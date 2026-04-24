@@ -20,6 +20,7 @@ import {
 } from "@/components/calendar/calendar-toolbar";
 import { WeekView } from "@/components/calendar/week-view";
 import { MonthView } from "@/components/calendar/month-view";
+import { CalendarAgenda } from "@/components/calendar/calendar-agenda";
 import { CreateStackProvider } from "@/components/create-stack/create-stack-provider";
 import { CreateDock } from "@/components/create-stack/create-dock";
 import { NewEventButton } from "@/components/calendar/new-event-button";
@@ -69,6 +70,10 @@ export default async function CalendarPage({
               <MonthView focal={focal} items={items} />
             )}
           </div>
+          {/* Agenda sits between the main calendar and the create dock,
+              so both rails remain visible when a create panel opens and
+              the create panel is the rightmost element on the page. */}
+          <CalendarAgenda />
           <CreateDock />
         </div>
       </div>

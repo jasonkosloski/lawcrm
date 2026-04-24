@@ -19,6 +19,7 @@ import {
   formatHourLabel,
   HOUR_HEIGHT_PX,
   HOURS,
+  isWeekend,
   nowOffsetPx,
 } from "@/lib/calendar-utils";
 import type {
@@ -60,19 +61,32 @@ export function WeekView({
       >
         <div />
         {days.map((day) => {
-          const isToday = isSameDay(day, today);
+          const dayIsToday = isSameDay(day, today);
+          const weekend = isWeekend(day);
           return (
             <div
               key={day.toISOString()}
-              className="flex flex-col items-center gap-0.5 py-2 border-l border-line"
+              className={cn(
+                "flex flex-col items-center gap-0.5 py-2 border-l border-line",
+                weekend && "bg-paper"
+              )}
             >
-              <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+              <div
+                className={cn(
+                  "text-2xs font-mono uppercase tracking-wider",
+                  weekend ? "text-ink-4/80" : "text-ink-4"
+                )}
+              >
                 {format(day, "EEE")}
               </div>
               <div
                 className={cn(
                   "text-base font-display tracking-tight",
-                  isToday ? "text-brand-500 font-semibold" : "text-ink"
+                  dayIsToday
+                    ? "text-brand-500 font-semibold"
+                    : weekend
+                      ? "text-ink-3"
+                      : "text-ink"
                 )}
               >
                 {format(day, "d")}
@@ -112,10 +126,14 @@ export function WeekView({
           );
           const nowTop = nowOffsetPx(now, day);
 
+          const weekend = isWeekend(day);
           return (
             <div
               key={day.toISOString()}
-              className="border-l border-line relative"
+              className={cn(
+                "border-l border-line relative",
+                weekend && "bg-paper"
+              )}
             >
               {/* Hour rows for grid lines */}
               {HOURS.map((h) => (

@@ -50,6 +50,9 @@ export default async function ProfileSettingsPage() {
           <div className="mt-5 pt-4 border-t border-line text-2xs text-ink-4">
             Editing is disabled until Phase 9 auth lands. Profile updates
             need a real session to attribute the change to the right user.
+            Future per-user preferences that will live on this page:
+            first day of the week (Sun / Mon), time zone, date + time
+            format, default calendar view.
           </div>
         </CardContent>
       </Card>

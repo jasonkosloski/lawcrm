@@ -10,6 +10,24 @@ import { addDays, format, parseISO, startOfDay } from "date-fns";
 export type CalendarView = "week" | "month";
 export const DEFAULT_VIEW: CalendarView = "week";
 
+/**
+ * First day of the week.
+ *
+ * 0 = Sunday (US convention), 1 = Monday (European / ISO convention).
+ * Currently a module-level constant — when the `UserPreferences` model
+ * lands, this will become a per-user setting resolved via the current
+ * user context. Every caller that needs week-start goes through here,
+ * so swapping is a single edit.
+ */
+export const WEEK_STARTS_ON: 0 | 1 = 0;
+
+/** True if the given date falls on Saturday or Sunday. Used to give
+ *  weekend cells/columns a subtle warm tint in the calendar views. */
+export function isWeekend(date: Date): boolean {
+  const d = date.getDay();
+  return d === 0 || d === 6;
+}
+
 export function parseCalendarParams(
   sp: Record<string, string | string[] | undefined>
 ): { view: CalendarView; focal: Date } {

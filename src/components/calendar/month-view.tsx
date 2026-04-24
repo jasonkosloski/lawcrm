@@ -16,6 +16,7 @@ import {
 } from "date-fns";
 import { cn } from "@/lib/utils";
 import { monthGridRange } from "./calendar-toolbar";
+import { isWeekend, WEEK_STARTS_ON } from "@/lib/calendar-utils";
 import type {
   CalendarItem,
   CalendarEventRow,
@@ -57,20 +58,31 @@ export function MonthView({
     });
   }
 
-  const weekdayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  // Order labels so the first column matches WEEK_STARTS_ON.
+  const WEEKDAYS_SUN_FIRST = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const weekdayLabels =
+    WEEK_STARTS_ON === 0
+      ? WEEKDAYS_SUN_FIRST
+      : [...WEEKDAYS_SUN_FIRST.slice(1), WEEKDAYS_SUN_FIRST[0]];
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* Weekday header */}
       <div className="grid grid-cols-7 border-b border-line shrink-0">
-        {weekdayLabels.map((w) => (
-          <div
-            key={w}
-            className="text-2xs font-mono uppercase tracking-wider text-ink-4 text-center py-2 border-l border-line first:border-l-0"
-          >
-            {w}
-          </div>
-        ))}
+        {weekdayLabels.map((w) => {
+          const isWeekendLabel = w === "Sat" || w === "Sun";
+          return (
+            <div
+              key={w}
+              className={cn(
+                "text-2xs font-mono uppercase tracking-wider text-center py-2 border-l border-line first:border-l-0",
+                isWeekendLabel ? "text-ink-4/80 bg-paper" : "text-ink-4"
+              )}
+            >
+              {w}
+            </div>
+          );
+        })}
       </div>
 
       {/* Day grid — 6 rows fill available vertical space */}
@@ -82,12 +94,17 @@ export function MonthView({
           const overflow = dayItems.length - visible.length;
           const isToday = isSameDay(day, today);
           const isInMonth = isSameMonth(day, focal);
+          const weekend = isWeekend(day);
           return (
             <div
               key={day.toISOString()}
               className={cn(
                 "border-l border-t border-line p-1 min-h-24 flex flex-col gap-1 first:border-l-0",
-                isInMonth ? "bg-white" : "bg-paper-2/40"
+                !isInMonth
+                  ? "bg-paper-2/40"
+                  : weekend
+                    ? "bg-paper"
+                    : "bg-white"
               )}
             >
               <div

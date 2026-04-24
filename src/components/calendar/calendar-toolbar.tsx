@@ -21,13 +21,14 @@ import {
 import { cn } from "@/lib/utils";
 import {
   buildCalendarHref,
+  WEEK_STARTS_ON,
   type CalendarView,
 } from "@/lib/calendar-utils";
 
 function formatRangeLabel(view: CalendarView, focal: Date): string {
   if (view === "week") {
-    const start = startOfWeek(focal, { weekStartsOn: 1 });
-    const end = endOfWeek(focal, { weekStartsOn: 1 });
+    const start = startOfWeek(focal, { weekStartsOn: WEEK_STARTS_ON });
+    const end = endOfWeek(focal, { weekStartsOn: WEEK_STARTS_ON });
     if (start.getMonth() === end.getMonth()) {
       return `Week of ${format(start, "MMM d, yyyy")}`;
     }
@@ -110,14 +111,14 @@ export function CalendarToolbar({
 // to the toolbar that displays it.
 export function weekRange(focal: Date): { start: Date; end: Date } {
   return {
-    start: startOfWeek(focal, { weekStartsOn: 1 }),
-    end: endOfWeek(focal, { weekStartsOn: 1 }),
+    start: startOfWeek(focal, { weekStartsOn: WEEK_STARTS_ON }),
+    end: endOfWeek(focal, { weekStartsOn: WEEK_STARTS_ON }),
   };
 }
 
 export function monthGridRange(focal: Date): { start: Date; end: Date } {
   return {
-    start: startOfWeek(startOfMonth(focal), { weekStartsOn: 1 }),
-    end: endOfWeek(endOfMonth(focal), { weekStartsOn: 1 }),
+    start: startOfWeek(startOfMonth(focal), { weekStartsOn: WEEK_STARTS_ON }),
+    end: endOfWeek(endOfMonth(focal), { weekStartsOn: WEEK_STARTS_ON }),
   };
 }
