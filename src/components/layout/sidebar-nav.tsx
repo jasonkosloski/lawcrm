@@ -281,26 +281,6 @@ export function SidebarNav({ data }: { data: SidebarData }) {
             <span className="absolute -top-0.5 -right-0.5 w-[7px] h-[7px] rounded-full bg-danger border-[1.5px] border-white" />
           </span>
         </div>
-
-        {/* ── Sync status bar ──────────────────────────────────────────── */}
-        <div
-          className="flex items-center gap-3.5 h-[26px] px-3.5 text-2xs font-mono text-ink-3 border-t"
-          style={{
-            background: "#e8ece9",
-            borderTopColor: "#d8d3c7",
-            color: "#4a5561",
-          }}
-        >
-          <span
-            className="w-1.5 h-1.5 rounded-full"
-            style={{
-              background: "var(--color-brand-500)",
-              boxShadow: "0 0 0 3px rgba(37,99,168,.18)",
-            }}
-          />
-          synced · 2s ago
-          <span className="ml-auto">v1.0</span>
-        </div>
       </div>
     </aside>
   );

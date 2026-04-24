@@ -12,8 +12,8 @@ Status legend: `[ ]` planned · `[~]` in progress · `[x]` complete · `[-]` des
 - [x] **Dashboard page** — KPI tiles, agenda, activity feed, deadlines, firm pulse (live Prisma queries)
 - [x] **Seed data** — Populate DB with realistic mock data from the prototype
 - [ ] **Command palette (⌘K)** — Fuzzy search matters, people, docs; run commands
-- [x] **Sidebar: data-driven** — All sidebar content is live: pinned matters (`isPinned`, cuid hrefs), practice-area counts, main nav badges (open matters, unread email, active leads, hours today), current user profile
-- [ ] **Sidebar: sync status bar** — "synced · 2s ago" is still design chrome; wire when real-time sync exists
+- [x] **Sidebar: data-driven** — All sidebar content is live: per-user pinned matters (cuid hrefs), practice-area counts, main nav badges (open matters, unread email, active leads, hours today), current user profile
+- [-] **Sidebar: sync status bar** — Removed entirely (was design chrome with no real signal behind it)
 - [ ] **Sidebar: notification bell** — Red dot on bell is hardcoded; wire when notification system exists
 
 ## Phase 2 — Matters
