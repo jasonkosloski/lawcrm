@@ -170,6 +170,43 @@ Uses a centered card in the tab content area with the tab name + a short
 description of what's coming. Lets users click through the full tab set
 without running into blank/404 pages. See `src/components/matters/tab-placeholder.tsx`.
 
+### Command Palette
+
+Global ⌘K/Ctrl+K palette built on `cmdk` via shadcn's `Command` primitives.
+Opens from anywhere; also triggered by the sidebar and topbar ⌘K buttons.
+
+**Architecture:**
+- `CommandPaletteProvider` (client) owns the open state and registers the
+  global keyboard shortcut. Mounted inside `AppShell` so every
+  authenticated page is within its scope.
+- `useCommandPalette()` hook exposes `open`, `openPalette`,
+  `closePalette`, `togglePalette`. Any client component can trigger the
+  palette via this.
+- Data fetched per-open via the `getPaletteData` server action
+  (`src/lib/queries/command-palette.ts`). Small cost; cmdk filters in
+  memory.
+
+**Sections (order matters — shown top-down):**
+1. Contextual (e.g. Pin/Unpin this matter, only when on a matter page)
+2. Recent (from localStorage, when no query)
+3. Pinned matters (when no query)
+4. Navigation (always listed, cmdk filters to matches)
+5. Matters / People / Leads (filtered to matches)
+
+**Adding a new searchable entity:**
+1. Add to the `PaletteItem` union in `src/lib/queries/command-palette.ts`
+2. Include it in the `getPaletteData` fetch
+3. Add a `CommandGroup` for it in the palette component
+
+**Adding a new navigation destination:**
+Append to `NAV_DESTINATIONS` in `src/lib/command-palette/destinations.ts`.
+No UI changes needed.
+
+**Adding a contextual action:**
+Extend the contextual section in `command-palette.tsx` gated on the
+appropriate route check (`pathname.startsWith(...)`) or page-provided
+context.
+
 ### Settings Section Layout
 
 `/settings/*` uses a left-rail layout (not a top tab bar — too many

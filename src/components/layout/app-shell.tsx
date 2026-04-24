@@ -19,6 +19,7 @@
 
 import { SidebarNav } from "./sidebar-nav";
 import { getSidebarData } from "@/lib/queries/sidebar";
+import { CommandPaletteProvider } from "@/components/command-palette/command-palette-provider";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -28,11 +29,13 @@ export async function AppShell({ children }: AppShellProps) {
   const sidebarData = await getSidebarData();
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-paper">
-      <SidebarNav data={sidebarData} />
-      <main className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
-        {children}
-      </main>
-    </div>
+    <CommandPaletteProvider>
+      <div className="flex h-full w-full overflow-hidden bg-paper">
+        <SidebarNav data={sidebarData} />
+        <main className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
+          {children}
+        </main>
+      </div>
+    </CommandPaletteProvider>
   );
 }

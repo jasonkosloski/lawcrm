@@ -10,6 +10,7 @@
 
 import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useCommandPalette } from "@/components/command-palette/command-palette-provider";
 
 interface TopBarProps {
   /** Page title displayed in Fraunces display font. */
@@ -25,6 +26,7 @@ interface TopBarProps {
 }
 
 export function TopBar({ title, crumbs, actions, below, subtitle }: TopBarProps) {
+  const { openPalette } = useCommandPalette();
   return (
     <div className="flex flex-col shrink-0 bg-card border-b border-line">
       {/* ── Brand gradient hairline ──────────────────────────────────────── */}
@@ -50,8 +52,9 @@ export function TopBar({ title, crumbs, actions, below, subtitle }: TopBarProps)
         </div>
 
         <div className="flex items-center gap-2">
-          {/* ── Global search trigger ──────────────────────────────────── */}
+          {/* ── Global search trigger (opens command palette) ─────────── */}
           <button
+            onClick={openPalette}
             className={cn(
               "flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-line-2",
               "bg-white text-ink-3 text-xs hover:border-brand-300 transition-colors"

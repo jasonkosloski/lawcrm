@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useCommandPalette } from "@/components/command-palette/command-palette-provider";
 import type { SidebarData } from "@/lib/queries/sidebar";
 
 interface NavItem {
@@ -85,6 +86,7 @@ const numBadge = (n: number): string | undefined =>
 export function SidebarNav({ data }: { data: SidebarData }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { openPalette } = useCommandPalette();
 
   const sections: NavSection[] = [
     {
@@ -183,6 +185,7 @@ export function SidebarNav({ data }: { data: SidebarData }) {
           <span className="font-display text-sm font-medium">Kosloski Law</span>
         </div>
         <button
+          onClick={openPalette}
           className="inline-block px-1.5 h-4 leading-[14px] border border-line-2 rounded text-2xs font-mono text-brand-700 bg-white cursor-pointer hover:border-brand-300 transition-colors"
           style={{ borderBottomWidth: 2 }}
           title="Command palette (⌘K)"

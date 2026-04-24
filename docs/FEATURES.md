@@ -11,7 +11,7 @@ Status legend: `[ ]` planned · `[~]` in progress · `[x]` complete · `[-]` des
 - [x] **App shell** — Sidebar nav, topbar, layout wrapper
 - [x] **Dashboard page** — KPI tiles, agenda, activity feed, deadlines, firm pulse (live Prisma queries)
 - [x] **Seed data** — Populate DB with realistic mock data from the prototype
-- [ ] **Command palette (⌘K)** — Fuzzy search matters, people, docs; run commands
+- [~] **Command palette (⌘K)** — Global ⌘K/Ctrl+K opens the palette from anywhere. Unified search across matters (name/case number/client/area/stage), contacts, leads, users, and navigation destinations. Contextual "Pin/Unpin this matter" action on matter detail pages. Recents persisted in localStorage; empty state shows recents + pinned matters + suggestions. Deferred to v2: scoping prefixes (@/#/>), create-new actions from palette, fuzzy-match highlight inside results.
 - [x] **Sidebar: data-driven** — All sidebar content is live: per-user pinned matters (cuid hrefs), practice-area counts, main nav badges (open matters, unread email, active leads, hours today), current user profile
 - [-] **Sidebar: sync status bar** — Removed entirely (was design chrome with no real signal behind it)
 - [-] **Sidebar: notification bell** — Removed entirely (same reasoning as sync bar — no notification system to back it). Will re-appear when the Phase 8 Notifications feature exists.
