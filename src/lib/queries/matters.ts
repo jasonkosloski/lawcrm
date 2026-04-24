@@ -54,12 +54,14 @@ function buildWhere(filter: MattersFilter, currentUserId: string) {
   if (filter.areas.length > 0)
     where.practiceArea = { name: { in: filter.areas } };
 
-  // Stage filter and hideClosed both constrain the stage relation.
-  // When both are active we AND them together via a compound relation filter.
+  // Stage filter and the show-closed toggle both constrain the stage
+  // relation. Closed stages are hidden by default; `showClosed` opts
+  // them back in. When both are active we AND them together via a
+  // compound relation filter.
   const stageConds: Array<Record<string, unknown>> = [];
   if (filter.stages.length > 0)
     stageConds.push({ name: { in: filter.stages } });
-  if (filter.hideClosed) stageConds.push({ isTerminal: false });
+  if (!filter.showClosed) stageConds.push({ isTerminal: false });
   if (stageConds.length === 1) where.stage = stageConds[0];
   else if (stageConds.length > 1) where.stage = { AND: stageConds };
 

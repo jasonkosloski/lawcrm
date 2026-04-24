@@ -16,7 +16,8 @@
  *   ?deadline=within-7d|within-30d|overdue|none
  *   ?archived=1                — include archived matters
  *   ?pinned=1                  — pinned only
- *   ?hide_closed=1             — exclude Closed + Settled
+ *   ?show_closed=1             — include matters in terminal stages
+ *                                (hidden by default)
  *   ?sort=name|area|lead|stage|trust|fee|deadline|created
  *   ?dir=asc|desc
  */
@@ -39,7 +40,11 @@ export type MattersFilter = {
   deadline: DeadlineFilter;
   includeArchived: boolean;
   pinnedOnly: boolean;
-  hideClosed: boolean;
+  /** When false (default), matters sitting in a terminal stage
+   *  (Settled/Closed-equivalent) are excluded. Opt in to include them.
+   *  TODO (auth): gate the toggle to roles the firm allows to view
+   *  closed files once RBAC lands. */
+  showClosed: boolean;
 };
 
 export type SortField =
@@ -104,7 +109,7 @@ export const EMPTY_FILTER: MattersFilter = {
   deadline: "any",
   includeArchived: false,
   pinnedOnly: false,
-  hideClosed: false,
+  showClosed: false,
 };
 
 const isTrust = (v: string | undefined): v is TrustFilter =>
@@ -147,7 +152,7 @@ export function parseMattersParams(
       deadline: isDeadline(deadline) ? deadline : "any",
       includeArchived: getOne(sp, "archived") === "1",
       pinnedOnly: getOne(sp, "pinned") === "1",
-      hideClosed: getOne(sp, "hide_closed") === "1",
+      showClosed: getOne(sp, "show_closed") === "1",
     },
     sort: {
       field: isSortField(sortField) ? sortField : DEFAULT_SORT.field,
@@ -169,7 +174,7 @@ export function isFilterActive(f: MattersFilter): boolean {
     f.deadline !== "any" ||
     f.includeArchived ||
     f.pinnedOnly ||
-    f.hideClosed
+    f.showClosed
   );
 }
 
@@ -188,7 +193,7 @@ export function buildMattersSearchParams(
   if (filter.deadline !== "any") p.set("deadline", filter.deadline);
   if (filter.includeArchived) p.set("archived", "1");
   if (filter.pinnedOnly) p.set("pinned", "1");
-  if (filter.hideClosed) p.set("hide_closed", "1");
+  if (filter.showClosed) p.set("show_closed", "1");
   if (
     sort.field !== DEFAULT_SORT.field ||
     sort.dir !== DEFAULT_SORT.dir

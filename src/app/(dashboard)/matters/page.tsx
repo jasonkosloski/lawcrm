@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { MattersToolbar } from "@/components/matters/matters-toolbar";
 import { MattersTable } from "@/components/matters/matters-table";
 import { MattersKanban } from "@/components/matters/matters-kanban";
+import { prisma } from "@/lib/prisma";
 import { parseMattersParams } from "@/lib/matters-filters";
 import {
   getMattersFilterOptions,
@@ -28,26 +29,31 @@ export default async function MattersListPage({
   const sp = await searchParams;
   const { filter, sort, view } = parseMattersParams(sp);
 
-  const [matters, options, totalCount] = await Promise.all([
-    listMatters(filter, sort),
-    getMattersFilterOptions(),
-    // Total (unfiltered) count for "showing N of M" — honors only the
-    // archived default so the denominator matches the default view.
-    listMatters({ ...filter, q: "" /* ignore search for total */ }, sort).then(
-      (r) => r.length
-    ),
-  ]);
-
-  const openCount = matters.filter(
-    (m) => !m.isArchived && !m.stageIsTerminal
-  ).length;
-  const closedOrArchived = matters.length - openCount;
+  const [matters, options, totalCount, firmOpenCount, firmClosedCount] =
+    await Promise.all([
+      listMatters(filter, sort),
+      getMattersFilterOptions(),
+      // Total (unfiltered) count for "showing N of M" — honors only the
+      // archived default so the denominator matches the default view.
+      listMatters({ ...filter, q: "" /* ignore search for total */ }, sort).then(
+        (r) => r.length
+      ),
+      // Firm-wide counts for the crumb — independent of the user's
+      // current filter so the header keeps its reference point even
+      // with show-closed off.
+      prisma.matter.count({
+        where: { isArchived: false, stage: { isTerminal: false } },
+      }),
+      prisma.matter.count({
+        where: { isArchived: false, stage: { isTerminal: true } },
+      }),
+    ]);
 
   return (
     <>
       <TopBar
         title="All matters"
-        crumbs={`${openCount} open · ${closedOrArchived} closed/settled`}
+        crumbs={`${firmOpenCount} open · ${firmClosedCount} closed/settled`}
         actions={
           <Button
             size="sm"

@@ -106,7 +106,7 @@ export function MattersToolbar({
         "deadline",
         "archived",
         "pinned",
-        "hide_closed",
+        "show_closed",
       ]) {
         p.delete(k);
       }
@@ -137,9 +137,7 @@ export function MattersToolbar({
   }, [qLocal]);
 
   const statusFlagCount =
-    (filter.includeArchived ? 1 : 0) +
-    (filter.pinnedOnly ? 1 : 0) +
-    (filter.hideClosed ? 1 : 0);
+    (filter.includeArchived ? 1 : 0) + (filter.pinnedOnly ? 1 : 0);
 
   const anyActive =
     filter.q.length > 0 ||
@@ -279,19 +277,60 @@ export function MattersToolbar({
               onToggle={(on) => toggleFlag("pinned", on)}
             />
             <FlagRow
-              label="Hide Closed / Settled"
-              checked={filter.hideClosed}
-              onToggle={(on) => toggleFlag("hide_closed", on)}
-            />
-            <FlagRow
               label="Include archived"
               checked={filter.includeArchived}
               onToggle={(on) => toggleFlag("archived", on)}
             />
           </PopoverContent>
         </Popover>
+
+        {/* Show-closed toggle. Closed/Settled matters are hidden by
+            default so the list stays focused on open work. Toggle to
+            include terminal stages — useful for reporting and for
+            looking up old matters.
+            TODO (auth): hide this toggle for users whose role the firm
+            has not authorized to view closed files. */}
+        <ShowClosedToggle
+          checked={filter.showClosed}
+          onToggle={(on) => toggleFlag("show_closed", on)}
+        />
       </div>
     </div>
+  );
+}
+
+function ShowClosedToggle({
+  checked,
+  onToggle,
+}: {
+  checked: boolean;
+  onToggle: (on: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onToggle(!checked)}
+      className={cn(
+        "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium border transition-colors",
+        checked
+          ? "bg-brand-soft text-brand-700 border-brand-200 hover:border-brand-300"
+          : "bg-white text-ink-2 border-line hover:border-brand-300 hover:text-brand-700"
+      )}
+    >
+      <span
+        className={cn(
+          "inline-flex items-center justify-center w-3.5 h-3.5 rounded-full border shrink-0 transition-colors",
+          checked
+            ? "bg-brand-500 border-brand-500"
+            : "bg-white border-line"
+        )}
+      >
+        {checked && <Check size={10} className="text-white" strokeWidth={3} />}
+      </span>
+      Show closed
+    </button>
   );
 }
 
