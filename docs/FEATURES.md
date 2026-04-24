@@ -1,0 +1,94 @@
+# Feature Roadmap
+
+Status legend: `[ ]` planned · `[~]` in progress · `[x]` complete · `[-]` descoped/deferred
+
+---
+
+## Phase 1 — App Shell & Core Navigation
+
+- [x] **Project scaffold** — Next.js, shadcn, Prisma, TanStack Query
+- [x] **Design tokens** — Brand colors, fonts, spacing from design handoff
+- [x] **App shell** — Sidebar nav, topbar, layout wrapper
+- [x] **Dashboard page** — KPI tiles, agenda, activity feed, deadlines (mock data)
+- [ ] **Seed data** — Populate DB with realistic mock data from the prototype
+- [ ] **Command palette (⌘K)** — Fuzzy search matters, people, docs; run commands
+
+## Phase 2 — Matters
+
+- [ ] **Matters list** — Sortable/filterable table, stage pipeline chips, practice area filter
+- [ ] **Matter detail — Overview tab** — Case facts, team, deadlines, timeline preview
+- [ ] **Matter detail — Timeline tab** — Chronological activity feed for a single matter
+- [ ] **Matter detail — Documents tab** — Document table with category filters
+- [ ] **Matter detail — Parties tab** — Contacts linked to this matter with roles
+- [ ] **Matter detail — Deadlines tab** — Deadline management with auto-rule support
+- [ ] **Matter detail — Tasks tab** — Task checklist with assignees and due dates
+- [ ] **Matter detail — Notes tab** — Rich text notes and strategy memos
+- [ ] **Matter detail — Billing tab** — WIP, time entries, invoices for this matter
+- [ ] **New matter form** — Create matter with stage, area, client, team assignment
+- [ ] **Matter search & filters** — Full-text search, area/stage/lead filters
+
+## Phase 3 — Intake
+
+- [ ] **Intake queue** — Split view: lead list + detail panel
+- [ ] **Lead scoring** — Score display, liability/damages breakdown
+- [ ] **Lead detail** — Summary, conflict check, statute window, conversion flow
+- [ ] **Convert lead to matter** — Wizard that creates matter + runs automations
+
+## Phase 4 — Email
+
+- [ ] **Email inbox — three-pane layout** — Mailboxes, thread list, reader
+- [ ] **Thread list** — Search, filter pills (All/Unread/Unfiled/Attach), selected state
+- [ ] **Thread reader** — Accordion messages, attachments, reply stub
+- [ ] **Email details drawer** — Participants, matter link, actions, sync metadata
+- [ ] **Compose window** — Docked/expanded/minimized modes, matter picker, templates
+- [ ] **Matter email filing** — File threads to matters, auto-filing suggestions
+- [ ] **Gmail integration** — OAuth, thread sync, label management
+
+## Phase 5 — Calendar & Time
+
+- [ ] **Calendar view** — Week/month toggle, per-matter color coding, deadline markers
+- [ ] **Calendar event create/edit** — Matter picker, attendees, video link
+- [ ] **Time tracking — week view** — Hour bars per matter, running totals
+- [ ] **Time entry modal** — Duration modes, UTBMS codes, narrative, billing toggles
+- [ ] **Timer widget** — Floating bottom-right, start/stop, auto-capture from activity
+- [ ] **Time reconciliation** — Day view with logged/captured/timer lanes
+
+## Phase 6 — Billing & Trust
+
+- [ ] **Invoices list** — Status chips, aging, totals
+- [ ] **Invoice detail/generation** — Line items from time entries, PDF generation
+- [ ] **Trust ledger** — IOLTA balance by matter, transactions, reconciliation
+- [ ] **Settlement distribution** — Gross → fees → costs → liens → client net waterfall
+- [ ] **Lien management** — Negotiation tracking, approval workflow
+- [ ] **Financial reports** — AR/AP, realization %, collection rate
+
+## Phase 7 — Contacts & Documents
+
+- [ ] **Contact directory** — Type filters, search, matter associations
+- [ ] **Contact detail** — Profile, linked matters, communication history
+- [ ] **Document management** — Folder tree, file grid, category filters
+- [ ] **Evidence viewer** — Multi-track timeline, flagged moments, transcript sync
+
+## Phase 8 — Firm & Admin
+
+- [ ] **Team management** — User roster, role assignments
+- [ ] **Settings** — Integration statuses (Gmail, Westlaw, calendar, e-sign, IOLTA)
+- [ ] **Automations** — Template library, trigger configuration
+- [ ] **Reports** — Pipeline, utilization, financials dashboards
+
+## Phase 9 — Polish & Production
+
+- [ ] **Keyboard shortcuts** — Full shortcut system (`g d`, `g m`, `c` compose, etc.)
+- [ ] **Responsive design** — Sidebar collapse on narrow viewports
+- [ ] **Loading states** — Skeletons for all data-dependent views
+- [ ] **Error boundaries** — Graceful error handling per route segment
+- [ ] **Authentication** — Login, session management, role-based access
+- [ ] **Deployment** — PostgreSQL, environment config, CI/CD
+
+---
+
+## Notes
+
+- Phases are roughly ordered by dependency and value delivery, but we'll adjust based on priorities.
+- Each feature should be built end-to-end (schema → API → UI) before moving to the next.
+- Schema will evolve — see SCHEMA_NOTES.md for data model decisions per feature.

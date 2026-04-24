@@ -1,0 +1,72 @@
+# Schema & Data Model Notes
+
+This file tracks decisions, trade-offs, and evolution of the Prisma schema as we build features. The schema is a living document — we'll refactor models as real requirements emerge during implementation.
+
+---
+
+## Current State (2026-04-24)
+
+Initial schema with 25 models covering the full domain from the design handoff. This is a starting point, not final.
+
+### Models
+
+| Model | Status | Notes |
+|---|---|---|
+| User | Draft | Minimal — needs auth fields when we add login |
+| Matter | Draft | Core entity, most relationships stem from here |
+| MatterTeamMember | Draft | Join table for users → matters with role |
+| Contact | Draft | Polymorphic type field — may split later if types diverge significantly |
+| MatterContact | Draft | Join table with role per matter |
+| Lead | Draft | Separate from Contact — converts to Matter + Contact on intake |
+| Document | Draft | Generic file reference — may need versioning later |
+| Evidence | Draft | Specialized for civil rights multimedia — may be overkill for simple cases |
+| FlaggedMoment | Draft | Evidence-specific — only needed for video/audio evidence review |
+| EvidenceSync | Draft | Multi-track sync links — very specialized, may defer |
+| Deadline | Draft | Auto-rule vs manual distinction is important for this firm |
+| CalendarEvent | Draft | Basic — needs Google Calendar sync fields later |
+| CalendarAttendee | Draft | Simple for now — may need response tracking |
+| TimeEntry | Draft | Core billing unit — UTBMS codes may need their own reference table |
+| Invoice | Draft | Needs line items beyond just time entries (expenses, flat fees) |
+| TrustTransaction | Draft | Simple ledger — real IOLTA compliance may need more fields |
+| Settlement | Draft | Specialized for contingency fee cases |
+| SettlementLien | Draft | Negotiation workflow fields |
+| SettlementApproval | Draft | 4-step approval chain |
+| EmailAccount | Draft | OAuth tokens should be encrypted — placeholder for now |
+| EmailThread | Draft | Gmail thread model — will need adjustment when we integrate |
+| EmailMessage | Draft | Recipients stored as JSON string — consider normalizing if we need to query by recipient |
+| EmailAttachment | Draft | Basic file reference |
+| EmailLabel | Draft | Thread-level labels |
+| Task | Draft | Simple to-do — may need subtasks, comments, or checklist items |
+| Note | Draft | Rich text — storage format (HTML vs Markdown) TBD |
+| ActivityLog | Draft | Append-only audit trail |
+| Automation | Draft | Steps stored as JSON — will need proper step model if we build an automation engine |
+
+---
+
+## Design Principles
+
+1. **Start simple, refactor when we hit a wall.** Don't build a model for a hypothetical need.
+2. **Prisma migrations are cheap.** Adding a field or a table is a one-line migration. Don't fear schema changes.
+3. **JSON columns are fine for semi-structured data** (email recipients, automation steps) but should be normalized if we ever need to query/filter on them.
+4. **Soft deletes vs hard deletes:** Currently no soft delete pattern. If legal compliance requires audit trails, we'll add `deletedAt` fields per model.
+5. **Timestamps:** All models have `createdAt`. Most have `updatedAt`. ActivityLog is append-only (no `updatedAt`).
+
+---
+
+## Known Evolution Points
+
+These are places where the schema will likely change as we build:
+
+- **Contact type polymorphism:** The `type` string field on Contact works for now but if client contacts need very different fields from opposing counsel contacts, we may split into separate models or use a discriminated union pattern.
+- **Email integration:** When we wire up Gmail OAuth, the EmailThread/EmailMessage models will need to align with Google's API response shapes. May need `historyId`, `labelIds[]`, `internalDate`, etc.
+- **Invoice line items:** Currently invoices only link to time entries. Real invoices need expense line items, flat fee items, adjustments, and tax calculations. This will need a proper `InvoiceLineItem` model.
+- **Multi-tenancy:** Currently single-firm. If this ever needs to support multiple firms, every model needs a `firmId` field. Not doing this now — YAGNI.
+- **File storage:** Documents and evidence reference `fileUrl` but we haven't decided on storage (S3, local, Vercel Blob, etc.). The URL field is storage-agnostic by design.
+
+---
+
+## Change Log
+
+| Date | Change | Reason |
+|---|---|---|
+| 2026-04-24 | Initial 25-model schema | Project scaffold — covers full domain from design handoff |

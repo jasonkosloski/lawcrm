@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kosloski Law · CRM — v1.0 prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@400;500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  html, body, #app { height: 100%; margin: 0; }
+  body { background: #14181f; font-family: 'Inter', system-ui, sans-serif; color: #14181f; }
+  #app { background: #faf9f5; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #d5d3cd; border-radius: 5px; border: 2px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-thumb:hover { background: #b8b6ae; border: 2px solid transparent; background-clip: content-box; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="mf-lib.jsx"></script>
+<script type="text/babel" src="app-polish.jsx"></script>
+<script type="text/babel" src="app-pages-1.jsx"></script>
+<script type="text/babel" src="app-matter.jsx"></script>
+<script type="text/babel" src="app-pages-2.jsx"></script>
+<script type="text/babel" src="app-email.jsx"></script>
+<script type="text/babel" src="app-blue.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+const KOSLOSKI_TWEAKS = /*EDITMODE-BEGIN*/{
+  "palette": "Firm",
+  "voice": "Professional",
+  "chrome": "Standard"
+}/*EDITMODE-END*/;
+
+const PALETTES = {
+  // Current default — cool navy accent on warm bone
+  "Firm":       { accent: '#3d83b8', accentDeep: '#1f4d7a', ink: '#14181f', ink2: '#3a4251', bg: '#faf9f5', bg2: '#f3f1ea', card: '#ffffff', line: '#e5e4de', tint: '#eaf1f8', soft: '#f4f8fc', hi: '#fff1bd' },
+  // Oxblood + brass — reads as courtroom/wood-paneled
+  "Courthouse": { accent: '#8a2f2a', accentDeep: '#5a1f1c', ink: '#1c1612', ink2: '#3e342c', bg: '#f5efe6', bg2: '#ece3d4', card: '#fffbf5', line: '#ddd0ba', tint: '#f7ece7', soft: '#faf1ec', hi: '#f5d78a' },
+  // Forest + stone — civic / public-interest energy
+  "Civic":      { accent: '#2f6b4e', accentDeep: '#1d4a35', ink: '#13201c', ink2: '#2f4239', bg: '#f5f4ed', bg2: '#eae8dd', card: '#fbfaf4', line: '#dcd9c9', tint: '#e6efe9', soft: '#eff5f0', hi: '#f1e79a' },
+  // Night mode — dusk ink on charcoal
+  "Midnight":   { accent: '#7aa8ff', accentDeep: '#4c7fdc', ink: '#e8ecf4', ink2: '#aeb4c0', bg: '#12161e', bg2: '#1b212c', card: '#1e2430', line: '#2c3342', tint: '#1f2a3d', soft: '#1a2130', hi: '#3d3b1f' },
+};
+
+const VOICES = {
+  "Professional": { disp: '"Inter", ui-sans-serif, system-ui, sans-serif', dispW: '600', ui: '"Inter", ui-sans-serif, system-ui, sans-serif', baseSize: 12.5, displayLetter: '-.01em', density: 1.0 },
+  "Editorial":    { disp: '"Fraunces", Georgia, serif',                    dispW: '500', ui: '"Inter", ui-sans-serif, system-ui, sans-serif', baseSize: 13,   displayLetter: '-.02em', density: 1.1 },
+  "Terminal":     { disp: '"JetBrains Mono", ui-monospace, monospace',     dispW: '500', ui: '"JetBrains Mono", ui-monospace, monospace',     baseSize: 12,   displayLetter: '0',       density: 0.95 },
+};
+
+const CHROMES = {
+  "Standard": { radius: 8, borderAlpha: 1.0, shadow: '0 1px 0 rgba(0,0,0,.02)', navStyle: 'filled', cardShadow: '0 1px 2px rgba(12,24,38,.04)' },
+  "Quiet":    { radius: 4, borderAlpha: 0.35, shadow: 'none',                   navStyle: 'minimal', cardShadow: 'none' },
+  "Bold":     { radius: 14, borderAlpha: 1.0, shadow: '0 4px 14px -4px rgba(12,24,38,.12), 0 1px 3px rgba(12,24,38,.06)', navStyle: 'pill', cardShadow: '0 6px 20px -8px rgba(12,24,38,.14), 0 1px 2px rgba(12,24,38,.04)' },
+};
+
+function applyTweaks(t) {
+  const p = PALETTES[t.palette] || PALETTES.Firm;
+  const v = VOICES[t.voice]     || VOICES.Professional;
+  const c = CHROMES[t.chrome]   || CHROMES.Standard;
+  const dark = t.palette === 'Midnight';
+
+  const lineAlpha = c.borderAlpha;
+  const lineColor = p.line;
+  const bodyBg = dark ? p.bg : p.bg;
+
+  const s = document.getElementById('kos-tweaks') || (() => {
+    const x = document.createElement('style'); x.id = 'kos-tweaks'; document.head.appendChild(x); return x;
+  })();
+  s.textContent = `
+    :root {
+      --mf-accent: ${p.accent};
+      --blue-500: ${p.accent};
+      --blue-600: ${p.accentDeep};
+      --blue-700: ${p.accentDeep};
+      --blue-900: ${p.accentDeep};
+      --blue-300: color-mix(in oklch, ${p.accent} 40%, #fff);
+      --blue-200: color-mix(in oklch, ${p.accent} 25%, #fff);
+      --blue-100: color-mix(in oklch, ${p.accent} 15%, #fff);
+      --blue-50: color-mix(in oklch, ${p.accent} 8%, #fff);
+      --blue-tint: ${p.tint};
+      --blue-soft: ${p.soft};
+    }
+    body, #app { background: ${p.bg} !important; color: ${p.ink}; }
+    html, body { font-family: ${v.ui}; font-size: ${v.baseSize}px; }
+    #app * { line-height: ${1.4 * v.density}; }
+
+    /* card treatment */
+    .mf-card, .mf-card-flat {
+      background: ${p.card} !important;
+      border-color: ${lineColor} !important;
+      border-radius: ${c.radius}px !important;
+      box-shadow: ${c.cardShadow} !important;
+      ${c.borderAlpha < 0.5 ? 'border-color: transparent !important;' : ''}
+    }
+    .mf-hairline, .mf-hl { border-color: ${lineColor} !important; opacity: ${lineAlpha}; }
+
+    /* surfaces */
+    .mf, [class*="mf-"] { --mf-bg: ${p.bg}; --mf-bg2: ${p.bg2}; --mf-card: ${p.card}; --mf-line: ${lineColor}; --mf-ink: ${p.ink}; }
+
+    /* display type */
+    .mf-disp, .app-h1 {
+      font-family: ${v.disp} !important;
+      font-weight: ${v.dispW} !important;
+      letter-spacing: ${v.displayLetter} !important;
+    }
+
+    /* nav chrome */
+    ${c.navStyle === 'pill' ? `
+      .mf-nav { border-radius: 999px !important; padding: 7px 14px !important; }
+      .mf-nav.on { background: ${p.accent} !important; color: #fff !important; box-shadow: 0 2px 8px -2px ${p.accent}66; }
+    ` : c.navStyle === 'minimal' ? `
+      .mf-nav { border-radius: 3px !important; padding: 4px 8px !important; }
+      .mf-nav.on { background: transparent !important; color: ${p.accent} !important; border-left: 2px solid ${p.accent}; padding-left: 10px !important; }
+    ` : `
+      .mf-nav.on { background: ${p.ink} !important; }
+    `}
+
+    /* buttons */
+    .mf-btn { border-radius: ${Math.max(4, c.radius - 2)}px !important; border-color: ${lineColor} !important; }
+    .mf-btn-primary { background: ${p.ink} !important; border-color: ${p.ink} !important; }
+
+    /* chips */
+    .mf-chip { border-radius: ${Math.min(999, c.radius * 2)}px !important; }
+
+    /* table borders */
+    .mf-table th, .mf-table td { border-color: ${lineColor} !important; }
+    ${c.borderAlpha < 0.5 ? '.mf-table th, .mf-table td { border-color: transparent !important; } .mf-table tr:hover { background: ' + p.bg2 + ' !important; }' : ''}
+
+    /* dark-mode fixups */
+    ${dark ? `
+      #app { background: ${p.bg} !important; }
+      .mf-ink { color: ${p.ink} !important; }
+      .mf-ink2 { color: ${p.ink2} !important; }
+      .mf-ink3 { color: #7e8494 !important; }
+      .mf-ink4 { color: #5a606d !important; }
+      input, textarea, select { background: ${p.bg2} !important; color: ${p.ink} !important; border-color: ${lineColor} !important; }
+      .mf-table th { background: ${p.bg2} !important; color: #9aa1ad !important; }
+      .mf-tab.on { color: ${p.ink} !important; border-bottom-color: ${p.accent} !important; }
+    ` : ''}
+  `;
+
+  // Nudge MF object live so inline-styled components pick up key colors
+  if (window.MF) {
+    window.MF.bg = p.bg; window.MF.bg2 = p.bg2; window.MF.card = p.card;
+    window.MF.line = lineColor; window.MF.ink = p.ink; window.MF.ink2 = p.ink2;
+    window.MF.accent = p.accent;
+  }
+}
+
+function App() {
+  const [t, setT] = useTweaks(KOSLOSKI_TWEAKS);
+  React.useLayoutEffect(() => { applyTweaks(t); }, [t]);
+
+  const [path, go] = useHashRoute('today');
+  const [paletteOpen, setPaletteOpen] = React.useState(false);
+
+  // global keyboard
+  React.useEffect(() => {
+    const keyBuf = { k: '', t: 0 };
+    const onKey = (e) => {
+      const tag = (e.target && e.target.tagName) || '';
+      const typing = tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable;
+      // palette
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault(); setPaletteOpen(true); return;
+      }
+      if (typing) return;
+      if (e.key === '/' || e.key === '?') { e.preventDefault(); setPaletteOpen(true); return; }
+      // sequential shortcuts g d, g m, ...
+      const now = Date.now();
+      if (now - keyBuf.t > 900) keyBuf.k = '';
+      keyBuf.k += e.key.toLowerCase();
+      keyBuf.t = now;
+      const map = {
+        'gd': 'today', 'gm': 'matters', 'gi': 'intake', 'gc': 'calendar',
+        'gb': 'billing', 'gt': 'time', 'gr': 'reports', 'ga': 'automations', 'gs': 'settings',
+        'ge': 'email',
+      };
+      if (map[keyBuf.k]) { go(map[keyBuf.k]); keyBuf.k = ''; }
+    };
+    const openPalette = () => setPaletteOpen(true);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('app-open-palette', openPalette);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('app-open-palette', openPalette);
+    };
+  }, [go]);
+
+  let page;
+  if (path === 'today' || path === '') page = <PageToday go={go} />;
+  else if (path === 'matters') page = <PageMatters go={go} />;
+  else if (path === 'intake') page = <PageIntake go={go} />;
+  else if (path === 'calendar') page = <PageCalendar go={go} />;
+  else if (path === 'billing') page = <PageBilling go={go} />;
+  else if (path === 'time') page = <PageTime go={go} />;
+  else if (path === 'reports') page = <PageReports go={go} />;
+  else if (path === 'automations') page = <PageAutomations go={go} />;
+  else if (path === 'settings') page = <PageSettings go={go} />;
+  else if (path === 'email') page = <PageEmail go={go} />;
+  else if (path.startsWith('matter/')) page = <PageMatter id={path.slice(7)} go={go} />;
+  else if (path.startsWith('settlement/')) page = <PageSettlement id={path.slice(11)} go={go} />;
+  else if (path.startsWith('area/')) page = <PageArea id={path.slice(5)} go={go} />;
+  else page = <PageToday go={go} />;
+
+  return (
+    <div style={{ height: '100%' }} data-screen-label={'Kosloski CRM · ' + (path || 'today')}>
+      {page}
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} go={go} />
+      <Toaster />
+      <TweaksPanel title="Tweaks">
+        <TweakSection label="Visual direction" />
+        <TweakRadio
+          label="Palette"
+          value={t.palette}
+          options={['Firm', 'Courthouse', 'Civic', 'Midnight']}
+          onChange={(v) => setT('palette', v)}
+        />
+        <TweakRadio
+          label="Voice"
+          value={t.voice}
+          options={['Professional', 'Editorial', 'Terminal']}
+          onChange={(v) => setT('voice', v)}
+        />
+        <TweakRadio
+          label="Chrome"
+          value={t.chrome}
+          options={['Standard', 'Quiet', 'Bold']}
+          onChange={(v) => setT('chrome', v)}
+        />
+      </TweaksPanel>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('app'));
+setTimeout(() => root.render(<App />), 50);
+</script>
+
+</body>
+</html>
