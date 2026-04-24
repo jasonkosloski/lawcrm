@@ -43,7 +43,26 @@ Status legend: `[ ]` planned · `[~]` in progress · `[x]` complete · `[-]` des
 - [x] **Matter detail — Events tab** — Calendar events linked to this matter split into Upcoming / Past with time, type chip, location, attendee count; clicking opens the same EventDetailModal as the calendar page via `?event=<id>`
 - [x] **Matter detail — Communication tab** — Email threads filed to this matter via `EmailThread.matterId`; embedded thread list links through to the main inbox with the thread preselected
 - [ ] **Matter detail — Billing tab** — WIP, time entries, invoices for this matter (placeholder route exists)
-- [~] **New matter form — v1** — First-pass working form at `/matters/new`: name, practice area, stage, case number, fee structure, client (picks from existing Contacts), lead attorney (picks from firm users), opposing party/firm, court, summary, plus "pin to my sidebar" checkbox. Zod validation + inline field errors via `useActionState`. Server action creates the Matter + MatterTeamMember (lead) + optional UserMatterPin in a single write, revalidates the dashboard layout, redirects to the new matter. Follow-ups: inline client create, multi-member team assignment, tag from an existing Lead, area-specific automations (CGIA notice for §1983, HUD response for FHA, etc.), file upload for intake docs.
+- [~] **New matter form — v1** — Working first-pass form at `/matters/new` with fields (name, practice area, stage, case number, case location, fee structure, opposing party/firm, court, summary, lead attorney), typeahead client picker that defaults to creating a new Contact inline, and auto-populated matter name built from the hardcoded firm pattern (`Last, First - Case Number - Location`) with dirty-tracking + "Reset to auto" restore. Zod validation, inline errors via `useActionState`, server action creates Matter + MatterTeamMember (lead) + optional UserMatterPin + optional new Contact in a single write.
+
+  > **Note: this form needs much more work.** The v1 gets the basic create flow working with a nice auto-name feel, but it's far from what a production legal-CRM intake flow should be. Expected follow-ups, non-exhaustive:
+  >
+  > - **Matter-name pattern as firm setting**: configurable by firm admin; per-practice-area overrides (§1983 might want incident date, Class might want plaintiff count, Trust might want decedent name)
+  > - **Case location as a real schema field** (currently consumed only for name generation — not persisted)
+  > - **Multi-member team assignment**: lead + paralegal + investigator + of-counsel with roles, with suggestions based on practice area
+  > - **Tag from existing lead**: "Convert from…" button that pre-fills everything from a Lead row + runs the lead-to-matter conversion flow (schema: `Lead.convertedMatterId`)
+  > - **Practice-area automations on create**: §1983 spawns a CGIA notice deadline + task; FHA spawns a HUD response deadline; CADA starts the 90-day EEOC right-to-sue clock; etc.
+  > - **Document upload at intake**: engagement letter, client ID, initial evidence — upload during creation
+  > - **Conflict check**: auto-run against existing Contacts + opposing parties before allowing save
+  > - **Filed/trial date pickers** with scheduling-order import
+  > - **Initial deadline templates** per practice area
+  > - **Fee + retainer structure**: contingent fee %, retainer amount, trust deposit at intake
+  > - **Multi-plaintiff matters**: allow linking additional clients beyond the primary
+  > - **Client co-creation of address + DOB + SSN** (sensitive — needs encryption-at-rest discussion first)
+  > - **Save draft and resume**: mid-intake interruptions shouldn't lose work
+  > - **Mobile-responsive layout**: field density and flow on tablets during client meetings
+  > - **Richer validation**: case number format check per court, duplicate-matter warning when same client + similar area, statute-of-limitations sanity check against date of incident
+  > - **Real-form component library consolidation**: swap native `<select>` for shadcn Select once there's a pattern we like across the app
 
 ## Phase 3 — Intake
 
