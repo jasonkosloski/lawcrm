@@ -13,6 +13,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import {
@@ -91,6 +92,66 @@ const createMatterSchema = z
       }
     }
   });
+
+/** Signature we use to identify the one auto-managed SOL deadline
+ *  per matter. Manually-created deadlines (kind="critical" via the
+ *  Deadlines tab composer) don't set this `sourceType`, so we can
+ *  find-and-update cleanly without clobbering unrelated rows. */
+const SOL_SOURCE_TYPE = "statute_of_limitations";
+
+/** Keeps the auto-managed "Statute of limitations" Deadline row in
+ *  sync with the matter's SOL fields. Called from create + update +
+ *  setMatterSolSatisfied so all three paths maintain the invariant:
+ *
+ *  - SOL date present → a critical Deadline exists with that dueDate
+ *  - SOL cleared / area no longer tracks SOL → deadline is removed
+ *  - satisfied=true → deadline status flipped to "completed"
+ *  - satisfied=false → deadline flipped back to "open"
+ */
+async function syncMatterSolDeadline(
+  tx: Prisma.TransactionClient | typeof prisma,
+  opts: {
+    matterId: string;
+    trackSol: boolean;
+    date: Date | null;
+    notes: string | null;
+    satisfied: boolean;
+    satisfiedAt: Date | null;
+    ownerId: string | null;
+  }
+): Promise<void> {
+  const existing = await tx.deadline.findFirst({
+    where: { matterId: opts.matterId, sourceType: SOL_SOURCE_TYPE },
+    select: { id: true },
+  });
+
+  // Tracking is off or no date set — remove the auto row entirely so
+  // the Deadlines tab doesn't show a dangling SOL entry.
+  if (!opts.trackSol || !opts.date) {
+    if (existing) {
+      await tx.deadline.delete({ where: { id: existing.id } });
+    }
+    return;
+  }
+
+  const data = {
+    title: "Statute of limitations",
+    dueDate: opts.date,
+    kind: "critical" as const,
+    sourceType: SOL_SOURCE_TYPE,
+    description: opts.notes,
+    ownerId: opts.ownerId,
+    status: opts.satisfied ? "completed" : "open",
+    completedAt: opts.satisfied ? opts.satisfiedAt : null,
+  };
+  if (existing) {
+    await tx.deadline.update({ where: { id: existing.id }, data });
+  } else {
+    await tx.deadline.create({
+      data: { matterId: opts.matterId, ...data },
+    });
+  }
+}
 
 /**
  * Verify the stage belongs to the area. If not, return the first
@@ -263,6 +324,19 @@ export async function createMatter(
           }
         : {}),
     },
+  });
+
+  // Auto-create the critical SOL Deadline when the area tracks SOL
+  // and a date was provided. Kept in sync via updateMatter +
+  // setMatterSolSatisfied below.
+  await syncMatterSolDeadline(prisma, {
+    matterId: matter.id,
+    trackSol: resolved.hasStatuteOfLimitations,
+    date: solDate,
+    notes: solNotes,
+    satisfied: false,
+    satisfiedAt: null,
+    ownerId: leadUserId,
   });
 
   // Sidebar + matters list both read fresh data on next render.
@@ -444,6 +518,27 @@ export async function updateMatter(
         update: {},
       });
     }
+
+    // Sync the auto-managed SOL Deadline. When the new area tracks
+    // SOL we upsert (create or update) the critical deadline; when
+    // it doesn't, the helper removes any stale row.
+    const existingSolDeadline = await tx.deadline.findFirst({
+      where: { matterId, sourceType: SOL_SOURCE_TYPE },
+      select: { status: true, completedAt: true },
+    });
+    // Preserve the existing satisfied state if there was one — the
+    // Overview card owns the manual toggle; edits to the deadline
+    // date shouldn't undo an earlier satisfied flip.
+    const isSatisfied = existingSolDeadline?.status === "completed";
+    await syncMatterSolDeadline(tx, {
+      matterId,
+      trackSol: resolved.hasStatuteOfLimitations,
+      date: solDate,
+      notes: solNotes,
+      satisfied: isSatisfied,
+      satisfiedAt: existingSolDeadline?.completedAt ?? null,
+      ownerId: leadUserId,
+    });
   });
 
   revalidatePath("/", "layout");
@@ -516,6 +611,8 @@ export async function setMatterSolSatisfied(
     where: { id: matterId },
     select: {
       id: true,
+      statuteOfLimitationsDate: true,
+      statuteOfLimitationsNotes: true,
       practiceArea: { select: { hasStatuteOfLimitations: true } },
     },
   });
@@ -528,16 +625,32 @@ export async function setMatterSolSatisfied(
     };
   }
 
-  await prisma.matter.update({
-    where: { id: matterId },
-    data: {
-      statuteOfLimitationsSatisfied: satisfied,
-      statuteOfLimitationsSatisfiedAt: satisfied ? new Date() : null,
-    },
+  const satisfiedAt = satisfied ? new Date() : null;
+
+  // One transaction — flip the matter flag AND the linked critical
+  // Deadline's status so the Deadlines tab mirrors the Overview
+  // card. The user asked that marking SOL satisfied also satisfy
+  // the tied critical deadline.
+  await prisma.$transaction(async (tx) => {
+    await tx.matter.update({
+      where: { id: matterId },
+      data: {
+        statuteOfLimitationsSatisfied: satisfied,
+        statuteOfLimitationsSatisfiedAt: satisfiedAt,
+      },
+    });
+    await syncMatterSolDeadline(tx, {
+      matterId,
+      trackSol: true,
+      date: matter.statuteOfLimitationsDate,
+      notes: matter.statuteOfLimitationsNotes,
+      satisfied,
+      satisfiedAt,
+      ownerId: null,
+    });
   });
 
   revalidatePath(`/matters/${matterId}`);
-  // Overview surface + sidebar SOL counts will be useful later — for
-  // now just the matter tree.
+  revalidatePath(`/matters/${matterId}/deadlines`);
   return { ok: true };
 }
