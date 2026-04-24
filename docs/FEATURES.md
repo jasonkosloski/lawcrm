@@ -79,6 +79,7 @@ Status legend: `[ ]` planned · `[~]` in progress · `[x]` complete · `[-]` des
 - [ ] **Settings** — Integration statuses (Gmail, Westlaw, calendar, e-sign, IOLTA)
 - [ ] **Automations** — Template library, trigger configuration
 - [ ] **Reports** — Pipeline, utilization, financials dashboards
+- [ ] **Role-based & customizable sidebar** — Different sidebar content per role, with per-user overrides. Attorneys see pinned matters; a finance user might pin reports or trust accounts; an intake paralegal might pin leads. Each role ships a sensible default, and users can add/remove/reorder pinned items from their own view. Depends on auth (for session user + role) and likely a `UserPreferences` model for persisted overrides. Consider a generic "pinned items" concept that spans matters, reports, leads, contacts, and views (saved filter URLs) rather than matter-only pinning.
 
 ## Phase 9 — Polish & Production
 
