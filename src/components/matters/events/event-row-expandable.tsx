@@ -1,22 +1,19 @@
 /**
  * Expandable Event Row — matter Events tab.
  *
- * Same compact summary as before (date/time/title/type/location) but
- * the summary is no longer a single click target. Instead:
- *   - Clicking the title opens the event detail modal (deeper view)
- *   - Clicking the count chip or the chevron toggles an inline
- *     section under the row with the full EventNotesSection (list +
- *     composer) and EventTimeEntriesSection (list + composer) stacked
- *
- * Modal still exists; the inline expansion is the friction-free
- * capture path for both notes and time.
+ * Primary interaction flipped: clicking the row body expands the
+ * attachments (notes + time) inline right there. A small
+ * "open full view" button on the right side opens the event detail
+ * modal for the deeper view. That way the common path (capture a
+ * note or log some time) is friction-free; the modal is an opt-in
+ * zoom.
  */
 
 "use client";
 
 import { useState } from "react";
 import { format, isSameDay } from "date-fns";
-import { ChevronDown, Clock, MessageSquare } from "lucide-react";
+import { ChevronDown, Clock, Maximize2, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EventLink } from "@/components/calendar/event-link";
 import { EventNotesSection } from "@/components/calendar/event-notes-section";
@@ -81,11 +78,16 @@ export function EventRowExpandable({
           expanded && "bg-paper-2/30"
         )}
       >
-        <EventLink
-          eventId={event.id}
-          className="flex-1 min-w-0 block"
+        {/* Row body — expands attachments inline. This is the
+            primary interaction; the modal is now opt-in via the
+            right-side "open full view" button. */}
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          className="flex-1 min-w-0 block text-left"
         >
-          <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-brand-tint transition-colors cursor-pointer">
+          <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-brand-tint transition-colors">
             <span
               className="w-1 self-stretch rounded-full shrink-0"
               style={{ background: event.color }}
@@ -142,31 +144,34 @@ export function EventRowExpandable({
                 {event.attendeeCount === 1 ? "attendee" : "attendees"}
               </span>
             )}
+            <ChevronDown
+              size={14}
+              className={cn(
+                "text-ink-3 shrink-0 transition-transform",
+                expanded && "rotate-180",
+                hasAttachments && !expanded && "text-brand-700"
+              )}
+            />
           </div>
-        </EventLink>
+        </button>
 
-        {/* Expand/collapse — separate click target so toggling the
-            inline sections doesn't open the modal. */}
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          aria-expanded={expanded}
-          aria-label={expanded ? "Hide attachments" : "Show attachments"}
+        {/* Open full view — the modal lives here now, as an opt-in
+            zoom rather than the default click behavior. */}
+        <EventLink
+          eventId={event.id}
           className={cn(
-            "flex items-center px-3 border-l border-line text-2xs font-mono shrink-0 transition-colors",
-            hasAttachments
-              ? "text-brand-700 hover:bg-brand-soft"
-              : "text-ink-4 hover:bg-paper-2 hover:text-ink-2"
+            "flex items-center px-3 border-l border-line shrink-0 transition-colors",
+            "text-ink-3 hover:bg-paper-2 hover:text-brand-700"
           )}
         >
-          <ChevronDown
-            size={14}
-            className={cn(
-              "transition-transform",
-              expanded && "rotate-180"
-            )}
-          />
-        </button>
+          <span
+            title="Open full event view"
+            aria-label="Open full event view"
+            className="inline-flex items-center"
+          >
+            <Maximize2 size={13} />
+          </span>
+        </EventLink>
       </div>
 
       {expanded && (
