@@ -30,30 +30,56 @@ function stripHtml(html: string): string {
     .trim();
 }
 
-type Thread = { parent: NoteCardNote; replies: NoteCardNote[] };
+/** Tree node — a note plus its (recursive) children. Reddit-style:
+ *  any note can itself be replied to and those replies nest further
+ *  beneath it. The recursion terminates because parentNoteId only
+ *  points to existing notes in the matter; a visited set guards
+ *  against hypothetical cycles. */
+type NoteNode = { note: NoteCardNote; children: NoteNode[] };
 
-function buildThreads(notes: NoteCardNote[]): Thread[] {
+function buildTrees(notes: NoteCardNote[]): NoteNode[] {
   const ids = new Set(notes.map((n) => n.id));
-  const byParent = new Map<string, NoteCardNote[]>();
+  const childrenByParent = new Map<string, NoteCardNote[]>();
   const roots: NoteCardNote[] = [];
   for (const n of notes) {
     // A note is a root if it has no parent OR the parent isn't in this
     // matter's set (edge case — cascade deletes should keep this clean).
     if (n.parentNoteId && ids.has(n.parentNoteId)) {
-      if (!byParent.has(n.parentNoteId)) byParent.set(n.parentNoteId, []);
-      byParent.get(n.parentNoteId)!.push(n);
+      if (!childrenByParent.has(n.parentNoteId))
+        childrenByParent.set(n.parentNoteId, []);
+      childrenByParent.get(n.parentNoteId)!.push(n);
     } else {
       roots.push(n);
     }
   }
+  const visited = new Set<string>();
+  const make = (n: NoteCardNote): NoteNode => {
+    if (visited.has(n.id)) return { note: n, children: [] };
+    visited.add(n.id);
+    return {
+      note: n,
+      children: (childrenByParent.get(n.id) ?? []).map(make),
+    };
+  };
   // Pinned roots first; within each group the server already sorted
   // oldest-to-newest, but roots look best newest-to-oldest at the top.
   const pinned = roots.filter((r) => r.isPinned);
   const rest = roots.filter((r) => !r.isPinned).reverse();
-  return [...pinned, ...rest].map((parent) => ({
-    parent,
-    replies: byParent.get(parent.id) ?? [],
-  }));
+  return [...pinned, ...rest].map(make);
+}
+
+function subtreeMatches(
+  node: NoteNode,
+  matches: (n: NoteCardNote) => boolean
+): boolean {
+  if (matches(node.note)) return true;
+  return node.children.some((c) => subtreeMatches(c, matches));
+}
+
+function countNodes(node: NoteNode): number {
+  return (
+    1 + node.children.reduce((sum, c) => sum + countNodes(c), 0)
+  );
 }
 
 export function NotesTabBody({
@@ -88,23 +114,15 @@ export function NotesTabBody({
     return true;
   };
 
-  const threads = useMemo(() => buildThreads(notes), [notes]);
-  const visibleThreads = useMemo(
-    () =>
-      threads.filter(
-        ({ parent, replies }) =>
-          matches(parent) || replies.some((r) => matches(r))
-      ),
+  const trees = useMemo(() => buildTrees(notes), [notes]);
+  const visibleTrees = useMemo(
+    () => trees.filter((t) => subtreeMatches(t, matches)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [threads, query, typeFilter, pinnedOnly]
+    [trees, query, typeFilter, pinnedOnly]
   );
   const visibleNoteCount = useMemo(
-    () =>
-      visibleThreads.reduce(
-        (n, t) => n + 1 + t.replies.length,
-        0
-      ),
-    [visibleThreads]
+    () => visibleTrees.reduce((n, t) => n + countNodes(t), 0),
+    [visibleTrees]
   );
 
   const typesWithCounts = useMemo(() => {
@@ -219,7 +237,7 @@ export function NotesTabBody({
       </div>
 
       {/* Threaded list */}
-      {visibleThreads.length === 0 ? (
+      {visibleTrees.length === 0 ? (
         <Card>
           <CardContent className="p-6 text-center text-xs text-ink-4">
             {anyActive
@@ -229,12 +247,12 @@ export function NotesTabBody({
         </Card>
       ) : (
         <div className="flex flex-col gap-4">
-          {visibleThreads.map(({ parent, replies }) => (
+          {visibleTrees.map((tree) => (
             <ThreadView
-              key={parent.id}
-              parent={parent}
-              replies={replies}
+              key={tree.note.id}
+              node={tree}
               matterId={matterId}
+              depth={0}
             />
           ))}
         </div>
@@ -243,22 +261,47 @@ export function NotesTabBody({
   );
 }
 
+/** Recursive tree render. Each level adds a small left-indent + a
+ *  connector line so the nesting reads at a glance. Indent is capped
+ *  at MAX_INDENT_DEPTH so very deep threads don't march off the
+ *  screen; beyond the cap everything stacks at the same indent with
+ *  the connector line still visible. */
+const MAX_INDENT_DEPTH = 6;
+
 function ThreadView({
-  parent,
-  replies,
+  node,
   matterId,
+  depth,
 }: {
-  parent: NoteCardNote;
-  replies: NoteCardNote[];
+  node: NoteNode;
   matterId: string;
+  depth: number;
 }) {
+  const hasChildren = node.children.length > 0;
   return (
     <div className="flex flex-col gap-2">
-      <NoteCard note={parent} matterId={matterId} />
-      {replies.length > 0 && (
-        <div className="pl-5 border-l-2 border-line/80 ml-3 flex flex-col gap-2">
-          {replies.map((r) => (
-            <NoteCard key={r.id} note={r} matterId={matterId} isReply />
+      <NoteCard
+        note={node.note}
+        matterId={matterId}
+        isReply={depth > 0}
+      />
+      {hasChildren && (
+        <div
+          className={cn(
+            "border-l-2 border-line/80 flex flex-col gap-2",
+            // Cap the visual indent — deeper replies still render
+            // inside the connector but stop marching right so they
+            // don't get cramped against the viewport edge.
+            depth + 1 <= MAX_INDENT_DEPTH ? "pl-5 ml-3" : "pl-3 ml-1"
+          )}
+        >
+          {node.children.map((child) => (
+            <ThreadView
+              key={child.note.id}
+              node={child}
+              matterId={matterId}
+              depth={depth + 1}
+            />
           ))}
         </div>
       )}
