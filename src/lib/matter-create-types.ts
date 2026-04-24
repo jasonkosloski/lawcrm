@@ -13,7 +13,6 @@
 
 export type MatterCreateType =
   | "time"
-  | "note"
   | "task"
   | "deadline"
   | "party"
@@ -35,7 +34,6 @@ export type MatterCreateEntry = {
   /** Lucide icon name resolved in the UI. */
   icon:
     | "clock"
-    | "note"
     | "task"
     | "deadline"
     | "users"
@@ -59,21 +57,6 @@ export const MATTER_CREATE_ENTRIES: MatterCreateEntry[] = [
       "Billing rate override (if not firm default)",
       "Flags: billable, no-charge, privileged",
       "Link to originating event (email, calendar, document) when applicable",
-    ],
-  },
-  {
-    type: "note",
-    group: "capture",
-    label: "Add note",
-    icon: "note",
-    description:
-      "Capture strategy memos, research notes, or internal chatter. Rich text editor with mentions and attachments.",
-    expected: [
-      "Type selector (Note / Strategy / Memo / Chatter)",
-      "Rich text content (headings, lists, bold/italic, inline code)",
-      "@-mentions for team members",
-      "Optional attachments",
-      "Pin-to-top toggle",
     ],
   },
   {

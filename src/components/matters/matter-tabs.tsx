@@ -41,15 +41,16 @@ const TABS = [
 ] as const;
 
 /** Map of tab slug → the create type to surface as a right-end button.
- *  Tabs not in this map (Overview, Timeline, Billing) have no contextual
- *  single-add action, so no button renders for them. */
+ *  Tabs not in this map have no contextual single-add action — the tab
+ *  either has its own inline create surface (Notes uses a composer at
+ *  the top of the tab) or there's no obvious single thing to create
+ *  (Overview, Timeline, Billing). */
 const TAB_ADD_TYPE: Record<string, MatterCreateType> = {
   events: "event",
   documents: "document",
   parties: "party",
   deadlines: "deadline",
   tasks: "task",
-  notes: "note",
   time: "time",
 };
 

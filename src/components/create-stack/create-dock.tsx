@@ -21,7 +21,6 @@ import {
   Maximize2,
   Minimize2,
   Receipt,
-  StickyNote,
   CircleAlert,
   ListTodo,
   Users,
@@ -37,7 +36,6 @@ import { useCreateStack, type CreatePanel } from "./create-stack-provider";
 
 const ICON_MAP: Record<MatterCreateEntry["icon"], LucideIcon> = {
   clock: Clock,
-  note: StickyNote,
   task: ListTodo,
   deadline: CircleAlert,
   users: Users,
