@@ -1,26 +1,231 @@
+/* =============================================================================
+ * Kosloski Law CRM — Global Styles & Design Tokens
+ *
+ * Color palette, typography, and spacing derived from the design handoff.
+ * The brand identity is: warm paper neutrals + saturated navy blue accent.
+ * Display font (Fraunces) for headings/email body, Inter for all UI chrome,
+ * JetBrains Mono for timestamps/metadata.
+ * ============================================================================= */
+
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
+/* ── Tailwind theme integration ─────────────────────────────────────────────── */
 @theme inline {
+  /* Semantic color mappings */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* Font families */
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
+  --font-display: var(--font-fraunces);
+
+  /* Radius scale */
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* ── Kosloski brand blue scale ──────────────────────────────────────────── */
+  --color-brand-50: #f0f6fc;
+  --color-brand-100: #dbeafe;
+  --color-brand-200: #b3d4ec;
+  --color-brand-300: #7fb4d9;
+  --color-brand-400: #4a8fc2;
+  --color-brand-500: #2563a8;
+  --color-brand-600: #1e4f88;
+  --color-brand-700: #18406e;
+  --color-brand-900: #0c2443;
+  --color-brand-soft: #eaf3fa;
+  --color-brand-tint: #f6faff;
+
+  /* ── Warm paper neutrals ────────────────────────────────────────────────── */
+  --color-ink: #14181f;
+  --color-ink-2: #3a4251;
+  --color-ink-3: #6b7280;
+  --color-ink-4: #9aa1ad;
+  --color-line: #e5e4de;
+  --color-line-2: #eeece6;
+  --color-paper: #faf9f5;
+  --color-paper-2: #f3f1ea;
+  --color-paper-email: #faf8f3;
+
+  /* ── Semantic colors ────────────────────────────────────────────────────── */
+  --color-highlight: #fff1bd;
+  --color-ok: #2d8a5f;
+  --color-warn: #b6623d;
+  --color-danger: #c13c3c;
+
+  /* ── Practice area colors ───────────────────────────────────────────────── */
+  --color-area-1983: #2563a8;
+  --color-area-housing: #2d8a5f;
+  --color-area-employment: #b6623d;
+  --color-area-criminal: #6b4e7d;
+  --color-area-class: #8a6a2d;
+  --color-area-ada: #3a8a7a;
+  --color-area-education: #3a8a7a;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ── Root CSS variables (shadcn-compatible, mapped to brand) ────────────────── */
+:root {
+  --background: #faf9f5;
+  --foreground: #14181f;
+  --card: #ffffff;
+  --card-foreground: #14181f;
+  --popover: #ffffff;
+  --popover-foreground: #14181f;
+  --primary: #2563a8;
+  --primary-foreground: #ffffff;
+  --secondary: #f3f1ea;
+  --secondary-foreground: #14181f;
+  --muted: #f3f1ea;
+  --muted-foreground: #6b7280;
+  --accent: #eaf3fa;
+  --accent-foreground: #0c2443;
+  --destructive: #c13c3c;
+  --border: #e5e4de;
+  --input: #e5e4de;
+  --ring: #2563a8;
+  --chart-1: #2563a8;
+  --chart-2: #2d8a5f;
+  --chart-3: #b6623d;
+  --chart-4: #6b4e7d;
+  --chart-5: #8a6a2d;
+  --radius: 0.5rem;
+
+  /* Sidebar */
+  --sidebar: #f3f1ea;
+  --sidebar-foreground: #14181f;
+  --sidebar-primary: #2563a8;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eaf3fa;
+  --sidebar-accent-foreground: #0c2443;
+  --sidebar-border: #e5e4de;
+  --sidebar-ring: #2563a8;
+}
+
+/* ── Base layer ─────────────────────────────────────────────────────────────── */
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    @apply font-sans;
+    font-feature-settings: "ss01", "cv11";
+  }
+
+  body {
+    @apply bg-paper text-ink;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ── Brand gradient hairline (top of main content area) ─────────────────────── */
+.brand-gradient-line {
+  height: 3px;
+  background: linear-gradient(90deg, var(--color-brand-500), var(--color-brand-300) 40%, #e5e4de 80%);
+}
+
+/* ── Display typography helper ──────────────────────────────────────────────── */
+.text-display {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+/* ── Email reader body typography ───────────────────────────────────────────── */
+.email-body {
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  line-height: 1.62;
+  white-space: pre-wrap;
+}
+
+/* ── Card hover lift (blue-tinted shadow from design spec) ──────────────────── */
+.card-hover {
+  transition: box-shadow 0.16s ease, border-color 0.16s ease;
+}
+.card-hover:hover {
+  border-color: var(--color-brand-300);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.02), 0 10px 24px -14px rgba(37, 99, 168, 0.35);
+}
+
+/* ── KPI tile gradient overlays ─────────────────────────────────────────────── */
+.kpi-accent {
+  position: relative;
+  overflow: hidden;
+}
+.kpi-accent::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, var(--color-brand-soft) 0%, #fff 55%);
+  pointer-events: none;
+  z-index: 0;
+}
+.kpi-accent > * { position: relative; z-index: 1; }
+
+.kpi-critical::before {
+  background: linear-gradient(135deg, #fbf0ea 0%, #fff 55%) !important;
+}
+.kpi-ok::before {
+  background: linear-gradient(135deg, #ecf6f1 0%, #fff 55%) !important;
+}
+
+/* ── Subtle page transition ─────────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-page-enter {
+  animation: fadeIn 0.22s ease-out both;
+}
+
+/* ── Scrollbar styling ──────────────────────────────────────────────────────── */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #c9ced4;
+  border-radius: 4px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
 }
