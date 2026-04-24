@@ -16,9 +16,11 @@
  * auto-generated name.
  *
  * Typeahead client picker: matches existing Contacts as the user
- * types. Picking one links to that contact AND auto-fills the
- * Location field from the contact's city (when available) — so
- * re-opening a case for a known client takes one click.
+ * types. Picking one links to the contact. Case location is
+ * intentionally NOT inferred from the client's city — the location
+ * of the case (incident location / venue) is a separate concept from
+ * where the client lives, so it stays a free-text field the user
+ * fills in only when relevant.
  */
 
 "use client";
@@ -213,15 +215,6 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
     setSelectedClientId(c.id);
     setClientName(c.name);
     setSuggestionsOpen(false);
-    // Magical auto-fill: if the selected client has a city, populate
-    // Location so the matter name pattern fills out automatically. Only
-    // overwrite if Location is currently empty — don't clobber what
-    // the user typed.
-    if (c.city && !location.trim()) {
-      const loc =
-        c.state && c.state !== c.city ? `${c.city}, ${c.state}` : c.city;
-      setLocation(loc);
-    }
   };
 
   const clearExisting = () => {
@@ -357,9 +350,9 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
           </Field>
 
           <Field
-            label="Location"
+            label="Case location"
             name="location"
-            hint="Used in the matter-name pattern (not persisted separately yet)."
+            hint="Optional — incident location or venue (e.g. 'Aurora'). Folds into the matter name if set."
           >
             <input
               id="location"
@@ -368,7 +361,7 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
               value={location}
               onChange={(e) => setLocation(e.target.value)}
               className={inputCls(false)}
-              placeholder="Aurora"
+              placeholder="Aurora (optional)"
             />
           </Field>
         </Row>
