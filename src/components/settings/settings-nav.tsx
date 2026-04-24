@@ -37,6 +37,7 @@ const SECTIONS: NavSection[] = [
     items: [
       { href: "/settings/team", label: "Team" },
       { href: "/settings/firm", label: "Firm info" },
+      { href: "/settings/practice-areas", label: "Practice areas" },
       { href: "/settings/integrations", label: "Integrations" },
       { href: "/settings/billing", label: "Billing & rates" },
     ],
@@ -56,7 +57,12 @@ export function SettingsNav() {
             </div>
             <ul className="flex flex-col gap-px">
               {section.items.map((item) => {
-                const active = pathname === item.href;
+                // Highlight the section link on any nested route too —
+                // e.g. /settings/practice-areas/<id> still highlights
+                // "Practice areas".
+                const active =
+                  pathname === item.href ||
+                  pathname.startsWith(`${item.href}/`);
                 return (
                   <li key={item.href}>
                     <Link
