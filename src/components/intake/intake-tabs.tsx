@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 const TABS = [
   { slug: "", label: "Overview" },
   { slug: "communication", label: "Communication" },
+  { slug: "time", label: "Time & expenses" },
 ] as const;
 
 export function IntakeTabs({ leadId }: { leadId: string }) {

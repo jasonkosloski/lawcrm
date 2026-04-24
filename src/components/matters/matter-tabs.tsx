@@ -36,6 +36,7 @@ const TABS = [
   { slug: "deadlines", label: "Deadlines" },
   { slug: "tasks", label: "Tasks" },
   { slug: "notes", label: "Notes" },
+  { slug: "time", label: "Time & expenses" },
   { slug: "billing", label: "Billing" },
 ] as const;
 
@@ -49,6 +50,7 @@ const TAB_ADD_TYPE: Record<string, MatterCreateType> = {
   deadlines: "deadline",
   tasks: "task",
   notes: "note",
+  time: "time",
 };
 
 export function MatterTabs({ matterId }: { matterId: string }) {

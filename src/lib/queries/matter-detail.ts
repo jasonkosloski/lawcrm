@@ -174,6 +174,92 @@ export async function getMatterNotes(matterId: string): Promise<NoteRow[]> {
   }));
 }
 
+// ── Time entries ─────────────────────────────────────────────────────────
+
+export type TimeEntryRow = {
+  id: string;
+  date: Date;
+  hours: number;
+  activity: string;
+  narrative: string | null;
+  utbmsCode: string | null;
+  rate: number | null;
+  amount: number | null;
+  billable: boolean;
+  noCharge: boolean;
+  privileged: boolean;
+  source: string;
+  status: string;
+  userName: string;
+  userInitials: string;
+  invoiceId: string | null;
+};
+
+export type MatterTimeSummary = {
+  totalHours: number;
+  billableHours: number;
+  unbilledAmount: number;
+  billedAmount: number;
+};
+
+export async function getMatterTimeEntries(
+  matterId: string
+): Promise<TimeEntryRow[]> {
+  const rows = await prisma.timeEntry.findMany({
+    where: { matterId },
+    include: { user: { select: { name: true, initials: true } } },
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+  });
+  return rows.map((e) => ({
+    id: e.id,
+    date: e.date,
+    hours: e.hours,
+    activity: e.activity,
+    narrative: e.narrative,
+    utbmsCode: e.utbmsCode,
+    rate: e.rate,
+    amount: e.amount,
+    billable: e.billable,
+    noCharge: e.noCharge,
+    privileged: e.privileged,
+    source: e.source,
+    status: e.status,
+    userName: e.user.name,
+    userInitials: e.user.initials,
+    invoiceId: e.invoiceId,
+  }));
+}
+
+export async function getMatterTimeSummary(
+  matterId: string
+): Promise<MatterTimeSummary> {
+  const entries = await prisma.timeEntry.findMany({
+    where: { matterId },
+    select: {
+      hours: true,
+      amount: true,
+      billable: true,
+      noCharge: true,
+      status: true,
+    },
+  });
+
+  let totalHours = 0;
+  let billableHours = 0;
+  let unbilledAmount = 0;
+  let billedAmount = 0;
+  for (const e of entries) {
+    totalHours += e.hours;
+    if (e.billable && !e.noCharge) {
+      billableHours += e.hours;
+      const amount = e.amount ?? 0;
+      if (e.status === "billed") billedAmount += amount;
+      else unbilledAmount += amount;
+    }
+  }
+  return { totalHours, billableHours, unbilledAmount, billedAmount };
+}
+
 // ── Events ───────────────────────────────────────────────────────────────
 
 export type MatterEventRow = {
