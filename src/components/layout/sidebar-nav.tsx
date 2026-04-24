@@ -107,9 +107,9 @@ export function SidebarNav({ data }: { data: SidebarData }) {
           badge: numBadge(data.activeLeadCount),
         },
         {
-          id: "email",
-          label: "Email",
-          href: "/email",
+          id: "communication",
+          label: "Communication",
+          href: "/communication",
           icon: Mail,
           badge: numBadge(data.unreadEmailCount),
         },

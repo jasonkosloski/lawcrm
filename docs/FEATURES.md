@@ -61,15 +61,26 @@ Status legend: `[ ]` planned · `[~]` in progress · `[x]` complete · `[-]` des
 - [ ] **Decline lead** — Inline stage change with decline reason capture
 - [ ] **Convert lead to matter** — Wizard that creates matter + runs area-specific automations (CGIA notice for §1983, HUD response for FHA, etc.)
 
-## Phase 4 — Email
+## Phase 4 — Communication
 
-- [ ] **Email inbox — three-pane layout** — Mailboxes, thread list, reader
-- [ ] **Thread list** — Search, filter pills (All/Unread/Unfiled/Attach), selected state
-- [ ] **Thread reader** — Accordion messages, attachments, reply stub
-- [ ] **Email details drawer** — Participants, matter link, actions, sync metadata
-- [ ] **Compose window** — Docked/expanded/minimized modes, matter picker, templates
-- [ ] **Matter email filing** — File threads to matters, auto-filing suggestions
+Unified inbox for everything the firm sends and receives on behalf of
+clients: email, text messages, and (later) voicemail. Starts email-
+first since that's where the existing schema lives, but the route and
+page chrome are built under `/communication` so SMS can plug in without
+a rename later. Schema currently uses `Email*` models; when SMS lands
+we'll decide whether to add sibling `Sms*` models or generalize to
+polymorphic `Communication*` — captured as an open question in
+SCHEMA_NOTES.
+
+- [ ] **Inbox — three-pane layout** — Channels/mailboxes, thread list, reader
+- [ ] **Thread list** — Search, filter pills (All/Unread/Unfiled/Attach), channel filter (Email / SMS), selected state
+- [ ] **Thread reader** — Accordion messages, attachments, reply stub; channel-aware (email formatting vs SMS bubbles)
+- [ ] **Details drawer** — Participants, matter link, actions, sync metadata
+- [ ] **Compose window** — Docked/expanded/minimized modes, matter picker, templates, channel picker (Email / SMS)
+- [ ] **Matter filing** — File threads to matters, auto-filing suggestions
 - [ ] **Gmail integration** — OAuth, thread sync, label management
+- [ ] **SMS integration** — Likely Twilio for sending/receiving texts, with per-matter phone numbers
+- [ ] **Voicemail transcription** — Later, when we wire phone integration
 
 ## Phase 5 — Calendar & Time
 

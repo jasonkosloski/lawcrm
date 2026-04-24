@@ -80,3 +80,11 @@ These are places where the schema will likely change as we build:
 Keep a record of schema changes we considered and explicitly passed on, so we don't keep re-litigating them.
 
 - **`Matter.slug` unique field** — Evaluated for prettier URLs (`/matters/alvarez`). Rejected: names collide, auto-suffixing (`alvarez-2`) is fragile. Stick with cuid (ADR-006). Could add a short_id (6-char nanoid) later if URL length becomes a real pain point — would not require changing the primary key.
+
+---
+
+## Open Questions
+
+Schema decisions deferred until the feature that forces them lands.
+
+- **Email vs. Communication model shape** — The /communication page will unify email + SMS (+ voicemail later). Current schema has `EmailAccount`, `EmailThread`, `EmailMessage`, `EmailLabel`, `EmailAttachment`. Two plausible paths when SMS lands: (a) add sibling `SmsThread` / `SmsMessage` models (FK integrity, clean per-channel querying, but more join work for unified inbox); (b) generalize to `Communication*` with a channel enum + channel-specific sub-fields (single-table simplicity, but JSON-ish shape for channel-specific metadata). Pick once we have real SMS requirements — likely when we integrate Twilio.

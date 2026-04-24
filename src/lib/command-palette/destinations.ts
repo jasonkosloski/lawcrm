@@ -23,7 +23,7 @@ export const NAV_DESTINATIONS: NavDestination[] = [
   { id: "nav:matters", label: "All matters", keywords: "cases list table", href: "/matters", icon: "gavel" },
   { id: "nav:matters-pinned", label: "Matters — pinned only", keywords: "cases favorites", href: "/matters?pinned=1", icon: "pin" },
   { id: "nav:intake", label: "Intake queue", keywords: "leads new prospects", href: "/intake", icon: "inbox" },
-  { id: "nav:email", label: "Email", keywords: "inbox mail messages", href: "/email", icon: "mail" },
+  { id: "nav:communication", label: "Communication", keywords: "email inbox mail messages texts sms", href: "/communication", icon: "mail" },
   { id: "nav:calendar", label: "Calendar", keywords: "schedule events meetings", href: "/calendar", icon: "calendar" },
   { id: "nav:time", label: "Time tracking", keywords: "hours billing timer", href: "/time", icon: "clock" },
   { id: "nav:billing", label: "Billing", keywords: "invoices payments ar", href: "/billing", icon: "dollar" },
