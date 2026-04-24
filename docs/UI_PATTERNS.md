@@ -210,22 +210,31 @@ context.
 ### Layout-Persistent Panel Stack (provider-owned)
 
 Pattern used by the matter-detail **Create** flow (Log time / Add
-note / Add task / etc.). Multiple concurrent panels are supported —
-common use case: taking notes during a hearing while adding a newly-
-announced court date, without losing either in progress.
+note / Add task / etc.) and the **calendar** New event flow.
+Multiple concurrent panels are supported — common use case: taking
+notes during a hearing while adding a newly-announced court date,
+without losing either in progress.
 
 **Architecture:**
 
-1. `MatterCreateStackProvider` (client) is mounted inside
-   `matters/[id]/layout.tsx`. It holds `panels: CreatePanel[]` +
-   `focusedId` in React state. Next.js layouts don't remount on
-   child route changes, so the provider — and everything in it —
-   survives tab navigation within the matter.
-2. `useMatterCreateStack()` exposes `open(type)`, `close(id)`,
-   `focus(id)`, `setExpanded(id, bool)`, and `updateFormState(id,
-   patch)`. Triggers (header Create dropdown, tab-bar contextual
-   button, empty-state CTA) call `open(type)` — URL params are not
-   involved.
+1. `CreateStackProvider` (client) is mounted inside a layout that
+   should host the stack — `matters/[id]/layout.tsx` for the matter
+   detail surface, directly on `calendar/page.tsx` for the calendar.
+   It holds `panels: CreatePanel[]` + `focusedId` in React state.
+   Next.js layouts don't remount on child route changes, so the
+   provider — and everything in it — survives navigation within
+   its subtree.
+2. `useCreateStack()` exposes `open(type)`, `close(id)`, `focus(id)`,
+   `setExpanded(id, bool)`, and `updateFormState(id, patch)`.
+   Triggers (header Create dropdown, tab-bar contextual button,
+   empty-state CTA, "+ New event" on calendar) call `open(type)` —
+   URL params are not involved.
+3. The provider takes an optional `context` prop (color + label +
+   sublabel) that drives the expanded-mode context strip inside the
+   modal. Matter detail passes the matter's color/name/case number;
+   calendar passes nothing (no per-matter context since an event
+   might be firm-wide). This is how one generic stack serves both
+   contexts.
 3. `MatterCreateDock` renders the current focused panel (docked
    right-rail or expanded modal). Non-focused open panels render as
    compact chips **inside the focused panel's chrome, right below

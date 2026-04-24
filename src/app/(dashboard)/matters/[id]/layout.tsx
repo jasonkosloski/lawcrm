@@ -24,8 +24,8 @@ import { TopBar } from "@/components/layout/topbar";
 import { MatterTabs } from "@/components/matters/matter-tabs";
 import { PinToggle } from "@/components/matters/pin-toggle";
 import { MatterCreateMenu } from "@/components/matters/matter-create-menu";
-import { MatterCreateDock } from "@/components/matters/matter-create-dock";
-import { MatterCreateStackProvider } from "@/components/matters/matter-create-stack-provider";
+import { CreateDock } from "@/components/create-stack/create-dock";
+import { CreateStackProvider } from "@/components/create-stack/create-stack-provider";
 import { getMatterById } from "@/lib/queries/matters";
 
 const FEE_LABEL: Record<string, string> = {
@@ -47,11 +47,12 @@ export default async function MatterDetailLayout({
   const leadMember = matter.teamMembers.find((t) => t.role === "lead");
 
   return (
-    <MatterCreateStackProvider
-      matterId={matter.id}
-      matterName={matter.name}
-      matterCaseNumber={matter.caseNumber}
-      matterColor={matter.color}
+    <CreateStackProvider
+      context={{
+        color: matter.color,
+        label: matter.name,
+        sublabel: matter.caseNumber,
+      }}
     >
       <TopBar
         title={matter.name}
@@ -113,8 +114,8 @@ export default async function MatterDetailLayout({
 
       <div className="flex-1 flex min-h-0">
         <div className="flex-1 overflow-y-auto min-w-0">{children}</div>
-        <MatterCreateDock />
+        <CreateDock />
       </div>
-    </MatterCreateStackProvider>
+    </CreateStackProvider>
   );
 }

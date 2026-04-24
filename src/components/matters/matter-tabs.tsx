@@ -24,7 +24,7 @@ import {
   findMatterCreateEntry,
   type MatterCreateType,
 } from "@/lib/matter-create-types";
-import { useMatterCreateStack } from "./matter-create-stack-provider";
+import { useCreateStack } from "@/components/create-stack/create-stack-provider";
 
 const TABS = [
   { slug: "", label: "Overview" },
@@ -50,7 +50,7 @@ const TAB_ADD_TYPE: Record<string, MatterCreateType> = {
 
 export function MatterTabs({ matterId }: { matterId: string }) {
   const pathname = usePathname();
-  const { open } = useMatterCreateStack();
+  const { open } = useCreateStack();
   const base = `/matters/${matterId}`;
 
   const activeSlug =

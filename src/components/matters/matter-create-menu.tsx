@@ -39,7 +39,7 @@ import {
   type MatterCreateEntry,
   type MatterCreateGroup,
 } from "@/lib/matter-create-types";
-import { useMatterCreateStack } from "./matter-create-stack-provider";
+import { useCreateStack } from "@/components/create-stack/create-stack-provider";
 
 const ICON_MAP: Record<MatterCreateEntry["icon"], LucideIcon> = {
   clock: Clock,
@@ -67,7 +67,7 @@ const GROUP_ORDER: MatterCreateGroup[] = [
 ];
 
 export function MatterCreateMenu() {
-  const { open } = useMatterCreateStack();
+  const { open } = useCreateStack();
 
   const byGroup = new Map<MatterCreateGroup, MatterCreateEntry[]>();
   for (const e of MATTER_CREATE_ENTRIES) {

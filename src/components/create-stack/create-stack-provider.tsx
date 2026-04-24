@@ -1,20 +1,17 @@
 /**
- * Matter Create Stack Provider
+ * Create Stack Provider
  *
- * Owns the list of open Create panels for a matter, plus which one is
- * focused and whether the focused panel is expanded-to-modal. Lives in
- * the matter detail layout so its state survives tab navigation.
+ * Generic stack of "+ Create …" panels that survive navigation within
+ * the layout they're mounted in. Used by the matter detail layout
+ * (where panels capture notes, time entries, deadlines, etc. for a
+ * matter) and by the calendar page (where the only panel type is
+ * `event`). Any page that wants a Gmail-compose-style docked create
+ * flow can wrap its subtree in this provider.
  *
- * Why a provider instead of URL state: multiple concurrent panels
- * don't serialize cleanly into query params, and once you need a
- * minimized chip list, URL roundtrips fight the interaction model.
- * Deep-linking to a specific create state is deferred.
- *
- * Real form state (once v1 placeholders get replaced with real forms)
- * will live here too — keyed by panel id in `panelFormState`. Keeping
- * form data in the provider rather than the panel component means
- * panels can freely mount/unmount as they gain or lose focus without
- * losing the user's work.
+ * The `context` prop is optional — when present, it drives the
+ * expanded-mode context strip (shown inside the modal chrome to remind
+ * the user what they're creating against). Matter detail passes
+ * matter color + name + case number; calendar passes nothing.
  */
 
 "use client";
@@ -29,52 +26,48 @@ import {
 } from "react";
 import type { MatterCreateType } from "@/lib/matter-create-types";
 
-/** A single open Create panel. */
 export type CreatePanel = {
   id: string;
   type: MatterCreateType;
   expanded: boolean;
-  /** Free-form form state for when real forms land. Currently unused. */
   formState: Record<string, unknown>;
 };
 
-export type MatterMeta = {
-  matterId: string;
-  matterName: string;
-  matterCaseNumber: string | null;
-  matterColor: string;
+/** Optional metadata shown in expanded-mode modal chrome so the user
+ *  knows what context the create is scoped to. */
+export type CreateContext = {
+  /** Dot color — e.g. matter practice-area color. */
+  color: string;
+  /** Primary label — e.g. matter name. */
+  label: string;
+  /** Secondary label — e.g. case number; shown monospaced. */
+  sublabel: string | null;
 };
 
-type StackContext = MatterMeta & {
+type StackContextValue = {
   panels: CreatePanel[];
   focusedId: string | null;
-  /** Open a new panel of `type`. Minimizes the currently focused panel
-   *  (if any) and makes the new one focused. */
+  context: CreateContext | null;
   open: (type: MatterCreateType) => void;
-  /** Remove a panel entirely. If it was focused, focus shifts to the
-   *  next most recent panel, or null. */
   close: (id: string) => void;
-  /** Bring a panel to focus. Collapses any expanded panel first. */
   focus: (id: string) => void;
-  /** Toggle expand-to-modal on the focused panel. */
   setExpanded: (id: string, expanded: boolean) => void;
-  /** Merge a patch into a panel's form state. */
   updateFormState: (id: string, patch: Record<string, unknown>) => void;
 };
 
-const Ctx = createContext<StackContext | null>(null);
+const Ctx = createContext<StackContextValue | null>(null);
 
 let idCounter = 0;
 const nextId = (): string =>
   `panel-${++idCounter}-${Date.now().toString(36)}`;
 
-export function MatterCreateStackProvider({
-  matterId,
-  matterName,
-  matterCaseNumber,
-  matterColor,
+export function CreateStackProvider({
+  context = null,
   children,
-}: MatterMeta & { children: ReactNode }) {
+}: {
+  context?: CreateContext | null;
+  children: ReactNode;
+}) {
   const [panels, setPanels] = useState<CreatePanel[]>([]);
   const [focusedId, setFocusedId] = useState<string | null>(null);
 
@@ -91,10 +84,9 @@ export function MatterCreateStackProvider({
     (id: string) => {
       const closingFocused = id === focusedId;
       const closingPanel = panels.find((p) => p.id === id);
-      // If the user is closing the focused panel *while it's expanded*,
-      // the next focused panel inherits that expansion — the user is in
-      // "focus mode" and doesn't want to be dumped back to the docked
-      // rail just because they closed one item in the stack.
+      // If the user closes the focused panel *while it's expanded*, the
+      // next focused panel inherits the expansion — they're in focus
+      // mode and shouldn't be kicked back to the docked rail.
       const inheritExpanded =
         closingFocused && (closingPanel?.expanded ?? false);
 
@@ -122,7 +114,6 @@ export function MatterCreateStackProvider({
       // Chip-click focus preserves expansion: if the current focused
       // panel is expanded, hand the expansion to the newly-focused
       // panel so the user stays in modal focus mode across switches.
-      // If the current is docked, the new one is docked too.
       setPanels((prev) => {
         const currentlyExpanded =
           prev.find((p) => p.id === focusedId)?.expanded ?? false;
@@ -154,12 +145,9 @@ export function MatterCreateStackProvider({
     []
   );
 
-  const value = useMemo<StackContext>(
+  const value = useMemo<StackContextValue>(
     () => ({
-      matterId,
-      matterName,
-      matterCaseNumber,
-      matterColor,
+      context,
       panels,
       focusedId,
       open,
@@ -169,10 +157,7 @@ export function MatterCreateStackProvider({
       updateFormState,
     }),
     [
-      matterId,
-      matterName,
-      matterCaseNumber,
-      matterColor,
+      context,
       panels,
       focusedId,
       open,
@@ -186,12 +171,10 @@ export function MatterCreateStackProvider({
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
-export function useMatterCreateStack(): StackContext {
+export function useCreateStack(): StackContextValue {
   const ctx = useContext(Ctx);
   if (!ctx) {
-    throw new Error(
-      "useMatterCreateStack must be used within MatterCreateStackProvider"
-    );
+    throw new Error("useCreateStack must be used within CreateStackProvider");
   }
   return ctx;
 }

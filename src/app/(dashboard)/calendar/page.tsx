@@ -1,16 +1,18 @@
 /**
  * Calendar Page
  *
- * Week view (default) and Month view, both read-only for now. State
- * lives in the URL: `?view=week|month` and `?d=YYYY-MM-DD`. No
- * external-calendar integration yet — this is the internal view of
- * CalendarEvents + Deadlines stored in the DB.
+ * Week view (default) and Month view, both read-only. State lives in
+ * the URL: `?view=week|month` and `?d=YYYY-MM-DD`. No external-calendar
+ * integration yet — this is the internal view of CalendarEvents +
+ * Deadlines stored in the DB.
+ *
+ * Event creation reuses the same CreateStackProvider + CreateDock
+ * pattern as the matter detail pages: the "New event" button opens a
+ * docked right-rail panel that can expand to modal, and multiple
+ * panels can be open concurrently.
  */
 
-import Link from "next/link";
-import { Plus } from "lucide-react";
 import { TopBar } from "@/components/layout/topbar";
-import { Button } from "@/components/ui/button";
 import {
   CalendarToolbar,
   monthGridRange,
@@ -18,6 +20,9 @@ import {
 } from "@/components/calendar/calendar-toolbar";
 import { WeekView } from "@/components/calendar/week-view";
 import { MonthView } from "@/components/calendar/month-view";
+import { CreateStackProvider } from "@/components/create-stack/create-stack-provider";
+import { CreateDock } from "@/components/create-stack/create-dock";
+import { NewEventButton } from "@/components/calendar/new-event-button";
 import { parseCalendarParams } from "@/lib/calendar-utils";
 import {
   getCalendarItems,
@@ -47,26 +52,26 @@ export default async function CalendarPage({
   ].filter(Boolean);
 
   return (
-    <>
+    <CreateStackProvider>
       <TopBar
         title="Calendar"
         crumbs={crumbBits.join(" · ")}
-        actions={
-          <Button size="sm" render={<Link href="/calendar/new" />}>
-            <Plus />
-            New event
-          </Button>
-        }
+        actions={<NewEventButton />}
       />
 
       <div className="flex-1 flex flex-col min-h-0 animate-page-enter">
         <CalendarToolbar view={view} focal={focal} />
-        {view === "week" ? (
-          <WeekView focal={focal} items={items} />
-        ) : (
-          <MonthView focal={focal} items={items} />
-        )}
+        <div className="flex-1 flex min-h-0">
+          <div className="flex-1 min-w-0 flex flex-col">
+            {view === "week" ? (
+              <WeekView focal={focal} items={items} />
+            ) : (
+              <MonthView focal={focal} items={items} />
+            )}
+          </div>
+          <CreateDock />
+        </div>
       </div>
-    </>
+    </CreateStackProvider>
   );
 }

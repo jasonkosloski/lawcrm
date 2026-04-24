@@ -1,14 +1,14 @@
 /**
- * Matter Create Dock
+ * Create Dock
  *
- * Renders the open Create panels for the current matter:
+ * Renders the open panels from the surrounding CreateStackProvider:
  *   - Focused panel: docked right-rail (or expanded modal)
- *   - Non-focused panels: compact chips docked inside the focused
- *     panel's chrome (right below the header), so the chip row sits
- *     next to the active panel rather than floating in a corner
+ *   - Non-focused panels: compact chips inside the focused panel's
+ *     chrome under an "Also open" label
  *
- * Mounted once in the matter detail layout, inside the
- * MatterCreateStackProvider. Reads everything from that provider.
+ * Generic — doesn't know whether it's inside a matter detail or the
+ * calendar. The `context` on the provider drives the expanded-mode
+ * context strip.
  */
 
 "use client";
@@ -33,10 +33,7 @@ import {
   findMatterCreateEntry,
   type MatterCreateEntry,
 } from "@/lib/matter-create-types";
-import {
-  useMatterCreateStack,
-  type CreatePanel,
-} from "./matter-create-stack-provider";
+import { useCreateStack, type CreatePanel } from "./create-stack-provider";
 
 const ICON_MAP: Record<MatterCreateEntry["icon"], LucideIcon> = {
   clock: Clock,
@@ -49,22 +46,13 @@ const ICON_MAP: Record<MatterCreateEntry["icon"], LucideIcon> = {
   invoice: Receipt,
 };
 
-export function MatterCreateDock() {
-  const {
-    panels,
-    focusedId,
-    close,
-    focus,
-    setExpanded,
-    matterName,
-    matterCaseNumber,
-    matterColor,
-  } = useMatterCreateStack();
+export function CreateDock() {
+  const { panels, focusedId, context, close, focus, setExpanded } =
+    useCreateStack();
 
   const focused = panels.find((p) => p.id === focusedId) ?? null;
   const minimized = panels.filter((p) => p.id !== focusedId);
 
-  // Global Escape handler: collapses expanded → docked; closes docked.
   useEffect(() => {
     if (!focused) return;
     const handler = (e: KeyboardEvent) => {
@@ -84,7 +72,6 @@ export function MatterCreateDock() {
 
   return (
     <>
-      {/* ── Docked rail ─────────────────────────────────────────── */}
       {showDocked && focused && (
         <aside
           aria-label={`Create panel (${findMatterCreateEntry(focused.type)?.label ?? focused.type})`}
@@ -102,7 +89,6 @@ export function MatterCreateDock() {
         </aside>
       )}
 
-      {/* ── Expanded modal ──────────────────────────────────────── */}
       {showExpanded && focused && (
         <>
           <button
@@ -119,9 +105,7 @@ export function MatterCreateDock() {
               panel={focused}
               minimized={minimized}
               expanded
-              matterName={matterName}
-              matterCaseNumber={matterCaseNumber}
-              matterColor={matterColor}
+              contextBadge={context}
               onClose={() => close(focused.id)}
               onExpand={() => setExpanded(focused.id, true)}
               onCollapse={() => setExpanded(focused.id, false)}
@@ -141,9 +125,7 @@ function PanelChrome({
   panel,
   minimized,
   expanded,
-  matterName,
-  matterCaseNumber,
-  matterColor,
+  contextBadge,
   onClose,
   onExpand,
   onCollapse,
@@ -153,9 +135,11 @@ function PanelChrome({
   panel: CreatePanel;
   minimized: CreatePanel[];
   expanded?: boolean;
-  matterName?: string;
-  matterCaseNumber?: string | null;
-  matterColor?: string;
+  contextBadge?: {
+    color: string;
+    label: string;
+    sublabel: string | null;
+  } | null;
   onClose: () => void;
   onExpand: () => void;
   onCollapse: () => void;
@@ -199,27 +183,25 @@ function PanelChrome({
         </div>
       </header>
 
-      {/* Matter context strip (expanded only — TopBar provides it in docked) */}
-      {expanded && (
+      {/* Context badge (expanded only, and only when provider passed context) */}
+      {expanded && contextBadge && (
         <div className="flex items-center gap-2 px-4 py-2 border-b border-line shrink-0 bg-paper-2/40">
           <span
             className="w-1.5 h-1.5 rounded-full shrink-0"
-            style={{ background: matterColor }}
+            style={{ background: contextBadge.color }}
           />
           <span className="text-xs font-medium text-ink-2 truncate">
-            {matterName}
+            {contextBadge.label}
           </span>
-          {matterCaseNumber && (
+          {contextBadge.sublabel && (
             <span className="text-2xs font-mono text-ink-4 shrink-0">
-              {matterCaseNumber}
+              {contextBadge.sublabel}
             </span>
           )}
         </div>
       )}
 
-      {/* Minimized-panel chips — inline below the header, next to the
-          active panel. Only renders when there are actually other
-          panels open, so single-panel flows stay visually quiet. */}
+      {/* Minimized-panel chips */}
       {minimized.length > 0 && (
         <div className="flex items-center gap-1.5 flex-wrap px-3 py-2 border-b border-line shrink-0 bg-paper-2/30">
           <span className="text-2xs font-mono uppercase tracking-wider text-ink-4 mr-1">
@@ -236,7 +218,7 @@ function PanelChrome({
         </div>
       )}
 
-      {/* Body — placeholder for now */}
+      {/* Body — placeholder */}
       <div className="flex-1 overflow-y-auto p-4">
         <div className="flex flex-col gap-3">
           <p className="text-xs text-ink-3 leading-relaxed">
@@ -253,10 +235,10 @@ function PanelChrome({
             </ul>
           </div>
           <div className="text-2xs text-ink-4 leading-relaxed">
-            The real form for this type is a Phase 2.X follow-up. Open
-            multiple panels at once if you need to capture several
-            things in parallel — each one stays in the stack until you
-            save or close it.
+            The real form for this type is a follow-up. Open multiple
+            panels at once if you need to capture several things in
+            parallel — each one stays in the stack until you save or
+            close it.
           </div>
         </div>
       </div>

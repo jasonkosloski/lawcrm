@@ -29,7 +29,7 @@ import {
   findMatterCreateEntry,
   type MatterCreateType,
 } from "@/lib/matter-create-types";
-import { useMatterCreateStack } from "./matter-create-stack-provider";
+import { useCreateStack } from "@/components/create-stack/create-stack-provider";
 
 const ICON_MAP: Record<string, LucideIcon> = {
   clock: Clock,
@@ -53,7 +53,7 @@ export function TabAddButton({
   variant?: "default" | "subtle";
   className?: string;
 }) {
-  const { open } = useMatterCreateStack();
+  const { open } = useCreateStack();
   const entry = findMatterCreateEntry(type);
   if (!entry) return null;
   const Icon = ICON_MAP[entry.icon] ?? Plus;
