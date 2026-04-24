@@ -181,6 +181,7 @@ export function CommandPalette({
       onOpenChange={onOpenChange}
       title="Command palette"
       description="Search matters, contacts, leads, and firm actions. Press ↵ to select, esc to close."
+      className="sm:max-w-2xl"
     >
       <Command
         label="Command palette"
