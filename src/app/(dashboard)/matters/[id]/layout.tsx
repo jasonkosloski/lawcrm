@@ -51,6 +51,7 @@ export default async function MatterDetailLayout({
   return (
     <CreateStackProvider
       context={{
+        matterId: matter.id,
         color: matter.color,
         label: matter.name,
         sublabel: matter.caseNumber,

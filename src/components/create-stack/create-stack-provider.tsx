@@ -34,8 +34,13 @@ export type CreatePanel = {
 };
 
 /** Optional metadata shown in expanded-mode modal chrome so the user
- *  knows what context the create is scoped to. */
+ *  knows what context the create is scoped to. Matter-scoped stacks
+ *  pass `matterId` so typed panels (e.g. note) can attach the created
+ *  record to the right matter without having to look at the URL. */
 export type CreateContext = {
+  /** Matter id when the stack is scoped to a matter; null on pages
+   *  like calendar where panels aren't tied to a single matter. */
+  matterId?: string | null;
   /** Dot color — e.g. matter practice-area color. */
   color: string;
   /** Primary label — e.g. matter name. */

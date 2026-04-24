@@ -18,6 +18,7 @@ import {
   FileText,
   Plus,
   Receipt,
+  StickyNote,
   CircleAlert,
   ListTodo,
   Users,
@@ -42,6 +43,7 @@ import { useCreateStack } from "@/components/create-stack/create-stack-provider"
 
 const ICON_MAP: Record<MatterCreateEntry["icon"], LucideIcon> = {
   clock: Clock,
+  note: StickyNote,
   task: ListTodo,
   deadline: CircleAlert,
   users: Users,
