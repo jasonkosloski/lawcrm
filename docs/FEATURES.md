@@ -14,7 +14,7 @@ Status legend: `[ ]` planned · `[~]` in progress · `[x]` complete · `[-]` des
 - [ ] **Command palette (⌘K)** — Fuzzy search matters, people, docs; run commands
 - [x] **Sidebar: data-driven** — All sidebar content is live: per-user pinned matters (cuid hrefs), practice-area counts, main nav badges (open matters, unread email, active leads, hours today), current user profile
 - [-] **Sidebar: sync status bar** — Removed entirely (was design chrome with no real signal behind it)
-- [ ] **Sidebar: notification bell** — Red dot on bell is hardcoded; wire when notification system exists
+- [-] **Sidebar: notification bell** — Removed entirely (same reasoning as sync bar — no notification system to back it). Will re-appear when the Phase 8 Notifications feature exists.
 
 ## Phase 2 — Matters
 
@@ -81,6 +81,7 @@ Status legend: `[ ]` planned · `[~]` in progress · `[x]` complete · `[-]` des
 - [ ] **Automations** — Template library, trigger configuration
 - [ ] **Reports** — Pipeline, utilization, financials dashboards
 - [ ] **Role-based & customizable sidebar** — Different sidebar content per role, with per-user overrides. Attorneys see pinned matters; a finance user might pin reports or trust accounts; an intake paralegal might pin leads. Each role ships a sensible default, and users can add/remove/reorder pinned items from their own view. Depends on auth (for session user + role) and likely a `UserPreferences` model for persisted overrides. Consider a generic "pinned items" concept that spans matters, reports, leads, contacts, and views (saved filter URLs) rather than matter-only pinning.
+- [ ] **Notifications** — Firm-wide notification system: new filings, email from opposing counsel, approaching deadlines, task assignments, settlement approvals. Needs a `Notification` model (user, type, target, read state, createdAt), a subscription/preference model per user, real-time delivery (SSE or WebSocket), a bell icon in the sidebar with unread count, and a notifications center page. Bell was removed from the sidebar until this feature exists — restore it as part of this work.
 
 ## Phase 9 — Polish & Production
 

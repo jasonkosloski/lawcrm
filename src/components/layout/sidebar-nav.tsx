@@ -30,7 +30,6 @@ import {
   BarChart3,
   Zap,
   Settings,
-  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -276,10 +275,6 @@ export function SidebarNav({ data }: { data: SidebarData }) {
               {user?.role ? `${user.role} · partner` : "—"}
             </span>
           </div>
-          <span className="relative">
-            <Bell size={14} className="text-ink-3" />
-            <span className="absolute -top-0.5 -right-0.5 w-[7px] h-[7px] rounded-full bg-danger border-[1.5px] border-white" />
-          </span>
         </div>
       </div>
     </aside>
