@@ -13,6 +13,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Pin } from "lucide-react";
+import { StageChanger } from "@/components/matters/stage-changer";
 import { getMatterById } from "@/lib/queries/matters";
 import {
   getMatterDeadlines,
@@ -65,6 +66,16 @@ export default async function MatterOverviewPage({
       <div className="grid grid-cols-3 gap-5">
         {/* ── Left column ─────────────────────────────────────────── */}
         <div className="col-span-2 flex flex-col gap-5">
+          {/* Stage transition */}
+          <Card>
+            <CardContent className="px-4 py-4">
+              <StageChanger
+                matterId={matter.id}
+                currentStage={matter.stage}
+              />
+            </CardContent>
+          </Card>
+
           {/* Case facts */}
           <Card>
             <CardHeader className="pb-2">

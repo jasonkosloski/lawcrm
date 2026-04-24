@@ -319,3 +319,50 @@ export async function updateMatter(
   redirect(`/matters/${matterId}`);
 }
 
+// ── Stage change ────────────────────────────────────────────────────────
+
+const STAGES = [
+  "Intake",
+  "Pre-suit",
+  "Retained",
+  "Discovery",
+  "Dispositive",
+  "Pretrial",
+  "Cert",
+  "Trial/Settle",
+  "Settled",
+  "Closed",
+] as const;
+
+type Stage = (typeof STAGES)[number];
+
+/**
+ * Narrow action for the stage control on the matter Overview tab. One
+ * SQL update, no redirect — the page revalidates in place and the
+ * client-side optimistic UI reconciles with the server value.
+ *
+ * TODO (auth): once the firm has permissions, gate this to roles the
+ * firm administrator has authorized to move stage (e.g. Partner,
+ * Managing, or the matter's lead). Today any signed-in user can
+ * transition any matter.
+ */
+export async function updateMatterStage(
+  matterId: string,
+  newStage: string
+): Promise<{ ok: boolean; error?: string }> {
+  if (!(STAGES as readonly string[]).includes(newStage)) {
+    return { ok: false, error: "Invalid stage" };
+  }
+
+  await prisma.matter.update({
+    where: { id: matterId },
+    data: { stage: newStage as Stage },
+  });
+
+  // Sidebar practice-area counts exclude Closed/Settled stages, and
+  // the matters list shows the stage chip — revalidate the whole
+  // dashboard tree so both update.
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
