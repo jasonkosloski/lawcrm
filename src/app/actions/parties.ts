@@ -40,6 +40,33 @@ const partySchema = z
       .or(z.literal("")),
     role: z.string().trim().max(80).optional().or(z.literal("")),
     notes: z.string().trim().max(4000).optional().or(z.literal("")),
+    /** Representation status: "unknown" | "yes" | "no". "yes" unlocks
+     *  the rep contact fields below. "no" means pro se. */
+    representation: z.enum(["unknown", "yes", "no"]).default("unknown"),
+    representationName: z
+      .string()
+      .trim()
+      .max(200)
+      .optional()
+      .or(z.literal("")),
+    representationFirm: z
+      .string()
+      .trim()
+      .max(200)
+      .optional()
+      .or(z.literal("")),
+    representationEmail: z
+      .string()
+      .trim()
+      .max(200)
+      .optional()
+      .or(z.literal("")),
+    representationPhone: z
+      .string()
+      .trim()
+      .max(80)
+      .optional()
+      .or(z.literal("")),
   })
   .superRefine((data, ctx) => {
     if (data.contactMode === PICK_EXISTING) {
@@ -145,6 +172,28 @@ export async function createMatterContact(
 
     if (!contactId) throw new Error("No contact id resolved");
 
+    // Clients are represented by us — don't persist representation
+    // data on that category even if somehow submitted.
+    const isClient = data.category === "client";
+    const isRepresented = isClient
+      ? null
+      : data.representation === "yes"
+        ? true
+        : data.representation === "no"
+          ? false
+          : null;
+    // Keep the contact fields only if the user explicitly said
+    // represented=yes; otherwise null them out so stale data from a
+    // prior state doesn't linger.
+    const repName =
+      !isClient && isRepresented ? data.representationName || null : null;
+    const repFirm =
+      !isClient && isRepresented ? data.representationFirm || null : null;
+    const repEmail =
+      !isClient && isRepresented ? data.representationEmail || null : null;
+    const repPhone =
+      !isClient && isRepresented ? data.representationPhone || null : null;
+
     // Upsert keyed on [matterId, contactId, category] so re-adding
     // the same person in the same category just updates notes/role.
     await tx.matterContact.upsert({
@@ -161,10 +210,20 @@ export async function createMatterContact(
         category: data.category,
         role: data.role || null,
         notes: data.notes || null,
+        isRepresented,
+        representationName: repName,
+        representationFirm: repFirm,
+        representationEmail: repEmail,
+        representationPhone: repPhone,
       },
       update: {
         role: data.role || null,
         notes: data.notes || null,
+        isRepresented,
+        representationName: repName,
+        representationFirm: repFirm,
+        representationEmail: repEmail,
+        representationPhone: repPhone,
       },
     });
   });

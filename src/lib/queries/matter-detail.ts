@@ -31,6 +31,15 @@ export type PartyRow = {
   role: string | null;
   notes: string | null;
   conflictStatus: string;
+  /** Representation info for non-client parties. `null` means
+   *  unknown; `false` means explicitly pro se / self-represented;
+   *  `true` means represented (check the name/firm/email/phone
+   *  fields for the rep's contact info). */
+  isRepresented: boolean | null;
+  representationName: string | null;
+  representationFirm: string | null;
+  representationEmail: string | null;
+  representationPhone: string | null;
 };
 
 export async function getMatterParties(matterId: string): Promise<PartyRow[]> {
@@ -63,6 +72,11 @@ export async function getMatterParties(matterId: string): Promise<PartyRow[]> {
     role: r.role,
     notes: r.notes,
     conflictStatus: r.contact.conflictStatus,
+    isRepresented: r.isRepresented,
+    representationName: r.representationName,
+    representationFirm: r.representationFirm,
+    representationEmail: r.representationEmail,
+    representationPhone: r.representationPhone,
   }));
 }
 

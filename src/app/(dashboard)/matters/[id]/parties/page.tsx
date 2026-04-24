@@ -102,6 +102,7 @@ function CategorySection({
   matterId: string;
   contacts: ContactOption[];
 }) {
+  const showsRepresentation = category !== "client";
   return (
     <section>
       <div className="flex items-center gap-2 mb-2">
@@ -119,6 +120,7 @@ function CategorySection({
                 <TableHead>Subrole</TableHead>
                 <TableHead>Organization</TableHead>
                 <TableHead>Contact</TableHead>
+                {showsRepresentation && <TableHead>Represented by</TableHead>}
                 <TableHead>Notes</TableHead>
                 <TableHead className="pr-4 w-8" />
               </TableRow>
@@ -153,6 +155,11 @@ function CategorySection({
                       {!p.email && !p.phone && "—"}
                     </div>
                   </TableCell>
+                  {showsRepresentation && (
+                    <TableCell className="text-xs">
+                      <RepresentationCell party={p} />
+                    </TableCell>
+                  )}
                   <TableCell className="text-xs text-ink-3 max-w-xs truncate">
                     {p.notes ?? "—"}
                   </TableCell>
@@ -177,4 +184,52 @@ function CategorySection({
       </Card>
     </section>
   );
+}
+
+function RepresentationCell({ party }: { party: PartyRow }) {
+  // Explicit pro se — distinct visual so it reads different from
+  // "unknown" and doesn't silently fall back to the em-dash.
+  if (party.isRepresented === false) {
+    return (
+      <span className="inline-block text-2xs font-medium px-1.5 py-0.5 rounded-full border bg-paper-2 text-ink-3 border-line">
+        Pro se
+      </span>
+    );
+  }
+  // Represented and we have the rep's contact info — stack it.
+  if (party.isRepresented === true && party.representationName) {
+    return (
+      <div className="flex flex-col leading-tight">
+        <span className="text-ink font-medium truncate">
+          {party.representationName}
+        </span>
+        {party.representationFirm && (
+          <span className="text-2xs text-ink-3 truncate">
+            {party.representationFirm}
+          </span>
+        )}
+        {party.representationEmail && (
+          <span className="text-2xs text-ink-4 truncate">
+            {party.representationEmail}
+          </span>
+        )}
+        {party.representationPhone && (
+          <span className="text-2xs font-mono text-ink-4">
+            {party.representationPhone}
+          </span>
+        )}
+      </div>
+    );
+  }
+  // Represented flag is true but no name yet — show a hint that
+  // info's missing rather than going silent.
+  if (party.isRepresented === true) {
+    return (
+      <span className="text-2xs text-ink-4 italic">
+        Represented (details unknown)
+      </span>
+    );
+  }
+  // Null = unknown — em-dash so collapse looks clean.
+  return <span className="text-ink-4">—</span>;
 }

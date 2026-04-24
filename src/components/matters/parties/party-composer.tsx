@@ -62,6 +62,8 @@ export function PartyComposer({
     FormData
   >(action, partyInitialState);
 
+  const showsRepresentation = category !== "client";
+
   const [expanded, setExpanded] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -71,6 +73,13 @@ export function PartyComposer({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [organization, setOrganization] = useState("");
+  const [representation, setRepresentation] = useState<
+    "unknown" | "yes" | "no"
+  >("unknown");
+  const [repName, setRepName] = useState("");
+  const [repFirm, setRepFirm] = useState("");
+  const [repEmail, setRepEmail] = useState("");
+  const [repPhone, setRepPhone] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
@@ -83,6 +92,11 @@ export function PartyComposer({
     setEmail("");
     setPhone("");
     setOrganization("");
+    setRepresentation("unknown");
+    setRepName("");
+    setRepFirm("");
+    setRepEmail("");
+    setRepPhone("");
   };
 
   useEffect(() => {
@@ -321,6 +335,95 @@ export function PartyComposer({
           className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
         />
       </div>
+
+      {/* Representation — non-client categories only. */}
+      {showsRepresentation && (
+        <>
+          <input
+            type="hidden"
+            name="representation"
+            value={representation}
+          />
+          {representation === "yes" && (
+            <>
+              <input
+                type="hidden"
+                name="representationName"
+                value={repName}
+              />
+              <input
+                type="hidden"
+                name="representationFirm"
+                value={repFirm}
+              />
+              <input
+                type="hidden"
+                name="representationEmail"
+                value={repEmail}
+              />
+              <input
+                type="hidden"
+                name="representationPhone"
+                value={repPhone}
+              />
+            </>
+          )}
+          <div className="flex items-center gap-2 pt-1">
+            <span className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+              Represented
+            </span>
+            <div className="inline-flex items-center gap-0.5 rounded-md border border-line bg-white p-0.5">
+              {(["unknown", "yes", "no"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setRepresentation(v)}
+                  className={cn(
+                    "text-2xs font-medium px-2 py-0.5 rounded transition-colors capitalize",
+                    representation === v
+                      ? "bg-brand-500 text-white"
+                      : "text-ink-3 hover:text-brand-700"
+                  )}
+                >
+                  {v === "unknown" ? "Unknown" : v === "yes" ? "Yes" : "Pro se"}
+                </button>
+              ))}
+            </div>
+          </div>
+          {representation === "yes" && (
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="text"
+                value={repName}
+                onChange={(e) => setRepName(e.target.value)}
+                placeholder="Attorney name"
+                className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+              />
+              <input
+                type="text"
+                value={repFirm}
+                onChange={(e) => setRepFirm(e.target.value)}
+                placeholder="Firm (optional)"
+                className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+              />
+              <input
+                type="email"
+                value={repEmail}
+                onChange={(e) => setRepEmail(e.target.value)}
+                placeholder="Attorney email (optional)"
+                className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+              />
+              <input
+                type="tel"
+                value={repPhone}
+                onChange={(e) => setRepPhone(e.target.value)}
+                placeholder="Attorney phone (optional)"
+                className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+              />
+            </div>
+          )}
+        </>
+      )}
 
       <div className="flex items-center justify-end gap-2">
         <button

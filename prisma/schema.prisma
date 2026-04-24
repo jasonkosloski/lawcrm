@@ -232,6 +232,19 @@ model MatterContact {
   category  String   @default("other") /// client | opposing | lay_witness | expert_witness | other
   role      String?  /// Optional subrole — plaintiff, defendant, opposing_counsel, GAL, medical_provider, etc.
   notes     String?
+
+  /// Representation — who (if anyone) represents this non-client party.
+  /// Only meaningful for opposing parties / witnesses / others; clients
+  /// are represented by us. `isRepresented = false` explicitly means
+  /// pro se / self-represented; null means unknown. The contact fields
+  /// are free-text for now — future: link to a Contact record so
+  /// cross-matter repeat counsel coalesces into one entry.
+  isRepresented       Boolean?
+  representationName  String?
+  representationFirm  String?
+  representationEmail String?
+  representationPhone String?
+
   createdAt DateTime @default(now())
 
   matter  Matter  @relation(fields: [matterId], references: [id], onDelete: Cascade)
