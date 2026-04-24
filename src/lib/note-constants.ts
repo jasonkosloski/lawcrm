@@ -77,11 +77,20 @@ export type TimeCapture = {
   narrative: string;
 };
 
+export type NoteSiblingCapture = {
+  kind: "note_sibling";
+  tempId: string;
+  content: string;
+  type: NoteType;
+  isPinned: boolean;
+};
+
 export type NoteCapture =
   | TaskCapture
   | EventCapture
   | DeadlineCapture
-  | TimeCapture;
+  | TimeCapture
+  | NoteSiblingCapture;
 
 export type CaptureKind = NoteCapture["kind"];
 
@@ -90,6 +99,7 @@ export const CAPTURE_KIND_LABEL: Record<CaptureKind, string> = {
   event: "Event",
   deadline: "Deadline",
   time: "Time entry",
+  note_sibling: "Note",
 };
 
 /** Today's date in YYYY-MM-DD form — the local-timezone "today" is
@@ -155,6 +165,14 @@ export function newCapture(kind: CaptureKind, tempId: string): NoteCapture {
         hours: "",
         activity: "",
         narrative: "",
+      };
+    case "note_sibling":
+      return {
+        kind: "note_sibling",
+        tempId,
+        content: "",
+        type: "note",
+        isPinned: false,
       };
   }
 }

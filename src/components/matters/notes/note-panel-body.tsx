@@ -27,7 +27,7 @@ import {
   type NoteFormState,
 } from "@/lib/note-constants";
 import { NoteEditor } from "./note-editor";
-import { CaptureStack } from "./capture-stack";
+import { CaptureStack } from "@/components/matters/captures/capture-stack";
 import { useCreateStack } from "@/components/create-stack/create-stack-provider";
 
 export function NotePanelBody({

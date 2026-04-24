@@ -6,7 +6,7 @@
  * due date.
  */
 
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -15,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { TabAddButton } from "@/components/matters/tab-add-button";
+import { DeadlineComposer } from "@/components/matters/captures/deadline-composer";
 import { getMatterDeadlines } from "@/lib/queries/matter-detail";
 
 const KIND_LABEL: Record<string, string> = {
@@ -78,29 +78,15 @@ export default async function MatterDeadlinesPage({
   const { id } = await params;
   const deadlines = await getMatterDeadlines(id);
 
-  if (deadlines.length === 0) {
-    return (
-      <div className="p-5">
-        <Card>
-          <CardContent className="p-8 text-center flex flex-col items-center gap-3">
-            <div>
-              <div className="text-sm font-semibold text-ink mb-1">
-                No deadlines
-              </div>
-              <div className="text-xs text-ink-3">
-                Statute-driven, scheduling-order, and manual deadlines for this
-                matter will appear here.
-              </div>
-            </div>
-            <TabAddButton type="deadline" />
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
-    <div className="p-5">
+    <div className="p-5 flex flex-col gap-4">
+      <DeadlineComposer matterId={id} />
+
+      {deadlines.length === 0 ? (
+        <div className="text-xs text-ink-4 text-center py-6">
+          No deadlines yet — add one above.
+        </div>
+      ) : (
       <Card className="p-0 overflow-hidden">
         <Table>
           <TableHeader>
@@ -169,6 +155,7 @@ export default async function MatterDeadlinesPage({
           </TableBody>
         </Table>
       </Card>
+      )}
     </div>
   );
 }

@@ -5,8 +5,8 @@
  * Done). Each task shows priority, due date, and owner.
  */
 
-import { Card, CardContent } from "@/components/ui/card";
-import { TabAddButton } from "@/components/matters/tab-add-button";
+import { Card } from "@/components/ui/card";
+import { TaskComposer } from "@/components/matters/captures/task-composer";
 import {
   getMatterTasks,
   type TaskRow,
@@ -55,27 +55,6 @@ export default async function MatterTasksPage({
   const { id } = await params;
   const tasks = await getMatterTasks(id);
 
-  if (tasks.length === 0) {
-    return (
-      <div className="p-5">
-        <Card>
-          <CardContent className="p-8 text-center flex flex-col items-center gap-3">
-            <div>
-              <div className="text-sm font-semibold text-ink mb-1">
-                No tasks yet
-              </div>
-              <div className="text-xs text-ink-3">
-                Task checklist for this matter — assignments, due dates, and
-                priorities — will appear here.
-              </div>
-            </div>
-            <TabAddButton type="task" />
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   // Group by status
   const byStatus = new Map<string, TaskRow[]>();
   for (const t of tasks) {
@@ -89,6 +68,14 @@ export default async function MatterTasksPage({
 
   return (
     <div className="p-5 flex flex-col gap-5">
+      <TaskComposer matterId={id} />
+
+      {tasks.length === 0 ? (
+        <div className="text-xs text-ink-4 text-center py-6">
+          No tasks yet — add the first one above.
+        </div>
+      ) : null}
+
       {orderedStatuses.map((status) => {
         const rows = byStatus.get(status)!;
         return (

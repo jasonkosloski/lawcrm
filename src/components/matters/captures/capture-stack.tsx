@@ -1,17 +1,17 @@
 /**
- * Capture Stack — "Also capture" sibling-record controls for the note
- * composer.
+ * Capture Stack — "Also capture" sibling-record controls shared by
+ * every primary composer (note, task, event, deadline, time).
  *
  * Renders:
- *   - A row of [+ Task] [+ Event] [+ Deadline] [+ Time] buttons
+ *   - A row of [+ Kind] buttons (one per `allowedKinds` entry)
  *   - A stack of compact mini-forms, one per capture the user has
  *     queued, each with an X to remove it
  *
  * Captures are local state owned by the parent composer; this
  * component mutates them via callbacks. The parent serializes the
  * stack to a hidden `attachments` JSON field before submit, and the
- * server action creates the note + all sibling records in a single
- * transaction.
+ * server action creates the primary + all sibling records in a
+ * single transaction.
  */
 
 "use client";
@@ -23,6 +23,7 @@ import {
   Clock,
   ListTodo,
   Plus,
+  StickyNote,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -30,12 +31,16 @@ import {
   CAPTURE_KIND_LABEL,
   DEADLINE_KINDS,
   EVENT_TYPES,
+  NOTE_TYPES,
+  NOTE_TYPE_LABEL,
   TASK_PRIORITIES,
   newCapture,
   type CaptureKind,
   type DeadlineCapture,
   type EventCapture,
   type NoteCapture,
+  type NoteSiblingCapture,
+  type NoteType,
   type TaskCapture,
   type TimeCapture,
 } from "@/lib/note-constants";
@@ -45,19 +50,23 @@ const KIND_ICON: Record<CaptureKind, typeof ListTodo> = {
   event: Calendar,
   deadline: CircleAlert,
   time: Clock,
+  note_sibling: StickyNote,
 };
-
-const CAPTURE_ORDER: CaptureKind[] = ["task", "event", "deadline", "time"];
 
 export function CaptureStack({
   captures,
   onChange,
   errors,
+  allowedKinds = ["task", "event", "deadline", "time"],
 }: {
   captures: NoteCapture[];
   onChange: (next: NoteCapture[]) => void;
   /** Per-capture field errors keyed by tempId, surfaced inline. */
   errors?: Record<string, Record<string, string[]>>;
+  /** Which sibling kinds to expose. A composer for a given primary
+   *  should omit its own kind. Defaults to the four non-note siblings
+   *  (the original Notes-tab behavior). */
+  allowedKinds?: CaptureKind[];
 }) {
   const idPrefix = useId();
   let localCounter = 0;
@@ -83,7 +92,7 @@ export function CaptureStack({
         <span className="text-2xs font-mono uppercase tracking-wider text-ink-4">
           Also capture
         </span>
-        {CAPTURE_ORDER.map((kind) => {
+        {allowedKinds.map((kind) => {
           const Icon = KIND_ICON[kind];
           return (
             <button
@@ -177,6 +186,13 @@ function CaptureCard({
           capture={capture}
           errors={errors}
           onUpdate={(patch) => onUpdate(patch as Partial<TimeCapture>)}
+        />
+      )}
+      {capture.kind === "note_sibling" && (
+        <NoteSiblingFields
+          capture={capture}
+          errors={errors}
+          onUpdate={(patch) => onUpdate(patch as Partial<NoteSiblingCapture>)}
         />
       )}
     </div>
@@ -345,6 +361,64 @@ function TimeFields({
         value={capture.narrative}
         onChange={(v) => onUpdate({ narrative: v })}
       />
+    </div>
+  );
+}
+
+function NoteSiblingFields({
+  capture,
+  errors,
+  onUpdate,
+}: {
+  capture: NoteSiblingCapture;
+  errors?: Record<string, string[]>;
+  onUpdate: (patch: Partial<NoteSiblingCapture>) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <textarea
+        value={capture.content}
+        onChange={(e) => onUpdate({ content: e.target.value })}
+        placeholder="Note content…"
+        rows={3}
+        className={cn(
+          "px-2 py-1.5 rounded-md border bg-white text-xs text-ink leading-relaxed w-full",
+          "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
+          "placeholder:text-ink-4 resize-y font-sans",
+          errors?.content ? "border-warn" : "border-line"
+        )}
+      />
+      {errors?.content && (
+        <div className="text-2xs text-warn">{errors.content[0]}</div>
+      )}
+      <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-0.5 rounded-md border border-line bg-white p-0.5">
+          {NOTE_TYPES.map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => onUpdate({ type: t })}
+              className={cn(
+                "text-2xs font-medium px-1.5 py-0.5 rounded transition-colors",
+                capture.type === t
+                  ? "bg-brand-500 text-white"
+                  : "text-ink-3 hover:text-brand-700"
+              )}
+            >
+              {NOTE_TYPE_LABEL[t]}
+            </button>
+          ))}
+        </div>
+        <label className="flex items-center gap-1 text-2xs text-ink-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={capture.isPinned}
+            onChange={(e) => onUpdate({ isPinned: e.target.checked })}
+            className="w-3 h-3 rounded border-line"
+          />
+          Pin
+        </label>
+      </div>
     </div>
   );
 }

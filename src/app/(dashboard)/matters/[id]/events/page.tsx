@@ -7,10 +7,10 @@
  */
 
 import { format, isSameDay } from "date-fns";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { EventLink } from "@/components/calendar/event-link";
 import { EventDetailModal } from "@/components/calendar/event-detail-modal";
-import { TabAddButton } from "@/components/matters/tab-add-button";
+import { EventComposer } from "@/components/matters/captures/event-composer";
 import {
   getMatterEvents,
   type MatterEventRow,
@@ -42,32 +42,19 @@ export default async function MatterEventsPage({
     eventId ? getCalendarEventById(eventId) : Promise.resolve(null),
   ]);
 
-  if (events.length === 0) {
-    return (
-      <div className="p-5">
-        <Card>
-          <CardContent className="p-8 text-center flex flex-col items-center gap-3">
-            <div>
-              <div className="text-sm font-semibold text-ink mb-1">
-                No events yet
-              </div>
-              <div className="text-xs text-ink-3">
-                Hearings, depositions, meetings, and other calendar events
-                for this matter will appear here.
-              </div>
-            </div>
-            <TabAddButton type="event" />
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   const upcoming = events.filter((e) => e.isUpcoming);
   const past = events.filter((e) => !e.isUpcoming).reverse(); // most recent first
 
   return (
     <div className="p-5 flex flex-col gap-5">
+      <EventComposer matterId={id} />
+
+      {events.length === 0 ? (
+        <div className="text-xs text-ink-4 text-center py-6">
+          No events yet — schedule one above.
+        </div>
+      ) : null}
+
       {upcoming.length > 0 && (
         <EventSection title="Upcoming" events={upcoming} />
       )}

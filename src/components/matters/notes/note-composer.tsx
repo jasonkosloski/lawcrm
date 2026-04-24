@@ -29,7 +29,7 @@ import {
   type NoteFormState,
 } from "@/lib/note-constants";
 import { NoteEditor } from "./note-editor";
-import { CaptureStack } from "./capture-stack";
+import { CaptureStack } from "@/components/matters/captures/capture-stack";
 
 export function NoteComposer({ matterId }: { matterId: string }) {
   const boundCreate = createNote.bind(null, matterId);

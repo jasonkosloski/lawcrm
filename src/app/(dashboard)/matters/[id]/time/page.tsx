@@ -20,7 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { TabAddButton } from "@/components/matters/tab-add-button";
+import { TimeComposer } from "@/components/matters/captures/time-composer";
 import {
   getMatterTimeEntries,
   getMatterTimeSummary,
@@ -73,21 +73,10 @@ export default async function MatterTimePage({
   if (entries.length === 0) {
     return (
       <div className="p-5 flex flex-col gap-5">
-        <Card>
-          <CardContent className="p-8 text-center flex flex-col items-center gap-3">
-            <div>
-              <div className="text-sm font-semibold text-ink mb-1">
-                No time logged yet
-              </div>
-              <div className="text-xs text-ink-3">
-                Billable and non-billable time on this matter will
-                appear here. Log time from the header Create button or
-                the matter's tab-bar add button.
-              </div>
-            </div>
-            <TabAddButton type="time" />
-          </CardContent>
-        </Card>
+        <TimeComposer matterId={id} />
+        <div className="text-xs text-ink-4 text-center py-6">
+          No time logged yet — add an entry above.
+        </div>
         <ExpensesPlaceholder />
       </div>
     );
@@ -95,6 +84,8 @@ export default async function MatterTimePage({
 
   return (
     <div className="p-5 flex flex-col gap-5">
+      <TimeComposer matterId={id} />
+
       {/* Summary cards */}
       <div className="grid grid-cols-4 gap-4">
         <SummaryCard

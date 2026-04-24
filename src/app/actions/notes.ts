@@ -20,13 +20,8 @@ import DOMPurify from "isomorphic-dompurify";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-import {
-  DEADLINE_KINDS,
-  EVENT_TYPES,
-  NOTE_TYPES,
-  TASK_PRIORITIES,
-  type NoteFormState,
-} from "@/lib/note-constants";
+import { NOTE_TYPES, type NoteFormState } from "@/lib/note-constants";
+import { captureSchema } from "@/lib/capture-schemas";
 
 /** Tags + attributes allowed through from the Tiptap editor. Keep this
  *  list minimal; Tiptap's StarterKit only emits this shape anyway. */
@@ -81,90 +76,9 @@ const noteSchema = z.object({
   attachments: z.string().optional().default("[]"),
 });
 
-// ── Attachment (capture) schemas ────────────────────────────────────────
-//
-// Captured siblings posted alongside the note: tasks, events,
-// deadlines, and time entries. Each one becomes its own DB row in the
-// same transaction as the note.
-
-const taskCaptureSchema = z.object({
-  kind: z.literal("task"),
-  tempId: z.string(),
-  title: z.string().trim().min(1, "Task title is required").max(200),
-  dueDate: z.string().optional().default(""),
-  priority: z.enum(TASK_PRIORITIES).default("normal"),
-});
-
-const eventCaptureSchema = z
-  .object({
-    kind: z.literal("event"),
-    tempId: z.string(),
-    title: z.string().trim().min(1, "Event title is required").max(200),
-    startTime: z.string().min(1, "Start time is required"),
-    endTime: z.string().min(1, "End time is required"),
-    type: z.enum(EVENT_TYPES).default("meeting"),
-    location: z.string().max(200).optional().default(""),
-  })
-  .superRefine((data, ctx) => {
-    const start = new Date(data.startTime);
-    const end = new Date(data.endTime);
-    if (Number.isNaN(start.getTime())) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["startTime"],
-        message: "Invalid start time",
-      });
-    }
-    if (Number.isNaN(end.getTime())) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["endTime"],
-        message: "Invalid end time",
-      });
-    }
-    if (
-      !Number.isNaN(start.getTime()) &&
-      !Number.isNaN(end.getTime()) &&
-      end.getTime() < start.getTime()
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["endTime"],
-        message: "End must be after start",
-      });
-    }
-  });
-
-const deadlineCaptureSchema = z.object({
-  kind: z.literal("deadline"),
-  tempId: z.string(),
-  title: z.string().trim().min(1, "Deadline title is required").max(200),
-  dueDate: z.string().min(1, "Due date is required"),
-  kind_: z.enum(DEADLINE_KINDS).default("manual"),
-  description: z.string().max(4000).optional().default(""),
-});
-
-const timeCaptureSchema = z.object({
-  kind: z.literal("time"),
-  tempId: z.string(),
-  date: z.string().min(1, "Date is required"),
-  hours: z
-    .string()
-    .min(1, "Hours required")
-    .refine((v) => {
-      const n = Number(v);
-      return Number.isFinite(n) && n > 0 && n <= 24;
-    }, "Hours must be > 0 and ≤ 24"),
-  activity: z.string().trim().min(1, "Activity is required").max(200),
-  narrative: z.string().max(4000).optional().default(""),
-});
-
-const captureSchema = z.discriminatedUnion("kind", [
-  taskCaptureSchema,
-  eventCaptureSchema,
-  deadlineCaptureSchema,
-  timeCaptureSchema,
-]);
+// Capture schemas + types live in src/lib/capture-schemas.ts so both
+// this action and the Task/Event/Deadline/Time composers' actions
+// can share a single parse + validation path.
 
 // ── Create ──────────────────────────────────────────────────────────────
 
@@ -301,6 +215,16 @@ export async function createNote(
             activity: cap.activity,
             narrative: cap.narrative || null,
             source: "manual",
+          },
+        });
+      } else if (cap.kind === "note_sibling") {
+        await tx.note.create({
+          data: {
+            matterId,
+            authorId: currentUserId,
+            content: sanitize(cap.content),
+            type: cap.type,
+            isPinned: cap.isPinned,
           },
         });
       }
