@@ -175,6 +175,49 @@ export type EventNote = {
   matterId: string;
 };
 
+/** Shape used by the event detail modal's time entries section. */
+export type EventTimeEntry = {
+  id: string;
+  date: Date;
+  hours: number;
+  activity: string;
+  narrative: string | null;
+  billable: boolean;
+  noCharge: boolean;
+  privileged: boolean;
+  status: string;
+  userName: string;
+  userInitials: string;
+  matterId: string;
+};
+
+/** Time entries directly attached to a specific calendar event
+ *  (calendarEventId FK). Sorted most-recent-first so new logs bubble
+ *  up. */
+export async function getEventTimeEntries(
+  eventId: string
+): Promise<EventTimeEntry[]> {
+  const rows = await prisma.timeEntry.findMany({
+    where: { calendarEventId: eventId },
+    include: { user: { select: { name: true, initials: true } } },
+    orderBy: { date: "desc" },
+  });
+  return rows.map((e) => ({
+    id: e.id,
+    date: e.date,
+    hours: e.hours,
+    activity: e.activity,
+    narrative: e.narrative,
+    billable: e.billable,
+    noCharge: e.noCharge,
+    privileged: e.privileged,
+    status: e.status,
+    userName: e.user.name,
+    userInitials: e.user.initials,
+    matterId: e.matterId,
+  }));
+}
+
 /** Notes directly attached to a specific calendar event (calendarEventId
  *  FK). Sorted pinned-first / most-recent-first so the most important
  *  court notes surface at the top. Replies (notes with parentNoteId

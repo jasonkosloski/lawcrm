@@ -3,23 +3,24 @@
  *
  * Same compact summary as before (date/time/title/type/location) but
  * the summary is no longer a single click target. Instead:
- *   - Clicking the title opens the event detail modal (?event=<id>)
- *   - Clicking the notes-count chip or the chevron toggles an
- *     inline thread below the row with the full EventNotesSection
- *     (list + composer)
+ *   - Clicking the title opens the event detail modal (deeper view)
+ *   - Clicking the count chip or the chevron toggles an inline
+ *     section under the row with the full EventNotesSection (list +
+ *     composer) and EventTimeEntriesSection (list + composer) stacked
  *
- * Modal still exists as the deeper view; the inline section is the
- * friction-free capture path.
+ * Modal still exists; the inline expansion is the friction-free
+ * capture path for both notes and time.
  */
 
 "use client";
 
 import { useState } from "react";
 import { format, isSameDay } from "date-fns";
-import { ChevronDown, MessageSquare } from "lucide-react";
+import { ChevronDown, Clock, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EventLink } from "@/components/calendar/event-link";
 import { EventNotesSection } from "@/components/calendar/event-notes-section";
+import { EventTimeEntriesSection } from "@/components/calendar/event-time-entries-section";
 import type { MatterEventRow } from "@/lib/queries/matter-detail";
 
 const TYPE_LABEL: Record<string, string> = {
@@ -33,9 +34,7 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 /** Plain-text preview of the first (pinned-first, most-recent) note
- *  shown under the event title when the row is collapsed. Strips
- *  HTML tags and collapses whitespace. Prefixed with the author's
- *  initials so scanners can tell at a glance who chimed in. */
+ *  shown under the event title when the row is collapsed. */
 function notePreview(note: {
   content: string;
   authorInitials: string;
@@ -58,10 +57,11 @@ export function EventRowExpandable({
   matterId: string;
   matterName: string;
 }) {
-  // Expand by default when there are existing notes so the user
-  // lands on the thread without an extra click; user can always
-  // collapse if they want the compact list view.
-  const [expanded, setExpanded] = useState(event.notes.length > 0);
+  const hasAttachments =
+    event.notes.length > 0 || event.timeEntries.length > 0;
+  // Auto-expand when there's already something attached so the user
+  // sees the thread + time logs on first load.
+  const [expanded, setExpanded] = useState(hasAttachments);
 
   const timeLabel = event.isAllDay
     ? "All day"
@@ -70,6 +70,8 @@ export function EventRowExpandable({
       : `${format(event.startTime, "MMM d, h:mm a")} – ${format(event.endTime, "MMM d, h:mm a")}`;
 
   const notesCount = event.notes.length;
+  const timeCount = event.timeEntries.length;
+  const totalHours = event.timeEntries.reduce((s, e) => s + e.hours, 0);
 
   return (
     <li className="flex flex-col">
@@ -97,7 +99,7 @@ export function EventRowExpandable({
               </span>
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 min-w-0">
+              <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                 <div className="text-xs font-medium text-ink truncate">
                   {event.title}
                 </div>
@@ -108,6 +110,15 @@ export function EventRowExpandable({
                   >
                     <MessageSquare size={10} />
                     {notesCount}
+                  </span>
+                )}
+                {timeCount > 0 && (
+                  <span
+                    className="inline-flex items-center gap-0.5 text-2xs font-medium text-ok bg-ok-soft border border-line px-1.5 py-0.5 rounded-full shrink-0 font-mono"
+                    title={`${totalHours.toFixed(1)} hours logged across ${timeCount} entr${timeCount === 1 ? "y" : "ies"}`}
+                  >
+                    <Clock size={10} />
+                    {totalHours.toFixed(1)}h
                   </span>
                 )}
               </div>
@@ -134,24 +145,22 @@ export function EventRowExpandable({
           </div>
         </EventLink>
 
-        {/* Expand/collapse — separate click target so the user can
-            toggle the inline notes thread without opening the modal. */}
+        {/* Expand/collapse — separate click target so toggling the
+            inline sections doesn't open the modal. */}
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
-          aria-label={expanded ? "Hide notes" : "Show notes"}
+          aria-label={expanded ? "Hide attachments" : "Show attachments"}
           className={cn(
-            "flex items-center gap-1.5 px-3 border-l border-line text-2xs font-mono shrink-0 transition-colors",
-            notesCount > 0
+            "flex items-center px-3 border-l border-line text-2xs font-mono shrink-0 transition-colors",
+            hasAttachments
               ? "text-brand-700 hover:bg-brand-soft"
               : "text-ink-4 hover:bg-paper-2 hover:text-ink-2"
           )}
         >
-          <MessageSquare size={12} />
-          <span>{notesCount}</span>
           <ChevronDown
-            size={12}
+            size={14}
             className={cn(
               "transition-transform",
               expanded && "rotate-180"
@@ -161,12 +170,17 @@ export function EventRowExpandable({
       </div>
 
       {expanded && (
-        <div className="px-5 py-3 border-t border-line bg-paper-2/30">
+        <div className="px-5 py-3 border-t border-line bg-paper-2/30 flex flex-col gap-4">
           <EventNotesSection
             eventId={event.id}
             matterId={matterId}
             matterName={matterName}
             notes={event.notes}
+          />
+          <EventTimeEntriesSection
+            eventId={event.id}
+            matterId={matterId}
+            entries={event.timeEntries}
           />
         </div>
       )}

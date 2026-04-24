@@ -25,8 +25,13 @@ import {
   Video,
   X,
 } from "lucide-react";
-import type { CalendarEventDetail, EventNote } from "@/lib/queries/calendar";
+import type {
+  CalendarEventDetail,
+  EventNote,
+  EventTimeEntry,
+} from "@/lib/queries/calendar";
 import { EventNotesSection } from "./event-notes-section";
+import { EventTimeEntriesSection } from "./event-time-entries-section";
 
 const TYPE_LABEL: Record<string, string> = {
   meeting: "Meeting",
@@ -49,9 +54,11 @@ const ATTENDEE_STATUS_LABEL: Record<string, string> = {
 export function EventDetailModal({
   event,
   notes,
+  timeEntries,
 }: {
   event: CalendarEventDetail;
   notes: EventNote[];
+  timeEntries: EventTimeEntry[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -224,6 +231,13 @@ export function EventDetailModal({
             matterId={event.matter?.id ?? null}
             matterName={event.matter?.name ?? null}
             notes={notes}
+          />
+
+          {/* Time entries attached to this event */}
+          <EventTimeEntriesSection
+            eventId={event.id}
+            matterId={event.matter?.id ?? null}
+            entries={timeEntries}
           />
         </div>
 

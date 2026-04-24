@@ -21,6 +21,7 @@ import { getMatterById } from "@/lib/queries/matters";
 import {
   getCalendarEventById,
   getEventNotes,
+  getEventTimeEntries,
 } from "@/lib/queries/calendar";
 
 export default async function MatterEventsPage({
@@ -33,13 +34,19 @@ export default async function MatterEventsPage({
   const rawEventParam = Array.isArray(sp.event) ? sp.event[0] : sp.event;
   const eventId = typeof rawEventParam === "string" ? rawEventParam : null;
 
-  const [matter, events, selectedEvent, selectedEventNotes] =
-    await Promise.all([
-      getMatterById(id),
-      getMatterEvents(id),
-      eventId ? getCalendarEventById(eventId) : Promise.resolve(null),
-      eventId ? getEventNotes(eventId) : Promise.resolve([]),
-    ]);
+  const [
+    matter,
+    events,
+    selectedEvent,
+    selectedEventNotes,
+    selectedEventTime,
+  ] = await Promise.all([
+    getMatterById(id),
+    getMatterEvents(id),
+    eventId ? getCalendarEventById(eventId) : Promise.resolve(null),
+    eventId ? getEventNotes(eventId) : Promise.resolve([]),
+    eventId ? getEventTimeEntries(eventId) : Promise.resolve([]),
+  ]);
 
   if (!matter) notFound();
 
@@ -74,7 +81,11 @@ export default async function MatterEventsPage({
       )}
 
       {selectedEvent && (
-        <EventDetailModal event={selectedEvent} notes={selectedEventNotes} />
+        <EventDetailModal
+          event={selectedEvent}
+          notes={selectedEventNotes}
+          timeEntries={selectedEventTime}
+        />
       )}
     </div>
   );

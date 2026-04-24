@@ -128,7 +128,11 @@ async function createCaptureRecord(
         hours: Number(cap.hours),
         activity: cap.activity,
         narrative: cap.narrative || null,
-        source: "manual",
+        // When this time entry is a sibling of a freshly-created event,
+        // link it so the event can surface the entry later.
+        calendarEventId:
+          linkToPrimary?.kind === "event" ? linkToPrimary.id : null,
+        source: linkToPrimary?.kind === "event" ? "calendar" : "manual",
       },
     });
   } else if (cap.kind === "note_sibling") {

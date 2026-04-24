@@ -31,6 +31,7 @@ import {
   getCalendarItems,
   getCalendarSummary,
   getEventNotes,
+  getEventTimeEntries,
 } from "@/lib/queries/calendar";
 
 export default async function CalendarPage({
@@ -47,14 +48,19 @@ export default async function CalendarPage({
   const rawEventParam = Array.isArray(sp.event) ? sp.event[0] : sp.event;
   const eventId = typeof rawEventParam === "string" ? rawEventParam : null;
 
-  const [items, summary, selectedEvent, selectedEventNotes] = await Promise.all(
-    [
-      getCalendarItems(range.start, range.end),
-      getCalendarSummary(range.start, range.end),
-      eventId ? getCalendarEventById(eventId) : Promise.resolve(null),
-      eventId ? getEventNotes(eventId) : Promise.resolve([]),
-    ]
-  );
+  const [
+    items,
+    summary,
+    selectedEvent,
+    selectedEventNotes,
+    selectedEventTime,
+  ] = await Promise.all([
+    getCalendarItems(range.start, range.end),
+    getCalendarSummary(range.start, range.end),
+    eventId ? getCalendarEventById(eventId) : Promise.resolve(null),
+    eventId ? getEventNotes(eventId) : Promise.resolve([]),
+    eventId ? getEventTimeEntries(eventId) : Promise.resolve([]),
+  ]);
 
   const crumbBits = [
     `${summary.events} events`,
@@ -91,7 +97,11 @@ export default async function CalendarPage({
       </div>
 
       {selectedEvent && (
-        <EventDetailModal event={selectedEvent} notes={selectedEventNotes} />
+        <EventDetailModal
+          event={selectedEvent}
+          notes={selectedEventNotes}
+          timeEntries={selectedEventTime}
+        />
       )}
     </CreateStackProvider>
   );

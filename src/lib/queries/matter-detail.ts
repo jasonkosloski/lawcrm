@@ -8,7 +8,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import type { EventNote } from "@/lib/queries/calendar";
+import type { EventNote, EventTimeEntry } from "@/lib/queries/calendar";
 
 // ── Parties ──────────────────────────────────────────────────────────────
 
@@ -357,6 +357,9 @@ export type MatterEventRow = {
    *  section under the row; the event detail modal uses the
    *  getEventNotes query instead. */
   notes: EventNote[];
+  /** All time entries attached to this event, most-recent-first.
+   *  Surfaced inline in the expandable section alongside notes. */
+  timeEntries: EventTimeEntry[];
 };
 
 export async function getMatterEvents(
@@ -370,6 +373,10 @@ export async function getMatterEvents(
       notes: {
         include: { author: { select: { name: true, initials: true } } },
         orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
+      },
+      timeEntries: {
+        include: { user: { select: { name: true, initials: true } } },
+        orderBy: { date: "desc" },
       },
     },
     orderBy: { startTime: "asc" },
@@ -396,6 +403,20 @@ export async function getMatterEvents(
       authorInitials: n.author.initials,
       createdAt: n.createdAt,
       matterId: n.matterId,
+    })),
+    timeEntries: e.timeEntries.map((t) => ({
+      id: t.id,
+      date: t.date,
+      hours: t.hours,
+      activity: t.activity,
+      narrative: t.narrative,
+      billable: t.billable,
+      noCharge: t.noCharge,
+      privileged: t.privileged,
+      status: t.status,
+      userName: t.user.name,
+      userInitials: t.user.initials,
+      matterId: t.matterId,
     })),
   }));
 }
