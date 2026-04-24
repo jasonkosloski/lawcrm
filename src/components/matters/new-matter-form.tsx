@@ -1,20 +1,30 @@
 /**
  * New Matter Form
  *
- * First-pass create form. Uses native form elements + a server action
- * so the submission flow is straightforward: FormData → Zod → create
- * row + team assignment → redirect to the matter detail.
+ * Create-matter flow. Default stance is "you're creating a new client"
+ * — name / email / phone / organization fields are visible from the
+ * start. As the user types the client name, a typeahead suggests
+ * matching existing Contacts; clicking a suggestion links to that
+ * existing row instead of creating a new one.
  *
- * Error display is driven by `useActionState` — the server action
- * returns per-field errors on validation failure and the form
- * re-renders with the previous values preserved.
+ * Uses native form elements + a server action so the submission path
+ * is straightforward: FormData → Zod → create Contact (if new) +
+ * Matter + team assignment (+ optional pin) → redirect to detail.
+ * Errors come back via `useActionState` and re-render the form with
+ * previous values preserved.
  */
 
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
-import { UserPlus } from "lucide-react";
+import {
+  useActionState,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { UserCheck, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createMatter } from "@/app/actions/matters";
 import {
@@ -54,11 +64,19 @@ const FEE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "pro_bono", label: "Pro bono" },
 ];
 
+type ClientOption = {
+  id: string;
+  name: string;
+  organization: string | null;
+};
+
 export type NewMatterFormOptions = {
-  clients: Array<{ id: string; name: string; organization: string | null }>;
+  clients: ClientOption[];
   users: Array<{ id: string; name: string; role: string; initials: string }>;
   currentUserId: string;
 };
+
+const MAX_SUGGESTIONS = 6;
 
 export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
   const [state, formAction, isPending] = useActionState<
@@ -69,14 +87,85 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
   const vals = state.values ?? {};
   const errs = state.errors ?? {};
 
-  // Local UI state for the client select — controlled so we can
-  // conditionally render the inline "create new client" fields.
-  // Seeded from the last submitted value so validation errors don't
-  // snap the dropdown back to a different option.
-  const [clientMode, setClientMode] = useState<string>(
-    vals.clientId ?? ""
+  // ── Client picker state ──────────────────────────────────────────────
+  // Default mode is "new client" — the sub-fields are visible from the
+  // start. If the user clicks a suggestion while typing, we switch to
+  // "existing" mode (clientId = selected contact id). Clearing sends
+  // them back to "new" with the typed name preserved.
+  const initialSelectedId =
+    vals.clientId && vals.clientId !== NEW_CLIENT_SENTINEL
+      ? vals.clientId
+      : null;
+  const initialClientName = initialSelectedId
+    ? (options.clients.find((c) => c.id === initialSelectedId)?.name ??
+      "")
+    : (vals.newClientName ?? "");
+
+  const [clientName, setClientName] = useState<string>(initialClientName);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(
+    initialSelectedId
   );
-  const showNewClientFields = clientMode === NEW_CLIENT_SENTINEL;
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const clientInputRef = useRef<HTMLInputElement>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
+
+  // Filter existing clients against what the user has typed. Opens the
+  // dropdown when the input has focus + non-empty value with matches.
+  const suggestions = useMemo(() => {
+    const q = clientName.trim().toLowerCase();
+    if (!q) return [];
+    return options.clients
+      .filter((c) => {
+        const inName = c.name.toLowerCase().includes(q);
+        const inOrg = c.organization?.toLowerCase().includes(q) ?? false;
+        return inName || inOrg;
+      })
+      .slice(0, MAX_SUGGESTIONS);
+  }, [clientName, options.clients]);
+
+  // Click-outside to close suggestions.
+  useEffect(() => {
+    if (!suggestionsOpen) return;
+    const handler = (e: MouseEvent) => {
+      const el = e.target as Node;
+      if (
+        clientInputRef.current?.contains(el) ||
+        suggestionsRef.current?.contains(el)
+      ) {
+        return;
+      }
+      setSuggestionsOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [suggestionsOpen]);
+
+  const pickExisting = (c: ClientOption) => {
+    setSelectedClientId(c.id);
+    setClientName(c.name);
+    setSuggestionsOpen(false);
+  };
+
+  const clearExisting = () => {
+    setSelectedClientId(null);
+    setSuggestionsOpen(false);
+    // Keep clientName — user might want to tweak it and create new.
+    clientInputRef.current?.focus();
+  };
+
+  // Hidden clientId sent with form submission:
+  // - existing id when a suggestion was picked
+  // - sentinel when a name was typed (create new)
+  // - empty string when no name typed at all (no client)
+  const hiddenClientId = selectedClientId
+    ? selectedClientId
+    : clientName.trim().length > 0
+      ? NEW_CLIENT_SENTINEL
+      : "";
+
+  const selectedClient = selectedClientId
+    ? options.clients.find((c) => c.id === selectedClientId)
+    : null;
 
   return (
     <form action={formAction} className="flex flex-col gap-6">
@@ -172,37 +261,119 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
 
       {/* ── People ──────────────────────────────────────────────── */}
       <Section title="People">
+        {/* Hidden field that the server action reads. Derived from
+            whether the user picked an existing contact, typed a name,
+            or left it blank. */}
+        <input type="hidden" name="clientId" value={hiddenClientId} />
+
         <Row>
-          <Field
-            label="Client"
-            name="clientId"
-            error={errs.clientId}
-            hint={
-              showNewClientFields
-                ? "Fill in the details below — the contact gets created when you submit."
-                : "Pick an existing contact, create a new one, or leave blank."
-            }
-          >
-            <select
-              id="clientId"
-              name="clientId"
-              value={clientMode}
-              onChange={(e) => setClientMode(e.target.value)}
-              className={selectCls(!!errs.clientId)}
+          {/* Client — typeahead */}
+          <div className="flex flex-col gap-1 relative">
+            <label
+              htmlFor="newClientName"
+              className="text-xs font-medium text-ink-2"
             >
-              <option value="">— No client yet —</option>
-              {options.clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                  {c.organization ? ` · ${c.organization}` : ""}
-                </option>
-              ))}
-              <option disabled>──────────</option>
-              <option value={NEW_CLIENT_SENTINEL}>
-                + Create new client…
-              </option>
-            </select>
-          </Field>
+              Client
+            </label>
+
+            {selectedClient ? (
+              <div
+                className="flex items-center gap-2 h-8 px-2.5 rounded-md border border-brand-200 bg-brand-soft/40 text-xs text-ink-2"
+                aria-live="polite"
+              >
+                <UserCheck size={13} className="text-brand-700 shrink-0" />
+                <span className="font-medium truncate flex-1">
+                  {selectedClient.name}
+                </span>
+                {selectedClient.organization && (
+                  <span className="text-2xs font-mono text-ink-4 truncate">
+                    {selectedClient.organization}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={clearExisting}
+                  aria-label="Unlink client"
+                  className="p-0.5 rounded text-ink-3 hover:text-ink-2"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ) : (
+              <>
+                <input
+                  ref={clientInputRef}
+                  id="newClientName"
+                  name="newClientName"
+                  type="text"
+                  autoComplete="off"
+                  value={clientName}
+                  onChange={(e) => {
+                    setClientName(e.target.value);
+                    setSuggestionsOpen(e.target.value.trim().length > 0);
+                  }}
+                  onFocus={() => {
+                    if (clientName.trim().length > 0) setSuggestionsOpen(true);
+                  }}
+                  className={inputCls(
+                    !!errs.newClientName || !!errs.clientId
+                  )}
+                  placeholder="Client name (type to search or create new)"
+                />
+                {suggestionsOpen && suggestions.length > 0 && (
+                  <div
+                    ref={suggestionsRef}
+                    role="listbox"
+                    className="absolute left-0 right-0 top-[calc(100%+2px)] z-20 rounded-md border border-line bg-white shadow-md py-1"
+                  >
+                    <div className="px-2.5 py-1 text-2xs font-mono uppercase tracking-wider text-ink-4">
+                      Matching clients
+                    </div>
+                    {suggestions.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => pickExisting(c)}
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-brand-tint"
+                      >
+                        <UserCheck
+                          size={12}
+                          className="text-ink-4 shrink-0"
+                        />
+                        <span className="font-medium text-ink">{c.name}</span>
+                        {c.organization && (
+                          <span className="text-2xs font-mono text-ink-4 truncate">
+                            · {c.organization}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                    <div className="border-t border-line mt-1 pt-1 px-2.5 pb-0.5 text-2xs text-ink-4 flex items-center gap-1">
+                      <UserPlus size={11} />
+                      Or keep typing to create
+                      {clientName.trim() && (
+                        <span className="text-ink-3 font-medium truncate">
+                          {" “"}
+                          {clientName.trim()}
+                          {"”"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {errs.newClientName && errs.newClientName.length > 0 && (
+              <div className="text-2xs text-warn">{errs.newClientName[0]}</div>
+            )}
+            {!selectedClient && !errs.newClientName?.length && (
+              <div className="text-2xs text-ink-4">
+                Start typing — we&apos;ll suggest existing clients, or
+                create a new one on save.
+              </div>
+            )}
+          </div>
 
           <Field
             label="Lead attorney"
@@ -226,33 +397,17 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
           </Field>
         </Row>
 
-        {showNewClientFields && (
-          <div className="rounded-md border border-brand-200 bg-brand-soft/30 p-3 flex flex-col gap-3">
-            <div className="flex items-center gap-2 text-2xs font-mono uppercase tracking-wider text-brand-700">
-              <UserPlus size={11} />
-              New client details
-            </div>
-            <Field
-              label="Client name"
-              name="newClientName"
-              required
-              error={errs.newClientName}
-            >
-              <input
-                id="newClientName"
-                name="newClientName"
-                type="text"
-                defaultValue={vals.newClientName ?? ""}
-                className={inputCls(!!errs.newClientName)}
-                placeholder="Maria Alvarez"
-              />
-            </Field>
+        {/* New-client fields — visible whenever the user is NOT linked
+            to an existing client (default). Name is the typeahead
+            input above; these round out the contact record. */}
+        {!selectedClient && (
+          <div className="flex flex-col gap-3">
             <Row>
               <Field
-                label="Email"
+                label="Client email"
                 name="newClientEmail"
                 error={errs.newClientEmail}
-                hint="Email or phone required — at least one."
+                hint="Email or phone required to reach the client."
               >
                 <input
                   id="newClientEmail"
@@ -264,7 +419,7 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
                 />
               </Field>
               <Field
-                label="Phone"
+                label="Client phone"
                 name="newClientPhone"
                 error={errs.newClientPhone}
               >
@@ -279,7 +434,7 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
               </Field>
             </Row>
             <Field
-              label="Organization"
+              label="Client organization"
               name="newClientOrganization"
               error={errs.newClientOrganization}
               hint="Optional — for business or institutional clients."
@@ -320,7 +475,7 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
         </Row>
       </Section>
 
-      {/* ── Court + description ─────────────────────────────────── */}
+      {/* ── Details ─────────────────────────────────────────────── */}
       <Section title="Details">
         <Field label="Court" name="court" error={errs.court}>
           <input
