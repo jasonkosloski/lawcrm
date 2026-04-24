@@ -8,8 +8,19 @@
 
 "use client";
 
-import { useTransition } from "react";
-import { MoreHorizontal, Pin, Trash2 } from "lucide-react";
+import { useState, useTransition } from "react";
+import Link from "next/link";
+import {
+  Calendar,
+  CircleAlert,
+  Clock,
+  CornerUpLeft,
+  ListTodo,
+  MessageSquare,
+  MoreHorizontal,
+  Pin,
+  Trash2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -20,6 +31,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { deleteNote, toggleNotePin } from "@/app/actions/notes";
 import { NOTE_TYPE_LABEL, type NoteType } from "@/lib/note-constants";
+import type { NoteLink } from "@/lib/queries/matter-detail";
+import { ReplyComposer } from "./reply-composer";
 
 export type NoteCardNote = {
   id: string;
@@ -29,6 +42,8 @@ export type NoteCardNote = {
   authorName: string;
   authorInitials: string;
   updatedAt: Date;
+  parentNoteId: string | null;
+  link: NoteLink | null;
 };
 
 const formatDateTime = (d: Date): string =>
@@ -40,8 +55,20 @@ const formatDateTime = (d: Date): string =>
     minute: "2-digit",
   });
 
-export function NoteCard({ note }: { note: NoteCardNote }) {
+export function NoteCard({
+  note,
+  matterId,
+  /** True when this card is rendered as a reply inside a thread — the
+   *  parent groups control spacing + the connector line, so the card
+   *  itself renders without the usual outer margin. */
+  isReply,
+}: {
+  note: NoteCardNote;
+  matterId: string;
+  isReply?: boolean;
+}) {
   const [pending, startTransition] = useTransition();
+  const [replyOpen, setReplyOpen] = useState(false);
 
   const onTogglePin = () => {
     startTransition(async () => {
@@ -61,7 +88,14 @@ export function NoteCard({ note }: { note: NoteCardNote }) {
   const typeLabel = NOTE_TYPE_LABEL[note.type as NoteType] ?? note.type;
 
   return (
-    <Card className={cn(note.isPinned && "border-brand-200", pending && "opacity-60")}>
+    <Card
+      id={`note-${note.id}`}
+      className={cn(
+        note.isPinned && "border-brand-200",
+        pending && "opacity-60",
+        isReply && "border-line/80"
+      )}
+    >
       <CardContent className="p-4">
         <div className="flex items-center gap-2 mb-3">
           <span
@@ -117,6 +151,8 @@ export function NoteCard({ note }: { note: NoteCardNote }) {
           </DropdownMenu>
         </div>
 
+        {note.link && <LinkChip link={note.link} matterId={matterId} />}
+
         <div
           className={cn(
             "prose prose-sm max-w-none text-xs text-ink leading-relaxed",
@@ -132,7 +168,108 @@ export function NoteCard({ note }: { note: NoteCardNote }) {
           // Content is sanitized server-side by DOMPurify before insert.
           dangerouslySetInnerHTML={{ __html: note.content }}
         />
+
+        {/* Reply control + inline reply composer */}
+        <div className="mt-3 pt-2 border-t border-line">
+          {replyOpen ? (
+            <ReplyComposer
+              matterId={matterId}
+              parentNoteId={note.id}
+              onDone={() => setReplyOpen(false)}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setReplyOpen(true)}
+              className="inline-flex items-center gap-1 text-2xs text-ink-3 hover:text-brand-700 transition-colors"
+            >
+              <CornerUpLeft size={11} />
+              Reply
+            </button>
+          )}
+        </div>
       </CardContent>
     </Card>
+  );
+}
+
+// ── Link chip ───────────────────────────────────────────────────────────
+
+function LinkChip({
+  link,
+  matterId,
+}: {
+  link: NoteLink;
+  matterId: string;
+}) {
+  // Event links deep-link to the shared event detail modal via the
+  // ?event=<id> contract; other link kinds render as read-only chips
+  // until their detail routes land.
+  const content = (
+    <span className="inline-flex items-center gap-1.5 max-w-full">
+      {link.kind === "parent" ? (
+        <>
+          <MessageSquare size={10} className="shrink-0" />
+          <span className="text-ink-4">Reply to</span>
+          <span className="truncate text-ink-2">{link.label}</span>
+        </>
+      ) : link.kind === "event" ? (
+        <>
+          <Calendar size={10} className="shrink-0" />
+          <span className="text-ink-4">Event</span>
+          <span className="truncate text-ink-2">{link.label}</span>
+          <span className="font-mono text-ink-4">
+            {link.startTime.toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+            })}
+          </span>
+        </>
+      ) : link.kind === "task" ? (
+        <>
+          <ListTodo size={10} className="shrink-0" />
+          <span className="text-ink-4">Task</span>
+          <span className="truncate text-ink-2">{link.label}</span>
+        </>
+      ) : link.kind === "deadline" ? (
+        <>
+          <CircleAlert size={10} className="shrink-0" />
+          <span className="text-ink-4">Deadline</span>
+          <span className="truncate text-ink-2">{link.label}</span>
+        </>
+      ) : (
+        <>
+          <Clock size={10} className="shrink-0" />
+          <span className="text-ink-4">Time</span>
+          <span className="truncate text-ink-2">{link.label}</span>
+        </>
+      )}
+    </span>
+  );
+
+  if (link.kind === "event") {
+    return (
+      <Link
+        href={`/matters/${matterId}/events?event=${link.id}`}
+        className="inline-flex items-center gap-1.5 text-2xs mb-2 px-2 py-1 rounded-md bg-paper-2/60 border border-line hover:border-brand-300 hover:bg-brand-soft transition-colors max-w-full"
+      >
+        {content}
+      </Link>
+    );
+  }
+  if (link.kind === "parent") {
+    return (
+      <a
+        href={`#note-${link.id}`}
+        className="inline-flex items-center gap-1.5 text-2xs mb-2 px-2 py-1 rounded-md bg-paper-2/60 border border-line hover:border-brand-300 hover:bg-brand-soft transition-colors max-w-full"
+      >
+        {content}
+      </a>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 text-2xs mb-2 px-2 py-1 rounded-md bg-paper-2/60 border border-line max-w-full">
+      {content}
+    </span>
   );
 }

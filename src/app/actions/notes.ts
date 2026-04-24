@@ -74,6 +74,14 @@ const noteSchema = z.object({
   /** JSON-stringified array of NoteCapture objects. Empty when the
    *  user hasn't attached any sibling items to the note. */
   attachments: z.string().optional().default("[]"),
+  /** Optional threading + entity associations. Each is a cuid; at
+   *  most one of the entity FKs should be set per note, but we don't
+   *  enforce that in the schema. */
+  parentNoteId: z.string().trim().optional().or(z.literal("")),
+  calendarEventId: z.string().trim().optional().or(z.literal("")),
+  taskId: z.string().trim().optional().or(z.literal("")),
+  deadlineId: z.string().trim().optional().or(z.literal("")),
+  timeEntryId: z.string().trim().optional().or(z.literal("")),
 });
 
 // Capture schemas + types live in src/lib/capture-schemas.ts so both
@@ -169,6 +177,11 @@ export async function createNote(
         content: clean,
         type: parsed.data.type,
         isPinned: parsed.data.isPinned === "on",
+        parentNoteId: parsed.data.parentNoteId || null,
+        calendarEventId: parsed.data.calendarEventId || null,
+        taskId: parsed.data.taskId || null,
+        deadlineId: parsed.data.deadlineId || null,
+        timeEntryId: parsed.data.timeEntryId || null,
       },
     });
 

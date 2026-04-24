@@ -70,11 +70,22 @@ type Tx = Omit<
   "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
 >;
 
+/** Identifies the just-created primary record so sibling notes can
+ *  link directly to it (e.g. a "court note" sibling on the Events
+ *  composer gets its calendarEventId set to the event we just made). */
+type PrimaryRef =
+  | { kind: "task"; id: string }
+  | { kind: "event"; id: string }
+  | { kind: "deadline"; id: string }
+  | { kind: "time"; id: string }
+  | null;
+
 async function createCaptureRecord(
   tx: Tx | Prisma.TransactionClient,
   cap: ValidCapture,
   matterId: string,
-  userId: string
+  userId: string,
+  linkToPrimary: PrimaryRef = null
 ): Promise<void> {
   if (cap.kind === "task") {
     await tx.task.create({
@@ -128,6 +139,12 @@ async function createCaptureRecord(
         content: sanitize(cap.content),
         type: cap.type,
         isPinned: cap.isPinned,
+        taskId: linkToPrimary?.kind === "task" ? linkToPrimary.id : null,
+        calendarEventId:
+          linkToPrimary?.kind === "event" ? linkToPrimary.id : null,
+        deadlineId:
+          linkToPrimary?.kind === "deadline" ? linkToPrimary.id : null,
+        timeEntryId: linkToPrimary?.kind === "time" ? linkToPrimary.id : null,
       },
     });
   }
@@ -226,7 +243,7 @@ export async function createTaskWithCaptures(
   const userId = await getCurrentUserId();
 
   await prisma.$transaction(async (tx) => {
-    await tx.task.create({
+    const task = await tx.task.create({
       data: {
         matterId,
         title: parsed.data.title,
@@ -235,9 +252,13 @@ export async function createTaskWithCaptures(
         dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
         ownerId: userId,
       },
+      select: { id: true },
     });
     for (const cap of attach.captures) {
-      await createCaptureRecord(tx, cap, matterId, userId);
+      await createCaptureRecord(tx, cap, matterId, userId, {
+        kind: "task",
+        id: task.id,
+      });
     }
   });
 
@@ -315,7 +336,7 @@ export async function createEventWithCaptures(
   const userId = await getCurrentUserId();
 
   await prisma.$transaction(async (tx) => {
-    await tx.calendarEvent.create({
+    const event = await tx.calendarEvent.create({
       data: {
         matterId,
         title: parsed.data.title,
@@ -325,9 +346,13 @@ export async function createEventWithCaptures(
         location: parsed.data.location || null,
         description: parsed.data.description || null,
       },
+      select: { id: true },
     });
     for (const cap of attach.captures) {
-      await createCaptureRecord(tx, cap, matterId, userId);
+      await createCaptureRecord(tx, cap, matterId, userId, {
+        kind: "event",
+        id: event.id,
+      });
     }
   });
 
@@ -374,7 +399,7 @@ export async function createDeadlineWithCaptures(
   const userId = await getCurrentUserId();
 
   await prisma.$transaction(async (tx) => {
-    await tx.deadline.create({
+    const deadline = await tx.deadline.create({
       data: {
         matterId,
         title: parsed.data.title,
@@ -384,9 +409,13 @@ export async function createDeadlineWithCaptures(
         description: parsed.data.description || null,
         ownerId: userId,
       },
+      select: { id: true },
     });
     for (const cap of attach.captures) {
-      await createCaptureRecord(tx, cap, matterId, userId);
+      await createCaptureRecord(tx, cap, matterId, userId, {
+        kind: "deadline",
+        id: deadline.id,
+      });
     }
   });
 
@@ -441,7 +470,7 @@ export async function createTimeEntryWithCaptures(
   const userId = await getCurrentUserId();
 
   await prisma.$transaction(async (tx) => {
-    await tx.timeEntry.create({
+    const entry = await tx.timeEntry.create({
       data: {
         matterId,
         userId,
@@ -454,9 +483,13 @@ export async function createTimeEntryWithCaptures(
         privileged: parsed.data.privileged === "on",
         source: "manual",
       },
+      select: { id: true },
     });
     for (const cap of attach.captures) {
-      await createCaptureRecord(tx, cap, matterId, userId);
+      await createCaptureRecord(tx, cap, matterId, userId, {
+        kind: "time",
+        id: entry.id,
+      });
     }
   });
 

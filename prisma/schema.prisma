@@ -378,6 +378,7 @@ model Deadline {
 
   matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
   owner  User?  @relation("DeadlineOwner", fields: [ownerId], references: [id])
+  notes  Note[] @relation("DeadlineNotes")
 
   @@index([matterId])
   @@index([dueDate])
@@ -403,6 +404,7 @@ model CalendarEvent {
 
   matter    Matter?             @relation(fields: [matterId], references: [id], onDelete: SetNull)
   attendees CalendarAttendee[]
+  notes     Note[]              @relation("CalendarEventNotes")
 
   @@index([startTime])
   @@index([matterId])
@@ -451,6 +453,7 @@ model TimeEntry {
   matter  Matter   @relation(fields: [matterId], references: [id], onDelete: Cascade)
   user    User     @relation(fields: [userId], references: [id])
   invoice Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  notes   Note[]   @relation("TimeEntryNotes")
 
   @@index([matterId])
   @@index([userId])
@@ -687,6 +690,7 @@ model Task {
 
   matter Matter? @relation(fields: [matterId], references: [id], onDelete: Cascade)
   owner  User?   @relation("TaskOwner", fields: [ownerId], references: [id])
+  notes  Note[]  @relation("TaskNotes")
 
   @@index([matterId])
   @@index([status])
@@ -709,10 +713,36 @@ model Note {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
-  author User   @relation(fields: [authorId], references: [id])
+  /// Threading — a reply to another note within the same matter. When
+  /// the parent is deleted, the whole sub-thread goes with it so
+  /// replies never dangle.
+  parentNoteId String?
+
+  /// Optional direct associations with other matter entities. A note
+  /// with `calendarEventId` set is the "court note" for that hearing;
+  /// `taskId` / `deadlineId` / `timeEntryId` attach the note to that
+  /// specific record. At most one of these should be set per note;
+  /// we don't enforce that in the DB to keep the schema simple.
+  calendarEventId String?
+  taskId          String?
+  deadlineId      String?
+  timeEntryId     String?
+
+  matter    Matter         @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  author    User           @relation(fields: [authorId], references: [id])
+  parent    Note?          @relation("NoteReplies", fields: [parentNoteId], references: [id], onDelete: Cascade)
+  replies   Note[]         @relation("NoteReplies")
+  event     CalendarEvent? @relation("CalendarEventNotes", fields: [calendarEventId], references: [id], onDelete: SetNull)
+  task      Task?          @relation("TaskNotes", fields: [taskId], references: [id], onDelete: SetNull)
+  deadline  Deadline?      @relation("DeadlineNotes", fields: [deadlineId], references: [id], onDelete: SetNull)
+  timeEntry TimeEntry?     @relation("TimeEntryNotes", fields: [timeEntryId], references: [id], onDelete: SetNull)
 
   @@index([matterId])
+  @@index([parentNoteId])
+  @@index([calendarEventId])
+  @@index([taskId])
+  @@index([deadlineId])
+  @@index([timeEntryId])
   @@map("notes")
 }
 

@@ -145,6 +145,16 @@ export async function getMatterTasks(matterId: string): Promise<TaskRow[]> {
 
 // ── Notes ────────────────────────────────────────────────────────────────
 
+/** Compact reference to whatever entity a note is directly attached
+ *  to — surfaced on the card so the user can see at a glance that
+ *  this is e.g. a court note for a specific hearing. */
+export type NoteLink =
+  | { kind: "event"; id: string; label: string; startTime: Date }
+  | { kind: "task"; id: string; label: string }
+  | { kind: "deadline"; id: string; label: string; dueDate: Date }
+  | { kind: "time"; id: string; label: string; date: Date }
+  | { kind: "parent"; id: string; label: string };
+
 export type NoteRow = {
   id: string;
   type: string;
@@ -154,24 +164,90 @@ export type NoteRow = {
   authorInitials: string;
   createdAt: Date;
   updatedAt: Date;
+  parentNoteId: string | null;
+  /** Single source-of-truth link shown on the card. Parent takes
+   *  priority (a reply shows its parent context) — otherwise the
+   *  first non-null entity FK wins. */
+  link: NoteLink | null;
 };
+
+function truncate(s: string, n: number): string {
+  return s.length <= n ? s : `${s.slice(0, n - 1)}…`;
+}
+
+function plainTextFromHtml(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 export async function getMatterNotes(matterId: string): Promise<NoteRow[]> {
   const rows = await prisma.note.findMany({
     where: { matterId },
-    include: { author: { select: { name: true, initials: true } } },
-    orderBy: [{ isPinned: "desc" }, { updatedAt: "desc" }],
+    include: {
+      author: { select: { name: true, initials: true } },
+      parent: { select: { id: true, content: true } },
+      event: { select: { id: true, title: true, startTime: true } },
+      task: { select: { id: true, title: true } },
+      deadline: { select: { id: true, title: true, dueDate: true } },
+      timeEntry: {
+        select: { id: true, activity: true, date: true, hours: true },
+      },
+    },
+    // Replies sort by creation so the thread reads top-down. Top-level
+    // notes use the pinned-first / most-recent ordering; the UI does
+    // the thread grouping after fetch.
+    orderBy: [{ isPinned: "desc" }, { createdAt: "asc" }],
   });
-  return rows.map((n) => ({
-    id: n.id,
-    type: n.type,
-    content: n.content,
-    isPinned: n.isPinned,
-    authorName: n.author.name,
-    authorInitials: n.author.initials,
-    createdAt: n.createdAt,
-    updatedAt: n.updatedAt,
-  }));
+
+  return rows.map((n) => {
+    let link: NoteLink | null = null;
+    if (n.parent) {
+      link = {
+        kind: "parent",
+        id: n.parent.id,
+        label: truncate(plainTextFromHtml(n.parent.content), 60) || "note",
+      };
+    } else if (n.event) {
+      link = {
+        kind: "event",
+        id: n.event.id,
+        label: n.event.title,
+        startTime: n.event.startTime,
+      };
+    } else if (n.task) {
+      link = { kind: "task", id: n.task.id, label: n.task.title };
+    } else if (n.deadline) {
+      link = {
+        kind: "deadline",
+        id: n.deadline.id,
+        label: n.deadline.title,
+        dueDate: n.deadline.dueDate,
+      };
+    } else if (n.timeEntry) {
+      link = {
+        kind: "time",
+        id: n.timeEntry.id,
+        label: `${n.timeEntry.activity} (${n.timeEntry.hours}h)`,
+        date: n.timeEntry.date,
+      };
+    }
+
+    return {
+      id: n.id,
+      type: n.type,
+      content: n.content,
+      isPinned: n.isPinned,
+      authorName: n.author.name,
+      authorInitials: n.author.initials,
+      createdAt: n.createdAt,
+      updatedAt: n.updatedAt,
+      parentNoteId: n.parentNoteId,
+      link,
+    };
+  });
 }
 
 // ── Time entries ─────────────────────────────────────────────────────────

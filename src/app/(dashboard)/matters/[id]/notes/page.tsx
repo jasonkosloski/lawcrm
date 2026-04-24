@@ -25,7 +25,7 @@ export default async function MatterNotesPage({
   return (
     <div className="p-5 flex flex-col gap-4">
       <NoteComposer matterId={id} />
-      <NotesTabBody notes={notes} />
+      <NotesTabBody notes={notes} matterId={id} />
     </div>
   );
 }
