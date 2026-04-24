@@ -54,13 +54,58 @@ model User {
 // MATTERS (Cases)
 // =============================================================================
 
+/// Firm-configurable practice area (§1983, Housing/FHA, etc.). Every
+/// Matter belongs to exactly one. Stages are scoped per-area so e.g.
+/// a criminal case can have a different lifecycle than a class action.
+/// Soft-delete only (`isActive = false`) so historical matters keep
+/// working even after an area is retired.
+model PracticeArea {
+  id           String   @id @default(cuid())
+  name         String   @unique /// Display name, e.g. "§1983" or "Housing/FHA"
+  label        String?  /// Optional longer label shown in sidebar/reports, e.g. "§1983 · Civil rights"
+  color        String   @default("#2563a8") /// Hex color — used for matter dots, sidebar, kanban
+  order        Int      @default(0) /// Sort order in pickers and settings UI
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  stages   MatterStage[]
+  matters  Matter[]
+
+  @@map("practice_areas")
+}
+
+/// Lifecycle stage for a matter within a single practice area. Ordered
+/// via `order`. `isTerminal` marks closing states (e.g. Settled, Closed)
+/// which are excluded from "open matter" aggregations and displayed in
+/// a muted style on the stage stepper.
+model MatterStage {
+  id              String   @id @default(cuid())
+  practiceAreaId  String
+  practiceArea    PracticeArea @relation(fields: [practiceAreaId], references: [id], onDelete: Cascade)
+  name            String   /// Display name, e.g. "Intake" or "Discovery"
+  order           Int      @default(0) /// Position within the area's lifecycle
+  isTerminal      Boolean  @default(false) /// True for closing states (Settled, Closed)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  matters Matter[]
+
+  @@unique([practiceAreaId, name])
+  @@index([practiceAreaId, order])
+  @@map("matter_stages")
+}
+
 /// A legal matter (case) — the central entity of the application.
 model Matter {
   id             String   @id @default(cuid())
   name           String   /// Display name, e.g. "Alvarez v. City of Aurora et al."
   caseNumber     String?  /// Court docket number, e.g. "2026-CV-00481"
-  area           String   /// Practice area: §1983, Housing/FHA, Employment/CADA, Criminal, ADA, Class, Education/IDEA
-  stage          String   @default("Intake") /// Intake | Pre-suit | Retained | Discovery | Dispositive | Pretrial | Cert | Trial/Settle | Settled | Closed
+  practiceAreaId String   /// FK → practice_areas
+  practiceArea   PracticeArea @relation(fields: [practiceAreaId], references: [id])
+  stageId        String   /// FK → matter_stages (must belong to the same practice area)
+  stage          MatterStage  @relation(fields: [stageId], references: [id])
   court          String?  /// Court and judge, e.g. "D. Colorado · Hon. L. Martinez"
   filedDate      DateTime?
   trialDate      DateTime?
@@ -68,7 +113,7 @@ model Matter {
   trustBalance   Float    @default(0) /// Current IOLTA trust balance for this matter
   wipAmount      Float    @default(0) /// Work-in-progress (unbilled hours value)
   description    String?  /// Brief case summary
-  color          String   @default("#2563a8") /// Color dot for UI display
+  color          String   @default("#2563a8") /// Color dot for UI display — snapshot from practiceArea.color on create
   isArchived     Boolean  @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -98,8 +143,8 @@ model Matter {
   settlements      Settlement[]
   pins             UserMatterPin[]
 
-  @@index([stage])
-  @@index([area])
+  @@index([stageId])
+  @@index([practiceAreaId])
   @@index([clientId])
   @@map("matters")
 }

@@ -66,6 +66,8 @@ async function main() {
   await prisma.matterContact.deleteMany();
   await prisma.matterTeamMember.deleteMany();
   await prisma.matter.deleteMany();
+  await prisma.matterStage.deleteMany();
+  await prisma.practiceArea.deleteMany();
   await prisma.contact.deleteMany();
   await prisma.lead.deleteMany();
   await prisma.automation.deleteMany();
@@ -257,6 +259,78 @@ async function main() {
   };
 
   // ─────────────────────────────────────────────────────────────────────
+  // Practice areas + stages (firm-configurable in settings)
+  //
+  // Each area seeds with the default 10-stage lifecycle. Firms can
+  // rename, reorder, archive, or add/remove stages per area via the
+  // settings UI. Matters always link to a specific stage row rather
+  // than carrying a stage-name string, so renames don't orphan data.
+  // ─────────────────────────────────────────────────────────────────────
+  console.log("  Creating practice areas + stages…");
+  const AREA_SEEDS: Array<{
+    name: string;
+    label: string;
+    color: string;
+    order: number;
+  }> = [
+    { name: "§1983", label: "§1983 · Civil rights", color: "#2563a8", order: 0 },
+    { name: "Housing/FHA", label: "Housing · FHA", color: "#2d8a5f", order: 1 },
+    { name: "Employment/CADA", label: "Employment · CADA", color: "#b6623d", order: 2 },
+    { name: "Criminal", label: "Criminal", color: "#7a5aa6", order: 3 },
+    { name: "Class", label: "Class actions", color: "#8a6a2d", order: 4 },
+    { name: "ADA", label: "ADA", color: "#3a8a7a", order: 5 },
+    { name: "Education/IDEA", label: "Education · IDEA", color: "#3a8a7a", order: 6 },
+  ];
+
+  const DEFAULT_STAGES: Array<{ name: string; isTerminal?: boolean }> = [
+    { name: "Intake" },
+    { name: "Pre-suit" },
+    { name: "Retained" },
+    { name: "Discovery" },
+    { name: "Dispositive" },
+    { name: "Pretrial" },
+    { name: "Cert" },
+    { name: "Trial/Settle" },
+    { name: "Settled", isTerminal: true },
+    { name: "Closed", isTerminal: true },
+  ];
+
+  const practiceAreas: Record<
+    string,
+    { id: string; color: string; stages: Record<string, string> }
+  > = {};
+  for (const area of AREA_SEEDS) {
+    const pa = await prisma.practiceArea.create({
+      data: {
+        name: area.name,
+        label: area.label,
+        color: area.color,
+        order: area.order,
+      },
+    });
+    const stages: Record<string, string> = {};
+    for (let i = 0; i < DEFAULT_STAGES.length; i++) {
+      const s = DEFAULT_STAGES[i];
+      const stage = await prisma.matterStage.create({
+        data: {
+          practiceAreaId: pa.id,
+          name: s.name,
+          order: i,
+          isTerminal: s.isTerminal ?? false,
+        },
+      });
+      stages[s.name] = stage.id;
+    }
+    practiceAreas[area.name] = { id: pa.id, color: area.color, stages };
+  }
+
+  /** Resolve area + stage names to FK ids for matter seed rows. */
+  const ref = (area: string, stage: string) => ({
+    practiceAreaId: practiceAreas[area].id,
+    stageId: practiceAreas[area].stages[stage],
+  });
+
+  // ─────────────────────────────────────────────────────────────────────
   // Matters (12 cases from the prototype)
   // ─────────────────────────────────────────────────────────────────────
   console.log("  Creating matters…");
@@ -265,8 +339,7 @@ async function main() {
       data: {
         name: "Alvarez v. City of Aurora et al.",
         caseNumber: "2026-CV-00481",
-        area: "§1983",
-        stage: "Discovery",
+        ...ref("§1983", "Discovery"),
         court: "D. Colorado · Hon. L. Martinez",
         filedDate: new Date("2026-01-14"),
         trialDate: new Date("2026-10-05"),
@@ -286,8 +359,7 @@ async function main() {
       data: {
         name: "Williams v. Denver",
         caseNumber: "2025-CV-02014",
-        area: "§1983",
-        stage: "Dispositive",
+        ...ref("§1983", "Dispositive"),
         court: "D. Colorado",
         filedDate: new Date("2025-08-12"),
         trialDate: new Date("2026-07-15"),
@@ -306,8 +378,7 @@ async function main() {
       data: {
         name: "Patel — FHA",
         caseNumber: "2026-CV-00655",
-        area: "Housing/FHA",
-        stage: "Retained",
+        ...ref("Housing/FHA", "Retained"),
         feeStructure: "hourly",
         trustBalance: 4120,
         wipAmount: 3800,
@@ -320,8 +391,7 @@ async function main() {
     moreno: await prisma.matter.create({
       data: {
         name: "Moreno — CADA",
-        area: "Employment/CADA",
-        stage: "Pre-suit",
+        ...ref("Employment/CADA", "Pre-suit"),
         feeStructure: "hybrid",
         trustBalance: 2500,
         wipAmount: 6200,
@@ -335,8 +405,7 @@ async function main() {
       data: {
         name: "Chen — ADA transit",
         caseNumber: "2026-CV-00311",
-        area: "ADA",
-        stage: "Discovery",
+        ...ref("ADA", "Discovery"),
         feeStructure: "contingent",
         trustBalance: 0,
         wipAmount: 11900,
@@ -349,8 +418,7 @@ async function main() {
       data: {
         name: "In re: Aurora class",
         caseNumber: "2026-CV-00122",
-        area: "Class",
-        stage: "Cert",
+        ...ref("Class", "Cert"),
         court: "D. Colorado",
         filedDate: new Date("2026-02-03"),
         feeStructure: "contingent",
@@ -364,8 +432,7 @@ async function main() {
     nguyen: await prisma.matter.create({
       data: {
         name: "Nguyen — DUI",
-        area: "Criminal",
-        stage: "Pretrial",
+        ...ref("Criminal", "Pretrial"),
         feeStructure: "flat",
         trustBalance: 3500,
         wipAmount: 1200,
@@ -377,8 +444,7 @@ async function main() {
     rodriguez: await prisma.matter.create({
       data: {
         name: "Rodriguez — FHA",
-        area: "Housing/FHA",
-        stage: "Pre-suit",
+        ...ref("Housing/FHA", "Pre-suit"),
         feeStructure: "hourly",
         trustBalance: 1200,
         wipAmount: 2400,
@@ -390,8 +456,7 @@ async function main() {
     ellis: await prisma.matter.create({
       data: {
         name: "Ellis — IDEA",
-        area: "Education/IDEA",
-        stage: "Pre-suit",
+        ...ref("Education/IDEA", "Pre-suit"),
         feeStructure: "contingent",
         trustBalance: 0,
         wipAmount: 800,
@@ -403,8 +468,7 @@ async function main() {
     boaz: await prisma.matter.create({
       data: {
         name: "Boaz — §1983 prisoner",
-        area: "§1983",
-        stage: "Intake",
+        ...ref("§1983", "Intake"),
         feeStructure: "pro_bono",
         trustBalance: 0,
         wipAmount: 0,
@@ -417,8 +481,7 @@ async function main() {
       data: {
         name: "Rivera v. Lakewood",
         caseNumber: "2024-CV-01188",
-        area: "§1983",
-        stage: "Settled",
+        ...ref("§1983", "Settled"),
         feeStructure: "contingent",
         trustBalance: 425000,
         wipAmount: 0,
@@ -431,8 +494,7 @@ async function main() {
     jenner: await prisma.matter.create({
       data: {
         name: "Jenner — employment",
-        area: "Employment/CADA",
-        stage: "Closed",
+        ...ref("Employment/CADA", "Closed"),
         feeStructure: "hourly",
         trustBalance: 0,
         wipAmount: 0,
