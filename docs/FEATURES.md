@@ -76,8 +76,13 @@ Status legend: `[ ]` planned · `[~]` in progress · `[x]` complete · `[-]` des
 
 ## Phase 8 — Firm & Admin
 
-- [ ] **Team management** — User roster, role assignments
-- [ ] **Settings** — Integration statuses (Gmail, Westlaw, calendar, e-sign, IOLTA)
+- [x] **Settings — route framework** — `/settings` layout with left-rail section nav (Account group: Profile / Security / Notifications; Firm group: Team / Firm info / Integrations / Billing & rates). Each section has a dedicated route so features plug in a home as they land.
+- [~] **Settings — Profile** — Read-only view of current user (name, role, initials). Edit form + server action pending Phase 9 auth.
+- [ ] **Settings — Security** — Change password, 2FA, active sessions, sign-in history (blocked on Phase 9 Authentication)
+- [ ] **Settings — Team management** — User roster, invite, role assignment, deactivate/reactivate (blocked on Phase 9 Authentication)
+- [ ] **Settings — Firm info** — Firm name/address/logo, default practice areas, default fee structure, matter numbering scheme
+- [ ] **Settings — Integrations** — Per-integration connection status + OAuth flows (Gmail, Google Calendar, Westlaw, e-sign, IOLTA bank feed, PACER). Each lights up when its underlying feature phase lands.
+- [ ] **Settings — Billing & rates** — Default hourly rate, UTBMS code library, invoice templates, payment terms (blocked on Phase 6 Billing)
 - [ ] **Automations** — Template library, trigger configuration
 - [ ] **Reports** — Pipeline, utilization, financials dashboards
 - [ ] **Role-based & customizable sidebar** — Different sidebar content per role, with per-user overrides. Attorneys see pinned matters; a finance user might pin reports or trust accounts; an intake paralegal might pin leads. Each role ships a sensible default, and users can add/remove/reorder pinned items from their own view. Depends on auth (for session user + role) and likely a `UserPreferences` model for persisted overrides. Consider a generic "pinned items" concept that spans matters, reports, leads, contacts, and views (saved filter URLs) rather than matter-only pinning.

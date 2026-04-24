@@ -170,6 +170,25 @@ Uses a centered card in the tab content area with the tab name + a short
 description of what's coming. Lets users click through the full tab set
 without running into blank/404 pages. See `src/components/matters/tab-placeholder.tsx`.
 
+### Settings Section Layout
+
+`/settings/*` uses a left-rail layout (not a top tab bar — too many
+sections to fit horizontally). Sections are grouped by scope:
+
+- **Account** — things that belong to the current user (Profile, Security, Notifications)
+- **Firm** — things that belong to the whole firm (Team, Firm info, Integrations, Billing & rates)
+
+Each section is its own route under `/settings/<slug>`. Adding a new
+settings area is two steps: add it to `SECTIONS` in
+`src/components/settings/settings-nav.tsx`, and create the page under
+`src/app/(dashboard)/settings/<slug>/page.tsx`.
+
+**Empty-state placeholder pages** use `SettingsPlaceholder` (see
+`src/components/settings/settings-placeholder.tsx`) which takes a title,
+description, list of expected items, and an optional "depends on" string
+so future contributors know what the section will eventually hold and
+what's blocking it.
+
 ---
 
 ## Interaction Patterns
