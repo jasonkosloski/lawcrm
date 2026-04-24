@@ -195,6 +195,17 @@ export async function createMatter(
       teamMembers: {
         create: { userId: leadUserId, role: "lead" },
       },
+      // Invariant: whenever a matter has a client, that contact
+      // surfaces as a MatterContact with category="client" so the
+      // Parties tab always shows them. Additional co-clients can
+      // still be added manually from the tab.
+      ...(clientId
+        ? {
+            contacts: {
+              create: { contactId: clientId, category: "client" },
+            },
+          }
+        : {}),
       ...(data.pinForMe === "on"
         ? {
             pins: {
@@ -324,6 +335,31 @@ export async function updateMatter(
         },
         update: { role: "lead" },
         create: { matterId, userId: leadUserId, role: "lead" },
+      });
+    }
+
+    // Sync the primary client's MatterContact row. Invariant:
+    // whenever Matter.clientId is set, there's a MatterContact with
+    // category="client" for that same contact. We upsert on the
+    // (matter, contact, category) unique key. We intentionally do
+    // NOT auto-remove the prior primary client's row — they may
+    // still belong as a co-client on the matter, and removal should
+    // be an explicit act via the Parties tab.
+    if (clientId) {
+      await tx.matterContact.upsert({
+        where: {
+          matterId_contactId_category: {
+            matterId,
+            contactId: clientId,
+            category: "client",
+          },
+        },
+        create: {
+          matterId,
+          contactId: clientId,
+          category: "client",
+        },
+        update: {},
       });
     }
   });

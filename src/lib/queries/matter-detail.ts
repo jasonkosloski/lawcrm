@@ -23,6 +23,11 @@ export type PartyRow = {
   email: string | null;
   phone: string | null;
   contactType: string;
+  /** True when this row represents the matter's primary client
+   *  (Matter.clientId points at this contactId and category is
+   *  "client"). The UI pins it, disables delete, and shows a
+   *  "Primary" badge. */
+  isPrimaryClient: boolean;
   /** Coarse display bucket — client / opposing / lay_witness /
    *  expert_witness / other. */
   category: string;
@@ -43,23 +48,32 @@ export type PartyRow = {
 };
 
 export async function getMatterParties(matterId: string): Promise<PartyRow[]> {
-  const rows = await prisma.matterContact.findMany({
-    where: { matterId },
-    include: {
-      contact: {
-        select: {
-          id: true,
-          name: true,
-          organization: true,
-          email: true,
-          phone: true,
-          type: true,
-          conflictStatus: true,
+  const [matter, rows] = await Promise.all([
+    prisma.matter.findUnique({
+      where: { id: matterId },
+      select: { clientId: true },
+    }),
+    prisma.matterContact.findMany({
+      where: { matterId },
+      include: {
+        contact: {
+          select: {
+            id: true,
+            name: true,
+            organization: true,
+            email: true,
+            phone: true,
+            type: true,
+            conflictStatus: true,
+          },
         },
       },
-    },
-    orderBy: [{ category: "asc" }, { createdAt: "asc" }],
-  });
+      orderBy: [{ category: "asc" }, { createdAt: "asc" }],
+    }),
+  ]);
+
+  const primaryClientId = matter?.clientId ?? null;
+
   return rows.map((r) => ({
     id: r.id,
     contactId: r.contact.id,
@@ -77,6 +91,8 @@ export async function getMatterParties(matterId: string): Promise<PartyRow[]> {
     representationFirm: r.representationFirm,
     representationEmail: r.representationEmail,
     representationPhone: r.representationPhone,
+    isPrimaryClient:
+      r.category === "client" && r.contact.id === primaryClientId,
   }));
 }
 

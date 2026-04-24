@@ -238,9 +238,31 @@ export async function removeMatterContact(
 ): Promise<{ ok: boolean; error?: string }> {
   const row = await prisma.matterContact.findUnique({
     where: { id: matterContactId },
-    select: { id: true, matterId: true },
+    select: {
+      id: true,
+      matterId: true,
+      contactId: true,
+      category: true,
+      matter: { select: { clientId: true } },
+    },
   });
   if (!row) return { ok: false, error: "Party not found" };
+
+  // Invariant guard: don't let the UI delete the primary client's
+  // MatterContact row — the matter's clientId still points to this
+  // contact, so the row would reappear on next load (plus the user
+  // expects the Parties tab to always reflect the matter's client).
+  // The proper way to change it is via Matter → Edit.
+  if (
+    row.category === "client" &&
+    row.matter?.clientId === row.contactId
+  ) {
+    return {
+      ok: false,
+      error:
+        "Can't remove the matter's primary client here. Change the client via Matter → Edit first.",
+    };
+  }
 
   await prisma.matterContact.delete({ where: { id: matterContactId } });
 

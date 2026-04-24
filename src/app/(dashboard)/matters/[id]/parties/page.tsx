@@ -103,16 +103,24 @@ function CategorySection({
   contacts: ContactOption[];
 }) {
   const showsRepresentation = category !== "client";
+  // Primary client pins to the top of the clients section so the
+  // Matter.clientId row is always visible at a glance.
+  const sortedRows =
+    category === "client"
+      ? [...rows].sort(
+          (a, b) => Number(b.isPrimaryClient) - Number(a.isPrimaryClient)
+        )
+      : rows;
   return (
     <section>
       <div className="flex items-center gap-2 mb-2">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-3">
           {PARTY_CATEGORY_LABEL[category]}
         </h2>
-        <span className="text-2xs font-mono text-ink-4">{rows.length}</span>
+        <span className="text-2xs font-mono text-ink-4">{sortedRows.length}</span>
       </div>
       <Card className="p-0 overflow-hidden">
-        {rows.length > 0 && (
+        {sortedRows.length > 0 && (
           <Table>
             <TableHeader>
               <TableRow>
@@ -126,11 +134,19 @@ function CategorySection({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((p) => (
+              {sortedRows.map((p) => (
                 <TableRow key={p.id}>
                   <TableCell className="pl-4 font-medium text-ink">
                     <div className="flex items-center gap-2">
                       <span>{p.name}</span>
+                      {p.isPrimaryClient && (
+                        <span
+                          className="text-2xs font-medium px-1.5 py-0.5 rounded-full bg-brand-soft text-brand-700 border border-brand-200"
+                          title="This matter's primary client — set via Matter → Edit"
+                        >
+                          Primary
+                        </span>
+                      )}
                       {p.conflictStatus === "flagged" && (
                         <span className="text-2xs font-medium px-1.5 py-0.5 rounded-full bg-warn-soft text-warn border border-warn-border">
                           conflict flagged
@@ -164,10 +180,12 @@ function CategorySection({
                     {p.notes ?? "—"}
                   </TableCell>
                   <TableCell className="pr-4">
-                    <PartyRowActions
-                      matterContactId={p.id}
-                      name={p.name}
-                    />
+                    {!p.isPrimaryClient && (
+                      <PartyRowActions
+                        matterContactId={p.id}
+                        name={p.name}
+                      />
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
