@@ -19,7 +19,9 @@
  * Next.js 16: dynamic route `params` is a Promise that must be awaited.
  */
 
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Pencil } from "lucide-react";
 import { TopBar } from "@/components/layout/topbar";
 import { MatterTabs } from "@/components/matters/matter-tabs";
 import { PinToggle } from "@/components/matters/pin-toggle";
@@ -67,6 +69,15 @@ export default async function MatterDetailLayout({
         }
         actions={
           <>
+            {/* TODO (auth): gate Edit to users with permission once
+                sessions + RBAC land. Today every user sees it. */}
+            <Link
+              href={`/matters/${matter.id}/edit`}
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium bg-white text-ink-2 border border-line hover:border-brand-300 hover:text-brand-700 transition-colors"
+            >
+              <Pencil size={13} />
+              Edit
+            </Link>
             <PinToggle
               matterId={matter.id}
               initialPinned={matter.isPinnedByCurrentUser}

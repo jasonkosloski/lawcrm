@@ -10,8 +10,8 @@
  *  "create new client" fields on the form. */
 export const NEW_CLIENT_SENTINEL = "__new__";
 
-/** Shape returned by the `createMatter` server action on validation
- *  error — field errors + echoed values for form re-render. */
+/** Shape returned by the create/update matter server actions on
+ *  validation error — field errors + echoed values for form re-render. */
 export type CreateMatterState = {
   status: "idle" | "error";
   errors?: Record<string, string[]>;
@@ -21,3 +21,7 @@ export type CreateMatterState = {
 export const createMatterInitialState: CreateMatterState = {
   status: "idle",
 };
+
+/** Update-matter shares the same shape — alias keeps callsites readable. */
+export type UpdateMatterState = CreateMatterState;
+export const updateMatterInitialState: UpdateMatterState = { status: "idle" };

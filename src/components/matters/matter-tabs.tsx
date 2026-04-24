@@ -58,12 +58,14 @@ export function MatterTabs({ matterId }: { matterId: string }) {
   const { open } = useCreateStack();
   const base = `/matters/${matterId}`;
 
-  const activeSlug =
-    TABS.find((t) => {
-      if (t.slug === "") return pathname === base;
-      return pathname.startsWith(`${base}/${t.slug}`);
-    })?.slug ?? "";
-  const addType = TAB_ADD_TYPE[activeSlug];
+  // `undefined` when on a non-tab sub-route (e.g. /edit) so no tab
+  // erroneously appears active. Falling back to "" would light up
+  // Overview since its slug is "".
+  const activeSlug = TABS.find((t) => {
+    if (t.slug === "") return pathname === base;
+    return pathname.startsWith(`${base}/${t.slug}`);
+  })?.slug;
+  const addType = activeSlug ? TAB_ADD_TYPE[activeSlug] : undefined;
   const addEntry = addType ? findMatterCreateEntry(addType) : undefined;
 
   return (
