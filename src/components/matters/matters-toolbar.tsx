@@ -29,7 +29,9 @@ import {
   type DeadlineFilter,
   type MattersFilter,
   type TrustFilter,
+  type ViewMode,
 } from "@/lib/matters-filters";
+import { MattersViewToggle } from "@/components/matters/matters-view-toggle";
 
 const SEARCH_DEBOUNCE_MS = 250;
 
@@ -44,11 +46,13 @@ type FilterOptions = {
 export function MattersToolbar({
   filter,
   options,
+  view,
   visibleCount,
   totalCount,
 }: {
   filter: MattersFilter;
   options: FilterOptions;
+  view: ViewMode;
   visibleCount: number;
   totalCount: number;
 }) {
@@ -187,6 +191,9 @@ export function MattersToolbar({
             Clear all
           </button>
         )}
+        <div className="ml-auto">
+          <MattersViewToggle view={view} />
+        </div>
       </div>
 
       {/* ── Row 2: filter popovers ────────────────────────────────────── */}

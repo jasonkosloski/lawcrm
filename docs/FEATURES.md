@@ -18,9 +18,20 @@ Status legend: `[ ]` planned · `[~]` in progress · `[x]` complete · `[-]` des
 
 ## Phase 2 — Matters
 
+> **Scope note:** Each matter-detail tab (Parties, Deadlines, Tasks, Notes,
+> Documents, Timeline, Billing) is its own substantial feature area, not a
+> single line item. The entries below mark "tab exists and renders real
+> data" — follow-up work on create/edit flows, specialized UI (rich text
+> for Notes, drag-drop for Tasks, document preview/upload for Documents,
+> real-time aggregation for Timeline), in-tab search/filter, and
+> integrations (OCR, deadline auto-generation, conflict checks) all
+> belong to their own dedicated phases. Each tab will likely get its own
+> Phase 2.X expansion once the v1 pass is complete.
+
 - [x] **Matters list — route + basic table** — Route, table, real data, click-through to detail
 - [x] **Matters list — sort & filter** — URL-backed state, 8 filter dimensions (search, area, stage, lead, fee, trust, deadline, status flags), sortable column headers with asc/desc/clear cycle
-- [ ] **Matters list — view toggles** — Kanban and Cards views (table is done; kanban/cards are the "multiple ways to view" variants)
+- [x] **Matters list — view toggle (Table / Kanban)** — Segmented control in topbar, URL-backed (`?view=kanban`), kanban shows all 10 lifecycle stages as columns (empty stages visible so pipeline shape stays legible), matter cards show area, fee, lead, trust, next-deadline; drag-drop between columns deferred to v2
+- [ ] **Matters list — Cards view** — Visual grid view as a third view mode
 - [x] **Matter detail — pin toggle** — Per-user pin/unpin button in the header, server action + revalidation, sidebar updates live
 - [x] **Matter detail — Overview tab** — Case facts + team roster, plus preview cards (upcoming deadlines, open tasks, strategy note) that link through to their dedicated tabs
 - [ ] **Matter detail — Timeline tab** — Chronological activity feed aggregating filings, emails, evidence, deadlines, notes, time entries (placeholder route exists)

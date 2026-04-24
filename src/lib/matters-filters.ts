@@ -56,6 +56,12 @@ export type SortDir = "asc" | "desc";
 
 export type MattersSort = { field: SortField; dir: SortDir };
 
+/** Render mode for the matters list. Default is "table"; URL param is
+ *  omitted in that case to keep URLs short. Cards view reserved for
+ *  later — add when we need it without breaking URL contract. */
+export type ViewMode = "table" | "kanban";
+export const DEFAULT_VIEW: ViewMode = "table";
+
 /** Canonical practice-case-stage order (case lifecycle). Used to sort by stage. */
 export const STAGE_ORDER = [
   "Intake",
@@ -132,14 +138,17 @@ const isSortField = (v: string | undefined): v is SortField =>
   v === "fee" ||
   v === "deadline" ||
   v === "created";
+const isViewMode = (v: string | undefined): v is ViewMode =>
+  v === "table" || v === "kanban";
 
 export function parseMattersParams(
   sp: Record<string, string | string[] | undefined>
-): { filter: MattersFilter; sort: MattersSort } {
+): { filter: MattersFilter; sort: MattersSort; view: ViewMode } {
   const trust = getOne(sp, "trust");
   const deadline = getOne(sp, "deadline");
   const sortField = getOne(sp, "sort");
   const sortDir = getOne(sp, "dir");
+  const view = getOne(sp, "view");
 
   return {
     filter: {
@@ -158,6 +167,7 @@ export function parseMattersParams(
       field: isSortField(sortField) ? sortField : DEFAULT_SORT.field,
       dir: sortDir === "asc" ? "asc" : sortDir === "desc" ? "desc" : DEFAULT_SORT.dir,
     },
+    view: isViewMode(view) ? view : DEFAULT_VIEW,
   };
 }
 
