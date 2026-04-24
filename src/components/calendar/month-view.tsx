@@ -16,6 +16,7 @@ import {
 } from "date-fns";
 import { cn } from "@/lib/utils";
 import { monthGridRange } from "./calendar-toolbar";
+import { EventLink } from "./event-link";
 import { isWeekend, WEEK_STARTS_ON } from "@/lib/calendar-utils";
 import type {
   CalendarItem,
@@ -142,24 +143,21 @@ export function MonthView({
 }
 
 function EventPill({ event }: { event: CalendarEventRow }) {
-  const content = (
-    <div
-      className="px-1 py-0.5 rounded-sm text-3xs leading-tight flex items-center gap-1 overflow-hidden hover:bg-brand-tint"
-      style={{
-        borderLeft: `2px solid ${event.color}`,
-      }}
-      title={`${format(event.startTime, "h:mm a")} — ${event.title}${event.matterName ? ` · ${event.matterName}` : ""}`}
-    >
-      <span className="font-mono text-ink-4 shrink-0">
-        {format(event.startTime, "ha").toLowerCase()}
-      </span>
-      <span className="truncate text-ink">{event.title}</span>
-    </div>
-  );
-  return event.matterId ? (
-    <Link href={`/matters/${event.matterId}`}>{content}</Link>
-  ) : (
-    content
+  return (
+    <EventLink eventId={event.id}>
+      <div
+        className="px-1 py-0.5 rounded-sm text-3xs leading-tight flex items-center gap-1 overflow-hidden hover:bg-brand-tint cursor-pointer"
+        style={{
+          borderLeft: `2px solid ${event.color}`,
+        }}
+        title={`${format(event.startTime, "h:mm a")} — ${event.title}${event.matterName ? ` · ${event.matterName}` : ""}`}
+      >
+        <span className="font-mono text-ink-4 shrink-0">
+          {format(event.startTime, "ha").toLowerCase()}
+        </span>
+        <span className="truncate text-ink">{event.title}</span>
+      </div>
+    </EventLink>
   );
 }
 

@@ -21,6 +21,7 @@ import {
   startOfDay,
 } from "date-fns";
 import { cn } from "@/lib/utils";
+import { EventLink } from "./event-link";
 import {
   getCalendarItems,
   type CalendarItem,
@@ -125,35 +126,30 @@ function AgendaEvent({ event }: { event: CalendarEventRow }) {
   const timeLabel = event.isAllDay
     ? "All day"
     : format(event.startTime, "h:mmaaa").toLowerCase();
-  const content = (
-    <div className="flex items-start gap-2 px-4 py-2 hover:bg-brand-tint transition-colors">
-      <span className="text-2xs font-mono text-ink-4 w-12 pt-0.5 shrink-0">
-        {timeLabel}
-      </span>
-      <span
-        className="w-1 self-stretch rounded-full mt-0.5 shrink-0"
-        style={{ background: event.color }}
-      />
-      <div className="flex-1 min-w-0">
-        <div className="text-xs font-medium text-ink truncate">
-          {event.title}
-        </div>
-        {event.matterName && (
-          <div className="text-2xs font-mono text-ink-4 truncate">
-            {event.matterName}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-  return event.matterId ? (
+  return (
     <li>
-      <Link href={`/matters/${event.matterId}`} className="block">
-        {content}
-      </Link>
+      <EventLink eventId={event.id} className="block">
+        <div className="flex items-start gap-2 px-4 py-2 hover:bg-brand-tint transition-colors cursor-pointer">
+          <span className="text-2xs font-mono text-ink-4 w-12 pt-0.5 shrink-0">
+            {timeLabel}
+          </span>
+          <span
+            className="w-1 self-stretch rounded-full mt-0.5 shrink-0"
+            style={{ background: event.color }}
+          />
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-medium text-ink truncate">
+              {event.title}
+            </div>
+            {event.matterName && (
+              <div className="text-2xs font-mono text-ink-4 truncate">
+                {event.matterName}
+              </div>
+            )}
+          </div>
+        </div>
+      </EventLink>
     </li>
-  ) : (
-    <li>{content}</li>
   );
 }
 

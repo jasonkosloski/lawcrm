@@ -92,6 +92,59 @@ export async function getCalendarItems(
   return [...mappedEvents, ...mappedDeadlines];
 }
 
+/** Full details for a single event — used by the event detail modal. */
+export type CalendarEventDetail = {
+  id: string;
+  title: string;
+  type: string;
+  startTime: Date;
+  endTime: Date;
+  isAllDay: boolean;
+  location: string | null;
+  description: string | null;
+  zoomUrl: string | null;
+  color: string;
+  matter: { id: string; name: string; area: string; color: string } | null;
+  attendees: Array<{
+    id: string;
+    name: string;
+    email: string | null;
+    status: string;
+  }>;
+};
+
+export async function getCalendarEventById(
+  id: string
+): Promise<CalendarEventDetail | null> {
+  const e = await prisma.calendarEvent.findUnique({
+    where: { id },
+    include: {
+      matter: { select: { id: true, name: true, area: true, color: true } },
+      attendees: true,
+    },
+  });
+  if (!e) return null;
+  return {
+    id: e.id,
+    title: e.title,
+    type: e.type,
+    startTime: e.startTime,
+    endTime: e.endTime,
+    isAllDay: e.isAllDay,
+    location: e.location,
+    description: e.description,
+    zoomUrl: e.zoomUrl,
+    color: e.matter?.color ?? e.color ?? "var(--color-ink-3)",
+    matter: e.matter,
+    attendees: e.attendees.map((a) => ({
+      id: a.id,
+      name: a.name,
+      email: a.email,
+      status: a.status,
+    })),
+  };
+}
+
 /** Summary counts for the top-bar crumb. */
 export async function getCalendarSummary(
   rangeStart: Date,

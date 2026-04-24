@@ -13,6 +13,7 @@
 import Link from "next/link";
 import { addDays, format, isSameDay, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
+import { EventLink } from "./event-link";
 import {
   eventHeightPx,
   eventTopPx,
@@ -195,36 +196,28 @@ function EventBlock({
 }) {
   const top = eventTopPx(event.startTime) + topOffset;
   const height = eventHeightPx(event.startTime, event.endTime);
-  const content = (
-    <div
-      className="absolute left-1 right-1 px-1.5 py-1 rounded-sm overflow-hidden shadow-[inset_3px_0_0_0] hover:shadow-[inset_3px_0_0_0,0_2px_6px_-2px_rgba(0,0,0,0.1)] transition-shadow cursor-default"
-      style={{
-        top,
-        height,
-        background: `color-mix(in oklch, ${event.color} 16%, white)`,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ["--tw-shadow-color" as any]: event.color,
-        boxShadow: `inset 3px 0 0 0 ${event.color}`,
-      }}
-    >
-      <div className="text-2xs font-medium text-ink leading-tight line-clamp-2">
-        {event.title}
-      </div>
-      {event.matterName && (
-        <div className="text-3xs font-mono text-ink-3 mt-0.5 truncate">
-          {event.matterName}
+  return (
+    <EventLink eventId={event.id} className="block">
+      <div
+        className="absolute left-1 right-1 px-1.5 py-1 rounded-sm overflow-hidden cursor-pointer hover:shadow-[inset_3px_0_0_0,0_2px_6px_-2px_rgba(0,0,0,0.1)] transition-shadow"
+        style={{
+          top,
+          height,
+          background: `color-mix(in oklch, ${event.color} 16%, white)`,
+          boxShadow: `inset 3px 0 0 0 ${event.color}`,
+        }}
+      >
+        <div className="text-2xs font-medium text-ink leading-tight line-clamp-2">
+          {event.title}
         </div>
-      )}
-    </div>
+        {event.matterName && (
+          <div className="text-3xs font-mono text-ink-3 mt-0.5 truncate">
+            {event.matterName}
+          </div>
+        )}
+      </div>
+    </EventLink>
   );
-  if (event.matterId) {
-    return (
-      <Link href={`/matters/${event.matterId}`} className="block">
-        {content}
-      </Link>
-    );
-  }
-  return content;
 }
 
 function DeadlineChip({ deadline }: { deadline: CalendarDeadlineRow }) {

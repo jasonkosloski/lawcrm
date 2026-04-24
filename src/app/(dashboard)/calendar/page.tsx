@@ -21,11 +21,13 @@ import {
 import { WeekView } from "@/components/calendar/week-view";
 import { MonthView } from "@/components/calendar/month-view";
 import { CalendarAgenda } from "@/components/calendar/calendar-agenda";
+import { EventDetailModal } from "@/components/calendar/event-detail-modal";
 import { CreateStackProvider } from "@/components/create-stack/create-stack-provider";
 import { CreateDock } from "@/components/create-stack/create-dock";
 import { NewEventButton } from "@/components/calendar/new-event-button";
 import { parseCalendarParams } from "@/lib/calendar-utils";
 import {
+  getCalendarEventById,
   getCalendarItems,
   getCalendarSummary,
 } from "@/lib/queries/calendar";
@@ -39,9 +41,15 @@ export default async function CalendarPage({
   const range =
     view === "week" ? weekRange(focal) : monthGridRange(focal);
 
-  const [items, summary] = await Promise.all([
+  // Event-detail modal is URL-driven via ?event=<id> so refresh +
+  // back-button both work. We fetch in parallel with the other queries.
+  const rawEventParam = Array.isArray(sp.event) ? sp.event[0] : sp.event;
+  const eventId = typeof rawEventParam === "string" ? rawEventParam : null;
+
+  const [items, summary, selectedEvent] = await Promise.all([
     getCalendarItems(range.start, range.end),
     getCalendarSummary(range.start, range.end),
+    eventId ? getCalendarEventById(eventId) : Promise.resolve(null),
   ]);
 
   const crumbBits = [
@@ -77,6 +85,8 @@ export default async function CalendarPage({
           <CreateDock />
         </div>
       </div>
+
+      {selectedEvent && <EventDetailModal event={selectedEvent} />}
     </CreateStackProvider>
   );
 }
