@@ -51,6 +51,19 @@ const createMatterSchema = z
     opposingFirm: z.string().trim().max(200).optional().or(z.literal("")),
     leadUserId: z.string().trim().min(1, "Lead attorney is required"),
     description: z.string().trim().max(4000).optional().or(z.literal("")),
+    /** SOL fields — ignored unless the selected practice area has
+     *  hasStatuteOfLimitations=true. Form shows them conditionally. */
+    statuteOfLimitationsDate: z
+      .string()
+      .trim()
+      .optional()
+      .or(z.literal("")),
+    statuteOfLimitationsNotes: z
+      .string()
+      .trim()
+      .max(4000)
+      .optional()
+      .or(z.literal("")),
     pinForMe: z.literal("on").optional(),
   })
   .superRefine((data, ctx) => {
@@ -88,7 +101,13 @@ async function resolveAreaAndStage(
   practiceAreaId: string,
   stageId: string
 ): Promise<
-  | { ok: true; practiceAreaId: string; stageId: string; color: string }
+  | {
+      ok: true;
+      practiceAreaId: string;
+      stageId: string;
+      color: string;
+      hasStatuteOfLimitations: boolean;
+    }
   | { ok: false; error: string }
 > {
   const area = await prisma.practiceArea.findUnique({
@@ -97,6 +116,7 @@ async function resolveAreaAndStage(
       id: true,
       color: true,
       isActive: true,
+      hasStatuteOfLimitations: true,
       stages: {
         where: { isActive: true },
         orderBy: { order: "asc" },
@@ -117,6 +137,7 @@ async function resolveAreaAndStage(
     practiceAreaId: area.id,
     stageId: resolvedStageId,
     color: area.color,
+    hasStatuteOfLimitations: area.hasStatuteOfLimitations,
   };
 }
 
@@ -193,6 +214,18 @@ export async function createMatter(
     clientId = client?.id ?? null;
   }
 
+  // Only persist SOL fields when the area actually tracks them;
+  // otherwise drop them on the floor so a stale form submission from
+  // an area that used to track SOL doesn't leave dangling dates.
+  const solDate =
+    resolved.hasStatuteOfLimitations && data.statuteOfLimitationsDate
+      ? new Date(data.statuteOfLimitationsDate)
+      : null;
+  const solNotes =
+    resolved.hasStatuteOfLimitations
+      ? data.statuteOfLimitationsNotes || null
+      : null;
+
   const matter = await prisma.matter.create({
     data: {
       name: data.name,
@@ -206,6 +239,8 @@ export async function createMatter(
       description: data.description || null,
       color: resolved.color,
       clientId,
+      statuteOfLimitationsDate: solDate,
+      statuteOfLimitationsNotes: solNotes,
       teamMembers: {
         create: { userId: leadUserId, role: "lead" },
       },
@@ -259,6 +294,17 @@ const updateMatterSchema = z.object({
   opposingFirm: z.string().trim().max(200).optional().or(z.literal("")),
   leadUserId: z.string().trim().min(1, "Lead attorney is required"),
   description: z.string().trim().max(4000).optional().or(z.literal("")),
+  statuteOfLimitationsDate: z
+    .string()
+    .trim()
+    .optional()
+    .or(z.literal("")),
+  statuteOfLimitationsNotes: z
+    .string()
+    .trim()
+    .max(4000)
+    .optional()
+    .or(z.literal("")),
 });
 
 /**
@@ -314,6 +360,18 @@ export async function updateMatter(
     clientId = client?.id ?? null;
   }
 
+  // Same SOL guard as createMatter — if the new area doesn't track
+  // SOL, null out any date/notes so switching areas doesn't leave
+  // orphaned SOL data.
+  const solDate =
+    resolved.hasStatuteOfLimitations && data.statuteOfLimitationsDate
+      ? new Date(data.statuteOfLimitationsDate)
+      : null;
+  const solNotes =
+    resolved.hasStatuteOfLimitations
+      ? data.statuteOfLimitationsNotes || null
+      : null;
+
   await prisma.$transaction(async (tx) => {
     await tx.matter.update({
       where: { id: matterId },
@@ -329,6 +387,16 @@ export async function updateMatter(
         description: data.description || null,
         color: resolved.color,
         clientId,
+        statuteOfLimitationsDate: solDate,
+        statuteOfLimitationsNotes: solNotes,
+        // If the area dropped SOL tracking, clear the satisfied flag
+        // as well so we don't carry stale state.
+        ...(resolved.hasStatuteOfLimitations
+          ? {}
+          : {
+              statuteOfLimitationsSatisfied: false,
+              statuteOfLimitationsSatisfiedAt: null,
+            }),
       },
     });
 
@@ -431,5 +499,45 @@ export async function updateMatterStage(
   // the matters list shows the stage chip — revalidate the whole
   // dashboard tree so both update.
   revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+// ── Statute of limitations ─────────────────────────────────────────────
+
+/** Flip the SOL-satisfied flag on a matter. Manual for now —
+ *  someone on the team has filed the complaint (or had it tolled)
+ *  and acknowledges the deadline is cleared. Future: auto-flip when
+ *  a linked document is filed + verified. */
+export async function setMatterSolSatisfied(
+  matterId: string,
+  satisfied: boolean
+): Promise<{ ok: boolean; error?: string }> {
+  const matter = await prisma.matter.findUnique({
+    where: { id: matterId },
+    select: {
+      id: true,
+      practiceArea: { select: { hasStatuteOfLimitations: true } },
+    },
+  });
+  if (!matter) return { ok: false, error: "Matter not found" };
+  if (!matter.practiceArea.hasStatuteOfLimitations) {
+    return {
+      ok: false,
+      error:
+        "This matter's practice area doesn't track statute of limitations.",
+    };
+  }
+
+  await prisma.matter.update({
+    where: { id: matterId },
+    data: {
+      statuteOfLimitationsSatisfied: satisfied,
+      statuteOfLimitationsSatisfiedAt: satisfied ? new Date() : null,
+    },
+  });
+
+  revalidatePath(`/matters/${matterId}`);
+  // Overview surface + sidebar SOL counts will be useful later — for
+  // now just the matter tree.
   return { ok: true };
 }

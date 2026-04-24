@@ -51,6 +51,10 @@ const practiceAreaSchema = z.object({
     .string()
     .trim()
     .regex(/^#[0-9a-fA-F]{6}$/, "Color must be a 6-digit hex (e.g. #2563a8)"),
+  /** When "on", matters in this area surface a statute-of-limitations
+   *  card on the Overview tab and expose SOL fields on the new/edit
+   *  forms. */
+  hasStatuteOfLimitations: z.literal("on").optional(),
 });
 
 /** Create a new practice area + auto-seed the default 10-stage
@@ -103,6 +107,7 @@ export async function createPracticeArea(
       label: data.label || null,
       color: data.color,
       order: nextOrder,
+      hasStatuteOfLimitations: data.hasStatuteOfLimitations === "on",
       stages: {
         create: DEFAULT_STAGE_TEMPLATE.map((s, i) => ({
           name: s.name,
@@ -152,6 +157,7 @@ export async function updatePracticeArea(
       name: data.name,
       label: data.label || null,
       color: data.color,
+      hasStatuteOfLimitations: data.hasStatuteOfLimitations === "on",
     },
   });
 

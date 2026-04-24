@@ -68,6 +68,12 @@ model PracticeArea {
   color        String   @default("#2563a8") /// Hex color — used for matter dots, sidebar, kanban
   order        Int      @default(0) /// Sort order in pickers and settings UI
   isActive     Boolean  @default(true)
+  /// Firms can flag practice areas that have a statute-of-limitations
+  /// deadline the lawyers need to track. When true, matters in this
+  /// area surface an SOL card on the overview + show SOL fields on
+  /// the new/edit forms. False for areas like "Guardianships" where
+  /// SOL isn't meaningful.
+  hasStatuteOfLimitations Boolean @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -117,6 +123,17 @@ model Matter {
   description    String?  /// Brief case summary
   color          String   @default("#2563a8") /// Color dot for UI display — snapshot from practiceArea.color on create
   isArchived     Boolean  @default(false)
+
+  /// Statute-of-limitations tracking — only meaningful when the
+  /// matter's practice area has hasStatuteOfLimitations=true. `Date`
+  /// is the deadline; `Satisfied` flips true once filed/tolled; both
+  /// are currently user-maintained. Tooling to auto-compute from
+  /// incident date + statute is a follow-up.
+  statuteOfLimitationsDate       DateTime?
+  statuteOfLimitationsSatisfied  Boolean   @default(false)
+  statuteOfLimitationsSatisfiedAt DateTime? /// Audit: when it was flipped
+  statuteOfLimitationsNotes      String?   /// Free-text ("Complaint filed…", "Waived by stip", etc.)
+
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

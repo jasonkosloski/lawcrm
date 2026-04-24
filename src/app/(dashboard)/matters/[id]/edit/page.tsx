@@ -41,6 +41,7 @@ export default async function EditMatterPage({
       select: {
         id: true,
         name: true,
+        hasStatuteOfLimitations: true,
         stages: {
           where: { isActive: true },
           orderBy: { order: "asc" },
@@ -75,6 +76,8 @@ export default async function EditMatterPage({
     opposingFirm: matter.opposingFirm,
     description: matter.description,
     leadUserId: matter.teamMembers[0]?.userId ?? null,
+    statuteOfLimitationsDate: matter.statuteOfLimitationsDate,
+    statuteOfLimitationsNotes: matter.statuteOfLimitationsNotes,
   };
 
   return (

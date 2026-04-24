@@ -40,11 +40,14 @@ export type MatterForEdit = {
   opposingFirm: string | null;
   description: string | null;
   leadUserId: string | null;
+  statuteOfLimitationsDate: Date | null;
+  statuteOfLimitationsNotes: string | null;
 };
 
 export type EditAreaOption = {
   id: string;
   name: string;
+  hasStatuteOfLimitations: boolean;
   stages: Array<{
     id: string;
     name: string;
@@ -79,6 +82,8 @@ export function EditMatterForm({
   // current values.
   const vals = state.values ?? {};
   const errs = state.errors ?? {};
+  const dateInputValue = (d: Date | null): string =>
+    d ? d.toISOString().slice(0, 10) : "";
   const init = {
     name: vals.name ?? matter.name,
     feeStructure: vals.feeStructure ?? matter.feeStructure,
@@ -90,6 +95,13 @@ export function EditMatterForm({
     leadUserId:
       vals.leadUserId ?? matter.leadUserId ?? options.users[0]?.id ?? "",
     description: vals.description ?? matter.description ?? "",
+    statuteOfLimitationsDate:
+      vals.statuteOfLimitationsDate ??
+      dateInputValue(matter.statuteOfLimitationsDate),
+    statuteOfLimitationsNotes:
+      vals.statuteOfLimitationsNotes ??
+      matter.statuteOfLimitationsNotes ??
+      "",
   };
 
   // ── Practice area + stage (cascading) ────────────────────────────────
@@ -308,6 +320,44 @@ export function EditMatterForm({
           />
         </Field>
       </Section>
+
+      {/* Statute of limitations — only when the chosen practice area
+          tracks SOL. The satisfied flag lives on the Overview card,
+          not here — edits to the deadline happen in one place, the
+          satisfied toggle in another. */}
+      {selectedArea?.hasStatuteOfLimitations && (
+        <Section title="Statute of limitations">
+          <Row>
+            <Field
+              label="Deadline date"
+              name="statuteOfLimitationsDate"
+              error={errs.statuteOfLimitationsDate}
+            >
+              <input
+                id="statuteOfLimitationsDate"
+                name="statuteOfLimitationsDate"
+                type="date"
+                defaultValue={init.statuteOfLimitationsDate}
+                className={inputCls(!!errs.statuteOfLimitationsDate)}
+              />
+            </Field>
+            <Field
+              label="Notes"
+              name="statuteOfLimitationsNotes"
+              error={errs.statuteOfLimitationsNotes}
+              hint="CRS cite, tolling agreement, notice waiver…"
+            >
+              <input
+                id="statuteOfLimitationsNotes"
+                name="statuteOfLimitationsNotes"
+                type="text"
+                defaultValue={init.statuteOfLimitationsNotes}
+                className={inputCls(!!errs.statuteOfLimitationsNotes)}
+              />
+            </Field>
+          </Row>
+        </Section>
+      )}
 
       <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
         <Link

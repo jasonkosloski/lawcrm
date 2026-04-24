@@ -272,14 +272,15 @@ async function main() {
     label: string;
     color: string;
     order: number;
+    hasStatuteOfLimitations: boolean;
   }> = [
-    { name: "§1983", label: "§1983 · Civil rights", color: "#2563a8", order: 0 },
-    { name: "Housing/FHA", label: "Housing · FHA", color: "#2d8a5f", order: 1 },
-    { name: "Employment/CADA", label: "Employment · CADA", color: "#b6623d", order: 2 },
-    { name: "Criminal", label: "Criminal", color: "#7a5aa6", order: 3 },
-    { name: "Class", label: "Class actions", color: "#8a6a2d", order: 4 },
-    { name: "ADA", label: "ADA", color: "#3a8a7a", order: 5 },
-    { name: "Education/IDEA", label: "Education · IDEA", color: "#3a8a7a", order: 6 },
+    { name: "§1983", label: "§1983 · Civil rights", color: "#2563a8", order: 0, hasStatuteOfLimitations: true },
+    { name: "Housing/FHA", label: "Housing · FHA", color: "#2d8a5f", order: 1, hasStatuteOfLimitations: true },
+    { name: "Employment/CADA", label: "Employment · CADA", color: "#b6623d", order: 2, hasStatuteOfLimitations: true },
+    { name: "Criminal", label: "Criminal", color: "#7a5aa6", order: 3, hasStatuteOfLimitations: true },
+    { name: "Class", label: "Class actions", color: "#8a6a2d", order: 4, hasStatuteOfLimitations: true },
+    { name: "ADA", label: "ADA", color: "#3a8a7a", order: 5, hasStatuteOfLimitations: true },
+    { name: "Education/IDEA", label: "Education · IDEA", color: "#3a8a7a", order: 6, hasStatuteOfLimitations: true },
   ];
 
   const DEFAULT_STAGES: Array<{ name: string; isTerminal?: boolean }> = [
@@ -306,6 +307,7 @@ async function main() {
         label: area.label,
         color: area.color,
         order: area.order,
+        hasStatuteOfLimitations: area.hasStatuteOfLimitations,
       },
     });
     const stages: Record<string, string> = {};

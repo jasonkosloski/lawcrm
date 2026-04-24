@@ -315,7 +315,12 @@ export async function getMatterById(id: string) {
     where: { id },
     include: {
       practiceArea: {
-        select: { id: true, name: true, color: true },
+        select: {
+          id: true,
+          name: true,
+          color: true,
+          hasStatuteOfLimitations: true,
+        },
       },
       stage: {
         select: { id: true, name: true, order: true, isTerminal: true },
@@ -346,6 +351,7 @@ export async function getMatterById(id: string) {
     stage: stage.name,
     practiceAreaId: practiceArea.id,
     practiceAreaColor: practiceArea.color,
+    practiceAreaHasStatuteOfLimitations: practiceArea.hasStatuteOfLimitations,
     stageId: stage.id,
     stageOrder: stage.order,
     stageIsTerminal: stage.isTerminal,

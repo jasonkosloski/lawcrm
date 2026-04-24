@@ -61,6 +61,7 @@ type ClientOption = {
 export type AreaOption = {
   id: string;
   name: string;
+  hasStatuteOfLimitations: boolean;
   stages: Array<{
     id: string;
     name: string;
@@ -660,6 +661,43 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
           Pin to my sidebar
         </label>
       </Section>
+
+      {/* Statute of limitations — only surfaces when the chosen
+          practice area tracks SOL. Same data persists on create. */}
+      {selectedArea?.hasStatuteOfLimitations && (
+        <Section title="Statute of limitations">
+          <Row>
+            <Field
+              label="Deadline date"
+              name="statuteOfLimitationsDate"
+              error={errs.statuteOfLimitationsDate}
+              hint="The SOL deadline you need to track on this matter."
+            >
+              <input
+                id="statuteOfLimitationsDate"
+                name="statuteOfLimitationsDate"
+                type="date"
+                defaultValue={vals.statuteOfLimitationsDate ?? ""}
+                className={inputCls(!!errs.statuteOfLimitationsDate)}
+              />
+            </Field>
+            <Field
+              label="Notes"
+              name="statuteOfLimitationsNotes"
+              error={errs.statuteOfLimitationsNotes}
+              hint="CRS cite, tolling agreement…"
+            >
+              <input
+                id="statuteOfLimitationsNotes"
+                name="statuteOfLimitationsNotes"
+                type="text"
+                defaultValue={vals.statuteOfLimitationsNotes ?? ""}
+                className={inputCls(!!errs.statuteOfLimitationsNotes)}
+              />
+            </Field>
+          </Row>
+        </Section>
+      )}
 
       {/* ── Submit ──────────────────────────────────────────────── */}
       <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">

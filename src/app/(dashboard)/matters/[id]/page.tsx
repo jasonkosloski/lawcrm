@@ -14,6 +14,7 @@ import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Mail, Phone, Pin } from "lucide-react";
 import { StageChanger } from "@/components/matters/stage-changer";
+import { StatuteOfLimitationsCard } from "@/components/matters/statute-of-limitations-card";
 import { EmailLink } from "@/components/ui/email-link";
 import { formatPhone } from "@/lib/format-phone";
 import { prisma } from "@/lib/prisma";
@@ -117,6 +118,20 @@ export default async function MatterOverviewPage({
               />
             </CardContent>
           </Card>
+
+          {/* Statute of limitations — only for practice areas that
+              track SOL. Placed above Case facts because when it
+              matters, it's the most time-sensitive thing on the
+              page. */}
+          {matter.practiceAreaHasStatuteOfLimitations && (
+            <StatuteOfLimitationsCard
+              matterId={matter.id}
+              date={matter.statuteOfLimitationsDate}
+              satisfied={matter.statuteOfLimitationsSatisfied}
+              satisfiedAt={matter.statuteOfLimitationsSatisfiedAt}
+              notes={matter.statuteOfLimitationsNotes}
+            />
+          )}
 
           {/* Case facts */}
           <Card>

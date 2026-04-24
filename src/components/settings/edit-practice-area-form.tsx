@@ -24,6 +24,7 @@ export function EditPracticeAreaForm({
     name: string;
     label: string | null;
     color: string;
+    hasStatuteOfLimitations: boolean;
   };
 }) {
   const boundAction = updatePracticeArea.bind(null, area.id);
@@ -36,6 +37,9 @@ export function EditPracticeAreaForm({
   const errs = state.errors ?? {};
 
   const [color, setColor] = useState<string>(vals.color ?? area.color);
+  const [hasSol, setHasSol] = useState<boolean>(
+    vals.hasStatuteOfLimitations === "on" || area.hasStatuteOfLimitations
+  );
 
   return (
     <form action={formAction} className="flex flex-col gap-3">
@@ -82,6 +86,26 @@ export function EditPracticeAreaForm({
           </div>
         </Field>
       </div>
+
+      <label className="flex items-start gap-2 cursor-pointer select-none pt-1">
+        <input
+          type="checkbox"
+          name="hasStatuteOfLimitations"
+          checked={hasSol}
+          onChange={(e) => setHasSol(e.target.checked)}
+          className="w-3.5 h-3.5 rounded border-line mt-0.5"
+        />
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs font-medium text-ink-2">
+            Track statute of limitations
+          </span>
+          <span className="text-2xs text-ink-4 leading-relaxed">
+            When on, matters in this area get an SOL date + satisfied
+            flag on the matter forms and a prominent countdown card on
+            the Overview tab.
+          </span>
+        </div>
+      </label>
 
       <div className="flex items-center justify-end gap-2">
         {state.status === "ok" && (

@@ -23,6 +23,7 @@ export default async function NewMatterPage() {
       select: {
         id: true,
         name: true,
+        hasStatuteOfLimitations: true,
         stages: {
           where: { isActive: true },
           orderBy: { order: "asc" },

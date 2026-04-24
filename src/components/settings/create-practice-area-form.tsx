@@ -95,6 +95,17 @@ export function CreatePracticeAreaForm() {
         </div>
       </div>
 
+      <label className="flex items-center gap-2 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          name="hasStatuteOfLimitations"
+          className="w-3.5 h-3.5 rounded border-line"
+        />
+        <span className="text-2xs text-ink-2">
+          Track statute of limitations on matters in this area
+        </span>
+      </label>
+
       <div className="text-2xs text-ink-4">
         New areas start with the default 10-stage lifecycle (Intake →
         Closed). Rename, reorder, or replace them on the detail page.
