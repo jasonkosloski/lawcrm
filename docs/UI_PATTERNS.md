@@ -253,9 +253,12 @@ expanded transition. The backdrop is rendered as a separate sibling
 fragment so its mount/unmount doesn't affect the form tree. Escape
 key collapses from expanded → docked, or closes outright from docked.
 
-**Known limitation:** switching between types in the panel today
-replaces the form — unsaved fields are lost. Warn-on-discard and
-cross-type draft stashing are follow-ups.
+**The panel is single-type by design:** there is no in-panel type
+switcher. Clicking "Add note" means the user intends to create a
+note — letting them flip mid-edit to a time entry is confusing and
+risks losing the note's content. The entry point (header Create
+dropdown, tab-bar contextual button, or empty-state CTA) determines
+the type; changing type means closing and reopening.
 
 ### Settings Section Layout
 

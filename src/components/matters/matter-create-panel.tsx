@@ -29,14 +29,12 @@
 
 "use client";
 
-import Link from "next/link";
 import { useSearchParams, usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useTransition } from "react";
 import { Maximize2, Minimize2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   findMatterCreateEntry,
-  MATTER_CREATE_ENTRIES,
   type MatterCreateEntry,
 } from "@/lib/matter-create-types";
 
@@ -208,33 +206,6 @@ export function MatterCreatePanel({
             )}
           </div>
         )}
-
-        {/* ── Type switcher ───────────────────────────────────────── */}
-        <div className="px-4 py-2 border-b border-line shrink-0">
-          <div className="flex flex-wrap gap-1">
-            {MATTER_CREATE_ENTRIES.map((e) => {
-              const active = e.type === entry.type;
-              return (
-                <Link
-                  key={e.type}
-                  href={withPanelParams(pathname, searchParams, {
-                    create: e.type,
-                  })}
-                  replace
-                  scroll={false}
-                  className={cn(
-                    "text-2xs px-2 py-0.5 rounded-full border transition-colors",
-                    active
-                      ? "bg-brand-500 text-white border-brand-500"
-                      : "bg-white text-ink-3 border-line hover:border-brand-300 hover:text-brand-700"
-                  )}
-                >
-                  {e.label}
-                </Link>
-              );
-            })}
-          </div>
-        </div>
 
         {/* ── Body ────────────────────────────────────────────────── */}
         <div className="flex-1 overflow-y-auto p-4">
