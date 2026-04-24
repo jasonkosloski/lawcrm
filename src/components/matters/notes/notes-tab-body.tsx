@@ -12,7 +12,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Pin, Search, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Pin, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { NoteCard, type NoteCardNote } from "./note-card";
@@ -278,6 +278,13 @@ function ThreadView({
   depth: number;
 }) {
   const hasChildren = node.children.length > 0;
+  const [collapsed, setCollapsed] = useState(false);
+  // Count is of ALL descendants, not just direct children — that's
+  // more useful info for deciding whether to expand a long thread.
+  const descendantCount = hasChildren
+    ? node.children.reduce((n, c) => n + countNodes(c), 0)
+    : 0;
+
   return (
     <div className="flex flex-col gap-2">
       <NoteCard
@@ -286,24 +293,46 @@ function ThreadView({
         isReply={depth > 0}
       />
       {hasChildren && (
-        <div
-          className={cn(
-            "border-l-2 border-line/80 flex flex-col gap-2",
-            // Cap the visual indent — deeper replies still render
-            // inside the connector but stop marching right so they
-            // don't get cramped against the viewport edge.
-            depth + 1 <= MAX_INDENT_DEPTH ? "pl-5 ml-3" : "pl-3 ml-1"
+        <>
+          <button
+            type="button"
+            onClick={() => setCollapsed((v) => !v)}
+            aria-expanded={!collapsed}
+            className={cn(
+              "inline-flex items-center gap-1 self-start text-2xs text-ink-3 hover:text-brand-700 transition-colors",
+              "pl-3 ml-3"
+            )}
+          >
+            {collapsed ? (
+              <ChevronRight size={11} />
+            ) : (
+              <ChevronDown size={11} />
+            )}
+            {collapsed
+              ? `Show ${descendantCount} ${descendantCount === 1 ? "reply" : "replies"}`
+              : `Hide ${descendantCount} ${descendantCount === 1 ? "reply" : "replies"}`}
+          </button>
+          {!collapsed && (
+            <div
+              className={cn(
+                "border-l-2 border-line/80 flex flex-col gap-2",
+                // Cap the visual indent — deeper replies still render
+                // inside the connector but stop marching right so they
+                // don't get cramped against the viewport edge.
+                depth + 1 <= MAX_INDENT_DEPTH ? "pl-5 ml-3" : "pl-3 ml-1"
+              )}
+            >
+              {node.children.map((child) => (
+                <ThreadView
+                  key={child.note.id}
+                  node={child}
+                  matterId={matterId}
+                  depth={depth + 1}
+                />
+              ))}
+            </div>
           )}
-        >
-          {node.children.map((child) => (
-            <ThreadView
-              key={child.note.id}
-              node={child}
-              matterId={matterId}
-              depth={depth + 1}
-            />
-          ))}
-        </div>
+        </>
       )}
     </div>
   );
