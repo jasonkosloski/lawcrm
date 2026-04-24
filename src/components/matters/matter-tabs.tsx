@@ -9,7 +9,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const TABS = [
@@ -25,12 +25,19 @@ const TABS = [
 
 export function MatterTabs({ matterId }: { matterId: string }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const base = `/matters/${matterId}`;
+  // Preserve the current query string on tab navigation so side-panels
+  // controlled by URL params (e.g. `?create=note`) survive tab changes
+  // and stay mounted. Without this the panel would close on every
+  // click-through.
+  const qs = searchParams.toString();
+  const suffix = qs ? `?${qs}` : "";
 
   return (
     <nav className="flex gap-1 border-b border-line px-5">
       {TABS.map((t) => {
-        const href = t.slug ? `${base}/${t.slug}` : base;
+        const href = (t.slug ? `${base}/${t.slug}` : base) + suffix;
         const active = t.slug
           ? pathname.startsWith(`${base}/${t.slug}`)
           : pathname === base;

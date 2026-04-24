@@ -1,20 +1,20 @@
 /**
  * Matter Create Menu
  *
- * "+ Create" dropdown in the matter detail header. Shows every thing a
- * user can create under the current matter (time, note, task, deadline,
- * party, document, event, invoice), grouped by domain. Each item routes
- * to `/matters/<id>/new/<type>` which is a placeholder today — real
- * forms replace the placeholder as they're built.
+ * "+ Create" dropdown in the matter detail header. Opens the
+ * `MatterCreatePanel` (docked right sidebar) by adding `?create=<type>`
+ * to the current URL. The panel persists across in-matter tab
+ * navigation so form state survives while the user explores the matter.
  *
  * Entries come from the shared registry in
- * `src/lib/matter-create-types.ts` so the menu and the placeholder page
- * stay in sync.
+ * `src/lib/matter-create-types.ts` — shared with the panel so the type
+ * list stays in sync.
  */
 
 "use client";
 
 import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   Calendar,
   Clock,
@@ -68,7 +68,16 @@ const GROUP_ORDER: MatterCreateGroup[] = [
   "bill",
 ];
 
-export function MatterCreateMenu({ matterId }: { matterId: string }) {
+export function MatterCreateMenu() {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const buildHref = (type: string): string => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("create", type);
+    return `${pathname}?${params.toString()}`;
+  };
+
   const byGroup = new Map<MatterCreateGroup, MatterCreateEntry[]>();
   for (const e of MATTER_CREATE_ENTRIES) {
     if (!byGroup.has(e.group)) byGroup.set(e.group, []);
@@ -99,7 +108,11 @@ export function MatterCreateMenu({ matterId }: { matterId: string }) {
                   <DropdownMenuItem
                     key={e.type}
                     render={
-                      <Link href={`/matters/${matterId}/new/${e.type}`} />
+                      <Link
+                        href={buildHref(e.type)}
+                        replace
+                        scroll={false}
+                      />
                     }
                   >
                     <Icon />

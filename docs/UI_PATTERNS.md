@@ -207,6 +207,56 @@ Extend the contextual section in `command-palette.tsx` gated on the
 appropriate route check (`pathname.startsWith(...)`) or page-provided
 context.
 
+### Layout-Persistent Side Panel (URL-controlled)
+
+Pattern used by the matter-detail **Create** panel (Log time / Add
+note / Add task / etc.). The panel must persist across tab navigation
+within the matter so form drafts survive while the user explores.
+
+**How it works:**
+
+1. The panel component is **mounted in `matters/[id]/layout.tsx`**
+   (not in an individual tab page). Next.js layouts do not remount
+   when their children change, so any React state inside the panel
+   — in particular, form field values — survives navigation between
+   Overview / Tasks / Notes / etc.
+2. Visibility is controlled by a **URL query param**
+   (`?create=<type>`). The panel reads it via `useSearchParams()`
+   and returns `null` when absent. This makes the panel state
+   deep-linkable and shareable.
+3. Tab links **must preserve the current query string** on
+   navigation — otherwise the panel closes on every tab click.
+   `MatterTabs` reads `useSearchParams()` and appends it to each
+   tab href. The same pattern applies to any in-context nav links
+   (breadcrumbs, preview-card "see all →" links) that should keep
+   the panel open.
+4. The panel's close button uses `router.replace` to drop the
+   `?create=` param; the panel then unmounts cleanly and any
+   in-progress form state is discarded.
+
+**When to reach for this pattern:** any "do something without losing
+context" flow — create forms, quick-edit panels, a details peek.
+Contrast with a modal dialog (blocks interaction) or a full-page
+route (loses the surrounding context).
+
+**Expand-to-modal variant:** the Create panel also has a second mode
+triggered by a second URL param (`?create=note&expanded=1`). When
+expanded, the same `<aside>` element swaps to fixed-centered
+positioning with a backdrop — a focus-mode modal for heavier work.
+The expand/collapse button lives in the panel header.
+
+The important implementation detail: the **same single `<aside>`
+element** renders in both modes, with position classes swapping based
+on the `expanded` state. React doesn't unmount subtrees on className
+changes, so any form state inside the panel survives the docked ↔
+expanded transition. The backdrop is rendered as a separate sibling
+fragment so its mount/unmount doesn't affect the form tree. Escape
+key collapses from expanded → docked, or closes outright from docked.
+
+**Known limitation:** switching between types in the panel today
+replaces the form — unsaved fields are lost. Warn-on-discard and
+cross-type draft stashing are follow-ups.
+
 ### Settings Section Layout
 
 `/settings/*` uses a left-rail layout (not a top tab bar — too many

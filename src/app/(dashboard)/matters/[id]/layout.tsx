@@ -21,6 +21,7 @@ import { TopBar } from "@/components/layout/topbar";
 import { MatterTabs } from "@/components/matters/matter-tabs";
 import { PinToggle } from "@/components/matters/pin-toggle";
 import { MatterCreateMenu } from "@/components/matters/matter-create-menu";
+import { MatterCreatePanel } from "@/components/matters/matter-create-panel";
 import { getMatterById } from "@/lib/queries/matters";
 
 const FEE_LABEL: Record<string, string> = {
@@ -60,7 +61,7 @@ export default async function MatterDetailLayout({
               matterId={matter.id}
               initialPinned={matter.isPinnedByCurrentUser}
             />
-            <MatterCreateMenu matterId={matter.id} />
+            <MatterCreateMenu />
           </>
         }
       />
@@ -101,7 +102,20 @@ export default async function MatterDetailLayout({
 
       <MatterTabs matterId={matter.id} />
 
-      <div className="flex-1 overflow-y-auto">{children}</div>
+      {/* Tab content + optional right-docked Create panel.
+          Panel is controlled by the `?create=<type>` URL param and
+          mounts here in the layout — it persists across tab navigation
+          within the matter, so form drafts survive as the user
+          explores Overview / Parties / Notes / etc. */}
+      <div className="flex-1 flex min-h-0">
+        <div className="flex-1 overflow-y-auto min-w-0">{children}</div>
+        <MatterCreatePanel
+          matterId={matter.id}
+          matterName={matter.name}
+          matterCaseNumber={matter.caseNumber}
+          matterColor={matter.color}
+        />
+      </div>
     </>
   );
 }
