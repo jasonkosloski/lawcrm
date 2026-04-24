@@ -12,6 +12,10 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import {
+  NEW_CLIENT_SENTINEL,
+  type CreateMatterState,
+} from "@/lib/new-matter-constants";
 
 const AREA_COLOR: Record<string, string> = {
   "§1983": "#2563a8",
@@ -23,57 +27,84 @@ const AREA_COLOR: Record<string, string> = {
   "Education/IDEA": "#3a8a7a",
 };
 
-const createMatterSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(1, "Name is required")
-    .max(200, "Name is too long"),
-  area: z.enum([
-    "§1983",
-    "Housing/FHA",
-    "Employment/CADA",
-    "Criminal",
-    "Class",
-    "ADA",
-    "Education/IDEA",
-  ]),
-  stage: z
-    .enum([
-      "Intake",
-      "Pre-suit",
-      "Retained",
-      "Discovery",
-      "Dispositive",
-      "Pretrial",
-      "Cert",
-      "Trial/Settle",
-      "Settled",
-      "Closed",
-    ])
-    .default("Intake"),
-  feeStructure: z
-    .enum(["contingent", "hourly", "flat", "hybrid", "pro_bono"])
-    .default("contingent"),
-  caseNumber: z.string().trim().max(80).optional().or(z.literal("")),
-  court: z.string().trim().max(200).optional().or(z.literal("")),
-  clientId: z.string().trim().optional().or(z.literal("")),
-  opposingParty: z.string().trim().max(200).optional().or(z.literal("")),
-  opposingFirm: z.string().trim().max(200).optional().or(z.literal("")),
-  leadUserId: z.string().trim().min(1, "Lead attorney is required"),
-  description: z.string().trim().max(4000).optional().or(z.literal("")),
-  pinForMe: z.literal("on").optional(),
-});
-
-export type CreateMatterState = {
-  status: "idle" | "error";
-  /** Per-field error messages. Keys match form field names. */
-  errors?: Record<string, string[]>;
-  /** Last submitted values so the form can re-render them on error. */
-  values?: Record<string, string>;
-};
-
-const INITIAL_STATE: CreateMatterState = { status: "idle" };
+const createMatterSchema = z
+  .object({
+    name: z
+      .string()
+      .trim()
+      .min(1, "Name is required")
+      .max(200, "Name is too long"),
+    area: z.enum([
+      "§1983",
+      "Housing/FHA",
+      "Employment/CADA",
+      "Criminal",
+      "Class",
+      "ADA",
+      "Education/IDEA",
+    ]),
+    stage: z
+      .enum([
+        "Intake",
+        "Pre-suit",
+        "Retained",
+        "Discovery",
+        "Dispositive",
+        "Pretrial",
+        "Cert",
+        "Trial/Settle",
+        "Settled",
+        "Closed",
+      ])
+      .default("Intake"),
+    feeStructure: z
+      .enum(["contingent", "hourly", "flat", "hybrid", "pro_bono"])
+      .default("contingent"),
+    caseNumber: z.string().trim().max(80).optional().or(z.literal("")),
+    court: z.string().trim().max(200).optional().or(z.literal("")),
+    clientId: z.string().trim().optional().or(z.literal("")),
+    /** When clientId === NEW_CLIENT_SENTINEL, these fields get used to
+     *  create a new Contact inline before the Matter is written. */
+    newClientName: z.string().trim().max(200).optional().or(z.literal("")),
+    newClientEmail: z.string().trim().max(200).optional().or(z.literal("")),
+    newClientPhone: z.string().trim().max(80).optional().or(z.literal("")),
+    newClientOrganization: z
+      .string()
+      .trim()
+      .max(200)
+      .optional()
+      .or(z.literal("")),
+    opposingParty: z.string().trim().max(200).optional().or(z.literal("")),
+    opposingFirm: z.string().trim().max(200).optional().or(z.literal("")),
+    leadUserId: z.string().trim().min(1, "Lead attorney is required"),
+    description: z.string().trim().max(4000).optional().or(z.literal("")),
+    pinForMe: z.literal("on").optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.clientId === NEW_CLIENT_SENTINEL) {
+      if (!data.newClientName) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["newClientName"],
+          message: "Name is required for a new client",
+        });
+      }
+      if (!data.newClientEmail && !data.newClientPhone) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["newClientEmail"],
+          message: "Add an email or phone so the client is reachable",
+        });
+      }
+      if (data.newClientEmail && !data.newClientEmail.includes("@")) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["newClientEmail"],
+          message: "That doesn't look like an email address",
+        });
+      }
+    }
+  });
 
 export async function createMatter(
   _prev: CreateMatterState,
@@ -101,9 +132,22 @@ export async function createMatter(
   });
   const leadUserId = lead?.id ?? currentUserId;
 
-  // Verify client id if provided.
+  // Resolve client: either pick an existing Contact, create a new one
+  // inline, or leave null.
   let clientId: string | null = null;
-  if (data.clientId) {
+  if (data.clientId === NEW_CLIENT_SENTINEL) {
+    const newClient = await prisma.contact.create({
+      data: {
+        name: data.newClientName!,
+        email: data.newClientEmail || null,
+        phone: data.newClientPhone || null,
+        organization: data.newClientOrganization || null,
+        type: "client",
+      },
+      select: { id: true },
+    });
+    clientId = newClient.id;
+  } else if (data.clientId) {
     const client = await prisma.contact.findUnique({
       where: { id: data.clientId },
       select: { id: true },
@@ -142,4 +186,3 @@ export async function createMatter(
   redirect(`/matters/${matter.id}`);
 }
 
-export { INITIAL_STATE as createMatterInitialState };

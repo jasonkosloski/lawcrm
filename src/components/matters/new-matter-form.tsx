@@ -13,13 +13,15 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
+import { UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { createMatter } from "@/app/actions/matters";
 import {
-  createMatter,
   createMatterInitialState,
+  NEW_CLIENT_SENTINEL,
   type CreateMatterState,
-} from "@/app/actions/matters";
+} from "@/lib/new-matter-constants";
 
 const AREAS = [
   "§1983",
@@ -66,6 +68,15 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
 
   const vals = state.values ?? {};
   const errs = state.errors ?? {};
+
+  // Local UI state for the client select — controlled so we can
+  // conditionally render the inline "create new client" fields.
+  // Seeded from the last submitted value so validation errors don't
+  // snap the dropdown back to a different option.
+  const [clientMode, setClientMode] = useState<string>(
+    vals.clientId ?? ""
+  );
+  const showNewClientFields = clientMode === NEW_CLIENT_SENTINEL;
 
   return (
     <form action={formAction} className="flex flex-col gap-6">
@@ -166,12 +177,17 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
             label="Client"
             name="clientId"
             error={errs.clientId}
-            hint="Pick an existing contact or leave blank to add later."
+            hint={
+              showNewClientFields
+                ? "Fill in the details below — the contact gets created when you submit."
+                : "Pick an existing contact, create a new one, or leave blank."
+            }
           >
             <select
               id="clientId"
               name="clientId"
-              defaultValue={vals.clientId ?? ""}
+              value={clientMode}
+              onChange={(e) => setClientMode(e.target.value)}
               className={selectCls(!!errs.clientId)}
             >
               <option value="">— No client yet —</option>
@@ -181,6 +197,10 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
                   {c.organization ? ` · ${c.organization}` : ""}
                 </option>
               ))}
+              <option disabled>──────────</option>
+              <option value={NEW_CLIENT_SENTINEL}>
+                + Create new client…
+              </option>
             </select>
           </Field>
 
@@ -205,6 +225,75 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
             </select>
           </Field>
         </Row>
+
+        {showNewClientFields && (
+          <div className="rounded-md border border-brand-200 bg-brand-soft/30 p-3 flex flex-col gap-3">
+            <div className="flex items-center gap-2 text-2xs font-mono uppercase tracking-wider text-brand-700">
+              <UserPlus size={11} />
+              New client details
+            </div>
+            <Field
+              label="Client name"
+              name="newClientName"
+              required
+              error={errs.newClientName}
+            >
+              <input
+                id="newClientName"
+                name="newClientName"
+                type="text"
+                defaultValue={vals.newClientName ?? ""}
+                className={inputCls(!!errs.newClientName)}
+                placeholder="Maria Alvarez"
+              />
+            </Field>
+            <Row>
+              <Field
+                label="Email"
+                name="newClientEmail"
+                error={errs.newClientEmail}
+                hint="Email or phone required — at least one."
+              >
+                <input
+                  id="newClientEmail"
+                  name="newClientEmail"
+                  type="email"
+                  defaultValue={vals.newClientEmail ?? ""}
+                  className={inputCls(!!errs.newClientEmail)}
+                  placeholder="maria.alvarez@example.com"
+                />
+              </Field>
+              <Field
+                label="Phone"
+                name="newClientPhone"
+                error={errs.newClientPhone}
+              >
+                <input
+                  id="newClientPhone"
+                  name="newClientPhone"
+                  type="tel"
+                  defaultValue={vals.newClientPhone ?? ""}
+                  className={inputCls(!!errs.newClientPhone)}
+                  placeholder="(303) 555-0182"
+                />
+              </Field>
+            </Row>
+            <Field
+              label="Organization"
+              name="newClientOrganization"
+              error={errs.newClientOrganization}
+              hint="Optional — for business or institutional clients."
+            >
+              <input
+                id="newClientOrganization"
+                name="newClientOrganization"
+                type="text"
+                defaultValue={vals.newClientOrganization ?? ""}
+                className={inputCls(!!errs.newClientOrganization)}
+              />
+            </Field>
+          </div>
+        )}
 
         <Row>
           <Field label="Opposing party" name="opposingParty" error={errs.opposingParty}>
