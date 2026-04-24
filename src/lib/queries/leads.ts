@@ -101,11 +101,27 @@ export async function getLeadById(id: string) {
 
   // If the lead was converted, fetch the matter it became so the UI can
   // link directly to it. Not a Prisma relation today — join here.
-  const convertedMatter = lead.convertedMatterId
+  const row = lead.convertedMatterId
     ? await prisma.matter.findUnique({
         where: { id: lead.convertedMatterId },
-        select: { id: true, name: true, area: true, stage: true, color: true },
+        select: {
+          id: true,
+          name: true,
+          color: true,
+          practiceArea: { select: { name: true } },
+          stage: { select: { name: true } },
+        },
       })
+    : null;
+
+  const convertedMatter = row
+    ? {
+        id: row.id,
+        name: row.name,
+        color: row.color,
+        area: row.practiceArea.name,
+        stage: row.stage.name,
+      }
     : null;
 
   return { ...lead, convertedMatter };

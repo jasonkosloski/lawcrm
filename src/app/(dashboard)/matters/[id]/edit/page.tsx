@@ -24,7 +24,7 @@ export default async function EditMatterPage({
 }: PageProps<"/matters/[id]/edit">) {
   const { id } = await params;
 
-  const [matter, clients, users] = await Promise.all([
+  const [matter, areas, clients, users] = await Promise.all([
     prisma.matter.findUnique({
       where: { id },
       include: {
@@ -32,6 +32,19 @@ export default async function EditMatterPage({
           where: { role: "lead" },
           select: { userId: true },
           take: 1,
+        },
+      },
+    }),
+    prisma.practiceArea.findMany({
+      where: { isActive: true },
+      orderBy: [{ order: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        stages: {
+          where: { isActive: true },
+          orderBy: { order: "asc" },
+          select: { id: true, name: true, order: true, isTerminal: true },
         },
       },
     }),
@@ -53,8 +66,8 @@ export default async function EditMatterPage({
     id: matter.id,
     name: matter.name,
     caseNumber: matter.caseNumber,
-    area: matter.area,
-    stage: matter.stage,
+    practiceAreaId: matter.practiceAreaId,
+    stageId: matter.stageId,
     feeStructure: matter.feeStructure,
     court: matter.court,
     clientId: matter.clientId,
@@ -71,7 +84,7 @@ export default async function EditMatterPage({
           <CardContent className="p-5">
             <EditMatterForm
               matter={forEdit}
-              options={{ clients, users }}
+              options={{ areas, clients, users }}
             />
           </CardContent>
         </Card>

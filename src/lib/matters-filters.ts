@@ -62,20 +62,6 @@ export type MattersSort = { field: SortField; dir: SortDir };
 export type ViewMode = "table" | "kanban";
 export const DEFAULT_VIEW: ViewMode = "table";
 
-/** Canonical practice-case-stage order (case lifecycle). Used to sort by stage. */
-export const STAGE_ORDER = [
-  "Intake",
-  "Pre-suit",
-  "Retained",
-  "Discovery",
-  "Dispositive",
-  "Pretrial",
-  "Cert",
-  "Trial/Settle",
-  "Settled",
-  "Closed",
-] as const;
-
 /** Human-friendly labels for fee structure values. */
 export const FEE_LABELS: Record<string, string> = {
   contingent: "Contingent",

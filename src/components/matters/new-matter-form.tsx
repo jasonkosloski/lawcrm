@@ -42,29 +42,6 @@ import {
   type CreateMatterState,
 } from "@/lib/new-matter-constants";
 
-const AREAS = [
-  "§1983",
-  "Housing/FHA",
-  "Employment/CADA",
-  "Criminal",
-  "Class",
-  "ADA",
-  "Education/IDEA",
-] as const;
-
-const STAGES = [
-  "Intake",
-  "Pre-suit",
-  "Retained",
-  "Discovery",
-  "Dispositive",
-  "Pretrial",
-  "Cert",
-  "Trial/Settle",
-  "Settled",
-  "Closed",
-] as const;
-
 const FEE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "contingent", label: "Contingent" },
   { value: "hourly", label: "Hourly" },
@@ -81,7 +58,19 @@ type ClientOption = {
   state: string | null;
 };
 
+export type AreaOption = {
+  id: string;
+  name: string;
+  stages: Array<{
+    id: string;
+    name: string;
+    order: number;
+    isTerminal: boolean;
+  }>;
+};
+
 export type NewMatterFormOptions = {
+  areas: AreaOption[];
   clients: ClientOption[];
   users: Array<{ id: string; name: string; role: string; initials: string }>;
   currentUserId: string;
@@ -165,6 +154,33 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
   const [isNameDirty, setIsNameDirty] = useState<boolean>(
     Boolean(vals.name)
   );
+
+  // ── Practice area + stage (cascading) ────────────────────────────────
+  // Seed from the previously-submitted values on validation error,
+  // otherwise default to the first area + its first stage.
+  const firstArea = options.areas[0];
+  const initialAreaId =
+    vals.practiceAreaId ?? firstArea?.id ?? "";
+  const initialArea = options.areas.find((a) => a.id === initialAreaId);
+  const initialStageId =
+    vals.stageId ??
+    initialArea?.stages[0]?.id ??
+    "";
+
+  const [practiceAreaId, setPracticeAreaId] = useState<string>(initialAreaId);
+  const [stageId, setStageId] = useState<string>(initialStageId);
+
+  const selectedArea = options.areas.find((a) => a.id === practiceAreaId);
+  const stageOptions = selectedArea?.stages ?? [];
+
+  const handleAreaChange = (nextAreaId: string) => {
+    setPracticeAreaId(nextAreaId);
+    // If the current stage isn't part of the new area, snap to that
+    // area's first stage so the form never submits a mismatched pair.
+    const nextArea = options.areas.find((a) => a.id === nextAreaId);
+    const stageBelongs = nextArea?.stages.some((s) => s.id === stageId);
+    if (!stageBelongs) setStageId(nextArea?.stages[0]?.id ?? "");
+  };
 
   const autoName = useMemo(() => {
     const { firstName, lastName } = splitName(clientName);
@@ -298,38 +314,47 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
         <Row>
           <Field
             label="Practice area"
-            name="area"
+            name="practiceAreaId"
             required
-            error={errs.area}
+            error={errs.practiceAreaId}
           >
             <select
-              id="area"
-              name="area"
-              defaultValue={vals.area ?? ""}
+              id="practiceAreaId"
+              name="practiceAreaId"
+              value={practiceAreaId}
+              onChange={(e) => handleAreaChange(e.target.value)}
               required
-              className={selectCls(!!errs.area)}
+              className={selectCls(!!errs.practiceAreaId)}
             >
-              <option value="" disabled>
-                Select area…
-              </option>
-              {AREAS.map((a) => (
-                <option key={a} value={a}>
-                  {a}
+              {options.areas.length === 0 && (
+                <option value="" disabled>
+                  No practice areas configured
+                </option>
+              )}
+              {options.areas.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
                 </option>
               ))}
             </select>
           </Field>
 
-          <Field label="Stage" name="stage" error={errs.stage}>
+          <Field label="Stage" name="stageId" error={errs.stageId}>
             <select
-              id="stage"
-              name="stage"
-              defaultValue={vals.stage ?? "Intake"}
-              className={selectCls(!!errs.stage)}
+              id="stageId"
+              name="stageId"
+              value={stageId}
+              onChange={(e) => setStageId(e.target.value)}
+              className={selectCls(!!errs.stageId)}
             >
-              {STAGES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
+              {stageOptions.length === 0 && (
+                <option value="" disabled>
+                  No stages for this area
+                </option>
+              )}
+              {stageOptions.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
                 </option>
               ))}
             </select>

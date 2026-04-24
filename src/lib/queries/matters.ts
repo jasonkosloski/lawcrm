@@ -5,13 +5,18 @@
  * Detail lookups use the matter's `id` (cuid) — matter names are not
  * guaranteed unique (two Alvarez cases can coexist), so the opaque cuid
  * is the durable identifier.
+ *
+ * Practice areas + stages now live in dedicated lookup tables. URL
+ * filter params still use human names (e.g. ?area=§1983&stage=Discovery)
+ * for readability and shareability — the queries below translate those
+ * names into FK filters via Prisma relation filtering. Sort-by-stage
+ * uses `stage.order` joined from the DB, not a hardcoded list.
  */
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import {
   EMPTY_FILTER,
-  STAGE_ORDER,
   type MattersFilter,
   type MattersSort,
 } from "@/lib/matters-filters";
@@ -22,6 +27,10 @@ export type MatterListRow = {
   caseNumber: string | null;
   area: string;
   stage: string;
+  /** Order of this stage within its practice area — used for sort-by-stage. */
+  stageOrder: number;
+  /** True when the stage is a closing state (Settled/Closed-equivalent). */
+  stageIsTerminal: boolean;
   feeStructure: string;
   trustBalance: number;
   color: string;
@@ -42,15 +51,17 @@ function buildWhere(filter: MattersFilter, currentUserId: string) {
 
   if (!filter.includeArchived) where.isArchived = false;
   if (filter.pinnedOnly) where.pins = { some: { userId: currentUserId } };
-  if (filter.areas.length > 0) where.area = { in: filter.areas };
+  if (filter.areas.length > 0)
+    where.practiceArea = { name: { in: filter.areas } };
 
-  // Stage filter combines with hideClosed.
-  const stageClauses: Array<Record<string, unknown>> = [];
-  if (filter.stages.length > 0) stageClauses.push({ stage: { in: filter.stages } });
-  if (filter.hideClosed)
-    stageClauses.push({ stage: { notIn: ["Closed", "Settled"] } });
-  if (stageClauses.length === 1) Object.assign(where, stageClauses[0]);
-  else if (stageClauses.length > 1) where.AND = stageClauses;
+  // Stage filter and hideClosed both constrain the stage relation.
+  // When both are active we AND them together via a compound relation filter.
+  const stageConds: Array<Record<string, unknown>> = [];
+  if (filter.stages.length > 0)
+    stageConds.push({ name: { in: filter.stages } });
+  if (filter.hideClosed) stageConds.push({ isTerminal: false });
+  if (stageConds.length === 1) where.stage = stageConds[0];
+  else if (stageConds.length > 1) where.stage = { AND: stageConds };
 
   if (filter.feeStructures.length > 0)
     where.feeStructure = { in: filter.feeStructures };
@@ -109,10 +120,6 @@ function buildWhere(filter: MattersFilter, currentUserId: string) {
 /** Comparator for in-memory sort. Pinned always wins as a tiebreaker. */
 function makeComparator(sort: MattersSort) {
   const mul = sort.dir === "asc" ? 1 : -1;
-  const stageIdx = (s: string) => {
-    const i = (STAGE_ORDER as readonly string[]).indexOf(s);
-    return i === -1 ? 999 : i;
-  };
 
   return (a: MatterListRow, b: MatterListRow): number => {
     if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
@@ -129,7 +136,7 @@ function makeComparator(sort: MattersSort) {
         diff = (a.leadInitials ?? "~").localeCompare(b.leadInitials ?? "~");
         break;
       case "stage":
-        diff = stageIdx(a.stage) - stageIdx(b.stage);
+        diff = a.stageOrder - b.stageOrder;
         break;
       case "fee":
         diff = a.feeStructure.localeCompare(b.feeStructure);
@@ -166,6 +173,8 @@ export async function listMatters(
   const matters = await prisma.matter.findMany({
     where,
     include: {
+      practiceArea: { select: { name: true } },
+      stage: { select: { name: true, order: true, isTerminal: true } },
       teamMembers: {
         where: { role: "lead" },
         take: 1,
@@ -192,8 +201,10 @@ export async function listMatters(
     id: m.id,
     name: m.name,
     caseNumber: m.caseNumber,
-    area: m.area,
-    stage: m.stage,
+    area: m.practiceArea.name,
+    stage: m.stage.name,
+    stageOrder: m.stage.order,
+    stageIsTerminal: m.stage.isTerminal,
     feeStructure: m.feeStructure,
     trustBalance: m.trustBalance,
     color: m.color,
@@ -234,13 +245,24 @@ export type MattersFilterOptions = {
   leads: Array<{ id: string; name: string; initials: string }>;
 };
 
-/** Queries the distinct values present in the DB + the set of users
- *  who lead at least one matter. Ordered for stable UI. */
+/**
+ * Returns the active practice areas + the union of their stage names
+ * (de-duplicated, sorted by the canonical order they appear across
+ * areas). Fee structures + lead options are derived from matters.
+ */
 export async function getMattersFilterOptions(): Promise<MattersFilterOptions> {
-  const [matters, leadAssignments] = await Promise.all([
-    prisma.matter.findMany({
-      select: { area: true, stage: true, feeStructure: true },
+  const [areas, stages, matters, leadAssignments] = await Promise.all([
+    prisma.practiceArea.findMany({
+      where: { isActive: true },
+      select: { name: true },
+      orderBy: [{ order: "asc" }, { name: "asc" }],
     }),
+    prisma.matterStage.findMany({
+      where: { isActive: true },
+      select: { name: true, order: true },
+      orderBy: [{ order: "asc" }, { name: "asc" }],
+    }),
+    prisma.matter.findMany({ select: { feeStructure: true } }),
     prisma.matterTeamMember.findMany({
       where: { role: "lead" },
       distinct: ["userId"],
@@ -249,16 +271,18 @@ export async function getMattersFilterOptions(): Promise<MattersFilterOptions> {
     }),
   ]);
 
-  const areas = Array.from(new Set(matters.map((m) => m.area))).sort();
-  const stages = Array.from(new Set(matters.map((m) => m.stage))).sort(
-    (a, b) => {
-      const stageIdx = (s: string) => {
-        const i = (STAGE_ORDER as readonly string[]).indexOf(s);
-        return i === -1 ? 999 : i;
-      };
-      return stageIdx(a) - stageIdx(b);
-    }
-  );
+  // Dedupe stage names across areas, keeping the earliest `order` seen
+  // so the filter list reads as a single lifecycle even if different
+  // areas have slightly different stage sets.
+  const stageFirstOrder = new Map<string, number>();
+  for (const s of stages) {
+    if (!stageFirstOrder.has(s.name))
+      stageFirstOrder.set(s.name, s.order);
+  }
+  const orderedStageNames = Array.from(stageFirstOrder.entries())
+    .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
+    .map(([name]) => name);
+
   const feeStructures = Array.from(
     new Set(matters.map((m) => m.feeStructure))
   ).sort();
@@ -268,19 +292,32 @@ export async function getMattersFilterOptions(): Promise<MattersFilterOptions> {
     initials: a.user.initials,
   }));
 
-  return { areas, stages, feeStructures, leads };
+  return {
+    areas: areas.map((a) => a.name),
+    stages: orderedStageNames,
+    feeStructures,
+    leads,
+  };
 }
 
 /**
  * Single matter with the relations needed for the detail header.
  * Returns `null` if the id doesn't exist — callers should `notFound()`.
- * The returned object includes `isPinnedByCurrentUser` for the pin toggle.
+ * The returned object includes `isPinnedByCurrentUser` for the pin toggle
+ * and flattens area/stage names so existing components read them as
+ * scalar strings.
  */
 export async function getMatterById(id: string) {
   const userId = await getCurrentUserId();
   const matter = await prisma.matter.findUnique({
     where: { id },
     include: {
+      practiceArea: {
+        select: { id: true, name: true, color: true },
+      },
+      stage: {
+        select: { id: true, name: true, order: true, isTerminal: true },
+      },
       client: true,
       teamMembers: {
         include: {
@@ -298,8 +335,20 @@ export async function getMatterById(id: string) {
     },
   });
   if (!matter) return null;
-  const { pins, ...rest } = matter;
-  return { ...rest, isPinnedByCurrentUser: pins.length > 0 };
+  const { pins, practiceArea, stage, ...rest } = matter;
+  return {
+    ...rest,
+    // Flattened for display. Components that already used `matter.area`
+    // and `matter.stage` as strings keep working.
+    area: practiceArea.name,
+    stage: stage.name,
+    practiceAreaId: practiceArea.id,
+    practiceAreaColor: practiceArea.color,
+    stageId: stage.id,
+    stageOrder: stage.order,
+    stageIsTerminal: stage.isTerminal,
+    isPinnedByCurrentUser: pins.length > 0,
+  };
 }
 
 export type MatterDetail = NonNullable<Awaited<ReturnType<typeof getMatterById>>>;

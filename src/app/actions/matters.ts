@@ -1,8 +1,11 @@
 /**
  * Matter server actions.
  *
- * Writes that create or mutate `Matter` rows. For now: create. Edit,
- * archive, and stage-change actions will land here as they're built.
+ * Writes that create or mutate `Matter` rows. Practice area + stage
+ * come in as FK ids (not names) since the options are pulled from the
+ * database by the forms above; each action verifies the ids exist, the
+ * stage belongs to the selected area, and (for update) the proposed
+ * stage is reachable from the matter's current area.
  */
 
 "use server";
@@ -18,16 +21,6 @@ import {
   type UpdateMatterState,
 } from "@/lib/new-matter-constants";
 
-const AREA_COLOR: Record<string, string> = {
-  "§1983": "#2563a8",
-  "Housing/FHA": "#2d8a5f",
-  "Employment/CADA": "#b6623d",
-  Criminal: "#7a5aa6",
-  Class: "#8a6a2d",
-  ADA: "#3a8a7a",
-  "Education/IDEA": "#3a8a7a",
-};
-
 const createMatterSchema = z
   .object({
     name: z
@@ -35,29 +28,8 @@ const createMatterSchema = z
       .trim()
       .min(1, "Name is required")
       .max(200, "Name is too long"),
-    area: z.enum([
-      "§1983",
-      "Housing/FHA",
-      "Employment/CADA",
-      "Criminal",
-      "Class",
-      "ADA",
-      "Education/IDEA",
-    ]),
-    stage: z
-      .enum([
-        "Intake",
-        "Pre-suit",
-        "Retained",
-        "Discovery",
-        "Dispositive",
-        "Pretrial",
-        "Cert",
-        "Trial/Settle",
-        "Settled",
-        "Closed",
-      ])
-      .default("Intake"),
+    practiceAreaId: z.string().trim().min(1, "Practice area is required"),
+    stageId: z.string().trim().min(1, "Stage is required"),
     feeStructure: z
       .enum(["contingent", "hourly", "flat", "hybrid", "pro_bono"])
       .default("contingent"),
@@ -107,6 +79,47 @@ const createMatterSchema = z
     }
   });
 
+/**
+ * Verify the stage belongs to the area. If not, return the first
+ * active stage for the area as a safe fallback. Also returns the area
+ * color so the caller can snapshot it onto the matter row.
+ */
+async function resolveAreaAndStage(
+  practiceAreaId: string,
+  stageId: string
+): Promise<
+  | { ok: true; practiceAreaId: string; stageId: string; color: string }
+  | { ok: false; error: string }
+> {
+  const area = await prisma.practiceArea.findUnique({
+    where: { id: practiceAreaId },
+    select: {
+      id: true,
+      color: true,
+      isActive: true,
+      stages: {
+        where: { isActive: true },
+        orderBy: { order: "asc" },
+        select: { id: true },
+      },
+    },
+  });
+  if (!area || !area.isActive) {
+    return { ok: false, error: "Practice area is not available" };
+  }
+  const stageMatch = area.stages.find((s) => s.id === stageId);
+  const resolvedStageId = stageMatch?.id ?? area.stages[0]?.id;
+  if (!resolvedStageId) {
+    return { ok: false, error: "This practice area has no active stages" };
+  }
+  return {
+    ok: true,
+    practiceAreaId: area.id,
+    stageId: resolvedStageId,
+    color: area.color,
+  };
+}
+
 export async function createMatter(
   _prev: CreateMatterState,
   formData: FormData
@@ -123,6 +136,16 @@ export async function createMatter(
   }
 
   const data = parsed.data;
+
+  const resolved = await resolveAreaAndStage(data.practiceAreaId, data.stageId);
+  if (!resolved.ok) {
+    return {
+      status: "error",
+      errors: { practiceAreaId: [resolved.error] },
+      values: raw,
+    };
+  }
+
   const currentUserId = await getCurrentUserId();
 
   // Verify the selected lead is a real user; fall through to the
@@ -159,15 +182,15 @@ export async function createMatter(
   const matter = await prisma.matter.create({
     data: {
       name: data.name,
-      area: data.area,
-      stage: data.stage,
+      practiceAreaId: resolved.practiceAreaId,
+      stageId: resolved.stageId,
       feeStructure: data.feeStructure,
       caseNumber: data.caseNumber || null,
       court: data.court || null,
       opposingParty: data.opposingParty || null,
       opposingFirm: data.opposingFirm || null,
       description: data.description || null,
-      color: AREA_COLOR[data.area] ?? "#2563a8",
+      color: resolved.color,
       clientId,
       teamMembers: {
         create: { userId: leadUserId, role: "lead" },
@@ -195,27 +218,8 @@ const updateMatterSchema = z.object({
     .trim()
     .min(1, "Name is required")
     .max(200, "Name is too long"),
-  area: z.enum([
-    "§1983",
-    "Housing/FHA",
-    "Employment/CADA",
-    "Criminal",
-    "Class",
-    "ADA",
-    "Education/IDEA",
-  ]),
-  stage: z.enum([
-    "Intake",
-    "Pre-suit",
-    "Retained",
-    "Discovery",
-    "Dispositive",
-    "Pretrial",
-    "Cert",
-    "Trial/Settle",
-    "Settled",
-    "Closed",
-  ]),
+  practiceAreaId: z.string().trim().min(1, "Practice area is required"),
+  stageId: z.string().trim().min(1, "Stage is required"),
   feeStructure: z.enum([
     "contingent",
     "hourly",
@@ -258,6 +262,15 @@ export async function updateMatter(
 
   const data = parsed.data;
 
+  const resolved = await resolveAreaAndStage(data.practiceAreaId, data.stageId);
+  if (!resolved.ok) {
+    return {
+      status: "error",
+      errors: { practiceAreaId: [resolved.error] },
+      values: raw,
+    };
+  }
+
   // Verify lead + client IDs before writing so stale dropdown values
   // don't point the matter at missing rows.
   const currentUserId = await getCurrentUserId();
@@ -281,15 +294,15 @@ export async function updateMatter(
       where: { id: matterId },
       data: {
         name: data.name,
-        area: data.area,
-        stage: data.stage,
+        practiceAreaId: resolved.practiceAreaId,
+        stageId: resolved.stageId,
         feeStructure: data.feeStructure,
         caseNumber: data.caseNumber || null,
         court: data.court || null,
         opposingParty: data.opposingParty || null,
         opposingFirm: data.opposingFirm || null,
         description: data.description || null,
-        color: AREA_COLOR[data.area] ?? "#2563a8",
+        color: resolved.color,
         clientId,
       },
     });
@@ -321,25 +334,14 @@ export async function updateMatter(
 
 // ── Stage change ────────────────────────────────────────────────────────
 
-const STAGES = [
-  "Intake",
-  "Pre-suit",
-  "Retained",
-  "Discovery",
-  "Dispositive",
-  "Pretrial",
-  "Cert",
-  "Trial/Settle",
-  "Settled",
-  "Closed",
-] as const;
-
-type Stage = (typeof STAGES)[number];
-
 /**
  * Narrow action for the stage control on the matter Overview tab. One
  * SQL update, no redirect — the page revalidates in place and the
  * client-side optimistic UI reconciles with the server value.
+ *
+ * Validates that the proposed stage belongs to the matter's current
+ * practice area; cross-area transitions have to go through the full
+ * edit flow (which can also adjust color + other area-scoped state).
  *
  * TODO (auth): once the firm has permissions, gate this to roles the
  * firm administrator has authorized to move stage (e.g. Partner,
@@ -348,21 +350,36 @@ type Stage = (typeof STAGES)[number];
  */
 export async function updateMatterStage(
   matterId: string,
-  newStage: string
+  newStageId: string
 ): Promise<{ ok: boolean; error?: string }> {
-  if (!(STAGES as readonly string[]).includes(newStage)) {
-    return { ok: false, error: "Invalid stage" };
+  const matter = await prisma.matter.findUnique({
+    where: { id: matterId },
+    select: { practiceAreaId: true },
+  });
+  if (!matter) return { ok: false, error: "Matter not found" };
+
+  const stage = await prisma.matterStage.findUnique({
+    where: { id: newStageId },
+    select: { id: true, practiceAreaId: true, isActive: true },
+  });
+  if (!stage || !stage.isActive) {
+    return { ok: false, error: "Stage is not available" };
+  }
+  if (stage.practiceAreaId !== matter.practiceAreaId) {
+    return {
+      ok: false,
+      error: "Stage does not belong to this matter's practice area",
+    };
   }
 
   await prisma.matter.update({
     where: { id: matterId },
-    data: { stage: newStage as Stage },
+    data: { stageId: stage.id },
   });
 
-  // Sidebar practice-area counts exclude Closed/Settled stages, and
+  // Sidebar practice-area counts exclude terminal stages, and
   // the matters list shows the stage chip — revalidate the whole
   // dashboard tree so both update.
   revalidatePath("/", "layout");
   return { ok: true };
 }
-

@@ -14,6 +14,7 @@ import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Pin } from "lucide-react";
 import { StageChanger } from "@/components/matters/stage-changer";
+import { prisma } from "@/lib/prisma";
 import { getMatterById } from "@/lib/queries/matters";
 import {
   getMatterDeadlines,
@@ -47,10 +48,15 @@ export default async function MatterOverviewPage({
   const matter = await getMatterById(id);
   if (!matter) notFound();
 
-  const [deadlines, tasks, notes] = await Promise.all([
+  const [deadlines, tasks, notes, stageOptions] = await Promise.all([
     getMatterDeadlines(id),
     getMatterTasks(id),
     getMatterNotes(id),
+    prisma.matterStage.findMany({
+      where: { practiceAreaId: matter.practiceAreaId, isActive: true },
+      orderBy: { order: "asc" },
+      select: { id: true, name: true, order: true, isTerminal: true },
+    }),
   ]);
 
   const upcomingDeadlines = deadlines
@@ -71,7 +77,8 @@ export default async function MatterOverviewPage({
             <CardContent className="px-4 py-4">
               <StageChanger
                 matterId={matter.id}
-                currentStage={matter.stage}
+                stages={stageOptions}
+                currentStageId={matter.stageId}
               />
             </CardContent>
           </Card>

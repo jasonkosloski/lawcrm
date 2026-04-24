@@ -7,6 +7,11 @@
  * render (the sidebar lives in the dashboard layout), so the whole
  * thing is parallelised.
  *
+ * Practice-area labels + colors come from the `practice_areas` table,
+ * not a hardcoded map — so firm-admin changes in settings flow through
+ * without code edits. "Open" matter counts exclude archived matters and
+ * stages flagged `isTerminal` (Settled/Closed by default).
+ *
  * No auth yet — current user is resolved via `getCurrentUserId()` (see
  * `src/lib/current-user.ts`). When login lands, swap that helper for the
  * session resolver and every caller keeps working.
@@ -46,40 +51,6 @@ export type SidebarData = {
   areaCounts: SidebarAreaCount[];
 };
 
-/** Display-label + CSS variable lookup for each practice area in the DB.
- *  Areas not in this map still render — they'll use the raw string and a
- *  neutral color. */
-const AREA_META: Record<string, { label: string; color: string }> = {
-  "§1983": {
-    label: "§1983 · Civil rights",
-    color: "var(--color-area-1983)",
-  },
-  "Housing/FHA": {
-    label: "Housing · FHA",
-    color: "var(--color-area-housing)",
-  },
-  "Employment/CADA": {
-    label: "Employment · CADA",
-    color: "var(--color-area-employment)",
-  },
-  Criminal: {
-    label: "Criminal",
-    color: "var(--color-area-criminal)",
-  },
-  Class: {
-    label: "Class actions",
-    color: "var(--color-area-class)",
-  },
-  ADA: {
-    label: "ADA",
-    color: "var(--color-area-ada)",
-  },
-  "Education/IDEA": {
-    label: "Education · IDEA",
-    color: "var(--color-area-education)",
-  },
-};
-
 const startOfToday = (): Date => {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -91,6 +62,12 @@ const endOfToday = (): Date => {
   return d;
 };
 
+/** Shared "open matter" constraint: not archived, stage not terminal. */
+const OPEN_MATTER_WHERE = {
+  isArchived: false,
+  stage: { isTerminal: false },
+} as const;
+
 export async function getSidebarData(): Promise<SidebarData> {
   const currentUserId = await getCurrentUserId();
 
@@ -101,15 +78,14 @@ export async function getSidebarData(): Promise<SidebarData> {
     activeLeadCount,
     pinnedMatters,
     areaGroups,
+    areas,
     hoursAgg,
   ] = await Promise.all([
     prisma.user.findUnique({
       where: { id: currentUserId },
       select: { id: true, name: true, initials: true, role: true },
     }),
-    prisma.matter.count({
-      where: { isArchived: false, NOT: { stage: { in: ["Closed", "Settled"] } } },
-    }),
+    prisma.matter.count({ where: OPEN_MATTER_WHERE }),
     prisma.emailThread.count({ where: { isRead: false } }),
     prisma.lead.count({
       where: { stage: { notIn: ["converted", "declined"] } },
@@ -121,17 +97,24 @@ export async function getSidebarData(): Promise<SidebarData> {
       orderBy: { createdAt: "desc" },
       select: {
         matter: {
-          select: { id: true, name: true, area: true, color: true },
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            practiceArea: { select: { name: true } },
+          },
         },
       },
     }),
     prisma.matter.groupBy({
-      by: ["area"],
-      where: {
-        isArchived: false,
-        NOT: { stage: { in: ["Closed", "Settled"] } },
-      },
+      by: ["practiceAreaId"],
+      where: OPEN_MATTER_WHERE,
       _count: true,
+    }),
+    // Fetch all active areas so we can join labels/colors onto the groups.
+    prisma.practiceArea.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, label: true, color: true, order: true },
     }),
     prisma.timeEntry.aggregate({
       where: {
@@ -142,13 +125,15 @@ export async function getSidebarData(): Promise<SidebarData> {
     }),
   ]);
 
+  const areaById = new Map(areas.map((a) => [a.id, a]));
+
   const areaCounts: SidebarAreaCount[] = areaGroups
     .map((g) => {
-      const meta = AREA_META[g.area];
+      const meta = areaById.get(g.practiceAreaId);
       return {
-        area: g.area,
+        area: meta?.name ?? "(unknown)",
         count: g._count,
-        label: meta?.label ?? g.area,
+        label: meta?.label ?? meta?.name ?? "(unknown)",
         color: meta?.color ?? "var(--color-ink-3)",
       };
     })
@@ -161,7 +146,12 @@ export async function getSidebarData(): Promise<SidebarData> {
     unreadEmailCount,
     activeLeadCount,
     hoursToday: hoursAgg._sum.hours ?? 0,
-    pinnedMatters: pinnedMatters.map((p) => p.matter),
+    pinnedMatters: pinnedMatters.map((p) => ({
+      id: p.matter.id,
+      name: p.matter.name,
+      area: p.matter.practiceArea.name,
+      color: p.matter.color,
+    })),
     areaCounts,
   };
 }

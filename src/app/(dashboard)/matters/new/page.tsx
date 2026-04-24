@@ -16,7 +16,20 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 
 export default async function NewMatterPage() {
-  const [clients, users, currentUserId] = await Promise.all([
+  const [areas, clients, users, currentUserId] = await Promise.all([
+    prisma.practiceArea.findMany({
+      where: { isActive: true },
+      orderBy: [{ order: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        stages: {
+          where: { isActive: true },
+          orderBy: { order: "asc" },
+          select: { id: true, name: true, order: true, isTerminal: true },
+        },
+      },
+    }),
     prisma.contact.findMany({
       where: { type: "client", isActive: true },
       select: {
@@ -44,7 +57,7 @@ export default async function NewMatterPage() {
           <Card>
             <CardContent className="p-5">
               <NewMatterForm
-                options={{ clients, users, currentUserId }}
+                options={{ areas, clients, users, currentUserId }}
               />
             </CardContent>
           </Card>

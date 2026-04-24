@@ -46,7 +46,7 @@ export async function getDashboardKpis(): Promise<DashboardKpis> {
   const [openMatters, mattersThisWeek, unreadEmail, flaggedEmail, hoursAgg, trustAgg] =
     await Promise.all([
       prisma.matter.count({
-        where: { isArchived: false, NOT: { stage: { in: ["Closed", "Settled"] } } },
+        where: { isArchived: false, stage: { isTerminal: false } },
       }),
       prisma.matter.count({
         where: {
@@ -88,16 +88,6 @@ export type AgendaItem = {
   color: string;
 };
 
-const AREA_COLOR: Record<string, string> = {
-  "§1983": "var(--color-area-1983)",
-  "Housing/FHA": "var(--color-area-housing)",
-  "Employment/CADA": "var(--color-area-employment)",
-  ADA: "var(--color-area-ada)",
-  Class: "var(--color-area-class)",
-  Criminal: "var(--color-area-criminal)",
-  "Education/IDEA": "var(--color-area-education)",
-};
-
 const formatTime = (d: Date): string => {
   const h = d.getHours();
   const m = d.getMinutes();
@@ -110,17 +100,21 @@ export async function getTodayAgenda(): Promise<AgendaItem[]> {
   const events = await prisma.calendarEvent.findMany({
     where: { startTime: { gte: startOfToday(), lte: endOfToday() } },
     orderBy: { startTime: "asc" },
-    include: { matter: { select: { area: true } } },
+    include: {
+      matter: {
+        select: { practiceArea: { select: { name: true, color: true } } },
+      },
+    },
   });
 
   return events.map((e) => {
-    const area = e.matter?.area ?? "Firm";
+    const pa = e.matter?.practiceArea;
     return {
       id: e.id,
       time: formatTime(e.startTime),
       title: e.title,
-      area,
-      color: AREA_COLOR[area] ?? "var(--color-ink-3)",
+      area: pa?.name ?? "Firm",
+      color: pa?.color ?? "var(--color-ink-3)",
     };
   });
 }

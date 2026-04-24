@@ -115,7 +115,12 @@ export async function getThreadById(id: string): Promise<ThreadDetail | null> {
     where: { id, account: { userId } },
     include: {
       matter: {
-        select: { id: true, name: true, color: true, area: true },
+        select: {
+          id: true,
+          name: true,
+          color: true,
+          practiceArea: { select: { name: true } },
+        },
       },
       labels: true,
       messages: {
@@ -128,7 +133,14 @@ export async function getThreadById(id: string): Promise<ThreadDetail | null> {
   return {
     id: thread.id,
     subject: thread.subject,
-    matter: thread.matter,
+    matter: thread.matter
+      ? {
+          id: thread.matter.id,
+          name: thread.matter.name,
+          color: thread.matter.color,
+          area: thread.matter.practiceArea.name,
+        }
+      : null,
     labels: thread.labels.map((l) => l.label),
     messageCount: thread.messageCount,
     lastMessageAt: thread.lastMessageAt,

@@ -39,7 +39,7 @@ export default async function MattersListPage({
   ]);
 
   const openCount = matters.filter(
-    (m) => !m.isArchived && m.stage !== "Closed" && m.stage !== "Settled"
+    (m) => !m.isArchived && !m.stageIsTerminal
   ).length;
   const closedOrArchived = matters.length - openCount;
 

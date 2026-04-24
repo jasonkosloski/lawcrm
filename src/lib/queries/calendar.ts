@@ -119,7 +119,14 @@ export async function getCalendarEventById(
   const e = await prisma.calendarEvent.findUnique({
     where: { id },
     include: {
-      matter: { select: { id: true, name: true, area: true, color: true } },
+      matter: {
+        select: {
+          id: true,
+          name: true,
+          color: true,
+          practiceArea: { select: { name: true } },
+        },
+      },
       attendees: true,
     },
   });
@@ -135,7 +142,14 @@ export async function getCalendarEventById(
     description: e.description,
     zoomUrl: e.zoomUrl,
     color: e.matter?.color ?? e.color ?? "var(--color-ink-3)",
-    matter: e.matter,
+    matter: e.matter
+      ? {
+          id: e.matter.id,
+          name: e.matter.name,
+          color: e.matter.color,
+          area: e.matter.practiceArea.name,
+        }
+      : null,
     attendees: e.attendees.map((a) => ({
       id: a.id,
       name: a.name,

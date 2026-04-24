@@ -99,7 +99,7 @@ export function MattersTable({ matters }: { matters: MatterListRow[] }) {
                   )}
                 </TableCell>
                 <TableCell>
-                  <StageChip stage={m.stage} />
+                  <StageChip stage={m.stage} isTerminal={m.stageIsTerminal} />
                 </TableCell>
                 <TableCell className="text-right font-mono text-xs text-ink">
                   {formatMoney(m.trustBalance)}
@@ -127,15 +127,20 @@ export function MattersTable({ matters }: { matters: MatterListRow[] }) {
   );
 }
 
-function StageChip({ stage }: { stage: string }) {
-  const active = !["Closed", "Settled"].includes(stage);
+function StageChip({
+  stage,
+  isTerminal,
+}: {
+  stage: string;
+  isTerminal: boolean;
+}) {
   return (
     <span
       className={
         "inline-block text-2xs font-medium px-2 py-0.5 rounded-full border " +
-        (active
-          ? "bg-brand-soft text-brand-700 border-brand-200"
-          : "bg-paper-2 text-ink-3 border-line")
+        (isTerminal
+          ? "bg-paper-2 text-ink-3 border-line"
+          : "bg-brand-soft text-brand-700 border-brand-200")
       }
     >
       {stage}

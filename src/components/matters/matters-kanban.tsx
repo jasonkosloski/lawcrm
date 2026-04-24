@@ -1,9 +1,10 @@
 /**
  * Matters — Kanban view
  *
- * Horizontal pipeline with one column per stage. Columns follow the
- * canonical case-lifecycle order (STAGE_ORDER); any stages present in
- * the data that aren't in the canonical list are appended at the end.
+ * Horizontal pipeline with one column per stage. Stages in the current
+ * result set are ordered left-to-right by the smallest `stageOrder`
+ * seen for each name, so the default lifecycle reads in order and any
+ * area-specific stages slot in based on their configured position.
  *
  * Matters inside a column are already ordered by the page's sort, so
  * changing sort re-orders within columns. Empty columns render with a
@@ -15,29 +16,32 @@
  */
 
 import Link from "next/link";
-import { STAGE_ORDER, FEE_LABELS } from "@/lib/matters-filters";
+import { FEE_LABELS } from "@/lib/matters-filters";
 import type { MatterListRow } from "@/lib/queries/matters";
 
 const formatMoney = (n: number): string =>
   n === 0 ? "$0" : `$${n.toLocaleString("en-US")}`;
 
 export function MattersKanban({ matters }: { matters: MatterListRow[] }) {
-  // Group by stage, preserving canonical order + appending unknowns.
+  // Group by stage name, tracking the smallest order seen per name so
+  // columns read in lifecycle order even when multiple practice areas
+  // contribute the same stage name.
   const byStage = new Map<string, MatterListRow[]>();
+  const stageOrder = new Map<string, number>();
   for (const m of matters) {
     if (!byStage.has(m.stage)) byStage.set(m.stage, []);
     byStage.get(m.stage)!.push(m);
+    const existing = stageOrder.get(m.stage);
+    if (existing === undefined || m.stageOrder < existing) {
+      stageOrder.set(m.stage, m.stageOrder);
+    }
   }
 
-  // Always show all canonical lifecycle stages so the pipeline structure
-  // stays visible even when some stages are empty. Non-canonical stages
-  // from the data get appended at the end.
-  const stages = [
-    ...STAGE_ORDER,
-    ...[...byStage.keys()].filter(
-      (s) => !(STAGE_ORDER as readonly string[]).includes(s)
-    ),
-  ];
+  const stages = [...byStage.keys()].sort((a, b) => {
+    const ao = stageOrder.get(a) ?? 999;
+    const bo = stageOrder.get(b) ?? 999;
+    return ao - bo || a.localeCompare(b);
+  });
 
   // When the filter produces no results at all, show a single empty-state row.
   if (matters.length === 0) {

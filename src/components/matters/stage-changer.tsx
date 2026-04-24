@@ -15,6 +15,11 @@
  *     is the commit — so a misclick on the overview doesn't
  *     accidentally move the matter out of (say) Discovery.
  *
+ * Stages are passed in as props so the component stays area-aware:
+ * each matter's lifecycle is whatever the firm configured for its
+ * practice area. Terminal stages (`isTerminal`) render muted on the
+ * stepper and labeled "terminal" in the popover.
+ *
  * Uses `useOptimistic` so both the stepper and subtitle update
  * instantly; `revalidatePath` in the action refreshes the rest of
  * the layout (TopBar subtitle chip, sidebar counts, matters list).
@@ -36,50 +41,53 @@ import {
 } from "@/components/ui/popover";
 import { updateMatterStage } from "@/app/actions/matters";
 
-const STAGES = [
-  "Intake",
-  "Pre-suit",
-  "Retained",
-  "Discovery",
-  "Dispositive",
-  "Pretrial",
-  "Cert",
-  "Trial/Settle",
-  "Settled",
-  "Closed",
-] as const;
-
-const TERMINAL_STAGES = new Set<string>(["Settled", "Closed"]);
+export type StageOption = {
+  id: string;
+  name: string;
+  order: number;
+  isTerminal: boolean;
+};
 
 export function StageChanger({
   matterId,
-  currentStage,
+  stages,
+  currentStageId,
 }: {
   matterId: string;
-  currentStage: string;
+  stages: StageOption[];
+  currentStageId: string;
 }) {
-  const [optimisticStage, setOptimisticStage] = useOptimistic(currentStage);
+  const [optimisticStageId, setOptimisticStageId] =
+    useOptimistic(currentStageId);
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
 
-  const currentIndex = STAGES.indexOf(
-    optimisticStage as (typeof STAGES)[number]
-  );
-  const isTerminalCurrent = TERMINAL_STAGES.has(optimisticStage);
+  const currentIndex = stages.findIndex((s) => s.id === optimisticStageId);
+  const currentStage = stages[currentIndex];
+  const isTerminalCurrent = currentStage?.isTerminal ?? false;
   const stagesRemaining =
-    currentIndex >= 0 ? STAGES.length - 1 - currentIndex : 0;
+    currentIndex >= 0 ? stages.length - 1 - currentIndex : 0;
 
-  const transitionTo = (stage: string) => {
-    if (stage === optimisticStage) {
+  const transitionTo = (nextId: string) => {
+    if (nextId === optimisticStageId) {
       setOpen(false);
       return;
     }
     setOpen(false);
     startTransition(async () => {
-      setOptimisticStage(stage);
-      await updateMatterStage(matterId, stage);
+      setOptimisticStageId(nextId);
+      await updateMatterStage(matterId, nextId);
     });
   };
+
+  if (stages.length === 0) {
+    return (
+      <div className="text-2xs text-ink-4">
+        No stages configured for this practice area — add stages in
+        Settings → Practice areas.
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -115,18 +123,17 @@ export function StageChanger({
               Move matter to…
             </div>
             <ul className="flex flex-col">
-              {STAGES.map((stage, idx) => {
-                const isCurrent = stage === optimisticStage;
+              {stages.map((stage, idx) => {
+                const isCurrent = stage.id === optimisticStageId;
                 const isPassed =
                   currentIndex >= 0 && idx < currentIndex && !isCurrent;
-                const isTerminal = TERMINAL_STAGES.has(stage);
 
                 return (
-                  <li key={stage}>
+                  <li key={stage.id}>
                     <button
                       type="button"
                       disabled={isCurrent}
-                      onClick={() => transitionTo(stage)}
+                      onClick={() => transitionTo(stage.id)}
                       className={cn(
                         "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-left transition-colors",
                         isCurrent
@@ -146,8 +153,8 @@ export function StageChanger({
                           <Check size={12} />
                         ) : null}
                       </span>
-                      <span className="flex-1">{stage}</span>
-                      {isTerminal && !isCurrent && (
+                      <span className="flex-1">{stage.name}</span>
+                      {stage.isTerminal && !isCurrent && (
                         <span className="text-2xs text-ink-4">terminal</span>
                       )}
                     </button>
@@ -165,24 +172,17 @@ export function StageChanger({
       {/* ── Horizontal stepper ─────────────────────────────────────── */}
       <div className="px-1">
         <div className="flex items-start">
-          {STAGES.map((stage, idx) => {
+          {stages.map((stage, idx) => {
             const isCurrent = idx === currentIndex;
             const isPassed = currentIndex >= 0 && idx < currentIndex;
-            // Connector to next stage is "filled" when BOTH endpoints
-            // are passed/current — i.e. when the left stage is before
-            // the current position. That way the filled portion of
-            // the rail stops exactly at the current dot.
             const connectorFilled = idx < currentIndex;
 
             return (
               <div
-                key={stage}
+                key={stage.id}
                 className="relative flex-1 flex flex-col items-center min-w-0"
               >
-                {/* Rail segment extending from this dot's center to
-                    the next dot's center. The last column owns no
-                    segment. Sits behind the dots via z-ordering. */}
-                {idx < STAGES.length - 1 && (
+                {idx < stages.length - 1 && (
                   <div
                     className={cn(
                       "absolute top-[5px] left-1/2 w-full h-[2px]",
@@ -191,7 +191,6 @@ export function StageChanger({
                   />
                 )}
 
-                {/* Dot */}
                 <div
                   className={cn(
                     "relative z-10 w-3 h-3 rounded-full transition-colors",
@@ -204,10 +203,9 @@ export function StageChanger({
                         : "bg-white border-2 border-line"
                   )}
                   aria-current={isCurrent ? "step" : undefined}
-                  title={stage}
+                  title={stage.name}
                 />
 
-                {/* Label */}
                 <div
                   className={cn(
                     "mt-2.5 text-2xs leading-tight text-center px-0.5 break-words",
@@ -220,7 +218,7 @@ export function StageChanger({
                         : "text-ink-4"
                   )}
                 >
-                  {stage}
+                  {stage.name}
                 </div>
               </div>
             );
@@ -233,12 +231,17 @@ export function StageChanger({
         {isTerminalCurrent ? (
           <>
             Matter is{" "}
-            <span className="text-ink-2 font-medium">{optimisticStage}</span>.
+            <span className="text-ink-2 font-medium">
+              {currentStage?.name}
+            </span>
+            .
           </>
         ) : (
           <>
             Currently in{" "}
-            <span className="text-ink-2 font-medium">{optimisticStage}</span>
+            <span className="text-ink-2 font-medium">
+              {currentStage?.name}
+            </span>
             {stagesRemaining > 0 && (
               <>
                 {" · "}

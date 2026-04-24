@@ -11,36 +11,13 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { cn } from "@/lib/utils";
 import { updateMatter } from "@/app/actions/matters";
 import {
   updateMatterInitialState,
   type UpdateMatterState,
 } from "@/lib/new-matter-constants";
-
-const AREAS = [
-  "§1983",
-  "Housing/FHA",
-  "Employment/CADA",
-  "Criminal",
-  "Class",
-  "ADA",
-  "Education/IDEA",
-] as const;
-
-const STAGES = [
-  "Intake",
-  "Pre-suit",
-  "Retained",
-  "Discovery",
-  "Dispositive",
-  "Pretrial",
-  "Cert",
-  "Trial/Settle",
-  "Settled",
-  "Closed",
-] as const;
 
 const FEE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "contingent", label: "Contingent" },
@@ -54,8 +31,8 @@ export type MatterForEdit = {
   id: string;
   name: string;
   caseNumber: string | null;
-  area: string;
-  stage: string;
+  practiceAreaId: string;
+  stageId: string;
   feeStructure: string;
   court: string | null;
   clientId: string | null;
@@ -65,7 +42,19 @@ export type MatterForEdit = {
   leadUserId: string | null;
 };
 
+export type EditAreaOption = {
+  id: string;
+  name: string;
+  stages: Array<{
+    id: string;
+    name: string;
+    order: number;
+    isTerminal: boolean;
+  }>;
+};
+
 export type EditMatterFormOptions = {
+  areas: EditAreaOption[];
   clients: Array<{ id: string; name: string; organization: string | null }>;
   users: Array<{ id: string; name: string; role: string }>;
 };
@@ -92,8 +81,6 @@ export function EditMatterForm({
   const errs = state.errors ?? {};
   const init = {
     name: vals.name ?? matter.name,
-    area: vals.area ?? matter.area,
-    stage: vals.stage ?? matter.stage,
     feeStructure: vals.feeStructure ?? matter.feeStructure,
     caseNumber: vals.caseNumber ?? matter.caseNumber ?? "",
     court: vals.court ?? matter.court ?? "",
@@ -103,6 +90,28 @@ export function EditMatterForm({
     leadUserId:
       vals.leadUserId ?? matter.leadUserId ?? options.users[0]?.id ?? "",
     description: vals.description ?? matter.description ?? "",
+  };
+
+  // ── Practice area + stage (cascading) ────────────────────────────────
+  const initialAreaId = vals.practiceAreaId ?? matter.practiceAreaId;
+  const initialArea = options.areas.find((a) => a.id === initialAreaId);
+  const initialStageId =
+    vals.stageId ??
+    (initialArea?.stages.some((s) => s.id === matter.stageId)
+      ? matter.stageId
+      : initialArea?.stages[0]?.id ?? "");
+
+  const [practiceAreaId, setPracticeAreaId] = useState<string>(initialAreaId);
+  const [stageId, setStageId] = useState<string>(initialStageId);
+
+  const selectedArea = options.areas.find((a) => a.id === practiceAreaId);
+  const stageOptions = selectedArea?.stages ?? [];
+
+  const handleAreaChange = (nextAreaId: string) => {
+    setPracticeAreaId(nextAreaId);
+    const nextArea = options.areas.find((a) => a.id === nextAreaId);
+    const stageBelongs = nextArea?.stages.some((s) => s.id === stageId);
+    if (!stageBelongs) setStageId(nextArea?.stages[0]?.id ?? "");
   };
 
   return (
@@ -120,32 +129,44 @@ export function EditMatterForm({
         </Field>
 
         <Row>
-          <Field label="Practice area" name="area" required error={errs.area}>
+          <Field
+            label="Practice area"
+            name="practiceAreaId"
+            required
+            error={errs.practiceAreaId}
+          >
             <select
-              id="area"
-              name="area"
-              defaultValue={init.area}
+              id="practiceAreaId"
+              name="practiceAreaId"
+              value={practiceAreaId}
+              onChange={(e) => handleAreaChange(e.target.value)}
               required
-              className={selectCls(!!errs.area)}
+              className={selectCls(!!errs.practiceAreaId)}
             >
-              {AREAS.map((a) => (
-                <option key={a} value={a}>
-                  {a}
+              {options.areas.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
                 </option>
               ))}
             </select>
           </Field>
 
-          <Field label="Stage" name="stage" error={errs.stage}>
+          <Field label="Stage" name="stageId" error={errs.stageId}>
             <select
-              id="stage"
-              name="stage"
-              defaultValue={init.stage}
-              className={selectCls(!!errs.stage)}
+              id="stageId"
+              name="stageId"
+              value={stageId}
+              onChange={(e) => setStageId(e.target.value)}
+              className={selectCls(!!errs.stageId)}
             >
-              {STAGES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
+              {stageOptions.length === 0 && (
+                <option value="" disabled>
+                  No stages for this area
+                </option>
+              )}
+              {stageOptions.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
                 </option>
               ))}
             </select>
