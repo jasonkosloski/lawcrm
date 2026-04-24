@@ -9,6 +9,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { REACTION_EMOJIS } from "@/lib/note-constants";
 import type { EventNote, EventTimeEntry } from "@/lib/queries/calendar";
 
 // ── Parties ──────────────────────────────────────────────────────────────
@@ -157,6 +158,15 @@ export type NoteLink =
   | { kind: "time"; id: string; label: string; date: Date }
   | { kind: "parent"; id: string; label: string };
 
+/** Aggregated reaction for a single emoji on a note. */
+export type NoteReactionSummary = {
+  emoji: string;
+  count: number;
+  /** True when the current user is among the reactors — used to
+   *  highlight the pill + toggle on click. */
+  userReacted: boolean;
+};
+
 export type NoteRow = {
   id: string;
   type: string;
@@ -175,6 +185,9 @@ export type NoteRow = {
    *  unread indicator on the card and the default collapse state
    *  of its thread. Always true for notes the current user wrote. */
   isRead: boolean;
+  /** Reactions on this note aggregated by emoji, ordered by the
+   *  curated palette. Only non-empty buckets surface. */
+  reactions: NoteReactionSummary[];
 };
 
 function truncate(s: string, n: number): string {
@@ -208,6 +221,11 @@ export async function getMatterNotes(matterId: string): Promise<NoteRow[]> {
         where: { userId },
         select: { userId: true },
         take: 1,
+      },
+      // All reactions (userId + emoji); we aggregate in-memory below
+      // so we can mark which ones the current user participated in.
+      reactions: {
+        select: { emoji: true, userId: true },
       },
     },
     // Replies sort by creation so the thread reads top-down. Top-level
@@ -249,6 +267,25 @@ export async function getMatterNotes(matterId: string): Promise<NoteRow[]> {
       };
     }
 
+    // Aggregate reactions per emoji, in palette order. Drop unknown
+    // emojis defensively (shouldn't happen — action validates against
+    // the same palette — but safer than rendering junk).
+    const byEmoji = new Map<string, { count: number; userReacted: boolean }>();
+    for (const r of n.reactions) {
+      if (!(REACTION_EMOJIS as readonly string[]).includes(r.emoji)) continue;
+      const entry = byEmoji.get(r.emoji) ?? { count: 0, userReacted: false };
+      entry.count += 1;
+      if (r.userId === userId) entry.userReacted = true;
+      byEmoji.set(r.emoji, entry);
+    }
+    const reactions = REACTION_EMOJIS.filter((e) => byEmoji.has(e)).map(
+      (emoji) => ({
+        emoji,
+        count: byEmoji.get(emoji)!.count,
+        userReacted: byEmoji.get(emoji)!.userReacted,
+      })
+    );
+
     return {
       id: n.id,
       type: n.type,
@@ -261,6 +298,7 @@ export async function getMatterNotes(matterId: string): Promise<NoteRow[]> {
       parentNoteId: n.parentNoteId,
       link,
       isRead: n.reads.length > 0,
+      reactions,
     };
   });
 }

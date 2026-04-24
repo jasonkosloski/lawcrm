@@ -20,7 +20,11 @@ import DOMPurify from "isomorphic-dompurify";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-import { NOTE_TYPES, type NoteFormState } from "@/lib/note-constants";
+import {
+  NOTE_TYPES,
+  REACTION_EMOJIS,
+  type NoteFormState,
+} from "@/lib/note-constants";
 import { captureSchema } from "@/lib/capture-schemas";
 
 /** Tags + attributes allowed through from the Tiptap editor. Keep this
@@ -418,5 +422,46 @@ export async function markMatterNotesRead(
       });
     }
   });
+  return { ok: true };
+}
+
+// ── Reactions ───────────────────────────────────────────────────────────
+
+/** Toggle the current user's reaction with `emoji` on the target
+ *  note: if the (user, note, emoji) row already exists, delete it;
+ *  otherwise create it. Validates emoji against the curated palette
+ *  so the DB doesn't accumulate arbitrary strings. */
+export async function toggleNoteReaction(
+  noteId: string,
+  emoji: string
+): Promise<{ ok: boolean; error?: string }> {
+  if (!(REACTION_EMOJIS as readonly string[]).includes(emoji)) {
+    return { ok: false, error: "Emoji not in reaction palette" };
+  }
+
+  const note = await prisma.note.findUnique({
+    where: { id: noteId },
+    select: { id: true, matterId: true, calendarEventId: true },
+  });
+  if (!note) return { ok: false, error: "Note not found" };
+
+  const userId = await getCurrentUserId();
+  const key = { userId, noteId, emoji };
+  const existing = await prisma.noteReaction.findUnique({
+    where: { userId_noteId_emoji: key },
+    select: { userId: true },
+  });
+  if (existing) {
+    await prisma.noteReaction.delete({ where: { userId_noteId_emoji: key } });
+  } else {
+    await prisma.noteReaction.create({ data: key });
+  }
+
+  revalidatePath(`/matters/${note.matterId}/notes`);
+  revalidatePath(`/matters/${note.matterId}`);
+  if (note.calendarEventId) {
+    revalidatePath(`/matters/${note.matterId}/events`);
+    revalidatePath(`/calendar`);
+  }
   return { ok: true };
 }

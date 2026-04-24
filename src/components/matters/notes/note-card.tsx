@@ -31,8 +31,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { deleteNote, toggleNotePin } from "@/app/actions/notes";
 import { NOTE_TYPE_LABEL, type NoteType } from "@/lib/note-constants";
-import type { NoteLink } from "@/lib/queries/matter-detail";
+import type {
+  NoteLink,
+  NoteReactionSummary,
+} from "@/lib/queries/matter-detail";
 import { ReplyComposer } from "./reply-composer";
+import { ReactionsBar } from "./reactions-bar";
 
 export type NoteCardNote = {
   id: string;
@@ -45,6 +49,7 @@ export type NoteCardNote = {
   parentNoteId: string | null;
   link: NoteLink | null;
   isRead: boolean;
+  reactions: NoteReactionSummary[];
 };
 
 const formatDateTime = (d: Date): string =>
@@ -179,8 +184,14 @@ export function NoteCard({
           dangerouslySetInnerHTML={{ __html: note.content }}
         />
 
+        {/* Reactions bar — above the reply divider so quick reacts
+            are visually separated from the reply action. */}
+        <div className="mt-3">
+          <ReactionsBar noteId={note.id} reactions={note.reactions} />
+        </div>
+
         {/* Reply control + inline reply composer */}
-        <div className="mt-3 pt-2 border-t border-line">
+        <div className="mt-2 pt-2 border-t border-line">
           {replyOpen ? (
             <ReplyComposer
               matterId={matterId}

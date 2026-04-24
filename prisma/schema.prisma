@@ -47,6 +47,7 @@ model User {
   flaggedMoments    FlaggedMoment[]
   matterPins        UserMatterPin[]
   noteReads         NoteRead[]
+  noteReactions     NoteReaction[]
 
   @@map("users")
 }
@@ -402,6 +403,26 @@ model NoteRead {
   @@id([userId, noteId])
   @@index([noteId])
   @@map("note_reads")
+}
+
+/// Emoji reaction on a note. Each (user, note, emoji) tuple is
+/// unique — a user can add multiple different emojis to the same
+/// note but can't stack the same one twice. Emoji is stored as its
+/// literal character (e.g. "👍"); the UI draws from a small curated
+/// palette so we don't need an EmojiDefinition table.
+model NoteReaction {
+  userId    String
+  noteId    String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@id([userId, noteId, emoji])
+  @@index([noteId])
+  @@index([noteId, emoji])
+  @@map("note_reactions")
 }
 
 /// A calendar event — hearings, depositions, meetings, blocks, etc.
@@ -763,6 +784,7 @@ model Note {
   deadline  Deadline?      @relation("DeadlineNotes", fields: [deadlineId], references: [id], onDelete: SetNull)
   timeEntry TimeEntry?     @relation("TimeEntryNotes", fields: [timeEntryId], references: [id], onDelete: SetNull)
   reads     NoteRead[]
+  reactions NoteReaction[]
 
   @@index([matterId])
   @@index([parentNoteId])

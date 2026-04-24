@@ -27,6 +27,14 @@ export type NoteFormState = {
 
 export const noteInitialState: NoteFormState = { status: "idle" };
 
+// ── Reactions ──────────────────────────────────────────────────────────
+
+/** Curated palette of quick-react emojis. Kept small so the picker
+ *  stays focused and the emoji column in the DB doesn't become a
+ *  free-for-all. Order here is the order they appear in the picker. */
+export const REACTION_EMOJIS = ["👍", "❤️", "✅", "🎉", "👀", "🔥"] as const;
+export type ReactionEmoji = (typeof REACTION_EMOJIS)[number];
+
 // ── Captures (attached records) ────────────────────────────────────────
 
 export const TASK_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
