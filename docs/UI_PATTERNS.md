@@ -227,9 +227,14 @@ announced court date, without losing either in progress.
    button, empty-state CTA) call `open(type)` — URL params are not
    involved.
 3. `MatterCreateDock` renders the current focused panel (docked
-   right-rail or expanded modal), plus a chip for each non-focused
-   open panel at bottom-right of the viewport. Chips show the
-   panel's type + label; click to focus, × to close.
+   right-rail or expanded modal). Non-focused open panels render as
+   compact chips **inside the focused panel's chrome, right below
+   its header** (under an "Also open" label). Keeping chips adjacent
+   to the active panel — instead of floating in the viewport corner
+   — means they're always in the user's line of sight and never
+   overlap the active panel's own controls. The "Also open" strip
+   only renders when there are 2+ open panels; a single panel keeps
+   the chrome quiet.
 4. **Form state lives in the provider** (`panel.formState`) keyed
    by panel id, NOT in the panel's React component. This lets the
    panel UI mount and unmount freely as focus shifts — the user's

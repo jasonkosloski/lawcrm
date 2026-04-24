@@ -3,7 +3,9 @@
  *
  * Renders the open Create panels for the current matter:
  *   - Focused panel: docked right-rail (or expanded modal)
- *   - Non-focused panels: minimized chips at bottom-right
+ *   - Non-focused panels: compact chips docked inside the focused
+ *     panel's chrome (right below the header), so the chip row sits
+ *     next to the active panel rather than floating in a corner
  *
  * Mounted once in the matter detail layout, inside the
  * MatterCreateStackProvider. Reads everything from that provider.
@@ -90,9 +92,12 @@ export function MatterCreateDock() {
         >
           <PanelChrome
             panel={focused}
+            minimized={minimized}
             onClose={() => close(focused.id)}
             onExpand={() => setExpanded(focused.id, true)}
             onCollapse={() => setExpanded(focused.id, false)}
+            onChipFocus={focus}
+            onChipClose={close}
           />
         </aside>
       )}
@@ -112,6 +117,7 @@ export function MatterCreateDock() {
           >
             <PanelChrome
               panel={focused}
+              minimized={minimized}
               expanded
               matterName={matterName}
               matterCaseNumber={matterCaseNumber}
@@ -119,18 +125,11 @@ export function MatterCreateDock() {
               onClose={() => close(focused.id)}
               onExpand={() => setExpanded(focused.id, true)}
               onCollapse={() => setExpanded(focused.id, false)}
+              onChipFocus={focus}
+              onChipClose={close}
             />
           </aside>
         </>
-      )}
-
-      {/* ── Minimized chips (bottom-right fixed) ────────────────── */}
-      {minimized.length > 0 && (
-        <div className="fixed bottom-4 right-4 z-30 flex flex-col gap-2 items-end">
-          {minimized.map((p) => (
-            <Chip key={p.id} panel={p} onFocus={() => focus(p.id)} onClose={() => close(p.id)} />
-          ))}
-        </div>
       )}
     </>
   );
@@ -140,6 +139,7 @@ export function MatterCreateDock() {
 
 function PanelChrome({
   panel,
+  minimized,
   expanded,
   matterName,
   matterCaseNumber,
@@ -147,8 +147,11 @@ function PanelChrome({
   onClose,
   onExpand,
   onCollapse,
+  onChipFocus,
+  onChipClose,
 }: {
   panel: CreatePanel;
+  minimized: CreatePanel[];
   expanded?: boolean;
   matterName?: string;
   matterCaseNumber?: string | null;
@@ -156,6 +159,8 @@ function PanelChrome({
   onClose: () => void;
   onExpand: () => void;
   onCollapse: () => void;
+  onChipFocus: (id: string) => void;
+  onChipClose: (id: string) => void;
 }) {
   const entry = findMatterCreateEntry(panel.type);
   if (!entry) return null;
@@ -212,6 +217,25 @@ function PanelChrome({
         </div>
       )}
 
+      {/* Minimized-panel chips — inline below the header, next to the
+          active panel. Only renders when there are actually other
+          panels open, so single-panel flows stay visually quiet. */}
+      {minimized.length > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap px-3 py-2 border-b border-line shrink-0 bg-paper-2/30">
+          <span className="text-2xs font-mono uppercase tracking-wider text-ink-4 mr-1">
+            Also open
+          </span>
+          {minimized.map((m) => (
+            <InlineChip
+              key={m.id}
+              panel={m}
+              onFocus={() => onChipFocus(m.id)}
+              onClose={() => onChipClose(m.id)}
+            />
+          ))}
+        </div>
+      )}
+
       {/* Body — placeholder for now */}
       <div className="flex-1 overflow-y-auto p-4">
         <div className="flex flex-col gap-3">
@@ -259,9 +283,9 @@ function PanelChrome({
   );
 }
 
-// ── Minimized chip ───────────────────────────────────────────────────────
+// ── Inline chip for minimized panels ─────────────────────────────────────
 
-function Chip({
+function InlineChip({
   panel,
   onFocus,
   onClose,
@@ -276,28 +300,28 @@ function Chip({
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-2 h-8 pl-2.5 pr-1 rounded-full",
-        "bg-white border border-line shadow-md",
-        "text-xs text-ink-2"
+        "inline-flex items-center gap-1 h-6 pl-1.5 pr-0.5 rounded-full",
+        "bg-white border border-line text-2xs text-ink-2",
+        "hover:border-brand-300"
       )}
     >
       <button
         type="button"
         onClick={onFocus}
-        className="inline-flex items-center gap-1.5 min-w-0 h-full hover:text-brand-700"
-        title={`Open ${entry.label}`}
+        className="inline-flex items-center gap-1 min-w-0 h-full hover:text-brand-700"
+        title={`Switch to ${entry.label}`}
       >
-        <Icon size={13} className="text-ink-3 shrink-0" />
-        <span className="font-medium truncate max-w-32">{entry.label}</span>
+        <Icon size={11} className="text-ink-3 shrink-0" />
+        <span className="font-medium truncate max-w-24">{entry.label}</span>
       </button>
       <button
         type="button"
         onClick={onClose}
         aria-label={`Close ${entry.label}`}
         title="Close"
-        className="p-1 rounded-full text-ink-4 hover:bg-muted hover:text-ink-2"
+        className="p-0.5 rounded-full text-ink-4 hover:bg-muted hover:text-ink-2"
       >
-        <X size={12} />
+        <X size={10} />
       </button>
     </div>
   );
