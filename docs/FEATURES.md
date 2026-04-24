@@ -40,6 +40,7 @@ Status legend: `[ ]` planned · `[~]` in progress · `[x]` complete · `[-]` des
 - [x] **Matter detail — Deadlines tab** — Table with due date, days remaining, kind (critical / auto-rule / manual), source (statute / scheduling order / rule), owner, status; overdue deadlines flagged in warn color
 - [x] **Matter detail — Tasks tab** — Grouped by status (Open / In progress / In review / Done / Cancelled) with priority chip, due date, owner
 - [x] **Matter detail — Notes tab** — Card list with type chip (Note / Strategy / Chatter / Memo), author avatar, timestamp; pinned notes float to top
+- [x] **Matter detail — Events tab** — Calendar events linked to this matter split into Upcoming / Past with time, type chip, location, attendee count; clicking opens the same EventDetailModal as the calendar page via `?event=<id>`
 - [ ] **Matter detail — Billing tab** — WIP, time entries, invoices for this matter (placeholder route exists)
 - [ ] **New matter form** — Create matter with stage, area, client, team assignment
 

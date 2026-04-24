@@ -174,6 +174,50 @@ export async function getMatterNotes(matterId: string): Promise<NoteRow[]> {
   }));
 }
 
+// ── Events ───────────────────────────────────────────────────────────────
+
+export type MatterEventRow = {
+  id: string;
+  title: string;
+  type: string;
+  startTime: Date;
+  endTime: Date;
+  isAllDay: boolean;
+  location: string | null;
+  zoomUrl: string | null;
+  color: string;
+  attendeeCount: number;
+  /** True when the event is in the future relative to "now". */
+  isUpcoming: boolean;
+};
+
+export async function getMatterEvents(
+  matterId: string
+): Promise<MatterEventRow[]> {
+  const rows = await prisma.calendarEvent.findMany({
+    where: { matterId },
+    include: {
+      matter: { select: { color: true } },
+      _count: { select: { attendees: true } },
+    },
+    orderBy: { startTime: "asc" },
+  });
+  const now = Date.now();
+  return rows.map((e) => ({
+    id: e.id,
+    title: e.title,
+    type: e.type,
+    startTime: e.startTime,
+    endTime: e.endTime,
+    isAllDay: e.isAllDay,
+    location: e.location,
+    zoomUrl: e.zoomUrl,
+    color: e.matter?.color ?? e.color ?? "var(--color-ink-3)",
+    attendeeCount: e._count.attendees,
+    isUpcoming: e.endTime.getTime() >= now,
+  }));
+}
+
 // ── Documents ────────────────────────────────────────────────────────────
 
 export type DocumentRow = {

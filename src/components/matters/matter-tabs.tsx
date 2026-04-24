@@ -29,6 +29,7 @@ import { useCreateStack } from "@/components/create-stack/create-stack-provider"
 const TABS = [
   { slug: "", label: "Overview" },
   { slug: "timeline", label: "Timeline" },
+  { slug: "events", label: "Events" },
   { slug: "documents", label: "Documents" },
   { slug: "parties", label: "Parties" },
   { slug: "deadlines", label: "Deadlines" },
@@ -41,6 +42,7 @@ const TABS = [
  *  Tabs not in this map (Overview, Timeline, Billing) have no contextual
  *  single-add action, so no button renders for them. */
 const TAB_ADD_TYPE: Record<string, MatterCreateType> = {
+  events: "event",
   documents: "document",
   parties: "party",
   deadlines: "deadline",
