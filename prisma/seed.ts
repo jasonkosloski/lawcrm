@@ -1051,6 +1051,405 @@ async function main() {
   });
 
   // ─────────────────────────────────────────────────────────────────────
+  // Email account + threads for Jason (Communication page demo data)
+  // ─────────────────────────────────────────────────────────────────────
+  console.log("  Creating email account + threads…");
+  const jasonAccount = await prisma.emailAccount.create({
+    data: {
+      userId: jason.id,
+      provider: "gmail",
+      emailAddress: "jkosloski@kosloskilaw.com",
+      syncStatus: "connected",
+      lastSyncAt: NOW,
+      threadsIndexed: 847,
+    },
+  });
+
+  const JASON_EMAIL = "jkosloski@kosloskilaw.com";
+
+  type ThreadSeed = {
+    subject: string;
+    snippet: string;
+    matterId: string | null;
+    lastMessageAt: Date;
+    isRead: boolean;
+    isStarred: boolean;
+    hasAttachments: boolean;
+    labels?: string[];
+    messages: Array<{
+      fromName: string;
+      fromEmail: string;
+      toRecipients: Array<{ name: string; email: string }>;
+      ccRecipients?: Array<{ name: string; email: string }>;
+      body: string;
+      sentAt: Date;
+      isPrivileged?: boolean;
+      attachments?: Array<{
+        filename: string;
+        contentType: string;
+        fileSize: number;
+      }>;
+    }>;
+  };
+
+  const threadSeeds: ThreadSeed[] = [
+    {
+      subject: "Rule 26 disclosures — schedule",
+      snippet:
+        "Attached the initial disclosures. We propose discovery cutoff of…",
+      matterId: matters.williams.id,
+      lastMessageAt: hoursAgo(3),
+      isRead: false,
+      isStarred: true,
+      hasAttachments: true,
+      labels: ["opposing_counsel"],
+      messages: [
+        {
+          fromName: "A. McGrath",
+          fromEmail: "a.mcgrath@denvergov.org",
+          toRecipients: [{ name: "Jason Kosloski", email: JASON_EMAIL }],
+          ccRecipients: [
+            { name: "Rachel Kim", email: "rachel@kosloskilaw.com" },
+          ],
+          body: `Counsel,
+
+Attached are the City's initial Rule 26 disclosures. We propose a discovery cutoff of July 15 and expert disclosures on staggered dates per the attached schedule.
+
+Please confirm by EOD Friday so I can circulate a joint proposed order.
+
+Best,
+A. McGrath
+Senior Counsel
+Denver City Attorney's Office`,
+          sentAt: hoursAgo(3),
+          attachments: [
+            {
+              filename: "Denver — Rule 26 disclosures.pdf",
+              contentType: "application/pdf",
+              fileSize: 284_112,
+            },
+            {
+              filename: "Proposed schedule.pdf",
+              contentType: "application/pdf",
+              fileSize: 98_420,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      subject: "CORA request — Officer Doe UOF history",
+      snippet: "We're following up on the CORA request filed 4/02 regarding…",
+      matterId: matters.alvarez.id,
+      lastMessageAt: hoursAgo(6),
+      isRead: false,
+      isStarred: false,
+      hasAttachments: false,
+      messages: [
+        {
+          fromName: "Marco Guerra",
+          fromEmail: "marco@kosloskilaw.com",
+          toRecipients: [
+            { name: "APD Records", email: "records@aurorapd.org" },
+          ],
+          ccRecipients: [{ name: "Jason Kosloski", email: JASON_EMAIL }],
+          body: `APD Records,
+
+Following up on CORA request #A-2023-441 filed April 2. We requested Officer J. Doe's (badge #4412) use-of-force history for the past 5 years, including any internal affairs findings.
+
+Per CRS §24-72-205(6), the statutory response window closes this Friday. Please confirm receipt and provide a production schedule.
+
+Regards,
+Marco Guerra
+Investigator, Kosloski Law`,
+          sentAt: hoursAgo(48),
+        },
+        {
+          fromName: "APD Records",
+          fromEmail: "records@aurorapd.org",
+          toRecipients: [
+            { name: "Marco Guerra", email: "marco@kosloskilaw.com" },
+          ],
+          body: `Mr. Guerra,
+
+Request acknowledged. We require an additional 7 business days per CRS §24-72-203(3)(b). Production expected by April 30.
+
+— APD Records`,
+          sentAt: hoursAgo(6),
+        },
+      ],
+    },
+    {
+      subject: "Meet & confer — MTD briefing",
+      snippet:
+        "Proposing Thursday 2pm for the meet & confer on the pending MTD…",
+      matterId: matters.alvarez.id,
+      lastMessageAt: hoursAgo(26),
+      isRead: true,
+      isStarred: false,
+      hasAttachments: false,
+      labels: ["opposing_counsel"],
+      messages: [
+        {
+          fromName: "Ruben Alvarado",
+          fromEmail: "r.alvarado@aurora.gov",
+          toRecipients: [{ name: "Jason Kosloski", email: JASON_EMAIL }],
+          body: `Jason,
+
+Proposing Thursday 4/25 at 2pm for the meet & confer on the pending MTD. We have a few narrow issues to discuss on the Monell claim; shouldn't take more than 30 minutes.
+
+Zoom or phone — your preference.
+
+Best,
+Ruben Alvarado
+Deputy City Attorney, Aurora`,
+          sentAt: hoursAgo(26),
+        },
+      ],
+    },
+    {
+      subject: "Memorial lien — revised reduction",
+      snippet:
+        "Memorial came back with $8,200 — that's 34% off original. Recommend accepting…",
+      matterId: matters.rivera.id,
+      lastMessageAt: hoursAgo(28),
+      isRead: true,
+      isStarred: true,
+      hasAttachments: true,
+      messages: [
+        {
+          fromName: "Rachel Kim",
+          fromEmail: "rachel@kosloskilaw.com",
+          toRecipients: [{ name: "Jason Kosloski", email: JASON_EMAIL }],
+          body: `Jason,
+
+Memorial Hospital came back on the Rivera lien negotiation. They'll accept $8,200 — that's 34% off the original $12,400. Reasoning: the billed rates exceed what Medicare would've paid for comparable care.
+
+Client net impact: adds ~$4,200 to Carla's distribution.
+
+Recommend we accept. Need your sign-off.
+
+— Rachel`,
+          sentAt: hoursAgo(28),
+          isPrivileged: true,
+          attachments: [
+            {
+              filename: "Memorial lien — revised letter.pdf",
+              contentType: "application/pdf",
+              fileSize: 62_800,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      subject: "Dr. Singh expert engagement — retainer",
+      snippet:
+        "Engagement letter attached. Retainer $7,500 on receipt. Looking forward to working together…",
+      matterId: matters.alvarez.id,
+      lastMessageAt: daysFromNow(-2, 10, 15),
+      isRead: true,
+      isStarred: false,
+      hasAttachments: true,
+      messages: [
+        {
+          fromName: "Dr. M. Singh",
+          fromEmail: "msingh@ohealth.org",
+          toRecipients: [{ name: "Jason Kosloski", email: JASON_EMAIL }],
+          body: `Jason,
+
+Engagement letter attached. Retainer is $7,500 on receipt, standard hourly after. CV and testimony log are also attached per the disclosure schedule.
+
+I've blocked May 6–7 for a full records review and can do a video consult on 5/8 to walk through findings. Let me know if that works.
+
+Best,
+Meera Singh, MD
+Orthopedic Health`,
+          sentAt: daysFromNow(-2, 10, 15),
+          attachments: [
+            {
+              filename: "Singh engagement letter.pdf",
+              contentType: "application/pdf",
+              fileSize: 142_300,
+            },
+            {
+              filename: "Singh CV (2026).pdf",
+              contentType: "application/pdf",
+              fileSize: 198_040,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      subject: "Client update — next steps post-Rule 26",
+      snippet:
+        "Derek — quick summary of where we are. Disclosures went out today; we expect…",
+      matterId: matters.williams.id,
+      lastMessageAt: daysFromNow(-3, 16, 22),
+      isRead: true,
+      isStarred: false,
+      hasAttachments: false,
+      messages: [
+        {
+          fromName: "Jason Kosloski",
+          fromEmail: JASON_EMAIL,
+          toRecipients: [
+            { name: "Derek Williams", email: "d.williams@email.com" },
+          ],
+          body: `Derek,
+
+Quick summary of where we are on your case:
+
+• Initial disclosures went out today. Denver has 21 days to respond.
+• We've subpoenaed the body-cam footage and 911 dispatch tapes.
+• Expert discovery opens May 15 — we'll be retaining a policing-practices expert.
+
+Trial is still set for July 2 but realistically we'll spend the summer in discovery. Settlement window opens if/when Denver sees our expert's report.
+
+Any questions, call anytime.
+
+Jason`,
+          sentAt: daysFromNow(-3, 16, 22),
+        },
+        {
+          fromName: "Derek Williams",
+          fromEmail: "d.williams@email.com",
+          toRecipients: [{ name: "Jason Kosloski", email: JASON_EMAIL }],
+          body: `Jason — thanks for the clear update. Appreciate it. Will you be in touch before the 15th?`,
+          sentAt: daysFromNow(-3, 17, 5),
+        },
+      ],
+    },
+    {
+      subject: "Intake — Priya Patel follow-up",
+      snippet:
+        "Sending the retainer + conflict check confirmation. Welcome to Kosloski Law…",
+      matterId: matters.patel.id,
+      lastMessageAt: daysFromNow(-10, 11, 30),
+      isRead: true,
+      isStarred: false,
+      hasAttachments: true,
+      messages: [
+        {
+          fromName: "Elena Serrano",
+          fromEmail: "elena@kosloskilaw.com",
+          toRecipients: [{ name: "Priya Patel", email: "ppatel@email.com" }],
+          ccRecipients: [
+            { name: "Rachel Kim", email: "rachel@kosloskilaw.com" },
+          ],
+          body: `Priya,
+
+Welcome to Kosloski Law. Attached:
+
+• Engagement letter
+• Rachel's contact info — she's your paralegal lead
+• FHA intake questionnaire (short)
+
+Please return the signed engagement letter at your earliest convenience. We'll follow up next week to schedule a kickoff call.
+
+Best,
+Elena Serrano
+Intake Coordinator`,
+          sentAt: daysFromNow(-10, 11, 30),
+          attachments: [
+            {
+              filename: "Engagement letter — Patel.pdf",
+              contentType: "application/pdf",
+              fileSize: 124_000,
+            },
+            {
+              filename: "FHA intake questionnaire.pdf",
+              contentType: "application/pdf",
+              fileSize: 84_200,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      subject: "PACER filing notification — Alvarez",
+      snippet:
+        "U.S. District Court, District of Colorado / 2026-CV-00481 / Minute Order…",
+      matterId: matters.alvarez.id,
+      lastMessageAt: hoursAgo(2),
+      isRead: false,
+      isStarred: false,
+      hasAttachments: true,
+      labels: ["auto_filed"],
+      messages: [
+        {
+          fromName: "PACER (Notices)",
+          fromEmail: "noreply@pacer.psc.uscourts.gov",
+          toRecipients: [{ name: "Jason Kosloski", email: JASON_EMAIL }],
+          body: `This is an automatic notification from the United States District Court for the District of Colorado.
+
+Case: Alvarez v. City of Aurora et al. (2026-CV-00481)
+Document #42: Minute Order on Motion to Compel
+Filed: 04/24/2026
+
+A copy of the document is available through PACER and is attached for your records. Response deadlines, if any, will run from the date of service.
+
+— PACER NEF`,
+          sentAt: hoursAgo(2),
+          attachments: [
+            {
+              filename: "ECF 42 — Minute Order on MTC.pdf",
+              contentType: "application/pdf",
+              fileSize: 156_720,
+            },
+          ],
+        },
+      ],
+    },
+  ];
+
+  for (const t of threadSeeds) {
+    const thread = await prisma.emailThread.create({
+      data: {
+        accountId: jasonAccount.id,
+        matterId: t.matterId,
+        subject: t.subject,
+        snippet: t.snippet,
+        isRead: t.isRead,
+        isStarred: t.isStarred,
+        hasAttachments: t.hasAttachments,
+        messageCount: t.messages.length,
+        lastMessageAt: t.lastMessageAt,
+        labels: t.labels
+          ? { create: t.labels.map((label) => ({ label })) }
+          : undefined,
+      },
+    });
+    for (const msg of t.messages) {
+      const created = await prisma.emailMessage.create({
+        data: {
+          threadId: thread.id,
+          fromName: msg.fromName,
+          fromEmail: msg.fromEmail,
+          toRecipients: JSON.stringify(msg.toRecipients),
+          ccRecipients: msg.ccRecipients
+            ? JSON.stringify(msg.ccRecipients)
+            : null,
+          body: msg.body,
+          sentAt: msg.sentAt,
+          isPrivileged: msg.isPrivileged ?? false,
+        },
+      });
+      if (msg.attachments && msg.attachments.length > 0) {
+        await prisma.emailAttachment.createMany({
+          data: msg.attachments.map((a) => ({
+            messageId: created.id,
+            filename: a.filename,
+            contentType: a.contentType,
+            fileSize: a.fileSize,
+          })),
+        });
+      }
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
   // Summary
   // ─────────────────────────────────────────────────────────────────────
   const counts = await Promise.all([
@@ -1063,6 +1462,7 @@ async function main() {
     prisma.timeEntry.count(),
     prisma.activityLog.count(),
     prisma.task.count(),
+    prisma.emailThread.count(),
   ]);
   console.log("\n✅ Seed complete:");
   console.log(`   ${counts[0]} users`);
@@ -1074,6 +1474,7 @@ async function main() {
   console.log(`   ${counts[6]} time entries`);
   console.log(`   ${counts[7]} activity log entries`);
   console.log(`   ${counts[8]} tasks`);
+  console.log(`   ${counts[9]} email threads`);
 }
 
 main()
