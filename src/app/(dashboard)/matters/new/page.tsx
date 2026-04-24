@@ -1,44 +1,54 @@
 /**
- * New Matter — placeholder
+ * New Matter page
  *
- * The full create-matter form is a Phase 2 follow-up (needs: basic
- * fields, client picker / create-new flow, team assignment, stage +
- * area defaults, automation hookups). Route exists now so the
- * "New matter" button in the list header goes somewhere useful.
+ * First-pass form for creating a matter. Fetches the dropdown options
+ * (active client contacts + firm users) server-side and hands them to
+ * the client form component. Submission goes through the
+ * `createMatter` server action which creates the matter + assigns the
+ * selected lead + optionally pins it for the creator, then redirects
+ * to the new matter's detail page.
  */
 
-import Link from "next/link";
 import { TopBar } from "@/components/layout/topbar";
 import { Card, CardContent } from "@/components/ui/card";
+import { NewMatterForm } from "@/components/matters/new-matter-form";
+import { prisma } from "@/lib/prisma";
+import { getCurrentUserId } from "@/lib/current-user";
 
-export default function NewMatterPage() {
+export default async function NewMatterPage() {
+  const [clients, users, currentUserId] = await Promise.all([
+    prisma.contact.findMany({
+      where: { type: "client", isActive: true },
+      select: { id: true, name: true, organization: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.user.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, role: true, initials: true },
+      orderBy: { name: "asc" },
+    }),
+    getCurrentUserId(),
+  ]);
+
   return (
     <>
       <TopBar title="New matter" crumbs="Matters / New" />
       <div className="flex-1 overflow-y-auto p-5 animate-page-enter">
-        <div className="max-w-2xl">
+        <div className="max-w-3xl">
           <Card>
-            <CardContent className="p-8">
-              <div className="text-sm font-semibold text-ink mb-2">
-                Create-matter form coming soon
-              </div>
-              <div className="text-xs text-ink-3 leading-relaxed mb-4">
-                The full form will capture: matter name + case number,
-                practice area, stage, client (pick existing Contact or
-                create a new one inline), opposing party + firm, court,
-                fee structure, team assignments, and optional automations
-                to run on creation (e.g. CGIA notice generation for §1983
-                matters). Until that lands, matters are created via the
-                seed script or Prisma Studio.
-              </div>
-              <Link
-                href="/matters"
-                className="text-xs text-brand-700 hover:underline"
-              >
-                ← Back to all matters
-              </Link>
+            <CardContent className="p-5">
+              <NewMatterForm
+                options={{ clients, users, currentUserId }}
+              />
             </CardContent>
           </Card>
+
+          <div className="text-2xs text-ink-4 mt-3">
+            First-pass form. Team assignment beyond the lead, tagging
+            to existing leads, automation hookups (CGIA notice
+            generation for §1983, etc.), and inline client creation
+            are all follow-ups.
+          </div>
         </div>
       </div>
     </>

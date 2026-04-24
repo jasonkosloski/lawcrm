@@ -43,7 +43,7 @@ Status legend: `[ ]` planned · `[~]` in progress · `[x]` complete · `[-]` des
 - [x] **Matter detail — Events tab** — Calendar events linked to this matter split into Upcoming / Past with time, type chip, location, attendee count; clicking opens the same EventDetailModal as the calendar page via `?event=<id>`
 - [x] **Matter detail — Communication tab** — Email threads filed to this matter via `EmailThread.matterId`; embedded thread list links through to the main inbox with the thread preselected
 - [ ] **Matter detail — Billing tab** — WIP, time entries, invoices for this matter (placeholder route exists)
-- [ ] **New matter form** — Create matter with stage, area, client, team assignment
+- [~] **New matter form — v1** — First-pass working form at `/matters/new`: name, practice area, stage, case number, fee structure, client (picks from existing Contacts), lead attorney (picks from firm users), opposing party/firm, court, summary, plus "pin to my sidebar" checkbox. Zod validation + inline field errors via `useActionState`. Server action creates the Matter + MatterTeamMember (lead) + optional UserMatterPin in a single write, revalidates the dashboard layout, redirects to the new matter. Follow-ups: inline client create, multi-member team assignment, tag from an existing Lead, area-specific automations (CGIA notice for §1983, HUD response for FHA, etc.), file upload for intake docs.
 
 ## Phase 3 — Intake
 
