@@ -216,19 +216,29 @@ model Contact {
   @@map("contacts")
 }
 
-/// Join table linking contacts to matters with their specific role in that case.
+/// Join table linking contacts to matters. `category` is the coarse
+/// display bucket the Parties tab groups by (client, opposing,
+/// lay_witness, expert_witness, other); `role` is the optional
+/// finer-grained subdivision the firm can set (plaintiff, defendant,
+/// GAL, medical provider, etc.).
+///
+/// TODO (settings): firm-configurable category list, same pattern as
+/// practice areas in /settings. For now the five categories above
+/// are hardcoded in src/lib/party-constants.ts.
 model MatterContact {
   id        String   @id @default(cuid())
   matterId  String
   contactId String
-  role      String   /// plaintiff | defendant | witness | expert | opposing_counsel | lienholder | medical_provider | judge | guardian_ad_litem
+  category  String   @default("other") /// client | opposing | lay_witness | expert_witness | other
+  role      String?  /// Optional subrole — plaintiff, defendant, opposing_counsel, GAL, medical_provider, etc.
   notes     String?
   createdAt DateTime @default(now())
 
   matter  Matter  @relation(fields: [matterId], references: [id], onDelete: Cascade)
   contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
 
-  @@unique([matterId, contactId, role])
+  @@unique([matterId, contactId, category])
+  @@index([category])
   @@map("matter_contacts")
 }
 

@@ -15,6 +15,7 @@ import type { EventNote, EventTimeEntry } from "@/lib/queries/calendar";
 // ── Parties ──────────────────────────────────────────────────────────────
 
 export type PartyRow = {
+  /** matterContact row id — used for delete/unlink. */
   id: string;
   contactId: string;
   name: string;
@@ -22,8 +23,12 @@ export type PartyRow = {
   email: string | null;
   phone: string | null;
   contactType: string;
-  /** Role *on this matter* (e.g. plaintiff / defendant / witness). */
-  role: string;
+  /** Coarse display bucket — client / opposing / lay_witness /
+   *  expert_witness / other. */
+  category: string;
+  /** Optional finer-grained subrole — plaintiff, defendant,
+   *  opposing counsel, GAL, medical provider, etc. */
+  role: string | null;
   notes: string | null;
   conflictStatus: string;
 };
@@ -44,7 +49,7 @@ export async function getMatterParties(matterId: string): Promise<PartyRow[]> {
         },
       },
     },
-    orderBy: [{ role: "asc" }, { createdAt: "asc" }],
+    orderBy: [{ category: "asc" }, { createdAt: "asc" }],
   });
   return rows.map((r) => ({
     id: r.id,
@@ -54,6 +59,7 @@ export async function getMatterParties(matterId: string): Promise<PartyRow[]> {
     email: r.contact.email,
     phone: r.contact.phone,
     contactType: r.contact.type,
+    category: r.category,
     role: r.role,
     notes: r.notes,
     conflictStatus: r.contact.conflictStatus,

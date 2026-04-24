@@ -547,52 +547,62 @@ async function main() {
     ],
   });
 
-  // Link key contacts to the Alvarez matter (plaintiff, defendants, witness, expert)
+  // Link key contacts to the Alvarez matter. `category` is the
+  // display bucket; `role` is the finer-grained subrole.
   await prisma.matterContact.createMany({
     data: [
       {
         matterId: matters.alvarez.id,
         contactId: contacts.mariaAlvarez.id,
+        category: "client",
         role: "plaintiff",
       },
       {
         matterId: matters.alvarez.id,
         contactId: contacts.cityOfAurora.id,
+        category: "opposing",
         role: "defendant",
       },
       {
         matterId: matters.alvarez.id,
         contactId: contacts.officerDoe.id,
+        category: "opposing",
         role: "defendant",
       },
       {
         matterId: matters.alvarez.id,
         contactId: contacts.sgtCarter.id,
+        category: "lay_witness",
         role: "witness",
       },
       {
         matterId: matters.alvarez.id,
         contactId: contacts.drSingh.id,
+        category: "expert_witness",
         role: "expert",
       },
       {
         matterId: matters.williams.id,
         contactId: contacts.derekWilliams.id,
+        category: "client",
         role: "plaintiff",
       },
       {
         matterId: matters.williams.id,
         contactId: contacts.denverCityAtty.id,
+        category: "opposing",
         role: "opposing_counsel",
       },
       {
         matterId: matters.rivera.id,
         contactId: contacts.carlaRivera.id,
+        category: "client",
         role: "plaintiff",
       },
       {
         matterId: matters.rivera.id,
         contactId: contacts.memorialHospital.id,
+        category: "other",
         role: "lienholder",
       },
     ],

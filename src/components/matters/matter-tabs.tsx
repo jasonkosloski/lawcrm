@@ -48,7 +48,6 @@ const TABS = [
 const TAB_ADD_TYPE: Record<string, MatterCreateType> = {
   events: "event",
   documents: "document",
-  parties: "party",
   deadlines: "deadline",
   tasks: "task",
   time: "time",
