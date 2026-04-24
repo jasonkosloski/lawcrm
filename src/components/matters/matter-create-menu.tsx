@@ -1,20 +1,17 @@
 /**
  * Matter Create Menu
  *
- * "+ Create" dropdown in the matter detail header. Opens the
- * `MatterCreatePanel` (docked right sidebar) by adding `?create=<type>`
- * to the current URL. The panel persists across in-matter tab
- * navigation so form state survives while the user explores the matter.
+ * "+ Create" dropdown in the matter detail header. Opens a new panel
+ * in the matter Create stack via `useMatterCreateStack().open(type)`.
+ * Multiple panels can be open at once — each new open minimizes the
+ * current focused panel to a chip at bottom-right.
  *
  * Entries come from the shared registry in
- * `src/lib/matter-create-types.ts` — shared with the panel so the type
- * list stays in sync.
+ * `src/lib/matter-create-types.ts`.
  */
 
 "use client";
 
-import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
 import {
   Calendar,
   Clock,
@@ -42,6 +39,7 @@ import {
   type MatterCreateEntry,
   type MatterCreateGroup,
 } from "@/lib/matter-create-types";
+import { useMatterCreateStack } from "./matter-create-stack-provider";
 
 const ICON_MAP: Record<MatterCreateEntry["icon"], LucideIcon> = {
   clock: Clock,
@@ -69,14 +67,7 @@ const GROUP_ORDER: MatterCreateGroup[] = [
 ];
 
 export function MatterCreateMenu() {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
-  const buildHref = (type: string): string => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("create", type);
-    return `${pathname}?${params.toString()}`;
-  };
+  const { open } = useMatterCreateStack();
 
   const byGroup = new Map<MatterCreateGroup, MatterCreateEntry[]>();
   for (const e of MATTER_CREATE_ENTRIES) {
@@ -107,13 +98,7 @@ export function MatterCreateMenu() {
                 return (
                   <DropdownMenuItem
                     key={e.type}
-                    render={
-                      <Link
-                        href={buildHref(e.type)}
-                        replace
-                        scroll={false}
-                      />
-                    }
+                    onClick={() => open(e.type)}
                   >
                     <Icon />
                     {e.label}

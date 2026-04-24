@@ -1,17 +1,20 @@
 /**
  * Matter Detail Layout
  *
- * Header + tab bar around every matter detail tab (Overview, Timeline,
- * Documents, Parties, Deadlines, Tasks, Notes, Billing). Fetches the
- * matter once here so each tab doesn't re-fetch the header data.
+ * Header + tab bar + optional Create dock around every matter detail
+ * tab. Fetches the matter once here so each tab doesn't re-fetch the
+ * header data, and wraps everything in `MatterCreateStackProvider` so
+ * a stack of Create panels can coexist and persist across tab
+ * navigation within the matter.
  *
  * Layout:
- *   TopBar        — crumb "Matters", title = matter name, stage chip +
- *                   area as subtitle, pin toggle in actions
- *   Metadata strip — compact one-line row: color dot, case number,
- *                   client, court, fee, lead
- *   Tab bar       — Overview, Timeline, Documents, …
- *   Tab content   — child route fills remaining height
+ *   TopBar           — matter name/stage/area/pin/Create dropdown
+ *   Metadata strip   — compact one-line row of case facts
+ *   Tab bar          — Overview, Timeline, Documents, …
+ *   <flex row>
+ *     Tab content    — the current tab's page
+ *     Create dock    — focused Create panel (or modal) + chip stack
+ *   </flex row>
  *
  * Next.js 16: dynamic route `params` is a Promise that must be awaited.
  */
@@ -21,7 +24,8 @@ import { TopBar } from "@/components/layout/topbar";
 import { MatterTabs } from "@/components/matters/matter-tabs";
 import { PinToggle } from "@/components/matters/pin-toggle";
 import { MatterCreateMenu } from "@/components/matters/matter-create-menu";
-import { MatterCreatePanel } from "@/components/matters/matter-create-panel";
+import { MatterCreateDock } from "@/components/matters/matter-create-dock";
+import { MatterCreateStackProvider } from "@/components/matters/matter-create-stack-provider";
 import { getMatterById } from "@/lib/queries/matters";
 
 const FEE_LABEL: Record<string, string> = {
@@ -43,7 +47,12 @@ export default async function MatterDetailLayout({
   const leadMember = matter.teamMembers.find((t) => t.role === "lead");
 
   return (
-    <>
+    <MatterCreateStackProvider
+      matterId={matter.id}
+      matterName={matter.name}
+      matterCaseNumber={matter.caseNumber}
+      matterColor={matter.color}
+    >
       <TopBar
         title={matter.name}
         crumbs="Matters"
@@ -102,20 +111,10 @@ export default async function MatterDetailLayout({
 
       <MatterTabs matterId={matter.id} />
 
-      {/* Tab content + optional right-docked Create panel.
-          Panel is controlled by the `?create=<type>` URL param and
-          mounts here in the layout — it persists across tab navigation
-          within the matter, so form drafts survive as the user
-          explores Overview / Parties / Notes / etc. */}
       <div className="flex-1 flex min-h-0">
         <div className="flex-1 overflow-y-auto min-w-0">{children}</div>
-        <MatterCreatePanel
-          matterId={matter.id}
-          matterName={matter.name}
-          matterCaseNumber={matter.caseNumber}
-          matterColor={matter.color}
-        />
+        <MatterCreateDock />
       </div>
-    </>
+    </MatterCreateStackProvider>
   );
 }

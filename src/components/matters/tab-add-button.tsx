@@ -1,21 +1,17 @@
 /**
  * Tab Add Button
  *
- * Small client-side button that opens the matter Create panel to a
- * specific type. Used at the top of each matter-detail tab (and
- * inside empty states) so users can add a new item from the relevant
- * context instead of reaching for the global Create dropdown.
+ * Empty-state CTA that opens a new Create panel in the matter stack
+ * for a specific type. Used inside each matter-detail tab's empty
+ * state so users can add their first item without hunting for the
+ * header Create dropdown.
  *
- * Mechanics: builds an href that adds `?create=<type>` to the current
- * URL (preserving any existing query params) and uses `Link` with
- * `replace` + `scroll={false}` so the panel opens without a
- * full-page transition.
+ * Opens via the provider's `open()` which minimizes the current
+ * focused panel (if any) and makes the new one focused.
  */
 
 "use client";
 
-import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
 import {
   Calendar,
   Clock,
@@ -33,6 +29,7 @@ import {
   findMatterCreateEntry,
   type MatterCreateType,
 } from "@/lib/matter-create-types";
+import { useMatterCreateStack } from "./matter-create-stack-provider";
 
 const ICON_MAP: Record<string, LucideIcon> = {
   clock: Clock,
@@ -56,22 +53,15 @@ export function TabAddButton({
   variant?: "default" | "subtle";
   className?: string;
 }) {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const { open } = useMatterCreateStack();
   const entry = findMatterCreateEntry(type);
   if (!entry) return null;
-
-  const params = new URLSearchParams(searchParams.toString());
-  params.set("create", entry.type);
-  const href = `${pathname}?${params.toString()}`;
-
   const Icon = ICON_MAP[entry.icon] ?? Plus;
 
   return (
-    <Link
-      href={href}
-      replace
-      scroll={false}
+    <button
+      type="button"
+      onClick={() => open(entry.type)}
       className={cn(
         "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium transition-colors",
         variant === "default"
@@ -82,6 +72,6 @@ export function TabAddButton({
     >
       <Icon size={13} />
       {entry.label}
-    </Link>
+    </button>
   );
 }

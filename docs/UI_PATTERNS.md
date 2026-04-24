@@ -207,58 +207,62 @@ Extend the contextual section in `command-palette.tsx` gated on the
 appropriate route check (`pathname.startsWith(...)`) or page-provided
 context.
 
-### Layout-Persistent Side Panel (URL-controlled)
+### Layout-Persistent Panel Stack (provider-owned)
 
-Pattern used by the matter-detail **Create** panel (Log time / Add
-note / Add task / etc.). The panel must persist across tab navigation
-within the matter so form drafts survive while the user explores.
+Pattern used by the matter-detail **Create** flow (Log time / Add
+note / Add task / etc.). Multiple concurrent panels are supported —
+common use case: taking notes during a hearing while adding a newly-
+announced court date, without losing either in progress.
 
-**How it works:**
+**Architecture:**
 
-1. The panel component is **mounted in `matters/[id]/layout.tsx`**
-   (not in an individual tab page). Next.js layouts do not remount
-   when their children change, so any React state inside the panel
-   — in particular, form field values — survives navigation between
-   Overview / Tasks / Notes / etc.
-2. Visibility is controlled by a **URL query param**
-   (`?create=<type>`). The panel reads it via `useSearchParams()`
-   and returns `null` when absent. This makes the panel state
-   deep-linkable and shareable.
-3. Tab links **must preserve the current query string** on
-   navigation — otherwise the panel closes on every tab click.
-   `MatterTabs` reads `useSearchParams()` and appends it to each
-   tab href. The same pattern applies to any in-context nav links
-   (breadcrumbs, preview-card "see all →" links) that should keep
-   the panel open.
-4. The panel's close button uses `router.replace` to drop the
-   `?create=` param; the panel then unmounts cleanly and any
-   in-progress form state is discarded.
+1. `MatterCreateStackProvider` (client) is mounted inside
+   `matters/[id]/layout.tsx`. It holds `panels: CreatePanel[]` +
+   `focusedId` in React state. Next.js layouts don't remount on
+   child route changes, so the provider — and everything in it —
+   survives tab navigation within the matter.
+2. `useMatterCreateStack()` exposes `open(type)`, `close(id)`,
+   `focus(id)`, `setExpanded(id, bool)`, and `updateFormState(id,
+   patch)`. Triggers (header Create dropdown, tab-bar contextual
+   button, empty-state CTA) call `open(type)` — URL params are not
+   involved.
+3. `MatterCreateDock` renders the current focused panel (docked
+   right-rail or expanded modal), plus a chip for each non-focused
+   open panel at bottom-right of the viewport. Chips show the
+   panel's type + label; click to focus, × to close.
+4. **Form state lives in the provider** (`panel.formState`) keyed
+   by panel id, NOT in the panel's React component. This lets the
+   panel UI mount and unmount freely as focus shifts — the user's
+   in-progress work is safe regardless of which panel the UI is
+   currently rendering.
+
+**Focus semantics:**
+
+- Opening a new panel minimizes the currently focused one to a chip
+  and makes the new one focused.
+- Clicking a chip focuses that panel (collapsing any expanded state
+  first); the previously focused panel becomes a chip.
+- Closing the focused panel shifts focus to the most recently
+  opened remaining panel, or to nothing if the stack is empty.
+- `Escape` collapses expanded → docked, or closes the focused panel
+  if already docked.
+
+**The panel is single-type by design:** clicking "Add note" means
+the user intends to create a note — letting them flip mid-edit to
+a time entry is confusing and risks losing content. The entry point
+determines the type; to switch, close the panel and open the new
+type (the original stays in its current state as a chip).
 
 **When to reach for this pattern:** any "do something without losing
-context" flow — create forms, quick-edit panels, a details peek.
-Contrast with a modal dialog (blocks interaction) or a full-page
-route (loses the surrounding context).
+context" flow where multiple simultaneous drafts are plausible.
+Contrast with a modal dialog (blocks interaction, one at a time) or
+a full-page route (loses context entirely).
 
-**Expand-to-modal variant:** the Create panel also has a second mode
-triggered by a second URL param (`?create=note&expanded=1`). When
-expanded, the same `<aside>` element swaps to fixed-centered
-positioning with a backdrop — a focus-mode modal for heavier work.
-The expand/collapse button lives in the panel header.
-
-The important implementation detail: the **same single `<aside>`
-element** renders in both modes, with position classes swapping based
-on the `expanded` state. React doesn't unmount subtrees on className
-changes, so any form state inside the panel survives the docked ↔
-expanded transition. The backdrop is rendered as a separate sibling
-fragment so its mount/unmount doesn't affect the form tree. Escape
-key collapses from expanded → docked, or closes outright from docked.
-
-**The panel is single-type by design:** there is no in-panel type
-switcher. Clicking "Add note" means the user intends to create a
-note — letting them flip mid-edit to a time entry is confusing and
-risks losing the note's content. The entry point (header Create
-dropdown, tab-bar contextual button, or empty-state CTA) determines
-the type; changing type means closing and reopening.
+**Deferred:** deep-linking to a specific panel state via URL.
+Previous iteration used `?create=<type>` but the multi-panel model
+doesn't serialize cleanly into query params. If sharing a "start me
+in this create state" link becomes important, add it back as a
+seed-on-mount behavior.
 
 ### Settings Section Layout
 

@@ -9,22 +9,22 @@
  * for tabs where there's an obvious single thing to create (Add
  * party on Parties, Add deadline on Deadlines, etc.). This balances
  * the visual weight of the bar and gives users a CTA without having
- * to reach for the header Create dropdown.
- *
- * Query params on the current URL are preserved on tab navigation so
- * side-panels controlled by `?create=<type>` survive tab clicks.
+ * to reach for the header Create dropdown. The button opens a new
+ * panel in the matter Create stack — the current focused panel (if
+ * any) minimizes to a chip.
  */
 
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   findMatterCreateEntry,
   type MatterCreateType,
 } from "@/lib/matter-create-types";
+import { useMatterCreateStack } from "./matter-create-stack-provider";
 
 const TABS = [
   { slug: "", label: "Overview" },
@@ -50,14 +50,9 @@ const TAB_ADD_TYPE: Record<string, MatterCreateType> = {
 
 export function MatterTabs({ matterId }: { matterId: string }) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const { open } = useMatterCreateStack();
   const base = `/matters/${matterId}`;
-  // Preserve the current query string on tab navigation so side-panels
-  // controlled by URL params (e.g. `?create=note`) survive tab clicks.
-  const qs = searchParams.toString();
-  const suffix = qs ? `?${qs}` : "";
 
-  // Which tab is currently active? Maps to an add-button type if any.
   const activeSlug =
     TABS.find((t) => {
       if (t.slug === "") return pathname === base;
@@ -66,17 +61,11 @@ export function MatterTabs({ matterId }: { matterId: string }) {
   const addType = TAB_ADD_TYPE[activeSlug];
   const addEntry = addType ? findMatterCreateEntry(addType) : undefined;
 
-  const buildCreateHref = (type: MatterCreateType): string => {
-    const params = new URLSearchParams(qs);
-    params.set("create", type);
-    return `${pathname}?${params.toString()}`;
-  };
-
   return (
     <div className="flex items-center border-b border-line px-5">
       <nav className="flex gap-1 flex-1">
         {TABS.map((t) => {
-          const href = (t.slug ? `${base}/${t.slug}` : base) + suffix;
+          const href = t.slug ? `${base}/${t.slug}` : base;
           const active = t.slug === activeSlug;
           return (
             <Link
@@ -96,15 +85,14 @@ export function MatterTabs({ matterId }: { matterId: string }) {
       </nav>
 
       {addEntry && (
-        <Link
-          href={buildCreateHref(addEntry.type)}
-          replace
-          scroll={false}
+        <button
+          type="button"
+          onClick={() => open(addEntry.type)}
           className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium bg-white text-ink-2 border border-line hover:border-brand-300 hover:text-brand-700 transition-colors shrink-0"
         >
           <Plus size={13} />
           {addEntry.label}
-        </Link>
+        </button>
       )}
     </div>
   );
