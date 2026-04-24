@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TabAddButton } from "@/components/matters/tab-add-button";
 import {
   getMatterDocuments,
   type DocumentRow,
@@ -95,14 +96,17 @@ export default async function MatterDocumentsPage({
     return (
       <div className="p-5">
         <Card>
-          <CardContent className="p-8 text-center">
-            <div className="text-sm font-semibold text-ink mb-1">
-              No documents yet
+          <CardContent className="p-8 text-center flex flex-col items-center gap-3">
+            <div>
+              <div className="text-sm font-semibold text-ink mb-1">
+                No documents yet
+              </div>
+              <div className="text-xs text-ink-3">
+                Filings, pleadings, correspondence, contracts, discovery,
+                and expert reports for this matter will appear here.
+              </div>
             </div>
-            <div className="text-xs text-ink-3">
-              Filings, pleadings, correspondence, contracts, discovery,
-              and expert reports for this matter will appear here.
-            </div>
+            <TabAddButton type="document" />
           </CardContent>
         </Card>
       </div>

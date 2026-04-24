@@ -8,6 +8,7 @@
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Pin } from "lucide-react";
+import { TabAddButton } from "@/components/matters/tab-add-button";
 import { getMatterNotes } from "@/lib/queries/matter-detail";
 
 const TYPE_LABEL: Record<string, string> = {
@@ -36,14 +37,17 @@ export default async function MatterNotesPage({
     return (
       <div className="p-5">
         <Card>
-          <CardContent className="p-8 text-center">
-            <div className="text-sm font-semibold text-ink mb-1">
-              No notes yet
+          <CardContent className="p-8 text-center flex flex-col items-center gap-3">
+            <div>
+              <div className="text-sm font-semibold text-ink mb-1">
+                No notes yet
+              </div>
+              <div className="text-xs text-ink-3">
+                Strategy memos, research notes, and internal chatter for this
+                matter will appear here.
+              </div>
             </div>
-            <div className="text-xs text-ink-3">
-              Strategy memos, research notes, and internal chatter for this
-              matter will appear here.
-            </div>
+            <TabAddButton type="note" />
           </CardContent>
         </Card>
       </div>

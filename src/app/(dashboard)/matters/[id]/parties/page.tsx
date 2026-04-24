@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TabAddButton } from "@/components/matters/tab-add-button";
 import { getMatterParties, type PartyRow } from "@/lib/queries/matter-detail";
 
 /** Preferred display order for roles. Unknown roles fall to the end. */
@@ -65,14 +66,17 @@ export default async function MatterPartiesPage({
     return (
       <div className="p-5">
         <Card>
-          <CardContent className="p-8 text-center">
-            <div className="text-sm font-semibold text-ink mb-1">
-              No parties yet
+          <CardContent className="p-8 text-center flex flex-col items-center gap-3">
+            <div>
+              <div className="text-sm font-semibold text-ink mb-1">
+                No parties yet
+              </div>
+              <div className="text-xs text-ink-3">
+                Contacts linked to this matter will appear here — plaintiffs,
+                defendants, witnesses, experts, opposing counsel, and more.
+              </div>
             </div>
-            <div className="text-xs text-ink-3">
-              Contacts linked to this matter will appear here — plaintiffs,
-              defendants, witnesses, experts, opposing counsel, and more.
-            </div>
+            <TabAddButton type="party" />
           </CardContent>
         </Card>
       </div>

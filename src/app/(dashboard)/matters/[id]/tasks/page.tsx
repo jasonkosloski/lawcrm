@@ -6,6 +6,7 @@
  */
 
 import { Card, CardContent } from "@/components/ui/card";
+import { TabAddButton } from "@/components/matters/tab-add-button";
 import {
   getMatterTasks,
   type TaskRow,
@@ -58,14 +59,17 @@ export default async function MatterTasksPage({
     return (
       <div className="p-5">
         <Card>
-          <CardContent className="p-8 text-center">
-            <div className="text-sm font-semibold text-ink mb-1">
-              No tasks yet
+          <CardContent className="p-8 text-center flex flex-col items-center gap-3">
+            <div>
+              <div className="text-sm font-semibold text-ink mb-1">
+                No tasks yet
+              </div>
+              <div className="text-xs text-ink-3">
+                Task checklist for this matter — assignments, due dates, and
+                priorities — will appear here.
+              </div>
             </div>
-            <div className="text-xs text-ink-3">
-              Task checklist for this matter — assignments, due dates, and
-              priorities — will appear here.
-            </div>
+            <TabAddButton type="task" />
           </CardContent>
         </Card>
       </div>

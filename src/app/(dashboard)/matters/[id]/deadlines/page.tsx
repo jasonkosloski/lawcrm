@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TabAddButton } from "@/components/matters/tab-add-button";
 import { getMatterDeadlines } from "@/lib/queries/matter-detail";
 
 const KIND_LABEL: Record<string, string> = {
@@ -81,14 +82,17 @@ export default async function MatterDeadlinesPage({
     return (
       <div className="p-5">
         <Card>
-          <CardContent className="p-8 text-center">
-            <div className="text-sm font-semibold text-ink mb-1">
-              No deadlines
+          <CardContent className="p-8 text-center flex flex-col items-center gap-3">
+            <div>
+              <div className="text-sm font-semibold text-ink mb-1">
+                No deadlines
+              </div>
+              <div className="text-xs text-ink-3">
+                Statute-driven, scheduling-order, and manual deadlines for this
+                matter will appear here.
+              </div>
             </div>
-            <div className="text-xs text-ink-3">
-              Statute-driven, scheduling-order, and manual deadlines for this
-              matter will appear here.
-            </div>
+            <TabAddButton type="deadline" />
           </CardContent>
         </Card>
       </div>
