@@ -14,6 +14,7 @@ import { useState } from "react";
 import { Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TableCell, TableRow } from "@/components/ui/table";
+import { EmailLink } from "@/components/ui/email-link";
 import { formatPhone } from "@/lib/format-phone";
 import type { PartyRow } from "@/lib/queries/matter-detail";
 import type { PartyCategory } from "@/lib/party-constants";
@@ -80,7 +81,7 @@ export function PartyRowView({
       )}
       <TableCell className="text-xs text-ink-3">
         <div className="flex flex-col leading-tight">
-          {party.email && <span>{party.email}</span>}
+          {party.email && <EmailLink email={party.email} />}
           {party.phones.length > 0 ? (
             party.phones.map((p) => (
               <span
@@ -165,9 +166,10 @@ function RepresentationCell({ party }: { party: PartyRow }) {
           </span>
         )}
         {party.representationEmail && (
-          <span className="text-2xs text-ink-4 truncate">
-            {party.representationEmail}
-          </span>
+          <EmailLink
+            email={party.representationEmail}
+            className="text-2xs text-ink-4 truncate block"
+          />
         )}
         {party.representationPhone && (
           <span className="text-2xs font-mono text-ink-4">

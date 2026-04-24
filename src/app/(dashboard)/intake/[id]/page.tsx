@@ -19,6 +19,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmailLink } from "@/components/ui/email-link";
 import { formatPhone } from "@/lib/format-phone";
 import { getLeadById, LEAD_SOURCE_LABEL } from "@/lib/queries/leads";
 
@@ -206,12 +207,10 @@ export default async function LeadOverviewPage({
               {lead.email && (
                 <div className="flex items-center gap-2 text-xs">
                   <Mail size={12} className="text-ink-4 shrink-0" />
-                  <a
-                    href={`mailto:${lead.email}`}
-                    className="text-ink hover:text-brand-700 truncate"
-                  >
-                    {lead.email}
-                  </a>
+                  <EmailLink
+                    email={lead.email}
+                    className="text-ink truncate"
+                  />
                 </div>
               )}
               {lead.phone && (

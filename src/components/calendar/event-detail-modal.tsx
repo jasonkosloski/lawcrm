@@ -25,6 +25,7 @@ import {
   Video,
   X,
 } from "lucide-react";
+import { EmailLink } from "@/components/ui/email-link";
 import type {
   CalendarEventDetail,
   EventNote,
@@ -211,9 +212,10 @@ export function EventDetailModal({
                     <div className="flex flex-col leading-tight">
                       <span className="text-ink">{a.name}</span>
                       {a.email && (
-                        <span className="text-2xs text-ink-4 font-mono">
-                          {a.email}
-                        </span>
+                        <EmailLink
+                          email={a.email}
+                          className="text-2xs text-ink-4 font-mono"
+                        />
                       )}
                     </div>
                     <span className="text-2xs text-ink-3">

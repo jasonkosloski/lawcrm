@@ -10,6 +10,7 @@
 
 import { notFound } from "next/navigation";
 import { Card } from "@/components/ui/card";
+import { EmailLink } from "@/components/ui/email-link";
 import { EmbeddedInbox } from "@/components/communication/embedded-inbox";
 import {
   getThreadById,
@@ -60,8 +61,11 @@ export default async function LeadCommunicationPage({
     <div className="p-5 flex flex-col flex-1 min-h-0 gap-3">
       <div className="text-2xs font-mono text-ink-4 shrink-0">
         Matching threads where{" "}
-        <span className="text-ink-3">{lead.email}</span> is the sender,
-        recipient, or cc.
+        <EmailLink
+          email={lead.email}
+          className="text-ink-3 hover:text-brand-700 hover:underline"
+        />{" "}
+        is the sender, recipient, or cc.
       </div>
       <EmbeddedInbox
         threads={threads}
