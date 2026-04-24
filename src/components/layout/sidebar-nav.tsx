@@ -17,7 +17,7 @@
 
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   Home,
@@ -50,14 +50,32 @@ interface NavSection {
   items: NavItem[];
 }
 
-/** Determines if a nav item is active based on the current pathname. */
-function isActive(href: string, pathname: string): boolean {
+/**
+ * Is this nav item active based on the current URL?
+ *
+ * - `/` is exact-match only (don't light up for every route).
+ * - Plain hrefs (`/matters`, `/matters/<id>`) match on path prefix — this
+ *   is how the parent section lights up along with a deeper destination
+ *   (e.g. pinned-matter clicks light up both Matters and the matter).
+ * - Query-string hrefs (`/matters?area=§1983`) require the path to match
+ *   AND every key/value in the href's query string to be present in the
+ *   current URL — so a practice-area link lights up when its filter is
+ *   active, and coexists with the Matters parent being lit.
+ */
+function isActive(
+  href: string,
+  pathname: string,
+  searchParams: URLSearchParams
+): boolean {
   if (href === "/") return pathname === "/";
-  // For ?area=… links, compare just the pathname portion; otherwise an
-  // area link matches /matters and lights up unexpectedly.
-  const bareHref = href.split("?")[0];
-  if (href.includes("?")) return false;
-  return pathname.startsWith(bareHref);
+  const [hrefPath, hrefQuery] = href.split("?");
+  if (!pathname.startsWith(hrefPath)) return false;
+  if (!hrefQuery) return true;
+  const hrefParams = new URLSearchParams(hrefQuery);
+  for (const [key, value] of hrefParams.entries()) {
+    if (!searchParams.getAll(key).includes(value)) return false;
+  }
+  return true;
 }
 
 /** Format small numeric badges. Returns undefined when the count is zero
@@ -67,6 +85,7 @@ const numBadge = (n: number): string | undefined =>
 
 export function SidebarNav({ data }: { data: SidebarData }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const sections: NavSection[] = [
     {
@@ -184,7 +203,7 @@ export function SidebarNav({ data }: { data: SidebarData }) {
             )}
             <div className="flex flex-col gap-px">
               {section.items.map((item) => {
-                const active = isActive(item.href, pathname);
+                const active = isActive(item.href, pathname, searchParams);
                 const Icon = item.icon;
                 return (
                   <Link
