@@ -20,6 +20,7 @@ import { notFound } from "next/navigation";
 import { TopBar } from "@/components/layout/topbar";
 import { MatterTabs } from "@/components/matters/matter-tabs";
 import { PinToggle } from "@/components/matters/pin-toggle";
+import { MatterCreateMenu } from "@/components/matters/matter-create-menu";
 import { getMatterById } from "@/lib/queries/matters";
 
 const FEE_LABEL: Record<string, string> = {
@@ -54,10 +55,13 @@ export default async function MatterDetailLayout({
           </>
         }
         actions={
-          <PinToggle
-            matterId={matter.id}
-            initialPinned={matter.isPinnedByCurrentUser}
-          />
+          <>
+            <PinToggle
+              matterId={matter.id}
+              initialPinned={matter.isPinnedByCurrentUser}
+            />
+            <MatterCreateMenu matterId={matter.id} />
+          </>
         }
       />
 
