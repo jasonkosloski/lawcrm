@@ -136,7 +136,7 @@ async function createCaptureRecord(
       },
     });
   } else if (cap.kind === "note_sibling") {
-    await tx.note.create({
+    const created = await tx.note.create({
       data: {
         matterId,
         authorId: userId,
@@ -150,6 +150,12 @@ async function createCaptureRecord(
           linkToPrimary?.kind === "deadline" ? linkToPrimary.id : null,
         timeEntryId: linkToPrimary?.kind === "time" ? linkToPrimary.id : null,
       },
+      select: { id: true },
+    });
+    // Author auto-reads their own note so it doesn't show "unread"
+    // to them on the next page load.
+    await tx.noteRead.create({
+      data: { userId, noteId: created.id },
     });
   }
 }

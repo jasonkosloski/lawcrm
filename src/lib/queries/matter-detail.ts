@@ -8,6 +8,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { getCurrentUserId } from "@/lib/current-user";
 import type { EventNote, EventTimeEntry } from "@/lib/queries/calendar";
 
 // ── Parties ──────────────────────────────────────────────────────────────
@@ -170,6 +171,10 @@ export type NoteRow = {
    *  priority (a reply shows its parent context) — otherwise the
    *  first non-null entity FK wins. */
   link: NoteLink | null;
+  /** Whether the current user has seen this note — drives the
+   *  unread indicator on the card and the default collapse state
+   *  of its thread. Always true for notes the current user wrote. */
+  isRead: boolean;
 };
 
 function truncate(s: string, n: number): string {
@@ -185,6 +190,7 @@ function plainTextFromHtml(html: string): string {
 }
 
 export async function getMatterNotes(matterId: string): Promise<NoteRow[]> {
+  const userId = await getCurrentUserId();
   const rows = await prisma.note.findMany({
     where: { matterId },
     include: {
@@ -195,6 +201,13 @@ export async function getMatterNotes(matterId: string): Promise<NoteRow[]> {
       deadline: { select: { id: true, title: true, dueDate: true } },
       timeEntry: {
         select: { id: true, activity: true, date: true, hours: true },
+      },
+      // Per-user read state — filtered to the current user so we only
+      // pull one row per note at most.
+      reads: {
+        where: { userId },
+        select: { userId: true },
+        take: 1,
       },
     },
     // Replies sort by creation so the thread reads top-down. Top-level
@@ -247,6 +260,7 @@ export async function getMatterNotes(matterId: string): Promise<NoteRow[]> {
       updatedAt: n.updatedAt,
       parentNoteId: n.parentNoteId,
       link,
+      isRead: n.reads.length > 0,
     };
   });
 }

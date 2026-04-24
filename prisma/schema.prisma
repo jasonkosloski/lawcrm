@@ -46,6 +46,7 @@ model User {
   approvals         SettlementApproval[]
   flaggedMoments    FlaggedMoment[]
   matterPins        UserMatterPin[]
+  noteReads         NoteRead[]
 
   @@map("users")
 }
@@ -384,6 +385,23 @@ model Deadline {
   @@index([dueDate])
   @@index([status])
   @@map("deadlines")
+}
+
+/// Per-user read state for a note. Presence of a row means the user
+/// has seen that note; absence means it's still unread. The Notes
+/// tab uses this to auto-expand threads with unread replies and
+/// auto-collapse threads the user has already caught up on.
+model NoteRead {
+  userId String
+  noteId String
+  readAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@id([userId, noteId])
+  @@index([noteId])
+  @@map("note_reads")
 }
 
 /// A calendar event — hearings, depositions, meetings, blocks, etc.
@@ -744,6 +762,7 @@ model Note {
   task      Task?          @relation("TaskNotes", fields: [taskId], references: [id], onDelete: SetNull)
   deadline  Deadline?      @relation("DeadlineNotes", fields: [deadlineId], references: [id], onDelete: SetNull)
   timeEntry TimeEntry?     @relation("TimeEntryNotes", fields: [timeEntryId], references: [id], onDelete: SetNull)
+  reads     NoteRead[]
 
   @@index([matterId])
   @@index([parentNoteId])

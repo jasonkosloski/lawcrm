@@ -44,6 +44,7 @@ export type NoteCardNote = {
   updatedAt: Date;
   parentNoteId: string | null;
   link: NoteLink | null;
+  isRead: boolean;
 };
 
 const formatDateTime = (d: Date): string =>
@@ -92,17 +93,26 @@ export function NoteCard({
       id={`note-${note.id}`}
       className={cn(
         note.isPinned && "border-brand-200",
+        !note.isRead && "border-brand-500 ring-1 ring-brand-200",
         pending && "opacity-60",
-        isReply && "border-line/80"
+        isReply && !note.isRead && "border-brand-500",
+        isReply && note.isRead && "border-line/80"
       )}
     >
       <CardContent className="p-4">
         <div className="flex items-center gap-2 mb-3">
           <span
-            className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-brand-50 text-2xs font-mono font-medium text-brand-700 border border-brand-100 shrink-0"
+            className="relative inline-flex items-center justify-center w-7 h-7 rounded-full bg-brand-50 text-2xs font-mono font-medium text-brand-700 border border-brand-100 shrink-0"
             title={note.authorName}
           >
             {note.authorInitials}
+            {!note.isRead && (
+              <span
+                className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-brand-500 ring-2 ring-white"
+                aria-label="Unread"
+                title="Unread"
+              />
+            )}
           </span>
           <div className="flex-1 min-w-0">
             <div className="text-xs font-medium text-ink">{note.authorName}</div>

@@ -170,7 +170,7 @@ export async function createNote(
   // One transaction — note plus all captures. If anything fails we
   // roll back everything so the user never sees a partial save.
   await prisma.$transaction(async (tx) => {
-    await tx.note.create({
+    const created = await tx.note.create({
       data: {
         matterId,
         authorId: currentUserId,
@@ -183,6 +183,12 @@ export async function createNote(
         deadlineId: parsed.data.deadlineId || null,
         timeEntryId: parsed.data.timeEntryId || null,
       },
+      select: { id: true },
+    });
+    // Author always starts "read" on their own note — nothing new
+    // for them to catch up on.
+    await tx.noteRead.create({
+      data: { userId: currentUserId, noteId: created.id },
     });
 
     for (const cap of validCaptures) {
@@ -231,7 +237,7 @@ export async function createNote(
           },
         });
       } else if (cap.kind === "note_sibling") {
-        await tx.note.create({
+        const sibling = await tx.note.create({
           data: {
             matterId,
             authorId: currentUserId,
@@ -239,6 +245,10 @@ export async function createNote(
             type: cap.type,
             isPinned: cap.isPinned,
           },
+          select: { id: true },
+        });
+        await tx.noteRead.create({
+          data: { userId: currentUserId, noteId: sibling.id },
         });
       }
     }
@@ -368,4 +378,45 @@ export async function updateNote(
   revalidatePath(`/matters/${note.matterId}/notes`);
   revalidatePath(`/matters/${note.matterId}`);
   return { status: "ok" };
+}
+
+// ── Mark read ───────────────────────────────────────────────────────────
+//
+// Client fires this after the user has had a moment to see a note on
+// screen. We intentionally do NOT revalidatePath here — the current
+// page's collapse defaults are computed from the server-rendered
+// unread state, so refreshing would collapse threads mid-read. The
+// DB update only matters for the NEXT page visit.
+
+export async function markMatterNotesRead(
+  noteIds: string[]
+): Promise<{ ok: boolean }> {
+  if (noteIds.length === 0) return { ok: true };
+  const userId = await getCurrentUserId();
+  // Scope to notes that actually exist so a stale client call can't
+  // create dangling reads. Limit quietly to the submitted ids.
+  const existing = await prisma.note.findMany({
+    where: { id: { in: noteIds } },
+    select: { id: true },
+  });
+  const validIds = existing.map((n) => n.id);
+  if (validIds.length === 0) return { ok: true };
+
+  await prisma.noteRead.createMany({
+    data: validIds.map((noteId) => ({ userId, noteId })),
+    // SQLite doesn't support skipDuplicates on createMany, but the
+    // composite primary key throws uniqueness errors if we retry a
+    // note already marked read. Catch per-row below.
+  }).catch(async () => {
+    // Fall back to individual upserts if batch failed (e.g. one row
+    // was already present). Slower but correct.
+    for (const noteId of validIds) {
+      await prisma.noteRead.upsert({
+        where: { userId_noteId: { userId, noteId } },
+        update: {},
+        create: { userId, noteId },
+      });
+    }
+  });
+  return { ok: true };
 }

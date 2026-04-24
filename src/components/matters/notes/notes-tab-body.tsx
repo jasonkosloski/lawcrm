@@ -11,10 +11,11 @@
 
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Pin, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
+import { markMatterNotesRead } from "@/app/actions/notes";
 import { NoteCard, type NoteCardNote } from "./note-card";
 import {
   NOTE_TYPES,
@@ -82,6 +83,14 @@ function countNodes(node: NoteNode): number {
   );
 }
 
+/** True if any note in the subtree is still unread for the current
+ *  user — drives the default collapse state so threads with fresh
+ *  replies stay expanded on load. */
+function subtreeHasUnread(node: NoteNode): boolean {
+  if (!node.note.isRead) return true;
+  return node.children.some((c) => subtreeHasUnread(c));
+}
+
 export function NotesTabBody({
   notes,
   matterId,
@@ -92,6 +101,27 @@ export function NotesTabBody({
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<Set<NoteType>>(new Set());
   const [pinnedOnly, setPinnedOnly] = useState(false);
+
+  // Fire-and-forget: mark every note that came back unread as read.
+  // We intentionally do NOT revalidate the page after — the initial
+  // render already drove default-expand from the was-unread state;
+  // refreshing would snap expanded threads shut mid-read. The write
+  // only matters for the NEXT page visit.
+  useEffect(() => {
+    const unreadIds = notes.filter((n) => !n.isRead).map((n) => n.id);
+    if (unreadIds.length === 0) return;
+    // Small delay so the user gets a beat to see the highlight before
+    // we mark things read behind the scenes.
+    const handle = setTimeout(() => {
+      markMatterNotesRead(unreadIds).catch(() => {
+        // Silent — failing to mark read isn't worth a user-facing error.
+      });
+    }, 800);
+    return () => clearTimeout(handle);
+    // Notes identity is stable per page render; no need to re-fire
+    // on unrelated state changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matterId]);
 
   const toggleType = (t: NoteType) => {
     setTypeFilter((prev) => {
@@ -278,7 +308,12 @@ function ThreadView({
   depth: number;
 }) {
   const hasChildren = node.children.length > 0;
-  const [collapsed, setCollapsed] = useState(false);
+  // Default collapse state — if the whole subtree is already read,
+  // collapse it so old threads don't clutter the page. If anything
+  // inside is still unread for this user, leave it open.
+  const [collapsed, setCollapsed] = useState(
+    () => hasChildren && !node.children.some((c) => subtreeHasUnread(c))
+  );
   // Count is of ALL descendants, not just direct children — that's
   // more useful info for deciding whether to expand a long thread.
   const descendantCount = hasChildren
