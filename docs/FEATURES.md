@@ -22,13 +22,13 @@ Status legend: `[ ]` planned · `[~]` in progress · `[x]` complete · `[-]` des
 - [x] **Matters list — sort & filter** — URL-backed state, 8 filter dimensions (search, area, stage, lead, fee, trust, deadline, status flags), sortable column headers with asc/desc/clear cycle
 - [ ] **Matters list — view toggles** — Kanban and Cards views (table is done; kanban/cards are the "multiple ways to view" variants)
 - [x] **Matter detail — pin toggle** — Per-user pin/unpin button in the header, server action + revalidation, sidebar updates live
-- [~] **Matter detail — Overview tab** — Case facts + team roster done; deadlines preview, timeline preview, strategy note preview still to come
-- [ ] **Matter detail — Timeline tab** — Chronological activity feed for a single matter (placeholder route exists)
-- [ ] **Matter detail — Documents tab** — Document table with category filters (placeholder route exists)
-- [ ] **Matter detail — Parties tab** — Contacts linked to this matter with roles (placeholder route exists)
-- [ ] **Matter detail — Deadlines tab** — Deadline management with auto-rule support (placeholder route exists)
-- [ ] **Matter detail — Tasks tab** — Task checklist with assignees and due dates (placeholder route exists)
-- [ ] **Matter detail — Notes tab** — Rich text notes and strategy memos (placeholder route exists)
+- [x] **Matter detail — Overview tab** — Case facts + team roster, plus preview cards (upcoming deadlines, open tasks, strategy note) that link through to their dedicated tabs
+- [ ] **Matter detail — Timeline tab** — Chronological activity feed aggregating filings, emails, evidence, deadlines, notes, time entries (placeholder route exists)
+- [x] **Matter detail — Documents tab** — Grouped by category (Filings / Pleadings / Discovery / Expert reports / etc.) with source + status chips
+- [x] **Matter detail — Parties tab** — Grouped by role (Plaintiff / Defendant / Witness / Expert / Opposing counsel / etc.) with conflict flag indicator
+- [x] **Matter detail — Deadlines tab** — Table with due date, days remaining, kind (critical / auto-rule / manual), source (statute / scheduling order / rule), owner, status; overdue deadlines flagged in warn color
+- [x] **Matter detail — Tasks tab** — Grouped by status (Open / In progress / In review / Done / Cancelled) with priority chip, due date, owner
+- [x] **Matter detail — Notes tab** — Card list with type chip (Note / Strategy / Chatter / Memo), author avatar, timestamp; pinned notes float to top
 - [ ] **Matter detail — Billing tab** — WIP, time entries, invoices for this matter (placeholder route exists)
 - [ ] **New matter form** — Create matter with stage, area, client, team assignment
 
