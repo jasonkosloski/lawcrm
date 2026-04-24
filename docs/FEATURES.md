@@ -72,8 +72,14 @@ Status legend: `[ ]` planned · `[~]` in progress · `[x]` complete · `[-]` des
 
 ## Phase 5 — Calendar & Time
 
-- [ ] **Calendar view** — Week/month toggle, per-matter color coding, deadline markers
-- [ ] **Calendar event create/edit** — Matter picker, attendees, video link
+- [x] **Calendar — Week view** — 7 day columns with hour grid 6am–9pm, events positioned by start/end time, deadlines as thin bars at top of day, "now" line in today's column, events colored by matter
+- [x] **Calendar — Month view** — 6-row grid, events as compact pills with time + title, deadlines styled distinctly by kind (critical / auto-rule / manual), +N more overflow indicator, today highlighted
+- [x] **Calendar — navigation** — Prev/Today/Next buttons (week or month units depending on view), URL-driven state (`?view=week|month&d=YYYY-MM-DD`)
+- [ ] **Calendar — Day view** — Single-day focus mode (deferred)
+- [ ] **Calendar — Deadlines-only filter** — Hide events and show just upcoming deadlines (deferred)
+- [ ] **Calendar event create/edit** — Placeholder route exists; real form is Phase 5 follow-up (title + type, start/end + all-day, matter picker, location/Zoom, attendees)
+- [ ] **Calendar event — click to open detail** — Currently events colored/linked to matters; dedicated event detail is a follow-up
+- [ ] **Google Calendar sync** — OAuth + two-way sync (deferred to integration phase)
 - [ ] **Time tracking — week view** — Hour bars per matter, running totals
 - [ ] **Time entry modal** — Duration modes, UTBMS codes, narrative, billing toggles
 - [ ] **Timer widget** — Floating bottom-right, start/stop, auto-capture from activity
