@@ -14,6 +14,7 @@ import { useState } from "react";
 import { Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TableCell, TableRow } from "@/components/ui/table";
+import { formatPhone } from "@/lib/format-phone";
 import type { PartyRow } from "@/lib/queries/matter-detail";
 import type { PartyCategory } from "@/lib/party-constants";
 import { PartyEditForm } from "./party-edit-form";
@@ -94,7 +95,7 @@ export function PartyRowView({
                     {p.label}
                   </span>
                 )}
-                {p.number}
+                {formatPhone(p.number)}
                 {p.isPrimary && party.phones.length > 1 && (
                   <span className="text-[9px] text-brand-700 ml-1 font-sans">
                     primary
@@ -104,7 +105,7 @@ export function PartyRowView({
             ))
           ) : party.phone ? (
             <span className="font-mono text-2xs text-ink-4">
-              {party.phone}
+              {formatPhone(party.phone)}
             </span>
           ) : null}
           {!party.email && party.phones.length === 0 && !party.phone && "—"}
@@ -170,7 +171,7 @@ function RepresentationCell({ party }: { party: PartyRow }) {
         )}
         {party.representationPhone && (
           <span className="text-2xs font-mono text-ink-4">
-            {party.representationPhone}
+            {formatPhone(party.representationPhone)}
           </span>
         )}
       </div>

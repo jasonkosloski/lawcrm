@@ -19,6 +19,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatPhone } from "@/lib/format-phone";
 import { getLeadById, LEAD_SOURCE_LABEL } from "@/lib/queries/leads";
 
 const ASSESSMENT_LABEL: Record<string, string> = {
@@ -216,7 +217,7 @@ export default async function LeadOverviewPage({
               {lead.phone && (
                 <div className="flex items-center gap-2 text-xs">
                   <Phone size={12} className="text-ink-4 shrink-0" />
-                  <span className="text-ink font-mono">{lead.phone}</span>
+                  <span className="text-ink font-mono">{formatPhone(lead.phone)}</span>
                 </div>
               )}
               {!lead.email && !lead.phone && (
