@@ -70,3 +70,12 @@ These are places where the schema will likely change as we build:
 | Date | Change | Reason |
 |---|---|---|
 | 2026-04-24 | Initial 25-model schema | Project scaffold — covers full domain from design handoff |
+| 2026-04-24 | Considered + rejected `Matter.slug` field | Matter names aren't unique (two "Alvarez" cases can coexist). Use `id` (cuid) in URLs instead. See ADR-006. |
+
+---
+
+## Rejected / Evaluated Changes
+
+Keep a record of schema changes we considered and explicitly passed on, so we don't keep re-litigating them.
+
+- **`Matter.slug` unique field** — Evaluated for prettier URLs (`/matters/alvarez`). Rejected: names collide, auto-suffixing (`alvarez-2`) is fragile. Stick with cuid (ADR-006). Could add a short_id (6-char nanoid) later if URL length becomes a real pain point — would not require changing the primary key.

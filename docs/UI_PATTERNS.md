@@ -126,6 +126,50 @@ Inactive: text-ink-3
 Tab content fills remaining height with overflow-y-auto
 ```
 
+Implementation: `src/components/matters/matter-tabs.tsx` — client component
+reading `usePathname()` to pick the active tab. 8 tabs: Overview, Timeline,
+Documents, Parties, Deadlines, Tasks, Notes, Billing. Overview is the base
+route (`/matters/[id]`); other tabs are nested routes.
+
+### Sortable Column Header
+
+Three-state click cycle: asc → desc → clear (see ADR-009).
+
+```
+Inactive: neutral "up/down" icon (low opacity), text-ink-2
+Active asc: up arrow, text-brand-700
+Active desc: down arrow, text-brand-700
+```
+
+URL contract: `?sort=<field>&dir=asc|desc`. Absent means default ordering.
+Use `useTransition` for the router update so the table dims slightly while
+re-rendering. See `src/components/matters/sortable-header.tsx`.
+
+### Filter Popover (Linear-style)
+
+Each filter is a button that opens a popover. Active filter shows a blue
+chip on the button with optional count. Changes apply immediately — no
+Apply button; popover closes on outside click.
+
+```
+Inactive button: variant="outline", size="xs", text-ink-2
+Active button: bg-brand-soft, text-brand-700, border-brand-200
+Active count: " · N" suffix in font-mono
+Popover: 14–16rem wide, checkboxes (multi-select) or radio-like rows
+         (single-select). Clear link at top when any value is selected.
+```
+
+URL contract: multi-select uses repeated params (`?area=§1983&area=Housing/FHA`);
+single-select uses a single param with defaults omitted. Parse/serialize
+centralised in `src/lib/matters-filters.ts`.
+
+### Tab Placeholder
+
+Shared empty state for matter detail tabs that haven't been built out yet.
+Uses a centered card in the tab content area with the tab name + a short
+description of what's coming. Lets users click through the full tab set
+without running into blank/404 pages. See `src/components/matters/tab-placeholder.tsx`.
+
 ---
 
 ## Interaction Patterns

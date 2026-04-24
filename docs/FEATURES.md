@@ -9,23 +9,25 @@ Status legend: `[ ]` planned · `[~]` in progress · `[x]` complete · `[-]` des
 - [x] **Project scaffold** — Next.js, shadcn, Prisma, TanStack Query
 - [x] **Design tokens** — Brand colors, fonts, spacing from design handoff
 - [x] **App shell** — Sidebar nav, topbar, layout wrapper
-- [x] **Dashboard page** — KPI tiles, agenda, activity feed, deadlines (mock data)
-- [ ] **Seed data** — Populate DB with realistic mock data from the prototype
+- [x] **Dashboard page** — KPI tiles, agenda, activity feed, deadlines, firm pulse (live Prisma queries)
+- [x] **Seed data** — Populate DB with realistic mock data from the prototype
 - [ ] **Command palette (⌘K)** — Fuzzy search matters, people, docs; run commands
+- [ ] **Sidebar: data-driven pinned matters** — Sidebar pinned list is still hardcoded with slug URLs; wire to `isPinned: true` query with cuid hrefs
 
 ## Phase 2 — Matters
 
-- [ ] **Matters list** — Sortable/filterable table, stage pipeline chips, practice area filter
-- [ ] **Matter detail — Overview tab** — Case facts, team, deadlines, timeline preview
-- [ ] **Matter detail — Timeline tab** — Chronological activity feed for a single matter
-- [ ] **Matter detail — Documents tab** — Document table with category filters
-- [ ] **Matter detail — Parties tab** — Contacts linked to this matter with roles
-- [ ] **Matter detail — Deadlines tab** — Deadline management with auto-rule support
-- [ ] **Matter detail — Tasks tab** — Task checklist with assignees and due dates
-- [ ] **Matter detail — Notes tab** — Rich text notes and strategy memos
-- [ ] **Matter detail — Billing tab** — WIP, time entries, invoices for this matter
+- [x] **Matters list — route + basic table** — Route, table, real data, click-through to detail
+- [x] **Matters list — sort & filter** — URL-backed state, 8 filter dimensions (search, area, stage, lead, fee, trust, deadline, status flags), sortable column headers with asc/desc/clear cycle
+- [ ] **Matters list — view toggles** — Kanban and Cards views (table is done; kanban/cards are the "multiple ways to view" variants)
+- [~] **Matter detail — Overview tab** — Case facts + team roster done; deadlines preview, timeline preview, strategy note preview still to come
+- [ ] **Matter detail — Timeline tab** — Chronological activity feed for a single matter (placeholder route exists)
+- [ ] **Matter detail — Documents tab** — Document table with category filters (placeholder route exists)
+- [ ] **Matter detail — Parties tab** — Contacts linked to this matter with roles (placeholder route exists)
+- [ ] **Matter detail — Deadlines tab** — Deadline management with auto-rule support (placeholder route exists)
+- [ ] **Matter detail — Tasks tab** — Task checklist with assignees and due dates (placeholder route exists)
+- [ ] **Matter detail — Notes tab** — Rich text notes and strategy memos (placeholder route exists)
+- [ ] **Matter detail — Billing tab** — WIP, time entries, invoices for this matter (placeholder route exists)
 - [ ] **New matter form** — Create matter with stage, area, client, team assignment
-- [ ] **Matter search & filters** — Full-text search, area/stage/lead filters
 
 ## Phase 3 — Intake
 
