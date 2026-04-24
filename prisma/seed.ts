@@ -62,6 +62,7 @@ async function main() {
   await prisma.invoice.deleteMany();
   await prisma.timeEntry.deleteMany();
   await prisma.activityLog.deleteMany();
+  await prisma.userMatterPin.deleteMany();
   await prisma.matterContact.deleteMany();
   await prisma.matterTeamMember.deleteMany();
   await prisma.matter.deleteMany();
@@ -275,7 +276,6 @@ async function main() {
         description:
           "Excessive force claim arising from Jan 2026 arrest. Officer Doe's body camera captures the use-of-force sequence at 14:32.",
         color: "#3d83b8",
-        isPinned: true,
         clientId: contacts.mariaAlvarez.id,
         opposingParty: "Officer J. Doe, APD, City of Aurora",
         opposingFirm: "Aurora City Attorney · R. Alvarado",
@@ -296,7 +296,6 @@ async function main() {
         wipAmount: 14200,
         description: "§1983 wrongful arrest and prolonged detention claim.",
         color: "#3d83b8",
-        isPinned: true,
         clientId: contacts.derekWilliams.id,
         opposingParty: "Denver PD officers",
         opposingFirm: "Denver City Attorney",
@@ -425,7 +424,6 @@ async function main() {
         wipAmount: 0,
         description: "Settled — distribution pending lien negotiations.",
         color: "#3d83b8",
-        isPinned: true,
         clientId: contacts.carlaRivera.id,
         createdAt: new Date("2024-06-01"),
       },
@@ -474,6 +472,18 @@ async function main() {
     { matterId: matters.jenner.id, userId: leo.id, role: "lead" },
   ];
   await prisma.matterTeamMember.createMany({ data: teamAssignments });
+
+  // Jason's pinned matters — previously modeled as a global Matter.isPinned
+  // boolean; now per-user via UserMatterPin. Leo, Rachel, etc. start with no
+  // pins (empty sidebar "Pinned" section) so users curate their own.
+  console.log("  Pinning matters for Jason…");
+  await prisma.userMatterPin.createMany({
+    data: [
+      { userId: jason.id, matterId: matters.alvarez.id },
+      { userId: jason.id, matterId: matters.williams.id },
+      { userId: jason.id, matterId: matters.rivera.id },
+    ],
+  });
 
   // Link key contacts to the Alvarez matter (plaintiff, defendants, witness, expert)
   await prisma.matterContact.createMany({

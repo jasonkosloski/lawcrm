@@ -12,6 +12,7 @@
 import { notFound } from "next/navigation";
 import { TopBar } from "@/components/layout/topbar";
 import { MatterTabs } from "@/components/matters/matter-tabs";
+import { PinToggle } from "@/components/matters/pin-toggle";
 import { getMatterById } from "@/lib/queries/matters";
 
 const FEE_LABEL: Record<string, string> = {
@@ -58,6 +59,12 @@ export default async function MatterDetailLayout({
                 {matter.stage}
               </span>
               <span className="text-2xs text-ink-3">{matter.area}</span>
+              <div className="ml-auto">
+                <PinToggle
+                  matterId={matter.id}
+                  initialPinned={matter.isPinnedByCurrentUser}
+                />
+              </div>
             </div>
             <div className="flex items-center gap-5 mt-1.5 text-xs text-ink-3">
               {matter.client && (

@@ -45,6 +45,7 @@ model User {
   emailAccounts     EmailAccount[]
   approvals         SettlementApproval[]
   flaggedMoments    FlaggedMoment[]
+  matterPins        UserMatterPin[]
 
   @@map("users")
 }
@@ -68,7 +69,6 @@ model Matter {
   wipAmount      Float    @default(0) /// Work-in-progress (unbilled hours value)
   description    String?  /// Brief case summary
   color          String   @default("#2563a8") /// Color dot for UI display
-  isPinned       Boolean  @default(false) /// Whether pinned in sidebar
   isArchived     Boolean  @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -96,11 +96,30 @@ model Matter {
   calendarEvents   CalendarEvent[]
   trustTransactions TrustTransaction[]
   settlements      Settlement[]
+  pins             UserMatterPin[]
 
   @@index([stage])
   @@index([area])
   @@index([clientId])
   @@map("matters")
+}
+
+/// Per-user pin of a matter — controls which matters appear in a given
+/// user's "Pinned matters" sidebar section. Replaces the former global
+/// `Matter.isPinned` boolean so attorneys/paralegals/etc. can each
+/// curate their own pin list.
+model UserMatterPin {
+  userId    String
+  matterId  String
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
+
+  @@id([userId, matterId])
+  @@index([userId])
+  @@index([matterId])
+  @@map("user_matter_pins")
 }
 
 /// Join table linking team members to matters with their role on the case.

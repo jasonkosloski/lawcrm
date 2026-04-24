@@ -7,13 +7,13 @@
  * render (the sidebar lives in the dashboard layout), so the whole
  * thing is parallelised.
  *
- * No auth yet — `currentUser` is resolved by looking up Jason's email.
- * When login lands, swap that for the session user.
+ * No auth yet — current user is resolved via `getCurrentUserId()` (see
+ * `src/lib/current-user.ts`). When login lands, swap that helper for the
+ * session resolver and every caller keeps working.
  */
 
 import { prisma } from "@/lib/prisma";
-
-const CURRENT_USER_EMAIL = "jkosloski@kosloskilaw.com";
+import { getCurrentUserId } from "@/lib/current-user";
 
 export type SidebarUser = {
   id: string;
@@ -92,6 +92,8 @@ const endOfToday = (): Date => {
 };
 
 export async function getSidebarData(): Promise<SidebarData> {
+  const currentUserId = await getCurrentUserId();
+
   const [
     user,
     openMatterCount,
@@ -102,7 +104,7 @@ export async function getSidebarData(): Promise<SidebarData> {
     hoursAgg,
   ] = await Promise.all([
     prisma.user.findUnique({
-      where: { email: CURRENT_USER_EMAIL },
+      where: { id: currentUserId },
       select: { id: true, name: true, initials: true, role: true },
     }),
     prisma.matter.count({
@@ -112,10 +114,16 @@ export async function getSidebarData(): Promise<SidebarData> {
     prisma.lead.count({
       where: { stage: { notIn: ["converted", "declined"] } },
     }),
-    prisma.matter.findMany({
-      where: { isPinned: true, isArchived: false },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, area: true, color: true },
+    // Pinned matters for this user only, ordered by the pin createdAt
+    // (most recently pinned first).
+    prisma.userMatterPin.findMany({
+      where: { userId: currentUserId, matter: { isArchived: false } },
+      orderBy: { createdAt: "desc" },
+      select: {
+        matter: {
+          select: { id: true, name: true, area: true, color: true },
+        },
+      },
     }),
     prisma.matter.groupBy({
       by: ["area"],
@@ -128,7 +136,7 @@ export async function getSidebarData(): Promise<SidebarData> {
     prisma.timeEntry.aggregate({
       where: {
         date: { gte: startOfToday(), lte: endOfToday() },
-        user: { email: CURRENT_USER_EMAIL },
+        userId: currentUserId,
       },
       _sum: { hours: true },
     }),
@@ -153,7 +161,7 @@ export async function getSidebarData(): Promise<SidebarData> {
     unreadEmailCount,
     activeLeadCount,
     hoursToday: hoursAgg._sum.hours ?? 0,
-    pinnedMatters,
+    pinnedMatters: pinnedMatters.map((p) => p.matter),
     areaCounts,
   };
 }

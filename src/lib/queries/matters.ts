@@ -8,6 +8,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { getCurrentUserId } from "@/lib/current-user";
 import {
   EMPTY_FILTER,
   STAGE_ORDER,
@@ -27,6 +28,7 @@ export type MatterListRow = {
   leadInitials: string | null;
   leadName: string | null;
   nextDeadlineDays: number | null;
+  /** True if pinned by the current user (not a global property of the matter). */
   isPinned: boolean;
   isArchived: boolean;
   createdAt: Date;
@@ -35,11 +37,11 @@ export type MatterListRow = {
 /** Prisma `where` built from the filter. Some filters (text search, sort
  *  on derived fields) are applied in memory after fetch — those are
  *  handled in `listMatters` below. */
-function buildWhere(filter: MattersFilter) {
+function buildWhere(filter: MattersFilter, currentUserId: string) {
   const where: Record<string, unknown> = {};
 
   if (!filter.includeArchived) where.isArchived = false;
-  if (filter.pinnedOnly) where.isPinned = true;
+  if (filter.pinnedOnly) where.pins = { some: { userId: currentUserId } };
   if (filter.areas.length > 0) where.area = { in: filter.areas };
 
   // Stage filter combines with hideClosed.
@@ -156,9 +158,11 @@ function makeComparator(sort: MattersSort) {
  */
 export async function listMatters(
   filter: MattersFilter = EMPTY_FILTER,
-  sort: MattersSort = { field: "created", dir: "desc" }
+  sort: MattersSort = { field: "created", dir: "desc" },
+  currentUserId?: string
 ): Promise<MatterListRow[]> {
-  const where = buildWhere(filter);
+  const userId = currentUserId ?? (await getCurrentUserId());
+  const where = buildWhere(filter, userId);
   const matters = await prisma.matter.findMany({
     where,
     include: {
@@ -172,6 +176,13 @@ export async function listMatters(
         orderBy: { dueDate: "asc" },
         take: 1,
         select: { dueDate: true },
+      },
+      // Pin fetched as a conditional include so we can tell if the *current
+      // user* has this matter pinned without a second query.
+      pins: {
+        where: { userId },
+        select: { userId: true },
+        take: 1,
       },
     },
   });
@@ -196,7 +207,7 @@ export async function listMatters(
           )
         )
       : null,
-    isPinned: m.isPinned,
+    isPinned: m.pins.length > 0,
     isArchived: m.isArchived,
     createdAt: m.createdAt,
   }));
@@ -263,9 +274,11 @@ export async function getMattersFilterOptions(): Promise<MattersFilterOptions> {
 /**
  * Single matter with the relations needed for the detail header.
  * Returns `null` if the id doesn't exist — callers should `notFound()`.
+ * The returned object includes `isPinnedByCurrentUser` for the pin toggle.
  */
 export async function getMatterById(id: string) {
-  return prisma.matter.findUnique({
+  const userId = await getCurrentUserId();
+  const matter = await prisma.matter.findUnique({
     where: { id },
     include: {
       client: true,
@@ -277,8 +290,16 @@ export async function getMatterById(id: string) {
         },
         orderBy: { role: "asc" },
       },
+      pins: {
+        where: { userId },
+        select: { userId: true },
+        take: 1,
+      },
     },
   });
+  if (!matter) return null;
+  const { pins, ...rest } = matter;
+  return { ...rest, isPinnedByCurrentUser: pins.length > 0 };
 }
 
 export type MatterDetail = NonNullable<Awaited<ReturnType<typeof getMatterById>>>;

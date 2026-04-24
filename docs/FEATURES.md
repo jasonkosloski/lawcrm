@@ -21,6 +21,7 @@ Status legend: `[ ]` planned · `[~]` in progress · `[x]` complete · `[-]` des
 - [x] **Matters list — route + basic table** — Route, table, real data, click-through to detail
 - [x] **Matters list — sort & filter** — URL-backed state, 8 filter dimensions (search, area, stage, lead, fee, trust, deadline, status flags), sortable column headers with asc/desc/clear cycle
 - [ ] **Matters list — view toggles** — Kanban and Cards views (table is done; kanban/cards are the "multiple ways to view" variants)
+- [x] **Matter detail — pin toggle** — Per-user pin/unpin button in the header, server action + revalidation, sidebar updates live
 - [~] **Matter detail — Overview tab** — Case facts + team roster done; deadlines preview, timeline preview, strategy note preview still to come
 - [ ] **Matter detail — Timeline tab** — Chronological activity feed for a single matter (placeholder route exists)
 - [ ] **Matter detail — Documents tab** — Document table with category filters (placeholder route exists)
