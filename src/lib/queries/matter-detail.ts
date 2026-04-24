@@ -8,6 +8,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import type { EventNote } from "@/lib/queries/calendar";
 
 // ── Parties ──────────────────────────────────────────────────────────────
 
@@ -351,6 +352,11 @@ export type MatterEventRow = {
   attendeeCount: number;
   /** True when the event is in the future relative to "now". */
   isUpcoming: boolean;
+  /** All notes attached to this event, pinned-first / most-recent-
+   *  first. The Events tab renders these inline in an expandable
+   *  section under the row; the event detail modal uses the
+   *  getEventNotes query instead. */
+  notes: EventNote[];
 };
 
 export async function getMatterEvents(
@@ -361,6 +367,10 @@ export async function getMatterEvents(
     include: {
       matter: { select: { color: true } },
       _count: { select: { attendees: true } },
+      notes: {
+        include: { author: { select: { name: true, initials: true } } },
+        orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
+      },
     },
     orderBy: { startTime: "asc" },
   });
@@ -377,6 +387,16 @@ export async function getMatterEvents(
     color: e.matter?.color ?? e.color ?? "var(--color-ink-3)",
     attendeeCount: e._count.attendees,
     isUpcoming: e.endTime.getTime() >= now,
+    notes: e.notes.map((n) => ({
+      id: n.id,
+      type: n.type,
+      content: n.content,
+      isPinned: n.isPinned,
+      authorName: n.author.name,
+      authorInitials: n.author.initials,
+      createdAt: n.createdAt,
+      matterId: n.matterId,
+    })),
   }));
 }
 

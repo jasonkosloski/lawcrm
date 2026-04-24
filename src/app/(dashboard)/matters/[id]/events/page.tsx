@@ -2,30 +2,26 @@
  * Matter Detail — Events tab
  *
  * Calendar events linked to this matter, split into Upcoming and Past.
- * Click an event to open the same EventDetailModal used on the
- * calendar page (via the `?event=<id>` URL contract).
+ * Each row is expandable: the compact summary opens the event detail
+ * modal, while a separate chevron expands an inline Notes thread
+ * (list + composer) directly under the row. Modal stays as the
+ * deeper view; inline expansion is the friction-free capture path.
  */
 
-import { format, isSameDay } from "date-fns";
+import { notFound } from "next/navigation";
 import { Card } from "@/components/ui/card";
-import { EventLink } from "@/components/calendar/event-link";
 import { EventDetailModal } from "@/components/calendar/event-detail-modal";
 import { EventComposer } from "@/components/matters/captures/event-composer";
+import { EventRowExpandable } from "@/components/matters/events/event-row-expandable";
 import {
   getMatterEvents,
   type MatterEventRow,
 } from "@/lib/queries/matter-detail";
-import { getCalendarEventById, getEventNotes } from "@/lib/queries/calendar";
-
-const TYPE_LABEL: Record<string, string> = {
-  meeting: "Meeting",
-  deposition: "Deposition",
-  hearing: "Hearing",
-  intake: "Intake",
-  block_time: "Block time",
-  mediation: "Mediation",
-  trial: "Trial",
-};
+import { getMatterById } from "@/lib/queries/matters";
+import {
+  getCalendarEventById,
+  getEventNotes,
+} from "@/lib/queries/calendar";
 
 export default async function MatterEventsPage({
   params,
@@ -37,11 +33,15 @@ export default async function MatterEventsPage({
   const rawEventParam = Array.isArray(sp.event) ? sp.event[0] : sp.event;
   const eventId = typeof rawEventParam === "string" ? rawEventParam : null;
 
-  const [events, selectedEvent, selectedEventNotes] = await Promise.all([
-    getMatterEvents(id),
-    eventId ? getCalendarEventById(eventId) : Promise.resolve(null),
-    eventId ? getEventNotes(eventId) : Promise.resolve([]),
-  ]);
+  const [matter, events, selectedEvent, selectedEventNotes] =
+    await Promise.all([
+      getMatterById(id),
+      getMatterEvents(id),
+      eventId ? getCalendarEventById(eventId) : Promise.resolve(null),
+      eventId ? getEventNotes(eventId) : Promise.resolve([]),
+    ]);
+
+  if (!matter) notFound();
 
   const upcoming = events.filter((e) => e.isUpcoming);
   const past = events.filter((e) => !e.isUpcoming).reverse(); // most recent first
@@ -57,9 +57,21 @@ export default async function MatterEventsPage({
       ) : null}
 
       {upcoming.length > 0 && (
-        <EventSection title="Upcoming" events={upcoming} />
+        <EventSection
+          title="Upcoming"
+          events={upcoming}
+          matterId={id}
+          matterName={matter.name}
+        />
       )}
-      {past.length > 0 && <EventSection title="Past" events={past} />}
+      {past.length > 0 && (
+        <EventSection
+          title="Past"
+          events={past}
+          matterId={id}
+          matterName={matter.name}
+        />
+      )}
 
       {selectedEvent && (
         <EventDetailModal event={selectedEvent} notes={selectedEventNotes} />
@@ -71,9 +83,13 @@ export default async function MatterEventsPage({
 function EventSection({
   title,
   events,
+  matterId,
+  matterName,
 }: {
   title: string;
   events: MatterEventRow[];
+  matterId: string;
+  matterName: string;
 }) {
   return (
     <section>
@@ -86,56 +102,15 @@ function EventSection({
       <Card className="p-0 overflow-hidden">
         <ul className="divide-y divide-line">
           {events.map((event) => (
-            <EventRow key={event.id} event={event} />
+            <EventRowExpandable
+              key={event.id}
+              event={event}
+              matterId={matterId}
+              matterName={matterName}
+            />
           ))}
         </ul>
       </Card>
     </section>
-  );
-}
-
-function EventRow({ event }: { event: MatterEventRow }) {
-  const timeLabel = event.isAllDay
-    ? "All day"
-    : isSameDay(event.startTime, event.endTime)
-      ? `${format(event.startTime, "h:mm a")} – ${format(event.endTime, "h:mm a")}`
-      : `${format(event.startTime, "MMM d, h:mm a")} – ${format(event.endTime, "MMM d, h:mm a")}`;
-
-  return (
-    <li>
-      <EventLink eventId={event.id} className="block">
-        <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-brand-tint transition-colors cursor-pointer">
-          <span
-            className="w-1 self-stretch rounded-full shrink-0"
-            style={{ background: event.color }}
-          />
-          <div className="flex flex-col leading-tight w-28 shrink-0">
-            <span className="text-xs font-medium text-ink">
-              {format(event.startTime, "EEE, MMM d")}
-            </span>
-            <span className="text-2xs font-mono text-ink-4">{timeLabel}</span>
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-xs font-medium text-ink truncate">
-              {event.title}
-            </div>
-            {event.location && (
-              <div className="text-2xs text-ink-3 truncate">
-                {event.location}
-              </div>
-            )}
-          </div>
-          <span className="inline-block text-2xs font-medium px-2 py-0.5 rounded-full border bg-paper-2 text-ink-3 border-line shrink-0">
-            {TYPE_LABEL[event.type] ?? event.type}
-          </span>
-          {event.attendeeCount > 0 && (
-            <span className="text-2xs font-mono text-ink-4 shrink-0">
-              {event.attendeeCount}{" "}
-              {event.attendeeCount === 1 ? "attendee" : "attendees"}
-            </span>
-          )}
-        </div>
-      </EventLink>
-    </li>
   );
 }
