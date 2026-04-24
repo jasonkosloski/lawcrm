@@ -45,10 +45,20 @@ Status legend: `[ ]` planned · `[~]` in progress · `[x]` complete · `[-]` des
 
 ## Phase 3 — Intake
 
-- [ ] **Intake queue** — Split view: lead list + detail panel
-- [ ] **Lead scoring** — Score display, liability/damages breakdown
-- [ ] **Lead detail** — Summary, conflict check, statute window, conversion flow
-- [ ] **Convert lead to matter** — Wizard that creates matter + runs automations
+> **Scope note:** Like the matter-detail tabs, each intake feature is
+> a substantial area — expect iterative depth per feature (lead scoring
+> deep-dive with liability/damages breakdown, conflict-check automation
+> against contacts+matters, conversion wizard that creates matter + runs
+> automations, split-view reader pane, etc.). The entries below mark
+> "v1 pass shipped" — follow-ups continue.
+
+- [x] **Intake queue — v1 list** — Sortable-looking table, active leads surface first by score desc, score/assessment/statute/conflict/stage/age columns
+- [x] **Lead detail — v1 page** — Case summary, assessment bars (liability + damages), contact card, intake meta, conflict-check card, converted-matter link when applicable; Convert / Decline actions placeholder until the conversion wizard ships
+- [ ] **Intake queue — split-view reader pane** — Lead list on the left, detail on the right (alternative to separate routes)
+- [ ] **Lead scoring — deep dive** — Score composition, liability/damages factor breakdown, recompute on field changes
+- [ ] **Conflict check automation** — Name/organization matching against existing Contacts and opposing parties with severity levels
+- [ ] **Decline lead** — Inline stage change with decline reason capture
+- [ ] **Convert lead to matter** — Wizard that creates matter + runs area-specific automations (CGIA notice for §1983, HUD response for FHA, etc.)
 
 ## Phase 4 — Email
 
