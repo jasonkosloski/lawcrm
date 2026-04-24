@@ -80,12 +80,34 @@ export function PartyRowView({
       <TableCell className="text-xs text-ink-3">
         <div className="flex flex-col leading-tight">
           {party.email && <span>{party.email}</span>}
-          {party.phone && (
+          {party.phones.length > 0 ? (
+            party.phones.map((p) => (
+              <span
+                key={p.id}
+                className={cn(
+                  "font-mono text-2xs",
+                  p.isPrimary ? "text-ink-3" : "text-ink-4"
+                )}
+              >
+                {p.label && (
+                  <span className="text-ink-4 mr-1 font-sans">
+                    {p.label}
+                  </span>
+                )}
+                {p.number}
+                {p.isPrimary && party.phones.length > 1 && (
+                  <span className="text-[9px] text-brand-700 ml-1 font-sans">
+                    primary
+                  </span>
+                )}
+              </span>
+            ))
+          ) : party.phone ? (
             <span className="font-mono text-2xs text-ink-4">
               {party.phone}
             </span>
-          )}
-          {!party.email && !party.phone && "—"}
+          ) : null}
+          {!party.email && party.phones.length === 0 && !party.phone && "—"}
         </div>
       </TableCell>
       {showsRepresentation && (

@@ -13,6 +13,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   PARTY_CATEGORIES,
@@ -21,6 +22,73 @@ import {
 
 const PICK_EXISTING = "__existing__";
 const CREATE_NEW = "__new__";
+
+/** Posted shape for a single phone in the edit form. */
+const phoneEntrySchema = z.object({
+  label: z.string().trim().max(40).optional().default(""),
+  number: z.string().trim().min(1, "Number required").max(80),
+  isPrimary: z.boolean().default(false),
+});
+type PhoneEntry = z.infer<typeof phoneEntrySchema>;
+
+/** Replace-all strategy for a contact's phones. Normalizes so exactly
+ *  one entry is primary when any exist, then mirrors the primary's
+ *  number onto Contact.phone so pre-existing single-phone readers
+ *  keep working. */
+async function syncContactPhones(
+  tx: Prisma.TransactionClient,
+  contactId: string,
+  phones: PhoneEntry[]
+): Promise<void> {
+  // Normalize primary — exactly one when the list is non-empty.
+  if (phones.length > 0) {
+    const currentPrimary = phones.findIndex((p) => p.isPrimary);
+    if (currentPrimary === -1) phones[0].isPrimary = true;
+    else {
+      // Clear any dupes beyond the first primary.
+      phones.forEach((p, i) => {
+        p.isPrimary = i === currentPrimary;
+      });
+    }
+  }
+
+  await tx.contactPhone.deleteMany({ where: { contactId } });
+  if (phones.length > 0) {
+    await tx.contactPhone.createMany({
+      data: phones.map((p, i) => ({
+        contactId,
+        label: p.label || null,
+        number: p.number,
+        isPrimary: p.isPrimary,
+        order: i,
+      })),
+    });
+  }
+
+  const primary = phones.find((p) => p.isPrimary);
+  await tx.contact.update({
+    where: { id: contactId },
+    data: { phone: primary?.number ?? null },
+  });
+}
+
+/** Parse the JSON-stringified phones array coming from the form.
+ *  Returns [] if the field is missing or malformed. */
+function parsePhonesJson(raw: string | undefined): PhoneEntry[] {
+  if (!raw) return [];
+  try {
+    const decoded = JSON.parse(raw);
+    if (!Array.isArray(decoded)) return [];
+    const result: PhoneEntry[] = [];
+    for (const item of decoded) {
+      const parsed = phoneEntrySchema.safeParse(item);
+      if (parsed.success) result.push(parsed.data);
+    }
+    return result;
+  } catch {
+    return [];
+  }
+}
 
 const partySchema = z
   .object({
@@ -160,6 +228,20 @@ export async function createMatterContact(
         select: { id: true },
       });
       contactId = created.id;
+      // Mirror the single phone the composer collected into a
+      // ContactPhone row so the contact starts with a first-class
+      // primary. Additional phones can be added via Edit.
+      if (data.newContactPhone) {
+        await tx.contactPhone.create({
+          data: {
+            contactId,
+            label: "Primary",
+            number: data.newContactPhone,
+            isPrimary: true,
+            order: 0,
+          },
+        });
+      }
     } else if (contactId) {
       // Verify the picked contact exists; stale client values
       // shouldn't silently create dangling rows.
@@ -241,13 +323,16 @@ const partyUpdateSchema = z.object({
    *  on. The UI surfaces that so the user isn't surprised. */
   contactName: z.string().trim().min(1, "Name is required").max(200),
   contactEmail: z.string().trim().max(200).optional().or(z.literal("")),
-  contactPhone: z.string().trim().max(80).optional().or(z.literal("")),
   contactOrganization: z
     .string()
     .trim()
     .max(200)
     .optional()
     .or(z.literal("")),
+  /** JSON-stringified array of { label, number, isPrimary }. Replace-
+   *  all strategy: whatever the user submits becomes the new phone
+   *  list for the contact. Empty array clears all phones. */
+  phones: z.string().optional().default("[]"),
   role: z.string().trim().max(80).optional().or(z.literal("")),
   notes: z.string().trim().max(4000).optional().or(z.literal("")),
   representation: z.enum(["unknown", "yes", "no"]).default("unknown"),
@@ -306,20 +391,24 @@ export async function updateMatterContact(
   const repPhone =
     !isClient && isRepresented ? data.representationPhone || null : null;
 
-  // Single transaction — Contact + MatterContact — so we never leave
-  // one updated and the other stale. Contact edits here propagate to
-  // every matter this contact appears on; the UI surfaces that.
-  await prisma.$transaction([
-    prisma.contact.update({
+  const phones = parsePhonesJson(data.phones);
+
+  // Single transaction — Contact + phones + MatterContact — so we
+  // never leave one updated and the other stale. Contact edits here
+  // propagate to every matter this contact appears on; the UI
+  // surfaces that.
+  await prisma.$transaction(async (tx) => {
+    await tx.contact.update({
       where: { id: row.contactId },
       data: {
         name: data.contactName,
         email: data.contactEmail || null,
-        phone: data.contactPhone || null,
         organization: data.contactOrganization || null,
       },
-    }),
-    prisma.matterContact.update({
+    });
+    // syncContactPhones also rewrites Contact.phone to the primary.
+    await syncContactPhones(tx, row.contactId, phones);
+    await tx.matterContact.update({
       where: { id: matterContactId },
       data: {
         role: data.role || null,
@@ -330,8 +419,8 @@ export async function updateMatterContact(
         representationEmail: repEmail,
         representationPhone: repPhone,
       },
-    }),
-  ]);
+    });
+  });
 
   revalidatePath(`/matters/${row.matterId}/parties`);
   revalidatePath(`/matters/${row.matterId}`);

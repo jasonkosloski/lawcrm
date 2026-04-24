@@ -14,6 +14,13 @@ import type { EventNote, EventTimeEntry } from "@/lib/queries/calendar";
 
 // ── Parties ──────────────────────────────────────────────────────────────
 
+export type ContactPhoneRow = {
+  id: string;
+  label: string | null;
+  number: string;
+  isPrimary: boolean;
+};
+
 export type PartyRow = {
   /** matterContact row id — used for delete/unlink. */
   id: string;
@@ -21,7 +28,12 @@ export type PartyRow = {
   name: string;
   organization: string | null;
   email: string | null;
+  /** Denormalized primary phone — same as phones.find(p=>p.isPrimary).
+   *  Kept as its own field so existing readers don't have to walk
+   *  the array. Nullable when the contact has no phones at all. */
   phone: string | null;
+  /** Full list of phones in display order (primary first). */
+  phones: ContactPhoneRow[];
   contactType: string;
   /** True when this row represents the matter's primary client
    *  (Matter.clientId points at this contactId and category is
@@ -65,6 +77,15 @@ export async function getMatterParties(matterId: string): Promise<PartyRow[]> {
             phone: true,
             type: true,
             conflictStatus: true,
+            phones: {
+              orderBy: [{ isPrimary: "desc" }, { order: "asc" }],
+              select: {
+                id: true,
+                label: true,
+                number: true,
+                isPrimary: true,
+              },
+            },
           },
         },
       },
@@ -81,6 +102,7 @@ export async function getMatterParties(matterId: string): Promise<PartyRow[]> {
     organization: r.contact.organization,
     email: r.contact.email,
     phone: r.contact.phone,
+    phones: r.contact.phones,
     contactType: r.contact.type,
     category: r.category,
     role: r.role,

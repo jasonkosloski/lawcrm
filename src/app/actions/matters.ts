@@ -171,6 +171,20 @@ export async function createMatter(
       select: { id: true },
     });
     clientId = newClient.id;
+    // Seed a first-class primary ContactPhone row so the contact
+    // starts with a real phone record the Parties edit form can
+    // manage. Denormalized Contact.phone above keeps old readers happy.
+    if (data.newClientPhone) {
+      await prisma.contactPhone.create({
+        data: {
+          contactId: clientId,
+          label: "Primary",
+          number: data.newClientPhone,
+          isPrimary: true,
+          order: 0,
+        },
+      });
+    }
   } else if (data.clientId) {
     const client = await prisma.contact.findUnique({
       where: { id: data.clientId },

@@ -11,7 +11,8 @@
 
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useId, useState } from "react";
+import { Phone, Plus, Star, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { updateMatterContact } from "@/app/actions/parties";
 import {
@@ -20,6 +21,13 @@ import {
   type PartyFormState,
 } from "@/lib/party-constants";
 import type { PartyRow } from "@/lib/queries/matter-detail";
+
+type PhoneDraft = {
+  tempId: string;
+  label: string;
+  number: string;
+  isPrimary: boolean;
+};
 
 export function PartyEditForm({
   party,
@@ -40,12 +48,83 @@ export function PartyEditForm({
 
   const [contactName, setContactName] = useState(party.name);
   const [contactEmail, setContactEmail] = useState(party.email ?? "");
-  const [contactPhone, setContactPhone] = useState(party.phone ?? "");
   const [contactOrganization, setContactOrganization] = useState(
     party.organization ?? ""
   );
   const [role, setRole] = useState(party.role ?? "");
   const [notes, setNotes] = useState(party.notes ?? "");
+
+  // Phones — hydrate from the loaded contact.phones, fall back to a
+  // single empty row keyed "Primary" when the contact has none so
+  // there's always a slot the user can fill.
+  const idPrefix = useId();
+  let phoneCounter = 0;
+  const nextPhoneId = () =>
+    `phone-${idPrefix}-${++phoneCounter}-${Date.now()}`;
+  const [phones, setPhones] = useState<PhoneDraft[]>(() => {
+    if (party.phones.length > 0) {
+      return party.phones.map((p) => ({
+        tempId: p.id,
+        label: p.label ?? "",
+        number: p.number,
+        isPrimary: p.isPrimary,
+      }));
+    }
+    return [
+      {
+        tempId: `phone-${idPrefix}-init`,
+        label: "",
+        number: "",
+        isPrimary: true,
+      },
+    ];
+  });
+
+  const addPhone = () => {
+    setPhones((prev) => [
+      ...prev,
+      {
+        tempId: nextPhoneId(),
+        label: "",
+        number: "",
+        // New phones default to non-primary; user can promote one.
+        isPrimary: prev.length === 0,
+      },
+    ]);
+  };
+  const removePhone = (tempId: string) => {
+    setPhones((prev) => {
+      const next = prev.filter((p) => p.tempId !== tempId);
+      // If we just removed the primary and others remain, promote
+      // the first one so exactly one primary survives.
+      if (next.length > 0 && !next.some((p) => p.isPrimary)) {
+        next[0] = { ...next[0], isPrimary: true };
+      }
+      return next;
+    });
+  };
+  const updatePhone = (tempId: string, patch: Partial<PhoneDraft>) => {
+    setPhones((prev) =>
+      prev.map((p) => (p.tempId === tempId ? { ...p, ...patch } : p))
+    );
+  };
+  const setPrimary = (tempId: string) => {
+    setPhones((prev) =>
+      prev.map((p) => ({ ...p, isPrimary: p.tempId === tempId }))
+    );
+  };
+
+  // Only submit phones that have a number — empty drafts are ignored
+  // server-side anyway (min(1) on number).
+  const phonesJson = JSON.stringify(
+    phones
+      .filter((p) => p.number.trim().length > 0)
+      .map((p) => ({
+        label: p.label.trim(),
+        number: p.number.trim(),
+        isPrimary: p.isPrimary,
+      }))
+  );
   const [representation, setRepresentation] = useState<
     "unknown" | "yes" | "no"
   >(
@@ -90,24 +169,14 @@ export function PartyEditForm({
         {errs.contactName && (
           <div className="text-2xs text-warn">{errs.contactName[0]}</div>
         )}
-        <div className="grid grid-cols-2 gap-2">
-          <input
-            type="email"
-            name="contactEmail"
-            value={contactEmail}
-            onChange={(e) => setContactEmail(e.target.value)}
-            placeholder="Email (optional)"
-            className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
-          />
-          <input
-            type="tel"
-            name="contactPhone"
-            value={contactPhone}
-            onChange={(e) => setContactPhone(e.target.value)}
-            placeholder="Phone (optional)"
-            className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
-          />
-        </div>
+        <input
+          type="email"
+          name="contactEmail"
+          value={contactEmail}
+          onChange={(e) => setContactEmail(e.target.value)}
+          placeholder="Email (optional)"
+          className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+        />
         <input
           type="text"
           name="contactOrganization"
@@ -116,7 +185,92 @@ export function PartyEditForm({
           placeholder="Organization (optional)"
           className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
         />
-        <div className="text-[10px] text-ink-4 leading-relaxed">
+
+        {/* Phones — multi-entry editor. Star marks the primary. */}
+        <input type="hidden" name="phones" value={phonesJson} />
+        <div className="flex flex-col gap-1.5 pt-1">
+          <div className="flex items-center justify-between">
+            <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+              Phones
+            </div>
+            <button
+              type="button"
+              onClick={addPhone}
+              className="inline-flex items-center gap-1 text-2xs text-brand-700 hover:underline"
+            >
+              <Plus size={11} />
+              Add phone
+            </button>
+          </div>
+          {phones.length === 0 ? (
+            <div className="text-2xs text-ink-4 italic py-1">
+              No phones — click "Add phone" to create one.
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {phones.map((p) => (
+                <div
+                  key={p.tempId}
+                  className="grid grid-cols-[auto_8rem_1fr_auto] gap-1.5 items-center"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setPrimary(p.tempId)}
+                    title={
+                      p.isPrimary
+                        ? "Primary phone"
+                        : "Make this the primary phone"
+                    }
+                    aria-label={
+                      p.isPrimary ? "Primary phone" : "Set as primary"
+                    }
+                    aria-pressed={p.isPrimary}
+                    className={cn(
+                      "inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors",
+                      p.isPrimary
+                        ? "text-brand-700"
+                        : "text-ink-4 hover:text-brand-700"
+                    )}
+                  >
+                    <Star
+                      size={12}
+                      className={cn(p.isPrimary && "fill-brand-500 text-brand-500")}
+                    />
+                  </button>
+                  <input
+                    type="text"
+                    value={p.label}
+                    onChange={(e) =>
+                      updatePhone(p.tempId, { label: e.target.value })
+                    }
+                    placeholder="Label (Mobile…)"
+                    className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+                  />
+                  <input
+                    type="tel"
+                    value={p.number}
+                    onChange={(e) =>
+                      updatePhone(p.tempId, { number: e.target.value })
+                    }
+                    placeholder="(303) 555-0000"
+                    className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removePhone(p.tempId)}
+                    title="Remove phone"
+                    aria-label="Remove phone"
+                    className="inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-4 hover:text-warn hover:bg-warn-soft transition-colors"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="text-[10px] text-ink-4 leading-relaxed pt-0.5">
           Changes here update the contact across every matter they
           appear on.
         </div>

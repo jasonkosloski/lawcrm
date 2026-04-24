@@ -194,6 +194,10 @@ model Contact {
   id              String   @id @default(cuid())
   name            String
   email           String?
+  /// Denormalized primary phone — kept in sync with the primary
+  /// ContactPhone row (via writes in src/app/actions/parties.ts).
+  /// Existing reads across the app keep working; new code that
+  /// needs the full list queries `phones`.
   phone           String?
   organization    String?  /// Firm, company, or agency name
   type            String   /// client | opposing_counsel | witness | expert | judge | court | vendor | medical_provider | government | other
@@ -210,10 +214,32 @@ model Contact {
   // Relationships
   mattersAsClient MatterContact[]
   clientMatters   Matter[]  @relation("MatterClient")
+  phones          ContactPhone[]
 
   @@index([type])
   @@index([name])
   @@map("contacts")
+}
+
+/// A phone number on a contact. Contacts can have many — a cell,
+/// office, fax, etc. Exactly one per contact may be marked
+/// `isPrimary`; the primary's `number` is mirrored onto
+/// `Contact.phone` for backward compatibility with existing reads.
+model ContactPhone {
+  id        String   @id @default(cuid())
+  contactId String
+  /// Free-text label (Mobile / Office / Home / Fax / custom).
+  label     String?
+  number    String
+  isPrimary Boolean  @default(false)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId])
+  @@index([contactId, isPrimary])
+  @@map("contact_phones")
 }
 
 /// Join table linking contacts to matters. `category` is the coarse
