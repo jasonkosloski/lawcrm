@@ -87,25 +87,54 @@ export function MatterCreateStackProvider({
     setFocusedId(id);
   }, []);
 
-  const close = useCallback((id: string) => {
-    setPanels((prev) => {
-      const next = prev.filter((p) => p.id !== id);
-      // Focus shift: if we just removed the focused panel, pick the
-      // most recently-opened remaining panel (last in list).
-      setFocusedId((currentFocus) => {
-        if (currentFocus !== id) return currentFocus;
-        return next.length > 0 ? next[next.length - 1].id : null;
-      });
-      return next;
-    });
-  }, []);
+  const close = useCallback(
+    (id: string) => {
+      const closingFocused = id === focusedId;
+      const closingPanel = panels.find((p) => p.id === id);
+      // If the user is closing the focused panel *while it's expanded*,
+      // the next focused panel inherits that expansion — the user is in
+      // "focus mode" and doesn't want to be dumped back to the docked
+      // rail just because they closed one item in the stack.
+      const inheritExpanded =
+        closingFocused && (closingPanel?.expanded ?? false);
 
-  const focus = useCallback((id: string) => {
-    // Collapse any expanded panels when switching focus; expansion is
-    // a focus-mode for one panel at a time.
-    setPanels((prev) => prev.map((p) => ({ ...p, expanded: false })));
-    setFocusedId(id);
-  }, []);
+      const remaining = panels.filter((p) => p.id !== id);
+      const nextFocusId = closingFocused
+        ? remaining.length > 0
+          ? remaining[remaining.length - 1].id
+          : null
+        : focusedId;
+
+      setPanels(
+        remaining.map((p) =>
+          inheritExpanded && p.id === nextFocusId
+            ? { ...p, expanded: true }
+            : p
+        )
+      );
+      setFocusedId(nextFocusId);
+    },
+    [panels, focusedId]
+  );
+
+  const focus = useCallback(
+    (id: string) => {
+      // Chip-click focus preserves expansion: if the current focused
+      // panel is expanded, hand the expansion to the newly-focused
+      // panel so the user stays in modal focus mode across switches.
+      // If the current is docked, the new one is docked too.
+      setPanels((prev) => {
+        const currentlyExpanded =
+          prev.find((p) => p.id === focusedId)?.expanded ?? false;
+        return prev.map((p) => ({
+          ...p,
+          expanded: p.id === id ? currentlyExpanded : false,
+        }));
+      });
+      setFocusedId(id);
+    },
+    [focusedId]
+  );
 
   const setExpanded = useCallback((id: string, expanded: boolean) => {
     setPanels((prev) =>

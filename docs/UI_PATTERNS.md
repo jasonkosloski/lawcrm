@@ -245,10 +245,15 @@ announced court date, without losing either in progress.
 
 - Opening a new panel minimizes the currently focused one to a chip
   and makes the new one focused.
-- Clicking a chip focuses that panel (collapsing any expanded state
-  first); the previously focused panel becomes a chip.
+- Clicking a chip focuses that panel; **expansion is preserved
+  across the switch** — if the user was in expanded-modal focus
+  mode, the newly-focused panel opens in modal too. Dumping the user
+  back to the docked rail just because they switched drafts would
+  break the focus session.
 - Closing the focused panel shifts focus to the most recently
   opened remaining panel, or to nothing if the stack is empty.
+  Same expansion-preservation rule applies: if the closed panel was
+  expanded, the next focused panel inherits the expansion.
 - `Escape` collapses expanded → docked, or closes the focused panel
   if already docked.
 
