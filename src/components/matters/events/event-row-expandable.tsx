@@ -32,6 +32,23 @@ const TYPE_LABEL: Record<string, string> = {
   trial: "Trial",
 };
 
+/** Plain-text preview of the first (pinned-first, most-recent) note
+ *  shown under the event title when the row is collapsed. Strips
+ *  HTML tags and collapses whitespace. Prefixed with the author's
+ *  initials so scanners can tell at a glance who chimed in. */
+function notePreview(note: {
+  content: string;
+  authorInitials: string;
+}): string {
+  const text = note.content
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const snippet = text.length > 110 ? `${text.slice(0, 109)}…` : text;
+  return `${note.authorInitials}: ${snippet}`;
+}
+
 export function EventRowExpandable({
   event,
   matterId,
@@ -80,12 +97,28 @@ export function EventRowExpandable({
               </span>
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-xs font-medium text-ink truncate">
-                {event.title}
+              <div className="flex items-center gap-1.5 min-w-0">
+                <div className="text-xs font-medium text-ink truncate">
+                  {event.title}
+                </div>
+                {notesCount > 0 && (
+                  <span
+                    className="inline-flex items-center gap-0.5 text-2xs font-medium text-brand-700 bg-brand-soft border border-brand-200 px-1.5 py-0.5 rounded-full shrink-0"
+                    title={`${notesCount} note${notesCount === 1 ? "" : "s"} attached`}
+                  >
+                    <MessageSquare size={10} />
+                    {notesCount}
+                  </span>
+                )}
               </div>
               {event.location && (
                 <div className="text-2xs text-ink-3 truncate">
                   {event.location}
+                </div>
+              )}
+              {notesCount > 0 && !expanded && (
+                <div className="text-2xs text-ink-3 truncate mt-0.5 italic">
+                  {notePreview(event.notes[0])}
                 </div>
               )}
             </div>
