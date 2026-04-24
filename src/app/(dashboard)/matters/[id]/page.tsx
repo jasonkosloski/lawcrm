@@ -12,8 +12,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Pin } from "lucide-react";
+import { Mail, Phone, Pin } from "lucide-react";
 import { StageChanger } from "@/components/matters/stage-changer";
+import { EmailLink } from "@/components/ui/email-link";
+import { formatPhone } from "@/lib/format-phone";
 import { prisma } from "@/lib/prisma";
 import { getMatterById } from "@/lib/queries/matters";
 import {
@@ -48,16 +50,49 @@ export default async function MatterOverviewPage({
   const matter = await getMatterById(id);
   if (!matter) notFound();
 
-  const [deadlines, tasks, notes, stageOptions] = await Promise.all([
-    getMatterDeadlines(id),
-    getMatterTasks(id),
-    getMatterNotes(id),
-    prisma.matterStage.findMany({
-      where: { practiceAreaId: matter.practiceAreaId, isActive: true },
-      orderBy: { order: "asc" },
-      select: { id: true, name: true, order: true, isTerminal: true },
-    }),
-  ]);
+  const [deadlines, tasks, notes, stageOptions, clientRows] =
+    await Promise.all([
+      getMatterDeadlines(id),
+      getMatterTasks(id),
+      getMatterNotes(id),
+      prisma.matterStage.findMany({
+        where: { practiceAreaId: matter.practiceAreaId, isActive: true },
+        orderBy: { order: "asc" },
+        select: { id: true, name: true, order: true, isTerminal: true },
+      }),
+      // All client-category parties on this matter (primary + any
+      // co-clients). Ordered primary-first via contactId match below.
+      prisma.matterContact.findMany({
+        where: { matterId: id, category: "client" },
+        include: {
+          contact: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              organization: true,
+              phones: {
+                orderBy: [{ isPrimary: "desc" }, { order: "asc" }],
+                select: {
+                  id: true,
+                  label: true,
+                  number: true,
+                  isPrimary: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: "asc" },
+      }),
+    ]);
+
+  // Pin the primary client (Matter.clientId) to the top of the list.
+  const clients = [...clientRows].sort(
+    (a, b) =>
+      (b.contact.id === matter.clientId ? 1 : 0) -
+      (a.contact.id === matter.clientId ? 1 : 0)
+  );
 
   const upcomingDeadlines = deadlines
     .filter((d) => d.status === "open")
@@ -218,6 +253,112 @@ export default async function MatterOverviewPage({
 
         {/* ── Right column ────────────────────────────────────────── */}
         <div className="flex flex-col gap-5">
+          {/* Clients — always visible thanks to the MatterContact
+              invariant (see createMatter/updateMatter). */}
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold">
+                  {clients.length === 1 ? "Client" : "Clients"}
+                </CardTitle>
+                <Link
+                  href={`/matters/${matter.id}/parties`}
+                  className="text-2xs text-brand-700 hover:underline"
+                >
+                  All parties →
+                </Link>
+              </div>
+            </CardHeader>
+            <CardContent className="px-4 pb-4">
+              {clients.length === 0 ? (
+                <div className="py-2 text-xs text-ink-4">
+                  No client on this matter yet — set one via{" "}
+                  <Link
+                    href={`/matters/${matter.id}/edit`}
+                    className="text-brand-700 hover:underline"
+                  >
+                    Edit matter
+                  </Link>
+                  .
+                </div>
+              ) : (
+                <ul className="flex flex-col gap-3">
+                  {clients.map((row) => (
+                    <li
+                      key={row.id}
+                      className="flex flex-col gap-1 text-xs"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-ink truncate">
+                          {row.contact.name}
+                        </span>
+                        {row.contact.id === matter.clientId && (
+                          <span
+                            className="text-2xs font-medium px-1.5 py-0.5 rounded-full bg-brand-soft text-brand-700 border border-brand-200"
+                            title="Matter's primary client"
+                          >
+                            Primary
+                          </span>
+                        )}
+                      </div>
+                      {row.contact.organization && (
+                        <div className="text-2xs text-ink-3">
+                          {row.contact.organization}
+                        </div>
+                      )}
+                      {row.contact.email && (
+                        <div className="flex items-center gap-1.5 text-2xs">
+                          <Mail size={11} className="text-ink-4 shrink-0" />
+                          <EmailLink
+                            email={row.contact.email}
+                            className="text-ink truncate"
+                          />
+                        </div>
+                      )}
+                      {row.contact.phones.length > 0 ? (
+                        <div className="flex flex-col gap-0.5">
+                          {row.contact.phones.map((p) => (
+                            <div
+                              key={p.id}
+                              className="flex items-center gap-1.5 text-2xs"
+                            >
+                              <Phone
+                                size={11}
+                                className="text-ink-4 shrink-0"
+                              />
+                              {p.label && (
+                                <span className="text-ink-4">
+                                  {p.label}
+                                </span>
+                              )}
+                              <a
+                                href={`tel:${p.number.replace(/\D/g, "")}`}
+                                className="font-mono text-ink hover:text-brand-700 hover:underline"
+                              >
+                                {formatPhone(p.number)}
+                              </a>
+                              {p.isPrimary &&
+                                row.contact.phones.length > 1 && (
+                                  <span className="text-[9px] text-brand-700">
+                                    primary
+                                  </span>
+                                )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      {row.notes && (
+                        <div className="text-2xs text-ink-3 italic">
+                          {row.notes}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Upcoming deadlines */}
           <Card>
             <CardHeader className="pb-2">
