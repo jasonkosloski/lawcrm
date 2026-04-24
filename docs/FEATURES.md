@@ -41,6 +41,7 @@ Status legend: `[ ]` planned · `[~]` in progress · `[x]` complete · `[-]` des
 - [x] **Matter detail — Tasks tab** — Grouped by status (Open / In progress / In review / Done / Cancelled) with priority chip, due date, owner
 - [x] **Matter detail — Notes tab** — Card list with type chip (Note / Strategy / Chatter / Memo), author avatar, timestamp; pinned notes float to top
 - [x] **Matter detail — Events tab** — Calendar events linked to this matter split into Upcoming / Past with time, type chip, location, attendee count; clicking opens the same EventDetailModal as the calendar page via `?event=<id>`
+- [x] **Matter detail — Communication tab** — Email threads filed to this matter via `EmailThread.matterId`; embedded thread list links through to the main inbox with the thread preselected
 - [ ] **Matter detail — Billing tab** — WIP, time entries, invoices for this matter (placeholder route exists)
 - [ ] **New matter form** — Create matter with stage, area, client, team assignment
 
@@ -55,6 +56,7 @@ Status legend: `[ ]` planned · `[~]` in progress · `[x]` complete · `[-]` des
 
 - [x] **Intake queue — v1 list** — Sortable-looking table, active leads surface first by score desc, score/assessment/statute/conflict/stage/age columns
 - [x] **Lead detail — v1 page** — Case summary, assessment bars (liability + damages), contact card, intake meta, conflict-check card, converted-matter link when applicable; Convert / Decline actions placeholder until the conversion wizard ships
+- [x] **Lead detail — tab structure + Communication tab** — Intake detail split into Overview + Communication tabs (matches matter-detail pattern); Communication tab matches threads by the lead's email address (sender, to, or cc). When lead↔thread linkage tightens (e.g., auto-match on inbound email), swap the query without changing the page.
 - [ ] **Intake queue — split-view reader pane** — Lead list on the left, detail on the right (alternative to separate routes)
 - [ ] **Lead scoring — deep dive** — Score composition, liability/damages factor breakdown, recompute on field changes
 - [ ] **Conflict check automation** — Name/organization matching against existing Contacts and opposing parties with severity levels

@@ -151,6 +151,112 @@ export async function getThreadById(id: string): Promise<ThreadDetail | null> {
   };
 }
 
+/** Threads whose `matterId` points at this matter — scoped to the
+ *  current user's accounts. Used by the matter's Communication tab. */
+export async function listThreadsForMatter(
+  matterId: string
+): Promise<ThreadListRow[]> {
+  const userId = await getCurrentUserId();
+  const threads = await prisma.emailThread.findMany({
+    where: { matterId, account: { userId } },
+    include: {
+      matter: { select: { id: true, name: true, color: true } },
+      messages: {
+        orderBy: { sentAt: "asc" },
+        take: 1,
+        select: { fromName: true, fromEmail: true },
+      },
+    },
+    orderBy: { lastMessageAt: "desc" },
+  });
+  return threads.map((t) => ({
+    id: t.id,
+    subject: t.subject,
+    snippet: t.snippet,
+    isRead: t.isRead,
+    isStarred: t.isStarred,
+    hasAttachments: t.hasAttachments,
+    messageCount: t.messageCount,
+    lastMessageAt: t.lastMessageAt,
+    fromDisplay:
+      t.messages[0]?.fromName ?? t.messages[0]?.fromEmail ?? "Unknown",
+    matter: t.matter,
+  }));
+}
+
+/** Threads that touch a given email address (sender OR recipient).
+ *  Recipients are stored as JSON strings so the final filter runs in
+ *  memory after fetching the candidate set.
+ *
+ *  Used by the lead Communication tab — since Leads don't have direct
+ *  EmailThread links today, email address is the matching key. Schema
+ *  may eventually gain a `Lead.threadId[]` relation (see SCHEMA_NOTES
+ *  open questions) at which point this becomes a direct join. */
+export async function listThreadsForEmail(
+  email: string
+): Promise<ThreadListRow[]> {
+  if (!email) return [];
+  const normalized = email.toLowerCase();
+  const userId = await getCurrentUserId();
+
+  // Quick candidate fetch: any thread with a message that sent to or
+  // from the email (via substring hit on toRecipients/ccRecipients
+  // JSON, or exact on fromEmail).
+  const candidates = await prisma.emailThread.findMany({
+    where: {
+      account: { userId },
+      messages: {
+        some: {
+          OR: [
+            { fromEmail: { contains: normalized } },
+            { toRecipients: { contains: normalized } },
+            { ccRecipients: { contains: normalized } },
+          ],
+        },
+      },
+    },
+    include: {
+      matter: { select: { id: true, name: true, color: true } },
+      messages: {
+        orderBy: { sentAt: "asc" },
+        select: {
+          fromName: true,
+          fromEmail: true,
+          toRecipients: true,
+          ccRecipients: true,
+        },
+      },
+    },
+    orderBy: { lastMessageAt: "desc" },
+  });
+
+  // Sharpen the match in memory so a substring collision doesn't
+  // produce a false positive.
+  const matches = candidates.filter((t) =>
+    t.messages.some((m) => {
+      if (m.fromEmail.toLowerCase() === normalized) return true;
+      const to = parseRecipients(m.toRecipients);
+      if (to.some((r) => r.email.toLowerCase() === normalized)) return true;
+      const cc = parseRecipients(m.ccRecipients);
+      return cc.some((r) => r.email.toLowerCase() === normalized);
+    })
+  );
+
+  return matches.map((t) => ({
+    id: t.id,
+    subject: t.subject,
+    snippet: t.snippet,
+    isRead: t.isRead,
+    isStarred: t.isStarred,
+    hasAttachments: t.hasAttachments,
+    messageCount: t.messageCount,
+    lastMessageAt: t.lastMessageAt,
+    fromDisplay:
+      t.messages[0]?.fromName ?? t.messages[0]?.fromEmail ?? "Unknown",
+    matter: t.matter,
+  }));
+}
+
 export type CommunicationCounts = {
   all: number;
   unread: number;

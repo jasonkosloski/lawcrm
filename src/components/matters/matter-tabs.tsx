@@ -30,6 +30,7 @@ const TABS = [
   { slug: "", label: "Overview" },
   { slug: "timeline", label: "Timeline" },
   { slug: "events", label: "Events" },
+  { slug: "communication", label: "Communication" },
   { slug: "documents", label: "Documents" },
   { slug: "parties", label: "Parties" },
   { slug: "deadlines", label: "Deadlines" },
