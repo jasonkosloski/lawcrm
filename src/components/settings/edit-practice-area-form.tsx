@@ -37,9 +37,6 @@ export function EditPracticeAreaForm({
   const errs = state.errors ?? {};
 
   const [color, setColor] = useState<string>(vals.color ?? area.color);
-  const [hasSol, setHasSol] = useState<boolean>(
-    vals.hasStatuteOfLimitations === "on" || area.hasStatuteOfLimitations
-  );
 
   return (
     <form action={formAction} className="flex flex-col gap-3">
@@ -87,12 +84,20 @@ export function EditPracticeAreaForm({
         </Field>
       </div>
 
+      {/* Uncontrolled — the DOM owns the checkbox state so a stale
+          area prop or reset form-state from the action can't revert
+          what the user just clicked. `defaultChecked` re-seeds only
+          if the component remounts, which is the desired behavior
+          after revalidatePath. */}
       <label className="flex items-start gap-2 cursor-pointer select-none pt-1">
         <input
           type="checkbox"
           name="hasStatuteOfLimitations"
-          checked={hasSol}
-          onChange={(e) => setHasSol(e.target.checked)}
+          defaultChecked={
+            vals.hasStatuteOfLimitations === "on" ||
+            (vals.hasStatuteOfLimitations === undefined &&
+              area.hasStatuteOfLimitations)
+          }
           className="w-3.5 h-3.5 rounded border-line mt-0.5"
         />
         <div className="flex flex-col gap-0.5">
