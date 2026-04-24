@@ -1,10 +1,17 @@
 /**
  * Matter Detail Layout
  *
- * Shared header + tab bar around every matter detail tab (Overview,
- * Timeline, Documents, Parties, Deadlines, Tasks, Notes, Billing).
- * Fetches the matter once here so each tab doesn't re-fetch the
- * header data.
+ * Header + tab bar around every matter detail tab (Overview, Timeline,
+ * Documents, Parties, Deadlines, Tasks, Notes, Billing). Fetches the
+ * matter once here so each tab doesn't re-fetch the header data.
+ *
+ * Layout:
+ *   TopBar        — crumb "Matters", title = matter name, stage chip +
+ *                   area as subtitle, pin toggle in actions
+ *   Metadata strip — compact one-line row: color dot, case number,
+ *                   client, court, fee, lead
+ *   Tab bar       — Overview, Timeline, Documents, …
+ *   Tab content   — child route fills remaining height
  *
  * Next.js 16: dynamic route `params` is a Promise that must be awaited.
  */
@@ -35,72 +42,61 @@ export default async function MatterDetailLayout({
 
   return (
     <>
-      <TopBar title={matter.name} crumbs={`Matters / ${matter.name}`} />
+      <TopBar
+        title={matter.name}
+        crumbs="Matters"
+        subtitle={
+          <>
+            <span className="inline-block text-2xs font-medium px-2 py-0.5 rounded-full border bg-brand-soft text-brand-700 border-brand-200">
+              {matter.stage}
+            </span>
+            <span className="text-2xs text-ink-3">{matter.area}</span>
+          </>
+        }
+        actions={
+          <PinToggle
+            matterId={matter.id}
+            initialPinned={matter.isPinnedByCurrentUser}
+          />
+        }
+      />
 
-      {/* ── Matter header card ──────────────────────────────────────── */}
-      <div className="px-5 pt-5 animate-page-enter">
-        <div className="flex items-start gap-4">
-          {/* Practice area color block */}
-          <div
-            className="w-1 self-stretch rounded-full shrink-0"
+      {/* ── Compact metadata strip ──────────────────────────────────── */}
+      <div className="flex items-center gap-5 flex-wrap px-4 py-2 border-b border-line text-xs text-ink-3 animate-page-enter">
+        <span className="flex items-center gap-2">
+          <span
+            className="w-1.5 h-1.5 rounded-full shrink-0"
             style={{ background: matter.color }}
           />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-lg font-display font-medium text-ink">
-                {matter.name}
-              </h1>
-              {matter.caseNumber && (
-                <span className="text-2xs font-mono text-ink-4">
-                  {matter.caseNumber}
-                </span>
-              )}
-              <span className="inline-block text-2xs font-medium px-2 py-0.5 rounded-full border bg-brand-soft text-brand-700 border-brand-200">
-                {matter.stage}
-              </span>
-              <span className="text-2xs text-ink-3">{matter.area}</span>
-              <div className="ml-auto">
-                <PinToggle
-                  matterId={matter.id}
-                  initialPinned={matter.isPinnedByCurrentUser}
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-5 mt-1.5 text-xs text-ink-3">
-              {matter.client && (
-                <span>
-                  Client:{" "}
-                  <span className="text-ink font-medium">
-                    {matter.client.name}
-                  </span>
-                </span>
-              )}
-              {matter.court && <span>{matter.court}</span>}
-              <span>
-                Fee:{" "}
-                <span className="text-ink">
-                  {FEE_LABEL[matter.feeStructure] ?? matter.feeStructure}
-                </span>
-              </span>
-              {leadMember && (
-                <span>
-                  Lead:{" "}
-                  <span className="text-ink font-medium">
-                    {leadMember.user.name}
-                  </span>
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
+          {matter.caseNumber && (
+            <span className="font-mono text-2xs text-ink-4">
+              {matter.caseNumber}
+            </span>
+          )}
+        </span>
+        {matter.client && (
+          <span>
+            Client:{" "}
+            <span className="text-ink font-medium">{matter.client.name}</span>
+          </span>
+        )}
+        {matter.court && <span>{matter.court}</span>}
+        <span>
+          Fee:{" "}
+          <span className="text-ink">
+            {FEE_LABEL[matter.feeStructure] ?? matter.feeStructure}
+          </span>
+        </span>
+        {leadMember && (
+          <span>
+            Lead:{" "}
+            <span className="text-ink font-medium">{leadMember.user.name}</span>
+          </span>
+        )}
       </div>
 
-      {/* ── Tab bar ─────────────────────────────────────────────────── */}
-      <div className="mt-4">
-        <MatterTabs matterId={matter.id} />
-      </div>
+      <MatterTabs matterId={matter.id} />
 
-      {/* ── Tab content ─────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto">{children}</div>
     </>
   );
