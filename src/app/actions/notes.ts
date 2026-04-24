@@ -260,6 +260,14 @@ export async function createNote(
     revalidatePath(`/matters/${matterId}/deadlines`);
   if (validCaptures.some((c) => c.kind === "time"))
     revalidatePath(`/matters/${matterId}/time`);
+
+  // When the primary note itself is attached to a calendar event we
+  // need to refresh the matter's events tab + the main calendar so the
+  // event detail modal picks up the new note without a full reload.
+  if (parsed.data.calendarEventId) {
+    revalidatePath(`/matters/${matterId}/events`);
+    revalidatePath(`/calendar`);
+  }
   return { status: "ok" };
 }
 
@@ -270,7 +278,7 @@ export async function toggleNotePin(
 ): Promise<{ ok: boolean; error?: string }> {
   const note = await prisma.note.findUnique({
     where: { id: noteId },
-    select: { id: true, isPinned: true, matterId: true },
+    select: { id: true, isPinned: true, matterId: true, calendarEventId: true },
   });
   if (!note) return { ok: false, error: "Note not found" };
 
@@ -281,6 +289,10 @@ export async function toggleNotePin(
 
   revalidatePath(`/matters/${note.matterId}/notes`);
   revalidatePath(`/matters/${note.matterId}`);
+  if (note.calendarEventId) {
+    revalidatePath(`/matters/${note.matterId}/events`);
+    revalidatePath(`/calendar`);
+  }
   return { ok: true };
 }
 
@@ -291,7 +303,7 @@ export async function deleteNote(
 ): Promise<{ ok: boolean; error?: string }> {
   const note = await prisma.note.findUnique({
     where: { id: noteId },
-    select: { id: true, matterId: true },
+    select: { id: true, matterId: true, calendarEventId: true },
   });
   if (!note) return { ok: false, error: "Note not found" };
 
@@ -299,6 +311,10 @@ export async function deleteNote(
 
   revalidatePath(`/matters/${note.matterId}/notes`);
   revalidatePath(`/matters/${note.matterId}`);
+  if (note.calendarEventId) {
+    revalidatePath(`/matters/${note.matterId}/events`);
+    revalidatePath(`/calendar`);
+  }
   return { ok: true };
 }
 

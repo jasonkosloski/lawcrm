@@ -159,6 +159,45 @@ export async function getCalendarEventById(
   };
 }
 
+/** Shape used by the event detail modal's notes section. Compact —
+ *  not threaded, not filterable; the matter's Notes tab is the full
+ *  surface for that. */
+export type EventNote = {
+  id: string;
+  type: string;
+  content: string;
+  isPinned: boolean;
+  authorName: string;
+  authorInitials: string;
+  createdAt: Date;
+  /** Matter the note belongs to — needed so delete/pin server actions
+   *  can revalidate the right paths from the modal. */
+  matterId: string;
+};
+
+/** Notes directly attached to a specific calendar event (calendarEventId
+ *  FK). Sorted pinned-first / most-recent-first so the most important
+ *  court notes surface at the top. Replies (notes with parentNoteId
+ *  set) are included only when their parent is also attached to this
+ *  event — keeps the modal focused without fragmenting threads. */
+export async function getEventNotes(eventId: string): Promise<EventNote[]> {
+  const rows = await prisma.note.findMany({
+    where: { calendarEventId: eventId },
+    include: { author: { select: { name: true, initials: true } } },
+    orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
+  });
+  return rows.map((n) => ({
+    id: n.id,
+    type: n.type,
+    content: n.content,
+    isPinned: n.isPinned,
+    authorName: n.author.name,
+    authorInitials: n.author.initials,
+    createdAt: n.createdAt,
+    matterId: n.matterId,
+  }));
+}
+
 /** Summary counts for the top-bar crumb. */
 export async function getCalendarSummary(
   rangeStart: Date,

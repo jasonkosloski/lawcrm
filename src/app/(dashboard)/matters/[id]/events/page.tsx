@@ -15,7 +15,7 @@ import {
   getMatterEvents,
   type MatterEventRow,
 } from "@/lib/queries/matter-detail";
-import { getCalendarEventById } from "@/lib/queries/calendar";
+import { getCalendarEventById, getEventNotes } from "@/lib/queries/calendar";
 
 const TYPE_LABEL: Record<string, string> = {
   meeting: "Meeting",
@@ -37,9 +37,10 @@ export default async function MatterEventsPage({
   const rawEventParam = Array.isArray(sp.event) ? sp.event[0] : sp.event;
   const eventId = typeof rawEventParam === "string" ? rawEventParam : null;
 
-  const [events, selectedEvent] = await Promise.all([
+  const [events, selectedEvent, selectedEventNotes] = await Promise.all([
     getMatterEvents(id),
     eventId ? getCalendarEventById(eventId) : Promise.resolve(null),
+    eventId ? getEventNotes(eventId) : Promise.resolve([]),
   ]);
 
   const upcoming = events.filter((e) => e.isUpcoming);
@@ -60,7 +61,9 @@ export default async function MatterEventsPage({
       )}
       {past.length > 0 && <EventSection title="Past" events={past} />}
 
-      {selectedEvent && <EventDetailModal event={selectedEvent} />}
+      {selectedEvent && (
+        <EventDetailModal event={selectedEvent} notes={selectedEventNotes} />
+      )}
     </div>
   );
 }

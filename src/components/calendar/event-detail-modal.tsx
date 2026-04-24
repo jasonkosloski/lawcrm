@@ -25,7 +25,8 @@ import {
   Video,
   X,
 } from "lucide-react";
-import type { CalendarEventDetail } from "@/lib/queries/calendar";
+import type { CalendarEventDetail, EventNote } from "@/lib/queries/calendar";
+import { EventNotesSection } from "./event-notes-section";
 
 const TYPE_LABEL: Record<string, string> = {
   meeting: "Meeting",
@@ -45,7 +46,13 @@ const ATTENDEE_STATUS_LABEL: Record<string, string> = {
   pending: "Pending",
 };
 
-export function EventDetailModal({ event }: { event: CalendarEventDetail }) {
+export function EventDetailModal({
+  event,
+  notes,
+}: {
+  event: CalendarEventDetail;
+  notes: EventNote[];
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -172,7 +179,7 @@ export function EventDetailModal({ event }: { event: CalendarEventDetail }) {
           {event.description && (
             <div className="pt-3 border-t border-line">
               <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 mb-1.5">
-                Notes
+                Description
               </div>
               <p className="text-xs text-ink leading-relaxed whitespace-pre-wrap">
                 {event.description}
@@ -210,6 +217,14 @@ export function EventDetailModal({ event }: { event: CalendarEventDetail }) {
               </ul>
             </div>
           )}
+
+          {/* Notes attached to this event */}
+          <EventNotesSection
+            eventId={event.id}
+            matterId={event.matter?.id ?? null}
+            matterName={event.matter?.name ?? null}
+            notes={notes}
+          />
         </div>
 
         {/* Footer */}
