@@ -25,9 +25,11 @@ import {
   NOTE_TYPE_LABEL,
   NOTE_TYPES,
   noteInitialState,
+  type NoteCapture,
   type NoteFormState,
 } from "@/lib/note-constants";
 import { NoteEditor } from "./note-editor";
+import { CaptureStack } from "./capture-stack";
 
 export function NoteComposer({ matterId }: { matterId: string }) {
   const boundCreate = createNote.bind(null, matterId);
@@ -40,6 +42,7 @@ export function NoteComposer({ matterId }: { matterId: string }) {
   const [html, setHtml] = useState("");
   const [type, setType] = useState<(typeof NOTE_TYPES)[number]>("note");
   const [pin, setPin] = useState(false);
+  const [captures, setCaptures] = useState<NoteCapture[]>([]);
   // Bumped after each successful save so the editor remounts with a
   // fresh empty document.
   const [editorKey, setEditorKey] = useState(0);
@@ -51,11 +54,13 @@ export function NoteComposer({ matterId }: { matterId: string }) {
     setHtml("");
     setType("note");
     setPin(false);
+    setCaptures([]);
     setExpanded(false);
     setEditorKey((k) => k + 1);
   }, [state.status]);
 
   const errs = state.errors ?? {};
+  const attachmentErrors = state.attachmentErrors ?? {};
 
   return (
     <Card className={cn(expanded && "border-brand-200")}>
@@ -69,6 +74,11 @@ export function NoteComposer({ matterId }: { matterId: string }) {
           <input type="hidden" name="content" value={html} />
           <input type="hidden" name="type" value={type} />
           {pin && <input type="hidden" name="isPinned" value="on" />}
+          <input
+            type="hidden"
+            name="attachments"
+            value={JSON.stringify(captures)}
+          />
 
           {!expanded ? (
             <button
@@ -95,6 +105,12 @@ export function NoteComposer({ matterId }: { matterId: string }) {
               {errs.content && errs.content.length > 0 && (
                 <div className="text-2xs text-warn">{errs.content[0]}</div>
               )}
+
+              <CaptureStack
+                captures={captures}
+                onChange={setCaptures}
+                errors={attachmentErrors}
+              />
 
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -157,7 +173,11 @@ export function NoteComposer({ matterId }: { matterId: string }) {
                       "hover:bg-brand-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                     )}
                   >
-                    {isPending ? "Saving…" : "Save note"}
+                    {isPending
+                      ? "Saving…"
+                      : captures.length > 0
+                        ? `Save note + ${captures.length}`
+                        : "Save note"}
                   </button>
                 </div>
               </div>

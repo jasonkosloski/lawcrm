@@ -19,6 +19,142 @@ export type NoteFormState = {
   status: "idle" | "ok" | "error";
   errors?: Record<string, string[]>;
   values?: Record<string, string>;
+  /** Per-attachment errors keyed by tempId. Surfaced inline next to
+   *  the offending sub-form so the user can fix it without losing
+   *  everything else they typed. */
+  attachmentErrors?: Record<string, Record<string, string[]>>;
 };
 
 export const noteInitialState: NoteFormState = { status: "idle" };
+
+// ── Captures (attached records) ────────────────────────────────────────
+
+export const TASK_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
+export const EVENT_TYPES = [
+  "meeting",
+  "deposition",
+  "hearing",
+  "intake",
+  "mediation",
+  "block_time",
+  "trial",
+] as const;
+export const DEADLINE_KINDS = ["critical", "auto_rule", "manual"] as const;
+
+export type TaskCapture = {
+  kind: "task";
+  tempId: string;
+  title: string;
+  dueDate: string;
+  priority: (typeof TASK_PRIORITIES)[number];
+};
+
+export type EventCapture = {
+  kind: "event";
+  tempId: string;
+  title: string;
+  startTime: string;
+  endTime: string;
+  type: (typeof EVENT_TYPES)[number];
+  location: string;
+};
+
+export type DeadlineCapture = {
+  kind: "deadline";
+  tempId: string;
+  title: string;
+  dueDate: string;
+  kind_: (typeof DEADLINE_KINDS)[number];
+  description: string;
+};
+
+export type TimeCapture = {
+  kind: "time";
+  tempId: string;
+  date: string;
+  hours: string;
+  activity: string;
+  narrative: string;
+};
+
+export type NoteCapture =
+  | TaskCapture
+  | EventCapture
+  | DeadlineCapture
+  | TimeCapture;
+
+export type CaptureKind = NoteCapture["kind"];
+
+export const CAPTURE_KIND_LABEL: Record<CaptureKind, string> = {
+  task: "Task",
+  event: "Event",
+  deadline: "Deadline",
+  time: "Time entry",
+};
+
+/** Today's date in YYYY-MM-DD form — the local-timezone "today" is
+ *  what users expect when they open a capture form. */
+export function todayDateString(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Round now up to the next :00 in local time, formatted for
+ *  datetime-local inputs (YYYY-MM-DDTHH:mm). */
+export function nextHourDateTimeString(addHours = 0): string {
+  const d = new Date();
+  d.setMinutes(0, 0, 0);
+  d.setHours(d.getHours() + 1 + addHours);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${y}-${m}-${day}T${hh}:${mm}`;
+}
+
+/** Factory functions for new capture sub-forms — keep the shape
+ *  consistent so the composer doesn't need to branch on kind. */
+export function newCapture(kind: CaptureKind, tempId: string): NoteCapture {
+  switch (kind) {
+    case "task":
+      return {
+        kind: "task",
+        tempId,
+        title: "",
+        dueDate: "",
+        priority: "normal",
+      };
+    case "event":
+      return {
+        kind: "event",
+        tempId,
+        title: "",
+        startTime: nextHourDateTimeString(),
+        endTime: nextHourDateTimeString(1),
+        type: "meeting",
+        location: "",
+      };
+    case "deadline":
+      return {
+        kind: "deadline",
+        tempId,
+        title: "",
+        dueDate: "",
+        kind_: "manual",
+        description: "",
+      };
+    case "time":
+      return {
+        kind: "time",
+        tempId,
+        date: todayDateString(),
+        hours: "",
+        activity: "",
+        narrative: "",
+      };
+  }
+}

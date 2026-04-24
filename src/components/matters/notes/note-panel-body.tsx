@@ -23,9 +23,11 @@ import {
   NOTE_TYPE_LABEL,
   NOTE_TYPES,
   noteInitialState,
+  type NoteCapture,
   type NoteFormState,
 } from "@/lib/note-constants";
 import { NoteEditor } from "./note-editor";
+import { CaptureStack } from "./capture-stack";
 import { useCreateStack } from "@/components/create-stack/create-stack-provider";
 
 export function NotePanelBody({
@@ -45,6 +47,7 @@ export function NotePanelBody({
   const [html, setHtml] = useState("");
   const [type, setType] = useState<(typeof NOTE_TYPES)[number]>("note");
   const [pin, setPin] = useState(false);
+  const [captures, setCaptures] = useState<NoteCapture[]>([]);
   const [editorKey, setEditorKey] = useState(0);
   const closedRef = useRef(false);
 
@@ -59,6 +62,7 @@ export function NotePanelBody({
   }, [state.status, close, panelId]);
 
   const errs = state.errors ?? {};
+  const attachmentErrors = state.attachmentErrors ?? {};
 
   return (
     <form
@@ -68,6 +72,11 @@ export function NotePanelBody({
       <input type="hidden" name="content" value={html} />
       <input type="hidden" name="type" value={type} />
       {pin && <input type="hidden" name="isPinned" value="on" />}
+      <input
+        type="hidden"
+        name="attachments"
+        value={JSON.stringify(captures)}
+      />
 
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
         <NoteEditor
@@ -122,6 +131,7 @@ export function NotePanelBody({
             type="button"
             onClick={() => {
               setHtml("");
+              setCaptures([]);
               setEditorKey((k) => k + 1);
             }}
             className="text-2xs text-ink-3 hover:text-ink-2 ml-auto"
@@ -129,6 +139,12 @@ export function NotePanelBody({
             Clear
           </button>
         </div>
+
+        <CaptureStack
+          captures={captures}
+          onChange={setCaptures}
+          errors={attachmentErrors}
+        />
       </div>
 
       <footer className="flex items-center justify-end gap-2 px-4 py-3 border-t border-line shrink-0 bg-paper-2/30">
@@ -144,7 +160,11 @@ export function NotePanelBody({
           disabled={isPending || html.trim().length === 0}
           className="text-xs px-2.5 h-7 rounded-md bg-brand-500 text-white hover:bg-brand-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          {isPending ? "Saving…" : "Save note"}
+          {isPending
+            ? "Saving…"
+            : captures.length > 0
+              ? `Save note + ${captures.length}`
+              : "Save note"}
         </button>
       </footer>
     </form>
