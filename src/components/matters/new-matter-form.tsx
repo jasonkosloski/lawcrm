@@ -1,17 +1,24 @@
 /**
  * New Matter Form
  *
- * Create-matter flow. Default stance is "you're creating a new client"
- * — name / email / phone / organization fields are visible from the
- * start. As the user types the client name, a typeahead suggests
- * matching existing Contacts; clicking a suggestion links to that
- * existing row instead of creating a new one.
+ * Create-matter flow with a "magical" auto-populated matter name.
+ * Default stance is "you're creating a new client." As the user fills
+ * in client name / case number / location, the Matter name builds
+ * itself using the firm's pattern:
  *
- * Uses native form elements + a server action so the submission path
- * is straightforward: FormData → Zod → create Contact (if new) +
- * Matter + team assignment (+ optional pin) → redirect to detail.
- * Errors come back via `useActionState` and re-render the form with
- * previous values preserved.
+ *     Last, First - Case Number - Location
+ *
+ * The pattern is hardcoded for now. Future: firm-admin-configurable
+ * and per-practice-area overrides.
+ *
+ * Dirty-tracking: once the user types in the matter name input, we
+ * stop overwriting their value. A "Reset to auto" link restores the
+ * auto-generated name.
+ *
+ * Typeahead client picker: matches existing Contacts as the user
+ * types. Picking one links to that contact AND auto-fills the
+ * Location field from the contact's city (when available) — so
+ * re-opening a case for a known client takes one click.
  */
 
 "use client";
@@ -24,7 +31,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { UserCheck, UserPlus, X } from "lucide-react";
+import { Sparkles, UserCheck, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createMatter } from "@/app/actions/matters";
 import {
@@ -68,6 +75,8 @@ type ClientOption = {
   id: string;
   name: string;
   organization: string | null;
+  city: string | null;
+  state: string | null;
 };
 
 export type NewMatterFormOptions = {
@@ -77,6 +86,43 @@ export type NewMatterFormOptions = {
 };
 
 const MAX_SUGGESTIONS = 6;
+
+/** Split a full name into first + last on the last whitespace. Handles
+ *  single-word names ("Madonna" → last only) and multi-part first names
+ *  ("Mary Jane Watson" → first="Mary Jane", last="Watson"). */
+function splitName(full: string): { firstName: string; lastName: string } {
+  const trimmed = full.trim();
+  if (!trimmed) return { firstName: "", lastName: "" };
+  const parts = trimmed.split(/\s+/);
+  if (parts.length === 1) return { firstName: "", lastName: parts[0] };
+  return {
+    lastName: parts[parts.length - 1],
+    firstName: parts.slice(0, -1).join(" "),
+  };
+}
+
+/** Build the firm's matter-name pattern from the filled-in parts.
+ *  Only joins non-empty segments with " - " so partial fills read
+ *  naturally: "Alvarez, Maria - Aurora" rather than "Alvarez, Maria
+ *  -  - Aurora". */
+function buildAutoMatterName(parts: {
+  firstName: string;
+  lastName: string;
+  caseNumber: string;
+  location: string;
+}): string {
+  const segments: string[] = [];
+  const f = parts.firstName.trim();
+  const l = parts.lastName.trim();
+  if (f && l) segments.push(`${l}, ${f}`);
+  else if (l) segments.push(l);
+  else if (f) segments.push(f);
+  const c = parts.caseNumber.trim();
+  if (c) segments.push(c);
+  const loc = parts.location.trim();
+  if (loc) segments.push(loc);
+  return segments.join(" - ");
+}
 
 export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
   const [state, formAction, isPending] = useActionState<
@@ -88,10 +134,6 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
   const errs = state.errors ?? {};
 
   // ── Client picker state ──────────────────────────────────────────────
-  // Default mode is "new client" — the sub-fields are visible from the
-  // start. If the user clicks a suggestion while typing, we switch to
-  // "existing" mode (clientId = selected contact id). Clearing sends
-  // them back to "new" with the typed name preserved.
   const initialSelectedId =
     vals.clientId && vals.clientId !== NEW_CLIENT_SENTINEL
       ? vals.clientId
@@ -109,8 +151,36 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
   const clientInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
-  // Filter existing clients against what the user has typed. Opens the
-  // dropdown when the input has focus + non-empty value with matches.
+  // ── Auto-name inputs (controlled) ────────────────────────────────────
+  const [caseNumber, setCaseNumber] = useState<string>(vals.caseNumber ?? "");
+  const [location, setLocation] = useState<string>("");
+
+  // ── Matter name state + dirty tracking ───────────────────────────────
+  // If the server action re-rendered us after a validation error,
+  // treat the previously-submitted name as user-edited so we don't
+  // blow it away on the next dependency change.
+  const [matterName, setMatterName] = useState<string>(vals.name ?? "");
+  const [isNameDirty, setIsNameDirty] = useState<boolean>(
+    Boolean(vals.name)
+  );
+
+  const autoName = useMemo(() => {
+    const { firstName, lastName } = splitName(clientName);
+    return buildAutoMatterName({
+      firstName,
+      lastName,
+      caseNumber,
+      location,
+    });
+  }, [clientName, caseNumber, location]);
+
+  // Sync matter name from auto-generated value — but only when the
+  // user hasn't taken ownership of the field.
+  useEffect(() => {
+    if (!isNameDirty) setMatterName(autoName);
+  }, [autoName, isNameDirty]);
+
+  // ── Client suggestions (typeahead) ───────────────────────────────────
   const suggestions = useMemo(() => {
     const q = clientName.trim().toLowerCase();
     if (!q) return [];
@@ -123,7 +193,6 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
       .slice(0, MAX_SUGGESTIONS);
   }, [clientName, options.clients]);
 
-  // Click-outside to close suggestions.
   useEffect(() => {
     if (!suggestionsOpen) return;
     const handler = (e: MouseEvent) => {
@@ -144,19 +213,28 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
     setSelectedClientId(c.id);
     setClientName(c.name);
     setSuggestionsOpen(false);
+    // Magical auto-fill: if the selected client has a city, populate
+    // Location so the matter name pattern fills out automatically. Only
+    // overwrite if Location is currently empty — don't clobber what
+    // the user typed.
+    if (c.city && !location.trim()) {
+      const loc =
+        c.state && c.state !== c.city ? `${c.city}, ${c.state}` : c.city;
+      setLocation(loc);
+    }
   };
 
   const clearExisting = () => {
     setSelectedClientId(null);
     setSuggestionsOpen(false);
-    // Keep clientName — user might want to tweak it and create new.
     clientInputRef.current?.focus();
   };
 
-  // Hidden clientId sent with form submission:
-  // - existing id when a suggestion was picked
-  // - sentinel when a name was typed (create new)
-  // - empty string when no name typed at all (no client)
+  const resetNameToAuto = () => {
+    setIsNameDirty(false);
+    setMatterName(autoName);
+  };
+
   const hiddenClientId = selectedClientId
     ? selectedClientId
     : clientName.trim().length > 0
@@ -171,23 +249,58 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
     <form action={formAction} className="flex flex-col gap-6">
       {/* ── Core ────────────────────────────────────────────────── */}
       <Section title="Core">
-        <Field
-          label="Matter name"
-          name="name"
-          required
-          error={errs.name}
-          hint="e.g. 'Alvarez v. City of Aurora et al.'"
-        >
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center justify-between">
+            <label
+              htmlFor="name"
+              className="text-xs font-medium text-ink-2 flex items-center gap-1.5"
+            >
+              Matter name
+              <span className="text-warn">*</span>
+              {!isNameDirty && matterName && (
+                <span
+                  className="inline-flex items-center gap-1 text-2xs font-mono text-brand-700 bg-brand-soft px-1.5 py-0.5 rounded-full border border-brand-200"
+                  title="Auto-generated from Client + Case number + Location"
+                >
+                  <Sparkles size={10} />
+                  auto
+                </span>
+              )}
+            </label>
+            {isNameDirty && (
+              <button
+                type="button"
+                onClick={resetNameToAuto}
+                className="text-2xs text-brand-700 hover:underline"
+              >
+                Reset to auto
+              </button>
+            )}
+          </div>
           <input
             id="name"
             name="name"
             type="text"
-            defaultValue={vals.name ?? ""}
+            value={matterName}
+            onChange={(e) => {
+              setMatterName(e.target.value);
+              setIsNameDirty(true);
+            }}
             required
             className={inputCls(!!errs.name)}
-            placeholder="Alvarez v. City of Aurora et al."
+            placeholder="Fill in the fields below — or type your own"
           />
-        </Field>
+          {errs.name && errs.name.length > 0 ? (
+            <div className="text-2xs text-warn">{errs.name[0]}</div>
+          ) : (
+            <div className="text-2xs text-ink-4">
+              Pattern:{" "}
+              <span className="font-mono text-ink-3">
+                Last, First - Case Number - Location
+              </span>
+            </div>
+          )}
+        </div>
 
         <Row>
           <Field
@@ -236,34 +349,48 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
               id="caseNumber"
               name="caseNumber"
               type="text"
-              defaultValue={vals.caseNumber ?? ""}
+              value={caseNumber}
+              onChange={(e) => setCaseNumber(e.target.value)}
               className={inputCls(!!errs.caseNumber)}
               placeholder="2026-CV-00481"
             />
           </Field>
 
-          <Field label="Fee structure" name="feeStructure" error={errs.feeStructure}>
-            <select
-              id="feeStructure"
-              name="feeStructure"
-              defaultValue={vals.feeStructure ?? "contingent"}
-              className={selectCls(!!errs.feeStructure)}
-            >
-              {FEE_OPTIONS.map((f) => (
-                <option key={f.value} value={f.value}>
-                  {f.label}
-                </option>
-              ))}
-            </select>
+          <Field
+            label="Location"
+            name="location"
+            hint="Used in the matter-name pattern (not persisted separately yet)."
+          >
+            <input
+              id="location"
+              name="location"
+              type="text"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              className={inputCls(false)}
+              placeholder="Aurora"
+            />
           </Field>
         </Row>
+
+        <Field label="Fee structure" name="feeStructure" error={errs.feeStructure}>
+          <select
+            id="feeStructure"
+            name="feeStructure"
+            defaultValue={vals.feeStructure ?? "contingent"}
+            className={selectCls(!!errs.feeStructure)}
+          >
+            {FEE_OPTIONS.map((f) => (
+              <option key={f.value} value={f.value}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+        </Field>
       </Section>
 
       {/* ── People ──────────────────────────────────────────────── */}
       <Section title="People">
-        {/* Hidden field that the server action reads. Derived from
-            whether the user picked an existing contact, typed a name,
-            or left it blank. */}
         <input type="hidden" name="clientId" value={hiddenClientId} />
 
         <Row>
@@ -318,7 +445,7 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
                   className={inputCls(
                     !!errs.newClientName || !!errs.clientId
                   )}
-                  placeholder="Client name (type to search or create new)"
+                  placeholder="Client name (First Last — type to search or create)"
                 />
                 {suggestionsOpen && suggestions.length > 0 && (
                   <div
@@ -344,6 +471,11 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
                         {c.organization && (
                           <span className="text-2xs font-mono text-ink-4 truncate">
                             · {c.organization}
+                          </span>
+                        )}
+                        {c.city && (
+                          <span className="text-2xs font-mono text-ink-4 ml-auto shrink-0">
+                            {c.city}
                           </span>
                         )}
                       </button>
@@ -397,9 +529,7 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
           </Field>
         </Row>
 
-        {/* New-client fields — visible whenever the user is NOT linked
-            to an existing client (default). Name is the typeahead
-            input above; these round out the contact record. */}
+        {/* New-client fields — visible unless an existing client is linked. */}
         {!selectedClient && (
           <div className="flex flex-col gap-3">
             <Row>

@@ -19,7 +19,13 @@ export default async function NewMatterPage() {
   const [clients, users, currentUserId] = await Promise.all([
     prisma.contact.findMany({
       where: { type: "client", isActive: true },
-      select: { id: true, name: true, organization: true },
+      select: {
+        id: true,
+        name: true,
+        organization: true,
+        city: true,
+        state: true,
+      },
       orderBy: { name: "asc" },
     }),
     prisma.user.findMany({
