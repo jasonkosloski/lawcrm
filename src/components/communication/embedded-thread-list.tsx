@@ -1,12 +1,11 @@
 /**
  * Embedded Thread List
  *
- * Compact thread list for use inside matter or lead detail tabs. Each
- * row is a Link to the main inbox with the thread preselected
- * (`/communication?thread=<id>`) — clicking navigates out to the full
- * three-pane inbox where the reader takes the full width. Later we
- * could swap this for an in-place modal reader (calendar-event
- * pattern) without changing the query layer.
+ * Compact thread list for use inside matter or lead detail tabs.
+ * `threadHref` lets the caller decide how clicking a row navigates —
+ * matter/intake Communication tabs point it at their own URL with
+ * `?thread=<id>` so the reader updates in place (mini-inbox pattern);
+ * the main inbox path is the default.
  */
 
 import Link from "next/link";
@@ -16,11 +15,16 @@ import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import type { ThreadListRow } from "@/lib/queries/communication";
 
+const defaultThreadHref = (id: string): string =>
+  `/communication?thread=${id}`;
+
 export function EmbeddedThreadList({
   threads,
   emptyLabel,
   emptyHint,
   showMatterChip = true,
+  threadHref = defaultThreadHref,
+  selectedThreadId = null,
 }: {
   threads: ThreadListRow[];
   emptyLabel: string;
@@ -28,6 +32,11 @@ export function EmbeddedThreadList({
   /** When inside a matter tab, every thread is for that matter —
    *  suppress the matter chip for visual cleanliness. */
   showMatterChip?: boolean;
+  /** Override destination for clicks. Default navigates to the main
+   *  inbox with the thread preselected. */
+  threadHref?: (id: string) => string;
+  /** Currently-selected thread id; highlighted in the list. */
+  selectedThreadId?: string | null;
 }) {
   if (threads.length === 0) {
     return (
@@ -45,88 +54,96 @@ export function EmbeddedThreadList({
   return (
     <Card className="p-0 overflow-hidden">
       <ul className="divide-y divide-line">
-        {threads.map((t) => (
-          <li key={t.id}>
-            <Link
-              href={`/communication?thread=${t.id}`}
-              className={cn(
-                "block px-4 py-3 transition-colors border-l-2 border-l-transparent",
-                t.isRead
-                  ? "hover:bg-brand-tint"
-                  : "bg-brand-tint/40 hover:bg-brand-tint border-l-brand-500"
-              )}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <span
-                  className={cn(
-                    "text-xs truncate flex-1 min-w-0",
-                    t.isRead ? "text-ink-2" : "font-semibold text-ink"
-                  )}
-                >
-                  {t.fromDisplay}
-                </span>
-                {t.messageCount > 1 && (
-                  <span className="text-2xs font-mono text-ink-4 shrink-0">
-                    {t.messageCount}
-                  </span>
-                )}
-                <span className="text-2xs font-mono text-ink-4 shrink-0">
-                  {formatDistanceToNowStrict(t.lastMessageAt, {
-                    addSuffix: false,
-                  })
-                    .replace(" hours", "h")
-                    .replace(" hour", "h")
-                    .replace(" minutes", "m")
-                    .replace(" minute", "m")
-                    .replace(" days", "d")
-                    .replace(" day", "d")
-                    .replace(" months", "mo")
-                    .replace(" month", "mo")
-                    .replace(" years", "y")
-                    .replace(" year", "y")}
-                </span>
-              </div>
-              <div
+        {threads.map((t) => {
+          const isSelected = t.id === selectedThreadId;
+          return (
+            <li key={t.id}>
+              <Link
+                href={threadHref(t.id)}
+                scroll={false}
                 className={cn(
-                  "text-xs leading-tight truncate mb-0.5",
-                  t.isRead ? "text-ink-3" : "text-ink font-medium"
+                  "block px-4 py-3 transition-colors border-l-2",
+                  isSelected
+                    ? "bg-brand-soft border-l-brand-500"
+                    : t.isRead
+                      ? "hover:bg-brand-tint border-l-transparent"
+                      : "bg-brand-tint/40 hover:bg-brand-tint border-l-brand-500"
                 )}
               >
-                {t.subject}
-              </div>
-              {t.snippet && (
-                <div className="text-2xs text-ink-4 truncate">{t.snippet}</div>
-              )}
-              <div className="flex items-center gap-2 mt-1.5">
-                {showMatterChip && t.matter && (
-                  <span className="inline-flex items-center gap-1 text-2xs font-mono text-ink-3">
-                    <span
-                      className="w-1.5 h-1.5 rounded-full"
-                      style={{ background: t.matter.color }}
-                    />
-                    {t.matter.name}
+                <div className="flex items-center gap-2 mb-1">
+                  <span
+                    className={cn(
+                      "text-xs truncate flex-1 min-w-0",
+                      t.isRead ? "text-ink-2" : "font-semibold text-ink"
+                    )}
+                  >
+                    {t.fromDisplay}
                   </span>
-                )}
-                {showMatterChip && !t.matter && (
-                  <span className="text-2xs font-medium text-warn">
-                    Unfiled
+                  {t.messageCount > 1 && (
+                    <span className="text-2xs font-mono text-ink-4 shrink-0">
+                      {t.messageCount}
+                    </span>
+                  )}
+                  <span className="text-2xs font-mono text-ink-4 shrink-0">
+                    {formatDistanceToNowStrict(t.lastMessageAt, {
+                      addSuffix: false,
+                    })
+                      .replace(" hours", "h")
+                      .replace(" hour", "h")
+                      .replace(" minutes", "m")
+                      .replace(" minute", "m")
+                      .replace(" days", "d")
+                      .replace(" day", "d")
+                      .replace(" months", "mo")
+                      .replace(" month", "mo")
+                      .replace(" years", "y")
+                      .replace(" year", "y")}
                   </span>
+                </div>
+                <div
+                  className={cn(
+                    "text-xs leading-tight truncate mb-0.5",
+                    t.isRead ? "text-ink-3" : "text-ink font-medium"
+                  )}
+                >
+                  {t.subject}
+                </div>
+                {t.snippet && (
+                  <div className="text-2xs text-ink-4 truncate">
+                    {t.snippet}
+                  </div>
                 )}
-                <span className="ml-auto flex items-center gap-1.5">
-                  {t.hasAttachments && (
-                    <Paperclip size={11} className="text-ink-4 shrink-0" />
+                <div className="flex items-center gap-2 mt-1.5">
+                  {showMatterChip && t.matter && (
+                    <span className="inline-flex items-center gap-1 text-2xs font-mono text-ink-3">
+                      <span
+                        className="w-1.5 h-1.5 rounded-full"
+                        style={{ background: t.matter.color }}
+                      />
+                      {t.matter.name}
+                    </span>
                   )}
-                  {t.isStarred && (
-                    <Star
-                      size={11}
-                      className="text-warn fill-warn shrink-0"
-                    />
+                  {showMatterChip && !t.matter && (
+                    <span className="text-2xs font-medium text-warn">
+                      Unfiled
+                    </span>
                   )}
-                </span>
-              </div>
-            </Link>
-          </li>
-        ))}
+                  <span className="ml-auto flex items-center gap-1.5">
+                    {t.hasAttachments && (
+                      <Paperclip size={11} className="text-ink-4 shrink-0" />
+                    )}
+                    {t.isStarred && (
+                      <Star
+                        size={11}
+                        className="text-warn fill-warn shrink-0"
+                      />
+                    )}
+                  </span>
+                </div>
+              </Link>
+            </li>
+          );
+        })}
       </ul>
     </Card>
   );
