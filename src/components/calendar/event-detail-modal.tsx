@@ -20,6 +20,7 @@ import {
   Calendar,
   Link as LinkIcon,
   MapPin,
+  Pencil,
   Users,
   Video,
   X,
@@ -212,8 +213,15 @@ export function EventDetailModal({ event }: { event: CalendarEventDetail }) {
         </div>
 
         {/* Footer */}
-        {event.matter && (
-          <footer className="flex items-center justify-end gap-2 px-5 py-3 border-t border-line shrink-0 bg-paper-2/30">
+        <footer className="flex items-center justify-end gap-2 px-5 py-3 border-t border-line shrink-0 bg-paper-2/30">
+          <Link
+            href={`/calendar/events/${event.id}/edit`}
+            className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 h-7 rounded-md bg-white text-ink-2 border border-line hover:border-brand-300 hover:text-brand-700 transition-colors"
+          >
+            <Pencil size={13} />
+            Edit
+          </Link>
+          {event.matter && (
             <Link
               href={`/matters/${event.matter.id}`}
               className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 h-7 rounded-md bg-brand-500 text-white hover:bg-brand-600 transition-colors"
@@ -221,8 +229,8 @@ export function EventDetailModal({ event }: { event: CalendarEventDetail }) {
               Open matter
               <ArrowRight size={13} />
             </Link>
-          </footer>
-        )}
+          )}
+        </footer>
       </div>
     </>
   );
