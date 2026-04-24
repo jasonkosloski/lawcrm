@@ -233,6 +233,114 @@ export async function createMatterContact(
   return { status: "ok" };
 }
 
+// ── Update ──────────────────────────────────────────────────────────────
+
+const partyUpdateSchema = z.object({
+  /** Core contact fields — these live on the global Contact record,
+   *  so edits here flow through to every matter the contact appears
+   *  on. The UI surfaces that so the user isn't surprised. */
+  contactName: z.string().trim().min(1, "Name is required").max(200),
+  contactEmail: z.string().trim().max(200).optional().or(z.literal("")),
+  contactPhone: z.string().trim().max(80).optional().or(z.literal("")),
+  contactOrganization: z
+    .string()
+    .trim()
+    .max(200)
+    .optional()
+    .or(z.literal("")),
+  role: z.string().trim().max(80).optional().or(z.literal("")),
+  notes: z.string().trim().max(4000).optional().or(z.literal("")),
+  representation: z.enum(["unknown", "yes", "no"]).default("unknown"),
+  representationName: z.string().trim().max(200).optional().or(z.literal("")),
+  representationFirm: z.string().trim().max(200).optional().or(z.literal("")),
+  representationEmail: z.string().trim().max(200).optional().or(z.literal("")),
+  representationPhone: z.string().trim().max(80).optional().or(z.literal("")),
+});
+
+/** Edits the MatterContact join row in place — subrole, notes, and
+ *  representation info. Does NOT change the contact itself or the
+ *  category (both are structural; change them via add/remove or a
+ *  future contact-edit flow). */
+export async function updateMatterContact(
+  matterContactId: string,
+  _prev: PartyFormState,
+  formData: FormData
+): Promise<PartyFormState> {
+  const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
+  const parsed = partyUpdateSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      status: "error",
+      errors: parsed.error.flatten().fieldErrors,
+      values: raw,
+    };
+  }
+
+  const row = await prisma.matterContact.findUnique({
+    where: { id: matterContactId },
+    select: { id: true, matterId: true, contactId: true, category: true },
+  });
+  if (!row) {
+    return {
+      status: "error",
+      errors: { contactName: ["Party not found"] },
+      values: raw,
+    };
+  }
+
+  const isClient = row.category === "client";
+  const data = parsed.data;
+  const isRepresented = isClient
+    ? null
+    : data.representation === "yes"
+      ? true
+      : data.representation === "no"
+        ? false
+        : null;
+  const repName =
+    !isClient && isRepresented ? data.representationName || null : null;
+  const repFirm =
+    !isClient && isRepresented ? data.representationFirm || null : null;
+  const repEmail =
+    !isClient && isRepresented ? data.representationEmail || null : null;
+  const repPhone =
+    !isClient && isRepresented ? data.representationPhone || null : null;
+
+  // Single transaction — Contact + MatterContact — so we never leave
+  // one updated and the other stale. Contact edits here propagate to
+  // every matter this contact appears on; the UI surfaces that.
+  await prisma.$transaction([
+    prisma.contact.update({
+      where: { id: row.contactId },
+      data: {
+        name: data.contactName,
+        email: data.contactEmail || null,
+        phone: data.contactPhone || null,
+        organization: data.contactOrganization || null,
+      },
+    }),
+    prisma.matterContact.update({
+      where: { id: matterContactId },
+      data: {
+        role: data.role || null,
+        notes: data.notes || null,
+        isRepresented,
+        representationName: repName,
+        representationFirm: repFirm,
+        representationEmail: repEmail,
+        representationPhone: repPhone,
+      },
+    }),
+  ]);
+
+  revalidatePath(`/matters/${row.matterId}/parties`);
+  revalidatePath(`/matters/${row.matterId}`);
+  // Contact may appear on other matters — bust their caches too. The
+  // dashboard layout revalidation catches sidebar + matters list.
+  revalidatePath("/", "layout");
+  return { status: "ok" };
+}
+
 export async function removeMatterContact(
   matterContactId: string
 ): Promise<{ ok: boolean; error?: string }> {

@@ -19,7 +19,6 @@ import {
 import {
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableHeader,
   TableRow,
@@ -28,7 +27,7 @@ import {
   PartyComposer,
   type ContactOption,
 } from "@/components/matters/parties/party-composer";
-import { PartyRowActions } from "@/components/matters/parties/party-row-actions";
+import { PartyRowView } from "@/components/matters/parties/party-row-view";
 import { prisma } from "@/lib/prisma";
 import { getMatterParties, type PartyRow } from "@/lib/queries/matter-detail";
 import {
@@ -103,6 +102,11 @@ function CategorySection({
   contacts: ContactOption[];
 }) {
   const showsRepresentation = category !== "client";
+  // Clients are typically individuals whose organization (if any)
+  // isn't the point of them being the client. Other categories
+  // often ARE organizations (opposing firm, lienholder hospital…),
+  // so keep the column there.
+  const showsOrganization = category !== "client";
   // Primary client pins to the top of the clients section so the
   // Matter.clientId row is always visible at a glance.
   const sortedRows =
@@ -126,7 +130,7 @@ function CategorySection({
               <TableRow>
                 <TableHead className="pl-4">Name</TableHead>
                 <TableHead>Subrole</TableHead>
-                <TableHead>Organization</TableHead>
+                {showsOrganization && <TableHead>Organization</TableHead>}
                 <TableHead>Contact</TableHead>
                 {showsRepresentation && <TableHead>Represented by</TableHead>}
                 <TableHead>Notes</TableHead>
@@ -135,59 +139,19 @@ function CategorySection({
             </TableHeader>
             <TableBody>
               {sortedRows.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell className="pl-4 font-medium text-ink">
-                    <div className="flex items-center gap-2">
-                      <span>{p.name}</span>
-                      {p.isPrimaryClient && (
-                        <span
-                          className="text-2xs font-medium px-1.5 py-0.5 rounded-full bg-brand-soft text-brand-700 border border-brand-200"
-                          title="This matter's primary client — set via Matter → Edit"
-                        >
-                          Primary
-                        </span>
-                      )}
-                      {p.conflictStatus === "flagged" && (
-                        <span className="text-2xs font-medium px-1.5 py-0.5 rounded-full bg-warn-soft text-warn border border-warn-border">
-                          conflict flagged
-                        </span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-2xs text-ink-3 capitalize">
-                    {p.role ? p.role.replace(/_/g, " ") : "—"}
-                  </TableCell>
-                  <TableCell className="text-xs text-ink-3">
-                    {p.organization ?? "—"}
-                  </TableCell>
-                  <TableCell className="text-xs text-ink-3">
-                    <div className="flex flex-col leading-tight">
-                      {p.email && <span>{p.email}</span>}
-                      {p.phone && (
-                        <span className="font-mono text-2xs text-ink-4">
-                          {p.phone}
-                        </span>
-                      )}
-                      {!p.email && !p.phone && "—"}
-                    </div>
-                  </TableCell>
-                  {showsRepresentation && (
-                    <TableCell className="text-xs">
-                      <RepresentationCell party={p} />
-                    </TableCell>
-                  )}
-                  <TableCell className="text-xs text-ink-3 max-w-xs truncate">
-                    {p.notes ?? "—"}
-                  </TableCell>
-                  <TableCell className="pr-4">
-                    {!p.isPrimaryClient && (
-                      <PartyRowActions
-                        matterContactId={p.id}
-                        name={p.name}
-                      />
-                    )}
-                  </TableCell>
-                </TableRow>
+                <PartyRowView
+                  key={p.id}
+                  party={p}
+                  category={category}
+                  showsRepresentation={showsRepresentation}
+                  showsOrganization={showsOrganization}
+                  colSpan={
+                    // name + subrole + contact + notes + actions = 5
+                    5 +
+                    (showsOrganization ? 1 : 0) +
+                    (showsRepresentation ? 1 : 0)
+                  }
+                />
               ))}
             </TableBody>
           </Table>
@@ -204,50 +168,3 @@ function CategorySection({
   );
 }
 
-function RepresentationCell({ party }: { party: PartyRow }) {
-  // Explicit pro se — distinct visual so it reads different from
-  // "unknown" and doesn't silently fall back to the em-dash.
-  if (party.isRepresented === false) {
-    return (
-      <span className="inline-block text-2xs font-medium px-1.5 py-0.5 rounded-full border bg-paper-2 text-ink-3 border-line">
-        Pro se
-      </span>
-    );
-  }
-  // Represented and we have the rep's contact info — stack it.
-  if (party.isRepresented === true && party.representationName) {
-    return (
-      <div className="flex flex-col leading-tight">
-        <span className="text-ink font-medium truncate">
-          {party.representationName}
-        </span>
-        {party.representationFirm && (
-          <span className="text-2xs text-ink-3 truncate">
-            {party.representationFirm}
-          </span>
-        )}
-        {party.representationEmail && (
-          <span className="text-2xs text-ink-4 truncate">
-            {party.representationEmail}
-          </span>
-        )}
-        {party.representationPhone && (
-          <span className="text-2xs font-mono text-ink-4">
-            {party.representationPhone}
-          </span>
-        )}
-      </div>
-    );
-  }
-  // Represented flag is true but no name yet — show a hint that
-  // info's missing rather than going silent.
-  if (party.isRepresented === true) {
-    return (
-      <span className="text-2xs text-ink-4 italic">
-        Represented (details unknown)
-      </span>
-    );
-  }
-  // Null = unknown — em-dash so collapse looks clean.
-  return <span className="text-ink-4">—</span>;
-}
