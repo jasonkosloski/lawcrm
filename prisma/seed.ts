@@ -2070,6 +2070,58 @@ A copy of the document is available through PACER and is attached for your recor
   console.log(`   ${attachedNoteCount} attached-note examples`);
 
   // ─────────────────────────────────────────────────────────────────────
+  // Sibling-capture examples — task / deadline spawned alongside a
+  // primary calendar event or deadline so the "From event" /
+  // "From deadline" chip renders out of the box.
+  // ─────────────────────────────────────────────────────────────────────
+  console.log("  Creating sibling-capture examples…");
+  const sampleEvent = await prisma.calendarEvent.findFirst({
+    where: { matterId: matters.williams.id },
+    select: { id: true, matterId: true },
+  });
+  const sampleDeadlineForTask = await prisma.deadline.findFirst({
+    where: { matterId: matters.williams.id, eventId: null },
+    select: { id: true, matterId: true },
+  });
+  let siblingCaptureCount = 0;
+  if (sampleEvent?.matterId) {
+    await prisma.task.create({
+      data: {
+        matterId: sampleEvent.matterId,
+        eventId: sampleEvent.id,
+        title: "Prep witness questions for hearing",
+        priority: "high",
+        ownerId: jason.id,
+      },
+    });
+    await prisma.deadline.create({
+      data: {
+        matterId: sampleEvent.matterId,
+        eventId: sampleEvent.id,
+        title: "Submit pre-hearing brief",
+        kind: "manual",
+        dueDate: hoursAgo(-5 * 24),
+        ownerId: jason.id,
+      },
+    });
+    siblingCaptureCount += 2;
+  }
+  if (sampleDeadlineForTask?.matterId) {
+    await prisma.task.create({
+      data: {
+        matterId: sampleDeadlineForTask.matterId,
+        deadlineId: sampleDeadlineForTask.id,
+        title: "Draft response addressing this deadline",
+        priority: "normal",
+        ownerId: jason.id,
+        dueDate: hoursAgo(-24),
+      },
+    });
+    siblingCaptureCount += 1;
+  }
+  console.log(`   ${siblingCaptureCount} sibling-capture examples`);
+
+  // ─────────────────────────────────────────────────────────────────────
   // Summary
   // ─────────────────────────────────────────────────────────────────────
   const counts = await Promise.all([

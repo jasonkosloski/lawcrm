@@ -11,7 +11,13 @@
  */
 
 import Link from "next/link";
-import { Mail, Phone, StickyNote } from "lucide-react";
+import {
+  Calendar,
+  CircleAlert,
+  Mail,
+  Phone,
+  StickyNote,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { EntitySource } from "@/lib/queries/matter-detail";
 
@@ -38,6 +44,20 @@ export function EntitySourceChip({
         Icon: Mail,
         prefix: "From email",
         href: `/matters/${matterId}/communication?thread=${source.id}`,
+      };
+    }
+    if (source.kind === "event") {
+      return {
+        Icon: Calendar,
+        prefix: "From event",
+        href: `/matters/${matterId}/events?event=${source.id}`,
+      };
+    }
+    if (source.kind === "deadline") {
+      return {
+        Icon: CircleAlert,
+        prefix: "From deadline",
+        href: `/matters/${matterId}/deadlines`,
       };
     }
     return {

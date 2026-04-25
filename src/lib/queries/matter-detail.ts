@@ -162,6 +162,7 @@ export async function getMatterDeadlines(
           },
         },
       },
+      parentEvent: { select: { id: true, title: true } },
       notes: {
         select: {
           id: true,
@@ -196,6 +197,7 @@ export async function getMatterDeadlines(
         note: d.parentNote,
         email: d.emailThread,
         messenger: d.messengerItem,
+        event: d.parentEvent,
       }),
       attachedNotes: d.notes.map((n) => ({
         id: n.id,
@@ -222,7 +224,9 @@ export async function getMatterDeadlines(
 export type EntitySource =
   | { kind: "note"; id: string; label: string }
   | { kind: "email"; id: string; label: string }
-  | { kind: "message"; id: string; label: string };
+  | { kind: "message"; id: string; label: string }
+  | { kind: "event"; id: string; label: string }
+  | { kind: "deadline"; id: string; label: string };
 
 export type TaskRow = {
   id: string;
@@ -279,6 +283,8 @@ export async function getMatterTasks(matterId: string): Promise<TaskRow[]> {
           },
         },
       },
+      parentEvent: { select: { id: true, title: true } },
+      parentDeadline: { select: { id: true, title: true } },
       // Notes attached to this task (Note.taskId === task.id) —
       // surfaces in the row's inline expandable panel. Sorted oldest-
       // first so the conversation reads top-down.
@@ -313,6 +319,8 @@ export async function getMatterTasks(matterId: string): Promise<TaskRow[]> {
       note: t.parentNote,
       email: t.emailThread,
       messenger: t.messengerItem,
+      event: t.parentEvent,
+      deadline: t.parentDeadline,
     }),
     attachedNotes: t.notes.map((n) => ({
       id: n.id,
@@ -326,7 +334,9 @@ export async function getMatterTasks(matterId: string): Promise<TaskRow[]> {
 }
 
 /** Pick the first populated source FK in priority order and turn it
- *  into the typed EntitySource shape the UI expects. */
+ *  into the typed EntitySource shape the UI expects. Note > email >
+ *  message > event > deadline; only one chip ever renders per row so
+ *  the most-specific source wins. */
 function resolveEntitySource(refs: {
   note: { id: string; content: string } | null;
   email: { id: string; subject: string } | null;
@@ -339,6 +349,8 @@ function resolveEntitySource(refs: {
       contact: { name: string } | null;
     } | null;
   } | null;
+  event?: { id: string; title: string } | null;
+  deadline?: { id: string; title: string } | null;
 }): EntitySource | null {
   if (refs.note) {
     return {
@@ -357,6 +369,16 @@ function resolveEntitySource(refs: {
       kind: "message",
       id: t?.id ?? refs.messenger.id,
       label: `${capitalizeKind(refs.messenger.kind)} from ${who}`,
+    };
+  }
+  if (refs.event) {
+    return { kind: "event", id: refs.event.id, label: refs.event.title };
+  }
+  if (refs.deadline) {
+    return {
+      kind: "deadline",
+      id: refs.deadline.id,
+      label: refs.deadline.title,
     };
   }
   return null;

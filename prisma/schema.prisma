@@ -451,6 +451,9 @@ model Deadline {
   /// the note becomes its parent and surfaces this deadline as an
   /// attached chip. Null for stand-alone deadlines (the common case).
   noteId      String?
+  /// If spawned alongside a calendar event (event → deadline sibling).
+  /// E.g. "scheduling-order deadline that emerged from this hearing."
+  eventId     String?
   /// Inbox-action sources: when this deadline was spawned from an
   /// email thread or messenger item via the "Create deadline"
   /// affordance.
@@ -466,6 +469,8 @@ model Deadline {
   parentNote    Note?          @relation("NoteAttachedDeadlines", fields: [noteId], references: [id], onDelete: SetNull)
   emailThread   EmailThread?   @relation("EmailThreadSpawnedDeadlines", fields: [emailThreadId], references: [id], onDelete: SetNull)
   messengerItem MessengerItem? @relation("MessengerItemSpawnedDeadlines", fields: [messengerItemId], references: [id], onDelete: SetNull)
+  parentEvent   CalendarEvent? @relation("EventSpawnedDeadlines", fields: [eventId], references: [id], onDelete: SetNull)
+  spawnedTasks  Task[]         @relation("DeadlineSpawnedTasks")
 
   @@index([matterId])
   @@index([dueDate])
@@ -473,6 +478,7 @@ model Deadline {
   @@index([noteId])
   @@index([emailThreadId])
   @@index([messengerItemId])
+  @@index([eventId])
   @@map("deadlines")
 }
 
@@ -533,6 +539,8 @@ model CalendarEvent {
   attendees   CalendarAttendee[]
   notes       Note[]              @relation("CalendarEventNotes")
   timeEntries TimeEntry[]         @relation("CalendarEventTimeEntries")
+  spawnedTasks     Task[]         @relation("EventSpawnedTasks")
+  spawnedDeadlines Deadline[]     @relation("EventSpawnedDeadlines")
 
   @@index([startTime])
   @@index([matterId])
@@ -983,7 +991,10 @@ model Task {
   status      String    @default("open") /// open | in_progress | in_review | done | cancelled
   dueDate     DateTime?
   ownerId     String?   /// Assigned team member
-  deadlineId  String?   /// If spawned from a deadline
+  deadlineId  String?   /// If spawned from a deadline (deadline → task sibling-capture)
+  /// If spawned alongside a calendar event (event → task sibling-capture).
+  /// E.g. "task to prep witness questions for this hearing."
+  eventId     String?
   /// When the task was created in the context of a specific note —
   /// the note becomes its parent and surfaces this task as an
   /// attached chip. Null for stand-alone tasks (the common case).
@@ -1005,6 +1016,8 @@ model Task {
   parentNote    Note?          @relation("NoteAttachedTasks", fields: [noteId], references: [id], onDelete: SetNull)
   emailThread   EmailThread?   @relation("EmailThreadSpawnedTasks", fields: [emailThreadId], references: [id], onDelete: SetNull)
   messengerItem MessengerItem? @relation("MessengerItemSpawnedTasks", fields: [messengerItemId], references: [id], onDelete: SetNull)
+  parentEvent   CalendarEvent? @relation("EventSpawnedTasks", fields: [eventId], references: [id], onDelete: SetNull)
+  parentDeadline Deadline?     @relation("DeadlineSpawnedTasks", fields: [deadlineId], references: [id], onDelete: SetNull)
 
   @@index([matterId])
   @@index([status])
@@ -1012,6 +1025,8 @@ model Task {
   @@index([noteId])
   @@index([emailThreadId])
   @@index([messengerItemId])
+  @@index([eventId])
+  @@index([deadlineId])
   @@map("tasks")
 }
 

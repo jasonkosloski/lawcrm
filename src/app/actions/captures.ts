@@ -96,6 +96,14 @@ async function createCaptureRecord(
         priority: cap.priority,
         dueDate: cap.dueDate ? new Date(cap.dueDate) : null,
         ownerId: userId,
+        // Sibling-capture link-back: if this task was created
+        // alongside a primary event or deadline, point the FK back
+        // so the spawned task surfaces under the primary AND the
+        // task itself shows a "From event" / "From deadline" chip.
+        eventId:
+          linkToPrimary?.kind === "event" ? linkToPrimary.id : null,
+        deadlineId:
+          linkToPrimary?.kind === "deadline" ? linkToPrimary.id : null,
       },
     });
   } else if (cap.kind === "event") {
@@ -118,6 +126,9 @@ async function createCaptureRecord(
         kind: cap.kind_,
         description: cap.description || null,
         ownerId: userId,
+        // Sibling-capture link-back from a primary event.
+        eventId:
+          linkToPrimary?.kind === "event" ? linkToPrimary.id : null,
       },
     });
   } else if (cap.kind === "time") {
