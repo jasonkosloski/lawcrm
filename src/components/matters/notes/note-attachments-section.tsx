@@ -21,6 +21,8 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import {
+  ChevronDown,
+  ChevronRight,
   CircleAlert,
   Clock,
   ListTodo,
@@ -282,6 +284,31 @@ const TIME_STATUS_LABEL: Record<string, string> = {
   written_off: "written off",
 };
 
+/** Aggregate hours per user, sorted by hours desc. Drives the
+ *  collapsed-summary line so the user knows who logged how much
+ *  without expanding the full list. */
+function aggregateByUser(
+  entries: NoteAttachedTimeEntry[]
+): Array<{ initials: string; name: string; hours: number }> {
+  const byUser = new Map<
+    string,
+    { initials: string; name: string; hours: number }
+  >();
+  for (const e of entries) {
+    const existing = byUser.get(e.userInitials);
+    if (existing) {
+      existing.hours += e.hours;
+    } else {
+      byUser.set(e.userInitials, {
+        initials: e.userInitials,
+        name: e.userName,
+        hours: e.hours,
+      });
+    }
+  }
+  return Array.from(byUser.values()).sort((a, b) => b.hours - a.hours);
+}
+
 function TimeEntriesGroup({
   entries,
   matterId,
@@ -289,37 +316,76 @@ function TimeEntriesGroup({
   entries: NoteAttachedTimeEntry[];
   matterId: string;
 }) {
+  // Default to collapsed — once a note has more than a couple of
+  // entries the expanded list dominates the card. Summary line still
+  // tells the user count + total + per-user breakdown without taking
+  // a row per entry. Toggle persists per-mount; we don't store it
+  // anywhere persistent (would clutter the URL or local storage for
+  // marginal benefit).
+  const [expanded, setExpanded] = useState(false);
+
   const totalHours = entries.reduce((s, e) => s + e.hours, 0);
   const billableHours = entries
     .filter((e) => e.billable && !e.noCharge)
     .reduce((s, e) => s + e.hours, 0);
+  const byUser = aggregateByUser(entries);
 
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex items-center justify-between">
-        <div className="flex items-baseline gap-2">
-          <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          aria-label={expanded ? "Collapse time entries" : "Expand time entries"}
+          className="flex-1 inline-flex items-center gap-1.5 text-left rounded-md hover:bg-paper-2/60 -mx-1 px-1 py-0.5 transition-colors"
+        >
+          {expanded ? (
+            <ChevronDown size={11} className="text-ink-4 shrink-0" />
+          ) : (
+            <ChevronRight size={11} className="text-ink-4 shrink-0" />
+          )}
+          <span className="text-2xs font-mono uppercase tracking-wider text-ink-4">
             Time ({entries.length})
-          </div>
-          <div className="text-2xs font-mono text-ink-3">
-            {totalHours.toFixed(1)}h total
+          </span>
+          <span className="text-2xs font-mono text-ink-3">
+            {totalHours.toFixed(1)}h
             {billableHours !== totalHours &&
               ` · ${billableHours.toFixed(1)}h billable`}
-          </div>
-        </div>
+          </span>
+          {/* Per-user breakdown only matters when more than one
+              person logged time — single-user case is implied by the
+              total above. Drop into the same line so collapsed view
+              stays a single row. */}
+          {byUser.length > 1 && (
+            <span className="text-2xs font-mono text-ink-4 truncate">
+              ·{" "}
+              {byUser.map((u, i) => (
+                <span key={u.initials}>
+                  {i > 0 && " · "}
+                  <span title={u.name}>
+                    {u.initials} {u.hours.toFixed(1)}h
+                  </span>
+                </span>
+              ))}
+            </span>
+          )}
+        </button>
         <Link
           href={`/matters/${matterId}/time`}
-          className="text-2xs text-brand-700 hover:underline"
+          className="text-2xs text-brand-700 hover:underline shrink-0"
         >
           All matter time
         </Link>
       </div>
 
-      <ul className="flex flex-col gap-2">
-        {entries.map((e) => (
-          <TimeEntryItem key={e.id} entry={e} />
-        ))}
-      </ul>
+      {expanded && (
+        <ul className="flex flex-col gap-2">
+          {entries.map((e) => (
+            <TimeEntryItem key={e.id} entry={e} />
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
