@@ -14,6 +14,7 @@ import Link from "next/link";
 import {
   Calendar,
   CircleAlert,
+  ListTodo,
   Mail,
   Phone,
   StickyNote,
@@ -58,6 +59,13 @@ export function EntitySourceChip({
         Icon: CircleAlert,
         prefix: "From deadline",
         href: `/matters/${matterId}/deadlines`,
+      };
+    }
+    if (source.kind === "task") {
+      return {
+        Icon: ListTodo,
+        prefix: "From task",
+        href: `/matters/${matterId}/tasks`,
       };
     }
     return {

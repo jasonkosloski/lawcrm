@@ -226,7 +226,8 @@ export type EntitySource =
   | { kind: "email"; id: string; label: string }
   | { kind: "message"; id: string; label: string }
   | { kind: "event"; id: string; label: string }
-  | { kind: "deadline"; id: string; label: string };
+  | { kind: "deadline"; id: string; label: string }
+  | { kind: "task"; id: string; label: string };
 
 export type TaskRow = {
   id: string;
@@ -351,6 +352,7 @@ function resolveEntitySource(refs: {
   } | null;
   event?: { id: string; title: string } | null;
   deadline?: { id: string; title: string } | null;
+  task?: { id: string; title: string } | null;
 }): EntitySource | null {
   if (refs.note) {
     return {
@@ -380,6 +382,9 @@ function resolveEntitySource(refs: {
       id: refs.deadline.id,
       label: refs.deadline.title,
     };
+  }
+  if (refs.task) {
+    return { kind: "task", id: refs.task.id, label: refs.task.title };
   }
   return null;
 }
@@ -723,6 +728,8 @@ export async function getMatterTimeEntries(
     include: {
       user: { select: { name: true, initials: true } },
       parentNote: { select: { id: true, content: true } },
+      parentTask: { select: { id: true, title: true } },
+      parentDeadline: { select: { id: true, title: true } },
       notes: {
         select: {
           id: true,
@@ -757,6 +764,8 @@ export async function getMatterTimeEntries(
       note: e.parentNote,
       email: null,
       messenger: null,
+      task: e.parentTask,
+      deadline: e.parentDeadline,
     }),
     attachedNotes: e.notes.map((n) => ({
       id: n.id,

@@ -471,6 +471,9 @@ model Deadline {
   messengerItem MessengerItem? @relation("MessengerItemSpawnedDeadlines", fields: [messengerItemId], references: [id], onDelete: SetNull)
   parentEvent   CalendarEvent? @relation("EventSpawnedDeadlines", fields: [eventId], references: [id], onDelete: SetNull)
   spawnedTasks  Task[]         @relation("DeadlineSpawnedTasks")
+  /// Time logged "on this deadline" (e.g. drafting time toward a
+  /// brief deadline). Inverse of TimeEntry.deadlineId.
+  timeEntries   TimeEntry[]    @relation("DeadlineTimeEntries")
 
   @@index([matterId])
   @@index([dueDate])
@@ -596,12 +599,21 @@ model TimeEntry {
   /// its attached-time list (mirrors the events tab pattern).
   noteId String?
 
-  matter     Matter         @relation(fields: [matterId], references: [id], onDelete: Cascade)
-  user       User           @relation(fields: [userId], references: [id])
-  invoice    Invoice?       @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  notes      Note[]         @relation("TimeEntryNotes")
-  event      CalendarEvent? @relation("CalendarEventTimeEntries", fields: [calendarEventId], references: [id], onDelete: SetNull)
-  parentNote Note?          @relation("NoteAttachedTimeEntries", fields: [noteId], references: [id], onDelete: SetNull)
+  /// "Log time on this task" / "Log time on this deadline" — the
+  /// time entry's relationship to its primary work item. Mirrors
+  /// the noteId / calendarEventId pattern. Nullable since most
+  /// entries are matter-scoped without a more specific parent.
+  taskId     String?
+  deadlineId String?
+
+  matter       Matter         @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  user         User           @relation(fields: [userId], references: [id])
+  invoice      Invoice?       @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  notes        Note[]         @relation("TimeEntryNotes")
+  event        CalendarEvent? @relation("CalendarEventTimeEntries", fields: [calendarEventId], references: [id], onDelete: SetNull)
+  parentNote   Note?          @relation("NoteAttachedTimeEntries", fields: [noteId], references: [id], onDelete: SetNull)
+  parentTask   Task?          @relation("TaskTimeEntries", fields: [taskId], references: [id], onDelete: SetNull)
+  parentDeadline Deadline?    @relation("DeadlineTimeEntries", fields: [deadlineId], references: [id], onDelete: SetNull)
 
   @@index([matterId])
   @@index([userId])
@@ -609,6 +621,8 @@ model TimeEntry {
   @@index([status])
   @@index([calendarEventId])
   @@index([noteId])
+  @@index([taskId])
+  @@index([deadlineId])
   @@map("time_entries")
 }
 
@@ -1018,6 +1032,8 @@ model Task {
   messengerItem MessengerItem? @relation("MessengerItemSpawnedTasks", fields: [messengerItemId], references: [id], onDelete: SetNull)
   parentEvent   CalendarEvent? @relation("EventSpawnedTasks", fields: [eventId], references: [id], onDelete: SetNull)
   parentDeadline Deadline?     @relation("DeadlineSpawnedTasks", fields: [deadlineId], references: [id], onDelete: SetNull)
+  /// Time logged "on this task" — the inverse of TimeEntry.taskId.
+  timeEntries    TimeEntry[]   @relation("TaskTimeEntries")
 
   @@index([matterId])
   @@index([status])

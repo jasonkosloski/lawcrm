@@ -16,7 +16,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, Loader2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import {
+  Check,
+  Clock,
+  Loader2,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,7 +40,9 @@ import {
   type TaskStatus,
 } from "@/lib/note-constants";
 import { deleteTask, setTaskStatus } from "@/app/actions/tasks";
+import { addTimeEntryToTask } from "@/app/actions/time-on-entity";
 import { EditTaskDialog, type EditableTask } from "./edit-task-dialog";
+import { LogTimeOnEntityDialog } from "@/components/time-entries/log-time-on-entity-dialog";
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
   open: "Open",
@@ -90,6 +99,7 @@ export function TaskStatusToggle({
 
 export function TaskRowMenu({ task }: { task: EditableTask }) {
   const [editOpen, setEditOpen] = useState(false);
+  const [logTimeOpen, setLogTimeOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const onSelectStatus = (next: string) => {
@@ -132,6 +142,10 @@ export function TaskRowMenu({ task }: { task: EditableTask }) {
             <Pencil />
             Edit
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setLogTimeOpen(true)}>
+            <Clock />
+            Log time on this task
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuLabel>Set status</DropdownMenuLabel>
@@ -155,6 +169,14 @@ export function TaskRowMenu({ task }: { task: EditableTask }) {
       </DropdownMenu>
 
       <EditTaskDialog open={editOpen} onOpenChange={setEditOpen} task={task} />
+
+      <LogTimeOnEntityDialog
+        open={logTimeOpen}
+        onOpenChange={setLogTimeOpen}
+        action={addTimeEntryToTask.bind(null, task.id)}
+        parentLabel={task.title}
+        parentKind="task"
+      />
     </>
   );
 }

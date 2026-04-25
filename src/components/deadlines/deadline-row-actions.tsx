@@ -9,7 +9,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Clock, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,10 +26,12 @@ import {
   type DeadlineStatus,
 } from "@/lib/note-constants";
 import { deleteDeadline, setDeadlineStatus } from "@/app/actions/deadlines";
+import { addTimeEntryToDeadline } from "@/app/actions/time-on-entity";
 import {
   EditDeadlineDialog,
   type EditableDeadline,
 } from "./edit-deadline-dialog";
+import { LogTimeOnEntityDialog } from "@/components/time-entries/log-time-on-entity-dialog";
 
 const STATUS_LABEL: Record<DeadlineStatus, string> = {
   open: "Open",
@@ -43,6 +45,7 @@ export function DeadlineRowMenu({
   deadline: EditableDeadline;
 }) {
   const [editOpen, setEditOpen] = useState(false);
+  const [logTimeOpen, setLogTimeOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const onSelectStatus = (next: string) => {
@@ -85,6 +88,10 @@ export function DeadlineRowMenu({
             <Pencil />
             Edit
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setLogTimeOpen(true)}>
+            <Clock />
+            Log time on this deadline
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuLabel>Set status</DropdownMenuLabel>
@@ -111,6 +118,14 @@ export function DeadlineRowMenu({
         open={editOpen}
         onOpenChange={setEditOpen}
         deadline={deadline}
+      />
+
+      <LogTimeOnEntityDialog
+        open={logTimeOpen}
+        onOpenChange={setLogTimeOpen}
+        action={addTimeEntryToDeadline.bind(null, deadline.id)}
+        parentLabel={deadline.title}
+        parentKind="deadline"
       />
     </>
   );

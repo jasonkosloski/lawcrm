@@ -2122,6 +2122,53 @@ A copy of the document is available through PACER and is attached for your recor
   console.log(`   ${siblingCaptureCount} sibling-capture examples`);
 
   // ─────────────────────────────────────────────────────────────────────
+  // Time-on-task / time-on-deadline examples — surfaces the new
+  // "From task" / "From deadline" chip on time entries.
+  // ─────────────────────────────────────────────────────────────────────
+  console.log("  Creating time-on-entity examples…");
+  const taskWithoutTime = await prisma.task.findFirst({
+    where: { matterId: matters.williams.id, eventId: null },
+    select: { id: true, matterId: true },
+  });
+  const deadlineWithoutTime = await prisma.deadline.findFirst({
+    where: { matterId: matters.williams.id, eventId: null },
+    select: { id: true, matterId: true },
+  });
+  let timeOnEntityCount = 0;
+  if (taskWithoutTime?.matterId) {
+    await prisma.timeEntry.create({
+      data: {
+        matterId: taskWithoutTime.matterId,
+        userId: jason.id,
+        taskId: taskWithoutTime.id,
+        date: hoursAgo(4),
+        hours: 0.8,
+        activity: "Working through the assigned task",
+        billable: true,
+        source: "task",
+      },
+    });
+    timeOnEntityCount++;
+  }
+  if (deadlineWithoutTime?.matterId) {
+    await prisma.timeEntry.create({
+      data: {
+        matterId: deadlineWithoutTime.matterId,
+        userId: jason.id,
+        deadlineId: deadlineWithoutTime.id,
+        date: hoursAgo(8),
+        hours: 2.1,
+        activity: "Drafting in advance of deadline",
+        billable: true,
+        privileged: true,
+        source: "manual",
+      },
+    });
+    timeOnEntityCount++;
+  }
+  console.log(`   ${timeOnEntityCount} time-on-entity examples`);
+
+  // ─────────────────────────────────────────────────────────────────────
   // Summary
   // ─────────────────────────────────────────────────────────────────────
   const counts = await Promise.all([
