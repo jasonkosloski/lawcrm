@@ -1,80 +1,216 @@
 /**
- * Profile Settings
+ * /settings/profile — current user's own profile.
  *
- * Shows the current user's profile info. Read-only for now —
- * edit form + server action will follow in Phase 9 Auth when we can
- * safely validate changes against a real session.
+ * Editable: name, initials, phone, bar number, avatar URL.
+ * Read-only sidebar: avatar, email, role, admin badge, firm,
+ * member-since. Identity / governance fields stay read-only here —
+ * email needs a re-verification flow (deferred), and role + admin
+ * status flow through admin governance on /settings/team.
+ *
+ * Future bits that'll land here as their features go live:
+ *   - Time zone, first day of the week, date/time format
+ *   - Default calendar view
+ *   - Notification preferences (when notifications land)
+ *   - Connected accounts (Google, Microsoft) — when OAuth wires up
  */
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { getCurrentUser } from "@/lib/current-user";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { Lock, ShieldCheck } from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ProfileEditForm } from "@/components/settings/profile-edit-form";
+import { getCurrentUserId } from "@/lib/current-user";
+import { getCurrentFirm } from "@/lib/firm";
+import { prisma } from "@/lib/prisma";
 
-const formatValue = (v: string | null | undefined): string => v || "—";
+const formatDate = (d: Date | null): string => {
+  if (!d) return "—";
+  return d.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+};
 
 export default async function ProfileSettingsPage() {
-  const user = await getCurrentUser();
+  const userId = await getCurrentUserId();
+  // Pull every field directly — getCurrentUser is the lite version
+  // for the sidebar; we want the full row for the edit form.
+  const [user, firm] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        initials: true,
+        role: true,
+        phone: true,
+        barNumber: true,
+        avatarUrl: true,
+        isAdmin: true,
+        isActive: true,
+        createdAt: true,
+      },
+    }),
+    getCurrentFirm(),
+  ]);
+  // The middleware + getCurrentUserId guarantee a session, so a
+  // missing row here would mean the row was deleted between the
+  // session check and this query — treat as not-found.
+  if (!user) notFound();
 
   return (
-    <div className="max-w-2xl">
-      <h1 className="text-lg font-display font-medium text-ink mb-1">Profile</h1>
-      <p className="text-sm text-ink-3 mb-5">
-        Your personal info on this firm account.
-      </p>
+    <div className="grid grid-cols-[1fr_18rem] gap-6 max-w-5xl">
+      <div>
+        <div className="mb-4">
+          <h1 className="text-base font-semibold text-ink">Profile</h1>
+          <p className="text-xs text-ink-3 mt-1">
+            Your personal info on this firm account. Changes flow to your
+            sidebar avatar, party assignments, and time entries.
+          </p>
+        </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-3">
-            <Avatar className="h-12 w-12 shadow-[0_0_0_2px_var(--color-brand-100)]">
-              <AvatarFallback className="text-sm font-semibold bg-[#efe3d9] text-ink-2">
-                {user?.initials ?? "??"}
-              </AvatarFallback>
-            </Avatar>
-            <div>
-              <CardTitle className="text-base font-medium">
-                {formatValue(user?.name)}
-              </CardTitle>
-              <div className="text-xs text-ink-3">
-                {formatValue(user?.role)}
+        <ProfileEditForm
+          profile={{
+            name: user.name,
+            initials: user.initials,
+            phone: user.phone,
+            barNumber: user.barNumber,
+            avatarUrl: user.avatarUrl,
+          }}
+        />
+
+        <div className="mt-6 pt-4 border-t border-line text-2xs text-ink-4 leading-relaxed">
+          <strong className="text-ink-3 font-medium">
+            Want to change your password?
+          </strong>{" "}
+          Head to{" "}
+          <Link
+            href="/settings/security"
+            className="text-brand-700 hover:underline"
+          >
+            Security
+          </Link>{" "}
+          (coming soon — for now, an admin can reset it on{" "}
+          <Link
+            href="/settings/team"
+            className="text-brand-700 hover:underline"
+          >
+            Team
+          </Link>
+          ).
+        </div>
+      </div>
+
+      {/* Right rail — read-only context. The values here are
+          governance-controlled (admin via /settings/team) or identity
+          (email + verified-at, eventually) so we surface them but
+          don't let the user touch them. */}
+      <aside className="flex flex-col gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <span>Identity</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <Avatar className="h-12 w-12 shadow-[0_0_0_2px_var(--color-brand-100)]">
+                {user.avatarUrl ? (
+                  <AvatarImage src={user.avatarUrl} alt={user.name} />
+                ) : null}
+                <AvatarFallback className="text-sm font-semibold bg-[#efe3d9] text-ink-2">
+                  {user.initials}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex flex-col min-w-0">
+                <div className="text-sm font-medium text-ink truncate">
+                  {user.name}
+                </div>
+                <div className="text-2xs text-ink-4 truncate">{user.email}</div>
               </div>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent className="px-4 pb-4">
-          <dl className="grid grid-cols-2 gap-y-3 gap-x-6 text-xs border-t border-line pt-4">
-            <Field label="Display name" value={user?.name} />
-            <Field label="Role" value={user?.role} />
-            <Field label="Initials" value={user?.initials} mono />
-          </dl>
 
-          <div className="mt-5 pt-4 border-t border-line text-2xs text-ink-4">
-            Editing is disabled until Phase 9 auth lands. Profile updates
-            need a real session to attribute the change to the right user.
-            Future per-user preferences that will live on this page:
-            first day of the week (Sun / Mon), time zone, date + time
-            format, default calendar view.
-          </div>
-        </CardContent>
-      </Card>
+            <dl className="grid grid-cols-[7rem_1fr] gap-y-1.5 text-2xs pt-2 border-t border-line">
+              <Row label="Role" value={user.role} />
+              <Row
+                label="Permissions"
+                value={user.isAdmin ? "Admin" : "Member"}
+                accent={user.isAdmin ? "brand" : undefined}
+              />
+              <Row
+                label="Status"
+                value={user.isActive ? "Active" : "Deactivated"}
+                accent={user.isActive ? undefined : "warn"}
+              />
+              <Row label="Member since" value={formatDate(user.createdAt)} />
+            </dl>
+
+            <div className="inline-flex items-center gap-1.5 text-[10px] text-ink-4 px-2 py-1 rounded border border-line bg-paper-2 self-start">
+              <Lock size={10} />
+              Email + role are managed by an admin on Team.
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <ShieldCheck
+                size={14}
+                className={user.isAdmin ? "text-brand-700" : "text-ink-4"}
+              />
+              Firm
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <div className="flex flex-col gap-1">
+              <div className="text-sm font-medium text-ink">
+                {firm.shortName ?? firm.name}
+              </div>
+              {firm.shortName && (
+                <div className="text-2xs text-ink-4">{firm.name}</div>
+              )}
+            </div>
+            <Link
+              href="/settings/firm"
+              className="text-2xs text-brand-700 hover:underline mt-2 inline-block"
+            >
+              Open firm settings →
+            </Link>
+          </CardContent>
+        </Card>
+      </aside>
     </div>
   );
 }
 
-function Field({
+function Row({
   label,
   value,
-  mono,
+  accent,
 }: {
   label: string;
-  value: string | null | undefined;
-  mono?: boolean;
+  value: string;
+  accent?: "brand" | "warn";
 }) {
+  const valueClass =
+    accent === "brand"
+      ? "text-brand-700 font-medium"
+      : accent === "warn"
+        ? "text-warn font-medium"
+        : "text-ink";
   return (
-    <div>
-      <dt className="text-ink-4 mb-0.5">{label}</dt>
-      <dd className={mono ? "font-mono text-ink" : "text-ink"}>
-        {formatValue(value)}
-      </dd>
-    </div>
+    <>
+      <dt className="text-ink-4">{label}</dt>
+      <dd className={valueClass}>{value}</dd>
+    </>
   );
 }
