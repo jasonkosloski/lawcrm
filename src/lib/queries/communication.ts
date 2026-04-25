@@ -10,7 +10,16 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 
-export type CommunicationFilter = "all" | "unread" | "starred" | "unfiled";
+export type CommunicationFilter =
+  | "all"
+  | "unread"
+  | "starred"
+  | "unfiled"
+  /** Threads associated with any matter (matterId IS NOT NULL). */
+  | "filed"
+  /** Threads where the current user has not logged time on any
+   *  message — surfaces email work the user did but didn't bill. */
+  | "untimed";
 
 export type ThreadListRow = {
   id: string;
@@ -29,7 +38,11 @@ export type ThreadListRow = {
 };
 
 export async function listThreads(
-  filter: CommunicationFilter = "all"
+  filter: CommunicationFilter = "all",
+  /** When set, filters to threads on this specific matter — used by
+   *  the per-pinned-matter sub-rail entries. Overrides matter-related
+   *  filters. */
+  matterId?: string
 ): Promise<ThreadListRow[]> {
   const userId = await getCurrentUserId();
 
@@ -41,6 +54,17 @@ export async function listThreads(
   if (filter === "unread") where.isRead = false;
   if (filter === "starred") where.isStarred = true;
   if (filter === "unfiled") where.matterId = null;
+  if (filter === "filed") where.matterId = { not: null };
+  if (filter === "untimed") {
+    // No message in this thread has a time entry by the current user.
+    // Other users' time entries don't disqualify — this is "what
+    // I haven't billed yet" for me specifically.
+    where.messages = {
+      none: { timeEntries: { some: { userId } } },
+    };
+  }
+  // Per-pinned-matter override — wins over any matter-related filter.
+  if (matterId) where.matterId = matterId;
 
   const threads = await prisma.emailThread.findMany({
     where,
@@ -316,16 +340,76 @@ export type CommunicationCounts = {
   unread: number;
   starred: number;
   unfiled: number;
+  filed: number;
+  untimed: number;
 };
 
 export async function getCommunicationCounts(): Promise<CommunicationCounts> {
   const userId = await getCurrentUserId();
   const base = { account: { userId } };
-  const [all, unread, starred, unfiled] = await Promise.all([
+  const [all, unread, starred, unfiled, filed, untimed] = await Promise.all([
     prisma.emailThread.count({ where: base }),
     prisma.emailThread.count({ where: { ...base, isRead: false } }),
     prisma.emailThread.count({ where: { ...base, isStarred: true } }),
     prisma.emailThread.count({ where: { ...base, matterId: null } }),
+    prisma.emailThread.count({ where: { ...base, matterId: { not: null } } }),
+    prisma.emailThread.count({
+      where: {
+        ...base,
+        messages: {
+          none: { timeEntries: { some: { userId } } },
+        },
+      },
+    }),
   ]);
-  return { all, unread, starred, unfiled };
+  return { all, unread, starred, unfiled, filed, untimed };
+}
+
+/** Pinned matter + thread count for the communication rail's per-
+ *  matter drilldown section. Only matters that actually have at
+ *  least one thread on the user's account are returned — keeps the
+ *  rail tight. */
+export type CommPinnedMatter = {
+  id: string;
+  name: string;
+  color: string;
+  area: string;
+  threadCount: number;
+};
+
+export async function getCommunicationPinnedMatters(): Promise<
+  CommPinnedMatter[]
+> {
+  const userId = await getCurrentUserId();
+  const pins = await prisma.userMatterPin.findMany({
+    where: { userId, matter: { isArchived: false } },
+    orderBy: { createdAt: "desc" },
+    select: {
+      matter: {
+        select: {
+          id: true,
+          name: true,
+          color: true,
+          practiceArea: { select: { name: true } },
+        },
+      },
+    },
+  });
+  if (pins.length === 0) return [];
+
+  const matterIds = pins.map((p) => p.matter.id);
+  const counts = await prisma.emailThread.groupBy({
+    by: ["matterId"],
+    where: { account: { userId }, matterId: { in: matterIds } },
+    _count: true,
+  });
+  const countMap = new Map(counts.map((c) => [c.matterId, c._count]));
+
+  return pins.map((p) => ({
+    id: p.matter.id,
+    name: p.matter.name,
+    color: p.matter.color,
+    area: p.matter.practiceArea.name,
+    threadCount: countMap.get(p.matter.id) ?? 0,
+  }));
 }

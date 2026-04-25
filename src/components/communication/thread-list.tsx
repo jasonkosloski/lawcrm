@@ -15,33 +15,48 @@ import type {
   ThreadListRow,
 } from "@/lib/queries/communication";
 
-function rowHref(threadId: string, filter: CommunicationFilter): string {
+function rowHref(
+  threadId: string,
+  filter: CommunicationFilter,
+  matterId: string | null
+): string {
   const params = new URLSearchParams();
   if (filter !== "all") params.set("filter", filter);
+  if (matterId) params.set("matter", matterId);
   params.set("thread", threadId);
   return `/communication?${params.toString()}`;
 }
 
+const FILTER_LABEL: Record<CommunicationFilter, string> = {
+  all: "Inbox",
+  unread: "Unread",
+  starred: "Starred",
+  unfiled: "Unfiled",
+  filed: "On a matter",
+  untimed: "Untimed (mine)",
+};
+
 export function ThreadList({
   threads,
   filter,
+  matterId,
+  matterLabel,
   selectedThreadId,
 }: {
   threads: ThreadListRow[];
   filter: CommunicationFilter;
+  /** When set, the rail's per-pinned-matter row is active; the
+   *  thread-list header shows the matter name instead of the
+   *  filter label, and per-row hrefs preserve the matter param. */
+  matterId?: string | null;
+  matterLabel?: string | null;
   selectedThreadId: string | null;
 }) {
   return (
     <div className="w-90 shrink-0 border-r border-line bg-white flex flex-col min-h-0">
       <header className="px-4 py-3 border-b border-line shrink-0">
         <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
-          {filter === "all"
-            ? "Inbox"
-            : filter === "unread"
-              ? "Unread"
-              : filter === "starred"
-                ? "Starred"
-                : "Unfiled"}
+          {matterLabel ?? FILTER_LABEL[filter]}
         </div>
         <div className="text-sm font-display font-medium text-ink">
           {threads.length} {threads.length === 1 ? "thread" : "threads"}
@@ -57,7 +72,7 @@ export function ThreadList({
           threads.map((t) => (
             <li key={t.id}>
               <Link
-                href={rowHref(t.id, filter)}
+                href={rowHref(t.id, filter, matterId ?? null)}
                 scroll={false}
                 className={cn(
                   "block px-4 py-3 border-b border-line transition-colors",

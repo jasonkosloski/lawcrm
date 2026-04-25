@@ -24,6 +24,7 @@ import { MessengerThreadList } from "@/components/communication/messenger-thread
 import { MessengerThreadReader } from "@/components/communication/messenger-thread-reader";
 import {
   getCommunicationCounts,
+  getCommunicationPinnedMatters,
   getThreadById,
   listThreads,
   type CommunicationFilter,
@@ -45,7 +46,14 @@ function parseEmailFilter(
   raw: string | string[] | undefined
 ): CommunicationFilter {
   const v = Array.isArray(raw) ? raw[0] : raw;
-  if (v === "unread" || v === "starred" || v === "unfiled" || v === "all")
+  if (
+    v === "unread" ||
+    v === "starred" ||
+    v === "unfiled" ||
+    v === "filed" ||
+    v === "untimed" ||
+    v === "all"
+  )
     return v;
   return "all";
 }
@@ -114,9 +122,15 @@ export default async function CommunicationPage({
 
   // Email view (default)
   const filter = parseEmailFilter(sp.filter);
-  const [threads, selectedThread] = await Promise.all([
-    listThreads(filter),
+  // Per-pinned-matter drilldown: ?matter=<id> overrides matter-related
+  // filter behavior to scope the list to that single matter.
+  const rawMatter = Array.isArray(sp.matter) ? sp.matter[0] : sp.matter;
+  const matterIdParam = typeof rawMatter === "string" ? rawMatter : null;
+
+  const [threads, selectedThread, pinnedMatters] = await Promise.all([
+    listThreads(filter, matterIdParam ?? undefined),
     threadId ? getThreadById(threadId) : Promise.resolve(null),
+    getCommunicationPinnedMatters(),
   ]);
 
   return (
@@ -136,12 +150,20 @@ export default async function CommunicationPage({
       <div className="flex-1 flex min-h-0">
         <MailboxRail
           counts={emailCounts}
+          pinnedMatters={pinnedMatters}
           activeFilter={filter}
+          activeMatterId={matterIdParam}
           selectedThreadId={threadId}
         />
         <ThreadList
           threads={threads}
           filter={filter}
+          matterId={matterIdParam}
+          matterLabel={
+            matterIdParam
+              ? (pinnedMatters.find((m) => m.id === matterIdParam)?.name ?? null)
+              : null
+          }
           selectedThreadId={threadId}
         />
         <ThreadReader thread={selectedThread} />
