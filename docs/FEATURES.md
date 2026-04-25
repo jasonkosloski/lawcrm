@@ -162,7 +162,7 @@ SCHEMA_NOTES.
 - [ ] **Responsive design** — Sidebar collapse on narrow viewports
 - [x] **Loading states** — `loading.tsx` per high-traffic segment (dashboard, matters list, matter detail, intake, calendar, communication, contacts) backed by a shared `<PageSkeleton variant="tiles|table|detail|grid">` so layout doesn't jump on hydrate.
 - [x] **Error boundaries** — Dashboard-segment `error.tsx` catches uncaught throws inside any /dashboard route and renders a friendly card with the message + a Try-again button. `not-found.tsx` for missing matters/leads/contacts. Root `global-error.tsx` as last-resort fallback when the root layout itself crashes.
-- [ ] **Authentication** — Login, session management, role-based access
+- [~] **Authentication — Phase 1 (email + password, JWT sessions)** — Auth.js v5 + Prisma adapter + argon2id. `/login` page with generic error messages (no email enumeration), `?next=` round-trip via `src/proxy.ts`, sign-out from the sidebar profile strip. Seed users get a hashed dev password (`ChangeMe2026!`). `Account` + `VerificationToken` tables provisioned now so adding Google OAuth or password-reset flows later is config-only. Everything else (MFA, OAuth, password reset, RBAC, session revocation, account lockout, audit log) is deferred — see `docs/AUTH_PLAN.md`.
 - [ ] **Deployment** — PostgreSQL, environment config, CI/CD
 
 ---

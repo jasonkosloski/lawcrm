@@ -15,8 +15,14 @@
  */
 
 import "dotenv/config";
+import * as argon2 from "argon2";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { PrismaClient } from "../src/generated/prisma/client";
+
+/// Single dev password applied to every seed user. Surfaced in the
+/// seed log so dev knows what to type at /login. Production users
+/// would go through the (deferred) admin invite flow instead.
+const DEV_PASSWORD = "ChangeMe2026!";
 
 const databaseUrl = process.env.DATABASE_URL ?? "file:./dev.db";
 const adapter = new PrismaBetterSqlite3({ url: databaseUrl });
@@ -80,7 +86,12 @@ async function main() {
   // Users (firm team)
   // ─────────────────────────────────────────────────────────────────────
   console.log("  Creating users…");
-  const [jason, leo, rachel, marco, elena] = await Promise.all([
+  // Hash once and reuse for every dev user — argon2 is intentionally
+  // slow (that's the point), so don't re-derive five times.
+  const devPasswordHash = await argon2.hash(DEV_PASSWORD, {
+    type: argon2.argon2id,
+  });
+  const [jason, leo, rachel, marco, _elena] = await Promise.all([
     prisma.user.create({
       data: {
         email: "jkosloski@kosloskilaw.com",
@@ -89,6 +100,7 @@ async function main() {
         role: "Managing",
         barNumber: "CO-44821",
         phone: "(303) 555-0100",
+        passwordHash: devPasswordHash,
       },
     }),
     prisma.user.create({
@@ -99,6 +111,7 @@ async function main() {
         role: "Partner",
         barNumber: "CO-39110",
         phone: "(303) 555-0101",
+        passwordHash: devPasswordHash,
       },
     }),
     prisma.user.create({
@@ -108,6 +121,7 @@ async function main() {
         initials: "RK",
         role: "Paralegal",
         phone: "(303) 555-0102",
+        passwordHash: devPasswordHash,
       },
     }),
     prisma.user.create({
@@ -117,6 +131,7 @@ async function main() {
         initials: "MG",
         role: "Investigator",
         phone: "(303) 555-0103",
+        passwordHash: devPasswordHash,
       },
     }),
     prisma.user.create({
@@ -126,6 +141,7 @@ async function main() {
         initials: "ES",
         role: "Intake",
         phone: "(303) 555-0104",
+        passwordHash: devPasswordHash,
       },
     }),
   ]);
@@ -2487,6 +2503,11 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
   console.log(`   ${counts[9]} email threads`);
   console.log(`   ${counts[10]} messenger threads`);
   console.log(`   ${counts[11]} messenger items`);
+
+  console.log("\n🔐 Dev login (every seed user uses the same password):");
+  console.log(`   email:    jkosloski@kosloskilaw.com`);
+  console.log(`   password: ${DEV_PASSWORD}`);
+  console.log(`   (other emails: leo / rachel / marco / elena @kosloskilaw.com)`);
 }
 
 main()

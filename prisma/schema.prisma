@@ -25,6 +25,20 @@ datasource db {
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
+  /// Argon2id-hashed password. Null means the user can't log in via
+  /// the credentials provider — they must use a linked OAuth account
+  /// (none of those wired yet) or the firm admin must invite them.
+  /// Set by the seed for dev users; set by the future invite flow
+  /// for production users.
+  passwordHash String?
+  /// Auth.js standard field — set when the user verifies their email
+  /// (or when an OAuth provider returns a verified email). Null for
+  /// dev/seed users today; the verification flow that flips this is
+  /// deferred to a later phase.
+  emailVerified DateTime?
+  /// Auth.js standard field — profile photo URL pulled from OAuth
+  /// providers when wired. Mirrors avatarUrl for now (legacy).
+  image     String?
   name      String
   initials  String   /// Two-letter initials for avatar display (e.g. "JM")
   role      String   /// Partner | Managing | Counsel | Paralegal | Investigator | Intake | Admin
@@ -52,8 +66,55 @@ model User {
   matterPins        UserMatterPin[]
   noteReads         NoteRead[]
   noteReactions     NoteReaction[]
+  /// Auth.js Prisma adapter — linked OAuth providers (Google etc.).
+  /// Empty until we wire OAuth; the table needs to exist now so
+  /// adding a provider later is config-only.
+  accounts          Account[]
 
   @@map("users")
+}
+
+// =============================================================================
+// AUTH.JS  (next-auth v5 + Prisma adapter)
+// =============================================================================
+//
+// Standard Auth.js shapes — kept verbatim so the adapter contract
+// stays intact across upgrades. We use JWT sessions (no Session
+// table needed yet) so the only writes today are to Account /
+// VerificationToken when those flows land.
+
+/// Linked OAuth account — one row per (provider × providerAccountId).
+/// Empty until we wire Google. Don't add columns without checking
+/// the adapter's expected shape.
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String  /// "oauth" | "oidc" | "email" | "webauthn"
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+/// Single-use tokens for the email-verification + magic-link flows.
+/// Empty until those flows land — same back-compat reason as Account.
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
 }
 
 // =============================================================================

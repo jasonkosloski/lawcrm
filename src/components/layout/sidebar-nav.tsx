@@ -28,6 +28,7 @@ import {
   Clock,
   DollarSign,
   BarChart3,
+  LogOut,
   Zap,
   Settings,
   Users,
@@ -35,6 +36,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useCommandPalette } from "@/components/command-palette/command-palette-provider";
+import { logoutAction } from "@/app/actions/auth";
 import type { SidebarData } from "@/lib/queries/sidebar";
 
 interface NavItem {
@@ -280,8 +282,27 @@ export function SidebarNav({ data }: { data: SidebarData }) {
               {user?.role ? `${user.role} · partner` : "—"}
             </span>
           </div>
+          <SignOutButton />
         </div>
       </div>
     </aside>
+  );
+}
+
+/** Sign-out is a server-action button (no JS-on-client required). The
+ *  button needs to be inside a client form, but since the parent is
+ *  already a client component this is just the inline form pattern. */
+function SignOutButton() {
+  return (
+    <form action={logoutAction}>
+      <button
+        type="submit"
+        title="Sign out"
+        aria-label="Sign out"
+        className="inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-4 hover:text-warn hover:bg-warn-soft transition-colors"
+      >
+        <LogOut size={13} />
+      </button>
+    </form>
   );
 }

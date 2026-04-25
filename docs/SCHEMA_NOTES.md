@@ -74,6 +74,7 @@ These are places where the schema will likely change as we build:
 | 2026-04-24 | Removed `Matter.isPinned`, added `UserMatterPin` join table | Pinning should be per-user, not global — an attorney's pins shouldn't appear in everyone's sidebar. See ADR-010. |
 | 2026-04-25 | Added `MatterContact.representationContactId` FK + `representationContact` relation (with reverse `Contact.representationOf`) | Representing attorneys are now first-class Contacts so cross-matter repeat counsel coalesces into one record (and the rep cell can deep-link to `/contacts/[id]`). Legacy free-text representation* columns retained as a fallback for un-backfilled rows. |
 | 2026-04-25 | Added `Lead.contactId` FK + `Lead.contact` relation (with reverse `Contact.leads`) | Every intake/lead is now attached to a first-class Contact — same shape as `Matter.clientId` — so a person who contacts the firm twice (or whose lead converts to a matter) surfaces as one record across the system. Conversion reuses `Lead.contactId` instead of creating a fresh contact each time. Legacy `Lead.name`/`.email`/`.phone` columns kept as a fallback for un-backfilled rows. |
+| 2026-04-25 | Added `User.passwordHash`/`emailVerified`/`image`, `Account` table, `VerificationToken` table | Auth.js v5 phase 1 — email + password sign-in with the Credentials provider, JWT sessions. `Account` and `VerificationToken` are empty today but get created upfront so adding Google OAuth or password-reset flows later is config-only (no migration). See `docs/AUTH_PLAN.md`. |
 
 ---
 
