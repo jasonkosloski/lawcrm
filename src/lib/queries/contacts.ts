@@ -49,6 +49,10 @@ export async function listContacts({
           }
         : {}),
     },
+    // 500-row cap as a safety net. Same rationale as the matters /
+    // leads / threads caps — covers a small/mid firm without paging
+    // UI; build "Load more" when a real firm bumps the ceiling.
+    take: 500,
     orderBy: [{ name: "asc" }],
     include: {
       _count: {

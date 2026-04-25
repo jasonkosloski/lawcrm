@@ -109,6 +109,11 @@ export async function requireAdmin(): Promise<string> {
     },
   });
   if (isAdmin === 0) {
+    // In Next.js 16's streaming RSC context, redirect() emits a
+    // client-side <meta http-equiv="refresh"> rather than a 307 —
+    // the page may still render briefly before the browser hops.
+    // For pages that absolutely must not flash, gate at the layout
+    // level instead of the page.
     redirect("/");
   }
   return userId;

@@ -322,8 +322,12 @@ model Matter {
   filedDate      DateTime?
   trialDate      DateTime?
   feeStructure   String   @default("contingent") /// contingent | hourly | flat | hybrid | pro_bono
-  trustBalance   Float    @default(0) /// Current IOLTA trust balance for this matter
-  wipAmount      Float    @default(0) /// Work-in-progress (unbilled hours value)
+  /// IOLTA trust balance for this matter. Decimal (not Float) for
+  /// regulatory-grade precision — a $0.01 drift on real client trust
+  /// money is a compliance violation.
+  trustBalance   Decimal  @default(0) /// Current IOLTA trust balance for this matter
+  /// Work-in-progress total — same precision rationale as trustBalance.
+  wipAmount      Decimal  @default(0) /// Work-in-progress (unbilled hours value)
   description    String?  /// Brief case summary
   color          String   @default("#2563a8") /// Color dot for UI display — snapshot from practiceArea.color on create
   isArchived     Boolean  @default(false)
@@ -816,12 +820,19 @@ model TimeEntry {
   matterId      String
   userId        String    /// Attorney or staff who did the work
   date          DateTime  /// Date the work was performed
+  /// Duration in decimal hours (e.g. 1.5). Float is fine — these
+  /// are quarter-hour increments and the value isn't itself money.
   hours         Float     /// Duration in decimal hours (e.g. 1.5)
   activity      String    /// Short description, e.g. "Motion to compel · draft & file"
   narrative     String?   /// Detailed client-facing description
   utbmsCode     String?   /// UTBMS activity code, e.g. "A101"
-  rate          Float?    /// Billing rate per hour (null for contingent)
-  amount        Float?    /// Computed billable amount (hours × rate)
+  /// Billing rate per hour. Decimal for money-precision. Null on
+  /// contingent matters where there's no hourly rate.
+  rate          Decimal?  /// Billing rate per hour (null for contingent)
+  /// Computed billable amount (hours × rate). Stored Decimal so we
+  /// don't recompute on every read; the action that sets it is
+  /// responsible for keeping it in sync.
+  amount        Decimal?  /// Computed billable amount (hours × rate)
   billable      Boolean   @default(true)
   noCharge      Boolean   @default(false) /// Write-off flag
   privileged    Boolean   @default(false) /// Attorney-client privilege flag
@@ -886,10 +897,10 @@ model Invoice {
   clientId     String?   /// Contact ID for the billed client
   issueDate    DateTime
   dueDate      DateTime
-  subtotal     Float     @default(0)
-  taxAmount    Float     @default(0)
-  totalAmount  Float     @default(0)
-  paidAmount   Float     @default(0)
+  subtotal     Decimal   @default(0)
+  taxAmount    Decimal   @default(0)
+  totalAmount  Decimal   @default(0)
+  paidAmount   Decimal   @default(0)
   status       String    @default("draft") /// draft | sent | open | overdue | paid | void
   notes        String?
   createdAt    DateTime  @default(now())
@@ -912,7 +923,7 @@ model TrustTransaction {
   id          String   @id @default(cuid())
   matterId    String
   type        String   /// deposit | disbursement | transfer | refund | interest
-  amount      Float    /// Positive for deposits, negative for disbursements
+  amount      Decimal  /// Positive for deposits, negative for disbursements
   description String
   reference   String?  /// Check number, wire confirmation, etc.
   date        DateTime
@@ -935,11 +946,11 @@ model TrustTransaction {
 model Settlement {
   id               String   @id @default(cuid())
   matterId         String
-  grossAmount      Float    /// Total settlement amount
-  firmFee          Float    @default(0) /// Attorney fee
-  firmFeePercent   Float?   /// Fee percentage (e.g. 33.33)
-  advancedCosts    Float    @default(0) /// Costs advanced by firm
-  clientNet        Float    @default(0) /// Net amount to client
+  grossAmount      Decimal  /// Total settlement amount
+  firmFee          Decimal  @default(0) /// Attorney fee
+  firmFeePercent   Decimal? /// Fee percentage (e.g. 33.33)
+  advancedCosts    Decimal  @default(0) /// Costs advanced by firm
+  clientNet        Decimal  @default(0) /// Net amount to client
   status           String   @default("pending") /// pending | approved | disbursed | closed
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -958,8 +969,8 @@ model SettlementLien {
   settlementId     String
   lienholder       String  /// Name of lienholder
   lienholderType   String? /// hospital | physician | insurance | government | other
-  originalAmount   Float
-  negotiatedAmount Float?  /// Reduced amount after negotiation
+  originalAmount   Decimal
+  negotiatedAmount Decimal? /// Reduced amount after negotiation
   status           String  @default("pending") /// pending | negotiating | signed | verified | paid
 
   settlement Settlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)

@@ -806,8 +806,9 @@ export async function getMatterTimeEntries(
     activity: e.activity,
     narrative: e.narrative,
     utbmsCode: e.utbmsCode,
-    rate: e.rate,
-    amount: e.amount,
+    // Decimal → number at the API boundary. Same pattern as Matter.trustBalance.
+    rate: e.rate?.toNumber() ?? null,
+    amount: e.amount?.toNumber() ?? null,
     billable: e.billable,
     noCharge: e.noCharge,
     privileged: e.privileged,
@@ -863,7 +864,10 @@ export async function getMatterTimeSummary(
     totalHours += e.hours;
     if (e.billable && !e.noCharge) {
       billableHours += e.hours;
-      const amount = e.amount ?? 0;
+      // amount is Prisma.Decimal | null. Convert to number for the
+      // running totals — at this scale rounding is irrelevant; the
+      // canonical money lives in the Decimal column.
+      const amount = e.amount?.toNumber() ?? 0;
       if (e.status === "billed") billedAmount += amount;
       else unbilledAmount += amount;
     }

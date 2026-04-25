@@ -76,7 +76,10 @@ export async function getDashboardKpis(): Promise<DashboardKpis> {
     flaggedEmail,
     hoursToday: hoursAgg._sum.hours ?? 0,
     hoursGoal: 6.0,
-    trustBalance: trustAgg._sum.trustBalance ?? 0,
+    // Decimal → number at the API boundary. Display + KPI math
+    // tolerates the precision floor; the Decimal stays canonical
+    // in the DB. Same pattern below for invoice totals.
+    trustBalance: trustAgg._sum.trustBalance?.toNumber() ?? 0,
     trustMatterCount: trustAgg._count,
   };
 }
@@ -363,8 +366,10 @@ export async function getFirmPulse(): Promise<FirmPulse> {
     }),
   ]);
 
-  const total = invoiceAgg._sum.totalAmount ?? 0;
-  const paid = invoiceAgg._sum.paidAmount ?? 0;
+  // Decimal → number at the API boundary; display arithmetic
+  // (collection rate, AR) tolerates the precision floor.
+  const total = invoiceAgg._sum.totalAmount?.toNumber() ?? 0;
+  const paid = invoiceAgg._sum.paidAmount?.toNumber() ?? 0;
   const collectionRate = total > 0 ? (paid / total) * 100 : 0;
   const arOutstanding = Math.max(0, total - paid);
 

@@ -74,8 +74,15 @@ export type LeadListRow = {
 const daysBetween = (a: Date, b: Date): number =>
   Math.floor((a.getTime() - b.getTime()) / (24 * 60 * 60 * 1000));
 
+/// Hard cap on listLeads — same rationale as LIST_MATTERS_CAP in
+/// matters.ts. Most firms have far fewer active leads than this,
+/// and converted/declined leads still count toward the cap so this
+/// is the "all intake history" bound. Build paging when needed.
+const LIST_LEADS_CAP = 200;
+
 export async function listLeads(): Promise<LeadListRow[]> {
   const leads = await prisma.lead.findMany({
+    take: LIST_LEADS_CAP,
     orderBy: [{ createdAt: "desc" }],
     include: {
       // Joined Contact wins for display fields when present — keeps

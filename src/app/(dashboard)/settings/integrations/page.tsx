@@ -1,6 +1,8 @@
 import { SettingsPlaceholder } from "@/components/settings/settings-placeholder";
+import { requireAdmin } from "@/lib/firm";
 
-export default function IntegrationsSettingsPage() {
+export default async function IntegrationsSettingsPage() {
+  await requireAdmin();
   return (
     <SettingsPlaceholder
       title="Integrations"

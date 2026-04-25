@@ -1,6 +1,8 @@
 import { SettingsPlaceholder } from "@/components/settings/settings-placeholder";
+import { requireAdmin } from "@/lib/firm";
 
-export default function BillingSettingsPage() {
+export default async function BillingSettingsPage() {
+  await requireAdmin();
   return (
     <SettingsPlaceholder
       title="Billing & rates"

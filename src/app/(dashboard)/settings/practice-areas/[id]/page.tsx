@@ -10,7 +10,7 @@
  * matters are concentrated before making changes. Archive on a stage
  * with active matters is blocked server-side.
  *
- * TODO (auth): gate to firm administrators once RBAC lands.
+ * Admin-only — non-admins are bounced via requireAdmin().
  */
 
 import Link from "next/link";
@@ -18,12 +18,14 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { prisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/firm";
 import { EditPracticeAreaForm } from "@/components/settings/edit-practice-area-form";
 import { StageManager } from "@/components/settings/stage-manager";
 
 export default async function PracticeAreaDetailPage({
   params,
 }: PageProps<"/settings/practice-areas/[id]">) {
+  await requireAdmin();
   const { id } = await params;
   const area = await prisma.practiceArea.findUnique({
     where: { id },

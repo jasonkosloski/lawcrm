@@ -13,18 +13,23 @@
 
 import { TopBar } from "@/components/layout/topbar";
 import { SettingsNav } from "@/components/settings/settings-nav";
+import { isCurrentUserAdmin } from "@/lib/firm";
 
-export default function SettingsLayout({
+export default async function SettingsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Admin-only nav items (practice areas / integrations / billing)
+  // hide for non-admins. Each underlying page also calls
+  // requireAdmin() server-side so a deep-link still bounces.
+  const isAdmin = await isCurrentUserAdmin();
   return (
     <>
       <TopBar title="Settings" crumbs="Settings" />
       <div className="flex-1 overflow-y-auto animate-page-enter">
         <div className="flex h-full">
-          <SettingsNav />
+          <SettingsNav isAdmin={isAdmin} />
           <div className="flex-1 min-w-0 p-6 overflow-y-auto">{children}</div>
         </div>
       </div>

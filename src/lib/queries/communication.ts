@@ -83,6 +83,10 @@ export async function listThreads(
 
   const threads = await prisma.emailThread.findMany({
     where,
+    // 500-thread cap on the inbox — matches how Gmail / Outlook
+    // both default to "most recent N" without a true infinite
+    // scroll. Build proper paging when a real firm exceeds this.
+    take: 500,
     include: {
       matter: { select: { id: true, name: true, color: true } },
       messages: {
@@ -250,6 +254,9 @@ export async function listThreadsForMatter(
   const userId = await getCurrentUserId();
   const threads = await prisma.emailThread.findMany({
     where: { matterId, account: { userId } },
+    // 500-thread cap matches listThreads. A single matter rarely
+    // exceeds this; if one does, build per-matter paging.
+    take: 500,
     include: {
       matter: { select: { id: true, name: true, color: true } },
       messages: {

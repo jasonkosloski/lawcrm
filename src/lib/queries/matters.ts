@@ -165,6 +165,11 @@ function makeComparator(sort: MattersSort) {
  * Text search (`filter.q`) is applied in memory after the DB round-trip —
  * SQLite doesn't support `mode: 'insensitive'` and this dataset is small.
  */
+/// Hard cap on listMatters — covers a small/mid firm without a real
+/// pagination UI. When a firm hits this, build "Load more" / page
+/// controls; until then, an unbounded query is the bigger risk.
+const LIST_MATTERS_CAP = 200;
+
 export async function listMatters(
   filter: MattersFilter = EMPTY_FILTER,
   sort: MattersSort = { field: "created", dir: "desc" },
@@ -174,6 +179,11 @@ export async function listMatters(
   const where = buildWhere(filter, userId);
   const matters = await prisma.matter.findMany({
     where,
+    take: LIST_MATTERS_CAP,
+    // Order by createdAt desc as a stable cap — the in-memory sort
+    // below resorts. Without this, the cap would silently drop a
+    // semi-random subset on the way to JS.
+    orderBy: { createdAt: "desc" },
     include: {
       practiceArea: { select: { name: true } },
       stage: { select: { name: true, order: true, isTerminal: true } },
@@ -208,7 +218,10 @@ export async function listMatters(
     stageOrder: m.stage.order,
     stageIsTerminal: m.stage.isTerminal,
     feeStructure: m.feeStructure,
-    trustBalance: m.trustBalance,
+    // Decimal → number at the API boundary so the row shape stays
+    // primitive-only (matches comparator + display helpers). The DB
+    // keeps Decimal precision; UI doesn't need it.
+    trustBalance: m.trustBalance.toNumber(),
     color: m.color,
     leadInitials: m.teamMembers[0]?.user.initials ?? null,
     leadName: m.teamMembers[0]?.user.name ?? null,
@@ -342,7 +355,8 @@ export async function getMatterById(id: string) {
     },
   });
   if (!matter) return null;
-  const { pins, practiceArea, stage, ...rest } = matter;
+  const { pins, practiceArea, stage, trustBalance, wipAmount, ...rest } =
+    matter;
   return {
     ...rest,
     // Flattened for display. Components that already used `matter.area`
@@ -356,6 +370,10 @@ export async function getMatterById(id: string) {
     stageOrder: stage.order,
     stageIsTerminal: stage.isTerminal,
     isPinnedByCurrentUser: pins.length > 0,
+    // Decimal → number at the API boundary so consumers stay
+    // primitive-typed. The DB keeps Decimal precision.
+    trustBalance: trustBalance.toNumber(),
+    wipAmount: wipAmount.toNumber(),
   };
 }
 

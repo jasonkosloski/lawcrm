@@ -16,6 +16,11 @@ interface NavItem {
   href: string;
   label: string;
   description?: string;
+  /** When true, this nav item is only rendered for admins. The
+   *  underlying page is also gated server-side via requireAdmin();
+   *  hiding the nav item is just so non-admins don't see a link
+   *  that would bounce them to /. */
+  adminOnly?: boolean;
 }
 
 interface NavSection {
@@ -36,22 +41,33 @@ const SECTIONS: NavSection[] = [
     label: "Firm",
     items: [
       { href: "/settings/team", label: "Team" },
+      // Roles + practice-areas are admin-write surfaces. Roles +
+      // Firm info expose a read-only view to non-admins so they can
+      // still see the firm setup; practice-areas is fully admin-only.
       { href: "/settings/roles", label: "Roles" },
       { href: "/settings/firm", label: "Firm info" },
-      { href: "/settings/practice-areas", label: "Practice areas" },
-      { href: "/settings/integrations", label: "Integrations" },
-      { href: "/settings/billing", label: "Billing & rates" },
+      { href: "/settings/practice-areas", label: "Practice areas", adminOnly: true },
+      { href: "/settings/integrations", label: "Integrations", adminOnly: true },
+      { href: "/settings/billing", label: "Billing & rates", adminOnly: true },
     ],
   },
 ];
 
-export function SettingsNav() {
+export function SettingsNav({ isAdmin }: { isAdmin: boolean }) {
   const pathname = usePathname();
+
+  // Filter out admin-only items for non-admins. Sections that end up
+  // with no visible items get hidden too (don't render an empty
+  // section header).
+  const visibleSections = SECTIONS.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => !item.adminOnly || isAdmin),
+  })).filter((section) => section.items.length > 0);
 
   return (
     <aside className="w-52 shrink-0 border-r border-line py-5 pr-3">
       <nav className="flex flex-col gap-5">
-        {SECTIONS.map((section) => (
+        {visibleSections.map((section) => (
           <div key={section.label}>
             <div className="px-2.5 pb-1.5 text-2xs font-semibold uppercase tracking-wider text-ink-4">
               {section.label}
