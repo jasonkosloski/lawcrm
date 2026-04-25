@@ -23,6 +23,7 @@ import {
 import { TimeComposer } from "@/components/matters/captures/time-composer";
 import { TimeEntryRowMenu } from "@/components/time-entries/time-entry-row-actions";
 import { EntitySourceChip } from "@/components/matters/entity-source-chip";
+import { RowAttachedNotes } from "@/components/matters/row-attached-notes";
 import { type TimeEntryStatus } from "@/lib/note-constants";
 import {
   getMatterTimeEntries,
@@ -215,13 +216,19 @@ function EntryRow({
               <span className="text-2xs text-brand-700">Privileged</span>
             )}
           </div>
-          {entry.spawnedFrom && (
-            <EntitySourceChip
-              source={entry.spawnedFrom}
+          <div className="flex items-center gap-1.5 flex-wrap mt-1">
+            {entry.spawnedFrom && (
+              <EntitySourceChip
+                source={entry.spawnedFrom}
+                matterId={matterId}
+              />
+            )}
+            <RowAttachedNotes
+              notes={entry.attachedNotes}
               matterId={matterId}
-              className="self-start mt-1"
+              compact
             />
-          )}
+          </div>
         </div>
       </TableCell>
       <TableCell className="text-2xs font-mono text-ink-4">

@@ -1997,6 +1997,79 @@ A copy of the document is available through PACER and is attached for your recor
   console.log(`   ${noteAttachmentsCreated} note-attachment examples`);
 
   // ─────────────────────────────────────────────────────────────────────
+  // Notes attached to existing tasks / deadlines / time entries so
+  // the inverse "💬 N notes" expandable chip renders out of the box
+  // on the Tasks / Deadlines / Time tabs.
+  // ─────────────────────────────────────────────────────────────────────
+  console.log("  Creating attached-note examples…");
+  const sampleTask = await prisma.task.findFirst({
+    where: { matterId: matters.williams.id, noteId: null },
+    select: { id: true, matterId: true },
+  });
+  const sampleDeadline = await prisma.deadline.findFirst({
+    where: { matterId: matters.williams.id, noteId: null },
+    select: { id: true, matterId: true },
+  });
+  const sampleTimeEntry = await prisma.timeEntry.findFirst({
+    where: { matterId: matters.williams.id, noteId: null },
+    select: { id: true, matterId: true },
+  });
+
+  let attachedNoteCount = 0;
+  if (sampleTask?.matterId) {
+    const n = await prisma.note.create({
+      data: {
+        matterId: sampleTask.matterId,
+        authorId: rachel.id,
+        taskId: sampleTask.id,
+        type: "note",
+        content:
+          "<p>Pulled the four most relevant cases on lien reduction in the District. Will summarize and drop in the strategy memo.</p>",
+      },
+      select: { id: true },
+    });
+    await prisma.noteRead.create({
+      data: { userId: rachel.id, noteId: n.id },
+    });
+    attachedNoteCount++;
+  }
+  if (sampleDeadline?.matterId) {
+    const n = await prisma.note.create({
+      data: {
+        matterId: sampleDeadline.matterId,
+        authorId: jason.id,
+        deadlineId: sampleDeadline.id,
+        type: "memo",
+        content:
+          "<p>Confirmed the deadline date with opposing counsel. Including a 3-day buffer in case our reply needs to incorporate Memorial's revised lien letter.</p>",
+      },
+      select: { id: true },
+    });
+    await prisma.noteRead.create({
+      data: { userId: jason.id, noteId: n.id },
+    });
+    attachedNoteCount++;
+  }
+  if (sampleTimeEntry?.matterId) {
+    const n = await prisma.note.create({
+      data: {
+        matterId: sampleTimeEntry.matterId,
+        authorId: jason.id,
+        timeEntryId: sampleTimeEntry.id,
+        type: "chatter",
+        content:
+          "<p>Spent an extra 15 min on this — client called mid-research with a new question. Logged as part of the same activity.</p>",
+      },
+      select: { id: true },
+    });
+    await prisma.noteRead.create({
+      data: { userId: jason.id, noteId: n.id },
+    });
+    attachedNoteCount++;
+  }
+  console.log(`   ${attachedNoteCount} attached-note examples`);
+
+  // ─────────────────────────────────────────────────────────────────────
   // Summary
   // ─────────────────────────────────────────────────────────────────────
   const counts = await Promise.all([

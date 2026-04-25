@@ -137,6 +137,7 @@ export type DeadlineRow = {
   ownerName: string | null;
   ownerInitials: string | null;
   spawnedFrom: EntitySource | null;
+  attachedNotes: AttachedNotePreview[];
 };
 
 export async function getMatterDeadlines(
@@ -160,6 +161,16 @@ export async function getMatterDeadlines(
             },
           },
         },
+      },
+      notes: {
+        select: {
+          id: true,
+          content: true,
+          type: true,
+          createdAt: true,
+          author: { select: { name: true, initials: true } },
+        },
+        orderBy: { createdAt: "asc" },
       },
     },
     orderBy: [{ status: "asc" }, { dueDate: "asc" }],
@@ -186,6 +197,14 @@ export async function getMatterDeadlines(
         email: d.emailThread,
         messenger: d.messengerItem,
       }),
+      attachedNotes: d.notes.map((n) => ({
+        id: n.id,
+        content: n.content,
+        type: n.type,
+        authorName: n.author.name,
+        authorInitials: n.author.initials,
+        createdAt: n.createdAt,
+      })),
     };
   });
 }
@@ -220,6 +239,22 @@ export type TaskRow = {
    *  item. Null when the row was created directly. Drives the "From X"
    *  chip on the row. */
   spawnedFrom: EntitySource | null;
+  /** Notes attached *to* this row (Note.taskId / .deadlineId / .timeEntryId
+   *  pointing here). Powers the inline expandable panel below each
+   *  row — symmetric to how the events tab shows notes attached to an
+   *  event. Empty array when none. */
+  attachedNotes: AttachedNotePreview[];
+};
+
+/** Compact note view for the row-attached-notes inline panel. Just
+ *  enough to render a small card without re-fetching. */
+export type AttachedNotePreview = {
+  id: string;
+  content: string;
+  type: string;
+  authorName: string;
+  authorInitials: string;
+  createdAt: Date;
 };
 
 export async function getMatterTasks(matterId: string): Promise<TaskRow[]> {
@@ -244,6 +279,19 @@ export async function getMatterTasks(matterId: string): Promise<TaskRow[]> {
           },
         },
       },
+      // Notes attached to this task (Note.taskId === task.id) —
+      // surfaces in the row's inline expandable panel. Sorted oldest-
+      // first so the conversation reads top-down.
+      notes: {
+        select: {
+          id: true,
+          content: true,
+          type: true,
+          createdAt: true,
+          author: { select: { name: true, initials: true } },
+        },
+        orderBy: { createdAt: "asc" },
+      },
     },
     orderBy: [{ status: "asc" }, { sortOrder: "asc" }, { createdAt: "desc" }],
   });
@@ -266,6 +314,14 @@ export async function getMatterTasks(matterId: string): Promise<TaskRow[]> {
       email: t.emailThread,
       messenger: t.messengerItem,
     }),
+    attachedNotes: t.notes.map((n) => ({
+      id: n.id,
+      content: n.content,
+      type: n.type,
+      authorName: n.author.name,
+      authorInitials: n.author.initials,
+      createdAt: n.createdAt,
+    })),
   }));
 }
 
@@ -627,6 +683,7 @@ export type TimeEntryRow = {
    *  time entries — the user's working session goes there directly).
    *  Same field shape as TaskRow / DeadlineRow for chip-render reuse. */
   spawnedFrom: EntitySource | null;
+  attachedNotes: AttachedNotePreview[];
 };
 
 export type MatterTimeSummary = {
@@ -644,6 +701,16 @@ export async function getMatterTimeEntries(
     include: {
       user: { select: { name: true, initials: true } },
       parentNote: { select: { id: true, content: true } },
+      notes: {
+        select: {
+          id: true,
+          content: true,
+          type: true,
+          createdAt: true,
+          author: { select: { name: true, initials: true } },
+        },
+        orderBy: { createdAt: "asc" },
+      },
     },
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
   });
@@ -669,6 +736,14 @@ export async function getMatterTimeEntries(
       email: null,
       messenger: null,
     }),
+    attachedNotes: e.notes.map((n) => ({
+      id: n.id,
+      content: n.content,
+      type: n.type,
+      authorName: n.author.name,
+      authorInitials: n.author.initials,
+      createdAt: n.createdAt,
+    })),
   }));
 }
 

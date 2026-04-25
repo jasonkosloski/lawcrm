@@ -12,6 +12,7 @@ import {
   TaskStatusToggle,
 } from "@/components/tasks/task-row-actions";
 import { EntitySourceChip } from "@/components/matters/entity-source-chip";
+import { RowAttachedNotes } from "@/components/matters/row-attached-notes";
 import { type TaskStatus } from "@/lib/note-constants";
 import {
   getMatterTasks,
@@ -128,14 +129,15 @@ function TaskItem({ task, matterId }: { task: TaskRow; matterId: string }) {
             {task.description}
           </div>
         )}
-        {task.spawnedFrom && (
-          <div className="mt-0.5">
+        <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+          {task.spawnedFrom && (
             <EntitySourceChip
               source={task.spawnedFrom}
               matterId={matterId}
             />
-          </div>
-        )}
+          )}
+          <RowAttachedNotes notes={task.attachedNotes} matterId={matterId} />
+        </div>
       </div>
       <span
         className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full border shrink-0 ${priority.className}`}

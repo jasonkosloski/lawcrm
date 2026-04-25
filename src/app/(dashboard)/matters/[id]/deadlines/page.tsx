@@ -18,6 +18,7 @@ import {
 import { DeadlineComposer } from "@/components/matters/captures/deadline-composer";
 import { DeadlineRowMenu } from "@/components/deadlines/deadline-row-actions";
 import { EntitySourceChip } from "@/components/matters/entity-source-chip";
+import { RowAttachedNotes } from "@/components/matters/row-attached-notes";
 import { type DeadlineStatus } from "@/lib/note-constants";
 import { getMatterDeadlines } from "@/lib/queries/matter-detail";
 
@@ -115,13 +116,19 @@ export default async function MatterDeadlinesPage({
                         {d.description}
                       </span>
                     )}
-                    {d.spawnedFrom && (
-                      <EntitySourceChip
-                        source={d.spawnedFrom}
+                    <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                      {d.spawnedFrom && (
+                        <EntitySourceChip
+                          source={d.spawnedFrom}
+                          matterId={id}
+                        />
+                      )}
+                      <RowAttachedNotes
+                        notes={d.attachedNotes}
                         matterId={id}
-                        className="self-start mt-0.5"
+                        compact
                       />
-                    )}
+                    </div>
                   </div>
                 </TableCell>
                 <TableCell className="text-xs text-ink-3">
