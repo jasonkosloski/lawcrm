@@ -44,7 +44,9 @@ import {
 const formatMoney = (n: number): string =>
   `$${Math.round(n).toLocaleString("en-US")}`;
 
-/** Map activity-log icon names (stored as strings in DB) to lucide icons. */
+/** Map activity-log icon names (stored as strings in DB) to lucide
+ *  icons. Keep this in sync with `defaultIconFor()` in
+ *  `src/lib/activity-log.ts`. */
 const ACTIVITY_ICONS: Record<string, LucideIcon> = {
   gavel: Gavel,
   mail: Mail,
@@ -53,6 +55,7 @@ const ACTIVITY_ICONS: Record<string, LucideIcon> = {
   zap: Zap,
   note: StickyNote,
   document: FileText,
+  clock: Clock,
 };
 
 export default async function DashboardPage() {

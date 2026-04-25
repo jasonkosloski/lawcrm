@@ -22,6 +22,7 @@ import {
   DEADLINE_KINDS,
   TASK_PRIORITIES,
 } from "@/lib/note-constants";
+import { logActivity } from "@/lib/activity-log";
 import type { NoteAttachmentFormState } from "@/lib/note-attachment-form";
 
 /** Resolve the matter the note belongs to. Used by every attach
@@ -103,6 +104,13 @@ export async function addTaskToNote(
   });
 
   revalidateForNote(note.matterId, "task");
+  await logActivity({
+    matterId: note.matterId,
+    userId,
+    type: "task",
+    title: "Task added to note",
+    detail: parsed.data.title,
+  });
   return { status: "ok" };
 }
 
@@ -148,6 +156,13 @@ export async function addDeadlineToNote(
   });
 
   revalidateForNote(note.matterId, "deadline");
+  await logActivity({
+    matterId: note.matterId,
+    userId,
+    type: "deadline",
+    title: "Deadline added to note",
+    detail: parsed.data.title,
+  });
   return { status: "ok" };
 }
 
@@ -206,5 +221,12 @@ export async function addTimeEntryToNote(
   });
 
   revalidateForNote(note.matterId, "time");
+  await logActivity({
+    matterId: note.matterId,
+    userId,
+    type: "time_entry",
+    title: `Time logged on note · ${parsed.data.hours}h`,
+    detail: parsed.data.activity,
+  });
   return { status: "ok" };
 }

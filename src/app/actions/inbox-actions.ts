@@ -28,6 +28,7 @@ import {
   TASK_PRIORITIES,
 } from "@/lib/note-constants";
 import type { InboxActionFormState } from "@/lib/inbox-action-form";
+import { logActivity } from "@/lib/activity-log";
 
 const ALLOWED_TAGS = [
   "p",
@@ -181,6 +182,13 @@ export async function createTaskFromEmail(
     },
   });
   revalidateForSpawn(ctx.matterId, "task", "email");
+  await logActivity({
+    matterId: ctx.matterId,
+    userId,
+    type: "task",
+    title: "Task created from email",
+    detail: parsed.data.title,
+  });
   return { status: "ok" };
 }
 
@@ -214,6 +222,13 @@ export async function createDeadlineFromEmail(
     },
   });
   revalidateForSpawn(ctx.matterId, "deadline", "email");
+  await logActivity({
+    matterId: ctx.matterId,
+    userId,
+    type: "deadline",
+    title: "Deadline created from email",
+    detail: parsed.data.title,
+  });
   return { status: "ok" };
 }
 
@@ -254,6 +269,18 @@ export async function createNoteFromEmail(
     data: { userId, noteId: created.id },
   });
   revalidateForSpawn(ctx.matterId, "note", "email");
+  await logActivity({
+    matterId: ctx.matterId,
+    userId,
+    type: "note",
+    title: "Note saved from email",
+    detail:
+      clean
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 80) || "Note",
+  });
   return { status: "ok" };
 }
 
@@ -289,6 +316,13 @@ export async function createTaskFromMessage(
     },
   });
   revalidateForSpawn(ctx.matterId, "task", "messenger");
+  await logActivity({
+    matterId: ctx.matterId,
+    userId,
+    type: "task",
+    title: "Task created from message",
+    detail: parsed.data.title,
+  });
   return { status: "ok" };
 }
 
@@ -322,6 +356,13 @@ export async function createDeadlineFromMessage(
     },
   });
   revalidateForSpawn(ctx.matterId, "deadline", "messenger");
+  await logActivity({
+    matterId: ctx.matterId,
+    userId,
+    type: "deadline",
+    title: "Deadline created from message",
+    detail: parsed.data.title,
+  });
   return { status: "ok" };
 }
 
@@ -361,5 +402,17 @@ export async function createNoteFromMessage(
     data: { userId, noteId: created.id },
   });
   revalidateForSpawn(ctx.matterId, "note", "messenger");
+  await logActivity({
+    matterId: ctx.matterId,
+    userId,
+    type: "note",
+    title: "Note saved from message",
+    detail:
+      clean
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 80) || "Note",
+  });
   return { status: "ok" };
 }

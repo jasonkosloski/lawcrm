@@ -26,6 +26,7 @@ import {
   type NoteFormState,
 } from "@/lib/note-constants";
 import { captureSchema } from "@/lib/capture-schemas";
+import { logActivity } from "@/lib/activity-log";
 
 /** Tags + attributes allowed through from the Tiptap editor. Keep this
  *  list minimal; Tiptap's StarterKit only emits this shape anyway. */
@@ -290,6 +291,24 @@ export async function createNote(
     revalidatePath(`/matters/${matterId}/events`);
     revalidatePath(`/calendar`);
   }
+
+  // Activity log — let the dashboard "Recent activity" reflect the
+  // real write. Title is a short preview of the note body so the
+  // entry is meaningful without expanding it.
+  const previewText =
+    clean
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 80) || "Note added";
+  await logActivity({
+    matterId,
+    userId: currentUserId,
+    type: "note",
+    title: parsed.data.parentNoteId ? "Reply added" : "Note added",
+    detail: previewText,
+  });
+
   return { status: "ok" };
 }
 

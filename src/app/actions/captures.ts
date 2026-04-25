@@ -31,6 +31,7 @@ import {
   type CaptureFormState,
   type ValidCapture,
 } from "@/lib/capture-schemas";
+import { logActivity } from "@/lib/activity-log";
 
 // ── Shared helpers ──────────────────────────────────────────────────────
 
@@ -273,6 +274,13 @@ export async function createTaskWithCaptures(
   });
 
   revalidateTouched(matterId, attach.captures, "task");
+  await logActivity({
+    matterId,
+    userId,
+    type: "task",
+    title: "Task added",
+    detail: parsed.data.title,
+  });
   return { status: "ok" };
 }
 
@@ -367,6 +375,13 @@ export async function createEventWithCaptures(
   });
 
   revalidateTouched(matterId, attach.captures, "event");
+  await logActivity({
+    matterId,
+    userId,
+    type: "event",
+    title: "Event scheduled",
+    detail: parsed.data.title,
+  });
   return { status: "ok" };
 }
 
@@ -430,6 +445,13 @@ export async function createDeadlineWithCaptures(
   });
 
   revalidateTouched(matterId, attach.captures, "deadline");
+  await logActivity({
+    matterId,
+    userId,
+    type: "deadline",
+    title: "Deadline added",
+    detail: parsed.data.title,
+  });
   return { status: "ok" };
 }
 
@@ -504,5 +526,12 @@ export async function createTimeEntryWithCaptures(
   });
 
   revalidateTouched(matterId, attach.captures, "time");
+  await logActivity({
+    matterId,
+    userId,
+    type: "time_entry",
+    title: `Time logged · ${parsed.data.hours}h`,
+    detail: parsed.data.activity,
+  });
   return { status: "ok" };
 }

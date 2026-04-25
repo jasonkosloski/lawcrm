@@ -24,6 +24,8 @@ import {
   type TaskStatus,
 } from "@/lib/note-constants";
 import type { UpdateTaskFormState } from "@/lib/task-form";
+import { getCurrentUserId } from "@/lib/current-user";
+import { logActivity } from "@/lib/activity-log";
 
 /** Path-revalidate every surface that displays this task. */
 function revalidateForTask(matterId: string | null): void {
@@ -46,7 +48,7 @@ export async function setTaskStatus(
 
   const task = await prisma.task.findUnique({
     where: { id: taskId },
-    select: { matterId: true, status: true },
+    select: { matterId: true, status: true, title: true },
   });
   if (!task) return { ok: false, error: "Task not found" };
 
@@ -69,6 +71,29 @@ export async function setTaskStatus(
   });
 
   revalidateForTask(task.matterId);
+
+  // Activity log only for completed/reopened transitions — minor
+  // status nudges (open → in_progress) aren't worth dashboard space.
+  if (!wasComplete && isComplete) {
+    const userId = await getCurrentUserId();
+    await logActivity({
+      matterId: task.matterId,
+      userId,
+      type: "task_complete",
+      title: status === "cancelled" ? "Task cancelled" : "Task completed",
+      detail: task.title,
+    });
+  } else if (wasComplete && !isComplete) {
+    const userId = await getCurrentUserId();
+    await logActivity({
+      matterId: task.matterId,
+      userId,
+      type: "task",
+      title: "Task reopened",
+      detail: task.title,
+    });
+  }
+
   return { ok: true };
 }
 
