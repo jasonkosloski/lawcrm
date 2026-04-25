@@ -51,27 +51,17 @@ type ComposerKind = "task" | "deadline" | "time" | null;
 export function NoteAttachmentsSection({
   noteId,
   matterId,
-  /** When true, hides the "+ Add" affordances when nothing is attached
-   *  yet — keeps reply notes uncluttered. */
-  compact = false,
   tasks,
   deadlines,
   timeEntries,
 }: {
   noteId: string;
   matterId: string;
-  compact?: boolean;
   tasks: NoteAttachedTask[];
   deadlines: NoteAttachedDeadline[];
   timeEntries: NoteAttachedTimeEntry[];
 }) {
   const [composer, setComposer] = useState<ComposerKind>(null);
-  const hasAny =
-    tasks.length > 0 || deadlines.length > 0 || timeEntries.length > 0;
-
-  // Compact-mode collapse: when there's nothing here AND no composer
-  // is open, render nothing so reply notes stay tidy.
-  if (compact && !hasAny && composer === null) return null;
 
   return (
     <div className="mt-3 pt-3 border-t border-line flex flex-col gap-2">

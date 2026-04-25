@@ -192,12 +192,13 @@ export function NoteCard({
         />
 
         {/* Attached tasks / deadlines / time entries + the inline
-            "+ Add" affordance. Hidden on reply notes when nothing is
-            attached so threaded conversations stay clean. */}
+            "+ Add" affordance. Always rendered (even on reply notes)
+            so any note can spawn captures — replies that are part of
+            a back-and-forth conversation often produce the actionable
+            follow-ups that need this. */}
         <NoteAttachmentsSection
           noteId={note.id}
           matterId={matterId}
-          compact={isReply}
           tasks={note.attachedTasks}
           deadlines={note.attachedDeadlines}
           timeEntries={note.attachedTimeEntries}
