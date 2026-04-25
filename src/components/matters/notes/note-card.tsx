@@ -16,8 +16,10 @@ import {
   Clock,
   CornerUpLeft,
   ListTodo,
+  Mail,
   MessageSquare,
   MoreHorizontal,
+  Phone,
   Pin,
   Trash2,
 } from "lucide-react";
@@ -278,10 +280,22 @@ function LinkChip({
           <span className="text-ink-4">Deadline</span>
           <span className="truncate text-ink-2">{link.label}</span>
         </>
-      ) : (
+      ) : link.kind === "time" ? (
         <>
           <Clock size={10} className="shrink-0" />
           <span className="text-ink-4">Time</span>
+          <span className="truncate text-ink-2">{link.label}</span>
+        </>
+      ) : link.kind === "email" ? (
+        <>
+          <Mail size={10} className="shrink-0" />
+          <span className="text-ink-4">Email</span>
+          <span className="truncate text-ink-2">{link.label}</span>
+        </>
+      ) : (
+        <>
+          <Phone size={10} className="shrink-0" />
+          <span className="text-ink-4">Message</span>
           <span className="truncate text-ink-2">{link.label}</span>
         </>
       )}
@@ -306,6 +320,32 @@ function LinkChip({
       >
         {content}
       </a>
+    );
+  }
+  if (link.kind === "email") {
+    // Drop into the matter's Communication tab with the source thread
+    // selected — closes the loop on "where did this note come from?"
+    return (
+      <Link
+        href={`/matters/${matterId}/communication?thread=${link.id}`}
+        className="inline-flex items-center gap-1.5 text-2xs mb-2 px-2 py-1 rounded-md bg-paper-2/60 border border-line hover:border-brand-300 hover:bg-brand-soft transition-colors max-w-full"
+      >
+        {content}
+      </Link>
+    );
+  }
+  if (link.kind === "message") {
+    // No matter-scoped messenger view yet — drop into the firm-wide
+    // messenger inbox with the source thread selected. When the
+    // matter Communication tab gains a messenger sub-view, switch
+    // this href to it.
+    return (
+      <Link
+        href={`/communication?view=messages&thread=${link.id}`}
+        className="inline-flex items-center gap-1.5 text-2xs mb-2 px-2 py-1 rounded-md bg-paper-2/60 border border-line hover:border-brand-300 hover:bg-brand-soft transition-colors max-w-full"
+      >
+        {content}
+      </Link>
     );
   }
   return (

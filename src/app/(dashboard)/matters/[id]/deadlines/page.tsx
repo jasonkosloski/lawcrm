@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/table";
 import { DeadlineComposer } from "@/components/matters/captures/deadline-composer";
 import { DeadlineRowMenu } from "@/components/deadlines/deadline-row-actions";
+import { EntitySourceChip } from "@/components/matters/entity-source-chip";
 import { type DeadlineStatus } from "@/lib/note-constants";
 import { getMatterDeadlines } from "@/lib/queries/matter-detail";
 
@@ -107,12 +108,19 @@ export default async function MatterDeadlinesPage({
             {deadlines.map((d) => (
               <TableRow key={d.id}>
                 <TableCell className="pl-4">
-                  <div className="flex flex-col leading-tight">
+                  <div className="flex flex-col leading-tight gap-0.5">
                     <span className="font-medium text-ink">{d.title}</span>
                     {d.description && (
                       <span className="text-2xs text-ink-3 truncate max-w-md">
                         {d.description}
                       </span>
+                    )}
+                    {d.spawnedFrom && (
+                      <EntitySourceChip
+                        source={d.spawnedFrom}
+                        matterId={id}
+                        className="self-start mt-0.5"
+                      />
                     )}
                   </div>
                 </TableCell>

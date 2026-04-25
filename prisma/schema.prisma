@@ -451,19 +451,28 @@ model Deadline {
   /// the note becomes its parent and surfaces this deadline as an
   /// attached chip. Null for stand-alone deadlines (the common case).
   noteId      String?
+  /// Inbox-action sources: when this deadline was spawned from an
+  /// email thread or messenger item via the "Create deadline"
+  /// affordance.
+  emailThreadId   String?
+  messengerItemId String?
   completedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  matter     Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
-  owner      User?  @relation("DeadlineOwner", fields: [ownerId], references: [id])
-  notes      Note[] @relation("DeadlineNotes")
-  parentNote Note?  @relation("NoteAttachedDeadlines", fields: [noteId], references: [id], onDelete: SetNull)
+  matter        Matter         @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  owner         User?          @relation("DeadlineOwner", fields: [ownerId], references: [id])
+  notes         Note[]         @relation("DeadlineNotes")
+  parentNote    Note?          @relation("NoteAttachedDeadlines", fields: [noteId], references: [id], onDelete: SetNull)
+  emailThread   EmailThread?   @relation("EmailThreadSpawnedDeadlines", fields: [emailThreadId], references: [id], onDelete: SetNull)
+  messengerItem MessengerItem? @relation("MessengerItemSpawnedDeadlines", fields: [messengerItemId], references: [id], onDelete: SetNull)
 
   @@index([matterId])
   @@index([dueDate])
   @@index([status])
   @@index([noteId])
+  @@index([emailThreadId])
+  @@index([messengerItemId])
   @@map("deadlines")
 }
 
@@ -747,6 +756,11 @@ model EmailThread {
   matter   Matter?        @relation(fields: [matterId], references: [id], onDelete: SetNull)
   messages EmailMessage[]
   labels   EmailLabel[]
+  /// Inverse for the inbox-to-action affordances on the email
+  /// thread reader. Lets us list "things spawned from this thread."
+  spawnedNotes     Note[]     @relation("EmailThreadSpawnedNotes")
+  spawnedTasks     Task[]     @relation("EmailThreadSpawnedTasks")
+  spawnedDeadlines Deadline[] @relation("EmailThreadSpawnedDeadlines")
 
   @@index([accountId])
   @@index([matterId])
@@ -942,6 +956,12 @@ model MessengerItem {
 
   thread MessengerThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
   matter Matter?         @relation("MessengerItemMatter", fields: [matterId], references: [id], onDelete: SetNull)
+  /// Inverse for the inbox-to-action affordances on messenger items
+  /// (especially voicemails). Lets us list "things spawned from this
+  /// message / call / voicemail."
+  spawnedNotes     Note[]     @relation("MessengerItemSpawnedNotes")
+  spawnedTasks     Task[]     @relation("MessengerItemSpawnedTasks")
+  spawnedDeadlines Deadline[] @relation("MessengerItemSpawnedDeadlines")
 
   @@index([threadId, occurredAt])
   @@index([matterId])
@@ -968,20 +988,30 @@ model Task {
   /// the note becomes its parent and surfaces this task as an
   /// attached chip. Null for stand-alone tasks (the common case).
   noteId      String?
+  /// Inbox-action sources: when this task was spawned from an
+  /// email thread or a messenger item via the "Create task from
+  /// this" affordance. Drives the "From email" / "From message"
+  /// chip on the task card so users can navigate back to context.
+  emailThreadId   String?
+  messengerItemId String?
   sortOrder   Int       @default(0) /// For manual ordering within status groups
   completedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  matter     Matter? @relation(fields: [matterId], references: [id], onDelete: Cascade)
-  owner      User?   @relation("TaskOwner", fields: [ownerId], references: [id])
-  notes      Note[]  @relation("TaskNotes")
-  parentNote Note?   @relation("NoteAttachedTasks", fields: [noteId], references: [id], onDelete: SetNull)
+  matter        Matter?        @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  owner         User?          @relation("TaskOwner", fields: [ownerId], references: [id])
+  notes         Note[]         @relation("TaskNotes")
+  parentNote    Note?          @relation("NoteAttachedTasks", fields: [noteId], references: [id], onDelete: SetNull)
+  emailThread   EmailThread?   @relation("EmailThreadSpawnedTasks", fields: [emailThreadId], references: [id], onDelete: SetNull)
+  messengerItem MessengerItem? @relation("MessengerItemSpawnedTasks", fields: [messengerItemId], references: [id], onDelete: SetNull)
 
   @@index([matterId])
   @@index([status])
   @@index([ownerId])
   @@index([noteId])
+  @@index([emailThreadId])
+  @@index([messengerItemId])
   @@map("tasks")
 }
 
@@ -1014,17 +1044,24 @@ model Note {
   taskId          String?
   deadlineId      String?
   timeEntryId     String?
+  /// Inbox-action sources: when this note was saved from an email
+  /// thread or messenger item via "Save as note." Drives the "From
+  /// email" / "From message" chip + back-link.
+  emailThreadId   String?
+  messengerItemId String?
 
-  matter    Matter         @relation(fields: [matterId], references: [id], onDelete: Cascade)
-  author    User           @relation(fields: [authorId], references: [id])
-  parent    Note?          @relation("NoteReplies", fields: [parentNoteId], references: [id], onDelete: Cascade)
-  replies   Note[]         @relation("NoteReplies")
-  event     CalendarEvent? @relation("CalendarEventNotes", fields: [calendarEventId], references: [id], onDelete: SetNull)
-  task      Task?          @relation("TaskNotes", fields: [taskId], references: [id], onDelete: SetNull)
-  deadline  Deadline?      @relation("DeadlineNotes", fields: [deadlineId], references: [id], onDelete: SetNull)
-  timeEntry TimeEntry?     @relation("TimeEntryNotes", fields: [timeEntryId], references: [id], onDelete: SetNull)
-  reads     NoteRead[]
-  reactions NoteReaction[]
+  matter        Matter         @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  author        User           @relation(fields: [authorId], references: [id])
+  parent        Note?          @relation("NoteReplies", fields: [parentNoteId], references: [id], onDelete: Cascade)
+  replies       Note[]         @relation("NoteReplies")
+  event         CalendarEvent? @relation("CalendarEventNotes", fields: [calendarEventId], references: [id], onDelete: SetNull)
+  task          Task?          @relation("TaskNotes", fields: [taskId], references: [id], onDelete: SetNull)
+  deadline      Deadline?      @relation("DeadlineNotes", fields: [deadlineId], references: [id], onDelete: SetNull)
+  timeEntry     TimeEntry?     @relation("TimeEntryNotes", fields: [timeEntryId], references: [id], onDelete: SetNull)
+  emailThread   EmailThread?   @relation("EmailThreadSpawnedNotes", fields: [emailThreadId], references: [id], onDelete: SetNull)
+  messengerItem MessengerItem? @relation("MessengerItemSpawnedNotes", fields: [messengerItemId], references: [id], onDelete: SetNull)
+  reads         NoteRead[]
+  reactions     NoteReaction[]
 
   /// Inverse: tasks / deadlines / time entries created in the
   /// context of THIS note (the note is the parent, these are
@@ -1040,6 +1077,8 @@ model Note {
   @@index([taskId])
   @@index([deadlineId])
   @@index([timeEntryId])
+  @@index([emailThreadId])
+  @@index([messengerItemId])
   @@map("notes")
 }
 

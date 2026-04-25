@@ -127,12 +127,16 @@ export type DeadlineRow = {
   daysUntil: number;
   isOverdue: boolean;
   kind: string;
+  /** Legal source of the deadline (statute / scheduling order / rule).
+   *  Distinct from `spawnedFrom` (which captures *which surface* the
+   *  user used to create the deadline — note / email / messenger). */
   sourceType: string | null;
   sourceRef: string | null;
   description: string | null;
   status: string;
   ownerName: string | null;
   ownerInitials: string | null;
+  spawnedFrom: EntitySource | null;
 };
 
 export async function getMatterDeadlines(
@@ -142,6 +146,21 @@ export async function getMatterDeadlines(
     where: { matterId },
     include: {
       owner: { select: { name: true, initials: true } },
+      parentNote: { select: { id: true, content: true } },
+      emailThread: { select: { id: true, subject: true } },
+      messengerItem: {
+        select: {
+          id: true,
+          kind: true,
+          thread: {
+            select: {
+              id: true,
+              contactPhone: true,
+              contact: { select: { name: true } },
+            },
+          },
+        },
+      },
     },
     orderBy: [{ status: "asc" }, { dueDate: "asc" }],
   });
@@ -162,11 +181,29 @@ export async function getMatterDeadlines(
       status: d.status,
       ownerName: d.owner?.name ?? null,
       ownerInitials: d.owner?.initials ?? null,
+      spawnedFrom: resolveEntitySource({
+        note: d.parentNote,
+        email: d.emailThread,
+        messenger: d.messengerItem,
+      }),
     };
   });
 }
 
 // ── Tasks ────────────────────────────────────────────────────────────────
+
+/** Shared "where did this come from?" reference rendered as a chip
+ *  on tasks, deadlines, and time entries. Powers cross-feature
+ *  navigability — click a task that came from an email and land on
+ *  that email; click one spawned from a note and land on the note.
+ *
+ *  At most one of the underlying FKs (noteId / emailThreadId /
+ *  messengerItemId) is set per row; the query picks the first
+ *  populated one in priority order (note > email > message). */
+export type EntitySource =
+  | { kind: "note"; id: string; label: string }
+  | { kind: "email"; id: string; label: string }
+  | { kind: "message"; id: string; label: string };
 
 export type TaskRow = {
   id: string;
@@ -179,12 +216,35 @@ export type TaskRow = {
   ownerName: string | null;
   ownerInitials: string | null;
   createdAt: Date;
+  /** Where the row was spawned from — note / email thread / messenger
+   *  item. Null when the row was created directly. Drives the "From X"
+   *  chip on the row. */
+  spawnedFrom: EntitySource | null;
 };
 
 export async function getMatterTasks(matterId: string): Promise<TaskRow[]> {
   const rows = await prisma.task.findMany({
     where: { matterId },
-    include: { owner: { select: { name: true, initials: true } } },
+    include: {
+      owner: { select: { name: true, initials: true } },
+      // Spawn-source includes — at most one of these is populated per
+      // row. Fetched together so the chip render is a single query.
+      parentNote: { select: { id: true, content: true } },
+      emailThread: { select: { id: true, subject: true } },
+      messengerItem: {
+        select: {
+          id: true,
+          kind: true,
+          thread: {
+            select: {
+              id: true,
+              contactPhone: true,
+              contact: { select: { name: true } },
+            },
+          },
+        },
+      },
+    },
     orderBy: [{ status: "asc" }, { sortOrder: "asc" }, { createdAt: "desc" }],
   });
   const now = Date.now();
@@ -201,7 +261,49 @@ export async function getMatterTasks(matterId: string): Promise<TaskRow[]> {
     ownerName: t.owner?.name ?? null,
     ownerInitials: t.owner?.initials ?? null,
     createdAt: t.createdAt,
+    spawnedFrom: resolveEntitySource({
+      note: t.parentNote,
+      email: t.emailThread,
+      messenger: t.messengerItem,
+    }),
   }));
+}
+
+/** Pick the first populated source FK in priority order and turn it
+ *  into the typed EntitySource shape the UI expects. */
+function resolveEntitySource(refs: {
+  note: { id: string; content: string } | null;
+  email: { id: string; subject: string } | null;
+  messenger: {
+    id: string;
+    kind: string;
+    thread: {
+      id: string;
+      contactPhone: string;
+      contact: { name: string } | null;
+    } | null;
+  } | null;
+}): EntitySource | null {
+  if (refs.note) {
+    return {
+      kind: "note",
+      id: refs.note.id,
+      label: truncate(plainTextFromHtml(refs.note.content), 60) || "note",
+    };
+  }
+  if (refs.email) {
+    return { kind: "email", id: refs.email.id, label: refs.email.subject };
+  }
+  if (refs.messenger) {
+    const t = refs.messenger.thread;
+    const who = t?.contact?.name ?? prettyPhoneForLink(t?.contactPhone ?? "");
+    return {
+      kind: "message",
+      id: t?.id ?? refs.messenger.id,
+      label: `${capitalizeKind(refs.messenger.kind)} from ${who}`,
+    };
+  }
+  return null;
 }
 
 // ── Notes ────────────────────────────────────────────────────────────────
@@ -214,7 +316,9 @@ export type NoteLink =
   | { kind: "task"; id: string; label: string }
   | { kind: "deadline"; id: string; label: string; dueDate: Date }
   | { kind: "time"; id: string; label: string; date: Date }
-  | { kind: "parent"; id: string; label: string };
+  | { kind: "parent"; id: string; label: string }
+  | { kind: "email"; id: string; label: string }
+  | { kind: "message"; id: string; label: string };
 
 /** Aggregated reaction for a single emoji on a note. */
 export type NoteReactionSummary = {
@@ -300,6 +404,24 @@ function plainTextFromHtml(html: string): string {
     .trim();
 }
 
+/** Local copy of the messenger phone formatter used by the messenger
+ *  components — kept inline here so this query module doesn't need
+ *  to depend on a UI util just for the link-chip label. */
+function prettyPhoneForLink(p: string): string {
+  const digits = p.replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  return p || "Unknown number";
+}
+
+function capitalizeKind(k: string): string {
+  return k.charAt(0).toUpperCase() + k.slice(1);
+}
+
 export async function getMatterNotes(matterId: string): Promise<NoteRow[]> {
   const userId = await getCurrentUserId();
   const rows = await prisma.note.findMany({
@@ -312,6 +434,22 @@ export async function getMatterNotes(matterId: string): Promise<NoteRow[]> {
       deadline: { select: { id: true, title: true, dueDate: true } },
       timeEntry: {
         select: { id: true, activity: true, date: true, hours: true },
+      },
+      // Inbox-action sources: render as "From email" / "From message"
+      // chips so users can navigate back to where the note came from.
+      emailThread: { select: { id: true, subject: true } },
+      messengerItem: {
+        select: {
+          id: true,
+          kind: true,
+          thread: {
+            select: {
+              id: true,
+              contactPhone: true,
+              contact: { select: { name: true } },
+            },
+          },
+        },
       },
       // Per-user read state — filtered to the current user so we only
       // pull one row per note at most.
@@ -392,6 +530,25 @@ export async function getMatterNotes(matterId: string): Promise<NoteRow[]> {
         id: n.timeEntry.id,
         label: `${n.timeEntry.activity} (${n.timeEntry.hours}h)`,
         date: n.timeEntry.date,
+      };
+    } else if (n.emailThread) {
+      link = {
+        kind: "email",
+        id: n.emailThread.id,
+        label: n.emailThread.subject,
+      };
+    } else if (n.messengerItem) {
+      // Messenger items don't have a label; derive one from the
+      // thread's contact (or pretty-printed phone fallback).
+      const t = n.messengerItem.thread;
+      const label =
+        t?.contact?.name ?? prettyPhoneForLink(t?.contactPhone ?? "");
+      link = {
+        kind: "message",
+        // Link by thread id so navigation lands on the conversation
+        // (no per-item URL today).
+        id: t?.id ?? n.messengerItem.id,
+        label: `${capitalizeKind(n.messengerItem.kind)} from ${label}`,
       };
     }
 

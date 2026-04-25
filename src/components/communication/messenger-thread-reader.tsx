@@ -27,6 +27,7 @@ import type {
   MessengerItemRow,
   MessengerThreadDetail,
 } from "@/lib/queries/messenger";
+import { InboxActionButtons } from "./inbox-action-buttons";
 
 function prettyPhone(p: string): string {
   const digits = p.replace(/\D/g, "");
@@ -130,7 +131,19 @@ export function MessengerThreadReader({
             No messages in this thread yet.
           </div>
         ) : (
-          thread.items.map((it) => <Item key={it.id} item={it} />)
+          thread.items.map((it) => (
+            <Item
+              key={it.id}
+              item={it}
+              contactLabel={headline}
+              isFiled={
+                // An item is actionable if it has its own matterId or
+                // the thread defaults to one — matches the same logic
+                // resolveMessengerMatter uses on the server.
+                it.matterId !== null || thread.defaultMatter !== null
+              }
+            />
+          ))
         )}
       </div>
 
@@ -145,9 +158,24 @@ export function MessengerThreadReader({
   );
 }
 
-function Item({ item }: { item: MessengerItemRow }) {
+function Item({
+  item,
+  contactLabel,
+  isFiled,
+}: {
+  item: MessengerItemRow;
+  contactLabel: string;
+  isFiled: boolean;
+}) {
   if (item.kind === "call") return <CallEvent item={item} />;
-  if (item.kind === "voicemail") return <VoicemailCard item={item} />;
+  if (item.kind === "voicemail")
+    return (
+      <VoicemailCard
+        item={item}
+        contactLabel={contactLabel}
+        isFiled={isFiled}
+      />
+    );
   return <SmsBubble item={item} />;
 }
 
@@ -220,10 +248,22 @@ function CallEvent({ item }: { item: MessengerItemRow }) {
   );
 }
 
-function VoicemailCard({ item }: { item: MessengerItemRow }) {
+function VoicemailCard({
+  item,
+  contactLabel,
+  isFiled,
+}: {
+  item: MessengerItemRow;
+  contactLabel: string;
+  isFiled: boolean;
+}) {
+  // Voicemails are the highest-leverage source for inbox actions —
+  // the transcript usually contains an explicit ask ("call me back
+  // about X by Y"). Surface task / deadline / note buttons inline so
+  // the user doesn't have to leave the conversation to act on it.
   return (
-    <div className="self-start max-w-[80%] rounded-lg border border-line bg-paper-2/40 px-3 py-2">
-      <div className="flex items-center gap-2 mb-1.5">
+    <div className="self-start max-w-[80%] rounded-lg border border-line bg-paper-2/40 px-3 py-2 flex flex-col gap-2">
+      <div className="flex items-center gap-2">
         <Voicemail size={12} className="text-brand-500" />
         <span className="text-2xs font-mono uppercase tracking-wider text-ink-3">
           Voicemail
@@ -246,10 +286,21 @@ function VoicemailCard({ item }: { item: MessengerItemRow }) {
         <audio
           controls
           src={item.recordingUrl}
-          className="mt-2 w-full h-8"
+          className="w-full h-8"
           preload="none"
         />
       )}
+      <div className="pt-1.5 border-t border-line/60">
+        <InboxActionButtons
+          isFiled={isFiled}
+          source={{
+            kind: "messenger",
+            id: item.id,
+            contactLabel,
+            preview: item.transcript ?? "Voicemail (no transcript)",
+          }}
+        />
+      </div>
     </div>
   );
 }

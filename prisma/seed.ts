@@ -1874,6 +1874,78 @@ A copy of the document is available through PACER and is attached for your recor
   );
 
   // ─────────────────────────────────────────────────────────────────────
+  // Inbox-action examples — a task / note / deadline spawned from
+  // an email or a voicemail so the "From email" / "From message"
+  // back-link chips render with real data on first load.
+  // ─────────────────────────────────────────────────────────────────────
+  console.log("  Creating inbox-action examples…");
+  const williamsEmail = await prisma.emailThread.findFirst({
+    where: { matterId: matters.williams.id },
+    select: { id: true },
+  });
+  const williamsVoicemail = await prisma.messengerItem.findFirst({
+    where: {
+      kind: "voicemail",
+      thread: { defaultMatterId: matters.williams.id },
+    },
+    select: { id: true },
+  });
+  const aurorVoicemailOrSms = await prisma.messengerItem.findFirst({
+    where: { matterId: matters.aurora.id },
+    select: { id: true },
+  });
+
+  let inboxActionsCreated = 0;
+  if (williamsEmail) {
+    await prisma.task.create({
+      data: {
+        matterId: matters.williams.id,
+        emailThreadId: williamsEmail.id,
+        title: "Respond to opposing counsel re: Rule 26 disclosures",
+        description:
+          "They're proposing a discovery cutoff that's tighter than I want. Counter with the original schedule + cite the case-management order.",
+        priority: "high",
+        ownerId: jason.id,
+        dueDate: hoursAgo(-72), // 3 days out
+      },
+    });
+    inboxActionsCreated++;
+  }
+  if (williamsVoicemail) {
+    const note = await prisma.note.create({
+      data: {
+        matterId: matters.williams.id,
+        authorId: jason.id,
+        messengerItemId: williamsVoicemail.id,
+        type: "strategy",
+        content:
+          "<p><em>From voicemail · Derek Williams</em></p><blockquote>Wants to discuss the lien situation before committing to the settlement number.</blockquote><p>Action: schedule a 30-min call to walk through Memorial Hospital's reduction options. Keep this between us until I have numbers — don't loop in opposing yet.</p>",
+      },
+      select: { id: true },
+    });
+    await prisma.noteRead.create({
+      data: { userId: jason.id, noteId: note.id },
+    });
+    inboxActionsCreated++;
+  }
+  if (aurorVoicemailOrSms) {
+    await prisma.deadline.create({
+      data: {
+        matterId: matters.aurora.id,
+        messengerItemId: aurorVoicemailOrSms.id,
+        title: "Aurora interrogatories — opposing extension request",
+        description:
+          "Counsel asked for a 7-day extension via text. Granting puts the cutoff here.",
+        kind: "manual",
+        dueDate: hoursAgo(-7 * 24),
+        ownerId: jason.id,
+      },
+    });
+    inboxActionsCreated++;
+  }
+  console.log(`   ${inboxActionsCreated} inbox-action examples`);
+
+  // ─────────────────────────────────────────────────────────────────────
   // Summary
   // ─────────────────────────────────────────────────────────────────────
   const counts = await Promise.all([

@@ -11,6 +11,7 @@ import {
   TaskRowMenu,
   TaskStatusToggle,
 } from "@/components/tasks/task-row-actions";
+import { EntitySourceChip } from "@/components/matters/entity-source-chip";
 import { type TaskStatus } from "@/lib/note-constants";
 import {
   getMatterTasks,
@@ -96,7 +97,7 @@ export default async function MatterTasksPage({
             <Card className="p-0 overflow-hidden">
               <ul className="divide-y divide-line">
                 {rows.map((t) => (
-                  <TaskItem key={t.id} task={t} />
+                  <TaskItem key={t.id} task={t} matterId={id} />
                 ))}
               </ul>
             </Card>
@@ -107,7 +108,7 @@ export default async function MatterTasksPage({
   );
 }
 
-function TaskItem({ task }: { task: TaskRow }) {
+function TaskItem({ task, matterId }: { task: TaskRow; matterId: string }) {
   const priority = PRIORITY_META[task.priority] ?? PRIORITY_META.normal;
   const done = task.status === "done" || task.status === "cancelled";
   return (
@@ -125,6 +126,14 @@ function TaskItem({ task }: { task: TaskRow }) {
         {task.description && (
           <div className="text-2xs text-ink-3 truncate max-w-xl">
             {task.description}
+          </div>
+        )}
+        {task.spawnedFrom && (
+          <div className="mt-0.5">
+            <EntitySourceChip
+              source={task.spawnedFrom}
+              matterId={matterId}
+            />
           </div>
         )}
       </div>
