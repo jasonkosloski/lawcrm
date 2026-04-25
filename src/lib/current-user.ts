@@ -38,6 +38,6 @@ export async function getCurrentUser() {
   if (!session?.user?.id) return null;
   return prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { id: true, name: true, initials: true, role: true },
+    select: { id: true, name: true, initials: true, jobTitle: true },
   });
 }

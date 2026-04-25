@@ -1,20 +1,24 @@
 /**
  * Team Roster Row — toggles between display + inline edit.
  *
- * Display mode: avatar, name, email, role, admin/active chips, kebab
- * (admin-only). Edit mode: collapses into a colSpan cell with the
- * MemberEditForm; cancel returns to display.
+ * Display mode: avatar, name, email, jobTitle, role chips, status,
+ * kebab (admin-only). Edit mode: collapses into a colSpan cell with
+ * the MemberEditForm.
  *
  * Reset-password is a separate inline action (not in the kebab) so
  * the temp password renders right next to the row that's affected.
- * Once email-based reset lands, this becomes "Send reset email"
- * instead.
  */
 
 "use client";
 
 import { useState, useTransition } from "react";
-import { Pencil, KeyRound, MoreHorizontal, ShieldCheck } from "lucide-react";
+import {
+  KeyRound,
+  Lock,
+  MoreHorizontal,
+  Pencil,
+  ShieldCheck,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TableCell, TableRow } from "@/components/ui/table";
 import {
@@ -25,14 +29,18 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { resetFirmMemberPassword } from "@/app/actions/team";
 import { MemberEditForm } from "./member-edit-form";
-import type { FirmUserRow } from "@/lib/queries/team";
+import type { FirmUserRow, RoleChip } from "@/lib/queries/team";
 
 export function MemberRow({
   member,
   isCurrentUserAdmin,
+  rolePickerOptions,
 }: {
   member: FirmUserRow;
   isCurrentUserAdmin: boolean;
+  /** Full list of firm roles, passed down so the edit form's
+   *  multi-select shows everything available. */
+  rolePickerOptions: RoleChip[];
 }) {
   const [editing, setEditing] = useState(false);
   // Last-shown reset password — shown until the user dismisses it
@@ -65,6 +73,7 @@ export function MemberRow({
         <TableCell colSpan={6} className="p-3 bg-paper-2/30">
           <MemberEditForm
             member={member}
+            rolePickerOptions={rolePickerOptions}
             onDone={() => setEditing(false)}
           />
         </TableCell>
@@ -94,16 +103,9 @@ export function MemberRow({
           </div>
         </div>
       </TableCell>
-      <TableCell className="text-xs text-ink-3">{member.role}</TableCell>
+      <TableCell className="text-xs text-ink-3">{member.jobTitle}</TableCell>
       <TableCell>
-        {member.isAdmin ? (
-          <span className="inline-flex items-center gap-1 text-2xs font-medium px-1.5 py-0.5 rounded-full bg-brand-soft text-brand-700 border border-brand-200">
-            <ShieldCheck size={10} />
-            Admin
-          </span>
-        ) : (
-          <span className="text-2xs text-ink-4">—</span>
-        )}
+        <RoleChips roles={member.roles} />
       </TableCell>
       <TableCell>
         {member.isActive ? (
@@ -158,5 +160,36 @@ export function MemberRow({
         )}
       </TableCell>
     </TableRow>
+  );
+}
+
+/** Compact pill row of the user's roles. Admin chip is colored;
+ *  system roles get a small lock; custom roles are neutral. */
+function RoleChips({ roles }: { roles: RoleChip[] }) {
+  if (roles.length === 0) {
+    return <span className="text-2xs text-ink-4">—</span>;
+  }
+  return (
+    <div className="flex flex-wrap gap-1">
+      {roles.map((r) => {
+        const isAdmin = r.name === "Admin";
+        return (
+          <span
+            key={r.id}
+            className={cn(
+              "inline-flex items-center gap-1 text-2xs font-medium px-1.5 py-0.5 rounded-full border",
+              isAdmin
+                ? "bg-brand-soft text-brand-700 border-brand-200"
+                : "bg-paper-2 text-ink-3 border-line"
+            )}
+            title={r.isSystem ? "System role" : undefined}
+          >
+            {isAdmin && <ShieldCheck size={10} />}
+            {r.isSystem && !isAdmin && <Lock size={9} />}
+            {r.name}
+          </span>
+        );
+      })}
+    </div>
   );
 }

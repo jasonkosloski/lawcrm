@@ -5,15 +5,18 @@
  * paralegal's email"); admins additionally get the per-row kebab
  * (Edit / Reset password) plus the invite composer at the bottom.
  *
- * Invariants are enforced server-side in `src/app/actions/team.ts`:
- *   - "At least one admin" — any change that would leave 0 active
- *     admins is rejected.
+ * Permission roles (Admin, default, custom) replace the old
+ * isAdmin boolean. Members can hold any number of roles; the
+ * "default" role is auto-assigned to everyone. Manage the role
+ * catalog on /settings/roles.
+ *
+ * Invariants enforced server-side in `src/app/actions/team.ts`:
+ *   - "At least one Admin" — any change that would leave 0 active
+ *     users with the Admin role is rejected.
+ *   - "default role always assigned" — survives any role-list edit.
  *   - "No deactivating yourself" — you can't lock yourself out.
  *   - "Email is unique" — duplicate-on-invite returns a friendly
  *     error rather than a Prisma constraint violation.
- *
- * Once email delivery lands, the invite composer becomes a
- * magic-link send and the temp-password panel goes away.
  */
 
 import { Card } from "@/components/ui/card";
@@ -28,13 +31,14 @@ import { MemberRow } from "@/components/settings/member-row";
 import { InviteMemberComposer } from "@/components/settings/invite-member-composer";
 import { getCurrentUserId } from "@/lib/current-user";
 import { isCurrentUserAdmin } from "@/lib/firm";
-import { listFirmUsers } from "@/lib/queries/team";
+import { listFirmUsers, listRolePickerOptions } from "@/lib/queries/team";
 
 export default async function TeamSettingsPage() {
   const currentUserId = await getCurrentUserId();
-  const [members, isAdmin] = await Promise.all([
+  const [members, isAdmin, rolePickerOptions] = await Promise.all([
     listFirmUsers(currentUserId),
     isCurrentUserAdmin(),
+    listRolePickerOptions(),
   ]);
 
   const activeCount = members.filter((m) => m.isActive).length;
@@ -45,7 +49,7 @@ export default async function TeamSettingsPage() {
       <div>
         <h1 className="text-base font-semibold text-ink">Team</h1>
         <p className="text-xs text-ink-3 mt-1">
-          Firm members, roles, and permissions.{" "}
+          Firm members, job titles, and role assignments.{" "}
           <span className="text-ink-4">
             {activeCount} active · {adminCount}{" "}
             {adminCount === 1 ? "admin" : "admins"}
@@ -58,8 +62,8 @@ export default async function TeamSettingsPage() {
           <TableHeader>
             <TableRow>
               <TableHead className="pl-4">Member</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Permissions</TableHead>
+              <TableHead>Job title</TableHead>
+              <TableHead>Roles</TableHead>
               <TableHead>Status</TableHead>
               <TableHead />
               <TableHead className="pr-4 w-8" />
@@ -71,6 +75,7 @@ export default async function TeamSettingsPage() {
                 key={m.id}
                 member={m}
                 isCurrentUserAdmin={isAdmin}
+                rolePickerOptions={rolePickerOptions}
               />
             ))}
           </TableBody>
@@ -79,7 +84,7 @@ export default async function TeamSettingsPage() {
 
       {isAdmin && (
         <div className="flex flex-col gap-2">
-          <InviteMemberComposer />
+          <InviteMemberComposer rolePickerOptions={rolePickerOptions} />
           <div className="text-[10px] text-ink-4 leading-relaxed">
             Invites generate a one-time password you deliver to the new
             member. Email-based invites land when we wire delivery

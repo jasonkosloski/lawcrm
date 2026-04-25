@@ -36,6 +36,7 @@ const SECTIONS: NavSection[] = [
     label: "Firm",
     items: [
       { href: "/settings/team", label: "Team" },
+      { href: "/settings/roles", label: "Roles" },
       { href: "/settings/firm", label: "Firm info" },
       { href: "/settings/practice-areas", label: "Practice areas" },
       { href: "/settings/integrations", label: "Integrations" },

@@ -50,13 +50,17 @@ export default async function ProfileSettingsPage() {
         name: true,
         email: true,
         initials: true,
-        role: true,
+        jobTitle: true,
         phone: true,
         barNumber: true,
         avatarUrl: true,
-        isAdmin: true,
         isActive: true,
         createdAt: true,
+        userRoles: {
+          select: {
+            role: { select: { id: true, name: true, isSystem: true } },
+          },
+        },
       },
     }),
     getCurrentFirm(),
@@ -139,12 +143,7 @@ export default async function ProfileSettingsPage() {
             </div>
 
             <dl className="grid grid-cols-[7rem_1fr] gap-y-1.5 text-2xs pt-2 border-t border-line">
-              <Row label="Role" value={user.role} />
-              <Row
-                label="Permissions"
-                value={user.isAdmin ? "Admin" : "Member"}
-                accent={user.isAdmin ? "brand" : undefined}
-              />
+              <Row label="Job title" value={user.jobTitle} />
               <Row
                 label="Status"
                 value={user.isActive ? "Active" : "Deactivated"}
@@ -153,9 +152,34 @@ export default async function ProfileSettingsPage() {
               <Row label="Member since" value={formatDate(user.createdAt)} />
             </dl>
 
+            <div className="flex flex-col gap-1.5 pt-2 border-t border-line">
+              <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+                Roles
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {user.userRoles.length === 0 ? (
+                  <span className="text-2xs text-ink-4">—</span>
+                ) : (
+                  user.userRoles.map((ur) => (
+                    <span
+                      key={ur.role.id}
+                      className={
+                        "inline-flex items-center text-2xs font-medium px-1.5 py-0.5 rounded-full border " +
+                        (ur.role.name === "Admin"
+                          ? "bg-brand-soft text-brand-700 border-brand-200"
+                          : "bg-paper-2 text-ink-3 border-line")
+                      }
+                    >
+                      {ur.role.name}
+                    </span>
+                  ))
+                )}
+              </div>
+            </div>
+
             <div className="inline-flex items-center gap-1.5 text-[10px] text-ink-4 px-2 py-1 rounded border border-line bg-paper-2 self-start">
               <Lock size={10} />
-              Email + role are managed by an admin on Team.
+              Email + roles are managed by an admin on Team.
             </div>
           </CardContent>
         </Card>
@@ -165,7 +189,11 @@ export default async function ProfileSettingsPage() {
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <ShieldCheck
                 size={14}
-                className={user.isAdmin ? "text-brand-700" : "text-ink-4"}
+                className={
+                  user.userRoles.some((ur) => ur.role.name === "Admin")
+                    ? "text-brand-700"
+                    : "text-ink-4"
+                }
               />
               Firm
             </CardTitle>

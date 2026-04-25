@@ -279,7 +279,7 @@ export function SidebarNav({ data }: { data: SidebarData }) {
               {user?.name ?? "Not signed in"}
             </span>
             <span className="text-2xs text-ink-4">
-              {user?.role ? `${user.role} · partner` : "—"}
+              {user?.jobTitle ? `${user.jobTitle} · partner` : "—"}
             </span>
           </div>
           <SignOutButton />

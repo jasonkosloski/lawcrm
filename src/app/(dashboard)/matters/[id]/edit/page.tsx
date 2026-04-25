@@ -56,7 +56,7 @@ export default async function EditMatterPage({
     }),
     prisma.user.findMany({
       where: { isActive: true },
-      select: { id: true, name: true, role: true },
+      select: { id: true, name: true, jobTitle: true },
       orderBy: { name: "asc" },
     }),
   ]);

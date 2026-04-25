@@ -22,9 +22,14 @@ export default async function LoginPage({
   const rawNext = Array.isArray(sp.next) ? sp.next[0] : sp.next;
   const next = typeof rawNext === "string" ? rawNext : "/";
 
-  // Already signed in? Skip the form.
+  // Already signed in with a VALID session? Skip the form.
+  // `session?.user?.id` is undefined when the JWT references a
+  // user that no longer exists or is deactivated (the jwt callback
+  // in src/auth.ts wipes userId in those cases) — we render the
+  // login form so they can re-auth, and submitting the form mints
+  // a fresh JWT that overwrites the stale cookie.
   const session = await auth();
-  if (session?.user) {
+  if (session?.user?.id) {
     redirect(next);
   }
 

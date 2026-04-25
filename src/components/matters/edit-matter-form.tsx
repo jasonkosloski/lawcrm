@@ -59,7 +59,7 @@ export type EditAreaOption = {
 export type EditMatterFormOptions = {
   areas: EditAreaOption[];
   clients: Array<{ id: string; name: string; organization: string | null }>;
-  users: Array<{ id: string; name: string; role: string }>;
+  users: Array<{ id: string; name: string; jobTitle: string }>;
 };
 
 export function EditMatterForm({
@@ -257,7 +257,7 @@ export function EditMatterForm({
             >
               {options.users.map((u) => (
                 <option key={u.id} value={u.id}>
-                  {u.name} · {u.role}
+                  {u.name} · {u.jobTitle}
                 </option>
               ))}
             </select>

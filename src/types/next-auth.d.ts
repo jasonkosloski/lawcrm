@@ -9,7 +9,12 @@ import type { DefaultSession } from "next-auth";
 declare module "next-auth" {
   interface Session {
     user: {
-      id: string;
+      /** Undefined when the JWT references a user that no longer
+       *  exists or is deactivated. The `jwt` callback in
+       *  `src/auth.ts` strips it; downstream guards
+       *  (getCurrentUserId, dashboard layout) treat that as
+       *  "logged out" and bounce to /login. */
+      id?: string;
     } & DefaultSession["user"];
   }
 }

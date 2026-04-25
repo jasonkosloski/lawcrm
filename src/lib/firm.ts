@@ -15,6 +15,11 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { ADMIN_ROLE_NAME } from "@/lib/role-constants";
+
+// Re-export so server-only callers have one import path. Client
+// callers should import directly from "@/lib/role-constants".
+export { ADMIN_ROLE_NAME, DEFAULT_ROLE_NAME } from "@/lib/role-constants";
 
 export type FirmProfile = {
   id: string;
@@ -74,17 +79,20 @@ export async function getCurrentFirm(): Promise<FirmProfile> {
   return user.firm;
 }
 
-/** True when the current user is a firm admin. Cheap — single
- *  user-by-id lookup. Use the throwing variant `requireAdmin()`
- *  inside server actions where the failure mode should be a
- *  redirect, not an in-page conditional. */
+/** True when the current user holds the firm's "Admin" role and is
+ *  active. Cheap — single user-by-id lookup with a count. Use the
+ *  throwing variant `requireAdmin()` inside server actions where
+ *  the failure mode should be a redirect, not an in-page conditional. */
 export async function isCurrentUserAdmin(): Promise<boolean> {
   const userId = await getCurrentUserId();
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { isAdmin: true },
+  const hits = await prisma.user.count({
+    where: {
+      id: userId,
+      isActive: true,
+      userRoles: { some: { role: { name: ADMIN_ROLE_NAME } } },
+    },
   });
-  return user?.isAdmin ?? false;
+  return hits > 0;
 }
 
 /** Server-action guard. Bounces non-admins to the dashboard so
@@ -93,11 +101,14 @@ export async function isCurrentUserAdmin(): Promise<boolean> {
  *  non-admins — this is for the WRITE path only. */
 export async function requireAdmin(): Promise<string> {
   const userId = await getCurrentUserId();
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { isAdmin: true },
+  const isAdmin = await prisma.user.count({
+    where: {
+      id: userId,
+      isActive: true,
+      userRoles: { some: { role: { name: ADMIN_ROLE_NAME } } },
+    },
   });
-  if (!user?.isAdmin) {
+  if (isAdmin === 0) {
     redirect("/");
   }
   return userId;

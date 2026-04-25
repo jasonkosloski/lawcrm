@@ -1,11 +1,12 @@
 /**
  * Invite Member Composer — admin-only.
  *
- * Collapsed state: a single "Invite member" button. Expanded:
- * inline form for name, email, initials, role, optional phone +
- * bar number, and an admin checkbox. On success the action returns
- * a temporary password we render alongside a copy hint — once
- * email delivery lands (Phase 2 of AUTH_PLAN) this becomes a
+ * Collapsed: a single "Invite member" button. Expanded: inline form
+ * for name, email, initials, jobTitle, optional phone + bar number,
+ * and a roles multi-select. The "default" role is always granted
+ * server-side regardless of form state. On success the action
+ * returns a temporary password we render alongside a copy hint —
+ * once email delivery lands (Phase 2 of AUTH_PLAN) this becomes a
  * magic-link send instead and the password panel goes away.
  */
 
@@ -19,25 +20,25 @@ import {
   teamInitialState,
   type TeamFormState,
 } from "@/lib/team-form";
+import { RoleMultiSelect } from "./member-edit-form";
+import type { RoleChip } from "@/lib/queries/team";
 
-export function InviteMemberComposer() {
+export function InviteMemberComposer({
+  rolePickerOptions,
+}: {
+  rolePickerOptions: RoleChip[];
+}) {
   const [state, formAction, isPending] = useActionState<
     TeamFormState,
     FormData
   >(inviteFirmMember, teamInitialState);
   const [expanded, setExpanded] = useState(false);
-  // Last successfully-issued temp password — kept alive until the
-  // admin dismisses it so they can copy/paste into Slack/email.
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [tempEmail, setTempEmail] = useState<string | null>(null);
 
   useEffect(() => {
     if (state.status === "ok" && state.invitePassword) {
       setTempPassword(state.invitePassword);
-      // Pull email from the form's previous values… but on success
-      // we don't get values back. Stash it in a hidden field via the
-      // values shape would be ideal — for now, we capture from the
-      // submitting form right before the action runs.
     }
   }, [state.status, state.invitePassword]);
 
@@ -60,6 +61,8 @@ export function InviteMemberComposer() {
 
   const errs = state.errors ?? {};
   const v = state.values ?? {};
+  // No roles checked by default — server adds "default" automatically.
+  const noneSelected = new Set<string>();
 
   return (
     <div className="flex flex-col gap-3 p-4 rounded-md border border-line bg-paper-2/40">
@@ -107,8 +110,6 @@ export function InviteMemberComposer() {
       ) : (
         <form
           action={(formData) => {
-            // Capture email so we can show it next to the temp
-            // password on success. Server doesn't echo values on ok.
             const email = formData.get("email");
             if (typeof email === "string") setTempEmail(email);
             return formAction(formData);
@@ -125,7 +126,12 @@ export function InviteMemberComposer() {
                 className={inputClass(!!errs.name)}
               />
             </Field>
-            <Field label="Email" name="email" required error={errs.email?.[0]}>
+            <Field
+              label="Email"
+              name="email"
+              required
+              error={errs.email?.[0]}
+            >
               <input
                 name="email"
                 type="email"
@@ -150,14 +156,19 @@ export function InviteMemberComposer() {
                 className={cn(inputClass(!!errs.initials), "uppercase font-mono")}
               />
             </Field>
-            <Field label="Role" name="role" required error={errs.role?.[0]}>
+            <Field
+              label="Job title"
+              name="jobTitle"
+              required
+              error={errs.jobTitle?.[0]}
+            >
               <input
-                name="role"
+                name="jobTitle"
                 type="text"
                 required
-                defaultValue={v.role ?? ""}
+                defaultValue={v.jobTitle ?? ""}
                 placeholder="Counsel, Paralegal, Intake…"
-                className={inputClass(!!errs.role)}
+                className={inputClass(!!errs.jobTitle)}
               />
             </Field>
             <Field label="Phone" name="phone">
@@ -178,21 +189,11 @@ export function InviteMemberComposer() {
             </Field>
           </div>
 
-          <label className="flex items-center gap-2 text-xs cursor-pointer">
-            <input
-              type="checkbox"
-              name="isAdmin"
-              value="on"
-              defaultChecked={v.isAdmin === "on"}
-              className="accent-brand-500"
-            />
-            <span>
-              <span className="font-medium text-ink">Make admin</span>
-              <span className="text-ink-4 ml-1.5">
-                — can edit firm + manage team
-              </span>
-            </span>
-          </label>
+          <RoleMultiSelect
+            options={rolePickerOptions}
+            defaultSelected={noneSelected}
+            error={errs.roleId?.[0]}
+          />
 
           {state.status === "error" && !state.errors && (
             <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">

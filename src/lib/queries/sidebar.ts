@@ -24,7 +24,7 @@ export type SidebarUser = {
   id: string;
   name: string;
   initials: string;
-  role: string;
+  jobTitle: string;
 };
 
 export type SidebarPinnedMatter = {
@@ -83,7 +83,7 @@ export async function getSidebarData(): Promise<SidebarData> {
   ] = await Promise.all([
     prisma.user.findUnique({
       where: { id: currentUserId },
-      select: { id: true, name: true, initials: true, role: true },
+      select: { id: true, name: true, initials: true, jobTitle: true },
     }),
     prisma.matter.count({ where: OPEN_MATTER_WHERE }),
     prisma.emailThread.count({ where: { isRead: false } }),

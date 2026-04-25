@@ -303,7 +303,7 @@ export function CommandPalette({
                 return (
                   <CommandItem
                     key={`user-${u.id}`}
-                    value={`${u.name} ${u.role} ${u.initials} firm user`}
+                    value={`${u.name} ${u.jobTitle} ${u.initials} firm user`}
                     onSelect={() =>
                       go("/settings/team", { kind: "user", id: u.id })
                     }
@@ -311,7 +311,7 @@ export function CommandPalette({
                     <UserSquare />
                     <span>{u.name}</span>
                     <CommandShortcut>
-                      {u.role} · {u.initials}
+                      {u.jobTitle} · {u.initials}
                     </CommandShortcut>
                   </CommandItem>
                 );
@@ -439,7 +439,7 @@ function RecentItemRow({
   if (item.kind === "user") {
     return (
       <CommandItem
-        value={`${item.name} ${item.role}`}
+        value={`${item.name} ${item.jobTitle}`}
         onSelect={() =>
           onGo("/settings/team", { kind: "user", id: item.id })
         }

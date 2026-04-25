@@ -3,22 +3,26 @@
  *
  * Every action is `requireAdmin()`-gated; the read view (the
  * /settings/team page) is open to all firm members but every write
- * is admin-only. Three classes of invariant we enforce:
+ * is admin-only. Invariants we enforce:
  *
- *   1. "At least one admin" — a firm without an admin can't change
- *      its own settings, invite, deactivate, or reset passwords.
- *      We block any write that would leave `countActiveAdmins() === 0`.
- *   2. "No deactivating yourself" — an admin who locks themselves
- *      out by mistake has no recovery path. The other admins can
- *      still deactivate them.
- *   3. "Email is unique per firm" (and globally — `User.email` has a
- *      unique index already). The invite path turns a duplicate into
- *      a friendly error rather than a 500.
+ *   1. "At least one Admin" — a firm without an active user holding
+ *      the Admin role can't change its own settings, invite,
+ *      deactivate, or reset passwords. Any write that would leave
+ *      `countActiveAdmins() === 0` is rejected.
+ *   2. "default role is always assigned" — every active user holds
+ *      the firm's "default" role. The invite path adds it; the
+ *      update path silently re-adds it if a form somehow drops it.
+ *   3. "No deactivating yourself" — an admin who locks themselves
+ *      out by mistake has no recovery path. Other admins can do it
+ *      for them.
+ *   4. "Email is unique" — duplicate-on-invite returns a friendly
+ *      error rather than a Prisma constraint violation.
  *
- * Password handling on invite + reset: we generate a 16-char URL-safe
- * temp password, return it in the form state so the admin can
- * paste it into Slack/email/whatever. When email delivery lands
- * (Phase 2 of AUTH_PLAN), this becomes a magic-link instead.
+ * Role membership replaces the old `User.isAdmin` boolean. The
+ * multi-select on the team forms posts repeated `roleId=…` entries;
+ * we read them as an array, normalize, intersect with the firm's
+ * actual roles (defense against URL-tampering / stale options), and
+ * replace-all the join rows.
  */
 
 "use server";
@@ -29,7 +33,12 @@ import * as argon2 from "argon2";
 import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-import { getCurrentFirm, requireAdmin } from "@/lib/firm";
+import {
+  ADMIN_ROLE_NAME,
+  DEFAULT_ROLE_NAME,
+  getCurrentFirm,
+  requireAdmin,
+} from "@/lib/firm";
 import { countActiveAdmins } from "@/lib/queries/team";
 import {
   teamInitialState,
@@ -55,6 +64,33 @@ async function hashPassword(plain: string): Promise<string> {
   return argon2.hash(plain, { type: argon2.argon2id });
 }
 
+/** Pull every `roleId` value from the form data — multi-select
+ *  posts repeated keys with the same name. Filters out empties. */
+function readRoleIds(formData: FormData): string[] {
+  return formData
+    .getAll("roleId")
+    .filter((v): v is string => typeof v === "string" && v.length > 0);
+}
+
+/** Resolve the firm's role rows — used to (a) intersect submitted
+ *  ids with the legitimate set and (b) find the Admin + default
+ *  rows by name without an extra round-trip. */
+async function getFirmRoleMap(firmId: string): Promise<{
+  byId: Map<string, { id: string; name: string; isSystem: boolean }>;
+  adminId: string | null;
+  defaultId: string | null;
+}> {
+  const roles = await prisma.role.findMany({
+    where: { firmId },
+    select: { id: true, name: true, isSystem: true },
+  });
+  const byId = new Map(roles.map((r) => [r.id, r]));
+  const adminId = roles.find((r) => r.name === ADMIN_ROLE_NAME)?.id ?? null;
+  const defaultId =
+    roles.find((r) => r.name === DEFAULT_ROLE_NAME)?.id ?? null;
+  return { byId, adminId, defaultId };
+}
+
 // ── Invite ──────────────────────────────────────────────────────────────
 
 const inviteSchema = z.object({
@@ -65,10 +101,9 @@ const inviteSchema = z.object({
     .trim()
     .min(1, "Initials are required")
     .max(3, "Initials should be 1–3 characters"),
-  role: z.string().trim().min(1, "Pick a role").max(60),
+  jobTitle: z.string().trim().min(1, "Pick a job title").max(60),
   phone: z.string().trim().max(40).optional().or(z.literal("")),
   barNumber: z.string().trim().max(40).optional().or(z.literal("")),
-  isAdmin: z.literal("on").optional(),
 });
 
 export async function inviteFirmMember(
@@ -102,26 +137,55 @@ export async function inviteFirmMember(
   }
 
   const firm = await getCurrentFirm();
+  const roleMap = await getFirmRoleMap(firm.id);
+  if (!roleMap.defaultId) {
+    return {
+      status: "error",
+      errors: { _form: ["Firm is missing the system 'default' role — re-seed."] },
+      values: raw,
+    };
+  }
+
+  // Posted ids ∩ firm roles → set so dupes collapse. The default role
+  // is always added (firm baseline); admins promoting at invite time
+  // tick the Admin role explicitly.
+  const requested = new Set(readRoleIds(formData));
+  const validRoleIds = new Set<string>([roleMap.defaultId]);
+  for (const id of requested) {
+    if (roleMap.byId.has(id)) validRoleIds.add(id);
+  }
+
   const tempPassword = generateTempPassword();
   const passwordHash = await hashPassword(tempPassword);
+  const currentUserId = await getCurrentUserId();
 
-  await prisma.user.create({
-    data: {
-      firmId: firm.id,
-      name: parsed.data.name,
-      email: parsed.data.email,
-      initials: parsed.data.initials.toUpperCase(),
-      role: parsed.data.role,
-      phone: parsed.data.phone || null,
-      barNumber: parsed.data.barNumber || null,
-      isAdmin: parsed.data.isAdmin === "on",
-      isActive: true,
-      passwordHash,
-    },
+  await prisma.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: {
+        firmId: firm.id,
+        name: parsed.data.name,
+        email: parsed.data.email,
+        initials: parsed.data.initials.toUpperCase(),
+        jobTitle: parsed.data.jobTitle,
+        phone: parsed.data.phone || null,
+        barNumber: parsed.data.barNumber || null,
+        isActive: true,
+        passwordHash,
+      },
+      select: { id: true },
+    });
+    await tx.userRole.createMany({
+      data: [...validRoleIds].map((roleId) => ({
+        userId: user.id,
+        roleId,
+        assignedById: currentUserId,
+      })),
+    });
   });
 
   revalidatePath("/settings/team");
   revalidatePath("/settings/firm"); // member count + admin list
+  revalidatePath("/settings/roles"); // member counts
   return {
     ...teamInitialState,
     status: "ok",
@@ -129,7 +193,7 @@ export async function inviteFirmMember(
   };
 }
 
-// ── Update (name / role / initials / phone / barNumber / isAdmin / isActive) ─
+// ── Update (name / initials / jobTitle / phone / barNumber / roles / isActive)
 
 const updateSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
@@ -138,10 +202,9 @@ const updateSchema = z.object({
     .trim()
     .min(1, "Initials are required")
     .max(3, "Initials should be 1–3 characters"),
-  role: z.string().trim().min(1, "Pick a role").max(60),
+  jobTitle: z.string().trim().min(1, "Pick a job title").max(60),
   phone: z.string().trim().max(40).optional().or(z.literal("")),
   barNumber: z.string().trim().max(40).optional().or(z.literal("")),
-  isAdmin: z.literal("on").optional(),
   isActive: z.literal("on").optional(),
 });
 
@@ -164,7 +227,11 @@ export async function updateFirmMember(
   const firm = await getCurrentFirm();
   const target = await prisma.user.findFirst({
     where: { id: userId, firmId: firm.id },
-    select: { id: true, isAdmin: true, isActive: true },
+    select: {
+      id: true,
+      isActive: true,
+      userRoles: { select: { roleId: true, role: { select: { name: true } } } },
+    },
   });
   if (!target) {
     return {
@@ -174,10 +241,9 @@ export async function updateFirmMember(
     };
   }
 
-  const newIsAdmin = parsed.data.isAdmin === "on";
   const newIsActive = parsed.data.isActive === "on";
-
   const currentUserId = await getCurrentUserId();
+
   // Self-protection: an admin can't deactivate themselves. Mistake-
   // proofing — if you want out, another admin can do it for you.
   if (target.id === currentUserId && !newIsActive) {
@@ -188,20 +254,40 @@ export async function updateFirmMember(
     };
   }
 
-  // "At least one admin" invariant — any change that would leave
-  // the firm with zero active admins is rejected.
-  const wasAdminAndActive = target.isAdmin && target.isActive;
-  const isAdminAfter = newIsAdmin && newIsActive;
-  if (wasAdminAndActive && !isAdminAfter) {
+  // Resolve the firm's role universe + identify Admin / default rows.
+  const roleMap = await getFirmRoleMap(firm.id);
+  if (!roleMap.defaultId) {
+    return {
+      status: "error",
+      errors: { _form: ["Firm is missing the system 'default' role — re-seed."] },
+      values: raw,
+    };
+  }
+  const requested = new Set(readRoleIds(formData));
+  const validRoleIds = new Set<string>([roleMap.defaultId]);
+  for (const id of requested) {
+    if (roleMap.byId.has(id)) validRoleIds.add(id);
+  }
+
+  const wasAdmin = target.userRoles.some(
+    (ur) => ur.role.name === ADMIN_ROLE_NAME
+  );
+  const willBeAdmin = roleMap.adminId
+    ? validRoleIds.has(roleMap.adminId)
+    : false;
+
+  // "At least one Admin" invariant — losing the Admin role OR going
+  // inactive while being the last admin is rejected.
+  const wasAdminActive = wasAdmin && target.isActive;
+  const willBeAdminActive = willBeAdmin && newIsActive;
+  if (wasAdminActive && !willBeAdminActive) {
     const remaining = await countActiveAdmins();
-    // remaining includes the target row itself (still admin in DB);
-    // post-mutation count = remaining - 1. Block if that would be 0.
     if (remaining <= 1) {
       return {
         status: "error",
         errors: {
-          isAdmin: [
-            "This is the firm's last active admin — promote someone else first.",
+          roleId: [
+            "This is the firm's last active Admin — promote someone else before changing their roles or status.",
           ],
         },
         values: raw,
@@ -209,21 +295,35 @@ export async function updateFirmMember(
     }
   }
 
-  await prisma.user.update({
-    where: { id: target.id },
-    data: {
-      name: parsed.data.name,
-      initials: parsed.data.initials.toUpperCase(),
-      role: parsed.data.role,
-      phone: parsed.data.phone || null,
-      barNumber: parsed.data.barNumber || null,
-      isAdmin: newIsAdmin,
-      isActive: newIsActive,
-    },
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: target.id },
+      data: {
+        name: parsed.data.name,
+        initials: parsed.data.initials.toUpperCase(),
+        jobTitle: parsed.data.jobTitle,
+        phone: parsed.data.phone || null,
+        barNumber: parsed.data.barNumber || null,
+        isActive: newIsActive,
+      },
+    });
+    // Replace-all on roles. Cheap (≤ a handful of rows per user) and
+    // matches the mental model of the multi-select form.
+    await tx.userRole.deleteMany({ where: { userId: target.id } });
+    if (validRoleIds.size > 0) {
+      await tx.userRole.createMany({
+        data: [...validRoleIds].map((roleId) => ({
+          userId: target.id,
+          roleId,
+          assignedById: currentUserId,
+        })),
+      });
+    }
   });
 
   revalidatePath("/settings/team");
   revalidatePath("/settings/firm"); // admin list might change
+  revalidatePath("/settings/roles"); // member counts
   // Sidebar profile reads from the User row — bust layout cache.
   revalidatePath("/", "layout");
   return { ...teamInitialState, status: "ok" };

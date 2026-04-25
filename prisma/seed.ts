@@ -80,6 +80,8 @@ async function main() {
   await prisma.contact.deleteMany();
   await prisma.lead.deleteMany();
   await prisma.automation.deleteMany();
+  await prisma.userRole.deleteMany();
+  await prisma.role.deleteMany();
   await prisma.user.deleteMany();
   await prisma.firm.deleteMany();
 
@@ -105,6 +107,32 @@ async function main() {
     },
   });
 
+  console.log("  Creating system roles…");
+  // Two seeded roles per firm: "Admin" grants admin powers (today
+  // that's the only permission we check); "default" is auto-applied
+  // to every new user as a baseline. Both are isSystem=true so the
+  // UI blocks rename/delete.
+  const [adminRole, defaultRole] = await Promise.all([
+    prisma.role.create({
+      data: {
+        firmId: firm.id,
+        name: "Admin",
+        description:
+          "Firm administrators — can edit firm settings, manage team, and create roles.",
+        isSystem: true,
+      },
+    }),
+    prisma.role.create({
+      data: {
+        firmId: firm.id,
+        name: "default",
+        description:
+          "Baseline role assigned to every firm member. Holds no permissions today; future granular permissions hang off this row when added.",
+        isSystem: true,
+      },
+    }),
+  ]);
+
   console.log("  Creating users…");
   // Hash once and reuse for every dev user — argon2 is intentionally
   // slow (that's the point), so don't re-derive five times.
@@ -117,15 +145,11 @@ async function main() {
         email: "jkosloski@kosloskilaw.com",
         name: "Jason Kosloski",
         initials: "JM",
-        role: "Managing",
+        jobTitle: "Managing",
         barNumber: "CO-44821",
         phone: "(303) 555-0100",
         passwordHash: devPasswordHash,
         firmId: firm.id,
-        // Founding partner / managing attorney → admin by default.
-        // Every firm needs at least one admin; the seed enforces it
-        // here, the team-management UI will enforce it on demote.
-        isAdmin: true,
       },
     }),
     prisma.user.create({
@@ -133,7 +157,7 @@ async function main() {
         email: "leo@kosloskilaw.com",
         name: "Leo Kosloski",
         initials: "LK",
-        role: "Partner",
+        jobTitle: "Partner",
         barNumber: "CO-39110",
         phone: "(303) 555-0101",
         passwordHash: devPasswordHash,
@@ -145,7 +169,7 @@ async function main() {
         email: "rachel@kosloskilaw.com",
         name: "Rachel Kim",
         initials: "RK",
-        role: "Paralegal",
+        jobTitle: "Paralegal",
         phone: "(303) 555-0102",
         passwordHash: devPasswordHash,
         firmId: firm.id,
@@ -156,7 +180,7 @@ async function main() {
         email: "marco@kosloskilaw.com",
         name: "Marco Guerra",
         initials: "MG",
-        role: "Investigator",
+        jobTitle: "Investigator",
         phone: "(303) 555-0103",
         passwordHash: devPasswordHash,
         firmId: firm.id,
@@ -167,13 +191,32 @@ async function main() {
         email: "elena@kosloskilaw.com",
         name: "Elena Serrano",
         initials: "ES",
-        role: "Intake",
+        jobTitle: "Intake",
         phone: "(303) 555-0104",
         passwordHash: devPasswordHash,
         firmId: firm.id,
       },
     }),
   ]);
+
+  console.log("  Assigning roles…");
+  // Every user gets the default role; Jason additionally gets the
+  // Admin role so the firm has an admin out-of-the-box. The
+  // "at least one Admin" invariant lives in the team-management
+  // actions and prevents removing his Admin role until another
+  // user is promoted.
+  await prisma.userRole.createMany({
+    data: [
+      // Admin
+      { userId: jason.id, roleId: adminRole.id },
+      // default — every active member
+      { userId: jason.id, roleId: defaultRole.id },
+      { userId: leo.id, roleId: defaultRole.id },
+      { userId: rachel.id, roleId: defaultRole.id },
+      { userId: marco.id, roleId: defaultRole.id },
+      { userId: _elena.id, roleId: defaultRole.id },
+    ],
+  });
 
   // ─────────────────────────────────────────────────────────────────────
   // Contacts (clients, opposing parties, witnesses, experts)

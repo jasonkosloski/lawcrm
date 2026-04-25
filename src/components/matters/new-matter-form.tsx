@@ -73,7 +73,7 @@ export type AreaOption = {
 export type NewMatterFormOptions = {
   areas: AreaOption[];
   clients: ClientOption[];
-  users: Array<{ id: string; name: string; role: string; initials: string }>;
+  users: Array<{ id: string; name: string; jobTitle: string; initials: string }>;
   currentUserId: string;
 };
 
@@ -541,7 +541,7 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
             >
               {options.users.map((u) => (
                 <option key={u.id} value={u.id}>
-                  {u.name} · {u.role}
+                  {u.name} · {u.jobTitle}
                 </option>
               ))}
             </select>

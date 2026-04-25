@@ -44,7 +44,7 @@ export default async function NewMatterPage() {
     }),
     prisma.user.findMany({
       where: { isActive: true },
-      select: { id: true, name: true, role: true, initials: true },
+      select: { id: true, name: true, jobTitle: true, initials: true },
       orderBy: { name: "asc" },
     }),
     getCurrentUserId(),

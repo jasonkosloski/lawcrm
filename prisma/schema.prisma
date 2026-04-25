@@ -41,16 +41,16 @@ model User {
   image     String?
   name      String
   initials  String   /// Two-letter initials for avatar display (e.g. "JM")
-  role      String   /// Display-only job title — Managing / Partner / Counsel / Paralegal / Investigator / Intake. Orthogonal to permission roles (see isAdmin).
+  /// Display-only job title — Managing / Partner / Counsel /
+  /// Paralegal / Investigator / Intake. Orthogonal to permission
+  /// roles (see UserRole). Renamed from `role` once permission
+  /// roles became first-class so the two concepts don't collide
+  /// in code or UI.
+  jobTitle  String
   avatarUrl String?  /// Optional profile photo URL
   phone     String?
   barNumber String?  /// State bar number (attorneys only)
   isActive  Boolean  @default(true)
-  /// Permission flag — admins can edit the firm profile and manage
-  /// users (Team page). Independent of the display `role` so any job
-  /// title can hold the admin bit. Multi-tenant friendly: scoped
-  /// per-firm once we have multiple firms.
-  isAdmin   Boolean  @default(false)
   /// FK to the firm this user belongs to. Nullable in the schema
   /// only because SQLite can't add a non-null column without a
   /// default; every code path treats it as required and the seed
@@ -85,6 +85,15 @@ model User {
   /// firm row shouldn't blow away the user; the user is unusable
   /// until reassigned but their historical activity stays intact.
   firm              Firm?       @relation(fields: [firmId], references: [id], onDelete: SetNull)
+  /// Permission roles — many-to-many via the UserRole join. Empty
+  /// for a brand-new user until at least the firm's "default" role
+  /// is auto-assigned by the invite path. Membership in the "Admin"
+  /// system role is what grants admin powers.
+  userRoles         UserRole[]
+  /// Reverse of UserRole.assignedBy — every assignment this user
+  /// has performed. Useful for auditing role grants once that
+  /// surfaces in the UI.
+  roleAssignments   UserRole[]  @relation("UserRoleAssignedBy")
 
   @@index([firmId])
   @@map("users")
@@ -143,8 +152,65 @@ model Firm {
   updatedAt     DateTime @updatedAt
 
   users         User[]
+  /// Permission roles defined for this firm. Always includes the
+  /// two system roles ("Admin" + "default") plus any custom roles
+  /// firm admins create.
+  roles         Role[]
 
   @@map("firms")
+}
+
+/// A permission role within a firm. Membership grants the role's
+/// permissions to the user — for now the only "permission" we
+/// check is "is the role named Admin?" (that grants all admin
+/// powers). When granular permissions land they live on a sibling
+/// `RolePermission` join keyed off this row.
+///
+/// System roles ("Admin" + "default") are seeded with
+/// `isSystem = true` and can't be renamed or deleted. The
+/// "default" role is auto-assigned to every new user; "Admin"
+/// is assigned by invite/edit when an admin promotes someone.
+model Role {
+  id          String   @id @default(cuid())
+  /// Firm-scoped — same name can exist in two different firms.
+  firmId      String
+  /// Unique per firm. System roles use the names "Admin" and
+  /// "default" — those names are reserved at the action level.
+  name        String
+  description String?
+  /// Locked: can't be renamed or deleted via the UI. Set true
+  /// only by the seed for the two system roles.
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  firm        Firm       @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  userRoles   UserRole[]
+
+  @@unique([firmId, name])
+  @@index([firmId])
+  @@map("roles")
+}
+
+/// Many-to-many join between users and the roles they hold.
+/// Composite PK on [userId, roleId] so the same role can't be
+/// assigned twice. `assignedBy` is optional because the seed
+/// performs initial grants without a "current user" context.
+model UserRole {
+  userId       String
+  roleId       String
+  assignedAt   DateTime @default(now())
+  /// The admin who granted this role. Nullable because the seed
+  /// path has no current-user context.
+  assignedById String?
+
+  user       User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       Role  @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  assignedBy User? @relation("UserRoleAssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@map("user_roles")
 }
 
 // =============================================================================

@@ -329,7 +329,7 @@ export async function getMatterById(id: string) {
       teamMembers: {
         include: {
           user: {
-            select: { id: true, name: true, initials: true, role: true },
+            select: { id: true, name: true, initials: true, jobTitle: true },
           },
         },
         orderBy: { role: "asc" },

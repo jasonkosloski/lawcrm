@@ -102,16 +102,33 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // }),
   ],
   callbacks: {
-    // First sign-in: copy user.id onto the JWT. Subsequent calls
-    // receive the existing token and we just pass it through.
+    // Runs on sign-in (when `user` is present) AND on every
+    // subsequent request that reads the JWT. We re-validate the
+    // user against the DB on every request so a stale JWT (e.g.
+    // user deleted, deactivated, or DB reset between sign-in and
+    // now) can't be used to access the app. When invalid, we
+    // strip `userId` from the token — the session callback then
+    // returns a session without a user.id, and `getCurrentUserId`
+    // bounces to /login. Cookie clears on the next sign-in.
     async jwt({ token, user }) {
       if (user) {
         token.userId = user.id;
       }
+      if (token.userId) {
+        const valid = await prisma.user.count({
+          where: { id: token.userId as string, isActive: true },
+        });
+        if (valid === 0) {
+          delete token.userId;
+        }
+      }
       return token;
     },
-    // Expose the userId on session.user.id so server components +
-    // actions can read it via `(await auth()).user.id`.
+    // Expose the validated userId on session.user.id. When the JWT
+    // has no userId (because validation in the jwt callback wiped
+    // it), session.user.id stays undefined; downstream guards
+    // (getCurrentUserId, dashboard layout) treat that as "logged
+    // out" and bounce.
     async session({ session, token }) {
       if (token.userId && session.user) {
         session.user.id = token.userId as string;

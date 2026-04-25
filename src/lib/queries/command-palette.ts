@@ -49,7 +49,7 @@ export type PaletteUser = {
   id: string;
   name: string;
   initials: string;
-  role: string;
+  jobTitle: string;
 };
 
 export type PaletteItem =
@@ -123,7 +123,7 @@ export async function getPaletteData(): Promise<PaletteData> {
         id: u.id,
         name: u.name,
         initials: u.initials,
-        role: u.role,
+        jobTitle: u.jobTitle,
       })
     ),
   ];

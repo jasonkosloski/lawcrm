@@ -30,8 +30,15 @@ export default async function FirmSettingsPage() {
   // /settings/team lands).
   const [memberCount, admins] = await Promise.all([
     prisma.user.count({ where: { firmId: firm.id, isActive: true } }),
+    // Admins = active users holding the firm's "Admin" role. Pull
+    // by role-name match so this stays correct if/when we add
+    // multiple admin-tier roles in the future.
     prisma.user.findMany({
-      where: { firmId: firm.id, isAdmin: true, isActive: true },
+      where: {
+        firmId: firm.id,
+        isActive: true,
+        userRoles: { some: { role: { name: "Admin" } } },
+      },
       select: { id: true, name: true, email: true, initials: true },
       orderBy: { name: "asc" },
     }),

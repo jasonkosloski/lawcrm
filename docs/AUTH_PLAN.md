@@ -17,13 +17,23 @@ deferred until concrete demand surfaces.
 
 ## Files to look at
 
-- `src/auth.ts` — Auth.js config (Credentials provider, Prisma adapter, JWT strategy, session callbacks).
+- `src/auth.ts` — Auth.js config (Credentials provider, Prisma adapter, JWT strategy, session callbacks). The `jwt` callback re-validates `token.userId` against the DB on every request and strips it when the user no longer exists / is deactivated — closes the stale-JWT gap.
 - `src/app/api/auth/[...nextauth]/route.ts` — catch-all handler, just re-exports `handlers`.
 - `src/proxy.ts` — Next.js 16 proxy (renamed from middleware). Optimistic cookie-presence check only, never validates the JWT itself.
-- `src/lib/current-user.ts` — `getCurrentUserId()` reads from `auth()`, `redirect("/login")` on miss.
+- `src/app/(dashboard)/layout.tsx` — **Authoritative auth gate.** Calls `auth()` and bounces to `/login` when `session.user.id` is undefined. The proxy is fast-path; this layer is where real validation happens.
+- `src/lib/current-user.ts` — `getCurrentUserId()` reads from `auth()`, `redirect("/login")` on miss. Also enforced for completeness — the layout is the primary gate.
 - `src/app/actions/auth.ts` — `loginAction` + `logoutAction` server actions.
-- `src/app/login/page.tsx` + `src/components/auth/login-form.tsx` — form UI.
-- `src/types/next-auth.d.ts` — module augmentation that types `session.user.id`.
+- `src/app/login/page.tsx` + `src/components/auth/login-form.tsx` — form UI. Skip-the-form check uses `session?.user?.id` (not `session?.user`) so a stale cookie can't cause a redirect loop.
+- `src/types/next-auth.d.ts` — module augmentation that types `session.user.id` as optional (undefined = stale / invalid session).
+
+### Security: defense-in-depth against stale JWTs
+
+Three layers cooperate:
+1. **JWT callback** validates the user against the DB on every request. If gone or inactive, strips `userId` from the token.
+2. **Dashboard layout** calls `auth()` and bounces to `/login` when `session.user.id` is undefined. Catches any page that doesn't explicitly call `getCurrentUserId()`.
+3. **Login page** detects a stale-but-cryptographically-valid cookie (`session` exists but `session.user.id` is undefined) and renders the form so the user can re-auth — submitting overwrites the cookie with a fresh JWT.
+
+The proxy remains optimistic (cookie-presence only) so it's fast and Edge-compatible; the heavy lifting happens in the layout.
 
 ## Schema additions (migration `20260425201311_auth_phase_1`)
 
