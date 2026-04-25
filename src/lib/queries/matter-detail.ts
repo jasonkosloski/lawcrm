@@ -732,6 +732,29 @@ export async function getMatterTimeEntries(
       parentNote: { select: { id: true, content: true } },
       parentTask: { select: { id: true, title: true } },
       parentDeadline: { select: { id: true, title: true } },
+      // Per-individual-comm sources: time entries logged on a
+      // single email message or messenger item. Resolved into the
+      // existing email/message EntitySource kinds for chip render.
+      emailMessage: {
+        select: {
+          id: true,
+          fromName: true,
+          thread: { select: { id: true, subject: true } },
+        },
+      },
+      messengerItem: {
+        select: {
+          id: true,
+          kind: true,
+          thread: {
+            select: {
+              id: true,
+              contactPhone: true,
+              contact: { select: { name: true } },
+            },
+          },
+        },
+      },
       notes: {
         select: {
           id: true,
@@ -764,8 +787,15 @@ export async function getMatterTimeEntries(
     invoiceId: e.invoiceId,
     spawnedFrom: resolveEntitySource({
       note: e.parentNote,
-      email: null,
-      messenger: null,
+      // Resolve the per-message source up to the thread for the chip
+      // href — there's no per-message detail URL today.
+      email: e.emailMessage
+        ? {
+            id: e.emailMessage.thread.id,
+            subject: `${e.emailMessage.thread.subject} (${e.emailMessage.fromName})`,
+          }
+        : null,
+      messenger: e.messengerItem,
       task: e.parentTask,
       deadline: e.parentDeadline,
     }),

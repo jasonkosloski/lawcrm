@@ -16,6 +16,7 @@ import type { ThreadDetail } from "@/lib/queries/communication";
 import { InboxActionButtons } from "./inbox-action-buttons";
 import { FollowUpButton } from "./follow-up-button";
 import { setEmailThreadFollowUp } from "@/app/actions/follow-ups";
+import { LogTimeOnCommButton } from "./log-time-on-comm-button";
 
 const formatSize = (bytes: number | null): string => {
   if (bytes === null || bytes === 0) return "—";
@@ -154,8 +155,18 @@ export function ThreadReader({ thread }: { thread: ThreadDetail | null }) {
                   )}
                 </div>
               </div>
-              <div className="text-2xs font-mono text-ink-4 shrink-0 whitespace-nowrap">
-                {format(m.sentAt, "MMM d, yyyy · h:mm a")}
+              <div className="flex flex-col items-end gap-1.5 shrink-0">
+                <div className="text-2xs font-mono text-ink-4 whitespace-nowrap">
+                  {format(m.sentAt, "MMM d, yyyy · h:mm a")}
+                </div>
+                <LogTimeOnCommButton
+                  isFiled={thread.matter !== null}
+                  source={{
+                    kind: "email",
+                    messageId: m.id,
+                    label: `${m.fromName}: ${thread.subject}`,
+                  }}
+                />
               </div>
             </header>
 

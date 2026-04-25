@@ -16,6 +16,13 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { logActivity } from "@/lib/activity-log";
 import type { NoteAttachmentFormState } from "@/lib/note-attachment-form";
 
+/** Trim a string to N chars, appending "…" only when actually truncated. */
+function snippet(s: string | null | undefined, max: number): string {
+  if (!s) return "";
+  const stripped = s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return stripped.length <= max ? stripped : stripped.slice(0, max - 1) + "…";
+}
+
 const timeSchema = z.object({
   date: z.string().min(1, "Date is required"),
   hours: z
@@ -135,6 +142,146 @@ export async function addTimeEntryToDeadline(
     type: "time_entry",
     title: `Time logged on deadline · ${parsed.data.hours}h`,
     detail: `${deadline.title}: ${parsed.data.activity}`,
+  });
+  return { status: "ok" };
+}
+
+// ── Per-email-message ───────────────────────────────────────────────────
+
+export async function addTimeEntryToEmailMessage(
+  emailMessageId: string,
+  _prev: NoteAttachmentFormState,
+  formData: FormData
+): Promise<NoteAttachmentFormState> {
+  const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
+  const parsed = timeSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { status: "error", errors: parsed.error.flatten().fieldErrors };
+  }
+  // Pull the message and its thread so we can resolve the matter.
+  const msg = await prisma.emailMessage.findUnique({
+    where: { id: emailMessageId },
+    select: {
+      id: true,
+      fromName: true,
+      thread: { select: { matterId: true, subject: true } },
+    },
+  });
+  if (!msg || !msg.thread.matterId) {
+    return {
+      status: "error",
+      errors: {
+        activity: ["Email isn't filed to a matter — file the thread first"],
+      },
+    };
+  }
+  const userId = await getCurrentUserId();
+  await prisma.timeEntry.create({
+    data: {
+      matterId: msg.thread.matterId,
+      userId,
+      emailMessageId,
+      date: new Date(parsed.data.date),
+      hours: Number(parsed.data.hours),
+      activity: parsed.data.activity,
+      narrative: parsed.data.narrative || null,
+      billable: parsed.data.billable === "on",
+      noCharge: parsed.data.noCharge === "on",
+      privileged: parsed.data.privileged === "on",
+      // 'email' is one of the canonical source kinds in the schema.
+      source: "email",
+    },
+  });
+
+  revalidatePath("/communication");
+  revalidatePath(`/matters/${msg.thread.matterId}/communication`);
+  revalidatePath(`/matters/${msg.thread.matterId}/time`);
+  revalidatePath(`/matters/${msg.thread.matterId}`);
+  await logActivity({
+    matterId: msg.thread.matterId,
+    userId,
+    type: "time_entry",
+    title: `Time logged on email · ${parsed.data.hours}h`,
+    detail: `${snippet(msg.thread.subject, 40)} (${msg.fromName}): ${parsed.data.activity}`,
+  });
+  return { status: "ok" };
+}
+
+// ── Per-messenger-item (SMS / call / voicemail) ─────────────────────────
+
+export async function addTimeEntryToMessengerItem(
+  messengerItemId: string,
+  _prev: NoteAttachmentFormState,
+  formData: FormData
+): Promise<NoteAttachmentFormState> {
+  const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
+  const parsed = timeSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { status: "error", errors: parsed.error.flatten().fieldErrors };
+  }
+  const item = await prisma.messengerItem.findUnique({
+    where: { id: messengerItemId },
+    select: {
+      id: true,
+      kind: true,
+      matterId: true,
+      thread: {
+        select: {
+          defaultMatterId: true,
+          contactPhone: true,
+          contact: { select: { name: true } },
+        },
+      },
+    },
+  });
+  if (!item) {
+    return {
+      status: "error",
+      errors: { activity: ["Item not found"] },
+    };
+  }
+  // Item-level matterId wins; fall back to thread default — same
+  // resolution as resolveMessengerMatter in inbox-actions.ts.
+  const matterId = item.matterId ?? item.thread?.defaultMatterId ?? null;
+  if (!matterId) {
+    return {
+      status: "error",
+      errors: {
+        activity: ["This conversation isn't filed to a matter yet."],
+      },
+    };
+  }
+  const userId = await getCurrentUserId();
+  const who =
+    item.thread?.contact?.name ?? item.thread?.contactPhone ?? "Unknown";
+  await prisma.timeEntry.create({
+    data: {
+      matterId,
+      userId,
+      messengerItemId,
+      date: new Date(parsed.data.date),
+      hours: Number(parsed.data.hours),
+      activity: parsed.data.activity,
+      narrative: parsed.data.narrative || null,
+      billable: parsed.data.billable === "on",
+      noCharge: parsed.data.noCharge === "on",
+      privileged: parsed.data.privileged === "on",
+      // Provider-channel labelling — sms/voicemail map to 'email'-
+      // adjacent in the schema enum, so fall through to manual.
+      source: "manual",
+    },
+  });
+
+  revalidatePath("/communication");
+  revalidatePath(`/matters/${matterId}/communication`);
+  revalidatePath(`/matters/${matterId}/time`);
+  revalidatePath(`/matters/${matterId}`);
+  await logActivity({
+    matterId,
+    userId,
+    type: "time_entry",
+    title: `Time logged on ${item.kind} · ${parsed.data.hours}h`,
+    detail: `${who}: ${parsed.data.activity}`,
   });
   return { status: "ok" };
 }

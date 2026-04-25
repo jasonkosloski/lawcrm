@@ -30,6 +30,7 @@ import type {
 import { InboxActionButtons } from "./inbox-action-buttons";
 import { FollowUpButton } from "./follow-up-button";
 import { setMessengerThreadFollowUp } from "@/app/actions/follow-ups";
+import { LogTimeOnCommButton } from "./log-time-on-comm-button";
 
 function prettyPhone(p: string): string {
   const digits = p.replace(/\D/g, "");
@@ -176,7 +177,10 @@ function Item({
   contactLabel: string;
   isFiled: boolean;
 }) {
-  if (item.kind === "call") return <CallEvent item={item} />;
+  if (item.kind === "call")
+    return (
+      <CallEvent item={item} contactLabel={contactLabel} isFiled={isFiled} />
+    );
   if (item.kind === "voicemail")
     return (
       <VoicemailCard
@@ -185,15 +189,49 @@ function Item({
         isFiled={isFiled}
       />
     );
-  return <SmsBubble item={item} />;
+  return (
+    <SmsBubble item={item} contactLabel={contactLabel} isFiled={isFiled} />
+  );
 }
 
-function SmsBubble({ item }: { item: MessengerItemRow }) {
+/** Build the source label passed into the LogTimeOnCommButton dialog
+ *  for SMS / call / voicemail items. Includes contact name + a short
+ *  preview so the dialog title makes sense at a glance. */
+function commLabel(
+  contactLabel: string,
+  item: MessengerItemRow
+): string {
+  if (item.kind === "voicemail")
+    return `Voicemail from ${contactLabel}`;
+  if (item.kind === "call") {
+    const dir = item.direction === "inbound" ? "Inbound" : "Outbound";
+    const missed =
+      item.callStatus === "missed" || item.callStatus === "no_answer";
+    return `${missed ? "Missed call" : `${dir} call`} · ${contactLabel}`;
+  }
+  // SMS — quote the body if present so context stands.
+  const preview = item.body
+    ? item.body.length > 40
+      ? item.body.slice(0, 37) + "…"
+      : item.body
+    : "(media)";
+  return `${contactLabel}: "${preview}"`;
+}
+
+function SmsBubble({
+  item,
+  contactLabel,
+  isFiled,
+}: {
+  item: MessengerItemRow;
+  contactLabel: string;
+  isFiled: boolean;
+}) {
   const outbound = item.direction === "outbound";
   return (
     <div
       className={cn(
-        "flex items-end gap-2 max-w-[80%]",
+        "group/msg flex items-end gap-2 max-w-[80%]",
         outbound ? "self-end flex-row-reverse" : "self-start"
       )}
     >
@@ -230,11 +268,32 @@ function SmsBubble({ item }: { item: MessengerItemRow }) {
       <span className="text-3xs font-mono text-ink-4 pb-1">
         {format(item.occurredAt, "h:mm a")}
       </span>
+      {/* Hover-reveal log-time icon — keeps SMS bubbles uncluttered
+          at rest. Always visible on touch devices via opacity. */}
+      <div className="opacity-0 group-hover/msg:opacity-100 transition-opacity pb-1">
+        <LogTimeOnCommButton
+          isFiled={isFiled}
+          variant="compact"
+          source={{
+            kind: "messenger",
+            itemId: item.id,
+            label: commLabel(contactLabel, item),
+          }}
+        />
+      </div>
     </div>
   );
 }
 
-function CallEvent({ item }: { item: MessengerItemRow }) {
+function CallEvent({
+  item,
+  contactLabel,
+  isFiled,
+}: {
+  item: MessengerItemRow;
+  contactLabel: string;
+  isFiled: boolean;
+}) {
   const missed = item.callStatus === "missed" || item.callStatus === "no_answer";
   const Icon = missed
     ? PhoneMissed
@@ -245,14 +304,27 @@ function CallEvent({ item }: { item: MessengerItemRow }) {
     ? `Missed call · ${formatDistanceToNowStrict(item.occurredAt, { addSuffix: true })}`
     : `${item.direction === "inbound" ? "Inbound" : "Outbound"} call · ${formatDuration(item.callDurationSec)}`;
   return (
-    <div className="self-center inline-flex items-center gap-2 px-3 py-1 rounded-full border border-line bg-paper-2/50 text-2xs text-ink-3">
-      <Icon size={11} className={missed ? "text-warn" : "text-ink-3"} />
-      <span className={missed ? "text-warn font-medium" : "text-ink-3"}>
-        {label}
-      </span>
-      <span className="font-mono text-ink-4">
-        {format(item.occurredAt, "h:mm a")}
-      </span>
+    <div className="self-center group/call flex items-center gap-2">
+      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-line bg-paper-2/50 text-2xs text-ink-3">
+        <Icon size={11} className={missed ? "text-warn" : "text-ink-3"} />
+        <span className={missed ? "text-warn font-medium" : "text-ink-3"}>
+          {label}
+        </span>
+        <span className="font-mono text-ink-4">
+          {format(item.occurredAt, "h:mm a")}
+        </span>
+      </div>
+      <div className="opacity-0 group-hover/call:opacity-100 transition-opacity">
+        <LogTimeOnCommButton
+          isFiled={isFiled}
+          variant="compact"
+          source={{
+            kind: "messenger",
+            itemId: item.id,
+            label: commLabel(contactLabel, item),
+          }}
+        />
+      </div>
     </div>
   );
 }
@@ -299,7 +371,7 @@ function VoicemailCard({
           preload="none"
         />
       )}
-      <div className="pt-1.5 border-t border-line/60">
+      <div className="pt-1.5 border-t border-line/60 flex items-center gap-1.5 flex-wrap">
         <InboxActionButtons
           isFiled={isFiled}
           source={{
@@ -307,6 +379,14 @@ function VoicemailCard({
             id: item.id,
             contactLabel,
             preview: item.transcript ?? "Voicemail (no transcript)",
+          }}
+        />
+        <LogTimeOnCommButton
+          isFiled={isFiled}
+          source={{
+            kind: "messenger",
+            itemId: item.id,
+            label: commLabel(contactLabel, item),
           }}
         />
       </div>

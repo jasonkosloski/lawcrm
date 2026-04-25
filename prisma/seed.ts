@@ -2254,6 +2254,67 @@ A copy of the document is available through PACER and is attached for your recor
   console.log(`   ${replyRollupCount} reply-rollup attachments`);
 
   // ─────────────────────────────────────────────────────────────────────
+  // Per-individual-comm time examples — surface the new "From email"
+  // / "From message" chip on time entries that were logged against a
+  // specific email message or messenger item.
+  // ─────────────────────────────────────────────────────────────────────
+  console.log("  Creating per-comm time examples…");
+  const sampleEmailMessage = await prisma.emailMessage.findFirst({
+    where: { thread: { matterId: matters.williams.id } },
+    select: { id: true, thread: { select: { matterId: true } } },
+  });
+  const sampleVoicemail = await prisma.messengerItem.findFirst({
+    where: {
+      kind: "voicemail",
+      thread: { defaultMatterId: matters.williams.id },
+    },
+    select: {
+      id: true,
+      matterId: true,
+      thread: { select: { defaultMatterId: true } },
+    },
+  });
+  let perCommTimeCount = 0;
+  if (sampleEmailMessage?.thread.matterId) {
+    await prisma.timeEntry.create({
+      data: {
+        matterId: sampleEmailMessage.thread.matterId,
+        userId: jason.id,
+        emailMessageId: sampleEmailMessage.id,
+        date: hoursAgo(3),
+        hours: 0.4,
+        activity: "Read + drafted response to opposing counsel",
+        billable: true,
+        privileged: true,
+        source: "email",
+      },
+    });
+    perCommTimeCount++;
+  }
+  if (sampleVoicemail) {
+    const matterId =
+      sampleVoicemail.matterId ??
+      sampleVoicemail.thread?.defaultMatterId ??
+      null;
+    if (matterId) {
+      await prisma.timeEntry.create({
+        data: {
+          matterId,
+          userId: jason.id,
+          messengerItemId: sampleVoicemail.id,
+          date: hoursAgo(3),
+          hours: 0.2,
+          activity: "Listened to voicemail + summarized for file",
+          billable: true,
+          source: "manual",
+        },
+      });
+      perCommTimeCount++;
+    }
+  }
+  console.log(`   ${perCommTimeCount} per-comm time examples`);
+
+  // ─────────────────────────────────────────────────────────────────────
   // Summary
   // ─────────────────────────────────────────────────────────────────────
   const counts = await Promise.all([

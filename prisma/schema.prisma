@@ -610,15 +610,22 @@ model TimeEntry {
   /// entries are matter-scoped without a more specific parent.
   taskId     String?
   deadlineId String?
+  /// "Log time on this email" / "Log time on this SMS / call /
+  /// voicemail." Per-individual-item granularity (not the thread).
+  /// Lawyer's clock for reading + responding to a specific message.
+  emailMessageId   String?
+  messengerItemId  String?
 
-  matter       Matter         @relation(fields: [matterId], references: [id], onDelete: Cascade)
-  user         User           @relation(fields: [userId], references: [id])
-  invoice      Invoice?       @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  notes        Note[]         @relation("TimeEntryNotes")
-  event        CalendarEvent? @relation("CalendarEventTimeEntries", fields: [calendarEventId], references: [id], onDelete: SetNull)
-  parentNote   Note?          @relation("NoteAttachedTimeEntries", fields: [noteId], references: [id], onDelete: SetNull)
-  parentTask   Task?          @relation("TaskTimeEntries", fields: [taskId], references: [id], onDelete: SetNull)
-  parentDeadline Deadline?    @relation("DeadlineTimeEntries", fields: [deadlineId], references: [id], onDelete: SetNull)
+  matter        Matter         @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id])
+  invoice       Invoice?       @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  notes         Note[]         @relation("TimeEntryNotes")
+  event         CalendarEvent? @relation("CalendarEventTimeEntries", fields: [calendarEventId], references: [id], onDelete: SetNull)
+  parentNote    Note?          @relation("NoteAttachedTimeEntries", fields: [noteId], references: [id], onDelete: SetNull)
+  parentTask    Task?          @relation("TaskTimeEntries", fields: [taskId], references: [id], onDelete: SetNull)
+  parentDeadline Deadline?     @relation("DeadlineTimeEntries", fields: [deadlineId], references: [id], onDelete: SetNull)
+  emailMessage   EmailMessage?  @relation("EmailMessageTimeEntries", fields: [emailMessageId], references: [id], onDelete: SetNull)
+  messengerItem  MessengerItem? @relation("MessengerItemTimeEntries", fields: [messengerItemId], references: [id], onDelete: SetNull)
 
   @@index([matterId])
   @@index([userId])
@@ -628,6 +635,8 @@ model TimeEntry {
   @@index([noteId])
   @@index([taskId])
   @@index([deadlineId])
+  @@index([emailMessageId])
+  @@index([messengerItemId])
   @@map("time_entries")
 }
 
@@ -817,6 +826,11 @@ model EmailMessage {
 
   thread      EmailThread       @relation(fields: [threadId], references: [id], onDelete: Cascade)
   attachments EmailAttachment[]
+  /// Time entries logged "on this specific email" — drives the per-
+  /// message log-time affordance + the "From email" chip on the time
+  /// entry. Different from EmailThread.spawnedTasks/etc. which fire
+  /// from the inbox-action affordance at the thread level.
+  timeEntries TimeEntry[]       @relation("EmailMessageTimeEntries")
 
   @@index([threadId])
   @@map("email_messages")
@@ -1000,6 +1014,8 @@ model MessengerItem {
   spawnedNotes     Note[]     @relation("MessengerItemSpawnedNotes")
   spawnedTasks     Task[]     @relation("MessengerItemSpawnedTasks")
   spawnedDeadlines Deadline[] @relation("MessengerItemSpawnedDeadlines")
+  /// Time entries logged "on this specific SMS / call / voicemail."
+  timeEntries      TimeEntry[] @relation("MessengerItemTimeEntries")
 
   @@index([threadId, occurredAt])
   @@index([matterId])

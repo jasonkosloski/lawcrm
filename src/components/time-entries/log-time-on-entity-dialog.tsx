@@ -49,7 +49,7 @@ export function LogTimeOnEntityDialog({
   /** What the time is being logged against, shown in the dialog
    *  description so context is obvious. */
   parentLabel: string;
-  parentKind: "task" | "deadline";
+  parentKind: "task" | "deadline" | "email" | "message" | "call" | "voicemail";
 }) {
   const [state, formAction, isPending] = useActionState<
     NoteAttachmentFormState,
@@ -87,7 +87,7 @@ export function LogTimeOnEntityDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            Log time on {parentKind === "task" ? "task" : "deadline"}
+            Log time on {parentKind}
           </DialogTitle>
           <DialogDescription className="truncate">
             {parentLabel}
