@@ -10,8 +10,12 @@
  * the slowest one.
  */
 
+import Link from "next/link";
 import { TopBar } from "@/components/layout/topbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DashboardCustomizeButton } from "@/components/dashboard/customize-button";
+import { getCurrentUserId } from "@/lib/current-user";
+import { getDashboardVisibility } from "@/lib/queries/dashboard-prefs";
 import {
   Briefcase,
   Check,
@@ -29,9 +33,11 @@ import {
 import {
   getDashboardKpis,
   getFirmPulse,
+  getMyOpenTasks,
   getRecentActivity,
   getTodayAgenda,
   getUpcomingDeadlines,
+  type MyTaskItem,
 } from "@/lib/queries/dashboard";
 
 /** Format a dollar amount with comma separators, no cents. */
@@ -50,13 +56,17 @@ const ACTIVITY_ICONS: Record<string, LucideIcon> = {
 };
 
 export default async function DashboardPage() {
-  const [kpis, agenda, activity, deadlines, pulse] = await Promise.all([
-    getDashboardKpis(),
-    getTodayAgenda(),
-    getRecentActivity(5),
-    getUpcomingDeadlines(7),
-    getFirmPulse(),
-  ]);
+  const userId = await getCurrentUserId();
+  const [kpis, agenda, activity, deadlines, pulse, myTasks, visibility] =
+    await Promise.all([
+      getDashboardKpis(),
+      getTodayAgenda(),
+      getRecentActivity(5),
+      getUpcomingDeadlines(7),
+      getFirmPulse(),
+      getMyOpenTasks(),
+      getDashboardVisibility(userId),
+    ]);
 
   const kpiTiles = [
     {
@@ -93,13 +103,18 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <TopBar title="Today" crumbs="Dashboard" />
+      <TopBar
+        title="Today"
+        crumbs="Dashboard"
+        actions={<DashboardCustomizeButton initialVisibility={visibility} />}
+      />
 
       <div className="flex-1 overflow-y-auto p-5 animate-page-enter">
         <div className="flex gap-5">
           {/* ── Left column (flex) ──────────────────────────────────────── */}
           <div className="flex-1 min-w-0 flex flex-col gap-5">
             {/* KPI tile grid */}
+            {visibility.kpis && (
             <div className="grid grid-cols-4 gap-4">
               {kpiTiles.map((kpi) => {
                 const Icon = kpi.icon;
@@ -142,8 +157,10 @@ export default async function DashboardPage() {
                 );
               })}
             </div>
+            )}
 
             {/* Today's agenda */}
+            {visibility.agenda && (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold">
@@ -179,8 +196,44 @@ export default async function DashboardPage() {
                 )}
               </CardContent>
             </Card>
+            )}
+
+            {/* Your tasks (assigned to current user, grouped by due date) */}
+            {visibility.tasks && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  Your tasks
+                  <span className="text-2xs font-mono font-normal text-ink-4">
+                    {myTasks.total}
+                  </span>
+                  {myTasks.overdue.length > 0 && (
+                    <span className="ml-auto text-2xs font-mono font-medium px-2 py-0.5 rounded-full bg-warn-soft text-warn border border-warn-border">
+                      {myTasks.overdue.length} overdue
+                    </span>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                {myTasks.total === 0 ? (
+                  <div className="py-3 text-xs text-ink-4">
+                    Nothing on your plate. Inbox zero.
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    <TaskGroup label="Overdue" tone="warn" tasks={myTasks.overdue} />
+                    <TaskGroup label="Today" tone="brand" tasks={myTasks.today} />
+                    <TaskGroup label="This week" tone="muted" tasks={myTasks.thisWeek} />
+                    <TaskGroup label="Later" tone="muted" tasks={myTasks.later} />
+                    <TaskGroup label="No due date" tone="muted" tasks={myTasks.noDueDate} />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            )}
 
             {/* Recent activity */}
+            {visibility.activity && (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold">
@@ -227,11 +280,13 @@ export default async function DashboardPage() {
                 )}
               </CardContent>
             </Card>
+            )}
           </div>
 
           {/* ── Right column (340px = w-85 in Tailwind spacing scale) ──── */}
           <div className="w-85 shrink-0 flex flex-col gap-5">
             {/* Deadlines this week */}
+            {visibility.deadlines && (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold">
@@ -272,8 +327,10 @@ export default async function DashboardPage() {
                 )}
               </CardContent>
             </Card>
+            )}
 
             {/* Firm pulse */}
+            {visibility.pulse && (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold">
@@ -319,9 +376,106 @@ export default async function DashboardPage() {
                 </div>
               </CardContent>
             </Card>
+            )}
           </div>
         </div>
       </div>
     </>
+  );
+}
+
+/** Format a task's due date as a short relative or absolute label. */
+const formatTaskDue = (task: MyTaskItem): string => {
+  if (task.dueDate === null || task.daysUntilDue === null) return "—";
+  if (task.daysUntilDue < 0) return `${Math.abs(task.daysUntilDue)}d late`;
+  if (task.daysUntilDue === 0) return "today";
+  if (task.daysUntilDue === 1) return "tomorrow";
+  if (task.daysUntilDue <= 7) return `${task.daysUntilDue}d`;
+  return task.dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+};
+
+const PRIORITY_DOT: Record<string, string> = {
+  urgent: "bg-warn",
+  high: "bg-brand-500",
+  normal: "bg-ink-4",
+  low: "bg-line",
+};
+
+/**
+ * One bucket of tasks (Overdue / Today / This week / etc.) inside the
+ * "Your tasks" card. Renders nothing when empty so we don't clutter the
+ * card with empty headers.
+ */
+function TaskGroup({
+  label,
+  tone,
+  tasks,
+}: {
+  label: string;
+  tone: "warn" | "brand" | "muted";
+  tasks: MyTaskItem[];
+}) {
+  if (tasks.length === 0) return null;
+  const labelClass =
+    tone === "warn"
+      ? "text-warn"
+      : tone === "brand"
+        ? "text-brand-700"
+        : "text-ink-3";
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-1">
+        <span
+          className={`text-2xs font-semibold uppercase tracking-wider ${labelClass}`}
+        >
+          {label}
+        </span>
+        <span className="text-2xs font-mono text-ink-4">{tasks.length}</span>
+      </div>
+      <div className="flex flex-col">
+        {tasks.map((t) => {
+          const dueClass =
+            t.daysUntilDue !== null && t.daysUntilDue < 0
+              ? "text-warn"
+              : t.daysUntilDue === 0
+                ? "text-brand-700"
+                : "text-ink-4";
+          const row = (
+            <div className="flex items-center gap-3 py-1.5 border-b border-line last:border-b-0">
+              <span
+                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                  PRIORITY_DOT[t.priority] ?? PRIORITY_DOT.normal
+                }`}
+                title={`${t.priority} priority`}
+              />
+              <div className="flex-1 min-w-0">
+                <div className="text-xs text-ink truncate">{t.title}</div>
+                {t.matterName && (
+                  <div className="text-2xs text-ink-4 truncate">
+                    {t.matterName}
+                  </div>
+                )}
+              </div>
+              <span
+                className={`text-2xs font-mono shrink-0 w-16 text-right ${dueClass}`}
+              >
+                {formatTaskDue(t)}
+              </span>
+            </div>
+          );
+          return t.matterId ? (
+            <Link
+              key={t.id}
+              href={`/matters/${t.matterId}/tasks`}
+              className="block hover:bg-paper-2 -mx-2 px-2 rounded-sm transition-colors"
+            >
+              {row}
+            </Link>
+          ) : (
+            <div key={t.id}>{row}</div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

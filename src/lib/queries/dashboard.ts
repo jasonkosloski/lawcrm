@@ -10,6 +10,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { getCurrentUserId } from "@/lib/current-user";
 
 const startOfToday = (): Date => {
   const d = new Date();
@@ -178,6 +179,90 @@ export async function getUpcomingDeadlines(withinDays = 7): Promise<DeadlineItem
     days: Math.max(0, Math.ceil((d.dueDate.getTime() - now) / (24 * 60 * 60 * 1000))),
     kind: (d.kind as DeadlineItem["kind"]) ?? "manual",
   }));
+}
+
+/** A single open task assigned to the current user, shaped for the dashboard. */
+export type MyTaskItem = {
+  id: string;
+  title: string;
+  priority: string;
+  dueDate: Date | null;
+  /** Negative when overdue, 0 today, positive when in the future, null if no due date. */
+  daysUntilDue: number | null;
+  matterId: string | null;
+  matterName: string | null;
+};
+
+/** Tasks bucketed by due date for the dashboard card. */
+export type MyTasksGrouped = {
+  overdue: MyTaskItem[];
+  today: MyTaskItem[];
+  thisWeek: MyTaskItem[];
+  later: MyTaskItem[];
+  noDueDate: MyTaskItem[];
+  total: number;
+};
+
+/**
+ * Outstanding (non-done, non-cancelled) tasks owned by the current user,
+ * grouped by due-date bucket. Sorted within each bucket by due date asc,
+ * then priority. Used by the "Your tasks" dashboard card.
+ */
+export async function getMyOpenTasks(): Promise<MyTasksGrouped> {
+  const userId = await getCurrentUserId();
+
+  const tasks = await prisma.task.findMany({
+    where: {
+      ownerId: userId,
+      status: { notIn: ["done", "cancelled"] },
+    },
+    orderBy: [{ dueDate: "asc" }, { priority: "desc" }, { createdAt: "asc" }],
+    select: {
+      id: true,
+      title: true,
+      priority: true,
+      dueDate: true,
+      matterId: true,
+      matter: { select: { name: true } },
+    },
+  });
+
+  const today = startOfToday();
+  const todayMs = today.getTime();
+  const dayMs = 24 * 60 * 60 * 1000;
+
+  const grouped: MyTasksGrouped = {
+    overdue: [],
+    today: [],
+    thisWeek: [],
+    later: [],
+    noDueDate: [],
+    total: tasks.length,
+  };
+
+  for (const t of tasks) {
+    const item: MyTaskItem = {
+      id: t.id,
+      title: t.title,
+      priority: t.priority,
+      dueDate: t.dueDate,
+      daysUntilDue: t.dueDate
+        ? Math.floor(
+            (new Date(t.dueDate).setHours(0, 0, 0, 0) - todayMs) / dayMs
+          )
+        : null,
+      matterId: t.matterId,
+      matterName: t.matter?.name ?? null,
+    };
+
+    if (item.daysUntilDue === null) grouped.noDueDate.push(item);
+    else if (item.daysUntilDue < 0) grouped.overdue.push(item);
+    else if (item.daysUntilDue === 0) grouped.today.push(item);
+    else if (item.daysUntilDue <= 7) grouped.thisWeek.push(item);
+    else grouped.later.push(item);
+  }
+
+  return grouped;
 }
 
 export type FirmPulse = {
