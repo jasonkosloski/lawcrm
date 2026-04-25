@@ -18,13 +18,14 @@
 
 "use client";
 
-import { useState, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   ChevronDown,
   ChevronRight,
   CircleAlert,
   Clock,
+  Layers,
   ListTodo,
   Lock,
   Plus,
@@ -44,11 +45,18 @@ import {
   AddTaskForm,
   AddTimeEntryForm,
 } from "./note-attachment-forms";
+import { CaptureStack } from "@/components/matters/captures/capture-stack";
+import type { NoteCapture } from "@/lib/note-constants";
+import { addCapturesToNoteBulk } from "@/app/actions/note-attachments";
+import {
+  bulkAttachInitialState,
+  type BulkAttachFormState,
+} from "@/lib/note-attachment-form";
 
 const formatDate = (d: Date): string =>
   d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
-type ComposerKind = "task" | "deadline" | "time" | null;
+type ComposerKind = "task" | "deadline" | "time" | "bulk" | null;
 
 export function NoteAttachmentsSection({
   noteId,
@@ -112,14 +120,102 @@ export function NoteAttachmentsSection({
           onCancel={() => setComposer(null)}
           onSaved={() => setComposer(null)}
         />
-      ) : (
+      ) : composer === "time" ? (
         <AddTimeEntryForm
+          noteId={noteId}
+          onCancel={() => setComposer(null)}
+          onSaved={() => setComposer(null)}
+        />
+      ) : (
+        <BulkComposer
           noteId={noteId}
           onCancel={() => setComposer(null)}
           onSaved={() => setComposer(null)}
         />
       )}
     </div>
+  );
+}
+
+/** CaptureStack-driven bulk composer — lets the user queue multiple
+ *  task / deadline / time captures in one go and submit them in a
+ *  single transaction. Same pattern the top-level NoteComposer uses
+ *  on initial save; surfaced here so saved notes get the same power. */
+function BulkComposer({
+  noteId,
+  onCancel,
+  onSaved,
+}: {
+  noteId: string;
+  onCancel: () => void;
+  onSaved: () => void;
+}) {
+  const action = addCapturesToNoteBulk.bind(null, noteId);
+  const [state, formAction, isPending] = useActionState<
+    BulkAttachFormState,
+    FormData
+  >(action, bulkAttachInitialState);
+  const [captures, setCaptures] = useState<NoteCapture[]>([]);
+
+  useEffect(() => {
+    if (state.status === "ok") {
+      setCaptures([]);
+      onSaved();
+    }
+  }, [state.status, onSaved]);
+
+  const errs = state.errors ?? {};
+  const hasContent = captures.length > 0;
+
+  return (
+    <form action={formAction} className="flex flex-col gap-2">
+      <input
+        type="hidden"
+        name="attachments"
+        value={JSON.stringify(captures)}
+      />
+
+      <CaptureStack
+        captures={captures}
+        onChange={setCaptures}
+        errors={state.attachmentErrors}
+        // Matches the reply composer's restriction — events have
+        // their own primary surface and sibling notes don't make
+        // sense as attachments to an existing note.
+        allowedKinds={["task", "deadline", "time"]}
+      />
+
+      {errs.attachments && (
+        <div className="text-2xs text-warn">{errs.attachments[0]}</div>
+      )}
+
+      <div className="flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            setCaptures([]);
+            onCancel();
+          }}
+          className="text-2xs text-ink-3 hover:text-ink-2 px-2"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={isPending || !hasContent}
+          className={cn(
+            "inline-flex items-center h-7 px-3 rounded-md text-xs font-medium bg-brand-500 text-white",
+            "hover:bg-brand-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          )}
+        >
+          {isPending
+            ? "Saving…"
+            : captures.length > 0
+              ? `Save ${captures.length} ${captures.length === 1 ? "item" : "items"}`
+              : "Save"}
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -497,6 +593,9 @@ function AddButtonRow({
       </AddPill>
       <AddPill onClick={() => onPick("time")} icon={<Clock size={11} />}>
         Log time
+      </AddPill>
+      <AddPill onClick={() => onPick("bulk")} icon={<Layers size={11} />}>
+        Add multiple
       </AddPill>
     </div>
   );

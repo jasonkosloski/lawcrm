@@ -23,7 +23,11 @@ import {
   TASK_PRIORITIES,
 } from "@/lib/note-constants";
 import { logActivity } from "@/lib/activity-log";
-import type { NoteAttachmentFormState } from "@/lib/note-attachment-form";
+import type {
+  BulkAttachFormState,
+  NoteAttachmentFormState,
+} from "@/lib/note-attachment-form";
+import { captureSchema, type ValidCapture } from "@/lib/capture-schemas";
 
 /** Resolve the matter the note belongs to. Used by every attach
  *  action since attached children inherit the note's matter. Throws
@@ -230,3 +234,168 @@ export async function addTimeEntryToNote(
   });
   return { status: "ok" };
 }
+
+// ── Bulk add (CaptureStack from a saved note) ───────────────────────────
+
+const bulkSchema = z.object({
+  /** JSON-stringified array of NoteCapture items from CaptureStack. */
+  attachments: z.string().min(2, "Nothing to save"),
+});
+
+/**
+ * Bulk-attach the contents of a CaptureStack to a saved note in
+ * one transaction. Mirrors the capture-loop in `createNote` but
+ * scoped to an existing note.
+ *
+ * `note_sibling` captures from the stack create independent matter
+ * notes (without parentNoteId) — same semantics as the top-level
+ * NoteComposer's CaptureStack. If a user wants threaded replies
+ * they should use the reply composer instead.
+ */
+export async function addCapturesToNoteBulk(
+  noteId: string,
+  _prev: BulkAttachFormState,
+  formData: FormData
+): Promise<BulkAttachFormState> {
+  const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
+  const parsed = bulkSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { status: "error", errors: parsed.error.flatten().fieldErrors };
+  }
+
+  let rawArr: unknown[] = [];
+  try {
+    const decoded = JSON.parse(parsed.data.attachments);
+    rawArr = Array.isArray(decoded) ? decoded : [];
+  } catch {
+    return {
+      status: "error",
+      errors: { attachments: ["Captures payload was malformed"] },
+    };
+  }
+  if (rawArr.length === 0) {
+    return { status: "error", errors: { attachments: ["Nothing to save"] } };
+  }
+
+  const attachmentErrors: Record<string, Record<string, string[]>> = {};
+  const validCaptures: ValidCapture[] = [];
+  for (const a of rawArr) {
+    const result = captureSchema.safeParse(a);
+    if (!result.success) {
+      const tempId =
+        (a as { tempId?: unknown })?.tempId &&
+        typeof (a as { tempId: unknown }).tempId === "string"
+          ? ((a as { tempId: string }).tempId as string)
+          : "unknown";
+      attachmentErrors[tempId] = result.error.flatten().fieldErrors;
+      continue;
+    }
+    validCaptures.push(result.data);
+  }
+  if (Object.keys(attachmentErrors).length > 0) {
+    return { status: "error", errors: {}, attachmentErrors };
+  }
+
+  const note = await resolveNoteMatter(noteId);
+  if (!note) {
+    return {
+      status: "error",
+      errors: { attachments: ["Note no longer exists"] },
+    };
+  }
+
+  const userId = await getCurrentUserId();
+  await prisma.$transaction(async (tx) => {
+    for (const cap of validCaptures) {
+      if (cap.kind === "task") {
+        await tx.task.create({
+          data: {
+            matterId: note.matterId,
+            noteId,
+            title: cap.title,
+            priority: cap.priority,
+            dueDate: cap.dueDate ? new Date(cap.dueDate) : null,
+            ownerId: userId,
+          },
+        });
+      } else if (cap.kind === "deadline") {
+        await tx.deadline.create({
+          data: {
+            matterId: note.matterId,
+            noteId,
+            title: cap.title,
+            dueDate: new Date(cap.dueDate),
+            kind: cap.kind_,
+            description: cap.description || null,
+            ownerId: userId,
+          },
+        });
+      } else if (cap.kind === "time") {
+        await tx.timeEntry.create({
+          data: {
+            matterId: note.matterId,
+            userId,
+            noteId,
+            date: new Date(cap.date),
+            hours: Number(cap.hours),
+            activity: cap.activity,
+            narrative: cap.narrative || null,
+            source: "manual",
+          },
+        });
+      } else if (cap.kind === "event") {
+        // Events have their own primary surface; the link from
+        // note-via-eventId is a thinner association. Don't set
+        // noteId — Note.calendarEventId is the existing channel.
+        await tx.calendarEvent.create({
+          data: {
+            matterId: note.matterId,
+            title: cap.title,
+            type: cap.type,
+            startTime: new Date(cap.startTime),
+            endTime: new Date(cap.endTime),
+            location: cap.location || null,
+          },
+        });
+      }
+      // `note_sibling` deliberately ignored — replies belong to
+      // the reply composer, not the bulk-attach surface.
+    }
+  });
+
+  // Revalidate every kind that was touched.
+  const kinds = new Set(validCaptures.map((c) => c.kind));
+  if (kinds.has("task")) {
+    revalidateForNote(note.matterId, "task");
+  }
+  if (kinds.has("deadline")) {
+    revalidateForNote(note.matterId, "deadline");
+  }
+  if (kinds.has("time")) {
+    revalidateForNote(note.matterId, "time");
+  }
+  if (kinds.has("event")) {
+    revalidatePath(`/matters/${note.matterId}/events`);
+    revalidatePath("/calendar");
+    revalidatePath(`/matters/${note.matterId}/notes`);
+  }
+
+  // Compose a "1 task · 2 deadlines" summary for the activity log.
+  const tally = validCaptures.reduce<Record<string, number>>((acc, c) => {
+    acc[c.kind] = (acc[c.kind] ?? 0) + 1;
+    return acc;
+  }, {});
+  const summary = Object.entries(tally)
+    .map(([k, n]) => `${n} ${k}${n === 1 ? "" : "s"}`)
+    .join(" · ");
+  await logActivity({
+    matterId: note.matterId,
+    userId,
+    type: "note",
+    title: `${validCaptures.length} ${validCaptures.length === 1 ? "item" : "items"} added to note`,
+    detail: summary,
+  });
+
+  return { status: "ok" };
+}
+
