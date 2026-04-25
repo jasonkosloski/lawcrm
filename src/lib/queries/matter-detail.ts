@@ -225,6 +225,40 @@ export type NoteReactionSummary = {
   userReacted: boolean;
 };
 
+/** Compact view of a task attached to a note — drives the chip row. */
+export type NoteAttachedTask = {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  dueDate: Date | null;
+};
+
+/** Compact view of a deadline attached to a note. */
+export type NoteAttachedDeadline = {
+  id: string;
+  title: string;
+  status: string;
+  kind: string;
+  dueDate: Date;
+};
+
+/** Time entry attached to a note — same fields the events tab uses
+ *  so the renderer can be shared. */
+export type NoteAttachedTimeEntry = {
+  id: string;
+  date: Date;
+  hours: number;
+  activity: string;
+  narrative: string | null;
+  billable: boolean;
+  noCharge: boolean;
+  privileged: boolean;
+  status: string;
+  userName: string;
+  userInitials: string;
+};
+
 export type NoteRow = {
   id: string;
   type: string;
@@ -246,6 +280,12 @@ export type NoteRow = {
   /** Reactions on this note aggregated by emoji, ordered by the
    *  curated palette. Only non-empty buckets surface. */
   reactions: NoteReactionSummary[];
+  /** Tasks added to this note via the "Add task" affordance. */
+  attachedTasks: NoteAttachedTask[];
+  /** Deadlines added to this note via the "Add deadline" affordance. */
+  attachedDeadlines: NoteAttachedDeadline[];
+  /** Time entries logged against this note. */
+  attachedTimeEntries: NoteAttachedTimeEntry[];
 };
 
 function truncate(s: string, n: number): string {
@@ -284,6 +324,36 @@ export async function getMatterNotes(matterId: string): Promise<NoteRow[]> {
       // so we can mark which ones the current user participated in.
       reactions: {
         select: { emoji: true, userId: true },
+      },
+      // Children added via the "Add task / deadline / time" inline
+      // composers on the saved-note card. Sort each so the rendered
+      // order matches the user's mental model (earliest due first
+      // for tasks/deadlines; chronological for time).
+      attachedTasks: {
+        orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          priority: true,
+          dueDate: true,
+        },
+      },
+      attachedDeadlines: {
+        orderBy: [{ dueDate: "asc" }],
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          kind: true,
+          dueDate: true,
+        },
+      },
+      attachedTimeEntries: {
+        orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+        include: {
+          user: { select: { name: true, initials: true } },
+        },
       },
     },
     // Replies sort by creation so the thread reads top-down. Top-level
@@ -357,6 +427,21 @@ export async function getMatterNotes(matterId: string): Promise<NoteRow[]> {
       link,
       isRead: n.reads.length > 0,
       reactions,
+      attachedTasks: n.attachedTasks,
+      attachedDeadlines: n.attachedDeadlines,
+      attachedTimeEntries: n.attachedTimeEntries.map((t) => ({
+        id: t.id,
+        date: t.date,
+        hours: t.hours,
+        activity: t.activity,
+        narrative: t.narrative,
+        billable: t.billable,
+        noCharge: t.noCharge,
+        privileged: t.privileged,
+        status: t.status,
+        userName: t.user.name,
+        userInitials: t.user.initials,
+      })),
     };
   });
 }

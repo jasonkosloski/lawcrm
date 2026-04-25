@@ -32,11 +32,15 @@ import {
 import { deleteNote, toggleNotePin } from "@/app/actions/notes";
 import { NOTE_TYPE_LABEL, type NoteType } from "@/lib/note-constants";
 import type {
+  NoteAttachedDeadline,
+  NoteAttachedTask,
+  NoteAttachedTimeEntry,
   NoteLink,
   NoteReactionSummary,
 } from "@/lib/queries/matter-detail";
 import { ReplyComposer } from "./reply-composer";
 import { ReactionsBar } from "./reactions-bar";
+import { NoteAttachmentsSection } from "./note-attachments-section";
 
 export type NoteCardNote = {
   id: string;
@@ -50,6 +54,9 @@ export type NoteCardNote = {
   link: NoteLink | null;
   isRead: boolean;
   reactions: NoteReactionSummary[];
+  attachedTasks: NoteAttachedTask[];
+  attachedDeadlines: NoteAttachedDeadline[];
+  attachedTimeEntries: NoteAttachedTimeEntry[];
 };
 
 const formatDateTime = (d: Date): string =>
@@ -182,6 +189,18 @@ export function NoteCard({
           )}
           // Content is sanitized server-side by DOMPurify before insert.
           dangerouslySetInnerHTML={{ __html: note.content }}
+        />
+
+        {/* Attached tasks / deadlines / time entries + the inline
+            "+ Add" affordance. Hidden on reply notes when nothing is
+            attached so threaded conversations stay clean. */}
+        <NoteAttachmentsSection
+          noteId={note.id}
+          matterId={matterId}
+          compact={isReply}
+          tasks={note.attachedTasks}
+          deadlines={note.attachedDeadlines}
+          timeEntries={note.attachedTimeEntries}
         />
 
         {/* Reactions bar — above the reply divider so quick reacts

@@ -106,10 +106,14 @@ function parseMediaUrls(raw: unknown): MessengerItemRow["mediaUrls"] {
 export async function listMessengerThreads({
   filter = "all",
   matterId,
+  contactPhone,
   take = 200,
 }: {
   filter?: "all" | "unread" | "unfiled" | "pinned";
   matterId?: string;
+  /** Exact-match (E.164) filter — used by the lead Communication
+   *  tab to scope to one phone number. */
+  contactPhone?: string;
   take?: number;
 } = {}): Promise<MessengerThreadRow[]> {
   const threads = await prisma.messengerThread.findMany({
@@ -126,6 +130,7 @@ export async function listMessengerThreads({
             ],
           }
         : {}),
+      ...(contactPhone ? { contactPhone } : {}),
     },
     orderBy: [{ isPinned: "desc" }, { lastItemAt: "desc" }],
     take,
@@ -177,6 +182,31 @@ export async function listMessengerThreads({
       isArchived: t.isArchived,
     };
   });
+}
+
+/** Normalize a US phone string for matching: strips everything but
+ *  digits, then prepends `+1` for the common 10-digit case so the
+ *  result lines up with E.164-stored thread.contactPhone. */
+export function normalizePhone(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 0) return null;
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  return `+${digits}`;
+}
+
+/**
+ * Threads scoped to a phone number — used by the lead Communication
+ * tab. Falls back to digit-only comparison so seeded `(303) 555-0182`
+ * matches stored `+13035550182` even before normalization migration.
+ */
+export async function listMessengerThreadsForPhone(
+  phone: string
+): Promise<MessengerThreadRow[]> {
+  const normalized = normalizePhone(phone);
+  if (!normalized) return [];
+  return listMessengerThreads({ contactPhone: normalized });
 }
 
 /** Counts for the mailbox rail on the messenger view. */

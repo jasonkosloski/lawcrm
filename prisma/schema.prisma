@@ -447,17 +447,23 @@ model Deadline {
   description String?   /// Explanation of why/how this deadline applies
   ownerId     String?   /// Responsible attorney
   status      String    @default("open") /// open | completed | overdue | waived
+  /// When the deadline was added in the context of a specific note —
+  /// the note becomes its parent and surfaces this deadline as an
+  /// attached chip. Null for stand-alone deadlines (the common case).
+  noteId      String?
   completedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
-  owner  User?  @relation("DeadlineOwner", fields: [ownerId], references: [id])
-  notes  Note[] @relation("DeadlineNotes")
+  matter     Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  owner      User?  @relation("DeadlineOwner", fields: [ownerId], references: [id])
+  notes      Note[] @relation("DeadlineNotes")
+  parentNote Note?  @relation("NoteAttachedDeadlines", fields: [noteId], references: [id], onDelete: SetNull)
 
   @@index([matterId])
   @@index([dueDate])
   @@index([status])
+  @@index([noteId])
   @@map("deadlines")
 }
 
@@ -568,17 +574,24 @@ model TimeEntry {
   /// than sourceRef — a proper FK so we can query both directions.
   calendarEventId String?
 
-  matter  Matter         @relation(fields: [matterId], references: [id], onDelete: Cascade)
-  user    User           @relation(fields: [userId], references: [id])
-  invoice Invoice?       @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  notes   Note[]         @relation("TimeEntryNotes")
-  event   CalendarEvent? @relation("CalendarEventTimeEntries", fields: [calendarEventId], references: [id], onDelete: SetNull)
+  /// When the time entry was logged in the context of a specific
+  /// note — the note becomes its parent and surfaces this entry in
+  /// its attached-time list (mirrors the events tab pattern).
+  noteId String?
+
+  matter     Matter         @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  user       User           @relation(fields: [userId], references: [id])
+  invoice    Invoice?       @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  notes      Note[]         @relation("TimeEntryNotes")
+  event      CalendarEvent? @relation("CalendarEventTimeEntries", fields: [calendarEventId], references: [id], onDelete: SetNull)
+  parentNote Note?          @relation("NoteAttachedTimeEntries", fields: [noteId], references: [id], onDelete: SetNull)
 
   @@index([matterId])
   @@index([userId])
   @@index([date])
   @@index([status])
   @@index([calendarEventId])
+  @@index([noteId])
   @@map("time_entries")
 }
 
@@ -951,18 +964,24 @@ model Task {
   dueDate     DateTime?
   ownerId     String?   /// Assigned team member
   deadlineId  String?   /// If spawned from a deadline
+  /// When the task was created in the context of a specific note —
+  /// the note becomes its parent and surfaces this task as an
+  /// attached chip. Null for stand-alone tasks (the common case).
+  noteId      String?
   sortOrder   Int       @default(0) /// For manual ordering within status groups
   completedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  matter Matter? @relation(fields: [matterId], references: [id], onDelete: Cascade)
-  owner  User?   @relation("TaskOwner", fields: [ownerId], references: [id])
-  notes  Note[]  @relation("TaskNotes")
+  matter     Matter? @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  owner      User?   @relation("TaskOwner", fields: [ownerId], references: [id])
+  notes      Note[]  @relation("TaskNotes")
+  parentNote Note?   @relation("NoteAttachedTasks", fields: [noteId], references: [id], onDelete: SetNull)
 
   @@index([matterId])
   @@index([status])
   @@index([ownerId])
+  @@index([noteId])
   @@map("tasks")
 }
 
@@ -1006,6 +1025,14 @@ model Note {
   timeEntry TimeEntry?     @relation("TimeEntryNotes", fields: [timeEntryId], references: [id], onDelete: SetNull)
   reads     NoteRead[]
   reactions NoteReaction[]
+
+  /// Inverse: tasks / deadlines / time entries created in the
+  /// context of THIS note (the note is the parent, these are
+  /// children). Mirrors how `event.notes` works on the events tab —
+  /// renders below the note as compact chips + a time-entry list.
+  attachedTasks       Task[]      @relation("NoteAttachedTasks")
+  attachedDeadlines   Deadline[]  @relation("NoteAttachedDeadlines")
+  attachedTimeEntries TimeEntry[] @relation("NoteAttachedTimeEntries")
 
   @@index([matterId])
   @@index([parentNoteId])
