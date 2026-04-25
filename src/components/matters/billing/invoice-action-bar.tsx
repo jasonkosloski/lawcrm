@@ -7,6 +7,16 @@
  * positioning, border, padding) so the same buttons can sit
  * inline next to the close button without doubling up containers.
  *
+ * Layout strategy:
+ *   - Affirmative transitions (Mark sent, Mark paid) render as
+ *     primary / secondary buttons inline. These are the actions
+ *     the user is most likely to take while looking at the
+ *     invoice.
+ *   - Destructive / rare transitions (Void today; could grow into
+ *     duplicate / export / etc.) hide behind a small kebab menu
+ *     so they're a deliberate two-click action, not an accidental
+ *     one-click slip.
+ *
  * Terminal states (paid + void after the void escape hatch is
  * gone) render nothing — the document letterhead already shows
  * the status pill, so a separate "no actions available" hint
@@ -16,8 +26,14 @@
 "use client";
 
 import { useTransition } from "react";
-import { Check, Send, X } from "lucide-react";
+import { Check, MoreHorizontal, Send, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { setInvoiceStatus } from "@/app/actions/billing";
 import { INVOICE_STATUS_TRANSITIONS } from "@/lib/billing-form";
 
@@ -42,6 +58,10 @@ export function InvoiceActionBar({
       if (!res.ok) alert(res.error ?? "Couldn't update invoice.");
     });
   };
+
+  // Anything that goes inside the kebab. Today this is just Void,
+  // but the slot exists for future "Duplicate", "Export PDF", etc.
+  const hasMoreMenu = allowed.includes("void");
 
   return (
     <div className="flex items-center gap-1.5">
@@ -84,26 +104,37 @@ export function InvoiceActionBar({
           Mark paid
         </button>
       )}
-      {allowed.includes("void") && (
-        <button
-          type="button"
-          onClick={() =>
-            transitionTo(
-              "void",
-              `Void invoice ${invoiceNumber}? Linked time entries return to billable WIP.`
-            )
-          }
-          disabled={pending}
-          className={cn(
-            "inline-flex items-center gap-1 h-7 px-2 rounded-md text-2xs font-medium",
-            "text-ink-3 hover:text-warn hover:bg-warn-soft",
-            "transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-          )}
-          title="Void invoice"
-          aria-label="Void invoice"
-        >
-          <X size={11} />
-        </button>
+      {hasMoreMenu && (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                type="button"
+                aria-label="More invoice actions"
+                disabled={pending}
+                className="inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-4 hover:bg-paper-2 hover:text-ink disabled:opacity-50"
+              >
+                <MoreHorizontal size={14} />
+              </button>
+            }
+          />
+          <DropdownMenuContent align="end" className="min-w-44">
+            {allowed.includes("void") && (
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={() =>
+                  transitionTo(
+                    "void",
+                    `Void invoice ${invoiceNumber}? Linked time entries return to billable WIP.`
+                  )
+                }
+              >
+                <Trash2 />
+                Void invoice
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
     </div>
   );
