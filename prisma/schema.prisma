@@ -46,6 +46,7 @@ model User {
   notes             Note[]
   deadlines         Deadline[]        @relation("DeadlineOwner")
   emailAccounts     EmailAccount[]
+  messengerAccounts MessengerAccount[]
   approvals         SettlementApproval[]
   flaggedMoments    FlaggedMoment[]
   matterPins        UserMatterPin[]
@@ -159,6 +160,8 @@ model Matter {
   tasks            Task[]
   notes            Note[]
   emailThreads     EmailThread[]
+  messengerThreadDefaults MessengerThread[] @relation("MessengerThreadDefaultMatter")
+  messengerItems   MessengerItem[]   @relation("MessengerItemMatter")
   activityLogs     ActivityLog[]
   calendarEvents   CalendarEvent[]
   trustTransactions TrustTransaction[]
@@ -235,6 +238,7 @@ model Contact {
   mattersAsClient MatterContact[]
   clientMatters   Matter[]  @relation("MatterClient")
   phones          ContactPhone[]
+  messengerThreads MessengerThread[] @relation("MessengerThreadContact")
 
   @@index([type])
   @@index([name])
@@ -782,6 +786,154 @@ model EmailLabel {
 
   @@unique([threadId, label])
   @@map("email_labels")
+}
+
+// =============================================================================
+// MESSENGER (SMS + voice + voicemail via Quo / OpenPhone)
+// =============================================================================
+//
+// Sibling system to email: SMS, calls, and voicemails for a single
+// firm phone number. Threads are keyed on (account, contact phone)
+// — every conversation with a number lives in one thread regardless
+// of channel, mirroring WhatsApp / Telegram / Signal.
+//
+// Routing:
+//   - Thread.defaultMatterId → ambient matter for "client" numbers
+//     (resolved at thread create from contact's open matters).
+//   - Item.matterId → per-message override for "opposing counsel" /
+//     "court" style numbers that touch multiple matters.
+//
+// Idempotency: every inbound provider event carries an event id we
+// store on `providerEventId` with a unique constraint, so webhook
+// retries never duplicate.
+
+/// A connection to an outbound calling/SMS provider (Quo today,
+/// designed to allow OpenPhone alias / future providers). Holds the
+/// firm phone number, OAuth-style tokens, and the per-account
+/// webhook signing secret.
+///
+/// SECURITY: `accessToken` / `refreshToken` / `webhookSecret` are
+/// plaintext today. Same posture as `EmailAccount` — flagged as a
+/// time bomb in docs/MVP_TODO.md. Encrypt-at-rest before going live.
+model MessengerAccount {
+  id                String   @id @default(cuid())
+  /// Owner — null when the line is shared firm-wide. Multi-user is
+  /// not real today (auth is hardcoded), but this column means the
+  /// "is this mine?" filter on the inbox doesn't need a refactor.
+  userId            String?
+  provider          String   @default("quo") /// quo | openphone (legacy alias) | future
+  /// Quo's id for the account / number — used when calling their
+  /// REST API for outbound + when matching webhook payloads.
+  providerAccountId String?
+  providerNumberId  String?
+  /// E.164 format, e.g. "+13035551234". The user-facing firm number.
+  phoneNumber       String
+  /// Optional display label, e.g. "Main", "Intake line", "Jason direct".
+  label             String?
+  isActive          Boolean  @default(true)
+
+  accessToken       String?
+  refreshToken      String?
+  webhookSecret     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  threads MessengerThread[]
+
+  @@unique([provider, phoneNumber])
+  @@index([userId])
+  @@map("messenger_accounts")
+}
+
+/// A conversation with one external phone number on one of our
+/// MessengerAccounts. SMS, calls, and voicemails all live as items
+/// inside this thread regardless of channel.
+model MessengerThread {
+  id              String   @id @default(cuid())
+  accountId       String
+  /// External party in E.164. Together with accountId this is unique.
+  contactPhone    String
+  /// Resolved Contact when we recognize the number. Null for new /
+  /// unknown numbers — the inbox surfaces these with a "Create
+  /// contact" inline action.
+  contactId       String?
+  /// Default routing target. Set at thread create when the contact
+  /// has exactly one open matter; left null when they have zero or
+  /// many open matters (per-item picker required).
+  defaultMatterId String?
+  /// Denormalized so the inbox sort + the unread badge don't have to
+  /// aggregate every page load. Maintained inside the inbound
+  /// webhook handler + outbound send action.
+  lastItemAt      DateTime
+  unreadCount     Int      @default(0)
+  isArchived      Boolean  @default(false)
+  /// Optional pinned-to-top flag for the inbox.
+  isPinned        Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account       MessengerAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  contact       Contact?         @relation("MessengerThreadContact", fields: [contactId], references: [id], onDelete: SetNull)
+  defaultMatter Matter?          @relation("MessengerThreadDefaultMatter", fields: [defaultMatterId], references: [id], onDelete: SetNull)
+  items         MessengerItem[]
+
+  @@unique([accountId, contactPhone])
+  @@index([accountId, lastItemAt])
+  @@index([contactId])
+  @@index([defaultMatterId])
+  @@map("messenger_threads")
+}
+
+/// A single SMS, call, or voicemail inside a MessengerThread. Calls
+/// without a transcript still get a row so the thread reader shows a
+/// "📞 Inbound call · 4m 12s" entry inline with surrounding messages.
+model MessengerItem {
+  id              String   @id @default(cuid())
+  threadId        String
+  /// Provider event id — unique so webhook retries are idempotent.
+  /// Use Quo's `eventId` (or `messageId` / `callId` if no event id).
+  providerEventId String   @unique
+  kind            String   /// sms | call | voicemail
+  direction       String   /// inbound | outbound
+  fromNumber      String
+  toNumber        String
+  /// SMS body or voicemail transcript or call summary. Null for
+  /// plain calls without transcript.
+  body            String?
+  /// MMS attachments — JSON array of { url, contentType, sizeBytes }.
+  mediaUrls       Json?
+  /// kind=call only — duration in seconds (0 for missed calls).
+  callDurationSec Int?
+  /// kind=call only — answered | missed | voicemail | busy | failed | no_answer | declined.
+  callStatus      String?
+  /// kind=call/voicemail — recording URL on the provider's storage.
+  /// Plan: proxy through our own object store later for compliance
+  /// (Quo URLs expire + tie us to their retention policy).
+  recordingUrl    String?
+  /// kind=voicemail — full transcript text. Indexed by application
+  /// search later; today rendered inline in the thread reader so
+  /// users don't have to listen.
+  transcript      String?
+  /// Per-item routing override. Falls back to thread.defaultMatterId
+  /// at read time when null. Set explicitly when the user files an
+  /// item to a matter via the picker (opposing-counsel pattern).
+  matterId        String?
+  isRead          Boolean  @default(false)
+  /// Provider's timestamp for the event — may differ from createdAt
+  /// (queued retries, batch processing). Use this for thread sort.
+  occurredAt      DateTime
+  createdAt       DateTime @default(now())
+
+  thread MessengerThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  matter Matter?         @relation("MessengerItemMatter", fields: [matterId], references: [id], onDelete: SetNull)
+
+  @@index([threadId, occurredAt])
+  @@index([matterId])
+  @@index([threadId, isRead])
+  @@map("messenger_items")
 }
 
 // =============================================================================
