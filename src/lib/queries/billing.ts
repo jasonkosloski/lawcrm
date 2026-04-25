@@ -86,6 +86,31 @@ export type InvoiceRow = {
   lineItemCount: number;
 };
 
+/** A payment received against any invoice on this matter — every
+ *  channel (trust, check, ACH, cash, card, other) flows through
+ *  the same shape. Drives the matter-level "Received payments"
+ *  ledger card on the Billing tab. Joined to its invoice so each
+ *  row deep-links into the invoice preview. */
+export type ReceivedPaymentRow = {
+  id: string;
+  date: Date;
+  source: string;
+  amount: number;
+  reference: string | null;
+  description: string | null;
+  invoiceId: string;
+  invoiceNumber: string;
+};
+
+export type ReceivedPaymentsSummary = {
+  /** Sum of every payment that's ever landed on this matter,
+   *  across every channel. Lifetime — not bound by date range. */
+  totalReceived: number;
+  /** Most recent first. Capped at TRUST_RECENT_LIMIT to mirror the
+   *  trust ledger's pagination behavior. */
+  rows: ReceivedPaymentRow[];
+};
+
 export type MatterBilling = {
   matterId: string;
   /** Which billing flow the matter uses (today every value renders
@@ -98,6 +123,10 @@ export type MatterBilling = {
   /** Sum of unpaid balances across all open invoices on this
    *  matter. Drives the "Outstanding AR" KPI on the page. */
   outstandingAr: number;
+  /** Every payment received on this matter — drives the matter-
+   *  level "Received payments" ledger. Distinct from the trust
+   *  ledger (which only reflects trust-account movements). */
+  receivedPayments: ReceivedPaymentsSummary;
 };
 
 const WIP_RECENT_LIMIT = 10;
@@ -110,35 +139,48 @@ const WIP_STATUSES = ["draft", "submitted", "billable"] as const;
 export async function getMatterBilling(
   matterId: string
 ): Promise<MatterBilling> {
-  const [wipEntries, trustTxns, invoices, matter] = await Promise.all([
-    prisma.timeEntry.findMany({
-      where: {
-        matterId,
-        billable: true,
-        noCharge: false,
-        invoiceId: null,
-        status: { in: [...WIP_STATUSES] },
-      },
-      orderBy: { date: "desc" },
-      include: { user: { select: { name: true, initials: true } } },
-    }),
-    prisma.trustTransaction.findMany({
-      where: { matterId },
-      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-      take: TRUST_RECENT_LIMIT,
-      // Pull the invoiceNumber for the row label so we don't N+1.
-      include: { invoice: { select: { invoiceNumber: true } } },
-    }),
-    prisma.invoice.findMany({
-      where: { matterId },
-      orderBy: [{ issueDate: "desc" }, { createdAt: "desc" }],
-      include: { _count: { select: { lineItems: true } } },
-    }),
-    prisma.matter.findUnique({
-      where: { id: matterId },
-      select: { trustBalance: true, billingMode: true },
-    }),
-  ]);
+  const [wipEntries, trustTxns, invoices, matter, receivedRows] =
+    await Promise.all([
+      prisma.timeEntry.findMany({
+        where: {
+          matterId,
+          billable: true,
+          noCharge: false,
+          invoiceId: null,
+          status: { in: [...WIP_STATUSES] },
+        },
+        orderBy: { date: "desc" },
+        include: { user: { select: { name: true, initials: true } } },
+      }),
+      prisma.trustTransaction.findMany({
+        where: { matterId },
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+        take: TRUST_RECENT_LIMIT,
+        // Pull the invoiceNumber for the row label so we don't N+1.
+        include: { invoice: { select: { invoiceNumber: true } } },
+      }),
+      prisma.invoice.findMany({
+        where: { matterId },
+        orderBy: [{ issueDate: "desc" }, { createdAt: "desc" }],
+        include: { _count: { select: { lineItems: true } } },
+      }),
+      prisma.matter.findUnique({
+        where: { id: matterId },
+        select: { trustBalance: true, billingMode: true },
+      }),
+      // Every payment ever received on the matter, regardless of
+      // channel. We join through invoice → matter so adding a new
+      // payment channel later is a write-side concern only — this
+      // read picks it up automatically. Capped at TRUST_RECENT_LIMIT
+      // for the recent view; the lifetime sum below uses every row.
+      prisma.invoicePayment.findMany({
+        where: { invoice: { matterId } },
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+        include: {
+          invoice: { select: { id: true, invoiceNumber: true } },
+        },
+      }),
+    ]);
 
   // WIP totals: sum hours + amount across every eligible entry.
   // amount may be null on legacy / contingent rows — treat as 0.
@@ -225,6 +267,26 @@ export async function getMatterBilling(
     })),
   };
 
+  // Received payments — flattened across every invoice on the
+  // matter. Keep the lifetime sum on the full set, but cap the
+  // visible rows to the same "recent" limit the trust ledger uses
+  // so the page doesn't render hundreds of rows on busy matters.
+  let receivedTotal = 0;
+  const receivedShaped: ReceivedPaymentRow[] = receivedRows.map((p) => {
+    const amt = p.amount.toNumber();
+    receivedTotal += amt;
+    return {
+      id: p.id,
+      date: p.date,
+      source: p.source,
+      amount: amt,
+      reference: p.reference,
+      description: p.description,
+      invoiceId: p.invoice.id,
+      invoiceNumber: p.invoice.invoiceNumber,
+    };
+  });
+
   return {
     matterId,
     billingMode: matter?.billingMode ?? "client",
@@ -232,6 +294,10 @@ export async function getMatterBilling(
     trust,
     invoices: invoiceRows,
     outstandingAr,
+    receivedPayments: {
+      totalReceived: receivedTotal,
+      rows: receivedShaped.slice(0, TRUST_RECENT_LIMIT),
+    },
   };
 }
 

@@ -60,7 +60,12 @@ import {
   type MatterBilling,
 } from "@/lib/queries/billing";
 import { getCurrentFirm } from "@/lib/firm";
-import { invoiceStatusLabel, type InvoiceKind } from "@/lib/billing-form";
+import {
+  invoiceStatusLabel,
+  INVOICE_PAYMENT_SOURCE_LABEL,
+  type InvoiceKind,
+  type InvoicePaymentSource,
+} from "@/lib/billing-form";
 
 const formatMoney = (n: number): string =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -503,6 +508,83 @@ function MainColumn({
                   invoice bundles all of them.
                 </div>
               )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Received payments ledger ───────────────────────── */}
+      {/* Matter-level view of every payment ever applied to any
+          invoice on this matter, regardless of channel. Distinct
+          from the Trust ledger above (which only reflects trust-
+          account movement); this surfaces check / ACH / cash / card
+          payments that don't touch trust at all, and also includes
+          the trust-funded payments so the firm has one place to
+          see "money in" per matter. Long-term this becomes a slice
+          of a firm-wide operating-account ledger. */}
+      <Card className="p-0 overflow-hidden">
+        <CardHeader className="pb-2 pt-4 px-4">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            Received payments
+            <span className="text-2xs font-mono font-normal text-ink-4">
+              total {formatMoney(billing.receivedPayments.totalReceived)}
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4 flex flex-col gap-3">
+          {billing.receivedPayments.rows.length === 0 ? (
+            <div className="text-2xs text-ink-4 italic">
+              No payments received on this matter yet. Use{" "}
+              <span className="font-medium">Record payment</span> from an
+              open invoice to log one.
+            </div>
+          ) : (
+            <div className="border border-line rounded-md overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-4">Date</TableHead>
+                    <TableHead>Method</TableHead>
+                    <TableHead>Invoice</TableHead>
+                    <TableHead>Reference</TableHead>
+                    <TableHead className="pr-4">Amount</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {billing.receivedPayments.rows.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="pl-4 text-2xs font-mono text-ink-3">
+                        {formatDate(p.date)}
+                      </TableCell>
+                      <TableCell className="text-2xs text-ink-3">
+                        {INVOICE_PAYMENT_SOURCE_LABEL[
+                          p.source as InvoicePaymentSource
+                        ] ?? p.source}
+                        {p.description && (
+                          <div className="text-2xs text-ink-4 mt-0.5 truncate max-w-xs">
+                            {p.description}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        <Link
+                          href={invoiceHref(p.invoiceId)}
+                          scroll={false}
+                          className="text-ink hover:text-brand-700 hover:underline font-mono"
+                        >
+                          {p.invoiceNumber}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-2xs font-mono text-ink-4">
+                        {p.reference ?? "—"}
+                      </TableCell>
+                      <TableCell className="pr-4 text-xs font-mono text-ok">
+                        +{formatMoney(p.amount)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           )}
         </CardContent>
