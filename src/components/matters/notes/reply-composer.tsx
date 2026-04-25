@@ -4,10 +4,15 @@
  * action with `parentNoteId` set so the server threads the note
  * under its parent.
  *
- * Intentionally simpler than the top-level NoteComposer: no type
- * pills, no pin, no sibling captures. Replies are follow-ups — if a
- * user needs full note semantics, they create a top-level note
- * instead.
+ * Captures (task / deadline / time) ride along the same way they do
+ * on the top-level note composer — serialized into the `attachments`
+ * field. The server creates them with `noteId` pointing at the new
+ * reply, so they surface in that reply's attached-list immediately.
+ *
+ * Intentionally simpler than NoteComposer in two ways:
+ *   - No type pills (replies are always plain notes)
+ *   - No pin (replies inherit thread context, pinning a reply alone
+ *     would orphan it from its parent)
  */
 
 "use client";
@@ -15,8 +20,13 @@
 import { useActionState, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { createNote } from "@/app/actions/notes";
-import { noteInitialState, type NoteFormState } from "@/lib/note-constants";
+import {
+  noteInitialState,
+  type NoteCapture,
+  type NoteFormState,
+} from "@/lib/note-constants";
 import { NoteEditor } from "./note-editor";
+import { CaptureStack } from "@/components/matters/captures/capture-stack";
 
 export function ReplyComposer({
   matterId,
@@ -37,23 +47,30 @@ export function ReplyComposer({
 
   const [html, setHtml] = useState("");
   const [editorKey, setEditorKey] = useState(0);
+  const [captures, setCaptures] = useState<NoteCapture[]>([]);
 
   useEffect(() => {
     if (state.status === "ok") {
       setHtml("");
+      setCaptures([]);
       setEditorKey((k) => k + 1);
       onDone();
     }
   }, [state.status, onDone]);
 
   const errs = state.errors ?? {};
+  const attachmentErrors = state.attachmentErrors ?? {};
 
   return (
     <form action={formAction} className="flex flex-col gap-2">
       <input type="hidden" name="content" value={html} />
       <input type="hidden" name="parentNoteId" value={parentNoteId} />
       <input type="hidden" name="type" value="note" />
-      <input type="hidden" name="attachments" value="[]" />
+      <input
+        type="hidden"
+        name="attachments"
+        value={JSON.stringify(captures)}
+      />
 
       <NoteEditor
         key={editorKey}
@@ -65,6 +82,17 @@ export function ReplyComposer({
       {errs.content && errs.content.length > 0 && (
         <div className="text-2xs text-warn">{errs.content[0]}</div>
       )}
+
+      {/* Same capture surface as the top-level note composer, but
+          scoped to the three actionable kinds — events have their own
+          tab + flow, and a sibling-note off a reply isn't a meaningful
+          mental model. */}
+      <CaptureStack
+        captures={captures}
+        onChange={setCaptures}
+        errors={attachmentErrors}
+        allowedKinds={["task", "deadline", "time"]}
+      />
 
       <div className="flex items-center justify-end gap-2">
         <button
@@ -82,7 +110,11 @@ export function ReplyComposer({
             "hover:bg-brand-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           )}
         >
-          {isPending ? "Posting…" : "Reply"}
+          {isPending
+            ? "Posting…"
+            : captures.length > 0
+              ? `Reply + ${captures.length}`
+              : "Reply"}
         </button>
       </div>
     </form>

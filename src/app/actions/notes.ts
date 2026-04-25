@@ -200,6 +200,10 @@ export async function createNote(
         await tx.task.create({
           data: {
             matterId,
+            // Link the capture back to the note that spawned it so the
+            // note's attached-list surfaces it (matches the after-the-
+            // fact "+ Add task" affordance behavior).
+            noteId: created.id,
             title: cap.title,
             priority: cap.priority,
             dueDate: cap.dueDate ? new Date(cap.dueDate) : null,
@@ -207,6 +211,8 @@ export async function createNote(
           },
         });
       } else if (cap.kind === "event") {
+        // Events deliberately don't carry noteId — the events tab is
+        // their primary surface; the note's link chip is sufficient.
         await tx.calendarEvent.create({
           data: {
             matterId,
@@ -221,6 +227,7 @@ export async function createNote(
         await tx.deadline.create({
           data: {
             matterId,
+            noteId: created.id,
             title: cap.title,
             dueDate: new Date(cap.dueDate),
             kind: cap.kind_,
@@ -233,6 +240,7 @@ export async function createNote(
           data: {
             matterId,
             userId: currentUserId,
+            noteId: created.id,
             date: new Date(cap.date),
             hours: Number(cap.hours),
             activity: cap.activity,
