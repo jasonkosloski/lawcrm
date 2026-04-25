@@ -49,3 +49,8 @@ prisma/dev.db
 prisma/dev.db-journal
 /dev.db
 /dev.db-journal
+
+# Local document storage — uploads land here in dev. Production
+# swaps the storage adapter (Vercel Blob / S3); keep the local
+# directory out of git.
+/uploads/

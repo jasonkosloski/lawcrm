@@ -969,6 +969,17 @@ export type DocumentRow = {
   status: string;
   fileSize: number | null;
   contentType: string | null;
+  /** True when the document has actual bytes attached. Seeded
+   *  fixtures don't (they were created before upload was wired) —
+   *  the row UI hides Download for those. */
+  hasFile: boolean;
+  /** Original uploader's user id; null on seeded / programmatically-
+   *  created rows. Drives the "can I delete this?" check on the
+   *  row actions menu. */
+  uploadedBy: string | null;
+  /** Pre-resolved display name for the uploader so the row can show
+   *  "by JK" without a second query. */
+  uploaderInitials: string | null;
   createdAt: Date;
 };
 
@@ -979,6 +990,19 @@ export async function getMatterDocuments(
     where: { matterId },
     orderBy: [{ createdAt: "desc" }],
   });
+  // Resolve uploader initials in one batch query rather than N+1.
+  const uploaderIds = [
+    ...new Set(rows.map((d) => d.uploadedBy).filter((v): v is string => !!v)),
+  ];
+  const uploaders =
+    uploaderIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: uploaderIds } },
+          select: { id: true, initials: true },
+        })
+      : [];
+  const initialsByUser = new Map(uploaders.map((u) => [u.id, u.initials]));
+
   return rows.map((d) => ({
     id: d.id,
     name: d.name,
@@ -987,6 +1011,11 @@ export async function getMatterDocuments(
     status: d.status,
     fileSize: d.fileSize,
     contentType: d.contentType,
+    hasFile: !!d.fileUrl,
+    uploadedBy: d.uploadedBy,
+    uploaderInitials: d.uploadedBy
+      ? initialsByUser.get(d.uploadedBy) ?? null
+      : null,
     createdAt: d.createdAt,
   }));
 }

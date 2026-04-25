@@ -2,8 +2,9 @@
  * Matter Detail — Documents tab
  *
  * Filings, pleadings, correspondence, contracts, discovery, and
- * expert reports for this matter. Grouped by category so related
- * documents cluster.
+ * expert reports for this matter. Grouped by category. Per-row:
+ * download (if the file actually exists) + delete (admin or
+ * uploader). Inline upload composer at the top.
  */
 
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,7 +16,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { TabAddButton } from "@/components/matters/tab-add-button";
+import { UploadDocumentForm } from "@/components/matters/documents/upload-document-form";
+import { DocumentRowActions } from "@/components/matters/documents/document-row-actions";
+import { getCurrentUserId } from "@/lib/current-user";
+import { isCurrentUserAdmin } from "@/lib/firm";
 import {
   getMatterDocuments,
   type DocumentRow,
@@ -90,11 +94,15 @@ export default async function MatterDocumentsPage({
   params,
 }: PageProps<"/matters/[id]">) {
   const { id } = await params;
-  const documents = await getMatterDocuments(id);
+  const [documents, currentUserId, isAdmin] = await Promise.all([
+    getMatterDocuments(id),
+    getCurrentUserId(),
+    isCurrentUserAdmin(),
+  ]);
 
   if (documents.length === 0) {
     return (
-      <div className="p-5">
+      <div className="p-5 flex flex-col gap-4">
         <Card>
           <CardContent className="p-8 text-center flex flex-col items-center gap-3">
             <div>
@@ -106,9 +114,9 @@ export default async function MatterDocumentsPage({
                 and expert reports for this matter will appear here.
               </div>
             </div>
-            <TabAddButton type="document" />
           </CardContent>
         </Card>
+        <UploadDocumentForm matterId={id} />
       </div>
     );
   }
@@ -145,16 +153,34 @@ export default async function MatterDocumentsPage({
                     <TableHead>Source</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Size</TableHead>
-                    <TableHead className="pr-4">Added</TableHead>
+                    <TableHead>By</TableHead>
+                    <TableHead>Added</TableHead>
+                    <TableHead className="pr-4 w-8" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {rows.map((d) => {
                     const status = STATUS_META[d.status] ?? STATUS_META.active;
+                    const canDelete =
+                      isAdmin || d.uploadedBy === currentUserId;
                     return (
                       <TableRow key={d.id}>
                         <TableCell className="pl-4 font-medium text-ink">
-                          {d.name}
+                          {d.hasFile ? (
+                            <a
+                              href={`/api/documents/${d.id}/download`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="hover:text-brand-700 hover:underline"
+                              title="Open or download"
+                            >
+                              {d.name}
+                            </a>
+                          ) : (
+                            <span title="No file attached — seeded row.">
+                              {d.name}
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell className="text-2xs font-mono text-ink-4">
                           {d.source ?? "—"}
@@ -169,8 +195,20 @@ export default async function MatterDocumentsPage({
                         <TableCell className="text-2xs font-mono text-ink-3">
                           {formatSize(d.fileSize)}
                         </TableCell>
-                        <TableCell className="pr-4 text-xs text-ink-3">
+                        <TableCell className="text-2xs font-mono text-ink-3">
+                          {d.uploaderInitials ?? "—"}
+                        </TableCell>
+                        <TableCell className="text-xs text-ink-3">
                           {formatDate(d.createdAt)}
+                        </TableCell>
+                        <TableCell className="pr-4 text-right">
+                          {d.hasFile && (
+                            <DocumentRowActions
+                              documentId={d.id}
+                              name={d.name}
+                              canDelete={canDelete}
+                            />
+                          )}
                         </TableCell>
                       </TableRow>
                     );
@@ -181,6 +219,8 @@ export default async function MatterDocumentsPage({
           </section>
         );
       })}
+
+      <UploadDocumentForm matterId={id} />
     </div>
   );
 }
