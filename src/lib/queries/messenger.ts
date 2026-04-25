@@ -37,6 +37,19 @@ export type MessengerThreadRow = {
 };
 
 /** Row shape for an item rendered inside the thread reader (right pane). */
+/** Compact view of a time entry logged on a messenger item — drives
+ *  the inline time-logged indicator on SMS bubbles, call events, and
+ *  voicemail cards. */
+export type MessengerItemTime = {
+  id: string;
+  hours: number;
+  date: Date;
+  activity: string;
+  userName: string;
+  userInitials: string;
+  billable: boolean;
+};
+
 export type MessengerItemRow = {
   id: string;
   kind: MessengerKind;
@@ -55,6 +68,8 @@ export type MessengerItemRow = {
   matterColor: string | null;
   isRead: boolean;
   occurredAt: Date;
+  /** Time entries logged "on this specific item." */
+  timeEntries: MessengerItemTime[];
 };
 
 /** Detail shape returned by getMessengerThread — header + items. */
@@ -254,6 +269,12 @@ export async function getMessengerThread(
         orderBy: { occurredAt: "asc" },
         include: {
           matter: { select: { id: true, name: true, color: true } },
+          // Per-item time entries — drives the inline indicator
+          // chip on SMS bubbles, call events, and voicemail cards.
+          timeEntries: {
+            include: { user: { select: { name: true, initials: true } } },
+            orderBy: { date: "asc" },
+          },
         },
       },
     },
@@ -285,6 +306,15 @@ export async function getMessengerThread(
       matterColor: i.matter?.color ?? null,
       isRead: i.isRead,
       occurredAt: i.occurredAt,
+      timeEntries: i.timeEntries.map((te) => ({
+        id: te.id,
+        hours: te.hours,
+        date: te.date,
+        activity: te.activity,
+        userName: te.user.name,
+        userInitials: te.user.initials,
+        billable: te.billable,
+      })),
     })),
   };
 }

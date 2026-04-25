@@ -71,6 +71,20 @@ export async function listThreads(
   }));
 }
 
+/** Compact view of a time entry logged against a single email message
+ *  or messenger item — surfaces in the per-item time-logged indicator
+ *  so the user can see hours + author at a glance without leaving the
+ *  reader. */
+export type CommTimeEntry = {
+  id: string;
+  hours: number;
+  date: Date;
+  activity: string;
+  userName: string;
+  userInitials: string;
+  billable: boolean;
+};
+
 export type ThreadMessageView = {
   id: string;
   fromName: string;
@@ -86,6 +100,9 @@ export type ThreadMessageView = {
     contentType: string | null;
     fileSize: number | null;
   }>;
+  /** Time entries logged on this specific email — drives the
+   *  per-message time-logged chip. Empty array when none. */
+  timeEntries: CommTimeEntry[];
 };
 
 export type ThreadDetail = {
@@ -129,7 +146,15 @@ export async function getThreadById(id: string): Promise<ThreadDetail | null> {
       },
       labels: true,
       messages: {
-        include: { attachments: true },
+        include: {
+          attachments: true,
+          // Per-message time entries — drives the inline "X.Xh logged
+          // by JK, RK" indicator in the email reader.
+          timeEntries: {
+            include: { user: { select: { name: true, initials: true } } },
+            orderBy: { date: "asc" },
+          },
+        },
         orderBy: { sentAt: "asc" },
       },
     },
@@ -164,6 +189,15 @@ export async function getThreadById(id: string): Promise<ThreadDetail | null> {
         filename: a.filename,
         contentType: a.contentType,
         fileSize: a.fileSize,
+      })),
+      timeEntries: m.timeEntries.map((t) => ({
+        id: t.id,
+        hours: t.hours,
+        date: t.date,
+        activity: t.activity,
+        userName: t.user.name,
+        userInitials: t.user.initials,
+        billable: t.billable,
       })),
     })),
   };

@@ -31,6 +31,7 @@ import { InboxActionButtons } from "./inbox-action-buttons";
 import { FollowUpButton } from "./follow-up-button";
 import { setMessengerThreadFollowUp } from "@/app/actions/follow-ups";
 import { LogTimeOnCommButton } from "./log-time-on-comm-button";
+import { CommTimeLoggedIndicator } from "./comm-time-logged-indicator";
 
 function prettyPhone(p: string): string {
   const digits = p.replace(/\D/g, "");
@@ -265,9 +266,20 @@ function SmsBubble({
           </div>
         )}
       </div>
-      <span className="text-3xs font-mono text-ink-4 pb-1">
-        {format(item.occurredAt, "h:mm a")}
-      </span>
+      <div className="flex flex-col gap-1 pb-1">
+        <span className="text-3xs font-mono text-ink-4">
+          {format(item.occurredAt, "h:mm a")}
+        </span>
+        {/* Time-logged indicator — always visible when there's time,
+            so the bubble shows a hint of "0.4h logged" without hover. */}
+        {item.timeEntries.length > 0 && (
+          <CommTimeLoggedIndicator
+            entries={item.timeEntries}
+            compact
+            align={outbound ? "right" : "left"}
+          />
+        )}
+      </div>
       {/* Hover-reveal log-time icon — keeps SMS bubbles uncluttered
           at rest. Always visible on touch devices via opacity. */}
       <div className="opacity-0 group-hover/msg:opacity-100 transition-opacity pb-1">
@@ -314,6 +326,11 @@ function CallEvent({
           {format(item.occurredAt, "h:mm a")}
         </span>
       </div>
+      {/* Time-logged indicator stays visible (without hover) once
+          time exists — matches voicemail / SMS behavior. */}
+      {item.timeEntries.length > 0 && (
+        <CommTimeLoggedIndicator entries={item.timeEntries} compact />
+      )}
       <div className="opacity-0 group-hover/call:opacity-100 transition-opacity">
         <LogTimeOnCommButton
           isFiled={isFiled}
@@ -389,6 +406,9 @@ function VoicemailCard({
             label: commLabel(contactLabel, item),
           }}
         />
+        {item.timeEntries.length > 0 && (
+          <CommTimeLoggedIndicator entries={item.timeEntries} />
+        )}
       </div>
     </div>
   );
