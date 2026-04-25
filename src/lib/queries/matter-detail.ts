@@ -163,6 +163,7 @@ export async function getMatterDeadlines(
         },
       },
       parentEvent: { select: { id: true, title: true } },
+      parentTask: { select: { id: true, title: true } },
       notes: {
         select: {
           id: true,
@@ -198,6 +199,7 @@ export async function getMatterDeadlines(
         email: d.emailThread,
         messenger: d.messengerItem,
         event: d.parentEvent,
+        task: d.parentTask,
       }),
       attachedNotes: d.notes.map((n) => ({
         id: n.id,

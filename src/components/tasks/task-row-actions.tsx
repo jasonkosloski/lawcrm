@@ -17,6 +17,7 @@
 
 import { useState, useTransition } from "react";
 import {
+  ArrowRight,
   Check,
   Clock,
   Loader2,
@@ -43,6 +44,7 @@ import { deleteTask, setTaskStatus } from "@/app/actions/tasks";
 import { addTimeEntryToTask } from "@/app/actions/time-on-entity";
 import { EditTaskDialog, type EditableTask } from "./edit-task-dialog";
 import { LogTimeOnEntityDialog } from "@/components/time-entries/log-time-on-entity-dialog";
+import { ConvertTaskToDeadlineDialog } from "@/components/conversions/convert-dialogs";
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
   open: "Open",
@@ -100,6 +102,7 @@ export function TaskStatusToggle({
 export function TaskRowMenu({ task }: { task: EditableTask }) {
   const [editOpen, setEditOpen] = useState(false);
   const [logTimeOpen, setLogTimeOpen] = useState(false);
+  const [convertOpen, setConvertOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const onSelectStatus = (next: string) => {
@@ -146,6 +149,10 @@ export function TaskRowMenu({ task }: { task: EditableTask }) {
             <Clock />
             Log time on this task
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setConvertOpen(true)}>
+            <ArrowRight />
+            Convert to deadline
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuLabel>Set status</DropdownMenuLabel>
@@ -176,6 +183,19 @@ export function TaskRowMenu({ task }: { task: EditableTask }) {
         action={addTimeEntryToTask.bind(null, task.id)}
         parentLabel={task.title}
         parentKind="task"
+      />
+
+      <ConvertTaskToDeadlineDialog
+        open={convertOpen}
+        onOpenChange={setConvertOpen}
+        taskId={task.id}
+        defaultTitle={task.title}
+        defaultDueDate={
+          task.dueDate
+            ? `${task.dueDate.getFullYear()}-${String(task.dueDate.getMonth() + 1).padStart(2, "0")}-${String(task.dueDate.getDate()).padStart(2, "0")}`
+            : ""
+        }
+        defaultDescription={task.description ?? ""}
       />
     </>
   );

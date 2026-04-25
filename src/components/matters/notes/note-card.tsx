@@ -11,6 +11,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import {
+  ArrowRight,
   Calendar,
   CircleAlert,
   Clock,
@@ -43,6 +44,10 @@ import type {
 import { ReplyComposer } from "./reply-composer";
 import { ReactionsBar } from "./reactions-bar";
 import { NoteAttachmentsSection } from "./note-attachments-section";
+import {
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { ConvertNoteToTaskDialog } from "@/components/conversions/convert-dialogs";
 
 export type NoteCardNote = {
   id: string;
@@ -84,6 +89,7 @@ export function NoteCard({
 }) {
   const [pending, startTransition] = useTransition();
   const [replyOpen, setReplyOpen] = useState(false);
+  const [convertOpen, setConvertOpen] = useState(false);
 
   const onTogglePin = () => {
     startTransition(async () => {
@@ -102,7 +108,22 @@ export function NoteCard({
 
   const typeLabel = NOTE_TYPE_LABEL[note.type as NoteType] ?? note.type;
 
+  // Plain-text preview of the note content — drives the prefilled
+  // task title (first non-empty line) + description (the rest) when
+  // the user clicks "Convert to task."
+  const plainContent = note.content
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const convertTitleDefault =
+    plainContent.length > 80
+      ? plainContent.slice(0, 77) + "…"
+      : plainContent || "Note follow-up";
+  const convertDescriptionDefault = plainContent;
+
   return (
+    <>
     <Card
       id={`note-${note.id}`}
       className={cn(
@@ -163,7 +184,12 @@ export function NoteCard({
             >
               <MoreHorizontal size={14} />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-40">
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onClick={() => setConvertOpen(true)}>
+                <ArrowRight size={13} />
+                Convert to task
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem
                 variant="destructive"
                 onClick={onDelete}
@@ -233,6 +259,15 @@ export function NoteCard({
         </div>
       </CardContent>
     </Card>
+
+    <ConvertNoteToTaskDialog
+      open={convertOpen}
+      onOpenChange={setConvertOpen}
+      noteId={note.id}
+      defaultTitle={convertTitleDefault}
+      defaultDescription={convertDescriptionDefault}
+    />
+    </>
   );
 }
 

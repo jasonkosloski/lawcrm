@@ -454,6 +454,9 @@ model Deadline {
   /// If spawned alongside a calendar event (event → deadline sibling).
   /// E.g. "scheduling-order deadline that emerged from this hearing."
   eventId     String?
+  /// "Converted from task" — the task that was promoted to a
+  /// deadline. Backlink for the EntitySource chip on the deadline.
+  parentTaskId String?
   /// Inbox-action sources: when this deadline was spawned from an
   /// email thread or messenger item via the "Create deadline"
   /// affordance.
@@ -470,6 +473,7 @@ model Deadline {
   emailThread   EmailThread?   @relation("EmailThreadSpawnedDeadlines", fields: [emailThreadId], references: [id], onDelete: SetNull)
   messengerItem MessengerItem? @relation("MessengerItemSpawnedDeadlines", fields: [messengerItemId], references: [id], onDelete: SetNull)
   parentEvent   CalendarEvent? @relation("EventSpawnedDeadlines", fields: [eventId], references: [id], onDelete: SetNull)
+  parentTask    Task?          @relation("TaskConvertedDeadlines", fields: [parentTaskId], references: [id], onDelete: SetNull)
   spawnedTasks  Task[]         @relation("DeadlineSpawnedTasks")
   /// Time logged "on this deadline" (e.g. drafting time toward a
   /// brief deadline). Inverse of TimeEntry.deadlineId.
@@ -482,6 +486,7 @@ model Deadline {
   @@index([emailThreadId])
   @@index([messengerItemId])
   @@index([eventId])
+  @@index([parentTaskId])
   @@map("deadlines")
 }
 
@@ -1045,6 +1050,8 @@ model Task {
   parentDeadline Deadline?     @relation("DeadlineSpawnedTasks", fields: [deadlineId], references: [id], onDelete: SetNull)
   /// Time logged "on this task" — the inverse of TimeEntry.taskId.
   timeEntries    TimeEntry[]   @relation("TaskTimeEntries")
+  /// Deadlines that were "Convert to deadline" promoted from this task.
+  convertedDeadlines Deadline[] @relation("TaskConvertedDeadlines")
 
   @@index([matterId])
   @@index([status])
