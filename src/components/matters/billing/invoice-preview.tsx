@@ -12,7 +12,7 @@
  * tree to a print-friendly route + PDF the result.
  */
 
-import { Building2, FileText } from "lucide-react";
+import { Building2, FileText, Wallet } from "lucide-react";
 import { invoiceStatusLabel, type InvoiceKind } from "@/lib/billing-form";
 import type { FirmProfile } from "@/lib/firm";
 import type { InvoiceDetail } from "@/lib/queries/billing";
@@ -300,6 +300,83 @@ export function InvoicePreview({
               </dd>
             </dl>
           </div>
+
+          {/* Payments received — individual transactions that have
+              been applied against this invoice. Only renders when
+              there's at least one recorded payment; the totals stack
+              above remains the authoritative "what's been paid"
+              number (it can diverge if a manual Mark-paid bumped
+              paidAmount without producing a TrustTransaction row). */}
+          {invoice.payments.length > 0 && (
+            <div className="px-6 py-4 border-b border-line">
+              <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 mb-2 flex items-center gap-1.5">
+                <Wallet size={11} />
+                Payments received
+              </div>
+              <table className="w-full text-2xs">
+                <thead>
+                  <tr className="text-ink-4 border-b border-line">
+                    <th className="text-left font-mono uppercase tracking-wider pb-1.5">
+                      Date
+                    </th>
+                    <th className="text-left font-mono uppercase tracking-wider pb-1.5">
+                      Source
+                    </th>
+                    <th className="text-left font-mono uppercase tracking-wider pb-1.5">
+                      Reference
+                    </th>
+                    <th className="text-right font-mono uppercase tracking-wider pb-1.5">
+                      Amount
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoice.payments.map((p) => (
+                    <tr
+                      key={p.id}
+                      className="border-b border-line/60 last:border-b-0 align-top"
+                    >
+                      <td className="py-2 font-mono text-ink-3 whitespace-nowrap pr-3">
+                        {p.date.toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </td>
+                      <td className="py-2 pr-3">
+                        <div className="text-ink">From trust account</div>
+                        {p.description && (
+                          <div className="text-ink-4 mt-0.5">
+                            {p.description}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-2 pr-3 font-mono text-ink-3">
+                        {p.reference ?? "—"}
+                      </td>
+                      <td className="py-2 text-right font-mono text-ink whitespace-nowrap pl-3">
+                        {formatMoney(p.amount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {/* If paidAmount is higher than the sum of recorded
+                  payments, a manual Mark-paid is in play. Surface
+                  the gap so the doc isn't silently misleading. */}
+              {invoice.paidAmount > invoice.paymentsRecordedTotal + 0.005 && (
+                <div className="text-2xs text-ink-4 mt-2 italic">
+                  An additional{" "}
+                  <span className="font-mono">
+                    {formatMoney(
+                      invoice.paidAmount - invoice.paymentsRecordedTotal
+                    )}
+                  </span>{" "}
+                  was applied via Mark paid without a recorded
+                  transaction.
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Notes */}
           {invoice.notes && (

@@ -249,6 +249,23 @@ export type InvoiceLineItem = {
   userInitials: string;
 };
 
+/** A payment recorded against an invoice. Today every entry comes
+ *  from a `TrustTransaction` row; future channels (manual mark-paid
+ *  with capture, ACH webhook, etc.) will produce additional rows
+ *  with different `source` values. */
+export type InvoicePayment = {
+  id: string;
+  date: Date;
+  /** Where the money came from. Drives the row's source label
+   *  ("From trust account", future: "Check", "ACH", etc.). */
+  source: "trust";
+  /** Free-text from the underlying TrustTransaction. */
+  description: string;
+  /** Check #, wire ID — what the user typed when recording. */
+  reference: string | null;
+  amount: number;
+};
+
 export type InvoiceDetail = InvoiceRow & {
   matterId: string;
   matterName: string;
@@ -264,6 +281,16 @@ export type InvoiceDetail = InvoiceRow & {
     zip: string | null;
   } | null;
   lineItems: InvoiceLineItem[];
+  /** Recorded payments against this invoice — drives the
+   *  "Payments received" section on the preview. May be empty
+   *  even when paidAmount > 0 if the invoice was Mark-paid
+   *  manually (no source TrustTransaction); the totals stack
+   *  remains authoritative for "what's been paid". */
+  payments: InvoicePayment[];
+  /** Sum of `payments[].amount`. The totals stack uses
+   *  `paidAmount` (which may be larger if a manual Mark-paid is
+   *  in play); this lets the UI flag the gap. */
+  paymentsRecordedTotal: number;
 };
 
 export async function getInvoiceById(
@@ -290,6 +317,12 @@ export async function getInvoiceById(
       lineItems: {
         orderBy: { date: "asc" },
         include: { user: { select: { name: true, initials: true } } },
+      },
+      trustPayments: {
+        // Newest payments float to the top so the most recent
+        // activity is visible first. Within a date, createdAt
+        // breaks ties.
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       },
       _count: { select: { lineItems: true } },
     },
@@ -350,5 +383,20 @@ export async function getInvoiceById(
       userName: e.user.name,
       userInitials: e.user.initials,
     })),
+    payments: inv.trustPayments.map((p) => ({
+      id: p.id,
+      date: p.date,
+      source: "trust" as const,
+      description: p.description,
+      reference: p.reference,
+      // Trust disbursements are stored as negative amounts (so the
+      // ledger sums to the balance directly). For the invoice's
+      // perspective these are positive payments — flip the sign.
+      amount: p.amount.abs().toNumber(),
+    })),
+    paymentsRecordedTotal: inv.trustPayments.reduce(
+      (sum, p) => sum + p.amount.abs().toNumber(),
+      0
+    ),
   };
 }
