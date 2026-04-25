@@ -72,6 +72,98 @@ async function syncContactPhones(
   });
 }
 
+/** Resolved representation block to persist on the MatterContact row.
+ *  Either points at an existing/new Contact (representationContactId)
+ *  or all-null when the party is pro se / unknown / a client. The
+ *  legacy free-text columns are mirrored from the resolved Contact for
+ *  back-compat reads. */
+type ResolvedRepresentation = {
+  representationContactId: string | null;
+  representationName: string | null;
+  representationFirm: string | null;
+  representationEmail: string | null;
+  representationPhone: string | null;
+};
+
+const NULL_REPRESENTATION: ResolvedRepresentation = {
+  representationContactId: null,
+  representationName: null,
+  representationFirm: null,
+  representationEmail: null,
+  representationPhone: null,
+};
+
+/** Resolve the rep contact — either pick an existing one or create a
+ *  new one inline. Returns the FK + mirrored display fields for the
+ *  MatterContact row. Throws when the picked id doesn't exist (caller
+ *  rolls back the surrounding transaction). */
+async function resolveRepresentation(
+  tx: Prisma.TransactionClient,
+  input: {
+    mode: typeof PICK_EXISTING | typeof CREATE_NEW;
+    pickedId: string | null;
+    newName: string | null;
+    newFirm: string | null;
+    newEmail: string | null;
+    newPhone: string | null;
+  }
+): Promise<ResolvedRepresentation> {
+  if (input.mode === PICK_EXISTING) {
+    if (!input.pickedId) throw new Error("Representation contact id missing");
+    const c = await tx.contact.findUnique({
+      where: { id: input.pickedId },
+      select: {
+        id: true,
+        name: true,
+        organization: true,
+        email: true,
+        phone: true,
+      },
+    });
+    if (!c) throw new Error("Representation contact not found");
+    return {
+      representationContactId: c.id,
+      representationName: c.name,
+      representationFirm: c.organization,
+      representationEmail: c.email,
+      representationPhone: c.phone,
+    };
+  }
+
+  // CREATE_NEW — opposing counsel by default. The user can change the
+  // contact's type later via the contacts directory if it's wrong
+  // (e.g. an in-house counsel hire that should be "other").
+  if (!input.newName) throw new Error("Representation name missing");
+  const created = await tx.contact.create({
+    data: {
+      name: input.newName,
+      organization: input.newFirm || null,
+      email: input.newEmail || null,
+      phone: input.newPhone || null,
+      type: "opposing_counsel",
+    },
+    select: { id: true },
+  });
+  if (input.newPhone) {
+    await tx.contactPhone.create({
+      data: {
+        contactId: created.id,
+        label: "Primary",
+        number: input.newPhone,
+        isPrimary: true,
+        order: 0,
+      },
+    });
+  }
+  return {
+    representationContactId: created.id,
+    representationName: input.newName,
+    representationFirm: input.newFirm || null,
+    representationEmail: input.newEmail || null,
+    representationPhone: input.newPhone || null,
+  };
+}
+
 /** Parse the JSON-stringified phones array coming from the form.
  *  Returns [] if the field is missing or malformed. */
 function parsePhonesJson(raw: string | undefined): PhoneEntry[] {
@@ -109,27 +201,36 @@ const partySchema = z
     role: z.string().trim().max(80).optional().or(z.literal("")),
     notes: z.string().trim().max(4000).optional().or(z.literal("")),
     /** Representation status: "unknown" | "yes" | "no". "yes" unlocks
-     *  the rep contact fields below. "no" means pro se. */
+     *  the rep contact picker below. "no" means pro se. */
     representation: z.enum(["unknown", "yes", "no"]).default("unknown"),
-    representationName: z
+    /** Either pick an existing Contact (rep is the firm's record of
+     *  some attorney) or create a new one inline. Same pattern as
+     *  the main party picker. */
+    representationContactMode: z
+      .enum([PICK_EXISTING, CREATE_NEW])
+      .default(CREATE_NEW),
+    representationContactId: z.string().trim().optional().or(z.literal("")),
+    /** Inline-create fields used when representationContactMode === CREATE_NEW.
+     *  The created Contact gets type "opposing_counsel". */
+    newRepresentationName: z
       .string()
       .trim()
       .max(200)
       .optional()
       .or(z.literal("")),
-    representationFirm: z
+    newRepresentationFirm: z
       .string()
       .trim()
       .max(200)
       .optional()
       .or(z.literal("")),
-    representationEmail: z
+    newRepresentationEmail: z
       .string()
       .trim()
       .max(200)
       .optional()
       .or(z.literal("")),
-    representationPhone: z
+    newRepresentationPhone: z
       .string()
       .trim()
       .max(80)
@@ -160,6 +261,36 @@ const partySchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["newContactEmail"],
+          message: "That doesn't look like an email",
+        });
+      }
+    }
+
+    // Representation validation only matters when explicitly "yes" —
+    // unknown / pro se don't need a rep contact at all.
+    if (data.category !== "client" && data.representation === "yes") {
+      if (data.representationContactMode === PICK_EXISTING) {
+        if (!data.representationContactId) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["representationContactId"],
+            message: "Pick a representing contact or create a new one",
+          });
+        }
+      } else if (!data.newRepresentationName) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["newRepresentationName"],
+          message: "Attorney name is required",
+        });
+      }
+      if (
+        data.newRepresentationEmail &&
+        !data.newRepresentationEmail.includes("@")
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["newRepresentationEmail"],
           message: "That doesn't look like an email",
         });
       }
@@ -264,17 +395,19 @@ export async function createMatterContact(
         : data.representation === "no"
           ? false
           : null;
-    // Keep the contact fields only if the user explicitly said
-    // represented=yes; otherwise null them out so stale data from a
-    // prior state doesn't linger.
-    const repName =
-      !isClient && isRepresented ? data.representationName || null : null;
-    const repFirm =
-      !isClient && isRepresented ? data.representationFirm || null : null;
-    const repEmail =
-      !isClient && isRepresented ? data.representationEmail || null : null;
-    const repPhone =
-      !isClient && isRepresented ? data.representationPhone || null : null;
+    // Resolve representation either to a Contact (FK + mirrored text)
+    // or to all-null when not represented / unknown / pro se / client.
+    const rep =
+      !isClient && isRepresented
+        ? await resolveRepresentation(tx, {
+            mode: data.representationContactMode,
+            pickedId: data.representationContactId || null,
+            newName: data.newRepresentationName || null,
+            newFirm: data.newRepresentationFirm || null,
+            newEmail: data.newRepresentationEmail || null,
+            newPhone: data.newRepresentationPhone || null,
+          })
+        : NULL_REPRESENTATION;
 
     // Upsert keyed on [matterId, contactId, category] so re-adding
     // the same person in the same category just updates notes/role.
@@ -293,19 +426,13 @@ export async function createMatterContact(
         role: data.role || null,
         notes: data.notes || null,
         isRepresented,
-        representationName: repName,
-        representationFirm: repFirm,
-        representationEmail: repEmail,
-        representationPhone: repPhone,
+        ...rep,
       },
       update: {
         role: data.role || null,
         notes: data.notes || null,
         isRepresented,
-        representationName: repName,
-        representationFirm: repFirm,
-        representationEmail: repEmail,
-        representationPhone: repPhone,
+        ...rep,
       },
     });
   });
@@ -317,30 +444,74 @@ export async function createMatterContact(
 
 // ── Update ──────────────────────────────────────────────────────────────
 
-const partyUpdateSchema = z.object({
-  /** Core contact fields — these live on the global Contact record,
-   *  so edits here flow through to every matter the contact appears
-   *  on. The UI surfaces that so the user isn't surprised. */
-  contactName: z.string().trim().min(1, "Name is required").max(200),
-  contactEmail: z.string().trim().max(200).optional().or(z.literal("")),
-  contactOrganization: z
-    .string()
-    .trim()
-    .max(200)
-    .optional()
-    .or(z.literal("")),
-  /** JSON-stringified array of { label, number, isPrimary }. Replace-
-   *  all strategy: whatever the user submits becomes the new phone
-   *  list for the contact. Empty array clears all phones. */
-  phones: z.string().optional().default("[]"),
-  role: z.string().trim().max(80).optional().or(z.literal("")),
-  notes: z.string().trim().max(4000).optional().or(z.literal("")),
-  representation: z.enum(["unknown", "yes", "no"]).default("unknown"),
-  representationName: z.string().trim().max(200).optional().or(z.literal("")),
-  representationFirm: z.string().trim().max(200).optional().or(z.literal("")),
-  representationEmail: z.string().trim().max(200).optional().or(z.literal("")),
-  representationPhone: z.string().trim().max(80).optional().or(z.literal("")),
-});
+const partyUpdateSchema = z
+  .object({
+    /** Core contact fields — these live on the global Contact record,
+     *  so edits here flow through to every matter the contact appears
+     *  on. The UI surfaces that so the user isn't surprised. */
+    contactName: z.string().trim().min(1, "Name is required").max(200),
+    contactEmail: z.string().trim().max(200).optional().or(z.literal("")),
+    contactOrganization: z
+      .string()
+      .trim()
+      .max(200)
+      .optional()
+      .or(z.literal("")),
+    /** JSON-stringified array of { label, number, isPrimary }. Replace-
+     *  all strategy: whatever the user submits becomes the new phone
+     *  list for the contact. Empty array clears all phones. */
+    phones: z.string().optional().default("[]"),
+    role: z.string().trim().max(80).optional().or(z.literal("")),
+    notes: z.string().trim().max(4000).optional().or(z.literal("")),
+    representation: z.enum(["unknown", "yes", "no"]).default("unknown"),
+    representationContactMode: z
+      .enum([PICK_EXISTING, CREATE_NEW])
+      .default(CREATE_NEW),
+    representationContactId: z.string().trim().optional().or(z.literal("")),
+    newRepresentationName: z
+      .string()
+      .trim()
+      .max(200)
+      .optional()
+      .or(z.literal("")),
+    newRepresentationFirm: z
+      .string()
+      .trim()
+      .max(200)
+      .optional()
+      .or(z.literal("")),
+    newRepresentationEmail: z
+      .string()
+      .trim()
+      .max(200)
+      .optional()
+      .or(z.literal("")),
+    newRepresentationPhone: z
+      .string()
+      .trim()
+      .max(80)
+      .optional()
+      .or(z.literal("")),
+  })
+  .superRefine((data, ctx) => {
+    if (data.representation === "yes") {
+      if (data.representationContactMode === PICK_EXISTING) {
+        if (!data.representationContactId) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["representationContactId"],
+            message: "Pick a representing contact or create a new one",
+          });
+        }
+      } else if (!data.newRepresentationName) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["newRepresentationName"],
+          message: "Attorney name is required",
+        });
+      }
+    }
+  });
 
 /** Edits the MatterContact join row in place — subrole, notes, and
  *  representation info. Does NOT change the contact itself or the
@@ -382,14 +553,6 @@ export async function updateMatterContact(
       : data.representation === "no"
         ? false
         : null;
-  const repName =
-    !isClient && isRepresented ? data.representationName || null : null;
-  const repFirm =
-    !isClient && isRepresented ? data.representationFirm || null : null;
-  const repEmail =
-    !isClient && isRepresented ? data.representationEmail || null : null;
-  const repPhone =
-    !isClient && isRepresented ? data.representationPhone || null : null;
 
   const phones = parsePhonesJson(data.phones);
 
@@ -408,16 +571,26 @@ export async function updateMatterContact(
     });
     // syncContactPhones also rewrites Contact.phone to the primary.
     await syncContactPhones(tx, row.contactId, phones);
+
+    const rep =
+      !isClient && isRepresented
+        ? await resolveRepresentation(tx, {
+            mode: data.representationContactMode,
+            pickedId: data.representationContactId || null,
+            newName: data.newRepresentationName || null,
+            newFirm: data.newRepresentationFirm || null,
+            newEmail: data.newRepresentationEmail || null,
+            newPhone: data.newRepresentationPhone || null,
+          })
+        : NULL_REPRESENTATION;
+
     await tx.matterContact.update({
       where: { id: matterContactId },
       data: {
         role: data.role || null,
         notes: data.notes || null,
         isRepresented,
-        representationName: repName,
-        representationFirm: repFirm,
-        representationEmail: repEmail,
-        representationPhone: repPhone,
+        ...rep,
       },
     });
   });

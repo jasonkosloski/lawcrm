@@ -253,6 +253,21 @@ async function main() {
         type: "opposing_counsel",
       },
     }),
+    /// Opposing counsel for the Alvarez matter — represents both the
+    /// City of Aurora and Officer Doe, so cross-matter repeat counsel
+    /// coalesces into one Contact (the whole point of the
+    /// representation FK on MatterContact).
+    auroraOC: await prisma.contact.create({
+      data: {
+        name: "Marcus Alvarado, Esq.",
+        email: "m.alvarado@aurorapd-defense.com",
+        phone: "(303) 555-0411",
+        organization: "Aurora City Attorney's Office",
+        type: "opposing_counsel",
+        city: "Aurora",
+        state: "CO",
+      },
+    }),
     memorialHospital: await prisma.contact.create({
       data: {
         name: "Memorial Hospital",
@@ -554,6 +569,18 @@ async function main() {
 
   // Link key contacts to the Alvarez matter. `category` is the
   // display bucket; `role` is the finer-grained subrole.
+  // Mirror the auroraOC Contact's display fields onto each
+  // MatterContact rep cell for back-compat — readers prefer the
+  // joined Contact, but the legacy text fallback stays in sync.
+  const auroraOCRep = {
+    isRepresented: true,
+    representationContactId: contacts.auroraOC.id,
+    representationName: "Marcus Alvarado, Esq.",
+    representationFirm: "Aurora City Attorney's Office",
+    representationEmail: "m.alvarado@aurorapd-defense.com",
+    representationPhone: "(303) 555-0411",
+  } as const;
+
   await prisma.matterContact.createMany({
     data: [
       {
@@ -562,17 +589,21 @@ async function main() {
         category: "client",
         role: "plaintiff",
       },
+      // Both Alvarez opposing parties are represented by the same
+      // attorney — repeat counsel surfacing as one Contact.
       {
         matterId: matters.alvarez.id,
         contactId: contacts.cityOfAurora.id,
         category: "opposing",
         role: "defendant",
+        ...auroraOCRep,
       },
       {
         matterId: matters.alvarez.id,
         contactId: contacts.officerDoe.id,
         category: "opposing",
         role: "defendant",
+        ...auroraOCRep,
       },
       {
         matterId: matters.alvarez.id,
@@ -604,11 +635,14 @@ async function main() {
         category: "client",
         role: "plaintiff",
       },
+      // Lienholder hospital handles its own lien — explicitly pro se
+      // so the rep cell renders the "Pro se" pill.
       {
         matterId: matters.rivera.id,
         contactId: contacts.memorialHospital.id,
         category: "other",
         role: "lienholder",
+        isRepresented: false,
       },
     ],
   });

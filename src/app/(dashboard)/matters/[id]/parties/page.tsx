@@ -145,6 +145,7 @@ function CategorySection({
                   category={category}
                   showsRepresentation={showsRepresentation}
                   showsOrganization={showsOrganization}
+                  contacts={contacts}
                   colSpan={
                     // name + subrole + contact + notes + actions = 5
                     5 +

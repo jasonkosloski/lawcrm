@@ -239,6 +239,10 @@ model Contact {
   clientMatters   Matter[]  @relation("MatterClient")
   phones          ContactPhone[]
   messengerThreads MessengerThread[] @relation("MessengerThreadContact")
+  /// Reverse of MatterContact.representationContact — every party
+  /// row across every matter where this contact represents the other
+  /// side. Lets the contact page surface "represents N parties."
+  representationOf MatterContact[] @relation("MatterContactRepresentation")
 
   @@index([type])
   @@index([name])
@@ -286,10 +290,17 @@ model MatterContact {
   /// Representation — who (if anyone) represents this non-client party.
   /// Only meaningful for opposing parties / witnesses / others; clients
   /// are represented by us. `isRepresented = false` explicitly means
-  /// pro se / self-represented; null means unknown. The contact fields
-  /// are free-text for now — future: link to a Contact record so
-  /// cross-matter repeat counsel coalesces into one entry.
+  /// pro se / self-represented; null means unknown.
   isRepresented       Boolean?
+  /// Preferred: the representing attorney as a first-class Contact.
+  /// Set when the rep is picked from the contact directory or
+  /// created inline via the party composer. Same Contact can show
+  /// up across many matters' representation columns.
+  representationContactId String?
+  /// Legacy free-text representation fields, retained for back-
+  /// compat read paths and as a fallback when the FK is null.
+  /// New writes prefer the FK; the strings are populated alongside
+  /// for transition only.
   representationName  String?
   representationFirm  String?
   representationEmail String?
@@ -299,9 +310,14 @@ model MatterContact {
 
   matter  Matter  @relation(fields: [matterId], references: [id], onDelete: Cascade)
   contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  /// SetNull (not Cascade) — losing the rep contact shouldn't blow
+  /// away the party row; it just falls back to the legacy text fields
+  /// (or empty) until a new rep is picked.
+  representationContact Contact? @relation("MatterContactRepresentation", fields: [representationContactId], references: [id], onDelete: SetNull)
 
   @@unique([matterId, contactId, category])
   @@index([category])
+  @@index([representationContactId])
   @@map("matter_contacts")
 }
 

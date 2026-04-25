@@ -10,6 +10,7 @@
 
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -20,18 +21,23 @@ import type { PartyRow } from "@/lib/queries/matter-detail";
 import type { PartyCategory } from "@/lib/party-constants";
 import { PartyEditForm } from "./party-edit-form";
 import { PartyRowActions } from "./party-row-actions";
+import type { ContactOption } from "./party-composer";
 
 export function PartyRowView({
   party,
   category,
   showsRepresentation,
   showsOrganization,
+  contacts,
   colSpan,
 }: {
   party: PartyRow;
   category: PartyCategory;
   showsRepresentation: boolean;
   showsOrganization: boolean;
+  /** All active contacts — forwarded to PartyEditForm for the
+   *  representation typeahead. */
+  contacts: ContactOption[];
   /** Total number of columns this row spans when in edit mode. */
   colSpan: number;
 }) {
@@ -44,6 +50,7 @@ export function PartyRowView({
           <PartyEditForm
             party={party}
             category={category}
+            contacts={contacts}
             onDone={() => setEditing(false)}
           />
         </TableCell>
@@ -155,11 +162,26 @@ function RepresentationCell({ party }: { party: PartyRow }) {
     );
   }
   if (party.isRepresented === true && party.representationName) {
+    // When the rep is a real Contact (preferred), the name links to
+    // the contact's profile so the user can hop straight to their
+    // record. Falls back to plain text for legacy rows that haven't
+    // been backfilled yet.
+    const nameNode = party.representationContactId ? (
+      <Link
+        href={`/contacts/${party.representationContactId}`}
+        className="text-ink font-medium truncate hover:text-brand-700 hover:underline"
+        title={`Open ${party.representationName} in contacts`}
+      >
+        {party.representationName}
+      </Link>
+    ) : (
+      <span className="text-ink font-medium truncate">
+        {party.representationName}
+      </span>
+    );
     return (
       <div className="flex flex-col leading-tight">
-        <span className="text-ink font-medium truncate">
-          {party.representationName}
-        </span>
+        {nameNode}
         {party.representationFirm && (
           <span className="text-2xs text-ink-3 truncate">
             {party.representationFirm}
