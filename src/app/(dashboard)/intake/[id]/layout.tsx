@@ -9,11 +9,14 @@
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight, Ban, Briefcase } from "lucide-react";
+import { Briefcase } from "lucide-react";
 import { TopBar } from "@/components/layout/topbar";
 import { Button } from "@/components/ui/button";
 import { IntakeTabs } from "@/components/intake/intake-tabs";
+import { ConvertLeadButton } from "@/components/intake/convert-lead-button";
+import { DeclineLeadButton } from "@/components/intake/decline-lead-button";
 import { getLeadById, LEAD_STAGE_LABEL } from "@/lib/queries/leads";
+import { getPracticeAreaOptions } from "@/lib/queries/practice-area-options";
 
 function StageChip({ stage }: { stage: string }) {
   const label = LEAD_STAGE_LABEL[stage] ?? stage;
@@ -41,7 +44,10 @@ export default async function LeadDetailLayout({
   params,
 }: LayoutProps<"/intake/[id]">) {
   const { id } = await params;
-  const lead = await getLeadById(id);
+  const [lead, areas] = await Promise.all([
+    getLeadById(id),
+    getPracticeAreaOptions(),
+  ]);
   if (!lead) notFound();
 
   const isResolved = lead.stage === "converted" || lead.stage === "declined";
@@ -64,14 +70,12 @@ export default async function LeadDetailLayout({
         actions={
           !isResolved ? (
             <>
-              <Button size="sm" variant="outline" disabled title="Coming soon">
-                <Ban />
-                Decline
-              </Button>
-              <Button size="sm" disabled title="Coming soon">
-                <ArrowRight />
-                Convert to matter
-              </Button>
+              <DeclineLeadButton leadId={lead.id} />
+              <ConvertLeadButton
+                leadId={lead.id}
+                defaultMatterName={lead.name}
+                areas={areas}
+              />
             </>
           ) : lead.convertedMatter ? (
             <Button

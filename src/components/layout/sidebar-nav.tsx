@@ -30,6 +30,7 @@ import {
   BarChart3,
   Zap,
   Settings,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -114,6 +115,7 @@ export function SidebarNav({ data }: { data: SidebarData }) {
           badge: numBadge(data.unreadEmailCount),
         },
         { id: "calendar", label: "Calendar", href: "/calendar", icon: Calendar },
+        { id: "contacts", label: "Contacts", href: "/contacts", icon: Users },
         {
           id: "time",
           label: "Time",

@@ -323,12 +323,9 @@ export function CommandPalette({
                   <CommandItem
                     key={`contact-${c.id}`}
                     value={`${c.name} ${c.email ?? ""} ${c.organization ?? ""} ${c.contactType}`}
-                    onSelect={() => {
-                      // Contacts don't have a detail page yet — suggest the
-                      // contacts directory once it exists. For now, just close.
-                      pushRecent({ kind: "contact", id: c.id });
-                      close();
-                    }}
+                    onSelect={() =>
+                      go(`/contacts/${c.id}`, { kind: "contact", id: c.id })
+                    }
                   >
                     <User />
                     <span>{c.name}</span>
@@ -419,7 +416,9 @@ function RecentItemRow({
     return (
       <CommandItem
         value={`${item.name} ${item.email ?? ""} ${item.organization ?? ""}`}
-        onSelect={() => onGo("/", { kind: "contact", id: item.id })}
+        onSelect={() =>
+          onGo(`/contacts/${item.id}`, { kind: "contact", id: item.id })
+        }
       >
         <User />
         <span>{item.name}</span>

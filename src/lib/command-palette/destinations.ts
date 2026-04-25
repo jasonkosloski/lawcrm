@@ -25,6 +25,8 @@ export const NAV_DESTINATIONS: NavDestination[] = [
   { id: "nav:intake", label: "Intake queue", keywords: "leads new prospects", href: "/intake", icon: "inbox" },
   { id: "nav:communication", label: "Communication", keywords: "email inbox mail messages texts sms", href: "/communication", icon: "mail" },
   { id: "nav:calendar", label: "Calendar", keywords: "schedule events meetings", href: "/calendar", icon: "calendar" },
+  { id: "nav:contacts", label: "Contacts", keywords: "directory people address book clients opposing experts witnesses", href: "/contacts", icon: "userSquare" },
+  { id: "nav:contacts-new", label: "New contact", keywords: "create contact add person", href: "/contacts/new", icon: "userSquare" },
   { id: "nav:time", label: "Time tracking", keywords: "hours billing timer", href: "/time", icon: "clock" },
   { id: "nav:billing", label: "Billing", keywords: "invoices payments ar", href: "/billing", icon: "dollar" },
   { id: "nav:reports", label: "Reports", keywords: "analytics dashboards", href: "/reports", icon: "chart" },
