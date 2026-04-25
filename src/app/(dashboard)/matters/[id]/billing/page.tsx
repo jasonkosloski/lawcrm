@@ -48,6 +48,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { BundleInternalRecordForm } from "@/components/matters/billing/bundle-internal-record-form";
 import { GenerateInvoiceForm } from "@/components/matters/billing/generate-invoice-form";
 import { InvoiceActionBar } from "@/components/matters/billing/invoice-action-bar";
 import { InvoiceRowActions } from "@/components/matters/billing/invoice-row-actions";
@@ -59,7 +60,7 @@ import {
   type MatterBilling,
 } from "@/lib/queries/billing";
 import { getCurrentFirm } from "@/lib/firm";
-import { INVOICE_STATUS_LABEL } from "@/lib/billing-form";
+import { invoiceStatusLabel, type InvoiceKind } from "@/lib/billing-form";
 
 const formatMoney = (n: number): string =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -148,6 +149,7 @@ export default async function MatterBillingPage({
             invoiceId={selectedInvoice.id}
             invoiceNumber={selectedInvoice.invoiceNumber}
             currentStatus={selectedInvoice.status}
+            kind={selectedInvoice.kind as InvoiceKind}
           />
           <Link
             href={`/matters/${id}/billing`}
@@ -323,6 +325,14 @@ function MainColumn({
                         {cellLink(
                           <>
                             {inv.invoiceNumber}
+                            {inv.kind === "internal_record" && (
+                              <span
+                                className="ml-2 text-2xs text-ink-3 px-1.5 py-px rounded-full border border-line bg-paper-2 font-sans"
+                                title="Internal record — closes WIP without billing the client. Excluded from Outstanding AR."
+                              >
+                                internal
+                              </span>
+                            )}
                             {inv.lineItemCount > 0 && (
                               <span className="ml-2 text-2xs text-ink-4 font-sans">
                                 · {inv.lineItemCount}{" "}
@@ -343,7 +353,10 @@ function MainColumn({
                           <span
                             className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full border ${STATUS_META[inv.status] ?? STATUS_META.draft}`}
                           >
-                            {INVOICE_STATUS_LABEL[inv.status] ?? inv.status}
+                            {invoiceStatusLabel(
+                              inv.status,
+                              inv.kind as InvoiceKind
+                            )}
                           </span>
                         )}
                       </TableCell>
@@ -416,11 +429,24 @@ function MainColumn({
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4 flex flex-col gap-3">
-          <GenerateInvoiceForm
-            matterId={matterId}
-            amountTotal={billing.wip.amountTotal}
-            entryCount={billing.wip.entryCount}
-          />
+          {/* Two ways to clear WIP. The primary action bills the
+              client; the secondary closes WIP without billing —
+              for contingency settlements, abandoned matters, or
+              fee-already-collected-elsewhere cases. Both share
+              the same bundle-and-link mechanic, so void on either
+              kind unlinks entries back to billable WIP. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <GenerateInvoiceForm
+              matterId={matterId}
+              amountTotal={billing.wip.amountTotal}
+              entryCount={billing.wip.entryCount}
+            />
+            <BundleInternalRecordForm
+              matterId={matterId}
+              amountTotal={billing.wip.amountTotal}
+              entryCount={billing.wip.entryCount}
+            />
+          </div>
           {billing.wip.recent.length > 0 && (
             <div className="border border-line rounded-md overflow-hidden">
               <Table>

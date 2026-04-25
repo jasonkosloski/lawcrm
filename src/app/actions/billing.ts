@@ -27,10 +27,11 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { logActivity } from "@/lib/activity-log";
 import {
-  INVOICE_STATUS_TRANSITIONS,
+  invoiceStatusTransitions,
   TRUST_TXN_TYPES,
   billingInitialState,
   type BillingFormState,
+  type InvoiceKind,
 } from "@/lib/billing-form";
 
 // ── Helpers ─────────────────────────────────────────────────────────────
@@ -252,6 +253,7 @@ export async function setInvoiceStatus(
       id: true,
       matterId: true,
       invoiceNumber: true,
+      kind: true,
       status: true,
       totalAmount: true,
       paidAmount: true,
@@ -259,7 +261,12 @@ export async function setInvoiceStatus(
   });
   if (!invoice) return { ok: false, error: "Invoice not found." };
 
-  const allowed = INVOICE_STATUS_TRANSITIONS[invoice.status] ?? [];
+  // Kind-aware transition guard so internal records can't accidentally
+  // be marked "sent" (which has no meaning for them).
+  const allowed = invoiceStatusTransitions(
+    invoice.status,
+    invoice.kind as InvoiceKind
+  );
   if (!allowed.includes(next)) {
     return {
       ok: false,
@@ -390,6 +397,161 @@ export async function addTrustTransaction(
     return {
       status: "error",
       error: err instanceof Error ? err.message : "Couldn't record transaction.",
+    };
+  }
+}
+
+// ── Bundle as internal record ──────────────────────────────────────────
+//
+// Same WIP-bundling mechanic as generateInvoiceFromWip, but the
+// resulting Invoice row is born already-locked at status="paid" with
+// kind="internal_record". No due date math (issueDate == dueDate),
+// no AR exposure (excluded from Outstanding-AR aggregates by the
+// query layer). Used to close out unbilled time on contingency /
+// pro-bono cases that resolve without a fee petition — settled,
+// fee already collected via a separate channel, etc.
+//
+// Void still works: unlinks entries back to billable WIP, same as
+// the client-invoice path.
+
+const internalRecordSchema = z.object({
+  /** Required-ish reason captured into Invoice.notes — answers
+   *  "why are these entries being closed without billing?".
+   *  Free-text so the firm can land on its own conventions
+   *  (settled, abandoned, pro-bono complete, fee already collected
+   *  via settlement, etc.). */
+  notes: z
+    .string()
+    .trim()
+    .min(1, "Reason is required so the record explains itself")
+    .max(2000),
+});
+
+export async function bundleAsInternalRecord(
+  matterId: string,
+  _prev: BillingFormState,
+  formData: FormData
+): Promise<BillingFormState> {
+  const userId = await getCurrentUserId();
+  const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
+  const parsed = internalRecordSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      status: "error",
+      errors: parsed.error.flatten().fieldErrors,
+    };
+  }
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const matter = await tx.matter.findUnique({
+        where: { id: matterId },
+        select: { id: true, name: true, clientId: true },
+      });
+      if (!matter) throw new Error("Matter not found");
+
+      const entries = await tx.timeEntry.findMany({
+        where: {
+          matterId: matter.id,
+          billable: true,
+          noCharge: false,
+          invoiceId: null,
+          status: { in: ["draft", "submitted", "billable"] },
+        },
+        select: { id: true, amount: true },
+      });
+      if (entries.length === 0) {
+        throw new Error("No unbilled entries to bundle.");
+      }
+
+      const subtotal = entries.reduce(
+        (acc, e) => (e.amount ? acc.add(e.amount) : acc),
+        new Prisma.Decimal(0)
+      );
+      const total = subtotal;
+
+      const issueDate = new Date();
+
+      let invoice;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const number = await nextInvoiceNumber(tx);
+        try {
+          invoice = await tx.invoice.create({
+            data: {
+              invoiceNumber: number,
+              matterId: matter.id,
+              clientId: matter.clientId,
+              kind: "internal_record",
+              issueDate,
+              // No real due date — set equal to issue so daysUntilDue
+              // math doesn't surface anything alarming.
+              dueDate: issueDate,
+              subtotal,
+              taxAmount: new Prisma.Decimal(0),
+              totalAmount: total,
+              // Born already-locked as "Recorded" (status=paid, label
+              // flipped per kind). Avoids the "draft sitting there
+              // forever" fate of internal records.
+              paidAmount: total,
+              status: "paid",
+              notes: parsed.data.notes,
+            },
+            select: { id: true, invoiceNumber: true },
+          });
+          break;
+        } catch (err) {
+          if (
+            err instanceof Prisma.PrismaClientKnownRequestError &&
+            err.code === "P2002" &&
+            attempt === 0
+          ) {
+            continue;
+          }
+          throw err;
+        }
+      }
+      if (!invoice) throw new Error("Failed to mint record number.");
+
+      // Same as client invoices — flip the entries to "billed" so
+      // they leave WIP. Void unlinks them back. The "billed" status
+      // here doesn't mean "billed to a client"; it means "linked to
+      // a bundling document, no longer in WIP".
+      await tx.timeEntry.updateMany({
+        where: { id: { in: entries.map((e) => e.id) } },
+        data: { invoiceId: invoice.id, status: "billed" },
+      });
+
+      return {
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        matter,
+        entryCount: entries.length,
+        total,
+      };
+    });
+
+    await logActivity({
+      matterId: result.matter.id,
+      userId,
+      type: "filing",
+      title: `Internal record ${result.invoiceNumber} bundled`,
+      detail: `${result.entryCount} time entries · $${result.total.toFixed(2)} (${parsed.data.notes})`,
+    });
+
+    revalidatePath(`/matters/${matterId}/billing`);
+    revalidatePath(`/matters/${matterId}/time`);
+    revalidatePath(`/matters/${matterId}`);
+    revalidatePath("/", "layout");
+    return {
+      ...billingInitialState,
+      status: "ok",
+      invoiceId: result.invoiceId,
+    };
+  } catch (err) {
+    return {
+      status: "error",
+      error:
+        err instanceof Error ? err.message : "Couldn't bundle internal record.",
     };
   }
 }

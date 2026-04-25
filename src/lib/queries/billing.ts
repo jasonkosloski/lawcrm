@@ -69,6 +69,10 @@ export type InvoiceRow = {
   paidAmount: number;
   balance: number;
   status: string;
+  /** "client" (today's bills) | "internal_record" (contingency
+   *  / pro-bono close-out bundles). Drives label + chip + AR
+   *  exclusion downstream. */
+  kind: string;
   notes: string | null;
   /** Count of time entries linked to this invoice — drives the
    *  "5 line items" hint on the row without joining heavy. */
@@ -179,15 +183,21 @@ export async function getMatterBilling(
       paidAmount: paid,
       balance: Math.max(0, total - paid),
       status: i.status,
+      kind: i.kind,
       notes: i.notes,
       lineItemCount: i._count.lineItems,
     };
   });
 
-  // Outstanding AR — sum of balances on every non-paid, non-void
-  // invoice. Matches what the firm cares about for cash collection.
+  // Outstanding AR — sum of balances on every open client invoice.
+  // Internal records are deliberately excluded (no money is owed to
+  // the firm — the doc just memorializes work done) regardless of
+  // their status.
   const outstandingAr = invoiceRows
-    .filter((i) => i.status !== "paid" && i.status !== "void")
+    .filter(
+      (i) =>
+        i.kind === "client" && i.status !== "paid" && i.status !== "void"
+    )
     .reduce((sum, i) => sum + i.balance, 0);
 
   const trust: TrustSummary = {
@@ -303,6 +313,7 @@ export async function getInvoiceById(
     paidAmount: paid,
     balance: Math.max(0, total - paid),
     status: inv.status,
+    kind: inv.kind,
     notes: inv.notes,
     lineItemCount: inv._count.lineItems,
     matterId: inv.matterId,

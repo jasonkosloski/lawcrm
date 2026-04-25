@@ -905,12 +905,25 @@ model TimeEntry {
   @@map("time_entries")
 }
 
-/// An invoice sent to a client for a matter.
+/// An invoice (or internal work record) bundling a matter's time
+/// entries. The `kind` field distinguishes:
+///   - "client": traditional invoice that goes to AR. Has a real
+///     due date, transitions through draft → sent → paid → void.
+///   - "internal_record": closes out WIP without billing anyone.
+///     Used on contingency / pro-bono cases that resolve without a
+///     fee petition (settled, abandoned, fee already collected via
+///     a separate channel). Created already-locked at status="paid"
+///     so it doesn't sit in "draft" forever; the "Paid" label
+///     renders as "Recorded" via the kind-aware label helper.
+///     Excluded from Outstanding-AR aggregates.
 model Invoice {
   id           String    @id @default(cuid())
   invoiceNumber String   @unique /// Human-readable number, e.g. "2026-041"
   matterId     String
-  clientId     String?   /// Contact ID for the billed client
+  clientId     String?   /// Contact ID for the billed client (null for internal records)
+  /// Kind of bundle this row represents. Same data shape, different
+  /// semantics + display + AR rules. See model docstring above.
+  kind         String    @default("client") /// client | internal_record
   issueDate    DateTime
   dueDate      DateTime
   subtotal     Decimal   @default(0)
@@ -927,6 +940,7 @@ model Invoice {
 
   @@index([matterId])
   @@index([status])
+  @@index([kind])
   @@map("invoices")
 }
 

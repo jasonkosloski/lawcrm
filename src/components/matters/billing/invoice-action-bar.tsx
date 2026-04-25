@@ -35,19 +35,27 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { setInvoiceStatus } from "@/app/actions/billing";
-import { INVOICE_STATUS_TRANSITIONS } from "@/lib/billing-form";
+import {
+  invoiceStatusTransitions,
+  type InvoiceKind,
+} from "@/lib/billing-form";
 
 export function InvoiceActionBar({
   invoiceId,
   invoiceNumber,
   currentStatus,
+  /** Defaults to "client" for back-compat with callers that haven't
+   *  threaded kind through yet. Internal records have a much
+   *  smaller transition set (no "sent"). */
+  kind = "client",
 }: {
   invoiceId: string;
   invoiceNumber: string;
   currentStatus: string;
+  kind?: InvoiceKind;
 }) {
   const [pending, startTransition] = useTransition();
-  const allowed = INVOICE_STATUS_TRANSITIONS[currentStatus] ?? [];
+  const allowed = invoiceStatusTransitions(currentStatus, kind);
 
   if (allowed.length === 0) return null;
 
@@ -86,14 +94,17 @@ export function InvoiceActionBar({
           onClick={() =>
             transitionTo(
               "paid",
-              `Mark invoice ${invoiceNumber} as fully paid? V1 doesn't support partial payments yet.`
+              kind === "internal_record"
+                ? `Lock internal record ${invoiceNumber}? Linked time entries stay linked; void unlinks them back to WIP.`
+                : `Mark invoice ${invoiceNumber} as fully paid? V1 doesn't support partial payments yet.`
             )
           }
           disabled={pending}
           className={cn(
             "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-2xs font-medium",
-            // When sent isn't an option (already-sent invoice), Mark
-            // paid IS the primary CTA; otherwise it's secondary.
+            // When sent isn't an option (already-sent invoice or
+            // internal record), Mark paid / Mark recorded IS the
+            // primary CTA; otherwise it's secondary.
             allowed.includes("sent")
               ? "border border-line bg-white text-ink hover:border-brand-300 hover:text-brand-700"
               : "bg-brand-500 text-white hover:bg-brand-600",
@@ -101,7 +112,7 @@ export function InvoiceActionBar({
           )}
         >
           <Check size={11} />
-          Mark paid
+          {kind === "internal_record" ? "Mark recorded" : "Mark paid"}
         </button>
       )}
       {hasMoreMenu && (

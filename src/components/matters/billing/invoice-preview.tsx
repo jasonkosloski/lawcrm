@@ -13,7 +13,7 @@
  */
 
 import { Building2, FileText } from "lucide-react";
-import { INVOICE_STATUS_LABEL } from "@/lib/billing-form";
+import { invoiceStatusLabel, type InvoiceKind } from "@/lib/billing-form";
 import type { FirmProfile } from "@/lib/firm";
 import type { InvoiceDetail } from "@/lib/queries/billing";
 
@@ -44,6 +44,10 @@ export function InvoicePreview({
   firm: FirmProfile;
 }) {
   const statusClass = STATUS_META[invoice.status] ?? STATUS_META.draft;
+  const isInternal = invoice.kind === "internal_record";
+  // Letterhead label flips per kind so the doc reads like what it
+  // actually is — a real bill vs. a record-of-work file copy.
+  const headerLabel = isInternal ? "Internal Record" : "Invoice";
   const firmAddress = [
     firm.addressLine1,
     firm.addressLine2,
@@ -87,7 +91,7 @@ export function InvoicePreview({
               </div>
               <div className="text-right shrink-0">
                 <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
-                  Invoice
+                  {headerLabel}
                 </div>
                 <div className="text-lg font-display font-medium text-ink mt-0.5">
                   {invoice.invoiceNumber}
@@ -95,50 +99,79 @@ export function InvoicePreview({
                 <span
                   className={`inline-block mt-1.5 text-2xs font-medium px-2 py-0.5 rounded-full border ${statusClass}`}
                 >
-                  {INVOICE_STATUS_LABEL[invoice.status] ?? invoice.status}
+                  {invoiceStatusLabel(
+                    invoice.status,
+                    invoice.kind as InvoiceKind
+                  )}
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Meta + Bill-to */}
+          {/* Meta + Bill-to (or For-file block on internal records) */}
           <div className="px-6 py-4 grid grid-cols-2 gap-6 border-b border-line">
             <div>
-              <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 mb-1">
-                Bill to
-              </div>
-              <div className="text-sm font-medium text-ink">
-                {invoice.clientName ?? "—"}
-              </div>
-              {invoice.clientEmail && (
-                <div className="text-2xs text-ink-3 font-mono mt-0.5">
-                  {invoice.clientEmail}
-                </div>
-              )}
-              {invoice.clientAddress && (
-                <div className="text-2xs text-ink-4 mt-1 leading-relaxed">
-                  {invoice.clientAddress.line1 && (
-                    <div>{invoice.clientAddress.line1}</div>
-                  )}
-                  {(invoice.clientAddress.city ||
-                    invoice.clientAddress.state ||
-                    invoice.clientAddress.zip) && (
-                    <div>
-                      {[
-                        invoice.clientAddress.city,
-                        invoice.clientAddress.state,
-                        invoice.clientAddress.zip,
-                      ]
-                        .filter(Boolean)
-                        .join(", ")}
+              {isInternal ? (
+                <>
+                  <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 mb-1">
+                    For matter file
+                  </div>
+                  <div className="text-sm font-medium text-ink">
+                    Internal record — not billed
+                  </div>
+                  <div className="text-2xs text-ink-4 mt-1 leading-relaxed max-w-xs">
+                    Closes WIP without invoicing. Excluded from
+                    Outstanding AR; the matter&apos;s Trust ledger is
+                    unaffected.
+                  </div>
+                  <div className="text-2xs text-ink-4 mt-2">
+                    <span className="font-mono uppercase tracking-wider">
+                      Re:
+                    </span>{" "}
+                    {invoice.matterName}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 mb-1">
+                    Bill to
+                  </div>
+                  <div className="text-sm font-medium text-ink">
+                    {invoice.clientName ?? "—"}
+                  </div>
+                  {invoice.clientEmail && (
+                    <div className="text-2xs text-ink-3 font-mono mt-0.5">
+                      {invoice.clientEmail}
                     </div>
                   )}
-                </div>
+                  {invoice.clientAddress && (
+                    <div className="text-2xs text-ink-4 mt-1 leading-relaxed">
+                      {invoice.clientAddress.line1 && (
+                        <div>{invoice.clientAddress.line1}</div>
+                      )}
+                      {(invoice.clientAddress.city ||
+                        invoice.clientAddress.state ||
+                        invoice.clientAddress.zip) && (
+                        <div>
+                          {[
+                            invoice.clientAddress.city,
+                            invoice.clientAddress.state,
+                            invoice.clientAddress.zip,
+                          ]
+                            .filter(Boolean)
+                            .join(", ")}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div className="text-2xs text-ink-4 mt-2">
+                    <span className="font-mono uppercase tracking-wider">
+                      Re:
+                    </span>{" "}
+                    {invoice.matterName}
+                  </div>
+                </>
               )}
-              <div className="text-2xs text-ink-4 mt-2">
-                <span className="font-mono uppercase tracking-wider">Re:</span>{" "}
-                {invoice.matterName}
-              </div>
             </div>
             <dl className="text-2xs grid grid-cols-[5rem_1fr] gap-y-1 self-start">
               <dt className="text-ink-4">Issued</dt>
