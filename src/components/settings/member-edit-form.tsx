@@ -107,28 +107,51 @@ export function MemberEditForm({
           />
         </Field>
         <div className="flex flex-col gap-1.5 pt-5">
-          <label
-            className={cn(
-              "flex items-center gap-2 text-xs",
-              member.isSelf
-                ? "cursor-not-allowed opacity-50"
-                : "cursor-pointer"
-            )}
-            title={member.isSelf ? "You can't deactivate yourself." : undefined}
-          >
-            <input
-              type="checkbox"
-              name="isActive"
-              value="on"
-              defaultChecked={member.isActive}
-              disabled={member.isSelf}
-              className="accent-brand-500"
-            />
-            <span>
-              <span className="font-medium text-ink">Active</span>
-              <span className="text-ink-4 ml-1.5">— can sign in</span>
-            </span>
-          </label>
+          {member.isSelf ? (
+            // Self-row: a disabled checkbox WOULDN'T submit its value
+            // (browsers omit disabled fields from form data), so the
+            // server would see undefined and try to deactivate you.
+            // Force-submit the current value via a hidden input and
+            // render a non-interactive indicator instead.
+            <>
+              <input
+                type="hidden"
+                name="isActive"
+                value={member.isActive ? "on" : ""}
+              />
+              <div
+                className="flex items-center gap-2 text-xs opacity-60"
+                title="You can't deactivate yourself — another admin can do it."
+              >
+                <span
+                  className={cn(
+                    "inline-block w-3.5 h-3.5 rounded-sm border",
+                    member.isActive
+                      ? "bg-brand-500 border-brand-500"
+                      : "border-line"
+                  )}
+                />
+                <span>
+                  <span className="font-medium text-ink">Active</span>
+                  <span className="text-ink-4 ml-1.5">— can sign in</span>
+                </span>
+              </div>
+            </>
+          ) : (
+            <label className="flex items-center gap-2 text-xs cursor-pointer">
+              <input
+                type="checkbox"
+                name="isActive"
+                value="on"
+                defaultChecked={member.isActive}
+                className="accent-brand-500"
+              />
+              <span>
+                <span className="font-medium text-ink">Active</span>
+                <span className="text-ink-4 ml-1.5">— can sign in</span>
+              </span>
+            </label>
+          )}
           {errs.isActive && (
             <div className="text-2xs text-warn">{errs.isActive[0]}</div>
           )}

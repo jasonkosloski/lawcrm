@@ -241,11 +241,20 @@ export async function updateFirmMember(
     };
   }
 
-  const newIsActive = parsed.data.isActive === "on";
   const currentUserId = await getCurrentUserId();
+  // Self-protection: ignore whatever the form said about isActive
+  // when editing yourself. Belt + suspenders — the form renders a
+  // non-interactive indicator + hidden input so the value round-
+  // trips, but a tampered post would otherwise hit the deactivate
+  // path and trip the guard below.
+  const newIsActive =
+    target.id === currentUserId
+      ? target.isActive
+      : parsed.data.isActive === "on";
 
-  // Self-protection: an admin can't deactivate themselves. Mistake-
-  // proofing — if you want out, another admin can do it for you.
+  // Self-protection check: redundant given the above, but kept as a
+  // belt-and-suspenders guard in case the assignment above ever
+  // changes. If you want out, another admin can do it for you.
   if (target.id === currentUserId && !newIsActive) {
     return {
       status: "error",
