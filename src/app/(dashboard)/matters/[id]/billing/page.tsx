@@ -231,14 +231,22 @@ function MainColumn({
               <TableBody>
                 {billing.invoices.map((inv) => {
                   const isSelected = inv.id === selectedInvoiceId;
-                  // Each cell wraps its content in a Link so the whole
-                  // row is clickable; the kebab is its own link-free
-                  // cell so it doesn't double-fire navigation.
-                  const cellLink = (children: React.ReactNode) => (
+                  // Each cell wraps its content in a Link that fills
+                  // the cell so the whole row is clickable. The kebab
+                  // cell stays link-free so its menu doesn't double-
+                  // fire navigation. Padding lives on the Link (not
+                  // the TableCell) because TableCell's default p-2
+                  // would otherwise eat half the click target — the
+                  // first/last cells get extra px-4 for the table's
+                  // outer gutter.
+                  const cellLink = (
+                    children: React.ReactNode,
+                    extraClasses?: string
+                  ) => (
                     <Link
                       href={invoiceHref(inv.id)}
                       scroll={false}
-                      className="block py-3"
+                      className={cn("block px-2 py-3", extraClasses)}
                     >
                       {children}
                     </Link>
@@ -253,25 +261,24 @@ function MainColumn({
                           : "hover:bg-paper-2"
                       )}
                     >
-                      <TableCell className="pl-4 font-mono text-xs p-0">
-                        <Link
-                          href={invoiceHref(inv.id)}
-                          scroll={false}
-                          className={cn(
-                            "block py-3",
+                      <TableCell className="font-mono text-xs p-0">
+                        {cellLink(
+                          <>
+                            {inv.invoiceNumber}
+                            {inv.lineItemCount > 0 && (
+                              <span className="ml-2 text-2xs text-ink-4 font-sans">
+                                · {inv.lineItemCount}{" "}
+                                {inv.lineItemCount === 1 ? "item" : "items"}
+                              </span>
+                            )}
+                          </>,
+                          cn(
+                            "pl-4",
                             isSelected
                               ? "text-brand-700 font-semibold"
                               : "text-ink"
-                          )}
-                        >
-                          {inv.invoiceNumber}
-                          {inv.lineItemCount > 0 && (
-                            <span className="ml-2 text-2xs text-ink-4 font-sans">
-                              · {inv.lineItemCount}{" "}
-                              {inv.lineItemCount === 1 ? "item" : "items"}
-                            </span>
-                          )}
-                        </Link>
+                          )
+                        )}
                       </TableCell>
                       <TableCell className="p-0">
                         {cellLink(
