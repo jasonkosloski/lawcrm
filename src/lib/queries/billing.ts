@@ -249,19 +249,21 @@ export type InvoiceLineItem = {
   userInitials: string;
 };
 
-/** A payment recorded against an invoice. Today every entry comes
- *  from a `TrustTransaction` row; future channels (manual mark-paid
- *  with capture, ACH webhook, etc.) will produce additional rows
- *  with different `source` values. */
+/** A payment recorded against an invoice. Sourced from the
+ *  `InvoicePayment` table — every channel (trust, check, ACH, cash,
+ *  card, other) lands here. Trust payments also write a separate
+ *  `TrustTransaction` row for the trust ledger, but the invoice
+ *  preview reads from this single table. */
 export type InvoicePayment = {
   id: string;
   date: Date;
-  /** Where the money came from. Drives the row's source label
-   *  ("From trust account", future: "Check", "ACH", etc.). */
-  source: "trust";
-  /** Free-text from the underlying TrustTransaction. */
-  description: string;
-  /** Check #, wire ID — what the user typed when recording. */
+  /** Channel the payment came in on. UI maps to display label via
+   *  `INVOICE_PAYMENT_SOURCE_LABEL`. */
+  source: string;
+  /** Free-text memo / description. May be null for older trust
+   *  rows that pre-date the unified InvoicePayment table. */
+  description: string | null;
+  /** Check #, wire ID, last-4 — what the user typed when recording. */
   reference: string | null;
   amount: number;
 };
@@ -318,7 +320,7 @@ export async function getInvoiceById(
         orderBy: { date: "asc" },
         include: { user: { select: { name: true, initials: true } } },
       },
-      trustPayments: {
+      payments: {
         // Newest payments float to the top so the most recent
         // activity is visible first. Within a date, createdAt
         // breaks ties.
@@ -383,19 +385,18 @@ export async function getInvoiceById(
       userName: e.user.name,
       userInitials: e.user.initials,
     })),
-    payments: inv.trustPayments.map((p) => ({
+    payments: inv.payments.map((p) => ({
       id: p.id,
       date: p.date,
-      source: "trust" as const,
+      source: p.source,
       description: p.description,
       reference: p.reference,
-      // Trust disbursements are stored as negative amounts (so the
-      // ledger sums to the balance directly). For the invoice's
-      // perspective these are positive payments — flip the sign.
-      amount: p.amount.abs().toNumber(),
+      // InvoicePayment.amount is always stored positive — it's the
+      // payment side of the ledger, not the trust-account side.
+      amount: p.amount.toNumber(),
     })),
-    paymentsRecordedTotal: inv.trustPayments.reduce(
-      (sum, p) => sum + p.amount.abs().toNumber(),
+    paymentsRecordedTotal: inv.payments.reduce(
+      (sum, p) => sum + p.amount.toNumber(),
       0
     ),
   };

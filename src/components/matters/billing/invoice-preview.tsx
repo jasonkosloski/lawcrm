@@ -13,7 +13,12 @@
  */
 
 import { Building2, FileText, Wallet } from "lucide-react";
-import { invoiceStatusLabel, type InvoiceKind } from "@/lib/billing-form";
+import {
+  invoiceStatusLabel,
+  INVOICE_PAYMENT_SOURCE_LABEL,
+  type InvoiceKind,
+  type InvoicePaymentSource,
+} from "@/lib/billing-form";
 import type { FirmProfile } from "@/lib/firm";
 import type { InvoiceDetail } from "@/lib/queries/billing";
 
@@ -343,7 +348,11 @@ export function InvoicePreview({
                         })}
                       </td>
                       <td className="py-2 pr-3">
-                        <div className="text-ink">From trust account</div>
+                        <div className="text-ink">
+                          {INVOICE_PAYMENT_SOURCE_LABEL[
+                            p.source as InvoicePaymentSource
+                          ] ?? p.source}
+                        </div>
                         {p.description && (
                           <div className="text-ink-4 mt-0.5">
                             {p.description}

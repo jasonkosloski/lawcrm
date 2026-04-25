@@ -92,6 +92,34 @@ export function invoiceStatusLabel(
 /// Back-compat for callers that haven't moved yet.
 export const INVOICE_STATUS_LABEL = STATUS_LABEL_CLIENT;
 
+/// Channels the "Record payment" dialog offers. `trust` is in the
+/// list (so the action validates it) but the UI doesn't surface it
+/// — the dedicated "Pay from trust" flow handles that case so we
+/// can also write the trust ledger leg in the same transaction.
+export const INVOICE_PAYMENT_SOURCES = [
+  "check",
+  "ach",
+  "cash",
+  "card",
+  "other",
+  "trust",
+] as const;
+export type InvoicePaymentSource = (typeof INVOICE_PAYMENT_SOURCES)[number];
+
+/// Display label for a payment source. Used by both the dialog
+/// dropdown and the invoice preview's "Payments received" rows.
+export const INVOICE_PAYMENT_SOURCE_LABEL: Record<
+  InvoicePaymentSource,
+  string
+> = {
+  check: "Check",
+  ach: "ACH / wire",
+  cash: "Cash",
+  card: "Credit card",
+  other: "Other",
+  trust: "Trust account",
+};
+
 /// Trust transaction types the manual composer offers. Interest +
 /// transfer are reserved for later automation (bank-feed import).
 export const TRUST_TXN_TYPES = ["deposit", "disbursement", "refund"] as const;

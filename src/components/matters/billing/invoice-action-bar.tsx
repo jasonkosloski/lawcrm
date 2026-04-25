@@ -30,6 +30,7 @@ import {
   Check,
   Landmark,
   MoreHorizontal,
+  Receipt,
   Send,
   Trash2,
 } from "lucide-react";
@@ -46,6 +47,7 @@ import {
   type InvoiceKind,
 } from "@/lib/billing-form";
 import { PayFromTrustDialog } from "./pay-from-trust-dialog";
+import { RecordPaymentDialog } from "./record-payment-dialog";
 
 export function InvoiceActionBar({
   invoiceId,
@@ -70,6 +72,7 @@ export function InvoiceActionBar({
 }) {
   const [pending, startTransition] = useTransition();
   const [trustOpen, setTrustOpen] = useState(false);
+  const [recordOpen, setRecordOpen] = useState(false);
   const allowed = invoiceStatusTransitions(currentStatus, kind);
   // Pay-from-trust eligibility: client invoice with an open balance,
   // and the matter actually has trust funds. Internal records have
@@ -79,10 +82,16 @@ export function InvoiceActionBar({
     currentStatus !== "void" &&
     invoiceBalance > 0 &&
     trustBalance > 0;
+  // Record-payment eligibility: client invoice with an open balance.
+  // Internal records can't take payments (born locked at "Recorded"),
+  // and we need somewhere to apply the money.
+  const canRecordPayment =
+    kind === "client" && currentStatus !== "void" && invoiceBalance > 0;
 
   // Render nothing only when there's truly nothing to do — no
-  // status transitions AND no trust-pay opportunity.
-  if (allowed.length === 0 && !canPayFromTrust) return null;
+  // status transitions AND no money paths available.
+  if (allowed.length === 0 && !canPayFromTrust && !canRecordPayment)
+    return null;
 
   const transitionTo = (next: string, confirmCopy?: string) => {
     if (confirmCopy && !confirm(confirmCopy)) return;
@@ -134,31 +143,52 @@ export function InvoiceActionBar({
           Pay from trust
         </button>
       )}
-      {allowed.includes("paid") && (
+      {/* Client invoices: Record payment opens a dialog that
+          captures amount / method / reference and creates a real
+          payment record. Auto-flips status to "paid" when the
+          payment covers the balance. */}
+      {kind === "client" && canRecordPayment && (
+        <button
+          type="button"
+          onClick={() => setRecordOpen(true)}
+          disabled={pending}
+          className={cn(
+            "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-2xs font-medium",
+            // Primary when this is the natural "money in" CTA — i.e.,
+            // invoice is already sent and there's no trust covering
+            // it. Secondary otherwise so it sits next to Mark sent
+            // or Pay from trust without competing.
+            !allowed.includes("sent") && !canPayFromTrust
+              ? "bg-brand-500 text-white hover:bg-brand-600"
+              : "border border-line bg-white text-ink hover:border-brand-300 hover:text-brand-700",
+            "transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          )}
+          title="Log a payment received against this invoice (check, ACH, cash, card, etc.)"
+        >
+          <Receipt size={11} />
+          Record payment
+        </button>
+      )}
+      {/* Internal records keep the bare "Mark recorded" status flip
+          — there's no payment behind them, just a lock. */}
+      {kind === "internal_record" && allowed.includes("paid") && (
         <button
           type="button"
           onClick={() =>
             transitionTo(
               "paid",
-              kind === "internal_record"
-                ? `Lock internal record ${invoiceNumber}? Linked time entries stay linked; void unlinks them back to WIP.`
-                : `Mark invoice ${invoiceNumber} as fully paid? V1 doesn't support partial payments yet.`
+              `Lock internal record ${invoiceNumber}? Linked time entries stay linked; void unlinks them back to WIP.`
             )
           }
           disabled={pending}
           className={cn(
             "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-2xs font-medium",
-            // When sent isn't an option (already-sent invoice or
-            // internal record), Mark paid / Mark recorded IS the
-            // primary CTA; otherwise it's secondary.
-            allowed.includes("sent")
-              ? "border border-line bg-white text-ink hover:border-brand-300 hover:text-brand-700"
-              : "bg-brand-500 text-white hover:bg-brand-600",
+            "bg-brand-500 text-white hover:bg-brand-600",
             "transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           )}
         >
           <Check size={11} />
-          {kind === "internal_record" ? "Mark recorded" : "Mark paid"}
+          Mark recorded
         </button>
       )}
       {hasMoreMenu && (
@@ -201,6 +231,15 @@ export function InvoiceActionBar({
           invoiceNumber={invoiceNumber}
           invoiceBalance={invoiceBalance}
           trustBalance={trustBalance}
+        />
+      )}
+      {canRecordPayment && (
+        <RecordPaymentDialog
+          open={recordOpen}
+          onOpenChange={setRecordOpen}
+          invoiceId={invoiceId}
+          invoiceNumber={invoiceNumber}
+          invoiceBalance={invoiceBalance}
         />
       )}
     </div>

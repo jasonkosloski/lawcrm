@@ -29,6 +29,7 @@ import { logActivity } from "@/lib/activity-log";
 import {
   invoiceStatusTransitions,
   TRUST_TXN_TYPES,
+  INVOICE_PAYMENT_SOURCES,
   billingInitialState,
   type BillingFormState,
   type InvoiceKind,
@@ -690,6 +691,25 @@ export async function payInvoiceFromTrust(
         },
       });
 
+      // Leg 4: invoice payment record. Same shape as a manual
+      // "Record payment" entry but tagged source=trust + linked back
+      // to the trust ledger row that funded it. This is what the
+      // invoice preview renders in its "Payments received" section
+      // — keeping it unified with non-trust channels means the
+      // preview reads from one place regardless of how money landed.
+      await tx.invoicePayment.create({
+        data: {
+          invoiceId: invoice.id,
+          source: "trust",
+          amount: requested,
+          date: txnDate,
+          description: `Earned-fee transfer from matter trust account`,
+          reference: data.reference || null,
+          trustTxnId: trustTxn.id,
+          createdBy: userId,
+        },
+      });
+
       return {
         invoiceNumber: invoice.invoiceNumber,
         matterId: invoice.matterId,
@@ -716,6 +736,151 @@ export async function payInvoiceFromTrust(
     return {
       status: "error",
       error: err instanceof Error ? err.message : "Couldn't record the payment.",
+    };
+  }
+}
+
+// ── Record manual invoice payment ───────────────────────────────────────
+//
+// Logs a payment received via a non-trust channel (check, ACH, cash,
+// card, other) against an open invoice. Shape:
+//   - Creates an InvoicePayment row (the canonical per-invoice
+//     payment record).
+//   - Bumps Invoice.paidAmount by the amount.
+//   - Flips status to "paid" only when the new paidAmount covers the
+//     total — partial payments leave status alone.
+//
+// Refused on internal records (no AR balance to pay) and on voided
+// invoices. Source "trust" is rejected here too — Pay from trust is
+// the dedicated path so the trust ledger leg gets written in the
+// same transaction.
+
+const recordPaymentSchema = z.object({
+  amount: z
+    .string()
+    .trim()
+    .min(1, "Amount is required")
+    .transform((v) => v.replace(/[$,]/g, ""))
+    .refine((v) => /^\d+(\.\d{1,2})?$/.test(v), "Enter a valid amount")
+    .refine((v) => parseFloat(v) > 0, "Amount must be greater than 0"),
+  /** YYYY-MM-DD; today when empty. Editable so reconciliation
+   *  against bank statements is straightforward. */
+  date: z.string().optional().or(z.literal("")),
+  /** Channel the payment came in on. Trust is excluded at the UI
+   *  level (Pay from trust handles that path) but we still validate
+   *  against the same enum here. */
+  source: z.enum(INVOICE_PAYMENT_SOURCES),
+  reference: z.string().trim().max(120).optional().or(z.literal("")),
+  description: z.string().trim().max(400).optional().or(z.literal("")),
+});
+
+export async function recordInvoicePayment(
+  invoiceId: string,
+  _prev: BillingFormState,
+  formData: FormData
+): Promise<BillingFormState> {
+  const userId = await getCurrentUserId();
+  const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
+  const parsed = recordPaymentSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      status: "error",
+      errors: parsed.error.flatten().fieldErrors,
+    };
+  }
+  const data = parsed.data;
+  if (data.source === "trust") {
+    return {
+      status: "error",
+      error: "Use Pay from trust to record a trust-funded payment.",
+    };
+  }
+  const requested = new Prisma.Decimal(data.amount);
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const invoice = await tx.invoice.findUnique({
+        where: { id: invoiceId },
+        select: {
+          id: true,
+          matterId: true,
+          invoiceNumber: true,
+          kind: true,
+          status: true,
+          totalAmount: true,
+          paidAmount: true,
+        },
+      });
+      if (!invoice) throw new Error("Invoice not found.");
+      if (invoice.kind !== "client") {
+        throw new Error(
+          "Payments only apply to client invoices — internal records have no AR balance."
+        );
+      }
+      if (invoice.status === "void") {
+        throw new Error("Can't record a payment against a voided invoice.");
+      }
+
+      const balance = invoice.totalAmount.sub(invoice.paidAmount);
+      if (balance.lessThanOrEqualTo(0)) {
+        throw new Error("Invoice has no outstanding balance.");
+      }
+      if (requested.greaterThan(balance)) {
+        throw new Error(
+          `Amount exceeds the invoice's $${balance.toFixed(2)} balance — record the balance or less.`
+        );
+      }
+
+      const txnDate = data.date ? new Date(data.date) : new Date();
+      await tx.invoicePayment.create({
+        data: {
+          invoiceId: invoice.id,
+          source: data.source,
+          amount: requested,
+          date: txnDate,
+          description: data.description || null,
+          reference: data.reference || null,
+          createdBy: userId,
+        },
+      });
+
+      const newPaid = invoice.paidAmount.add(requested);
+      const fullyPaid = newPaid.greaterThanOrEqualTo(invoice.totalAmount);
+      await tx.invoice.update({
+        where: { id: invoice.id },
+        data: {
+          paidAmount: newPaid,
+          ...(fullyPaid ? { status: "paid" } : {}),
+        },
+      });
+
+      return {
+        invoiceNumber: invoice.invoiceNumber,
+        matterId: invoice.matterId,
+        amount: requested,
+        fullyPaid,
+        source: data.source,
+      };
+    });
+
+    await logActivity({
+      matterId: result.matterId,
+      userId,
+      type: "deposit",
+      title: result.fullyPaid
+        ? `Invoice ${result.invoiceNumber} paid in full · $${result.amount.toFixed(2)} (${result.source})`
+        : `Partial payment to invoice ${result.invoiceNumber} · $${result.amount.toFixed(2)} (${result.source})`,
+    });
+
+    revalidatePath(`/matters/${result.matterId}/billing`);
+    revalidatePath(`/matters/${result.matterId}`);
+    revalidatePath("/", "layout");
+    return { ...billingInitialState, status: "ok" };
+  } catch (err) {
+    return {
+      status: "error",
+      error:
+        err instanceof Error ? err.message : "Couldn't record the payment.",
     };
   }
 }

@@ -942,11 +942,61 @@ model Invoice {
   /// `invoiceId` points back here. Lets the preview + ledger both
   /// surface the cross-link without separate queries.
   trustPayments TrustTransaction[]
+  /// Every payment recorded against this invoice — trust, check,
+  /// ACH, cash, card, etc. This is what the invoice preview reads
+  /// to render its "Payments received" section. Trust payments
+  /// double-write here AND to TrustTransaction (the trust ledger
+  /// remains the source of truth for the trust account itself).
+  payments InvoicePayment[]
 
   @@index([matterId])
   @@index([status])
   @@index([kind])
   @@map("invoices")
+}
+
+/// A payment recorded against an invoice. One row per payment event,
+/// regardless of channel. Created by the "Record payment" action
+/// (manual channels) and the "Pay from trust" action (which also
+/// creates the underlying TrustTransaction ledger row and links to
+/// it via `trustTxnId`).
+///
+/// Why this is its own model: pre-this, the invoice preview pulled
+/// payment rows from `Invoice.trustPayments` (TrustTransaction FK).
+/// That worked for trust-only, but as soon as a check / ACH / cash
+/// payment lands there's no trust row to read from. This table is
+/// the unified record of "what's been paid against this invoice."
+model InvoicePayment {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  /// Where the money came from. Free string (not enum) so adding
+  /// new channels (Stripe webhook, lockbox import) is config-only,
+  /// not a migration. UI maps known sources to display labels.
+  source      String   /// trust | check | ach | cash | card | other
+  amount      Decimal  /// Always positive — payments add to paidAmount
+  date        DateTime
+  /// Free text — "Paid in full per email 4/12", "Partial — balance
+  /// to follow", etc. Captured into the trust txn's description
+  /// when source=trust.
+  description String?
+  /// Check #, wire confirmation, last-4 of card, etc.
+  reference   String?
+  /// FK back to the originating TrustTransaction when source=trust.
+  /// SetNull (not Cascade) so deleting the trust row — if we ever
+  /// expose that — doesn't lose the invoice's payment history; the
+  /// payment was applied regardless of whether the ledger entry
+  /// survives. Unique because at most one InvoicePayment per trust
+  /// txn ever exists.
+  trustTxnId  String?  @unique
+  trustTxn    TrustTransaction? @relation(fields: [trustTxnId], references: [id], onDelete: SetNull)
+  createdBy   String?  /// User who recorded the payment
+  createdAt   DateTime @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([date])
+  @@map("invoice_payments")
 }
 
 // =============================================================================
@@ -975,6 +1025,10 @@ model TrustTransaction {
 
   matter  Matter   @relation(fields: [matterId], references: [id], onDelete: Cascade)
   invoice Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  /// The InvoicePayment row this trust txn produced (when it was
+  /// created via Pay from trust). Lets the ledger surface "applied
+  /// to invoice" detail without joining through Invoice.
+  invoicePayment InvoicePayment?
 
   @@index([matterId])
   @@index([date])
