@@ -1,15 +1,16 @@
 /**
  * Matter Detail — Billing tab (v1)
  *
- * What's live:
- *   - WIP summary (unbilled billable time) with "Generate invoice"
- *     CTA → bundles every approved+unbilled entry into a draft
- *     Invoice and flips their status to "billed".
- *   - Invoice table with status transitions (draft → sent → paid;
- *     void unlinks entries back to WIP).
- *   - Trust ledger: current balance, transaction history,
- *     manual add (deposit / disbursement / refund) with overdraw
- *     prevention.
+ * Layout:
+ *   - Top KPI strip (full width).
+ *   - Invoices section: split-pane on desktop. Left = the invoices
+ *     table (rows are clickable Links setting `?invoice=<id>`).
+ *     Right = letterhead-style preview of the selected invoice, or
+ *     a "select an invoice" placeholder when none is set. The
+ *     selected row uses ?invoice= URL state so the view is deep-
+ *     linkable + back-button-honest (matches the email + calendar
+ *     URL patterns).
+ *   - WIP and Trust cards (full width below).
  *
  * What's deferred (intentionally — see docs/MVP_TODO.md):
  *   - Invoice line-item editing beyond the auto-bundle
@@ -21,6 +22,9 @@
  *   - Aging report (the row's daysUntilDue gets the user 90% there)
  */
 
+import Link from "next/link";
+import { FileText } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   Card,
   CardContent,
@@ -36,9 +40,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { GenerateInvoiceForm } from "@/components/matters/billing/generate-invoice-form";
-import { InvoiceRowActions } from "@/components/matters/billing/invoice-row-actions";
+import { InvoicePreview } from "@/components/matters/billing/invoice-preview";
 import { TrustTransactionForm } from "@/components/matters/billing/trust-transaction-form";
-import { getMatterBilling } from "@/lib/queries/billing";
+import { getMatterBilling, getInvoiceById } from "@/lib/queries/billing";
+import { getCurrentFirm } from "@/lib/firm";
 import { INVOICE_STATUS_LABEL } from "@/lib/billing-form";
 
 const formatMoney = (n: number): string =>
@@ -70,9 +75,33 @@ const TRUST_TYPE_LABEL: Record<string, string> = {
 
 export default async function MatterBillingPage({
   params,
-}: PageProps<"/matters/[id]">) {
+  searchParams,
+}: PageProps<"/matters/[id]/billing">) {
   const { id } = await params;
-  const billing = await getMatterBilling(id);
+  const sp = await searchParams;
+  const rawInvoice = Array.isArray(sp.invoice) ? sp.invoice[0] : sp.invoice;
+  const requestedInvoiceId =
+    typeof rawInvoice === "string" ? rawInvoice : null;
+
+  const [billing, firm] = await Promise.all([
+    getMatterBilling(id),
+    getCurrentFirm(),
+  ]);
+
+  // Validate the requested invoice belongs to this matter — defends
+  // against a stale ?invoice= surviving navigation between matters
+  // (and against URL-tampering once we go multi-tenant).
+  const selectedInvoiceId =
+    requestedInvoiceId &&
+    billing.invoices.some((i) => i.id === requestedInvoiceId)
+      ? requestedInvoiceId
+      : null;
+  const selectedInvoice = selectedInvoiceId
+    ? await getInvoiceById(selectedInvoiceId)
+    : null;
+
+  const invoiceHref = (invId: string): string =>
+    `/matters/${id}/billing?invoice=${invId}`;
 
   return (
     <div className="p-5 flex flex-col gap-5">
@@ -97,103 +126,150 @@ export default async function MatterBillingPage({
         />
       </div>
 
-      {/* ── Invoices ───────────────────────────────────────── */}
-      <Card className="p-0 overflow-hidden">
-        <CardHeader className="pb-2 pt-4 px-4">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            Invoices
-            <span className="text-2xs font-mono font-normal text-ink-4">
-              {billing.invoices.length}
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {billing.invoices.length === 0 ? (
-            <div className="p-6 text-center">
-              <div className="text-xs text-ink-3 mb-1">No invoices yet.</div>
-              <div className="text-2xs text-ink-4">
-                Generate the first one from WIP below.
+      {/* ── Invoices: split-pane ────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-4">
+        {/* Left: list */}
+        <Card className="p-0 overflow-hidden self-start">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              Invoices
+              <span className="text-2xs font-mono font-normal text-ink-4">
+                {billing.invoices.length}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {billing.invoices.length === 0 ? (
+              <div className="p-6 text-center">
+                <div className="text-xs text-ink-3 mb-1">
+                  No invoices yet.
+                </div>
+                <div className="text-2xs text-ink-4">
+                  Generate the first one from WIP below.
+                </div>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-4">#</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Due</TableHead>
+                    <TableHead className="pr-4">Balance</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {billing.invoices.map((inv) => {
+                    const isSelected = inv.id === selectedInvoiceId;
+                    return (
+                      <TableRow
+                        key={inv.id}
+                        className={cn(
+                          "cursor-pointer transition-colors",
+                          isSelected
+                            ? "bg-brand-tint hover:bg-brand-tint"
+                            : "hover:bg-paper-2"
+                        )}
+                      >
+                        <TableCell className="pl-4 font-mono text-xs p-0">
+                          <Link
+                            href={invoiceHref(inv.id)}
+                            scroll={false}
+                            className={cn(
+                              "block px-0 py-3",
+                              isSelected
+                                ? "text-brand-700 font-semibold"
+                                : "text-ink"
+                            )}
+                          >
+                            {inv.invoiceNumber}
+                            {inv.lineItemCount > 0 && (
+                              <span className="ml-2 text-2xs text-ink-4 font-sans">
+                                · {inv.lineItemCount}{" "}
+                                {inv.lineItemCount === 1 ? "item" : "items"}
+                              </span>
+                            )}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="p-0">
+                          <Link
+                            href={invoiceHref(inv.id)}
+                            scroll={false}
+                            className="block py-3"
+                          >
+                            <span
+                              className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full border ${STATUS_META[inv.status] ?? STATUS_META.draft}`}
+                            >
+                              {INVOICE_STATUS_LABEL[inv.status] ?? inv.status}
+                            </span>
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-2xs font-mono p-0">
+                          <Link
+                            href={invoiceHref(inv.id)}
+                            scroll={false}
+                            className="block py-3"
+                          >
+                            <span
+                              className={
+                                inv.daysUntilDue !== null &&
+                                inv.daysUntilDue < 0
+                                  ? "text-warn font-medium"
+                                  : "text-ink-3"
+                              }
+                            >
+                              {formatDate(inv.dueDate)}
+                              {inv.daysUntilDue !== null &&
+                                inv.daysUntilDue < 0 && (
+                                  <span className="ml-1 text-warn">
+                                    ({Math.abs(inv.daysUntilDue)}d late)
+                                  </span>
+                                )}
+                            </span>
+                          </Link>
+                        </TableCell>
+                        <TableCell className="pr-4 text-xs font-mono font-medium p-0">
+                          <Link
+                            href={invoiceHref(inv.id)}
+                            scroll={false}
+                            className={cn(
+                              "block py-3",
+                              inv.balance > 0 ? "text-ink" : "text-ink-4"
+                            )}
+                          >
+                            {formatMoney(inv.balance)}
+                          </Link>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Right: preview pane */}
+        <Card className="p-0 overflow-hidden lg:min-h-[36rem] lg:max-h-[calc(100vh-15rem)]">
+          {selectedInvoice ? (
+            <InvoicePreview invoice={selectedInvoice} firm={firm} />
+          ) : (
+            <div className="h-full min-h-[20rem] flex flex-col items-center justify-center text-center px-6 py-10 bg-paper-2/30">
+              <FileText size={28} className="text-ink-4 mb-2" />
+              <div className="text-sm font-medium text-ink mb-1">
+                {billing.invoices.length === 0
+                  ? "No invoices to preview"
+                  : "Select an invoice to preview"}
+              </div>
+              <div className="text-2xs text-ink-4 max-w-xs">
+                {billing.invoices.length === 0
+                  ? "Generate one from WIP below — the letterhead preview, line items, and action bar all show up here."
+                  : "Click a row on the left to see the letterhead view, line items, and quick actions for that invoice."}
               </div>
             </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="pl-4">#</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Issued</TableHead>
-                  <TableHead>Due</TableHead>
-                  <TableHead>Total</TableHead>
-                  <TableHead>Paid</TableHead>
-                  <TableHead>Balance</TableHead>
-                  <TableHead className="pr-4 w-8" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {billing.invoices.map((inv) => (
-                  <TableRow key={inv.id}>
-                    <TableCell className="pl-4 font-mono text-xs text-ink">
-                      {inv.invoiceNumber}
-                      {inv.lineItemCount > 0 && (
-                        <span className="ml-2 text-2xs text-ink-4">
-                          · {inv.lineItemCount} {inv.lineItemCount === 1 ? "item" : "items"}
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <span
-                        className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full border ${STATUS_META[inv.status] ?? STATUS_META.draft}`}
-                      >
-                        {INVOICE_STATUS_LABEL[inv.status] ?? inv.status}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-2xs font-mono text-ink-3">
-                      {formatDate(inv.issueDate)}
-                    </TableCell>
-                    <TableCell className="text-2xs font-mono">
-                      <span
-                        className={
-                          inv.daysUntilDue !== null && inv.daysUntilDue < 0
-                            ? "text-warn font-medium"
-                            : "text-ink-3"
-                        }
-                      >
-                        {formatDate(inv.dueDate)}
-                        {inv.daysUntilDue !== null &&
-                          inv.daysUntilDue < 0 && (
-                            <span className="ml-1 text-warn">
-                              ({Math.abs(inv.daysUntilDue)}d late)
-                            </span>
-                          )}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-xs font-mono text-ink">
-                      {formatMoney(inv.totalAmount)}
-                    </TableCell>
-                    <TableCell className="text-xs font-mono text-ink-3">
-                      {formatMoney(inv.paidAmount)}
-                    </TableCell>
-                    <TableCell
-                      className={`text-xs font-mono font-medium ${
-                        inv.balance > 0 ? "text-ink" : "text-ink-4"
-                      }`}
-                    >
-                      {formatMoney(inv.balance)}
-                    </TableCell>
-                    <TableCell className="pr-4 text-right">
-                      <InvoiceRowActions
-                        invoiceId={inv.id}
-                        invoiceNumber={inv.invoiceNumber}
-                        currentStatus={inv.status}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
           )}
-        </CardContent>
-      </Card>
+        </Card>
+      </div>
 
       {/* ── WIP detail + generate CTA ──────────────────────── */}
       <Card className="p-0 overflow-hidden">

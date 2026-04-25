@@ -208,3 +208,120 @@ export async function getMatterBilling(
     outstandingAr,
   };
 }
+
+// ── Invoice detail (preview pane) ───────────────────────────────────────
+
+export type InvoiceLineItem = {
+  id: string;
+  date: Date;
+  hours: number;
+  activity: string;
+  narrative: string | null;
+  rate: number | null;
+  amount: number | null;
+  userName: string;
+  userInitials: string;
+};
+
+export type InvoiceDetail = InvoiceRow & {
+  matterId: string;
+  matterName: string;
+  /** Bill-to client info pulled from the matter's client. The
+   *  `Invoice.clientId` field is captured at issue time but for v1
+   *  we read through `Matter.client` so renames flow through. */
+  clientName: string | null;
+  clientEmail: string | null;
+  clientAddress: {
+    line1: string | null;
+    city: string | null;
+    state: string | null;
+    zip: string | null;
+  } | null;
+  lineItems: InvoiceLineItem[];
+};
+
+export async function getInvoiceById(
+  invoiceId: string
+): Promise<InvoiceDetail | null> {
+  const inv = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    include: {
+      matter: {
+        select: {
+          name: true,
+          client: {
+            select: {
+              name: true,
+              email: true,
+              address: true,
+              city: true,
+              state: true,
+              zip: true,
+            },
+          },
+        },
+      },
+      lineItems: {
+        orderBy: { date: "asc" },
+        include: { user: { select: { name: true, initials: true } } },
+      },
+      _count: { select: { lineItems: true } },
+    },
+  });
+  if (!inv) return null;
+
+  // Reuse the same daysUntilDue logic as the row shape so the
+  // preview's "X days late" text matches the table.
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dayMs = 24 * 60 * 60 * 1000;
+  const total = inv.totalAmount.toNumber();
+  const paid = inv.paidAmount.toNumber();
+  const isClosed = inv.status === "paid" || inv.status === "void";
+  const daysUntilDue = isClosed
+    ? null
+    : Math.floor(
+        (new Date(inv.dueDate).setHours(0, 0, 0, 0) - today.getTime()) / dayMs
+      );
+
+  const client = inv.matter.client;
+
+  return {
+    id: inv.id,
+    invoiceNumber: inv.invoiceNumber,
+    issueDate: inv.issueDate,
+    dueDate: inv.dueDate,
+    daysUntilDue,
+    subtotal: inv.subtotal.toNumber(),
+    taxAmount: inv.taxAmount.toNumber(),
+    totalAmount: total,
+    paidAmount: paid,
+    balance: Math.max(0, total - paid),
+    status: inv.status,
+    notes: inv.notes,
+    lineItemCount: inv._count.lineItems,
+    matterId: inv.matterId,
+    matterName: inv.matter.name,
+    clientName: client?.name ?? null,
+    clientEmail: client?.email ?? null,
+    clientAddress: client
+      ? {
+          line1: client.address,
+          city: client.city,
+          state: client.state,
+          zip: client.zip,
+        }
+      : null,
+    lineItems: inv.lineItems.map((e) => ({
+      id: e.id,
+      date: e.date,
+      hours: e.hours,
+      activity: e.activity,
+      narrative: e.narrative,
+      rate: e.rate?.toNumber() ?? null,
+      amount: e.amount?.toNumber() ?? null,
+      userName: e.user.name,
+      userInitials: e.user.initials,
+    })),
+  };
+}
