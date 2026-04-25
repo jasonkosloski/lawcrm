@@ -16,9 +16,11 @@ import {
   addDeadlineToNote,
   addTaskToNote,
   addTimeEntryToNote,
+} from "@/app/actions/note-attachments";
+import {
   noteAttachmentInitialState,
   type NoteAttachmentFormState,
-} from "@/app/actions/note-attachments";
+} from "@/lib/note-attachment-form";
 import {
   DEADLINE_KINDS,
   TASK_PRIORITIES,

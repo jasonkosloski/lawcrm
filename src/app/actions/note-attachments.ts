@@ -22,6 +22,7 @@ import {
   DEADLINE_KINDS,
   TASK_PRIORITIES,
 } from "@/lib/note-constants";
+import type { NoteAttachmentFormState } from "@/lib/note-attachment-form";
 
 /** Resolve the matter the note belongs to. Used by every attach
  *  action since attached children inherit the note's matter. Throws
@@ -56,16 +57,9 @@ function revalidateForNote(matterId: string, kind: "task" | "deadline" | "time")
   }
 }
 
-/** Form state shape used by all three attach actions. Caller doesn't
- *  need to know which entity it is — same shape, different fields. */
-export type NoteAttachmentFormState = {
-  status: "idle" | "ok" | "error";
-  errors?: Record<string, string[]>;
-};
-
-export const noteAttachmentInitialState: NoteAttachmentFormState = {
-  status: "idle",
-};
+// Form state lives in `@/lib/note-attachment-form` since "use server"
+// files can only export async functions — no consts, no types with a
+// runtime shape. The three composer forms import from there.
 
 // ── Task ────────────────────────────────────────────────────────────────
 
