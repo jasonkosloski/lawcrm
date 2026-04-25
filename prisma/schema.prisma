@@ -937,6 +937,11 @@ model Invoice {
 
   matter     Matter      @relation(fields: [matterId], references: [id], onDelete: Cascade)
   lineItems  TimeEntry[]
+  /// Trust transactions that paid (or partially paid) this invoice.
+  /// Populated by the "Pay from trust" action; the ledger row's
+  /// `invoiceId` points back here. Lets the preview + ledger both
+  /// surface the cross-link without separate queries.
+  trustPayments TrustTransaction[]
 
   @@index([matterId])
   @@index([status])
@@ -959,12 +964,21 @@ model TrustTransaction {
   date        DateTime
   createdBy   String?  /// User who recorded the transaction
   reconciled  Boolean  @default(false)
+  /// When this txn was created by paying an invoice from trust, the
+  /// FK back to that invoice. Lets the ledger row link to the
+  /// invoice and the invoice preview list "paid via trust on X."
+  /// SetNull (not Cascade) so deleting an invoice doesn't lose the
+  /// trust record — the disbursement actually happened, regardless
+  /// of whether the doc lives on.
+  invoiceId   String?
   createdAt   DateTime @default(now())
 
-  matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  matter  Matter   @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  invoice Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
 
   @@index([matterId])
   @@index([date])
+  @@index([invoiceId])
   @@map("trust_transactions")
 }
 

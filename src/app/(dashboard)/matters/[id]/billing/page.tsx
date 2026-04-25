@@ -150,6 +150,8 @@ export default async function MatterBillingPage({
             invoiceNumber={selectedInvoice.invoiceNumber}
             currentStatus={selectedInvoice.status}
             kind={selectedInvoice.kind as InvoiceKind}
+            invoiceBalance={selectedInvoice.balance}
+            trustBalance={billing.trust.balance}
           />
           <Link
             href={`/matters/${id}/billing`}
@@ -350,13 +352,26 @@ function MainColumn({
                       </TableCell>
                       <TableCell className="p-0">
                         {cellLink(
-                          <span
-                            className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full border ${STATUS_META[inv.status] ?? STATUS_META.draft}`}
-                          >
-                            {invoiceStatusLabel(
-                              inv.status,
-                              inv.kind as InvoiceKind
-                            )}
+                          <span className="inline-flex items-center gap-1 flex-wrap">
+                            <span
+                              className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full border ${STATUS_META[inv.status] ?? STATUS_META.draft}`}
+                            >
+                              {invoiceStatusLabel(
+                                inv.status,
+                                inv.kind as InvoiceKind
+                              )}
+                            </span>
+                            {inv.kind === "client" &&
+                              inv.paidAmount > 0 &&
+                              inv.paidAmount < inv.totalAmount &&
+                              inv.status !== "void" && (
+                                <span
+                                  className="text-2xs font-medium px-1.5 py-0.5 rounded-full border bg-paper-2 text-ink-3 border-line"
+                                  title="Some payment recorded but a balance remains."
+                                >
+                                  partial
+                                </span>
+                              )}
                           </span>
                         )}
                       </TableCell>
@@ -531,7 +546,17 @@ function MainColumn({
                         {TRUST_TYPE_LABEL[t.type] ?? t.type}
                       </TableCell>
                       <TableCell className="text-xs text-ink truncate max-w-md">
-                        {t.description}
+                        {t.invoiceId && t.invoiceNumber ? (
+                          <Link
+                            href={invoiceHref(t.invoiceId)}
+                            scroll={false}
+                            className="hover:text-brand-700 hover:underline"
+                          >
+                            {t.description}
+                          </Link>
+                        ) : (
+                          t.description
+                        )}
                       </TableCell>
                       <TableCell className="text-2xs font-mono text-ink-4">
                         {t.reference ?? "—"}

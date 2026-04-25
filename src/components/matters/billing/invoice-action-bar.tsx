@@ -25,8 +25,14 @@
 
 "use client";
 
-import { useTransition } from "react";
-import { Check, MoreHorizontal, Send, Trash2 } from "lucide-react";
+import { useState, useTransition } from "react";
+import {
+  Check,
+  Landmark,
+  MoreHorizontal,
+  Send,
+  Trash2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -39,6 +45,7 @@ import {
   invoiceStatusTransitions,
   type InvoiceKind,
 } from "@/lib/billing-form";
+import { PayFromTrustDialog } from "./pay-from-trust-dialog";
 
 export function InvoiceActionBar({
   invoiceId,
@@ -48,16 +55,34 @@ export function InvoiceActionBar({
    *  threaded kind through yet. Internal records have a much
    *  smaller transition set (no "sent"). */
   kind = "client",
+  /** Open balance + trust balance — power the "Pay from trust"
+   *  button and the dialog's amount default. Both default to 0 so
+   *  the button stays hidden when context is missing. */
+  invoiceBalance = 0,
+  trustBalance = 0,
 }: {
   invoiceId: string;
   invoiceNumber: string;
   currentStatus: string;
   kind?: InvoiceKind;
+  invoiceBalance?: number;
+  trustBalance?: number;
 }) {
   const [pending, startTransition] = useTransition();
+  const [trustOpen, setTrustOpen] = useState(false);
   const allowed = invoiceStatusTransitions(currentStatus, kind);
+  // Pay-from-trust eligibility: client invoice with an open balance,
+  // and the matter actually has trust funds. Internal records have
+  // no AR; voided invoices have nothing to pay.
+  const canPayFromTrust =
+    kind === "client" &&
+    currentStatus !== "void" &&
+    invoiceBalance > 0 &&
+    trustBalance > 0;
 
-  if (allowed.length === 0) return null;
+  // Render nothing only when there's truly nothing to do — no
+  // status transitions AND no trust-pay opportunity.
+  if (allowed.length === 0 && !canPayFromTrust) return null;
 
   const transitionTo = (next: string, confirmCopy?: string) => {
     if (confirmCopy && !confirm(confirmCopy)) return;
@@ -86,6 +111,27 @@ export function InvoiceActionBar({
         >
           <Send size={11} />
           Mark sent
+        </button>
+      )}
+      {canPayFromTrust && (
+        <button
+          type="button"
+          onClick={() => setTrustOpen(true)}
+          disabled={pending}
+          className={cn(
+            "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-2xs font-medium",
+            // Primary when this is the only viable "money in" path
+            // (i.e., already sent + trust covers it). Secondary
+            // otherwise so it sits next to Mark sent.
+            !allowed.includes("sent")
+              ? "bg-brand-500 text-white hover:bg-brand-600"
+              : "border border-line bg-white text-ink hover:border-brand-300 hover:text-brand-700",
+            "transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          )}
+          title="Record an earned-fee transfer from the matter's IOLTA balance against this invoice"
+        >
+          <Landmark size={11} />
+          Pay from trust
         </button>
       )}
       {allowed.includes("paid") && (
@@ -146,6 +192,16 @@ export function InvoiceActionBar({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
+      )}
+      {canPayFromTrust && (
+        <PayFromTrustDialog
+          open={trustOpen}
+          onOpenChange={setTrustOpen}
+          invoiceId={invoiceId}
+          invoiceNumber={invoiceNumber}
+          invoiceBalance={invoiceBalance}
+          trustBalance={trustBalance}
+        />
       )}
     </div>
   );

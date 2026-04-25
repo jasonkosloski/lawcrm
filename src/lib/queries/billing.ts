@@ -47,6 +47,13 @@ export type TrustTxn = {
   date: Date;
   createdBy: string | null;
   reconciled: boolean;
+  /** When this txn was created by paying an invoice from trust,
+   *  the FK back to that invoice. Drives the "Payment to invoice
+   *  X" link in the ledger. */
+  invoiceId: string | null;
+  /** Pre-resolved invoice number for the link label so the ledger
+   *  row doesn't need a second query. */
+  invoiceNumber: string | null;
 };
 
 export type TrustSummary = {
@@ -119,6 +126,8 @@ export async function getMatterBilling(
       where: { matterId },
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       take: TRUST_RECENT_LIMIT,
+      // Pull the invoiceNumber for the row label so we don't N+1.
+      include: { invoice: { select: { invoiceNumber: true } } },
     }),
     prisma.invoice.findMany({
       where: { matterId },
@@ -211,6 +220,8 @@ export async function getMatterBilling(
       date: t.date,
       createdBy: t.createdBy,
       reconciled: t.reconciled,
+      invoiceId: t.invoiceId,
+      invoiceNumber: t.invoice?.invoiceNumber ?? null,
     })),
   };
 
