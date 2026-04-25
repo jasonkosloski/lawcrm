@@ -1099,6 +1099,70 @@ async function main() {
   });
 
   // ─────────────────────────────────────────────────────────────────────
+  // Invoices — demonstrates the billing tab's non-empty state. Each
+  // invoice gets a small bundle of approved-and-billed time entries
+  // so the WIP totals stay realistic while invoiced rows show up
+  // under the Invoices table on /matters/[id]/billing.
+  // ─────────────────────────────────────────────────────────────────────
+  console.log("  Creating invoices…");
+  const invoiceFixtures = [
+    {
+      key: "alvarezPaid",
+      matterId: matters.alvarez.id,
+      clientId: contacts.mariaAlvarez.id,
+      number: "2026-001",
+      // Issued 30 days ago, paid 5 days later.
+      issueOffsetDays: -30,
+      dueOffsetDays: 0,
+      status: "paid" as const,
+      total: 4250,
+      paid: 4250,
+      notes: "Initial discovery + motion practice through April.",
+    },
+    {
+      key: "alvarezSent",
+      matterId: matters.alvarez.id,
+      clientId: contacts.mariaAlvarez.id,
+      number: "2026-002",
+      issueOffsetDays: -8,
+      dueOffsetDays: 22,
+      status: "sent" as const,
+      total: 2880,
+      paid: 0,
+      notes: "April expert-prep + deposition outlines.",
+    },
+    {
+      key: "williamsOverdue",
+      matterId: matters.williams.id,
+      clientId: contacts.derekWilliams.id,
+      number: "2026-003",
+      issueOffsetDays: -45,
+      dueOffsetDays: -15,
+      status: "sent" as const,
+      total: 6720,
+      paid: 0,
+      notes: "Discovery sprint — invoiced before settlement talks.",
+    },
+  ];
+  for (const f of invoiceFixtures) {
+    await prisma.invoice.create({
+      data: {
+        invoiceNumber: f.number,
+        matterId: f.matterId,
+        clientId: f.clientId,
+        issueDate: daysFromNow(f.issueOffsetDays),
+        dueDate: daysFromNow(f.dueOffsetDays),
+        subtotal: f.total,
+        taxAmount: 0,
+        totalAmount: f.total,
+        paidAmount: f.paid,
+        status: f.status,
+        notes: f.notes,
+      },
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
   // Leads (intake queue)
   // ─────────────────────────────────────────────────────────────────────
   // Every lead hangs off a Contact (Lead.contactId) — same shape
