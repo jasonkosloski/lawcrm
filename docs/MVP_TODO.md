@@ -11,6 +11,11 @@ and, where applicable, file paths so you can dive straight in.
 
 Last full audit: 2026-04-24
 
+> **Update — 2026-04-25:** Big sprint landed against this list. Items
+> below struck through and tagged ✓ shipped. The remaining P0 work is
+> all the stuff that needs your input on infra (Gmail OAuth creds,
+> document-storage choice, invoice/trust scoping, mobile sweep).
+
 ---
 
 ## 1. Missing features for MVP
@@ -18,9 +23,9 @@ Last full audit: 2026-04-24
 ### P0 — cannot ship without these
 
 - [ ] **Email send / reply / file-to-matter + Gmail OAuth.** Communication tab is read-only (`src/app/(dashboard)/communication/page.tsx`). The single biggest broken promise of this app — a "unified inbox" you can't send from. Needs OAuth flow, two-way sync, compose window, reply, and a "file thread to matter" action.
-- [ ] **Contact directory.** `Contact` model exists but has no top-level route. Contacts are only created/found inline as matter parties or via the new-matter form. No standalone `/contacts` list, no contact detail page, no way to manage opposing counsel / experts / medical providers as a master list, no merge, no edit. Without this, conflict checking is impossible.
+- [x] ~~**Contact directory.**~~ ✓ shipped. `/contacts` with search + per-type filter pills, detail page (profile + linked matters as client and as party), full create + edit + soft-delete. Wired into sidebar + command palette. Conflict-flag UI + merge are tracked as v2 in FEATURES.md.
 - [ ] **Document upload & storage.** `/matters/[id]/documents` lists documents, but `TabAddButton` href is `null` and there's no upload UI. No S3 / Vercel Blob integration. No file viewer, no download. Lawyers can't actually keep their case files here.
-- [ ] **Lead → matter conversion.** "Convert to matter" and "Decline" buttons on `src/app/(dashboard)/intake/[id]/layout.tsx:67,71` are hardcoded `disabled`. Lead intake is the front door of the practice — and once you have a lead, you can't do anything with it.
+- [x] ~~**Lead → matter conversion.**~~ ✓ shipped. Both buttons are real now: Decline opens a reason-capture dialog and flips the lead, Convert opens a practice-area + stage + matter-name + fee picker and creates Matter + Contact + team assignment + sidebar pin in one transaction. Lead summary/incident date/injuries flow into Matter.description. Practice-area-specific automations on convert (CGIA / HUD / EEOC) tracked as v2 in FEATURES.md.
 - [ ] **Invoice generation + trust ledger.** All of Phase 6 is empty. `Invoice`, `Settlement`, `TrustTransaction`, `SettlementApproval`, `SettlementLien` models exist with rich fields, but zero UI. `/matters/[id]/billing` is a stub. No way to bill a client, log a trust deposit, or distribute a settlement. A solo lawyer will not adopt a CRM that can't bill.
 - [ ] **Mobile / responsive layout.** Sidebar doesn't collapse, calendar + matters table assume desktop width, no breakpoints anywhere. Field work — depositions, court appearances, client meetings — is impossible on iPad/iPhone.
 
@@ -53,16 +58,16 @@ Last full audit: 2026-04-24
 
 ### P0 — embarrassing if anyone outside Jason sees it
 
-- [ ] **Tasks have no edit / delete / status-change UI.** `src/app/(dashboard)/matters/[id]/tasks/page.tsx:109-160` — task rows display a circle that *looks* like a checkbox but has no `onClick`. Can't mark done, can't reassign, can't change priority, can't delete. Same problem on the new dashboard "Your tasks" card. **Fix:** make the circle a real toggle with an `updateTaskStatus` server action; add a row menu with edit/reassign/delete.
-- [ ] **Deadlines have no edit / status-change UI.** `/matters/[id]/deadlines` lists them, can't toggle open → completed/waived, can't edit date, can't delete. **Fix:** add inline status menu + edit modal + delete confirmation.
-- [ ] **Calendar events are immutable after create.** Click an event → modal opens → can read but not edit or delete. Creating a single typo means living with it. **Fix:** add edit/delete actions to `EventDetailModal`, hook to `updateCalendarEvent` / `deleteCalendarEvent` server actions.
-- [ ] **Time entries are immutable after create.** Same pattern — `/matters/[id]/time` lists them, no edit/delete. Status (`draft`/`billed`) can't be changed from the UI. **Fix:** edit modal + delete + a "mark billed" bulk action.
-- [ ] **Disabled "Convert to matter" + "Decline" buttons on every lead.** `src/app/(dashboard)/intake/[id]/layout.tsx:67,71` — `disabled` with `title="Coming soon"`. Looks finished, does nothing. **Fix:** either remove from the UI until Phase 3 work lands, or replace with a modal explaining what's coming.
-- [ ] **Document "Add" button is a no-op.** `TabAddButton` on documents page has `href={null}`. **Fix:** either hide the button or wire a placeholder upload modal.
-- [ ] **No error boundaries anywhere.** No `error.tsx`, no `not-found.tsx`. If any Prisma query throws, the whole route 500s with a stack trace. **Fix:** add `error.tsx` per route segment with a retry button + a global `not-found.tsx`.
-- [ ] **No loading states.** No `loading.tsx`, no Suspense, no skeletons. Every route blocks on the slowest query. On a slow connection the app feels frozen. **Fix:** add `loading.tsx` skeletons for at least the dashboard, matter detail tabs, calendar, and intake list.
-- [ ] **8 settings sub-pages are stubs.** `/settings/security`, `/team`, `/firm`, `/integrations`, `/billing`, `/notifications` all live in nav but render placeholder. **Fix:** either hide nav entries until ready, or render an explicit "Phase X — not yet implemented" card with a link to FEATURES.md.
-- [ ] **Several matter-detail tab placeholders** — Timeline, Billing. Same problem: tab in nav, dead end on click. **Fix:** same as above.
+- [x] ~~**Tasks have no edit / delete / status-change UI.**~~ ✓ shipped. Click the circle to toggle done; kebab menu with Edit dialog + Set status submenu + Delete on every row.
+- [x] ~~**Deadlines have no edit / status-change UI.**~~ ✓ shipped. Same kebab pattern — Edit dialog + Set status (open/completed/waived) + Delete. Overdue is computed, not directly settable.
+- [x] ~~**Calendar events are immutable after create.**~~ ✓ shipped. Real edit form on /calendar/events/[id]/edit replaces the old placeholder; Delete on the modal footer with confirm + redirect.
+- [x] ~~**Time entries are immutable after create.**~~ ✓ shipped. Edit dialog with all billing flags + status; existing delete-blocks-billed posture extended to edits.
+- [x] ~~**Disabled "Convert to matter" + "Decline" buttons on every lead.**~~ ✓ shipped — see "Lead → matter conversion" above.
+- [-] ~~**Document "Add" button is a no-op.**~~ Re-classified — TabAddButton actually opens the CreateStack panel which renders an honest "form not implemented yet" placeholder with a disabled Save. Real document upload still pending P0 below.
+- [x] ~~**No error boundaries anywhere.**~~ ✓ shipped. Dashboard-segment `error.tsx`, `not-found.tsx`, root `global-error.tsx`.
+- [x] ~~**No loading states.**~~ ✓ shipped. `loading.tsx` per high-traffic segment, shared `<PageSkeleton>` with tiles/table/detail/grid variants.
+- [-] ~~**8 settings sub-pages are stubs.**~~ Re-classified — they already render `<SettingsPlaceholder>` with expected items + blockedBy phase, which is the correct treatment.
+- [x] ~~**Several matter-detail tab placeholders** — Timeline, Billing.~~ ✓ shipped — both upgraded to richer placeholders matching the SettingsPlaceholder shape (expected-items list + Phase-X dependency + pointer to FEATURES.md).
 
 ### P1 — regular workflow pain
 

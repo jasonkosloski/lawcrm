@@ -38,15 +38,15 @@ Status legend: `[ ]` planned · `[~]` in progress · `[x]` complete · `[-]` des
 - [ ] **Matters list — Cards view** — Visual grid view as a third view mode
 - [x] **Matter detail — pin toggle** — Per-user pin/unpin button in the header, server action + revalidation, sidebar updates live
 - [x] **Matter detail — Overview tab** — Case facts + team roster, plus preview cards (upcoming deadlines, open tasks, strategy note) that link through to their dedicated tabs
-- [ ] **Matter detail — Timeline tab** — Chronological activity feed aggregating filings, emails, evidence, deadlines, notes, time entries (placeholder route exists)
+- [ ] **Matter detail — Timeline tab** — Chronological activity feed aggregating filings, emails, evidence, deadlines, notes, time entries (rich placeholder route lists what's coming + dependency)
 - [x] **Matter detail — Documents tab** — Grouped by category (Filings / Pleadings / Discovery / Expert reports / etc.) with source + status chips
 - [x] **Matter detail — Parties tab** — Grouped by role (Plaintiff / Defendant / Witness / Expert / Opposing counsel / etc.) with conflict flag indicator
-- [x] **Matter detail — Deadlines tab** — Table with due date, days remaining, kind (critical / auto-rule / manual), source (statute / scheduling order / rule), owner, status; overdue deadlines flagged in warn color
-- [x] **Matter detail — Tasks tab** — Grouped by status (Open / In progress / In review / Done / Cancelled) with priority chip, due date, owner
+- [x] **Matter detail — Deadlines tab** — Table with due date, days remaining, kind (critical / auto-rule / manual), source (statute / scheduling order / rule), owner, status; overdue deadlines flagged in warn color. Per-row kebab menu with Edit dialog + Set status (open / completed / waived) + Delete. Overdue is computed from dueDate, not directly settable.
+- [x] **Matter detail — Tasks tab** — Grouped by status (Open / In progress / In review / Done / Cancelled) with priority chip, due date, owner. Inline status toggle (click circle to mark done), per-row kebab menu with Edit dialog + Set status submenu + Delete. Same actions surface from the dashboard "Your tasks" card.
 - [x] **Matter detail — Notes tab** — Card list with type chip (Note / Strategy / Chatter / Memo), author avatar, timestamp; pinned notes float to top
 - [x] **Matter detail — Events tab** — Calendar events linked to this matter split into Upcoming / Past with time, type chip, location, attendee count; clicking opens the same EventDetailModal as the calendar page via `?event=<id>`
 - [x] **Matter detail — Communication tab** — Email threads filed to this matter via `EmailThread.matterId`; embedded thread list links through to the main inbox with the thread preselected
-- [ ] **Matter detail — Billing tab** — WIP, time entries, invoices for this matter (placeholder route exists)
+- [ ] **Matter detail — Billing tab** — WIP, time entries, invoices for this matter (rich placeholder route lists what's coming + dependency)
 - [~] **New matter form — v1** — Working first-pass form at `/matters/new` with fields (name, practice area, stage, case number, case location, fee structure, opposing party/firm, court, summary, lead attorney), typeahead client picker that defaults to creating a new Contact inline, and auto-populated matter name built from the hardcoded firm pattern (`Last, First - Case Number - Location`) with dirty-tracking + "Reset to auto" restore. Zod validation, inline errors via `useActionState`, server action creates Matter + MatterTeamMember (lead) + optional UserMatterPin + optional new Contact in a single write.
 
   > **Note: this form needs much more work.** The v1 gets the basic create flow working with a nice auto-name feel, but it's far from what a production legal-CRM intake flow should be. Expected follow-ups, non-exhaustive:
@@ -83,8 +83,9 @@ Status legend: `[ ]` planned · `[~]` in progress · `[x]` complete · `[-]` des
 - [ ] **Intake queue — split-view reader pane** — Lead list on the left, detail on the right (alternative to separate routes)
 - [ ] **Lead scoring — deep dive** — Score composition, liability/damages factor breakdown, recompute on field changes
 - [ ] **Conflict check automation** — Name/organization matching against existing Contacts and opposing parties with severity levels
-- [ ] **Decline lead** — Inline stage change with decline reason capture
-- [ ] **Convert lead to matter** — Wizard that creates matter + runs area-specific automations (CGIA notice for §1983, HUD response for FHA, etc.)
+- [x] **Decline lead** — Topbar action opens a dialog capturing an optional internal reason; flips Lead.stage to "declined" and bounces the lead out of the active intake queue.
+- [x] **Convert lead to matter — v1** — Topbar action opens a dialog asking for practice area + initial stage + matter name + fee structure. Single-transaction creates Matter + Contact (or reuses one matching the lead's email) + MatterTeamMember (lead) + UserMatterPin, then redirects to the new matter. Lead summary/location/incident date/injuries/source flow into Matter.description.
+- [ ] **Convert lead to matter — v2 (automations)** — Practice-area-specific automations on convert: §1983 spawns a CGIA notice deadline + task; FHA spawns a HUD response deadline; CADA starts the 90-day EEOC right-to-sue clock. Plus initial deadline templates per area.
 
 ## Phase 4 — Communication
 
@@ -114,7 +115,8 @@ SCHEMA_NOTES.
 - [x] **Calendar — navigation** — Prev/Today/Next buttons (week or month units depending on view), URL-driven state (`?view=week|month&d=YYYY-MM-DD`)
 - [ ] **Calendar — Day view** — Single-day focus mode (deferred)
 - [ ] **Calendar — Deadlines-only filter** — Hide events and show just upcoming deadlines (deferred)
-- [ ] **Calendar event create/edit** — Placeholder route exists; real form is Phase 5 follow-up (title + type, start/end + all-day, matter picker, location/Zoom, attendees)
+- [x] **Calendar event edit + delete** — Replaced the placeholder edit page with a real form (title + type, start/end datetime, location, zoom URL, description). Delete button on the event detail modal with confirm + redirect back to the calendar (or matter events tab). Create still happens via the existing EventComposer on the matter Events tab; a top-of-calendar "New event" full form + matter picker + attendee management is a v2 follow-up.
+- [ ] **Calendar event create — v2** — Standalone /calendar/events/new full form with matter picker, attendees + RSVP statuses, all-day toggle, recurrence rules. (Today: per-matter EventComposer covers the common case.)
 - [ ] **Calendar event — click to open detail** — Currently events colored/linked to matters; dedicated event detail is a follow-up
 - [ ] **Google Calendar sync** — OAuth + two-way sync (deferred to integration phase)
 - [ ] **Time tracking — week view** — Hour bars per matter, running totals
@@ -133,7 +135,8 @@ SCHEMA_NOTES.
 
 ## Phase 7 — Contacts & Documents
 
-- [ ] **Contact directory** — Type filters, search, matter associations
+- [x] **Contact directory** — `/contacts` list with URL-driven search + per-type filter pills (Client / Opposing counsel / Witness / Expert / etc.), detail page (profile + linked matters split into "as client" + "as party"), full create + edit + soft-delete (isActive=false to preserve historical matter rows). Contact.phone stays in sync with the primary ContactPhone row. Wired into the sidebar primary nav and command palette.
+- [ ] **Contact directory — v2** — Conflict-flag UI (today the field exists in schema but only set programmatically), contact merge for duplicates, bulk operations, multi-phone management UI per contact (today only the primary is editable inline).
 - [ ] **Contact detail** — Profile, linked matters, communication history
 - [ ] **Document management** — Folder tree, file grid, category filters
 - [ ] **Evidence viewer** — Multi-track timeline, flagged moments, transcript sync
@@ -156,8 +159,8 @@ SCHEMA_NOTES.
 
 - [ ] **Keyboard shortcuts** — Full shortcut system (`g d`, `g m`, `c` compose, etc.)
 - [ ] **Responsive design** — Sidebar collapse on narrow viewports
-- [ ] **Loading states** — Skeletons for all data-dependent views
-- [ ] **Error boundaries** — Graceful error handling per route segment
+- [x] **Loading states** — `loading.tsx` per high-traffic segment (dashboard, matters list, matter detail, intake, calendar, communication, contacts) backed by a shared `<PageSkeleton variant="tiles|table|detail|grid">` so layout doesn't jump on hydrate.
+- [x] **Error boundaries** — Dashboard-segment `error.tsx` catches uncaught throws inside any /dashboard route and renders a friendly card with the message + a Try-again button. `not-found.tsx` for missing matters/leads/contacts. Root `global-error.tsx` as last-resort fallback when the root layout itself crashes.
 - [ ] **Authentication** — Login, session management, role-based access
 - [ ] **Deployment** — PostgreSQL, environment config, CI/CD
 
