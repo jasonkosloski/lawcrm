@@ -1946,6 +1946,57 @@ A copy of the document is available through PACER and is attached for your recor
   console.log(`   ${inboxActionsCreated} inbox-action examples`);
 
   // ─────────────────────────────────────────────────────────────────────
+  // Note → captures examples — task / deadline / time entry attached
+  // to an existing note so the "From note" inverse chip renders on
+  // the Tasks / Deadlines / Time tabs out of the box.
+  // ─────────────────────────────────────────────────────────────────────
+  console.log("  Creating note-attachment examples…");
+  const williamsNote = await prisma.note.findFirst({
+    where: { matterId: matters.williams.id },
+    select: { id: true },
+  });
+  let noteAttachmentsCreated = 0;
+  if (williamsNote) {
+    await prisma.task.create({
+      data: {
+        matterId: matters.williams.id,
+        noteId: williamsNote.id,
+        title: "Pull Memorial Hospital lien reduction precedent",
+        priority: "high",
+        ownerId: rachel.id,
+        dueDate: hoursAgo(-48),
+      },
+    });
+    await prisma.deadline.create({
+      data: {
+        matterId: matters.williams.id,
+        noteId: williamsNote.id,
+        title: "Lien reduction proposal due",
+        kind: "manual",
+        dueDate: hoursAgo(-10 * 24),
+        ownerId: jason.id,
+      },
+    });
+    await prisma.timeEntry.create({
+      data: {
+        matterId: matters.williams.id,
+        userId: jason.id,
+        noteId: williamsNote.id,
+        date: hoursAgo(2),
+        hours: 1.5,
+        activity: "Review + draft strategy memo on lien negotiation",
+        narrative:
+          "Outline of three reduction scenarios + supporting case law for the Memorial Hospital negotiation.",
+        billable: true,
+        privileged: true,
+        source: "manual",
+      },
+    });
+    noteAttachmentsCreated += 3;
+  }
+  console.log(`   ${noteAttachmentsCreated} note-attachment examples`);
+
+  // ─────────────────────────────────────────────────────────────────────
   // Summary
   // ─────────────────────────────────────────────────────────────────────
   const counts = await Promise.all([

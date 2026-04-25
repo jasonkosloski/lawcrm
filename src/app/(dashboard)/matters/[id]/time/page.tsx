@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/table";
 import { TimeComposer } from "@/components/matters/captures/time-composer";
 import { TimeEntryRowMenu } from "@/components/time-entries/time-entry-row-actions";
+import { EntitySourceChip } from "@/components/matters/entity-source-chip";
 import { type TimeEntryStatus } from "@/lib/note-constants";
 import {
   getMatterTimeEntries,
@@ -138,7 +139,7 @@ export default async function MatterTimePage({
             </TableHeader>
             <TableBody>
               {entries.map((e) => (
-                <EntryRow key={e.id} entry={e} />
+                <EntryRow key={e.id} entry={e} matterId={id} />
               ))}
             </TableBody>
           </Table>
@@ -172,7 +173,13 @@ function SummaryCard({
   );
 }
 
-function EntryRow({ entry }: { entry: TimeEntryRow }) {
+function EntryRow({
+  entry,
+  matterId,
+}: {
+  entry: TimeEntryRow;
+  matterId: string;
+}) {
   const status = STATUS_META[entry.status] ?? STATUS_META.draft;
   return (
     <TableRow>
@@ -208,6 +215,13 @@ function EntryRow({ entry }: { entry: TimeEntryRow }) {
               <span className="text-2xs text-brand-700">Privileged</span>
             )}
           </div>
+          {entry.spawnedFrom && (
+            <EntitySourceChip
+              source={entry.spawnedFrom}
+              matterId={matterId}
+              className="self-start mt-1"
+            />
+          )}
         </div>
       </TableCell>
       <TableCell className="text-2xs font-mono text-ink-4">

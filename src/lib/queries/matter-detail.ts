@@ -622,6 +622,11 @@ export type TimeEntryRow = {
   userName: string;
   userInitials: string;
   invoiceId: string | null;
+  /** Where this entry was logged from. Today only the "note" kind
+   *  fires for time entries (email + messenger sources don't spawn
+   *  time entries — the user's working session goes there directly).
+   *  Same field shape as TaskRow / DeadlineRow for chip-render reuse. */
+  spawnedFrom: EntitySource | null;
 };
 
 export type MatterTimeSummary = {
@@ -636,7 +641,10 @@ export async function getMatterTimeEntries(
 ): Promise<TimeEntryRow[]> {
   const rows = await prisma.timeEntry.findMany({
     where: { matterId },
-    include: { user: { select: { name: true, initials: true } } },
+    include: {
+      user: { select: { name: true, initials: true } },
+      parentNote: { select: { id: true, content: true } },
+    },
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
   });
   return rows.map((e) => ({
@@ -656,6 +664,11 @@ export async function getMatterTimeEntries(
     userName: e.user.name,
     userInitials: e.user.initials,
     invoiceId: e.invoiceId,
+    spawnedFrom: resolveEntitySource({
+      note: e.parentNote,
+      email: null,
+      messenger: null,
+    }),
   }));
 }
 
