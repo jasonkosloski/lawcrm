@@ -48,6 +48,7 @@ function parseEmailFilter(
 ): CommunicationFilter {
   const v = Array.isArray(raw) ? raw[0] : raw;
   if (
+    v === "inbox" ||
     v === "unread" ||
     v === "starred" ||
     v === "unfiled" ||
@@ -56,7 +57,9 @@ function parseEmailFilter(
     v === "all"
   )
     return v;
-  return "all";
+  // Default landing — Inbox is the working surface (excludes archived
+  // + snoozed). "All mail" is opt-in via the rail.
+  return "inbox";
 }
 
 function parseMessengerFilter(

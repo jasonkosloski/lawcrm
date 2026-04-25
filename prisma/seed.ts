@@ -2260,6 +2260,21 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
     });
     followUpCount++;
   }
+  // Snoozed-into-the-future example — disappears from the Inbox
+  // mailbox until the date arrives. Pick a separate thread so the
+  // overdue example above stays overdue.
+  const snoozedEmail = await prisma.emailThread.findFirst({
+    where: { matterId: matters.alvarez.id, followUpAt: null },
+    select: { id: true },
+  });
+  if (snoozedEmail) {
+    await prisma.emailThread.update({
+      where: { id: snoozedEmail.id },
+      // 4 days out → won't show in Inbox; will show in All mail.
+      data: { followUpAt: new Date(NOW.getTime() + 4 * 24 * 60 * 60 * 1000) },
+    });
+    followUpCount++;
+  }
   console.log(`   ${followUpCount} follow-up examples`);
 
   // ─────────────────────────────────────────────────────────────────────

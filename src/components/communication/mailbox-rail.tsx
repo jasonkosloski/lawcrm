@@ -14,10 +14,12 @@
 
 import Link from "next/link";
 import {
+  Archive,
   Briefcase,
   Clock,
   FileQuestion,
   Inbox,
+  Layers,
   MailOpen,
   Star,
 } from "lucide-react";
@@ -35,7 +37,10 @@ type RailItem = {
 };
 
 const MAILBOX_ITEMS: RailItem[] = [
-  { filter: "all", label: "All", icon: Inbox },
+  // Inbox sits at the top — most users want this most of the time.
+  // Excludes archived + snoozed (followUpAt in the future).
+  { filter: "inbox", label: "Inbox", icon: Inbox },
+  { filter: "all", label: "All mail", icon: Layers },
   { filter: "unread", label: "Unread", icon: MailOpen },
   { filter: "starred", label: "Starred", icon: Star },
   { filter: "untimed", label: "Untimed (mine)", icon: Clock },
@@ -52,7 +57,9 @@ function hrefFor(
   threadId: string | null
 ): string {
   const params = new URLSearchParams();
-  if (filter && filter !== "all") params.set("filter", filter);
+  // Inbox is the default — only emit ?filter= when picking
+  // something else, so the canonical URL stays clean.
+  if (filter && filter !== "inbox") params.set("filter", filter);
   if (matterId) params.set("matter", matterId);
   if (threadId) params.set("thread", threadId);
   const qs = params.toString();

@@ -28,7 +28,8 @@ function rowHref(
 }
 
 const FILTER_LABEL: Record<CommunicationFilter, string> = {
-  all: "Inbox",
+  inbox: "Inbox",
+  all: "All mail",
   unread: "Unread",
   starred: "Starred",
   unfiled: "Unfiled",

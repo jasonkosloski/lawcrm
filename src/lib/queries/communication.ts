@@ -11,6 +11,11 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 
 export type CommunicationFilter =
+  /** Default working surface: unarchived threads that aren't
+   *  snoozed (followUpAt in the future hides until the date
+   *  arrives). This is what most users want most of the time. */
+  | "inbox"
+  /** Everything, including archived + snoozed. */
   | "all"
   | "unread"
   | "starred"
@@ -62,6 +67,16 @@ export async function listThreads(
     where.messages = {
       none: { timeEntries: { some: { userId } } },
     };
+  }
+  if (filter === "inbox") {
+    // Working inbox: not archived AND not snoozed for later.
+    // followUpAt = null → never snoozed; followUpAt <= now → snooze
+    // has expired and the thread should reappear.
+    where.isArchived = false;
+    where.OR = [
+      { followUpAt: null },
+      { followUpAt: { lte: new Date() } },
+    ];
   }
   // Per-pinned-matter override — wins over any matter-related filter.
   if (matterId) where.matterId = matterId;
@@ -336,6 +351,7 @@ export async function listThreadsForEmail(
 }
 
 export type CommunicationCounts = {
+  inbox: number;
   all: number;
   unread: number;
   starred: number;
@@ -347,22 +363,31 @@ export type CommunicationCounts = {
 export async function getCommunicationCounts(): Promise<CommunicationCounts> {
   const userId = await getCurrentUserId();
   const base = { account: { userId } };
-  const [all, unread, starred, unfiled, filed, untimed] = await Promise.all([
-    prisma.emailThread.count({ where: base }),
-    prisma.emailThread.count({ where: { ...base, isRead: false } }),
-    prisma.emailThread.count({ where: { ...base, isStarred: true } }),
-    prisma.emailThread.count({ where: { ...base, matterId: null } }),
-    prisma.emailThread.count({ where: { ...base, matterId: { not: null } } }),
-    prisma.emailThread.count({
-      where: {
-        ...base,
-        messages: {
-          none: { timeEntries: { some: { userId } } },
+  const now = new Date();
+  const [inbox, all, unread, starred, unfiled, filed, untimed] =
+    await Promise.all([
+      prisma.emailThread.count({
+        where: {
+          ...base,
+          isArchived: false,
+          OR: [{ followUpAt: null }, { followUpAt: { lte: now } }],
         },
-      },
-    }),
-  ]);
-  return { all, unread, starred, unfiled, filed, untimed };
+      }),
+      prisma.emailThread.count({ where: base }),
+      prisma.emailThread.count({ where: { ...base, isRead: false } }),
+      prisma.emailThread.count({ where: { ...base, isStarred: true } }),
+      prisma.emailThread.count({ where: { ...base, matterId: null } }),
+      prisma.emailThread.count({ where: { ...base, matterId: { not: null } } }),
+      prisma.emailThread.count({
+        where: {
+          ...base,
+          messages: {
+            none: { timeEntries: { some: { userId } } },
+          },
+        },
+      }),
+    ]);
+  return { inbox, all, unread, starred, unfiled, filed, untimed };
 }
 
 /** Compact matter row used by the file-to-matter picker on the
