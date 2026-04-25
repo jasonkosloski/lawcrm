@@ -52,12 +52,17 @@ export function InvoicePreview({
   ].filter(Boolean);
 
   return (
-    <div className="flex flex-col h-full bg-paper-2/30">
-      {/* Document body — scrolls; action bar is sticky below. */}
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-2xl mx-auto bg-white border border-line rounded-md shadow-sm">
+    <div className="flex flex-col h-full">
+      {/* Document body — scrolls; action bar is sticky below. The
+          parent <aside> already provides the rounded border + bg
+          for the pane chrome, so we don't double up here. Letting
+          the letterhead sit flush against that pane reads more
+          like "the right side IS the invoice" than "a piece of
+          paper sitting on a workspace". */}
+      <div className="flex-1 overflow-y-auto bg-white">
+        <div>
           {/* Letterhead */}
-          <div className="px-8 py-6 border-b border-line">
+          <div className="px-6 py-4 border-b border-line">
             <div className="flex items-start justify-between gap-6">
               <div className="flex items-start gap-3 min-w-0">
                 <div className="w-10 h-10 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0 border border-brand-100">
@@ -98,7 +103,7 @@ export function InvoicePreview({
           </div>
 
           {/* Meta + Bill-to */}
-          <div className="px-8 py-5 grid grid-cols-2 gap-6 border-b border-line">
+          <div className="px-6 py-4 grid grid-cols-2 gap-6 border-b border-line">
             <div>
               <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 mb-1">
                 Bill to
@@ -170,7 +175,7 @@ export function InvoicePreview({
           </div>
 
           {/* Line items */}
-          <div className="px-8 py-5 border-b border-line">
+          <div className="px-6 py-4 border-b border-line">
             <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 mb-2">
               Services
             </div>
@@ -241,7 +246,7 @@ export function InvoicePreview({
           </div>
 
           {/* Totals stack */}
-          <div className="px-8 py-4 border-b border-line">
+          <div className="px-6 py-4 border-b border-line">
             <dl className="ml-auto w-64 text-xs grid grid-cols-[1fr_auto] gap-y-1">
               <dt className="text-ink-3">Subtotal</dt>
               <dd className="text-ink font-mono">
@@ -266,7 +271,7 @@ export function InvoicePreview({
 
           {/* Notes */}
           {invoice.notes && (
-            <div className="px-8 py-4">
+            <div className="px-6 py-4">
               <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 mb-1 flex items-center gap-1.5">
                 <FileText size={11} />
                 Notes

@@ -31,7 +31,7 @@ export function InvoiceActionBar({
     // void → []). Show a small contextual hint instead of a dead bar.
     return (
       <div className="border-t border-line bg-paper-2/60 px-6 py-3">
-        <div className="text-2xs text-ink-4 max-w-2xl mx-auto">
+        <div className="text-2xs text-ink-4 w-full">
           {currentStatus === "void"
             ? "This invoice was voided. Linked time entries returned to billable WIP."
             : "No further actions available on this invoice."}
@@ -50,7 +50,7 @@ export function InvoiceActionBar({
 
   return (
     <div className="border-t border-line bg-paper-2/60 px-6 py-3">
-      <div className="max-w-2xl mx-auto flex items-center gap-2">
+      <div className="w-full flex items-center gap-2">
         {allowed.includes("sent") && (
           <button
             type="button"
