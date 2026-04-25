@@ -7,7 +7,7 @@
  */
 
 import Link from "next/link";
-import { Paperclip, Star } from "lucide-react";
+import { BellRing, Paperclip, Star } from "lucide-react";
 import { formatDistanceToNowStrict } from "date-fns";
 import { cn } from "@/lib/utils";
 import type {
@@ -125,6 +125,22 @@ export function ThreadList({
                     </span>
                   )}
                   <span className="ml-auto flex items-center gap-1.5">
+                    {t.followUpAt && (
+                      <span
+                        title={`Follow up by ${t.followUpAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
+                        className={cn(
+                          "inline-flex items-center gap-0.5 text-3xs font-mono px-1 rounded",
+                          t.followUpAt.getTime() < Date.now()
+                            ? "text-warn"
+                            : "text-brand-700"
+                        )}
+                      >
+                        <BellRing size={9} />
+                        {t.followUpAt.getTime() < Date.now() - 24 * 60 * 60 * 1000
+                          ? "Late"
+                          : t.followUpAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </span>
+                    )}
                     {t.hasAttachments && (
                       <Paperclip
                         size={11}

@@ -33,10 +33,12 @@ import {
 import {
   getDashboardKpis,
   getFirmPulse,
+  getFollowUpsDueToday,
   getMyOpenTasks,
   getRecentActivity,
   getTodayAgenda,
   getUpcomingDeadlines,
+  type FollowUpItem,
   type MyTaskItem,
 } from "@/lib/queries/dashboard";
 
@@ -60,16 +62,25 @@ const ACTIVITY_ICONS: Record<string, LucideIcon> = {
 
 export default async function DashboardPage() {
   const userId = await getCurrentUserId();
-  const [kpis, agenda, activity, deadlines, pulse, myTasks, visibility] =
-    await Promise.all([
-      getDashboardKpis(),
-      getTodayAgenda(),
-      getRecentActivity(5),
-      getUpcomingDeadlines(7),
-      getFirmPulse(),
-      getMyOpenTasks(),
-      getDashboardVisibility(userId),
-    ]);
+  const [
+    kpis,
+    agenda,
+    activity,
+    deadlines,
+    pulse,
+    myTasks,
+    followUps,
+    visibility,
+  ] = await Promise.all([
+    getDashboardKpis(),
+    getTodayAgenda(),
+    getRecentActivity(5),
+    getUpcomingDeadlines(7),
+    getFirmPulse(),
+    getMyOpenTasks(),
+    getFollowUpsDueToday(),
+    getDashboardVisibility(userId),
+  ]);
 
   const kpiTiles = [
     {
@@ -229,6 +240,40 @@ export default async function DashboardPage() {
                     <TaskGroup label="This week" tone="muted" tasks={myTasks.thisWeek} />
                     <TaskGroup label="Later" tone="muted" tasks={myTasks.later} />
                     <TaskGroup label="No due date" tone="muted" tasks={myTasks.noDueDate} />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            )}
+
+            {/* Follow up today (email + messenger threads with a snooze
+                date today or earlier — overdue ones bubble to the top) */}
+            {visibility.followUps && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  Follow up today
+                  <span className="text-2xs font-mono font-normal text-ink-4">
+                    {followUps.length}
+                  </span>
+                  {followUps.some((f) => f.isOverdue) && (
+                    <span className="ml-auto text-2xs font-mono font-medium px-2 py-0.5 rounded-full bg-warn-soft text-warn border border-warn-border">
+                      {followUps.filter((f) => f.isOverdue).length} overdue
+                    </span>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                {followUps.length === 0 ? (
+                  <div className="py-3 text-xs text-ink-4">
+                    Nothing flagged for today. Snooze a thread by clicking
+                    the bell on its reader header.
+                  </div>
+                ) : (
+                  <div className="flex flex-col">
+                    {followUps.map((f) => (
+                      <FollowUpRow key={`${f.kind}-${f.id}`} item={f} />
+                    ))}
                   </div>
                 )}
               </CardContent>
@@ -480,5 +525,46 @@ function TaskGroup({
         })}
       </div>
     </div>
+  );
+}
+
+/** Row in the dashboard "Follow up today" card. Click navigates to
+ *  the source thread (matter-scoped for filed email; firm-wide for
+ *  messenger which doesn't have a matter-scoped view yet). */
+function FollowUpRow({ item }: { item: FollowUpItem }) {
+  const href =
+    item.kind === "email"
+      ? // No matter-scoped messenger view; matter-scoped email view exists.
+        `/communication?view=email&thread=${item.id}`
+      : `/communication?view=messages&thread=${item.id}`;
+  return (
+    <Link
+      href={href}
+      className="flex items-center gap-3 py-2 border-b border-line last:border-b-0 hover:bg-paper-2 -mx-2 px-2 rounded-sm transition-colors"
+    >
+      <span
+        className={
+          "w-1.5 h-1.5 rounded-full shrink-0 " +
+          (item.isOverdue ? "bg-warn" : "bg-brand-500")
+        }
+      />
+      <div className="flex-1 min-w-0">
+        <div className="text-xs text-ink truncate">{item.label}</div>
+        {item.matterName && (
+          <div className="text-3xs font-mono uppercase tracking-wider text-ink-4 truncate">
+            {item.matterName}
+          </div>
+        )}
+      </div>
+      <span
+        className={
+          "text-2xs font-mono shrink-0 " +
+          (item.isOverdue ? "text-warn font-medium" : "text-ink-4")
+        }
+      >
+        {item.kind === "email" ? "✉ " : "💬 "}
+        {item.isOverdue ? "Late" : "Today"}
+      </span>
+    </Link>
   );
 }

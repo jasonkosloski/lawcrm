@@ -21,6 +21,8 @@ export type ThreadListRow = {
   hasAttachments: boolean;
   messageCount: number;
   lastMessageAt: Date;
+  /** Snooze date when set — surfaces as a chip on the row. */
+  followUpAt: Date | null;
   /** First sender in the thread — typically "who's emailing me". */
   fromDisplay: string;
   matter: { id: string; name: string; color: string } | null;
@@ -62,6 +64,7 @@ export async function listThreads(
     hasAttachments: t.hasAttachments,
     messageCount: t.messageCount,
     lastMessageAt: t.lastMessageAt,
+    followUpAt: t.followUpAt,
     fromDisplay:
       t.messages[0]?.fromName ?? t.messages[0]?.fromEmail ?? "Unknown",
     matter: t.matter,
@@ -92,6 +95,8 @@ export type ThreadDetail = {
   labels: string[];
   messageCount: number;
   lastMessageAt: Date;
+  /** Snooze date — null when no follow-up is set. */
+  followUpAt: Date | null;
   messages: ThreadMessageView[];
 };
 
@@ -144,6 +149,7 @@ export async function getThreadById(id: string): Promise<ThreadDetail | null> {
     labels: thread.labels.map((l) => l.label),
     messageCount: thread.messageCount,
     lastMessageAt: thread.lastMessageAt,
+    followUpAt: thread.followUpAt,
     messages: thread.messages.map((m) => ({
       id: m.id,
       fromName: m.fromName,
@@ -190,6 +196,7 @@ export async function listThreadsForMatter(
     hasAttachments: t.hasAttachments,
     messageCount: t.messageCount,
     lastMessageAt: t.lastMessageAt,
+    followUpAt: t.followUpAt,
     fromDisplay:
       t.messages[0]?.fromName ?? t.messages[0]?.fromEmail ?? "Unknown",
     matter: t.matter,
@@ -263,6 +270,7 @@ export async function listThreadsForEmail(
     hasAttachments: t.hasAttachments,
     messageCount: t.messageCount,
     lastMessageAt: t.lastMessageAt,
+    followUpAt: t.followUpAt,
     fromDisplay:
       t.messages[0]?.fromName ?? t.messages[0]?.fromEmail ?? "Unknown",
     matter: t.matter,

@@ -155,6 +155,86 @@ export async function getRecentActivity(limit = 5): Promise<ActivityItem[]> {
   }));
 }
 
+/** Email + messenger threads with a follow-up date today or earlier
+ *  (or unset overdue followUps from prior days). Surfaced on the
+ *  dashboard "Follow up today" card so the user sees the queue
+ *  before the next email lands. */
+export type FollowUpItem = {
+  id: string;
+  kind: "email" | "messenger";
+  /** Subject line for email, contact name (or pretty phone) for messenger. */
+  label: string;
+  followUpAt: Date;
+  isOverdue: boolean;
+  matterName: string | null;
+  matterColor: string | null;
+};
+
+export async function getFollowUpsDueToday(): Promise<FollowUpItem[]> {
+  const end = endOfToday();
+  const [emails, messages] = await Promise.all([
+    prisma.emailThread.findMany({
+      where: { followUpAt: { lte: end }, isArchived: false },
+      orderBy: { followUpAt: "asc" },
+      take: 50,
+      include: {
+        matter: { select: { name: true, color: true } },
+      },
+    }),
+    prisma.messengerThread.findMany({
+      where: { followUpAt: { lte: end }, isArchived: false },
+      orderBy: { followUpAt: "asc" },
+      take: 50,
+      include: {
+        defaultMatter: { select: { name: true, color: true } },
+        contact: { select: { name: true } },
+      },
+    }),
+  ]);
+
+  const now = Date.now();
+  const items: FollowUpItem[] = [
+    ...emails.map((t) => ({
+      id: t.id,
+      kind: "email" as const,
+      label: t.subject,
+      followUpAt: t.followUpAt!,
+      isOverdue: t.followUpAt!.getTime() < now,
+      matterName: t.matter?.name ?? null,
+      matterColor: t.matter?.color ?? null,
+    })),
+    ...messages.map((t) => ({
+      id: t.id,
+      kind: "messenger" as const,
+      label:
+        t.contact?.name ??
+        prettyPhoneForFollowUp(t.contactPhone) ??
+        "Unknown number",
+      followUpAt: t.followUpAt!,
+      isOverdue: t.followUpAt!.getTime() < now,
+      matterName: t.defaultMatter?.name ?? null,
+      matterColor: t.defaultMatter?.color ?? null,
+    })),
+  ];
+
+  // Merge + sort: overdue first, then by date asc.
+  return items.sort((a, b) => {
+    if (a.isOverdue !== b.isOverdue) return a.isOverdue ? -1 : 1;
+    return a.followUpAt.getTime() - b.followUpAt.getTime();
+  });
+}
+
+function prettyPhoneForFollowUp(p: string): string {
+  const digits = p.replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  return p;
+}
+
 export type DeadlineItem = {
   id: string;
   title: string;

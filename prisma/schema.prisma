@@ -771,6 +771,11 @@ model EmailThread {
   hasAttachments Boolean  @default(false)
   messageCount   Int      @default(1)
   lastMessageAt  DateTime
+  /// "Follow up by" snooze. Null = no follow-up tracked. When set,
+  /// the thread surfaces in the dashboard "Follow up today" card and
+  /// the thread-list row gets a date chip (overdue styled when past).
+  /// Notifications themselves wait on Phase 8 — this is the data model.
+  followUpAt     DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -787,6 +792,7 @@ model EmailThread {
   @@index([accountId])
   @@index([matterId])
   @@index([lastMessageAt])
+  @@index([followUpAt])
   @@map("email_threads")
 }
 
@@ -920,6 +926,10 @@ model MessengerThread {
   isArchived      Boolean  @default(false)
   /// Optional pinned-to-top flag for the inbox.
   isPinned        Boolean  @default(false)
+  /// "Follow up by" snooze — same semantics as EmailThread.followUpAt.
+  /// When set, the thread surfaces in the dashboard "Follow up today"
+  /// card and the thread-list row gets a date chip.
+  followUpAt      DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -933,6 +943,7 @@ model MessengerThread {
   @@index([accountId, lastItemAt])
   @@index([contactId])
   @@index([defaultMatterId])
+  @@index([followUpAt])
   @@map("messenger_threads")
 }
 

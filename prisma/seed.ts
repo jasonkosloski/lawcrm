@@ -2169,6 +2169,40 @@ A copy of the document is available through PACER and is attached for your recor
   console.log(`   ${timeOnEntityCount} time-on-entity examples`);
 
   // ─────────────────────────────────────────────────────────────────────
+  // Follow-up snooze examples — one email + one messenger thread set
+  // to "follow up by today" so the dashboard card renders with data.
+  // One overdue, one due today.
+  // ─────────────────────────────────────────────────────────────────────
+  console.log("  Creating follow-up examples…");
+  const followUpEmail = await prisma.emailThread.findFirst({
+    where: { matterId: matters.williams.id, followUpAt: null },
+    select: { id: true },
+  });
+  const followUpMessage = await prisma.messengerThread.findFirst({
+    where: { followUpAt: null },
+    select: { id: true },
+  });
+  let followUpCount = 0;
+  if (followUpEmail) {
+    await prisma.emailThread.update({
+      where: { id: followUpEmail.id },
+      // Yesterday end-of-day → renders as "Late" overdue.
+      data: { followUpAt: new Date(NOW.getTime() - 12 * 60 * 60 * 1000) },
+    });
+    followUpCount++;
+  }
+  if (followUpMessage) {
+    const today = new Date(NOW);
+    today.setHours(23, 59, 59, 999);
+    await prisma.messengerThread.update({
+      where: { id: followUpMessage.id },
+      data: { followUpAt: today },
+    });
+    followUpCount++;
+  }
+  console.log(`   ${followUpCount} follow-up examples`);
+
+  // ─────────────────────────────────────────────────────────────────────
   // Summary
   // ─────────────────────────────────────────────────────────────────────
   const counts = await Promise.all([

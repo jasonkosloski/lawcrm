@@ -14,6 +14,8 @@ import { format } from "date-fns";
 import { MailOpen, Paperclip, Reply, ShieldCheck } from "lucide-react";
 import type { ThreadDetail } from "@/lib/queries/communication";
 import { InboxActionButtons } from "./inbox-action-buttons";
+import { FollowUpButton } from "./follow-up-button";
+import { setEmailThreadFollowUp } from "@/app/actions/follow-ups";
 
 const formatSize = (bytes: number | null): string => {
   if (bytes === null || bytes === 0) return "—";
@@ -86,21 +88,28 @@ export function ThreadReader({ thread }: { thread: ThreadDetail | null }) {
             </div>
           </div>
 
-          {/* Inbox-to-action shortcuts. Disabled when the thread is
-              unfiled — actions need a matter to attach the new entity to. */}
-          <InboxActionButtons
-            isFiled={thread.matter !== null}
-            source={{
-              kind: "email",
-              id: thread.id,
-              subject: thread.subject,
-              // Quote the first message in the prefilled note body —
-              // gives the user a starting block of context to edit
-              // down. 400 chars keeps the dialog from being a wall of
-              // text on long emails.
-              snippet: thread.messages[0]?.body?.slice(0, 400) ?? "",
-            }}
-          />
+          <div className="flex items-center gap-1.5 shrink-0">
+            <FollowUpButton
+              threadId={thread.id}
+              followUpAt={thread.followUpAt}
+              action={setEmailThreadFollowUp}
+            />
+            {/* Inbox-to-action shortcuts. Disabled when the thread is
+                unfiled — actions need a matter to attach the new entity to. */}
+            <InboxActionButtons
+              isFiled={thread.matter !== null}
+              source={{
+                kind: "email",
+                id: thread.id,
+                subject: thread.subject,
+                // Quote the first message in the prefilled note body —
+                // gives the user a starting block of context to edit
+                // down. 400 chars keeps the dialog from being a wall of
+                // text on long emails.
+                snippet: thread.messages[0]?.body?.slice(0, 400) ?? "",
+              }}
+            />
+          </div>
         </div>
       </header>
 

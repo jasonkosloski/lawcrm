@@ -33,6 +33,7 @@ export type MessengerThreadRow = {
   unreadCount: number;
   isPinned: boolean;
   isArchived: boolean;
+  followUpAt: Date | null;
 };
 
 /** Row shape for an item rendered inside the thread reader (right pane). */
@@ -73,6 +74,7 @@ export type MessengerThreadDetail = {
   } | null;
   isPinned: boolean;
   isArchived: boolean;
+  followUpAt: Date | null;
   items: MessengerItemRow[];
 };
 
@@ -180,6 +182,7 @@ export async function listMessengerThreads({
       unreadCount: t.unreadCount,
       isPinned: t.isPinned,
       isArchived: t.isArchived,
+      followUpAt: t.followUpAt,
     };
   });
 }
@@ -264,6 +267,7 @@ export async function getMessengerThread(
     defaultMatter: t.defaultMatter,
     isPinned: t.isPinned,
     isArchived: t.isArchived,
+    followUpAt: t.followUpAt,
     items: t.items.map((i) => ({
       id: i.id,
       kind: i.kind as MessengerKind,

@@ -28,6 +28,8 @@ import type {
   MessengerThreadDetail,
 } from "@/lib/queries/messenger";
 import { InboxActionButtons } from "./inbox-action-buttons";
+import { FollowUpButton } from "./follow-up-button";
+import { setMessengerThreadFollowUp } from "@/app/actions/follow-ups";
 
 function prettyPhone(p: string): string {
   const digits = p.replace(/\D/g, "");
@@ -105,23 +107,30 @@ export function MessengerThreadReader({
           </div>
         </div>
 
-        {thread.defaultMatter ? (
-          <Link
-            href={`/matters/${thread.defaultMatter.id}`}
-            className="inline-flex items-center gap-1.5 text-2xs px-2 py-1 rounded-full border border-line hover:border-brand-300 hover:text-brand-700 transition-colors"
-          >
-            <span
-              className="w-1.5 h-1.5 rounded-full"
-              style={{ background: thread.defaultMatter.color }}
-            />
-            <Briefcase size={11} className="text-ink-3" />
-            <span className="text-ink-2 truncate max-w-[14rem]">
-              {thread.defaultMatter.name}
-            </span>
-          </Link>
-        ) : (
-          <span className="text-2xs text-ink-4 italic">Unfiled</span>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          <FollowUpButton
+            threadId={thread.id}
+            followUpAt={thread.followUpAt}
+            action={setMessengerThreadFollowUp}
+          />
+          {thread.defaultMatter ? (
+            <Link
+              href={`/matters/${thread.defaultMatter.id}`}
+              className="inline-flex items-center gap-1.5 text-2xs px-2 py-1 rounded-full border border-line hover:border-brand-300 hover:text-brand-700 transition-colors"
+            >
+              <span
+                className="w-1.5 h-1.5 rounded-full"
+                style={{ background: thread.defaultMatter.color }}
+              />
+              <Briefcase size={11} className="text-ink-3" />
+              <span className="text-ink-2 truncate max-w-[14rem]">
+                {thread.defaultMatter.name}
+              </span>
+            </Link>
+          ) : (
+            <span className="text-2xs text-ink-4 italic">Unfiled</span>
+          )}
+        </div>
       </header>
 
       {/* Body */}
