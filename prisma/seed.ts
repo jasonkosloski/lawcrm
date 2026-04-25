@@ -50,6 +50,9 @@ async function main() {
   await prisma.emailMessage.deleteMany();
   await prisma.emailThread.deleteMany();
   await prisma.emailAccount.deleteMany();
+  await prisma.messengerItem.deleteMany();
+  await prisma.messengerThread.deleteMany();
+  await prisma.messengerAccount.deleteMany();
   await prisma.flaggedMoment.deleteMany();
   await prisma.evidenceSync.deleteMany();
   await prisma.evidence.deleteMany();
@@ -1524,6 +1527,353 @@ A copy of the document is available through PACER and is attached for your recor
   }
 
   // ─────────────────────────────────────────────────────────────────────
+  // Messenger account + threads (Quo SMS / voice / voicemail demo)
+  // ─────────────────────────────────────────────────────────────────────
+  console.log("  Creating messenger account + threads…");
+  const minsAgo = (m: number) => new Date(NOW.getTime() - m * 60 * 1000);
+  const hrsAgo = (h: number) => new Date(NOW.getTime() - h * 60 * 60 * 1000);
+  const daysAgoMsg = (d: number) =>
+    new Date(NOW.getTime() - d * 24 * 60 * 60 * 1000);
+
+  const FIRM_NUMBER = "+13035550100"; // Jason's firm Quo line, E.164.
+
+  const messengerAccount = await prisma.messengerAccount.create({
+    data: {
+      userId: jason.id,
+      provider: "quo",
+      phoneNumber: FIRM_NUMBER,
+      label: "Main",
+      isActive: true,
+      // Tokens null in seed — real values arrive when the OAuth flow
+      // ships. The webhook handler will reject events without a
+      // matching account regardless.
+    },
+  });
+
+  type MessengerSeedItem = {
+    kind: "sms" | "call" | "voicemail";
+    direction: "inbound" | "outbound";
+    body?: string | null;
+    callDurationSec?: number | null;
+    callStatus?: string | null;
+    transcript?: string | null;
+    recordingUrl?: string | null;
+    matterId?: string | null;
+    isRead?: boolean;
+    occurredAt: Date;
+  };
+
+  type MessengerSeedThread = {
+    /** External party number in E.164. */
+    contactPhone: string;
+    /** Optional contact for auto-resolve. */
+    contactId: string | null;
+    /** Default matter — set for "client" threads, null for opposing /
+     *  expert / unknown patterns where the user picks per-item. */
+    defaultMatterId: string | null;
+    isPinned?: boolean;
+    items: MessengerSeedItem[];
+  };
+
+  const messengerSeeds: MessengerSeedThread[] = [
+    // ── Maria Alvarez (client, single matter — auto-routed) ──
+    {
+      contactPhone: "+13035550182",
+      contactId: contacts.mariaAlvarez.id,
+      defaultMatterId: matters.alvarez.id,
+      items: [
+        {
+          kind: "sms",
+          direction: "outbound",
+          body:
+            "Hi Maria — quick reminder that your deposition prep is Thursday at 10am. Let me know if anything changes.",
+          occurredAt: hrsAgo(28),
+          isRead: true,
+        },
+        {
+          kind: "sms",
+          direction: "inbound",
+          body: "Got it. Should I bring the medical records folder?",
+          occurredAt: hrsAgo(27),
+          isRead: true,
+        },
+        {
+          kind: "sms",
+          direction: "outbound",
+          body:
+            "No need — Rachel already pulled everything. Just bring photo ID and yourself :)",
+          occurredAt: hrsAgo(27),
+          isRead: true,
+        },
+        {
+          kind: "sms",
+          direction: "inbound",
+          body: "Perfect, see you Thursday.",
+          occurredAt: hrsAgo(26),
+          isRead: true,
+        },
+        {
+          kind: "sms",
+          direction: "inbound",
+          body:
+            "One more thing — my sister Lisa is asking if she can come for moral support. Is that ok?",
+          occurredAt: hrsAgo(2),
+          isRead: false,
+        },
+        {
+          kind: "sms",
+          direction: "inbound",
+          body: "Sorry to keep texting — also got a call from a number I don't recognize asking about the case. Should I call them back?",
+          occurredAt: minsAgo(45),
+          isRead: false,
+        },
+      ],
+    },
+
+    // ── Derek Williams (client, pinned, missed call + voicemail) ──
+    {
+      contactPhone: "+13035550221",
+      contactId: contacts.derekWilliams.id,
+      defaultMatterId: matters.williams.id,
+      isPinned: true,
+      items: [
+        {
+          kind: "sms",
+          direction: "outbound",
+          body: "Derek — confirming our 2pm strategy call tomorrow.",
+          occurredAt: daysAgoMsg(2),
+          isRead: true,
+        },
+        {
+          kind: "sms",
+          direction: "inbound",
+          body: "Sounds good.",
+          occurredAt: daysAgoMsg(2),
+          isRead: true,
+        },
+        {
+          kind: "call",
+          direction: "outbound",
+          callStatus: "answered",
+          callDurationSec: 612,
+          occurredAt: daysAgoMsg(1),
+          isRead: true,
+        },
+        {
+          kind: "call",
+          direction: "inbound",
+          callStatus: "missed",
+          callDurationSec: 0,
+          occurredAt: hrsAgo(4),
+          isRead: false,
+        },
+        {
+          kind: "voicemail",
+          direction: "inbound",
+          callDurationSec: 47,
+          transcript:
+            "Hey Jason it's Derek. Sorry I missed you — wanted to follow up on the settlement offer we discussed. The number they came back with is workable but I want to talk through the lien situation before I commit. Call me back when you get a sec, I'll be in the truck most of the day. Thanks.",
+          recordingUrl: null, // would be a Quo CDN URL in real life
+          occurredAt: hrsAgo(4),
+          isRead: false,
+        },
+      ],
+    },
+
+    // ── Denver City Attorney (opposing counsel — multi-matter, unfiled at thread level) ──
+    {
+      contactPhone: "+17205550400",
+      contactId: contacts.denverCityAtty.id,
+      defaultMatterId: null,
+      items: [
+        {
+          kind: "sms",
+          direction: "inbound",
+          body:
+            "Counsel — sending over the proposed protective order on the Williams matter shortly. Will include the redaction schedule.",
+          // Filed per-item to Williams since this number touches multiple matters.
+          matterId: matters.williams.id,
+          occurredAt: daysAgoMsg(3),
+          isRead: true,
+        },
+        {
+          kind: "sms",
+          direction: "outbound",
+          body: "Acknowledged. We'll review and respond by Friday.",
+          matterId: matters.williams.id,
+          occurredAt: daysAgoMsg(3),
+          isRead: true,
+        },
+        {
+          kind: "call",
+          direction: "outbound",
+          callStatus: "answered",
+          callDurationSec: 184,
+          // This call was about the Aurora matter — different filing.
+          matterId: matters.aurora.id,
+          occurredAt: daysAgoMsg(1),
+          isRead: true,
+        },
+        {
+          kind: "sms",
+          direction: "inbound",
+          body:
+            "Following up on our call — sending discovery responses for Aurora today. Will need a 7-day extension on the Williams interrogatories.",
+          // Two matters mentioned but the actionable ask is Aurora —
+          // file there. The unfiled-at-thread design lets the user
+          // re-file if the read changes.
+          matterId: matters.aurora.id,
+          occurredAt: hrsAgo(6),
+          isRead: false,
+        },
+      ],
+    },
+
+    // ── Priya Patel (client, simple back-and-forth, all read) ──
+    {
+      contactPhone: "+17205550188",
+      contactId: contacts.priyaPatel.id,
+      defaultMatterId: matters.patel.id,
+      items: [
+        {
+          kind: "sms",
+          direction: "outbound",
+          body:
+            "Priya — your initial intake form went out via DocuSign just now. Should hit your inbox in a minute.",
+          occurredAt: hrsAgo(50),
+          isRead: true,
+        },
+        {
+          kind: "sms",
+          direction: "inbound",
+          body: "Got it, signing now. Thank you!",
+          occurredAt: hrsAgo(49),
+          isRead: true,
+        },
+        {
+          kind: "sms",
+          direction: "inbound",
+          body:
+            "Done. Let me know if anything else is needed before our meeting next week.",
+          occurredAt: hrsAgo(48),
+          isRead: true,
+        },
+      ],
+    },
+
+    // ── Unknown number (no contact, no matter — could be a new lead) ──
+    {
+      contactPhone: "+19705550912",
+      contactId: null,
+      defaultMatterId: null,
+      items: [
+        {
+          kind: "sms",
+          direction: "inbound",
+          body:
+            "Hi — I was given your number by Maria Alvarez. I think I have a similar case to hers (excessive force in Aurora last September). Would you have time to talk this week?",
+          occurredAt: minsAgo(20),
+          isRead: false,
+        },
+      ],
+    },
+
+    // ── Dr. Singh (expert across multiple matters) ──
+    {
+      contactPhone: "+13035550700",
+      contactId: contacts.drSingh.id,
+      defaultMatterId: null,
+      items: [
+        {
+          kind: "sms",
+          direction: "outbound",
+          body:
+            "Dr. Singh — checking on availability for a deposition the week of June 16. Williams matter, ortho damages testimony.",
+          matterId: matters.williams.id,
+          occurredAt: daysAgoMsg(2),
+          isRead: true,
+        },
+        {
+          kind: "sms",
+          direction: "inbound",
+          body:
+            "Tuesday June 17 afternoon works. I can do morning if needed. Will need the updated MRI scans 48 hrs in advance.",
+          matterId: matters.williams.id,
+          occurredAt: daysAgoMsg(2),
+          isRead: true,
+        },
+        {
+          kind: "call",
+          direction: "inbound",
+          callStatus: "answered",
+          callDurationSec: 423,
+          // Different matter — Alvarez.
+          matterId: matters.alvarez.id,
+          occurredAt: hrsAgo(20),
+          isRead: true,
+        },
+        {
+          kind: "sms",
+          direction: "inbound",
+          body:
+            "Per our call — invoice for the Alvarez record review will go out Friday. $1,850 flat.",
+          matterId: matters.alvarez.id,
+          occurredAt: hrsAgo(19),
+          isRead: false,
+        },
+      ],
+    },
+  ];
+
+  let messengerItemsCreated = 0;
+  for (const t of messengerSeeds) {
+    // lastItemAt + unreadCount derive from the items so we don't have
+    // to hand-maintain them in the seed data — matches the runtime
+    // contract that the inbound webhook handler keeps current.
+    const lastItem = t.items[t.items.length - 1];
+    const unreadCount = t.items.filter((i) => i.isRead === false).length;
+
+    const thread = await prisma.messengerThread.create({
+      data: {
+        accountId: messengerAccount.id,
+        contactPhone: t.contactPhone,
+        contactId: t.contactId,
+        defaultMatterId: t.defaultMatterId,
+        lastItemAt: lastItem.occurredAt,
+        unreadCount,
+        isPinned: t.isPinned ?? false,
+      },
+    });
+
+    for (const [idx, it] of t.items.entries()) {
+      await prisma.messengerItem.create({
+        data: {
+          threadId: thread.id,
+          providerEventId: `seed-${thread.id}-${idx}`,
+          kind: it.kind,
+          direction: it.direction,
+          fromNumber:
+            it.direction === "inbound" ? t.contactPhone : FIRM_NUMBER,
+          toNumber:
+            it.direction === "inbound" ? FIRM_NUMBER : t.contactPhone,
+          body: it.body ?? null,
+          callDurationSec: it.callDurationSec ?? null,
+          callStatus: it.callStatus ?? null,
+          transcript: it.transcript ?? null,
+          recordingUrl: it.recordingUrl ?? null,
+          matterId: it.matterId ?? null,
+          isRead: it.isRead ?? true,
+          occurredAt: it.occurredAt,
+        },
+      });
+      messengerItemsCreated++;
+    }
+  }
+  console.log(
+    `   ${messengerSeeds.length} messenger threads · ${messengerItemsCreated} items`
+  );
+
+  // ─────────────────────────────────────────────────────────────────────
   // Summary
   // ─────────────────────────────────────────────────────────────────────
   const counts = await Promise.all([
@@ -1537,6 +1887,8 @@ A copy of the document is available through PACER and is attached for your recor
     prisma.activityLog.count(),
     prisma.task.count(),
     prisma.emailThread.count(),
+    prisma.messengerThread.count(),
+    prisma.messengerItem.count(),
   ]);
   console.log("\n✅ Seed complete:");
   console.log(`   ${counts[0]} users`);
@@ -1549,6 +1901,8 @@ A copy of the document is available through PACER and is attached for your recor
   console.log(`   ${counts[7]} activity log entries`);
   console.log(`   ${counts[8]} tasks`);
   console.log(`   ${counts[9]} email threads`);
+  console.log(`   ${counts[10]} messenger threads`);
+  console.log(`   ${counts[11]} messenger items`);
 }
 
 main()
