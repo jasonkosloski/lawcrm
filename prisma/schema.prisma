@@ -278,6 +278,12 @@ model PracticeArea {
   /// the new/edit forms. False for areas like "Guardianships" where
   /// SOL isn't meaningful.
   hasStatuteOfLimitations Boolean @default(false)
+  /// Default billing flow new matters in this area inherit on
+  /// create. See `Matter.billingMode` for the per-matter override
+  /// + the full enum of values. iteration 1: schema only — every
+  /// mode currently routes through the traditional UX with a
+  /// "flow not implemented" hint.
+  defaultBillingMode String @default("client")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -322,6 +328,16 @@ model Matter {
   filedDate      DateTime?
   trialDate      DateTime?
   feeStructure   String   @default("contingent") /// contingent | hourly | flat | hybrid | pro_bono
+  /// Which billing flow the matter uses on the Billing tab —
+  /// "client" (today's traditional invoicing), "court_voucher"
+  /// (court-appointed, generate vouchers for agency reimbursement),
+  /// "fee_petition" (contingency / fee-shifting; generate court
+  /// exhibits for §1988 / FHA / Title VII fee awards), or "none"
+  /// (true pro-bono / personal). Inherited from
+  /// `PracticeArea.defaultBillingMode` on create; can be overridden
+  /// per-matter (a §1988-eligible case might swap from client →
+  /// fee_petition mid-life). iteration 1: schema only.
+  billingMode    String   @default("client")
   /// IOLTA trust balance for this matter. Decimal (not Float) for
   /// regulatory-grade precision — a $0.01 drift on real client trust
   /// money is a compliance violation.

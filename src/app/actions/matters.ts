@@ -16,6 +16,7 @@ import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { BILLING_MODES } from "@/lib/billing-mode-constants";
 import {
   NEW_CLIENT_SENTINEL,
   type CreateMatterState,
@@ -168,6 +169,10 @@ async function resolveAreaAndStage(
       stageId: string;
       color: string;
       hasStatuteOfLimitations: boolean;
+      /** Snapshotted onto the new Matter so per-area changes don't
+       *  rewrite history. Per-matter override happens via the matter
+       *  edit form. */
+      defaultBillingMode: string;
     }
   | { ok: false; error: string }
 > {
@@ -178,6 +183,7 @@ async function resolveAreaAndStage(
       color: true,
       isActive: true,
       hasStatuteOfLimitations: true,
+      defaultBillingMode: true,
       stages: {
         where: { isActive: true },
         orderBy: { order: "asc" },
@@ -199,6 +205,7 @@ async function resolveAreaAndStage(
     stageId: resolvedStageId,
     color: area.color,
     hasStatuteOfLimitations: area.hasStatuteOfLimitations,
+    defaultBillingMode: area.defaultBillingMode,
   };
 }
 
@@ -293,6 +300,10 @@ export async function createMatter(
       practiceAreaId: resolved.practiceAreaId,
       stageId: resolved.stageId,
       feeStructure: data.feeStructure,
+      // Snapshot the area's defaultBillingMode onto the matter on
+      // create. Per-area changes don't rewrite history; per-matter
+      // override happens on the matter edit form.
+      billingMode: resolved.defaultBillingMode,
       caseNumber: data.caseNumber || null,
       court: data.court || null,
       opposingParty: data.opposingParty || null,
@@ -361,6 +372,10 @@ const updateMatterSchema = z.object({
     "hybrid",
     "pro_bono",
   ]),
+  /** Per-matter override of the practice area's defaultBillingMode.
+   *  Optional on the form so older clients without the field don't
+   *  reject; we just leave the existing value alone. */
+  billingMode: z.enum(BILLING_MODES).optional(),
   caseNumber: z.string().trim().max(80).optional().or(z.literal("")),
   court: z.string().trim().max(200).optional().or(z.literal("")),
   clientId: z.string().trim().optional().or(z.literal("")),
@@ -454,6 +469,9 @@ export async function updateMatter(
         practiceAreaId: resolved.practiceAreaId,
         stageId: resolved.stageId,
         feeStructure: data.feeStructure,
+        // Only write when the form posted a value — keeps forward-
+        // compat with older clients that don't include the field.
+        ...(data.billingMode ? { billingMode: data.billingMode } : {}),
         caseNumber: data.caseNumber || null,
         court: data.court || null,
         opposingParty: data.opposingParty || null,

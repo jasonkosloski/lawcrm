@@ -15,6 +15,12 @@ import {
   practiceAreaInitialState,
   type PracticeAreaFormState,
 } from "@/lib/practice-area-constants";
+import {
+  BILLING_MODES,
+  BILLING_MODE_DESCRIPTION,
+  BILLING_MODE_LABEL,
+  type BillingMode,
+} from "@/lib/billing-mode-constants";
 
 export function EditPracticeAreaForm({
   area,
@@ -25,6 +31,7 @@ export function EditPracticeAreaForm({
     label: string | null;
     color: string;
     hasStatuteOfLimitations: boolean;
+    defaultBillingMode: string;
   };
 }) {
   const boundAction = updatePracticeArea.bind(null, area.id);
@@ -111,6 +118,33 @@ export function EditPracticeAreaForm({
           </span>
         </div>
       </label>
+
+      {/* Default billing mode — snapshots onto each new matter on
+          create. Per-matter override happens on the matter edit
+          form, so changing this here only affects future matters. */}
+      <Field
+        label="Default billing mode"
+        error={errs.defaultBillingMode}
+        hint={
+          BILLING_MODE_DESCRIPTION[
+            (vals.defaultBillingMode as BillingMode) ??
+              (area.defaultBillingMode as BillingMode)
+          ]
+        }
+      >
+        <select
+          id="defaultBillingMode"
+          name="defaultBillingMode"
+          defaultValue={vals.defaultBillingMode ?? area.defaultBillingMode}
+          className={cn(inputCls(!!errs.defaultBillingMode), "max-w-xs")}
+        >
+          {BILLING_MODES.map((m) => (
+            <option key={m} value={m}>
+              {BILLING_MODE_LABEL[m]}
+            </option>
+          ))}
+        </select>
+      </Field>
 
       <div className="flex items-center justify-end gap-2">
         {state.status === "ok" && (

@@ -77,6 +77,10 @@ export type InvoiceRow = {
 
 export type MatterBilling = {
   matterId: string;
+  /** Which billing flow the matter uses (today every value renders
+   *  through the traditional flow with a "not implemented yet"
+   *  hint for non-client modes). */
+  billingMode: string;
   wip: WipSummary;
   trust: TrustSummary;
   invoices: InvoiceRow[];
@@ -119,7 +123,7 @@ export async function getMatterBilling(
     }),
     prisma.matter.findUnique({
       where: { id: matterId },
-      select: { trustBalance: true },
+      select: { trustBalance: true, billingMode: true },
     }),
   ]);
 
@@ -202,6 +206,7 @@ export async function getMatterBilling(
 
   return {
     matterId,
+    billingMode: matter?.billingMode ?? "client",
     wip,
     trust,
     invoices: invoiceRows,

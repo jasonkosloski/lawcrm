@@ -70,6 +70,7 @@ export default async function EditMatterPage({
     practiceAreaId: matter.practiceAreaId,
     stageId: matter.stageId,
     feeStructure: matter.feeStructure,
+    billingMode: matter.billingMode,
     court: matter.court,
     clientId: matter.clientId,
     opposingParty: matter.opposingParty,

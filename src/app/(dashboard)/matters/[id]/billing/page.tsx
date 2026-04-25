@@ -27,8 +27,13 @@
  */
 
 import Link from "next/link";
-import { X } from "lucide-react";
+import { Info, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  BILLING_MODE_DESCRIPTION,
+  BILLING_MODE_LABEL,
+  type BillingMode,
+} from "@/lib/billing-mode-constants";
 import {
   Card,
   CardContent,
@@ -182,8 +187,51 @@ function MainColumn({
   const invoiceHref = (invId: string): string =>
     `/matters/${matterId}/billing?invoice=${invId}`;
 
+  const billingMode = billing.billingMode as BillingMode;
+  const isTraditional = billingMode === "client";
+
   return (
     <>
+      {/* ── Mode chip + (when non-client) info banner ──────── */}
+      <div className="flex items-center gap-2 -mb-2">
+        <span
+          className={cn(
+            "inline-flex items-center text-2xs font-medium px-2 py-0.5 rounded-full border",
+            isTraditional
+              ? "bg-paper-2 text-ink-3 border-line"
+              : "bg-brand-soft text-brand-700 border-brand-200"
+          )}
+          title={BILLING_MODE_DESCRIPTION[billingMode]}
+        >
+          {BILLING_MODE_LABEL[billingMode]}
+        </span>
+        <span className="text-2xs text-ink-4">
+          ·{" "}
+          <Link
+            href={`/matters/${matterId}/edit`}
+            className="hover:text-brand-700 hover:underline"
+          >
+            change on matter edit
+          </Link>
+        </span>
+      </div>
+      {!isTraditional && (
+        <div className="flex items-start gap-2 px-3 py-2 rounded-md border border-warn-border bg-warn-soft text-2xs text-warn">
+          <Info size={12} className="shrink-0 mt-0.5" />
+          <div>
+            <div className="font-medium">
+              {BILLING_MODE_LABEL[billingMode]} flow isn&apos;t implemented yet.
+            </div>
+            <div className="text-ink-3 mt-0.5">
+              {BILLING_MODE_DESCRIPTION[billingMode]} For now this matter
+              uses the traditional client-billing UX below — generated
+              invoices won&apos;t carry the mode-specific letterhead or
+              workflow until that lands.
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Top KPI strip ───────────────────────────────────── */}
       <div className="grid grid-cols-3 gap-3">
         <Kpi

@@ -15,6 +15,10 @@ import { useActionState, useState } from "react";
 import { cn } from "@/lib/utils";
 import { updateMatter } from "@/app/actions/matters";
 import {
+  BILLING_MODES,
+  BILLING_MODE_LABEL,
+} from "@/lib/billing-mode-constants";
+import {
   updateMatterInitialState,
   type UpdateMatterState,
 } from "@/lib/new-matter-constants";
@@ -34,6 +38,7 @@ export type MatterForEdit = {
   practiceAreaId: string;
   stageId: string;
   feeStructure: string;
+  billingMode: string;
   court: string | null;
   clientId: string | null;
   opposingParty: string | null;
@@ -87,6 +92,7 @@ export function EditMatterForm({
   const init = {
     name: vals.name ?? matter.name,
     feeStructure: vals.feeStructure ?? matter.feeStructure,
+    billingMode: vals.billingMode ?? matter.billingMode,
     caseNumber: vals.caseNumber ?? matter.caseNumber ?? "",
     court: vals.court ?? matter.court ?? "",
     clientId: vals.clientId ?? matter.clientId ?? "",
@@ -211,6 +217,28 @@ export function EditMatterForm({
               {FEE_OPTIONS.map((f) => (
                 <option key={f.value} value={f.value}>
                   {f.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </Row>
+
+        <Row>
+          <Field
+            label="Billing mode"
+            name="billingMode"
+            error={errs.billingMode}
+            hint="Which workflow the Billing tab uses. Inherited from the practice area on create; override per-matter when this case bills differently (e.g. a §1988-eligible contingency case switching to fee-petition mode)."
+          >
+            <select
+              id="billingMode"
+              name="billingMode"
+              defaultValue={init.billingMode}
+              className={selectCls(!!errs.billingMode)}
+            >
+              {BILLING_MODES.map((m) => (
+                <option key={m} value={m}>
+                  {BILLING_MODE_LABEL[m]}
                 </option>
               ))}
             </select>

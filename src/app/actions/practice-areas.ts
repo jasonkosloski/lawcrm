@@ -20,6 +20,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/firm";
+import { BILLING_MODES } from "@/lib/billing-mode-constants";
 import type {
   PracticeAreaFormState,
   StageFormState,
@@ -58,6 +59,11 @@ const practiceAreaSchema = z.object({
    *  card on the Overview tab and expose SOL fields on the new/edit
    *  forms. */
   hasStatuteOfLimitations: z.literal("on").optional(),
+  /** Billing flow new matters in this area inherit on create. The
+   *  edit form posts a string; we accept any value the enum knows
+   *  about and fall back to "client" for stale forms posting an
+   *  unknown value. */
+  defaultBillingMode: z.enum(BILLING_MODES).optional(),
 });
 
 /** Create a new practice area + auto-seed the default 10-stage
@@ -112,6 +118,12 @@ export async function createPracticeArea(
       color: data.color,
       order: nextOrder,
       hasStatuteOfLimitations: data.hasStatuteOfLimitations === "on",
+      // Defaulted to "client" at the column level; the create form
+      // doesn't expose a picker (kept lean), so this only matters
+      // if a future form posts the field.
+      ...(data.defaultBillingMode
+        ? { defaultBillingMode: data.defaultBillingMode }
+        : {}),
       stages: {
         create: DEFAULT_STAGE_TEMPLATE.map((s, i) => ({
           name: s.name,
@@ -163,6 +175,12 @@ export async function updatePracticeArea(
       label: data.label || null,
       color: data.color,
       hasStatuteOfLimitations: data.hasStatuteOfLimitations === "on",
+      // Only write when the form actually posted a value — keeps
+      // forward-compat with older forms that don't include the
+      // select.
+      ...(data.defaultBillingMode
+        ? { defaultBillingMode: data.defaultBillingMode }
+        : {}),
     },
   });
 

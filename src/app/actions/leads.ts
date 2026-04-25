@@ -102,7 +102,9 @@ export async function convertLeadToMatter(
   const [area, stage] = await Promise.all([
     prisma.practiceArea.findUnique({
       where: { id: parsed.data.practiceAreaId },
-      select: { id: true, color: true },
+      // defaultBillingMode snapshots onto the new Matter so the
+      // billing tab shows the right flow from day one.
+      select: { id: true, color: true, defaultBillingMode: true },
     }),
     prisma.matterStage.findUnique({
       where: { id: parsed.data.stageId },
@@ -174,6 +176,9 @@ export async function convertLeadToMatter(
         practiceAreaId: area.id,
         stageId: stage.id,
         feeStructure: parsed.data.feeStructure,
+        // Snapshot the area's default — same pattern as the direct
+        // matter-create path.
+        billingMode: area.defaultBillingMode,
         color: area.color,
         description: description || null,
         clientId: clientContactId,

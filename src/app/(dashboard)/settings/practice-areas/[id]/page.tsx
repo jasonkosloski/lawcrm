@@ -89,6 +89,7 @@ export default async function PracticeAreaDetailPage({
               label: area.label,
               color: area.color,
               hasStatuteOfLimitations: area.hasStatuteOfLimitations,
+              defaultBillingMode: area.defaultBillingMode,
             }}
           />
         </CardContent>
