@@ -13,6 +13,7 @@
 import { EmbeddedThreadList } from "./embedded-thread-list";
 import { ThreadReader } from "./thread-reader";
 import type {
+  FilingMatterOption,
   ThreadDetail,
   ThreadListRow,
 } from "@/lib/queries/communication";
@@ -20,6 +21,7 @@ import type {
 export function EmbeddedInbox({
   threads,
   selectedThread,
+  filingOptions,
   basePath,
   emptyLabel,
   emptyHint,
@@ -27,6 +29,9 @@ export function EmbeddedInbox({
 }: {
   threads: ThreadListRow[];
   selectedThread: ThreadDetail | null;
+  /** Open-matter list for the file-to-matter picker on the embedded
+   *  thread reader. Caller passes from getFilingMatterOptions(). */
+  filingOptions: FilingMatterOption[];
   /** Page URL used to build thread selection hrefs
    *  (e.g. "/matters/[id]/communication"). */
   basePath: string;
@@ -53,7 +58,10 @@ export function EmbeddedInbox({
       {/* Right pane: reader */}
       {threads.length > 0 && (
         <div className="flex-1 min-w-0 flex flex-col min-h-0 rounded-lg border border-line overflow-hidden bg-paper-email">
-          <ThreadReader thread={selectedThread} />
+          <ThreadReader
+            thread={selectedThread}
+            filingOptions={filingOptions}
+          />
         </div>
       )}
     </div>

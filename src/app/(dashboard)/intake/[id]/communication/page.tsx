@@ -13,6 +13,7 @@ import { Card } from "@/components/ui/card";
 import { EmailLink } from "@/components/ui/email-link";
 import { EmbeddedInbox } from "@/components/communication/embedded-inbox";
 import {
+  getFilingMatterOptions,
   getThreadById,
   listThreadsForEmail,
 } from "@/lib/queries/communication";
@@ -31,7 +32,10 @@ export default async function LeadCommunicationPage({
   const lead = await getLeadById(id);
   if (!lead) notFound();
 
-  const threads = lead.email ? await listThreadsForEmail(lead.email) : [];
+  const [threads, filingOptions] = await Promise.all([
+    lead.email ? listThreadsForEmail(lead.email) : Promise.resolve([]),
+    getFilingMatterOptions(),
+  ]);
 
   // Only allow reading threads that are actually in the lead's set.
   const threadId =
@@ -70,6 +74,7 @@ export default async function LeadCommunicationPage({
       <EmbeddedInbox
         threads={threads}
         selectedThread={selectedThread}
+        filingOptions={filingOptions}
         basePath={`/intake/${id}/communication`}
         emptyLabel="No communication yet"
         emptyHint={`Emails to or from ${lead.email} will surface here. Once we wire SMS, text threads will land here too.`}

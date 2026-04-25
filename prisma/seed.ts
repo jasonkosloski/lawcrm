@@ -1479,6 +1479,66 @@ A copy of the document is available through PACER and is attached for your recor
         },
       ],
     },
+    // ── Unfiled examples — for testing the file-to-matter flow ──
+    {
+      subject: "Possible new case — wrongful arrest, Aurora",
+      snippet:
+        "Got your name from Maria Alvarez. I think I have a similar case…",
+      matterId: null,
+      lastMessageAt: hoursAgo(5),
+      isRead: false,
+      isStarred: false,
+      hasAttachments: false,
+      messages: [
+        {
+          fromName: "Marcus Patterson",
+          fromEmail: "mpatterson82@gmail.com",
+          toRecipients: [{ name: "Jason Kosloski", email: JASON_EMAIL }],
+          body: `Mr. Kosloski,
+
+Maria Alvarez gave me your name and said you handled her case against Aurora PD. I think I might have a similar situation. I was pulled over in September for a busted tail light, things escalated, and I ended up with a fractured wrist and a disorderly conduct charge that was dismissed.
+
+Would you be willing to look at this? I have body cam footage from the request I made to APD.
+
+Thanks,
+Marcus Patterson
+(303) 555-0931`,
+          sentAt: hoursAgo(5),
+        },
+      ],
+    },
+    {
+      subject: "Bar association CLE — Spring civil rights conference",
+      snippet:
+        "Registration is now open for our spring conference. Early-bird…",
+      matterId: null,
+      lastMessageAt: hoursAgo(28),
+      isRead: true,
+      isStarred: false,
+      hasAttachments: true,
+      messages: [
+        {
+          fromName: "Colorado Trial Lawyers Association",
+          fromEmail: "events@ctla.org",
+          toRecipients: [{ name: "Jason Kosloski", email: JASON_EMAIL }],
+          body: `Jason,
+
+Registration is now open for our spring civil rights litigation conference, May 14-16 in Boulder.
+
+Early-bird pricing through the end of this month. Agenda + speakers attached.
+
+— CTLA Events`,
+          sentAt: hoursAgo(28),
+          attachments: [
+            {
+              filename: "CTLA-Spring-Conference-2026.pdf",
+              contentType: "application/pdf",
+              fileSize: 412_330,
+            },
+          ],
+        },
+      ],
+    },
   ];
 
   for (const t of threadSeeds) {

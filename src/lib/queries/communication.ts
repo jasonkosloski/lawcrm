@@ -365,6 +365,51 @@ export async function getCommunicationCounts(): Promise<CommunicationCounts> {
   return { all, unread, starred, unfiled, filed, untimed };
 }
 
+/** Compact matter row used by the file-to-matter picker on the
+ *  email thread reader. Open matters only; pinned ones bubble to
+ *  the top so the most-likely targets are at hand. */
+export type FilingMatterOption = {
+  id: string;
+  name: string;
+  color: string;
+  area: string;
+  isPinned: boolean;
+};
+
+export async function getFilingMatterOptions(): Promise<FilingMatterOption[]> {
+  const userId = await getCurrentUserId();
+  const [matters, pins] = await Promise.all([
+    prisma.matter.findMany({
+      where: { isArchived: false, stage: { isTerminal: false } },
+      orderBy: [{ updatedAt: "desc" }],
+      select: {
+        id: true,
+        name: true,
+        color: true,
+        practiceArea: { select: { name: true } },
+      },
+    }),
+    prisma.userMatterPin.findMany({
+      where: { userId },
+      select: { matterId: true },
+    }),
+  ]);
+  const pinnedSet = new Set(pins.map((p) => p.matterId));
+  // Stable sort: pinned first, then most-recently-updated.
+  return matters
+    .map((m) => ({
+      id: m.id,
+      name: m.name,
+      color: m.color,
+      area: m.practiceArea.name,
+      isPinned: pinnedSet.has(m.id),
+    }))
+    .sort((a, b) => {
+      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+      return 0;
+    });
+}
+
 /** Pinned matter + thread count for the communication rail's per-
  *  matter drilldown section. Only matters that actually have at
  *  least one thread on the user's account are returned — keeps the

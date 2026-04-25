@@ -25,6 +25,7 @@ import { MessengerThreadReader } from "@/components/communication/messenger-thre
 import {
   getCommunicationCounts,
   getCommunicationPinnedMatters,
+  getFilingMatterOptions,
   getThreadById,
   listThreads,
   type CommunicationFilter,
@@ -127,11 +128,15 @@ export default async function CommunicationPage({
   const rawMatter = Array.isArray(sp.matter) ? sp.matter[0] : sp.matter;
   const matterIdParam = typeof rawMatter === "string" ? rawMatter : null;
 
-  const [threads, selectedThread, pinnedMatters] = await Promise.all([
-    listThreads(filter, matterIdParam ?? undefined),
-    threadId ? getThreadById(threadId) : Promise.resolve(null),
-    getCommunicationPinnedMatters(),
-  ]);
+  const [threads, selectedThread, pinnedMatters, filingOptions] =
+    await Promise.all([
+      listThreads(filter, matterIdParam ?? undefined),
+      threadId ? getThreadById(threadId) : Promise.resolve(null),
+      getCommunicationPinnedMatters(),
+      // Open-matter list for the file-to-matter picker. Cheap query
+      // even on 1000s of matters; cached server-side per request.
+      getFilingMatterOptions(),
+    ]);
 
   return (
     <>
@@ -166,7 +171,10 @@ export default async function CommunicationPage({
           }
           selectedThreadId={threadId}
         />
-        <ThreadReader thread={selectedThread} />
+        <ThreadReader
+          thread={selectedThread}
+          filingOptions={filingOptions}
+        />
       </div>
     </>
   );

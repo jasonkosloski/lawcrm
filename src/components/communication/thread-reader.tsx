@@ -18,6 +18,8 @@ import { FollowUpButton } from "./follow-up-button";
 import { setEmailThreadFollowUp } from "@/app/actions/follow-ups";
 import { LogTimeOnCommButton } from "./log-time-on-comm-button";
 import { CommTimeLoggedIndicator } from "./comm-time-logged-indicator";
+import { FileToMatterPicker } from "./file-to-matter-picker";
+import type { FilingMatterOption } from "@/lib/queries/communication";
 
 const formatSize = (bytes: number | null): string => {
   if (bytes === null || bytes === 0) return "—";
@@ -31,7 +33,15 @@ const formatRecipients = (
 ): string =>
   list.map((r) => (r.name ? `${r.name} <${r.email}>` : r.email)).join(", ");
 
-export function ThreadReader({ thread }: { thread: ThreadDetail | null }) {
+export function ThreadReader({
+  thread,
+  /** Open-matter list passed in from the page server component so the
+   *  file-to-matter picker can render synchronously. */
+  filingOptions,
+}: {
+  thread: ThreadDetail | null;
+  filingOptions: FilingMatterOption[];
+}) {
   if (!thread) {
     return (
       <div className="flex-1 flex items-center justify-center bg-paper-email min-h-0">
@@ -53,20 +63,11 @@ export function ThreadReader({ thread }: { thread: ThreadDetail | null }) {
               {thread.subject}
             </h1>
             <div className="flex items-center gap-2 mt-1.5 text-2xs">
-              {thread.matter ? (
-                <Link
-                  href={`/matters/${thread.matter.id}`}
-                  className="inline-flex items-center gap-1.5 font-mono text-ink-3 hover:text-brand-700"
-                >
-                  <span
-                    className="w-1.5 h-1.5 rounded-full"
-                    style={{ background: thread.matter.color }}
-                  />
-                  {thread.matter.name} · {thread.matter.area}
-                </Link>
-              ) : (
-                <span className="font-medium text-warn">Unfiled</span>
-              )}
+              <FileToMatterPicker
+                threadId={thread.id}
+                currentMatter={thread.matter}
+                options={filingOptions}
+              />
               <span className="text-ink-4">·</span>
               <span className="font-mono text-ink-4">
                 {thread.messageCount}{" "}

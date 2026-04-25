@@ -12,6 +12,7 @@
 
 import { EmbeddedInbox } from "@/components/communication/embedded-inbox";
 import {
+  getFilingMatterOptions,
   getThreadById,
   listThreadsForMatter,
 } from "@/lib/queries/communication";
@@ -26,7 +27,10 @@ export default async function MatterCommunicationPage({
   const requestedThreadId =
     typeof rawThread === "string" ? rawThread : null;
 
-  const threads = await listThreadsForMatter(id);
+  const [threads, filingOptions] = await Promise.all([
+    listThreadsForMatter(id),
+    getFilingMatterOptions(),
+  ]);
 
   // Only allow reading threads that are actually on this matter.
   const threadId =
@@ -41,6 +45,7 @@ export default async function MatterCommunicationPage({
       <EmbeddedInbox
         threads={threads}
         selectedThread={selectedThread}
+        filingOptions={filingOptions}
         basePath={`/matters/${id}/communication`}
         emptyLabel="No communication filed to this matter"
         emptyHint="Emails and text messages filed to this matter will appear here. File a thread from the main inbox or let auto-filing catch it."
