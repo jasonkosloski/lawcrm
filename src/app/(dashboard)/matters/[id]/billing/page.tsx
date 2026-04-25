@@ -44,6 +44,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { GenerateInvoiceForm } from "@/components/matters/billing/generate-invoice-form";
+import { InvoiceActionBar } from "@/components/matters/billing/invoice-action-bar";
 import { InvoiceRowActions } from "@/components/matters/billing/invoice-row-actions";
 import { InvoicePreview } from "@/components/matters/billing/invoice-preview";
 import { TrustTransactionForm } from "@/components/matters/billing/trust-transaction-form";
@@ -130,16 +131,25 @@ export default async function MatterBillingPage({
     <div className="p-5 flex gap-5 items-start">
       <div className="flex-1 min-w-0 flex flex-col gap-5">{main}</div>
       <aside className="w-[36rem] shrink-0 sticky top-5 max-h-[calc(100vh-2.5rem)] flex flex-col rounded-md border border-line overflow-hidden bg-paper">
-        <div className="flex items-center justify-between gap-2 px-4 py-2 border-b border-line bg-paper-2/60 shrink-0">
-          <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+        {/* Sticky top bar — stays visible as the document body
+            below scrolls. Hosts the invoice label + status-aware
+            action buttons + close. The body section is the scroll
+            container, so this header naturally sits put. */}
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-line bg-paper-2/60 shrink-0">
+          <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 mr-auto pl-1">
             Invoice {selectedInvoice.invoiceNumber}
           </div>
+          <InvoiceActionBar
+            invoiceId={selectedInvoice.id}
+            invoiceNumber={selectedInvoice.invoiceNumber}
+            currentStatus={selectedInvoice.status}
+          />
           <Link
             href={`/matters/${id}/billing`}
             scroll={false}
             aria-label="Close preview"
             title="Close preview"
-            className="inline-flex items-center justify-center w-6 h-6 rounded-md text-ink-4 hover:bg-paper-2 hover:text-ink"
+            className="inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-4 hover:bg-paper-2 hover:text-ink"
           >
             <X size={14} />
           </Link>

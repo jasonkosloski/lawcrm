@@ -1,9 +1,16 @@
 /**
- * Invoice Action Bar — sticky footer on the preview pane.
+ * Invoice Action Bar — buttons-only render for the top of the
+ * preview pane.
  *
- * Mirrors the row kebab actions but in a more affordant button row
- * for the user who's looking AT the invoice. State-machine-aware:
- * only shows transitions allowed from the current status.
+ * Renders just the state-machine-aware action buttons; the parent
+ * (page.tsx aside header) provides the wrapper chrome (sticky
+ * positioning, border, padding) so the same buttons can sit
+ * inline next to the close button without doubling up containers.
+ *
+ * Terminal states (paid + void after the void escape hatch is
+ * gone) render nothing — the document letterhead already shows
+ * the status pill, so a separate "no actions available" hint
+ * here would just be noise.
  */
 
 "use client";
@@ -26,19 +33,7 @@ export function InvoiceActionBar({
   const [pending, startTransition] = useTransition();
   const allowed = INVOICE_STATUS_TRANSITIONS[currentStatus] ?? [];
 
-  if (allowed.length === 0) {
-    // Terminal state (paid+nothing-allowed-but-void already handled,
-    // void → []). Show a small contextual hint instead of a dead bar.
-    return (
-      <div className="border-t border-line bg-paper-2/60 px-6 py-3">
-        <div className="text-2xs text-ink-4 w-full">
-          {currentStatus === "void"
-            ? "This invoice was voided. Linked time entries returned to billable WIP."
-            : "No further actions available on this invoice."}
-        </div>
-      </div>
-    );
-  }
+  if (allowed.length === 0) return null;
 
   const transitionTo = (next: string, confirmCopy?: string) => {
     if (confirmCopy && !confirm(confirmCopy)) return;
@@ -49,66 +44,67 @@ export function InvoiceActionBar({
   };
 
   return (
-    <div className="border-t border-line bg-paper-2/60 px-6 py-3">
-      <div className="w-full flex items-center gap-2">
-        {allowed.includes("sent") && (
-          <button
-            type="button"
-            onClick={() => transitionTo("sent")}
-            disabled={pending}
-            className={cn(
-              "inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium",
-              "bg-brand-500 text-white hover:bg-brand-600 transition-colors",
-              "disabled:opacity-60 disabled:cursor-not-allowed"
-            )}
-          >
-            <Send size={12} />
-            Mark sent
-          </button>
-        )}
-        {allowed.includes("paid") && (
-          <button
-            type="button"
-            onClick={() =>
-              transitionTo(
-                "paid",
-                `Mark invoice ${invoiceNumber} as fully paid? V1 doesn't support partial payments yet.`
-              )
-            }
-            disabled={pending}
-            className={cn(
-              "inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium",
-              allowed.includes("sent")
-                ? "border border-line bg-white text-ink hover:border-brand-300 hover:text-brand-700"
-                : "bg-brand-500 text-white hover:bg-brand-600",
-              "transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-            )}
-          >
-            <Check size={12} />
-            Mark paid
-          </button>
-        )}
-        {allowed.includes("void") && (
-          <button
-            type="button"
-            onClick={() =>
-              transitionTo(
-                "void",
-                `Void invoice ${invoiceNumber}? Linked time entries return to billable WIP.`
-              )
-            }
-            disabled={pending}
-            className={cn(
-              "inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium ml-auto",
-              "text-ink-3 hover:text-warn hover:bg-warn-soft",
-              "transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-            )}
-          >
-            <X size={12} />
-            Void
-          </button>
-        )}
-      </div>
+    <div className="flex items-center gap-1.5">
+      {allowed.includes("sent") && (
+        <button
+          type="button"
+          onClick={() => transitionTo("sent")}
+          disabled={pending}
+          className={cn(
+            "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-2xs font-medium",
+            "bg-brand-500 text-white hover:bg-brand-600 transition-colors",
+            "disabled:opacity-60 disabled:cursor-not-allowed"
+          )}
+        >
+          <Send size={11} />
+          Mark sent
+        </button>
+      )}
+      {allowed.includes("paid") && (
+        <button
+          type="button"
+          onClick={() =>
+            transitionTo(
+              "paid",
+              `Mark invoice ${invoiceNumber} as fully paid? V1 doesn't support partial payments yet.`
+            )
+          }
+          disabled={pending}
+          className={cn(
+            "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-2xs font-medium",
+            // When sent isn't an option (already-sent invoice), Mark
+            // paid IS the primary CTA; otherwise it's secondary.
+            allowed.includes("sent")
+              ? "border border-line bg-white text-ink hover:border-brand-300 hover:text-brand-700"
+              : "bg-brand-500 text-white hover:bg-brand-600",
+            "transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          )}
+        >
+          <Check size={11} />
+          Mark paid
+        </button>
+      )}
+      {allowed.includes("void") && (
+        <button
+          type="button"
+          onClick={() =>
+            transitionTo(
+              "void",
+              `Void invoice ${invoiceNumber}? Linked time entries return to billable WIP.`
+            )
+          }
+          disabled={pending}
+          className={cn(
+            "inline-flex items-center gap-1 h-7 px-2 rounded-md text-2xs font-medium",
+            "text-ink-3 hover:text-warn hover:bg-warn-soft",
+            "transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          )}
+          title="Void invoice"
+          aria-label="Void invoice"
+        >
+          <X size={11} />
+        </button>
+      )}
     </div>
   );
 }

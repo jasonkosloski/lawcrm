@@ -1,11 +1,11 @@
 /**
  * Invoice Preview — letterhead-style render of a single invoice.
  *
- * Server component. Shows the firm letterhead, invoice meta
- * (#, dates, status), bill-to block, line items table, totals
- * stack, and notes. The action bar at the bottom mirrors the row
- * kebab so the user doesn't have to scroll the table to mark
- * sent / paid / void.
+ * Server component. Renders the document body only (firm
+ * letterhead, invoice meta, bill-to, line items, totals, notes).
+ * The sticky top header (close button + state-machine action
+ * buttons) lives in the parent page so the same component can be
+ * reused in a future print / PDF route without the chrome.
  *
  * Designed to look like the document that'll eventually be PDF'd
  * and emailed — when that lands (deferred), we render the same
@@ -13,7 +13,6 @@
  */
 
 import { Building2, FileText } from "lucide-react";
-import { InvoiceActionBar } from "./invoice-action-bar";
 import { INVOICE_STATUS_LABEL } from "@/lib/billing-form";
 import type { FirmProfile } from "@/lib/firm";
 import type { InvoiceDetail } from "@/lib/queries/billing";
@@ -284,12 +283,6 @@ export function InvoicePreview({
         </div>
       </div>
 
-      {/* Sticky action bar */}
-      <InvoiceActionBar
-        invoiceId={invoice.id}
-        invoiceNumber={invoice.invoiceNumber}
-        currentStatus={invoice.status}
-      />
     </div>
   );
 }
