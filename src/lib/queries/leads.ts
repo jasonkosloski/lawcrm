@@ -49,6 +49,11 @@ export const LEAD_SOURCE_LABEL: Record<string, string> = {
 
 export type LeadListRow = {
   id: string;
+  /** Linked Contact id when the lead has been backfilled / created
+   *  through the new flow. Null only for un-backfilled legacy rows.
+   *  When set, the intake list links the name through to the
+   *  contact directory. */
+  contactId: string | null;
   name: string;
   email: string | null;
   phone: string | null;
@@ -72,13 +77,21 @@ const daysBetween = (a: Date, b: Date): number =>
 export async function listLeads(): Promise<LeadListRow[]> {
   const leads = await prisma.lead.findMany({
     orderBy: [{ createdAt: "desc" }],
+    include: {
+      // Joined Contact wins for display fields when present — keeps
+      // intake and the contact directory consistent if the user edits
+      // the Contact (e.g. updates the phone number). Falls back to
+      // the legacy Lead.email/.phone columns for un-backfilled rows.
+      contact: { select: { id: true, name: true, email: true, phone: true } },
+    },
   });
   const now = new Date();
   return leads.map((l) => ({
     id: l.id,
-    name: l.name,
-    email: l.email,
-    phone: l.phone,
+    contactId: l.contact?.id ?? l.contactId,
+    name: l.contact?.name ?? l.name,
+    email: l.contact?.email ?? l.email,
+    phone: l.contact?.phone ?? l.phone,
     source: l.source,
     sourceDetail: l.sourceDetail,
     summary: l.summary,
@@ -96,7 +109,32 @@ export async function listLeads(): Promise<LeadListRow[]> {
 export type LeadDetail = Awaited<ReturnType<typeof getLeadById>>;
 
 export async function getLeadById(id: string) {
-  const lead = await prisma.lead.findUnique({ where: { id } });
+  const lead = await prisma.lead.findUnique({
+    where: { id },
+    include: {
+      // Joined Contact — the lead's first-class contact record. UI
+      // prefers contact.name/email/phone over the legacy Lead.* mirrors
+      // so a phone-number edit on /contacts/[id] flows through here.
+      contact: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          organization: true,
+          phones: {
+            orderBy: [{ isPrimary: "desc" }, { order: "asc" }],
+            select: {
+              id: true,
+              label: true,
+              number: true,
+              isPrimary: true,
+            },
+          },
+        },
+      },
+    },
+  });
   if (!lead) return null;
 
   // If the lead was converted, fetch the matter it became so the UI can
@@ -124,7 +162,17 @@ export async function getLeadById(id: string) {
       }
     : null;
 
-  return { ...lead, convertedMatter };
+  // Resolve display fields once — joined Contact wins, legacy text
+  // mirrors are the fallback for un-backfilled rows. Pages should
+  // read displayName / displayEmail / displayPhone instead of the raw
+  // lead.* columns.
+  return {
+    ...lead,
+    convertedMatter,
+    displayName: lead.contact?.name ?? lead.name,
+    displayEmail: lead.contact?.email ?? lead.email,
+    displayPhone: lead.contact?.phone ?? lead.phone,
+  };
 }
 
 /** Aggregate counts for the intake-page header: total active, new today,

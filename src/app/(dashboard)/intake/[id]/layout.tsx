@@ -55,7 +55,7 @@ export default async function LeadDetailLayout({
   return (
     <>
       <TopBar
-        title={lead.name}
+        title={lead.displayName}
         crumbs="Intake"
         subtitle={
           <>
@@ -73,7 +73,7 @@ export default async function LeadDetailLayout({
               <DeclineLeadButton leadId={lead.id} />
               <ConvertLeadButton
                 leadId={lead.id}
-                defaultMatterName={lead.name}
+                defaultMatterName={lead.displayName}
                 areas={areas}
               />
             </>

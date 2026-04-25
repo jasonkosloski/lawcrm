@@ -10,6 +10,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   Ban,
+  Building2,
   CheckCircle2,
   Hourglass,
   Mail,
@@ -17,6 +18,7 @@ import {
   Phone,
   ShieldCheck,
   TriangleAlert,
+  UserCheck,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmailLink } from "@/components/ui/email-link";
@@ -198,28 +200,82 @@ export default async function LeadOverviewPage({
 
         {/* ── Right column (1/3) ────────────────────────────────── */}
         <div className="flex flex-col gap-5">
-          {/* Contact */}
+          {/* Contact — joined Contact wins; legacy text columns are
+              the fallback for un-backfilled rows. When linked, the
+              header doubles as a deep link to /contacts/[id] so the
+              user can hop to the full contact record. */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">Contact</CardTitle>
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <span>Contact</span>
+                {lead.contact && (
+                  <Link
+                    href={`/contacts/${lead.contact.id}`}
+                    className="ml-auto inline-flex items-center gap-1 text-2xs font-mono text-ink-4 hover:text-brand-700"
+                    title="Open full contact record"
+                  >
+                    <UserCheck size={11} />
+                    Open
+                  </Link>
+                )}
+              </CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4 flex flex-col gap-2">
-              {lead.email && (
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-ink font-medium truncate">
+                  {lead.displayName}
+                </span>
+              </div>
+              {lead.contact?.organization && (
+                <div className="flex items-center gap-2 text-xs">
+                  <Building2 size={12} className="text-ink-4 shrink-0" />
+                  <span className="text-ink-3 truncate">
+                    {lead.contact.organization}
+                  </span>
+                </div>
+              )}
+              {lead.displayEmail && (
                 <div className="flex items-center gap-2 text-xs">
                   <Mail size={12} className="text-ink-4 shrink-0" />
                   <EmailLink
-                    email={lead.email}
+                    email={lead.displayEmail}
                     className="text-ink truncate"
                   />
                 </div>
               )}
-              {lead.phone && (
+              {/* Render all phones from the joined Contact when present
+                  — same shape as the parties tab's phone display.
+                  Falls back to lead.displayPhone (mirror) for un-
+                  backfilled rows. */}
+              {lead.contact && lead.contact.phones.length > 0 ? (
+                lead.contact.phones.map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex items-center gap-2 text-xs"
+                  >
+                    <Phone size={12} className="text-ink-4 shrink-0" />
+                    {p.label && (
+                      <span className="text-ink-4 mr-1">{p.label}</span>
+                    )}
+                    <span className="text-ink font-mono">
+                      {formatPhone(p.number)}
+                    </span>
+                    {p.isPrimary && lead.contact!.phones.length > 1 && (
+                      <span className="text-[9px] text-brand-700">
+                        primary
+                      </span>
+                    )}
+                  </div>
+                ))
+              ) : lead.displayPhone ? (
                 <div className="flex items-center gap-2 text-xs">
                   <Phone size={12} className="text-ink-4 shrink-0" />
-                  <span className="text-ink font-mono">{formatPhone(lead.phone)}</span>
+                  <span className="text-ink font-mono">
+                    {formatPhone(lead.displayPhone)}
+                  </span>
                 </div>
-              )}
-              {!lead.email && !lead.phone && (
+              ) : null}
+              {!lead.displayEmail && !lead.displayPhone && (
                 <div className="text-xs text-ink-4">
                   No contact info provided.
                 </div>

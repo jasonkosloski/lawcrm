@@ -243,6 +243,10 @@ model Contact {
   /// row across every matter where this contact represents the other
   /// side. Lets the contact page surface "represents N parties."
   representationOf MatterContact[] @relation("MatterContactRepresentation")
+  /// Reverse of Lead.contact — every intake record this contact has
+  /// ever sat on. Lets the contact page surface prior intakes (even
+  /// the ones that didn't convert).
+  leads Lead[] @relation("LeadContact")
 
   @@index([type])
   @@index([name])
@@ -326,11 +330,24 @@ model MatterContact {
 // =============================================================================
 
 /// Prospective client lead in the intake pipeline.
+///
+/// Every lead is attached to a `Contact` (`contactId`) — same shape
+/// as `Matter.clientId`. The contact is created at intake time and
+/// carries through to the converted matter, so a person who
+/// contacts the firm twice (or whose lead converts to a matter)
+/// surfaces as one record across the system. The legacy `name` /
+/// `email` / `phone` columns remain as a fallback for un-backfilled
+/// rows; new code should prefer the joined `contact`.
 model Lead {
   id                  String   @id @default(cuid())
-  name                String   /// Prospective client name
-  email               String?
-  phone               String?
+  /// FK to the prospective client's Contact. Nullable in the schema
+  /// only because SQLite can't add a non-null column without a
+  /// default; the create-lead action treats it as required and the
+  /// seed backfills every existing row.
+  contactId           String?
+  name                String   /// Prospective client name (legacy mirror — prefer contact.name)
+  email               String?  /// Legacy mirror — prefer contact.email
+  phone               String?  /// Legacy mirror — prefer contact.phone
   source              String?  /// web | referral | phone | walk_in | court_appointment
   sourceDetail        String?  /// Additional source info, e.g. "referral · Fox"
   summary             String?  /// Auto-extracted or manually entered case summary
@@ -350,8 +367,13 @@ model Lead {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
+  /// SetNull (not Cascade) — losing the contact shouldn't blow away
+  /// the lead row; it just falls back to the legacy text columns.
+  contact Contact? @relation("LeadContact", fields: [contactId], references: [id], onDelete: SetNull)
+
   @@index([stage])
   @@index([score])
+  @@index([contactId])
   @@map("leads")
 }
 

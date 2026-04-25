@@ -274,6 +274,32 @@ async function main() {
         type: "medical_provider",
       },
     }),
+    /// Lead-attached Contacts. Every Lead (intake) hangs off a real
+    /// Contact via Lead.contactId — same shape as Matter.clientId —
+    /// so a person who contacts the firm twice (or whose lead
+    /// converts to a matter) surfaces as one record.
+    jessicaHale: await prisma.contact.create({
+      data: {
+        name: "Jessica Hale",
+        email: "jhale@email.com",
+        phone: "(303) 555-0244",
+        type: "client",
+      },
+    }),
+    davidOkafor: await prisma.contact.create({
+      data: {
+        name: "David Okafor",
+        email: "dokafor@email.com",
+        type: "client",
+      },
+    }),
+    tanyaBrooks: await prisma.contact.create({
+      data: {
+        name: "Tanya Brooks",
+        phone: "(720) 555-0331",
+        type: "client",
+      },
+    }),
   };
 
   // ─────────────────────────────────────────────────────────────────────
@@ -987,10 +1013,15 @@ async function main() {
   // ─────────────────────────────────────────────────────────────────────
   // Leads (intake queue)
   // ─────────────────────────────────────────────────────────────────────
+  // Every lead hangs off a Contact (Lead.contactId) — same shape
+  // as Matter.clientId. Patel reuses her existing Contact (already
+  // created up top because she's also a converted-matter client);
+  // the rest hang off freshly-created Contacts.
   console.log("  Creating leads…");
   await prisma.lead.createMany({
     data: [
       {
+        contactId: contacts.priyaPatel.id,
         name: "Priya Patel",
         email: "ppatel@email.com",
         phone: "(720) 555-0188",
@@ -1008,6 +1039,7 @@ async function main() {
         convertedMatterId: matters.patel.id,
       },
       {
+        contactId: contacts.jessicaHale.id,
         name: "Jessica Hale",
         email: "jhale@email.com",
         phone: "(303) 555-0244",
@@ -1023,6 +1055,7 @@ async function main() {
         stage: "qualifying",
       },
       {
+        contactId: contacts.davidOkafor.id,
         name: "David Okafor",
         email: "dokafor@email.com",
         source: "court_appointment",
@@ -1034,6 +1067,7 @@ async function main() {
         stage: "new",
       },
       {
+        contactId: contacts.tanyaBrooks.id,
         name: "Tanya Brooks",
         phone: "(720) 555-0331",
         source: "phone",

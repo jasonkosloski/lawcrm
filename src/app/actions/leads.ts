@@ -127,16 +127,16 @@ export async function convertLeadToMatter(
 
   // Single transaction so a half-converted lead can't exist.
   const matterId = await prisma.$transaction(async (tx) => {
-    // Reuse an existing Contact when the lead's email matches one
-    // already in the system; otherwise create a fresh client Contact.
-    let clientContactId: string | null = null;
-    if (lead.email) {
-      const existing = await tx.contact.findFirst({
-        where: { email: lead.email },
-        select: { id: true },
-      });
-      if (existing) clientContactId = existing.id;
-    }
+    // Every lead is attached to a Contact (Lead.contactId) — same
+    // shape as Matter.clientId. The Patel-style "find by email"
+    // dance lives in the create-lead flow now (so prior intakes for
+    // the same person coalesce up front), not at conversion time.
+    //
+    // For un-backfilled rows that still lack a contactId, fall back
+    // to the legacy create-on-conversion path so old data doesn't
+    // block conversion. This branch can be deleted once the legacy
+    // text columns get retired.
+    let clientContactId = lead.contactId;
     if (!clientContactId) {
       const created = await tx.contact.create({
         data: {
@@ -161,6 +161,11 @@ export async function convertLeadToMatter(
           },
         });
       }
+      // Heal the lead row so the next read sees the FK populated.
+      await tx.lead.update({
+        where: { id: leadId },
+        data: { contactId: created.id },
+      });
     }
 
     const matter = await tx.matter.create({
