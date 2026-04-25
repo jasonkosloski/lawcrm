@@ -16,6 +16,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { DeadlineComposer } from "@/components/matters/captures/deadline-composer";
+import { DeadlineRowMenu } from "@/components/deadlines/deadline-row-actions";
+import { type DeadlineStatus } from "@/lib/note-constants";
 import { getMatterDeadlines } from "@/lib/queries/matter-detail";
 
 const KIND_LABEL: Record<string, string> = {
@@ -97,7 +99,8 @@ export default async function MatterDeadlinesPage({
               <TableHead>Kind</TableHead>
               <TableHead>Source</TableHead>
               <TableHead>Owner</TableHead>
-              <TableHead className="pr-4">Status</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="pr-4 w-10"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -147,8 +150,25 @@ export default async function MatterDeadlinesPage({
                     <span className="text-2xs text-ink-4">—</span>
                   )}
                 </TableCell>
-                <TableCell className="pr-4">
+                <TableCell>
                   <StatusChip status={d.status} />
+                </TableCell>
+                <TableCell className="pr-4">
+                  <DeadlineRowMenu
+                    deadline={{
+                      id: d.id,
+                      title: d.title,
+                      description: d.description,
+                      kind: d.kind,
+                      sourceRef: d.sourceRef,
+                      dueDate: d.dueDate,
+                      // `overdue` is computed; persisted statuses are open/completed/waived.
+                      // Coerce overdue → open so the menu radio shows the underlying state.
+                      status: (d.status === "overdue"
+                        ? "open"
+                        : d.status) as DeadlineStatus,
+                    }}
+                  />
                 </TableCell>
               </TableRow>
             ))}

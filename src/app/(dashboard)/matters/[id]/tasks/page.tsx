@@ -8,6 +8,11 @@
 import { Card } from "@/components/ui/card";
 import { TaskComposer } from "@/components/matters/captures/task-composer";
 import {
+  TaskRowMenu,
+  TaskStatusToggle,
+} from "@/components/tasks/task-row-actions";
+import { type TaskStatus } from "@/lib/note-constants";
+import {
   getMatterTasks,
   type TaskRow,
 } from "@/lib/queries/matter-detail";
@@ -106,17 +111,8 @@ function TaskItem({ task }: { task: TaskRow }) {
   const priority = PRIORITY_META[task.priority] ?? PRIORITY_META.normal;
   const done = task.status === "done" || task.status === "cancelled";
   return (
-    <li className="flex items-center gap-3 px-4 py-2.5">
-      <span
-        className={
-          "inline-block w-3.5 h-3.5 rounded-full border shrink-0 " +
-          (done
-            ? "bg-ok border-ok"
-            : task.status === "in_progress"
-              ? "border-brand-500 bg-brand-50"
-              : "border-line")
-        }
-      />
+    <li className="flex items-center gap-3 px-4 py-2.5 group">
+      <TaskStatusToggle taskId={task.id} status={task.status as TaskStatus} />
       <div className="flex-1 min-w-0">
         <div
           className={
@@ -158,6 +154,16 @@ function TaskItem({ task }: { task: TaskRow }) {
           <span className="text-2xs text-ink-4">—</span>
         )}
       </span>
+      <TaskRowMenu
+        task={{
+          id: task.id,
+          title: task.title,
+          description: task.description,
+          priority: task.priority,
+          status: task.status as TaskStatus,
+          dueDate: task.dueDate,
+        }}
+      />
     </li>
   );
 }

@@ -38,6 +38,26 @@ export type ReactionEmoji = (typeof REACTION_EMOJIS)[number];
 // ── Captures (attached records) ────────────────────────────────────────
 
 export const TASK_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
+export const TASK_STATUSES = [
+  "open",
+  "in_progress",
+  "in_review",
+  "done",
+  "cancelled",
+] as const;
+export type TaskStatus = (typeof TASK_STATUSES)[number];
+
+export const DEADLINE_STATUSES = ["open", "completed", "waived"] as const;
+export type DeadlineStatus = (typeof DEADLINE_STATUSES)[number];
+
+export const TIME_ENTRY_STATUSES = [
+  "draft",
+  "submitted",
+  "billable",
+  "billed",
+  "written_off",
+] as const;
+export type TimeEntryStatus = (typeof TIME_ENTRY_STATUSES)[number];
 export const EVENT_TYPES = [
   "meeting",
   "deposition",

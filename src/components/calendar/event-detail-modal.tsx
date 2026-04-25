@@ -21,10 +21,13 @@ import {
   Link as LinkIcon,
   MapPin,
   Pencil,
+  Trash2,
   Users,
   Video,
   X,
 } from "lucide-react";
+import { useTransition } from "react";
+import { deleteCalendarEventAndRedirect } from "@/app/actions/calendar-events";
 import { EmailLink } from "@/components/ui/email-link";
 import type {
   CalendarEventDetail,
@@ -64,6 +67,20 @@ export function EventDetailModal({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [deletePending, startDelete] = useTransition();
+
+  const onDelete = () => {
+    if (
+      !confirm(
+        `Delete this event?\n\n"${event.title}"\n\nThis can't be undone.`
+      )
+    ) {
+      return;
+    }
+    startDelete(async () => {
+      await deleteCalendarEventAndRedirect(event.id);
+    });
+  };
 
   const close = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
@@ -245,6 +262,15 @@ export function EventDetailModal({
 
         {/* Footer */}
         <footer className="flex items-center justify-end gap-2 px-5 py-3 border-t border-line shrink-0 bg-paper-2/30">
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={deletePending}
+            className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 h-7 rounded-md bg-white text-warn border border-line hover:border-warn-border hover:bg-warn-soft transition-colors disabled:opacity-50 mr-auto"
+          >
+            <Trash2 size={13} />
+            {deletePending ? "Deleting…" : "Delete"}
+          </button>
           <Link
             href={`/calendar/events/${event.id}/edit`}
             className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 h-7 rounded-md bg-white text-ink-2 border border-line hover:border-brand-300 hover:text-brand-700 transition-colors"

@@ -21,6 +21,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { TimeComposer } from "@/components/matters/captures/time-composer";
+import { TimeEntryRowMenu } from "@/components/time-entries/time-entry-row-actions";
+import { type TimeEntryStatus } from "@/lib/note-constants";
 import {
   getMatterTimeEntries,
   getMatterTimeSummary,
@@ -130,7 +132,8 @@ export default async function MatterTimePage({
                 <TableHead>UTBMS</TableHead>
                 <TableHead className="text-right">Hours</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
-                <TableHead className="pr-4">Status</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="pr-4 w-10"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -218,12 +221,27 @@ function EntryRow({ entry }: { entry: TimeEntryRow }) {
           ? formatMoney(entry.amount)
           : "—"}
       </TableCell>
-      <TableCell className="pr-4">
+      <TableCell>
         <span
           className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full border ${status.className}`}
         >
           {status.label}
         </span>
+      </TableCell>
+      <TableCell className="pr-4">
+        <TimeEntryRowMenu
+          entry={{
+            id: entry.id,
+            date: entry.date,
+            hours: entry.hours,
+            activity: entry.activity,
+            narrative: entry.narrative,
+            billable: entry.billable,
+            noCharge: entry.noCharge,
+            privileged: entry.privileged,
+            status: entry.status as TimeEntryStatus,
+          }}
+        />
       </TableCell>
     </TableRow>
   );
