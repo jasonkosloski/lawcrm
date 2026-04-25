@@ -21,6 +21,7 @@ import {
   Check,
   Clock,
   Loader2,
+  MessageSquarePlus,
   MoreHorizontal,
   Pencil,
   Trash2,
@@ -42,8 +43,10 @@ import {
 } from "@/lib/note-constants";
 import { deleteTask, setTaskStatus } from "@/app/actions/tasks";
 import { addTimeEntryToTask } from "@/app/actions/time-on-entity";
+import { addNoteToTask } from "@/app/actions/note-on-entity";
 import { EditTaskDialog, type EditableTask } from "./edit-task-dialog";
 import { LogTimeOnEntityDialog } from "@/components/time-entries/log-time-on-entity-dialog";
+import { AddNoteOnEntityDialog } from "@/components/notes/add-note-on-entity-dialog";
 import { ConvertTaskToDeadlineDialog } from "@/components/conversions/convert-dialogs";
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
@@ -102,6 +105,7 @@ export function TaskStatusToggle({
 export function TaskRowMenu({ task }: { task: EditableTask }) {
   const [editOpen, setEditOpen] = useState(false);
   const [logTimeOpen, setLogTimeOpen] = useState(false);
+  const [addNoteOpen, setAddNoteOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -149,6 +153,10 @@ export function TaskRowMenu({ task }: { task: EditableTask }) {
             <Clock />
             Log time on this task
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setAddNoteOpen(true)}>
+            <MessageSquarePlus />
+            Add note on this task
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setConvertOpen(true)}>
             <ArrowRight />
             Convert to deadline
@@ -181,6 +189,14 @@ export function TaskRowMenu({ task }: { task: EditableTask }) {
         open={logTimeOpen}
         onOpenChange={setLogTimeOpen}
         action={addTimeEntryToTask.bind(null, task.id)}
+        parentLabel={task.title}
+        parentKind="task"
+      />
+
+      <AddNoteOnEntityDialog
+        open={addNoteOpen}
+        onOpenChange={setAddNoteOpen}
+        action={addNoteToTask.bind(null, task.id)}
         parentLabel={task.title}
         parentKind="task"
       />

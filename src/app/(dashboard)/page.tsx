@@ -14,6 +14,7 @@ import Link from "next/link";
 import { TopBar } from "@/components/layout/topbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DashboardCustomizeButton } from "@/components/dashboard/customize-button";
+import { DashboardTaskRow } from "@/components/tasks/dashboard-task-row";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getDashboardVisibility } from "@/lib/queries/dashboard-prefs";
 import {
@@ -442,17 +443,12 @@ const formatTaskDue = (task: MyTaskItem): string => {
   return task.dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 };
 
-const PRIORITY_DOT: Record<string, string> = {
-  urgent: "bg-warn",
-  high: "bg-brand-500",
-  normal: "bg-ink-4",
-  low: "bg-line",
-};
-
 /**
  * One bucket of tasks (Overdue / Today / This week / etc.) inside the
  * "Your tasks" card. Renders nothing when empty so we don't clutter the
- * card with empty headers.
+ * card with empty headers. The actual row markup + per-task kebab
+ * (Log time / Add note) live in `DashboardTaskRow` so this stays
+ * server-rendered.
  */
 function TaskGroup({
   label,
@@ -481,48 +477,18 @@ function TaskGroup({
         <span className="text-2xs font-mono text-ink-4">{tasks.length}</span>
       </div>
       <div className="flex flex-col">
-        {tasks.map((t) => {
-          const dueClass =
-            t.daysUntilDue !== null && t.daysUntilDue < 0
-              ? "text-warn"
-              : t.daysUntilDue === 0
-                ? "text-brand-700"
-                : "text-ink-4";
-          const row = (
-            <div className="flex items-center gap-3 py-1.5 border-b border-line last:border-b-0">
-              <span
-                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                  PRIORITY_DOT[t.priority] ?? PRIORITY_DOT.normal
-                }`}
-                title={`${t.priority} priority`}
-              />
-              <div className="flex-1 min-w-0">
-                <div className="text-xs text-ink truncate">{t.title}</div>
-                {t.matterName && (
-                  <div className="text-2xs text-ink-4 truncate">
-                    {t.matterName}
-                  </div>
-                )}
-              </div>
-              <span
-                className={`text-2xs font-mono shrink-0 w-16 text-right ${dueClass}`}
-              >
-                {formatTaskDue(t)}
-              </span>
-            </div>
-          );
-          return t.matterId ? (
-            <Link
-              key={t.id}
-              href={`/matters/${t.matterId}/tasks`}
-              className="block hover:bg-paper-2 -mx-2 px-2 rounded-sm transition-colors"
-            >
-              {row}
-            </Link>
-          ) : (
-            <div key={t.id}>{row}</div>
-          );
-        })}
+        {tasks.map((t) => (
+          <DashboardTaskRow
+            key={t.id}
+            id={t.id}
+            title={t.title}
+            priority={t.priority}
+            matterId={t.matterId}
+            matterName={t.matterName}
+            daysUntilDue={t.daysUntilDue}
+            dueLabel={formatTaskDue(t)}
+          />
+        ))}
       </div>
     </div>
   );
