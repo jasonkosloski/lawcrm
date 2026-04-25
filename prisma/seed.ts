@@ -2203,6 +2203,57 @@ A copy of the document is available through PACER and is attached for your recor
   console.log(`   ${followUpCount} follow-up examples`);
 
   // ─────────────────────────────────────────────────────────────────────
+  // Reply with attached task — demonstrates the parent-note rollup
+  // chip ("N items in replies") on the matter Notes tab.
+  // ─────────────────────────────────────────────────────────────────────
+  console.log("  Creating reply-rollup example…");
+  const rootNoteForReply = await prisma.note.findFirst({
+    where: { matterId: matters.williams.id, parentNoteId: null },
+    select: { id: true, matterId: true },
+  });
+  let replyRollupCount = 0;
+  if (rootNoteForReply) {
+    const reply = await prisma.note.create({
+      data: {
+        matterId: rootNoteForReply.matterId,
+        authorId: rachel.id,
+        parentNoteId: rootNoteForReply.id,
+        type: "note",
+        content:
+          "<p>Good catch. I'll add a task to follow up on the lien letter timing — and we should probably block out 30 minutes on the calendar to call Memorial directly.</p>",
+      },
+      select: { id: true },
+    });
+    await prisma.noteRead.create({
+      data: { userId: rachel.id, noteId: reply.id },
+    });
+    // Attach a task + a deadline to the reply so the parent's
+    // rollup chip has something to surface.
+    await prisma.task.create({
+      data: {
+        matterId: rootNoteForReply.matterId,
+        noteId: reply.id,
+        title: "Call Memorial Hospital re: lien letter timing",
+        priority: "normal",
+        ownerId: rachel.id,
+        dueDate: hoursAgo(-48),
+      },
+    });
+    await prisma.deadline.create({
+      data: {
+        matterId: rootNoteForReply.matterId,
+        noteId: reply.id,
+        title: "Memorial response window",
+        kind: "manual",
+        dueDate: hoursAgo(-7 * 24),
+        ownerId: jason.id,
+      },
+    });
+    replyRollupCount = 2;
+  }
+  console.log(`   ${replyRollupCount} reply-rollup attachments`);
+
+  // ─────────────────────────────────────────────────────────────────────
   // Summary
   // ─────────────────────────────────────────────────────────────────────
   const counts = await Promise.all([

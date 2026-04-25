@@ -91,6 +91,57 @@ function subtreeHasUnread(node: NoteNode): boolean {
   return node.children.some((c) => subtreeHasUnread(c));
 }
 
+/** Aggregate counts of attached tasks/deadlines/time entries across
+ *  every descendant of `node` (children only — the node itself's
+ *  attachments are already shown on its own card). Powers the parent
+ *  rollup chip "Thread has 4 items in 2 replies." */
+export type ThreadRollup = {
+  tasks: number;
+  deadlines: number;
+  timeEntries: number;
+  totalHours: number;
+  /** Number of descendant notes that have at least one attachment. */
+  notesWithAttachments: number;
+};
+
+function summarizeRollup(r: ThreadRollup): string {
+  const parts: string[] = [];
+  if (r.tasks > 0) parts.push(`${r.tasks} ${r.tasks === 1 ? "task" : "tasks"}`);
+  if (r.deadlines > 0)
+    parts.push(`${r.deadlines} ${r.deadlines === 1 ? "deadline" : "deadlines"}`);
+  if (r.timeEntries > 0)
+    parts.push(
+      `${r.timeEntries} time ${r.timeEntries === 1 ? "entry" : "entries"} (${r.totalHours.toFixed(1)}h)`
+    );
+  return `${parts.join(" · ")} across ${r.notesWithAttachments} ${r.notesWithAttachments === 1 ? "reply" : "replies"}`;
+}
+
+function rollupDescendants(node: NoteNode): ThreadRollup {
+  let tasks = 0;
+  let deadlines = 0;
+  let timeEntries = 0;
+  let totalHours = 0;
+  let notesWithAttachments = 0;
+  const walk = (n: NoteNode) => {
+    for (const child of n.children) {
+      const t = child.note.attachedTasks.length;
+      const d = child.note.attachedDeadlines.length;
+      const e = child.note.attachedTimeEntries.length;
+      tasks += t;
+      deadlines += d;
+      timeEntries += e;
+      totalHours += child.note.attachedTimeEntries.reduce(
+        (s, x) => s + x.hours,
+        0
+      );
+      if (t + d + e > 0) notesWithAttachments++;
+      walk(child);
+    }
+  };
+  walk(node);
+  return { tasks, deadlines, timeEntries, totalHours, notesWithAttachments };
+}
+
 export function NotesTabBody({
   notes,
   matterId,
@@ -320,6 +371,17 @@ function ThreadView({
     ? node.children.reduce((n, c) => n + countNodes(c), 0)
     : 0;
 
+  // Roll up attachments from descendants — surfaces "thread has N
+  // items buried in replies" so the user knows the conversation has
+  // actionable stuff before expanding it. Only computed at depth 0
+  // (root of the conversation); deeper levels handle their own.
+  const rollup =
+    depth === 0 && hasChildren ? rollupDescendants(node) : null;
+  const rollupTotal =
+    rollup === null
+      ? 0
+      : rollup.tasks + rollup.deadlines + rollup.timeEntries;
+
   return (
     <div className="flex flex-col gap-2">
       <NoteCard
@@ -329,24 +391,43 @@ function ThreadView({
       />
       {hasChildren && (
         <>
-          <button
-            type="button"
-            onClick={() => setCollapsed((v) => !v)}
-            aria-expanded={!collapsed}
-            className={cn(
-              "inline-flex items-center gap-1 self-start text-2xs text-ink-3 hover:text-brand-700 transition-colors",
-              "pl-3 ml-3"
+          <div className="flex items-center gap-2 self-start pl-3 ml-3">
+            <button
+              type="button"
+              onClick={() => setCollapsed((v) => !v)}
+              aria-expanded={!collapsed}
+              className="inline-flex items-center gap-1 text-2xs text-ink-3 hover:text-brand-700 transition-colors"
+            >
+              {collapsed ? (
+                <ChevronRight size={11} />
+              ) : (
+                <ChevronDown size={11} />
+              )}
+              {collapsed
+                ? `Show ${descendantCount} ${descendantCount === 1 ? "reply" : "replies"}`
+                : `Hide ${descendantCount} ${descendantCount === 1 ? "reply" : "replies"}`}
+            </button>
+            {rollup && rollupTotal > 0 && (
+              <button
+                type="button"
+                onClick={() => setCollapsed(false)}
+                title={summarizeRollup(rollup)}
+                className="inline-flex items-center gap-1 text-2xs px-1.5 py-0.5 rounded-md border border-line bg-paper-2/60 text-ink-3 hover:border-brand-300 hover:bg-brand-soft hover:text-brand-700 transition-colors"
+              >
+                <span className="font-mono text-brand-700">
+                  {rollupTotal}
+                </span>
+                <span>
+                  {rollupTotal === 1 ? "item" : "items"} in replies
+                </span>
+                {rollup.totalHours > 0 && (
+                  <span className="font-mono text-ink-4">
+                    · {rollup.totalHours.toFixed(1)}h
+                  </span>
+                )}
+              </button>
             )}
-          >
-            {collapsed ? (
-              <ChevronRight size={11} />
-            ) : (
-              <ChevronDown size={11} />
-            )}
-            {collapsed
-              ? `Show ${descendantCount} ${descendantCount === 1 ? "reply" : "replies"}`
-              : `Hide ${descendantCount} ${descendantCount === 1 ? "reply" : "replies"}`}
-          </button>
+          </div>
           {!collapsed && (
             <div
               className={cn(
