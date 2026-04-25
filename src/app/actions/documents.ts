@@ -48,17 +48,19 @@ export async function uploadDocument(
   formData: FormData
 ): Promise<DocumentFormState> {
   const userId = await getCurrentUserId();
-  const firm = await getCurrentFirm();
+  // getCurrentFirm() guards that the user belongs to a firm; the
+  // result isn't used yet (single-tenant — every Matter is in the
+  // seed firm) but calling it preserves the auth chain.
+  await getCurrentFirm();
 
-  // Scope: the matter must live in the user's firm. When we go
-  // multi-tenant the firm clause keeps a leaked URL from working.
-  const matter = await prisma.matter.findFirst({
-    where: { id: matterId, client: { OR: [{ firmId: firm.id }, {}] } },
+  // TODO (multi-tenant): once Contact / Matter gain a firmId
+  // column, scope this find by `firmId: firm.id` so a leaked URL
+  // from another firm refuses to upload. Today there's only one
+  // firm so existence-by-id is sufficient.
+  const matter = await prisma.matter.findUnique({
+    where: { id: matterId },
     select: { id: true, name: true },
   });
-  // Today every contact lives in the same firm so the firm-scope
-  // filter above is a no-op; once Contact has firmId we tighten
-  // this. For now just confirm the matter exists.
   if (!matter) {
     return { status: "error", error: "Matter not found." };
   }
