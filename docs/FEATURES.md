@@ -148,7 +148,7 @@ SCHEMA_NOTES.
 - [~] **Settings — Profile** — Read-only view of current user (name, role, initials). Edit form + server action pending Phase 9 auth.
 - [ ] **Settings — Security** — Change password, 2FA, active sessions, sign-in history (blocked on Phase 9 Authentication)
 - [ ] **Settings — Team management** — User roster, invite, role assignment, deactivate/reactivate (blocked on Phase 9 Authentication)
-- [ ] **Settings — Firm info** — Firm name/address/logo, default practice areas, default fee structure, matter numbering scheme
+- [x] **Settings — Firm info** — First-class `Firm` model with name / short name / EIN / website / phone / email / address / country / established date / logo URL. Admins (`User.isAdmin`) get an inline edit form; non-admins see a read-only view (everyone in the firm should be able to look up the EIN). Right rail shows the team count + admin list. Future bits — logo upload, default fee structure, matter numbering scheme — land here as their feature phases ship.
 - [ ] **Settings — Integrations** — Per-integration connection status + OAuth flows (Gmail, Google Calendar, Westlaw, e-sign, IOLTA bank feed, PACER). Each lights up when its underlying feature phase lands.
 - [ ] **Settings — Billing & rates** — Default hourly rate, UTBMS code library, invoice templates, payment terms (blocked on Phase 6 Billing)
 - [ ] **Automations** — Template library, trigger configuration

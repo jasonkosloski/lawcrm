@@ -81,10 +81,30 @@ async function main() {
   await prisma.lead.deleteMany();
   await prisma.automation.deleteMany();
   await prisma.user.deleteMany();
+  await prisma.firm.deleteMany();
 
   // ─────────────────────────────────────────────────────────────────────
   // Users (firm team)
   // ─────────────────────────────────────────────────────────────────────
+  console.log("  Creating firm…");
+  const firm = await prisma.firm.create({
+    data: {
+      name: "Kosloski Law Firm, P.C.",
+      shortName: "Kosloski Law",
+      ein: "84-3019442",
+      website: "https://kosloskilaw.com",
+      phone: "(303) 555-0100",
+      email: "info@kosloskilaw.com",
+      addressLine1: "1675 Larimer Street",
+      addressLine2: "Suite 410",
+      city: "Denver",
+      state: "CO",
+      zip: "80202",
+      country: "US",
+      establishedAt: new Date("2018-09-01"),
+    },
+  });
+
   console.log("  Creating users…");
   // Hash once and reuse for every dev user — argon2 is intentionally
   // slow (that's the point), so don't re-derive five times.
@@ -101,6 +121,11 @@ async function main() {
         barNumber: "CO-44821",
         phone: "(303) 555-0100",
         passwordHash: devPasswordHash,
+        firmId: firm.id,
+        // Founding partner / managing attorney → admin by default.
+        // Every firm needs at least one admin; the seed enforces it
+        // here, the team-management UI will enforce it on demote.
+        isAdmin: true,
       },
     }),
     prisma.user.create({
@@ -112,6 +137,7 @@ async function main() {
         barNumber: "CO-39110",
         phone: "(303) 555-0101",
         passwordHash: devPasswordHash,
+        firmId: firm.id,
       },
     }),
     prisma.user.create({
@@ -122,6 +148,7 @@ async function main() {
         role: "Paralegal",
         phone: "(303) 555-0102",
         passwordHash: devPasswordHash,
+        firmId: firm.id,
       },
     }),
     prisma.user.create({
@@ -132,6 +159,7 @@ async function main() {
         role: "Investigator",
         phone: "(303) 555-0103",
         passwordHash: devPasswordHash,
+        firmId: firm.id,
       },
     }),
     prisma.user.create({
@@ -142,6 +170,7 @@ async function main() {
         role: "Intake",
         phone: "(303) 555-0104",
         passwordHash: devPasswordHash,
+        firmId: firm.id,
       },
     }),
   ]);

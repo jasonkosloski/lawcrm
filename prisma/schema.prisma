@@ -41,11 +41,22 @@ model User {
   image     String?
   name      String
   initials  String   /// Two-letter initials for avatar display (e.g. "JM")
-  role      String   /// Partner | Managing | Counsel | Paralegal | Investigator | Intake | Admin
+  role      String   /// Display-only job title — Managing / Partner / Counsel / Paralegal / Investigator / Intake. Orthogonal to permission roles (see isAdmin).
   avatarUrl String?  /// Optional profile photo URL
   phone     String?
   barNumber String?  /// State bar number (attorneys only)
   isActive  Boolean  @default(true)
+  /// Permission flag — admins can edit the firm profile and manage
+  /// users (Team page). Independent of the display `role` so any job
+  /// title can hold the admin bit. Multi-tenant friendly: scoped
+  /// per-firm once we have multiple firms.
+  isAdmin   Boolean  @default(false)
+  /// FK to the firm this user belongs to. Nullable in the schema
+  /// only because SQLite can't add a non-null column without a
+  /// default; every code path treats it as required and the seed
+  /// backfills every existing row. When we go multi-tenant this
+  /// stays the canonical scoping column.
+  firmId    String?
   /// Per-user dashboard preferences. Currently `{ visible: Record<cardKey, boolean> }`.
   /// Null = use defaults (everything visible). Shape may grow to include order, etc.
   dashboardPrefs Json?
@@ -70,8 +81,70 @@ model User {
   /// Empty until we wire OAuth; the table needs to exist now so
   /// adding a provider later is config-only.
   accounts          Account[]
+  /// The firm this user belongs to. SetNull on delete — losing the
+  /// firm row shouldn't blow away the user; the user is unusable
+  /// until reassigned but their historical activity stays intact.
+  firm              Firm?       @relation(fields: [firmId], references: [id], onDelete: SetNull)
 
+  @@index([firmId])
   @@map("users")
+}
+
+// =============================================================================
+// FIRM
+// =============================================================================
+//
+// Single-tenant today (one Firm row, every User belongs to it). The
+// model + FKs are structured so multi-tenancy is additive: when we
+// add a second firm, every scoped query gains a `where: { firmId }`
+// clause and the session callback puts firmId on the JWT.
+
+/// The law firm using this CRM. Holds firm-wide identity
+/// (name, addresses, phone, EIN) plus settings that show up across
+/// the app — letterhead, default fee structure, matter-numbering
+/// scheme. Deferred bits (logo upload, IOLTA bank info, e-sign
+/// branding) get added as their features land; don't preempt.
+model Firm {
+  id            String   @id @default(cuid())
+  /// Display name — appears on letterhead, invoices, the topbar
+  /// (eventually). Required.
+  name          String
+  /// Optional shorter "doing business as" / informal name used in
+  /// places where the legal name is overkill ("Kosloski Law" vs
+  /// "Kosloski Law Firm, P.C."). Falls back to `name` in renders.
+  shortName     String?
+  /// Federal Employer Identification Number — formatted xx-xxxxxxx.
+  /// Used on invoices + tax forms. Free-text so firms outside the
+  /// US can store whatever ID their jurisdiction issues.
+  ein           String?
+  /// Public-facing website (https://…). Optional.
+  website       String?
+  /// Main reception line, formatted as the firm prefers.
+  phone         String?
+  /// Main contact email — typically reception@ or info@ rather than
+  /// any one attorney's address.
+  email         String?
+  /// Primary office address — single physical location for v1; a
+  /// future Office model can split if firms need multiple offices.
+  addressLine1  String?
+  addressLine2  String?
+  city          String?
+  state         String?
+  zip           String?
+  country       String   @default("US")
+  /// Date the firm was founded — surfaces on the about/marketing
+  /// material a firm pulls from this profile. Nullable.
+  establishedAt DateTime?
+  /// URL to the firm's logo (square preferred, transparent
+  /// background). Surfaces on letterhead, invoices, the login page
+  /// branding once we wire it. Null = use the default app brand.
+  logoUrl       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  users         User[]
+
+  @@map("firms")
 }
 
 // =============================================================================
