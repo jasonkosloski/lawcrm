@@ -49,6 +49,7 @@ export function ApplyTrustDialog({
   invoiceNumber,
   invoiceBalance,
   trustBalance,
+  clientEmail,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -56,6 +57,9 @@ export function ApplyTrustDialog({
   invoiceNumber: string;
   invoiceBalance: number;
   trustBalance: number;
+  /** Drives the "Send updated invoice" checkbox at the bottom of
+   *  the dialog. Disabled with a hint when null. */
+  clientEmail: string | null;
 }) {
   const action = recordInvoicePayment.bind(null, invoiceId);
   const [state, formAction, isPending] = useActionState<
@@ -72,12 +76,16 @@ export function ApplyTrustDialog({
 
   const [amount, setAmount] = useState(defaultAmount);
   const [date, setDate] = useState(todayIso());
+  // See RecordPaymentDialog: default checked when there's an email
+  // to send to; disabled when not.
+  const [notifyClient, setNotifyClient] = useState(!!clientEmail);
 
   useEffect(() => {
     if (!open) return;
     setAmount(defaultAmount);
     setDate(todayIso());
-  }, [open, defaultAmount]);
+    setNotifyClient(!!clientEmail);
+  }, [open, defaultAmount, clientEmail]);
 
   useEffect(() => {
     if (state.status === "ok") onOpenChange(false);
@@ -202,6 +210,41 @@ export function ApplyTrustDialog({
               className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 max-w-[12rem]"
             />
           </div>
+
+          {/* Notify-client opt-out — see RecordPaymentDialog for the
+              full rationale; same shape so the lawyer sees a
+              consistent control across both dialogs. */}
+          <label
+            className={cn(
+              "flex items-start gap-2 px-3 py-2 rounded-md border text-xs",
+              clientEmail
+                ? "cursor-pointer border-line bg-paper-2/40 hover:bg-paper-2/60"
+                : "border-line bg-paper-2/30 cursor-not-allowed opacity-70"
+            )}
+          >
+            <input
+              type="checkbox"
+              checked={notifyClient && !!clientEmail}
+              disabled={!clientEmail}
+              onChange={(e) => setNotifyClient(e.target.checked)}
+              className="mt-0.5"
+            />
+            <input
+              type="hidden"
+              name="notifyClient"
+              value={notifyClient && clientEmail ? "true" : ""}
+            />
+            <div>
+              <div className="text-ink font-medium">
+                Send updated invoice to client
+              </div>
+              <div className="text-2xs text-ink-4 mt-0.5">
+                {clientEmail
+                  ? `Emails a refreshed copy reflecting the trust application to ${clientEmail}. (Logged-only for now.)`
+                  : "No email on file for the client — add one on the client record to enable this."}
+              </div>
+            </div>
+          </label>
 
           {state.status === "error" && state.error && (
             <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">

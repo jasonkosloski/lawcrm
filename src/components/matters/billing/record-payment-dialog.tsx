@@ -61,6 +61,7 @@ export function RecordPaymentDialog({
   invoiceNumber,
   invoiceBalance,
   trustBalance,
+  clientEmail,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -71,6 +72,11 @@ export function RecordPaymentDialog({
    *  the method dropdown when > 0. Server runs the four-leg trust
    *  op when source=trust. */
   trustBalance: number;
+  /** Drives the "Send updated invoice" checkbox at the bottom of
+   *  the dialog. When null the checkbox is shown disabled with a
+   *  "no email on file" hint so the lawyer knows why they can't
+   *  notify. */
+  clientEmail: string | null;
 }) {
   // Trust appears as a method only when the matter actually has
   // funds in trust to draw from. Other channels are always
@@ -101,6 +107,11 @@ export function RecordPaymentDialog({
   const [source, setSource] = useState<InvoicePaymentSource>("check");
   const [reference, setReference] = useState("");
   const [description, setDescription] = useState("");
+  // Default to checked when the client has an email — the common
+  // case is "got the check, send them an updated copy." If there's
+  // no email on file the checkbox stays disabled + unchecked
+  // regardless of clicks.
+  const [notifyClient, setNotifyClient] = useState(!!clientEmail);
 
   useEffect(() => {
     if (!open) return;
@@ -109,7 +120,8 @@ export function RecordPaymentDialog({
     setSource("check");
     setReference("");
     setDescription("");
-  }, [open, defaultAmount]);
+    setNotifyClient(!!clientEmail);
+  }, [open, defaultAmount, clientEmail]);
 
   useEffect(() => {
     if (state.status === "ok") onOpenChange(false);
@@ -268,6 +280,42 @@ export function RecordPaymentDialog({
               className="px-2.5 py-1.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4 resize-none"
             />
           </div>
+
+          {/* Notify-client opt-out. Checked by default so the lawyer
+              doesn't have to think about it; unchecks silently when
+              there's no email on file. The hidden input mirrors the
+              boolean so the server reads "true" / "" cleanly. */}
+          <label
+            className={cn(
+              "flex items-start gap-2 px-3 py-2 rounded-md border text-xs",
+              clientEmail
+                ? "cursor-pointer border-line bg-paper-2/40 hover:bg-paper-2/60"
+                : "border-line bg-paper-2/30 cursor-not-allowed opacity-70"
+            )}
+          >
+            <input
+              type="checkbox"
+              checked={notifyClient && !!clientEmail}
+              disabled={!clientEmail}
+              onChange={(e) => setNotifyClient(e.target.checked)}
+              className="mt-0.5"
+            />
+            <input
+              type="hidden"
+              name="notifyClient"
+              value={notifyClient && clientEmail ? "true" : ""}
+            />
+            <div>
+              <div className="text-ink font-medium">
+                Send updated invoice to client
+              </div>
+              <div className="text-2xs text-ink-4 mt-0.5">
+                {clientEmail
+                  ? `Emails a refreshed copy reflecting this payment to ${clientEmail}. (Logged-only for now.)`
+                  : "No email on file for the client — add one on the client record to enable this."}
+              </div>
+            </div>
+          </label>
 
           {state.status === "error" && state.error && (
             <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">

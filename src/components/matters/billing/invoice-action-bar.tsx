@@ -297,6 +297,7 @@ export function InvoiceActionBar({
           invoiceNumber={invoiceNumber}
           invoiceBalance={invoiceBalance}
           trustBalance={trustBalance}
+          clientEmail={clientEmail}
         />
       )}
       {canApplyTrust && (
@@ -307,6 +308,7 @@ export function InvoiceActionBar({
           invoiceNumber={invoiceNumber}
           invoiceBalance={invoiceBalance}
           trustBalance={trustBalance}
+          clientEmail={clientEmail}
         />
       )}
     </div>

@@ -722,6 +722,18 @@ const recordPaymentSchema = z.object({
   source: z.enum(INVOICE_PAYMENT_SOURCES),
   reference: z.string().trim().max(120).optional().or(z.literal("")),
   description: z.string().trim().max(400).optional().or(z.literal("")),
+  /** When the lawyer ticks the "Send updated invoice" checkbox in
+   *  the dialog, we send a refreshed copy of the invoice to the
+   *  client showing the new payment activity. Today this is just
+   *  a logged event (mirrors sendInvoice); when real email is
+   *  wired up the same flag will fire the actual send. The future
+   *  automatic-payment portal will call this action with
+   *  notifyClient unset / false — its own confirmation flow
+   *  handles client comms. */
+  notifyClient: z
+    .string()
+    .optional()
+    .transform((v) => v === "true" || v === "on"),
 });
 
 export async function recordInvoicePayment(
@@ -753,6 +765,12 @@ export async function recordInvoicePayment(
           status: true,
           totalAmount: true,
           paidAmount: true,
+          // Pull the client's email so the notifyClient branch can
+          // address the resend. Single source of truth — never
+          // accept the recipient from form input on this path
+          // (that's how a phished form would exfiltrate to a
+          // wrong address).
+          matter: { select: { client: { select: { email: true } } } },
         },
       });
       if (!invoice) throw new Error("Invoice not found.");
@@ -843,6 +861,7 @@ export async function recordInvoicePayment(
         amount: requested,
         fullyPaid,
         source: data.source,
+        clientEmail: invoice.matter.client?.email ?? null,
       };
     });
 
@@ -854,6 +873,21 @@ export async function recordInvoicePayment(
         ? `Invoice ${result.invoiceNumber} paid in full · $${result.amount.toFixed(2)} (${result.source})`
         : `Partial payment to invoice ${result.invoiceNumber} · $${result.amount.toFixed(2)} (${result.source})`,
     });
+
+    // Notify client of the updated invoice. Today this is logged-
+    // only — when real email lands the same flag fires actual
+    // delivery. Skip silently if the client has no email on file
+    // rather than failing the action: the payment itself still
+    // landed correctly.
+    if (data.notifyClient && result.clientEmail) {
+      await logActivity({
+        matterId: result.matterId,
+        userId,
+        type: "filing",
+        title: `Updated invoice ${result.invoiceNumber} sent to ${result.clientEmail}`,
+        detail: `after $${result.amount.toFixed(2)} ${result.source} payment`,
+      });
+    }
 
     revalidatePath(`/matters/${result.matterId}/billing`);
     revalidatePath(`/matters/${result.matterId}`);
