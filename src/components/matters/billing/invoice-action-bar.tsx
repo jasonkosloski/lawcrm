@@ -31,6 +31,7 @@ import { useState, useTransition } from "react";
 import {
   Check,
   CheckCircle2,
+  Landmark,
   MoreHorizontal,
   Receipt,
   Send,
@@ -54,6 +55,7 @@ import {
   invoiceStatusTransitions,
   type InvoiceKind,
 } from "@/lib/billing-form";
+import { ApplyTrustDialog } from "./apply-trust-dialog";
 import { RecordPaymentDialog } from "./record-payment-dialog";
 import { SendInvoiceDialog } from "./send-invoice-dialog";
 
@@ -87,6 +89,7 @@ export function InvoiceActionBar({
   const [pending, startTransition] = useTransition();
   const [sendOpen, setSendOpen] = useState(false);
   const [recordOpen, setRecordOpen] = useState(false);
+  const [applyTrustOpen, setApplyTrustOpen] = useState(false);
 
   const canApprove = kind === "client" && currentStatus === "draft";
   const canSend = kind === "client" && currentStatus === "approved";
@@ -94,6 +97,12 @@ export function InvoiceActionBar({
     kind === "client" &&
     (currentStatus === "sent" || currentStatus === "partial") &&
     invoiceBalance > 0;
+  // Apply-trust shortcut surfaces whenever there's an outstanding
+  // balance AND funds in the matter trust to draw from. Same set of
+  // states as Record payment, plus the trust > 0 condition. The
+  // generic Record payment path still includes Trust as a method,
+  // but this button is the one-click "earn out the retainer" flow.
+  const canApplyTrust = canRecordPayment && trustBalance > 0;
   const canMarkRecorded =
     kind === "internal_record" &&
     invoiceStatusTransitions(currentStatus, kind).includes("paid");
@@ -104,6 +113,7 @@ export function InvoiceActionBar({
     !canApprove &&
     !canSend &&
     !canRecordPayment &&
+    !canApplyTrust &&
     !canMarkRecorded &&
     !deleteAllowed &&
     !voidAllowed;
@@ -176,11 +186,33 @@ export function InvoiceActionBar({
           type="button"
           onClick={() => setRecordOpen(true)}
           disabled={pending}
-          className={primaryButtonClass}
+          className={cn(
+            "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-2xs font-medium",
+            // Promote Apply-trust to primary when it's available —
+            // it's the more decisive one-click action. Record payment
+            // becomes secondary in that case.
+            canApplyTrust
+              ? "border border-line bg-white text-ink hover:border-brand-300 hover:text-brand-700"
+              : "bg-brand-500 text-white hover:bg-brand-600",
+            "transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          )}
           title="Log a payment received against this invoice (check, ACH, cash, card, trust, etc.)"
         >
           <Receipt size={11} />
           Record payment
+        </button>
+      )}
+
+      {canApplyTrust && (
+        <button
+          type="button"
+          onClick={() => setApplyTrustOpen(true)}
+          disabled={pending}
+          className={primaryButtonClass}
+          title={`Apply funds from the matter trust account (avail $${trustBalance.toFixed(2)}) toward this invoice's balance.`}
+        >
+          <Landmark size={11} />
+          Apply trust
         </button>
       )}
 
@@ -261,6 +293,16 @@ export function InvoiceActionBar({
         <RecordPaymentDialog
           open={recordOpen}
           onOpenChange={setRecordOpen}
+          invoiceId={invoiceId}
+          invoiceNumber={invoiceNumber}
+          invoiceBalance={invoiceBalance}
+          trustBalance={trustBalance}
+        />
+      )}
+      {canApplyTrust && (
+        <ApplyTrustDialog
+          open={applyTrustOpen}
+          onOpenChange={setApplyTrustOpen}
           invoiceId={invoiceId}
           invoiceNumber={invoiceNumber}
           invoiceBalance={invoiceBalance}
