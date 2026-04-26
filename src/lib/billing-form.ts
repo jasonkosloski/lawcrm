@@ -30,14 +30,25 @@ export const INVOICE_KIND_LABEL: Record<InvoiceKind, string> = {
 };
 
 /// State machines per kind. Client invoices flow through the full
-/// AR lifecycle; internal records skip "sent" (no one's getting
-/// the doc) and only transition draft → paid (= "Recorded") → void.
+/// AR lifecycle: draft → approved → sent → partial → paid (with
+/// void allowed at any pre-payment step). Once any payment lands
+/// (status flips to partial/paid) void is refused — payments are
+/// real money events that shouldn't disappear silently. Internal
+/// records skip the AR machinery and only transition draft → paid
+/// (= "Recorded") → void.
+///
+/// Note: void presence in this map only means "the kind allows
+/// the transition string." The hard rule "no void after any
+/// payment" lives in canVoidInvoice() / the server-side void
+/// guard, defending against the edge case where an old row sits
+/// in 'sent' with paidAmount > 0 (data drift from the pre-refactor
+/// schema).
 const CLIENT_TRANSITIONS: Record<string, string[]> = {
-  draft: ["sent", "paid", "void"],
-  sent: ["paid", "void"],
-  open: ["paid", "void"],
-  overdue: ["paid", "void"],
-  paid: ["void"],
+  draft: ["approved", "void"],
+  approved: ["sent", "void"],
+  sent: ["partial", "paid", "void"],
+  partial: ["paid"],
+  paid: [],
   void: [],
 };
 
@@ -57,15 +68,32 @@ export function invoiceStatusTransitions(
   return map[status] ?? [];
 }
 
+/** Whether voiding is allowed on this invoice given current state.
+ *  Hard rule: any recorded payment (paidAmount > 0) blocks void
+ *  regardless of status, so a 'sent' row with a partial payment
+ *  can't be voided either. Internal records use the kind-specific
+ *  state machine without the payment guard since they have no AR. */
+export function canVoidInvoice(
+  status: string,
+  paidAmount: number,
+  kind: InvoiceKind = "client"
+): boolean {
+  if (kind === "internal_record") {
+    return invoiceStatusTransitions(status, kind).includes("void");
+  }
+  if (paidAmount > 0) return false;
+  return invoiceStatusTransitions(status, kind).includes("void");
+}
+
 /// Back-compat for callers that haven't moved to the kind-aware
 /// helper yet. New code should call `invoiceStatusTransitions(status, kind)`.
 export const INVOICE_STATUS_TRANSITIONS = CLIENT_TRANSITIONS;
 
 const STATUS_LABEL_CLIENT: Record<string, string> = {
   draft: "Draft",
+  approved: "Approved",
   sent: "Sent",
-  open: "Open",
-  overdue: "Overdue",
+  partial: "Partially paid",
   paid: "Paid",
   void: "Void",
 };

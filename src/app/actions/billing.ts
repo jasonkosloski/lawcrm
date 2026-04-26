@@ -28,6 +28,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { logActivity } from "@/lib/activity-log";
 import {
   invoiceStatusTransitions,
+  canVoidInvoice,
   TRUST_TXN_TYPES,
   INVOICE_PAYMENT_SOURCES,
   billingInitialState,
@@ -262,12 +263,8 @@ export async function setInvoiceStatus(
   });
   if (!invoice) return { ok: false, error: "Invoice not found." };
 
-  // Kind-aware transition guard so internal records can't accidentally
-  // be marked "sent" (which has no meaning for them).
-  const allowed = invoiceStatusTransitions(
-    invoice.status,
-    invoice.kind as InvoiceKind
-  );
+  const kind = invoice.kind as InvoiceKind;
+  const allowed = invoiceStatusTransitions(invoice.status, kind);
   if (!allowed.includes(next)) {
     return {
       ok: false,
@@ -275,10 +272,27 @@ export async function setInvoiceStatus(
     };
   }
 
-  // "Paid" implies paidAmount = totalAmount (full payment for v1;
-  // partial payments land later with an explicit amount field).
+  // Defense-in-depth: void is refused once any payment has landed,
+  // even if the state-machine technically allows the string. This
+  // catches the data-drift case where an old row sits in 'sent'
+  // with paidAmount > 0 (pre-refactor schema).
+  if (next === "void") {
+    const paidNum = invoice.paidAmount.toNumber();
+    if (!canVoidInvoice(invoice.status, paidNum, kind)) {
+      return {
+        ok: false,
+        error:
+          "Can't void an invoice with payments recorded — refund the payments first.",
+      };
+    }
+  }
+
+  // Internal records' "Mark recorded" path is the only remaining
+  // place setInvoiceStatus sets paidAmount directly. Client-invoice
+  // payments are funneled through recordInvoicePayment so every
+  // status flip is paired with a real payment row.
   const data: Prisma.InvoiceUpdateInput =
-    next === "paid"
+    next === "paid" && kind === "internal_record"
       ? { status: next, paidAmount: invoice.totalAmount }
       : { status: next };
 
@@ -306,6 +320,55 @@ export async function setInvoiceStatus(
 
   revalidatePath(`/matters/${invoice.matterId}/billing`);
   revalidatePath(`/matters/${invoice.matterId}/time`);
+  revalidatePath(`/matters/${invoice.matterId}`);
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+// ── Approve invoice ────────────────────────────────────────────────────
+//
+// Single-step transition draft → approved. Today this is just a
+// status flip; future iterations will gate it behind a billing-
+// approval role and capture the approver in an audit row.
+
+export async function approveInvoice(
+  invoiceId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const userId = await getCurrentUserId();
+  const invoice = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    select: {
+      id: true,
+      matterId: true,
+      invoiceNumber: true,
+      kind: true,
+      status: true,
+    },
+  });
+  if (!invoice) return { ok: false, error: "Invoice not found." };
+  if (invoice.kind !== "client") {
+    return { ok: false, error: "Only client invoices need approval." };
+  }
+  if (invoice.status !== "draft") {
+    return {
+      ok: false,
+      error: `Approve only applies to draft invoices (this one is ${invoice.status}).`,
+    };
+  }
+
+  await prisma.invoice.update({
+    where: { id: invoice.id },
+    data: { status: "approved" },
+  });
+
+  await logActivity({
+    matterId: invoice.matterId,
+    userId,
+    type: "filing",
+    title: `Invoice ${invoice.invoiceNumber} approved`,
+  });
+
+  revalidatePath(`/matters/${invoice.matterId}/billing`);
   revalidatePath(`/matters/${invoice.matterId}`);
   revalidatePath("/", "layout");
   return { ok: true };
@@ -557,203 +620,22 @@ export async function bundleAsInternalRecord(
   }
 }
 
-// ── Pay invoice from trust ──────────────────────────────────────────────
+// ── Record invoice payment (any channel) ───────────────────────────────
 //
-// Atomic three-leg operation that mirrors what the lawyer is
-// actually doing in real life: earned fees come out of the trust
-// account, paid against the matter's outstanding invoice, and the
-// trust ledger records the disbursement. All three legs land in
-// one transaction — no partial drift if any step fails.
+// The unified write path for "money landed against this invoice."
+// Trust, check, ACH, cash, card, other — all flow through here.
 //
-// Allows partial payments naturally: when trust < invoice.balance,
-// the user can pay what's available; the invoice stays in its
-// current open status with a non-zero paidAmount, and the Balance
-// column shows what's still due. Marking fully-paid only flips
-// status="paid" when paidAmount === totalAmount.
-//
-// Refused on internal records — they have no AR balance to pay
-// (born already-locked at status="paid").
-
-const trustPaymentSchema = z.object({
-  /** Amount to pay from trust. Posted as a string from the form;
-   *  validated as a positive Decimal-shaped value. */
-  amount: z
-    .string()
-    .trim()
-    .min(1, "Amount is required")
-    .transform((v) => v.replace(/[$,]/g, ""))
-    .refine((v) => /^\d+(\.\d{1,2})?$/.test(v), "Enter a valid amount")
-    .refine((v) => parseFloat(v) > 0, "Amount must be greater than 0"),
-  /** YYYY-MM-DD; defaults to today when empty. Kept editable so
-   *  back-dated entries are easy when reconciling against bank. */
-  date: z.string().optional().or(z.literal("")),
-  /** Optional check #, wire confirmation, etc. */
-  reference: z.string().trim().max(120).optional().or(z.literal("")),
-});
-
-export async function payInvoiceFromTrust(
-  invoiceId: string,
-  _prev: BillingFormState,
-  formData: FormData
-): Promise<BillingFormState> {
-  const userId = await getCurrentUserId();
-  const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
-  const parsed = trustPaymentSchema.safeParse(raw);
-  if (!parsed.success) {
-    return {
-      status: "error",
-      errors: parsed.error.flatten().fieldErrors,
-    };
-  }
-  const data = parsed.data;
-  const requested = new Prisma.Decimal(data.amount);
-
-  try {
-    const result = await prisma.$transaction(async (tx) => {
-      const invoice = await tx.invoice.findUnique({
-        where: { id: invoiceId },
-        select: {
-          id: true,
-          matterId: true,
-          invoiceNumber: true,
-          kind: true,
-          status: true,
-          totalAmount: true,
-          paidAmount: true,
-        },
-      });
-      if (!invoice) throw new Error("Invoice not found.");
-
-      if (invoice.kind !== "client") {
-        throw new Error(
-          "Trust payments only apply to client invoices — internal records don't carry an AR balance."
-        );
-      }
-      if (invoice.status === "void") {
-        throw new Error("Can't pay a voided invoice.");
-      }
-
-      const balance = invoice.totalAmount.sub(invoice.paidAmount);
-      if (balance.lessThanOrEqualTo(0)) {
-        throw new Error("Invoice has no outstanding balance.");
-      }
-      if (requested.greaterThan(balance)) {
-        throw new Error(
-          `Amount exceeds the invoice's $${balance.toFixed(2)} balance — pay the balance or less.`
-        );
-      }
-
-      const matter = await tx.matter.findUnique({
-        where: { id: invoice.matterId },
-        select: { trustBalance: true },
-      });
-      if (!matter) throw new Error("Matter not found.");
-      if (requested.greaterThan(matter.trustBalance)) {
-        throw new Error(
-          `Trust balance is $${matter.trustBalance.toFixed(2)} — not enough to cover $${requested.toFixed(2)}. Deposit funds to trust first or pay a smaller amount.`
-        );
-      }
-
-      // Leg 1: trust ledger row (signed negative for the
-      // disbursement; cross-linked back to the invoice).
-      const txnDate = data.date ? new Date(data.date) : new Date();
-      const trustTxn = await tx.trustTransaction.create({
-        data: {
-          matterId: invoice.matterId,
-          type: "disbursement",
-          amount: requested.neg(),
-          description: `Payment to invoice ${invoice.invoiceNumber}`,
-          reference: data.reference || null,
-          date: txnDate,
-          createdBy: userId,
-          invoiceId: invoice.id,
-        },
-        select: { id: true },
-      });
-
-      // Leg 2: drop trust balance.
-      const newTrust = matter.trustBalance.sub(requested);
-      await tx.matter.update({
-        where: { id: invoice.matterId },
-        data: { trustBalance: newTrust },
-      });
-
-      // Leg 3: bump invoice paidAmount; only flip to "paid" when
-      // we hit the total. Partial payments leave status alone so
-      // the row stays in the open / overdue / sent bucket.
-      const newPaid = invoice.paidAmount.add(requested);
-      const fullyPaid = newPaid.greaterThanOrEqualTo(invoice.totalAmount);
-      await tx.invoice.update({
-        where: { id: invoice.id },
-        data: {
-          paidAmount: newPaid,
-          ...(fullyPaid ? { status: "paid" } : {}),
-        },
-      });
-
-      // Leg 4: invoice payment record. Same shape as a manual
-      // "Record payment" entry but tagged source=trust + linked back
-      // to the trust ledger row that funded it. This is what the
-      // invoice preview renders in its "Payments received" section
-      // — keeping it unified with non-trust channels means the
-      // preview reads from one place regardless of how money landed.
-      await tx.invoicePayment.create({
-        data: {
-          invoiceId: invoice.id,
-          source: "trust",
-          amount: requested,
-          date: txnDate,
-          description: `Earned-fee transfer from matter trust account`,
-          reference: data.reference || null,
-          trustTxnId: trustTxn.id,
-          createdBy: userId,
-        },
-      });
-
-      return {
-        invoiceNumber: invoice.invoiceNumber,
-        matterId: invoice.matterId,
-        amount: requested,
-        fullyPaid,
-        trustTxnId: trustTxn.id,
-      };
-    });
-
-    await logActivity({
-      matterId: result.matterId,
-      userId,
-      type: "deposit",
-      title: result.fullyPaid
-        ? `Invoice ${result.invoiceNumber} paid in full from trust · $${result.amount.toFixed(2)}`
-        : `Partial trust payment to invoice ${result.invoiceNumber} · $${result.amount.toFixed(2)}`,
-    });
-
-    revalidatePath(`/matters/${result.matterId}/billing`);
-    revalidatePath(`/matters/${result.matterId}`);
-    revalidatePath("/", "layout");
-    return { ...billingInitialState, status: "ok" };
-  } catch (err) {
-    return {
-      status: "error",
-      error: err instanceof Error ? err.message : "Couldn't record the payment.",
-    };
-  }
-}
-
-// ── Record manual invoice payment ───────────────────────────────────────
-//
-// Logs a payment received via a non-trust channel (check, ACH, cash,
-// card, other) against an open invoice. Shape:
-//   - Creates an InvoicePayment row (the canonical per-invoice
-//     payment record).
-//   - Bumps Invoice.paidAmount by the amount.
-//   - Flips status to "paid" only when the new paidAmount covers the
-//     total — partial payments leave status alone.
-//
-// Refused on internal records (no AR balance to pay) and on voided
-// invoices. Source "trust" is rejected here too — Pay from trust is
-// the dedicated path so the trust ledger leg gets written in the
-// same transaction.
+// What the action does:
+//   - Validates the invoice is in a payable state (sent / partial,
+//     client kind only).
+//   - When source=trust: also writes a TrustTransaction (trust
+//     ledger leg) and decrements Matter.trustBalance, refusing if
+//     trust would overdraw. Same atomic four-leg op the standalone
+//     Pay-from-trust used to do — folded in here so callers don't
+//     have to branch.
+//   - Creates the canonical InvoicePayment row.
+//   - Bumps Invoice.paidAmount and flips status: paid when fully
+//     covered, partial otherwise.
 
 const recordPaymentSchema = z.object({
   amount: z
@@ -766,9 +648,7 @@ const recordPaymentSchema = z.object({
   /** YYYY-MM-DD; today when empty. Editable so reconciliation
    *  against bank statements is straightforward. */
   date: z.string().optional().or(z.literal("")),
-  /** Channel the payment came in on. Trust is excluded at the UI
-   *  level (Pay from trust handles that path) but we still validate
-   *  against the same enum here. */
+  /** Channel the payment came in on. */
   source: z.enum(INVOICE_PAYMENT_SOURCES),
   reference: z.string().trim().max(120).optional().or(z.literal("")),
   description: z.string().trim().max(400).optional().or(z.literal("")),
@@ -789,12 +669,6 @@ export async function recordInvoicePayment(
     };
   }
   const data = parsed.data;
-  if (data.source === "trust") {
-    return {
-      status: "error",
-      error: "Use Pay from trust to record a trust-funded payment.",
-    };
-  }
   const requested = new Prisma.Decimal(data.amount);
 
   try {
@@ -817,8 +691,10 @@ export async function recordInvoicePayment(
           "Payments only apply to client invoices — internal records have no AR balance."
         );
       }
-      if (invoice.status === "void") {
-        throw new Error("Can't record a payment against a voided invoice.");
+      if (invoice.status !== "sent" && invoice.status !== "partial") {
+        throw new Error(
+          `Payments are only recordable on sent or partially-paid invoices (this one is ${invoice.status}). Approve and send the invoice first.`
+        );
       }
 
       const balance = invoice.totalAmount.sub(invoice.paidAmount);
@@ -832,6 +708,42 @@ export async function recordInvoicePayment(
       }
 
       const txnDate = data.date ? new Date(data.date) : new Date();
+
+      // Trust path: write the trust ledger leg + decrement the
+      // matter trust balance, refusing on overdraw. The InvoicePayment
+      // row links back to the TrustTransaction for cross-navigation.
+      let trustTxnId: string | null = null;
+      if (data.source === "trust") {
+        const matter = await tx.matter.findUnique({
+          where: { id: invoice.matterId },
+          select: { trustBalance: true },
+        });
+        if (!matter) throw new Error("Matter not found.");
+        if (requested.greaterThan(matter.trustBalance)) {
+          throw new Error(
+            `Trust balance is $${matter.trustBalance.toFixed(2)} — not enough to cover $${requested.toFixed(2)}.`
+          );
+        }
+        const trustTxn = await tx.trustTransaction.create({
+          data: {
+            matterId: invoice.matterId,
+            type: "disbursement",
+            amount: requested.neg(),
+            description: `Payment to invoice ${invoice.invoiceNumber}`,
+            reference: data.reference || null,
+            date: txnDate,
+            createdBy: userId,
+            invoiceId: invoice.id,
+          },
+          select: { id: true },
+        });
+        trustTxnId = trustTxn.id;
+        await tx.matter.update({
+          where: { id: invoice.matterId },
+          data: { trustBalance: matter.trustBalance.sub(requested) },
+        });
+      }
+
       await tx.invoicePayment.create({
         data: {
           invoiceId: invoice.id,
@@ -840,6 +752,7 @@ export async function recordInvoicePayment(
           date: txnDate,
           description: data.description || null,
           reference: data.reference || null,
+          trustTxnId,
           createdBy: userId,
         },
       });
@@ -850,7 +763,7 @@ export async function recordInvoicePayment(
         where: { id: invoice.id },
         data: {
           paidAmount: newPaid,
-          ...(fullyPaid ? { status: "paid" } : {}),
+          status: fullyPaid ? "paid" : "partial",
         },
       });
 
@@ -881,6 +794,211 @@ export async function recordInvoicePayment(
       status: "error",
       error:
         err instanceof Error ? err.message : "Couldn't record the payment.",
+    };
+  }
+}
+
+// ── Send invoice (with optional trust application) ─────────────────────
+//
+// Transitions an approved invoice to sent. For now "sending" is just
+// a logged event — Gmail integration + US-mail print/ship workflow
+// land later. The dialog captures the channel, the recipient
+// address, and (optionally) an amount of trust to apply against the
+// invoice in the same transaction.
+//
+// If applyTrust is set, we run the same four-leg op as the trust
+// payment branch of recordInvoicePayment — and the resulting status
+// can be sent / partial / paid depending on coverage.
+
+const sendInvoiceSchema = z.object({
+  /** "email" today; "mail" is reserved for the future US-mail
+   *  workflow but rejected here so the dialog's disabled state is
+   *  enforced server-side too. */
+  method: z.enum(["email", "mail"]),
+  /** Recipient — for email, validated as an email address. For
+   *  mail, will become the bill-to mailing address (pulled from
+   *  the client) once that path lands. */
+  recipient: z.string().trim().min(1, "Recipient is required").max(320),
+  /** "true" when the apply-trust checkbox was ticked. */
+  applyTrust: z
+    .string()
+    .optional()
+    .transform((v) => v === "true" || v === "on"),
+  /** Amount of trust to apply, only consulted when applyTrust=true.
+   *  Defaults to MIN(trust balance, invoice balance) on the client. */
+  trustAmount: z
+    .string()
+    .optional()
+    .or(z.literal("")),
+});
+
+export async function sendInvoice(
+  invoiceId: string,
+  _prev: BillingFormState,
+  formData: FormData
+): Promise<BillingFormState> {
+  const userId = await getCurrentUserId();
+  const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
+  const parsed = sendInvoiceSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      status: "error",
+      errors: parsed.error.flatten().fieldErrors,
+    };
+  }
+  const data = parsed.data;
+  if (data.method === "mail") {
+    return {
+      status: "error",
+      error: "US mail isn't wired up yet — pick email for now.",
+    };
+  }
+  if (data.method === "email" && !/^.+@.+\..+$/.test(data.recipient)) {
+    return {
+      status: "error",
+      errors: { recipient: ["Enter a valid email address."] },
+    };
+  }
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const invoice = await tx.invoice.findUnique({
+        where: { id: invoiceId },
+        select: {
+          id: true,
+          matterId: true,
+          invoiceNumber: true,
+          kind: true,
+          status: true,
+          totalAmount: true,
+          paidAmount: true,
+        },
+      });
+      if (!invoice) throw new Error("Invoice not found.");
+      if (invoice.kind !== "client") {
+        throw new Error("Only client invoices get sent.");
+      }
+      if (invoice.status !== "approved") {
+        throw new Error(
+          `Send is only available on approved invoices (this one is ${invoice.status}). Approve it first.`
+        );
+      }
+
+      // Optional apply-trust leg. Same shape as recordInvoicePayment's
+      // trust branch — if it would overdraw the invoice or trust, the
+      // whole transaction rolls back and the invoice doesn't move.
+      let trustApplied: Prisma.Decimal | null = null;
+      let newPaid = invoice.paidAmount;
+      if (data.applyTrust) {
+        const matter = await tx.matter.findUnique({
+          where: { id: invoice.matterId },
+          select: { trustBalance: true },
+        });
+        if (!matter) throw new Error("Matter not found.");
+        const balance = invoice.totalAmount.sub(invoice.paidAmount);
+        // Default: cap at MIN(trust, balance). User-supplied amount
+        // can step down but never up past the cap.
+        const cap = matter.trustBalance.lessThan(balance)
+          ? matter.trustBalance
+          : balance;
+        const applied = data.trustAmount
+          ? new Prisma.Decimal(data.trustAmount.replace(/[$,]/g, ""))
+          : cap;
+        if (applied.lessThanOrEqualTo(0)) {
+          throw new Error("Trust application amount must be greater than 0.");
+        }
+        if (applied.greaterThan(cap)) {
+          throw new Error(
+            `Can apply at most $${cap.toFixed(2)} from trust (limited by ${
+              matter.trustBalance.lessThan(balance) ? "trust balance" : "invoice balance"
+            }).`
+          );
+        }
+        const trustTxn = await tx.trustTransaction.create({
+          data: {
+            matterId: invoice.matterId,
+            type: "disbursement",
+            amount: applied.neg(),
+            description: `Payment to invoice ${invoice.invoiceNumber}`,
+            reference: null,
+            date: new Date(),
+            createdBy: userId,
+            invoiceId: invoice.id,
+          },
+          select: { id: true },
+        });
+        await tx.matter.update({
+          where: { id: invoice.matterId },
+          data: { trustBalance: matter.trustBalance.sub(applied) },
+        });
+        await tx.invoicePayment.create({
+          data: {
+            invoiceId: invoice.id,
+            source: "trust",
+            amount: applied,
+            date: new Date(),
+            description: `Earned-fee transfer applied at invoice send`,
+            reference: null,
+            trustTxnId: trustTxn.id,
+            createdBy: userId,
+          },
+        });
+        newPaid = invoice.paidAmount.add(applied);
+        trustApplied = applied;
+      }
+
+      // Final status: paid if trust covered the whole thing, partial
+      // if it covered some, sent otherwise.
+      const fullyPaid = newPaid.greaterThanOrEqualTo(invoice.totalAmount);
+      const finalStatus = fullyPaid
+        ? "paid"
+        : trustApplied
+          ? "partial"
+          : "sent";
+      await tx.invoice.update({
+        where: { id: invoice.id },
+        data: {
+          paidAmount: newPaid,
+          status: finalStatus,
+        },
+      });
+
+      return {
+        invoiceNumber: invoice.invoiceNumber,
+        matterId: invoice.matterId,
+        method: data.method,
+        recipient: data.recipient,
+        trustApplied,
+        finalStatus,
+      };
+    });
+
+    // Log: send event + (separately) the trust application if it
+    // happened. Two log lines so audit reads cleanly.
+    await logActivity({
+      matterId: result.matterId,
+      userId,
+      type: "filing",
+      title: `Invoice ${result.invoiceNumber} sent via ${result.method}`,
+      detail: `to ${result.recipient}`,
+    });
+    if (result.trustApplied) {
+      await logActivity({
+        matterId: result.matterId,
+        userId,
+        type: "deposit",
+        title: `Trust applied to invoice ${result.invoiceNumber} · $${result.trustApplied.toFixed(2)}`,
+      });
+    }
+
+    revalidatePath(`/matters/${result.matterId}/billing`);
+    revalidatePath(`/matters/${result.matterId}`);
+    revalidatePath("/", "layout");
+    return { ...billingInitialState, status: "ok" };
+  } catch (err) {
+    return {
+      status: "error",
+      error: err instanceof Error ? err.message : "Couldn't send the invoice.",
     };
   }
 }

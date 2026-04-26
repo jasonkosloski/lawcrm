@@ -1,16 +1,16 @@
 /**
  * Record Payment Dialog
  *
- * Logs a payment received against a client invoice via a non-trust
- * channel — check, ACH, cash, card, other. Trust-funded payments
- * use the dedicated PayFromTrustDialog so the trust ledger leg
- * lands in the same transaction.
+ * Logs a payment received against a sent or partially-paid client
+ * invoice. Channel options: check, ACH, cash, card, other — plus
+ * trust when the matter has a trust balance. Trust selections run
+ * the four-leg op (trust ledger row + balance decrement + invoice
+ * paidAmount increment + InvoicePayment row) atomically.
  *
- * Recording a payment that fully covers the invoice's open balance
- * auto-flips the status to "paid"; partial payments leave status
- * alone (the row stays open / overdue / sent) but reduce the
- * Balance column. The dialog defaults the amount to the open
- * balance so the common "paid in full" case is one click.
+ * The dialog defaults the amount to the open balance so the common
+ * "paid in full" case is one click. A payment that fully covers
+ * the balance flips the invoice to "paid"; a partial payment moves
+ * it to "partial" so the row stays surfaced as still-owing money.
  */
 
 "use client";
@@ -43,17 +43,6 @@ const todayIso = (): string => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
-// Trust is in the canonical source list but doesn't belong in this
-// dialog — that path goes through PayFromTrustDialog so the ledger
-// + balance legs land atomically.
-const SELECTABLE_SOURCES: InvoicePaymentSource[] = [
-  "check",
-  "ach",
-  "cash",
-  "card",
-  "other",
-];
-
 // Reference field placeholder hints at what the firm typically
 // captures per channel. Cosmetic — the field accepts anything.
 const REFERENCE_PLACEHOLDER: Record<InvoicePaymentSource, string> = {
@@ -62,7 +51,7 @@ const REFERENCE_PLACEHOLDER: Record<InvoicePaymentSource, string> = {
   cash: "Receipt #",
   card: "Last 4 / auth code",
   other: "Reference",
-  trust: "",
+  trust: "Optional",
 };
 
 export function RecordPaymentDialog({
@@ -71,13 +60,29 @@ export function RecordPaymentDialog({
   invoiceId,
   invoiceNumber,
   invoiceBalance,
+  trustBalance,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   invoiceId: string;
   invoiceNumber: string;
   invoiceBalance: number;
+  /** Matter's current trust balance — surfaces the Trust option in
+   *  the method dropdown when > 0. Server runs the four-leg trust
+   *  op when source=trust. */
+  trustBalance: number;
 }) {
+  // Trust appears as a method only when the matter actually has
+  // funds in trust to draw from. Other channels are always
+  // available.
+  const selectableSources: InvoicePaymentSource[] = [
+    "check",
+    "ach",
+    "cash",
+    "card",
+    "other",
+    ...(trustBalance > 0 ? (["trust"] as const) : []),
+  ];
   const action = recordInvoicePayment.bind(null, invoiceId);
   const [state, formAction, isPending] = useActionState<
     BillingFormState,
@@ -115,6 +120,10 @@ export function RecordPaymentDialog({
   const validAmount = Number.isFinite(parsedAmount) && parsedAmount > 0;
   const overBalance =
     Number.isFinite(parsedAmount) && parsedAmount > invoiceBalance;
+  const overTrust =
+    source === "trust" &&
+    Number.isFinite(parsedAmount) &&
+    parsedAmount > trustBalance;
   const balanceAfter = Number.isFinite(parsedAmount)
     ? Math.max(0, invoiceBalance - parsedAmount)
     : invoiceBalance;
@@ -173,7 +182,9 @@ export function RecordPaymentDialog({
               className={cn(
                 "h-9 px-3 rounded-md border bg-white text-sm text-ink font-mono",
                 "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-                errs.amount || overBalance ? "border-warn" : "border-line"
+                errs.amount || overBalance || overTrust
+                  ? "border-warn"
+                  : "border-line"
               )}
             />
             {errs.amount && (
@@ -182,6 +193,12 @@ export function RecordPaymentDialog({
             {!errs.amount && overBalance && (
               <span className="text-2xs text-warn">
                 Exceeds the invoice balance — record the balance or less.
+              </span>
+            )}
+            {!errs.amount && !overBalance && overTrust && (
+              <span className="text-2xs text-warn">
+                Exceeds the trust balance — drop the amount or pick a
+                different method.
               </span>
             )}
           </div>
@@ -200,9 +217,10 @@ export function RecordPaymentDialog({
                 }
                 className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
               >
-                {SELECTABLE_SOURCES.map((s) => (
+                {selectableSources.map((s) => (
                   <option key={s} value={s}>
                     {INVOICE_PAYMENT_SOURCE_LABEL[s]}
+                    {s === "trust" && ` (avail: $${trustBalance.toFixed(2)})`}
                   </option>
                 ))}
               </select>
@@ -268,7 +286,9 @@ export function RecordPaymentDialog({
             </Button>
             <Button
               type="submit"
-              disabled={isPending || !validAmount || overBalance}
+              disabled={
+                isPending || !validAmount || overBalance || overTrust
+              }
             >
               {isPending
                 ? "Recording…"

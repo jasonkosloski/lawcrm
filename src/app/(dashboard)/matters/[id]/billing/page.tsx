@@ -51,7 +51,6 @@ import {
 import { BundleInternalRecordForm } from "@/components/matters/billing/bundle-internal-record-form";
 import { GenerateInvoiceForm } from "@/components/matters/billing/generate-invoice-form";
 import { InvoiceActionBar } from "@/components/matters/billing/invoice-action-bar";
-import { InvoiceRowActions } from "@/components/matters/billing/invoice-row-actions";
 import { InvoicePreview } from "@/components/matters/billing/invoice-preview";
 import { TrustTransactionForm } from "@/components/matters/billing/trust-transaction-form";
 import {
@@ -79,8 +78,9 @@ const formatDate = (d: Date): string =>
 
 const STATUS_META: Record<string, string> = {
   draft: "bg-paper-2 text-ink-3 border-line",
+  approved: "bg-brand-soft/60 text-brand-700 border-brand-200",
   sent: "bg-brand-soft text-brand-700 border-brand-200",
-  open: "bg-brand-soft text-brand-700 border-brand-200",
+  partial: "bg-warn-soft text-warn border-warn-border",
   overdue: "bg-warn-soft text-warn border-warn-border",
   paid: "bg-ok-soft text-ok border-line",
   void: "bg-paper-2 text-ink-4 border-line",
@@ -157,6 +157,8 @@ export default async function MatterBillingPage({
             kind={selectedInvoice.kind as InvoiceKind}
             invoiceBalance={selectedInvoice.balance}
             trustBalance={billing.trust.balance}
+            paidAmount={selectedInvoice.paidAmount}
+            clientEmail={selectedInvoice.clientEmail}
           />
           <Link
             href={`/matters/${id}/billing`}
@@ -291,8 +293,7 @@ function MainColumn({
                   <TableHead>Total</TableHead>
                   {/* Hide Paid in split mode — the preview shows it. */}
                   {!isSplit && <TableHead>Paid</TableHead>}
-                  <TableHead>Balance</TableHead>
-                  <TableHead className="pr-4 w-8" />
+                  <TableHead className="pr-4">Balance</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -366,10 +367,15 @@ function MainColumn({
                                 inv.kind as InvoiceKind
                               )}
                             </span>
+                            {/* Drift indicator: an old row that
+                                pre-dates the "partial" status sits in
+                                'sent' but already has payment against
+                                it. New rows go straight to status=
+                                'partial' and don't need the chip. */}
                             {inv.kind === "client" &&
+                              inv.status === "sent" &&
                               inv.paidAmount > 0 &&
-                              inv.paidAmount < inv.totalAmount &&
-                              inv.status !== "void" && (
+                              inv.paidAmount < inv.totalAmount && (
                                 <span
                                   className="text-2xs font-medium px-1.5 py-0.5 rounded-full border bg-paper-2 text-ink-3 border-line"
                                   title="Some payment recorded but a balance remains."
@@ -419,15 +425,9 @@ function MainColumn({
                             }
                           >
                             {formatMoney(inv.balance)}
-                          </span>
+                          </span>,
+                          "pr-4"
                         )}
-                      </TableCell>
-                      <TableCell className="pr-4 text-right">
-                        <InvoiceRowActions
-                          invoiceId={inv.id}
-                          invoiceNumber={inv.invoiceNumber}
-                          currentStatus={inv.status}
-                        />
                       </TableCell>
                     </TableRow>
                   );

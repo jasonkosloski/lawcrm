@@ -1,26 +1,28 @@
 /**
  * Invoice Action Bar — buttons-only render for the top of the
- * preview pane.
+ * preview pane. State-machine-aware.
  *
- * Renders just the state-machine-aware action buttons; the parent
- * (page.tsx aside header) provides the wrapper chrome (sticky
- * positioning, border, padding) so the same buttons can sit
- * inline next to the close button without doubling up containers.
+ * Client invoices flow draft → approved → sent → partial → paid.
+ * The bar exposes exactly the action that moves the invoice to the
+ * next step:
  *
- * Layout strategy:
- *   - Affirmative transitions (Mark sent, Mark paid) render as
- *     primary / secondary buttons inline. These are the actions
- *     the user is most likely to take while looking at the
- *     invoice.
- *   - Destructive / rare transitions (Void today; could grow into
- *     duplicate / export / etc.) hide behind a small kebab menu
- *     so they're a deliberate two-click action, not an accidental
- *     one-click slip.
+ *   draft     → Approve            (one-click, no dialog)
+ *   approved  → Send invoice…       (dialog: method / recipient /
+ *                                    optional apply-trust)
+ *   sent      → Record payment…     (dialog: amount / method incl.
+ *                                    trust / reference / memo)
+ *   partial   → Record payment…     (same dialog; remaining balance
+ *                                    is the default amount)
+ *   paid      → (terminal)
+ *   void      → (terminal)
  *
- * Terminal states (paid + void after the void escape hatch is
- * gone) render nothing — the document letterhead already shows
- * the status pill, so a separate "no actions available" hint
- * here would just be noise.
+ * Internal records keep their pre-refactor machine: a bare "Mark
+ * recorded" status flip (draft → paid).
+ *
+ * Void lives in the kebab menu and is refused by the server when
+ * any payment has been recorded — the kebab still shows the option
+ * but the server is the source of truth (defense-in-depth against
+ * stale UI state).
  */
 
 "use client";
@@ -28,7 +30,7 @@
 import { useState, useTransition } from "react";
 import {
   Check,
-  Landmark,
+  CheckCircle2,
   MoreHorizontal,
   Receipt,
   Send,
@@ -41,13 +43,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { setInvoiceStatus } from "@/app/actions/billing";
+import { approveInvoice, setInvoiceStatus } from "@/app/actions/billing";
 import {
+  canVoidInvoice,
   invoiceStatusTransitions,
   type InvoiceKind,
 } from "@/lib/billing-form";
-import { PayFromTrustDialog } from "./pay-from-trust-dialog";
 import { RecordPaymentDialog } from "./record-payment-dialog";
+import { SendInvoiceDialog } from "./send-invoice-dialog";
 
 export function InvoiceActionBar({
   invoiceId,
@@ -57,11 +60,15 @@ export function InvoiceActionBar({
    *  threaded kind through yet. Internal records have a much
    *  smaller transition set (no "sent"). */
   kind = "client",
-  /** Open balance + trust balance — power the "Pay from trust"
-   *  button and the dialog's amount default. Both default to 0 so
-   *  the button stays hidden when context is missing. */
+  /** Open balance + trust balance — power Record-payment defaults
+   *  and the Send dialog's apply-trust option. Both default to 0
+   *  so dependent UI stays hidden when context is missing. */
   invoiceBalance = 0,
   trustBalance = 0,
+  paidAmount = 0,
+  /** Pre-fills the Send dialog's recipient field. Editable in the
+   *  dialog if the firm wants a one-shot override. */
+  clientEmail = null,
 }: {
   invoiceId: string;
   invoiceNumber: string;
@@ -69,29 +76,31 @@ export function InvoiceActionBar({
   kind?: InvoiceKind;
   invoiceBalance?: number;
   trustBalance?: number;
+  paidAmount?: number;
+  clientEmail?: string | null;
 }) {
   const [pending, startTransition] = useTransition();
-  const [trustOpen, setTrustOpen] = useState(false);
+  const [sendOpen, setSendOpen] = useState(false);
   const [recordOpen, setRecordOpen] = useState(false);
-  const allowed = invoiceStatusTransitions(currentStatus, kind);
-  // Pay-from-trust eligibility: client invoice with an open balance,
-  // and the matter actually has trust funds. Internal records have
-  // no AR; voided invoices have nothing to pay.
-  const canPayFromTrust =
-    kind === "client" &&
-    currentStatus !== "void" &&
-    invoiceBalance > 0 &&
-    trustBalance > 0;
-  // Record-payment eligibility: client invoice with an open balance.
-  // Internal records can't take payments (born locked at "Recorded"),
-  // and we need somewhere to apply the money.
-  const canRecordPayment =
-    kind === "client" && currentStatus !== "void" && invoiceBalance > 0;
 
-  // Render nothing only when there's truly nothing to do — no
-  // status transitions AND no money paths available.
-  if (allowed.length === 0 && !canPayFromTrust && !canRecordPayment)
-    return null;
+  const canApprove = kind === "client" && currentStatus === "draft";
+  const canSend = kind === "client" && currentStatus === "approved";
+  const canRecordPayment =
+    kind === "client" &&
+    (currentStatus === "sent" || currentStatus === "partial") &&
+    invoiceBalance > 0;
+  const canMarkRecorded =
+    kind === "internal_record" &&
+    invoiceStatusTransitions(currentStatus, kind).includes("paid");
+  const voidAllowed = canVoidInvoice(currentStatus, paidAmount, kind);
+
+  const nothingToDo =
+    !canApprove &&
+    !canSend &&
+    !canRecordPayment &&
+    !canMarkRecorded &&
+    !voidAllowed;
+  if (nothingToDo) return null;
 
   const transitionTo = (next: string, confirmCopy?: string) => {
     if (confirmCopy && !confirm(confirmCopy)) return;
@@ -101,77 +110,61 @@ export function InvoiceActionBar({
     });
   };
 
-  // Anything that goes inside the kebab. Today this is just Void,
-  // but the slot exists for future "Duplicate", "Export PDF", etc.
-  const hasMoreMenu = allowed.includes("void");
+  const approve = () => {
+    startTransition(async () => {
+      const res = await approveInvoice(invoiceId);
+      if (!res.ok) alert(res.error ?? "Couldn't approve invoice.");
+    });
+  };
+
+  const primaryButtonClass = cn(
+    "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-2xs font-medium",
+    "bg-brand-500 text-white hover:bg-brand-600 transition-colors",
+    "disabled:opacity-60 disabled:cursor-not-allowed"
+  );
 
   return (
     <div className="flex items-center gap-1.5">
-      {allowed.includes("sent") && (
+      {canApprove && (
         <button
           type="button"
-          onClick={() => transitionTo("sent")}
+          onClick={approve}
           disabled={pending}
-          className={cn(
-            "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-2xs font-medium",
-            "bg-brand-500 text-white hover:bg-brand-600 transition-colors",
-            "disabled:opacity-60 disabled:cursor-not-allowed"
-          )}
+          className={primaryButtonClass}
+          title="Approve this draft so it can be sent."
+        >
+          <CheckCircle2 size={11} />
+          Approve
+        </button>
+      )}
+
+      {canSend && (
+        <button
+          type="button"
+          onClick={() => setSendOpen(true)}
+          disabled={pending}
+          className={primaryButtonClass}
+          title="Send this invoice to the client."
         >
           <Send size={11} />
-          Mark sent
+          Send invoice
         </button>
       )}
-      {canPayFromTrust && (
-        <button
-          type="button"
-          onClick={() => setTrustOpen(true)}
-          disabled={pending}
-          className={cn(
-            "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-2xs font-medium",
-            // Primary when this is the only viable "money in" path
-            // (i.e., already sent + trust covers it). Secondary
-            // otherwise so it sits next to Mark sent.
-            !allowed.includes("sent")
-              ? "bg-brand-500 text-white hover:bg-brand-600"
-              : "border border-line bg-white text-ink hover:border-brand-300 hover:text-brand-700",
-            "transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-          )}
-          title="Record an earned-fee transfer from the matter's IOLTA balance against this invoice"
-        >
-          <Landmark size={11} />
-          Pay from trust
-        </button>
-      )}
-      {/* Client invoices: Record payment opens a dialog that
-          captures amount / method / reference and creates a real
-          payment record. Auto-flips status to "paid" when the
-          payment covers the balance. */}
-      {kind === "client" && canRecordPayment && (
+
+      {canRecordPayment && (
         <button
           type="button"
           onClick={() => setRecordOpen(true)}
           disabled={pending}
-          className={cn(
-            "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-2xs font-medium",
-            // Primary when this is the natural "money in" CTA — i.e.,
-            // invoice is already sent and there's no trust covering
-            // it. Secondary otherwise so it sits next to Mark sent
-            // or Pay from trust without competing.
-            !allowed.includes("sent") && !canPayFromTrust
-              ? "bg-brand-500 text-white hover:bg-brand-600"
-              : "border border-line bg-white text-ink hover:border-brand-300 hover:text-brand-700",
-            "transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-          )}
-          title="Log a payment received against this invoice (check, ACH, cash, card, etc.)"
+          className={primaryButtonClass}
+          title="Log a payment received against this invoice (check, ACH, cash, card, trust, etc.)"
         >
           <Receipt size={11} />
           Record payment
         </button>
       )}
-      {/* Internal records keep the bare "Mark recorded" status flip
-          — there's no payment behind them, just a lock. */}
-      {kind === "internal_record" && allowed.includes("paid") && (
+
+      {canMarkRecorded && (
         <button
           type="button"
           onClick={() =>
@@ -181,17 +174,14 @@ export function InvoiceActionBar({
             )
           }
           disabled={pending}
-          className={cn(
-            "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-2xs font-medium",
-            "bg-brand-500 text-white hover:bg-brand-600",
-            "transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-          )}
+          className={primaryButtonClass}
         >
           <Check size={11} />
           Mark recorded
         </button>
       )}
-      {hasMoreMenu && (
+
+      {voidAllowed && (
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -206,30 +196,30 @@ export function InvoiceActionBar({
             }
           />
           <DropdownMenuContent align="end" className="min-w-44">
-            {allowed.includes("void") && (
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={() =>
-                  transitionTo(
-                    "void",
-                    `Void invoice ${invoiceNumber}? Linked time entries return to billable WIP.`
-                  )
-                }
-              >
-                <Trash2 />
-                Void invoice
-              </DropdownMenuItem>
-            )}
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={() =>
+                transitionTo(
+                  "void",
+                  `Void invoice ${invoiceNumber}? Linked time entries return to billable WIP.`
+                )
+              }
+            >
+              <Trash2 />
+              Void invoice
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       )}
-      {canPayFromTrust && (
-        <PayFromTrustDialog
-          open={trustOpen}
-          onOpenChange={setTrustOpen}
+
+      {canSend && (
+        <SendInvoiceDialog
+          open={sendOpen}
+          onOpenChange={setSendOpen}
           invoiceId={invoiceId}
           invoiceNumber={invoiceNumber}
           invoiceBalance={invoiceBalance}
+          clientEmail={clientEmail}
           trustBalance={trustBalance}
         />
       )}
@@ -240,6 +230,7 @@ export function InvoiceActionBar({
           invoiceId={invoiceId}
           invoiceNumber={invoiceNumber}
           invoiceBalance={invoiceBalance}
+          trustBalance={trustBalance}
         />
       )}
     </div>
