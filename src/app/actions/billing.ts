@@ -28,6 +28,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { logActivity } from "@/lib/activity-log";
 import {
   invoiceStatusTransitions,
+  canDeleteInvoice,
   canVoidInvoice,
   TRUST_TXN_TYPES,
   INVOICE_PAYMENT_SOURCES,
@@ -316,6 +317,75 @@ export async function setInvoiceStatus(
     userId,
     type: "filing",
     title: `Invoice ${invoice.invoiceNumber} → ${next}`,
+  });
+
+  revalidatePath(`/matters/${invoice.matterId}/billing`);
+  revalidatePath(`/matters/${invoice.matterId}/time`);
+  revalidatePath(`/matters/${invoice.matterId}`);
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+// ── Delete draft invoice ───────────────────────────────────────────────
+//
+// Hard-deletes a draft client invoice. Drafts are pre-AR — no one
+// has seen the doc, nothing's been paid against it — so removing
+// the row entirely is the right shape, vs. void (which is a
+// soft-kill that preserves the audit trail for sent / approved
+// docs). Time entries linked to the draft return to billable WIP
+// just like the void path.
+//
+// Refused on: anything that isn't a client draft, anything with
+// paidAmount > 0 (defense-in-depth — drafts shouldn't have
+// payments, but the guard catches data drift).
+
+export async function deleteInvoice(
+  invoiceId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const userId = await getCurrentUserId();
+  const invoice = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    select: {
+      id: true,
+      matterId: true,
+      invoiceNumber: true,
+      kind: true,
+      status: true,
+      paidAmount: true,
+    },
+  });
+  if (!invoice) return { ok: false, error: "Invoice not found." };
+
+  const paidNum = invoice.paidAmount.toNumber();
+  if (
+    !canDeleteInvoice(invoice.status, paidNum, invoice.kind as InvoiceKind)
+  ) {
+    return {
+      ok: false,
+      error:
+        "Only draft client invoices with no recorded payments can be deleted. Use Void on sent or approved invoices.",
+    };
+  }
+
+  // Two-step: unlink + reset entries first so they re-appear in
+  // WIP, then delete the row. The Invoice → InvoicePayment cascade
+  // handles any stray payment rows (drafts shouldn't have any
+  // anyway), and the TimeEntry → Invoice SetNull would handle the
+  // unlink for free, but we want status: "billable" too — SetNull
+  // alone leaves status="billed".
+  await prisma.$transaction([
+    prisma.timeEntry.updateMany({
+      where: { invoiceId: invoice.id },
+      data: { invoiceId: null, status: "billable" },
+    }),
+    prisma.invoice.delete({ where: { id: invoice.id } }),
+  ]);
+
+  await logActivity({
+    matterId: invoice.matterId,
+    userId,
+    type: "filing",
+    title: `Draft invoice ${invoice.invoiceNumber} deleted`,
   });
 
   revalidatePath(`/matters/${invoice.matterId}/billing`);

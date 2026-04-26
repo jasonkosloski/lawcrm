@@ -43,8 +43,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { approveInvoice, setInvoiceStatus } from "@/app/actions/billing";
 import {
+  approveInvoice,
+  deleteInvoice,
+  setInvoiceStatus,
+} from "@/app/actions/billing";
+import {
+  canDeleteInvoice,
   canVoidInvoice,
   invoiceStatusTransitions,
   type InvoiceKind,
@@ -92,6 +97,7 @@ export function InvoiceActionBar({
   const canMarkRecorded =
     kind === "internal_record" &&
     invoiceStatusTransitions(currentStatus, kind).includes("paid");
+  const deleteAllowed = canDeleteInvoice(currentStatus, paidAmount, kind);
   const voidAllowed = canVoidInvoice(currentStatus, paidAmount, kind);
 
   const nothingToDo =
@@ -99,6 +105,7 @@ export function InvoiceActionBar({
     !canSend &&
     !canRecordPayment &&
     !canMarkRecorded &&
+    !deleteAllowed &&
     !voidAllowed;
   if (nothingToDo) return null;
 
@@ -114,6 +121,19 @@ export function InvoiceActionBar({
     startTransition(async () => {
       const res = await approveInvoice(invoiceId);
       if (!res.ok) alert(res.error ?? "Couldn't approve invoice.");
+    });
+  };
+
+  const handleDelete = () => {
+    if (
+      !confirm(
+        `Delete draft invoice ${invoiceNumber}? This removes the row entirely and returns linked time entries to billable WIP.`
+      )
+    )
+      return;
+    startTransition(async () => {
+      const res = await deleteInvoice(invoiceId);
+      if (!res.ok) alert(res.error ?? "Couldn't delete invoice.");
     });
   };
 
@@ -181,7 +201,7 @@ export function InvoiceActionBar({
         </button>
       )}
 
-      {voidAllowed && (
+      {(deleteAllowed || voidAllowed) && (
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -196,18 +216,32 @@ export function InvoiceActionBar({
             }
           />
           <DropdownMenuContent align="end" className="min-w-44">
-            <DropdownMenuItem
-              variant="destructive"
-              onClick={() =>
-                transitionTo(
-                  "void",
-                  `Void invoice ${invoiceNumber}? Linked time entries return to billable WIP.`
-                )
-              }
-            >
-              <Trash2 />
-              Void invoice
-            </DropdownMenuItem>
+            {/* Drafts: hard delete (no audit trail needed — no one
+                has seen the doc). Approved/sent: void (preserves
+                the row + invoice number for audit). */}
+            {deleteAllowed && (
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={handleDelete}
+              >
+                <Trash2 />
+                Delete draft
+              </DropdownMenuItem>
+            )}
+            {voidAllowed && (
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={() =>
+                  transitionTo(
+                    "void",
+                    `Void invoice ${invoiceNumber}? Linked time entries return to billable WIP.`
+                  )
+                }
+              >
+                <Trash2 />
+                Void invoice
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       )}

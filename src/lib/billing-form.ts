@@ -44,7 +44,11 @@ export const INVOICE_KIND_LABEL: Record<InvoiceKind, string> = {
 /// in 'sent' with paidAmount > 0 (data drift from the pre-refactor
 /// schema).
 const CLIENT_TRANSITIONS: Record<string, string[]> = {
-  draft: ["approved", "void"],
+  // Drafts are deletable (hard delete via deleteInvoice), not
+  // voidable — there's nothing to "void" because no one has seen
+  // the invoice yet. Void only makes sense once the doc has been
+  // approved or sent.
+  draft: ["approved"],
   approved: ["sent", "void"],
   sent: ["partial", "paid", "void"],
   partial: ["paid"],
@@ -83,6 +87,21 @@ export function canVoidInvoice(
   }
   if (paidAmount > 0) return false;
   return invoiceStatusTransitions(status, kind).includes("void");
+}
+
+/** Whether the invoice can be hard-deleted. Today only client
+ *  drafts qualify — they have no AR exposure, no client has seen
+ *  them, and any payment-bearing state should preserve the row
+ *  for audit. Internal records are immutable once bundled (use
+ *  void if a record needs to disappear from the ledger). */
+export function canDeleteInvoice(
+  status: string,
+  paidAmount: number,
+  kind: InvoiceKind = "client"
+): boolean {
+  if (kind !== "client") return false;
+  if (paidAmount > 0) return false;
+  return status === "draft";
 }
 
 /// Back-compat for callers that haven't moved to the kind-aware
