@@ -7,6 +7,7 @@
  * are more complex aggregations and live elsewhere.
  */
 
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { REACTION_EMOJIS } from "@/lib/note-constants";
@@ -1018,4 +1019,75 @@ export async function getMatterDocuments(
       : null,
     createdAt: d.createdAt,
   }));
+}
+
+// ── Matter activity / timeline ─────────────────────────────────────────
+
+export type ActivityRow = {
+  id: string;
+  type: string;
+  title: string;
+  detail: string | null;
+  iconName: string;
+  source: string;
+  timestamp: Date;
+  /** Author of the action when known. Some actions (seeds, system
+   *  events) have null userId — those render with a generic
+   *  "system" badge. */
+  authorName: string | null;
+  authorInitials: string | null;
+};
+
+/// Cap how many rows the timeline page pulls in one shot. Matters
+/// that age past this number need to switch to the eventual
+/// load-more / paginated viewer.
+const MATTER_ACTIVITY_LIMIT = 200;
+
+/** Pull the matter's activity log rows (newest first), joined to
+ *  the author for display. Optional `types` filter narrows to a
+ *  specific category — used by the URL-driven filter pills on the
+ *  Timeline tab. */
+export async function getMatterActivity(
+  matterId: string,
+  options: { types?: readonly string[]; limit?: number } = {}
+): Promise<ActivityRow[]> {
+  const where: Prisma.ActivityLogWhereInput = { matterId };
+  if (options.types && options.types.length > 0) {
+    where.type = { in: [...options.types] };
+  }
+  const rows = await prisma.activityLog.findMany({
+    where,
+    orderBy: { timestamp: "desc" },
+    take: options.limit ?? MATTER_ACTIVITY_LIMIT,
+    include: {
+      user: { select: { name: true, initials: true } },
+    },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    type: r.type,
+    title: r.title,
+    detail: r.detail,
+    iconName: r.icon ?? "zap",
+    source: r.source ?? "System",
+    timestamp: r.timestamp,
+    authorName: r.user?.name ?? null,
+    authorInitials: r.user?.initials ?? null,
+  }));
+}
+
+/** Counts every type bucket on the matter, keyed by `type`. Drives
+ *  the filter pills' badge counts so the user can see "8 emails / 3
+ *  filings / 12 notes" before clicking. */
+export async function getMatterActivityTypeCounts(
+  matterId: string
+): Promise<Record<string, number>> {
+  const grouped = await prisma.activityLog.groupBy({
+    by: ["type"],
+    where: { matterId },
+    _count: { type: true },
+  });
+  const out: Record<string, number> = {};
+  for (const g of grouped) out[g.type] = g._count.type;
+  return out;
 }

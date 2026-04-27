@@ -40,7 +40,7 @@ Last full audit: 2026-04-27
 - [ ] **Notifications + bell.** No `Notification` model. No alerts for approaching deadlines, new email, task assignments. The sidebar bell was deliberately removed pending this work — restore as part of it.
 - [ ] **SOL automation.** SOL fields on Matter are 100% manual. No auto-compute from incident date + practice-area statute table, no "approaching" warning, no auto-deadline generation.
 - [ ] **Conflict check automation.** `Contact.conflictStatus` and `Lead.conflictCheck` exist but are never written to by any code path. No matching engine against existing matters/parties when a lead arrives, no "block save" guardrail, no override workflow.
-- [ ] **Practice area stage editing.** You can create a practice area, but stages are seeded once and can't be renamed, reordered, or archived. Each firm has its own pipeline — this blocks adoption beyond default workflows.
+- [x] ~~**Practice area stage editing.**~~ ✓ shipped. The `/settings/practice-areas/[id]` detail page has full stage CRUD: create stage, rename, mark/unmark terminal, reorder up/down, archive (refused if any active matters still sit in the stage). All actions gated on `firm.manage_practice_areas`. Each firm can shape its own pipeline.
 - [ ] **Phone call / SMS / voicemail logging.** Email-only today. Real practices live on the phone. Even a simple "log a call" button (date, with-whom, duration, summary) would beat the current zero.
 - [ ] **Settlement distribution waterfall UI.** Schema is rich (gross → fees → costs → liens → client net) but there is no UI. Personal injury / civil rights firms need this on every case.
 - [ ] **Document templates / template library.** No way to save and reuse a demand letter, discovery responses, retainer agreement.
@@ -51,7 +51,7 @@ Last full audit: 2026-04-27
 
 - [x] ~~**Permission system + matrix.**~~ ✓ shipped 2026-04-27. First-class `RolePermission` join table, static permission catalog in `src/lib/permissions.ts`, runtime helpers in `src/lib/permission-check.ts` (`currentUserHasPermission` / `requirePermission` / `getCurrentUserPermissions`). Every server action and page guard funnels through a specific permission key; admin role short-circuits to all granted; user effective permissions = union across roles held. Matrix UI on `/settings/roles` lets admins (or anyone with `firm.manage_permissions`) toggle cells with optimistic UI; every non-no-op grant/revoke writes to ActivityLog. Full reference doc at `docs/PERMISSIONS.md`.
 - [ ] **Authentication + real session** (Phase 9). Solo Jason can run today on the hardcoded user. Multi-user features are blocked until auth lands. See "Time bombs" in §2.
-- [ ] **Audit log viewer.** `ActivityLog` is populated by every action that creates a Note / Task / Deadline / TimeEntry / Event / Invoice transition / Permission change / Team add+remove, but is only surfaced as the dashboard "Recent activity" card. Need a matter-scoped Activity tab + a global `/firm/activity` page with filter pills (user, type, date range). Compliance + dispute resolution use case.
+- [~] **Audit log viewer.** Matter-scoped Timeline tab ✓ shipped 2026-04-27 — real ActivityLog feed with day-grouped journal layout and URL-driven filter pills. Still deferred: a global `/firm/activity` page with cross-matter view + user/date filters, pagination beyond the 200-row cap, pin-to-overview, date-range scrubber, and PDF export.
 - [ ] **Reports dashboard.** Pipeline, utilization, AR aging, realization rate — Phase 8 placeholder.
 - [ ] **Export / print to PDF.** Demand letters, invoices, trust reports — none of it can be exported.
 - [ ] **Evidence viewer.** `Evidence`, `FlaggedMoment`, `EvidenceSync` schemas are designed for body-cam / dashcam timelines (§1983 use case) but no UI exists. Defer.
@@ -88,7 +88,7 @@ Last full audit: 2026-04-27
 - [ ] **No current-user indicator in the topbar.** Today everyone is Jason; once auth lands, users won't know which account they're looking at. **Fix:** add a user avatar + menu in the topbar.
 - [ ] **`ActivityLog` is written but never read.** Seed populates it; recent activity card shows the last 5; that's it. No filterable activity log per matter / per user / per type. **Fix:** add an Activity tab on matter detail (and a global firm activity page) once auth lands.
 - [ ] **`/matters/[id]/intake/[id]/time` is a placeholder.** Doesn't render anything meaningful. **Fix:** either build it or remove the route.
-- [ ] **Invalid stage transitions allowed.** Matter can be moved from "Closed" back to "Intake" with no warning. **Fix:** add a `canTransitionTo(currentStageId, newStageId)` guard on the stage action.
+- [x] ~~**Invalid stage transitions allowed.**~~ ✓ shipped 2026-04-27. Server returns `requiresConfirmation` for terminal → non-terminal reopens and backward jumps > 1 stage; UI surfaces the warning + retries with `force: true` on confirm. Every successful transition writes to ActivityLog with a distinctive title for reopens.
 
 ### P2 — polish and consistency
 
