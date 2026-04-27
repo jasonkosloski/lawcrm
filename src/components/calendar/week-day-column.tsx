@@ -480,6 +480,7 @@ function DraggableEventWrapper({
   className: string;
   children: ReactNode;
 }) {
+  const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
 
@@ -503,7 +504,12 @@ function DraggableEventWrapper({
     e.preventDefault();
     const params = new URLSearchParams(sp.toString());
     params.set("event", eventId);
-    window.location.href = `${pathname}?${params.toString()}`;
+    // Soft client-side navigation — keeps the current page
+    // rendered while Next preps the new searchParams snapshot.
+    // The previous `window.location.href` was a hard reload
+    // that fired the loading.tsx skeleton, producing a visible
+    // flash of the wireframe state on every event click.
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
   return (

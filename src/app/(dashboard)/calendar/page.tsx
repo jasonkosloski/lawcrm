@@ -12,6 +12,7 @@
  * panels can be open concurrently.
  */
 
+import { Suspense } from "react";
 import { TopBar } from "@/components/layout/topbar";
 import {
   CalendarToolbar,
@@ -45,23 +46,16 @@ export default async function CalendarPage({
     view === "week" ? weekRange(focal) : monthGridRange(focal);
 
   // Event-detail modal is URL-driven via ?event=<id> so refresh +
-  // back-button both work. We fetch in parallel with the other queries.
+  // back-button both work. The modal's queries live in a separate
+  // suspense boundary below so opening / closing an event doesn't
+  // re-await the calendar's own queries — that re-await was firing
+  // the calendar `loading.tsx` skeleton on every chip click.
   const rawEventParam = Array.isArray(sp.event) ? sp.event[0] : sp.event;
   const eventId = typeof rawEventParam === "string" ? rawEventParam : null;
 
-  const [
-    items,
-    summary,
-    selectedEvent,
-    selectedEventNotes,
-    selectedEventTime,
-    canEditEvents,
-  ] = await Promise.all([
+  const [items, summary, canEditEvents] = await Promise.all([
     getCalendarItems(range.start, range.end),
     getCalendarSummary(range.start, range.end),
-    eventId ? getCalendarEventById(eventId) : Promise.resolve(null),
-    eventId ? getEventNotes(eventId) : Promise.resolve([]),
-    eventId ? getEventTimeEntries(eventId) : Promise.resolve([]),
     // Drives whether week-view chips become draggable + drop
     // zones light up. The action itself is gated server-side
     // regardless — this is just the UX affordance.
@@ -106,13 +100,33 @@ export default async function CalendarPage({
         </div>
       </div>
 
-      {selectedEvent && (
-        <EventDetailModal
-          event={selectedEvent}
-          notes={selectedEventNotes}
-          timeEntries={selectedEventTime}
-        />
+      {/* Modal lives in its own suspense boundary so the page's
+          calendar queries above don't get re-awaited every time
+          the user clicks an event. The modal's own loading state
+          is null — the modal pops in the moment its queries
+          resolve, which on a primed cache is instant. */}
+      {eventId && (
+        <Suspense fallback={null}>
+          <EventDetailLoader eventId={eventId} />
+        </Suspense>
       )}
     </CreateStackProvider>
+  );
+}
+
+/** Async server component owning the event-detail fetches. Lives
+ *  inside a Suspense boundary so its queries don't block the
+ *  calendar's render — opening an event no longer re-awaits the
+ *  whole page. Returns null when the eventId points at a missing
+ *  row (URL tampering or stale link). */
+async function EventDetailLoader({ eventId }: { eventId: string }) {
+  const [event, notes, timeEntries] = await Promise.all([
+    getCalendarEventById(eventId),
+    getEventNotes(eventId),
+    getEventTimeEntries(eventId),
+  ]);
+  if (!event) return null;
+  return (
+    <EventDetailModal event={event} notes={notes} timeEntries={timeEntries} />
   );
 }
