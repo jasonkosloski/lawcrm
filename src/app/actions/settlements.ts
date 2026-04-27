@@ -33,11 +33,12 @@ import { logActivity } from "@/lib/activity-log";
 import { requirePermission } from "@/lib/permission-check";
 import type { SettlementFormState } from "@/lib/settlement-constants";
 
-// Re-exporting types from a "use server" file is allowed (types
-// are compile-time only); re-exporting values is not. UI clients
-// import `settlementInitialState` directly from
-// `@/lib/settlement-constants`.
-export type { SettlementFormState };
+// UI clients import `SettlementFormState` + `settlementInitialState`
+// directly from `@/lib/settlement-constants`. We don't re-export
+// from this "use server" file — Next 16's server bundler emits
+// type re-exports as runtime references, which then crash with
+// `SettlementFormState is not defined` since the symbol doesn't
+// exist as a value.
 
 // Money parser shared with billing actions — strip $ + commas,
 // validate decimal shape. Use the explicit result type so the
