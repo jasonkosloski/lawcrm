@@ -86,6 +86,10 @@ model User {
   noteReads         NoteRead[]
   noteReactions     NoteReaction[]
   notifications     Notification[]
+  /// Calendar events the user is an attendee on. Created via the
+  /// event detail modal's attendee picker (or any future API
+  /// that links a user to an event).
+  calendarAttendances CalendarAttendee[] @relation("CalendarAttendeeUser")
   /// Auth.js Prisma adapter — linked OAuth providers (Google etc.).
   /// Empty until we wire OAuth; the table needs to exist now so
   /// adding a provider later is config-only.
@@ -548,6 +552,10 @@ model Contact {
   /// ever sat on. Lets the contact page surface prior intakes (even
   /// the ones that didn't convert).
   leads Lead[] @relation("LeadContact")
+  /// Calendar events this contact has been added as an attendee
+  /// on. Created by the modal's attendee picker (existing-contact
+  /// pick OR new-contact-from-arbitrary-name path).
+  calendarAttendances CalendarAttendee[] @relation("CalendarAttendeeContact")
 
   @@index([type])
   @@index([name])
@@ -908,15 +916,37 @@ model CalendarEvent {
 }
 
 /// An attendee of a calendar event.
+///
+/// Three flavors, distinguished by which optional FK is set:
+///   - `userId` → a firm team member (User).
+///   - `contactId` → an existing Contact (client, opposing
+///     counsel, witness, expert, etc.).
+///   - both null → an arbitrary entry (the picker creates a
+///     Contact for these too, so this branch is rare in practice;
+///     it exists for legacy rows that pre-date the typed picker
+///     and as a fallback when contact-create races).
+///
+/// `name` + `email` are denormalized snapshots — they always hold
+/// the values shown on the chip so renaming a user/contact later
+/// doesn't silently rewrite past attendee labels. The relations
+/// power UI affordances (avatar from User, contact-page deep
+/// link, type chip).
 model CalendarAttendee {
-  id       String @id @default(cuid())
-  eventId  String
-  name     String
-  email    String?
-  status   String @default("pending") /// accepted | declined | tentative | pending
+  id        String  @id @default(cuid())
+  eventId   String
+  userId    String?
+  contactId String?
+  name      String
+  email     String?
+  status    String  @default("pending") /// accepted | declined | tentative | pending
 
-  event CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event   CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user    User?         @relation("CalendarAttendeeUser", fields: [userId], references: [id], onDelete: SetNull)
+  contact Contact?      @relation("CalendarAttendeeContact", fields: [contactId], references: [id], onDelete: SetNull)
 
+  @@index([eventId])
+  @@index([userId])
+  @@index([contactId])
   @@map("calendar_attendees")
 }
 

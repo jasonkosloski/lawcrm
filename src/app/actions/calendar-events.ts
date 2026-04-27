@@ -26,10 +26,30 @@ function revalidateForEvent(matterId: string | null): void {
 
 // ── Update ──────────────────────────────────────────────────────────────
 
+/** Posted shape for a single attendee. The picker tags each
+ *  entry with its source so the action knows whether to link a
+ *  user, link a contact, or create a new contact for the
+ *  arbitrary case. Name + email are always present (denormalized
+ *  snapshot); they're what the chip renders regardless of which
+ *  branch the entry came from.
+ *
+ *  Existing rows posted from the legacy editor (no `kind`) are
+ *  treated as `kind: "new"` so the older client form still works
+ *  during the rollout. */
 const attendeeEntrySchema = z.object({
+  kind: z
+    .enum(["user", "contact", "new"])
+    .optional()
+    .default("new"),
+  /** Set when `kind === "user"`. Server validates against User. */
+  userId: z.string().optional().or(z.literal("")),
+  /** Set when `kind === "contact"`. Server validates against Contact. */
+  contactId: z.string().optional().or(z.literal("")),
   name: z.string().trim().min(1, "Name is required").max(120),
   email: z.string().trim().max(200).optional().or(z.literal("")),
 });
+
+type AttendeeEntry = z.infer<typeof attendeeEntrySchema>;
 
 const updateEventSchema = z
   .object({
@@ -129,7 +149,7 @@ export async function updateCalendarEvent(
   // Parse + validate the attendees list before opening the
   // transaction so a malformed payload doesn't half-update the
   // event's core fields.
-  let attendeeList: Array<{ name: string; email: string }> = [];
+  let attendeeList: AttendeeEntry[] = [];
   try {
     const decoded = JSON.parse(parsed.data.attendees);
     if (!Array.isArray(decoded)) throw new Error("not an array");
@@ -141,7 +161,7 @@ export async function updateCalendarEvent(
           errors: { attendees: [r.error.issues[0]?.message ?? "Invalid attendee"] },
         };
       }
-      attendeeList.push({ name: r.data.name, email: r.data.email ?? "" });
+      attendeeList.push(r.data);
     }
   } catch {
     return {
@@ -175,15 +195,65 @@ export async function updateCalendarEvent(
     // and existing rows had no per-attendee state worth preserving
     // (status defaults to "pending" today; RSVP isn't wired yet).
     await tx.calendarAttendee.deleteMany({ where: { eventId } });
+
     if (attendeeList.length > 0) {
-      await tx.calendarAttendee.createMany({
-        data: attendeeList.map((a) => ({
-          eventId,
-          name: a.name,
-          email: a.email || null,
-          status: "pending",
-        })),
-      });
+      // Resolve each entry to a CalendarAttendee row. The
+      // arbitrary-name path also creates a Contact (type=other)
+      // so the firm's directory grows organically as people get
+      // invited to events.
+      for (const a of attendeeList) {
+        let userId: string | null = null;
+        let contactId: string | null = null;
+
+        if (a.kind === "user" && a.userId) {
+          // Validate the user actually exists + is active —
+          // defensive against a stale clientId.
+          const u = await tx.user.findUnique({
+            where: { id: a.userId },
+            select: { id: true, isActive: true },
+          });
+          if (u?.isActive) userId = u.id;
+        } else if (a.kind === "contact" && a.contactId) {
+          const c = await tx.contact.findUnique({
+            where: { id: a.contactId },
+            select: { id: true, isActive: true },
+          });
+          if (c?.isActive) contactId = c.id;
+        } else {
+          // "new" branch — create a Contact (type=other) so the
+          // arbitrary entry becomes a real directory row. Other
+          // events the user attaches the same person to can pick
+          // them up via the contact picker on the next save. We
+          // don't dedupe by email here because false positives
+          // are easier to undo than missed contacts; the Contact
+          // directory has its own merge story.
+          const trimmedName = a.name.trim();
+          const trimmedEmail = a.email?.trim() || null;
+          const created = await tx.contact.create({
+            data: {
+              name: trimmedName,
+              email: trimmedEmail,
+              type: "other",
+            },
+            select: { id: true },
+          });
+          contactId = created.id;
+        }
+
+        await tx.calendarAttendee.create({
+          data: {
+            eventId,
+            userId,
+            contactId,
+            // Snapshot the display name + email regardless of
+            // which branch we took. Renaming a user/contact
+            // later won't silently rewrite past attendance.
+            name: a.name.trim(),
+            email: a.email?.trim() || null,
+            status: "pending",
+          },
+        });
+      }
     }
   });
 

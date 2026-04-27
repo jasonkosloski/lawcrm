@@ -110,6 +110,20 @@ export type CalendarEventDetail = {
     name: string;
     email: string | null;
     status: string;
+    /** Set when the attendee is linked to a firm User. The
+     *  picker uses this to render an avatar + jobTitle and to
+     *  exclude the user from autocomplete results on subsequent
+     *  edits. */
+    userId: string | null;
+    userInitials: string | null;
+    userJobTitle: string | null;
+    /** Set when the attendee is linked to an existing Contact
+     *  (or one created from the arbitrary-name path). The picker
+     *  uses this to render a type chip + exclude the contact
+     *  from autocomplete on subsequent edits. */
+    contactId: string | null;
+    contactType: string | null;
+    contactOrganization: string | null;
   }>;
 };
 
@@ -127,7 +141,16 @@ export async function getCalendarEventById(
           practiceArea: { select: { name: true } },
         },
       },
-      attendees: true,
+      attendees: {
+        include: {
+          user: {
+            select: { id: true, initials: true, jobTitle: true },
+          },
+          contact: {
+            select: { id: true, type: true, organization: true },
+          },
+        },
+      },
     },
   });
   if (!e) return null;
@@ -155,6 +178,12 @@ export async function getCalendarEventById(
       name: a.name,
       email: a.email,
       status: a.status,
+      userId: a.userId,
+      userInitials: a.user?.initials ?? null,
+      userJobTitle: a.user?.jobTitle ?? null,
+      contactId: a.contactId,
+      contactType: a.contact?.type ?? null,
+      contactOrganization: a.contact?.organization ?? null,
     })),
   };
 }

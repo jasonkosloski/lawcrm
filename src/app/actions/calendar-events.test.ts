@@ -277,6 +277,139 @@ describe("updateCalendarEvent — attendees replace-all", () => {
   });
 });
 
+describe("updateCalendarEvent — typed attendee picker", () => {
+  test("kind=user links the User row + snapshots name/email", async () => {
+    // Reuse the seeded test user from beforeEach.
+    const userRow = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true, email: true },
+    });
+
+    const res = await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm({
+        attendees: JSON.stringify([
+          {
+            kind: "user",
+            userId,
+            name: userRow!.name,
+            email: userRow!.email,
+          },
+        ]),
+      })
+    );
+    expect(res.status).toBe("ok");
+    const rows = await prisma.calendarAttendee.findMany({
+      where: { eventId },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.userId).toBe(userId);
+    expect(rows[0]!.contactId).toBeNull();
+    expect(rows[0]!.name).toBe(userRow!.name);
+  });
+
+  test("kind=contact links the Contact row", async () => {
+    const c = await prisma.contact.create({
+      data: { name: "Existing Co.", type: "vendor", email: "ex@co.com" },
+      select: { id: true, name: true, email: true },
+    });
+
+    const res = await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm({
+        attendees: JSON.stringify([
+          {
+            kind: "contact",
+            contactId: c.id,
+            name: c.name,
+            email: c.email,
+          },
+        ]),
+      })
+    );
+    expect(res.status).toBe("ok");
+    const rows = await prisma.calendarAttendee.findMany({
+      where: { eventId },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.contactId).toBe(c.id);
+    expect(rows[0]!.userId).toBeNull();
+  });
+
+  test("kind=new creates a Contact (type=other) and links it", async () => {
+    const beforeCount = await prisma.contact.count();
+    const res = await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm({
+        attendees: JSON.stringify([
+          { kind: "new", name: "Stranger Person", email: "s@p.com" },
+        ]),
+      })
+    );
+    expect(res.status).toBe("ok");
+    const afterCount = await prisma.contact.count();
+    expect(afterCount).toBe(beforeCount + 1);
+
+    const newContact = await prisma.contact.findFirst({
+      where: { name: "Stranger Person" },
+    });
+    expect(newContact).not.toBeNull();
+    expect(newContact!.type).toBe("other");
+    expect(newContact!.email).toBe("s@p.com");
+
+    const rows = await prisma.calendarAttendee.findMany({
+      where: { eventId },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.contactId).toBe(newContact!.id);
+    expect(rows[0]!.userId).toBeNull();
+  });
+
+  test("kind=user with a stale userId silently skips the link (snapshot still saved)", async () => {
+    const res = await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm({
+        attendees: JSON.stringify([
+          {
+            kind: "user",
+            userId: "no-such-user",
+            name: "Display Only",
+            email: "x@y.com",
+          },
+        ]),
+      })
+    );
+    // The event still saves — we don't blow up on a stale id.
+    // The attendee row carries the snapshot but no FK.
+    expect(res.status).toBe("ok");
+    const row = await prisma.calendarAttendee.findFirst({ where: { eventId } });
+    expect(row!.userId).toBeNull();
+    expect(row!.contactId).toBeNull();
+    expect(row!.name).toBe("Display Only");
+  });
+
+  test("legacy attendee (no kind) is treated as kind=new and creates a Contact", async () => {
+    const beforeCount = await prisma.contact.count();
+    const res = await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm({
+        attendees: JSON.stringify([
+          // Old shape — no `kind` field. Should still work via
+          // the schema's default("new").
+          { name: "Legacy Person", email: "l@p.com" },
+        ]),
+      })
+    );
+    expect(res.status).toBe("ok");
+    expect(await prisma.contact.count()).toBe(beforeCount + 1);
+  });
+});
+
 describe("updateCalendarEvent — guards", () => {
   test("missing event id surfaces an error", async () => {
     const res = await updateCalendarEvent(
