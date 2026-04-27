@@ -25,7 +25,7 @@
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useTransition, type ReactNode } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { format, isSameDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
@@ -37,6 +37,10 @@ import {
   nowOffsetPx,
 } from "@/lib/calendar-utils";
 import {
+  clearActiveDrag,
+  hasKind,
+  peekActiveDrag,
+  setActiveDrag,
   setDragPayload,
   useDropTarget,
   type DragPayload,
@@ -74,6 +78,10 @@ export function WeekDayColumn({
 }: WeekDayColumnProps) {
   const router = useRouter();
   const [, startTransition] = useTransition();
+  // Snapped chip-top Y inside the hour grid while a drag is
+  // hovering this column. Drives the preview line + time label.
+  // Reset on dragleave / drop / when no drag is in flight.
+  const [previewTopY, setPreviewTopY] = useState<number | null>(null);
 
   // Bar offset math — must match WeekView's previous logic so a
   // user toggling between editable / read-only sees the same
@@ -130,26 +138,40 @@ export function WeekDayColumn({
   });
 
   // ── Drop: hour grid ───────────────────────────────────────────────────
+  //
+  // Shared snap helper — used by both the drop handler (commits)
+  // and the dragover preview (renders the line). Returns the
+  // snapped chip-top in pixels relative to the grid's top edge,
+  // plus the Date that pixel maps to and the matching minutes-
+  // from-grid-start (handy for the time label).
+  const computeSnap = (
+    cursorYInGrid: number,
+    data: CalendarEventDragData
+  ): { topY: number; date: Date; minutesFromStart: number } => {
+    const chipTopY = data.isAllDay
+      ? cursorYInGrid
+      : cursorYInGrid - data.grabOffsetY;
+    const totalMinutes = clamp(
+      Math.round((chipTopY / HOUR_HEIGHT_PX) * 60 / 15) * 15,
+      0,
+      (HOURS.length - 1) * 60 + 45
+    );
+    const topY = (totalMinutes / 60) * HOUR_HEIGHT_PX;
+    const startHour = HOURS[0]!;
+    const dayStart = startOfLocalDay(day);
+    const date = new Date(dayStart);
+    date.setHours(startHour, 0, 0, 0);
+    date.setMinutes(date.getMinutes() + totalMinutes);
+    return { topY, date, minutesFromStart: totalMinutes };
+  };
+
   const hourGridDrop = useDropTarget<CalendarEventDragData>({
     kind: CALENDAR_EVENT_KIND,
     disabled: !canEdit,
     onDrop: (data, e) => {
-      // Y is the cursor's offset from the day column's top, but
-      // only the area BELOW the bar is the hour grid. Subtract
-      // the bar height so the first hour begins at relative Y=0.
       const rect = e.currentTarget.getBoundingClientRect();
-      const yInGrid = e.clientY - rect.top;
-      // Map Y → minutes since the grid's start hour, snapped to 15.
-      const totalMinutes = clamp(
-        Math.round((yInGrid / HOUR_HEIGHT_PX) * 60 / 15) * 15,
-        0,
-        (HOURS.length - 1) * 60 + 45
-      );
-      const startHour = HOURS[0]!;
-      const dayStart = startOfLocalDay(day);
-      const newStart = new Date(dayStart);
-      newStart.setHours(startHour, 0, 0, 0);
-      newStart.setMinutes(newStart.getMinutes() + totalMinutes);
+      const cursorYInGrid = e.clientY - rect.top;
+      const { date: newStart } = computeSnap(cursorYInGrid, data);
 
       // Duration: preserve when the source was timed; default to
       // 2 hours when the source was all-day (per spec).
@@ -163,9 +185,70 @@ export function WeekDayColumn({
           );
       const newEnd = new Date(newStart.getTime() + durationMs);
 
+      setPreviewTopY(null);
       handleMove(data.id, { isAllDay: false, start: newStart, end: newEnd });
     },
   });
+
+  // Wrap the hour-grid handlers with cursor-tracking so we can
+  // render a "where it'll land" preview line. We keep the
+  // counter-based isOver state from useDropTarget AND layer in
+  // the per-pixel cursor position here.
+  const hourGridHandlers = {
+    ...hourGridDrop.handlers,
+    onDragOver: (e: React.DragEvent) => {
+      hourGridDrop.handlers.onDragOver(e);
+      if (!canEdit) return;
+      if (!hasKind(e, CALENDAR_EVENT_KIND)) return;
+      const data = peekActiveDrag<CalendarEventDragData>(CALENDAR_EVENT_KIND);
+      if (!data) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const cursorYInGrid = e.clientY - rect.top;
+      const { topY } = computeSnap(cursorYInGrid, data);
+      setPreviewTopY(topY);
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      hourGridDrop.handlers.onDragLeave(e);
+      setPreviewTopY(null);
+    },
+    onDrop: (e: React.DragEvent) => {
+      hourGridDrop.handlers.onDrop(e);
+      setPreviewTopY(null);
+    },
+  };
+
+  // Compute the preview's time label from previewTopY. We re-use
+  // `computeSnap` shape via direct math here since we already have
+  // a snapped Y. Read the active drag once for the duration so
+  // the preview can also render an outline of the resulting chip.
+  const activeDrag = peekActiveDrag<CalendarEventDragData>(
+    CALENDAR_EVENT_KIND
+  );
+  let previewLabel: string | null = null;
+  let previewHeight = 0;
+  if (previewTopY !== null && activeDrag) {
+    const minutesFromStart = (previewTopY / HOUR_HEIGHT_PX) * 60;
+    const startHour = HOURS[0]!;
+    const totalHours = startHour + minutesFromStart / 60;
+    const hour24 = Math.floor(totalHours);
+    const minute = Math.round((totalHours - hour24) * 60);
+    const h12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+    const suffix = hour24 < 12 ? "a" : "p";
+    previewLabel = `${h12}:${String(minute).padStart(2, "0")}${suffix}`;
+
+    // Resulting chip height in px — duration preserved for timed,
+    // 2h default for all-day.
+    const originalStart = new Date(activeDrag.startTimeIso);
+    const originalEnd = new Date(activeDrag.endTimeIso);
+    const durationHours = activeDrag.isAllDay
+      ? 2
+      : Math.max(
+          0.25,
+          (originalEnd.getTime() - originalStart.getTime()) /
+            (60 * 60 * 1000)
+        );
+    previewHeight = durationHours * HOUR_HEIGHT_PX;
+  }
 
   const weekend = isWeekend(day);
   const isToday = isSameDay(day, today);
@@ -210,7 +293,7 @@ export function WeekDayColumn({
       {/* Hour grid drop zone — sits over the hour rows below the
           bar. The drop handler reads cursor Y to pick the slot. */}
       <div
-        {...hourGridDrop.handlers}
+        {...hourGridHandlers}
         className={cn(
           "absolute left-0 right-0 z-0 transition-colors",
           hourGridDrop.isOver && "bg-brand-tint/30"
@@ -220,7 +303,31 @@ export function WeekDayColumn({
           height: HOURS.length * HOUR_HEIGHT_PX - (topBarHeight + 4),
         }}
         aria-hidden="true"
-      />
+      >
+        {/* Live preview of where the chip will land. Only renders
+            while a drag is hovering and a payload is active.
+            The outlined block + the time label make the snap
+            target obvious before the user releases. */}
+        {previewTopY !== null && activeDrag && (
+          <>
+            <div
+              className="absolute left-1 right-1 rounded-sm border-2 border-dashed border-brand-500/60 bg-brand-tint/40 pointer-events-none z-[15]"
+              style={{
+                top: previewTopY,
+                height: Math.max(20, previewHeight),
+              }}
+              aria-hidden="true"
+            />
+            <div
+              className="absolute -left-12 text-2xs font-mono text-brand-700 bg-white px-1 rounded shadow-sm pointer-events-none z-[16]"
+              style={{ top: previewTopY - 7 }}
+              aria-hidden="true"
+            >
+              {previewLabel}
+            </div>
+          </>
+        )}
+      </div>
 
       {/* Timed events — same render as before, just draggable. */}
       {timedEvents.map((e) => (
@@ -284,15 +391,16 @@ function DraggableAllDayChip({
     <DraggableEventWrapper
       eventId={event.id}
       canDrag={canEdit}
-      payload={{
+      buildPayload={(grabOffsetY) => ({
         kind: CALENDAR_EVENT_KIND,
         data: {
           id: event.id,
           isAllDay: true,
           startTimeIso: event.startTime.toISOString(),
           endTimeIso: event.endTime.toISOString(),
+          grabOffsetY,
         },
-      }}
+      })}
       title={`All day: ${event.title}${event.matterName ? ` · ${event.matterName}` : ""}`}
       style={style}
       className="text-3xs px-1.5 py-0.5 rounded border block overflow-hidden"
@@ -323,15 +431,16 @@ function DraggableEventBlock({
     <DraggableEventWrapper
       eventId={event.id}
       canDrag={canEdit}
-      payload={{
+      buildPayload={(grabOffsetY) => ({
         kind: CALENDAR_EVENT_KIND,
         data: {
           id: event.id,
           isAllDay: false,
           startTimeIso: event.startTime.toISOString(),
           endTimeIso: event.endTime.toISOString(),
+          grabOffsetY,
         },
-      }}
+      })}
       title={`${event.title}${event.matterName ? ` · ${event.matterName}` : ""}`}
       style={style}
       className="absolute left-1 right-1 px-1.5 py-1 rounded-sm overflow-hidden hover:shadow-[inset_3px_0_0_0,0_2px_6px_-2px_rgba(0,0,0,0.1)] transition-shadow"
@@ -356,11 +465,19 @@ function DraggableEventBlock({
  *  `canDrag`, exposes the drag source. We don't use a Link here
  *  because anchor's default URL drag would compete with the
  *  payload we want to set. Cursor is `grab` in editable mode and
- *  `pointer` otherwise. */
+ *  `pointer` otherwise.
+ *
+ *  Payload is built lazily on dragstart so we can include the
+ *  grab offset (cursor Y minus chip top at the moment of grab).
+ *  The drop handler uses that offset to land the chip's TOP at
+ *  the time slot the user is hovering over — otherwise grabbing
+ *  a chip mid-way down would shift it up by however much was
+ *  below the cursor, which is the bug everyone hits with naive
+ *  HTML5 DnD. */
 function DraggableEventWrapper({
   eventId,
   canDrag,
-  payload,
+  buildPayload,
   title,
   style,
   extraStyle,
@@ -369,7 +486,9 @@ function DraggableEventWrapper({
 }: {
   eventId: string;
   canDrag: boolean;
-  payload: DragPayload<typeof CALENDAR_EVENT_KIND, CalendarEventDragData>;
+  buildPayload: (
+    grabOffsetY: number
+  ) => DragPayload<typeof CALENDAR_EVENT_KIND, CalendarEventDragData>;
   title: string;
   style: React.CSSProperties;
   extraStyle?: React.CSSProperties;
@@ -417,10 +536,25 @@ function DraggableEventWrapper({
       style={{ ...style, ...extraStyle }}
       draggable
       onDragStart={(e) => {
+        // Cursor Y relative to the chip's top edge at the moment
+        // of grab. We pass this through the payload so the drop
+        // target can land the chip's top where it visually
+        // appears, rather than where the cursor is.
+        const rect = e.currentTarget.getBoundingClientRect();
+        const grabOffsetY = e.clientY - rect.top;
         // Wipe any default drag content (e.g., the browser's
         // text-selection drag image) before our payload lands.
         e.dataTransfer.clearData();
+        const payload = buildPayload(grabOffsetY);
         setDragPayload(e, payload);
+        // Mirror into the active-drag registry so dragover
+        // handlers (which can't read the dataTransfer JSON for
+        // security reasons) can render a preview of where the
+        // chip will land.
+        setActiveDrag(payload.kind, payload.data);
+      }}
+      onDragEnd={() => {
+        clearActiveDrag();
       }}
       onClick={open}
       onKeyDown={(e) => {

@@ -19,3 +19,9 @@ export {
   type UseDropTargetOptions,
   type UseDropTargetResult,
 } from "./use-drop-target";
+
+export {
+  setActiveDrag,
+  clearActiveDrag,
+  peekActiveDrag,
+} from "./active-drag";

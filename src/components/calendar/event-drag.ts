@@ -25,4 +25,12 @@ export type CalendarEventDragData = {
    *  + same-day no-op detection. */
   startTimeIso: string;
   endTimeIso: string;
+  /** Pixel offset between the cursor and the chip's top edge
+   *  at dragstart. The drop target subtracts this from the
+   *  cursor's Y so the chip lands where the user *sees* it
+   *  (intuitive) instead of where the cursor is (jumps the
+   *  chip up by however much the user grabbed below its top
+   *  edge). Only relevant for timed-chip → time-slot drops;
+   *  all-day drops snap to the day regardless. */
+  grabOffsetY: number;
 };
