@@ -17,13 +17,15 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUserId } from "@/lib/current-user";
+import { logActivity } from "@/lib/activity-log";
 import {
   ADMIN_ROLE_NAME,
   DEFAULT_ROLE_NAME,
   getCurrentFirm,
 } from "@/lib/firm";
 import { requirePermission } from "@/lib/permission-check";
-import { isKnownPermission } from "@/lib/permissions";
+import { isKnownPermission, permissionLabel } from "@/lib/permissions";
 import {
   roleInitialState,
   type RoleFormState,
@@ -236,6 +238,17 @@ export async function setRolePermissionAction(
     };
   }
 
+  // Detect no-op writes so we don't log "granted" entries for a
+  // permission that was already granted (or "revoked" for one that
+  // wasn't held). The matrix UI is optimistic so duplicate clicks
+  // are common.
+  const existing = await prisma.rolePermission.findUnique({
+    where: { roleId_permission: { roleId: target.id, permission } },
+    select: { roleId: true },
+  });
+  const wasGranted = existing !== null;
+  const isNoOp = granted === wasGranted;
+
   if (granted) {
     await prisma.rolePermission.upsert({
       where: { roleId_permission: { roleId: target.id, permission } },
@@ -247,6 +260,24 @@ export async function setRolePermissionAction(
     // a no-op rather than a P2025 throw.
     await prisma.rolePermission.deleteMany({
       where: { roleId: target.id, permission },
+    });
+  }
+
+  // Audit trail. Permission changes are higher-trust than most
+  // mutations — capturing who flipped which cell against which
+  // role is exactly what a firm needs to retrace if something
+  // gets misconfigured. matterId=null because this is firm-scope
+  // governance, not matter-scoped activity.
+  if (!isNoOp) {
+    const actorId = await getCurrentUserId();
+    await logActivity({
+      matterId: null,
+      userId: actorId,
+      type: "filing",
+      title: granted
+        ? `Granted "${permissionLabel(permission)}" to ${target.name}`
+        : `Revoked "${permissionLabel(permission)}" from ${target.name}`,
+      detail: permission,
     });
   }
 

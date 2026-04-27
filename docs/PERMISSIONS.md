@@ -351,6 +351,15 @@ the server rejects, the local state reverts and an inline warning
 shows. The action calls `revalidatePath("/settings/roles")` on
 success so the next render reflects the canonical state.
 
+### Audit trail
+
+Every non-no-op grant or revoke writes an `ActivityLog` entry with
+`matterId: null` (firm-scope), the actor's `userId`, a human-
+readable title (`Granted "Send invoices" to Billing manager` /
+`Revoked …`), and the raw permission key in `detail`. Duplicate
+clicks (granting an already-granted permission) skip the log so
+the audit doesn't fill with no-ops.
+
 ### Why `firm.manage_permissions` is its own key
 
 It's separate from `firm.manage_roles` (create/rename/delete) because
@@ -493,9 +502,6 @@ boxes."
   read time.
 - **Deny rules.** Pure additive set-union model. If you need to
   remove a capability from someone, take them out of the role.
-- **Audit log of permission changes.** `setRolePermissionAction`
-  doesn't write an `ActivityLog` entry. We should add one — track
-  it as a follow-up.
 
 ---
 
@@ -523,3 +529,4 @@ boxes."
 | 2026-04-25 | Replaced `User.isAdmin` boolean with `Role` + `UserRole` membership in the Admin role.              |
 | 2026-04-27 | Added `RolePermission` join + matrix UI on `/settings/roles`. Catalog seeded.                       |
 | 2026-04-27 | Replaced every `requireAdmin()` write gate with `requirePermission(<specific-key>)`. Admin retained as wildcard. |
+| 2026-04-27 | `setRolePermissionAction` writes an `ActivityLog` entry on every non-no-op grant/revoke. Firm-scope (`matterId: null`). |

@@ -182,7 +182,24 @@ export const PERMISSION_KEYS: string[] = PERMISSION_CATEGORIES.flatMap(
 
 export const PERMISSION_KEYS_SET = new Set(PERMISSION_KEYS);
 
+/// O(1) label lookup keyed by the dotted permission key. Built once
+/// at module load so callers (activity log titles, error messages,
+/// etc.) don't have to walk the categories.
+const PERMISSION_LABEL_BY_KEY = new Map<string, string>();
+for (const cat of PERMISSION_CATEGORIES) {
+  for (const p of cat.permissions) {
+    PERMISSION_LABEL_BY_KEY.set(p.key, p.label);
+  }
+}
+
 /** True when `key` appears in the static catalog. Cheap O(1). */
 export function isKnownPermission(key: string): boolean {
   return PERMISSION_KEYS_SET.has(key);
+}
+
+/** Display label for a permission key. Falls back to the key itself
+ *  when the catalog doesn't recognize it (e.g. legacy `RolePermission`
+ *  rows that survived a catalog removal). */
+export function permissionLabel(key: string): string {
+  return PERMISSION_LABEL_BY_KEY.get(key) ?? key;
 }
