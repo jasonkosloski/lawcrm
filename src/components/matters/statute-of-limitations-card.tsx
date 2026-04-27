@@ -30,6 +30,16 @@ export type StatuteOfLimitationsCardProps = {
   satisfied: boolean;
   satisfiedAt: Date | null;
   notes: string | null;
+  /** Citation for the firm-configured SOL period on this matter's
+   *  practice area. When non-null we render a small "per [cite]"
+   *  hint so the lawyer can verify the auto-computation against
+   *  the actual statute. */
+  citation?: string | null;
+  /** When the SOL date was auto-computed from incident + period
+   *  rather than explicitly entered, surface the source so the
+   *  attorney sees how the date was derived. Cosmetic — the
+   *  field doesn't change the underlying data. */
+  incidentDate?: Date | null;
 };
 
 const ONE_DAY = 24 * 60 * 60 * 1000;
@@ -57,6 +67,8 @@ export function StatuteOfLimitationsCard({
   satisfied,
   satisfiedAt,
   notes,
+  citation,
+  incidentDate,
 }: StatuteOfLimitationsCardProps) {
   const [optimisticSatisfied, setOptimisticSatisfied] =
     useOptimistic(satisfied);
@@ -180,6 +192,30 @@ export function StatuteOfLimitationsCard({
         {optimisticSatisfied && satisfiedAt && (
           <div className="text-2xs text-ink-4">
             Marked satisfied {formatFullDate(satisfiedAt)}
+          </div>
+        )}
+
+        {/* Provenance line: when both an incident date and a
+            citation are available the line reads as the full
+            audit ("per CRS… from incident MM/DD/YYYY"); either
+            alone surfaces independently so the lawyer always
+            sees the strongest signal we have. */}
+        {(citation || incidentDate) && (
+          <div className="text-2xs text-ink-4 flex flex-wrap items-center gap-x-1.5">
+            {incidentDate && (
+              <span>
+                from incident{" "}
+                <span className="font-mono">
+                  {formatFullDate(incidentDate)}
+                </span>
+              </span>
+            )}
+            {citation && (
+              <span>
+                {incidentDate && "·"} per{" "}
+                <span className="font-mono">{citation}</span>
+              </span>
+            )}
           </div>
         )}
 

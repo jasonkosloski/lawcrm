@@ -14,6 +14,7 @@ import Link from "next/link";
 import { useActionState, useState } from "react";
 import { cn } from "@/lib/utils";
 import { updateMatter } from "@/app/actions/matters";
+import { formatStatutePeriod } from "@/lib/sol";
 import {
   BILLING_MODES,
   BILLING_MODE_LABEL,
@@ -45,6 +46,7 @@ export type MatterForEdit = {
   opposingFirm: string | null;
   description: string | null;
   leadUserId: string | null;
+  incidentDate: Date | null;
   statuteOfLimitationsDate: Date | null;
   statuteOfLimitationsNotes: string | null;
 };
@@ -53,6 +55,10 @@ export type EditAreaOption = {
   id: string;
   name: string;
   hasStatuteOfLimitations: boolean;
+  /** Total-days statute period; drives the auto-compute preview
+   *  shown below the incident-date input. */
+  statutePeriodDays: number | null;
+  statuteSourceCitation: string | null;
   stages: Array<{
     id: string;
     name: string;
@@ -101,6 +107,8 @@ export function EditMatterForm({
     leadUserId:
       vals.leadUserId ?? matter.leadUserId ?? options.users[0]?.id ?? "",
     description: vals.description ?? matter.description ?? "",
+    incidentDate:
+      vals.incidentDate ?? dateInputValue(matter.incidentDate),
     statuteOfLimitationsDate:
       vals.statuteOfLimitationsDate ??
       dateInputValue(matter.statuteOfLimitationsDate),
@@ -352,14 +360,37 @@ export function EditMatterForm({
       {/* Statute of limitations — only when the chosen practice area
           tracks SOL. The satisfied flag lives on the Overview card,
           not here — edits to the deadline happen in one place, the
-          satisfied toggle in another. */}
+          satisfied toggle in another.
+          When the area has a configured statute period and you set
+          incidentDate without an explicit Deadline date, the action
+          auto-computes the SOL from incident + period. The hint
+          line spells out what that period will be. */}
       {selectedArea?.hasStatuteOfLimitations && (
         <Section title="Statute of limitations">
           <Row>
             <Field
+              label="Incident / accrual date"
+              name="incidentDate"
+              error={errs.incidentDate}
+              hint={
+                selectedArea.statutePeriodDays
+                  ? `Period: ${formatStatutePeriod(selectedArea.statutePeriodDays)}${selectedArea.statuteSourceCitation ? ` · ${selectedArea.statuteSourceCitation}` : ""}. Leave Deadline date blank to auto-compute.`
+                  : "When known, drives the SOL deadline once the firm configures a statute period for this area."
+              }
+            >
+              <input
+                id="incidentDate"
+                name="incidentDate"
+                type="date"
+                defaultValue={init.incidentDate}
+                className={inputCls(!!errs.incidentDate)}
+              />
+            </Field>
+            <Field
               label="Deadline date"
               name="statuteOfLimitationsDate"
               error={errs.statuteOfLimitationsDate}
+              hint="Manual override — wins over auto-compute."
             >
               <input
                 id="statuteOfLimitationsDate"
@@ -369,11 +400,13 @@ export function EditMatterForm({
                 className={inputCls(!!errs.statuteOfLimitationsDate)}
               />
             </Field>
+          </Row>
+          <Row>
             <Field
               label="Notes"
               name="statuteOfLimitationsNotes"
               error={errs.statuteOfLimitationsNotes}
-              hint="CRS cite, tolling agreement, notice waiver…"
+              hint="Tolling agreement, notice waiver, jurisdictional quirks…"
             >
               <input
                 id="statuteOfLimitationsNotes"

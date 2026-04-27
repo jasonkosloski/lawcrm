@@ -138,6 +138,8 @@ export default async function MatterOverviewPage({
               satisfied={matter.statuteOfLimitationsSatisfied}
               satisfiedAt={matter.statuteOfLimitationsSatisfiedAt}
               notes={matter.statuteOfLimitationsNotes}
+              citation={matter.practiceAreaStatuteSourceCitation}
+              incidentDate={matter.incidentDate}
             />
           )}
 

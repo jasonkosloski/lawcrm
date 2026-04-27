@@ -24,6 +24,8 @@ export default async function NewMatterPage() {
         id: true,
         name: true,
         hasStatuteOfLimitations: true,
+        statutePeriodDays: true,
+        statuteSourceCitation: true,
         stages: {
           where: { isActive: true },
           orderBy: { order: "asc" },

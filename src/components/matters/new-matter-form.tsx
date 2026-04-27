@@ -36,6 +36,7 @@ import {
 import { Sparkles, UserCheck, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createMatter } from "@/app/actions/matters";
+import { formatStatutePeriod } from "@/lib/sol";
 import {
   createMatterInitialState,
   NEW_CLIENT_SENTINEL,
@@ -62,6 +63,10 @@ export type AreaOption = {
   id: string;
   name: string;
   hasStatuteOfLimitations: boolean;
+  /** Total-days statute period; drives the auto-compute hint
+   *  shown below the incident-date input on the SOL section. */
+  statutePeriodDays: number | null;
+  statuteSourceCitation: string | null;
   stages: Array<{
     id: string;
     name: string;
@@ -663,15 +668,36 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
       </Section>
 
       {/* Statute of limitations — only surfaces when the chosen
-          practice area tracks SOL. Same data persists on create. */}
+          practice area tracks SOL. The action auto-computes the
+          deadline from incidentDate + the area's configured
+          statute period; explicit Deadline date wins so the user
+          can override. */}
       {selectedArea?.hasStatuteOfLimitations && (
         <Section title="Statute of limitations">
           <Row>
             <Field
+              label="Incident / accrual date"
+              name="incidentDate"
+              error={errs.incidentDate}
+              hint={
+                selectedArea.statutePeriodDays
+                  ? `Period: ${formatStatutePeriod(selectedArea.statutePeriodDays)}${selectedArea.statuteSourceCitation ? ` · ${selectedArea.statuteSourceCitation}` : ""}. Leave Deadline blank to auto-compute.`
+                  : "When known, drives the SOL deadline once the firm configures a statute period for this area."
+              }
+            >
+              <input
+                id="incidentDate"
+                name="incidentDate"
+                type="date"
+                defaultValue={vals.incidentDate ?? ""}
+                className={inputCls(!!errs.incidentDate)}
+              />
+            </Field>
+            <Field
               label="Deadline date"
               name="statuteOfLimitationsDate"
               error={errs.statuteOfLimitationsDate}
-              hint="The SOL deadline you need to track on this matter."
+              hint="Manual override — wins over auto-compute."
             >
               <input
                 id="statuteOfLimitationsDate"
@@ -681,11 +707,13 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
                 className={inputCls(!!errs.statuteOfLimitationsDate)}
               />
             </Field>
+          </Row>
+          <Row>
             <Field
               label="Notes"
               name="statuteOfLimitationsNotes"
               error={errs.statuteOfLimitationsNotes}
-              hint="CRS cite, tolling agreement…"
+              hint="Tolling agreement, jurisdictional quirks, prior CRS exposure…"
             >
               <input
                 id="statuteOfLimitationsNotes"

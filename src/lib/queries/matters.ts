@@ -339,6 +339,8 @@ export async function getMatterById(id: string) {
           name: true,
           color: true,
           hasStatuteOfLimitations: true,
+          statutePeriodDays: true,
+          statuteSourceCitation: true,
         },
       },
       stage: {
@@ -375,6 +377,8 @@ export async function getMatterById(id: string) {
     practiceAreaId: practiceArea.id,
     practiceAreaColor: practiceArea.color,
     practiceAreaHasStatuteOfLimitations: practiceArea.hasStatuteOfLimitations,
+    practiceAreaStatutePeriodDays: practiceArea.statutePeriodDays,
+    practiceAreaStatuteSourceCitation: practiceArea.statuteSourceCitation,
     stageId: stage.id,
     stageOrder: stage.order,
     stageIsTerminal: stage.isTerminal,

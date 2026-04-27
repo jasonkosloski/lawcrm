@@ -54,6 +54,8 @@ export default async function EditMatterPage({
         id: true,
         name: true,
         hasStatuteOfLimitations: true,
+        statutePeriodDays: true,
+        statuteSourceCitation: true,
         stages: {
           where: { isActive: true },
           orderBy: { order: "asc" },
@@ -94,6 +96,7 @@ export default async function EditMatterPage({
     opposingFirm: matter.opposingFirm,
     description: matter.description,
     leadUserId: activeLead?.userId ?? null,
+    incidentDate: matter.incidentDate,
     statuteOfLimitationsDate: matter.statuteOfLimitationsDate,
     statuteOfLimitationsNotes: matter.statuteOfLimitationsNotes,
   };
