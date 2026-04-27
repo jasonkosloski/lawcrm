@@ -57,6 +57,18 @@ const toDateTimeInput = (d: Date): string => {
   return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
 };
 
+/** Strip a YYYY-MM-DDTHH:mm value down to just the date half. */
+const dateOnly = (v: string): string => v.slice(0, 10);
+
+/** Round-trip back from a date-only value to a sensible default
+ *  date+time when the user toggles all-day OFF. We default the
+ *  start to 9am and the end to 10am — same defaults the matter-
+ *  detail event composer uses for a fresh non-all-day event. */
+const withDefaultStart = (v: string): string =>
+  v.length === 10 ? `${v}T09:00` : v;
+const withDefaultEnd = (v: string): string =>
+  v.length === 10 ? `${v}T10:00` : v;
+
 export function EditEventForm({ event }: { event: EditableEvent }) {
   const router = useRouter();
   const action = updateCalendarEvent.bind(null, event.id);
@@ -68,8 +80,30 @@ export function EditEventForm({ event }: { event: EditableEvent }) {
   const [title, setTitle] = useState(event.title);
   const [type, setType] = useState(event.type);
   const [isAllDay, setIsAllDay] = useState(event.isAllDay);
-  const [startTime, setStartTime] = useState(toDateTimeInput(event.startTime));
-  const [endTime, setEndTime] = useState(toDateTimeInput(event.endTime));
+  // Stored as datetime-local format ("YYYY-MM-DDTHH:mm") even when
+  // the event is all-day; the all-day branch slices to the date half
+  // for the visible <input type="date">. Toggling reseeds with sane
+  // defaults on the way back to timed.
+  const [startTime, setStartTime] = useState(
+    event.isAllDay
+      ? `${dateOnly(toDateTimeInput(event.startTime))}T09:00`
+      : toDateTimeInput(event.startTime)
+  );
+  const [endTime, setEndTime] = useState(
+    event.isAllDay
+      ? `${dateOnly(toDateTimeInput(event.endTime))}T10:00`
+      : toDateTimeInput(event.endTime)
+  );
+
+  const toggleAllDay = (next: boolean) => {
+    setIsAllDay(next);
+    // Reseed times when toggling off so the user doesn't see
+    // empty-time inputs the moment they uncheck.
+    if (!next) {
+      setStartTime((v) => withDefaultStart(v));
+      setEndTime((v) => withDefaultEnd(v));
+    }
+  };
   const [location, setLocation] = useState(event.location ?? "");
   const [zoomUrl, setZoomUrl] = useState(event.zoomUrl ?? "");
   const [description, setDescription] = useState(event.description ?? "");
@@ -133,31 +167,51 @@ export function EditEventForm({ event }: { event: EditableEvent }) {
             type="checkbox"
             name="isAllDay"
             checked={isAllDay}
-            onChange={(e) => setIsAllDay(e.target.checked)}
+            onChange={(e) => toggleAllDay(e.target.checked)}
             className="h-3.5 w-3.5 rounded border-line"
           />
           All day
-          <span className="text-ink-4">
-            (the date is what counts; time fields below are ignored)
-          </span>
         </label>
 
-        <div className="grid grid-cols-2 gap-2">
-          <DateTimeField
-            name="startTime"
-            value={startTime}
-            onChange={setStartTime}
-            label={isAllDay ? "Start date" : "Starts"}
-            error={errs.startTime?.[0]}
-          />
-          <DateTimeField
-            name="endTime"
-            value={endTime}
-            onChange={setEndTime}
-            label={isAllDay ? "End date" : "Ends"}
-            error={errs.endTime?.[0]}
-          />
-        </div>
+        {isAllDay ? (
+          // All-day branch: date-only inputs. The hidden datetime-
+          // local state is held in `startTime` / `endTime` for
+          // round-tripping when the user un-toggles; visible
+          // inputs sync the date half via slice.
+          <div className="grid grid-cols-2 gap-2">
+            <DateOnlyField
+              name="startTime"
+              value={dateOnly(startTime)}
+              onChange={(d) => setStartTime(`${d}T00:00`)}
+              label="Start date"
+              error={errs.startTime?.[0]}
+            />
+            <DateOnlyField
+              name="endTime"
+              value={dateOnly(endTime)}
+              onChange={(d) => setEndTime(`${d}T00:00`)}
+              label="End date"
+              error={errs.endTime?.[0]}
+            />
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            <DateTimeField
+              name="startTime"
+              value={startTime}
+              onChange={setStartTime}
+              label="Starts"
+              error={errs.startTime?.[0]}
+            />
+            <DateTimeField
+              name="endTime"
+              value={endTime}
+              onChange={setEndTime}
+              label="Ends"
+              error={errs.endTime?.[0]}
+            />
+          </div>
+        )}
 
         <div className="grid grid-cols-[auto_1fr] gap-2">
           <SelectField
@@ -288,5 +342,37 @@ export function EditEventForm({ event }: { event: EditableEvent }) {
         </div>
       </form>
     </div>
+  );
+}
+
+/** Date-only field — mirrors the look of `DateTimeField` but
+ *  renders a `<input type="date">` and posts a YYYY-MM-DD value.
+ *  Used by the all-day branch above. */
+function DateOnlyField({
+  name,
+  value,
+  onChange,
+  label,
+  error,
+}: {
+  name: string;
+  value: string;
+  onChange: (v: string) => void;
+  label: string;
+  error?: string;
+}) {
+  return (
+    <label className="flex flex-col gap-1 text-2xs text-ink-3">
+      {label}
+      <input
+        type="date"
+        name={name}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        required
+        className="h-8 px-2 rounded-md border border-line text-xs text-ink bg-white font-mono"
+      />
+      {error && <span className="text-2xs text-warn">{error}</span>}
+    </label>
   );
 }

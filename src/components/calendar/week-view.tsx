@@ -119,13 +119,31 @@ export function WeekView({
         {days.map((day) => {
           const key = format(day, "yyyy-MM-dd");
           const dayItems = byDay.get(key) ?? [];
-          const events = dayItems.filter(
-            (i): i is CalendarEventRow => i.kind === "event"
+          // All-day events render as bars at the top of the column
+          // alongside deadlines — they don't have a meaningful spot
+          // on the hour grid. Timed events get absolute-positioned
+          // blocks inside the grid via eventTopPx / eventHeightPx.
+          const allDayEvents = dayItems.filter(
+            (i): i is CalendarEventRow => i.kind === "event" && i.isAllDay
+          );
+          const timedEvents = dayItems.filter(
+            (i): i is CalendarEventRow => i.kind === "event" && !i.isAllDay
           );
           const deadlines = dayItems.filter(
             (i): i is CalendarDeadlineRow => i.kind === "deadline"
           );
           const nowTop = nowOffsetPx(now, day);
+          // Top-bar height drives how far down the timed-event area
+          // starts. Deadline chips are ~18px each; all-day chips
+          // are two-line (~28px) when matter-linked, single-line
+          // (~18px) otherwise. We compute the offset by summing
+          // per-chip heights so timed events don't overlap.
+          const topBarHeight =
+            deadlines.length * 18 +
+            allDayEvents.reduce(
+              (acc, e) => acc + (e.matterName ? 28 : 18),
+              0
+            );
 
           const weekend = isWeekend(day);
           return (
@@ -145,21 +163,27 @@ export function WeekView({
                 />
               ))}
 
-              {/* Deadlines — stack as thin bars at the very top of the column */}
-              {deadlines.length > 0 && (
+              {/* Deadlines + all-day events — stack as thin bars at
+                  the very top of the column. All-day events use the
+                  matter color (or ink-3 fallback) to match the timed
+                  block treatment, just compressed. */}
+              {(deadlines.length > 0 || allDayEvents.length > 0) && (
                 <div className="absolute top-0 left-1 right-1 flex flex-col gap-0.5 pt-0.5 z-10">
+                  {allDayEvents.map((e) => (
+                    <AllDayEventChip key={e.id} event={e} />
+                  ))}
                   {deadlines.map((d) => (
                     <DeadlineChip key={d.id} deadline={d} />
                   ))}
                 </div>
               )}
 
-              {/* Events */}
-              {events.map((e) => (
+              {/* Timed events */}
+              {timedEvents.map((e) => (
                 <EventBlock
                   key={e.id}
                   event={e}
-                  topOffset={deadlines.length * 18 + 4}
+                  topOffset={topBarHeight + 4}
                 />
               ))}
 
@@ -239,5 +263,34 @@ function DeadlineChip({ deadline }: { deadline: CalendarDeadlineRow }) {
       <span className="shrink-0">⚠</span>
       <span className="truncate">{deadline.title}</span>
     </Link>
+  );
+}
+
+/** All-day event — same color treatment as a timed event but
+ *  collapsed into a top-of-column bar. Two-line layout: the title
+ *  prefixed with "All day:" on top, the matter name underneath
+ *  for at-a-glance scoping. Falls back to single-line when the
+ *  event isn't matter-linked. */
+function AllDayEventChip({ event }: { event: CalendarEventRow }) {
+  return (
+    <EventLink
+      eventId={event.id}
+      className={cn(
+        "text-3xs px-1.5 py-0.5 rounded border block overflow-hidden"
+      )}
+      style={{
+        background: `color-mix(in oklch, ${event.color} 16%, white)`,
+        borderColor: `color-mix(in oklch, ${event.color} 35%, white)`,
+        color: "var(--color-ink)",
+      }}
+      title={`All day: ${event.title}${event.matterName ? ` · ${event.matterName}` : ""}`}
+    >
+      <div className="font-medium truncate">All day: {event.title}</div>
+      {event.matterName && (
+        <div className="font-mono text-ink-3 truncate leading-tight">
+          {event.matterName}
+        </div>
+      )}
+    </EventLink>
   );
 }

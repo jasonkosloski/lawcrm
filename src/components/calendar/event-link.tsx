@@ -17,10 +17,14 @@ import type { ReactNode } from "react";
 export function EventLink({
   eventId,
   className,
+  style,
+  title,
   children,
 }: {
   eventId: string;
   className?: string;
+  style?: React.CSSProperties;
+  title?: string;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -32,6 +36,8 @@ export function EventLink({
       href={`${pathname}?${params.toString()}`}
       scroll={false}
       className={className}
+      style={style}
+      title={title}
     >
       {children}
     </Link>

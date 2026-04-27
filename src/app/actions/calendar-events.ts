@@ -35,6 +35,10 @@ const updateEventSchema = z
     title: z.string().trim().min(1, "Title is required").max(200),
     type: z.enum(EVENT_TYPES).default("meeting"),
     isAllDay: z.literal("on").optional(),
+    /** Datetime-local "YYYY-MM-DDTHH:mm" for timed events;
+     *  date-only "YYYY-MM-DD" for all-day events. The
+     *  superRefine + the action body below normalize both
+     *  shapes into proper Date objects. */
     startTime: z.string().min(1, "Start time is required"),
     endTime: z.string().min(1, "End time is required"),
     location: z.string().max(200).optional().or(z.literal("")),
@@ -46,34 +50,55 @@ const updateEventSchema = z
     attendees: z.string().optional().default("[]"),
   })
   .superRefine((data, ctx) => {
-    const start = new Date(data.startTime);
-    const end = new Date(data.endTime);
-    if (Number.isNaN(start.getTime())) {
+    const allDay = data.isAllDay === "on";
+    const start = parseEventBoundary(data.startTime, allDay);
+    const end = parseEventBoundary(data.endTime, allDay);
+    if (!start) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["startTime"],
-        message: "Invalid start time",
+        message: allDay ? "Invalid start date" : "Invalid start time",
       });
     }
-    if (Number.isNaN(end.getTime())) {
+    if (!end) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["endTime"],
-        message: "Invalid end time",
+        message: allDay ? "Invalid end date" : "Invalid end time",
       });
     }
-    if (
-      !Number.isNaN(start.getTime()) &&
-      !Number.isNaN(end.getTime()) &&
-      end.getTime() < start.getTime()
-    ) {
+    if (start && end && end.getTime() < start.getTime()) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["endTime"],
-        message: "End must be after start",
+        message: allDay ? "End date must be on or after start date" : "End must be after start",
       });
     }
   });
+
+/** Parse the form's startTime / endTime field into a Date.
+ *
+ *  - Timed events post `YYYY-MM-DDTHH:mm` from `<input type="datetime-local">`.
+ *    Pass through `new Date(...)` which interprets the value as
+ *    local time.
+ *  - All-day events post `YYYY-MM-DD` from `<input type="date">`.
+ *    Build the Date as local midnight of that day. We don't use
+ *    `new Date(value)` directly because that parses ISO date-only
+ *    as UTC, which would shift the day for any user west of UTC.
+ *
+ *  Returns null when the value can't be parsed (caller surfaces
+ *  the field error). */
+function parseEventBoundary(value: string, allDay: boolean): Date | null {
+  if (allDay) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    if (!m) return null;
+    const [, y, mo, d] = m;
+    const date = new Date(Number(y), Number(mo) - 1, Number(d), 0, 0, 0, 0);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
 
 export async function updateCalendarEvent(
   eventId: string,
@@ -124,15 +149,22 @@ export async function updateCalendarEvent(
     };
   }
 
+  const allDay = parsed.data.isAllDay === "on";
+  // Re-parse here — the superRefine validated shape, but didn't
+  // hand us the parsed Date. Both calls succeed at this point
+  // because the schema would have errored otherwise.
+  const startDate = parseEventBoundary(parsed.data.startTime, allDay)!;
+  const endDate = parseEventBoundary(parsed.data.endTime, allDay)!;
+
   await prisma.$transaction(async (tx) => {
     await tx.calendarEvent.update({
       where: { id: eventId },
       data: {
         title: parsed.data.title,
         type: parsed.data.type,
-        isAllDay: parsed.data.isAllDay === "on",
-        startTime: new Date(parsed.data.startTime),
-        endTime: new Date(parsed.data.endTime),
+        isAllDay: allDay,
+        startTime: startDate,
+        endTime: endDate,
         location: parsed.data.location || null,
         zoomUrl: parsed.data.zoomUrl || null,
         description: parsed.data.description || null,

@@ -143,13 +143,37 @@ export function MonthView({
 }
 
 function EventPill({ event }: { event: CalendarEventRow }) {
+  // All-day pills get a filled background and two-line layout
+  // (title + matter name) for at-a-glance scoping; timed pills
+  // keep the single-line "9am — Title" treatment with a hairline
+  // left-rule.
+  const isAllDay = event.isAllDay;
+  if (isAllDay) {
+    return (
+      <EventLink eventId={event.id}>
+        <div
+          className="px-1 py-0.5 rounded-sm text-3xs leading-tight overflow-hidden hover:bg-brand-tint cursor-pointer"
+          style={{
+            background: `color-mix(in oklch, ${event.color} 16%, white)`,
+            borderLeft: `2px solid ${event.color}`,
+          }}
+          title={`All day: ${event.title}${event.matterName ? ` · ${event.matterName}` : ""}`}
+        >
+          <div className="truncate text-ink">All day: {event.title}</div>
+          {event.matterName && (
+            <div className="truncate font-mono text-ink-4">
+              {event.matterName}
+            </div>
+          )}
+        </div>
+      </EventLink>
+    );
+  }
   return (
     <EventLink eventId={event.id}>
       <div
         className="px-1 py-0.5 rounded-sm text-3xs leading-tight flex items-center gap-1 overflow-hidden hover:bg-brand-tint cursor-pointer"
-        style={{
-          borderLeft: `2px solid ${event.color}`,
-        }}
+        style={{ borderLeft: `2px solid ${event.color}` }}
         title={`${format(event.startTime, "h:mm a")} — ${event.title}${event.matterName ? ` · ${event.matterName}` : ""}`}
       >
         <span className="font-mono text-ink-4 shrink-0">

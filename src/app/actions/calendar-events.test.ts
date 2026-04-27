@@ -72,14 +72,21 @@ const buildForm = (overrides: Partial<Record<string, string>> = {}) => {
   const fd = new FormData();
   fd.set("title", overrides.title ?? "Updated title");
   fd.set("type", overrides.type ?? "meeting");
-  fd.set("startTime", overrides.startTime ?? "2026-05-01T09:00");
-  fd.set("endTime", overrides.endTime ?? "2026-05-01T10:00");
   fd.set("location", overrides.location ?? "");
   fd.set("zoomUrl", overrides.zoomUrl ?? "");
   fd.set("description", overrides.description ?? "");
   fd.set("attendees", overrides.attendees ?? "[]");
+  // All-day events post date-only (`YYYY-MM-DD`); timed events
+  // post the full `YYYY-MM-DDTHH:mm`. The test helper picks the
+  // right default based on the isAllDay flag, but a caller can
+  // still override either side explicitly.
   if (overrides.isAllDay === "on") {
     fd.set("isAllDay", "on");
+    fd.set("startTime", overrides.startTime ?? "2026-05-01");
+    fd.set("endTime", overrides.endTime ?? "2026-05-01");
+  } else {
+    fd.set("startTime", overrides.startTime ?? "2026-05-01T09:00");
+    fd.set("endTime", overrides.endTime ?? "2026-05-01T10:00");
   }
   return fd;
 };
@@ -105,6 +112,70 @@ describe("updateCalendarEvent — isAllDay", () => {
     expect(res.status).toBe("ok");
     const row = await prisma.calendarEvent.findUnique({ where: { id: eventId } });
     expect(row!.isAllDay).toBe(false);
+  });
+
+  test("all-day accepts date-only (YYYY-MM-DD) and stores local midnight", async () => {
+    const res = await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm({
+        isAllDay: "on",
+        startTime: "2026-05-15",
+        endTime: "2026-05-15",
+      })
+    );
+    expect(res.status).toBe("ok");
+    const row = await prisma.calendarEvent.findUnique({ where: { id: eventId } });
+    expect(row!.isAllDay).toBe(true);
+    // Stored as local midnight of the user-entered date.
+    expect(row!.startTime.getFullYear()).toBe(2026);
+    expect(row!.startTime.getMonth()).toBe(4); // 0-indexed: 4 = May
+    expect(row!.startTime.getDate()).toBe(15);
+    expect(row!.startTime.getHours()).toBe(0);
+    expect(row!.startTime.getMinutes()).toBe(0);
+  });
+
+  test("all-day rejects datetime-local input (date-only required)", async () => {
+    const res = await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm({
+        isAllDay: "on",
+        startTime: "2026-05-15T09:00",
+        endTime: "2026-05-15T10:00",
+      })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.startTime?.[0]).toMatch(/start date/i);
+  });
+
+  test("all-day end-before-start (by date) is rejected", async () => {
+    const res = await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm({
+        isAllDay: "on",
+        startTime: "2026-05-15",
+        endTime: "2026-05-14",
+      })
+    );
+    expect(res.status).toBe("error");
+    expect(
+      res.errors?.endTime?.some((m) => /on or after start date/i.test(m))
+    ).toBe(true);
+  });
+
+  test("all-day same-day (start === end) is allowed", async () => {
+    const res = await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm({
+        isAllDay: "on",
+        startTime: "2026-05-15",
+        endTime: "2026-05-15",
+      })
+    );
+    expect(res.status).toBe("ok");
   });
 });
 
