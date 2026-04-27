@@ -53,6 +53,7 @@ import { GenerateInvoiceForm } from "@/components/matters/billing/generate-invoi
 import { InvoiceActionBar } from "@/components/matters/billing/invoice-action-bar";
 import { InvoicePreview } from "@/components/matters/billing/invoice-preview";
 import { TrustTransactionForm } from "@/components/matters/billing/trust-transaction-form";
+import { SettlementApprovals } from "@/components/matters/settlement/settlement-approvals";
 import { SettlementComposer } from "@/components/matters/settlement/settlement-composer";
 import { SettlementLienForm } from "@/components/matters/settlement/settlement-lien-form";
 import {
@@ -117,12 +118,14 @@ export default async function MatterBillingPage({
     settlement,
     canEditSettlement,
     canManageLiens,
+    canApproveSettlement,
   ] = await Promise.all([
     getMatterBilling(id),
     getCurrentFirm(),
     getMatterSettlement(id),
     currentUserHasPermission("matters.settlement.edit"),
     currentUserHasPermission("matters.settlement.manage_liens"),
+    currentUserHasPermission("matters.settlement.approve"),
   ]);
 
   // Validate the requested invoice belongs to this matter — defends
@@ -144,6 +147,7 @@ export default async function MatterBillingPage({
       settlement={settlement}
       canEditSettlement={canEditSettlement}
       canManageLiens={canManageLiens}
+      canApproveSettlement={canApproveSettlement}
       selectedInvoiceId={selectedInvoiceId}
       isSplit={!!selectedInvoice}
     />
@@ -205,6 +209,7 @@ function MainColumn({
   settlement,
   canEditSettlement,
   canManageLiens,
+  canApproveSettlement,
   selectedInvoiceId,
   isSplit,
 }: {
@@ -213,6 +218,7 @@ function MainColumn({
   settlement: MatterSettlement | null;
   canEditSettlement: boolean;
   canManageLiens: boolean;
+  canApproveSettlement: boolean;
   selectedInvoiceId: string | null;
   isSplit: boolean;
 }) {
@@ -692,6 +698,7 @@ function MainColumn({
           settlement={settlement}
           canEdit={canEditSettlement}
           canManageLiens={canManageLiens}
+          canApprove={canApproveSettlement}
         />
       )}
     </>
@@ -703,11 +710,13 @@ function SettlementCard({
   settlement,
   canEdit,
   canManageLiens,
+  canApprove,
 }: {
   matterId: string;
   settlement: MatterSettlement | null;
   canEdit: boolean;
   canManageLiens: boolean;
+  canApprove: boolean;
 }) {
   return (
     <Card className="p-0 overflow-hidden">
@@ -842,6 +851,28 @@ function SettlementCard({
 
             {canManageLiens && (
               <SettlementLienForm settlementId={settlement.id} />
+            )}
+
+            {/* Approval steps. Always rendered when present (read
+                view for everyone with view perm); the buttons only
+                show for users holding matters.settlement.approve. */}
+            {settlement.approvals.length > 0 && (
+              <SettlementApprovals
+                approvals={settlement.approvals.map((a) => ({
+                  id: a.id,
+                  step: a.step,
+                  label: a.label,
+                  status: a.status,
+                  approverName: a.approverName,
+                  approvedAt: a.approvedAt,
+                  notes: a.notes,
+                }))}
+                canApprove={canApprove}
+                settlementLocked={
+                  settlement.status === "disbursed" ||
+                  settlement.status === "closed"
+                }
+              />
             )}
 
             {canEdit && (

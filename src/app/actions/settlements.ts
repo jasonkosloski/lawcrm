@@ -157,7 +157,11 @@ export async function upsertSettlement(
       detail: `Status: ${data.status}`,
     });
   } else {
-    await prisma.settlement.create({
+    // Seed the default 4-step approval chain on first create. The
+    // labels reflect the typical contingency-distribution workflow;
+    // firms with a different chain can edit step labels later when
+    // we expose a "manage steps" UI.
+    const created = await prisma.settlement.create({
       data: {
         matterId,
         grossAmount,
@@ -165,15 +169,27 @@ export async function upsertSettlement(
         firmFee,
         advancedCosts,
         status: data.status,
+        approvals: {
+          create: [
+            { step: 1, label: "Client release signed" },
+            { step: 2, label: "Lien negotiations finalized" },
+            { step: 3, label: "Partner sign-off" },
+            { step: 4, label: "Trust ledger reconciliation" },
+          ],
+        },
       },
+      select: { id: true },
     });
     await logActivity({
       matterId,
       userId: actorId,
       type: "settlement",
       title: `Settlement opened · gross $${grossAmount.toFixed(2)}`,
-      detail: `Status: ${data.status}`,
+      detail: `Status: ${data.status} · 4-step approval chain seeded`,
     });
+    // The created variable is unused locally but kept so future
+    // logic that needs the new id has it.
+    void created;
   }
 
   revalidatePath(`/matters/${matterId}/billing`);
@@ -345,5 +361,85 @@ export async function deleteSettlementLien(
 
   revalidatePath(`/matters/${lien.settlement.matterId}/billing`);
   revalidatePath(`/matters/${lien.settlement.matterId}/timeline`);
+  return { ok: true };
+}
+
+// ── Approval steps ────────────────────────────────────────────────────
+
+/** Set an approval step's status. The "approverId" snapshot is
+ *  the current user when transitioning to "approved" (the
+ *  attribution is the audit). Resetting to "pending" or
+ *  rejecting clears the snapshot. */
+export async function setApprovalStepStatus(
+  approvalId: string,
+  status: "pending" | "approved" | "rejected",
+  notes?: string
+): Promise<{ ok: boolean; error?: string }> {
+  await requirePermission("matters.settlement.approve");
+  const actorId = await getCurrentUserId();
+
+  const approval = await prisma.settlementApproval.findUnique({
+    where: { id: approvalId },
+    select: {
+      id: true,
+      step: true,
+      label: true,
+      status: true,
+      settlement: { select: { id: true, matterId: true, status: true } },
+    },
+  });
+  if (!approval) return { ok: false, error: "Approval step not found." };
+  if (
+    approval.settlement.status === "disbursed" ||
+    approval.settlement.status === "closed"
+  ) {
+    return {
+      ok: false,
+      error:
+        "Settlement is already disbursed or closed — approvals are locked.",
+    };
+  }
+
+  await prisma.settlementApproval.update({
+    where: { id: approval.id },
+    data: {
+      status,
+      approverId: status === "approved" ? actorId : null,
+      approvedAt: status === "approved" ? new Date() : null,
+      notes: notes && notes.trim().length > 0 ? notes.trim() : null,
+    },
+  });
+
+  // Auto-promote the settlement to "approved" status when every
+  // step is approved. We don't auto-disburse — that's a separate
+  // money-moving action that needs explicit confirmation.
+  const allSteps = await prisma.settlementApproval.findMany({
+    where: { settlementId: approval.settlement.id },
+    select: { status: true },
+  });
+  const allApproved =
+    allSteps.length > 0 && allSteps.every((s) => s.status === "approved");
+  if (
+    allApproved &&
+    approval.settlement.status !== "approved" &&
+    approval.settlement.status !== "disbursed" &&
+    approval.settlement.status !== "closed"
+  ) {
+    await prisma.settlement.update({
+      where: { id: approval.settlement.id },
+      data: { status: "approved" },
+    });
+  }
+
+  await logActivity({
+    matterId: approval.settlement.matterId,
+    userId: actorId,
+    type: "settlement",
+    title: `Settlement step ${approval.step} (${approval.label}) → ${status}`,
+    detail: notes ?? undefined,
+  });
+
+  revalidatePath(`/matters/${approval.settlement.matterId}/billing`);
+  revalidatePath(`/matters/${approval.settlement.matterId}/timeline`);
   return { ok: true };
 }

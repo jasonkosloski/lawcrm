@@ -102,6 +102,12 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         description:
           "Add a lien (medical, subrogation, etc.) to a settlement; negotiate the amount and mark its status.",
       },
+      {
+        key: "matters.settlement.approve",
+        label: "Sign off on settlement approval steps",
+        description:
+          "Mark a settlement approval step approved or rejected. Each step is gated by this permission today; future role-specific approval gates (partner-only sign-off, etc.) will layer on top.",
+      },
     ],
   },
   {
