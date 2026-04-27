@@ -3,3 +3,24 @@
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
+
+# Testing is non-optional
+
+Every new feature ships with at least one test. The pre-commit hook
+runs `npm run typecheck && npm test` on every commit and blocks
+the commit on failure. See **`docs/TESTING.md`** for the full
+discipline — what to test, what NOT to test, file conventions,
+running commands. The framework is Vitest; tests live alongside
+their source as `*.test.ts`.
+
+If you're adding logic and don't write a test, you're leaving
+broken work for the next session. Don't.
+
+# Permissions are non-optional
+
+Every gated capability gets a granular permission key in
+`src/lib/permissions.ts` (split into view / add / edit / delete
+when the capability has those distinct access levels — don't lump
+into "manage_X"). Server actions gate via `requirePermission(...)`;
+read-side flags via `currentUserHasPermission(...)`. See
+**`docs/PERMISSIONS.md`** for the full reference.

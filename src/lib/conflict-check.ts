@@ -57,9 +57,21 @@ export type ConflictCandidate = {
 };
 
 /** Normalize for case-insensitive comparison. Lowercase + trim +
- *  collapse internal whitespace. */
-function normalize(s: string | null | undefined): string {
+ *  collapse internal whitespace. Exported for testing — UI / DB
+ *  callers should go through `runConflictMatcher`. */
+export function normalize(s: string | null | undefined): string {
   return (s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** Roll up a list of matches into the overall severity label.
+ *  Pure — kept exported so the matcher's decision can be unit-
+ *  tested without the surrounding DB infrastructure. */
+export function summarizeMatchSeverity(
+  matches: ConflictMatch[]
+): ConflictCheckResult["severity"] {
+  if (matches.some((m) => m.severity === "conflict")) return "conflict";
+  if (matches.length > 0) return "warn";
+  return "clear";
 }
 
 const CANDIDATE_LIMIT = 200;
@@ -223,12 +235,5 @@ export async function runConflictMatcher(
     }
   }
 
-  const severity: ConflictCheckResult["severity"] =
-    matches.some((m) => m.severity === "conflict")
-      ? "conflict"
-      : matches.length > 0
-        ? "warn"
-        : "clear";
-
-  return { severity, matches };
+  return { severity: summarizeMatchSeverity(matches), matches };
 }

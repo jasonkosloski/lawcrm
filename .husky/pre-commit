@@ -1,0 +1,11 @@
+# Pre-commit gate. Two checks, in order, fail-fast:
+#   1. tsc — catch type errors before they hit the diff. Cheap
+#      on an incremental run, prevents "fix the type error in CI"
+#      churn.
+#   2. vitest — run the unit-test suite. Currently fast (<5s).
+#
+# Bypass with `git commit --no-verify` only when committing
+# something genuinely unfinishable in this checkout (work-in-
+# progress branches before a final cleanup commit). Don't make
+# it a habit.
+npm run precommit
