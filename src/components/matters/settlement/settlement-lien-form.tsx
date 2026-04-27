@@ -10,11 +10,11 @@ import { useActionState, useState, useEffect } from "react";
 import { Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { addSettlementLien } from "@/app/actions/settlements";
 import {
-  addSettlementLien,
   settlementInitialState,
   type SettlementFormState,
-} from "@/app/actions/settlements";
+} from "@/lib/settlement-constants";
 
 export function SettlementLienForm({
   settlementId,

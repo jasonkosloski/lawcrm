@@ -31,18 +31,13 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { logActivity } from "@/lib/activity-log";
 import { requirePermission } from "@/lib/permission-check";
+import type { SettlementFormState } from "@/lib/settlement-constants";
 
-export type SettlementFormState = {
-  status: "idle" | "ok" | "error";
-  /** Mirrors `zod.flatten().fieldErrors` — value may be undefined
-   *  per zod's typing. The UI checks `errs.foo?.[0]` everywhere. */
-  errors?: Record<string, string[] | undefined>;
-  error?: string;
-};
-
-export const settlementInitialState: SettlementFormState = {
-  status: "idle",
-};
+// Re-exporting types from a "use server" file is allowed (types
+// are compile-time only); re-exporting values is not. UI clients
+// import `settlementInitialState` directly from
+// `@/lib/settlement-constants`.
+export type { SettlementFormState };
 
 // Money parser shared with billing actions — strip $ + commas,
 // validate decimal shape. Use the explicit result type so the

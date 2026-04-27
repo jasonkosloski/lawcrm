@@ -13,11 +13,11 @@ import { useActionState, useEffect, useState } from "react";
 import { Pencil, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { upsertSettlement } from "@/app/actions/settlements";
 import {
-  upsertSettlement,
   settlementInitialState,
   type SettlementFormState,
-} from "@/app/actions/settlements";
+} from "@/lib/settlement-constants";
 
 type SettlementInitial = {
   grossAmount: number;
