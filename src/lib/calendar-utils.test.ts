@@ -13,6 +13,7 @@ import {
   HOURS,
   HOUR_HEIGHT_PX,
   isWeekend,
+  layoutOverlappingEvents,
   nowOffsetPx,
   parseCalendarParams,
   toDateParam,
@@ -180,5 +181,124 @@ describe("nowOffsetPx", () => {
   test("'now' after the grid's last hour returns null", () => {
     const now = new Date("2026-04-15T23:00:00");
     expect(nowOffsetPx(now, dayStart)).toBeNull();
+  });
+});
+
+// ── layoutOverlappingEvents ──────────────────────────────────────────────
+
+const ev = (
+  id: string,
+  startHour: number,
+  durationHours: number
+): { id: string; start: Date; end: Date } => {
+  const start = new Date(2026, 4, 1, startHour, 0, 0, 0);
+  const end = new Date(start.getTime() + durationHours * 60 * 60 * 1000);
+  return { id, start, end };
+};
+
+describe("layoutOverlappingEvents", () => {
+  test("empty input returns empty output", () => {
+    expect(layoutOverlappingEvents([])).toEqual([]);
+  });
+
+  test("single event gets lane=0 of laneCount=1", () => {
+    const result = layoutOverlappingEvents([ev("a", 9, 1)]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ lane: 0, laneCount: 1 });
+    expect(result[0]!.event.id).toBe("a");
+  });
+
+  test("two non-overlapping events stay full-width (separate clusters)", () => {
+    // 9–10 and 11–12 — no overlap
+    const result = layoutOverlappingEvents([ev("a", 9, 1), ev("b", 11, 1)]);
+    expect(result.map((r) => ({ id: r.event.id, lane: r.lane, count: r.laneCount }))).toEqual([
+      { id: "a", lane: 0, count: 1 },
+      { id: "b", lane: 0, count: 1 },
+    ]);
+  });
+
+  test("two overlapping events split the column 50/50", () => {
+    // 9–11 and 10–12 overlap from 10–11
+    const result = layoutOverlappingEvents([ev("a", 9, 2), ev("b", 10, 2)]);
+    expect(result).toEqual([
+      expect.objectContaining({ event: expect.objectContaining({ id: "a" }), lane: 0, laneCount: 2 }),
+      expect.objectContaining({ event: expect.objectContaining({ id: "b" }), lane: 1, laneCount: 2 }),
+    ]);
+  });
+
+  test("three events all overlapping get 3 lanes", () => {
+    const result = layoutOverlappingEvents([
+      ev("a", 9, 3),
+      ev("b", 10, 2),
+      ev("c", 11, 1),
+    ]);
+    // All three overlap at 11.
+    expect(result.every((r) => r.laneCount === 3)).toBe(true);
+    // Lanes assigned in arrival order: a=0, b=1, c=2.
+    const byId = Object.fromEntries(
+      result.map((r) => [r.event.id, r.lane])
+    );
+    expect(byId.a).toBe(0);
+    expect(byId.b).toBe(1);
+    expect(byId.c).toBe(2);
+  });
+
+  test("lane reuse within a cluster: A doesn't overlap C, so C reuses A's lane", () => {
+    // A: 9–10 / B: 9:30–11 / C: 10–10:30
+    // A and B overlap (lanes 0, 1)
+    // C starts at 10 (when A ends) but B (10:30-end-not-yet) still covers C's start-end.
+    // Wait: B ends at 11, C is 10-10:30. They overlap.
+    // A ends at 10, C starts at 10 — A's lane is free for C.
+    const result = layoutOverlappingEvents([
+      ev("a", 9, 1), // 9-10
+      { id: "b", start: new Date(2026, 4, 1, 9, 30), end: new Date(2026, 4, 1, 11, 0) },
+      { id: "c", start: new Date(2026, 4, 1, 10, 0), end: new Date(2026, 4, 1, 10, 30) },
+    ]);
+    const byId = Object.fromEntries(
+      result.map((r) => [r.event.id, r])
+    );
+    // a + b + c are all in one cluster (chained via b).
+    expect(byId.a!.laneCount).toBe(2);
+    expect(byId.b!.laneCount).toBe(2);
+    expect(byId.c!.laneCount).toBe(2);
+    // A and C share lane 0 (A ended before C started).
+    expect(byId.a!.lane).toBe(0);
+    expect(byId.c!.lane).toBe(0);
+    expect(byId.b!.lane).toBe(1);
+  });
+
+  test("touching boundary doesn't count as overlap (A ends when B starts)", () => {
+    // A: 9-10, B: 10-11. Touching but not overlapping.
+    const result = layoutOverlappingEvents([ev("a", 9, 1), ev("b", 10, 1)]);
+    // Both should be lane 0, count 1 (separate clusters).
+    expect(result.every((r) => r.lane === 0 && r.laneCount === 1)).toBe(true);
+  });
+
+  test("input order doesn't change the output", () => {
+    const a = ev("a", 9, 2);
+    const b = ev("b", 10, 2);
+    const c = ev("c", 11, 1);
+    const r1 = layoutOverlappingEvents([a, b, c]);
+    const r2 = layoutOverlappingEvents([c, a, b]);
+    // Same id → same lane + laneCount in both runs.
+    const map = (r: typeof r1) =>
+      Object.fromEntries(r.map((x) => [x.event.id, [x.lane, x.laneCount]]));
+    expect(map(r1)).toEqual(map(r2));
+  });
+
+  test("clusters are independent — adding more events in one doesn't widen another", () => {
+    // Cluster 1 (overlapping): A 9-11, B 10-12 → 2 lanes
+    // Cluster 2 (single): D 14-15 → 1 lane
+    const result = layoutOverlappingEvents([
+      ev("a", 9, 2),
+      ev("b", 10, 2),
+      ev("d", 14, 1),
+    ]);
+    const byId = Object.fromEntries(
+      result.map((r) => [r.event.id, r])
+    );
+    expect(byId.a!.laneCount).toBe(2);
+    expect(byId.b!.laneCount).toBe(2);
+    expect(byId.d!.laneCount).toBe(1);
   });
 });

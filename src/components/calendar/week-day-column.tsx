@@ -35,6 +35,7 @@ import {
   HOUR_HEIGHT_PX,
   HOURS,
   isWeekend,
+  layoutOverlappingEvents,
   nowOffsetPx,
 } from "@/lib/calendar-utils";
 import {
@@ -288,9 +289,18 @@ export function WeekTimeColumn({
 
       {/* Timed events — Y position computed from start time alone
           (no all-day offset since the all-day chips are in their
-          own row above this column). */}
-      {events.map((e) => (
-        <DraggableEventBlock key={e.id} event={e} canEdit={canEdit} />
+          own row above this column). Overlapping events split the
+          column horizontally via `layoutOverlappingEvents`. */}
+      {layoutOverlappingEvents(
+        events.map((e) => ({ ...e, start: e.startTime, end: e.endTime }))
+      ).map(({ event, lane, laneCount }) => (
+        <DraggableEventBlock
+          key={event.id}
+          event={event}
+          canEdit={canEdit}
+          lane={lane}
+          laneCount={laneCount}
+        />
       ))}
 
       {/* "Now" line */}
@@ -382,15 +392,31 @@ function DraggableAllDayChip({
 function DraggableEventBlock({
   event,
   canEdit,
+  lane,
+  laneCount,
 }: {
   event: CalendarEventRow;
   canEdit: boolean;
+  /** 0-indexed slot within the event's overlap cluster. */
+  lane: number;
+  /** Total slots in the event's overlap cluster. Drives the
+   *  per-chip width = 1 / laneCount. */
+  laneCount: number;
 }) {
   const top = eventTopPx(event.startTime);
   const height = eventHeightPx(event.startTime, event.endTime);
+  // Lane → horizontal position. We leave a hairline gap between
+  // adjacent chips so the boundary reads cleanly. The first lane
+  // starts at the column's left padding (4px); subsequent lanes
+  // are offset by `lane * laneWidthPct%`.
+  const laneWidthPct = 100 / laneCount;
+  const leftPct = lane * laneWidthPct;
+  const widthCss = `calc(${laneWidthPct}% - ${laneCount > 1 ? 6 : 8}px)`;
   const style: React.CSSProperties = {
     top,
     height,
+    left: `calc(${leftPct}% + 4px)`,
+    width: widthCss,
     background: `color-mix(in oklch, ${event.color} 16%, white)`,
     boxShadow: `inset 3px 0 0 0 ${event.color}`,
   };
@@ -410,7 +436,7 @@ function DraggableEventBlock({
       })}
       title={`${event.title}${event.matterName ? ` · ${event.matterName}` : ""}`}
       style={style}
-      className="absolute left-1 right-1 px-1.5 py-1 rounded-sm overflow-hidden hover:shadow-[inset_3px_0_0_0,0_2px_6px_-2px_rgba(0,0,0,0.1)] transition-shadow"
+      className="absolute px-1.5 py-1 rounded-sm overflow-hidden hover:shadow-[inset_3px_0_0_0,0_2px_6px_-2px_rgba(0,0,0,0.1)] transition-shadow"
       // Stays above the column's drop-zone background so the
       // drag pickup stays reliable.
       extraStyle={{ zIndex: 5 }}

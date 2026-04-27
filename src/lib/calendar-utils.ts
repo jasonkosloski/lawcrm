@@ -100,5 +100,111 @@ export function nowOffsetPx(now: Date, day: Date): number | null {
   return (h - from) * HOUR_HEIGHT_PX;
 }
 
+// ── Overlap layout ─────────────────────────────────────────────────────
+//
+// When timed events overlap on the same day, the standard calendar
+// behavior (Google / Apple / Outlook) is to split the column
+// horizontally — N overlapping events each get 1/N of the width
+// and sit side-by-side. Non-overlapping events stay full-width
+// regardless of what's happening elsewhere in the day.
+//
+// The algorithm is two passes:
+//
+//   1. Sweep-line clustering. Walk events in start-time order. A
+//      new cluster begins the moment the next event's start is
+//      ≥ the running max-end of the current cluster — i.e. the
+//      gap is real and the layout decisions don't have to chain
+//      across it.
+//
+//   2. Greedy lane assignment per cluster. Each event picks the
+//      lowest-numbered lane whose previous occupant has ended by
+//      the new event's start. The cluster's lane count is the
+//      max lane index used + 1; that count drives the per-event
+//      width = 100% / count.
+//
+// The output keeps each event's natural width when it has no
+// overlap (cluster of one → laneCount=1), and shrinks only the
+// events that actually conflict.
+
+/** A single timed event in the form the layout helper consumes.
+ *  We only care about start + end; the caller threads its own
+ *  identity / metadata through the result. */
+export type LayoutInput = { start: Date; end: Date };
+
+/** Result of the layout algorithm. `lane` is 0-indexed within
+ *  the event's cluster; `laneCount` is that cluster's total
+ *  lane count. Together they determine the chip's horizontal
+ *  position: `left = lane / laneCount`, `width = 1 / laneCount`. */
+export type LayoutResult<T> = {
+  event: T;
+  lane: number;
+  laneCount: number;
+};
+
+/** Compute lane assignments for a day's timed events.
+ *
+ *  Order of input doesn't matter — the helper sorts internally.
+ *  Order of output matches the sorted order so the caller can
+ *  iterate without re-sorting.
+ *
+ *  Two events touching at the boundary (A.end === B.start) do
+ *  NOT overlap — the second event reuses the first's lane and a
+ *  new cluster may begin if no other event bridges the gap.
+ */
+export function layoutOverlappingEvents<T extends LayoutInput>(
+  events: readonly T[]
+): LayoutResult<T>[] {
+  if (events.length === 0) return [];
+  const sorted = [...events].sort(
+    (a, b) => a.start.getTime() - b.start.getTime()
+  );
+
+  const result: LayoutResult<T>[] = [];
+
+  // Walk clusters one at a time. `cluster` accumulates events
+  // until we see a gap (start >= currentMaxEnd), then we emit
+  // lane assignments for the cluster and reset.
+  let cluster: T[] = [];
+  let currentMaxEnd = -Infinity;
+
+  const flushCluster = () => {
+    if (cluster.length === 0) return;
+    // Greedy lane assignment. `laneEnds[i]` = end time of the
+    // last event placed in lane i. A new event reuses the
+    // lowest-numbered lane whose end is ≤ the event's start.
+    const laneEnds: number[] = [];
+    for (const ev of cluster) {
+      const start = ev.start.getTime();
+      let lane = laneEnds.findIndex((end) => end <= start);
+      if (lane === -1) {
+        laneEnds.push(ev.end.getTime());
+        lane = laneEnds.length - 1;
+      } else {
+        laneEnds[lane] = ev.end.getTime();
+      }
+      result.push({ event: ev, lane, laneCount: 0 });
+    }
+    // Patch the laneCount on every entry we just emitted now
+    // that we know the cluster's max width.
+    const laneCount = laneEnds.length;
+    for (let i = result.length - cluster.length; i < result.length; i++) {
+      result[i]!.laneCount = laneCount;
+    }
+    cluster = [];
+    currentMaxEnd = -Infinity;
+  };
+
+  for (const ev of sorted) {
+    if (ev.start.getTime() >= currentMaxEnd) {
+      flushCluster();
+    }
+    cluster.push(ev);
+    currentMaxEnd = Math.max(currentMaxEnd, ev.end.getTime());
+  }
+  flushCluster();
+
+  return result;
+}
+
 /** Add N days preserving local time; wraps around via date-fns. */
 export const addDaysLocal = addDays;
