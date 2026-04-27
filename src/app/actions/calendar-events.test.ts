@@ -19,9 +19,20 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@/lib/permission-check", () => ({
+  // Action-logic tests assume the user passes the gate. The gate
+  // itself is verified in the dedicated "RBAC gate" describe at
+  // the bottom of this file.
+  requirePermission: vi.fn().mockResolvedValue("test-user"),
+  currentUserHasPermission: vi.fn().mockResolvedValue(true),
+}));
 
 import { prisma } from "@/lib/prisma";
-import { updateCalendarEvent } from "@/app/actions/calendar-events";
+import {
+  moveCalendarEvent,
+  updateCalendarEvent,
+} from "@/app/actions/calendar-events";
+import { requirePermission } from "@/lib/permission-check";
 import { updateCalendarEventInitialState } from "@/lib/calendar-event-form";
 import {
   resetDb,
@@ -290,5 +301,104 @@ describe("updateCalendarEvent — guards", () => {
     expect(
       res.errors?.endTime?.some((m) => /after start/i.test(m))
     ).toBe(true);
+  });
+});
+
+// ── moveCalendarEvent ───────────────────────────────────────────────────
+
+describe("moveCalendarEvent — drag-and-drop reschedule", () => {
+  test("moves a timed event to a new time slot, preserves duration", async () => {
+    const newStart = new Date("2026-05-08T14:00:00.000Z");
+    const newEnd = new Date("2026-05-08T15:00:00.000Z"); // 1h
+    const res = await moveCalendarEvent(eventId, {
+      isAllDay: false,
+      startTime: newStart.toISOString(),
+      endTime: newEnd.toISOString(),
+    });
+    expect(res.ok).toBe(true);
+    const row = await prisma.calendarEvent.findUnique({ where: { id: eventId } });
+    expect(row!.startTime.toISOString()).toBe(newStart.toISOString());
+    expect(row!.endTime.toISOString()).toBe(newEnd.toISOString());
+    expect(row!.isAllDay).toBe(false);
+  });
+
+  test("flips a timed event to all-day", async () => {
+    const day = new Date("2026-05-08T00:00:00.000Z");
+    const res = await moveCalendarEvent(eventId, {
+      isAllDay: true,
+      startTime: day.toISOString(),
+      endTime: day.toISOString(),
+    });
+    expect(res.ok).toBe(true);
+    const row = await prisma.calendarEvent.findUnique({ where: { id: eventId } });
+    expect(row!.isAllDay).toBe(true);
+    expect(row!.startTime.toISOString()).toBe(day.toISOString());
+    expect(row!.endTime.toISOString()).toBe(day.toISOString());
+  });
+
+  test("flips an all-day event to a timed slot", async () => {
+    // Set the event to all-day first.
+    await prisma.calendarEvent.update({
+      where: { id: eventId },
+      data: {
+        isAllDay: true,
+        startTime: new Date("2026-05-08T00:00:00.000Z"),
+        endTime: new Date("2026-05-08T00:00:00.000Z"),
+      },
+    });
+    const newStart = new Date("2026-05-08T13:00:00.000Z");
+    const newEnd = new Date("2026-05-08T15:00:00.000Z"); // 2h default
+    const res = await moveCalendarEvent(eventId, {
+      isAllDay: false,
+      startTime: newStart.toISOString(),
+      endTime: newEnd.toISOString(),
+    });
+    expect(res.ok).toBe(true);
+    const row = await prisma.calendarEvent.findUnique({ where: { id: eventId } });
+    expect(row!.isAllDay).toBe(false);
+    expect(row!.endTime.getTime() - row!.startTime.getTime()).toBe(
+      2 * 60 * 60 * 1000
+    );
+  });
+
+  test("rejects when the event is missing", async () => {
+    const res = await moveCalendarEvent("no-such-id", {
+      isAllDay: false,
+      startTime: new Date("2026-05-08T09:00:00Z").toISOString(),
+      endTime: new Date("2026-05-08T10:00:00Z").toISOString(),
+    });
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/not found/i);
+  });
+
+  test("rejects end-before-start", async () => {
+    const res = await moveCalendarEvent(eventId, {
+      isAllDay: false,
+      startTime: new Date("2026-05-08T15:00:00Z").toISOString(),
+      endTime: new Date("2026-05-08T14:00:00Z").toISOString(),
+    });
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/on or after start/i);
+  });
+
+  test("rejects unparseable timestamps", async () => {
+    const res = await moveCalendarEvent(eventId, {
+      isAllDay: false,
+      startTime: "not-a-date",
+      endTime: new Date("2026-05-08T10:00:00Z").toISOString(),
+    });
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/invalid/i);
+  });
+
+  test("gates on events.edit", async () => {
+    const mocked = vi.mocked(requirePermission);
+    mocked.mockClear();
+    await moveCalendarEvent(eventId, {
+      isAllDay: false,
+      startTime: new Date("2026-05-08T09:00:00Z").toISOString(),
+      endTime: new Date("2026-05-08T10:00:00Z").toISOString(),
+    });
+    expect(mocked).toHaveBeenCalledWith("events.edit");
   });
 });

@@ -26,6 +26,7 @@ import { CreateStackProvider } from "@/components/create-stack/create-stack-prov
 import { CreateDock } from "@/components/create-stack/create-dock";
 import { NewEventButton } from "@/components/calendar/new-event-button";
 import { parseCalendarParams } from "@/lib/calendar-utils";
+import { currentUserHasPermission } from "@/lib/permission-check";
 import {
   getCalendarEventById,
   getCalendarItems,
@@ -54,12 +55,17 @@ export default async function CalendarPage({
     selectedEvent,
     selectedEventNotes,
     selectedEventTime,
+    canEditEvents,
   ] = await Promise.all([
     getCalendarItems(range.start, range.end),
     getCalendarSummary(range.start, range.end),
     eventId ? getCalendarEventById(eventId) : Promise.resolve(null),
     eventId ? getEventNotes(eventId) : Promise.resolve([]),
     eventId ? getEventTimeEntries(eventId) : Promise.resolve([]),
+    // Drives whether week-view chips become draggable + drop
+    // zones light up. The action itself is gated server-side
+    // regardless — this is just the UX affordance.
+    currentUserHasPermission("events.edit"),
   ]);
 
   const crumbBits = [
@@ -83,7 +89,11 @@ export default async function CalendarPage({
         <div className="flex-1 flex min-h-0">
           <div className="flex-1 min-w-0 flex flex-col">
             {view === "week" ? (
-              <WeekView focal={focal} items={items} />
+              <WeekView
+                focal={focal}
+                items={items}
+                canEditEvents={canEditEvents}
+              />
             ) : (
               <MonthView focal={focal} items={items} />
             )}

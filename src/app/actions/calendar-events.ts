@@ -12,6 +12,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { EVENT_TYPES } from "@/lib/note-constants";
+import { requirePermission } from "@/lib/permission-check";
 import type { UpdateCalendarEventFormState } from "@/lib/calendar-event-form";
 
 function revalidateForEvent(matterId: string | null): void {
@@ -221,4 +222,86 @@ export async function deleteCalendarEventAndRedirect(
     redirect(`/matters/${result.matterId}/events`);
   }
   redirect("/calendar");
+}
+
+// ── Move (drag-and-drop) ───────────────────────────────────────────────
+//
+// Reschedule action used by the calendar's drag-and-drop. Compared to
+// `updateCalendarEvent` this is a narrow, fast-path mutation: only the
+// schedule fields change, no attendees / description / type touched.
+// The client sends ISO strings + the all-day flag; the server
+// re-validates the boundary semantics (end >= start; non-empty;
+// parseable) before writing.
+//
+// Auth: gated on `events.edit`. Admins short-circuit; other roles need
+// the explicit grant via the matrix.
+
+const moveCalendarEventSchema = z
+  .object({
+    isAllDay: z.boolean(),
+    /** ISO 8601 strings — the client builds them from a Date and
+     *  POSTs as JSON via the action. We re-parse + revalidate here. */
+    startTime: z.string().min(1),
+    endTime: z.string().min(1),
+  })
+  .superRefine((data, ctx) => {
+    const start = new Date(data.startTime);
+    const end = new Date(data.endTime);
+    if (Number.isNaN(start.getTime())) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["startTime"],
+        message: "Invalid start",
+      });
+    }
+    if (Number.isNaN(end.getTime())) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["endTime"],
+        message: "Invalid end",
+      });
+    }
+    if (
+      !Number.isNaN(start.getTime()) &&
+      !Number.isNaN(end.getTime()) &&
+      end.getTime() < start.getTime()
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["endTime"],
+        message: "End must be on or after start",
+      });
+    }
+  });
+
+export async function moveCalendarEvent(
+  eventId: string,
+  input: { isAllDay: boolean; startTime: string; endTime: string }
+): Promise<{ ok: boolean; error?: string }> {
+  await requirePermission("events.edit");
+  const parsed = moveCalendarEventSchema.safeParse(input);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    return { ok: false, error: first?.message ?? "Invalid move." };
+  }
+
+  const event = await prisma.calendarEvent.findUnique({
+    where: { id: eventId },
+    select: { matterId: true },
+  });
+  if (!event) {
+    return { ok: false, error: "Event not found." };
+  }
+
+  await prisma.calendarEvent.update({
+    where: { id: eventId },
+    data: {
+      isAllDay: parsed.data.isAllDay,
+      startTime: new Date(parsed.data.startTime),
+      endTime: new Date(parsed.data.endTime),
+    },
+  });
+
+  revalidateForEvent(event.matterId);
+  return { ok: true };
 }

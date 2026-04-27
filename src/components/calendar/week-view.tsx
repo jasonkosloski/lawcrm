@@ -8,20 +8,21 @@
  *
  * Hour range is fixed at 6am–9pm (HOURS in calendar-utils) — legal
  * work hours fit comfortably inside without scrolling.
+ *
+ * Drag-and-drop: when `canEditEvents` is true, each chip is a
+ * drag source and each day exposes two drop zones (all-day bar
+ * + hour grid). Per-column DnD logic lives in the client
+ * `WeekDayColumn` component so this server component stays a
+ * thin layout wrapper. See `event-drag.ts` for the wire format.
  */
 
-import Link from "next/link";
 import { addDays, format, isSameDay, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
-import { EventLink } from "./event-link";
 import {
-  eventHeightPx,
-  eventTopPx,
   formatHourLabel,
   HOUR_HEIGHT_PX,
   HOURS,
   isWeekend,
-  nowOffsetPx,
 } from "@/lib/calendar-utils";
 import type {
   CalendarItem,
@@ -29,13 +30,19 @@ import type {
   CalendarDeadlineRow,
 } from "@/lib/queries/calendar";
 import { weekRange } from "./calendar-toolbar";
+import { WeekDayColumn } from "./week-day-column";
 
 export function WeekView({
   focal,
   items,
+  canEditEvents = false,
 }: {
   focal: Date;
   items: CalendarItem[];
+  /** When true, chips are draggable + day columns expose drop
+   *  zones. The server still gates `moveCalendarEvent` on
+   *  `events.edit` regardless. */
+  canEditEvents?: boolean;
 }) {
   const { start } = weekRange(focal);
   const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
@@ -115,14 +122,11 @@ export function WeekView({
           ))}
         </div>
 
-        {/* Day columns */}
+        {/* Day columns — delegated to the client WeekDayColumn so
+            the drag-and-drop logic stays in one place. */}
         {days.map((day) => {
           const key = format(day, "yyyy-MM-dd");
           const dayItems = byDay.get(key) ?? [];
-          // All-day events render as bars at the top of the column
-          // alongside deadlines — they don't have a meaningful spot
-          // on the hour grid. Timed events get absolute-positioned
-          // blocks inside the grid via eventTopPx / eventHeightPx.
           const allDayEvents = dayItems.filter(
             (i): i is CalendarEventRow => i.kind === "event" && i.isAllDay
           );
@@ -132,76 +136,17 @@ export function WeekView({
           const deadlines = dayItems.filter(
             (i): i is CalendarDeadlineRow => i.kind === "deadline"
           );
-          const nowTop = nowOffsetPx(now, day);
-          // Top-bar height drives how far down the timed-event area
-          // starts. Deadline chips are ~18px each; all-day chips
-          // are two-line (~28px) when matter-linked, single-line
-          // (~18px) otherwise. We compute the offset by summing
-          // per-chip heights so timed events don't overlap.
-          const topBarHeight =
-            deadlines.length * 18 +
-            allDayEvents.reduce(
-              (acc, e) => acc + (e.matterName ? 28 : 18),
-              0
-            );
-
-          const weekend = isWeekend(day);
           return (
-            <div
+            <WeekDayColumn
               key={day.toISOString()}
-              className={cn(
-                "border-l border-line relative",
-                weekend && "bg-paper"
-              )}
-            >
-              {/* Hour rows for grid lines */}
-              {HOURS.map((h) => (
-                <div
-                  key={h}
-                  className="border-b border-line"
-                  style={{ height: HOUR_HEIGHT_PX }}
-                />
-              ))}
-
-              {/* Deadlines + all-day events — stack as thin bars at
-                  the very top of the column. All-day events use the
-                  matter color (or ink-3 fallback) to match the timed
-                  block treatment, just compressed. */}
-              {(deadlines.length > 0 || allDayEvents.length > 0) && (
-                <div className="absolute top-0 left-1 right-1 flex flex-col gap-0.5 pt-0.5 z-10">
-                  {allDayEvents.map((e) => (
-                    <AllDayEventChip key={e.id} event={e} />
-                  ))}
-                  {deadlines.map((d) => (
-                    <DeadlineChip key={d.id} deadline={d} />
-                  ))}
-                </div>
-              )}
-
-              {/* Timed events */}
-              {timedEvents.map((e) => (
-                <EventBlock
-                  key={e.id}
-                  event={e}
-                  topOffset={topBarHeight + 4}
-                />
-              ))}
-
-              {/* "Now" line */}
-              {nowTop !== null && (
-                <div
-                  className="absolute left-0 right-0 z-20 pointer-events-none"
-                  style={{ top: nowTop }}
-                >
-                  <div className="h-px bg-warn">
-                    <div
-                      className="w-2 h-2 rounded-full bg-warn -mt-[3px] -ml-[3px]"
-                      aria-label="Current time"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
+              day={day}
+              today={today}
+              now={now}
+              allDayEvents={allDayEvents}
+              timedEvents={timedEvents}
+              deadlines={deadlines}
+              canEdit={canEditEvents}
+            />
           );
         })}
       </div>
@@ -209,88 +154,4 @@ export function WeekView({
   );
 }
 
-// ── Sub-components ──────────────────────────────────────────────────────
-
-function EventBlock({
-  event,
-  topOffset,
-}: {
-  event: CalendarEventRow;
-  topOffset: number;
-}) {
-  const top = eventTopPx(event.startTime) + topOffset;
-  const height = eventHeightPx(event.startTime, event.endTime);
-  return (
-    <EventLink eventId={event.id} className="block">
-      <div
-        className="absolute left-1 right-1 px-1.5 py-1 rounded-sm overflow-hidden cursor-pointer hover:shadow-[inset_3px_0_0_0,0_2px_6px_-2px_rgba(0,0,0,0.1)] transition-shadow"
-        style={{
-          top,
-          height,
-          background: `color-mix(in oklch, ${event.color} 16%, white)`,
-          boxShadow: `inset 3px 0 0 0 ${event.color}`,
-        }}
-      >
-        <div className="text-2xs font-medium text-ink leading-tight line-clamp-2">
-          {event.title}
-        </div>
-        {event.matterName && (
-          <div className="text-3xs font-mono text-ink-3 mt-0.5 truncate">
-            {event.matterName}
-          </div>
-        )}
-      </div>
-    </EventLink>
-  );
-}
-
-function DeadlineChip({ deadline }: { deadline: CalendarDeadlineRow }) {
-  const cls =
-    deadline.deadlineKind === "critical"
-      ? "bg-warn-soft text-warn border-warn-border"
-      : deadline.deadlineKind === "auto_rule"
-        ? "bg-brand-soft text-brand-700 border-brand-200"
-        : "bg-paper-2 text-ink-3 border-line";
-  return (
-    <Link
-      href={`/matters/${deadline.matterId}/deadlines`}
-      className={cn(
-        "text-3xs font-medium px-1.5 py-0.5 rounded border truncate flex items-center gap-1",
-        cls
-      )}
-      title={`${deadline.title} — ${deadline.matterName}`}
-    >
-      <span className="shrink-0">⚠</span>
-      <span className="truncate">{deadline.title}</span>
-    </Link>
-  );
-}
-
-/** All-day event — same color treatment as a timed event but
- *  collapsed into a top-of-column bar. Two-line layout: the title
- *  prefixed with "All day:" on top, the matter name underneath
- *  for at-a-glance scoping. Falls back to single-line when the
- *  event isn't matter-linked. */
-function AllDayEventChip({ event }: { event: CalendarEventRow }) {
-  return (
-    <EventLink
-      eventId={event.id}
-      className={cn(
-        "text-3xs px-1.5 py-0.5 rounded border block overflow-hidden"
-      )}
-      style={{
-        background: `color-mix(in oklch, ${event.color} 16%, white)`,
-        borderColor: `color-mix(in oklch, ${event.color} 35%, white)`,
-        color: "var(--color-ink)",
-      }}
-      title={`All day: ${event.title}${event.matterName ? ` · ${event.matterName}` : ""}`}
-    >
-      <div className="font-medium truncate">All day: {event.title}</div>
-      {event.matterName && (
-        <div className="font-mono text-ink-3 truncate leading-tight">
-          {event.matterName}
-        </div>
-      )}
-    </EventLink>
-  );
-}
+// All chip + drop-zone rendering lives in `WeekDayColumn` now.
