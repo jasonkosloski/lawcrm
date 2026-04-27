@@ -129,31 +129,77 @@ hits it.
 
 ### Layer 3 — Server action / Prisma integration tests
 
-Real DB, real Prisma, real action. Slower (50–500ms per test);
-use sparingly for the highest-leverage workflows.
+Real DB, real Prisma, real action. Slower (50–500ms per test) —
+use selectively for the highest-leverage workflows.
 
-Setup pattern (when we wire this up):
+**Infrastructure** (already wired):
 
-1. Create a per-test SQLite DB file (or an in-memory connection)
-   via a Vitest setup hook.
-2. Push the schema and seed a minimal fixture.
-3. Run the action against it; assert the resulting DB state.
-4. Tear the DB down.
+- `src/test/integration-setup.ts` — Vitest `globalSetup` that
+  runs ONCE before any test loads. Sets `DATABASE_URL` to
+  `file:./prisma/test.db`, deletes any leftover file, and
+  pushes the current schema via `npx prisma db push --url ...
+  --accept-data-loss`. Teardown deletes the file so re-runs
+  start clean.
+- `src/test/integration-helpers.ts` — `resetDb()` truncates
+  every table in FK-safe order; fixture builders (`seedFirm`,
+  `seedUser`, `seedPracticeArea`, `seedMatter`, `seedTimeEntry`,
+  `seedExpense`, `seedContact`, `seedMatterContact`, `seedLead`)
+  return the row id for chaining.
+- `vitest.config.ts` sets `fileParallelism: false` because the
+  test DB is shared across files — file-level parallelism would
+  race on the shared state. Tests within a file still run
+  sequentially via `beforeEach { resetDb() }`.
 
-Targets we'll write first:
+**Mocking pattern** for action tests:
 
-- Invoice generation — `generateInvoiceFromWip` should bundle
-  every billable un-invoiced TimeEntry + Expense into one
-  transaction; void unlinks both buckets back to billable.
-- Settlement waterfall — `upsertSettlement` seeds 4 approval
-  steps; `setApprovalStepStatus` auto-promotes the settlement
-  to `approved` once every step lands.
-- Conflict matcher — name + email + organization match across
-  Contacts and matter opposing-side records, severity rolls up
-  correctly.
-- Permission gates — `requirePermission(...)` redirects when
-  the user lacks the key, succeeds when they hold it (or hold
-  Admin).
+```ts
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
+// Mock the permission gate when the test is about action logic,
+// not authorization. requirePermission's correctness is covered
+// in `permission-check.integration.test.ts`.
+vi.mock("@/lib/permission-check", () => ({
+  requirePermission: vi.fn().mockResolvedValue("test-user"),
+  currentUserHasPermission: vi.fn().mockResolvedValue(true),
+}));
+
+// next/navigation.redirect throws an internal error in prod —
+// for tests, stub it to throw something we can assert on:
+vi.mock("next/navigation", () => ({
+  redirect: vi.fn((url: string) => {
+    throw new Error(`__REDIRECT__:${url}`);
+  }),
+}));
+```
+
+**What's covered today** (42 integration tests across 4 files):
+
+- `src/app/actions/billing.test.ts` (7) —
+  `generateInvoiceFromWip` rolls billable time + expenses into
+  one invoice with the right subtotal; flips entries to
+  `status="billed"` + stamps `invoiceId`; ignores already-invoiced
+  rows; ignores non-billable; refuses when nothing is bundleable.
+  `setInvoiceStatus("void")` unlinks both buckets back to
+  billable.
+- `src/app/actions/settlements.test.ts` (10) —
+  `upsertSettlement` seeds the 4-step approval chain on create,
+  doesn't re-seed on update, computes firm fee from percent.
+  `setApprovalStepStatus` auto-promotes to "approved" only when
+  every step approves; snapshots approverId + clears on
+  reject/reset; refuses on disbursed/closed. `addSettlementLien`
+  refuses on disbursed settlements.
+- `src/lib/conflict-check.integration.test.ts` (13) — the
+  matcher against the real DB: email + opposing-side
+  MatterContact → conflict, email + non-opposing → warn, exact
+  name match against `Matter.opposingParty` /
+  `.opposingFirm` → conflict, organization match → warn,
+  archived matters skipped, severity rolls up correctly.
+- `src/lib/permission-check.integration.test.ts` (12) — Admin
+  short-circuits to all-granted; non-admin grants flow through
+  `RolePermission` rows; multi-role union; inactive user gets
+  nothing (even with Admin); `requirePermission(...)` throws
+  redirect on miss; `currentUserHasAnyPermission([...])` matches
+  the doc.
 
 ---
 
@@ -242,3 +288,4 @@ end-to-end flow.
 |------------|-------------------------------------------------------------------------------------------|
 | 2026-04-27 | Vitest + happy-dom installed. 103 tests landed across 7 helper files. Pre-commit hook wired via husky. `docs/TESTING.md` added. |
 | 2026-04-27 | Layer 2 testing wired: `@testing-library/react` + user-event installed, `src/test/setup.ts` registers jest-dom matchers + auto-cleanup. 49 component tests landed for `PermissionsMatrix` / `ExpenseComposer` / `SettlementApprovals` / `ConflictCheckCard`. Suite is 152 tests across 11 files in 1.3s. |
+| 2026-04-27 | Layer 3 testing wired. `src/test/integration-setup.ts` is a Vitest `globalSetup` that points DATABASE_URL at a dedicated `prisma/test.db`, runs `prisma db push` once, and tears the file down. `src/test/integration-helpers.ts` exposes `resetDb()` + fixture builders (`seedFirm`, `seedUser`, `seedMatter`, etc). 42 integration tests across 4 files cover `generateInvoiceFromWip` bundling + void unlink, settlement waterfall + approval chain auto-promotion, conflict matcher against real Contacts + matters, `requirePermission` gate behavior. `fileParallelism: false` keeps integration files from racing on the shared DB. Full suite: 194 tests across 15 files in ~7s. |
