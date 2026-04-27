@@ -119,7 +119,12 @@ export function WeekAllDayCell({
     <div
       {...drop.handlers}
       className={cn(
-        "border-l border-line p-1 flex flex-col gap-0.5 transition-colors",
+        // `min-w-0` is what keeps the cell honest to its `1fr`
+        // grid track. Without it, grid items default to
+        // `min-width: auto` — a long chip title would push this
+        // cell wider than its share and visibly desync from the
+        // hour-grid column directly below it.
+        "border-l border-line p-1 flex flex-col gap-0.5 min-w-0 overflow-hidden transition-colors",
         weekend && "bg-paper",
         drop.isOver && "bg-brand-tint/40 ring-2 ring-brand-300 ring-inset"
       )}
@@ -258,7 +263,12 @@ export function WeekTimeColumn({
     <div
       {...handlers}
       className={cn(
-        "border-l border-line relative",
+        // `min-w-0` mirrors the all-day cell — grid items in a
+        // `1fr` track expand to their content's natural width by
+        // default. Time columns happen to be safe today (their
+        // children are absolute-positioned), but a future relative
+        // child shouldn't break the column width silently.
+        "border-l border-line relative min-w-0",
         weekend && "bg-paper",
         drop.isOver && "bg-brand-tint/30"
       )}
