@@ -76,7 +76,29 @@ export function StageChanger({
     setOpen(false);
     startTransition(async () => {
       setOptimisticStageId(nextId);
-      await updateMatterStage(matterId, nextId);
+      const res = await updateMatterStage(matterId, nextId);
+      if (res.ok) return;
+      // Server flagged the transition as unusual (terminal → non-
+      // terminal reopen, or backward jump >1). Surface the warning
+      // and retry with force=true if the user confirms.
+      if (res.requiresConfirmation && res.warning) {
+        if (confirm(res.warning)) {
+          const retry = await updateMatterStage(matterId, nextId, {
+            force: true,
+          });
+          if (!retry.ok) {
+            // Revert the optimistic flip — the server still refused.
+            setOptimisticStageId(currentStageId);
+            alert(retry.error ?? "Couldn't change stage.");
+          }
+        } else {
+          // Cancelled — revert optimistic state.
+          setOptimisticStageId(currentStageId);
+        }
+      } else {
+        setOptimisticStageId(currentStageId);
+        alert(res.error ?? "Couldn't change stage.");
+      }
     });
   };
 

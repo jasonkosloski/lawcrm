@@ -585,24 +585,60 @@ export async function updateMatter(
  * practice area; cross-area transitions have to go through the full
  * edit flow (which can also adjust color + other area-scoped state).
  *
- * TODO (auth): once the firm has permissions, gate this to roles the
- * firm administrator has authorized to move stage (e.g. Partner,
- * Managing, or the matter's lead). Today any signed-in user can
- * transition any matter.
+ * Today any signed-in user can transition any matter (no permission
+ * gate yet — `matters.edit` will gate this once that key is wired).
+ *
+ * Unusual transitions are surfaced as an explicit confirmation
+ * step, NOT as an outright refusal:
+ *  - Reopening a terminal matter (terminal → non-terminal)
+ *  - Moving the matter backward more than one stage
+ *
+ * The server returns `{ ok: false, requiresConfirmation, warning }`
+ * for those unless the caller passes `force: true`. UI shows the
+ * warning, asks the user, then retries with force. That way
+ * scripted clients can't accidentally reopen a closed matter from
+ * a stale form, but the UI flow stays low-friction.
+ *
+ * Every successful transition writes an ActivityLog entry so the
+ * matter timeline carries the lifecycle history.
  */
 export async function updateMatterStage(
   matterId: string,
-  newStageId: string
-): Promise<{ ok: boolean; error?: string }> {
+  newStageId: string,
+  options: { force?: boolean } = {}
+): Promise<{
+  ok: boolean;
+  error?: string;
+  requiresConfirmation?: boolean;
+  warning?: string;
+}> {
+  const userId = await getCurrentUserId();
   const matter = await prisma.matter.findUnique({
     where: { id: matterId },
-    select: { practiceAreaId: true },
+    select: {
+      practiceAreaId: true,
+      stage: {
+        select: {
+          id: true,
+          name: true,
+          order: true,
+          isTerminal: true,
+        },
+      },
+    },
   });
   if (!matter) return { ok: false, error: "Matter not found" };
 
   const stage = await prisma.matterStage.findUnique({
     where: { id: newStageId },
-    select: { id: true, practiceAreaId: true, isActive: true },
+    select: {
+      id: true,
+      name: true,
+      order: true,
+      isTerminal: true,
+      practiceAreaId: true,
+      isActive: true,
+    },
   });
   if (!stage || !stage.isActive) {
     return { ok: false, error: "Stage is not available" };
@@ -614,9 +650,49 @@ export async function updateMatterStage(
     };
   }
 
+  // Same-stage no-op — let the optimistic UI quietly settle.
+  if (stage.id === matter.stage.id) {
+    return { ok: true };
+  }
+
+  // Unusual-transition guards. Skipped when force=true (UI already
+  // confirmed). Stack from most-severe to least so the message
+  // surfaced is the most relevant.
+  if (!options.force) {
+    if (matter.stage.isTerminal && !stage.isTerminal) {
+      return {
+        ok: false,
+        requiresConfirmation: true,
+        warning: `Reopen this matter? It's currently ${matter.stage.name} (terminal). Confirming will move it to ${stage.name} and re-list it as active.`,
+      };
+    }
+    // Backward jump of more than one slot — could be intentional
+    // (case bounced back from settle to discovery) but worth a
+    // beat. One-slot backward is normal stepping and doesn't ask.
+    if (stage.order < matter.stage.order - 1) {
+      return {
+        ok: false,
+        requiresConfirmation: true,
+        warning: `Move ${matter.stage.name} → ${stage.name}? That's ${matter.stage.order - stage.order} stages backward — make sure that's intended.`,
+      };
+    }
+  }
+
   await prisma.matter.update({
     where: { id: matterId },
     data: { stageId: stage.id },
+  });
+
+  // Audit. Two distinct titles so reopens stand out in the
+  // timeline ("Reopened …" reads at a glance vs. "Stage moved …").
+  await logActivity({
+    matterId,
+    userId,
+    type: "filing",
+    title:
+      matter.stage.isTerminal && !stage.isTerminal
+        ? `Reopened from ${matter.stage.name} → ${stage.name}`
+        : `Stage moved: ${matter.stage.name} → ${stage.name}`,
   });
 
   // Sidebar practice-area counts exclude terminal stages, and
