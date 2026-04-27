@@ -28,11 +28,11 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { updateInvoiceLineItem } from "@/app/actions/billing";
 import {
   lineItemEditInitialState,
-  updateInvoiceLineItem,
   type LineItemEditState,
-} from "@/app/actions/billing";
+} from "@/lib/billing-form";
 
 const formatMoney = (n: number): string =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

@@ -17,6 +17,22 @@ export type BillingFormState = {
 
 export const billingInitialState: BillingFormState = { status: "idle" };
 
+/** Form state for `updateInvoiceLineItem`. Narrower than
+ *  `BillingFormState` — line-item edits don't return an invoiceId
+ *  and don't surface tax-side errors. Lives here (not in
+ *  `app/actions/billing.ts`) because "use server" files can only
+ *  export async functions, and the dialog needs the initial state
+ *  as a value. */
+export type LineItemEditState = {
+  status: "idle" | "ok" | "error";
+  errors?: Record<string, string[]>;
+  /** Top-level error not tied to a specific field (invoice-state
+   *  refusals, missing-row, etc.). Surfaces above the form. */
+  error?: string;
+};
+
+export const lineItemEditInitialState: LineItemEditState = { status: "idle" };
+
 /// Kind of invoice — see Invoice.kind on the schema. The "client"
 /// kind is the traditional bill-to-client AR invoice; "internal_record"
 /// is a record-of-work bundle for contingency / pro-bono cases that

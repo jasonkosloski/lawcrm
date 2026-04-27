@@ -36,6 +36,7 @@ import {
   billingInitialState,
   type BillingFormState,
   type InvoiceKind,
+  type LineItemEditState,
 } from "@/lib/billing-form";
 
 // ── Helpers ─────────────────────────────────────────────────────────────
@@ -328,16 +329,6 @@ const updateLineItemSchema = z.object({
       "Rate must be a number"
     ),
 });
-
-export type LineItemEditState = {
-  status: "idle" | "ok" | "error";
-  errors?: Record<string, string[]>;
-  /** Top-level error not tied to a specific field (invoice-state
-   *  refusals, missing-row, etc.). Surfaces above the form. */
-  error?: string;
-};
-
-export const lineItemEditInitialState: LineItemEditState = { status: "idle" };
 
 export async function updateInvoiceLineItem(
   timeEntryId: string,

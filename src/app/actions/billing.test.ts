@@ -32,10 +32,10 @@ import { requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import {
   generateInvoiceFromWip,
-  lineItemEditInitialState,
   setInvoiceStatus,
   updateInvoiceLineItem,
 } from "@/app/actions/billing";
+import { lineItemEditInitialState } from "@/lib/billing-form";
 import {
   resetDb,
   seedExpense,
