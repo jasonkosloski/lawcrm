@@ -209,6 +209,32 @@ export async function listFirmRoles(): Promise<FirmRoleRow[]> {
   return shaped;
 }
 
+/** Map of roleId → Set of permission keys granted to that role.
+ *  Drives the permissions matrix on /settings/roles. Admin's set
+ *  is intentionally NOT pre-populated here — the runtime check
+ *  treats Admin as "all granted" and the matrix renders Admin's
+ *  column as locked-checked from the role row's name, not from
+ *  this map. */
+export async function listRolePermissionGrants(): Promise<
+  Map<string, Set<string>>
+> {
+  const firm = await getCurrentFirm();
+  const rows = await prisma.rolePermission.findMany({
+    where: { role: { firmId: firm.id } },
+    select: { roleId: true, permission: true },
+  });
+  const grants = new Map<string, Set<string>>();
+  for (const r of rows) {
+    let set = grants.get(r.roleId);
+    if (!set) {
+      set = new Set<string>();
+      grants.set(r.roleId, set);
+    }
+    set.add(r.permission);
+  }
+  return grants;
+}
+
 /** Compact list for role-picker UIs — same firm scope, admins-first
  *  ordering, member count omitted. */
 export async function listRolePickerOptions(): Promise<RoleChip[]> {

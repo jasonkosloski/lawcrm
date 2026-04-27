@@ -22,60 +22,85 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CreateRoleForm } from "@/components/settings/create-role-form";
+import { PermissionsMatrix } from "@/components/settings/permissions-matrix";
 import { RoleRow } from "@/components/settings/role-row";
 import { isCurrentUserAdmin } from "@/lib/firm";
-import { listFirmRoles } from "@/lib/queries/team";
+import {
+  listFirmRoles,
+  listRolePermissionGrants,
+} from "@/lib/queries/team";
 
 export default async function RolesSettingsPage() {
-  const [roles, isAdmin] = await Promise.all([
+  const [roles, isAdmin, grantsMap] = await Promise.all([
     listFirmRoles(),
     isCurrentUserAdmin(),
+    listRolePermissionGrants(),
   ]);
 
+  // Convert the Map<roleId, Set<key>> into a plain object the
+  // matrix component can serialize across the server/client
+  // boundary. Sets aren't transferrable; arrays are.
+  const grants: Record<string, string[]> = {};
+  for (const [roleId, keys] of grantsMap) {
+    grants[roleId] = Array.from(keys);
+  }
+
   return (
-    <div className="flex flex-col gap-5 max-w-4xl">
+    <div className="flex flex-col gap-5 max-w-6xl">
       <div>
         <h1 className="text-base font-semibold text-ink">Roles</h1>
         <p className="text-xs text-ink-3 mt-1">
           Permission groups for your firm. Members can hold any number
-          of roles; permissions flow through these.{" "}
-          <span className="text-ink-4">
-            Today only <span className="font-mono">Admin</span> grants
-            powers — custom roles are named buckets ready for
-            granular permissions.
-          </span>
+          of roles; permissions flow through these. Admins can change
+          which roles grant which permissions in the matrix below.
         </p>
       </div>
 
-      <Card className="p-0 overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="pl-4">Role</TableHead>
-              <TableHead>Members</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead className="pr-4 w-8" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {roles.map((r) => (
-              <RoleRow key={r.id} role={r} isAdmin={isAdmin} />
-            ))}
-          </TableBody>
-        </Table>
-      </Card>
+      {/* Permissions matrix — drives what each role actually grants. */}
+      <PermissionsMatrix
+        roles={roles.map((r) => ({
+          id: r.id,
+          name: r.name,
+          isSystem: r.isSystem,
+        }))}
+        grants={grants}
+        canEdit={isAdmin}
+      />
 
-      {isAdmin && (
-        <div className="flex flex-col gap-2">
-          <CreateRoleForm />
-          <div className="text-[10px] text-ink-4 leading-relaxed">
-            System roles (<span className="font-mono">Admin</span>,{" "}
-            <span className="font-mono">default</span>) can&apos;t be
-            renamed or deleted. The <span className="font-mono">default</span>{" "}
-            role is auto-assigned to every new firm member.
+      {/* Role list / management — rename, delete, member count. */}
+      <div className="flex flex-col gap-2">
+        <h2 className="text-sm font-semibold text-ink">Roles</h2>
+        <Card className="p-0 overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="pl-4">Role</TableHead>
+                <TableHead>Members</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead className="pr-4 w-8" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {roles.map((r) => (
+                <RoleRow key={r.id} role={r} isAdmin={isAdmin} />
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+
+        {isAdmin && (
+          <div className="flex flex-col gap-2">
+            <CreateRoleForm />
+            <div className="text-[10px] text-ink-4 leading-relaxed">
+              System roles (<span className="font-mono">Admin</span>,{" "}
+              <span className="font-mono">default</span>) can&apos;t
+              be renamed or deleted. The{" "}
+              <span className="font-mono">default</span> role is
+              auto-assigned to every new firm member.
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

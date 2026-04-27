@@ -186,10 +186,38 @@ model Role {
 
   firm        Firm       @relation(fields: [firmId], references: [id], onDelete: Cascade)
   userRoles   UserRole[]
+  permissions RolePermission[]
 
   @@unique([firmId, name])
   @@index([firmId])
   @@map("roles")
+}
+
+/// Per-role permission grant. The catalog of permission keys lives
+/// in `src/lib/permissions.ts` (an app-defined enum, not data the
+/// firm owns). This table is the link between a firm-scoped Role
+/// and the keys it grants.
+///
+/// The Admin role is intentionally NOT seeded with explicit rows —
+/// the runtime check (`hasPermission`) treats Admin as "always
+/// granted" regardless of what's in this table. That way the
+/// matrix UI shows Admin's column as checked + locked without us
+/// having to materialize hundreds of rows just to keep it true.
+model RolePermission {
+  roleId     String
+  /// Dotted permission key, e.g. "matters.manage_team". Validated
+  /// against `PERMISSION_KEYS` in the action layer; unknown keys
+  /// can sit harmlessly in the table (we just skip them on read)
+  /// so deleting a permission from the catalog doesn't break
+  /// existing rows.
+  permission String
+  createdAt  DateTime @default(now())
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permission])
+  @@index([permission])
+  @@map("role_permissions")
 }
 
 /// Many-to-many join between users and the roles they hold.

@@ -23,6 +23,7 @@ import {
   getCurrentFirm,
   requireAdmin,
 } from "@/lib/firm";
+import { isKnownPermission } from "@/lib/permissions";
 import {
   roleInitialState,
   type RoleFormState,
@@ -192,4 +193,57 @@ export async function deleteRoleAction(
   revalidatePath("/settings/roles");
   revalidatePath("/settings/team");
   return { ...roleInitialState, status: "ok" };
+}
+
+// ── Toggle a single role/permission cell ──────────────────────────────
+//
+// The matrix UI calls this on every checkbox click. Idempotent:
+// granting an already-granted permission is a no-op (and ditto for
+// revoke). Refuses to mutate the Admin role — admin grants every
+// permission implicitly via the runtime check, so the matrix shows
+// it as locked and the action wouldn't have anywhere to write.
+
+export async function setRolePermissionAction(
+  roleId: string,
+  permission: string,
+  granted: boolean
+): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  if (!isKnownPermission(permission)) {
+    return { ok: false, error: "Unknown permission key." };
+  }
+
+  const firm = await getCurrentFirm();
+  const target = await prisma.role.findFirst({
+    where: { id: roleId, firmId: firm.id },
+    select: { id: true, isSystem: true, name: true },
+  });
+  if (!target) return { ok: false, error: "Role not found in this firm." };
+  // Admin is implicitly all-granted at the runtime check, so its
+  // matrix column is read-only. Refuse mutations explicitly so a
+  // tampered request can't leak rows.
+  if (target.isSystem && target.name === ADMIN_ROLE_NAME) {
+    return {
+      ok: false,
+      error: "Admin grants every permission by definition — can't change it.",
+    };
+  }
+
+  if (granted) {
+    await prisma.rolePermission.upsert({
+      where: { roleId_permission: { roleId: target.id, permission } },
+      create: { roleId: target.id, permission },
+      update: {},
+    });
+  } else {
+    // Use deleteMany so revoking a not-currently-granted row is
+    // a no-op rather than a P2025 throw.
+    await prisma.rolePermission.deleteMany({
+      where: { roleId: target.id, permission },
+    });
+  }
+
+  revalidatePath("/settings/roles");
+  revalidatePath("/settings/team");
+  return { ok: true };
 }

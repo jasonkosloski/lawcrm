@@ -1,0 +1,183 @@
+/**
+ * Permission catalog.
+ *
+ * Static list of every permission the app knows about, grouped by
+ * category for the matrix UI. Permissions are app-defined (we know
+ * in code which capabilities exist), not data the firm creates;
+ * the `RolePermission` table just records "this role grants this
+ * permission key." Adding a new permission is a code change here +
+ * a UI surface that calls `hasPermission(...)`.
+ *
+ * Today the app's authorization checks are mostly admin-gated via
+ * `requireAdmin()`. As features mature we'll route specific gates
+ * through `hasPermission(userId, "matters.manage_team")` etc., but
+ * the matrix UI is in place first so admins can configure roles
+ * before the runtime checks light up.
+ *
+ * Naming: dotted keys, lowercase snake_case under the dot. The
+ * prefix matches the category id so a key like "billing.send_invoice"
+ * is self-locating — you can grep for it and find both the catalog
+ * entry and the runtime check.
+ */
+
+export type PermissionEntry = {
+  key: string;
+  label: string;
+  description: string;
+};
+
+export type PermissionCategory = {
+  id: string;
+  label: string;
+  permissions: PermissionEntry[];
+};
+
+export const PERMISSION_CATEGORIES: PermissionCategory[] = [
+  {
+    id: "matters",
+    label: "Matters",
+    permissions: [
+      {
+        key: "matters.manage_team",
+        label: "Manage team members",
+        description:
+          "Add or remove people from a matter's case team via the matter edit page.",
+      },
+      {
+        key: "matters.edit",
+        label: "Edit matter details",
+        description:
+          "Change name, practice area, stage, fee structure, opposing party, summary, and other matter fields.",
+      },
+      {
+        key: "matters.archive",
+        label: "Archive matters",
+        description:
+          "Move a matter to archived state (preserved, hidden from the active list). Reserved for the Matter Actions menu.",
+      },
+      {
+        key: "matters.delete",
+        label: "Delete matters",
+        description:
+          "Permanently delete a matter and its associated rows. Reserved for the Matter Actions menu.",
+      },
+    ],
+  },
+  {
+    id: "billing",
+    label: "Billing",
+    permissions: [
+      {
+        key: "billing.generate_invoice",
+        label: "Generate invoice from WIP",
+        description:
+          "Bundle a matter's approved time entries into a draft invoice.",
+      },
+      {
+        key: "billing.approve_invoice",
+        label: "Approve invoices",
+        description:
+          "Move a draft invoice to approved (the gate before sending).",
+      },
+      {
+        key: "billing.send_invoice",
+        label: "Send invoices",
+        description:
+          "Transition an approved invoice to sent — actual delivery is logged today; the gate stays the same when real email lands.",
+      },
+      {
+        key: "billing.delete_draft",
+        label: "Delete draft invoices",
+        description:
+          "Hard-delete a draft invoice. Time entries return to billable WIP.",
+      },
+      {
+        key: "billing.void_invoice",
+        label: "Void invoices",
+        description:
+          "Soft-kill an approved or sent invoice (no payments recorded).",
+      },
+      {
+        key: "billing.record_payment",
+        label: "Record payments",
+        description:
+          "Log a payment received against a sent or partially-paid invoice (check, ACH, cash, card, other).",
+      },
+      {
+        key: "billing.apply_trust",
+        label: "Apply trust to invoices",
+        description:
+          "Run the four-leg trust transfer that earns funds out of the matter trust toward an outstanding invoice balance.",
+      },
+    ],
+  },
+  {
+    id: "trust",
+    label: "Trust account",
+    permissions: [
+      {
+        key: "trust.record_transaction",
+        label: "Record trust transactions",
+        description:
+          "Add trust deposits, disbursements, or refunds via the matter trust composer.",
+      },
+    ],
+  },
+  {
+    id: "firm",
+    label: "Firm settings",
+    permissions: [
+      {
+        key: "firm.manage_team_directory",
+        label: "Invite / edit / deactivate firm members",
+        description:
+          "Full access to the /settings/team roster — invite new members, edit roles, reset passwords, deactivate accounts.",
+      },
+      {
+        key: "firm.manage_roles",
+        label: "Create / rename / delete custom roles",
+        description:
+          "Manage the firm's custom roles (the two system roles, Admin and default, are always locked).",
+      },
+      {
+        key: "firm.manage_permissions",
+        label: "Set role permissions",
+        description:
+          "Toggle the matrix on this page — controls who else can grant access to what.",
+      },
+      {
+        key: "firm.edit_info",
+        label: "Edit firm profile",
+        description:
+          "Edit firm name, EIN, contact info, address, logo, and other identity fields.",
+      },
+    ],
+  },
+  {
+    id: "documents",
+    label: "Documents",
+    permissions: [
+      {
+        key: "documents.delete_any",
+        label: "Delete any document",
+        description:
+          "Delete documents uploaded by other firm members (uploaders can always delete their own).",
+      },
+    ],
+  },
+];
+
+/// Flat key list, derived from the categories. Used by the action
+/// layer to validate input, by the seed-friendly migration helper
+/// to clean up dropped keys, and as the source-of-truth set for
+/// the matrix UI.
+export const PERMISSION_KEYS: string[] = PERMISSION_CATEGORIES.flatMap(
+  (c) => c.permissions.map((p) => p.key)
+);
+
+export const PERMISSION_KEYS_SET = new Set(PERMISSION_KEYS);
+
+/** True when `key` appears in the static catalog. Cheap O(1). */
+export function isKnownPermission(key: string): boolean {
+  return PERMISSION_KEYS_SET.has(key);
+}
