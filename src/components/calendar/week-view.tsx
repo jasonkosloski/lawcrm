@@ -1,19 +1,28 @@
 /**
  * Week View
  *
- * 7 day columns + a left-rail time gutter. Events are positioned
- * absolutely within their day column based on start/end times.
- * Deadlines (time-less) float above the hour grid as a bar at the
- * top of their day.
+ * Layout (top to bottom):
  *
- * Hour range is fixed at 6am–9pm (HOURS in calendar-utils) — legal
- * work hours fit comfortably inside without scrolling.
+ *   1. Sticky day-header row
+ *   2. All-day row (uniform height, one cell per day, holds
+ *      all-day events + deadlines)
+ *   3. Hour grid (gutter on the left + one column per day)
+ *
+ * Splitting all-day chips into their own row keeps the hour
+ * grid's gridlines aligned with the gutter labels exactly. The
+ * old design rendered everything inside a single column with a
+ * top offset for the bar, which left the gridlines and timed
+ * chips out of alignment with the gutter (a 9am chip could
+ * appear at the gridline labeled 8:15 if the bar pushed it
+ * down). Modeling the all-day strip separately is also how
+ * Google / Apple / Outlook calendars do it.
  *
  * Drag-and-drop: when `canEditEvents` is true, each chip is a
- * drag source and each day exposes two drop zones (all-day bar
- * + hour grid). Per-column DnD logic lives in the client
- * `WeekDayColumn` component so this server component stays a
- * thin layout wrapper. See `event-drag.ts` for the wire format.
+ * drag source. The all-day row cells are drop targets for
+ * "make all-day on that date"; the time-grid columns are drop
+ * targets for "schedule at this time slot." See `event-drag.ts`
+ * for the wire format and `week-day-column.tsx` for the per-cell
+ * client components.
  */
 
 import { addDays, format, isSameDay, startOfDay } from "date-fns";
@@ -30,7 +39,7 @@ import type {
   CalendarDeadlineRow,
 } from "@/lib/queries/calendar";
 import { weekRange } from "./calendar-toolbar";
-import { WeekDayColumn } from "./week-day-column";
+import { WeekAllDayCell, WeekTimeColumn } from "./week-day-column";
 
 export function WeekView({
   focal,
@@ -59,6 +68,43 @@ export function WeekView({
     if (!byDay.has(d)) byDay.set(d, []);
     byDay.get(d)!.push(item);
   }
+
+  // Pre-compute per-day buckets so the all-day row + time grid
+  // each pull from the same map without re-filtering.
+  const byDayBuckets = days.map((day) => {
+    const key = format(day, "yyyy-MM-dd");
+    const items = byDay.get(key) ?? [];
+    return {
+      day,
+      key,
+      allDayEvents: items.filter(
+        (i): i is CalendarEventRow => i.kind === "event" && i.isAllDay
+      ),
+      timedEvents: items.filter(
+        (i): i is CalendarEventRow => i.kind === "event" && !i.isAllDay
+      ),
+      deadlines: items.filter(
+        (i): i is CalendarDeadlineRow => i.kind === "deadline"
+      ),
+    };
+  });
+
+  // Uniform all-day-row height across the week so the gridlines
+  // below stay flush — even on a day with three chips the row
+  // is the same height as a day with zero. Min of 28px gives
+  // empty days a real drop target instead of a hairline.
+  const maxAllDayChipCount = Math.max(
+    1,
+    ...byDayBuckets.map(
+      (b) => b.allDayEvents.length + b.deadlines.length
+    )
+  );
+  // 28px per chip (two-line all-day or single-line deadline) +
+  // 2px gap. Cap to a reasonable max for very full weeks.
+  const allDayRowHeight = Math.min(
+    180,
+    Math.max(36, maxAllDayChipCount * 28 + 8)
+  );
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
@@ -104,7 +150,30 @@ export function WeekView({
         })}
       </div>
 
-      {/* Time grid */}
+      {/* All-day row — sits above the hour grid so the gridlines
+          below align with the gutter labels exactly. */}
+      <div
+        className="grid border-b border-line bg-card"
+        style={{
+          gridTemplateColumns: "56px repeat(7, 1fr)",
+          height: allDayRowHeight,
+        }}
+      >
+        <div className="text-2xs font-mono text-ink-4 text-right pr-1.5 pt-1 border-r border-line">
+          all-day
+        </div>
+        {byDayBuckets.map((b) => (
+          <WeekAllDayCell
+            key={b.day.toISOString()}
+            day={b.day}
+            events={b.allDayEvents}
+            deadlines={b.deadlines}
+            canEdit={canEditEvents}
+          />
+        ))}
+      </div>
+
+      {/* Hour grid */}
       <div
         className="grid relative flex-1"
         style={{ gridTemplateColumns: "56px repeat(7, 1fr)" }}
@@ -122,36 +191,20 @@ export function WeekView({
           ))}
         </div>
 
-        {/* Day columns — delegated to the client WeekDayColumn so
-            the drag-and-drop logic stays in one place. */}
-        {days.map((day) => {
-          const key = format(day, "yyyy-MM-dd");
-          const dayItems = byDay.get(key) ?? [];
-          const allDayEvents = dayItems.filter(
-            (i): i is CalendarEventRow => i.kind === "event" && i.isAllDay
-          );
-          const timedEvents = dayItems.filter(
-            (i): i is CalendarEventRow => i.kind === "event" && !i.isAllDay
-          );
-          const deadlines = dayItems.filter(
-            (i): i is CalendarDeadlineRow => i.kind === "deadline"
-          );
-          return (
-            <WeekDayColumn
-              key={day.toISOString()}
-              day={day}
-              today={today}
-              now={now}
-              allDayEvents={allDayEvents}
-              timedEvents={timedEvents}
-              deadlines={deadlines}
-              canEdit={canEditEvents}
-            />
-          );
-        })}
+        {/* Per-day time columns */}
+        {byDayBuckets.map((b) => (
+          <WeekTimeColumn
+            key={b.day.toISOString()}
+            day={b.day}
+            today={today}
+            now={now}
+            events={b.timedEvents}
+            canEdit={canEditEvents}
+          />
+        ))}
       </div>
     </div>
   );
 }
 
-// All chip + drop-zone rendering lives in `WeekDayColumn` now.
+// Per-cell rendering lives in `week-day-column.tsx`.
