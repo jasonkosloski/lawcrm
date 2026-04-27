@@ -20,6 +20,10 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@/lib/permission-check", () => ({
+  requirePermission: vi.fn().mockResolvedValue("test-user"),
+  currentUserHasPermission: vi.fn().mockResolvedValue(true),
+}));
 
 import { prisma } from "@/lib/prisma";
 import {
@@ -251,5 +255,44 @@ describe("updateDeadline — happy path", () => {
     await updateDeadline(id, updateDeadlineInitialState, fd2);
     row = await prisma.deadline.findUnique({ where: { id } });
     expect(row!.completedAt).toBeNull();
+  });
+});
+
+// ── RBAC gate ───────────────────────────────────────────────────────────
+//
+// The module-level `vi.mock("@/lib/permission-check", ...)` at the
+// top stubs requirePermission so the action-logic tests don't have
+// to set up gates. The mocked function is a spy — read `.mock.calls`
+// to verify each action wired the gate to the right key.
+
+import { requirePermission } from "@/lib/permission-check";
+
+describe("deadlines action gate", () => {
+  const mockedRequirePermission = vi.mocked(requirePermission);
+
+  test("setDeadlineStatus gates on deadlines.edit", async () => {
+    mockedRequirePermission.mockClear();
+    const id = await seedDeadline();
+    await setDeadlineStatus(id, "completed");
+    expect(mockedRequirePermission).toHaveBeenCalledWith("deadlines.edit");
+  });
+
+  test("updateDeadline gates on deadlines.edit", async () => {
+    mockedRequirePermission.mockClear();
+    const id = await seedDeadline();
+    const fd = new FormData();
+    fd.set("title", "ok");
+    fd.set("dueDate", "2026-08-01");
+    fd.set("kind", "manual");
+    fd.set("status", "open");
+    await updateDeadline(id, updateDeadlineInitialState, fd);
+    expect(mockedRequirePermission).toHaveBeenCalledWith("deadlines.edit");
+  });
+
+  test("deleteDeadline gates on deadlines.delete", async () => {
+    mockedRequirePermission.mockClear();
+    const id = await seedDeadline();
+    await deleteDeadline(id);
+    expect(mockedRequirePermission).toHaveBeenCalledWith("deadlines.delete");
   });
 });

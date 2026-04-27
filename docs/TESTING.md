@@ -183,7 +183,7 @@ vi.mock("next/navigation", () => ({
 }));
 ```
 
-**What's covered today** (123 integration tests across 9 files):
+**What's covered today** (145 integration tests across 10 files):
 
 - `src/app/actions/billing.test.ts` (7) —
   `generateInvoiceFromWip` rolls billable time + expenses into
@@ -239,6 +239,15 @@ vi.mock("next/navigation", () => ({
   pins → unpins → re-pins idempotently and revalidates the
   layout tree; pins are scoped per (user, matter) so two users
   can pin the same matter without interfering.
+- `src/app/actions/time-entries.test.ts` (22) —
+  `createTimeEntry` validation (hours > 0, ≤ 24, non-empty
+  activity) + matter existence guard + source field write
+  (manual vs calendar). `updateTimeEntry` billed-row guard +
+  field updates. `setTimeEntryStatus` enum guard. `deleteTimeEntry`
+  refuses billed entries (accounting hygiene). RBAC gates:
+  create hits `time_entries.create`; edit + delete + status
+  bypass on author and gate on `time_entries.{edit,delete}_any`
+  for non-author actors.
 
 ---
 
@@ -301,10 +310,10 @@ better measured by component + integration tests.
 
 | Metric     | Floor | Current |
 |------------|-------|---------|
-| Lines      | 20%   | 20.47%  |
-| Statements | 20%   | 20.58%  |
-| Functions  | 19%   | 19.79%  |
-| Branches   | 18%   | 18.88%  |
+| Lines      | 22%   | 22.52%  |
+| Statements | 22%   | 22.53%  |
+| Functions  | 20%   | 21.03%  |
+| Branches   | 20%   | 20.57%  |
 
 The target is "every public function in `src/lib/` has a test."
 We're not there yet — a lot of the gap is `src/app/actions/**`
@@ -349,3 +358,4 @@ end-to-end flow.
 | 2026-04-27 | Layer 3 testing wired. `src/test/integration-setup.ts` is a Vitest `globalSetup` that points DATABASE_URL at a dedicated `prisma/test.db`, runs `prisma db push` once, and tears the file down. `src/test/integration-helpers.ts` exposes `resetDb()` + fixture builders (`seedFirm`, `seedUser`, `seedMatter`, etc). 42 integration tests across 4 files cover `generateInvoiceFromWip` bundling + void unlink, settlement waterfall + approval chain auto-promotion, conflict matcher against real Contacts + matters, `requirePermission` gate behavior. `fileParallelism: false` keeps integration files from racing on the shared DB. Full suite: 194 tests across 15 files in ~7s. |
 | 2026-04-25 | Coverage push. New layer-1 tests for `format-phone`, `calendar-utils`, `matters-filters`, `dashboard-prefs`, `note-constants`, `capture-schemas`, plus a `file-storage` test that uses `process.chdir(mkdtempSync(...))` + dynamic import to control STORAGE_ROOT. New layer-3 tests for `firm.ts` admin helpers and the `activity-log` writer (icon/source mapping + fire-and-forget contract). Coverage threshold floors landed in `vitest.config.ts` (lines 17 / statements 17 / functions 17 / branches 15) — current numbers ~17.8%. Full suite: **361 tests across 24 files in ~12s**. |
 | 2026-04-25 | Coverage push round 2 + Button wrapper fix. Layer-3 tests for the task action surface (`setTaskStatus` / `updateTask` / `deleteTask` — completedAt mirroring + activity-log fan-out), the deadline action surface, and `toggleMatterPin` (idempotent toggle, per-user scoping). New layer-2 test for the Button wrapper locks in `nativeButton: false` inference when a `render` element is supplied — fixes a noisy console warning that fired across `/matters`, `/contacts`, `/intake`, and the catch-all not-found page when Button rendered a `<Link>` (anchor) via `render`. Threshold floors raised to lines 20 / statements 20 / functions 19 / branches 18. Full suite: **406 tests across 28 files in ~15s**. |
+| 2026-04-25 | RBAC gating sweep + time-entry tests. Closed all seven `TODO (auth)` markers in the action layer. Added six permission categories (`tasks`, `deadlines`, `notes`, `time_entries`, `parties`, `events`) with 20 new keys following the granularity convention; user-authored rows (notes, time entries) use the `_any` suffix only when crossing the ownership line, mirroring `documents.delete_any`. Wrapped `requirePermission(...)` around mutating actions in `tasks.ts`, `deadlines.ts`, `notes.ts`, `time-entries.ts`, `parties.ts`, `captures.ts`, and the `updateMatter` / `updateMatterStage` / `setMatterSolSatisfied` paths. Added a new `time-entries.test.ts` (22) covering create/update/status/delete plus the author-vs-`_any` gate logic. Existing `tasks.test.ts` + `deadlines.test.ts` got "RBAC gate" describe blocks asserting each action wires the right permission key. Threshold floors raised to lines 22 / statements 22 / functions 20 / branches 20. Full suite: **453 tests across 29 files in ~15s**. |

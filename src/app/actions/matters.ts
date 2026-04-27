@@ -435,15 +435,15 @@ const updateMatterSchema = z.object({
  * Update an existing matter. Bound via `.bind(null, matterId)` at the
  * call site so the form component signature stays `(prev, formData)`.
  *
- * TODO (auth): once we have sessions + role-based access, gate this
- * action to partners, the matter's lead, or an admin role. For now
- * every user can edit every matter.
+ * Auth: gated on `matters.edit`. Admins short-circuit; other roles
+ * need explicit grant via the matrix.
  */
 export async function updateMatter(
   matterId: string,
   _prev: UpdateMatterState,
   formData: FormData
 ): Promise<UpdateMatterState> {
+  await requirePermission("matters.edit");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = updateMatterSchema.safeParse(raw);
 
@@ -650,6 +650,7 @@ export async function updateMatterStage(
   requiresConfirmation?: boolean;
   warning?: string;
 }> {
+  await requirePermission("matters.edit");
   const userId = await getCurrentUserId();
   const matter = await prisma.matter.findUnique({
     where: { id: matterId },
@@ -750,6 +751,7 @@ export async function setMatterSolSatisfied(
   matterId: string,
   satisfied: boolean
 ): Promise<{ ok: boolean; error?: string }> {
+  await requirePermission("matters.edit");
   const matter = await prisma.matter.findUnique({
     where: { id: matterId },
     select: {

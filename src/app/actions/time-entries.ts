@@ -11,7 +11,10 @@
  * the event; revalidation reaches back into the calendar and matter
  * events tab so both UIs reflect the new row immediately.
  *
- * TODO (auth): gate delete + edit once RBAC lands.
+ * Auth: `create` gated on `time_entries.create`. Edit + delete gate
+ * on author-or-`time_entries.edit_any` / `delete_any` — loggers can
+ * always touch their own entries; crossing the ownership line needs
+ * the explicit permission. Admins short-circuit either path.
  */
 
 "use server";
@@ -20,6 +23,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { requirePermission } from "@/lib/permission-check";
 import {
   TIME_ENTRY_STATUSES,
   type TimeEntryStatus,
@@ -48,6 +52,7 @@ export async function createTimeEntry(
   _prev: TimeEntryFormState,
   formData: FormData
 ): Promise<TimeEntryFormState> {
+  await requirePermission("time_entries.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = timeEntrySchema.safeParse(raw);
   if (!parsed.success) {
@@ -134,7 +139,7 @@ export async function updateTimeEntry(
 
   const entry = await prisma.timeEntry.findUnique({
     where: { id: timeEntryId },
-    select: { matterId: true, calendarEventId: true, status: true },
+    select: { matterId: true, userId: true, calendarEventId: true, status: true },
   });
   if (!entry) {
     return {
@@ -142,6 +147,13 @@ export async function updateTimeEntry(
       errors: { activity: ["Time entry no longer exists"] },
       values: raw,
     };
+  }
+
+  // Author can always edit their own; otherwise require the
+  // `_any` permission. Admins pass either path.
+  const actorId = await getCurrentUserId();
+  if (entry.userId !== actorId) {
+    await requirePermission("time_entries.edit_any");
   }
 
   // Once a time entry is on a sent invoice (status: billed), the
@@ -193,9 +205,15 @@ export async function setTimeEntryStatus(
 
   const entry = await prisma.timeEntry.findUnique({
     where: { id: timeEntryId },
-    select: { matterId: true, calendarEventId: true },
+    select: { matterId: true, userId: true, calendarEventId: true },
   });
   if (!entry) return { ok: false, error: "Time entry not found" };
+
+  // Status changes are still edits. Author bypass; otherwise gate.
+  const actorId = await getCurrentUserId();
+  if (entry.userId !== actorId) {
+    await requirePermission("time_entries.edit_any");
+  }
 
   await prisma.timeEntry.update({
     where: { id: timeEntryId },
@@ -216,9 +234,15 @@ export async function deleteTimeEntry(
 ): Promise<{ ok: boolean; error?: string }> {
   const entry = await prisma.timeEntry.findUnique({
     where: { id: timeEntryId },
-    select: { id: true, matterId: true, calendarEventId: true, status: true },
+    select: { id: true, matterId: true, userId: true, calendarEventId: true, status: true },
   });
   if (!entry) return { ok: false, error: "Time entry not found" };
+  // Author can always delete their own unbilled entries; otherwise
+  // gate on time_entries.delete_any.
+  const actorId = await getCurrentUserId();
+  if (entry.userId !== actorId) {
+    await requirePermission("time_entries.delete_any");
+  }
   // Don't let users delete entries that are already on an invoice —
   // accounting hygiene. Unbill first.
   if (entry.status === "billed") {

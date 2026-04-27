@@ -242,6 +242,156 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       },
     ],
   },
+  {
+    id: "tasks",
+    label: "Tasks",
+    permissions: [
+      {
+        key: "tasks.create",
+        label: "Create tasks",
+        description:
+          "Add new tasks on a matter or firm-wide. Required for the 'New task' button on the matter Tasks tab and the global Tasks dialog.",
+      },
+      {
+        key: "tasks.edit",
+        label: "Edit tasks",
+        description:
+          "Change a task's title, description, due date, priority, or status — including marking it complete or cancelled.",
+      },
+      {
+        key: "tasks.delete",
+        label: "Delete tasks",
+        description:
+          "Permanently remove a task from a matter (or firm-wide). The activity log entry is preserved.",
+      },
+    ],
+  },
+  {
+    id: "deadlines",
+    label: "Deadlines",
+    permissions: [
+      {
+        key: "deadlines.create",
+        label: "Create deadlines",
+        description:
+          "Add a new deadline to a matter — discovery cutoffs, statutory notice dates, hearings, etc.",
+      },
+      {
+        key: "deadlines.edit",
+        label: "Edit deadlines",
+        description:
+          "Change a deadline's date, kind, source rule, description, or status (open / completed / waived).",
+      },
+      {
+        key: "deadlines.delete",
+        label: "Delete deadlines",
+        description:
+          "Permanently remove a deadline. Use carefully — most deadlines are statutorily driven.",
+      },
+    ],
+  },
+  {
+    id: "notes",
+    label: "Notes",
+    permissions: [
+      {
+        key: "notes.create",
+        label: "Create notes",
+        description:
+          "Author notes (memo, strategy, chatter, plain note) on a matter or as a firm-wide capture.",
+      },
+      {
+        key: "notes.edit_any",
+        label: "Edit any note",
+        description:
+          "Edit the body or type of notes authored by other firm members. Authors can always edit their own.",
+      },
+      {
+        key: "notes.delete_any",
+        label: "Delete any note",
+        description:
+          "Delete notes authored by other firm members. Authors can always delete their own.",
+      },
+      {
+        key: "notes.pin",
+        label: "Pin / unpin notes",
+        description:
+          "Pin a note so it surfaces at the top of the matter Overview tab. Pinning is a firm-wide signal — usually reserved for case leads.",
+      },
+    ],
+  },
+  {
+    id: "time_entries",
+    label: "Time entries",
+    permissions: [
+      {
+        key: "time_entries.create",
+        label: "Log time",
+        description:
+          "Log billable or non-billable time on a matter, task, or firm-level activity.",
+      },
+      {
+        key: "time_entries.edit_any",
+        label: "Edit any time entry",
+        description:
+          "Edit time entries logged by other team members. Loggers can always edit their own draft / unbilled entries.",
+      },
+      {
+        key: "time_entries.delete_any",
+        label: "Delete any time entry",
+        description:
+          "Delete time entries logged by other team members. Loggers can always delete their own unbilled entries.",
+      },
+    ],
+  },
+  {
+    id: "parties",
+    label: "Parties",
+    permissions: [
+      {
+        key: "parties.create",
+        label: "Add parties to a matter",
+        description:
+          "Pin a contact to a matter as a party — client, opposing party, witness, expert, vendor, etc.",
+      },
+      {
+        key: "parties.edit",
+        label: "Edit party records",
+        description:
+          "Change a party's role on a matter, contact info, or supplemental fields.",
+      },
+      {
+        key: "parties.delete",
+        label: "Remove parties from matters",
+        description:
+          "Detach a contact from a matter. The underlying Contact record is preserved.",
+      },
+    ],
+  },
+  {
+    id: "events",
+    label: "Events",
+    permissions: [
+      {
+        key: "events.create",
+        label: "Create events",
+        description:
+          "Schedule events on a matter — meetings, depositions, hearings, intakes, mediations, trial blocks, etc.",
+      },
+      {
+        key: "events.edit",
+        label: "Edit events",
+        description:
+          "Change date, time, type, location, or invitees on an existing event.",
+      },
+      {
+        key: "events.delete",
+        label: "Delete events",
+        description:
+          "Remove an event from the calendar. Linked time entries / tasks remain but lose their event association.",
+      },
+    ],
+  },
 ];
 
 /// Flat key list, derived from the categories. Used by the action

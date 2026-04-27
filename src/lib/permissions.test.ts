@@ -31,7 +31,8 @@ describe("PERMISSION_KEYS — catalog shape", () => {
   test("every key uses the dotted prefix.action convention", () => {
     for (const key of PERMISSION_KEYS) {
       // Two-or-more dotted segments, lowercase snake_case parts.
-      expect(key).toMatch(/^[a-z]+(\.[a-z][a-z0-9_]*)+$/);
+      // First segment allows underscores too (e.g. `time_entries`).
+      expect(key).toMatch(/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/);
     }
   });
 
@@ -113,6 +114,25 @@ describe("expected-key invariants", () => {
     "matters.settlement.edit",
     "matters.settlement.manage_liens",
     "matters.settlement.approve",
+    "tasks.create",
+    "tasks.edit",
+    "tasks.delete",
+    "deadlines.create",
+    "deadlines.edit",
+    "deadlines.delete",
+    "notes.create",
+    "notes.edit_any",
+    "notes.delete_any",
+    "notes.pin",
+    "time_entries.create",
+    "time_entries.edit_any",
+    "time_entries.delete_any",
+    "parties.create",
+    "parties.edit",
+    "parties.delete",
+    "events.create",
+    "events.edit",
+    "events.delete",
   ])("%s exists in the catalog", (key) => {
     expect(isKnownPermission(key)).toBe(true);
   });

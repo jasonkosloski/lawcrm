@@ -8,9 +8,17 @@
  * what actually hits the database, so reads can render it with
  * dangerouslySetInnerHTML without re-sanitizing.
  *
- * TODO (auth): gate delete + pin actions to the note's author and/or
- * firm admins once RBAC lands. For now any signed-in user can edit
- * any note on the matter they have access to.
+ * Auth:
+ *   - createNote: `notes.create`
+ *   - toggleNotePin: `notes.pin` (no author bypass — pinning is a
+ *     firm-wide signal, usually reserved for case leads)
+ *   - deleteNote: author bypass + `notes.delete_any` for crossing
+ *     ownership
+ *   - updateNote: author bypass + `notes.edit_any` for crossing
+ *     ownership
+ *   - markMatterNotesRead / toggleNoteReaction: ungated. Recording
+ *     reads + reacting are reader-side actions; anyone with note
+ *     visibility can do them.
  */
 
 "use server";
@@ -20,6 +28,7 @@ import DOMPurify from "isomorphic-dompurify";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { requirePermission } from "@/lib/permission-check";
 import {
   NOTE_TYPES,
   REACTION_EMOJIS,
@@ -100,6 +109,7 @@ export async function createNote(
   _prev: NoteFormState,
   formData: FormData
 ): Promise<NoteFormState> {
+  await requirePermission("notes.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = noteSchema.safeParse(raw);
   if (!parsed.success) {
@@ -317,6 +327,7 @@ export async function createNote(
 export async function toggleNotePin(
   noteId: string
 ): Promise<{ ok: boolean; error?: string }> {
+  await requirePermission("notes.pin");
   const note = await prisma.note.findUnique({
     where: { id: noteId },
     select: { id: true, isPinned: true, matterId: true, calendarEventId: true },
@@ -344,9 +355,15 @@ export async function deleteNote(
 ): Promise<{ ok: boolean; error?: string }> {
   const note = await prisma.note.findUnique({
     where: { id: noteId },
-    select: { id: true, matterId: true, calendarEventId: true },
+    select: { id: true, authorId: true, matterId: true, calendarEventId: true },
   });
   if (!note) return { ok: false, error: "Note not found" };
+
+  // Author can always delete their own; otherwise gate.
+  const actorId = await getCurrentUserId();
+  if (note.authorId !== actorId) {
+    await requirePermission("notes.delete_any");
+  }
 
   await prisma.note.delete({ where: { id: noteId } });
 
@@ -387,7 +404,7 @@ export async function updateNote(
 
   const note = await prisma.note.findUnique({
     where: { id: noteId },
-    select: { matterId: true },
+    select: { authorId: true, matterId: true },
   });
   if (!note) {
     return {
@@ -395,6 +412,12 @@ export async function updateNote(
       errors: { content: ["Note not found"] },
       values: raw,
     };
+  }
+
+  // Author can always edit their own; otherwise require notes.edit_any.
+  const actorId = await getCurrentUserId();
+  if (note.authorId !== actorId) {
+    await requirePermission("notes.edit_any");
   }
 
   await prisma.note.update({

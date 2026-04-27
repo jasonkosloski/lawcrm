@@ -4,6 +4,10 @@
  * Mirrors the task-actions pattern. Status `overdue` is computed at
  * read time from `dueDate` vs now, so we don't write it here — only
  * the user-driven states (open / completed / waived) are settable.
+ *
+ * Auth: gated on `deadlines.edit` (status + field edits) and
+ * `deadlines.delete`. Admins short-circuit; other roles need
+ * explicit grant via the matrix.
  */
 
 "use server";
@@ -17,6 +21,7 @@ import {
   type DeadlineStatus,
 } from "@/lib/note-constants";
 import type { UpdateDeadlineFormState } from "@/lib/deadline-form";
+import { requirePermission } from "@/lib/permission-check";
 
 function revalidateForDeadline(matterId: string): void {
   revalidatePath(`/matters/${matterId}/deadlines`);
@@ -31,6 +36,7 @@ export async function setDeadlineStatus(
   deadlineId: string,
   status: DeadlineStatus
 ): Promise<{ ok: boolean; error?: string }> {
+  await requirePermission("deadlines.edit");
   if (!(DEADLINE_STATUSES as readonly string[]).includes(status)) {
     return { ok: false, error: `Unknown status: ${status}` };
   }
@@ -65,6 +71,7 @@ export async function setDeadlineStatus(
 export async function deleteDeadline(
   deadlineId: string
 ): Promise<{ ok: boolean; error?: string }> {
+  await requirePermission("deadlines.delete");
   const deadline = await prisma.deadline.findUnique({
     where: { id: deadlineId },
     select: { matterId: true },
@@ -93,6 +100,7 @@ export async function updateDeadline(
   _prev: UpdateDeadlineFormState,
   formData: FormData
 ): Promise<UpdateDeadlineFormState> {
+  await requirePermission("deadlines.edit");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = updateDeadlineSchema.safeParse(raw);
   if (!parsed.success) {

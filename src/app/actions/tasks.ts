@@ -9,8 +9,8 @@
  * Every mutation revalidates the matter tasks tab, the matter overview
  * (which previews open tasks), and the dashboard "Your tasks" card.
  *
- * TODO (auth): gate edits + deletes by ownership / firm-admin role
- * once RBAC lands.
+ * Auth: gated on `tasks.edit` (status + field edits) and `tasks.delete`.
+ * Admins short-circuit; other roles need explicit grant via the matrix.
  */
 
 "use server";
@@ -25,6 +25,7 @@ import {
 } from "@/lib/note-constants";
 import type { UpdateTaskFormState } from "@/lib/task-form";
 import { getCurrentUserId } from "@/lib/current-user";
+import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 
 /** Path-revalidate every surface that displays this task. */
@@ -42,6 +43,7 @@ export async function setTaskStatus(
   taskId: string,
   status: TaskStatus
 ): Promise<{ ok: boolean; error?: string }> {
+  await requirePermission("tasks.edit");
   if (!(TASK_STATUSES as readonly string[]).includes(status)) {
     return { ok: false, error: `Unknown status: ${status}` };
   }
@@ -102,6 +104,7 @@ export async function setTaskStatus(
 export async function deleteTask(
   taskId: string
 ): Promise<{ ok: boolean; error?: string }> {
+  await requirePermission("tasks.delete");
   const task = await prisma.task.findUnique({
     where: { id: taskId },
     select: { matterId: true },
@@ -129,6 +132,7 @@ export async function updateTask(
   _prev: UpdateTaskFormState,
   formData: FormData
 ): Promise<UpdateTaskFormState> {
+  await requirePermission("tasks.edit");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = updateTaskSchema.safeParse(raw);
   if (!parsed.success) {

@@ -6,7 +6,10 @@
  * subrole. One transaction so a failed MatterContact link doesn't
  * leave an orphaned new Contact behind.
  *
- * TODO (auth): gate once RBAC lands.
+ * Auth: gated on `parties.create` (createMatterContact),
+ * `parties.edit` (updateMatterContact), and `parties.delete`
+ * (removeMatterContact). Admins short-circuit; other roles need
+ * explicit grant via the matrix.
  */
 
 "use server";
@@ -15,6 +18,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { requirePermission } from "@/lib/permission-check";
 import {
   PARTY_CATEGORIES,
   type PartyFormState,
@@ -302,6 +306,7 @@ export async function createMatterContact(
   _prev: PartyFormState,
   formData: FormData
 ): Promise<PartyFormState> {
+  await requirePermission("parties.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = partySchema.safeParse(raw);
   if (!parsed.success) {
@@ -522,6 +527,7 @@ export async function updateMatterContact(
   _prev: PartyFormState,
   formData: FormData
 ): Promise<PartyFormState> {
+  await requirePermission("parties.edit");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = partyUpdateSchema.safeParse(raw);
   if (!parsed.success) {
@@ -606,6 +612,7 @@ export async function updateMatterContact(
 export async function removeMatterContact(
   matterContactId: string
 ): Promise<{ ok: boolean; error?: string }> {
+  await requirePermission("parties.delete");
   const row = await prisma.matterContact.findUnique({
     where: { id: matterContactId },
     select: {

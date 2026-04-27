@@ -20,6 +20,14 @@ import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vi
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
+vi.mock("@/lib/permission-check", () => ({
+  // Action-logic tests assume the user passes the gate. Gate
+  // behavior itself is covered in `permission-check.integration.test.ts`
+  // and in this file's "RBAC gate" describe block at the bottom,
+  // which restores the real implementation.
+  requirePermission: vi.fn().mockResolvedValue("test-user"),
+  currentUserHasPermission: vi.fn().mockResolvedValue(true),
+}));
 
 import { getCurrentUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
@@ -293,5 +301,44 @@ describe("updateTask — happy path", () => {
     await updateTask(id, updateTaskInitialState, fd2);
     row = await prisma.task.findUnique({ where: { id } });
     expect(row!.completedAt).toBeNull();
+  });
+});
+
+// ── RBAC gate ───────────────────────────────────────────────────────────
+//
+// The module-level `vi.mock("@/lib/permission-check", ...)` at the
+// top stubs `requirePermission` to short-circuit so the action-logic
+// tests don't worry about gates. The mocked function IS a spy, so
+// we can read `.mock.calls` to verify each action wired the gate to
+// the right permission key.
+
+import { requirePermission } from "@/lib/permission-check";
+
+describe("tasks action gate", () => {
+  const mockedRequirePermission = vi.mocked(requirePermission);
+
+  test("setTaskStatus gates on tasks.edit", async () => {
+    mockedRequirePermission.mockClear();
+    const id = await seedTask();
+    await setTaskStatus(id, "done");
+    expect(mockedRequirePermission).toHaveBeenCalledWith("tasks.edit");
+  });
+
+  test("updateTask gates on tasks.edit", async () => {
+    mockedRequirePermission.mockClear();
+    const id = await seedTask();
+    const fd = new FormData();
+    fd.set("title", "ok");
+    fd.set("priority", "normal");
+    fd.set("status", "open");
+    await updateTask(id, updateTaskInitialState, fd);
+    expect(mockedRequirePermission).toHaveBeenCalledWith("tasks.edit");
+  });
+
+  test("deleteTask gates on tasks.delete", async () => {
+    mockedRequirePermission.mockClear();
+    const id = await seedTask();
+    await deleteTask(id);
+    expect(mockedRequirePermission).toHaveBeenCalledWith("tasks.delete");
   });
 });

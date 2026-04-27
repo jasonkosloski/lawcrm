@@ -10,7 +10,11 @@
  * Sibling creation logic is shared via `createCaptureRecord` so each
  * primary action stays focused on its own fields + revalidation.
  *
- * TODO (auth): gate each action once RBAC lands.
+ * Auth: each entry-point gates on the primary's create permission
+ * (tasks.create / events.create / deadlines.create /
+ * time_entries.create). Sibling captures inherit the primary's
+ * gate — the model is "if you can create X, you can attach a Y to
+ * it." Admins short-circuit either way.
  */
 
 "use server";
@@ -21,6 +25,7 @@ import { z } from "zod";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { requirePermission } from "@/lib/permission-check";
 import {
   DEADLINE_KINDS,
   EVENT_TYPES,
@@ -242,6 +247,7 @@ export async function createTaskWithCaptures(
   _prev: CaptureFormState,
   formData: FormData
 ): Promise<CaptureFormState> {
+  await requirePermission("tasks.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = taskSchema.safeParse(raw);
   if (!parsed.success) {
@@ -342,6 +348,7 @@ export async function createEventWithCaptures(
   _prev: CaptureFormState,
   formData: FormData
 ): Promise<CaptureFormState> {
+  await requirePermission("events.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = eventSchema.safeParse(raw);
   if (!parsed.success) {
@@ -412,6 +419,7 @@ export async function createDeadlineWithCaptures(
   _prev: CaptureFormState,
   formData: FormData
 ): Promise<CaptureFormState> {
+  await requirePermission("deadlines.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = deadlineSchema.safeParse(raw);
   if (!parsed.success) {
@@ -490,6 +498,7 @@ export async function createTimeEntryWithCaptures(
   _prev: CaptureFormState,
   formData: FormData
 ): Promise<CaptureFormState> {
+  await requirePermission("time_entries.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = timeEntrySchema.safeParse(raw);
   if (!parsed.success) {
