@@ -25,6 +25,7 @@ import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import {
   invoiceStatusTransitions,
@@ -286,6 +287,173 @@ export async function generateInvoiceFromWip(
     return {
       status: "error",
       error: err instanceof Error ? err.message : "Couldn't generate invoice.",
+    };
+  }
+}
+
+// ── Invoice line-item editing (un-sent invoices only) ──────────────────
+//
+// Editing a line item directly mutates the underlying TimeEntry row +
+// re-derives the invoice's subtotal / total in the same transaction.
+// Only allowed while the invoice is still in the firm's possession
+// — `draft` or `approved`. Once `sent`, the client has the doc; in-
+// place edits would diverge from what they received and break the
+// audit trail. Void + regenerate is the right path then.
+//
+// Permission model mirrors the standalone `updateTimeEntry`: the
+// entry's author can always edit their own; other actors need
+// `time_entries.edit_any`. Admins short-circuit either path.
+
+const editableInvoiceStatuses = new Set(["draft", "approved"]);
+
+const updateLineItemSchema = z.object({
+  date: z.string().min(1, "Date is required"),
+  activity: z.string().trim().min(1, "Activity is required").max(200),
+  narrative: z.string().max(4000).optional().or(z.literal("")),
+  hours: z
+    .string()
+    .min(1, "Hours required")
+    .refine((v) => {
+      const n = Number(v);
+      return Number.isFinite(n) && n > 0 && n <= 24;
+    }, "Hours must be > 0 and ≤ 24"),
+  /** Optional. Empty string = leave unchanged (contingent /
+   *  no-rate matters). Set to a positive number to override. */
+  rate: z
+    .string()
+    .optional()
+    .or(z.literal(""))
+    .refine(
+      (v) => v === undefined || v === "" || Number.isFinite(Number(v)),
+      "Rate must be a number"
+    ),
+});
+
+export type LineItemEditState = {
+  status: "idle" | "ok" | "error";
+  errors?: Record<string, string[]>;
+  /** Top-level error not tied to a specific field (invoice-state
+   *  refusals, missing-row, etc.). Surfaces above the form. */
+  error?: string;
+};
+
+export const lineItemEditInitialState: LineItemEditState = { status: "idle" };
+
+export async function updateInvoiceLineItem(
+  timeEntryId: string,
+  _prev: LineItemEditState,
+  formData: FormData
+): Promise<LineItemEditState> {
+  const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
+  const parsed = updateLineItemSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      status: "error",
+      errors: parsed.error.flatten().fieldErrors,
+    };
+  }
+
+  const entry = await prisma.timeEntry.findUnique({
+    where: { id: timeEntryId },
+    select: {
+      id: true,
+      userId: true,
+      matterId: true,
+      invoiceId: true,
+      status: true,
+      invoice: { select: { id: true, status: true } },
+    },
+  });
+  if (!entry) {
+    return { status: "error", error: "Time entry not found." };
+  }
+  if (!entry.invoice) {
+    return {
+      status: "error",
+      error:
+        "This entry isn't on an invoice. Use the standard time-entry edit instead.",
+    };
+  }
+  if (!editableInvoiceStatuses.has(entry.invoice.status)) {
+    return {
+      status: "error",
+      error: `Invoice is ${entry.invoice.status}. Line items can only be edited on draft or approved invoices.`,
+    };
+  }
+
+  // Author bypass; otherwise gate on time_entries.edit_any. Same
+  // posture as the standalone updateTimeEntry action.
+  const actorId = await getCurrentUserId();
+  if (entry.userId !== actorId) {
+    await requirePermission("time_entries.edit_any");
+  }
+
+  // Rate handling: empty string = preserve nothing changed (the row
+  // had no rate, e.g. a contingent matter, and the user didn't try
+  // to add one). Non-empty = parse + use.
+  const newRate =
+    parsed.data.rate && parsed.data.rate.length > 0
+      ? new Prisma.Decimal(parsed.data.rate)
+      : null;
+  const newHours = Number(parsed.data.hours);
+  // Amount = hours * rate when both are present. When rate is null,
+  // amount is null too — the entry sits on the invoice but doesn't
+  // contribute to the subtotal (matches the existing
+  // generateInvoiceFromWip path that filters `e.amount ? ...` in
+  // the reduce).
+  const newAmount = newRate ? newRate.mul(newHours) : null;
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.timeEntry.update({
+        where: { id: entry.id },
+        data: {
+          date: new Date(parsed.data.date),
+          activity: parsed.data.activity,
+          narrative: parsed.data.narrative || null,
+          hours: newHours,
+          rate: newRate,
+          amount: newAmount,
+        },
+      });
+      // Recompute the invoice subtotal from scratch — pull every
+      // line item (time + expense) again so the math stays
+      // authoritative regardless of what changed. Cheaper than
+      // tracking deltas; line counts on a typical invoice are
+      // small (dozens, not thousands).
+      const [timeEntries, expenses] = await Promise.all([
+        tx.timeEntry.findMany({
+          where: { invoiceId: entry.invoice!.id },
+          select: { amount: true },
+        }),
+        tx.expense.findMany({
+          where: { invoiceId: entry.invoice!.id },
+          select: { amount: true },
+        }),
+      ]);
+      const timeSubtotal = timeEntries.reduce(
+        (acc, e) => (e.amount ? acc.add(e.amount) : acc),
+        new Prisma.Decimal(0)
+      );
+      const expenseSubtotal = expenses.reduce(
+        (acc, e) => acc.add(e.amount),
+        new Prisma.Decimal(0)
+      );
+      const subtotal = timeSubtotal.add(expenseSubtotal);
+      // No tax in v1 — total = subtotal. Mirrors generateInvoiceFromWip.
+      await tx.invoice.update({
+        where: { id: entry.invoice!.id },
+        data: { subtotal, totalAmount: subtotal },
+      });
+    });
+
+    revalidatePath(`/matters/${entry.matterId}/billing`);
+    revalidatePath(`/matters/${entry.matterId}`);
+    return { status: "ok" };
+  } catch (err) {
+    return {
+      status: "error",
+      error: err instanceof Error ? err.message : "Couldn't update line item.",
     };
   }
 }

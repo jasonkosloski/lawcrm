@@ -66,6 +66,7 @@ import {
   type MatterSettlement,
 } from "@/lib/queries/settlements";
 import { getCurrentFirm } from "@/lib/firm";
+import { getCurrentUserId } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import {
   invoiceStatusLabel,
@@ -119,6 +120,8 @@ export default async function MatterBillingPage({
     canEditSettlement,
     canManageLiens,
     canApproveSettlement,
+    canEditAnyTimeEntry,
+    currentUserId,
   ] = await Promise.all([
     getMatterBilling(id),
     getCurrentFirm(),
@@ -126,6 +129,12 @@ export default async function MatterBillingPage({
     currentUserHasPermission("matters.settlement.edit"),
     currentUserHasPermission("matters.settlement.manage_liens"),
     currentUserHasPermission("matters.settlement.approve"),
+    // Drives the line-item edit pencil on draft/approved
+    // invoices for non-author actors. Authors of an entry can
+    // always edit their own (per-row check below) — this gates
+    // the cross-author path.
+    currentUserHasPermission("time_entries.edit_any"),
+    getCurrentUserId(),
   ]);
 
   // Validate the requested invoice belongs to this matter — defends
@@ -208,7 +217,20 @@ export default async function MatterBillingPage({
           </Link>
         </div>
         <div className="flex-1 min-h-0 overflow-hidden">
-          <InvoicePreview invoice={selectedInvoice} firm={firm} />
+          <InvoicePreview
+            invoice={selectedInvoice}
+            firm={firm}
+            // Line items are editable while the invoice is still
+            // in the firm's possession — `draft` or `approved`.
+            // Once `sent`, edits would diverge from the doc the
+            // client received.
+            editable={
+              selectedInvoice.status === "draft" ||
+              selectedInvoice.status === "approved"
+            }
+            currentUserId={currentUserId}
+            canEditAnyTimeEntry={canEditAnyTimeEntry}
+          />
         </div>
       </aside>
     </div>
