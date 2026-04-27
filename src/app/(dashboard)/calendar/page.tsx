@@ -107,7 +107,10 @@ export default async function CalendarPage({
           resolve, which on a primed cache is instant. */}
       {eventId && (
         <Suspense fallback={null}>
-          <EventDetailLoader eventId={eventId} />
+          <EventDetailLoader
+            eventId={eventId}
+            canEdit={canEditEvents}
+          />
         </Suspense>
       )}
     </CreateStackProvider>
@@ -119,7 +122,13 @@ export default async function CalendarPage({
  *  calendar's render — opening an event no longer re-awaits the
  *  whole page. Returns null when the eventId points at a missing
  *  row (URL tampering or stale link). */
-async function EventDetailLoader({ eventId }: { eventId: string }) {
+async function EventDetailLoader({
+  eventId,
+  canEdit,
+}: {
+  eventId: string;
+  canEdit: boolean;
+}) {
   const [event, notes, timeEntries] = await Promise.all([
     getCalendarEventById(eventId),
     getEventNotes(eventId),
@@ -127,6 +136,11 @@ async function EventDetailLoader({ eventId }: { eventId: string }) {
   ]);
   if (!event) return null;
   return (
-    <EventDetailModal event={event} notes={notes} timeEntries={timeEntries} />
+    <EventDetailModal
+      event={event}
+      notes={notes}
+      timeEntries={timeEntries}
+      canEdit={canEdit}
+    />
   );
 }
