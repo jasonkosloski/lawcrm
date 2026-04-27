@@ -87,19 +87,45 @@ write a sibling `*.test.ts` for it. No exceptions.
 
 Client components with non-trivial state (forms, dialogs, the
 matrix UI, optimistic toggles). Use `happy-dom` (already
-configured) + Testing Library when the testing footprint exceeds
-"render and click."
+configured) + `@testing-library/react` + `@testing-library/user-event`.
+Setup file at `src/test/setup.ts` wires the jest-dom matchers
+and runs `cleanup()` after every test.
 
-Examples we should write next as the suite grows:
+What's already covered (49 tests across 4 components):
 
-- `PermissionsMatrix` — toggling cells, locked Admin column,
-  optimistic flip + revert on error.
-- `ExpenseComposer` — required-field validation, receipt
-  picker filter, optimistic clear on success.
-- `SettlementApprovals` — Approve/Reject/Reset buttons, locked
-  state when settlement is disbursed/closed.
-- `ConflictCheckCard` — status pill mapping, override workflow,
-  matches list.
+- `PermissionsMatrix` — read-only mode, locked Admin column,
+  toggle calls action with right args, optimistic flip,
+  revert + warning on error.
+- `ExpenseComposer` — collapsed → expanded states, receipt
+  picker shown only when documentOptions is non-empty,
+  validation error inline + top-level error rendering, success
+  flow resets the form.
+- `SettlementApprovals` — Approve/Reject/Reset wire to action
+  with the right approval id + status, optional inline note
+  passed through, settlement-locked state hides every button,
+  canApprove=false hides every button, counter header reflects
+  approved + rejected counts.
+- `ConflictCheckCard` — full status-pill matrix (pending /
+  clear / warn / conflict / override), Run button visibility +
+  label switch ("Run" vs "Re-run"), Override workflow opens +
+  rejects <5 char justifications + posts FormData with notes,
+  saved override rationale read-only when status=override,
+  matches list deep-links to contact + matter targets.
+
+**Mocking pattern:** stub the imported server action at module
+level via `vi.mock("@/app/actions/foo", () => ({ ... }))`. The
+test sets `mockedAction.mockResolvedValue(...)` per-case to
+control happy / failure paths. Don't go through the action's
+real validation — that's covered at layer 1 / layer 3.
+
+**Querying inputs:** the project's form helpers don't always
+associate `<label>` to inputs via `htmlFor` (most are siblings),
+so `getByLabelText` doesn't always work. Prefer
+`container.querySelector('[name="foo"]')` for inputs by name,
+`screen.getByRole("button", { name: /foo/i })` for buttons,
+`screen.getByPlaceholderText(...)` for fields with stable
+placeholders. Document this trap in any new component test that
+hits it.
 
 ### Layer 3 — Server action / Prisma integration tests
 
@@ -215,3 +241,4 @@ end-to-end flow.
 | Date       | Change                                                                                    |
 |------------|-------------------------------------------------------------------------------------------|
 | 2026-04-27 | Vitest + happy-dom installed. 103 tests landed across 7 helper files. Pre-commit hook wired via husky. `docs/TESTING.md` added. |
+| 2026-04-27 | Layer 2 testing wired: `@testing-library/react` + user-event installed, `src/test/setup.ts` registers jest-dom matchers + auto-cleanup. 49 component tests landed for `PermissionsMatrix` / `ExpenseComposer` / `SettlementApprovals` / `ConflictCheckCard`. Suite is 152 tests across 11 files in 1.3s. |

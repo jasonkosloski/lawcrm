@@ -27,6 +27,7 @@ export default defineConfig({
   test: {
     environment: "happy-dom",
     globals: true,
+    setupFiles: ["./src/test/setup.ts"],
     // Match the project's TS path alias so tests import the same
     // way the app does ("@/lib/foo" instead of "../../src/lib/foo").
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
