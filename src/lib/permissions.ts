@@ -60,6 +60,30 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         description:
           "Permanently delete a matter and its associated rows. Reserved for the Matter Actions menu.",
       },
+      {
+        key: "matters.expense.view",
+        label: "View matter expenses",
+        description:
+          "See logged expenses on a matter (filing fees, expert costs, travel, etc.).",
+      },
+      {
+        key: "matters.expense.create",
+        label: "Log expenses",
+        description:
+          "Add a new expense to a matter — filing fees, expert witness fees, deposition transcripts, postage, etc.",
+      },
+      {
+        key: "matters.expense.edit",
+        label: "Edit expenses",
+        description:
+          "Change amount, description, billable / client-advanced flags on an existing expense.",
+      },
+      {
+        key: "matters.expense.delete",
+        label: "Delete expenses",
+        description:
+          "Remove an expense entirely. Refused once the expense has been billed onto an invoice.",
+      },
     ],
   },
   {

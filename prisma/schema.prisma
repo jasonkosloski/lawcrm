@@ -405,6 +405,7 @@ model Matter {
   deadlines        Deadline[]
   timeEntries      TimeEntry[]
   invoices         Invoice[]
+  expenses         Expense[]
   tasks            Task[]
   notes            Note[]
   emailThreads     EmailThread[]
@@ -658,6 +659,10 @@ model Document {
   updatedAt   DateTime @updatedAt
 
   matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  /// Expenses that point at this document as their receipt. SetNull
+  /// on the FK in Expense — deleting the receipt doesn't lose the
+  /// expense itself.
+  receiptForExpenses Expense[]
 
   @@index([matterId])
   @@index([category])
@@ -957,6 +962,74 @@ model TimeEntry {
 ///     so it doesn't sit in "draft" forever; the "Paid" label
 ///     renders as "Recorded" via the kind-aware label helper.
 ///     Excluded from Outstanding-AR aggregates.
+/// A matter-level out-of-pocket cost: filing fees, expert witness
+/// fees, deposition transcripts, travel, postage, court reporter,
+/// medical record retrieval, etc. Distinct from `TimeEntry` (which
+/// represents the firm's labor) — expenses are real money the firm
+/// or client paid externally that may or may not bill back to the
+/// client.
+///
+/// Two separate "is it billable?" flags:
+///  - `billable`: passes through to a client invoice when true
+///    (most expenses); when false the firm absorbs it (e.g. a
+///    client-relationship gesture).
+///  - `clientAdvanced`: client paid the cost up-front (rare).
+///    When false, the firm advanced it on the client's behalf and
+///    expects reimbursement from settlement / retainer / invoice.
+///    Drives the contingency settlement waterfall: firm-advanced
+///    costs get repaid from the gross before fees + client net.
+///
+/// Receipts: `receiptUrl` points at a Document row when one was
+/// uploaded; otherwise stays null. We don't enforce a receipt at
+/// the schema level — common case is "expense logged, receipt
+/// uploaded later" or "client gave a verbal authorization that
+/// suffices for a small charge." Required-receipt policy belongs
+/// in firm settings down the road.
+model Expense {
+  id              String    @id @default(cuid())
+  matterId        String
+  /// Optional intake-time expenses. When a Lead converts to a
+  /// Matter, expenses logged against the lead carry over via the
+  /// conversion path (not yet wired — placeholder FK ready).
+  leadId          String?
+  /// User who logged the expense — drives the audit trail and the
+  /// timeline-tab attribution. Required for new rows; legacy rows
+  /// from a future bulk import may be null.
+  loggedBy        String?
+  date            DateTime  /// Date the cost was incurred (not the log date)
+  description     String    /// "Court filing fee — motion to compel"
+  /// UTBMS expense code (E-codes), e.g. "E102 Outside printing".
+  /// Optional today; firms with strict billing standards may
+  /// require it via a future setting.
+  utbmsCode       String?
+  /// Open-ended category for grouping in the UI: filing_fee |
+  /// expert | travel | deposition | medical_record | postage |
+  /// records | research | other. String not enum so adding
+  /// categories is data, not a migration.
+  category        String    @default("other")
+  amount          Decimal   /// Always positive — sign is implied by `clientAdvanced`
+  billable        Boolean   @default(true)
+  clientAdvanced  Boolean   @default(false)
+  /// Set when this expense is included on an invoice. SetNull on
+  /// invoice delete so the expense survives invoice purges.
+  invoiceId       String?
+  /// Optional Document row for the receipt. SetNull so deleting
+  /// the receipt document doesn't lose the expense.
+  receiptDocumentId String?
+  notes           String?   /// Free-text memo
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  matter          Matter    @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  invoice         Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  receiptDocument Document? @relation(fields: [receiptDocumentId], references: [id], onDelete: SetNull)
+
+  @@index([matterId])
+  @@index([invoiceId])
+  @@index([date])
+  @@map("expenses")
+}
+
 model Invoice {
   id           String    @id @default(cuid())
   invoiceNumber String   @unique /// Human-readable number, e.g. "2026-041"
@@ -978,6 +1051,10 @@ model Invoice {
 
   matter     Matter      @relation(fields: [matterId], references: [id], onDelete: Cascade)
   lineItems  TimeEntry[]
+  /// Expenses billed on this invoice. Same shape as time entries
+  /// — the invoice generation flow bundles billable + un-invoiced
+  /// expenses alongside billable + un-invoiced time entries.
+  expenseLineItems Expense[]
   /// Trust transactions that paid (or partially paid) this invoice.
   /// Populated by the "Pay from trust" action; the ledger row's
   /// `invoiceId` points back here. Lets the preview + ledger both

@@ -36,7 +36,7 @@ Last full audit: 2026-04-27
 ### P1 — MVP usability
 
 - [ ] **Calendar event create/edit form.** `EventComposer` exists for matter-detail event creation, but there's no full-featured event-editor (start/end + all-day, type, attendees, location/Zoom, recurrence). Currently events are immutable after creation.
-- [ ] **Expense tracking.** No `Expense` model. No way to log filing fees, expert witness costs, deposition transcripts, travel. Invoices will be incomplete.
+- [~] **Expense tracking.** v1 ✓ shipped 2026-04-27 — first-class `Expense` model, composer + table on the matter Time & Expenses tab, granular `matters.expense.{view,create,edit,delete}` permissions in the matrix, soft refusal of edit/delete once an expense has been billed onto an invoice, audit-log on every action. Still deferred: rolling expenses into invoice generation alongside time entries (today they're tracked but the WIP-bundling action only pulls TimeEntry rows), receipt-document attachment UI (FK exists), markup rules, lead-level expenses (FK exists for the future conversion path).
 - [ ] **Notifications + bell.** No `Notification` model. No alerts for approaching deadlines, new email, task assignments. The sidebar bell was deliberately removed pending this work — restore as part of it.
 - [ ] **SOL automation.** SOL fields on Matter are 100% manual. No auto-compute from incident date + practice-area statute table, no "approaching" warning, no auto-deadline generation.
 - [ ] **Conflict check automation.** `Contact.conflictStatus` and `Lead.conflictCheck` exist but are never written to by any code path. No matching engine against existing matters/parties when a lead arrives, no "block save" guardrail, no override workflow.

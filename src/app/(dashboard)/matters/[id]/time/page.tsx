@@ -5,13 +5,15 @@
  * summary cards (total hours / billable hours / unbilled amount /
  * billed amount) and a dated table.
  *
- * Expenses: placeholder section — the schema doesn't have an Expense
- * model yet. When we add one, the placeholder card becomes a real
- * list in the same layout.
+ * Expenses: real Expense model + matter-level list. Mirrors the
+ * time-entry layout — composer at top, table below, summary KPIs
+ * inline. Each row carries its category + billable/client-advanced
+ * flags + invoice link when billed.
  */
 
+import Link from "next/link";
 import { format } from "date-fns";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -23,11 +25,20 @@ import {
 import { TimeComposer } from "@/components/matters/captures/time-composer";
 import { TimeEntryRowMenu } from "@/components/time-entries/time-entry-row-actions";
 import { EntitySourceChip } from "@/components/matters/entity-source-chip";
+import { ExpenseComposer } from "@/components/matters/expenses/expense-composer";
+import { ExpenseRowActions } from "@/components/matters/expenses/expense-row-actions";
 import { RowAttachedNotes } from "@/components/matters/row-attached-notes";
-import { type TimeEntryStatus } from "@/lib/note-constants";
 import {
+  EXPENSE_CATEGORY_LABEL,
+  type ExpenseCategory,
+} from "@/lib/expense-constants";
+import { type TimeEntryStatus } from "@/lib/note-constants";
+import { currentUserHasPermission } from "@/lib/permission-check";
+import {
+  getMatterExpenses,
   getMatterTimeEntries,
   getMatterTimeSummary,
+  type ExpenseRow,
   type TimeEntryRow,
 } from "@/lib/queries/matter-detail";
 
@@ -69,9 +80,18 @@ export default async function MatterTimePage({
   params,
 }: PageProps<"/matters/[id]/time">) {
   const { id } = await params;
-  const [entries, summary] = await Promise.all([
+  const [
+    entries,
+    summary,
+    expenses,
+    canCreateExpense,
+    canDeleteExpense,
+  ] = await Promise.all([
     getMatterTimeEntries(id),
     getMatterTimeSummary(id),
+    getMatterExpenses(id),
+    currentUserHasPermission("matters.expense.create"),
+    currentUserHasPermission("matters.expense.delete"),
   ]);
 
   if (entries.length === 0) {
@@ -81,7 +101,12 @@ export default async function MatterTimePage({
         <div className="text-xs text-ink-4 text-center py-6">
           No time logged yet — add an entry above.
         </div>
-        <ExpensesPlaceholder />
+        <ExpensesSection
+          matterId={id}
+          expenses={expenses}
+          canCreate={canCreateExpense}
+          canDelete={canDeleteExpense}
+        />
       </div>
     );
   }
@@ -147,7 +172,12 @@ export default async function MatterTimePage({
         </Card>
       </section>
 
-      <ExpensesPlaceholder />
+      <ExpensesSection
+        matterId={id}
+        expenses={expenses}
+        canCreate={canCreateExpense}
+        canDelete={canDeleteExpense}
+      />
     </div>
   );
 }
@@ -268,38 +298,141 @@ function EntryRow({
   );
 }
 
-function ExpensesPlaceholder() {
+function ExpensesSection({
+  matterId,
+  expenses,
+  canCreate,
+  canDelete,
+}: {
+  matterId: string;
+  expenses: { rows: ExpenseRow[]; totalAmount: number; billableUnbilledAmount: number };
+  canCreate: boolean;
+  canDelete: boolean;
+}) {
+  const { rows, totalAmount, billableUnbilledAmount } = expenses;
   return (
-    <section>
-      <div className="flex items-center gap-2 mb-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-3">
-          Expenses
-        </h2>
+    <section className="flex flex-col gap-3">
+      <div className="flex items-baseline justify-between">
+        <div className="flex items-center gap-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-3">
+            Expenses
+          </h2>
+          <span className="text-2xs font-mono text-ink-4">{rows.length}</span>
+        </div>
+        <div className="text-2xs text-ink-4 font-mono">
+          {rows.length === 0
+            ? "—"
+            : `total ${formatMoney(totalAmount)} · unbilled ${formatMoney(billableUnbilledAmount)}`}
+        </div>
       </div>
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold">
-            Expense tracking coming
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-4 pb-4">
-          <p className="text-xs text-ink-3 leading-relaxed mb-3">
-            Reimbursable and billable expenses on this matter will live
-            here once the schema has an `Expense` model. Expect:
-          </p>
-          <ul className="flex flex-col gap-1.5 text-xs text-ink-2 list-disc pl-4">
-            <li>Date + description + amount + category (filing fees, expert costs, travel, deposition transcripts, etc.)</li>
-            <li>Billable / non-billable + markup rules</li>
-            <li>Receipt attachment per expense</li>
-            <li>Invoice line-item generation alongside time entries</li>
-            <li>Client-advanced vs firm-absorbed distinction (for contingent matters)</li>
-          </ul>
-          <div className="mt-4 pt-3 border-t border-line text-2xs text-ink-4">
-            Captured in <code className="font-mono text-ink-3">docs/SCHEMA_NOTES.md</code>{" "}
-            under open questions.
-          </div>
-        </CardContent>
-      </Card>
+
+      {canCreate && <ExpenseComposer matterId={matterId} />}
+
+      {rows.length === 0 ? (
+        <div className="text-xs text-ink-4 text-center py-6 border border-dashed border-line rounded-md">
+          No expenses logged on this matter yet.
+          {canCreate && " Use \"Log expense\" above to add one."}
+        </div>
+      ) : (
+        <Card className="p-0 overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="pl-4">Date</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>UTBMS</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+                <TableHead>Billing</TableHead>
+                <TableHead>By</TableHead>
+                <TableHead className="pr-4 w-10" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((e) => (
+                <ExpenseTableRow
+                  key={e.id}
+                  expense={e}
+                  matterId={matterId}
+                  canDelete={canDelete}
+                />
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
     </section>
+  );
+}
+
+function ExpenseTableRow({
+  expense,
+  matterId,
+  canDelete,
+}: {
+  expense: ExpenseRow;
+  matterId: string;
+  canDelete: boolean;
+}) {
+  return (
+    <TableRow>
+      <TableCell className="pl-4 text-xs text-ink-3 whitespace-nowrap">
+        {format(expense.date, "MMM d, yyyy")}
+      </TableCell>
+      <TableCell className="text-xs text-ink">
+        {expense.description}
+        {expense.notes && (
+          <div className="text-2xs text-ink-4 mt-0.5">{expense.notes}</div>
+        )}
+      </TableCell>
+      <TableCell className="text-2xs text-ink-3 whitespace-nowrap">
+        {EXPENSE_CATEGORY_LABEL[expense.category as ExpenseCategory] ??
+          expense.category}
+      </TableCell>
+      <TableCell className="text-2xs font-mono text-ink-4">
+        {expense.utbmsCode ?? "—"}
+      </TableCell>
+      <TableCell className="text-xs font-mono text-ink text-right whitespace-nowrap">
+        {formatMoney(expense.amount)}
+      </TableCell>
+      <TableCell className="text-2xs whitespace-nowrap">
+        <div className="flex flex-col gap-0.5">
+          {expense.billable ? (
+            expense.invoiceId && expense.invoiceNumber ? (
+              <Link
+                href={`/matters/${matterId}/billing?invoice=${expense.invoiceId}`}
+                className="inline-flex w-fit text-2xs px-1.5 py-0.5 rounded-full border bg-ok-soft text-ok border-line hover:underline"
+              >
+                Billed · {expense.invoiceNumber}
+              </Link>
+            ) : (
+              <span className="inline-flex w-fit text-2xs px-1.5 py-0.5 rounded-full border bg-brand-soft text-brand-700 border-brand-200">
+                Billable
+              </span>
+            )
+          ) : (
+            <span className="inline-flex w-fit text-2xs px-1.5 py-0.5 rounded-full border bg-paper-2 text-ink-3 border-line">
+              Non-billable
+            </span>
+          )}
+          {expense.clientAdvanced && (
+            <span className="inline-flex w-fit text-2xs px-1.5 py-0.5 rounded-full border bg-paper-2 text-ink-3 border-line">
+              Client-advanced
+            </span>
+          )}
+        </div>
+      </TableCell>
+      <TableCell className="text-2xs font-mono text-ink-4">
+        {expense.loggerInitials ?? "—"}
+      </TableCell>
+      <TableCell className="pr-4 text-right">
+        <ExpenseRowActions
+          expenseId={expense.id}
+          description={expense.description}
+          isBilled={!!expense.invoiceId}
+          canDelete={canDelete}
+        />
+      </TableCell>
+    </TableRow>
   );
 }
