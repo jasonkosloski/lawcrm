@@ -9,12 +9,16 @@ solo lawyer can run their practice on it." Two sections:
 Each item has a priority (P0 = blocks MVP, P1 = MVP usability, P2 = polish)
 and, where applicable, file paths so you can dive straight in.
 
-Last full audit: 2026-04-24
+Last full audit: 2026-04-27
 
-> **Update — 2026-04-25:** Big sprint landed against this list. Items
-> below struck through and tagged ✓ shipped. The remaining P0 work is
-> all the stuff that needs your input on infra (Gmail OAuth creds,
-> document-storage choice, invoice/trust scoping, mobile sweep).
+> **Update — 2026-04-27:** Second sprint landed (billing flow refactor,
+> permissions matrix, matter team management, payment recording,
+> received-payments ledger, draft delete). The remaining P0 work is
+> still mostly external-infra-blocked: Gmail OAuth, mobile sweep.
+> Big P1 wins still on the list: Notifications model, expense
+> tracking, conflict check automation, SOL automation, stage
+> transition guard, rich-text note editor, activity log viewer,
+> standalone Contact UI v2 (merge), practice-area stage editing.
 
 ---
 
@@ -26,7 +30,7 @@ Last full audit: 2026-04-24
 - [x] ~~**Contact directory.**~~ ✓ shipped. `/contacts` with search + per-type filter pills, detail page (profile + linked matters as client and as party), full create + edit + soft-delete. Wired into sidebar + command palette. Conflict-flag UI + merge are tracked as v2 in FEATURES.md.
 - [x] ~~**Document upload & storage.**~~ ✓ shipped 2026-04-25. Real upload composer on the Documents tab (file picker + display name + category + 25 MB cap). Files write to `./uploads/` in dev via the pluggable `src/lib/file-storage.ts` adapter; production swaps in Vercel Blob / S3 by changing one file. Per-row download via auth-gated `/api/documents/[id]/download` (so the security boundary stays in the app, not the storage backend) + per-row delete (admin or original uploader). What's still deferred: drag-and-drop, multi-file upload in one go, inline preview beyond what the browser does for PDFs, document versioning.
 - [x] ~~**Lead → matter conversion.**~~ ✓ shipped. Both buttons are real now: Decline opens a reason-capture dialog and flips the lead, Convert opens a practice-area + stage + matter-name + fee picker and creates Matter + Contact + team assignment + sidebar pin in one transaction. Lead summary/incident date/injuries flow into Matter.description. Practice-area-specific automations on convert (CGIA / HUD / EEOC) tracked as v2 in FEATURES.md.
-- [~] **Invoice generation + trust ledger** (v1 shipped 2026-04-25). `/matters/[id]/billing` is real now — KPI strip (WIP / Trust / AR), invoices table with status transitions, "Generate invoice from WIP" composer, trust ledger with manual deposit / disbursement / refund (overdraw protected). Decimal math throughout. **Still deferred:** invoice line-item editing, expense tracking model + UI, partial payments, PDF export + email send, settlement distribution waterfall, tax calculation, aging report, AR firm-wide page, recurring invoices, payment-gateway integration. Settlement / SettlementApproval / SettlementLien models still empty UI.
+- [~] **Invoice generation + trust ledger** (v1 shipped 2026-04-25, refactored 2026-04-27). `/matters/[id]/billing` carries the full client invoice state machine (draft → approved → sent → partial → paid; void only with no payments; drafts deletable). Send dialog with optional trust application; Apply trust shortcut; Record payment with multi-channel support (check / ACH / cash / card / other / trust). Notify-client checkbox on every payment surface. Matter-level Received payments ledger. Decimal math throughout. **Still deferred:** invoice line-item editing, expense tracking model + UI, real PDF export, real email/mail delivery (Gmail integration blocks), settlement distribution waterfall, tax calculation, AR firm-wide page, recurring invoices, payment-gateway integration. Settlement / SettlementApproval / SettlementLien models still empty UI.
 - [ ] **Mobile / responsive layout.** Sidebar doesn't collapse, calendar + matters table assume desktop width, no breakpoints anywhere. Field work — depositions, court appearances, client meetings — is impossible on iPad/iPhone.
 
 ### P1 — MVP usability
@@ -41,12 +45,13 @@ Last full audit: 2026-04-24
 - [ ] **Settlement distribution waterfall UI.** Schema is rich (gross → fees → costs → liens → client net) but there is no UI. Personal injury / civil rights firms need this on every case.
 - [ ] **Document templates / template library.** No way to save and reuse a demand letter, discovery responses, retainer agreement.
 - [ ] **Search results page + global text search.** ⌘K palette covers narrow lookups; nothing else. No results page, no save-search, no within-list keyword search beyond the matter list filters.
-- [ ] **Multi-member matter team editor.** Matter edit form lets you change the lead attorney; you can't add/remove paralegal, investigator, of-counsel, or co-counsel. Team roster on Overview is read-only.
+- [x] ~~**Multi-member matter team editor.**~~ ✓ shipped 2026-04-27. Admin-gated section on the matter edit page lets admins add/remove lead/co-counsel/paralegal/investigator/of-counsel. Promoting a new lead auto-demotes the existing one to co_counsel (humane swap). Removal is soft (`MatterTeamMember.removedAt`); former members render dimmed with "(former)" suffix on the overview roster. Audit-log entries on every add/remove. Permission key: `matters.manage_team` (admin always; other roles via the matrix).
 
 ### P2 — post-MVP but plan for it
 
+- [x] ~~**Permission system + matrix.**~~ ✓ shipped 2026-04-27. First-class `RolePermission` join table, static permission catalog in `src/lib/permissions.ts`, runtime helpers in `src/lib/permission-check.ts` (`currentUserHasPermission` / `requirePermission` / `getCurrentUserPermissions`). Every server action and page guard funnels through a specific permission key; admin role short-circuits to all granted; user effective permissions = union across roles held. Matrix UI on `/settings/roles` lets admins (or anyone with `firm.manage_permissions`) toggle cells with optimistic UI; every non-no-op grant/revoke writes to ActivityLog. Full reference doc at `docs/PERMISSIONS.md`.
 - [ ] **Authentication + real session** (Phase 9). Solo Jason can run today on the hardcoded user. Multi-user features are blocked until auth lands. See "Time bombs" in §2.
-- [ ] **Audit log viewer.** `ActivityLog` is populated by seed and a few writes but never displayed anywhere. Compliance + dispute resolution use case.
+- [ ] **Audit log viewer.** `ActivityLog` is populated by every action that creates a Note / Task / Deadline / TimeEntry / Event / Invoice transition / Permission change / Team add+remove, but is only surfaced as the dashboard "Recent activity" card. Need a matter-scoped Activity tab + a global `/firm/activity` page with filter pills (user, type, date range). Compliance + dispute resolution use case.
 - [ ] **Reports dashboard.** Pipeline, utilization, AR aging, realization rate — Phase 8 placeholder.
 - [ ] **Export / print to PDF.** Demand letters, invoices, trust reports — none of it can be exported.
 - [ ] **Evidence viewer.** `Evidence`, `FlaggedMoment`, `EvidenceSync` schemas are designed for body-cam / dashcam timelines (§1983 use case) but no UI exists. Defer.
@@ -72,7 +77,7 @@ Last full audit: 2026-04-24
 ### P1 — regular workflow pain
 
 - [ ] **No standalone Contact UI.** Contacts are only edited/created inline. Once a contact is created (e.g. opposing counsel), there's no way to update their phone number short of editing the DB. **Fix:** see P0 in §1 ("Contact directory").
-- [ ] **Matter team is lead-only on edit.** Edit form changes lead attorney, but the rest of the team (paralegal, investigator, of-counsel) is read-only on Overview and uneditable. **Fix:** team-member editor as part of the matter edit page.
+- [x] ~~**Matter team is lead-only on edit.**~~ ✓ shipped 2026-04-27 — see "Multi-member matter team editor" above.
 - [ ] **Note editor is a plain `<textarea>`.** No formatting, no markdown, no rich text. Lawyers expect to bold case names and italicize statutes. **Fix:** swap in TipTap or switch to Markdown rendering.
 - [ ] **Date computations use server time.** `src/lib/queries/dashboard.ts:14-32` — `new Date()` everywhere. "Today's agenda" and "this week's deadlines" will be wrong for any user not in server time zone. **Fix:** add `User.timeZone`, plumb through to `startOfToday()` / `endOfToday()` / etc.
 - [x] ~~**Trust balance is `Float`.**~~ ✓ shipped 2026-04-25. All 16 financial fields migrated to `Decimal`: `Matter.trustBalance/wipAmount`, `TimeEntry.rate/amount`, `Invoice.subtotal/taxAmount/totalAmount/paidAmount`, `TrustTransaction.amount`, `Settlement.grossAmount/firmFee/firmFeePercent/advancedCosts/clientNet`, `SettlementLien.originalAmount/negotiatedAmount`. Query layer converts Decimal → number at the API boundary. `TimeEntry.hours` stays Float (not money).
@@ -99,16 +104,23 @@ Last full audit: 2026-04-24
 
 ---
 
-## Suggested next sprint (1–2 weeks)
+## Suggested next sprint (post 2026-04-27)
 
-If I had to pick the smallest set of work that would make the app feel "done" to a solo user who already lives in it:
+The previous "looks like a demo → pilot-ready" sprint is done. The
+remaining gap to "battle-hardened production" is mostly about
+governance, automation, and the workflows that surface as soon as a
+second user touches the app:
 
-1. **Task / deadline / event / time-entry edit + delete + status toggle.** Five copies of the same problem. Once one is solved the pattern repeats. (~3 days)
-2. **Hide or explain every dead-end button** (Decline, Convert to matter, Document Add, settings stubs, matter-detail stubs). (~½ day)
-3. **`error.tsx` + `loading.tsx` per route segment.** (~1 day)
-4. **Contact directory** at `/contacts` with list + detail + edit + create. (~2 days)
-5. **Calendar event editor** (full form). (~1 day)
-6. **Trust balance: Decimal migration + invoice list page (read-only first cut).** (~2 days)
-7. **Mobile breakpoints on the most-used routes** (dashboard, matter detail, calendar week view). (~2 days)
+1. **Stage transition guard + practice-area stage editing.** Closed → Intake should be confirmed; firms need to shape their own pipeline. (~1 day)
+2. **Activity log viewer.** Matter Activity tab + global firm activity page. We already write the entries — just surface them. (~1 day)
+3. **Expense tracking.** First-class `Expense` model; bills onto invoices alongside time entries; client-advanced vs firm-absorbed split for contingency. (~2 days)
+4. **Notifications system.** `Notification` model, sidebar bell, deadline / task-assignment / new-email triggers, mark-read. (~3 days)
+5. **Rich-text note editor.** TipTap. Bold case names, italicize statutes. (~1 day)
+6. **Date format consolidation + `User.timeZone`.** Today's-agenda is server-time. Plumb a `formatDate` util through every callsite. (~1 day)
+7. **Conflict check automation.** Match incoming leads against existing Contacts and opposing parties; severity + override workflow. (~2 days)
+8. **SOL automation.** Auto-compute from incident date + practice-area statute table; approaching warning + auto-deadline generation. (~2 days)
+9. **Settlement waterfall UI.** Schema is rich; build the gross→fees→costs→liens→client-net workflow on contingency matters. (~2 days)
 
-That's a believable two-week slice that takes the app from "demo" to "I could pilot this with one paralegal." Everything else can land iteratively.
+After that lands, the remaining P0s (Gmail OAuth, mobile sweep) can
+be tackled in order. Phone/SMS logging and document templates round
+out the polish layer.
