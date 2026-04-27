@@ -11,6 +11,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { formatRelative } from "@/lib/format-date";
 
 const startOfToday = (): Date => {
   const d = new Date();
@@ -132,16 +133,10 @@ export type ActivityItem = {
   source: string;
 };
 
-const formatRelativeTime = (ts: Date): string => {
-  const diffMs = Date.now() - ts.getTime();
-  const hours = Math.floor(diffMs / (60 * 60 * 1000));
-  if (hours < 1) return "just now";
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days === 1) return "yest.";
-  if (days < 7) return `${days}d ago`;
-  return `${Math.floor(days / 7)}w ago`;
-};
+// Use the centralized formatter so the dashboard activity feed
+// reads identically to every other relative-time surface across
+// the app (matter Timeline, settings/activity, etc.).
+const formatRelativeTime = (ts: Date): string => formatRelative(ts);
 
 export async function getRecentActivity(limit = 5): Promise<ActivityItem[]> {
   const entries = await prisma.activityLog.findMany({

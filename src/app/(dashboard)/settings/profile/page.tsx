@@ -54,6 +54,7 @@ export default async function ProfileSettingsPage() {
         phone: true,
         barNumber: true,
         avatarUrl: true,
+        timeZone: true,
         isActive: true,
         createdAt: true,
         userRoles: {
@@ -88,6 +89,7 @@ export default async function ProfileSettingsPage() {
             phone: user.phone,
             barNumber: user.barNumber,
             avatarUrl: user.avatarUrl,
+            timeZone: user.timeZone,
           }}
         />
 

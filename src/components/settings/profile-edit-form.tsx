@@ -28,7 +28,22 @@ export type EditableProfile = {
   phone: string | null;
   barNumber: string | null;
   avatarUrl: string | null;
+  timeZone: string;
 };
+
+/// IANA zone names — small starter list of US zones plus the
+/// most common global ones. Free string in the schema so a firm
+/// admin can add unusual zones via a future custom-list setting.
+const TIMEZONE_OPTIONS = [
+  { value: "America/New_York", label: "Eastern (New York)" },
+  { value: "America/Chicago", label: "Central (Chicago)" },
+  { value: "America/Denver", label: "Mountain (Denver)" },
+  { value: "America/Phoenix", label: "Mountain — no DST (Phoenix)" },
+  { value: "America/Los_Angeles", label: "Pacific (Los Angeles)" },
+  { value: "America/Anchorage", label: "Alaska (Anchorage)" },
+  { value: "Pacific/Honolulu", label: "Hawaii (Honolulu)" },
+  { value: "UTC", label: "UTC" },
+];
 
 export function ProfileEditForm({ profile }: { profile: EditableProfile }) {
   const [state, formAction, isPending] = useActionState<
@@ -102,6 +117,25 @@ export function ProfileEditForm({ profile }: { profile: EditableProfile }) {
             placeholder="https://example.com/me.jpg"
             className={inputClass(!!errs.avatarUrl)}
           />
+        </Field>
+        <Field
+          label="Time zone"
+          name="timeZone"
+          error={errs.timeZone?.[0]}
+          hint="Used for dashboard agenda, deadlines countdown, and timeline timestamps."
+          className="col-span-2"
+        >
+          <select
+            name="timeZone"
+            defaultValue={profile.timeZone}
+            className={inputClass(!!errs.timeZone)}
+          >
+            {TIMEZONE_OPTIONS.map((tz) => (
+              <option key={tz.value} value={tz.value}>
+                {tz.label}
+              </option>
+            ))}
+          </select>
         </Field>
       </div>
 

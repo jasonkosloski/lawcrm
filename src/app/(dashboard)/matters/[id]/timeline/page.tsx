@@ -25,6 +25,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
+  formatDate,
+  formatDayBucket,
+  getCurrentUserTimeZone,
+} from "@/lib/format-date";
+import {
   Briefcase,
   Check,
   Circle,
@@ -93,14 +98,8 @@ const PILL_ORDER = [
   "events",
 ] as const;
 
-const formatDateTime = (d: Date): string =>
-  d.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+// Date rendering routes through the centralized formatter so
+// every page interprets the user's timeZone uniformly.
 
 export default async function MatterTimelinePage({
   params,
@@ -119,11 +118,12 @@ export default async function MatterTimelinePage({
   });
   if (!matter) notFound();
 
-  const [rows, counts] = await Promise.all([
+  const [rows, counts, tz] = await Promise.all([
     getMatterActivity(id, {
       types: bucket.types.length > 0 ? bucket.types : undefined,
     }),
     getMatterActivityTypeCounts(id),
+    getCurrentUserTimeZone(),
   ]);
 
   const totalCount = Object.values(counts).reduce((s, n) => s + n, 0);
@@ -228,7 +228,7 @@ export default async function MatterTimelinePage({
                                 <span>· {row.authorName}</span>
                               )}
                               <span className="font-mono">
-                                · {formatDateTime(row.timestamp)}
+                                · {formatDate(row.timestamp, "datetime", tz)}
                               </span>
                             </div>
                           </div>
@@ -264,10 +264,7 @@ function groupByDay<T extends { id: string; timestamp: Date }>(
   label: string;
   items: T[];
 }> {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
+  const now = new Date();
 
   const groups = new Map<string, { label: string; items: T[] }>();
   for (const row of rows) {
@@ -275,18 +272,9 @@ function groupByDay<T extends { id: string; timestamp: Date }>(
     d.setHours(0, 0, 0, 0);
     const key = d.toISOString().slice(0, 10);
     if (!groups.has(key)) {
-      const label =
-        d.getTime() === today.getTime()
-          ? "Today"
-          : d.getTime() === yesterday.getTime()
-            ? "Yesterday"
-            : d.toLocaleDateString("en-US", {
-                weekday: "long",
-                month: "long",
-                day: "numeric",
-                year:
-                  d.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
-              });
+      // Centralized day-bucket labeling — same logic the firm
+      // activity page and other journal-style views use.
+      const label = formatDayBucket(d, { now });
       groups.set(key, { label, items: [] });
     }
     groups.get(key)!.items.push(row);

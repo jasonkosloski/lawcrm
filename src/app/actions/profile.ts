@@ -45,6 +45,21 @@ const profileSchema = z.object({
       (v) => !v || /^https?:\/\//i.test(v),
       "Avatar URL must start with http:// or https://"
     ),
+  /** IANA zone string. Validate that Intl.DateTimeFormat can use
+   *  it before committing — bad values would silently break the
+   *  formatter for this user. */
+  timeZone: z
+    .string()
+    .trim()
+    .max(64)
+    .refine((v) => {
+      try {
+        new Intl.DateTimeFormat("en-US", { timeZone: v });
+        return true;
+      } catch {
+        return false;
+      }
+    }, "Unknown time zone."),
 });
 
 export async function updateProfileAction(
@@ -74,6 +89,7 @@ export async function updateProfileAction(
       phone: parsed.data.phone || null,
       barNumber: parsed.data.barNumber || null,
       avatarUrl: parsed.data.avatarUrl || null,
+      timeZone: parsed.data.timeZone,
     },
   });
 

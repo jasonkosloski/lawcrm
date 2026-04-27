@@ -15,6 +15,7 @@
 
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { formatDate, getCurrentUserTimeZone } from "@/lib/format-date";
 import {
   Briefcase,
   Check,
@@ -80,14 +81,7 @@ const PILL_ORDER = [
   "events",
 ] as const;
 
-const formatDateTime = (d: Date): string =>
-  d.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+// Date rendering routes through the centralized formatter.
 
 export default async function FirmActivityPage({
   searchParams,
@@ -115,7 +109,7 @@ export default async function FirmActivityPage({
 
   const bucket = FILTER_BUCKETS[filterKey];
 
-  const [rows, authors] = await Promise.all([
+  const [rows, authors, tz] = await Promise.all([
     getFirmActivity({
       types: bucket.types.length > 0 ? bucket.types : undefined,
       userId,
@@ -123,6 +117,7 @@ export default async function FirmActivityPage({
       to,
     }),
     listFirmActivityAuthors(),
+    getCurrentUserTimeZone(),
   ]);
 
   /** Build a query-string preserving the other filters when one
@@ -285,7 +280,7 @@ export default async function FirmActivityPage({
                         )}
                         {row.authorName && <span>· {row.authorName}</span>}
                         <span className="font-mono">
-                          · {formatDateTime(row.timestamp)}
+                          · {formatDate(row.timestamp, "datetime", tz)}
                         </span>
                       </div>
                     </div>

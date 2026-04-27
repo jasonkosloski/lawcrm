@@ -50,6 +50,14 @@ model User {
   avatarUrl String?  /// Optional profile photo URL
   phone     String?
   barNumber String?  /// State bar number (attorneys only)
+  /// IANA time-zone name ("America/Denver", "America/New_York"
+  /// etc). Drives date formatting on every page that renders a
+  /// time — dashboard "today's agenda," deadlines countdown,
+  /// timeline entries, activity log. Defaults to America/Denver
+  /// since that's where the firm operates today; later we'll
+  /// surface a picker on /settings/profile and infer a sensible
+  /// default from the browser at invite time.
+  timeZone  String   @default("America/Denver")
   isActive  Boolean  @default(true)
   /// FK to the firm this user belongs to. Nullable in the schema
   /// only because SQLite can't add a non-null column without a
