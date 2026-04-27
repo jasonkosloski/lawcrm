@@ -2,8 +2,10 @@
  * Firm profile server action.
  *
  * Single update path for the firm record — name, contact info,
- * address, EIN, website, established date. `requireAdmin()` runs
- * before any write, so the action is safe to expose to any UI.
+ * address, EIN, website, established date. Gated on
+ * `firm.edit_info` via `requirePermission(...)` (admin role
+ * short-circuits to all granted), so the action is safe to expose
+ * to any UI.
  *
  * Multi-tenant note: scopes the update by firmId resolved from the
  * current user's session. When we go multi-tenant, the same code

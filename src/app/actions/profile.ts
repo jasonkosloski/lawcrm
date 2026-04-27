@@ -51,9 +51,9 @@ export async function updateProfileAction(
   _prev: ProfileFormState,
   formData: FormData
 ): Promise<ProfileFormState> {
-  // No requireAdmin — every signed-in user can edit their own profile.
-  // The id comes from the session, never from the form, so we can't
-  // accidentally mutate another user.
+  // No permission gate — every signed-in user can edit their own
+  // profile by definition. The id comes from the session, never
+  // from the form, so we can't accidentally mutate another user.
   const userId = await getCurrentUserId();
 
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
