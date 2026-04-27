@@ -46,7 +46,11 @@ export default async function MatterDetailLayout({
   const matter = await getMatterById(id);
   if (!matter) notFound();
 
-  const leadMember = matter.teamMembers.find((t) => t.role === "lead");
+  // Active lead only — a former lead shouldn't drive the metadata
+  // strip (it'd display a wrong attribution and confuse reads).
+  const leadMember = matter.teamMembers.find(
+    (t) => t.role === "lead" && t.removedAt === null
+  );
 
   return (
     <CreateStackProvider

@@ -16,7 +16,13 @@ import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { requireAdmin } from "@/lib/firm";
+import { logActivity } from "@/lib/activity-log";
 import { BILLING_MODES } from "@/lib/billing-mode-constants";
+import {
+  MATTER_TEAM_ROLES,
+  matterTeamRoleLabel,
+} from "@/lib/matter-team-constants";
 import {
   NEW_CLIENT_SENTINEL,
   type CreateMatterState,
@@ -492,22 +498,27 @@ export async function updateMatter(
       },
     });
 
-    // Sync lead: remove the existing lead team member (if any) and
-    // add/replace with the new one. Non-lead team assignments stay
-    // untouched — this action only manages the lead slot.
+    // Sync lead. Match addMatterTeamMember's promotion shape: any
+    // existing active lead that isn't the new pick gets demoted
+    // to co_counsel (humane swap, not an off-team kick), and the
+    // new lead is upserted — restoring a former-member row if
+    // they previously left the team.
     const existingLead = await tx.matterTeamMember.findFirst({
-      where: { matterId, role: "lead" },
+      where: { matterId, role: "lead", removedAt: null },
       select: { id: true, userId: true },
     });
     if (existingLead && existingLead.userId !== leadUserId) {
-      await tx.matterTeamMember.delete({ where: { id: existingLead.id } });
+      await tx.matterTeamMember.update({
+        where: { id: existingLead.id },
+        data: { role: "co_counsel" },
+      });
     }
     if (!existingLead || existingLead.userId !== leadUserId) {
       await tx.matterTeamMember.upsert({
         where: {
           matterId_userId: { matterId, userId: leadUserId },
         },
-        update: { role: "lead" },
+        update: { role: "lead", removedAt: null, removedBy: null },
         create: { matterId, userId: leadUserId, role: "lead" },
       });
     }
@@ -670,5 +681,156 @@ export async function setMatterSolSatisfied(
 
   revalidatePath(`/matters/${matterId}`);
   revalidatePath(`/matters/${matterId}/deadlines`);
+  return { ok: true };
+}
+
+// ── Team membership ────────────────────────────────────────────────────
+//
+// Add / remove team members on a matter.
+//
+// Permission model: today both actions are admin-gated via
+// requireAdmin(). When the firm needs to delegate this (e.g. a "Case
+// manager" role), swap the gate for a permission check — the rest of
+// the flow stays the same. The audit-trail logActivity call carries
+// who-did-what regardless of how permissions evolve.
+//
+// Soft-delete shape: removing a member sets `removedAt` (and
+// `removedBy`) rather than deleting the row, so historical
+// attribution stays intact. The (matterId, userId) unique remains —
+// re-adding the same user upserts the existing row, clears
+// `removedAt`, and applies the new role. That preserves the rule
+// "one row per user-matter relationship" without losing the audit
+// thread.
+
+const addTeamMemberSchema = z.object({
+  userId: z.string().trim().min(1, "Pick a user"),
+  role: z.enum(MATTER_TEAM_ROLES),
+});
+
+export async function addMatterTeamMember(
+  matterId: string,
+  formData: FormData
+): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  const actorId = await getCurrentUserId();
+
+  const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
+  const parsed = addTeamMemberSchema.safeParse(raw);
+  if (!parsed.success) {
+    const flat = parsed.error.flatten().fieldErrors;
+    return {
+      ok: false,
+      error: flat.userId?.[0] ?? flat.role?.[0] ?? "Invalid input.",
+    };
+  }
+  const { userId, role } = parsed.data;
+
+  const [matter, user] = await Promise.all([
+    prisma.matter.findUnique({
+      where: { id: matterId },
+      select: { id: true },
+    }),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, isActive: true },
+    }),
+  ]);
+  if (!matter) return { ok: false, error: "Matter not found." };
+  if (!user || !user.isActive) {
+    return { ok: false, error: "User not found or deactivated." };
+  }
+
+  // Lead is unique per matter — when promoting a new lead, retire
+  // any existing active lead first. We don't auto-demote them off
+  // the team; they keep their seat at the new role co_counsel
+  // (closest-to-equivalent default). Admin can change it after
+  // if they want.
+  await prisma.$transaction(async (tx) => {
+    if (role === "lead") {
+      await tx.matterTeamMember.updateMany({
+        where: {
+          matterId,
+          role: "lead",
+          removedAt: null,
+          NOT: { userId },
+        },
+        data: { role: "co_counsel" },
+      });
+    }
+
+    // Upsert: if the user previously left the team, clear their
+    // removedAt and restore them at the new role; otherwise create
+    // a fresh row. The unique (matterId, userId) makes this a
+    // single statement.
+    await tx.matterTeamMember.upsert({
+      where: { matterId_userId: { matterId, userId } },
+      create: { matterId, userId, role },
+      update: { role, removedAt: null, removedBy: null },
+    });
+  });
+
+  await logActivity({
+    matterId,
+    userId: actorId,
+    type: "filing",
+    title: `${user.name} added to team as ${matterTeamRoleLabel(role)}`,
+  });
+
+  revalidatePath(`/matters/${matterId}`);
+  revalidatePath(`/matters/${matterId}/edit`);
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+export async function removeMatterTeamMember(
+  matterId: string,
+  membershipId: string
+): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  const actorId = await getCurrentUserId();
+
+  const member = await prisma.matterTeamMember.findUnique({
+    where: { id: membershipId },
+    select: {
+      id: true,
+      matterId: true,
+      role: true,
+      removedAt: true,
+      user: { select: { name: true } },
+    },
+  });
+  if (!member || member.matterId !== matterId) {
+    return { ok: false, error: "Team membership not found." };
+  }
+  if (member.removedAt) {
+    return { ok: false, error: "This person has already been removed." };
+  }
+
+  // Refuse to leave a matter without a lead. The admin can promote
+  // someone else first (which auto-demotes the current lead), or
+  // delete the matter outright if it's truly being abandoned.
+  if (member.role === "lead") {
+    return {
+      ok: false,
+      error:
+        "Can't remove the lead attorney without first promoting another team member to lead.",
+    };
+  }
+
+  await prisma.matterTeamMember.update({
+    where: { id: member.id },
+    data: { removedAt: new Date(), removedBy: actorId },
+  });
+
+  await logActivity({
+    matterId,
+    userId: actorId,
+    type: "filing",
+    title: `${member.user.name} removed from team (${matterTeamRoleLabel(member.role)})`,
+  });
+
+  revalidatePath(`/matters/${matterId}`);
+  revalidatePath(`/matters/${matterId}/edit`);
+  revalidatePath("/", "layout");
   return { ok: true };
 }

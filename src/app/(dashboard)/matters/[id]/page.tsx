@@ -493,21 +493,48 @@ export default async function MatterOverviewPage({
                 </div>
               ) : (
                 <ul className="flex flex-col gap-2.5">
-                  {matter.teamMembers.map((t) => (
-                    <li key={t.id} className="flex items-center gap-2.5">
-                      <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-brand-50 text-2xs font-mono font-medium text-brand-700 border border-brand-100 shrink-0">
-                        {t.user.initials}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-xs font-medium text-ink truncate">
-                          {t.user.name}
+                  {matter.teamMembers.map((t) => {
+                    const isFormer = t.removedAt !== null;
+                    return (
+                      <li
+                        key={t.id}
+                        className={cn(
+                          "flex items-center gap-2.5",
+                          // Former members stay visible (audit /
+                          // historical attribution) but dim so the
+                          // active roster reads as primary.
+                          isFormer && "opacity-60"
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "inline-flex items-center justify-center w-7 h-7 rounded-full text-2xs font-mono font-medium border shrink-0",
+                            isFormer
+                              ? "bg-paper-2 text-ink-4 border-line"
+                              : "bg-brand-50 text-brand-700 border-brand-100"
+                          )}
+                        >
+                          {t.user.initials}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div
+                            className={cn(
+                              "text-xs font-medium truncate",
+                              isFormer ? "text-ink-3" : "text-ink"
+                            )}
+                          >
+                            {t.user.name}
+                          </div>
+                          <div className="text-2xs text-ink-4">
+                            {ROLE_LABEL[t.role] ?? t.role}
+                            {isFormer && (
+                              <span className="italic"> (former)</span>
+                            )}
+                          </div>
                         </div>
-                        <div className="text-2xs text-ink-4">
-                          {ROLE_LABEL[t.role] ?? t.role}
-                        </div>
-                      </div>
-                    </li>
-                  ))}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </CardContent>

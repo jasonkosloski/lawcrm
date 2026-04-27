@@ -418,12 +418,25 @@ model MatterTeamMember {
   matterId  String
   userId    String
   role      String   /// lead | co_counsel | paralegal | investigator | of_counsel
+  /// Soft-delete: when set, the user is no longer an active team
+  /// member but the row is preserved so historical attribution
+  /// (who was on the case when X happened?) stays answerable. The
+  /// UI labels these "[role] (former)" and excludes them from the
+  /// active roster. Re-adding the same user clears `removedAt` +
+  /// updates `role` rather than creating a new row, which is why
+  /// the (matterId, userId) unique remains in place.
+  removedAt DateTime?
+  /// User who removed them — surfaces "Removed by X" in the audit
+  /// trail without joining through ActivityLog. Nullable since the
+  /// remover may have been deleted later.
+  removedBy String?
   createdAt DateTime @default(now())
 
   matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([matterId, userId])
+  @@index([matterId, removedAt])
   @@map("matter_team_members")
 }
 

@@ -70,7 +70,13 @@ function buildWhere(filter: MattersFilter, currentUserId: string) {
 
   if (filter.leadIds.length > 0) {
     where.teamMembers = {
-      some: { role: "lead", userId: { in: filter.leadIds } },
+      // Match the active lead only — a former lead doesn't make
+      // the matter "led by user X" anymore.
+      some: {
+        role: "lead",
+        removedAt: null,
+        userId: { in: filter.leadIds },
+      },
     };
   }
 
@@ -188,7 +194,7 @@ export async function listMatters(
       practiceArea: { select: { name: true } },
       stage: { select: { name: true, order: true, isTerminal: true } },
       teamMembers: {
-        where: { role: "lead" },
+        where: { role: "lead", removedAt: null },
         take: 1,
         include: { user: { select: { initials: true, name: true } } },
       },
@@ -345,7 +351,10 @@ export async function getMatterById(id: string) {
             select: { id: true, name: true, initials: true, jobTitle: true },
           },
         },
-        orderBy: { role: "asc" },
+        // Active first (removedAt null sorts before non-null in
+        // ASC), then alphabetic by role within each bucket so the
+        // overview's roster always reads the same way.
+        orderBy: [{ removedAt: "asc" }, { role: "asc" }],
       },
       pins: {
         where: { userId },

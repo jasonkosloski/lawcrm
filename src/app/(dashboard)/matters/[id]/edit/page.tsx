@@ -17,6 +17,11 @@ import {
   EditMatterForm,
   type MatterForEdit,
 } from "@/components/matters/edit-matter-form";
+import {
+  MatterTeamManagement,
+  type TeamMemberRow,
+} from "@/components/matters/matter-team-management";
+import { isCurrentUserAdmin } from "@/lib/firm";
 import { prisma } from "@/lib/prisma";
 
 export default async function EditMatterPage({
@@ -24,14 +29,21 @@ export default async function EditMatterPage({
 }: PageProps<"/matters/[id]/edit">) {
   const { id } = await params;
 
-  const [matter, areas, clients, users] = await Promise.all([
+  const [matter, areas, clients, users, isAdmin] = await Promise.all([
     prisma.matter.findUnique({
       where: { id },
       include: {
+        // Pull every team membership (active + former) so the
+        // edit page can render both buckets. The dedicated
+        // team-management section uses this; the lead-finder
+        // below scopes to active rows.
         teamMembers: {
-          where: { role: "lead" },
-          select: { userId: true },
-          take: 1,
+          orderBy: [{ removedAt: "asc" }, { createdAt: "asc" }],
+          include: {
+            user: {
+              select: { id: true, name: true, jobTitle: true, initials: true },
+            },
+          },
         },
       },
     }),
@@ -59,9 +71,14 @@ export default async function EditMatterPage({
       select: { id: true, name: true, jobTitle: true },
       orderBy: { name: "asc" },
     }),
+    isCurrentUserAdmin(),
   ]);
 
   if (!matter) notFound();
+
+  const activeLead = matter.teamMembers.find(
+    (m) => m.role === "lead" && !m.removedAt
+  );
 
   const forEdit: MatterForEdit = {
     id: matter.id,
@@ -76,14 +93,27 @@ export default async function EditMatterPage({
     opposingParty: matter.opposingParty,
     opposingFirm: matter.opposingFirm,
     description: matter.description,
-    leadUserId: matter.teamMembers[0]?.userId ?? null,
+    leadUserId: activeLead?.userId ?? null,
     statuteOfLimitationsDate: matter.statuteOfLimitationsDate,
     statuteOfLimitationsNotes: matter.statuteOfLimitationsNotes,
   };
 
+  // Shape for the team-management card. Includes former members
+  // so the audit trail surfaces during edit; the component
+  // separates active vs. former internally.
+  const teamMembers: TeamMemberRow[] = matter.teamMembers.map((m) => ({
+    membershipId: m.id,
+    userId: m.userId,
+    name: m.user.name,
+    jobTitle: m.user.jobTitle,
+    initials: m.user.initials,
+    role: m.role,
+    removedAt: m.removedAt,
+  }));
+
   return (
     <div className="p-5">
-      <div className="max-w-3xl">
+      <div className="max-w-3xl flex flex-col gap-5">
         <Card>
           <CardContent className="p-5">
             <EditMatterForm
@@ -93,9 +123,25 @@ export default async function EditMatterPage({
           </CardContent>
         </Card>
 
-        <div className="text-2xs text-ink-4 mt-3">
-          Non-lead team assignments, archiving, and deletion are
-          separate actions — see the Matter Actions menu (coming).
+        {/* Team management — admin-only today. When firm-configurable
+            permissions land we'll gate this on a "manage team"
+            permission instead. */}
+        {isAdmin && (
+          <Card>
+            <CardContent className="p-5">
+              <MatterTeamManagement
+                matterId={matter.id}
+                members={teamMembers}
+                userOptions={users}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        <div className="text-2xs text-ink-4">
+          {isAdmin
+            ? "Archiving and deletion are separate actions — see the Matter Actions menu (coming)."
+            : "Team changes, archiving, and deletion are admin-only today."}
         </div>
       </div>
     </div>
