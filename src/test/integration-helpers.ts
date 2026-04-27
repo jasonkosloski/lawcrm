@@ -81,6 +81,8 @@ const TABLES_IN_DELETE_ORDER = [
   // Activity logs reference users/matters
   "activity_logs",
   "automations",
+  // Per-user notifications reference user + matter; drop before users.
+  "notifications",
   // Users + firm at the bottom
   "users",
   "firms",

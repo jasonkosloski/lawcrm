@@ -8,11 +8,13 @@ export type UpdateCalendarEventFormState = {
     Record<
       | "title"
       | "type"
+      | "isAllDay"
       | "startTime"
       | "endTime"
       | "location"
       | "zoomUrl"
-      | "description",
+      | "description"
+      | "attendees",
       string[]
     >
   >;

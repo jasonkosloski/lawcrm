@@ -11,6 +11,7 @@
 import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCommandPalette } from "@/components/command-palette/command-palette-provider";
+import { NotificationBell } from "./notification-bell";
 
 interface TopBarProps {
   /** Page title displayed in Fraunces display font. */
@@ -69,6 +70,11 @@ export function TopBar({ title, crumbs, actions, below, subtitle }: TopBarProps)
               ⌘K
             </span>
           </button>
+
+          {/* Bell sits between Search and per-page actions so it's
+              always available without each page passing it. Self-
+              fetches its data; falls back to no-badge while loading. */}
+          <NotificationBell />
 
           {actions}
         </div>

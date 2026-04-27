@@ -27,6 +27,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
+import { createNotifications } from "@/lib/notifications";
 import {
   invoiceStatusTransitions,
   canDeleteInvoice,
@@ -1093,6 +1094,7 @@ export async function recordInvoicePayment(
       });
 
       return {
+        invoiceId: invoice.id,
         invoiceNumber: invoice.invoiceNumber,
         matterId: invoice.matterId,
         amount: requested,
@@ -1123,6 +1125,32 @@ export async function recordInvoicePayment(
         type: "filing",
         title: `Updated invoice ${result.invoiceNumber} sent to ${result.clientEmail}`,
         detail: `after $${result.amount.toFixed(2)} ${result.source} payment`,
+      });
+    }
+
+    // Fan a payment-recorded notification out to the matter's
+    // active team — case leads + co-counsel typically want to
+    // know money landed. Skips the actor (no point pinging your
+    // own bell). Best-effort: failures don't roll back the
+    // payment.
+    const team = await prisma.matterTeamMember.findMany({
+      where: { matterId: result.matterId, removedAt: null },
+      select: { userId: true },
+    });
+    const recipients = team
+      .map((t) => t.userId)
+      .filter((id) => id !== userId);
+    if (recipients.length > 0) {
+      const matter = await prisma.matter.findUnique({
+        where: { id: result.matterId },
+        select: { name: true },
+      });
+      await createNotifications(recipients, {
+        type: "invoice_payment_recorded",
+        title: `$${result.amount.toFixed(2)} payment on ${result.invoiceNumber}`,
+        body: `${matter?.name ?? "Matter"} · ${result.source}`,
+        link: `/matters/${result.matterId}/billing?invoice=${result.invoiceId}`,
+        matterId: result.matterId,
       });
     }
 

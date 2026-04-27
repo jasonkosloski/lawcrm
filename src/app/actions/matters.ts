@@ -18,6 +18,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
+import { createNotification } from "@/lib/notifications";
 import { BILLING_MODES } from "@/lib/billing-mode-constants";
 import { computeSolDate } from "@/lib/sol";
 import {
@@ -891,6 +892,23 @@ export async function addMatterTeamMember(
     type: "filing",
     title: `${user.name} added to team as ${matterTeamRoleLabel(role)}`,
   });
+
+  // Notify the new team member — but skip if they added themselves
+  // (no value in pinging your own bell for an action you just took).
+  if (userId !== actorId) {
+    const matterRow = await prisma.matter.findUnique({
+      where: { id: matterId },
+      select: { name: true },
+    });
+    await createNotification({
+      userId,
+      type: "matter_assigned",
+      title: `Added to ${matterRow?.name ?? "a matter"} as ${matterTeamRoleLabel(role)}`,
+      body: null,
+      link: `/matters/${matterId}`,
+      matterId,
+    });
+  }
 
   revalidatePath(`/matters/${matterId}`);
   revalidatePath(`/matters/${matterId}/edit`);

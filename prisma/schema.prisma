@@ -85,6 +85,7 @@ model User {
   matterPins        UserMatterPin[]
   noteReads         NoteRead[]
   noteReactions     NoteReaction[]
+  notifications     Notification[]
   /// Auth.js Prisma adapter — linked OAuth providers (Google etc.).
   /// Empty until we wire OAuth; the table needs to exist now so
   /// adding a provider later is config-only.
@@ -453,6 +454,7 @@ model Matter {
   trustTransactions TrustTransaction[]
   settlements      Settlement[]
   pins             UserMatterPin[]
+  notifications    Notification[]
 
   @@index([stageId])
   @@index([practiceAreaId])
@@ -1700,4 +1702,54 @@ model Automation {
   updatedAt   DateTime @updatedAt
 
   @@map("automations")
+}
+
+// =============================================================================
+// NOTIFICATIONS
+// =============================================================================
+
+/// Per-user, in-app notification. Surfaces in the topbar bell with an
+/// unread count. Server actions write entries via `createNotification()`
+/// in `src/lib/notifications.ts`; the read-side query pulls the most
+/// recent unread + a tail of recently-read for context.
+///
+/// We keep the model simple: one row per (user, event). No grouping,
+/// no fan-out tables, no email/SMS/push delivery — those land later
+/// behind the same writer helper.
+model Notification {
+  id        String   @id @default(cuid())
+  /// Who sees this notification. Notifications are strictly
+  /// per-recipient — fan-out is the writer's job.
+  userId    String
+  /// Trigger kind. UI maps to icon + tone via NOTIFICATION_TYPE_META.
+  /// task_assigned | task_due_soon | deadline_approaching |
+  /// deadline_overdue | settlement_step_approved |
+  /// settlement_step_rejected | invoice_payment_recorded |
+  /// note_mentioned | matter_assigned | generic
+  type      String
+  /// Short, headline-style copy ("Discovery cutoff in 7 days").
+  /// Renders as the primary line in the bell dropdown row.
+  title     String
+  /// Optional secondary line — context, matter name, who did it.
+  body      String?
+  /// Where clicking the row navigates to. Null = no navigation
+  /// (the notification is purely a heads-up).
+  link      String?
+  /// Optional matter scope so the bell can filter / group when we
+  /// add per-matter notification preferences later. Today the bell
+  /// shows the global stream regardless.
+  matterId  String?
+  /// Set when the user marks this row read (or "mark all read"
+  /// flips every open row to readAt = now).
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  matter Matter? @relation(fields: [matterId], references: [id], onDelete: SetNull)
+
+  /// Common queries: unread for the bell badge, recent for the
+  /// dropdown, full feed scrolled in a hypothetical /notifications page.
+  @@index([userId, readAt, createdAt])
+  @@index([userId, createdAt])
+  @@map("notifications")
 }

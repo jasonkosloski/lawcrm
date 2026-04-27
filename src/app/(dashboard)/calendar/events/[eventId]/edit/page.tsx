@@ -28,10 +28,12 @@ export default async function EditEventPage({
             type: event.type,
             startTime: event.startTime,
             endTime: event.endTime,
+            isAllDay: event.isAllDay,
             location: event.location,
             zoomUrl: event.zoomUrl,
             description: event.description,
             matterId: event.matter?.id ?? null,
+            attendees: event.attendees,
           }}
         />
       </div>

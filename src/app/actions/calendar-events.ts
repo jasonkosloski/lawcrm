@@ -25,15 +25,25 @@ function revalidateForEvent(matterId: string | null): void {
 
 // ── Update ──────────────────────────────────────────────────────────────
 
+const attendeeEntrySchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(120),
+  email: z.string().trim().max(200).optional().or(z.literal("")),
+});
+
 const updateEventSchema = z
   .object({
     title: z.string().trim().min(1, "Title is required").max(200),
     type: z.enum(EVENT_TYPES).default("meeting"),
+    isAllDay: z.literal("on").optional(),
     startTime: z.string().min(1, "Start time is required"),
     endTime: z.string().min(1, "End time is required"),
     location: z.string().max(200).optional().or(z.literal("")),
     zoomUrl: z.string().max(500).optional().or(z.literal("")),
     description: z.string().max(4000).optional().or(z.literal("")),
+    /** JSON array of `{ name, email }` from the form's hidden
+     *  field. Replace-all on save. Optional / empty = no
+     *  attendees. */
+    attendees: z.string().optional().default("[]"),
   })
   .superRefine((data, ctx) => {
     const start = new Date(data.startTime);
@@ -90,17 +100,58 @@ export async function updateCalendarEvent(
     };
   }
 
-  await prisma.calendarEvent.update({
-    where: { id: eventId },
-    data: {
-      title: parsed.data.title,
-      type: parsed.data.type,
-      startTime: new Date(parsed.data.startTime),
-      endTime: new Date(parsed.data.endTime),
-      location: parsed.data.location || null,
-      zoomUrl: parsed.data.zoomUrl || null,
-      description: parsed.data.description || null,
-    },
+  // Parse + validate the attendees list before opening the
+  // transaction so a malformed payload doesn't half-update the
+  // event's core fields.
+  let attendeeList: Array<{ name: string; email: string }> = [];
+  try {
+    const decoded = JSON.parse(parsed.data.attendees);
+    if (!Array.isArray(decoded)) throw new Error("not an array");
+    for (const raw of decoded) {
+      const r = attendeeEntrySchema.safeParse(raw);
+      if (!r.success) {
+        return {
+          status: "error",
+          errors: { attendees: [r.error.issues[0]?.message ?? "Invalid attendee"] },
+        };
+      }
+      attendeeList.push({ name: r.data.name, email: r.data.email ?? "" });
+    }
+  } catch {
+    return {
+      status: "error",
+      errors: { attendees: ["Attendee list was malformed — try again."] },
+    };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.calendarEvent.update({
+      where: { id: eventId },
+      data: {
+        title: parsed.data.title,
+        type: parsed.data.type,
+        isAllDay: parsed.data.isAllDay === "on",
+        startTime: new Date(parsed.data.startTime),
+        endTime: new Date(parsed.data.endTime),
+        location: parsed.data.location || null,
+        zoomUrl: parsed.data.zoomUrl || null,
+        description: parsed.data.description || null,
+      },
+    });
+    // Replace-all attendees — simpler than a diff at this scale,
+    // and existing rows had no per-attendee state worth preserving
+    // (status defaults to "pending" today; RSVP isn't wired yet).
+    await tx.calendarAttendee.deleteMany({ where: { eventId } });
+    if (attendeeList.length > 0) {
+      await tx.calendarAttendee.createMany({
+        data: attendeeList.map((a) => ({
+          eventId,
+          name: a.name,
+          email: a.email || null,
+          status: "pending",
+        })),
+      });
+    }
   });
 
   revalidateForEvent(event.matterId);
