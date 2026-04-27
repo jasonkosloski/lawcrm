@@ -290,7 +290,8 @@ export function InvoicePreview({
                           hours: li.hours,
                           rate: li.rate,
                         }}
-                        userInitials={li.userInitials}
+                        userName={li.userName}
+                        userJobTitle={li.userJobTitle}
                       />
                     ) : (
                       <tr
@@ -310,8 +311,17 @@ export function InvoicePreview({
                               {li.narrative}
                             </div>
                           )}
-                          <div className="text-ink-4 font-mono mt-0.5">
-                            {li.userInitials}
+                          {/* Timekeeper attribution. "Jason Kosloski
+                              — Managing Partner" reads more like a
+                              real bill than a bare "JK" initials
+                              chip. JobTitle is always populated on
+                              the User model, so no conditional
+                              fallback is needed. */}
+                          <div className="text-ink-4 mt-0.5">
+                            {li.userName}
+                            <span className="text-ink-4">
+                              {" "}— {li.userJobTitle}
+                            </span>
                           </div>
                         </td>
                         <td className="py-2 text-right font-mono text-ink-3 whitespace-nowrap">

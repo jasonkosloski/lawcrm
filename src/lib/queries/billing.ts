@@ -311,12 +311,17 @@ export type InvoiceLineItem = {
   narrative: string | null;
   rate: number | null;
   amount: number | null;
-  /** Author of the underlying TimeEntry. Drives the
-   *  edit-pencil visibility on the preview pane: an author can
-   *  always edit their own entry, even without
-   *  `time_entries.edit_any`. */
+  /** Author of the underlying TimeEntry. Drives the inline-edit
+   *  affordance on the preview pane: an author can always edit
+   *  their own entry, even without `time_entries.edit_any`. */
   userId: string;
+  /** "Jason Kosloski" — the timekeeper's full name. */
   userName: string;
+  /** "Managing Partner" — the timekeeper's display title. */
+  userJobTitle: string;
+  /** Two-letter initials kept available for legacy callsites
+   *  (avatars, dense list views). The invoice itself renders the
+   *  full name + jobTitle. */
   userInitials: string;
 };
 
@@ -402,7 +407,9 @@ export async function getInvoiceById(
       },
       lineItems: {
         orderBy: { date: "asc" },
-        include: { user: { select: { name: true, initials: true } } },
+        include: {
+          user: { select: { name: true, initials: true, jobTitle: true } },
+        },
       },
       expenseLineItems: {
         orderBy: { date: "asc" },
@@ -471,6 +478,7 @@ export async function getInvoiceById(
       amount: e.amount?.toNumber() ?? null,
       userId: e.userId,
       userName: e.user.name,
+      userJobTitle: e.user.jobTitle,
       userInitials: e.user.initials,
     })),
     expenseLineItems: inv.expenseLineItems.map((e) => ({

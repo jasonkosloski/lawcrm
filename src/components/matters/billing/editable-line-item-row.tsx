@@ -62,7 +62,8 @@ type RowState = {
 export function EditableLineItemRow({
   timeEntryId,
   initial,
-  userInitials,
+  userName,
+  userJobTitle,
 }: {
   timeEntryId: string;
   initial: {
@@ -72,7 +73,10 @@ export function EditableLineItemRow({
     hours: number;
     rate: number | null;
   };
-  userInitials: string;
+  /** "Jason Kosloski" — the timekeeper's full name. */
+  userName: string;
+  /** "Managing Partner" — the timekeeper's display title. */
+  userJobTitle: string;
 }) {
   // Local working state for the row. The action operates on the
   // whole tuple, so a single-cell edit composes with the row's
@@ -295,7 +299,10 @@ export function EditableLineItemRow({
           )}
         </div>
 
-        <div className="text-ink-4 font-mono mt-0.5">{userInitials}</div>
+        <div className="text-ink-4 mt-0.5">
+          {userName}
+          <span className="text-ink-4"> — {userJobTitle}</span>
+        </div>
 
         {/* Inline error indicator. Sits under the description so
             it has room to wrap; clears on the next successful
