@@ -22,8 +22,11 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmailLink } from "@/components/ui/email-link";
+import { ConflictCheckCard } from "@/components/intake/conflict-check-card";
 import { formatPhone } from "@/lib/format-phone";
 import { getLeadById, LEAD_SOURCE_LABEL } from "@/lib/queries/leads";
+import { runConflictMatcher } from "@/lib/conflict-check";
+import { currentUserHasPermission } from "@/lib/permission-check";
 
 const ASSESSMENT_LABEL: Record<string, string> = {
   strong: "Strong",
@@ -82,6 +85,19 @@ export default async function LeadOverviewPage({
   const { id } = await params;
   const lead = await getLeadById(id);
   if (!lead) notFound();
+
+  // Run the matcher live on every page load so a freshly added
+  // contact / opposing party shows up without re-clicking "Run."
+  // The matcher is read-only and bounded — see lib/conflict-check.ts.
+  const [conflictResult, canRunCheck, canOverride] = await Promise.all([
+    runConflictMatcher({
+      name: lead.contact?.name ?? lead.name ?? null,
+      email: lead.contact?.email ?? lead.email ?? null,
+      organization: lead.contact?.organization ?? null,
+    }),
+    currentUserHasPermission("intake.conflict_check.run"),
+    currentUserHasPermission("intake.conflict_check.override"),
+  ]);
 
   return (
     <div className="p-5">
@@ -322,28 +338,26 @@ export default async function LeadOverviewPage({
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                {lead.conflictCheck === "clear" ? (
-                  <ShieldCheck size={14} className="text-ok" />
-                ) : lead.conflictCheck === "warn" ||
-                  lead.conflictCheck === "conflict" ? (
-                  <TriangleAlert size={14} className="text-warn" />
-                ) : (
-                  <Hourglass size={14} className="text-ink-3" />
-                )}
                 Conflict check
               </CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4">
-              <div className="text-xs text-ink">
-                {lead.conflictCheck === "clear" &&
-                  "No conflicts found in the firm's existing matters."}
-                {lead.conflictCheck === "pending" &&
-                  "Conflict check is still running — re-visit once complete."}
-                {lead.conflictCheck === "warn" &&
-                  "Possible positional conflict flagged — review before taking on this lead."}
-                {lead.conflictCheck === "conflict" &&
-                  "Direct conflict detected — representing this lead is not recommended."}
-              </div>
+              <ConflictCheckCard
+                leadId={lead.id}
+                status={
+                  lead.conflictCheck as
+                    | "pending"
+                    | "clear"
+                    | "warn"
+                    | "conflict"
+                    | "override"
+                }
+                checkedAt={lead.conflictCheckedAt}
+                resolutionNotes={lead.conflictResolutionNotes}
+                matches={conflictResult.matches}
+                canRun={canRunCheck}
+                canOverride={canOverride}
+              />
             </CardContent>
           </Card>
         </div>

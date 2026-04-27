@@ -651,7 +651,16 @@ model Lead {
   damagesAssessment   String?  /// strong | moderate | weak
   defendantAbility    String?  /// Description of defendant's ability to satisfy judgment
   statuteWindow       Int?     /// Days remaining on statute of limitations
-  conflictCheck       String   @default("pending") /// pending | clear | warn | conflict
+  conflictCheck       String   @default("pending") /// pending | clear | warn | conflict | override
+  /// When the matcher last ran. Drives the "checked X minutes ago"
+  /// hint on the conflict card so the user knows whether the
+  /// status reflects current data or a stale run.
+  conflictCheckedAt   DateTime?
+  /// Set when an authorized user manually overrode a warn/conflict
+  /// match — captures the rationale ("informed-consent waiver
+  /// signed", "former client, no substantial relationship", etc.).
+  /// Required for ethics compliance audit trails.
+  conflictResolutionNotes String?
   stage               String   @default("new") /// new | contacted | qualifying | meeting | converted | declined | hold
   declineReason       String?
   convertedMatterId   String?  /// If converted, links to the created matter

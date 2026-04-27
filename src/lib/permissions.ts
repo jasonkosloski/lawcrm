@@ -105,6 +105,24 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
     ],
   },
   {
+    id: "intake",
+    label: "Intake",
+    permissions: [
+      {
+        key: "intake.conflict_check.run",
+        label: "Run conflict checks",
+        description:
+          "Click to (re-)scan a lead against existing Contacts and opposing parties. Updates the conflict-check status on the lead.",
+      },
+      {
+        key: "intake.conflict_check.override",
+        label: "Override conflict flags",
+        description:
+          "Mark a flagged or conflicted lead as cleared with a justification. Required for ethics compliance — the override is logged in the audit trail.",
+      },
+    ],
+  },
+  {
     id: "billing",
     label: "Billing",
     permissions: [
