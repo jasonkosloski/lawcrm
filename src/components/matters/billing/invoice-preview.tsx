@@ -21,7 +21,7 @@ import {
 } from "@/lib/billing-form";
 import type { FirmProfile } from "@/lib/firm";
 import type { InvoiceDetail } from "@/lib/queries/billing";
-import { EditLineItemDialog } from "./edit-line-item-dialog";
+import { EditableLineItemRow } from "./editable-line-item-row";
 
 const formatMoney = (n: number): string =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -72,17 +72,13 @@ export function InvoicePreview({
    *  members. */
   canEditAnyTimeEntry?: boolean;
 }) {
-  // Print pages should never show editing chrome — it'd render the
-  // pencil button and waste a column on the printed page.
+  // Print pages should never show editing chrome — clicking
+  // a value to edit makes no sense in a printed copy. Always
+  // false in printMode so each row renders the static <tr>.
   const editingEnabled = editable && !printMode;
   const canEditLineItem = (lineItemUserId: string): boolean =>
     editingEnabled &&
     (canEditAnyTimeEntry || lineItemUserId === currentUserId);
-  // Header-level: render the Edit column only if at least one row
-  // is editable for this user. Otherwise the column is dead space.
-  const showEditColumn =
-    editingEnabled &&
-    invoice.lineItems.some((li) => canEditLineItem(li.userId));
   const statusClass = STATUS_META[invoice.status] ?? STATUS_META.draft;
   const isInternal = invoice.kind === "internal_record";
   // Letterhead label flips per kind so the doc reads like what it
@@ -279,61 +275,57 @@ export function InvoicePreview({
                     <th className="text-right font-mono uppercase tracking-wider pb-1.5">
                       Amount
                     </th>
-                    {showEditColumn && (
-                      <th className="w-7 sr-only">Edit</th>
-                    )}
                   </tr>
                 </thead>
                 <tbody>
-                  {invoice.lineItems.map((li) => (
-                    <tr
-                      key={li.id}
-                      className="border-b border-line/60 last:border-b-0 align-top"
-                    >
-                      <td className="py-2 font-mono text-ink-3 whitespace-nowrap pr-3">
-                        {li.date.toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                        })}
-                      </td>
-                      <td className="py-2 pr-3">
-                        <div className="text-ink">{li.activity}</div>
-                        {li.narrative && (
-                          <div className="text-ink-4 mt-0.5">
-                            {li.narrative}
-                          </div>
-                        )}
-                        <div className="text-ink-4 font-mono mt-0.5">
-                          {li.userInitials}
-                        </div>
-                      </td>
-                      <td className="py-2 text-right font-mono text-ink-3 whitespace-nowrap">
-                        {li.hours.toFixed(2)}
-                      </td>
-                      <td className="py-2 text-right font-mono text-ink-3 whitespace-nowrap">
-                        {li.rate !== null ? formatMoney(li.rate) : "—"}
-                      </td>
-                      <td className="py-2 text-right font-mono text-ink whitespace-nowrap pl-3">
-                        {li.amount !== null ? formatMoney(li.amount) : "—"}
-                      </td>
-                      {showEditColumn && (
-                        <td className="py-2 pl-2 align-middle">
-                          {canEditLineItem(li.userId) && (
-                            <EditLineItemDialog
-                              timeEntryId={li.id}
-                              initial={{
-                                date: li.date,
-                                activity: li.activity,
-                                narrative: li.narrative,
-                                hours: li.hours,
-                                rate: li.rate,
-                              }}
-                            />
-                          )}
+                  {invoice.lineItems.map((li) =>
+                    canEditLineItem(li.userId) ? (
+                      <EditableLineItemRow
+                        key={li.id}
+                        timeEntryId={li.id}
+                        initial={{
+                          date: li.date,
+                          activity: li.activity,
+                          narrative: li.narrative,
+                          hours: li.hours,
+                          rate: li.rate,
+                        }}
+                        userInitials={li.userInitials}
+                      />
+                    ) : (
+                      <tr
+                        key={li.id}
+                        className="border-b border-line/60 last:border-b-0 align-top"
+                      >
+                        <td className="py-2 font-mono text-ink-3 whitespace-nowrap pr-3">
+                          {li.date.toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                          })}
                         </td>
-                      )}
-                    </tr>
-                  ))}
+                        <td className="py-2 pr-3">
+                          <div className="text-ink">{li.activity}</div>
+                          {li.narrative && (
+                            <div className="text-ink-4 mt-0.5">
+                              {li.narrative}
+                            </div>
+                          )}
+                          <div className="text-ink-4 font-mono mt-0.5">
+                            {li.userInitials}
+                          </div>
+                        </td>
+                        <td className="py-2 text-right font-mono text-ink-3 whitespace-nowrap">
+                          {li.hours.toFixed(2)}
+                        </td>
+                        <td className="py-2 text-right font-mono text-ink-3 whitespace-nowrap">
+                          {li.rate !== null ? formatMoney(li.rate) : "—"}
+                        </td>
+                        <td className="py-2 text-right font-mono text-ink whitespace-nowrap pl-3">
+                          {li.amount !== null ? formatMoney(li.amount) : "—"}
+                        </td>
+                      </tr>
+                    )
+                  )}
                 </tbody>
               </table>
             )}
