@@ -12,6 +12,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import { Mail, Phone, Pin } from "lucide-react";
 import { StageChanger } from "@/components/matters/stage-changer";
 import { StatuteOfLimitationsCard } from "@/components/matters/statute-of-limitations-card";
@@ -101,7 +102,14 @@ export default async function MatterOverviewPage({
   const openTasks = tasks
     .filter((t) => t.status === "open" || t.status === "in_progress")
     .slice(0, 5);
-  const pinnedNote = notes.find((n) => n.isPinned) ?? notes[0] ?? null;
+  // Every pinned note shows on the overview — the lawyer expressly
+  // chose them as the "always-visible reference items" for this
+  // case. Older behavior fell back to the most-recent note when
+  // nothing was pinned; that's been dropped because (a) the Notes
+  // tab is one click away, (b) showing un-pinned content here
+  // turned the overview into a stale-feed surface, and (c) the
+  // empty state encourages the lawyer to pin the note that matters.
+  const pinnedNotes = notes.filter((n) => n.isPinned);
 
   return (
     <div className="p-5">
@@ -168,20 +176,28 @@ export default async function MatterOverviewPage({
             </CardContent>
           </Card>
 
-          {/* Strategy note preview */}
-          {pinnedNote && (
+          {/* Pinned notes — every pinned note for this matter,
+              stacked. Content is sanitized server-side at write
+              time (see notes.ts → DOMPurify), so dangerouslySetInnerHTML
+              is safe and lets the rich-text composer's markup
+              actually render instead of leaking <p>/<ul>/etc. as
+              literal text. Plain-text seed notes pass through fine
+              — bare text inside the div renders as bare text. */}
+          {pinnedNotes.length > 0 && (
             <Card>
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm font-semibold">
                     <div className="flex items-center gap-2">
-                      {pinnedNote.isPinned && (
-                        <Pin
-                          size={12}
-                          className="fill-brand-500 text-brand-500"
-                        />
-                      )}
-                      Note · {pinnedNote.authorName}
+                      <Pin
+                        size={12}
+                        className="fill-brand-500 text-brand-500"
+                      />
+                      Pinned{" "}
+                      {pinnedNotes.length === 1 ? "note" : "notes"}
+                      <span className="text-2xs font-mono font-normal text-ink-4 ml-0.5">
+                        {pinnedNotes.length}
+                      </span>
                     </div>
                   </CardTitle>
                   <Link
@@ -192,10 +208,46 @@ export default async function MatterOverviewPage({
                   </Link>
                 </div>
               </CardHeader>
-              <CardContent className="px-4 pb-4">
-                <div className="text-xs text-ink leading-relaxed whitespace-pre-wrap line-clamp-6">
-                  {pinnedNote.content}
-                </div>
+              <CardContent className="px-4 pb-4 flex flex-col gap-3">
+                {pinnedNotes.map((note, idx) => (
+                  <div
+                    key={note.id}
+                    className={cn(
+                      "flex flex-col gap-1.5",
+                      // Hairline separators between stacked notes;
+                      // first one needs none.
+                      idx > 0 && "pt-3 border-t border-line"
+                    )}
+                  >
+                    <div className="flex items-center justify-between text-2xs">
+                      <span className="text-ink-3">
+                        {note.authorName}
+                      </span>
+                      <Link
+                        href={`/matters/${matter.id}/notes#note-${note.id}`}
+                        className="font-mono text-ink-4 hover:text-brand-700 hover:underline"
+                      >
+                        {formatDate(note.createdAt)} →
+                      </Link>
+                    </div>
+                    <div
+                      className={cn(
+                        "prose prose-sm max-w-none text-xs text-ink leading-relaxed line-clamp-6",
+                        // Match the composer's content styles so
+                        // reading + writing look the same. Mirrors
+                        // note-card.tsx so the overview preview
+                        // and the full Notes tab feel identical.
+                        "[&_p]:my-1 [&_p]:text-xs [&_p]:text-ink",
+                        "[&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-2 [&_h2]:mb-0.5",
+                        "[&_h3]:text-xs [&_h3]:font-semibold [&_h3]:mt-1 [&_h3]:mb-0.5",
+                        "[&_ul]:my-1 [&_ol]:my-1 [&_li]:text-xs [&_ul]:pl-5 [&_ol]:pl-5 [&_ul]:list-disc [&_ol]:list-decimal",
+                        "[&_blockquote]:border-l-2 [&_blockquote]:border-line [&_blockquote]:pl-3 [&_blockquote]:text-ink-3 [&_blockquote]:italic",
+                        "[&_code]:bg-paper-2 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[11px] [&_code]:font-mono"
+                      )}
+                      dangerouslySetInnerHTML={{ __html: note.content }}
+                    />
+                  </div>
+                ))}
               </CardContent>
             </Card>
           )}
