@@ -53,12 +53,19 @@ import { GenerateInvoiceForm } from "@/components/matters/billing/generate-invoi
 import { InvoiceActionBar } from "@/components/matters/billing/invoice-action-bar";
 import { InvoicePreview } from "@/components/matters/billing/invoice-preview";
 import { TrustTransactionForm } from "@/components/matters/billing/trust-transaction-form";
+import { SettlementComposer } from "@/components/matters/settlement/settlement-composer";
+import { SettlementLienForm } from "@/components/matters/settlement/settlement-lien-form";
 import {
   getMatterBilling,
   getInvoiceById,
   type MatterBilling,
 } from "@/lib/queries/billing";
+import {
+  getMatterSettlement,
+  type MatterSettlement,
+} from "@/lib/queries/settlements";
 import { getCurrentFirm } from "@/lib/firm";
+import { currentUserHasPermission } from "@/lib/permission-check";
 import {
   invoiceStatusLabel,
   INVOICE_PAYMENT_SOURCE_LABEL,
@@ -104,9 +111,18 @@ export default async function MatterBillingPage({
   const requestedInvoiceId =
     typeof rawInvoice === "string" ? rawInvoice : null;
 
-  const [billing, firm] = await Promise.all([
+  const [
+    billing,
+    firm,
+    settlement,
+    canEditSettlement,
+    canManageLiens,
+  ] = await Promise.all([
     getMatterBilling(id),
     getCurrentFirm(),
+    getMatterSettlement(id),
+    currentUserHasPermission("matters.settlement.edit"),
+    currentUserHasPermission("matters.settlement.manage_liens"),
   ]);
 
   // Validate the requested invoice belongs to this matter — defends
@@ -125,6 +141,9 @@ export default async function MatterBillingPage({
     <MainColumn
       matterId={id}
       billing={billing}
+      settlement={settlement}
+      canEditSettlement={canEditSettlement}
+      canManageLiens={canManageLiens}
       selectedInvoiceId={selectedInvoiceId}
       isSplit={!!selectedInvoice}
     />
@@ -183,11 +202,17 @@ export default async function MatterBillingPage({
 function MainColumn({
   matterId,
   billing,
+  settlement,
+  canEditSettlement,
+  canManageLiens,
   selectedInvoiceId,
   isSplit,
 }: {
   matterId: string;
   billing: MatterBilling;
+  settlement: MatterSettlement | null;
+  canEditSettlement: boolean;
+  canManageLiens: boolean;
   selectedInvoiceId: string | null;
   isSplit: boolean;
 }) {
@@ -659,7 +684,183 @@ function MainColumn({
           )}
         </CardContent>
       </Card>
+
+      {/* ── Settlement waterfall ───────────────────────────── */}
+      {(settlement || canEditSettlement) && (
+        <SettlementCard
+          matterId={matterId}
+          settlement={settlement}
+          canEdit={canEditSettlement}
+          canManageLiens={canManageLiens}
+        />
+      )}
     </>
+  );
+}
+
+function SettlementCard({
+  matterId,
+  settlement,
+  canEdit,
+  canManageLiens,
+}: {
+  matterId: string;
+  settlement: MatterSettlement | null;
+  canEdit: boolean;
+  canManageLiens: boolean;
+}) {
+  return (
+    <Card className="p-0 overflow-hidden">
+      <CardHeader className="pb-2 pt-4 px-4">
+        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+          Settlement
+          {settlement && (
+            <span
+              className={cn(
+                "text-2xs font-medium px-2 py-0.5 rounded-full border",
+                settlement.status === "disbursed" || settlement.status === "closed"
+                  ? "bg-ok-soft text-ok border-line"
+                  : settlement.status === "approved"
+                    ? "bg-brand-soft text-brand-700 border-brand-200"
+                    : "bg-paper-2 text-ink-3 border-line"
+              )}
+            >
+              {settlement.status}
+            </span>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="px-4 pb-4 flex flex-col gap-3">
+        {!settlement ? (
+          <>
+            <div className="text-2xs text-ink-4 leading-relaxed">
+              No settlement opened on this matter yet. Contingency
+              matters use this section to capture the gross
+              settlement, firm fee, advanced costs, and any liens —
+              the client&apos;s net distribution computes
+              automatically.
+            </div>
+            <SettlementComposer
+              matterId={matterId}
+              initial={null}
+              canEdit={canEdit}
+            />
+          </>
+        ) : (
+          <>
+            {/* Waterfall: gross → firm fee → advanced costs →
+                liens → client net. Each row is a flow stage so the
+                lawyer can scan it the way they'd narrate it to a
+                client. */}
+            <dl className="grid grid-cols-[1fr_auto] gap-y-1.5 text-xs">
+              <dt className="text-ink-2 font-medium">Gross settlement</dt>
+              <dd className="font-mono text-ink">
+                {formatMoney(settlement.grossAmount)}
+              </dd>
+
+              <dt className="text-ink-3 pl-3">
+                Firm fee
+                {settlement.firmFeePercent !== null && (
+                  <span className="text-ink-4 ml-1">
+                    ({settlement.firmFeePercent}%)
+                  </span>
+                )}
+              </dt>
+              <dd className="font-mono text-warn">
+                −{formatMoney(settlement.firmFee)}
+              </dd>
+
+              {settlement.advancedCosts > 0 && (
+                <>
+                  <dt className="text-ink-3 pl-3">Advanced costs</dt>
+                  <dd className="font-mono text-warn">
+                    −{formatMoney(settlement.advancedCosts)}
+                  </dd>
+                </>
+              )}
+
+              {settlement.lienTotal > 0 && (
+                <>
+                  <dt className="text-ink-3 pl-3">
+                    Liens
+                    <span className="text-ink-4 ml-1">
+                      ({settlement.liens.length})
+                    </span>
+                  </dt>
+                  <dd className="font-mono text-warn">
+                    −{formatMoney(settlement.lienTotal)}
+                  </dd>
+                </>
+              )}
+
+              <dt className="text-ink font-semibold pt-1.5 border-t border-line mt-1">
+                Client net
+              </dt>
+              <dd className="font-mono font-semibold text-ok pt-1.5 border-t border-line mt-1">
+                {formatMoney(settlement.clientNet)}
+              </dd>
+            </dl>
+
+            {/* Liens list (read-only chips by default; the form
+                below adds new ones when the user has the
+                permission). */}
+            {settlement.liens.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+                  Liens
+                </div>
+                <ul className="border border-line rounded-md overflow-hidden divide-y divide-line">
+                  {settlement.liens.map((l) => (
+                    <li
+                      key={l.id}
+                      className="flex items-center justify-between gap-3 px-3 py-2 text-2xs"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="text-ink truncate">
+                          {l.lienholder}
+                        </div>
+                        <div className="text-ink-4 mt-0.5">
+                          {l.lienholderType ?? "—"} · {l.status}
+                        </div>
+                      </div>
+                      <div className="text-right font-mono">
+                        <div className="text-ink">
+                          {formatMoney(l.effectiveAmount)}
+                        </div>
+                        {l.negotiatedAmount !== null &&
+                          l.negotiatedAmount < l.originalAmount && (
+                            <div className="text-2xs text-ink-4 line-through">
+                              {formatMoney(l.originalAmount)}
+                            </div>
+                          )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {canManageLiens && (
+              <SettlementLienForm settlementId={settlement.id} />
+            )}
+
+            {canEdit && (
+              <SettlementComposer
+                matterId={matterId}
+                initial={{
+                  grossAmount: settlement.grossAmount,
+                  firmFeePercent: settlement.firmFeePercent,
+                  firmFee: settlement.firmFee,
+                  advancedCosts: settlement.advancedCosts,
+                  status: settlement.status,
+                }}
+                canEdit={canEdit}
+              />
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

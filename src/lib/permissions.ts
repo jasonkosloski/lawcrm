@@ -84,6 +84,24 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         description:
           "Remove an expense entirely. Refused once the expense has been billed onto an invoice.",
       },
+      {
+        key: "matters.settlement.view",
+        label: "View settlements",
+        description:
+          "See the gross→fees→costs→liens→client-net waterfall on contingency matters.",
+      },
+      {
+        key: "matters.settlement.edit",
+        label: "Create / edit settlements",
+        description:
+          "Compose a new settlement on a matter; edit gross / firm fee / costs / status while it's pending.",
+      },
+      {
+        key: "matters.settlement.manage_liens",
+        label: "Manage settlement liens",
+        description:
+          "Add a lien (medical, subrogation, etc.) to a settlement; negotiate the amount and mark its status.",
+      },
     ],
   },
   {
