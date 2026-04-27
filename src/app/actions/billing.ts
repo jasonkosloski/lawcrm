@@ -149,14 +149,36 @@ export async function generateInvoiceFromWip(
         },
         select: { id: true, amount: true },
       });
-      if (entries.length === 0) {
-        throw new Error("No unbilled entries to invoice.");
+
+      // Same-shaped pull for billable + un-invoiced expenses on
+      // the matter. Both buckets contribute to the invoice
+      // subtotal; the bundling is a single transaction so an
+      // expense linked to an invoice that fails to mint never
+      // ends up in a half-billed state.
+      const expenseRows = await tx.expense.findMany({
+        where: {
+          matterId: matter.id,
+          billable: true,
+          invoiceId: null,
+        },
+        select: { id: true, amount: true },
+      });
+
+      if (entries.length === 0 && expenseRows.length === 0) {
+        throw new Error(
+          "Nothing unbilled to invoice — log billable time or expenses first."
+        );
       }
 
-      const subtotal = entries.reduce(
+      const timeSubtotal = entries.reduce(
         (acc, e) => (e.amount ? acc.add(e.amount) : acc),
         new Prisma.Decimal(0)
       );
+      const expenseSubtotal = expenseRows.reduce(
+        (acc, e) => acc.add(e.amount),
+        new Prisma.Decimal(0)
+      );
+      const subtotal = timeSubtotal.add(expenseSubtotal);
       // No tax for v1 — firm settings will introduce a per-state
       // rate later. Total = subtotal.
       const total = subtotal;
@@ -204,26 +226,51 @@ export async function generateInvoiceFromWip(
       if (!invoice) throw new Error("Failed to mint invoice number.");
 
       // Link every WIP entry to this invoice + flip status to billed.
-      await tx.timeEntry.updateMany({
-        where: { id: { in: entries.map((e) => e.id) } },
-        data: { invoiceId: invoice.id, status: "billed" },
-      });
+      if (entries.length > 0) {
+        await tx.timeEntry.updateMany({
+          where: { id: { in: entries.map((e) => e.id) } },
+          data: { invoiceId: invoice.id, status: "billed" },
+        });
+      }
+      // Link every billable expense to the invoice. Expenses
+      // don't have a status enum like time entries — the
+      // `invoiceId` itself is the "billed" signal.
+      if (expenseRows.length > 0) {
+        await tx.expense.updateMany({
+          where: { id: { in: expenseRows.map((e) => e.id) } },
+          data: { invoiceId: invoice.id },
+        });
+      }
 
       return {
         invoiceId: invoice.id,
         invoiceNumber: invoice.invoiceNumber,
         matter,
         entryCount: entries.length,
+        expenseCount: expenseRows.length,
         total,
       };
     });
 
+    // Activity log title spells out both buckets so the audit
+    // makes the bundle's composition readable at a glance.
+    const composition: string[] = [];
+    if (result.entryCount > 0) {
+      composition.push(
+        `${result.entryCount} time ${result.entryCount === 1 ? "entry" : "entries"}`
+      );
+    }
+    if (result.expenseCount > 0) {
+      composition.push(
+        `${result.expenseCount} expense${result.expenseCount === 1 ? "" : "s"}`
+      );
+    }
     await logActivity({
       matterId: result.matter.id,
       userId,
-      type: "filing", // closest existing type — replace with "invoice" when ActivityType expands
+      type: "filing",
       title: `Invoice ${result.invoiceNumber} generated`,
-      detail: `${result.entryCount} time entries · $${result.total.toFixed(2)}`,
+      detail: `${composition.join(" + ")} · $${result.total.toFixed(2)}`,
     });
 
     revalidatePath(`/matters/${matterId}/billing`);
@@ -299,12 +346,18 @@ export async function setInvoiceStatus(
 
   if (next === "void") {
     // Void → unlink time entries so they go back into WIP under
-    // their original status. Otherwise voiding strands billable
-    // hours at status="billed".
+    // their original status, and unlink expenses so they're
+    // available to roll into a future invoice. Otherwise
+    // voiding strands billable hours at status="billed" and
+    // expenses pinned to a now-voided invoice.
     await prisma.$transaction([
       prisma.timeEntry.updateMany({
         where: { invoiceId: invoice.id },
         data: { invoiceId: null, status: "billable" },
+      }),
+      prisma.expense.updateMany({
+        where: { invoiceId: invoice.id },
+        data: { invoiceId: null },
       }),
       prisma.invoice.update({ where: { id: invoice.id }, data }),
     ]);
@@ -594,14 +647,31 @@ export async function bundleAsInternalRecord(
         },
         select: { id: true, amount: true },
       });
-      if (entries.length === 0) {
-        throw new Error("No unbilled entries to bundle.");
+      // Bundle billable + un-invoiced expenses too — internal-
+      // record close-out should sweep both buckets so the WIP +
+      // expense rails on the matter Time tab read empty after
+      // the bundle.
+      const expenseRows = await tx.expense.findMany({
+        where: {
+          matterId: matter.id,
+          billable: true,
+          invoiceId: null,
+        },
+        select: { id: true, amount: true },
+      });
+      if (entries.length === 0 && expenseRows.length === 0) {
+        throw new Error("Nothing unbilled to bundle.");
       }
 
-      const subtotal = entries.reduce(
+      const timeSubtotal = entries.reduce(
         (acc, e) => (e.amount ? acc.add(e.amount) : acc),
         new Prisma.Decimal(0)
       );
+      const expenseSubtotal = expenseRows.reduce(
+        (acc, e) => acc.add(e.amount),
+        new Prisma.Decimal(0)
+      );
+      const subtotal = timeSubtotal.add(expenseSubtotal);
       const total = subtotal;
 
       const issueDate = new Date();
@@ -650,10 +720,18 @@ export async function bundleAsInternalRecord(
       // they leave WIP. Void unlinks them back. The "billed" status
       // here doesn't mean "billed to a client"; it means "linked to
       // a bundling document, no longer in WIP".
-      await tx.timeEntry.updateMany({
-        where: { id: { in: entries.map((e) => e.id) } },
-        data: { invoiceId: invoice.id, status: "billed" },
-      });
+      if (entries.length > 0) {
+        await tx.timeEntry.updateMany({
+          where: { id: { in: entries.map((e) => e.id) } },
+          data: { invoiceId: invoice.id, status: "billed" },
+        });
+      }
+      if (expenseRows.length > 0) {
+        await tx.expense.updateMany({
+          where: { id: { in: expenseRows.map((e) => e.id) } },
+          data: { invoiceId: invoice.id },
+        });
+      }
 
       return {
         invoiceId: invoice.id,

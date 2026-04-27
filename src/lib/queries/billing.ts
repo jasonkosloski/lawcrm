@@ -315,6 +315,16 @@ export type InvoiceLineItem = {
   userInitials: string;
 };
 
+export type InvoiceExpenseLineItem = {
+  id: string;
+  date: Date;
+  description: string;
+  category: string;
+  amount: number;
+  utbmsCode: string | null;
+  notes: string | null;
+};
+
 /** A payment recorded against an invoice. Sourced from the
  *  `InvoicePayment` table — every channel (trust, check, ACH, cash,
  *  card, other) lands here. Trust payments also write a separate
@@ -349,6 +359,9 @@ export type InvoiceDetail = InvoiceRow & {
     zip: string | null;
   } | null;
   lineItems: InvoiceLineItem[];
+  /** Expense line items billed alongside time entries. Same
+   *  invoice rolls up both buckets under the totals stack. */
+  expenseLineItems: InvoiceExpenseLineItem[];
   /** Recorded payments against this invoice — drives the
    *  "Payments received" section on the preview. May be empty
    *  even when paidAmount > 0 if the invoice was Mark-paid
@@ -385,6 +398,9 @@ export async function getInvoiceById(
       lineItems: {
         orderBy: { date: "asc" },
         include: { user: { select: { name: true, initials: true } } },
+      },
+      expenseLineItems: {
+        orderBy: { date: "asc" },
       },
       payments: {
         // Newest payments float to the top so the most recent
@@ -450,6 +466,15 @@ export async function getInvoiceById(
       amount: e.amount?.toNumber() ?? null,
       userName: e.user.name,
       userInitials: e.user.initials,
+    })),
+    expenseLineItems: inv.expenseLineItems.map((e) => ({
+      id: e.id,
+      date: e.date,
+      description: e.description,
+      category: e.category,
+      amount: e.amount.toNumber(),
+      utbmsCode: e.utbmsCode,
+      notes: e.notes,
     })),
     payments: inv.payments.map((p) => ({
       id: p.id,

@@ -283,6 +283,67 @@ export function InvoicePreview({
             )}
           </div>
 
+          {/* Expense line items — only renders when the invoice
+              actually bundled any. Same row chrome as Services so
+              the eye groups them as parallel sections. */}
+          {invoice.expenseLineItems.length > 0 && (
+            <div className="px-6 py-4 border-b border-line">
+              <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 mb-2">
+                Expenses
+              </div>
+              <table className="w-full text-2xs">
+                <thead>
+                  <tr className="text-ink-4 border-b border-line">
+                    <th className="text-left font-mono uppercase tracking-wider pb-1.5">
+                      Date
+                    </th>
+                    <th className="text-left font-mono uppercase tracking-wider pb-1.5">
+                      Description
+                    </th>
+                    <th className="text-left font-mono uppercase tracking-wider pb-1.5">
+                      Category
+                    </th>
+                    <th className="text-right font-mono uppercase tracking-wider pb-1.5">
+                      Amount
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoice.expenseLineItems.map((ex) => (
+                    <tr
+                      key={ex.id}
+                      className="border-b border-line/60 last:border-b-0 align-top"
+                    >
+                      <td className="py-2 font-mono text-ink-3 whitespace-nowrap pr-3">
+                        {ex.date.toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </td>
+                      <td className="py-2 pr-3">
+                        <div className="text-ink">{ex.description}</div>
+                        {ex.notes && (
+                          <div className="text-ink-4 mt-0.5">{ex.notes}</div>
+                        )}
+                        {ex.utbmsCode && (
+                          <div className="text-ink-4 font-mono mt-0.5">
+                            {ex.utbmsCode}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-2 text-ink-3 capitalize whitespace-nowrap pr-3">
+                        {ex.category.replace(/_/g, " ")}
+                      </td>
+                      <td className="py-2 text-right font-mono text-ink whitespace-nowrap pl-3">
+                        {formatMoney(ex.amount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           {/* Totals stack */}
           <div className="px-6 py-4 border-b border-line">
             <dl className="ml-auto w-64 text-xs grid grid-cols-[1fr_auto] gap-y-1">
