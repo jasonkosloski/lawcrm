@@ -19,6 +19,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { BILLING_MODES } from "@/lib/billing-mode-constants";
+import { computeSolDate } from "@/lib/sol";
 import {
   MATTER_TEAM_ROLES,
   matterTeamRoleLabel,
@@ -60,7 +61,16 @@ const createMatterSchema = z
     leadUserId: z.string().trim().min(1, "Lead attorney is required"),
     description: z.string().trim().max(4000).optional().or(z.literal("")),
     /** SOL fields — ignored unless the selected practice area has
-     *  hasStatuteOfLimitations=true. Form shows them conditionally. */
+     *  hasStatuteOfLimitations=true. Form shows them conditionally.
+     *  When the area has a configured statutePeriodDays AND
+     *  incidentDate is filled in, the SOL date is auto-computed
+     *  on submit; the explicit `statuteOfLimitationsDate` value
+     *  (if any) wins so the lawyer can override. */
+    incidentDate: z
+      .string()
+      .trim()
+      .optional()
+      .or(z.literal("")),
     statuteOfLimitationsDate: z
       .string()
       .trim()
@@ -175,6 +185,9 @@ async function resolveAreaAndStage(
       stageId: string;
       color: string;
       hasStatuteOfLimitations: boolean;
+      /** Total-days statute period configured by the firm. Drives
+       *  auto-compute of the matter's SOL date from incidentDate. */
+      statutePeriodDays: number | null;
       /** Snapshotted onto the new Matter so per-area changes don't
        *  rewrite history. Per-matter override happens via the matter
        *  edit form. */
@@ -189,6 +202,7 @@ async function resolveAreaAndStage(
       color: true,
       isActive: true,
       hasStatuteOfLimitations: true,
+      statutePeriodDays: true,
       defaultBillingMode: true,
       stages: {
         where: { isActive: true },
@@ -211,6 +225,7 @@ async function resolveAreaAndStage(
     stageId: resolvedStageId,
     color: area.color,
     hasStatuteOfLimitations: area.hasStatuteOfLimitations,
+    statutePeriodDays: area.statutePeriodDays,
     defaultBillingMode: area.defaultBillingMode,
   };
 }
@@ -291,9 +306,17 @@ export async function createMatter(
   // Only persist SOL fields when the area actually tracks them;
   // otherwise drop them on the floor so a stale form submission from
   // an area that used to track SOL doesn't leave dangling dates.
+  const incidentDate =
+    resolved.hasStatuteOfLimitations && data.incidentDate
+      ? new Date(data.incidentDate)
+      : null;
+  // Manual override wins; otherwise auto-compute from
+  // incidentDate + the area's statutePeriodDays.
   const solDate =
-    resolved.hasStatuteOfLimitations && data.statuteOfLimitationsDate
-      ? new Date(data.statuteOfLimitationsDate)
+    resolved.hasStatuteOfLimitations
+      ? data.statuteOfLimitationsDate
+        ? new Date(data.statuteOfLimitationsDate)
+        : computeSolDate(incidentDate, resolved.statutePeriodDays)
       : null;
   const solNotes =
     resolved.hasStatuteOfLimitations
@@ -317,6 +340,7 @@ export async function createMatter(
       description: data.description || null,
       color: resolved.color,
       clientId,
+      incidentDate,
       statuteOfLimitationsDate: solDate,
       statuteOfLimitationsNotes: solNotes,
       teamMembers: {
@@ -389,6 +413,11 @@ const updateMatterSchema = z.object({
   opposingFirm: z.string().trim().max(200).optional().or(z.literal("")),
   leadUserId: z.string().trim().min(1, "Lead attorney is required"),
   description: z.string().trim().max(4000).optional().or(z.literal("")),
+  incidentDate: z
+    .string()
+    .trim()
+    .optional()
+    .or(z.literal("")),
   statuteOfLimitationsDate: z
     .string()
     .trim()
@@ -457,10 +486,18 @@ export async function updateMatter(
 
   // Same SOL guard as createMatter — if the new area doesn't track
   // SOL, null out any date/notes so switching areas doesn't leave
-  // orphaned SOL data.
+  // orphaned SOL data. Auto-compute when an explicit SOL date
+  // wasn't posted but an incident date + statute period are
+  // available; explicit value wins.
+  const incidentDate =
+    resolved.hasStatuteOfLimitations && data.incidentDate
+      ? new Date(data.incidentDate)
+      : null;
   const solDate =
-    resolved.hasStatuteOfLimitations && data.statuteOfLimitationsDate
-      ? new Date(data.statuteOfLimitationsDate)
+    resolved.hasStatuteOfLimitations
+      ? data.statuteOfLimitationsDate
+        ? new Date(data.statuteOfLimitationsDate)
+        : computeSolDate(incidentDate, resolved.statutePeriodDays)
       : null;
   const solNotes =
     resolved.hasStatuteOfLimitations
@@ -485,6 +522,7 @@ export async function updateMatter(
         description: data.description || null,
         color: resolved.color,
         clientId,
+        incidentDate,
         statuteOfLimitationsDate: solDate,
         statuteOfLimitationsNotes: solNotes,
         // If the area dropped SOL tracking, clear the satisfied flag

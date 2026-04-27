@@ -89,6 +89,8 @@ export default async function PracticeAreaDetailPage({
               label: area.label,
               color: area.color,
               hasStatuteOfLimitations: area.hasStatuteOfLimitations,
+              statutePeriodDays: area.statutePeriodDays,
+              statuteSourceCitation: area.statuteSourceCitation,
               defaultBillingMode: area.defaultBillingMode,
             }}
           />

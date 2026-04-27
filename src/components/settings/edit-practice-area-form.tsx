@@ -11,6 +11,7 @@
 import { useActionState, useState } from "react";
 import { cn } from "@/lib/utils";
 import { updatePracticeArea } from "@/app/actions/practice-areas";
+import { unpackStatuteDays } from "@/lib/sol";
 import {
   practiceAreaInitialState,
   type PracticeAreaFormState,
@@ -31,6 +32,8 @@ export function EditPracticeAreaForm({
     label: string | null;
     color: string;
     hasStatuteOfLimitations: boolean;
+    statutePeriodDays: number | null;
+    statuteSourceCitation: string | null;
     defaultBillingMode: string;
   };
 }) {
@@ -118,6 +121,67 @@ export function EditPracticeAreaForm({
           </span>
         </div>
       </label>
+
+      {/* Statute period editor. Only relevant when the SOL toggle
+          above is on; we render unconditionally and let the action
+          ignore the values when the toggle is off. Pre-fills from
+          the area's stored total days, unpacked back into y/m/d so
+          the lawyer sees the same shape they typed last time. */}
+      <fieldset className="flex flex-col gap-2 px-3 py-2.5 rounded-md border border-line bg-paper-2/30">
+        <legend className="px-1 text-2xs font-mono uppercase tracking-wider text-ink-4">
+          Statute period (auto-computes Matter SOL date from incident)
+        </legend>
+        {(() => {
+          const period = unpackStatuteDays(area.statutePeriodDays);
+          return (
+            <div className="grid grid-cols-3 gap-2">
+              <Field label="Years">
+                <input
+                  type="number"
+                  name="statuteYears"
+                  min={0}
+                  defaultValue={period.years || ""}
+                  className={inputCls(false)}
+                />
+              </Field>
+              <Field label="Months">
+                <input
+                  type="number"
+                  name="statuteMonths"
+                  min={0}
+                  defaultValue={period.months || ""}
+                  className={inputCls(false)}
+                />
+              </Field>
+              <Field label="Days">
+                <input
+                  type="number"
+                  name="statuteDays"
+                  min={0}
+                  defaultValue={period.days || ""}
+                  className={inputCls(false)}
+                />
+              </Field>
+            </div>
+          );
+        })()}
+        <Field
+          label="Source citation"
+          hint="e.g. C.R.S. § 13-80-102 — surfaces on the SOL card so attorneys can verify against the statute"
+        >
+          <input
+            name="statuteSourceCitation"
+            type="text"
+            defaultValue={area.statuteSourceCitation ?? ""}
+            maxLength={120}
+            className={inputCls(false)}
+          />
+        </Field>
+        <p className="text-2xs text-ink-4 leading-relaxed">
+          Total days = years × 365 + months × 30 + days. Legal SOL
+          periods are virtually always specified that way.
+        </p>
+      </fieldset>
 
       {/* Default billing mode — snapshots onto each new matter on
           create. Per-matter override happens on the matter edit

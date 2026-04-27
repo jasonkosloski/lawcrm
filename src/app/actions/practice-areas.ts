@@ -23,6 +23,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permission-check";
 import { BILLING_MODES } from "@/lib/billing-mode-constants";
+import { packStatuteDays } from "@/lib/sol";
 import type {
   PracticeAreaFormState,
   StageFormState,
@@ -61,6 +62,43 @@ const practiceAreaSchema = z.object({
    *  card on the Overview tab and expose SOL fields on the new/edit
    *  forms. */
   hasStatuteOfLimitations: z.literal("on").optional(),
+  /** Statute period — entered as years/months/days, packed into
+   *  total days at write time. All optional; default to 0 when
+   *  blank. The action skips the SOL fields entirely when
+   *  hasStatuteOfLimitations isn't set. */
+  statuteYears: z
+    .string()
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => {
+      const n = parseInt(v ?? "", 10);
+      return Number.isFinite(n) && n >= 0 ? n : 0;
+    }),
+  statuteMonths: z
+    .string()
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => {
+      const n = parseInt(v ?? "", 10);
+      return Number.isFinite(n) && n >= 0 ? n : 0;
+    }),
+  statuteDays: z
+    .string()
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => {
+      const n = parseInt(v ?? "", 10);
+      return Number.isFinite(n) && n >= 0 ? n : 0;
+    }),
+  /** Citation for the statute period — "C.R.S. § 13-80-102" etc.
+   *  Surfaced on the SOL card so the lawyer can verify the firm's
+   *  configuration against the actual statute. */
+  statuteSourceCitation: z
+    .string()
+    .trim()
+    .max(120)
+    .optional()
+    .or(z.literal("")),
   /** Billing flow new matters in this area inherit on create. The
    *  edit form posts a string; we accept any value the enum knows
    *  about and fall back to "client" for stale forms posting an
@@ -120,6 +158,21 @@ export async function createPracticeArea(
       color: data.color,
       order: nextOrder,
       hasStatuteOfLimitations: data.hasStatuteOfLimitations === "on",
+      // SOL configuration — only stored when the area actually
+      // tracks SOL. Pack years/months/days into total days here so
+      // the runtime auto-compute does one Date arithmetic op.
+      statutePeriodDays:
+        data.hasStatuteOfLimitations === "on"
+          ? packStatuteDays({
+              years: data.statuteYears,
+              months: data.statuteMonths,
+              days: data.statuteDays,
+            }) || null
+          : null,
+      statuteSourceCitation:
+        data.hasStatuteOfLimitations === "on"
+          ? data.statuteSourceCitation || null
+          : null,
       // Defaulted to "client" at the column level; the create form
       // doesn't expose a picker (kept lean), so this only matters
       // if a future form posts the field.
@@ -177,6 +230,18 @@ export async function updatePracticeArea(
       label: data.label || null,
       color: data.color,
       hasStatuteOfLimitations: data.hasStatuteOfLimitations === "on",
+      statutePeriodDays:
+        data.hasStatuteOfLimitations === "on"
+          ? packStatuteDays({
+              years: data.statuteYears,
+              months: data.statuteMonths,
+              days: data.statuteDays,
+            }) || null
+          : null,
+      statuteSourceCitation:
+        data.hasStatuteOfLimitations === "on"
+          ? data.statuteSourceCitation || null
+          : null,
       // Only write when the form actually posted a value — keeps
       // forward-compat with older forms that don't include the
       // select.

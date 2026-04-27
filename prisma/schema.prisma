@@ -306,6 +306,25 @@ model PracticeArea {
   /// the new/edit forms. False for areas like "Guardianships" where
   /// SOL isn't meaningful.
   hasStatuteOfLimitations Boolean @default(false)
+  /// Statute period in days, computed from years + months + days
+  /// the firm enters in settings. When set + a Matter in this
+  /// area has an `incidentDate`, the create / update flow auto-
+  /// populates `Matter.statuteOfLimitationsDate` (the user can
+  /// override on the form). Null means "this area tracks SOL but
+  /// the firm hasn't configured the period yet" — the SOL card
+  /// stays manual until configured.
+  ///
+  /// We use total days rather than triple {years, months, days}
+  /// so the runtime math is one Date arithmetic op instead of
+  /// multiple. Firms enter human units in the form; the action
+  /// converts to days using a 365-day year + 30-day month
+  /// convention (legal statute periods are nearly always defined
+  /// this way — "two years" = 730 days, not "two solar years").
+  statutePeriodDays Int?
+  /// Source citation for the SOL period — "C.R.S. § 13-80-102"
+  /// etc. Surfaced on the SOL card so the lawyer can verify the
+  /// firm's configuration against the actual statute.
+  statuteSourceCitation String?
   /// Default billing flow new matters in this area inherit on
   /// create. See `Matter.billingMode` for the per-matter override
   /// + the full enum of values. iteration 1: schema only — every
@@ -376,11 +395,21 @@ model Matter {
   color          String   @default("#2563a8") /// Color dot for UI display — snapshot from practiceArea.color on create
   isArchived     Boolean  @default(false)
 
+  /// Date the underlying cause-of-action accrued — typically the
+  /// date of the injury / arrest / discrimination event / contract
+  /// breach. When the matter's practice area has a configured
+  /// `statutePeriodDays`, the create + update flows auto-populate
+  /// `statuteOfLimitationsDate` from `incidentDate +
+  /// area.statutePeriodDays`. The user can override the computed
+  /// value on the form.
+  incidentDate                   DateTime?
+
   /// Statute-of-limitations tracking — only meaningful when the
   /// matter's practice area has hasStatuteOfLimitations=true. `Date`
-  /// is the deadline; `Satisfied` flips true once filed/tolled; both
-  /// are currently user-maintained. Tooling to auto-compute from
-  /// incident date + statute is a follow-up.
+  /// is the deadline; `Satisfied` flips true once filed/tolled.
+  /// `Date` is auto-computed when both `incidentDate` and the
+  /// area's `statutePeriodDays` are present, but the user can
+  /// always override.
   statuteOfLimitationsDate       DateTime?
   statuteOfLimitationsSatisfied  Boolean   @default(false)
   statuteOfLimitationsSatisfiedAt DateTime? /// Audit: when it was flipped
