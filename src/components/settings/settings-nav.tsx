@@ -54,6 +54,11 @@ const SECTIONS: NavSection[] = [
         label: "Practice areas",
         requires: "firm.manage_practice_areas",
       },
+      {
+        href: "/settings/activity",
+        label: "Activity log",
+        requires: "firm.view_activity",
+      },
       // Integrations + Billing & rates are placeholder pages today;
       // gated on edit_info as a stand-in until they get their own
       // permission keys.

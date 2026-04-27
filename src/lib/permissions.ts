@@ -180,6 +180,12 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         description:
           "Create, rename, reorder, archive, and delete practice areas and the stages that live under them.",
       },
+      {
+        key: "firm.view_activity",
+        label: "View firm-wide activity log",
+        description:
+          "Read the cross-matter audit feed at /settings/activity. Useful for compliance review, dispute resolution, and finding who-did-what.",
+      },
     ],
   },
   {
