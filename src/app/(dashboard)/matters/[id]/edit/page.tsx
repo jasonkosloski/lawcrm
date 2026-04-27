@@ -21,7 +21,7 @@ import {
   MatterTeamManagement,
   type TeamMemberRow,
 } from "@/components/matters/matter-team-management";
-import { isCurrentUserAdmin } from "@/lib/firm";
+import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 
 export default async function EditMatterPage({
@@ -29,7 +29,7 @@ export default async function EditMatterPage({
 }: PageProps<"/matters/[id]/edit">) {
   const { id } = await params;
 
-  const [matter, areas, clients, users, isAdmin] = await Promise.all([
+  const [matter, areas, clients, users, canManageTeam] = await Promise.all([
     prisma.matter.findUnique({
       where: { id },
       include: {
@@ -71,7 +71,7 @@ export default async function EditMatterPage({
       select: { id: true, name: true, jobTitle: true },
       orderBy: { name: "asc" },
     }),
-    isCurrentUserAdmin(),
+    currentUserHasPermission("matters.manage_team"),
   ]);
 
   if (!matter) notFound();
@@ -123,10 +123,10 @@ export default async function EditMatterPage({
           </CardContent>
         </Card>
 
-        {/* Team management — admin-only today. When firm-configurable
-            permissions land we'll gate this on a "manage team"
-            permission instead. */}
-        {isAdmin && (
+        {/* Team management — gated on `matters.manage_team`. Admin
+            always has it; other roles get it via the matrix on
+            /settings/roles. */}
+        {canManageTeam && (
           <Card>
             <CardContent className="p-5">
               <MatterTeamManagement
@@ -139,9 +139,9 @@ export default async function EditMatterPage({
         )}
 
         <div className="text-2xs text-ink-4">
-          {isAdmin
+          {canManageTeam
             ? "Archiving and deletion are separate actions — see the Matter Actions menu (coming)."
-            : "Team changes, archiving, and deletion are admin-only today."}
+            : "Team changes, archiving, and deletion are gated on per-feature permissions assigned via /settings/roles."}
         </div>
       </div>
     </div>

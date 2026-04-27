@@ -33,11 +33,11 @@ import type { FirmUserRow, RoleChip } from "@/lib/queries/team";
 
 export function MemberRow({
   member,
-  isCurrentUserAdmin,
+  canManageDirectory,
   rolePickerOptions,
 }: {
   member: FirmUserRow;
-  isCurrentUserAdmin: boolean;
+  canManageDirectory: boolean;
   /** Full list of firm roles, passed down so the edit form's
    *  multi-select shows everything available. */
   rolePickerOptions: RoleChip[];
@@ -132,7 +132,7 @@ export function MemberRow({
         )}
       </TableCell>
       <TableCell className="pr-4 text-right">
-        {isCurrentUserAdmin && (
+        {canManageDirectory && (
           <DropdownMenu>
             <DropdownMenuTrigger
               render={

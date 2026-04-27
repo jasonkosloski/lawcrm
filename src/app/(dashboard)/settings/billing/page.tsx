@@ -1,8 +1,10 @@
 import { SettingsPlaceholder } from "@/components/settings/settings-placeholder";
-import { requireAdmin } from "@/lib/firm";
+import { requirePermission } from "@/lib/permission-check";
 
 export default async function BillingSettingsPage() {
-  await requireAdmin();
+  // Placeholder; gated on firm.edit_info until billing settings
+  // grow their own permission keys when the feature lands.
+  await requirePermission("firm.edit_info");
   return (
     <SettingsPlaceholder
       title="Billing & rates"

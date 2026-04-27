@@ -8,11 +8,10 @@
  * permission key." Adding a new permission is a code change here +
  * a UI surface that calls `hasPermission(...)`.
  *
- * Today the app's authorization checks are mostly admin-gated via
- * `requireAdmin()`. As features mature we'll route specific gates
- * through `hasPermission(userId, "matters.manage_team")` etc., but
- * the matrix UI is in place first so admins can configure roles
- * before the runtime checks light up.
+ * The runtime checks live in `src/lib/permission-check.ts` and
+ * are wired into every server action + page guard. Each call site
+ * passes a specific key like `matters.manage_team` — see that file
+ * for the helper signatures.
  *
  * Naming: dotted keys, lowercase snake_case under the dot. The
  * prefix matches the category id so a key like "billing.send_invoice"
@@ -150,6 +149,12 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         label: "Edit firm profile",
         description:
           "Edit firm name, EIN, contact info, address, logo, and other identity fields.",
+      },
+      {
+        key: "firm.manage_practice_areas",
+        label: "Manage practice areas + stages",
+        description:
+          "Create, rename, reorder, archive, and delete practice areas and the stages that live under them.",
       },
     ],
   },

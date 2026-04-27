@@ -1,9 +1,10 @@
 /**
  * Team / firm-roster server actions.
  *
- * Every action is `requireAdmin()`-gated; the read view (the
- * /settings/team page) is open to all firm members but every write
- * is admin-only. Invariants we enforce:
+ * Every action is gated on `firm.manage_team_directory`; the read
+ * view (the /settings/team page) is open to all firm members but
+ * every write requires the permission (admin always has it,
+ * other roles get it via the matrix). Invariants we enforce:
  *
  *   1. "At least one Admin" — a firm without an active user holding
  *      the Admin role can't change its own settings, invite,
@@ -37,8 +38,8 @@ import {
   ADMIN_ROLE_NAME,
   DEFAULT_ROLE_NAME,
   getCurrentFirm,
-  requireAdmin,
 } from "@/lib/firm";
+import { requirePermission } from "@/lib/permission-check";
 import { countActiveAdmins } from "@/lib/queries/team";
 import {
   teamInitialState,
@@ -110,7 +111,7 @@ export async function inviteFirmMember(
   _prev: TeamFormState,
   formData: FormData
 ): Promise<TeamFormState> {
-  await requireAdmin();
+  await requirePermission("firm.manage_team_directory");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = inviteSchema.safeParse(raw);
   if (!parsed.success) {
@@ -213,7 +214,7 @@ export async function updateFirmMember(
   _prev: TeamFormState,
   formData: FormData
 ): Promise<TeamFormState> {
-  await requireAdmin();
+  await requirePermission("firm.manage_team_directory");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = updateSchema.safeParse(raw);
   if (!parsed.success) {
@@ -343,7 +344,7 @@ export async function updateFirmMember(
 export async function resetFirmMemberPassword(
   userId: string
 ): Promise<TeamFormState> {
-  await requireAdmin();
+  await requirePermission("firm.manage_team_directory");
   const firm = await getCurrentFirm();
   const target = await prisma.user.findFirst({
     where: { id: userId, firmId: firm.id },

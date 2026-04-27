@@ -7,10 +7,12 @@
  * and stages archive (isActive: false) to keep historical matter
  * references intact.
  *
- * Admin-only — practice areas + stages are firm-wide governance, not
- * per-user preferences. Every action below calls `requireAdmin()`
- * before mutating; non-admins are bounced via redirect (no in-form
- * error).
+ * Gated on `firm.manage_practice_areas` — practice areas + stages
+ * are firm-wide governance, not per-user preferences. Every action
+ * below calls `requirePermission("firm.manage_practice_areas")`
+ * before mutating; non-admins without that permission are bounced
+ * via redirect (no in-form error). Admin always has every
+ * permission, so existing admin flows continue to work.
  */
 
 "use server";
@@ -19,7 +21,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/firm";
+import { requirePermission } from "@/lib/permission-check";
 import { BILLING_MODES } from "@/lib/billing-mode-constants";
 import type {
   PracticeAreaFormState,
@@ -72,7 +74,7 @@ export async function createPracticeArea(
   _prev: PracticeAreaFormState,
   formData: FormData
 ): Promise<PracticeAreaFormState> {
-  await requireAdmin();
+  await requirePermission("firm.manage_practice_areas");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = practiceAreaSchema.safeParse(raw);
   if (!parsed.success) {
@@ -144,7 +146,7 @@ export async function updatePracticeArea(
   _prev: PracticeAreaFormState,
   formData: FormData
 ): Promise<PracticeAreaFormState> {
-  await requireAdmin();
+  await requirePermission("firm.manage_practice_areas");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = practiceAreaSchema.safeParse(raw);
   if (!parsed.success) {
@@ -192,7 +194,7 @@ export async function setPracticeAreaActive(
   id: string,
   isActive: boolean
 ): Promise<{ ok: boolean; error?: string }> {
-  await requireAdmin();
+  await requirePermission("firm.manage_practice_areas");
   if (!isActive) {
     // Block archive if the area still owns active (non-archived) matters.
     // Firms should move those first or explicitly archive the matters.
@@ -220,7 +222,7 @@ export async function movePracticeArea(
   id: string,
   direction: "up" | "down"
 ): Promise<{ ok: boolean; error?: string }> {
-  await requireAdmin();
+  await requirePermission("firm.manage_practice_areas");
   const all = await prisma.practiceArea.findMany({
     orderBy: { order: "asc" },
     select: { id: true, order: true },
@@ -263,7 +265,7 @@ export async function createStage(
   _prev: StageFormState,
   formData: FormData
 ): Promise<StageFormState> {
-  await requireAdmin();
+  await requirePermission("firm.manage_practice_areas");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = stageSchema.safeParse(raw);
   if (!parsed.success) {
@@ -313,7 +315,7 @@ export async function updateStage(
   _prev: StageFormState,
   formData: FormData
 ): Promise<StageFormState> {
-  await requireAdmin();
+  await requirePermission("firm.manage_practice_areas");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = stageSchema.safeParse(raw);
   if (!parsed.success) {
@@ -370,7 +372,7 @@ export async function setStageActive(
   stageId: string,
   isActive: boolean
 ): Promise<{ ok: boolean; error?: string }> {
-  await requireAdmin();
+  await requirePermission("firm.manage_practice_areas");
   if (!isActive) {
     const matterCount = await prisma.matter.count({
       where: { stageId, isArchived: false },
@@ -394,7 +396,7 @@ export async function moveStage(
   stageId: string,
   direction: "up" | "down"
 ): Promise<{ ok: boolean; error?: string }> {
-  await requireAdmin();
+  await requirePermission("firm.manage_practice_areas");
   const stage = await prisma.matterStage.findUnique({
     where: { id: stageId },
     select: { practiceAreaId: true, order: true },

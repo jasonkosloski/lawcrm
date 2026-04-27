@@ -24,16 +24,22 @@ import {
 import { CreateRoleForm } from "@/components/settings/create-role-form";
 import { PermissionsMatrix } from "@/components/settings/permissions-matrix";
 import { RoleRow } from "@/components/settings/role-row";
-import { isCurrentUserAdmin } from "@/lib/firm";
+import { currentUserHasPermission } from "@/lib/permission-check";
 import {
   listFirmRoles,
   listRolePermissionGrants,
 } from "@/lib/queries/team";
 
 export default async function RolesSettingsPage() {
-  const [roles, isAdmin, grantsMap] = await Promise.all([
+  // Three independent permission gates on this page:
+  //   - role list visibility: open to every signed-in firm member
+  //     (read view is firm-wide governance info)
+  //   - role CRUD (create/rename/delete): firm.manage_roles
+  //   - permission matrix toggles: firm.manage_permissions
+  const [roles, canManageRoles, canManagePerms, grantsMap] = await Promise.all([
     listFirmRoles(),
-    isCurrentUserAdmin(),
+    currentUserHasPermission("firm.manage_roles"),
+    currentUserHasPermission("firm.manage_permissions"),
     listRolePermissionGrants(),
   ]);
 
@@ -64,7 +70,7 @@ export default async function RolesSettingsPage() {
           isSystem: r.isSystem,
         }))}
         grants={grants}
-        canEdit={isAdmin}
+        canEdit={canManagePerms}
       />
 
       {/* Role list / management — rename, delete, member count. */}
@@ -82,13 +88,13 @@ export default async function RolesSettingsPage() {
             </TableHeader>
             <TableBody>
               {roles.map((r) => (
-                <RoleRow key={r.id} role={r} isAdmin={isAdmin} />
+                <RoleRow key={r.id} role={r} isAdmin={canManageRoles} />
               ))}
             </TableBody>
           </Table>
         </Card>
 
-        {isAdmin && (
+        {canManageRoles && (
           <div className="flex flex-col gap-2">
             <CreateRoleForm />
             <div className="text-[10px] text-ink-4 leading-relaxed">

@@ -16,7 +16,7 @@ import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-import { requireAdmin } from "@/lib/firm";
+import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { BILLING_MODES } from "@/lib/billing-mode-constants";
 import {
@@ -688,11 +688,10 @@ export async function setMatterSolSatisfied(
 //
 // Add / remove team members on a matter.
 //
-// Permission model: today both actions are admin-gated via
-// requireAdmin(). When the firm needs to delegate this (e.g. a "Case
-// manager" role), swap the gate for a permission check — the rest of
-// the flow stays the same. The audit-trail logActivity call carries
-// who-did-what regardless of how permissions evolve.
+// Permission model: gated on `matters.manage_team`. Admin always
+// has it; other roles get it via the matrix on /settings/roles.
+// The audit-trail logActivity call carries who-did-what so the
+// matter timeline has a record regardless of how permissions evolve.
 //
 // Soft-delete shape: removing a member sets `removedAt` (and
 // `removedBy`) rather than deleting the row, so historical
@@ -711,7 +710,7 @@ export async function addMatterTeamMember(
   matterId: string,
   formData: FormData
 ): Promise<{ ok: boolean; error?: string }> {
-  await requireAdmin();
+  await requirePermission("matters.manage_team");
   const actorId = await getCurrentUserId();
 
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -786,7 +785,7 @@ export async function removeMatterTeamMember(
   matterId: string,
   membershipId: string
 ): Promise<{ ok: boolean; error?: string }> {
-  await requireAdmin();
+  await requirePermission("matters.manage_team");
   const actorId = await getCurrentUserId();
 
   const member = await prisma.matterTeamMember.findUnique({

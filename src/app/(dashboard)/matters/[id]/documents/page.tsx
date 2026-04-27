@@ -19,7 +19,7 @@ import {
 import { UploadDocumentForm } from "@/components/matters/documents/upload-document-form";
 import { DocumentRowActions } from "@/components/matters/documents/document-row-actions";
 import { getCurrentUserId } from "@/lib/current-user";
-import { isCurrentUserAdmin } from "@/lib/firm";
+import { currentUserHasPermission } from "@/lib/permission-check";
 import {
   getMatterDocuments,
   type DocumentRow,
@@ -94,10 +94,10 @@ export default async function MatterDocumentsPage({
   params,
 }: PageProps<"/matters/[id]">) {
   const { id } = await params;
-  const [documents, currentUserId, isAdmin] = await Promise.all([
+  const [documents, currentUserId, canDeleteAny] = await Promise.all([
     getMatterDocuments(id),
     getCurrentUserId(),
-    isCurrentUserAdmin(),
+    currentUserHasPermission("documents.delete_any"),
   ]);
 
   if (documents.length === 0) {
@@ -162,7 +162,7 @@ export default async function MatterDocumentsPage({
                   {rows.map((d) => {
                     const status = STATUS_META[d.status] ?? STATUS_META.active;
                     const canDelete =
-                      isAdmin || d.uploadedBy === currentUserId;
+                      canDeleteAny || d.uploadedBy === currentUserId;
                     return (
                       <TableRow key={d.id}>
                         <TableCell className="pl-4 font-medium text-ink">

@@ -16,11 +16,13 @@ interface NavItem {
   href: string;
   label: string;
   description?: string;
-  /** When true, this nav item is only rendered for admins. The
-   *  underlying page is also gated server-side via requireAdmin();
-   *  hiding the nav item is just so non-admins don't see a link
-   *  that would bounce them to /. */
-  adminOnly?: boolean;
+  /** When set, the item is only rendered for users who hold this
+   *  permission (admin always passes). When omitted, every signed-
+   *  in firm member sees the link. The underlying page is also
+   *  gated server-side via `requirePermission(...)`; hiding the
+   *  nav item is just so people don't see a link that would
+   *  bounce them. */
+  requires?: string;
 }
 
 interface NavSection {
@@ -40,28 +42,58 @@ const SECTIONS: NavSection[] = [
   {
     label: "Firm",
     items: [
+      // Team + Roles + Firm info expose read-only views for everyone
+      // (the underlying pages render write affordances based on
+      // each user's permissions). Practice-areas / integrations /
+      // billing are write-only surfaces for now.
       { href: "/settings/team", label: "Team" },
-      // Roles + practice-areas are admin-write surfaces. Roles +
-      // Firm info expose a read-only view to non-admins so they can
-      // still see the firm setup; practice-areas is fully admin-only.
       { href: "/settings/roles", label: "Roles" },
       { href: "/settings/firm", label: "Firm info" },
-      { href: "/settings/practice-areas", label: "Practice areas", adminOnly: true },
-      { href: "/settings/integrations", label: "Integrations", adminOnly: true },
-      { href: "/settings/billing", label: "Billing & rates", adminOnly: true },
+      {
+        href: "/settings/practice-areas",
+        label: "Practice areas",
+        requires: "firm.manage_practice_areas",
+      },
+      // Integrations + Billing & rates are placeholder pages today;
+      // gated on edit_info as a stand-in until they get their own
+      // permission keys.
+      {
+        href: "/settings/integrations",
+        label: "Integrations",
+        requires: "firm.edit_info",
+      },
+      {
+        href: "/settings/billing",
+        label: "Billing & rates",
+        requires: "firm.edit_info",
+      },
     ],
   },
 ];
 
-export function SettingsNav({ isAdmin }: { isAdmin: boolean }) {
+export function SettingsNav({
+  isAdmin,
+  grantedPermissions,
+}: {
+  isAdmin: boolean;
+  /** Flat list of permission keys the current user has. Used to
+   *  hide nav items they can't act on. Admin's set is empty
+   *  (admin short-circuits everything). */
+  grantedPermissions: string[];
+}) {
   const pathname = usePathname();
+  const granted = new Set(grantedPermissions);
 
-  // Filter out admin-only items for non-admins. Sections that end up
-  // with no visible items get hidden too (don't render an empty
-  // section header).
+  // Filter items by required permission. Sections that end up with
+  // no visible items get hidden too — no empty section header.
+  const canSee = (item: NavItem): boolean => {
+    if (!item.requires) return true;
+    if (isAdmin) return true;
+    return granted.has(item.requires);
+  };
   const visibleSections = SECTIONS.map((section) => ({
     ...section,
-    items: section.items.filter((item) => !item.adminOnly || isAdmin),
+    items: section.items.filter(canSee),
   })).filter((section) => section.items.length > 0);
 
   return (

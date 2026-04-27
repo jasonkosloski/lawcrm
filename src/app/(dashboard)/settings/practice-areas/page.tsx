@@ -7,8 +7,9 @@
  * detail page for stage management. Includes an inline "add area"
  * form that auto-seeds the default 10-stage lifecycle.
  *
- * Admin-only — non-admins are bounced via requireAdmin() and the
- * nav link is hidden in SettingsNav.
+ * Gated on `firm.manage_practice_areas` — anyone with that
+ * permission (admin always) can land here; the nav link is
+ * hidden in SettingsNav for users without it.
  */
 
 import Link from "next/link";
@@ -20,12 +21,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/firm";
+import { requirePermission } from "@/lib/permission-check";
 import { CreatePracticeAreaForm } from "@/components/settings/create-practice-area-form";
 import { PracticeAreaRowActions } from "@/components/settings/practice-area-row-actions";
 
 export default async function PracticeAreasSettingsPage() {
-  await requireAdmin();
+  await requirePermission("firm.manage_practice_areas");
   const areas = await prisma.practiceArea.findMany({
     orderBy: [{ isActive: "desc" }, { order: "asc" }, { name: "asc" }],
     select: {

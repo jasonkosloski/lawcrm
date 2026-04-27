@@ -6,12 +6,10 @@
  * read-only with a "(former)" suffix, and exposes an Add form
  * (user picker + role select).
  *
- * Permissions: today the parent page renders this card only when
- * the viewing user is an admin (server-side check via
- * `isCurrentUserAdmin()`). When firm-configurable role
- * permissions land we'll add a `canEdit` prop and gate the
- * mutating UI on it — the read-only structure already supports
- * being shown without buttons.
+ * Permissions: the parent page renders this card only when the
+ * viewing user holds `matters.manage_team` (admin always does).
+ * Mutations on the server side go through the same gate via
+ * `requirePermission("matters.manage_team")`.
  *
  * Audit: every add/remove fires through addMatterTeamMember /
  * removeMatterTeamMember which write an ActivityLog entry.

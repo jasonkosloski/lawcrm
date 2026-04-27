@@ -13,23 +13,27 @@
 
 import { TopBar } from "@/components/layout/topbar";
 import { SettingsNav } from "@/components/settings/settings-nav";
-import { isCurrentUserAdmin } from "@/lib/firm";
+import { getCurrentUserPermissions } from "@/lib/permission-check";
 
 export default async function SettingsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // Admin-only nav items (practice areas / integrations / billing)
-  // hide for non-admins. Each underlying page also calls
-  // requireAdmin() server-side so a deep-link still bounces.
-  const isAdmin = await isCurrentUserAdmin();
+  // Resolve once at the layout, threaded into the nav so each item
+  // can decide its own visibility. Each underlying write also
+  // re-checks server-side via `requirePermission(...)` so a deep-
+  // link still bounces.
+  const { isAdmin, granted } = await getCurrentUserPermissions();
   return (
     <>
       <TopBar title="Settings" crumbs="Settings" />
       <div className="flex-1 overflow-y-auto animate-page-enter">
         <div className="flex h-full">
-          <SettingsNav isAdmin={isAdmin} />
+          <SettingsNav
+            isAdmin={isAdmin}
+            grantedPermissions={Array.from(granted)}
+          />
           <div className="flex-1 min-w-0 p-6 overflow-y-auto">{children}</div>
         </div>
       </div>

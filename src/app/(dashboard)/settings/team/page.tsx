@@ -30,14 +30,14 @@ import {
 import { MemberRow } from "@/components/settings/member-row";
 import { InviteMemberComposer } from "@/components/settings/invite-member-composer";
 import { getCurrentUserId } from "@/lib/current-user";
-import { isCurrentUserAdmin } from "@/lib/firm";
+import { currentUserHasPermission } from "@/lib/permission-check";
 import { listFirmUsers, listRolePickerOptions } from "@/lib/queries/team";
 
 export default async function TeamSettingsPage() {
   const currentUserId = await getCurrentUserId();
-  const [members, isAdmin, rolePickerOptions] = await Promise.all([
+  const [members, canManageDirectory, rolePickerOptions] = await Promise.all([
     listFirmUsers(currentUserId),
-    isCurrentUserAdmin(),
+    currentUserHasPermission("firm.manage_team_directory"),
     listRolePickerOptions(),
   ]);
 
@@ -74,7 +74,7 @@ export default async function TeamSettingsPage() {
               <MemberRow
                 key={m.id}
                 member={m}
-                isCurrentUserAdmin={isAdmin}
+                canManageDirectory={canManageDirectory}
                 rolePickerOptions={rolePickerOptions}
               />
             ))}
@@ -82,7 +82,7 @@ export default async function TeamSettingsPage() {
         </Table>
       </Card>
 
-      {isAdmin && (
+      {canManageDirectory && (
         <div className="flex flex-col gap-2">
           <InviteMemberComposer rolePickerOptions={rolePickerOptions} />
           <div className="text-[10px] text-ink-4 leading-relaxed">

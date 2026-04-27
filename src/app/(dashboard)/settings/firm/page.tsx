@@ -15,13 +15,14 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FirmEditForm } from "@/components/settings/firm-edit-form";
 import { FirmReadView } from "@/components/settings/firm-read-view";
-import { getCurrentFirm, isCurrentUserAdmin } from "@/lib/firm";
+import { getCurrentFirm } from "@/lib/firm";
+import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 
 export default async function FirmSettingsPage() {
-  const [firm, isAdmin] = await Promise.all([
+  const [firm, canEdit] = await Promise.all([
     getCurrentFirm(),
-    isCurrentUserAdmin(),
+    currentUserHasPermission("firm.edit_info"),
   ]);
 
   // Fetch the team count + admin list for the side panel — fast,
@@ -54,7 +55,7 @@ export default async function FirmSettingsPage() {
             Surfaces on letterhead, invoices, and matter documents.
           </p>
         </div>
-        {isAdmin ? <FirmEditForm firm={firm} /> : <FirmReadView firm={firm} />}
+        {canEdit ? <FirmEditForm firm={firm} /> : <FirmReadView firm={firm} />}
       </div>
 
       {/* Right rail — quick context about firm members + admins. */}

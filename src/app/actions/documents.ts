@@ -25,7 +25,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-import { getCurrentFirm, isCurrentUserAdmin } from "@/lib/firm";
+import { getCurrentFirm } from "@/lib/firm";
+import { currentUserHasPermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { deleteFile, storeFile } from "@/lib/file-storage";
 import {
@@ -134,13 +135,18 @@ export async function deleteDocument(
   });
   if (!doc) return { ok: false, error: "Document not found." };
 
-  // Original uploader OR any admin. Defense against accidental
-  // deletion by other team members; admins keep the override.
-  const isAdmin = await isCurrentUserAdmin();
-  if (!isAdmin && doc.uploadedBy !== userId) {
+  // Original uploader OR anyone holding `documents.delete_any`
+  // (admin always does). Defense against accidental deletion by
+  // other team members; the override stays an explicit, gated
+  // capability rather than an implicit admin-bypass.
+  const canOverride = await currentUserHasPermission(
+    "documents.delete_any"
+  );
+  if (!canOverride && doc.uploadedBy !== userId) {
     return {
       ok: false,
-      error: "Only the uploader or an admin can delete this document.",
+      error:
+        "Only the uploader or someone with the Delete-any-document permission can delete this document.",
     };
   }
 

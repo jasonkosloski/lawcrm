@@ -21,8 +21,8 @@ import {
   ADMIN_ROLE_NAME,
   DEFAULT_ROLE_NAME,
   getCurrentFirm,
-  requireAdmin,
 } from "@/lib/firm";
+import { requirePermission } from "@/lib/permission-check";
 import { isKnownPermission } from "@/lib/permissions";
 import {
   roleInitialState,
@@ -54,7 +54,7 @@ export async function createRoleAction(
   _prev: RoleFormState,
   formData: FormData
 ): Promise<RoleFormState> {
-  await requireAdmin();
+  await requirePermission("firm.manage_roles");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = roleSchema.safeParse(raw);
   if (!parsed.success) {
@@ -103,7 +103,7 @@ export async function updateRoleAction(
   _prev: RoleFormState,
   formData: FormData
 ): Promise<RoleFormState> {
-  await requireAdmin();
+  await requirePermission("firm.manage_roles");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = roleSchema.safeParse(raw);
   if (!parsed.success) {
@@ -169,7 +169,7 @@ export async function updateRoleAction(
 export async function deleteRoleAction(
   roleId: string
 ): Promise<RoleFormState> {
-  await requireAdmin();
+  await requirePermission("firm.manage_roles");
   const firm = await getCurrentFirm();
   const target = await prisma.role.findFirst({
     where: { id: roleId, firmId: firm.id },
@@ -208,7 +208,14 @@ export async function setRolePermissionAction(
   permission: string,
   granted: boolean
 ): Promise<{ ok: boolean; error?: string }> {
-  await requireAdmin();
+  // Distinct permission from manage_roles — granting permissions
+  // is a higher-trust act than naming roles, since it controls
+  // who else can grant access. The matrix UI explicitly disables
+  // the cell for `firm.manage_permissions` on non-Admin rows for
+  // anyone who doesn't already have it (see PermissionsMatrix's
+  // canEdit gate), so a non-admin holder can edit other rows but
+  // not bootstrap themselves out of admin oversight.
+  await requirePermission("firm.manage_permissions");
   if (!isKnownPermission(permission)) {
     return { ok: false, error: "Unknown permission key." };
   }

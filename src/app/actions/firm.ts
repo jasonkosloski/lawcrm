@@ -16,7 +16,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getCurrentFirm, requireAdmin } from "@/lib/firm";
+import { getCurrentFirm } from "@/lib/firm";
+import { requirePermission } from "@/lib/permission-check";
 import {
   firmInitialState,
   type FirmFormState,
@@ -60,8 +61,9 @@ export async function updateFirmAction(
   formData: FormData
 ): Promise<FirmFormState> {
   // Auth gate — non-admins can't reach this even if they spoof a
-  // POST. requireAdmin() throws a redirect on failure.
-  await requireAdmin();
+  // Gated on `firm.edit_info`. Admin always has it; other roles
+  // pick it up via the matrix.
+  await requirePermission("firm.edit_info");
 
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = firmSchema.safeParse(raw);

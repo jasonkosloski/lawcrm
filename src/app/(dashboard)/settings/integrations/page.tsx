@@ -1,8 +1,10 @@
 import { SettingsPlaceholder } from "@/components/settings/settings-placeholder";
-import { requireAdmin } from "@/lib/firm";
+import { requirePermission } from "@/lib/permission-check";
 
 export default async function IntegrationsSettingsPage() {
-  await requireAdmin();
+  // Placeholder page; gated on firm.edit_info as a stand-in until
+  // each integration grows its own permission key when it lands.
+  await requirePermission("firm.edit_info");
   return (
     <SettingsPlaceholder
       title="Integrations"
