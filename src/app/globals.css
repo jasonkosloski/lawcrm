@@ -240,3 +240,40 @@
 .scrollbar-thin::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* ── Print styles ──────────────────────────────────────────────────────────── */
+/*
+ * Used by the /print/* route group (today: invoice export, eventually
+ * trust reports + demand letters). The page itself decides what to
+ * render; these globals tighten the page-margin defaults and ensure
+ * brand colors carry over to the printed output instead of getting
+ * stripped by the browser's "economy" defaults.
+ */
+@media print {
+  /* US Letter with quarter-inch margins. The print toolbar adds
+     the visible chrome; @page handles the physical paper margin. */
+  @page {
+    size: letter;
+    margin: 0.5in;
+  }
+  /* Force browsers to render exact colors so the brand status
+     pills + table dividers don't bleach to grayscale. Safari +
+     Chromium honor `print-color-adjust`; older Firefox needs the
+     `-webkit-` alias. */
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  /* Don't split a table row across pages — billing line items
+     read poorly when half a row sits at the bottom of one page
+     and half on the next. */
+  tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  /* Section headers (Services / Expenses / Payments) shouldn't
+     dangle alone at the bottom of a page. */
+  thead {
+    display: table-header-group;
+  }
+}

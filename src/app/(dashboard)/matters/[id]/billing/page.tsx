@@ -27,7 +27,7 @@
  */
 
 import Link from "next/link";
-import { Info, X } from "lucide-react";
+import { Info, Printer, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   BILLING_MODE_DESCRIPTION,
@@ -183,6 +183,20 @@ export default async function MatterBillingPage({
             paidAmount={selectedInvoice.paidAmount}
             clientEmail={selectedInvoice.clientEmail}
           />
+          {/* Print / Save as PDF — opens the print route in a new
+              tab with auto-print enabled so the browser dialog
+              fires immediately. New tab so the matter page stays
+              put behind the print preview. */}
+          <a
+            href={`/print/invoices/${selectedInvoice.id}?autoprint=1`}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Print or save as PDF"
+            title="Print or save as PDF"
+            className="inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-4 hover:bg-paper-2 hover:text-ink"
+          >
+            <Printer size={14} />
+          </a>
           <Link
             href={`/matters/${id}/billing`}
             scroll={false}
@@ -324,7 +338,8 @@ function MainColumn({
                   <TableHead>Total</TableHead>
                   {/* Hide Paid in split mode — the preview shows it. */}
                   {!isSplit && <TableHead>Paid</TableHead>}
-                  <TableHead className="pr-4">Balance</TableHead>
+                  <TableHead>Balance</TableHead>
+                  <TableHead className="pr-4 w-9 sr-only">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -456,9 +471,24 @@ function MainColumn({
                             }
                           >
                             {formatMoney(inv.balance)}
-                          </span>,
-                          "pr-4"
+                          </span>
                         )}
+                      </TableCell>
+                      {/* Print column — sits outside the row's
+                          full-cell Link so clicking the icon goes
+                          to the print route in a new tab without
+                          first opening the preview pane. */}
+                      <TableCell className="p-0 pr-4 w-9 align-middle">
+                        <a
+                          href={`/print/invoices/${inv.id}?autoprint=1`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`Print invoice ${inv.invoiceNumber} or save as PDF`}
+                          title="Print or save as PDF"
+                          className="inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-4 hover:bg-paper-3 hover:text-ink"
+                        >
+                          <Printer size={13} />
+                        </a>
                       </TableCell>
                     </TableRow>
                   );

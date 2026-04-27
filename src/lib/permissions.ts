@@ -37,6 +37,12 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
     label: "Matters",
     permissions: [
       {
+        key: "matters.create",
+        label: "Create matters",
+        description:
+          "Open a new matter — manually via the New matter form or programmatically by converting a lead. Doesn't grant team-management or edit rights on existing matters.",
+      },
+      {
         key: "matters.manage_team",
         label: "Manage team members",
         description:

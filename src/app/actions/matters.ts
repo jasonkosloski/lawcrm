@@ -234,6 +234,7 @@ export async function createMatter(
   _prev: CreateMatterState,
   formData: FormData
 ): Promise<CreateMatterState> {
+  await requirePermission("matters.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = createMatterSchema.safeParse(raw);
 

@@ -93,6 +93,7 @@ describe("expected-key invariants", () => {
   // silently no-ops or redirects unexpectedly. These tests are
   // the early-warning system.
   test.each([
+    "matters.create",
     "matters.manage_team",
     "matters.expense.create",
     "matters.expense.delete",

@@ -45,9 +45,15 @@ const STATUS_META: Record<string, string> = {
 export function InvoicePreview({
   invoice,
   firm,
+  printMode = false,
 }: {
   invoice: InvoiceDetail;
   firm: FirmProfile;
+  /** When true, drops the `h-full` + `overflow-y-auto` scroll
+   *  chrome that the side-panel layout needs. The document then
+   *  flows naturally — letting browsers paginate it across
+   *  multiple printed pages. Used by `/print/invoices/[id]`. */
+  printMode?: boolean;
 }) {
   const statusClass = STATUS_META[invoice.status] ?? STATUS_META.draft;
   const isInternal = invoice.kind === "internal_record";
@@ -61,14 +67,17 @@ export function InvoicePreview({
   ].filter(Boolean);
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Document body — scrolls; action bar is sticky below. The
-          parent <aside> already provides the rounded border + bg
-          for the pane chrome, so we don't double up here. Letting
-          the letterhead sit flush against that pane reads more
-          like "the right side IS the invoice" than "a piece of
-          paper sitting on a workspace". */}
-      <div className="flex-1 overflow-y-auto bg-white">
+    <div className={printMode ? "" : "flex flex-col h-full"}>
+      {/* Document body — scrolls in panel mode (action bar is
+          sticky above), flows naturally in print mode (browser
+          paginates across pages). The parent <aside> in panel
+          mode already provides the rounded border + bg for the
+          pane chrome, so we don't double up here. */}
+      <div
+        className={
+          printMode ? "bg-white" : "flex-1 overflow-y-auto bg-white"
+        }
+      >
         <div>
           {/* Letterhead */}
           <div className="px-6 py-4 border-b border-line">

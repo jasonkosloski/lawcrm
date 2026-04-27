@@ -22,6 +22,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { requirePermission } from "@/lib/permission-check";
 import type {
   ConvertLeadFormState,
   DeclineLeadFormState,
@@ -73,6 +74,10 @@ export async function convertLeadToMatter(
   _prev: ConvertLeadFormState,
   formData: FormData
 ): Promise<ConvertLeadFormState> {
+  // Conversion creates a Matter row — same gate as the direct
+  // create path so the rule is single: "creating a matter requires
+  // matters.create, regardless of the entry point."
+  await requirePermission("matters.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = convertSchema.safeParse(raw);
   if (!parsed.success) {
