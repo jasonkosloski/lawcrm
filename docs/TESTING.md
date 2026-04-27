@@ -183,7 +183,7 @@ vi.mock("next/navigation", () => ({
 }));
 ```
 
-**What's covered today** (83 integration tests across 6 files):
+**What's covered today** (123 integration tests across 9 files):
 
 - `src/app/actions/billing.test.ts` (7) —
   `generateInvoiceFromWip` rolls billable time + expenses into
@@ -222,6 +222,23 @@ vi.mock("next/navigation", () => ({
   forget contract — DB failures (FK violations) are swallowed
   with a `console.warn` so the user's underlying action stays
   the source of truth.
+- `src/app/actions/tasks.test.ts` (21) — `setTaskStatus`
+  completedAt mirroring (set on enter, clear on leave, preserved
+  across done↔cancelled), unknown-status / missing-task guards;
+  activity log fans out only on completed-state transitions
+  ("Task completed" / "Task cancelled" / "Task reopened").
+  `deleteTask` removes + 404s. `updateTask` zod validation,
+  dueDate parsing, completedAt mirroring on status change.
+- `src/app/actions/deadlines.test.ts` (15) —
+  `setDeadlineStatus` only completed stamps completedAt; waived
+  / open / overdue clear it; re-completing preserves the
+  original timestamp; missing-deadline + unknown-status guards.
+  `deleteDeadline` + `updateDeadline` (validation, dueDate parse,
+  null-coercion of optional sourceRef + description).
+- `src/app/actions/matter-pins.test.ts` (4) — `toggleMatterPin`
+  pins → unpins → re-pins idempotently and revalidates the
+  layout tree; pins are scoped per (user, matter) so two users
+  can pin the same matter without interfering.
 
 ---
 
@@ -284,10 +301,10 @@ better measured by component + integration tests.
 
 | Metric     | Floor | Current |
 |------------|-------|---------|
-| Lines      | 17%   | 17.78%  |
-| Statements | 17%   | 17.98%  |
-| Functions  | 17%   | 17.93%  |
-| Branches   | 15%   | 16.29%  |
+| Lines      | 20%   | 20.47%  |
+| Statements | 20%   | 20.58%  |
+| Functions  | 19%   | 19.79%  |
+| Branches   | 18%   | 18.88%  |
 
 The target is "every public function in `src/lib/` has a test."
 We're not there yet — a lot of the gap is `src/app/actions/**`
@@ -331,3 +348,4 @@ end-to-end flow.
 | 2026-04-27 | Layer 2 testing wired: `@testing-library/react` + user-event installed, `src/test/setup.ts` registers jest-dom matchers + auto-cleanup. 49 component tests landed for `PermissionsMatrix` / `ExpenseComposer` / `SettlementApprovals` / `ConflictCheckCard`. Suite is 152 tests across 11 files in 1.3s. |
 | 2026-04-27 | Layer 3 testing wired. `src/test/integration-setup.ts` is a Vitest `globalSetup` that points DATABASE_URL at a dedicated `prisma/test.db`, runs `prisma db push` once, and tears the file down. `src/test/integration-helpers.ts` exposes `resetDb()` + fixture builders (`seedFirm`, `seedUser`, `seedMatter`, etc). 42 integration tests across 4 files cover `generateInvoiceFromWip` bundling + void unlink, settlement waterfall + approval chain auto-promotion, conflict matcher against real Contacts + matters, `requirePermission` gate behavior. `fileParallelism: false` keeps integration files from racing on the shared DB. Full suite: 194 tests across 15 files in ~7s. |
 | 2026-04-25 | Coverage push. New layer-1 tests for `format-phone`, `calendar-utils`, `matters-filters`, `dashboard-prefs`, `note-constants`, `capture-schemas`, plus a `file-storage` test that uses `process.chdir(mkdtempSync(...))` + dynamic import to control STORAGE_ROOT. New layer-3 tests for `firm.ts` admin helpers and the `activity-log` writer (icon/source mapping + fire-and-forget contract). Coverage threshold floors landed in `vitest.config.ts` (lines 17 / statements 17 / functions 17 / branches 15) — current numbers ~17.8%. Full suite: **361 tests across 24 files in ~12s**. |
+| 2026-04-25 | Coverage push round 2 + Button wrapper fix. Layer-3 tests for the task action surface (`setTaskStatus` / `updateTask` / `deleteTask` — completedAt mirroring + activity-log fan-out), the deadline action surface, and `toggleMatterPin` (idempotent toggle, per-user scoping). New layer-2 test for the Button wrapper locks in `nativeButton: false` inference when a `render` element is supplied — fixes a noisy console warning that fired across `/matters`, `/contacts`, `/intake`, and the catch-all not-found page when Button rendered a `<Link>` (anchor) via `render`. Threshold floors raised to lines 20 / statements 20 / functions 19 / branches 18. Full suite: **406 tests across 28 files in ~15s**. |

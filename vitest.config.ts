@@ -65,10 +65,10 @@ export default defineConfig({
       // helpers + actions get covered. Don't lower them — if a
       // change *would* lower coverage, fix the test suite first.
       thresholds: {
-        lines: 17,
-        statements: 17,
-        functions: 17,
-        branches: 15,
+        lines: 20,
+        statements: 20,
+        functions: 19,
+        branches: 18,
       },
     },
   },
