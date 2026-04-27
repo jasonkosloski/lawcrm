@@ -60,7 +60,35 @@ const expenseSchema = z.object({
   billable: z.literal("on").optional(),
   clientAdvanced: z.literal("on").optional(),
   notes: z.string().trim().max(1000).optional().or(z.literal("")),
+  /** Optional FK to a Document row on the same matter — the
+   *  receipt for this expense. We validate cross-matter isolation
+   *  at write time so a tampered form can't link to another
+   *  firm's documents. Empty string means "no receipt." */
+  receiptDocumentId: z.string().optional().or(z.literal("")),
 });
+
+/** Validate the posted receipt-document FK against the matter
+ *  scope. Empty/null maps to "no receipt"; an unknown id or
+ *  cross-matter id silently coerces to null rather than blowing
+ *  up the create. The dropdown is server-rendered from the
+ *  matter's documents so a legitimate selection always resolves.
+ *  Anything off that path probably came from a stale form or a
+ *  tampered POST — drop it, don't error.
+ *
+ *  Empty string and null both map to "no receipt" — schema allows
+ *  null, the form posts "" when the user picks "—". */
+async function resolveReceiptDocumentId(
+  matterId: string,
+  posted: string | undefined
+): Promise<string | null> {
+  if (!posted) return null;
+  const doc = await prisma.document.findUnique({
+    where: { id: posted },
+    select: { id: true, matterId: true },
+  });
+  if (!doc || doc.matterId !== matterId) return null;
+  return doc.id;
+}
 
 // ── Create ──────────────────────────────────────────────────────────────
 
@@ -88,6 +116,14 @@ export async function createExpense(
   });
   if (!matter) return { status: "error", error: "Matter not found." };
 
+  // Cross-matter isolation guard for the receipt FK. Look up the
+  // posted document and refuse if it lives on another matter.
+  // Empty string is the "no receipt" sentinel.
+  const receiptDocumentId = await resolveReceiptDocumentId(
+    matter.id,
+    data.receiptDocumentId
+  );
+
   const expense = await prisma.expense.create({
     data: {
       matterId: matter.id,
@@ -100,6 +136,7 @@ export async function createExpense(
       billable: data.billable === "on",
       clientAdvanced: data.clientAdvanced === "on",
       notes: data.notes || null,
+      receiptDocumentId,
     },
     select: { id: true, amount: true },
   });
@@ -158,6 +195,11 @@ export async function updateExpense(
     };
   }
 
+  const receiptDocumentId = await resolveReceiptDocumentId(
+    existing.matterId,
+    data.receiptDocumentId
+  );
+
   await prisma.expense.update({
     where: { id: expenseId },
     data: {
@@ -169,6 +211,7 @@ export async function updateExpense(
       billable: data.billable === "on",
       clientAdvanced: data.clientAdvanced === "on",
       notes: data.notes || null,
+      receiptDocumentId,
     },
   });
 

@@ -1037,6 +1037,14 @@ export type ExpenseRow = {
   invoiceNumber: string | null;
   loggerName: string | null;
   loggerInitials: string | null;
+  /** When set, the expense has an attached receipt Document.
+   *  Drives the "📎 Receipt" chip + open link on the row. */
+  receiptDocumentId: string | null;
+  receiptDocumentName: string | null;
+  /** True when the receipt document has a file blob (downloads
+   *  available). Documents created without a file still surface
+   *  as a receipt link (chip), just without a download. */
+  receiptHasFile: boolean;
 };
 
 export type ExpenseSummary = {
@@ -1060,6 +1068,9 @@ export async function getMatterExpenses(
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     include: {
       invoice: { select: { invoiceNumber: true } },
+      receiptDocument: {
+        select: { id: true, name: true, fileUrl: true },
+      },
     },
   });
   // Resolve loggers in one batch — same pattern as documents.
@@ -1096,6 +1107,9 @@ export async function getMatterExpenses(
       invoiceNumber: r.invoice?.invoiceNumber ?? null,
       loggerName: logger?.name ?? null,
       loggerInitials: logger?.initials ?? null,
+      receiptDocumentId: r.receiptDocument?.id ?? null,
+      receiptDocumentName: r.receiptDocument?.name ?? null,
+      receiptHasFile: !!r.receiptDocument?.fileUrl,
     };
   });
 

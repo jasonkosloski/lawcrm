@@ -31,7 +31,20 @@ const todayIso = (): string => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
-export function ExpenseComposer({ matterId }: { matterId: string }) {
+export type ExpenseDocumentOption = {
+  id: string;
+  name: string;
+};
+
+export function ExpenseComposer({
+  matterId,
+  documentOptions = [],
+}: {
+  matterId: string;
+  /** Documents on this matter, surfaced as receipt options in the
+   *  dropdown. Empty list (the default) hides the receipt field. */
+  documentOptions?: ExpenseDocumentOption[];
+}) {
   const action = createExpense.bind(null, matterId);
   const [state, formAction, isPending] = useActionState<
     ExpenseFormState,
@@ -48,6 +61,7 @@ export function ExpenseComposer({ matterId }: { matterId: string }) {
   const [billable, setBillable] = useState(true);
   const [clientAdvanced, setClientAdvanced] = useState(false);
   const [notes, setNotes] = useState("");
+  const [receiptDocumentId, setReceiptDocumentId] = useState("");
 
   useEffect(() => {
     if (state.status === "ok") {
@@ -58,6 +72,7 @@ export function ExpenseComposer({ matterId }: { matterId: string }) {
       setDescription("");
       setUtbmsCode("");
       setNotes("");
+      setReceiptDocumentId("");
       setBillable(true);
       setClientAdvanced(false);
       setDate(todayIso());
@@ -203,6 +218,27 @@ export function ExpenseComposer({ matterId }: { matterId: string }) {
           className="px-2.5 py-1.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4 resize-none"
         />
       </Field>
+
+      {/* Receipt picker — only renders when the matter actually
+          has documents to pick from. Upload a receipt via the
+          Documents tab first, then attach it here. */}
+      {documentOptions.length > 0 && (
+        <Field label="Receipt">
+          <select
+            name="receiptDocumentId"
+            value={receiptDocumentId}
+            onChange={(e) => setReceiptDocumentId(e.target.value)}
+            className={inputClass}
+          >
+            <option value="">— No receipt —</option>
+            {documentOptions.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
 
       {state.error && (
         <div className="text-2xs text-warn">{state.error}</div>

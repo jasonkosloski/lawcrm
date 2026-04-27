@@ -25,8 +25,12 @@ import {
 import { TimeComposer } from "@/components/matters/captures/time-composer";
 import { TimeEntryRowMenu } from "@/components/time-entries/time-entry-row-actions";
 import { EntitySourceChip } from "@/components/matters/entity-source-chip";
-import { ExpenseComposer } from "@/components/matters/expenses/expense-composer";
+import {
+  ExpenseComposer,
+  type ExpenseDocumentOption,
+} from "@/components/matters/expenses/expense-composer";
 import { ExpenseRowActions } from "@/components/matters/expenses/expense-row-actions";
+import { prisma } from "@/lib/prisma";
 import { RowAttachedNotes } from "@/components/matters/row-attached-notes";
 import {
   EXPENSE_CATEGORY_LABEL,
@@ -86,13 +90,23 @@ export default async function MatterTimePage({
     expenses,
     canCreateExpense,
     canDeleteExpense,
+    matterDocuments,
   ] = await Promise.all([
     getMatterTimeEntries(id),
     getMatterTimeSummary(id),
     getMatterExpenses(id),
     currentUserHasPermission("matters.expense.create"),
     currentUserHasPermission("matters.expense.delete"),
+    // Pull the list of documents on this matter so the expense
+    // composer's receipt picker has options. Compact projection
+    // — name + id only — to keep the payload small.
+    prisma.document.findMany({
+      where: { matterId: id },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true },
+    }),
   ]);
+  const expenseDocumentOptions: ExpenseDocumentOption[] = matterDocuments;
 
   if (entries.length === 0) {
     return (
@@ -106,6 +120,7 @@ export default async function MatterTimePage({
           expenses={expenses}
           canCreate={canCreateExpense}
           canDelete={canDeleteExpense}
+          documentOptions={expenseDocumentOptions}
         />
       </div>
     );
@@ -177,6 +192,7 @@ export default async function MatterTimePage({
         expenses={expenses}
         canCreate={canCreateExpense}
         canDelete={canDeleteExpense}
+        documentOptions={expenseDocumentOptions}
       />
     </div>
   );
@@ -303,11 +319,13 @@ function ExpensesSection({
   expenses,
   canCreate,
   canDelete,
+  documentOptions,
 }: {
   matterId: string;
   expenses: { rows: ExpenseRow[]; totalAmount: number; billableUnbilledAmount: number };
   canCreate: boolean;
   canDelete: boolean;
+  documentOptions: ExpenseDocumentOption[];
 }) {
   const { rows, totalAmount, billableUnbilledAmount } = expenses;
   return (
@@ -326,7 +344,12 @@ function ExpensesSection({
         </div>
       </div>
 
-      {canCreate && <ExpenseComposer matterId={matterId} />}
+      {canCreate && (
+        <ExpenseComposer
+          matterId={matterId}
+          documentOptions={documentOptions}
+        />
+      )}
 
       {rows.length === 0 ? (
         <div className="text-xs text-ink-4 text-center py-6 border border-dashed border-line rounded-md">
@@ -419,6 +442,35 @@ function ExpenseTableRow({
             <span className="inline-flex w-fit text-2xs px-1.5 py-0.5 rounded-full border bg-paper-2 text-ink-3 border-line">
               Client-advanced
             </span>
+          )}
+          {expense.receiptDocumentId && (
+            // The chip links to the file when a blob exists, else
+            // falls back to a non-link annotation. Either way it
+            // tells the user a receipt is attached.
+            expense.receiptHasFile ? (
+              <a
+                href={`/api/documents/${expense.receiptDocumentId}/download`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex w-fit items-center gap-1 text-2xs px-1.5 py-0.5 rounded-full border bg-paper-2 text-ink-3 border-line hover:border-brand-300 hover:text-brand-700"
+                title={
+                  expense.receiptDocumentName
+                    ? `Receipt: ${expense.receiptDocumentName}`
+                    : "Receipt attached"
+                }
+              >
+                📎 Receipt
+              </a>
+            ) : (
+              <span
+                className="inline-flex w-fit text-2xs px-1.5 py-0.5 rounded-full border bg-paper-2 text-ink-3 border-line"
+                title={
+                  expense.receiptDocumentName ?? "Receipt attached (no file)"
+                }
+              >
+                📎 Receipt (no file)
+              </span>
+            )
           )}
         </div>
       </TableCell>
