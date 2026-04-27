@@ -58,6 +58,18 @@ export default defineConfig({
         "src/generated/**",
         "src/**/*.d.ts",
       ],
+      // Floors set just below current coverage so a legitimate
+      // refactor doesn't trip them, but a regression (or a new
+      // big un-tested file landing in `src/lib/` /
+      // `src/app/actions/`) does. Raise these numbers as more
+      // helpers + actions get covered. Don't lower them — if a
+      // change *would* lower coverage, fix the test suite first.
+      thresholds: {
+        lines: 17,
+        statements: 17,
+        functions: 17,
+        branches: 15,
+      },
     },
   },
   resolve: {

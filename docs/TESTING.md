@@ -74,9 +74,20 @@ What's already covered:
 - `lib/sol.ts` — pack/unpack/compute/format
 - `lib/billing-form.ts` — state machine, void/delete guards, labels
 - `lib/format-date.ts` — variants, relative tiers, day buckets
+- `lib/format-phone.ts` — null/empty/10-digit/11-digit/extension/vanity
 - `lib/permissions.ts` — catalog shape, isKnownPermission,
   permissionLabel, expected-key smoke list
 - `lib/conflict-check.ts` — `normalize` + `summarizeMatchSeverity`
+- `lib/calendar-utils.ts` — weekday math, param parse / round-trip,
+  hour labels, event positioning, now-line offset
+- `lib/matters-filters.ts` — URL parse + build round-trip, default
+  fallthroughs, sort + view modes, multi-value array handling
+- `lib/dashboard-prefs.ts` — `mergeVisibility` defensive merge
+- `lib/note-constants.ts` — catalog shapes, today/next-hour
+  helpers, `newCapture` factory by kind
+- `lib/capture-schemas.ts` — zod validators per kind (task /
+  event / deadline / time / note-sibling), event time-order
+  cross-check, discriminated-union routing
 - `lib/expense-constants.ts` + `lib/matter-team-constants.ts` —
   catalog shape
 
@@ -172,7 +183,7 @@ vi.mock("next/navigation", () => ({
 }));
 ```
 
-**What's covered today** (42 integration tests across 4 files):
+**What's covered today** (83 integration tests across 6 files):
 
 - `src/app/actions/billing.test.ts` (7) —
   `generateInvoiceFromWip` rolls billable time + expenses into
@@ -200,6 +211,17 @@ vi.mock("next/navigation", () => ({
   nothing (even with Admin); `requirePermission(...)` throws
   redirect on miss; `currentUserHasAnyPermission([...])` matches
   the doc.
+- `src/lib/firm.integration.test.ts` (9) — `getCurrentFirm`
+  returns the user's firm profile, throws on stale-session /
+  data-integrity bug; `isCurrentUserAdmin` returns true only for
+  active users with the Admin role; `requireAdmin` returns userId
+  for admins, throws redirect for non-admins or inactive admins.
+- `src/lib/activity-log.test.ts` (32) — `logActivity` writes the
+  row + revalidates the dashboard; default icon + source mapping
+  per ActivityType (with explicit overrides honored); fire-and-
+  forget contract — DB failures (FK violations) are swallowed
+  with a `console.warn` so the user's underlying action stays
+  the source of truth.
 
 ---
 
@@ -258,9 +280,28 @@ config (in `vitest.config.ts`) scopes coverage to `src/lib/**` and
 `src/app/actions/**` — the rest is UI / wiring whose value is
 better measured by component + integration tests.
 
-We don't enforce a coverage threshold yet. The target is "every
-public function in `src/lib/` has a test"; once we hit that the
-threshold gets a number.
+**Current floor** (enforced in `vitest.config.ts`):
+
+| Metric     | Floor | Current |
+|------------|-------|---------|
+| Lines      | 17%   | 17.78%  |
+| Statements | 17%   | 17.98%  |
+| Functions  | 17%   | 17.93%  |
+| Branches   | 15%   | 16.29%  |
+
+The target is "every public function in `src/lib/` has a test."
+We're not there yet — a lot of the gap is `src/app/actions/**`
+(server actions that need DB integration tests) and trivial
+`*-form.ts` initial-state files where there's no logic to cover.
+
+**Raising the floor:** when you add tests that bump the numbers
+materially, edit the `coverage.thresholds` block in
+`vitest.config.ts` upward in the same PR. Don't ratchet it past
+the current value — leave a few points of headroom so refactors
+that legitimately move uncovered lines don't trip CI.
+
+**Lowering the floor is not allowed.** If a change would lower
+coverage, fix the tests first.
 
 ---
 
@@ -289,3 +330,4 @@ end-to-end flow.
 | 2026-04-27 | Vitest + happy-dom installed. 103 tests landed across 7 helper files. Pre-commit hook wired via husky. `docs/TESTING.md` added. |
 | 2026-04-27 | Layer 2 testing wired: `@testing-library/react` + user-event installed, `src/test/setup.ts` registers jest-dom matchers + auto-cleanup. 49 component tests landed for `PermissionsMatrix` / `ExpenseComposer` / `SettlementApprovals` / `ConflictCheckCard`. Suite is 152 tests across 11 files in 1.3s. |
 | 2026-04-27 | Layer 3 testing wired. `src/test/integration-setup.ts` is a Vitest `globalSetup` that points DATABASE_URL at a dedicated `prisma/test.db`, runs `prisma db push` once, and tears the file down. `src/test/integration-helpers.ts` exposes `resetDb()` + fixture builders (`seedFirm`, `seedUser`, `seedMatter`, etc). 42 integration tests across 4 files cover `generateInvoiceFromWip` bundling + void unlink, settlement waterfall + approval chain auto-promotion, conflict matcher against real Contacts + matters, `requirePermission` gate behavior. `fileParallelism: false` keeps integration files from racing on the shared DB. Full suite: 194 tests across 15 files in ~7s. |
+| 2026-04-25 | Coverage push. New layer-1 tests for `format-phone`, `calendar-utils`, `matters-filters`, `dashboard-prefs`, `note-constants`, `capture-schemas`, plus a `file-storage` test that uses `process.chdir(mkdtempSync(...))` + dynamic import to control STORAGE_ROOT. New layer-3 tests for `firm.ts` admin helpers and the `activity-log` writer (icon/source mapping + fire-and-forget contract). Coverage threshold floors landed in `vitest.config.ts` (lines 17 / statements 17 / functions 17 / branches 15) — current numbers ~17.8%. Full suite: **361 tests across 24 files in ~12s**. |
