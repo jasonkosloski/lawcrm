@@ -830,9 +830,23 @@ function DeadlineChip({ deadline }: { deadline: CalendarDeadlineRow }) {
 // ── Helpers ─────────────────────────────────────────────────────────────
 
 function startOfLocalDay(d: Date): Date {
-  const out = new Date(d);
-  out.setHours(0, 0, 0, 0);
-  return out;
+  // The `day` prop is built server-side via `addDays(startOfWeek(focal))`
+  // which on Vercel (UTC) produces UTC midnights — `2026-04-26T00:00Z`
+  // for "Sunday April 26". When that Date hydrates in a browser west of
+  // UTC (e.g. MDT, UTC-6) it represents Saturday 6pm local. A naive
+  // `setHours(0,0,0,0)` would then round DOWN to Saturday midnight local,
+  // shifting every drop one day back. Reconstruct from the input's UTC
+  // calendar components so the resulting "local midnight" lands on the
+  // calendar day the server intended.
+  return new Date(
+    d.getUTCFullYear(),
+    d.getUTCMonth(),
+    d.getUTCDate(),
+    0,
+    0,
+    0,
+    0
+  );
 }
 
 function clamp(n: number, min: number, max: number): number {
