@@ -19,6 +19,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { getCurrentFirm } from "@/lib/firm";
 
 export type AttendeeSearchResult =
   | {
@@ -63,13 +64,22 @@ export async function searchAttendees(
   const excludeUserIds = new Set(options.excludeUserIds ?? []);
   const excludeContactIds = new Set(options.excludeContactIds ?? []);
 
+  const firm = await getCurrentFirm();
+
   // Pull both buckets in parallel. We over-fetch slightly (5x
   // the cap) so the app-layer case-insensitive filter has room
   // to drop duplicates / excluded ids without starving the
   // returned list.
+  //
+  // Firm scoping: users are already firm-scoped via
+  // `User.firmId`. Contacts get the same treatment — but we also
+  // accept legacy rows with `firmId IS NULL` for now so the
+  // picker keeps showing pre-multi-tenancy data. Drop the
+  // null branch once Contact.firmId is backfilled + tightened
+  // to required.
   const [users, contacts] = await Promise.all([
     prisma.user.findMany({
-      where: { isActive: true },
+      where: { isActive: true, firmId: firm.id },
       select: {
         id: true,
         name: true,
@@ -80,7 +90,10 @@ export async function searchAttendees(
       take: USER_CAP * 5,
     }),
     prisma.contact.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        OR: [{ firmId: firm.id }, { firmId: null }],
+      },
       select: {
         id: true,
         name: true,

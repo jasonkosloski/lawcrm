@@ -12,9 +12,19 @@
 
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
+// `searchAttendees` calls `getCurrentFirm` — mock the resolver
+// so the auth chain (next-auth → next/server) doesn't have to
+// load. Each test re-points the mock at its seeded firm.
+vi.mock("@/lib/firm", () => ({
+  getCurrentFirm: vi.fn(),
+}));
+
 import { prisma } from "@/lib/prisma";
+import { getCurrentFirm } from "@/lib/firm";
 import { searchAttendees } from "@/lib/queries/attendee-search";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
+
+const mockedGetCurrentFirm = vi.mocked(getCurrentFirm);
 
 let firmId: string;
 
@@ -26,6 +36,23 @@ beforeEach(async () => {
   await resetDb();
   const f = await seedFirm();
   firmId = f.firmId;
+  mockedGetCurrentFirm.mockResolvedValue({
+    id: firmId,
+    name: "Test Firm LLC",
+    shortName: null,
+    ein: null,
+    website: null,
+    phone: null,
+    email: null,
+    addressLine1: null,
+    addressLine2: null,
+    city: null,
+    state: null,
+    zip: null,
+    country: "US",
+    establishedAt: null,
+    logoUrl: null,
+  });
 });
 
 afterEach(() => {

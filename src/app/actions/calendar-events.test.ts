@@ -26,12 +26,20 @@ vi.mock("@/lib/permission-check", () => ({
   requirePermission: vi.fn().mockResolvedValue("test-user"),
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
 }));
+// `getCurrentFirm` (used by the new attendee-create path) pulls
+// in next-auth at module load. Stub the resolver so nothing in
+// the auth chain has to resolve. Each test re-points the mock
+// to whatever firm it just seeded.
+vi.mock("@/lib/firm", () => ({
+  getCurrentFirm: vi.fn(),
+}));
 
 import { prisma } from "@/lib/prisma";
 import {
   moveCalendarEvent,
   updateCalendarEvent,
 } from "@/app/actions/calendar-events";
+import { getCurrentFirm } from "@/lib/firm";
 import { requirePermission } from "@/lib/permission-check";
 import { updateCalendarEventInitialState } from "@/lib/calendar-event-form";
 import {
@@ -42,6 +50,9 @@ import {
   seedUser,
 } from "@/test/integration-helpers";
 
+const mockedGetCurrentFirm = vi.mocked(getCurrentFirm);
+
+let firmId: string;
 let userId: string;
 let matterId: string;
 let eventId: string;
@@ -52,7 +63,28 @@ beforeAll(() => {
 
 beforeEach(async () => {
   await resetDb();
-  const { firmId } = await seedFirm();
+  const f = await seedFirm();
+  firmId = f.firmId;
+  // Point the mocked resolver at the just-seeded firm so the
+  // attendee path can stamp Contact.firmId + scope its dup
+  // check correctly.
+  mockedGetCurrentFirm.mockResolvedValue({
+    id: firmId,
+    name: "Test Firm LLC",
+    shortName: null,
+    ein: null,
+    website: null,
+    phone: null,
+    email: null,
+    addressLine1: null,
+    addressLine2: null,
+    city: null,
+    state: null,
+    zip: null,
+    country: "US",
+    establishedAt: null,
+    logoUrl: null,
+  });
   const u = await seedUser({ firmId });
   userId = u.userId;
   const area = await seedPracticeArea();
@@ -454,6 +486,100 @@ describe("updateCalendarEvent — typed attendee picker", () => {
     );
     expect(res.status).toBe("error");
     expect(res.errors?.attendees?.[0]).toMatch(/valid email/i);
+  });
+
+  test("kind=new is rejected when the email already belongs to a contact in the firm", async () => {
+    // Seed an existing contact in the same firm with the
+    // colliding email.
+    await prisma.contact.create({
+      data: {
+        firmId,
+        name: "Already Here",
+        email: "duplicate@example.com",
+        type: "client",
+      },
+    });
+
+    const beforeCount = await prisma.contact.count();
+    const res = await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm({
+        attendees: JSON.stringify([
+          {
+            kind: "new",
+            name: "Duplicate Person",
+            email: "duplicate@example.com",
+          },
+        ]),
+      })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.attendees?.[0]).toMatch(/already exists/i);
+    expect(res.errors?.attendees?.[0]).toMatch(/Already Here/);
+    // No Contact created — pre-transaction reject.
+    expect(await prisma.contact.count()).toBe(beforeCount);
+  });
+
+  test("kind=new dup check is case-insensitive", async () => {
+    await prisma.contact.create({
+      data: {
+        firmId,
+        name: "Mixed Case Email",
+        email: "Mixed.Case@Example.com",
+        type: "client",
+      },
+    });
+    const res = await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm({
+        attendees: JSON.stringify([
+          {
+            kind: "new",
+            name: "Lower Caser",
+            email: "mixed.case@example.com",
+          },
+        ]),
+      })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.attendees?.[0]).toMatch(/already exists/i);
+  });
+
+  test("kind=new with two new entries sharing an email is rejected (in-list dup)", async () => {
+    const res = await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm({
+        attendees: JSON.stringify([
+          { kind: "new", name: "First", email: "same@example.com" },
+          { kind: "new", name: "Second", email: "same@example.com" },
+        ]),
+      })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.attendees?.[0]).toMatch(/share the email/i);
+  });
+
+  test("kind=new stamps Contact.firmId so the new row joins the firm directory", async () => {
+    await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm({
+        attendees: JSON.stringify([
+          {
+            kind: "new",
+            name: "Firm Scoped",
+            email: "scoped@example.com",
+          },
+        ]),
+      })
+    );
+    const created = await prisma.contact.findFirst({
+      where: { name: "Firm Scoped" },
+    });
+    expect(created!.firmId).toBe(firmId);
   });
 
   test("kind=user with empty email is allowed (linked user has its own)", async () => {

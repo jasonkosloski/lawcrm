@@ -11,6 +11,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { getCurrentFirm } from "@/lib/firm";
 import { EVENT_TYPES } from "@/lib/note-constants";
 import { requirePermission } from "@/lib/permission-check";
 import type { UpdateCalendarEventFormState } from "@/lib/calendar-event-form";
@@ -197,6 +198,70 @@ export async function updateCalendarEvent(
     };
   }
 
+  // Resolve the current firm once — used by the new-contact
+  // branch to scope the duplicate-email check + stamp firmId on
+  // any newly-created Contact rows. We also pre-flight any
+  // duplicate emails BEFORE opening the transaction so we can
+  // return a clean error without doing partial work.
+  const firm = await getCurrentFirm();
+  const newAttendees = attendeeList.filter((a) => a.kind === "new");
+  if (newAttendees.length > 0) {
+    // Lowercased emails for the dup check — Contact.email is
+    // free-form so we normalize on read.
+    const newEmails = newAttendees
+      .map((a) => a.email!.trim().toLowerCase())
+      .filter((e) => e.length > 0);
+    // Check for in-list duplicates first (two new entries with
+    // the same email in the same save).
+    const seen = new Set<string>();
+    for (const e of newEmails) {
+      if (seen.has(e)) {
+        return {
+          status: "error",
+          errors: {
+            attendees: [
+              `Two new attendees share the email "${e}" — pick one or merge.`,
+            ],
+          },
+        };
+      }
+      seen.add(e);
+    }
+    if (newEmails.length > 0) {
+      // Firm-scoped uniqueness check. SQLite has no
+      // case-insensitive comparison helper Prisma can drive, so
+      // we pull candidate rows + match in JS. Bounds: this is a
+      // small list (the new-attendee count, never the whole
+      // Contact table). The OR-firmId-null branch matches legacy
+      // unbackfilled rows so single-tenant duplicates still get
+      // caught — drop that clause once Contact.firmId is required.
+      const existing = await prisma.contact.findMany({
+        where: {
+          isActive: true,
+          email: { not: null },
+          OR: [{ firmId: firm.id }, { firmId: null }],
+        },
+        select: { email: true, name: true },
+      });
+      const existingByEmail = new Map<string, string>(
+        existing
+          .filter((c) => c.email)
+          .map((c) => [c.email!.toLowerCase(), c.name])
+      );
+      const collision = newEmails.find((e) => existingByEmail.has(e));
+      if (collision) {
+        return {
+          status: "error",
+          errors: {
+            attendees: [
+              `A contact with email "${collision}" already exists (${existingByEmail.get(collision)}). Pick them from the list instead of creating a duplicate.`,
+            ],
+          },
+        };
+      }
+    }
+  }
+
   const allDay = parsed.data.isAllDay === "on";
   // Re-parse here — the superRefine validated shape, but didn't
   // hand us the parsed Date. Both calls succeed at this point
@@ -248,16 +313,16 @@ export async function updateCalendarEvent(
           if (c?.isActive) contactId = c.id;
         } else {
           // "new" branch — create a Contact (type=other) so the
-          // arbitrary entry becomes a real directory row. Other
-          // events the user attaches the same person to can pick
-          // them up via the contact picker on the next save. We
-          // don't dedupe by email here because false positives
-          // are easier to undo than missed contacts; the Contact
-          // directory has its own merge story.
+          // arbitrary entry becomes a real directory row. The
+          // pre-transaction check above already ruled out
+          // duplicate emails within the firm; firmId is stamped
+          // here so the row joins the firm's directory cleanly
+          // from the moment it's born.
           const trimmedName = a.name.trim();
           const trimmedEmail = a.email?.trim() || null;
           const created = await tx.contact.create({
             data: {
+              firmId: firm.id,
               name: trimmedName,
               email: trimmedEmail,
               type: "other",

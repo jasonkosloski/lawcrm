@@ -169,6 +169,11 @@ model Firm {
   /// two system roles ("Admin" + "default") plus any custom roles
   /// firm admins create.
   roles         Role[]
+  /// Contacts owned by this firm — clients, opposing counsel,
+  /// witnesses, experts, etc. Optional today (Contact.firmId is
+  /// nullable for legacy rows); becomes the multi-tenancy scope
+  /// once backfilled.
+  contacts      Contact[] @relation("FirmContacts")
 
   @@map("firms")
 }
@@ -520,6 +525,13 @@ model MatterTeamMember {
 /// parties, witnesses, experts, courts, vendors, medical providers, etc.
 model Contact {
   id              String   @id @default(cuid())
+  /// The firm this contact belongs to. Optional today so legacy
+  /// rows (created before firm scoping was introduced) keep
+  /// working. New writes always set it via the action layer; the
+  /// long-term plan is to backfill all existing rows via a
+  /// migration and tighten this to required, at which point
+  /// every Contact query scopes to the caller's firm.
+  firmId          String?
   name            String
   email           String?
   /// Denormalized primary phone — kept in sync with the primary
@@ -538,6 +550,8 @@ model Contact {
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  firm            Firm? @relation("FirmContacts", fields: [firmId], references: [id], onDelete: SetNull)
 
   // Relationships
   mattersAsClient MatterContact[]
