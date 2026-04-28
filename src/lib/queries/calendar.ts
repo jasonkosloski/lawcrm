@@ -8,6 +8,8 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { getCurrentUserId } from "@/lib/current-user";
+import { canViewEventDetails } from "@/lib/calendar-visibility";
 
 export type CalendarEventRow = {
   id: string;
@@ -31,6 +33,12 @@ export type CalendarEventRow = {
    *  "with: A, B, C +N more" line when the chip has room. The
    *  full list lives behind the event detail modal. */
   attendeeNames: string[];
+  /** True when the viewer can see full details. False = "Busy"
+   *  view. The chip uses this to render either the rich body or
+   *  a bare time block; the modal uses it to gate detail
+   *  fields. The query strips title/location/etc. when this is
+   *  false, so the client can't accidentally leak data. */
+  viewerCanSeeDetails: boolean;
 };
 
 export type CalendarDeadlineRow = {
@@ -51,30 +59,40 @@ export async function getCalendarItems(
   rangeStart: Date,
   rangeEnd: Date
 ): Promise<CalendarItem[]> {
-  // Visibility today is permissive — every firm member sees
-  // every event in range, matter or otherwise. The right model
-  // is permission-driven (an `events.view_all` permission +
-  // per-event visibility levels like full / busy-only / private),
-  // landing in a follow-up. Until then the `createdById` column
-  // gives us the "your own event" branch when we need it.
+  // The visibility resolver runs per-event (creator + attendee
+  // + matter team + per-event override + creator's user-default
+  // override). To answer those questions we pull:
+  //   - createdBy.defaultEventVisibility (creator's user-default)
+  //   - all attendee userIds (one row per linked-user attendee)
+  //   - matter team's active member userIds (when matter event)
+  // Everything else stays the same as the prior shape.
+  const viewerId = await getCurrentUserId();
   const [events, deadlines] = await Promise.all([
     prisma.calendarEvent.findMany({
       where: {
         startTime: { gte: rangeStart, lte: rangeEnd },
       },
       include: {
-        matter: { select: { id: true, name: true, color: true } },
-        // Pull attendees so the chip can render a count + first
-        // few names. We cap at 4 ordered alphabetically — the
-        // chip's "with:" line surfaces 3 names + "+N more"
-        // when there's a fourth, and we only need 4 to make
-        // that render decision.
-        attendees: {
-          select: { name: true },
-          orderBy: { name: "asc" },
-          take: 4,
+        matter: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            teamMembers: {
+              where: { removedAt: null },
+              select: { userId: true },
+            },
+          },
         },
-        _count: { select: { attendees: true } },
+        createdBy: { select: { defaultEventVisibility: true } },
+        // Full attendee list — small in practice (< 10 typical),
+        // and needed for both the chip's "with:" line AND the
+        // resolver's userId-membership check. Display layer caps
+        // at 3 names; the resolver scans userIds.
+        attendees: {
+          select: { name: true, userId: true },
+          orderBy: { name: "asc" },
+        },
       },
       orderBy: { startTime: "asc" },
     }),
@@ -90,7 +108,48 @@ export async function getCalendarItems(
     }),
   ]);
 
-  const mappedEvents: CalendarItem[] = events.map((e) => ({
+  const mappedEvents: CalendarItem[] = events.map((e) => {
+    const attendeeUserIds = e.attendees
+      .map((a) => a.userId)
+      .filter((id): id is string => !!id);
+    const matterTeamUserIds = e.matter?.teamMembers.map((m) => m.userId) ?? [];
+
+    const canSee = canViewEventDetails({
+      viewerId,
+      createdById: e.createdById,
+      eventVisibility: e.visibility,
+      creatorDefaultEventVisibility:
+        e.createdBy?.defaultEventVisibility ?? null,
+      matterId: e.matter?.id ?? null,
+      attendeeUserIds,
+      matterTeamUserIds,
+    });
+
+    if (!canSee) {
+      // Strip every detail field server-side so a sniffer
+      // can't pull data the viewer isn't supposed to see.
+      // Time + isAllDay stay because that IS the busy block.
+      // Color falls back to a neutral gray so all "Busy"
+      // chips read uniformly regardless of matter.
+      return {
+        id: e.id,
+        kind: "event",
+        title: "Busy",
+        type: "block_time",
+        startTime: e.startTime,
+        endTime: e.endTime,
+        isAllDay: e.isAllDay,
+        location: null,
+        color: "var(--color-ink-3)",
+        matterId: null,
+        matterName: null,
+        attendeeCount: 0,
+        attendeeNames: [],
+        viewerCanSeeDetails: false,
+      };
+    }
+
+    return {
     id: e.id,
     kind: "event",
     title: e.title,
@@ -102,9 +161,16 @@ export async function getCalendarItems(
     color: e.matter?.color ?? e.color ?? "var(--color-ink-3)",
     matterId: e.matter?.id ?? null,
     matterName: e.matter?.name ?? null,
-    attendeeCount: e._count.attendees,
+    attendeeCount: e.attendees.length,
     attendeeNames: e.attendees.slice(0, 3).map((a) => a.name),
-  }));
+    viewerCanSeeDetails: true,
+    };
+  });
+
+  // Note: the "Busy" branch above also returns a CalendarEventRow
+  // with `viewerCanSeeDetails: false` and scrubbed fields. The
+  // chip render checks the flag and switches to the bare time
+  // block; the modal does the same.
 
   const mappedDeadlines: CalendarItem[] = deadlines.map((d) => ({
     id: d.id,
@@ -153,6 +219,14 @@ export type CalendarEventDetail = {
     contactType: string | null;
     contactOrganization: string | null;
   }>;
+  /** True when the viewer can see full details. False = the
+   *  fields above are scrubbed (title="Busy", attendees=[], etc.)
+   *  and the modal renders a minimal "Busy" view. */
+  viewerCanSeeDetails: boolean;
+  /** Per-event visibility override. Drives the modal's
+   *  "Show details to others" toggle. "default" applies
+   *  resolver rules; "show_details" makes the event public. */
+  visibility: string;
 };
 
 export async function getCalendarEventById(
@@ -167,8 +241,13 @@ export async function getCalendarEventById(
           name: true,
           color: true,
           practiceArea: { select: { name: true } },
+          teamMembers: {
+            where: { removedAt: null },
+            select: { userId: true },
+          },
         },
       },
+      createdBy: { select: { defaultEventVisibility: true } },
       attendees: {
         include: {
           user: {
@@ -182,6 +261,46 @@ export async function getCalendarEventById(
     },
   });
   if (!e) return null;
+
+  // Apply the visibility resolver. Modal users who can't see
+  // details get a stripped shape — same "Busy" treatment as
+  // the calendar grid. Returning null would also work, but the
+  // modal needs to render SOMETHING when a user clicks a busy
+  // block, so we keep the row + scrub the sensitive bits.
+  const viewerId = await getCurrentUserId();
+  const attendeeUserIds = e.attendees
+    .map((a) => a.userId)
+    .filter((uid): uid is string => !!uid);
+  const matterTeamUserIds = e.matter?.teamMembers.map((m) => m.userId) ?? [];
+  const canSee = canViewEventDetails({
+    viewerId,
+    createdById: e.createdById,
+    eventVisibility: e.visibility,
+    creatorDefaultEventVisibility:
+      e.createdBy?.defaultEventVisibility ?? null,
+    matterId: e.matter?.id ?? null,
+    attendeeUserIds,
+    matterTeamUserIds,
+  });
+  if (!canSee) {
+    return {
+      id: e.id,
+      title: "Busy",
+      type: "block_time",
+      startTime: e.startTime,
+      endTime: e.endTime,
+      isAllDay: e.isAllDay,
+      location: null,
+      description: null,
+      zoomUrl: null,
+      color: "var(--color-ink-3)",
+      matter: null,
+      attendees: [],
+      viewerCanSeeDetails: false,
+      visibility: e.visibility,
+    };
+  }
+
   return {
     id: e.id,
     title: e.title,
@@ -213,6 +332,8 @@ export async function getCalendarEventById(
       contactType: a.contact?.type ?? null,
       contactOrganization: a.contact?.organization ?? null,
     })),
+    viewerCanSeeDetails: true,
+    visibility: e.visibility,
   };
 }
 

@@ -39,6 +39,10 @@ export function EventComposer({ matterId }: { matterId: string }) {
   const [endTime, setEndTime] = useState(nextHourDateTimeString(1));
   const [location, setLocation] = useState("");
   const [description, setDescription] = useState("");
+  // Per-event visibility override — same shape as the calendar's
+  // NewEventComposer. Matter events are already team-visible by
+  // definition; flipping this to true exposes details firm-wide.
+  const [showDetails, setShowDetails] = useState(false);
 
   const reset = () => {
     setTitle("");
@@ -48,6 +52,7 @@ export function EventComposer({ matterId }: { matterId: string }) {
     setLocation("");
     setDescription("");
     setCaptures([]);
+    setShowDetails(false);
   };
 
   useEffect(() => {
@@ -130,6 +135,30 @@ export function EventComposer({ matterId }: { matterId: string }) {
           rows={2}
           error={errs.description?.[0]}
         />
+
+        {/* Per-event visibility — matter team always sees, but a
+            firm-wide event (CLE, all-hands, settlement
+            announcement) may want to surface details to non-team
+            firm members too. */}
+        <input
+          type="hidden"
+          name="visibility"
+          value={showDetails ? "show_details" : "default"}
+        />
+        <label className="flex items-start gap-2 text-xs text-ink-3 select-none cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showDetails}
+            onChange={(e) => setShowDetails(e.target.checked)}
+            className="mt-0.5 h-3.5 w-3.5 rounded border-line"
+          />
+          <span>
+            <span className="text-ink">Show details firm-wide</span>
+            <span className="block text-[10px] text-ink-4 leading-relaxed mt-0.5">
+              Off: only the matter team and invited attendees see details.
+            </span>
+          </span>
+        </label>
       </div>
     </CaptureComposerShell>
   );

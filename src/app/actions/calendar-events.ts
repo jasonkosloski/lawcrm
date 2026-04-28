@@ -13,8 +13,12 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentFirm } from "@/lib/firm";
 import { getCurrentUserId } from "@/lib/current-user";
+import { canEditEvent } from "@/lib/calendar-visibility";
 import { EVENT_TYPES } from "@/lib/note-constants";
-import { requirePermission } from "@/lib/permission-check";
+import {
+  currentUserHasPermission,
+  requirePermission,
+} from "@/lib/permission-check";
 import type {
   CreateCalendarEventState,
   UpdateCalendarEventFormState,
@@ -101,6 +105,13 @@ const updateEventSchema = z
      *  field. Replace-all on save. Optional / empty = no
      *  attendees. */
     attendees: z.string().optional().default("[]"),
+    /** Per-event visibility override. Defaults to "default"
+     *  (resolver applies standard rules). "show_details" makes
+     *  the event publicly visible in full. */
+    visibility: z
+      .enum(["default", "show_details"])
+      .optional()
+      .default("default"),
   })
   .superRefine((data, ctx) => {
     const allDay = data.isAllDay === "on";
@@ -169,12 +180,52 @@ export async function updateCalendarEvent(
 
   const event = await prisma.calendarEvent.findUnique({
     where: { id: eventId },
-    select: { matterId: true },
+    select: {
+      matterId: true,
+      createdById: true,
+      matter: {
+        select: {
+          teamMembers: {
+            where: { removedAt: null },
+            select: { userId: true },
+          },
+        },
+      },
+    },
   });
   if (!event) {
     return {
       status: "error",
       errors: { title: ["Event no longer exists"] },
+    };
+  }
+
+  // Edit gate per the visibility model. Creator bypass first
+  // (you can always edit your own events regardless of perms);
+  // otherwise events.edit gates matter events, and
+  // events.edit_non_matter gates other users' personal events.
+  // The resolver lives in lib/calendar-visibility.ts so the
+  // modal's canEdit prop and this server check can use the
+  // same logic.
+  const viewerId = await getCurrentUserId();
+  const [hasEventsEdit, hasEventsEditNonMatter] = await Promise.all([
+    currentUserHasPermission("events.edit"),
+    currentUserHasPermission("events.edit_non_matter"),
+  ]);
+  const allowed = canEditEvent({
+    viewerId,
+    createdById: event.createdById,
+    matterId: event.matterId,
+    matterTeamUserIds:
+      event.matter?.teamMembers.map((m) => m.userId) ?? [],
+    perms: { hasEventsEdit, hasEventsEditNonMatter },
+  });
+  if (!allowed) {
+    return {
+      status: "error",
+      errors: {
+        title: ["You don't have permission to edit this event."],
+      },
     };
   }
 
@@ -199,6 +250,26 @@ export async function updateCalendarEvent(
     return {
       status: "error",
       errors: { attendees: ["Attendee list was malformed — try again."] },
+    };
+  }
+
+  // Min-firm-attendee invariant: every event must keep at least
+  // one firm user attached. Stops a user from accidentally
+  // orphaning an event (no one to surface it on a calendar, no
+  // one to follow up). Counts kind=user entries — external
+  // contacts/arbitrary names don't satisfy the rule because
+  // they aren't firm members.
+  const firmAttendeeCount = attendeeList.filter(
+    (a) => a.kind === "user" && a.userId
+  ).length;
+  if (firmAttendeeCount === 0) {
+    return {
+      status: "error",
+      errors: {
+        attendees: [
+          "Every event needs at least one firm attendee. Add yourself or another team member before saving.",
+        ],
+      },
     };
   }
 
@@ -285,6 +356,7 @@ export async function updateCalendarEvent(
         location: parsed.data.location || null,
         zoomUrl: parsed.data.zoomUrl || null,
         description: parsed.data.description || null,
+        visibility: parsed.data.visibility,
       },
     });
     // Replace-all attendees — simpler than a diff at this scale,
@@ -415,6 +487,14 @@ const createCalendarEventSchema = z
      *  scope — the user's "personal" event in effect. When set,
      *  it's a matter event (visible to the matter team). */
     matterId: z.string().optional().or(z.literal("")),
+    /** Per-event visibility override. Defaults to "default"
+     *  (resolver decides: creator + attendees + matter team see;
+     *  everyone else sees Busy). "show_details" makes this event
+     *  firm-wide visible regardless of relationship. */
+    visibility: z
+      .enum(["default", "show_details"])
+      .optional()
+      .default("default"),
   })
   .superRefine((data, ctx) => {
     const allDay = data.isAllDay === "on";
@@ -479,20 +559,44 @@ export async function createCalendarEvent(
       ? parsed.data.matterId
       : null;
 
-  const created = await prisma.calendarEvent.create({
-    data: {
-      matterId,
-      createdById,
-      title: parsed.data.title,
-      type: parsed.data.type,
-      isAllDay: allDay,
-      startTime: startDate,
-      endTime: endDate,
-      location: parsed.data.location || null,
-      zoomUrl: parsed.data.zoomUrl || null,
-      description: parsed.data.description || null,
-    },
-    select: { id: true },
+  // Wrap the create + creator-attendee insert in a transaction
+  // so the min-firm-attendee invariant holds atomically — the
+  // event never exists without at least one firm attendee.
+  const created = await prisma.$transaction(async (tx) => {
+    const ev = await tx.calendarEvent.create({
+      data: {
+        matterId,
+        createdById,
+        title: parsed.data.title,
+        type: parsed.data.type,
+        isAllDay: allDay,
+        startTime: startDate,
+        endTime: endDate,
+        location: parsed.data.location || null,
+        zoomUrl: parsed.data.zoomUrl || null,
+        description: parsed.data.description || null,
+        visibility: parsed.data.visibility,
+      },
+      select: { id: true },
+    });
+    // Auto-add the creator as a firm-user attendee. Snapshot
+    // their name + email so a future rename doesn't rewrite the
+    // attendee label. Status `accepted` (creator is implicitly
+    // attending — RSVP doesn't apply to "you scheduled this").
+    const creator = await tx.user.findUniqueOrThrow({
+      where: { id: createdById },
+      select: { name: true, email: true },
+    });
+    await tx.calendarAttendee.create({
+      data: {
+        eventId: ev.id,
+        userId: createdById,
+        name: creator.name,
+        email: creator.email,
+        status: "accepted",
+      },
+    });
+    return ev;
   });
 
   // Calendar refreshes via revalidate so the newly-created

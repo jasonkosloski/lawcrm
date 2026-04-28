@@ -313,6 +313,14 @@ const eventSchema = z
     location: z.string().max(200).optional().or(z.literal("")),
     description: z.string().max(4000).optional().or(z.literal("")),
     attachments: z.string().optional().default("[]"),
+    /** Per-event visibility override — same shape as
+     *  createCalendarEvent. "default" defers to the resolver
+     *  (matter team sees by definition); "show_details" exposes
+     *  the event firm-wide. */
+    visibility: z
+      .enum(["default", "show_details"])
+      .optional()
+      .default("default"),
   })
   .superRefine((data, ctx) => {
     const start = new Date(data.startTime);
@@ -382,12 +390,14 @@ export async function createEventWithCaptures(
     const event = await tx.calendarEvent.create({
       data: {
         matterId,
+        createdById: userId,
         title: parsed.data.title,
         type: parsed.data.type,
         startTime: new Date(parsed.data.startTime),
         endTime: new Date(parsed.data.endTime),
         location: parsed.data.location || null,
         description: parsed.data.description || null,
+        visibility: parsed.data.visibility,
       },
       select: { id: true },
     });
@@ -403,6 +413,16 @@ export async function createEventWithCaptures(
     // typed `kind: user` attendee — same shape the modal
     // picker creates. We snapshot name/email so a future
     // user rename doesn't silently rewrite past attendance.
+    //
+    // The creator is added either as part of the team list
+    // (when they're on the matter team) or as a fallback after
+    // the team-add block — either way, the
+    // min-firm-attendee invariant holds.
+    const creatorAttendee = await tx.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { name: true, email: true },
+    });
+    let creatorAlreadyAdded = false;
     if (defaults.autoAddTeamToNewEvents) {
       const team = await tx.matterTeamMember.findMany({
         where: { matterId, removedAt: null },
@@ -425,7 +445,25 @@ export async function createEventWithCaptures(
             status: "accepted",
           })),
         });
+        if (team.some((t) => t.user.id === userId)) {
+          creatorAlreadyAdded = true;
+        }
       }
+    }
+    // Fallback: ensure the creator is on the attendee list.
+    // Without it a creator-not-on-team + auto-add-off (or empty
+    // team) would leave the event with zero firm attendees,
+    // violating the invariant.
+    if (!creatorAlreadyAdded) {
+      await tx.calendarAttendee.create({
+        data: {
+          eventId: event.id,
+          userId,
+          name: creatorAttendee.name,
+          email: creatorAttendee.email,
+          status: "accepted",
+        },
+      });
     }
   });
 

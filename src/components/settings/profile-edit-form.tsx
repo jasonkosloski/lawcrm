@@ -29,6 +29,11 @@ export type EditableProfile = {
   barNumber: string | null;
   avatarUrl: string | null;
   timeZone: string;
+  /** "default" — only attendees / matter team / per-event override
+   *  unlock event details. "show_details" — every event you create
+   *  defaults to publicly visible across the firm (the per-event
+   *  toggle still lets you hide individual ones). */
+  defaultEventVisibility: string;
 };
 
 /// IANA zone names — small starter list of US zones plus the
@@ -136,6 +141,47 @@ export function ProfileEditForm({ profile }: { profile: EditableProfile }) {
               </option>
             ))}
           </select>
+        </Field>
+
+        <Field
+          label="Default event visibility"
+          name="defaultEventVisibility"
+          error={errs.defaultEventVisibility?.[0]}
+          hint="How your events show up to firm-mates who aren't on the matter team or invited as attendees. You can still override this on any individual event."
+          className="col-span-2"
+        >
+          <div className="flex flex-col gap-2">
+            <label className="flex items-start gap-2 text-xs text-ink cursor-pointer">
+              <input
+                type="radio"
+                name="defaultEventVisibility"
+                value="default"
+                defaultChecked={profile.defaultEventVisibility !== "show_details"}
+                className="mt-0.5"
+              />
+              <span>
+                <span className="font-medium">Private by default</span>
+                <span className="block text-[10px] text-ink-4 leading-relaxed">
+                  Others see only an &ldquo;Unavailable&rdquo; block during your event time. Matter team and invited attendees still see full detail.
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 text-xs text-ink cursor-pointer">
+              <input
+                type="radio"
+                name="defaultEventVisibility"
+                value="show_details"
+                defaultChecked={profile.defaultEventVisibility === "show_details"}
+                className="mt-0.5"
+              />
+              <span>
+                <span className="font-medium">Show details to everyone in the firm</span>
+                <span className="block text-[10px] text-ink-4 leading-relaxed">
+                  Every event you create is visible firm-wide unless you flip the per-event toggle off when creating it.
+                </span>
+              </span>
+            </label>
+          </div>
         </Field>
       </div>
 

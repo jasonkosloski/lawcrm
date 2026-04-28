@@ -55,6 +55,7 @@ export default async function ProfileSettingsPage() {
         barNumber: true,
         avatarUrl: true,
         timeZone: true,
+        defaultEventVisibility: true,
         isActive: true,
         createdAt: true,
         userRoles: {
@@ -90,6 +91,7 @@ export default async function ProfileSettingsPage() {
             barNumber: user.barNumber,
             avatarUrl: user.avatarUrl,
             timeZone: user.timeZone,
+            defaultEventVisibility: user.defaultEventVisibility,
           }}
         />
 

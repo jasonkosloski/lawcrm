@@ -161,7 +161,13 @@ describe("createEventWithCaptures — auto-add team", () => {
       where: { matterId },
       include: { attendees: true },
     });
-    expect(event.attendees).toHaveLength(0);
+    // Auto-add is off, so the team isn't attached — but the
+    // min-firm-attendee invariant still ensures the creator
+    // (leadUserId, the seeded current user) is added as a fallback.
+    expect(event.attendees).toHaveLength(1);
+    expect(event.attendees[0]!.userId).toBe(leadUserId);
+    // Co-counsel was NOT pulled in despite being on the team.
+    expect(event.attendees.map((a) => a.userId)).not.toContain(coCounselUserId);
   });
 
   test("does NOT attach team when firm default is off and matter inherits", async () => {
@@ -179,7 +185,11 @@ describe("createEventWithCaptures — auto-add team", () => {
       where: { matterId },
       include: { attendees: true },
     });
-    expect(event.attendees).toHaveLength(0);
+    // Same as the override test above: team auto-add is off, but the
+    // creator is still added to satisfy the min-firm-attendee rule.
+    expect(event.attendees).toHaveLength(1);
+    expect(event.attendees[0]!.userId).toBe(leadUserId);
+    expect(event.attendees.map((a) => a.userId)).not.toContain(coCounselUserId);
   });
 
   test("matter override 'true' beats firm 'false'", async () => {
@@ -202,6 +212,38 @@ describe("createEventWithCaptures — auto-add team", () => {
       include: { attendees: true },
     });
     expect(event.attendees).toHaveLength(2);
+  });
+
+  test("visibility from the form is persisted on the matter event", async () => {
+    // The matter event composer now exposes the per-event
+    // visibility toggle. Without the field the event defaults to
+    // "default" (matter team sees, others get Busy). With
+    // "show_details" it goes firm-wide.
+    const fd = buildEventForm();
+    fd.set("visibility", "show_details");
+    const res = await createEventWithCaptures(
+      matterId,
+      captureInitialState,
+      fd
+    );
+    expect(res.status).toBe("ok");
+    const event = await prisma.calendarEvent.findFirstOrThrow({
+      where: { matterId },
+    });
+    expect(event.visibility).toBe("show_details");
+  });
+
+  test("visibility defaults to 'default' when the form omits the field", async () => {
+    const res = await createEventWithCaptures(
+      matterId,
+      captureInitialState,
+      buildEventForm()
+    );
+    expect(res.status).toBe("ok");
+    const event = await prisma.calendarEvent.findFirstOrThrow({
+      where: { matterId },
+    });
+    expect(event.visibility).toBe("default");
   });
 
   test("removed (former) team members are NOT auto-added", async () => {

@@ -58,6 +58,14 @@ model User {
   /// surface a picker on /settings/profile and infer a sensible
   /// default from the browser at invite time.
   timeZone  String   @default("America/Denver")
+  /// Default visibility for calendar events this user creates.
+  /// `default` (the default-default — privacy first) applies
+  /// the resolver's standard rules: only creator + attendees +
+  /// matter team see details; everyone else sees "Busy".
+  /// `show_details` flips every event this user creates to
+  /// publicly-visible-in-full unless overridden per-event. Set
+  /// from /settings/profile.
+  defaultEventVisibility String @default("default") /// default | show_details
   isActive  Boolean  @default(true)
   /// FK to the firm this user belongs to. Nullable in the schema
   /// only because SQLite can't add a non-null column without a
@@ -940,11 +948,21 @@ model NoteReaction {
 model CalendarEvent {
   id          String   @id @default(cuid())
   matterId    String?
-  /// Who created the event. Used today for audit; drives the
-  /// "you can always see your own events" rule once
-  /// permission-based visibility lands. Nullable so legacy
-  /// rows from before this column was added still work.
+  /// Who created the event. Used for audit + the "you can
+  /// always see your own events" branch of the visibility
+  /// resolver. Nullable so legacy rows from before this column
+  /// was added still work; SetNull on user delete preserves
+  /// the historical row.
   createdById String?
+  /// Per-event visibility override. `default` applies the
+  /// resolver's standard rules (creator + attendee + matter-
+  /// team see full; everyone else sees "Busy"). `show_details`
+  /// makes the event publicly visible in full to every firm
+  /// member regardless of relationship — used when a creator
+  /// wants this specific event to surface (e.g. "Firm
+  /// happy hour", "All-hands"). Defaults to default for
+  /// privacy by default.
+  visibility  String   @default("default") /// default | show_details
   title       String
   type        String   @default("meeting") /// meeting | deposition | hearing | intake | block_time | deadline | mediation | trial
   startTime   DateTime

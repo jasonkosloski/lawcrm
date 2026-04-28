@@ -41,7 +41,8 @@ export type CreateCalendarEventState = {
       | "location"
       | "zoomUrl"
       | "description"
-      | "matterId",
+      | "matterId"
+      | "visibility",
       string[]
     >
   >;

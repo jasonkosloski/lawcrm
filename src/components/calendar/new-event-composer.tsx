@@ -63,6 +63,10 @@ export function NewEventComposer({
   const [location, setLocation] = useState("");
   const [zoomUrl, setZoomUrl] = useState("");
   const [description, setDescription] = useState("");
+  // Per-event visibility — local UI is a single boolean
+  // ("show details to everyone in the firm" / not). Maps to the
+  // server's "show_details" / "default" enum on submit.
+  const [showDetails, setShowDetails] = useState(false);
 
   useEffect(() => {
     if (state.status === "ok") {
@@ -186,6 +190,30 @@ export function NewEventComposer({
         rows={3}
         error={errs.description?.[0]}
       />
+
+      {/* Visibility — defaults to private (resolver decides who
+          sees details). Toggle flips the per-event override to
+          "show_details" so anyone in the firm can see the full
+          event regardless of attendance / matter membership. */}
+      <input
+        type="hidden"
+        name="visibility"
+        value={showDetails ? "show_details" : "default"}
+      />
+      <label className="flex items-start gap-2 text-xs text-ink-3 select-none cursor-pointer">
+        <input
+          type="checkbox"
+          checked={showDetails}
+          onChange={(e) => setShowDetails(e.target.checked)}
+          className="mt-0.5 h-3.5 w-3.5 rounded border-line"
+        />
+        <span>
+          <span className="text-ink">Show details to everyone in the firm</span>
+          <span className="block text-[10px] text-ink-4 leading-relaxed mt-0.5">
+            Off: only invited attendees and matter team see details. Others see &ldquo;Unavailable.&rdquo;
+          </span>
+        </span>
+      </label>
 
       <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
         <Button type="submit" disabled={isPending} size="sm">

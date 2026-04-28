@@ -396,6 +396,12 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         description:
           "Remove an event from the calendar. Linked time entries / tasks remain but lose their event association.",
       },
+      {
+        key: "events.edit_non_matter",
+        label: "Edit other users' personal events",
+        description:
+          "Edit calendar events that aren't tied to a matter and that the user didn't create. Default OFF for everyone — keeps personal events truly personal. Grant only when a role legitimately needs cross-user calendar editing (e.g. an exec assistant role).",
+      },
     ],
   },
 ];

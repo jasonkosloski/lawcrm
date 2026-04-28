@@ -123,14 +123,46 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-const buildForm = (overrides: Partial<Record<string, string>> = {}) => {
+/** Default firm-user attendee — the seeded `userId`. The
+ *  min-firm-attendee invariant in `updateCalendarEvent`
+ *  requires at least one `kind: "user"` attendee, so the
+ *  helper auto-prepends the test user when a caller's
+ *  override doesn't already include one. Tests that want to
+ *  exercise the empty-list branch can pass `attendees:
+ *  "[]"` AND set `__skipDefaultUser: "1"` to bypass. */
+const buildForm = (
+  overrides: Partial<Record<string, string>> & {
+    __skipDefaultUser?: string;
+  } = {}
+) => {
   const fd = new FormData();
   fd.set("title", overrides.title ?? "Updated title");
   fd.set("type", overrides.type ?? "meeting");
   fd.set("location", overrides.location ?? "");
   fd.set("zoomUrl", overrides.zoomUrl ?? "");
   fd.set("description", overrides.description ?? "");
-  fd.set("attendees", overrides.attendees ?? "[]");
+  // Attendee list — auto-prepend the seeded user when the
+  // caller's list is empty or doesn't already include them.
+  let attendees = overrides.attendees ?? "[]";
+  if (overrides.__skipDefaultUser !== "1") {
+    try {
+      const parsed = JSON.parse(attendees) as Array<Record<string, unknown>>;
+      const hasUser = parsed.some(
+        (a) => a.kind === "user" && a.userId === userId
+      );
+      if (!hasUser) {
+        attendees = JSON.stringify([
+          { kind: "user", userId, name: "Test User", email: "" },
+          ...parsed,
+        ]);
+      }
+    } catch {
+      // Non-JSON override (e.g. malformed-payload test) —
+      // pass through untouched so the test gets the rejection
+      // it's exercising.
+    }
+  }
+  fd.set("attendees", attendees);
   // All-day events post date-only (`YYYY-MM-DD`); timed events
   // post the full `YYYY-MM-DDTHH:mm`. The test helper picks the
   // right default based on the isAllDay flag, but a caller can
@@ -261,8 +293,11 @@ describe("updateCalendarEvent — attendees replace-all", () => {
       })
     );
     expect(res.status).toBe("ok");
+    // The buildForm helper prepends the seeded user to satisfy
+    // the min-firm-attendee invariant — assert on the
+    // contact-only rows we explicitly added.
     const rows = await prisma.calendarAttendee.findMany({
-      where: { eventId },
+      where: { eventId, userId: null },
       orderBy: { name: "asc" },
     });
     expect(rows).toHaveLength(2);
@@ -286,11 +321,18 @@ describe("updateCalendarEvent — attendees replace-all", () => {
     const res = await updateCalendarEvent(
       eventId,
       updateCalendarEventInitialState,
+      // Empty user-input list — buildForm auto-prepends the
+      // seeded user to satisfy the min-firm-attendee rule.
+      // After save the only attendee is that single user; the
+      // pre-existing "Old A" / "Old B" rows were deleted.
       buildForm({ attendees: "[]" })
     );
     expect(res.status).toBe("ok");
-    const remaining = await prisma.calendarAttendee.count({ where: { eventId } });
-    expect(remaining).toBe(0);
+    const remaining = await prisma.calendarAttendee.findMany({
+      where: { eventId },
+    });
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]!.userId).toBe(userId);
   });
 
   test("replaces existing attendees (delete + recreate)", async () => {
@@ -305,7 +347,11 @@ describe("updateCalendarEvent — attendees replace-all", () => {
       })
     );
     expect(res.status).toBe("ok");
-    const rows = await prisma.calendarAttendee.findMany({ where: { eventId } });
+    // buildForm auto-prepends the seeded firm user — assert on the
+    // contact-only row to confirm the old attendee was replaced.
+    const rows = await prisma.calendarAttendee.findMany({
+      where: { eventId, userId: null },
+    });
     expect(rows).toHaveLength(1);
     expect(rows[0]!.name).toBe("New");
   });
@@ -389,8 +435,10 @@ describe("updateCalendarEvent — typed attendee picker", () => {
       })
     );
     expect(res.status).toBe("ok");
+    // Filter past the auto-prepended seeded user so we assert on the
+    // contact attendee we explicitly added.
     const rows = await prisma.calendarAttendee.findMany({
-      where: { eventId },
+      where: { eventId, userId: null },
     });
     expect(rows).toHaveLength(1);
     expect(rows[0]!.contactId).toBe(c.id);
@@ -419,8 +467,9 @@ describe("updateCalendarEvent — typed attendee picker", () => {
     expect(newContact!.type).toBe("other");
     expect(newContact!.email).toBe("s@p.com");
 
+    // Filter past the auto-prepended seeded user.
     const rows = await prisma.calendarAttendee.findMany({
-      where: { eventId },
+      where: { eventId, userId: null },
     });
     expect(rows).toHaveLength(1);
     expect(rows[0]!.contactId).toBe(newContact!.id);
@@ -444,8 +493,12 @@ describe("updateCalendarEvent — typed attendee picker", () => {
     );
     // The event still saves — we don't blow up on a stale id.
     // The attendee row carries the snapshot but no FK.
+    // (buildForm auto-prepends the seeded user; query by name to
+    // skip past it and grab the stale-id row we're testing.)
     expect(res.status).toBe("ok");
-    const row = await prisma.calendarAttendee.findFirst({ where: { eventId } });
+    const row = await prisma.calendarAttendee.findFirst({
+      where: { eventId, name: "Display Only" },
+    });
     expect(row!.userId).toBeNull();
     expect(row!.contactId).toBeNull();
     expect(row!.name).toBe("Display Only");
@@ -625,8 +678,9 @@ describe("updateCalendarEvent — typed attendee picker", () => {
         ]),
       })
     );
+    // Skip the auto-prepended seeded user; assert on the contact row.
     const row = await prisma.calendarAttendee.findFirstOrThrow({
-      where: { eventId },
+      where: { eventId, contactId: c.id },
     });
     expect(row.status).toBe("pending");
   });
@@ -641,10 +695,36 @@ describe("updateCalendarEvent — typed attendee picker", () => {
         ]),
       })
     );
+    // Skip the auto-prepended seeded user; assert on the new-contact row.
     const row = await prisma.calendarAttendee.findFirstOrThrow({
-      where: { eventId },
+      where: { eventId, name: "Brand New" },
     });
     expect(row.status).toBe("pending");
+  });
+
+  test("rejects when no firm-user attendees remain (every event needs ≥1)", async () => {
+    const res = await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm({
+        __skipDefaultUser: "1",
+        attendees: JSON.stringify([
+          { kind: "new", name: "External Only", email: "ext@x.com" },
+        ]),
+      })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.attendees?.[0]).toMatch(/at least one firm attendee/i);
+  });
+
+  test("rejects when attendee list is empty (every event needs ≥1)", async () => {
+    const res = await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm({ __skipDefaultUser: "1", attendees: "[]" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.attendees?.[0]).toMatch(/at least one firm attendee/i);
   });
 
   test("kind=user with empty email is allowed (linked user has its own)", async () => {
@@ -902,5 +982,261 @@ describe("createCalendarEvent", () => {
       buildForm()
     );
     expect(mocked).toHaveBeenCalledWith("events.create");
+  });
+
+  test("visibility defaults to 'default' when the form omits the field", async () => {
+    // Backwards-compat path — older clients that don't post the
+    // hidden `visibility` field still need to create events that
+    // default-deny to non-attendees.
+    const res = await createCalendarEvent(
+      createCalendarEventInitialState,
+      buildForm()
+    );
+    expect(res.status).toBe("ok");
+    const row = await prisma.calendarEvent.findUniqueOrThrow({
+      where: { id: res.eventId! },
+    });
+    expect(row.visibility).toBe("default");
+  });
+
+  test("visibility='show_details' from the form is persisted", async () => {
+    const fd = buildForm();
+    fd.set("visibility", "show_details");
+    const res = await createCalendarEvent(
+      createCalendarEventInitialState,
+      fd
+    );
+    expect(res.status).toBe("ok");
+    const row = await prisma.calendarEvent.findUniqueOrThrow({
+      where: { id: res.eventId! },
+    });
+    expect(row.visibility).toBe("show_details");
+  });
+
+  test("visibility rejects unknown enum values (tampered form)", async () => {
+    const fd = buildForm();
+    fd.set("visibility", "private"); // not a valid value
+    const res = await createCalendarEvent(
+      createCalendarEventInitialState,
+      fd
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.visibility?.length).toBeGreaterThan(0);
+  });
+});
+
+// ── updateCalendarEvent edit-gate (visibility model) ───────────────────
+//
+// The action runs `canEditEvent` server-side regardless of what the
+// client sent. These tests exercise the three branches:
+//
+//   1. Creator bypass — the creator can always edit, no perms needed.
+//   2. Matter event — needs `events.edit`. (Already covered above by
+//      the bulk of the test suite, which mocks events.edit as true;
+//      the explicit "missing events.edit on a non-creator's matter
+//      event" case lives below.)
+//   3. Non-matter event — needs `events.edit_non_matter` for non-
+//      creator viewers. `events.edit` alone does NOT suffice; that
+//      separation is the whole point of the new permission.
+//
+// `currentUserHasPermission` is the resolver the action uses for the
+// per-key permission check; we re-point its return values per test.
+
+describe("updateCalendarEvent — edit gate (visibility model)", () => {
+  const buildEditForm = (overrides: Partial<Record<string, string>> = {}) => {
+    const fd = new FormData();
+    fd.set("title", overrides.title ?? "Edited title");
+    fd.set("type", overrides.type ?? "meeting");
+    fd.set("location", "");
+    fd.set("zoomUrl", "");
+    fd.set("description", "");
+    fd.set("startTime", "2026-05-01T09:00");
+    fd.set("endTime", "2026-05-01T10:00");
+    // Auto-include the seeded user so the min-firm-attendee gate
+    // doesn't trip first — we want the edit gate to be the failure.
+    fd.set(
+      "attendees",
+      JSON.stringify([
+        { kind: "user", userId, name: "Test User", email: "" },
+      ])
+    );
+    return fd;
+  };
+
+  test("creator can edit their own non-matter event without any edit perms", async () => {
+    // Personal event the seeded user (= viewer) created. Both
+    // edit perms off — creator bypass should still succeed.
+    const personal = await prisma.calendarEvent.create({
+      data: {
+        title: "Therapy",
+        type: "personal",
+        startTime: new Date("2026-05-01T09:00:00Z"),
+        endTime: new Date("2026-05-01T10:00:00Z"),
+        createdById: userId,
+      },
+      select: { id: true },
+    });
+    const { currentUserHasPermission } = await import(
+      "@/lib/permission-check"
+    );
+    const mockedHas = vi.mocked(currentUserHasPermission);
+    mockedHas.mockResolvedValue(false);
+    const res = await updateCalendarEvent(
+      personal.id,
+      updateCalendarEventInitialState,
+      buildEditForm({ title: "Therapy renamed" })
+    );
+    expect(res.status).toBe("ok");
+    const row = await prisma.calendarEvent.findUniqueOrThrow({
+      where: { id: personal.id },
+    });
+    expect(row.title).toBe("Therapy renamed");
+  });
+
+  test("non-creator on a non-matter event: events.edit alone is NOT enough", async () => {
+    // A personal event created by SOMEONE ELSE. Viewer holds
+    // events.edit but not events.edit_non_matter — the action
+    // must reject so plain events.edit can't reach into other
+    // users' personal calendars.
+    const otherUser = await seedUser({
+      firmId,
+      name: "Other User",
+      email: "other@x.com",
+    });
+    const personal = await prisma.calendarEvent.create({
+      data: {
+        title: "Personal time",
+        type: "personal",
+        startTime: new Date("2026-05-01T09:00:00Z"),
+        endTime: new Date("2026-05-01T10:00:00Z"),
+        createdById: otherUser.userId,
+      },
+      select: { id: true },
+    });
+    const { currentUserHasPermission } = await import(
+      "@/lib/permission-check"
+    );
+    const mockedHas = vi.mocked(currentUserHasPermission);
+    mockedHas.mockImplementation(async (key: string) =>
+      key === "events.edit"
+    );
+    const res = await updateCalendarEvent(
+      personal.id,
+      updateCalendarEventInitialState,
+      buildEditForm({ title: "Hijacked" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.title?.[0]).toMatch(/permission/i);
+    const row = await prisma.calendarEvent.findUniqueOrThrow({
+      where: { id: personal.id },
+    });
+    expect(row.title).toBe("Personal time"); // unchanged
+  });
+
+  test("non-creator on a non-matter event: events.edit_non_matter unlocks the edit", async () => {
+    const otherUser = await seedUser({
+      firmId,
+      name: "Other User 2",
+      email: "other2@x.com",
+    });
+    const personal = await prisma.calendarEvent.create({
+      data: {
+        title: "Personal time",
+        type: "personal",
+        startTime: new Date("2026-05-01T09:00:00Z"),
+        endTime: new Date("2026-05-01T10:00:00Z"),
+        createdById: otherUser.userId,
+      },
+      select: { id: true },
+    });
+    const { currentUserHasPermission } = await import(
+      "@/lib/permission-check"
+    );
+    const mockedHas = vi.mocked(currentUserHasPermission);
+    mockedHas.mockImplementation(async (key: string) =>
+      key === "events.edit_non_matter"
+    );
+    const res = await updateCalendarEvent(
+      personal.id,
+      updateCalendarEventInitialState,
+      buildEditForm({ title: "Approved edit" })
+    );
+    expect(res.status).toBe("ok");
+    const row = await prisma.calendarEvent.findUniqueOrThrow({
+      where: { id: personal.id },
+    });
+    expect(row.title).toBe("Approved edit");
+  });
+
+  test("non-creator on a matter event: events.edit gates it (no edit_non_matter needed)", async () => {
+    const otherUser = await seedUser({
+      firmId,
+      name: "Matter Owner",
+      email: "mo@x.com",
+    });
+    const matterEvt = await prisma.calendarEvent.create({
+      data: {
+        matterId,
+        title: "Matter meeting",
+        type: "meeting",
+        startTime: new Date("2026-05-01T09:00:00Z"),
+        endTime: new Date("2026-05-01T10:00:00Z"),
+        createdById: otherUser.userId,
+      },
+      select: { id: true },
+    });
+    const { currentUserHasPermission } = await import(
+      "@/lib/permission-check"
+    );
+    const mockedHas = vi.mocked(currentUserHasPermission);
+    mockedHas.mockImplementation(async (key: string) =>
+      key === "events.edit"
+    );
+    const res = await updateCalendarEvent(
+      matterEvt.id,
+      updateCalendarEventInitialState,
+      buildEditForm({ title: "Updated meeting" })
+    );
+    expect(res.status).toBe("ok");
+    const row = await prisma.calendarEvent.findUniqueOrThrow({
+      where: { id: matterEvt.id },
+    });
+    expect(row.title).toBe("Updated meeting");
+  });
+
+  test("non-creator on a matter event without events.edit is rejected", async () => {
+    const otherUser = await seedUser({
+      firmId,
+      name: "Matter Owner 2",
+      email: "mo2@x.com",
+    });
+    const matterEvt = await prisma.calendarEvent.create({
+      data: {
+        matterId,
+        title: "Matter meeting",
+        type: "meeting",
+        startTime: new Date("2026-05-01T09:00:00Z"),
+        endTime: new Date("2026-05-01T10:00:00Z"),
+        createdById: otherUser.userId,
+      },
+      select: { id: true },
+    });
+    const { currentUserHasPermission } = await import(
+      "@/lib/permission-check"
+    );
+    const mockedHas = vi.mocked(currentUserHasPermission);
+    // No perms at all.
+    mockedHas.mockResolvedValue(false);
+    const res = await updateCalendarEvent(
+      matterEvt.id,
+      updateCalendarEventInitialState,
+      buildEditForm({ title: "Hijacked" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.title?.[0]).toMatch(/permission/i);
+    const row = await prisma.calendarEvent.findUniqueOrThrow({
+      where: { id: matterEvt.id },
+    });
+    expect(row.title).toBe("Matter meeting");
   });
 });

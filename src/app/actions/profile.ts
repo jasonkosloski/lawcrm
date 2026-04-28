@@ -60,6 +60,13 @@ const profileSchema = z.object({
         return false;
       }
     }, "Unknown time zone."),
+  /** Per-user default for event detail visibility. "default" =
+   *  matter team / attendees see details, everyone else sees a
+   *  Busy block. "show_details" = every event you create is
+   *  firm-wide visible unless overridden per-event.
+   *  Enum-checked here so a tampered form can't sneak in a
+   *  third value the resolver doesn't know how to handle. */
+  defaultEventVisibility: z.enum(["default", "show_details"]),
 });
 
 export async function updateProfileAction(
@@ -90,6 +97,7 @@ export async function updateProfileAction(
       barNumber: parsed.data.barNumber || null,
       avatarUrl: parsed.data.avatarUrl || null,
       timeZone: parsed.data.timeZone,
+      defaultEventVisibility: parsed.data.defaultEventVisibility,
     },
   });
 
@@ -99,5 +107,10 @@ export async function updateProfileAction(
   revalidatePath("/", "layout");
   // Team page admin list also surfaces these fields.
   revalidatePath("/settings/team");
+  // Calendar visibility resolver reads the creator's default — bust
+  // the calendar cache so a flip from private→public (or back)
+  // takes effect for everyone viewing this user's events without
+  // needing a manual refresh.
+  revalidatePath("/calendar");
   return { ...profileInitialState, status: "ok" };
 }

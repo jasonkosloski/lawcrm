@@ -35,6 +35,7 @@ import {
   ArrowRight,
   Calendar,
   Check,
+  Eye,
   Link as LinkIcon,
   MapPin,
   Trash2,
@@ -121,6 +122,10 @@ type EventEditState = {
   zoomUrl: string;
   description: string;
   attendees: EditableAttendee[];
+  /** Per-event visibility override. "default" applies the
+   *  resolver's standard rules; "show_details" makes this event
+   *  publicly visible in full. */
+  visibility: string;
 };
 
 /** Convert a Date to the `YYYY-MM-DDTHH:mm` form datetime-local
@@ -145,6 +150,7 @@ const buildInitialState = (event: CalendarEventDetail): EventEditState => ({
   location: event.location ?? "",
   zoomUrl: event.zoomUrl ?? "",
   description: event.description ?? "",
+  visibility: event.visibility,
   attendees: event.attendees.map((a) => ({
     kind: a.userId ? "user" : a.contactId ? "contact" : "new",
     attendeeId: a.id,
@@ -227,6 +233,7 @@ export function EventDetailModal({
       fd.set("location", next.location);
       fd.set("zoomUrl", next.zoomUrl);
       fd.set("description", next.description);
+      fd.set("visibility", next.visibility);
       // Strip the display-only fields (initials / jobTitle /
       // contactType / status / attendeeId) so the wire format
       // matches the action's zod schema. Display extras get
@@ -310,6 +317,64 @@ export function EventDetailModal({
     new Date(committed.startTime),
     "EEEE, MMMM d, yyyy"
   );
+
+  // Busy-only view: viewer is allowed to see this slot is taken
+  // but not what's on it. Render a minimal modal — time + the
+  // single line "Busy" — so the click-on-busy-block behavior is
+  // predictable but no detail leaks.
+  if (!event.viewerCanSeeDetails) {
+    return (
+      <>
+        <button
+          type="button"
+          aria-label="Close event"
+          onClick={close}
+          className="fixed inset-0 z-40 bg-black/25 backdrop-blur-sm cursor-default animate-in fade-in duration-100"
+        />
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Busy"
+          className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[min(92vw,400px)] rounded-xl shadow-2xl ring-1 ring-black/5 border border-line bg-white flex flex-col overflow-hidden animate-in zoom-in-95 fade-in duration-100"
+        >
+          <header className="flex items-start gap-3 px-5 pt-5 pb-4 border-b border-line">
+            <div className="w-1 self-stretch rounded-full shrink-0 bg-ink-3" />
+            <div className="flex-1 min-w-0">
+              <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 mb-1">
+                Busy
+              </div>
+              <h2 className="text-lg font-display font-medium text-ink leading-tight">
+                Unavailable
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={close}
+              aria-label="Close"
+              className="p-1 rounded-md text-ink-3 hover:bg-muted hover:text-ink-2 shrink-0"
+            >
+              <X size={16} />
+            </button>
+          </header>
+          <div className="px-5 py-4 flex flex-col gap-2">
+            <div className="flex items-start gap-3 text-xs text-ink">
+              <Calendar size={14} className="text-ink-3 mt-0.5 shrink-0" />
+              <div className="flex flex-col leading-tight">
+                <span className="font-medium">{dateLabel}</span>
+                <span className="text-2xs text-ink-3 font-mono">
+                  {startsAndEnds}
+                </span>
+              </div>
+            </div>
+            <p className="text-2xs text-ink-4 leading-relaxed mt-1">
+              You don&apos;t have access to this event&apos;s details.
+              Ask the creator or a matter team member to share more.
+            </p>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -488,6 +553,39 @@ export function EventDetailModal({
                   · {event.matter.area}
                 </span>
               </Link>
+            </Row>
+          )}
+
+          {/* Visibility toggle — editor-only. Defaults to
+              "default" (resolver applies standard rules:
+              creator + attendees + matter team see details;
+              everyone else sees Busy). Flipping to "Show
+              details to everyone" makes this specific event
+              publicly visible regardless of relationship —
+              use sparingly. */}
+          {canEdit && (
+            <Row icon={<Eye size={14} />}>
+              <label className="inline-flex items-center gap-2 text-xs text-ink-2 select-none">
+                <input
+                  type="checkbox"
+                  checked={committed.visibility === "show_details"}
+                  onChange={(e) =>
+                    commit({
+                      visibility: e.target.checked
+                        ? "show_details"
+                        : "default",
+                    })
+                  }
+                  className="h-3.5 w-3.5 rounded border-line"
+                />
+                <span>
+                  Show details to everyone in the firm
+                  <span className="text-2xs text-ink-4 ml-1.5">
+                    (otherwise only attendees + matter team see
+                    details — others see &ldquo;Busy&rdquo;)
+                  </span>
+                </span>
+              </label>
             </Row>
           )}
 
