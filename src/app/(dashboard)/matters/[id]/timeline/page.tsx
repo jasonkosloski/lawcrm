@@ -19,7 +19,7 @@
  * Render is intentionally low-chrome — date / icon / title /
  * source-chip / author. Long titles wrap; details (when present)
  * sit beneath in a muted line. Pin-to-overview, date scrubbing,
- * and PDF export are deferred follow-ups noted on MVP_TODO.
+ * and PDF export are deferred follow-ups noted on FEATURES.md.
  */
 
 import Link from "next/link";

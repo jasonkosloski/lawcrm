@@ -9,7 +9,7 @@
  * iteration 1: schema + select inputs only. Every mode still
  * routes through the traditional UX; the per-mode flows (voucher
  * submission packets, fee-petition court exhibits) land when each
- * has a real demand signal. See docs/MVP_TODO.md billing entry.
+ * has a real demand signal. See docs/FEATURES.md billing entry.
  *
  * Lives outside server-only files so the matter / practice-area
  * edit forms can import without dragging Prisma into the client

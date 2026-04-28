@@ -9,7 +9,7 @@
  *
  * Practice-area-specific automations (CGIA notice deadlines for §1983,
  * HUD response for FHA, etc.) are explicit follow-ups in
- * docs/MVP_TODO.md — this action just creates the matter so the user
+ * docs/FEATURES.md — this action just creates the matter so the user
  * can take it from there. The lead's existing data (summary, location,
  * incident date, injuries) flows into the new matter's description so
  * nothing gets lost.

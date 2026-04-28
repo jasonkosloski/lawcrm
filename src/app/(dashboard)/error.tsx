@@ -8,7 +8,7 @@
  *
  * Errors fed to this boundary include any thrown server-component
  * fetch (e.g. a Prisma query), so this is the safety net for the
- * "page 500s with a stack trace" failure mode flagged in MVP_TODO.
+ * "page 500s with a stack trace" failure mode flagged in FEATURES.md.
  */
 
 "use client";

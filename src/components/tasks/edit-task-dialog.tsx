@@ -6,7 +6,7 @@
  *
  * Owner reassignment is intentionally not exposed in v1 — there's no
  * team-picker component yet. Surfaces as an open follow-up in
- * docs/MVP_TODO.md (matter team editor).
+ * docs/FEATURES.md (matter team editor).
  */
 
 "use client";

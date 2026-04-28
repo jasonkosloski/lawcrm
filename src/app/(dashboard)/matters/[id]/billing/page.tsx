@@ -16,7 +16,7 @@
  * view is deep-linkable + back-button-honest, matching the email
  * + calendar URL patterns.
  *
- * What's deferred (intentionally — see docs/MVP_TODO.md):
+ * What's deferred (intentionally — see docs/FEATURES.md):
  *   - Invoice line-item editing beyond the auto-bundle
  *   - Expenses (no Expense model yet)
  *   - Partial payments
