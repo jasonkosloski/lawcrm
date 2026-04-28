@@ -921,12 +921,16 @@ export async function addMatterTeamMember(
       const toAdd = upcoming.filter((e) => !existingIds.has(e.id));
       if (toAdd.length > 0) {
         await prisma.calendarAttendee.createMany({
+          // Auto-added teammates → `accepted` so the modal
+          // doesn't surface a "Pending" pill for the whole
+          // team on every event. Real RSVP semantics will use
+          // pending/declined/tentative when the flow lands.
           data: toAdd.map((e) => ({
             eventId: e.id,
             userId,
             name: user.name,
             email: user.email,
-            status: "pending",
+            status: "accepted",
           })),
         });
       }

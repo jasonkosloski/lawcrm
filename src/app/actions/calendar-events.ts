@@ -332,6 +332,15 @@ export async function updateCalendarEvent(
           contactId = created.id;
         }
 
+        // Status semantics: firm-user attendees are implicitly
+        // attending — if a teammate added them, the assumption
+        // is "they're going" — so we mark them `accepted`.
+        // External rows (contact pick or new-contact create)
+        // stay `pending` until a real RSVP flow lands. The
+        // modal hides the pill for `accepted` so we don't show
+        // a noisy "Accepted" label next to every teammate;
+        // pending/declined/tentative still surface.
+        const status = userId ? "accepted" : "pending";
         await tx.calendarAttendee.create({
           data: {
             eventId,
@@ -342,7 +351,7 @@ export async function updateCalendarEvent(
             // later won't silently rewrite past attendance.
             name: a.name.trim(),
             email: a.email?.trim() || null,
-            status: "pending",
+            status,
           },
         });
       }

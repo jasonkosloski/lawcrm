@@ -139,6 +139,11 @@ describe("createEventWithCaptures — auto-add team", () => {
     expect(userIds).toEqual([leadUserId, coCounselUserId].sort());
     // Outside user (not on the team) is NOT auto-added.
     expect(userIds).not.toContain(outsideUserId);
+    // Auto-added teammates land as `accepted` so the modal
+    // doesn't surface a noisy "Pending" pill next to every
+    // teammate. Real RSVP semantics will arrive when the
+    // RSVP flow lands.
+    expect(event.attendees.every((a) => a.status === "accepted")).toBe(true);
   });
 
   test("does NOT attach team when matter override flips to false", async () => {
@@ -263,8 +268,13 @@ describe("addMatterTeamMember — auto-add to upcoming events", () => {
     });
     // Past untouched.
     expect(past.attendees.find((a) => a.userId === outsideUserId)).toBeUndefined();
-    // Future has the new member.
-    expect(future.attendees.find((a) => a.userId === outsideUserId)).toBeDefined();
+    // Future has the new member, marked accepted (auto-added
+    // teammates skip the pending stage).
+    const futureRow = future.attendees.find(
+      (a) => a.userId === outsideUserId
+    );
+    expect(futureRow).toBeDefined();
+    expect(futureRow!.status).toBe("accepted");
   });
 
   test("skips the auto-add when effective-off", async () => {

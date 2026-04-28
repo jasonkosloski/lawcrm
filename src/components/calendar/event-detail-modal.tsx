@@ -542,9 +542,11 @@ export function EventDetailModal({
                           />
                         )}
                       </div>
-                      <span className="text-2xs text-ink-3">
-                        {ATTENDEE_STATUS_LABEL[a.status] ?? a.status}
-                      </span>
+                      {a.status !== "accepted" && (
+                        <span className="text-2xs text-ink-3">
+                          {ATTENDEE_STATUS_LABEL[a.status] ?? a.status}
+                        </span>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -1130,7 +1132,14 @@ function InlineAttendees({
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                {a.status && (
+                {/* Hide the pill for `accepted` (the new
+                    default for firm-user attendees). RSVP isn't
+                    a real flow yet — surfacing "Accepted" next
+                    to every teammate would be visual noise.
+                    pending / declined / tentative still
+                    surface so when RSVP lands the chip lights
+                    up automatically. */}
+                {a.status && a.status !== "accepted" && (
                   <span className="text-2xs text-ink-3">
                     {ATTENDEE_STATUS_LABEL[a.status] ?? a.status}
                   </span>

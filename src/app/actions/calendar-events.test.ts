@@ -582,6 +582,59 @@ describe("updateCalendarEvent — typed attendee picker", () => {
     expect(created!.firmId).toBe(firmId);
   });
 
+  test("kind=user attendee gets status='accepted' (firm member implicitly attending)", async () => {
+    const u = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm({
+        attendees: JSON.stringify([
+          { kind: "user", userId, name: u.name, email: u.email },
+        ]),
+      })
+    );
+    const row = await prisma.calendarAttendee.findFirstOrThrow({
+      where: { eventId },
+    });
+    expect(row.status).toBe("accepted");
+  });
+
+  test("kind=contact attendee stays status='pending' (RSVP awaits real flow)", async () => {
+    const c = await prisma.contact.create({
+      data: { name: "Outside Person", type: "vendor", email: "o@p.com" },
+      select: { id: true, name: true, email: true },
+    });
+    await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm({
+        attendees: JSON.stringify([
+          { kind: "contact", contactId: c.id, name: c.name, email: c.email },
+        ]),
+      })
+    );
+    const row = await prisma.calendarAttendee.findFirstOrThrow({
+      where: { eventId },
+    });
+    expect(row.status).toBe("pending");
+  });
+
+  test("kind=new attendee stays status='pending' (RSVP awaits real flow)", async () => {
+    await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm({
+        attendees: JSON.stringify([
+          { kind: "new", name: "Brand New", email: "brand@new.com" },
+        ]),
+      })
+    );
+    const row = await prisma.calendarAttendee.findFirstOrThrow({
+      where: { eventId },
+    });
+    expect(row.status).toBe("pending");
+  });
+
   test("kind=user with empty email is allowed (linked user has its own)", async () => {
     const u = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const res = await updateCalendarEvent(

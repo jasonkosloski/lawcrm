@@ -412,12 +412,17 @@ export async function createEventWithCaptures(
       });
       if (team.length > 0) {
         await tx.calendarAttendee.createMany({
+          // Auto-added teammates are implicitly attending — the
+          // event was just created on their matter, presumably
+          // because they're going to be at it. Status `accepted`
+          // suppresses the modal's pending pill (which would
+          // otherwise read as "everyone's still deciding").
           data: team.map((t) => ({
             eventId: event.id,
             userId: t.user.id,
             name: t.user.name,
             email: t.user.email,
-            status: "pending",
+            status: "accepted",
           })),
         });
       }
