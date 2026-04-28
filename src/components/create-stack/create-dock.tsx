@@ -34,7 +34,7 @@ import {
   type MatterCreateEntry,
 } from "@/lib/matter-create-types";
 import { NotePanelBody } from "@/components/matters/notes/note-panel-body";
-import { PersonalEventComposer } from "@/components/calendar/personal-event-composer";
+import { NewEventComposer } from "@/components/calendar/new-event-composer";
 import { useCreateStack, type CreatePanel } from "./create-stack-provider";
 
 const ICON_MAP: Record<MatterCreateEntry["icon"], LucideIcon> = {
@@ -159,12 +159,13 @@ function PanelChrome({
   // footer (Save/Cancel). Everything else still falls through to the
   // placeholder body + disabled-save footer.
   const isNote = panel.type === "note" && matterId !== null;
-  // Personal-event composer: the calendar page mounts the create
-  // stack with no matter, so a "New event" panel there means
-  // "personal event for the current user." The matter-detail
-  // page still routes through its own EventComposer (with
-  // captures + team auto-add) since it has matterId set.
-  const isPersonalEvent = panel.type === "event" && matterId === null;
+  // Standalone event composer: the calendar page mounts the
+  // create stack with no matter, so a "New event" panel there
+  // creates a matter-less event (effectively personal). The
+  // matter-detail page still routes through its own
+  // EventComposer (with captures + team auto-add) since it has
+  // matterId set.
+  const isStandaloneEvent = panel.type === "event" && matterId === null;
 
   return (
     <>
@@ -238,9 +239,9 @@ function PanelChrome({
       {/* Body */}
       {isNote && matterId ? (
         <NotePanelBody panelId={panel.id} matterId={matterId} />
-      ) : isPersonalEvent ? (
+      ) : isStandaloneEvent ? (
         <div className="flex-1 overflow-y-auto p-4">
-          <PersonalEventComposer panelId={panel.id} onClose={onClose} />
+          <NewEventComposer panelId={panel.id} onClose={onClose} />
         </div>
       ) : (
         <>

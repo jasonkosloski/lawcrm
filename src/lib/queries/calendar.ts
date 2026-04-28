@@ -8,7 +8,6 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { getCurrentUserId } from "@/lib/current-user";
 
 export type CalendarEventRow = {
   id: string;
@@ -52,21 +51,16 @@ export async function getCalendarItems(
   rangeStart: Date,
   rangeEnd: Date
 ): Promise<CalendarItem[]> {
-  // Visibility scope:
-  //   - Matter / firm-wide events: ownerUserId IS NULL (visible
-  //     to everyone in the firm). Single-tenant today; when
-  //     multi-tenant lands the WHERE adds a firm scope.
-  //   - Personal events: only the current user sees their own
-  //     ownerUserId === currentUserId rows.
-  const currentUserId = await getCurrentUserId();
+  // Visibility today is permissive — every firm member sees
+  // every event in range, matter or otherwise. The right model
+  // is permission-driven (an `events.view_all` permission +
+  // per-event visibility levels like full / busy-only / private),
+  // landing in a follow-up. Until then the `createdById` column
+  // gives us the "your own event" branch when we need it.
   const [events, deadlines] = await Promise.all([
     prisma.calendarEvent.findMany({
       where: {
         startTime: { gte: rangeStart, lte: rangeEnd },
-        OR: [
-          { ownerUserId: null },
-          { ownerUserId: currentUserId },
-        ],
       },
       include: {
         matter: { select: { id: true, name: true, color: true } },

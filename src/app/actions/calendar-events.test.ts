@@ -33,15 +33,15 @@ vi.mock("@/lib/permission-check", () => ({
 vi.mock("@/lib/firm", () => ({
   getCurrentFirm: vi.fn(),
 }));
-// Personal events use `getCurrentUserId` to stamp ownership; the
-// resolver pulls in next-auth too, so mock it the same way.
+// `createCalendarEvent` stamps `createdById` from the current
+// user; the resolver pulls in next-auth, so mock the same way.
 vi.mock("@/lib/current-user", () => ({
   getCurrentUserId: vi.fn(),
 }));
 
 import { prisma } from "@/lib/prisma";
 import {
-  createPersonalEvent,
+  createCalendarEvent,
   moveCalendarEvent,
   updateCalendarEvent,
 } from "@/app/actions/calendar-events";
@@ -49,7 +49,7 @@ import { getCurrentFirm } from "@/lib/firm";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import {
-  createPersonalEventInitialState,
+  createCalendarEventInitialState,
   updateCalendarEventInitialState,
 } from "@/lib/calendar-event-form";
 import {
@@ -792,18 +792,17 @@ describe("moveCalendarEvent — drag-and-drop reschedule", () => {
   });
 });
 
-// ── createPersonalEvent ────────────────────────────────────────────────
+// ── createCalendarEvent ────────────────────────────────────────────────
 
-describe("createPersonalEvent", () => {
-  const buildPersonalForm = (
-    overrides: Partial<Record<string, string>> = {}
-  ) => {
+describe("createCalendarEvent", () => {
+  const buildForm = (overrides: Partial<Record<string, string>> = {}) => {
     const fd = new FormData();
     fd.set("title", overrides.title ?? "Block focus time");
     fd.set("type", overrides.type ?? "block_time");
     fd.set("location", overrides.location ?? "");
     fd.set("zoomUrl", overrides.zoomUrl ?? "");
     fd.set("description", overrides.description ?? "");
+    if (overrides.matterId !== undefined) fd.set("matterId", overrides.matterId);
     if (overrides.isAllDay === "on") {
       fd.set("isAllDay", "on");
       fd.set("startTime", overrides.startTime ?? "2026-06-01");
@@ -815,35 +814,58 @@ describe("createPersonalEvent", () => {
     return fd;
   };
 
-  test("creates a personal event owned by the current user, no matter", async () => {
-    const res = await createPersonalEvent(
-      createPersonalEventInitialState,
-      buildPersonalForm()
+  test("no matterId → matterless event, createdById stamped", async () => {
+    const res = await createCalendarEvent(
+      createCalendarEventInitialState,
+      buildForm()
     );
     expect(res.status).toBe("ok");
-    expect(res.eventId).toBeDefined();
-
     const row = await prisma.calendarEvent.findUniqueOrThrow({
       where: { id: res.eventId! },
     });
     expect(row.matterId).toBeNull();
-    expect(row.ownerUserId).toBe(userId);
+    expect(row.createdById).toBe(userId);
     expect(row.title).toBe("Block focus time");
   });
 
+  test("with matterId → matter-scoped event, createdById still stamped", async () => {
+    const res = await createCalendarEvent(
+      createCalendarEventInitialState,
+      buildForm({ matterId, title: "Strategy session" })
+    );
+    expect(res.status).toBe("ok");
+    const row = await prisma.calendarEvent.findUniqueOrThrow({
+      where: { id: res.eventId! },
+    });
+    expect(row.matterId).toBe(matterId);
+    expect(row.createdById).toBe(userId);
+  });
+
+  test("empty matterId string is treated as no matter", async () => {
+    const res = await createCalendarEvent(
+      createCalendarEventInitialState,
+      buildForm({ matterId: "" })
+    );
+    expect(res.status).toBe("ok");
+    const row = await prisma.calendarEvent.findUniqueOrThrow({
+      where: { id: res.eventId! },
+    });
+    expect(row.matterId).toBeNull();
+  });
+
   test("rejects empty title", async () => {
-    const res = await createPersonalEvent(
-      createPersonalEventInitialState,
-      buildPersonalForm({ title: "   " })
+    const res = await createCalendarEvent(
+      createCalendarEventInitialState,
+      buildForm({ title: "   " })
     );
     expect(res.status).toBe("error");
     expect(res.errors?.title?.length).toBeGreaterThan(0);
   });
 
   test("rejects end-before-start", async () => {
-    const res = await createPersonalEvent(
-      createPersonalEventInitialState,
-      buildPersonalForm({
+    const res = await createCalendarEvent(
+      createCalendarEventInitialState,
+      buildForm({
         startTime: "2026-06-01T15:00",
         endTime: "2026-06-01T14:00",
       })
@@ -855,9 +877,9 @@ describe("createPersonalEvent", () => {
   });
 
   test("all-day uses date-only inputs and stores local midnight", async () => {
-    const res = await createPersonalEvent(
-      createPersonalEventInitialState,
-      buildPersonalForm({
+    const res = await createCalendarEvent(
+      createCalendarEventInitialState,
+      buildForm({
         isAllDay: "on",
         startTime: "2026-06-15",
         endTime: "2026-06-15",
@@ -875,9 +897,9 @@ describe("createPersonalEvent", () => {
   test("gates on events.create", async () => {
     const mocked = vi.mocked(requirePermission);
     mocked.mockClear();
-    await createPersonalEvent(
-      createPersonalEventInitialState,
-      buildPersonalForm()
+    await createCalendarEvent(
+      createCalendarEventInitialState,
+      buildForm()
     );
     expect(mocked).toHaveBeenCalledWith("events.create");
   });

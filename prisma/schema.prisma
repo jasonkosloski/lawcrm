@@ -90,11 +90,11 @@ model User {
   /// event detail modal's attendee picker (or any future API
   /// that links a user to an event).
   calendarAttendances CalendarAttendee[] @relation("CalendarAttendeeUser")
-  /// Personal calendar events owned by the user — events with
-  /// no matter scope, visible only to this user. Cascade on
-  /// delete: deleting the user removes their personal events
-  /// (but not events on matters they were a team member of).
-  personalCalendarEvents CalendarEvent[] @relation("UserPersonalEvents")
+  /// Calendar events the user created. Used for audit; once
+  /// permission-based visibility lands this is the "you can
+  /// always see your own" branch. SetNull on user delete keeps
+  /// the historical event row intact.
+  createdCalendarEvents CalendarEvent[] @relation("UserCreatedEvents")
   /// Auth.js Prisma adapter — linked OAuth providers (Google etc.).
   /// Empty until we wire OAuth; the table needs to exist now so
   /// adding a provider later is config-only.
@@ -925,22 +925,26 @@ model NoteReaction {
 
 /// A calendar event — hearings, depositions, meetings, blocks, etc.
 ///
-/// Three flavors, distinguished by which optional FK is set:
-///   - `matterId` set → matter event. Visible to anyone with
-///     access to the matter; auto-attendees pull from the
-///     matter's team.
-///   - `ownerUserId` set → personal event. Private to that user
-///     (calendar query scopes by current user); not surfaced to
-///     anyone else regardless of firm role.
-///   - both null → legacy firm-wide event. Pre-personal events
-///     used this shape; new code shouldn't create them.
+/// `matterId` is optional. With a matter, the event is on a
+/// matter's calendar (visible to the matter team). Without a
+/// matter, it's a "personal" event — created from the calendar's
+/// "+ New event" button when the user isn't on a matter.
+///
+/// Visibility today is permissive (everyone in the firm sees
+/// every event). The right model is permission-driven:
+///   - firm-level "view all events" permission
+///   - per-event visibility (full / busy-only / private)
+/// That's a Phase-2 feature; the schema's ready for it (the
+/// `createdById` field carries the "your own event" branch),
+/// the resolver and UI ship later.
 model CalendarEvent {
   id          String   @id @default(cuid())
   matterId    String?
-  /// Owner of a personal calendar event. Set when `matterId` is
-  /// null and the event is private to one user. Drives the
-  /// per-user visibility scope in the calendar query.
-  ownerUserId String?
+  /// Who created the event. Used today for audit; drives the
+  /// "you can always see your own events" rule once
+  /// permission-based visibility lands. Nullable so legacy
+  /// rows from before this column was added still work.
+  createdById String?
   title       String
   type        String   @default("meeting") /// meeting | deposition | hearing | intake | block_time | deadline | mediation | trial
   startTime   DateTime
@@ -954,7 +958,7 @@ model CalendarEvent {
   updatedAt   DateTime @updatedAt
 
   matter      Matter?             @relation(fields: [matterId], references: [id], onDelete: SetNull)
-  ownerUser   User?               @relation("UserPersonalEvents", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  createdBy   User?               @relation("UserCreatedEvents", fields: [createdById], references: [id], onDelete: SetNull)
   attendees   CalendarAttendee[]
   notes       Note[]              @relation("CalendarEventNotes")
   timeEntries TimeEntry[]         @relation("CalendarEventTimeEntries")
@@ -963,7 +967,7 @@ model CalendarEvent {
 
   @@index([startTime])
   @@index([matterId])
-  @@index([ownerUserId, startTime])
+  @@index([createdById, startTime])
   @@map("calendar_events")
 }
 

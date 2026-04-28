@@ -24,11 +24,12 @@ export const updateCalendarEventInitialState: UpdateCalendarEventFormState = {
   status: "idle",
 };
 
-/** Form state for `createPersonalEvent` — kept here (not in
- *  the "use server" actions file) because Next 16's bundler
- *  emits non-async exports as runtime references and crashes
- *  with "X is not defined" when imported at render time. */
-export type CreatePersonalEventState = {
+/** Form state for `createCalendarEvent` (the standalone create
+ *  on the calendar page). Kept here (not in the "use server"
+ *  actions file) because Next 16's bundler emits non-async
+ *  exports as runtime references and crashes with
+ *  "X is not defined" when imported at render time. */
+export type CreateCalendarEventState = {
   status: "idle" | "ok" | "error";
   errors?: Partial<
     Record<
@@ -39,7 +40,8 @@ export type CreatePersonalEventState = {
       | "endTime"
       | "location"
       | "zoomUrl"
-      | "description",
+      | "description"
+      | "matterId",
       string[]
     >
   >;
@@ -47,6 +49,6 @@ export type CreatePersonalEventState = {
   eventId?: string;
 };
 
-export const createPersonalEventInitialState: CreatePersonalEventState = {
+export const createCalendarEventInitialState: CreateCalendarEventState = {
   status: "idle",
 };

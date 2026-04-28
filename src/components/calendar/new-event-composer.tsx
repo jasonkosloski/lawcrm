@@ -1,17 +1,16 @@
 /**
- * Personal Event Composer — used by the calendar page's
- * "+ New event" button when the user is composing on their
- * own personal calendar (no matter).
+ * New Event Composer — used by the calendar page's
+ * "+ New event" button.
  *
- * Personal events are private to the creator (calendar query
- * scopes by `ownerUserId === currentUserId`). No team auto-add,
- * no captures (tasks/deadlines/time can still be created from
- * the matter-detail surface where they belong); this is a
- * focused "block off some time on my own calendar" flow.
+ * Creates a calendar event with no required matter — when no
+ * matter is set, it's effectively a personal event by virtue
+ * of being matter-less. The matter-detail page still routes
+ * through its own EventComposer (with sibling captures + team
+ * auto-add) since that's the matter-scoped flow.
  *
- * Field set is the same as the matter event composer minus the
- * matter-only bits: title, type, all-day toggle, start/end,
- * location, video URL, description.
+ * Field set: title, type, all-day, start/end, location, video
+ * URL, description. A matter picker can be added here later if
+ * we want one place to create both flavors.
  */
 
 "use client";
@@ -19,10 +18,10 @@
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { createPersonalEvent } from "@/app/actions/calendar-events";
+import { createCalendarEvent } from "@/app/actions/calendar-events";
 import {
-  createPersonalEventInitialState,
-  type CreatePersonalEventState,
+  createCalendarEventInitialState,
+  type CreateCalendarEventState,
 } from "@/lib/calendar-event-form";
 import {
   EVENT_TYPES,
@@ -37,13 +36,13 @@ import {
 
 const dateOnly = (v: string): string => v.slice(0, 10);
 
-export function PersonalEventComposer({
+export function NewEventComposer({
   panelId,
   onClose,
 }: {
   /** Reserved — the create-stack passes the panel id so a future
-   *  composer can attach captures back to its origin. Personal
-   *  events don't use it today. */
+   *  composer can attach captures back to its origin. Unused
+   *  today. */
   panelId?: string;
   /** Optional — fired after a successful create so the dock can
    *  collapse the panel automatically. */
@@ -51,9 +50,9 @@ export function PersonalEventComposer({
 }) {
   const router = useRouter();
   const [state, formAction, isPending] = useActionState<
-    CreatePersonalEventState,
+    CreateCalendarEventState,
     FormData
-  >(createPersonalEvent, createPersonalEventInitialState);
+  >(createCalendarEvent, createCalendarEventInitialState);
 
   const [title, setTitle] = useState("");
   const [type, setType] =
@@ -189,9 +188,6 @@ export function PersonalEventComposer({
       />
 
       <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
-        <span className="text-2xs text-ink-4 mr-auto">
-          Personal event — visible only to you
-        </span>
         <Button type="submit" disabled={isPending} size="sm">
           {isPending ? "Creating…" : "Create event"}
         </Button>

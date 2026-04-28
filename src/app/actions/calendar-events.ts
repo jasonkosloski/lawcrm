@@ -16,7 +16,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { EVENT_TYPES } from "@/lib/note-constants";
 import { requirePermission } from "@/lib/permission-check";
 import type {
-  CreatePersonalEventState,
+  CreateCalendarEventState,
   UpdateCalendarEventFormState,
 } from "@/lib/calendar-event-form";
 
@@ -399,9 +399,9 @@ export async function deleteCalendarEventAndRedirect(
   redirect("/calendar");
 }
 
-// ── Personal events (no matter, owned by the current user) ─────────────
+// ── Standalone create (calendar page's "+ New event") ─────────────────
 
-const createPersonalEventSchema = z
+const createCalendarEventSchema = z
   .object({
     title: z.string().trim().min(1, "Title is required").max(200),
     type: z.enum(EVENT_TYPES).default("meeting"),
@@ -411,6 +411,10 @@ const createPersonalEventSchema = z
     location: z.string().max(200).optional().or(z.literal("")),
     zoomUrl: z.string().max(500).optional().or(z.literal("")),
     description: z.string().max(4000).optional().or(z.literal("")),
+    /** Optional. When omitted / empty the event has no matter
+     *  scope — the user's "personal" event in effect. When set,
+     *  it's a matter event (visible to the matter team). */
+    matterId: z.string().optional().or(z.literal("")),
   })
   .superRefine((data, ctx) => {
     const allDay = data.isAllDay === "on";
@@ -442,22 +446,25 @@ const createPersonalEventSchema = z
   });
 
 /**
- * Create a personal calendar event. Owned by the current user;
- * not surfaced to other firm members. Used by the calendar
- * page's "+ New event" button when the user isn't on a matter.
+ * Create a calendar event from the standalone calendar page.
+ * `matterId` is optional — without one the event is on the
+ * user's personal calendar (no matter scope). Doesn't go
+ * through `createEventWithCaptures` because the calendar page's
+ * composer doesn't surface attached siblings; the matter-detail
+ * page still uses that richer flow.
  *
- * Auth: gated on `events.create`. Same key as matter events —
- * the gate is "can this user create calendar events at all,"
- * not "can they create matter events specifically."
+ * Auth: gated on `events.create`. Same key for matter and
+ * personal events — the gate is "can this user create calendar
+ * events at all."
  */
-export async function createPersonalEvent(
-  _prev: CreatePersonalEventState,
+export async function createCalendarEvent(
+  _prev: CreateCalendarEventState,
   formData: FormData
-): Promise<CreatePersonalEventState> {
+): Promise<CreateCalendarEventState> {
   await requirePermission("events.create");
-  const ownerUserId = await getCurrentUserId();
+  const createdById = await getCurrentUserId();
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
-  const parsed = createPersonalEventSchema.safeParse(raw);
+  const parsed = createCalendarEventSchema.safeParse(raw);
   if (!parsed.success) {
     return {
       status: "error",
@@ -467,13 +474,15 @@ export async function createPersonalEvent(
   const allDay = parsed.data.isAllDay === "on";
   const startDate = parseEventBoundary(parsed.data.startTime, allDay)!;
   const endDate = parseEventBoundary(parsed.data.endTime, allDay)!;
+  const matterId =
+    parsed.data.matterId && parsed.data.matterId.length > 0
+      ? parsed.data.matterId
+      : null;
 
   const created = await prisma.calendarEvent.create({
     data: {
-      // Personal events have no matter — `matterId` stays null.
-      // Visibility comes from `ownerUserId` matching the current
-      // user in `getCalendarItems`.
-      ownerUserId,
+      matterId,
+      createdById,
       title: parsed.data.title,
       type: parsed.data.type,
       isAllDay: allDay,
@@ -486,10 +495,14 @@ export async function createPersonalEvent(
     select: { id: true },
   });
 
-  // Calendar refreshes via the layout-level revalidate so the
-  // newly-created event shows up on the next render.
+  // Calendar refreshes via revalidate so the newly-created
+  // event shows up on the next render.
   revalidatePath("/calendar");
   revalidatePath("/"); // dashboard "Today's agenda"
+  if (matterId) {
+    revalidatePath(`/matters/${matterId}/events`);
+    revalidatePath(`/matters/${matterId}`);
+  }
   return { status: "ok", eventId: created.id };
 }
 
