@@ -12,9 +12,13 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentFirm } from "@/lib/firm";
+import { getCurrentUserId } from "@/lib/current-user";
 import { EVENT_TYPES } from "@/lib/note-constants";
 import { requirePermission } from "@/lib/permission-check";
-import type { UpdateCalendarEventFormState } from "@/lib/calendar-event-form";
+import type {
+  CreatePersonalEventState,
+  UpdateCalendarEventFormState,
+} from "@/lib/calendar-event-form";
 
 function revalidateForEvent(matterId: string | null): void {
   revalidatePath("/calendar");
@@ -393,6 +397,100 @@ export async function deleteCalendarEventAndRedirect(
     redirect(`/matters/${result.matterId}/events`);
   }
   redirect("/calendar");
+}
+
+// ── Personal events (no matter, owned by the current user) ─────────────
+
+const createPersonalEventSchema = z
+  .object({
+    title: z.string().trim().min(1, "Title is required").max(200),
+    type: z.enum(EVENT_TYPES).default("meeting"),
+    isAllDay: z.literal("on").optional(),
+    startTime: z.string().min(1, "Start time is required"),
+    endTime: z.string().min(1, "End time is required"),
+    location: z.string().max(200).optional().or(z.literal("")),
+    zoomUrl: z.string().max(500).optional().or(z.literal("")),
+    description: z.string().max(4000).optional().or(z.literal("")),
+  })
+  .superRefine((data, ctx) => {
+    const allDay = data.isAllDay === "on";
+    const start = parseEventBoundary(data.startTime, allDay);
+    const end = parseEventBoundary(data.endTime, allDay);
+    if (!start) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["startTime"],
+        message: allDay ? "Invalid start date" : "Invalid start time",
+      });
+    }
+    if (!end) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["endTime"],
+        message: allDay ? "Invalid end date" : "Invalid end time",
+      });
+    }
+    if (start && end && end.getTime() < start.getTime()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["endTime"],
+        message: allDay
+          ? "End date must be on or after start date"
+          : "End must be after start",
+      });
+    }
+  });
+
+/**
+ * Create a personal calendar event. Owned by the current user;
+ * not surfaced to other firm members. Used by the calendar
+ * page's "+ New event" button when the user isn't on a matter.
+ *
+ * Auth: gated on `events.create`. Same key as matter events —
+ * the gate is "can this user create calendar events at all,"
+ * not "can they create matter events specifically."
+ */
+export async function createPersonalEvent(
+  _prev: CreatePersonalEventState,
+  formData: FormData
+): Promise<CreatePersonalEventState> {
+  await requirePermission("events.create");
+  const ownerUserId = await getCurrentUserId();
+  const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
+  const parsed = createPersonalEventSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      status: "error",
+      errors: parsed.error.flatten().fieldErrors,
+    };
+  }
+  const allDay = parsed.data.isAllDay === "on";
+  const startDate = parseEventBoundary(parsed.data.startTime, allDay)!;
+  const endDate = parseEventBoundary(parsed.data.endTime, allDay)!;
+
+  const created = await prisma.calendarEvent.create({
+    data: {
+      // Personal events have no matter — `matterId` stays null.
+      // Visibility comes from `ownerUserId` matching the current
+      // user in `getCalendarItems`.
+      ownerUserId,
+      title: parsed.data.title,
+      type: parsed.data.type,
+      isAllDay: allDay,
+      startTime: startDate,
+      endTime: endDate,
+      location: parsed.data.location || null,
+      zoomUrl: parsed.data.zoomUrl || null,
+      description: parsed.data.description || null,
+    },
+    select: { id: true },
+  });
+
+  // Calendar refreshes via the layout-level revalidate so the
+  // newly-created event shows up on the next render.
+  revalidatePath("/calendar");
+  revalidatePath("/"); // dashboard "Today's agenda"
+  return { status: "ok", eventId: created.id };
 }
 
 // ── Move (drag-and-drop) ───────────────────────────────────────────────

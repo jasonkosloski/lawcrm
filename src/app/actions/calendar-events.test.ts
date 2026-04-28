@@ -33,15 +33,25 @@ vi.mock("@/lib/permission-check", () => ({
 vi.mock("@/lib/firm", () => ({
   getCurrentFirm: vi.fn(),
 }));
+// Personal events use `getCurrentUserId` to stamp ownership; the
+// resolver pulls in next-auth too, so mock it the same way.
+vi.mock("@/lib/current-user", () => ({
+  getCurrentUserId: vi.fn(),
+}));
 
 import { prisma } from "@/lib/prisma";
 import {
+  createPersonalEvent,
   moveCalendarEvent,
   updateCalendarEvent,
 } from "@/app/actions/calendar-events";
 import { getCurrentFirm } from "@/lib/firm";
+import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
-import { updateCalendarEventInitialState } from "@/lib/calendar-event-form";
+import {
+  createPersonalEventInitialState,
+  updateCalendarEventInitialState,
+} from "@/lib/calendar-event-form";
 import {
   resetDb,
   seedFirm,
@@ -51,6 +61,7 @@ import {
 } from "@/test/integration-helpers";
 
 const mockedGetCurrentFirm = vi.mocked(getCurrentFirm);
+const mockedGetCurrentUser = vi.mocked(getCurrentUserId);
 
 let firmId: string;
 let userId: string;
@@ -87,6 +98,7 @@ beforeEach(async () => {
   });
   const u = await seedUser({ firmId });
   userId = u.userId;
+  mockedGetCurrentUser.mockResolvedValue(userId);
   const area = await seedPracticeArea();
   const m = await seedMatter({
     practiceAreaId: area.areaId,
@@ -777,5 +789,96 @@ describe("moveCalendarEvent — drag-and-drop reschedule", () => {
       endTime: new Date("2026-05-08T10:00:00Z").toISOString(),
     });
     expect(mocked).toHaveBeenCalledWith("events.edit");
+  });
+});
+
+// ── createPersonalEvent ────────────────────────────────────────────────
+
+describe("createPersonalEvent", () => {
+  const buildPersonalForm = (
+    overrides: Partial<Record<string, string>> = {}
+  ) => {
+    const fd = new FormData();
+    fd.set("title", overrides.title ?? "Block focus time");
+    fd.set("type", overrides.type ?? "block_time");
+    fd.set("location", overrides.location ?? "");
+    fd.set("zoomUrl", overrides.zoomUrl ?? "");
+    fd.set("description", overrides.description ?? "");
+    if (overrides.isAllDay === "on") {
+      fd.set("isAllDay", "on");
+      fd.set("startTime", overrides.startTime ?? "2026-06-01");
+      fd.set("endTime", overrides.endTime ?? "2026-06-01");
+    } else {
+      fd.set("startTime", overrides.startTime ?? "2026-06-01T13:00");
+      fd.set("endTime", overrides.endTime ?? "2026-06-01T14:00");
+    }
+    return fd;
+  };
+
+  test("creates a personal event owned by the current user, no matter", async () => {
+    const res = await createPersonalEvent(
+      createPersonalEventInitialState,
+      buildPersonalForm()
+    );
+    expect(res.status).toBe("ok");
+    expect(res.eventId).toBeDefined();
+
+    const row = await prisma.calendarEvent.findUniqueOrThrow({
+      where: { id: res.eventId! },
+    });
+    expect(row.matterId).toBeNull();
+    expect(row.ownerUserId).toBe(userId);
+    expect(row.title).toBe("Block focus time");
+  });
+
+  test("rejects empty title", async () => {
+    const res = await createPersonalEvent(
+      createPersonalEventInitialState,
+      buildPersonalForm({ title: "   " })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.title?.length).toBeGreaterThan(0);
+  });
+
+  test("rejects end-before-start", async () => {
+    const res = await createPersonalEvent(
+      createPersonalEventInitialState,
+      buildPersonalForm({
+        startTime: "2026-06-01T15:00",
+        endTime: "2026-06-01T14:00",
+      })
+    );
+    expect(res.status).toBe("error");
+    expect(
+      res.errors?.endTime?.some((m) => /after start/i.test(m))
+    ).toBe(true);
+  });
+
+  test("all-day uses date-only inputs and stores local midnight", async () => {
+    const res = await createPersonalEvent(
+      createPersonalEventInitialState,
+      buildPersonalForm({
+        isAllDay: "on",
+        startTime: "2026-06-15",
+        endTime: "2026-06-15",
+      })
+    );
+    expect(res.status).toBe("ok");
+    const row = await prisma.calendarEvent.findUniqueOrThrow({
+      where: { id: res.eventId! },
+    });
+    expect(row.isAllDay).toBe(true);
+    expect(row.startTime.getHours()).toBe(0);
+    expect(row.startTime.getDate()).toBe(15);
+  });
+
+  test("gates on events.create", async () => {
+    const mocked = vi.mocked(requirePermission);
+    mocked.mockClear();
+    await createPersonalEvent(
+      createPersonalEventInitialState,
+      buildPersonalForm()
+    );
+    expect(mocked).toHaveBeenCalledWith("events.create");
   });
 });

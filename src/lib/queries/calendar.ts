@@ -8,6 +8,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { getCurrentUserId } from "@/lib/current-user";
 
 export type CalendarEventRow = {
   id: string;
@@ -51,10 +52,21 @@ export async function getCalendarItems(
   rangeStart: Date,
   rangeEnd: Date
 ): Promise<CalendarItem[]> {
+  // Visibility scope:
+  //   - Matter / firm-wide events: ownerUserId IS NULL (visible
+  //     to everyone in the firm). Single-tenant today; when
+  //     multi-tenant lands the WHERE adds a firm scope.
+  //   - Personal events: only the current user sees their own
+  //     ownerUserId === currentUserId rows.
+  const currentUserId = await getCurrentUserId();
   const [events, deadlines] = await Promise.all([
     prisma.calendarEvent.findMany({
       where: {
         startTime: { gte: rangeStart, lte: rangeEnd },
+        OR: [
+          { ownerUserId: null },
+          { ownerUserId: currentUserId },
+        ],
       },
       include: {
         matter: { select: { id: true, name: true, color: true } },

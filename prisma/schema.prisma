@@ -90,6 +90,11 @@ model User {
   /// event detail modal's attendee picker (or any future API
   /// that links a user to an event).
   calendarAttendances CalendarAttendee[] @relation("CalendarAttendeeUser")
+  /// Personal calendar events owned by the user — events with
+  /// no matter scope, visible only to this user. Cascade on
+  /// delete: deleting the user removes their personal events
+  /// (but not events on matters they were a team member of).
+  personalCalendarEvents CalendarEvent[] @relation("UserPersonalEvents")
   /// Auth.js Prisma adapter — linked OAuth providers (Google etc.).
   /// Empty until we wire OAuth; the table needs to exist now so
   /// adding a provider later is config-only.
@@ -919,9 +924,23 @@ model NoteReaction {
 }
 
 /// A calendar event — hearings, depositions, meetings, blocks, etc.
+///
+/// Three flavors, distinguished by which optional FK is set:
+///   - `matterId` set → matter event. Visible to anyone with
+///     access to the matter; auto-attendees pull from the
+///     matter's team.
+///   - `ownerUserId` set → personal event. Private to that user
+///     (calendar query scopes by current user); not surfaced to
+///     anyone else regardless of firm role.
+///   - both null → legacy firm-wide event. Pre-personal events
+///     used this shape; new code shouldn't create them.
 model CalendarEvent {
   id          String   @id @default(cuid())
-  matterId    String?  /// Null for firm-wide events
+  matterId    String?
+  /// Owner of a personal calendar event. Set when `matterId` is
+  /// null and the event is private to one user. Drives the
+  /// per-user visibility scope in the calendar query.
+  ownerUserId String?
   title       String
   type        String   @default("meeting") /// meeting | deposition | hearing | intake | block_time | deadline | mediation | trial
   startTime   DateTime
@@ -935,6 +954,7 @@ model CalendarEvent {
   updatedAt   DateTime @updatedAt
 
   matter      Matter?             @relation(fields: [matterId], references: [id], onDelete: SetNull)
+  ownerUser   User?               @relation("UserPersonalEvents", fields: [ownerUserId], references: [id], onDelete: Cascade)
   attendees   CalendarAttendee[]
   notes       Note[]              @relation("CalendarEventNotes")
   timeEntries TimeEntry[]         @relation("CalendarEventTimeEntries")
@@ -943,6 +963,7 @@ model CalendarEvent {
 
   @@index([startTime])
   @@index([matterId])
+  @@index([ownerUserId, startTime])
   @@map("calendar_events")
 }
 
