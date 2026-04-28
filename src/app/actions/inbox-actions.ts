@@ -9,7 +9,7 @@
  *   2. Creates the new entity with the source FK set so the
  *      reverse-link chip ("From email" / "From message") can render.
  *   3. Sanitizes the note body if applicable (HTML through
- *      DOMPurify, same as createNote).
+ *      `sanitizeUserHtml`, same as createNote).
  *   4. Revalidates every surface that should reflect the new row.
  *
  * Source-content prefill happens client-side in the inbox action
@@ -19,7 +19,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import DOMPurify from "isomorphic-dompurify";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
@@ -29,37 +28,7 @@ import {
 } from "@/lib/note-constants";
 import type { InboxActionFormState } from "@/lib/inbox-action-form";
 import { logActivity } from "@/lib/activity-log";
-
-const ALLOWED_TAGS = [
-  "p",
-  "br",
-  "strong",
-  "em",
-  "s",
-  "u",
-  "code",
-  "pre",
-  "blockquote",
-  "ul",
-  "ol",
-  "li",
-  "h1",
-  "h2",
-  "h3",
-  "h4",
-  "h5",
-  "h6",
-  "a",
-  "span",
-];
-const ALLOWED_ATTR = ["href", "target", "rel", "class"];
-
-function sanitize(html: string): string {
-  return DOMPurify.sanitize(html, {
-    ALLOWED_TAGS,
-    ALLOWED_ATTR,
-  }).trim();
-}
+import { sanitizeUserHtml as sanitize } from "@/lib/sanitize-html";
 
 /** Resolve the matter for an email thread. Inbox actions require a
  *  filed source — unfiled threads can't spawn matter-scoped entities

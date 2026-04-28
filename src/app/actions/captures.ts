@@ -20,7 +20,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import DOMPurify from "isomorphic-dompurify";
 import { z } from "zod";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -38,39 +37,9 @@ import {
 } from "@/lib/capture-schemas";
 import { logActivity } from "@/lib/activity-log";
 import { getEffectiveCalendarDefaults } from "@/lib/calendar-defaults";
+import { sanitizeUserHtml as sanitize } from "@/lib/sanitize-html";
 
 // ── Shared helpers ──────────────────────────────────────────────────────
-
-const ALLOWED_TAGS = [
-  "p",
-  "br",
-  "strong",
-  "em",
-  "s",
-  "u",
-  "code",
-  "pre",
-  "blockquote",
-  "ul",
-  "ol",
-  "li",
-  "h1",
-  "h2",
-  "h3",
-  "h4",
-  "h5",
-  "h6",
-  "a",
-  "span",
-];
-const ALLOWED_ATTR = ["href", "target", "rel", "class"];
-
-function sanitize(html: string): string {
-  return DOMPurify.sanitize(html, {
-    ALLOWED_TAGS,
-    ALLOWED_ATTR,
-  }).trim();
-}
 
 type Tx = Omit<
   PrismaClient,

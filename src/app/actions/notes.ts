@@ -2,11 +2,11 @@
  * Note server actions.
  *
  * All note content is stored as HTML (Tiptap's native output). Every
- * write runs the submitted HTML through DOMPurify with a tight
- * allowlist — strips scripts, inline handlers, unknown tags, and any
- * attribute that isn't in the approved set. The sanitized string is
- * what actually hits the database, so reads can render it with
- * dangerouslySetInnerHTML without re-sanitizing.
+ * write runs the submitted HTML through `sanitizeUserHtml` (see
+ * src/lib/sanitize-html.ts) — strips scripts, inline handlers,
+ * unknown tags, and any attribute that isn't in the approved set.
+ * The sanitized string is what actually hits the database, so reads
+ * can render it with dangerouslySetInnerHTML without re-sanitizing.
  *
  * Auth:
  *   - createNote: `notes.create`
@@ -24,7 +24,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import DOMPurify from "isomorphic-dompurify";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
@@ -36,50 +35,10 @@ import {
 } from "@/lib/note-constants";
 import { captureSchema } from "@/lib/capture-schemas";
 import { logActivity } from "@/lib/activity-log";
-
-/** Tags + attributes allowed through from the Tiptap editor. Keep this
- *  list minimal; Tiptap's StarterKit only emits this shape anyway. */
-const ALLOWED_TAGS = [
-  "p",
-  "br",
-  "strong",
-  "em",
-  "s",
-  "u",
-  "code",
-  "pre",
-  "blockquote",
-  "ul",
-  "ol",
-  "li",
-  "h1",
-  "h2",
-  "h3",
-  "h4",
-  "h5",
-  "h6",
-  "a",
-  "span",
-];
-const ALLOWED_ATTR = ["href", "target", "rel", "class"];
-
-function sanitize(html: string): string {
-  return DOMPurify.sanitize(html, {
-    ALLOWED_TAGS,
-    ALLOWED_ATTR,
-    // Force any <a> without rel to get rel="noopener noreferrer" via a
-    // post-pass below. DOMPurify keeps the attribute if we list it.
-  }).trim();
-}
-
-/** True when the sanitized HTML has any non-whitespace visible text. */
-function isEffectivelyEmpty(html: string): boolean {
-  const textOnly = html
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;| /g, "")
-    .trim();
-  return textOnly.length === 0;
-}
+import {
+  isEffectivelyEmpty,
+  sanitizeUserHtml as sanitize,
+} from "@/lib/sanitize-html";
 
 const noteSchema = z.object({
   content: z.string().max(200_000, "Note is too long"),
