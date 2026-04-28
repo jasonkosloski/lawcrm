@@ -25,54 +25,68 @@
  * client components.
  */
 
-import { addDays, format, isSameDay, startOfDay } from "date-fns";
+import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
   formatHourLabel,
   HOUR_HEIGHT_PX,
   HOURS,
-  isWeekend,
 } from "@/lib/calendar-utils";
+import { dateKeyInTz } from "@/lib/format-date";
 import type {
   CalendarItem,
   CalendarEventRow,
   CalendarDeadlineRow,
 } from "@/lib/queries/calendar";
-import { weekRange } from "./calendar-toolbar";
 import { WeekAllDayCell, WeekTimeColumn } from "./week-day-column";
 
 export function WeekView({
-  focal,
+  days,
   items,
   canEditEvents = false,
+  userTz,
 }: {
-  focal: Date;
+  /** Seven noon-UTC Dates for Sun-Sat of the displayed week, built
+   *  in the user's TZ via `calendarWeekInTz`. Noon UTC keeps the
+   *  Date's UTC calendar components matching the user's calendar
+   *  day so server-side `format()` and client-side render agree. */
+  days: Date[];
   items: CalendarItem[];
   /** When true, chips are draggable + day columns expose drop
    *  zones. The server still gates `moveCalendarEvent` on
    *  `events.edit` regardless. */
   canEditEvents?: boolean;
+  /** User's IANA TZ — drives event bucketing + the "today"
+   *  highlight so a user in MDT viewing on a UTC server still
+   *  sees their local day. */
+  userTz: string;
 }) {
-  const { start } = weekRange(focal);
-  const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
-  const today = startOfDay(new Date());
   const now = new Date();
+  // "Today" in the user's TZ — used to highlight the right column
+  // header. Comparing as a YYYY-MM-DD string avoids any TZ math at
+  // the comparison site.
+  const todayKey = dateKeyInTz(now, userTz);
 
-  // Pre-bucket items by day (YYYY-MM-DD key).
+  // Bucket items by their user-TZ calendar date. Without the TZ,
+  // an event at "Sunday 11pm MDT" (UTC: Monday 5am) would land in
+  // the Monday column — the bug we just shipped a fix for.
   const byDay = new Map<string, CalendarItem[]>();
   for (const item of items) {
-    const d =
-      item.kind === "event"
-        ? format(item.startTime, "yyyy-MM-dd")
-        : format(item.dueDate, "yyyy-MM-dd");
-    if (!byDay.has(d)) byDay.set(d, []);
-    byDay.get(d)!.push(item);
+    const itemDate = item.kind === "event" ? item.startTime : item.dueDate;
+    const key = dateKeyInTz(itemDate, userTz);
+    if (!byDay.has(key)) byDay.set(key, []);
+    byDay.get(key)!.push(item);
   }
 
   // Pre-compute per-day buckets so the all-day row + time grid
-  // each pull from the same map without re-filtering.
+  // each pull from the same map without re-filtering. Day keys are
+  // derived from the noon-UTC Date's UTC components — that matches
+  // what `dateKeyInTz` produced for events on the same calendar
+  // day in the user's TZ.
   const byDayBuckets = days.map((day) => {
-    const key = format(day, "yyyy-MM-dd");
+    const key = `${day.getUTCFullYear()}-${String(
+      day.getUTCMonth() + 1
+    ).padStart(2, "0")}-${String(day.getUTCDate()).padStart(2, "0")}`;
     const items = byDay.get(key) ?? [];
     return {
       day,
@@ -114,12 +128,18 @@ export function WeekView({
         style={{ gridTemplateColumns: "56px repeat(7, 1fr)" }}
       >
         <div />
-        {days.map((day) => {
-          const dayIsToday = isSameDay(day, today);
-          const weekend = isWeekend(day);
+        {byDayBuckets.map((b) => {
+          const day = b.day;
+          const dayIsToday = b.key === todayKey;
+          // The day Date is noon UTC, so getUTCDay() returns the
+          // correct weekday for the user-TZ calendar day this column
+          // represents. Avoids re-importing date-fns isSameDay /
+          // isWeekend, which use server-local TZ.
+          const dow = day.getUTCDay();
+          const weekend = dow === 0 || dow === 6;
           return (
             <div
-              key={day.toISOString()}
+              key={b.key}
               className={cn(
                 "flex flex-col items-center gap-0.5 py-2 border-l border-line",
                 weekend && "bg-paper"
@@ -143,7 +163,7 @@ export function WeekView({
                       : "text-ink"
                 )}
               >
-                {format(day, "d")}
+                {day.getUTCDate()}
               </div>
             </div>
           );
@@ -164,7 +184,7 @@ export function WeekView({
         </div>
         {byDayBuckets.map((b) => (
           <WeekAllDayCell
-            key={b.day.toISOString()}
+            key={b.key}
             day={b.day}
             events={b.allDayEvents}
             deadlines={b.deadlines}
@@ -191,12 +211,14 @@ export function WeekView({
           ))}
         </div>
 
-        {/* Per-day time columns */}
+        {/* Per-day time columns. `isToday` is computed in user-TZ
+            via the date-key match so the "now line" only shows in
+            today's column for the user, not the server. */}
         {byDayBuckets.map((b) => (
           <WeekTimeColumn
-            key={b.day.toISOString()}
+            key={b.key}
             day={b.day}
-            today={today}
+            isToday={b.key === todayKey}
             now={now}
             events={b.timedEvents}
             canEdit={canEditEvents}

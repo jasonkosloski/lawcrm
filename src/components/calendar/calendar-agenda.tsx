@@ -12,16 +12,14 @@
  */
 
 import Link from "next/link";
-import {
-  addDays,
-  format,
-  isSameDay,
-  isToday,
-  isTomorrow,
-  startOfDay,
-} from "date-fns";
+import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { EventLink } from "./event-link";
+import {
+  dateKeyInTz,
+  getCurrentUserTimeZone,
+  instantInTz,
+} from "@/lib/format-date";
 import {
   getCalendarItems,
   type CalendarItem,
@@ -31,16 +29,44 @@ import {
 
 const AGENDA_DAYS = 14;
 
-function dayHeading(day: Date): string {
-  if (isToday(day)) return "Today";
-  if (isTomorrow(day)) return "Tomorrow";
-  return format(day, "EEE, MMM d");
+function dayHeading(dayKey: string, todayKey: string, tomorrowKey: string): string {
+  if (dayKey === todayKey) return "Today";
+  if (dayKey === tomorrowKey) return "Tomorrow";
+  // Reconstruct a noon-UTC Date from the YYYY-MM-DD key for
+  // formatting. Noon UTC keeps `format()` from re-interpreting in
+  // server-local TZ.
+  const [y, m, d] = dayKey.split("-").map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  const noon = new Date(Date.UTC(y, m - 1, d, 12));
+  return format(noon, "EEE, MMM d");
 }
 
 export async function CalendarAgenda() {
+  const userTz = await getCurrentUserTimeZone();
   const now = new Date();
-  const start = startOfDay(now);
-  const end = addDays(start, AGENDA_DAYS);
+  // Range bounds anchored to "today midnight in user TZ" through
+  // "AGENDA_DAYS later" — the user thinks "next two weeks" in
+  // their local time, not the server's UTC.
+  const todayKey = dateKeyInTz(now, userTz);
+  const [ty, tm, td] = todayKey.split("-").map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  const start = instantInTz(ty, tm, td, 0, 0, userTz);
+  const endNoon = new Date(Date.UTC(ty, tm - 1, td, 12));
+  endNoon.setUTCDate(endNoon.getUTCDate() + AGENDA_DAYS);
+  const end = instantInTz(
+    endNoon.getUTCFullYear(),
+    endNoon.getUTCMonth() + 1,
+    endNoon.getUTCDate(),
+    23,
+    59,
+    userTz
+  );
   const items = await getCalendarItems(start, end);
 
   // Sort chronologically. For same-day items, events sort by startTime;
@@ -55,19 +81,26 @@ export async function CalendarAgenda() {
     return 0;
   });
 
-  // Bucket into day groups.
-  const groups: Array<{ day: Date; items: CalendarItem[] }> = [];
+  // Bucket into day groups using the user's TZ. Two events at
+  // different UTC instants can still share the same calendar day
+  // in user TZ — that's what we want.
+  const groups: Array<{ dayKey: string; items: CalendarItem[] }> = [];
   for (const item of sorted) {
-    const day = startOfDay(
-      item.kind === "event" ? item.startTime : item.dueDate
-    );
+    const itemDate = item.kind === "event" ? item.startTime : item.dueDate;
+    const dayKey = dateKeyInTz(itemDate, userTz);
     const last = groups[groups.length - 1];
-    if (last && isSameDay(last.day, day)) {
+    if (last && last.dayKey === dayKey) {
       last.items.push(item);
     } else {
-      groups.push({ day, items: [item] });
+      groups.push({ dayKey, items: [item] });
     }
   }
+  // Pre-compute "tomorrow" key for the day-heading helper.
+  const tomorrowNoon = new Date(Date.UTC(ty, tm - 1, td, 12));
+  tomorrowNoon.setUTCDate(tomorrowNoon.getUTCDate() + 1);
+  const tomorrowKey = `${tomorrowNoon.getUTCFullYear()}-${String(
+    tomorrowNoon.getUTCMonth() + 1
+  ).padStart(2, "0")}-${String(tomorrowNoon.getUTCDate()).padStart(2, "0")}`;
 
   return (
     <aside className="w-72 shrink-0 border-l border-line bg-paper-2/30 flex flex-col min-h-0">
@@ -89,18 +122,18 @@ export async function CalendarAgenda() {
           <ul className="flex flex-col">
             {groups.map((group) => (
               <li
-                key={group.day.toISOString()}
+                key={group.dayKey}
                 className="border-b border-line last:border-b-0"
               >
                 <div
                   className={cn(
                     "sticky top-0 z-10 bg-paper-2/80 backdrop-blur-sm px-4 py-1.5 text-2xs font-mono uppercase tracking-wider",
-                    isToday(group.day)
+                    group.dayKey === todayKey
                       ? "text-brand-700 font-semibold"
                       : "text-ink-4"
                   )}
                 >
-                  {dayHeading(group.day)}
+                  {dayHeading(group.dayKey, todayKey, tomorrowKey)}
                 </div>
                 <ul className="flex flex-col">
                   {group.items.map((item) =>

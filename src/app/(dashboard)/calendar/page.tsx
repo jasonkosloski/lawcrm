@@ -14,11 +14,7 @@
 
 import { Suspense } from "react";
 import { TopBar } from "@/components/layout/topbar";
-import {
-  CalendarToolbar,
-  monthGridRange,
-  weekRange,
-} from "@/components/calendar/calendar-toolbar";
+import { CalendarToolbar } from "@/components/calendar/calendar-toolbar";
 import { WeekView } from "@/components/calendar/week-view";
 import { MonthView } from "@/components/calendar/month-view";
 import { CalendarAgenda } from "@/components/calendar/calendar-agenda";
@@ -28,6 +24,11 @@ import { CreateDock } from "@/components/create-stack/create-dock";
 import { NewEventButton } from "@/components/calendar/new-event-button";
 import { parseCalendarParams } from "@/lib/calendar-utils";
 import { currentUserHasPermission } from "@/lib/permission-check";
+import {
+  calendarMonthGridInTz,
+  calendarWeekInTz,
+  getCurrentUserTimeZone,
+} from "@/lib/format-date";
 import {
   getCalendarEventById,
   getCalendarItems,
@@ -42,8 +43,16 @@ export default async function CalendarPage({
   const sp = await searchParams;
   const { view, focal } = parseCalendarParams(sp);
 
-  const range =
-    view === "week" ? weekRange(focal) : monthGridRange(focal);
+  // Resolve user TZ once and thread it through every calendar
+  // surface. The week/month range bounds + bucketing all live in
+  // user TZ so a user in MDT viewing "this week" gets Sunday 00:00
+  // MDT through Saturday 23:59 MDT (instead of UTC bounds, which
+  // cut off the last 6 hours of Saturday and pull in 6 hours from
+  // the prior Saturday).
+  const userTz = await getCurrentUserTimeZone();
+  const week = calendarWeekInTz(focal, userTz);
+  const monthGrid = calendarMonthGridInTz(focal, userTz);
+  const range = view === "week" ? week : monthGrid;
 
   // Event-detail modal is URL-driven via ?event=<id> so refresh +
   // back-button both work. The modal's queries live in a separate
@@ -54,8 +63,8 @@ export default async function CalendarPage({
   const eventId = typeof rawEventParam === "string" ? rawEventParam : null;
 
   const [items, summary, canEditEvents] = await Promise.all([
-    getCalendarItems(range.start, range.end),
-    getCalendarSummary(range.start, range.end),
+    getCalendarItems(range.rangeStart, range.rangeEnd),
+    getCalendarSummary(range.rangeStart, range.rangeEnd),
     // Drives whether week-view chips become draggable + drop
     // zones light up. The action itself is gated server-side
     // regardless — this is just the UX affordance.
@@ -84,12 +93,18 @@ export default async function CalendarPage({
           <div className="flex-1 min-w-0 flex flex-col">
             {view === "week" ? (
               <WeekView
-                focal={focal}
+                days={week.days}
                 items={items}
                 canEditEvents={canEditEvents}
+                userTz={userTz}
               />
             ) : (
-              <MonthView focal={focal} items={items} />
+              <MonthView
+                focal={focal}
+                days={monthGrid.days}
+                items={items}
+                userTz={userTz}
+              />
             )}
           </div>
           {/* Agenda sits between the main calendar and the create dock,

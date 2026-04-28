@@ -12,9 +12,13 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
+  calendarMonthGridInTz,
+  calendarWeekInTz,
+  dateKeyInTz,
   formatDate,
   formatDayBucket,
   formatRelative,
+  instantInTz,
 } from "./format-date";
 
 // Anchor "now" so relative-time assertions are stable.
@@ -155,5 +159,149 @@ describe("formatDayBucket", () => {
 
   test("null returns the placeholder", () => {
     expect(formatDayBucket(null)).toBe("—");
+  });
+});
+
+// ── TZ helpers ─────────────────────────────────────────────────────────
+//
+// These cover the bug we just hit on production: dragging a calendar
+// event in a non-UTC browser landed it on the wrong calendar day
+// because the day Dates were UTC midnights. Each test pins a specific
+// behavior so a future "let's just use date-fns directly" regression
+// trips the suite.
+
+describe("dateKeyInTz", () => {
+  test("a UTC instant before local midnight resolves to the previous day in a west-of-UTC TZ", () => {
+    // 2026-04-26T00:00:00.000Z = Saturday April 25 6pm MDT.
+    const d = new Date("2026-04-26T00:00:00.000Z");
+    expect(dateKeyInTz(d, "America/Denver")).toBe("2026-04-25");
+  });
+
+  test("the same instant resolves to the next day in an east-of-UTC TZ", () => {
+    const d = new Date("2026-04-26T00:00:00.000Z");
+    expect(dateKeyInTz(d, "Asia/Tokyo")).toBe("2026-04-26");
+    // 23:00 UTC on the 25th is already the 26th in Tokyo (UTC+9).
+    const d2 = new Date("2026-04-25T23:00:00.000Z");
+    expect(dateKeyInTz(d2, "Asia/Tokyo")).toBe("2026-04-26");
+  });
+
+  test("UTC TZ is identity-ish — instant's UTC date is the key", () => {
+    expect(dateKeyInTz(new Date("2026-04-26T12:00:00.000Z"), "UTC")).toBe(
+      "2026-04-26"
+    );
+  });
+});
+
+describe("instantInTz", () => {
+  test("midnight in MDT (UTC-6) is 6am UTC", () => {
+    // April is in MDT (DST), UTC-6.
+    const d = instantInTz(2026, 4, 26, 0, 0, "America/Denver");
+    expect(d.toISOString()).toBe("2026-04-26T06:00:00.000Z");
+  });
+
+  test("midnight in MST (UTC-7) is 7am UTC — outside DST", () => {
+    // January is MST, UTC-7.
+    const d = instantInTz(2026, 1, 15, 0, 0, "America/Denver");
+    expect(d.toISOString()).toBe("2026-01-15T07:00:00.000Z");
+  });
+
+  test("midnight in Tokyo (UTC+9) is 3pm prior day UTC", () => {
+    const d = instantInTz(2026, 4, 26, 0, 0, "Asia/Tokyo");
+    expect(d.toISOString()).toBe("2026-04-25T15:00:00.000Z");
+  });
+
+  test("DST 'spring forward' day — 2am Denver doesn't exist (skipped); we land deterministically", () => {
+    // March 8, 2026 — second Sunday of March, US DST starts. Clocks
+    // jump from 1:59:59 MST to 3:00:00 MDT, so 2:30am locally never
+    // happens. Different Intl iteration paths can land at:
+    //   - 08:30 UTC = 2:30am MDT (post-jump, treats wall clock as MDT)
+    //   - 09:30 UTC = 2:30am MST (pre-jump, treats wall clock as MST)
+    //   - 10:30 UTC = 3:30am MDT (steps forward through the gap)
+    // We don't promise WHICH; only that the result is a valid
+    // instant in the morning hours and the function doesn't throw
+    // or hang.
+    const d = instantInTz(2026, 3, 8, 2, 30, "America/Denver");
+    expect(Number.isFinite(d.getTime())).toBe(true);
+    const isoHour = d.toISOString().slice(11, 13);
+    expect(["08", "09", "10"]).toContain(isoHour);
+  });
+
+  test("DST 'fall back' day — 1:30am Denver is ambiguous; we land deterministically", () => {
+    // November 1, 2026 — first Sunday of November, US DST ends.
+    // Clocks jump back from 1:59:59 MDT to 1:00:00 MST. 1:30am
+    // happens twice. Intl picks one consistently — we just verify
+    // we get *a* valid UTC instant for the chosen interpretation.
+    const d = instantInTz(2026, 11, 1, 1, 30, "America/Denver");
+    expect(Number.isFinite(d.getTime())).toBe(true);
+    // 1:30am MDT = 07:30 UTC; 1:30am MST = 08:30 UTC.
+    const isoHour = d.toISOString().slice(11, 13);
+    expect(["07", "08"]).toContain(isoHour);
+  });
+});
+
+describe("calendarWeekInTz", () => {
+  test("focal mid-week returns Sun-Sat days, all noon UTC", () => {
+    // Tuesday April 28 in MDT.
+    const focal = new Date("2026-04-28T15:00:00.000Z");
+    const { days } = calendarWeekInTz(focal, "America/Denver");
+    expect(days).toHaveLength(7);
+    // First day = Sunday April 26, noon UTC.
+    expect(days[0]!.toISOString()).toBe("2026-04-26T12:00:00.000Z");
+    // Last day = Saturday May 2, noon UTC.
+    expect(days[6]!.toISOString()).toBe("2026-05-02T12:00:00.000Z");
+  });
+
+  test("range covers Sunday 00:00 → Saturday 23:59 in user TZ", () => {
+    const focal = new Date("2026-04-28T15:00:00.000Z");
+    const { rangeStart, rangeEnd } = calendarWeekInTz(
+      focal,
+      "America/Denver"
+    );
+    // Sunday April 26 midnight MDT = 06:00 UTC.
+    expect(rangeStart.toISOString()).toBe("2026-04-26T06:00:00.000Z");
+    // Saturday May 2 23:59 MDT = May 3 05:59 UTC.
+    expect(rangeEnd.toISOString()).toBe("2026-05-03T05:59:00.000Z");
+  });
+
+  test("east-of-UTC TZ shifts the range the other direction", () => {
+    const focal = new Date("2026-04-28T15:00:00.000Z");
+    const { rangeStart } = calendarWeekInTz(focal, "Asia/Tokyo");
+    // Sunday April 26 midnight Tokyo (UTC+9) = April 25 15:00 UTC.
+    expect(rangeStart.toISOString()).toBe("2026-04-25T15:00:00.000Z");
+  });
+
+  test("focal that's Saturday late-evening MDT still returns this week (not next)", () => {
+    // Saturday May 2, 11:30pm MDT = May 3 05:30 UTC.
+    // The user calls this "Saturday May 2" — the week should
+    // be April 26 through May 2.
+    const focal = new Date("2026-05-03T05:30:00.000Z");
+    const { days } = calendarWeekInTz(focal, "America/Denver");
+    expect(days[0]!.getUTCDate()).toBe(26); // Sunday April 26
+    expect(days[6]!.getUTCDate()).toBe(2); // Saturday May 2
+  });
+});
+
+describe("calendarMonthGridInTz", () => {
+  test("April 2026 grid starts on Sunday March 29 (the prior week's Sunday)", () => {
+    // April 2026: the 1st is a Wednesday, so the grid starts on
+    // Sunday March 29.
+    const focal = new Date("2026-04-15T15:00:00.000Z");
+    const { days } = calendarMonthGridInTz(focal, "America/Denver");
+    expect(days).toHaveLength(42);
+    expect(days[0]!.toISOString()).toBe("2026-03-29T12:00:00.000Z");
+    // Last day = Saturday May 9 (the trailing week's Saturday).
+    expect(days[41]!.toISOString()).toBe("2026-05-09T12:00:00.000Z");
+  });
+
+  test("range bounds respect user TZ", () => {
+    const focal = new Date("2026-04-15T15:00:00.000Z");
+    const { rangeStart, rangeEnd } = calendarMonthGridInTz(
+      focal,
+      "America/Denver"
+    );
+    // Sunday March 29 midnight MDT = 06:00 UTC.
+    expect(rangeStart.toISOString()).toBe("2026-03-29T06:00:00.000Z");
+    // Saturday May 9 23:59 MDT = May 10 05:59 UTC.
+    expect(rangeEnd.toISOString()).toBe("2026-05-10T05:59:00.000Z");
   });
 });

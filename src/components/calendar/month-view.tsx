@@ -7,17 +7,11 @@
  */
 
 import Link from "next/link";
-import {
-  addDays,
-  format,
-  isSameDay,
-  isSameMonth,
-  startOfDay,
-} from "date-fns";
+import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { monthGridRange } from "./calendar-toolbar";
 import { EventLink } from "./event-link";
-import { isWeekend, WEEK_STARTS_ON } from "@/lib/calendar-utils";
+import { WEEK_STARTS_ON } from "@/lib/calendar-utils";
+import { dateKeyInTz } from "@/lib/format-date";
 import type {
   CalendarItem,
   CalendarEventRow,
@@ -28,24 +22,33 @@ const MAX_ITEMS_PER_CELL = 3;
 
 export function MonthView({
   focal,
+  days,
   items,
+  userTz,
 }: {
+  /** The focal date the user navigated to. Used only to decide
+   *  which days are "in this month" vs trailing/leading week
+   *  carry-over (rendered dim). */
   focal: Date;
+  /** 42 noon-UTC Dates (6 weeks × 7 days) built in user TZ via
+   *  `calendarMonthGridInTz`. */
+  days: Date[];
   items: CalendarItem[];
+  userTz: string;
 }) {
-  const { start } = monthGridRange(focal);
-  const today = startOfDay(new Date());
-  // 6 weeks × 7 days = 42 cells
-  const days = Array.from({ length: 42 }, (_, i) => addDays(start, i));
+  const now = new Date();
+  const todayKey = dateKeyInTz(now, userTz);
+  // The "in this month" check needs to know which calendar month
+  // the focal lives in *in the user's TZ* — same reason as the
+  // bucketing below.
+  const focalMonth = dateKeyInTz(focal, userTz).slice(0, 7); // "YYYY-MM"
 
   const byDay = new Map<string, CalendarItem[]>();
   for (const item of items) {
-    const d =
-      item.kind === "event"
-        ? format(item.startTime, "yyyy-MM-dd")
-        : format(item.dueDate, "yyyy-MM-dd");
-    if (!byDay.has(d)) byDay.set(d, []);
-    byDay.get(d)!.push(item);
+    const itemDate = item.kind === "event" ? item.startTime : item.dueDate;
+    const key = dateKeyInTz(itemDate, userTz);
+    if (!byDay.has(key)) byDay.set(key, []);
+    byDay.get(key)!.push(item);
   }
   // Sort items within each day: deadlines first (high-priority visual),
   // then events by start time.
@@ -89,16 +92,21 @@ export function MonthView({
       {/* Day grid — 6 rows fill available vertical space */}
       <div className="grid grid-cols-7 flex-1 min-h-0">
         {days.map((day) => {
-          const key = format(day, "yyyy-MM-dd");
+          // Day Dates are noon UTC of the user-TZ calendar day, so
+          // `getUTC*` accessors give the right calendar components.
+          const key = `${day.getUTCFullYear()}-${String(
+            day.getUTCMonth() + 1
+          ).padStart(2, "0")}-${String(day.getUTCDate()).padStart(2, "0")}`;
           const dayItems = byDay.get(key) ?? [];
           const visible = dayItems.slice(0, MAX_ITEMS_PER_CELL);
           const overflow = dayItems.length - visible.length;
-          const isToday = isSameDay(day, today);
-          const isInMonth = isSameMonth(day, focal);
-          const weekend = isWeekend(day);
+          const isToday = key === todayKey;
+          const isInMonth = key.slice(0, 7) === focalMonth;
+          const dow = day.getUTCDay();
+          const weekend = dow === 0 || dow === 6;
           return (
             <div
-              key={day.toISOString()}
+              key={key}
               className={cn(
                 "border-l border-t border-line p-1 min-h-24 flex flex-col gap-1 first:border-l-0",
                 !isInMonth
@@ -118,7 +126,7 @@ export function MonthView({
                       : "text-ink-4"
                 )}
               >
-                {format(day, "d")}
+                {day.getUTCDate()}
               </div>
               <div className="flex flex-col gap-0.5 overflow-hidden">
                 {visible.map((item) =>

@@ -144,7 +144,11 @@ export function WeekAllDayCell({
 
 export type WeekTimeColumnProps = {
   day: Date;
-  today: Date;
+  /** True when this column represents the user's local "today".
+   *  Computed once at the page level using user-TZ date keys so
+   *  the now-line + accent appear in the right column on a UTC
+   *  server. */
+  isToday: boolean;
   now: Date;
   events: CalendarEventRow[];
   canEdit: boolean;
@@ -152,7 +156,7 @@ export type WeekTimeColumnProps = {
 
 export function WeekTimeColumn({
   day,
-  today,
+  isToday,
   now,
   events,
   canEdit,
@@ -257,8 +261,12 @@ export function WeekTimeColumn({
   }
 
   const nowTop = nowOffsetPx(now, day);
-  const isTodayCol = isSameDay(day, today);
-  const weekend = isWeekend(day);
+  const isTodayCol = isToday;
+  // Weekend = the day Date's UTC weekday. Day Dates are noon UTC of
+  // the user-TZ calendar day (see calendarWeekInTz), so getUTCDay()
+  // returns the right weekday on any server TZ.
+  const dow = day.getUTCDay();
+  const weekend = dow === 0 || dow === 6;
 
   return (
     <div

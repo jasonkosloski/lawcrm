@@ -107,18 +107,8 @@ export function CalendarToolbar({
   );
 }
 
-// Exported for the page's range query calc — keeps the date math next
-// to the toolbar that displays it.
-export function weekRange(focal: Date): { start: Date; end: Date } {
-  return {
-    start: startOfWeek(focal, { weekStartsOn: WEEK_STARTS_ON }),
-    end: endOfWeek(focal, { weekStartsOn: WEEK_STARTS_ON }),
-  };
-}
-
-export function monthGridRange(focal: Date): { start: Date; end: Date } {
-  return {
-    start: startOfWeek(startOfMonth(focal), { weekStartsOn: WEEK_STARTS_ON }),
-    end: endOfWeek(endOfMonth(focal), { weekStartsOn: WEEK_STARTS_ON }),
-  };
-}
+// Range computation moved to `calendarWeekInTz` /
+// `calendarMonthGridInTz` in src/lib/format-date.ts. The old
+// date-fns-based versions used server-local TZ, which silently
+// broke for users east/west of UTC (events near local-midnight
+// landed on the wrong day). Use the TZ-aware helpers instead.

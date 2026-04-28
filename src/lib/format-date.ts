@@ -156,6 +156,195 @@ export function formatDayBucket(
   return formatDate(d, "medium", tz);
 }
 
+// ── Time-zone arithmetic ───────────────────────────────────────────────
+//
+// The calendar surfaces (week / month / agenda) need to think in the
+// user's TZ end-to-end: build day columns that match what the user
+// calls "today", bucket events into the right column regardless of
+// where the server runs, and compute DB query bounds that cover the
+// user's local week. The helpers below give us that without pulling
+// in date-fns-tz — Intl.DateTimeFormat already knows every IANA zone
+// + its DST rules.
+//
+// Key trick: every "Date for a calendar day" we hand around uses
+// **noon UTC** of that calendar day instead of midnight. Noon UTC is
+// the same calendar day in any zone from UTC-12 to UTC+11 (the only
+// regularly-inhabited exception being NZ DST at UTC+13). That makes
+// `format(day, "yyyy-MM-dd")` server-side give the right calendar
+// date for any user TZ without needing the TZ at the formatting site.
+
+/**
+ * Format an instant as a YYYY-MM-DD calendar key in the given TZ.
+ *
+ * Used to bucket events into day columns: two events at the same
+ * instant share a key only if they're on the same calendar day in
+ * the user's TZ. Pure Intl call — no library needed.
+ */
+export function dateKeyInTz(d: Date, tz: string): string {
+  // en-CA locale formats dates as YYYY-MM-DD natively, so we don't
+  // have to reorder month/day parts.
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
+
+/**
+ * UTC instant of a wall-clock time on a given calendar date in the
+ * given TZ. e.g. `instantInTz(2026, 4, 26, 0, 0, "America/Denver")`
+ * returns `2026-04-26T06:00:00.000Z` (Sunday MDT midnight).
+ *
+ * Handles DST transitions by iterating: the first guess may land on
+ * a different offset than the target, so we apply the offset and
+ * try again. Two passes is enough — if a single DST step is wider
+ * than 24 hours we have bigger problems.
+ */
+export function instantInTz(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  tz: string
+): Date {
+  let candidate = new Date(Date.UTC(year, month - 1, day, hour, minute));
+  for (let i = 0; i < 2; i++) {
+    const fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "numeric",
+      hour12: false,
+    });
+    const parts = fmt.formatToParts(candidate);
+    const lookup = (type: string): number => {
+      const part = parts.find((p) => p.type === type);
+      return part ? Number(part.value) : 0;
+    };
+    let h = lookup("hour");
+    if (h === 24) h = 0; // Some Intl impls emit 24 for midnight.
+    const localAtCandidate = Date.UTC(
+      lookup("year"),
+      lookup("month") - 1,
+      lookup("day"),
+      h,
+      lookup("minute")
+    );
+    const target = Date.UTC(year, month - 1, day, hour, minute);
+    const drift = target - localAtCandidate;
+    if (drift === 0) break;
+    candidate = new Date(candidate.getTime() + drift);
+  }
+  return candidate;
+}
+
+/**
+ * Compute the calendar week containing `focal` in the given TZ.
+ *
+ * Returns an array of seven day-noon-UTC Dates (one per column —
+ * ready to feed into `format(day, "EEE")` / `format(day, "d")`
+ * server-side without TZ leakage), plus the UTC instants for the
+ * exact start (Sunday 00:00 in TZ) and end (Saturday 23:59 in TZ)
+ * of the user's week — those are what the DB query needs.
+ *
+ * Week starts on Sunday to match the rest of the calendar.
+ */
+export function calendarWeekInTz(
+  focal: Date,
+  tz: string
+): { days: Date[]; rangeStart: Date; rangeEnd: Date } {
+  const focalKey = dateKeyInTz(focal, tz);
+  const [fy, fm, fd] = focalKey.split("-").map(Number) as [number, number, number];
+  // Noon UTC of the focal date — used purely to compute the weekday.
+  // Safe across every TZ from UTC-12 to UTC+11.
+  const focalNoon = new Date(Date.UTC(fy, fm - 1, fd, 12));
+  const dow = focalNoon.getUTCDay(); // 0 = Sunday
+  const sundayNoon = new Date(focalNoon);
+  sundayNoon.setUTCDate(sundayNoon.getUTCDate() - dow);
+
+  const days: Date[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(sundayNoon);
+    d.setUTCDate(d.getUTCDate() + i);
+    days.push(d);
+  }
+
+  const sunday = days[0]!;
+  const saturday = days[6]!;
+  const rangeStart = instantInTz(
+    sunday.getUTCFullYear(),
+    sunday.getUTCMonth() + 1,
+    sunday.getUTCDate(),
+    0,
+    0,
+    tz
+  );
+  const rangeEnd = instantInTz(
+    saturday.getUTCFullYear(),
+    saturday.getUTCMonth() + 1,
+    saturday.getUTCDate(),
+    23,
+    59,
+    tz
+  );
+  return { days, rangeStart, rangeEnd };
+}
+
+/**
+ * Compute the month-grid range containing `focal` in the given TZ.
+ *
+ * Returns the full month-grid (always 6 weeks = 42 day-noon-UTC
+ * Dates) plus the UTC instants for the exact start (Sunday of week
+ * containing the 1st) and end (Saturday of week containing the
+ * last day) of the grid — what the DB query needs.
+ */
+export function calendarMonthGridInTz(
+  focal: Date,
+  tz: string
+): { days: Date[]; rangeStart: Date; rangeEnd: Date } {
+  const focalKey = dateKeyInTz(focal, tz);
+  const [fy, fm] = focalKey.split("-").map(Number) as [number, number, number];
+  // First day of the month at noon UTC.
+  const firstNoon = new Date(Date.UTC(fy, fm - 1, 1, 12));
+  // Sunday of the week containing the 1st.
+  const dowFirst = firstNoon.getUTCDay();
+  const gridStart = new Date(firstNoon);
+  gridStart.setUTCDate(gridStart.getUTCDate() - dowFirst);
+
+  // 6 rows × 7 days — covers every month including the rare 6-row
+  // ones (a Sunday-start month with 31 days needs the 6th row).
+  const days: Date[] = [];
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(gridStart);
+    d.setUTCDate(d.getUTCDate() + i);
+    days.push(d);
+  }
+
+  const first = days[0]!;
+  const last = days[41]!;
+  const rangeStart = instantInTz(
+    first.getUTCFullYear(),
+    first.getUTCMonth() + 1,
+    first.getUTCDate(),
+    0,
+    0,
+    tz
+  );
+  const rangeEnd = instantInTz(
+    last.getUTCFullYear(),
+    last.getUTCMonth() + 1,
+    last.getUTCDate(),
+    23,
+    59,
+    tz
+  );
+  return { days, rangeStart, rangeEnd };
+}
+
 /** Server-side helper that resolves the current user's TZ from
  *  the DB. Returns the schema default when no user is logged in
  *  yet (build-time / seed paths). */
