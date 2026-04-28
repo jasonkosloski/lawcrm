@@ -26,7 +26,7 @@
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useState, useTransition, type ReactNode } from "react";
+import { useEffect, useState, useTransition, type ReactNode } from "react";
 import { isSameDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
@@ -403,8 +403,105 @@ function DraggableEventBlock({
    *  per-chip width = 1 / laneCount. */
   laneCount: number;
 }) {
-  const top = eventTopPx(event.startTime);
-  const height = eventHeightPx(event.startTime, event.endTime);
+  const move = useMoveEvent();
+
+  // Resize state — captures the original schedule + initial mouse
+  // Y at mousedown so mousemove can compute the snapped delta.
+  // Top edge drag changes start; bottom edge drag changes end.
+  // Both snap to 15min and respect a 15min minimum duration.
+  const [resizing, setResizing] = useState<null | {
+    edge: "top" | "bottom";
+    startMouseY: number;
+    originalStart: Date;
+    originalEnd: Date;
+    /** Live preview — what the chip will commit on mouseup. */
+    previewStart: Date;
+    previewEnd: Date;
+  }>(null);
+
+  // Document-level mousemove + mouseup while a resize is active.
+  // We attach to `document` (not the chip) so the drag keeps
+  // tracking even when the cursor slides outside the chip's
+  // bounds — which happens constantly when growing toward the
+  // edges of the day column.
+  useEffect(() => {
+    if (!resizing) return;
+    const onMove = (e: MouseEvent) => {
+      const deltaY = e.clientY - resizing.startMouseY;
+      // Pixel delta → minute delta, snapped to 15. Same snap
+      // resolution as the move drag for consistency.
+      const deltaMinutes =
+        Math.round((deltaY / HOUR_HEIGHT_PX) * 60 / 15) * 15;
+      const minDurationMs = 15 * 60_000;
+
+      if (resizing.edge === "top") {
+        // Move start; clamp so duration stays >= 15min and the
+        // start doesn't slide above the grid's first hour.
+        const proposed = new Date(
+          resizing.originalStart.getTime() + deltaMinutes * 60_000
+        );
+        const max = new Date(resizing.originalEnd.getTime() - minDurationMs);
+        const next = clampDateAboveGrid(proposed, resizing.originalStart);
+        const constrained = next.getTime() > max.getTime() ? max : next;
+        setResizing({ ...resizing, previewStart: constrained });
+      } else {
+        const proposed = new Date(
+          resizing.originalEnd.getTime() + deltaMinutes * 60_000
+        );
+        const min = new Date(resizing.originalStart.getTime() + minDurationMs);
+        const next = clampDateBelowGrid(proposed, resizing.originalEnd);
+        const constrained = next.getTime() < min.getTime() ? min : next;
+        setResizing({ ...resizing, previewEnd: constrained });
+      }
+    };
+    const onUp = () => {
+      // Commit only if something changed. Same-time mouseup =
+      // accidental click on the handle; no-op.
+      const startChanged =
+        resizing.previewStart.getTime() !== resizing.originalStart.getTime();
+      const endChanged =
+        resizing.previewEnd.getTime() !== resizing.originalEnd.getTime();
+      if (startChanged || endChanged) {
+        move(event.id, {
+          isAllDay: false,
+          start: resizing.previewStart,
+          end: resizing.previewEnd,
+        });
+      }
+      setResizing(null);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+  }, [resizing, event.id, move]);
+
+  const startResize = (edge: "top" | "bottom") =>
+    (e: React.MouseEvent) => {
+      if (!canEdit) return;
+      // Stop the chip's HTML5 drag from kicking in — the
+      // wrapper is `draggable`, but mousedown on a handle should
+      // initiate resize, not move.
+      e.preventDefault();
+      e.stopPropagation();
+      setResizing({
+        edge,
+        startMouseY: e.clientY,
+        originalStart: event.startTime,
+        originalEnd: event.endTime,
+        previewStart: event.startTime,
+        previewEnd: event.endTime,
+      });
+    };
+
+  // Display schedule = preview during resize, committed otherwise.
+  const renderStart = resizing?.previewStart ?? event.startTime;
+  const renderEnd = resizing?.previewEnd ?? event.endTime;
+
+  const top = eventTopPx(renderStart);
+  const height = eventHeightPx(renderStart, renderEnd);
   // Lane → horizontal position. We leave a hairline gap between
   // adjacent chips so the boundary reads cleanly. The first lane
   // starts at the column's left padding (4px); subsequent lanes
@@ -423,7 +520,7 @@ function DraggableEventBlock({
   return (
     <DraggableEventWrapper
       eventId={event.id}
-      canDrag={canEdit}
+      canDrag={canEdit && !resizing}
       buildPayload={(grabOffsetY) => ({
         kind: CALENDAR_EVENT_KIND,
         data: {
@@ -436,11 +533,31 @@ function DraggableEventBlock({
       })}
       title={`${event.title}${event.matterName ? ` · ${event.matterName}` : ""}`}
       style={style}
-      className="absolute px-1.5 py-1 rounded-sm overflow-hidden hover:shadow-[inset_3px_0_0_0,0_2px_6px_-2px_rgba(0,0,0,0.1)] transition-shadow"
+      className={cn(
+        "absolute px-1.5 py-1 rounded-sm overflow-hidden transition-shadow",
+        // Drop the hover-shadow during a resize — the live
+        // outline is feedback enough.
+        !resizing &&
+          "hover:shadow-[inset_3px_0_0_0,0_2px_6px_-2px_rgba(0,0,0,0.1)]",
+        resizing && "shadow-[0_4px_12px_-2px_rgba(0,0,0,0.15)]"
+      )}
       // Stays above the column's drop-zone background so the
       // drag pickup stays reliable.
-      extraStyle={{ zIndex: 5 }}
+      extraStyle={{ zIndex: resizing ? 20 : 5 }}
     >
+      {/* Top resize handle — only when canEdit. The 6px strip
+          gives a real click target without intruding on the
+          chip body's text. Cursor switches to n-resize so the
+          affordance is obvious on hover. */}
+      {canEdit && (
+        <div
+          aria-label="Resize event start"
+          onMouseDown={startResize("top")}
+          onClick={(e) => e.stopPropagation()}
+          className="absolute top-0 left-0 right-0 h-1.5 cursor-ns-resize hover:bg-brand-500/30 z-10"
+        />
+      )}
+
       <div className="text-2xs font-medium text-ink leading-tight line-clamp-2">
         {event.title}
       </div>
@@ -449,8 +566,61 @@ function DraggableEventBlock({
           {event.matterName}
         </div>
       )}
+
+      {/* Bottom resize handle */}
+      {canEdit && (
+        <div
+          aria-label="Resize event end"
+          onMouseDown={startResize("bottom")}
+          onClick={(e) => e.stopPropagation()}
+          className="absolute bottom-0 left-0 right-0 h-1.5 cursor-ns-resize hover:bg-brand-500/30 z-10"
+        />
+      )}
+
+      {/* Live time label during a resize — shows the user the
+          exact start/end the chip will commit on release. Sits
+          in the corner opposite the handle being dragged so it
+          doesn't fight with the cursor. */}
+      {resizing && (
+        <div
+          className={cn(
+            "absolute right-1 text-3xs font-mono text-brand-700 bg-white/90 px-1 rounded shadow-sm pointer-events-none",
+            resizing.edge === "top" ? "bottom-1" : "top-1"
+          )}
+          aria-live="polite"
+        >
+          {formatTimeShort(renderStart)} – {formatTimeShort(renderEnd)}
+        </div>
+      )}
     </DraggableEventWrapper>
   );
+}
+
+/** Format a Date as "9:00am" — used in the resize preview label. */
+function formatTimeShort(d: Date): string {
+  const h24 = d.getHours();
+  const m = d.getMinutes();
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  const suffix = h24 < 12 ? "am" : "pm";
+  return `${h12}:${String(m).padStart(2, "0")}${suffix}`;
+}
+
+/** Clamp a Date to the grid's first hour boundary. Used when
+ *  resizing the top edge so a top-drag past 6am stops at 6am. */
+function clampDateAboveGrid(proposed: Date, fallback: Date): Date {
+  const startHour = HOURS[0]!;
+  const min = new Date(fallback);
+  min.setHours(startHour, 0, 0, 0);
+  return proposed.getTime() < min.getTime() ? min : proposed;
+}
+
+/** Clamp a Date to the grid's last hour boundary (HOURS[-1] + 1
+ *  hour, exclusive). Used when resizing the bottom edge. */
+function clampDateBelowGrid(proposed: Date, fallback: Date): Date {
+  const endHour = HOURS[HOURS.length - 1]! + 1;
+  const max = new Date(fallback);
+  max.setHours(endHour, 0, 0, 0);
+  return proposed.getTime() > max.getTime() ? max : proposed;
 }
 
 /** Shared draggable wrapper. Read-only mode renders a Link;
