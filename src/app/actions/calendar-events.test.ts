@@ -198,7 +198,21 @@ describe("updateCalendarEvent — attendees replace-all", () => {
       buildForm({
         attendees: JSON.stringify([
           { name: "Opposing Counsel", email: "oc@example.com" },
-          { name: "Witness", email: "" },
+          // Witness is added via an existing-contact link (kind=
+          // contact) so it doesn't need an email — the linked
+          // Contact has its own. Demonstrates that the email-
+          // required rule only applies to the new-contact branch.
+          {
+            kind: "contact",
+            contactId: (
+              await prisma.contact.create({
+                data: { name: "Witness", type: "witness" },
+                select: { id: true },
+              })
+            ).id,
+            name: "Witness",
+            email: "",
+          },
         ]),
       })
     );
@@ -213,6 +227,7 @@ describe("updateCalendarEvent — attendees replace-all", () => {
     expect(oc.email).toBe("oc@example.com");
     const witness = rows.find((r) => r.name === "Witness")!;
     expect(witness.email).toBeNull();
+    expect(witness.contactId).not.toBeNull();
     expect(rows.every((r) => r.status === "pending")).toBe(true);
   });
 
@@ -407,6 +422,56 @@ describe("updateCalendarEvent — typed attendee picker", () => {
     );
     expect(res.status).toBe("ok");
     expect(await prisma.contact.count()).toBe(beforeCount + 1);
+  });
+
+  test("kind=new without an email is rejected (email mandatory for new contacts)", async () => {
+    const beforeCount = await prisma.contact.count();
+    const res = await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm({
+        attendees: JSON.stringify([
+          { kind: "new", name: "No Email Person", email: "" },
+        ]),
+      })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.attendees?.[0]).toMatch(/email/i);
+    // Pre-transaction rejection — no Contact created, no event
+    // fields touched.
+    expect(await prisma.contact.count()).toBe(beforeCount);
+  });
+
+  test("kind=new with malformed email is rejected", async () => {
+    const res = await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm({
+        attendees: JSON.stringify([
+          { kind: "new", name: "Garbage Email", email: "not-an-email" },
+        ]),
+      })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.attendees?.[0]).toMatch(/valid email/i);
+  });
+
+  test("kind=user with empty email is allowed (linked user has its own)", async () => {
+    const u = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const res = await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm({
+        attendees: JSON.stringify([
+          // The picker stores the linked user's email as a
+          // snapshot, but the rule's only enforced for the new-
+          // contact branch — picking a user with an empty email
+          // override should still pass.
+          { kind: "user", userId, name: u.name, email: "" },
+        ]),
+      })
+    );
+    expect(res.status).toBe("ok");
   });
 });
 

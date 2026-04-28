@@ -36,18 +36,45 @@ function revalidateForEvent(matterId: string | null): void {
  *  Existing rows posted from the legacy editor (no `kind`) are
  *  treated as `kind: "new"` so the older client form still works
  *  during the rollout. */
-const attendeeEntrySchema = z.object({
-  kind: z
-    .enum(["user", "contact", "new"])
-    .optional()
-    .default("new"),
-  /** Set when `kind === "user"`. Server validates against User. */
-  userId: z.string().optional().or(z.literal("")),
-  /** Set when `kind === "contact"`. Server validates against Contact. */
-  contactId: z.string().optional().or(z.literal("")),
-  name: z.string().trim().min(1, "Name is required").max(120),
-  email: z.string().trim().max(200).optional().or(z.literal("")),
-});
+const attendeeEntrySchema = z
+  .object({
+    kind: z
+      .enum(["user", "contact", "new"])
+      .optional()
+      .default("new"),
+    /** Set when `kind === "user"`. Server validates against User. */
+    userId: z.string().optional().or(z.literal("")),
+    /** Set when `kind === "contact"`. Server validates against Contact. */
+    contactId: z.string().optional().or(z.literal("")),
+    name: z.string().trim().min(1, "Name is required").max(120),
+    email: z.string().trim().max(200).optional().or(z.literal("")),
+  })
+  .superRefine((data, ctx) => {
+    // For the new-contact branch, require a parseable email — the
+    // arbitrary path mints a real Contact row and a phantom
+    // contact with no email is just noise in the directory. The
+    // user/contact branches don't need this since the linked row
+    // has its own email; we never persist what was typed in those
+    // cases (the snapshot uses the linked row's name/email).
+    if (data.kind === "new") {
+      if (!data.email || data.email.trim().length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["email"],
+          message: "Email is required when adding a new contact",
+        });
+      } else {
+        const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email.trim());
+        if (!ok) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["email"],
+            message: "Enter a valid email address",
+          });
+        }
+      }
+    }
+  });
 
 type AttendeeEntry = z.infer<typeof attendeeEntrySchema>;
 

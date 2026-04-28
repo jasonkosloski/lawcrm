@@ -1252,12 +1252,21 @@ function AttendeeAutocomplete({
 
   const trimmedQuery = query.trim();
   const trimmedEmail = email.trim();
+  // Light client-side email check. The server re-validates with
+  // the same regex, so this is purely UX (don't enable the
+  // commit button until the address looks valid).
+  const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail);
   // Show "Add new" option whenever the typed text doesn't have
   // an exact case-insensitive name match in the results.
   const exactMatchExists = results.some(
     (r) => r.name.toLowerCase() === trimmedQuery.toLowerCase()
   );
   const showAddNew = trimmedQuery.length > 0 && !exactMatchExists;
+  // The arbitrary-attendee path creates a real Contact row, so
+  // it requires an email. Without one the picker still shows
+  // the row (so the user knows the option exists) but it's
+  // disabled with a "+ email required" hint.
+  const addNewEnabled = showAddNew && emailLooksValid;
   // Total selectable rows in the dropdown — used for keyboard
   // navigation bounds.
   const totalRows = results.length + (showAddNew ? 1 : 0);
@@ -1292,7 +1301,8 @@ function AttendeeAutocomplete({
   };
 
   const pickAddNew = () => {
-    if (!trimmedQuery) return;
+    // Both gates are server-enforced too — this is just UX.
+    if (!trimmedQuery || !addNewEnabled) return;
     onPick({
       kind: "new",
       attendeeId: null,
@@ -1319,13 +1329,14 @@ function AttendeeAutocomplete({
       e.preventDefault();
       if (!open || totalRows === 0) {
         // Plain Enter on an empty dropdown should still let the
-        // add-new path fire when the user has typed a name.
-        if (showAddNew) pickAddNew();
+        // add-new path fire when the user has typed a name AND
+        // a valid email.
+        if (showAddNew && addNewEnabled) pickAddNew();
         return;
       }
       if (focusedIdx < results.length) {
         pickResult(results[focusedIdx]!);
-      } else if (showAddNew) {
+      } else if (showAddNew && addNewEnabled) {
         pickAddNew();
       }
     } else if (e.key === "Escape") {
@@ -1400,14 +1411,25 @@ function AttendeeAutocomplete({
             <li
               role="option"
               aria-selected={focusedIdx === results.length}
+              aria-disabled={!addNewEnabled}
               onMouseEnter={() => setFocusedIdx(results.length)}
-              onClick={pickAddNew}
+              onClick={() => addNewEnabled && pickAddNew()}
               className={cn(
-                "px-2.5 py-1.5 cursor-pointer flex items-center gap-2 border-t border-line/60",
-                focusedIdx === results.length
-                  ? "bg-brand-tint"
-                  : "hover:bg-paper-2"
+                "px-2.5 py-1.5 flex items-center gap-2 border-t border-line/60",
+                addNewEnabled
+                  ? cn(
+                      "cursor-pointer",
+                      focusedIdx === results.length
+                        ? "bg-brand-tint"
+                        : "hover:bg-paper-2"
+                    )
+                  : "cursor-not-allowed opacity-60"
               )}
+              title={
+                addNewEnabled
+                  ? undefined
+                  : "Email is required to create a new contact"
+              }
             >
               <span className="shrink-0 w-6 h-6 rounded-full bg-paper-2 text-ink-3 text-2xs font-mono inline-flex items-center justify-center border border-dashed border-line">
                 +
@@ -1417,7 +1439,9 @@ function AttendeeAutocomplete({
                   Add as new contact: {trimmedQuery}
                 </span>
                 <span className="text-2xs text-ink-4 font-mono truncate">
-                  Creates a Contact (type: other) — links to the firm directory
+                  {addNewEnabled
+                    ? "Creates a Contact (type: other) — links to the firm directory"
+                    : "Email required for the new contact"}
                 </span>
               </div>
             </li>
