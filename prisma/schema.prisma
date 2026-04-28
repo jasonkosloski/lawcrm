@@ -5,7 +5,10 @@
 // application. Covers matters, contacts, email, time & billing, documents,
 // evidence, deadlines, tasks, trust accounting, and team management.
 //
-// Database: SQLite for local dev (swap to PostgreSQL for production).
+// Database: PostgreSQL. Vercel Postgres in production; a local
+// Docker container (docker-compose.test.yml) for tests; the dev URL
+// is whatever you point DATABASE_URL at (Vercel branch DB or your
+// own local Postgres).
 // =============================================================================
 
 generator client {
@@ -13,8 +16,12 @@ generator client {
   output   = "../src/generated/prisma"
 }
 
+// Prisma 7 moved connection URLs out of the schema. The
+// datasource lives in prisma.config.ts (url + directUrl) and the
+// runtime client uses a driver adapter (PrismaPg) — see
+// src/lib/prisma.ts for the runtime wiring.
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 // =============================================================================

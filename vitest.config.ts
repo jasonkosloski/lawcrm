@@ -6,8 +6,9 @@
  *      no React rendering. Run on every commit.
  *   2. Component / hook tests for client components — happy-dom
  *      environment. Mock server actions; assert UI behavior.
- *   3. Server-action / query integration tests — sqlite test DB,
- *      seeded fixtures, real Prisma. See `src/test/integration-*`.
+ *   3. Server-action / query integration tests — local Postgres
+ *      container (docker-compose.test.yml), seeded fixtures, real
+ *      Prisma. See `src/test/integration-*`.
  *
  * Why happy-dom over jsdom: faster boot + closer-to-modern-DOM
  * behavior. Trade-off is slightly less compatibility with quirky
@@ -22,12 +23,12 @@ export default defineConfig({
     environment: "happy-dom",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
-    // Layer-3 integration tests need a real test SQLite DB.
+    // Layer-3 integration tests need a real test Postgres.
     // `globalSetup` runs once before any test file, points
-    // DATABASE_URL at the test DB, and pushes the schema. See
-    // `src/test/integration-setup.ts` for the full lifecycle.
+    // DATABASE_URL at the test container, and pushes the schema.
+    // See `src/test/integration-setup.ts` for the full lifecycle.
     globalSetup: ["./src/test/integration-setup.ts"],
-    // Integration tests share a single SQLite test DB and reset
+    // Integration tests share a single Postgres test DB and reset
     // it via `beforeEach` (see `src/test/integration-helpers.ts`).
     // Vitest's default file-level parallelism would race on that
     // shared state — file A truncating the DB while file B's

@@ -43,14 +43,14 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# prisma
+# prisma — generated client is regenerated on install/build
 /src/generated/prisma
-prisma/dev.db
-prisma/dev.db-journal
-prisma/test.db
-prisma/test.db-journal
-/dev.db
-/dev.db-journal
+
+# Stale SQLite files from before the Postgres migration — kept
+# locally for safety in case anyone still has dev data there,
+# but never committed.
+*.db
+*.db-journal
 
 # Local document storage — uploads land here in dev. Production
 # swaps the storage adapter (Vercel Blob / S3); keep the local

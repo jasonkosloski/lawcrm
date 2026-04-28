@@ -50,7 +50,7 @@ const RANGE_START = new Date("2026-06-01T00:00:00Z");
 const RANGE_END = new Date("2026-06-30T23:59:59Z");
 
 beforeAll(() => {
-  expect(process.env.DATABASE_URL).toMatch(/test\.db$/);
+  expect(process.env.DATABASE_URL).toMatch(/lawcrm_test/);
 });
 
 beforeEach(async () => {

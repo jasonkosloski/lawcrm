@@ -16,7 +16,7 @@
 
 import "dotenv/config";
 import * as argon2 from "argon2";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
 
 /// Single dev password applied to every seed user. Surfaced in the
@@ -24,8 +24,13 @@ import { PrismaClient } from "../src/generated/prisma/client";
 /// would go through the (deferred) admin invite flow instead.
 const DEV_PASSWORD = "ChangeMe2026!";
 
-const databaseUrl = process.env.DATABASE_URL ?? "file:./dev.db";
-const adapter = new PrismaBetterSqlite3({ url: databaseUrl });
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error(
+    "DATABASE_URL is not set. Configure it in .env before running the seed."
+  );
+}
+const adapter = new PrismaPg({ connectionString });
 const prisma = new PrismaClient({ adapter });
 
 // Anchor date — everything relative is computed from this.

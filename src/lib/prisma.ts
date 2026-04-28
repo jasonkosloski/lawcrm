@@ -1,16 +1,17 @@
 /**
  * Prisma Client Singleton
  *
- * Ensures a single PrismaClient instance is reused across hot reloads in
- * development. In production, a new instance is created once per process.
+ * One PrismaClient per process — reused across hot reloads in
+ * development, instantiated once per cold start in production.
  *
- * Prisma 7.x requires a driver adapter — we use `@prisma/adapter-better-sqlite3`
- * for local dev (SQLite). Swap to `@prisma/adapter-pg` + a Postgres URL for prod.
+ * Prisma 7.x requires a driver adapter. We use `@prisma/adapter-pg`
+ * against a Postgres URL (Vercel Postgres in production, a local
+ * Docker container for tests, your dev branch URL for local dev).
  *
- * @see https://www.prisma.io/docs/orm/overview/databases/sqlite
+ * @see https://www.prisma.io/docs/orm/overview/databases/postgresql
  */
 
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma/client";
 
 const globalForPrisma = globalThis as unknown as {
@@ -18,8 +19,17 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 const createClient = () => {
-  const url = process.env.DATABASE_URL ?? "file:./dev.db";
-  const adapter = new PrismaBetterSqlite3({ url });
+  // DATABASE_URL is required. We deliberately don't fall back to
+  // a default — a missing DATABASE_URL in production should fail
+  // loudly at startup, not silently connect to the wrong place.
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error(
+      "DATABASE_URL is not set. Configure it in your env (locally: .env, " +
+        "production: Vercel project env vars)."
+    );
+  }
+  const adapter = new PrismaPg({ connectionString });
   return new PrismaClient({ adapter });
 };
 

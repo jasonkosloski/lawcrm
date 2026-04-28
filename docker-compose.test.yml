@@ -1,0 +1,39 @@
+# Local Postgres for the integration test suite.
+#
+# Why a container: Prisma 7 needs a real Postgres on the other
+# end of its driver adapter. We could point the test runner at
+# the dev branch DB, but tests must be free to drop / recreate
+# the schema between runs and that's terrible to do against a
+# DB anyone else might be using. Isolated container == safe
+# DELETE FROM every table in a beforeEach.
+#
+# Run with: docker compose -f docker-compose.test.yml up -d
+# Stop with: docker compose -f docker-compose.test.yml down
+#
+# The Vitest globalSetup (src/test/integration-setup.ts) expects
+# this on localhost:5433 — non-default port so it doesn't collide
+# with a host-installed Postgres.
+
+services:
+  test-db:
+    image: postgres:17-alpine
+    container_name: lawcrm-test-postgres
+    # tmpfs storage — wipe-on-restart is the point of a test DB.
+    # No volume mount means restarting the container starts from
+    # zero; the test runner will re-push the schema anyway.
+    tmpfs:
+      - /var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: lawcrm_test
+      POSTGRES_PASSWORD: lawcrm_test
+      POSTGRES_DB: lawcrm_test
+    ports:
+      - "5433:5432"
+    # Healthcheck so docker compose --wait blocks until the DB
+    # actually accepts connections — avoids a race where the
+    # container is up but Postgres hasn't finished initialising.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lawcrm_test -d lawcrm_test"]
+      interval: 1s
+      timeout: 3s
+      retries: 30

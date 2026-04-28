@@ -36,7 +36,7 @@ let firmId: string;
 let userId: string;
 
 beforeAll(() => {
-  expect(process.env.DATABASE_URL).toMatch(/test\.db$/);
+  expect(process.env.DATABASE_URL).toMatch(/lawcrm_test/);
 });
 
 beforeEach(async () => {

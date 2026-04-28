@@ -57,7 +57,7 @@ beforeAll(async () => {
   // Sanity — make sure we're pointed at the test DB and not the
   // dev one. A typo in setup or env handling could otherwise
   // wreck dev data.
-  expect(process.env.DATABASE_URL).toMatch(/test\.db$/);
+  expect(process.env.DATABASE_URL).toMatch(/lawcrm_test/);
 });
 
 beforeEach(async () => {
