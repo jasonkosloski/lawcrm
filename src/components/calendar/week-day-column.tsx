@@ -558,14 +558,7 @@ function DraggableEventBlock({
         />
       )}
 
-      <div className="text-2xs font-medium text-ink leading-tight line-clamp-2">
-        {event.title}
-      </div>
-      {event.matterName && (
-        <div className="text-3xs font-mono text-ink-3 mt-0.5 truncate">
-          {event.matterName}
-        </div>
-      )}
+      <ChipBody event={event} renderHeight={height} />
 
       {/* Bottom resize handle */}
       {canEdit && (
@@ -603,6 +596,104 @@ function formatTimeShort(d: Date): string {
   const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
   const suffix = h24 < 12 ? "am" : "pm";
   return `${h12}:${String(m).padStart(2, "0")}${suffix}`;
+}
+
+/** Chip body — title plus secondary lines (time, location,
+ *  attendees, matter) prioritized into the available vertical
+ *  space. Lines are appended in priority order until the next
+ *  one wouldn't fit; we never render a partial line.
+ *
+ *  Why explicit thresholds rather than CSS overflow-hidden:
+ *  visual quality. A clipped half-line of "9:00am – 10:30am"
+ *  reads as broken. Counting slots first guarantees every
+ *  visible line is fully readable.
+ *
+ *  Approximate heights (kept conservative — better to skip a
+ *  line than overflow):
+ *    - chip y-padding (top + bottom):   8px
+ *    - title (text-2xs leading-tight):  ~14px (1 line)
+ *    - secondary line (text-3xs):       ~13px each
+ */
+function ChipBody({
+  event,
+  renderHeight,
+}: {
+  event: CalendarEventRow;
+  renderHeight: number;
+}) {
+  // Build the priority-ordered list of secondary lines. Time
+  // is the user's strongest "when" anchor (visual position is
+  // approximate; the exact label removes ambiguity). Location
+  // tells them where to be. Attendees: who. Matter: case
+  // context (color already encodes it; the name is the
+  // tiebreaker when two cases share a color).
+  type Line = { key: string; render: () => React.ReactNode };
+  const lines: Line[] = [];
+  lines.push({
+    key: "time",
+    render: () => (
+      <span className="text-3xs font-mono text-ink-3 truncate block">
+        {formatTimeShort(event.startTime)} – {formatTimeShort(event.endTime)}
+      </span>
+    ),
+  });
+  if (event.location) {
+    lines.push({
+      key: "location",
+      render: () => (
+        <span className="text-3xs text-ink-3 truncate block">
+          📍 {event.location}
+        </span>
+      ),
+    });
+  }
+  if (event.attendeeCount > 0) {
+    const names = event.attendeeNames;
+    const extra = event.attendeeCount - names.length;
+    lines.push({
+      key: "attendees",
+      render: () => (
+        <span className="text-3xs text-ink-3 truncate block">
+          👥 {names.join(", ")}
+          {extra > 0 && ` +${extra} more`}
+        </span>
+      ),
+    });
+  }
+  if (event.matterName) {
+    lines.push({
+      key: "matter",
+      render: () => (
+        <span className="text-3xs font-mono text-ink-3 truncate block">
+          {event.matterName}
+        </span>
+      ),
+    });
+  }
+
+  // Available secondary slots = (height - title - padding) / line height
+  // The title itself uses ~14px; padding is 8px (py-1 each side).
+  const TITLE_HEIGHT = 14;
+  const PADDING = 8;
+  const LINE_HEIGHT = 13;
+  const availableSlots = Math.max(
+    0,
+    Math.floor((renderHeight - TITLE_HEIGHT - PADDING) / LINE_HEIGHT)
+  );
+  const visibleLines = lines.slice(0, availableSlots);
+
+  return (
+    <>
+      <div className="text-2xs font-medium text-ink leading-tight truncate">
+        {event.title}
+      </div>
+      {visibleLines.map((line) => (
+        <div key={line.key} className="leading-tight mt-0.5">
+          {line.render()}
+        </div>
+      ))}
+    </>
+  );
 }
 
 /** Clamp a Date to the grid's first hour boundary. Used when

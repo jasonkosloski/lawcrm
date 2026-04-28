@@ -22,6 +22,15 @@ export type CalendarEventRow = {
   color: string;
   matterId: string | null;
   matterName: string | null;
+  /** Total attendee count — drives the "+ N attendees" line on
+   *  the chip when the chip is tall enough. Cheap aggregate so
+   *  the calendar grid doesn't have to ship the full attendee
+   *  list for every event. */
+  attendeeCount: number;
+  /** Up to 3 attendee display names — used by the chip's
+   *  "with: A, B, C +N more" line when the chip has room. The
+   *  full list lives behind the event detail modal. */
+  attendeeNames: string[];
 };
 
 export type CalendarDeadlineRow = {
@@ -49,6 +58,17 @@ export async function getCalendarItems(
       },
       include: {
         matter: { select: { id: true, name: true, color: true } },
+        // Pull attendees so the chip can render a count + first
+        // few names. We cap at 4 ordered alphabetically — the
+        // chip's "with:" line surfaces 3 names + "+N more"
+        // when there's a fourth, and we only need 4 to make
+        // that render decision.
+        attendees: {
+          select: { name: true },
+          orderBy: { name: "asc" },
+          take: 4,
+        },
+        _count: { select: { attendees: true } },
       },
       orderBy: { startTime: "asc" },
     }),
@@ -76,6 +96,8 @@ export async function getCalendarItems(
     color: e.matter?.color ?? e.color ?? "var(--color-ink-3)",
     matterId: e.matter?.id ?? null,
     matterName: e.matter?.name ?? null,
+    attendeeCount: e._count.attendees,
+    attendeeNames: e.attendees.slice(0, 3).map((a) => a.name),
   }));
 
   const mappedDeadlines: CalendarItem[] = deadlines.map((d) => ({
