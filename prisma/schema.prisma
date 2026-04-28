@@ -161,6 +161,13 @@ model Firm {
   /// background). Surfaces on letterhead, invoices, the login page
   /// branding once we wire it. Null = use the default app brand.
   logoUrl       String?
+  /// Default for "auto-add matter team to new calendar events".
+  /// Per-matter override lives on Matter.autoAddTeamToNewEvents
+  /// (null on the matter inherits this firm value).
+  autoAddTeamToNewEvents Boolean @default(true)
+  /// Default for "auto-add new team members to upcoming events
+  /// on the matter". Same per-matter override pattern as above.
+  autoAddTeamToUpcomingEvents Boolean @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -432,6 +439,16 @@ model Matter {
   statuteOfLimitationsSatisfied  Boolean   @default(false)
   statuteOfLimitationsSatisfiedAt DateTime? /// Audit: when it was flipped
   statuteOfLimitationsNotes      String?   /// Free-text ("Complaint filed…", "Waived by stip", etc.)
+
+  /// Per-matter override for "auto-add team to new calendar
+  /// events". `null` (the common case) inherits from
+  /// Firm.autoAddTeamToNewEvents. Set to true/false when this
+  /// matter wants to differ from the firm-wide default.
+  autoAddTeamToNewEvents       Boolean?
+  /// Per-matter override for "auto-add new team members to
+  /// upcoming events on the matter". Same inherit-from-firm
+  /// shape as above.
+  autoAddTeamToUpcomingEvents  Boolean?
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

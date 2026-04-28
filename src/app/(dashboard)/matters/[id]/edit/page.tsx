@@ -21,6 +21,7 @@ import {
   MatterTeamManagement,
   type TeamMemberRow,
 } from "@/components/matters/matter-team-management";
+import { MatterCalendarDefaultsCard } from "@/components/settings/calendar-defaults-card";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 
@@ -29,7 +30,15 @@ export default async function EditMatterPage({
 }: PageProps<"/matters/[id]/edit">) {
   const { id } = await params;
 
-  const [matter, areas, clients, users, canManageTeam] = await Promise.all([
+  const [
+    matter,
+    areas,
+    clients,
+    users,
+    canManageTeam,
+    canEditMatter,
+    firmDefaults,
+  ] = await Promise.all([
     prisma.matter.findUnique({
       where: { id },
       include: {
@@ -74,6 +83,16 @@ export default async function EditMatterPage({
       orderBy: { name: "asc" },
     }),
     currentUserHasPermission("matters.manage_team"),
+    currentUserHasPermission("matters.edit"),
+    // Firm-wide defaults — surfaced as the inherit hint copy on
+    // the matter override card. Single firm row in single-tenant
+    // mode; the resolver scopes by firm when multi-tenant lands.
+    prisma.firm.findFirstOrThrow({
+      select: {
+        autoAddTeamToNewEvents: true,
+        autoAddTeamToUpcomingEvents: true,
+      },
+    }),
   ]);
 
   if (!matter) notFound();
@@ -140,6 +159,18 @@ export default async function EditMatterPage({
             </CardContent>
           </Card>
         )}
+
+        {/* Per-matter calendar defaults — gated on `matters.edit`
+            for write; everyone can read the toggle state. */}
+        <MatterCalendarDefaultsCard
+          matterId={matter.id}
+          current={{
+            autoAddTeamToNewEvents: matter.autoAddTeamToNewEvents,
+            autoAddTeamToUpcomingEvents: matter.autoAddTeamToUpcomingEvents,
+          }}
+          firmDefaults={firmDefaults}
+          canEdit={canEditMatter}
+        />
 
         <div className="text-2xs text-ink-4">
           {canManageTeam

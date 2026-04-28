@@ -15,6 +15,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FirmEditForm } from "@/components/settings/firm-edit-form";
 import { FirmReadView } from "@/components/settings/firm-read-view";
+import { FirmCalendarDefaultsCard } from "@/components/settings/calendar-defaults-card";
 import { getCurrentFirm } from "@/lib/firm";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
@@ -24,6 +25,16 @@ export default async function FirmSettingsPage() {
     getCurrentFirm(),
     currentUserHasPermission("firm.edit_info"),
   ]);
+
+  // Calendar default toggles aren't on the FirmProfile shape;
+  // pull them directly so the card has the live values.
+  const calendarDefaults = await prisma.firm.findUniqueOrThrow({
+    where: { id: firm.id },
+    select: {
+      autoAddTeamToNewEvents: true,
+      autoAddTeamToUpcomingEvents: true,
+    },
+  });
 
   // Fetch the team count + admin list for the side panel — fast,
   // single query each. Admin invariant ("at least one admin") is
@@ -56,6 +67,13 @@ export default async function FirmSettingsPage() {
           </p>
         </div>
         {canEdit ? <FirmEditForm firm={firm} /> : <FirmReadView firm={firm} />}
+
+        <div className="mt-6">
+          <FirmCalendarDefaultsCard
+            current={calendarDefaults}
+            canEdit={canEdit}
+          />
+        </div>
       </div>
 
       {/* Right rail — quick context about firm members + admins. */}

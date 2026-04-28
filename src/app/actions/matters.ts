@@ -19,6 +19,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { createNotification } from "@/lib/notifications";
+import { getEffectiveCalendarDefaults } from "@/lib/calendar-defaults";
 import { BILLING_MODES } from "@/lib/billing-mode-constants";
 import { computeSolDate } from "@/lib/sol";
 import {
@@ -849,7 +850,7 @@ export async function addMatterTeamMember(
     }),
     prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true, isActive: true },
+      select: { id: true, name: true, email: true, isActive: true },
     }),
   ]);
   if (!matter) return { ok: false, error: "Matter not found." };
@@ -892,6 +893,45 @@ export async function addMatterTeamMember(
     type: "filing",
     title: `${user.name} added to team as ${matterTeamRoleLabel(role)}`,
   });
+
+  // Auto-add to upcoming events when the effective setting
+  // says so. We bound this to events strictly in the future
+  // (startTime > now) — past events are historical record;
+  // adding someone to them retroactively would imply they
+  // attended, which they didn't.
+  const defaults = await getEffectiveCalendarDefaults(matterId);
+  if (defaults.autoAddTeamToUpcomingEvents) {
+    const now = new Date();
+    const upcoming = await prisma.calendarEvent.findMany({
+      where: { matterId, startTime: { gt: now } },
+      select: { id: true },
+    });
+    if (upcoming.length > 0) {
+      // Skip events the user is already on so a re-add doesn't
+      // double-attach. Pull their existing memberships in one
+      // query keyed by the upcoming event ids.
+      const existing = await prisma.calendarAttendee.findMany({
+        where: {
+          eventId: { in: upcoming.map((e) => e.id) },
+          userId,
+        },
+        select: { eventId: true },
+      });
+      const existingIds = new Set(existing.map((a) => a.eventId));
+      const toAdd = upcoming.filter((e) => !existingIds.has(e.id));
+      if (toAdd.length > 0) {
+        await prisma.calendarAttendee.createMany({
+          data: toAdd.map((e) => ({
+            eventId: e.id,
+            userId,
+            name: user.name,
+            email: user.email,
+            status: "pending",
+          })),
+        });
+      }
+    }
+  }
 
   // Notify the new team member — but skip if they added themselves
   // (no value in pinging your own bell for an action you just took).

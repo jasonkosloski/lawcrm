@@ -37,6 +37,7 @@ import {
   type ValidCapture,
 } from "@/lib/capture-schemas";
 import { logActivity } from "@/lib/activity-log";
+import { getEffectiveCalendarDefaults } from "@/lib/calendar-defaults";
 
 // ── Shared helpers ──────────────────────────────────────────────────────
 
@@ -371,6 +372,12 @@ export async function createEventWithCaptures(
 
   const userId = await getCurrentUserId();
 
+  // Resolve calendar defaults BEFORE the transaction so we can
+  // skip the team query entirely when auto-add is off. The
+  // resolver inherits matter override → firm setting; result
+  // is a concrete boolean.
+  const defaults = await getEffectiveCalendarDefaults(matterId);
+
   await prisma.$transaction(async (tx) => {
     const event = await tx.calendarEvent.create({
       data: {
@@ -389,6 +396,31 @@ export async function createEventWithCaptures(
         kind: "event",
         id: event.id,
       });
+    }
+
+    // Auto-add matter team members as attendees when the
+    // effective setting says so. Each team member becomes a
+    // typed `kind: user` attendee — same shape the modal
+    // picker creates. We snapshot name/email so a future
+    // user rename doesn't silently rewrite past attendance.
+    if (defaults.autoAddTeamToNewEvents) {
+      const team = await tx.matterTeamMember.findMany({
+        where: { matterId, removedAt: null },
+        select: {
+          user: { select: { id: true, name: true, email: true } },
+        },
+      });
+      if (team.length > 0) {
+        await tx.calendarAttendee.createMany({
+          data: team.map((t) => ({
+            eventId: event.id,
+            userId: t.user.id,
+            name: t.user.name,
+            email: t.user.email,
+            status: "pending",
+          })),
+        });
+      }
     }
   });
 
