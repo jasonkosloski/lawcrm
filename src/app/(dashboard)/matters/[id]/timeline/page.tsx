@@ -26,9 +26,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   formatDate,
-  formatDayBucket,
-  getCurrentUserTimeZone,
-} from "@/lib/format-date";
+  formatDayBucket} from "@/lib/format-date";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import {
   Briefcase,
   Check,

@@ -17,9 +17,8 @@ import { cn } from "@/lib/utils";
 import { EventLink } from "./event-link";
 import {
   dateKeyInTz,
-  getCurrentUserTimeZone,
-  instantInTz,
-} from "@/lib/format-date";
+  instantInTz} from "@/lib/format-date";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import {
   getCalendarItems,
   type CalendarItem,

@@ -26,9 +26,8 @@ import { parseCalendarParams } from "@/lib/calendar-utils";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import {
   calendarMonthGridInTz,
-  calendarWeekInTz,
-  getCurrentUserTimeZone,
-} from "@/lib/format-date";
+  calendarWeekInTz} from "@/lib/format-date";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import {
   getCalendarEventById,
   getCalendarItems,

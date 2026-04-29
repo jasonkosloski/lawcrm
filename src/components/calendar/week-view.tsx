@@ -23,8 +23,22 @@
  * targets for "schedule at this time slot." See `event-drag.ts`
  * for the wire format and `week-day-column.tsx` for the per-cell
  * client components.
+ *
+ * **Optimistic moves.** This component owns the move dispatch
+ * AND a local overlay of pending move targets. Drop / resize
+ * fires the server action in a transition AND immediately
+ * updates the overlay so the chip jumps to its new spot with
+ * zero perceived latency. When the server confirms (router
+ * revalidates the page, items prop changes), we clear pending
+ * entries that the server agrees with so the chip stays put
+ * with no flash. Failure rolls back the overlay and surfaces an
+ * error.
  */
 
+"use client";
+
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
@@ -33,12 +47,27 @@ import {
   HOURS,
 } from "@/lib/calendar-utils";
 import { dateKeyInTz } from "@/lib/format-date";
+import { moveCalendarEvent } from "@/app/actions/calendar-events";
 import type {
   CalendarItem,
   CalendarEventRow,
   CalendarDeadlineRow,
 } from "@/lib/queries/calendar";
 import { WeekAllDayCell, WeekTimeColumn } from "./week-day-column";
+import {
+  applyPending,
+  reconcilePending,
+  type PendingMove,
+} from "./optimistic-moves";
+
+/** Posted by the day cells when a chip lands somewhere new — drop
+ *  on a time slot, drop on the all-day row, or chip-edge resize.
+ *  The shape mirrors the move action's input minus the eventId
+ *  (carried alongside). */
+export type MoveEventFn = (
+  eventId: string,
+  schedule: { isAllDay: boolean; start: Date; end: Date }
+) => void;
 
 export function WeekView({
   days,
@@ -61,17 +90,72 @@ export function WeekView({
    *  sees their local day. */
   userTz: string;
 }) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+  const [pending, setPending] = useState<Map<string, PendingMove>>(
+    () => new Map()
+  );
+
+  // When fresh server data arrives, drop any pending entries the
+  // server now agrees with. Entries that DON'T match stay until
+  // the next move or rollback — that keeps the chip in its
+  // optimistic position even if a separate revalidate fires (e.g.
+  // an unrelated mutation triggered a `/calendar` revalidate).
+  useEffect(() => {
+    setPending((prev) => reconcilePending(items, prev));
+  }, [items]);
+
+  const moveEvent: MoveEventFn = (eventId, schedule) => {
+    // Apply optimistic overlay synchronously so the chip jumps now.
+    setPending((prev) => {
+      const next = new Map(prev);
+      next.set(eventId, {
+        isAllDay: schedule.isAllDay,
+        startTime: schedule.start,
+        endTime: schedule.end,
+      });
+      return next;
+    });
+    startTransition(async () => {
+      const res = await moveCalendarEvent(eventId, {
+        isAllDay: schedule.isAllDay,
+        startTime: schedule.start.toISOString(),
+        endTime: schedule.end.toISOString(),
+      });
+      if (!res.ok) {
+        // Roll back the overlay so the chip snaps to its real
+        // server-saved position, then surface the error.
+        setPending((prev) => {
+          const next = new Map(prev);
+          next.delete(eventId);
+          return next;
+        });
+        // eslint-disable-next-line no-alert
+        alert(res.error ?? "Couldn't move event.");
+        return;
+      }
+      // Refresh pulls the server's saved state into the items prop;
+      // the useEffect above clears matching pending entries on
+      // arrival, leaving the chip in place.
+      router.refresh();
+    });
+  };
+
   const now = new Date();
   // "Today" in the user's TZ — used to highlight the right column
   // header. Comparing as a YYYY-MM-DD string avoids any TZ math at
   // the comparison site.
   const todayKey = dateKeyInTz(now, userTz);
 
+  // Apply optimistic overlay before bucketing so a moved chip lands
+  // in its new column / time slot immediately.
+  const renderItems = applyPending(items, pending);
+
   // Bucket items by their user-TZ calendar date. Without the TZ,
   // an event at "Sunday 11pm MDT" (UTC: Monday 5am) would land in
-  // the Monday column — the bug we just shipped a fix for.
+  // the Monday column.
   const byDay = new Map<string, CalendarItem[]>();
-  for (const item of items) {
+  for (const item of renderItems) {
     const itemDate = item.kind === "event" ? item.startTime : item.dueDate;
     const key = dateKeyInTz(itemDate, userTz);
     if (!byDay.has(key)) byDay.set(key, []);
@@ -87,17 +171,17 @@ export function WeekView({
     const key = `${day.getUTCFullYear()}-${String(
       day.getUTCMonth() + 1
     ).padStart(2, "0")}-${String(day.getUTCDate()).padStart(2, "0")}`;
-    const items = byDay.get(key) ?? [];
+    const dayItems = byDay.get(key) ?? [];
     return {
       day,
       key,
-      allDayEvents: items.filter(
+      allDayEvents: dayItems.filter(
         (i): i is CalendarEventRow => i.kind === "event" && i.isAllDay
       ),
-      timedEvents: items.filter(
+      timedEvents: dayItems.filter(
         (i): i is CalendarEventRow => i.kind === "event" && !i.isAllDay
       ),
-      deadlines: items.filter(
+      deadlines: dayItems.filter(
         (i): i is CalendarDeadlineRow => i.kind === "deadline"
       ),
     };
@@ -189,6 +273,7 @@ export function WeekView({
             events={b.allDayEvents}
             deadlines={b.deadlines}
             canEdit={canEditEvents}
+            move={moveEvent}
           />
         ))}
       </div>
@@ -222,6 +307,7 @@ export function WeekView({
             now={now}
             events={b.timedEvents}
             canEdit={canEditEvents}
+            move={moveEvent}
           />
         ))}
       </div>

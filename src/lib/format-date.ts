@@ -345,22 +345,10 @@ export function calendarMonthGridInTz(
   return { days, rangeStart, rangeEnd };
 }
 
-/** Server-side helper that resolves the current user's TZ from
- *  the DB. Returns the schema default when no user is logged in
- *  yet (build-time / seed paths). */
-export async function getCurrentUserTimeZone(): Promise<string> {
-  // Lazy-imported to keep this file usable from client components
-  // that bring in the formatters but never call this getter.
-  const { prisma } = await import("@/lib/prisma");
-  const { getCurrentUserId } = await import("@/lib/current-user");
-  try {
-    const userId = await getCurrentUserId();
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { timeZone: true },
-    });
-    return user?.timeZone ?? "America/Denver";
-  } catch {
-    return "America/Denver";
-  }
-}
+// `getCurrentUserTimeZone` lives in src/lib/current-user-tz.ts so
+// this file (the pure formatters + TZ helpers) stays client-safe.
+// Turbopack eagerly traces dynamic imports, so even a lazy
+// `await import("@/lib/prisma")` inside the getter pulled the
+// Prisma client into client bundles that touch a formatter.
+// Server-side callers should import the getter from
+// `@/lib/current-user-tz` directly.

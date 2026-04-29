@@ -15,7 +15,8 @@
 
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { formatDate, getCurrentUserTimeZone } from "@/lib/format-date";
+import { formatDate} from "@/lib/format-date";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import {
   Briefcase,
   Check,

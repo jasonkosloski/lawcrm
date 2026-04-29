@@ -26,7 +26,7 @@
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useEffect, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { isSameDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
@@ -47,7 +47,6 @@ import {
   useDropTarget,
   type DragPayload,
 } from "@/lib/dnd";
-import { moveCalendarEvent } from "@/app/actions/calendar-events";
 import {
   CALENDAR_EVENT_KIND,
   type CalendarEventDragData,
@@ -56,30 +55,12 @@ import type {
   CalendarEventRow,
   CalendarDeadlineRow,
 } from "@/lib/queries/calendar";
+import type { MoveEventFn } from "./week-view";
 
-// ── Shared move handler ────────────────────────────────────────────────
-
-function useMoveEvent(): (
-  eventId: string,
-  schedule: { isAllDay: boolean; start: Date; end: Date }
-) => void {
-  const router = useRouter();
-  const [, startTransition] = useTransition();
-  return (eventId, schedule) => {
-    startTransition(async () => {
-      const res = await moveCalendarEvent(eventId, {
-        isAllDay: schedule.isAllDay,
-        startTime: schedule.start.toISOString(),
-        endTime: schedule.end.toISOString(),
-      });
-      if (!res.ok) {
-        // eslint-disable-next-line no-alert
-        alert(res.error ?? "Couldn't move event.");
-      }
-      router.refresh();
-    });
-  };
-}
+// Move dispatch is owned by WeekView so the optimistic overlay,
+// the action call, and the post-action refresh stay in one place.
+// Each cell receives the move callback as a prop and fires it on
+// drop / resize.
 
 // ── All-day row cell ───────────────────────────────────────────────────
 
@@ -88,6 +69,10 @@ export type WeekAllDayCellProps = {
   events: CalendarEventRow[];
   deadlines: CalendarDeadlineRow[];
   canEdit: boolean;
+  /** Move dispatcher provided by WeekView. Owns the optimistic
+   *  overlay so the chip jumps to its new spot before the server
+   *  confirms. */
+  move: MoveEventFn;
 };
 
 export function WeekAllDayCell({
@@ -95,8 +80,8 @@ export function WeekAllDayCell({
   events,
   deadlines,
   canEdit,
+  move,
 }: WeekAllDayCellProps) {
-  const move = useMoveEvent();
   const drop = useDropTarget<CalendarEventDragData>({
     kind: CALENDAR_EVENT_KIND,
     disabled: !canEdit,
@@ -152,6 +137,7 @@ export type WeekTimeColumnProps = {
   now: Date;
   events: CalendarEventRow[];
   canEdit: boolean;
+  move: MoveEventFn;
 };
 
 export function WeekTimeColumn({
@@ -160,8 +146,8 @@ export function WeekTimeColumn({
   now,
   events,
   canEdit,
+  move,
 }: WeekTimeColumnProps) {
-  const move = useMoveEvent();
   const [previewTopY, setPreviewTopY] = useState<number | null>(null);
 
   // Snap helper — used by both drop and the dragover preview so
@@ -308,6 +294,7 @@ export function WeekTimeColumn({
           canEdit={canEdit}
           lane={lane}
           laneCount={laneCount}
+          move={move}
         />
       ))}
 
@@ -402,6 +389,7 @@ function DraggableEventBlock({
   canEdit,
   lane,
   laneCount,
+  move,
 }: {
   event: CalendarEventRow;
   canEdit: boolean;
@@ -410,8 +398,8 @@ function DraggableEventBlock({
   /** Total slots in the event's overlap cluster. Drives the
    *  per-chip width = 1 / laneCount. */
   laneCount: number;
+  move: MoveEventFn;
 }) {
-  const move = useMoveEvent();
 
   // Resize state — captures the original schedule + initial mouse
   // Y at mousedown so mousemove can compute the snapped delta.
