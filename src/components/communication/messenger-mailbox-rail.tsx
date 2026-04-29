@@ -42,7 +42,10 @@ export function MessengerMailboxRail({
   selectedThreadId: string | null;
 }) {
   return (
-    <aside className="hidden lg:flex w-48 shrink-0 border-r border-line bg-paper-2/30 flex-col py-3">
+    <aside className="flex w-48 shrink-0 border-r border-line bg-paper-2/30 flex-col py-3 h-full">
+      {/* See `mailbox-rail.tsx` for the dual-mode pattern — rail
+          renders as a persistent column at lg+ and is wrapped by
+          `<MailboxDrawer>` for the slide-out at `<lg`. */}
       <div className="px-3 pb-1 text-2xs font-mono uppercase tracking-wider text-ink-4">
         Messages
       </div>

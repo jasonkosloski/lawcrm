@@ -23,6 +23,10 @@ import { MessengerMailboxRail, type MessengerFilter } from "@/components/communi
 import { MessengerThreadList } from "@/components/communication/messenger-thread-list";
 import { MessengerThreadReader } from "@/components/communication/messenger-thread-reader";
 import {
+  MailboxDrawer,
+  MailboxDrawerProvider,
+} from "@/components/communication/mailbox-drawer";
+import {
   getCommunicationCounts,
   getCommunicationPinnedMatters,
   getFilingMatterOptions,
@@ -94,7 +98,7 @@ export default async function CommunicationPage({
     ]);
 
     return (
-      <>
+      <MailboxDrawerProvider>
         <TopBar
           title="Communication"
           crumbs={`${messengerCounts.all} conversations · ${messengerCounts.unread} unread`}
@@ -108,11 +112,13 @@ export default async function CommunicationPage({
         />
 
         <div className="flex-1 flex min-h-0">
-          <MessengerMailboxRail
-            counts={messengerCounts}
-            activeFilter={filter}
-            selectedThreadId={threadId}
-          />
+          <MailboxDrawer>
+            <MessengerMailboxRail
+              counts={messengerCounts}
+              activeFilter={filter}
+              selectedThreadId={threadId}
+            />
+          </MailboxDrawer>
           <MessengerThreadList
             threads={threads}
             filter={filter}
@@ -120,7 +126,7 @@ export default async function CommunicationPage({
           />
           <MessengerThreadReader thread={selectedThread} />
         </div>
-      </>
+      </MailboxDrawerProvider>
     );
   }
 
@@ -142,7 +148,7 @@ export default async function CommunicationPage({
     ]);
 
   return (
-    <>
+    <MailboxDrawerProvider>
       <TopBar
         title="Communication"
         crumbs={`${emailCounts.all} total · ${emailCounts.unread} unread`}
@@ -156,13 +162,15 @@ export default async function CommunicationPage({
       />
 
       <div className="flex-1 flex min-h-0">
-        <MailboxRail
-          counts={emailCounts}
-          pinnedMatters={pinnedMatters}
-          activeFilter={filter}
-          activeMatterId={matterIdParam}
-          selectedThreadId={threadId}
-        />
+        <MailboxDrawer>
+          <MailboxRail
+            counts={emailCounts}
+            pinnedMatters={pinnedMatters}
+            activeFilter={filter}
+            activeMatterId={matterIdParam}
+            selectedThreadId={threadId}
+          />
+        </MailboxDrawer>
         <ThreadList
           threads={threads}
           filter={filter}
@@ -179,6 +187,6 @@ export default async function CommunicationPage({
           filingOptions={filingOptions}
         />
       </div>
-    </>
+    </MailboxDrawerProvider>
   );
 }

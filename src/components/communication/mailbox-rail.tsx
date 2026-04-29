@@ -82,7 +82,12 @@ export function MailboxRail({
   selectedThreadId: string | null;
 }) {
   return (
-    <aside className="hidden lg:flex w-52 shrink-0 border-r border-line bg-paper-2/30 flex-col py-3 overflow-y-auto">
+    <aside className="flex w-52 shrink-0 border-r border-line bg-paper-2/30 flex-col py-3 overflow-y-auto h-full">
+      {/* Mailbox / folder rail. At lg+ it sits in the normal page
+          flow as a persistent column. Below `lg` it's wrapped by
+          `<MailboxDrawer>` which slides it in from the left as an
+          overlay; the rail itself doesn't need to know which mode
+          it's in. */}
       <Section label="Mailboxes">
         {MAILBOX_ITEMS.map((item) => (
           <RailRow

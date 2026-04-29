@@ -62,42 +62,51 @@ export function ThreadReader({
     <div className="flex-1 flex flex-col min-h-0 bg-paper-email overflow-y-auto">
       {/* Subject header */}
       <header className="sticky top-0 z-10 bg-paper-email/95 backdrop-blur-sm px-4 sm:px-6 py-3 sm:py-4 border-b border-line">
-        <div className="flex items-start gap-3">
-          <div className="flex-1 min-w-0">
-            <BackToListButton />
-            <h1 className="font-display text-lg sm:text-xl font-medium tracking-tight text-ink leading-snug">
-              {thread.subject}
-            </h1>
-            <div className="flex items-center gap-2 mt-1.5 text-2xs">
-              <FileToMatterPicker
-                threadId={thread.id}
-                currentMatter={thread.matter}
-                options={filingOptions}
-              />
-              <span className="text-ink-4">·</span>
-              <span className="font-mono text-ink-4">
-                {thread.messageCount}{" "}
-                {thread.messageCount === 1 ? "message" : "messages"}
-              </span>
-              {thread.labels.length > 0 && (
-                <>
-                  <span className="text-ink-4">·</span>
-                  <span className="flex items-center gap-1">
-                    {thread.labels.map((l) => (
-                      <span
-                        key={l}
-                        className="text-2xs font-mono text-ink-3 bg-white px-1.5 py-px rounded border border-line"
-                      >
-                        {l.replace("_", " ")}
-                      </span>
-                    ))}
-                  </span>
-                </>
-              )}
-            </div>
+        {/* Subject + back button — always at the top so it doesn't
+            compete with action buttons for horizontal space. */}
+        <div className="min-w-0">
+          <BackToListButton />
+          <h1 className="font-display text-lg sm:text-xl font-medium tracking-tight text-ink leading-snug break-words">
+            {thread.subject}
+          </h1>
+        </div>
+
+        {/* Meta row + action row.
+            - Meta (file-to-matter picker, message count, labels) wraps
+              freely on small screens.
+            - Action buttons (follow-up + inbox shortcuts) sit BELOW the
+              meta on `<sm` so they're full-width tap targets, and
+              FLOAT to the right alongside the meta on sm+. */}
+        <div className="mt-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div className="flex items-center gap-2 flex-wrap text-2xs min-w-0">
+            <FileToMatterPicker
+              threadId={thread.id}
+              currentMatter={thread.matter}
+              options={filingOptions}
+            />
+            <span className="text-ink-4">·</span>
+            <span className="font-mono text-ink-4">
+              {thread.messageCount}{" "}
+              {thread.messageCount === 1 ? "message" : "messages"}
+            </span>
+            {thread.labels.length > 0 && (
+              <>
+                <span className="text-ink-4">·</span>
+                <span className="flex items-center gap-1 flex-wrap">
+                  {thread.labels.map((l) => (
+                    <span
+                      key={l}
+                      className="text-2xs font-mono text-ink-3 bg-white px-1.5 py-px rounded border border-line"
+                    >
+                      {l.replace("_", " ")}
+                    </span>
+                  ))}
+                </span>
+              </>
+            )}
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
             <FollowUpButton
               threadId={thread.id}
               followUpAt={thread.followUpAt}
@@ -123,19 +132,23 @@ export function ThreadReader({
       </header>
 
       {/* Messages */}
-      <div className="flex-1 px-6 py-5 flex flex-col gap-4">
+      <div className="flex-1 px-3 sm:px-6 py-4 sm:py-5 flex flex-col gap-3 sm:gap-4">
         {thread.messages.map((m) => (
           <article
             key={m.id}
             className="bg-white rounded-lg border border-line overflow-hidden"
           >
-            <header className="flex items-start gap-3 px-4 py-3 border-b border-line">
+            {/* Per-message header. On `<sm` it stacks: sender row,
+                then recipients row, then timestamp + log-time row at
+                the bottom. On sm+ the timestamp + actions float to
+                the right of the sender column. */}
+            <header className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3 px-3 sm:px-4 py-3 border-b border-line">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-medium text-ink">
+                  <span className="text-sm font-medium text-ink truncate">
                     {m.fromName}
                   </span>
-                  <span className="text-2xs font-mono text-ink-4">
+                  <span className="text-2xs font-mono text-ink-4 truncate">
                     &lt;{m.fromEmail}&gt;
                   </span>
                   {m.isPrivileged && (
@@ -148,22 +161,29 @@ export function ThreadReader({
                     </span>
                   )}
                 </div>
-                <div className="text-2xs text-ink-4 mt-0.5">
-                  <span>To: </span>
-                  <span className="font-mono">
-                    {formatRecipients(m.toRecipients)}
-                  </span>
+                {/* Recipients block. Each line breaks on sm+ so the
+                    cursor can rest on the labels; on `<sm` they wrap
+                    naturally. The `break-all` on the recipient list
+                    prevents very long single-token emails from
+                    pushing the layout horizontal. */}
+                <div className="text-2xs text-ink-4 mt-0.5 flex flex-col gap-0.5">
+                  <div className="break-all">
+                    <span>To: </span>
+                    <span className="font-mono">
+                      {formatRecipients(m.toRecipients)}
+                    </span>
+                  </div>
                   {m.ccRecipients.length > 0 && (
-                    <>
-                      <span className="ml-2">Cc: </span>
+                    <div className="break-all">
+                      <span>Cc: </span>
                       <span className="font-mono">
                         {formatRecipients(m.ccRecipients)}
                       </span>
-                    </>
+                    </div>
                   )}
                 </div>
               </div>
-              <div className="flex flex-col items-end gap-1.5 shrink-0">
+              <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-1.5 shrink-0">
                 <div className="text-2xs font-mono text-ink-4 whitespace-nowrap">
                   {format(m.sentAt, "MMM d, yyyy · h:mm a")}
                 </div>
@@ -185,23 +205,26 @@ export function ThreadReader({
             </header>
 
             {/* Body — uses the email-body class from globals.css (Fraunces,
-                13.5px, line-height 1.62 per UI_PATTERNS). */}
-            <div className="email-body px-4 py-4 text-ink">{m.body}</div>
+                13.5px, line-height 1.62 per UI_PATTERNS). Slightly tighter
+                horizontal padding on phones to maximize reading width. */}
+            <div className="email-body px-3 sm:px-4 py-4 text-ink break-words">
+              {m.body}
+            </div>
 
             {/* Attachments */}
             {m.attachments.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-t border-line bg-paper-2/40">
+              <div className="flex flex-wrap items-center gap-2 px-3 sm:px-4 py-3 border-t border-line bg-paper-2/40">
                 {m.attachments.map((a) => (
                   <div
                     key={a.id}
-                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-line bg-white text-2xs text-ink-2"
+                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-line bg-white text-2xs text-ink-2 max-w-full"
                     title={`${a.filename} — ${formatSize(a.fileSize)}`}
                   >
-                    <Paperclip size={11} className="text-ink-4" />
+                    <Paperclip size={11} className="text-ink-4 shrink-0" />
                     <span className="font-medium truncate max-w-48">
                       {a.filename}
                     </span>
-                    <span className="font-mono text-ink-4">
+                    <span className="font-mono text-ink-4 shrink-0">
                       {formatSize(a.fileSize)}
                     </span>
                   </div>
@@ -212,8 +235,8 @@ export function ThreadReader({
         ))}
 
         {/* Reply stub — disabled placeholder */}
-        <div className="bg-white rounded-lg border border-dashed border-line px-4 py-5 flex items-center gap-2 text-xs text-ink-4">
-          <Reply size={13} />
+        <div className="bg-white rounded-lg border border-dashed border-line px-3 sm:px-4 py-4 sm:py-5 flex items-center gap-2 text-xs text-ink-4">
+          <Reply size={13} className="shrink-0" />
           <span>
             Reply, forward, and file-to-matter actions land in a follow-up
             pass.

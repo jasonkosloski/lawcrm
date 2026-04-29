@@ -89,11 +89,14 @@ export function MessengerThreadReader({
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-white">
-      {/* Header */}
-      <header className="flex items-center justify-between gap-2 px-3 sm:px-5 py-3 border-b border-line shrink-0">
+      {/* Header — identity row always at the top, action row floats
+          right on sm+ and wraps below on `<sm` so the matter pill +
+          follow-up button get full tap targets without squeezing
+          the contact name. */}
+      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 px-3 sm:px-5 py-3 border-b border-line shrink-0">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <BackToListButton />
-          <div className="w-9 h-9 rounded-full bg-brand-50 text-brand-700 border border-brand-100 flex items-center justify-center text-2xs font-mono font-medium shrink-0">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-brand-50 text-brand-700 border border-brand-100 flex items-center justify-center text-2xs font-mono font-medium shrink-0">
             {(thread.contact?.name ?? "?")
               .split(/\s+/)
               .filter(Boolean)
@@ -114,7 +117,7 @@ export function MessengerThreadReader({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
           <FollowUpButton
             threadId={thread.id}
             followUpAt={thread.followUpAt}
@@ -123,14 +126,14 @@ export function MessengerThreadReader({
           {thread.defaultMatter ? (
             <Link
               href={`/matters/${thread.defaultMatter.id}`}
-              className="inline-flex items-center gap-1.5 text-2xs px-2 py-1 rounded-full border border-line hover:border-brand-300 hover:text-brand-700 transition-colors"
+              className="inline-flex items-center gap-1.5 text-2xs px-2 py-1 rounded-full border border-line hover:border-brand-300 hover:text-brand-700 transition-colors min-w-0"
             >
               <span
-                className="w-1.5 h-1.5 rounded-full"
+                className="w-1.5 h-1.5 rounded-full shrink-0"
                 style={{ background: thread.defaultMatter.color }}
               />
-              <Briefcase size={11} className="text-ink-3" />
-              <span className="text-ink-2 truncate max-w-[14rem]">
+              <Briefcase size={11} className="text-ink-3 shrink-0" />
+              <span className="text-ink-2 truncate max-w-[10rem] sm:max-w-[14rem]">
                 {thread.defaultMatter.name}
               </span>
             </Link>
@@ -140,8 +143,9 @@ export function MessengerThreadReader({
         </div>
       </header>
 
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-2.5">
+      {/* Body — tighter horizontal padding on phones to maximize
+          bubble width. */}
+      <div className="flex-1 overflow-y-auto px-3 sm:px-5 py-4 flex flex-col gap-2.5">
         {thread.items.length === 0 ? (
           <div className="m-auto text-2xs text-ink-4">
             No messages in this thread yet.

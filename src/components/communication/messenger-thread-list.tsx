@@ -15,6 +15,14 @@ import { Phone, PhoneMissed, MessageSquare, Voicemail, Pin } from "lucide-react"
 import { cn } from "@/lib/utils";
 import type { MessengerThreadRow } from "@/lib/queries/messenger";
 import type { MessengerFilter } from "./messenger-mailbox-rail";
+import { MailboxDrawerTrigger } from "./mailbox-drawer";
+
+const MESSENGER_FILTER_LABEL: Record<MessengerFilter, string> = {
+  all: "All",
+  unread: "Unread",
+  unfiled: "Unfiled",
+  pinned: "Pinned",
+};
 
 function hrefFor(threadId: string, filter: MessengerFilter): string {
   const params = new URLSearchParams();
@@ -68,9 +76,16 @@ export function MessengerThreadList({
         " lg:w-80 lg:shrink-0 border-r border-line bg-white flex-col min-h-0"
       }
     >
-      <div className="px-4 py-3 border-b border-line shrink-0">
-        <div className="text-xs font-semibold text-ink">
-          {threads.length} {threads.length === 1 ? "conversation" : "conversations"}
+      <div className="flex items-center gap-2 px-3 sm:px-4 py-3 border-b border-line shrink-0">
+        <MailboxDrawerTrigger label={MESSENGER_FILTER_LABEL[filter]} />
+        <div className="min-w-0 flex-1">
+          <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 truncate">
+            {MESSENGER_FILTER_LABEL[filter]}
+          </div>
+          <div className="text-xs font-semibold text-ink">
+            {threads.length}{" "}
+            {threads.length === 1 ? "conversation" : "conversations"}
+          </div>
         </div>
       </div>
 

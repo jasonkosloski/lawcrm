@@ -14,6 +14,7 @@ import type {
   CommunicationFilter,
   ThreadListRow,
 } from "@/lib/queries/communication";
+import { MailboxDrawerTrigger } from "./mailbox-drawer";
 
 function rowHref(
   threadId: string,
@@ -65,12 +66,20 @@ export function ThreadList({
         " lg:w-90 lg:shrink-0 border-r border-line bg-white flex-col min-h-0"
       }
     >
-      <header className="px-4 py-3 border-b border-line shrink-0">
-        <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
-          {matterLabel ?? FILTER_LABEL[filter]}
-        </div>
-        <div className="text-sm font-display font-medium text-ink">
-          {threads.length} {threads.length === 1 ? "thread" : "threads"}
+      <header className="flex items-center gap-2 px-3 sm:px-4 py-3 border-b border-line shrink-0">
+        {/* Mobile: hamburger that opens the mailbox drawer (folders /
+            filters / pinned matters). Hidden at lg+ where the rail
+            is always visible. */}
+        <MailboxDrawerTrigger
+          label={matterLabel ?? FILTER_LABEL[filter]}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 truncate">
+            {matterLabel ?? FILTER_LABEL[filter]}
+          </div>
+          <div className="text-sm font-display font-medium text-ink">
+            {threads.length} {threads.length === 1 ? "thread" : "threads"}
+          </div>
         </div>
       </header>
 
