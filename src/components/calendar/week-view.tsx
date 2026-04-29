@@ -265,7 +265,7 @@ export function WeekView({
       <div
         className="grid border-b border-line bg-card"
         style={{
-          gridTemplateColumns: "56px repeat(7, 1fr)",
+          gridTemplateColumns: "var(--cal-gutter,56px) repeat(7, 1fr)",
           height: allDayRowHeight,
         }}
       >
