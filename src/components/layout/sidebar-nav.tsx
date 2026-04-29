@@ -17,6 +17,7 @@
 
 "use client";
 
+import { useEffect } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -32,12 +33,14 @@ import {
   Zap,
   Settings,
   Users,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useCommandPalette } from "@/components/command-palette/command-palette-provider";
 import { logoutAction } from "@/app/actions/auth";
 import type { SidebarData } from "@/lib/queries/sidebar";
+import { useMobileNav } from "./mobile-nav-provider";
 
 interface NavItem {
   id: string;
@@ -90,6 +93,17 @@ export function SidebarNav({ data }: { data: SidebarData }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { openPalette } = useCommandPalette();
+  const { open, close } = useMobileNav();
+
+  // Auto-close the mobile drawer when the user navigates. Without
+  // this the drawer would stay open after a Link tap, hiding the
+  // page they just opened. Watch the pathname (not the full URL)
+  // because query-only changes (e.g. ?event=<id> for the modal)
+  // shouldn't dismiss the drawer.
+  useEffect(() => {
+    close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   const sections: NavSection[] = [
     {
@@ -165,12 +179,38 @@ export function SidebarNav({ data }: { data: SidebarData }) {
   const user = data.currentUser;
 
   return (
-    <aside
-      className="flex flex-col w-60 shrink-0 h-full border-r border-line"
-      style={{
-        background: "linear-gradient(180deg, #f6f5ef 0%, #eef2f5 100%)",
-      }}
-    >
+    <>
+      {/* Backdrop for the mobile drawer. Visible only below `lg` and
+          only when the drawer is open. Tapping it dismisses the
+          drawer. The `aria-hidden` value flips so screen readers
+          know whether the backdrop is interactive. */}
+      <div
+        className={cn(
+          "fixed inset-0 z-30 bg-ink/40 transition-opacity lg:hidden",
+          open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        )}
+        aria-hidden={!open}
+        onClick={close}
+      />
+
+      <aside
+        className={cn(
+          "flex flex-col w-60 shrink-0 h-full border-r border-line",
+          // Mobile (< lg): fixed-position overlay that slides in
+          // from the left when `open`. Sits above the backdrop.
+          "fixed inset-y-0 left-0 z-40 transition-transform lg:transition-none",
+          open ? "translate-x-0" : "-translate-x-full",
+          // lg+: persistent column, no transform.
+          "lg:static lg:translate-x-0"
+        )}
+        style={{
+          background: "linear-gradient(180deg, #f6f5ef 0%, #eef2f5 100%)",
+        }}
+        // Hide from the a11y tree when the drawer is closed on
+        // mobile (so SR users don't tab through hidden links). At
+        // lg+ the sidebar is always visible regardless of `open`.
+        aria-hidden={!open ? undefined : false}
+      >
       {/* ── Firm logo + command palette trigger ──────────────────────────── */}
       <div className="flex items-center justify-between p-3 pb-2">
         <div className="flex items-center gap-2">
@@ -188,14 +228,26 @@ export function SidebarNav({ data }: { data: SidebarData }) {
           </div>
           <span className="font-display text-sm font-medium">Kosloski Law</span>
         </div>
-        <button
-          onClick={openPalette}
-          className="inline-block px-1.5 h-4 leading-[14px] border border-line-2 rounded text-2xs font-mono text-brand-700 bg-white cursor-pointer hover:border-brand-300 transition-colors"
-          style={{ borderBottomWidth: 2 }}
-          title="Command palette (⌘K)"
-        >
-          ⌘K
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={openPalette}
+            className="inline-block px-1.5 h-4 leading-[14px] border border-line-2 rounded text-2xs font-mono text-brand-700 bg-white cursor-pointer hover:border-brand-300 transition-colors"
+            style={{ borderBottomWidth: 2 }}
+            title="Command palette (⌘K)"
+          >
+            ⌘K
+          </button>
+          {/* Close button — mobile drawer only. lg+ users never
+              see it because the sidebar isn't a drawer there. */}
+          <button
+            onClick={close}
+            className="lg:hidden inline-flex items-center justify-center w-5 h-5 rounded text-ink-3 hover:text-ink hover:bg-paper-2"
+            title="Close navigation"
+            aria-label="Close navigation"
+          >
+            <X size={14} />
+          </button>
+        </div>
       </div>
 
       {/* ── Navigation groups ────────────────────────────────────────────── */}
@@ -285,7 +337,8 @@ export function SidebarNav({ data }: { data: SidebarData }) {
           <SignOutButton />
         </div>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
 
