@@ -205,11 +205,17 @@ export function WeekView({
   );
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
+    <div
+      // `--cal-gutter` is the width of the left hour-label column.
+      // 36px on phones (just enough for "12p"); 56px from sm+ where
+      // the calendar has more horizontal room. The grid templates
+      // below all read this var.
+      className="flex flex-col flex-1 min-h-0 overflow-y-auto [--cal-gutter:36px] sm:[--cal-gutter:56px]"
+    >
       {/* Day header row — sticky */}
       <div
         className="grid sticky top-0 z-10 bg-card border-b border-line"
-        style={{ gridTemplateColumns: "56px repeat(7, 1fr)" }}
+        style={{ gridTemplateColumns: "var(--cal-gutter,56px) repeat(7, 1fr)" }}
       >
         <div />
         {byDayBuckets.map((b) => {
@@ -281,7 +287,7 @@ export function WeekView({
       {/* Hour grid */}
       <div
         className="grid relative flex-1"
-        style={{ gridTemplateColumns: "56px repeat(7, 1fr)" }}
+        style={{ gridTemplateColumns: "var(--cal-gutter,56px) repeat(7, 1fr)" }}
       >
         {/* Hour gutter */}
         <div className="border-r border-line">

@@ -55,8 +55,8 @@ export function CalendarToolbar({
       : addMonths(startOfMonth(focal), 1);
 
   return (
-    <div className="flex items-center justify-between px-5 py-3 border-b border-line shrink-0">
-      <div className="flex items-center gap-3">
+    <div className="flex items-center justify-between gap-2 px-3 sm:px-5 py-3 border-b border-line shrink-0">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         <div className="flex items-center border border-line rounded-md bg-white">
           <Link
             href={buildCalendarHref(view, focal, { focal: prev })}
@@ -79,7 +79,7 @@ export function CalendarToolbar({
             <ChevronRight size={14} />
           </Link>
         </div>
-        <h2 className="text-sm font-display font-medium text-ink">
+        <h2 className="text-sm font-display font-medium text-ink truncate">
           {formatRangeLabel(view, focal)}
         </h2>
       </div>

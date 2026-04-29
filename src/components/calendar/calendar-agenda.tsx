@@ -102,7 +102,7 @@ export async function CalendarAgenda() {
   ).padStart(2, "0")}-${String(tomorrowNoon.getUTCDate()).padStart(2, "0")}`;
 
   return (
-    <aside className="w-72 shrink-0 border-l border-line bg-paper-2/30 flex flex-col min-h-0">
+    <aside className="hidden lg:flex w-72 shrink-0 border-l border-line bg-paper-2/30 flex-col min-h-0">
       <header className="px-4 py-3 border-b border-line shrink-0 bg-white">
         <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
           Agenda
