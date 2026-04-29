@@ -55,7 +55,7 @@ export default async function ContactsPage({
         }
       />
 
-      <div className="flex-1 overflow-y-auto p-5 animate-page-enter flex flex-col gap-4">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-5 animate-page-enter flex flex-col gap-4">
         {/* Search + filter pills */}
         <form className="flex items-center gap-2">
           <input
@@ -116,7 +116,54 @@ export default async function ContactsPage({
             </div>
           </Card>
         ) : (
-          <Card className="p-0 overflow-hidden">
+          <>
+          {/* Mobile: card stack. The 6-col contacts table can't
+              fit on a phone — collapse to one card per contact
+              with name + type + organization + email/phone +
+              matter count. Tablet+ keeps the table. */}
+          <ul className="md:hidden flex flex-col gap-2">
+            {rows.map((c) => (
+              <li key={c.id}>
+                <Link
+                  href={`/contacts/${c.id}`}
+                  className="block rounded border border-line bg-card p-3 hover:border-brand-300 transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium text-ink truncate">
+                          {c.name}
+                        </span>
+                        {c.conflictStatus === "flagged" && (
+                          <span className="text-2xs font-medium text-warn">
+                            conflict
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-2xs text-ink-3 mt-0.5">
+                        {CONTACT_TYPE_LABEL[
+                          c.type as keyof typeof CONTACT_TYPE_LABEL
+                        ] ?? c.type}
+                        {c.organization ? ` · ${c.organization}` : ""}
+                      </div>
+                      {(c.email || c.phone) && (
+                        <div className="text-2xs font-mono text-ink-3 mt-1 truncate">
+                          {c.email ?? c.phone}
+                        </div>
+                      )}
+                    </div>
+                    {c.matterCount > 0 && (
+                      <span className="font-mono text-xs text-ink-3 shrink-0">
+                        {c.matterCount}
+                      </span>
+                    )}
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+
+          <Card className="p-0 overflow-hidden hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -170,6 +217,7 @@ export default async function ContactsPage({
               </TableBody>
             </Table>
           </Card>
+          </>
         )}
       </div>
     </>

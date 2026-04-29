@@ -53,8 +53,18 @@ export function ThreadList({
   matterLabel?: string | null;
   selectedThreadId: string | null;
 }) {
+  // Mobile drill-down: when a thread is selected, the reader takes
+  // the whole viewport and the list hides. When no thread is
+  // selected, the list takes the whole viewport and the reader
+  // (which is just the placeholder anyway) hides. At lg+ both
+  // panes coexist as before — the list is fixed at 90 (360px).
   return (
-    <div className="w-90 shrink-0 border-r border-line bg-white flex flex-col min-h-0">
+    <div
+      className={
+        (selectedThreadId ? "hidden lg:flex" : "flex w-full") +
+        " lg:w-90 lg:shrink-0 border-r border-line bg-white flex-col min-h-0"
+      }
+    >
       <header className="px-4 py-3 border-b border-line shrink-0">
         <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
           {matterLabel ?? FILTER_LABEL[filter]}

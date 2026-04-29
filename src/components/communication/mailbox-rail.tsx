@@ -82,7 +82,7 @@ export function MailboxRail({
   selectedThreadId: string | null;
 }) {
   return (
-    <aside className="w-52 shrink-0 border-r border-line bg-paper-2/30 flex flex-col py-3 overflow-y-auto">
+    <aside className="hidden lg:flex w-52 shrink-0 border-r border-line bg-paper-2/30 flex-col py-3 overflow-y-auto">
       <Section label="Mailboxes">
         {MAILBOX_ITEMS.map((item) => (
           <RailRow

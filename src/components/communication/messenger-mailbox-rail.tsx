@@ -42,7 +42,7 @@ export function MessengerMailboxRail({
   selectedThreadId: string | null;
 }) {
   return (
-    <aside className="w-48 shrink-0 border-r border-line bg-paper-2/30 flex flex-col py-3">
+    <aside className="hidden lg:flex w-48 shrink-0 border-r border-line bg-paper-2/30 flex-col py-3">
       <div className="px-3 pb-1 text-2xs font-mono uppercase tracking-wider text-ink-4">
         Messages
       </div>

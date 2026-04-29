@@ -58,8 +58,16 @@ export function MessengerThreadList({
   filter: MessengerFilter;
   selectedThreadId: string | null;
 }) {
+  // Mobile drill-down — same shape as the email ThreadList. When a
+  // thread is selected the reader takes over; otherwise the list
+  // takes the whole viewport. lg+ keeps the fixed 80 (320px) width.
   return (
-    <div className="w-80 shrink-0 border-r border-line bg-white flex flex-col min-h-0">
+    <div
+      className={
+        (selectedThreadId ? "hidden lg:flex" : "flex w-full") +
+        " lg:w-80 lg:shrink-0 border-r border-line bg-white flex-col min-h-0"
+      }
+    >
       <div className="px-4 py-3 border-b border-line shrink-0">
         <div className="text-xs font-semibold text-ink">
           {threads.length} {threads.length === 1 ? "conversation" : "conversations"}

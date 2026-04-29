@@ -100,10 +100,12 @@ export default async function LeadOverviewPage({
   ]);
 
   return (
-    <div className="p-5">
-      <div className="max-w-4xl grid grid-cols-3 gap-5">
-        {/* ── Left column (2/3) ─────────────────────────────────── */}
-        <div className="col-span-2 flex flex-col gap-5">
+    <div className="p-3 sm:p-5">
+      {/* Two-pane on lg+, stacked below — case summary first, then
+          the contact / status / conflict rail. */}
+      <div className="max-w-4xl grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* ── Main column ─────────────────────────────────────────── */}
+        <div className="lg:col-span-2 flex flex-col gap-5">
           {/* Summary */}
           <Card>
             <CardHeader className="pb-2">

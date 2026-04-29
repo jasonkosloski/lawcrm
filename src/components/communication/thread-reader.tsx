@@ -19,6 +19,7 @@ import { setEmailThreadFollowUp } from "@/app/actions/follow-ups";
 import { LogTimeOnCommButton } from "./log-time-on-comm-button";
 import { CommTimeLoggedIndicator } from "./comm-time-logged-indicator";
 import { FileToMatterPicker } from "./file-to-matter-picker";
+import { BackToListButton } from "./back-to-list-button";
 import type { FilingMatterOption } from "@/lib/queries/communication";
 
 const formatSize = (bytes: number | null): string => {
@@ -43,8 +44,12 @@ export function ThreadReader({
   filingOptions: FilingMatterOption[];
 }) {
   if (!thread) {
+    // Empty-state placeholder — only useful on lg+ where the list
+    // is visible alongside. On mobile the thread list IS the home
+    // view; the placeholder would just take up screen space, so
+    // hide it.
     return (
-      <div className="flex-1 flex items-center justify-center bg-paper-email min-h-0">
+      <div className="hidden lg:flex flex-1 items-center justify-center bg-paper-email min-h-0">
         <div className="flex flex-col items-center gap-2 text-ink-4 text-xs">
           <MailOpen size={24} />
           Select a thread to read
@@ -56,10 +61,11 @@ export function ThreadReader({
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-paper-email overflow-y-auto">
       {/* Subject header */}
-      <header className="sticky top-0 z-10 bg-paper-email/95 backdrop-blur-sm px-6 py-4 border-b border-line">
+      <header className="sticky top-0 z-10 bg-paper-email/95 backdrop-blur-sm px-4 sm:px-6 py-3 sm:py-4 border-b border-line">
         <div className="flex items-start gap-3">
           <div className="flex-1 min-w-0">
-            <h1 className="font-display text-xl font-medium tracking-tight text-ink leading-snug">
+            <BackToListButton />
+            <h1 className="font-display text-lg sm:text-xl font-medium tracking-tight text-ink leading-snug">
               {thread.subject}
             </h1>
             <div className="flex items-center gap-2 mt-1.5 text-2xs">

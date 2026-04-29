@@ -23,6 +23,7 @@ import {
   Briefcase,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { BackToListButton } from "./back-to-list-button";
 import type {
   MessengerItemRow,
   MessengerThreadDetail,
@@ -58,8 +59,11 @@ export function MessengerThreadReader({
   thread: MessengerThreadDetail | null;
 }) {
   if (!thread) {
+    // Empty-state — only useful at lg+ where the list is visible
+    // alongside. On mobile the list IS the home view; the
+    // placeholder would just take screen space, so hide it.
     return (
-      <div className="flex-1 flex items-center justify-center bg-paper-2/30">
+      <div className="hidden lg:flex flex-1 items-center justify-center bg-paper-2/30">
         <div className="text-center max-w-sm px-6">
           <div className="w-12 h-12 rounded-full bg-brand-50 text-brand-500 flex items-center justify-center mx-auto mb-3">
             <MessageSquare size={20} />
@@ -86,8 +90,9 @@ export function MessengerThreadReader({
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-white">
       {/* Header */}
-      <header className="flex items-center justify-between px-5 py-3 border-b border-line shrink-0">
-        <div className="flex items-center gap-3 min-w-0">
+      <header className="flex items-center justify-between gap-2 px-3 sm:px-5 py-3 border-b border-line shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <BackToListButton />
           <div className="w-9 h-9 rounded-full bg-brand-50 text-brand-700 border border-brand-100 flex items-center justify-center text-2xs font-mono font-medium shrink-0">
             {(thread.contact?.name ?? "?")
               .split(/\s+/)

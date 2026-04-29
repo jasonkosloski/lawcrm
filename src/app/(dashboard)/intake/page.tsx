@@ -174,8 +174,65 @@ export default async function IntakePage() {
         }
       />
 
-      <div className="flex-1 overflow-y-auto p-5 animate-page-enter">
-        <Card className="p-0 overflow-hidden">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-5 animate-page-enter">
+        {/* Mobile: card stack. The 8-col leads table doesn't
+            survive a phone, so we collapse to one card per lead
+            with the most-glanceable bits (name, source, score,
+            statute warning, stage). Tablet+ keeps the table. */}
+        <ul className="md:hidden flex flex-col gap-2">
+          {sorted.length === 0 ? (
+            <li className="rounded border border-line bg-card p-6 text-center text-xs text-ink-4">
+              No leads yet — new inquiries will show up here.
+            </li>
+          ) : (
+            sorted.map((lead) => (
+              <li key={lead.id}>
+                <Link
+                  href={`/intake/${lead.id}`}
+                  className="block rounded border border-line bg-card p-3 hover:border-brand-300 transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-ink truncate">
+                        {lead.name}
+                      </div>
+                      {lead.summary && (
+                        <div className="text-2xs text-ink-3 line-clamp-2 mt-0.5">
+                          {lead.summary}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 flex-wrap mt-1.5">
+                        <StageChip stage={lead.stage} />
+                        <SourceLabel
+                          source={lead.source}
+                          detail={lead.sourceDetail}
+                        />
+                        <ConflictDot status={lead.conflictCheck} />
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <ScoreBadge score={lead.score} />
+                      {lead.statuteWindow !== null && (
+                        <span
+                          className={
+                            "font-mono text-2xs " +
+                            (lead.statuteWindow <= 30
+                              ? "text-warn font-medium"
+                              : "text-ink-3")
+                          }
+                        >
+                          {lead.statuteWindow}d
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </Link>
+              </li>
+            ))
+          )}
+        </ul>
+
+        <Card className="p-0 overflow-hidden hidden md:block">
           <Table>
             <TableHeader>
               <TableRow>

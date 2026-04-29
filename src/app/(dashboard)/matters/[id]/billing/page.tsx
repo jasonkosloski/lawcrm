@@ -167,13 +167,17 @@ export default async function MatterBillingPage({
   // preview pane lives on the right. The right pane is `sticky` so
   // it stays in view as the user scrolls WIP / Trust on the left.
   if (!selectedInvoice) {
-    return <div className="p-5 flex flex-col gap-5">{main}</div>;
+    return <div className="p-3 sm:p-5 flex flex-col gap-5">{main}</div>;
   }
 
   return (
-    <div className="p-5 flex gap-5 items-start">
+    <div className="p-3 sm:p-5 flex flex-col xl:flex-row gap-5 xl:items-start">
       <div className="flex-1 min-w-0 flex flex-col gap-5">{main}</div>
-      <aside className="w-[36rem] shrink-0 sticky top-5 max-h-[calc(100vh-2.5rem)] flex flex-col rounded-md border border-line overflow-hidden bg-paper">
+      {/* Preview pane is full-width on smaller screens (stacks
+          below the main column), 36rem wide and sticky on xl+
+          where the viewport has the room. Caps out at the
+          viewport height so the doc body still scrolls. */}
+      <aside className="w-full xl:w-[36rem] xl:shrink-0 xl:sticky xl:top-5 xl:max-h-[calc(100vh-2.5rem)] flex flex-col rounded-md border border-line overflow-hidden bg-paper">
         {/* Sticky top bar — stays visible as the document body
             below scrolls. Hosts the invoice label + status-aware
             action buttons + close. The body section is the scroll
@@ -310,8 +314,8 @@ function MainColumn({
         </div>
       )}
 
-      {/* ── Top KPI strip ───────────────────────────────────── */}
-      <div className="grid grid-cols-3 gap-3">
+      {/* ── Top KPI strip — stacks on phones, side-by-side from sm+. ─── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Kpi
           label="Work-in-progress"
           primary={formatMoney(billing.wip.amountTotal)}

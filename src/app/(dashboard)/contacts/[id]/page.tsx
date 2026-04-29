@@ -67,14 +67,14 @@ export default async function ContactDetailPage({
         }
       />
 
-      <div className="flex-1 overflow-y-auto p-5 animate-page-enter">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-5 animate-page-enter">
         <div className="max-w-3xl flex flex-col gap-4">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold">Profile</CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4">
-              <dl className="grid grid-cols-2 gap-y-3 gap-x-6 text-xs">
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6 text-xs">
                 <Field label="Type" value={typeLabel} />
                 <Field label="Organization" value={c.organization ?? "—"} />
                 <Field
