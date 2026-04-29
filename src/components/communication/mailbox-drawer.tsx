@@ -136,12 +136,19 @@ export function MailboxDrawer({ children }: { children: ReactNode }) {
       {/* Drawer container. At lg+ it sits in the normal flex flow
           (`lg:static lg:translate-x-0`). Below lg it's a fixed
           off-canvas panel that slides in. The rail's own width +
-          background + border classes do the rest. */}
+          background + border classes do the rest.
+          Solid `bg-card` here — the rail itself uses `bg-paper-2/30`
+          which looks fine layered over the page at lg+ but reads
+          as a ghosty translucent overlay on mobile where there's
+          page content + backdrop directly behind. The bg is
+          dropped at lg+ via `lg:bg-transparent` so the rail's own
+          translucent design surfaces normally on desktop. */}
       <div
         className={cn(
           "fixed inset-y-0 left-0 z-40 flex flex-col transition-transform lg:transition-none",
           open ? "translate-x-0" : "-translate-x-full",
-          "lg:static lg:translate-x-0 lg:z-auto"
+          "lg:static lg:translate-x-0 lg:z-auto",
+          "bg-card lg:bg-transparent shadow-2xl lg:shadow-none"
         )}
         aria-hidden={!open ? undefined : false}
       >
