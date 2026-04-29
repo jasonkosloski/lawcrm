@@ -124,13 +124,17 @@ export default async function DashboardPage() {
         actions={<DashboardCustomizeButton initialVisibility={visibility} />}
       />
 
-      <div className="flex-1 overflow-y-auto p-5 animate-page-enter">
-        <div className="flex gap-5">
-          {/* ── Left column (flex) ──────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto p-3 sm:p-5 animate-page-enter">
+        {/* Two-column on lg+, stack on smaller. The right rail
+            (deadlines + firm pulse) drops below the main column
+            on mobile/tablet so the user reads top-to-bottom
+            instead of side-to-side. */}
+        <div className="flex flex-col lg:flex-row gap-5">
+          {/* ── Main column ─────────────────────────────────────────────── */}
           <div className="flex-1 min-w-0 flex flex-col gap-5">
-            {/* KPI tile grid */}
+            {/* KPI tile grid — 1 / 2 / 4 columns at xs / sm / lg+. */}
             {visibility.kpis && (
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               {kpiTiles.map((kpi) => {
                 const Icon = kpi.icon;
                 const variantClass =
@@ -332,8 +336,10 @@ export default async function DashboardPage() {
             )}
           </div>
 
-          {/* ── Right column (340px = w-85 in Tailwind spacing scale) ──── */}
-          <div className="w-85 shrink-0 flex flex-col gap-5">
+          {/* ── Right rail ─────────────────────────────────────────────────
+              At lg+ this is a 340px sidebar; below lg it stacks under the
+              main column at full width. */}
+          <div className="w-full lg:w-85 lg:shrink-0 flex flex-col gap-5">
             {/* Deadlines this week */}
             {visibility.deadlines && (
             <Card>

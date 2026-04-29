@@ -65,7 +65,7 @@ export default async function MattersListPage({
         }
       />
 
-      <div className="flex-1 overflow-y-auto p-5 animate-page-enter flex flex-col gap-4">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-5 animate-page-enter flex flex-col gap-4">
         <MattersToolbar
           filter={filter}
           options={options}

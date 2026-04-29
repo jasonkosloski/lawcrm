@@ -69,8 +69,11 @@ export function MatterTabs({ matterId }: { matterId: string }) {
   const addEntry = addType ? findMatterCreateEntry(addType) : undefined;
 
   return (
-    <div className="flex items-center border-b border-line px-5">
-      <nav className="flex gap-1 flex-1">
+    <div className="flex items-center border-b border-line px-3 sm:px-5 gap-2">
+      {/* Horizontal scroll on small screens — 11 tabs don't fit on
+          a phone, so we let the user swipe through them. The active
+          tab is anchored visually by its border-bottom. */}
+      <nav className="flex gap-1 flex-1 overflow-x-auto scrollbar-thin -mb-px">
         {TABS.map((t) => {
           const href = t.slug ? `${base}/${t.slug}` : base;
           const active = t.slug === activeSlug;
@@ -79,7 +82,7 @@ export function MatterTabs({ matterId }: { matterId: string }) {
               key={t.slug || "overview"}
               href={href}
               className={cn(
-                "px-3 py-2.5 text-xs font-medium -mb-px border-b-2 transition-colors",
+                "px-3 py-2.5 text-xs font-medium border-b-2 transition-colors whitespace-nowrap shrink-0",
                 active
                   ? "text-brand-700 border-brand-500"
                   : "text-ink-3 border-transparent hover:text-ink hover:border-line"
@@ -96,9 +99,12 @@ export function MatterTabs({ matterId }: { matterId: string }) {
           type="button"
           onClick={() => open(addEntry.type)}
           className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium bg-white text-ink-2 border border-line hover:border-brand-300 hover:text-brand-700 transition-colors shrink-0"
+          title={addEntry.label}
         >
           <Plus size={13} />
-          {addEntry.label}
+          {/* Hide the label below sm — the icon + tooltip carry the
+              meaning. Saves valuable horizontal pixels. */}
+          <span className="hidden sm:inline">{addEntry.label}</span>
         </button>
       )}
     </div>

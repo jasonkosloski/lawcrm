@@ -24,8 +24,25 @@ const formatMoney = (n: number): string =>
 
 export function MattersTable({ matters }: { matters: MatterListRow[] }) {
   return (
-    <Card className="p-0 overflow-hidden">
-      <Table>
+    <>
+      {/* Mobile + small tablet: card stack. The 7-column table is
+          unreadable on a phone — collapse to one card per matter
+          showing the most-glanceable bits (name, area, lead,
+          stage, trust, deadline). Sortable headers are dropped
+          here; sorting is most useful on a desktop scan anyway. */}
+      <ul className="md:hidden flex flex-col gap-2">
+        {matters.length === 0 ? (
+          <li className="rounded border border-line bg-card p-6 text-center text-xs text-ink-4">
+            No matters match these filters.
+          </li>
+        ) : (
+          matters.map((m) => <MatterCard key={m.id} m={m} />)
+        )}
+      </ul>
+
+      {/* Tablet+ desktop: the dense table. */}
+      <Card className="p-0 overflow-hidden hidden md:block">
+        <Table>
         <TableHeader>
           <TableRow>
             <TableHead className="pl-4">
@@ -124,6 +141,66 @@ export function MattersTable({ matters }: { matters: MatterListRow[] }) {
         </TableBody>
       </Table>
     </Card>
+    </>
+  );
+}
+
+function MatterCard({ m }: { m: MatterListRow }) {
+  return (
+    <li>
+      <Link
+        href={`/matters/${m.id}`}
+        className="block rounded border border-line bg-card p-3 hover:border-brand-300 transition-colors"
+      >
+        <div className="flex items-start gap-2">
+          <span
+            className="w-1.5 h-1.5 rounded-full shrink-0 mt-1.5"
+            style={{ background: m.color }}
+          />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-medium text-ink truncate">
+                {m.name}
+              </span>
+              {m.caseNumber && (
+                <span className="text-2xs font-mono text-ink-4">
+                  {m.caseNumber}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 flex-wrap mt-1.5">
+              <StageChip stage={m.stage} isTerminal={m.stageIsTerminal} />
+              <span className="text-2xs text-ink-3">{m.area}</span>
+              {m.leadInitials && (
+                <span
+                  className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand-50 text-3xs font-mono font-medium text-brand-700 border border-brand-100"
+                  title={m.leadName ?? undefined}
+                >
+                  {m.leadInitials}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            <span className="font-mono text-xs text-ink">
+              {formatMoney(m.trustBalance)}
+            </span>
+            {m.nextDeadlineDays !== null && (
+              <span
+                className={
+                  "font-mono text-2xs " +
+                  (m.nextDeadlineDays <= 7
+                    ? "text-warn font-medium"
+                    : "text-ink-3")
+                }
+              >
+                {m.nextDeadlineDays}d
+              </span>
+            )}
+          </div>
+        </div>
+      </Link>
+    </li>
   );
 }
 

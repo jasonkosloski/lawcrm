@@ -112,10 +112,13 @@ export default async function MatterOverviewPage({
   const pinnedNotes = notes.filter((n) => n.isPinned);
 
   return (
-    <div className="p-5">
-      <div className="grid grid-cols-3 gap-5">
-        {/* ── Left column ─────────────────────────────────────────── */}
-        <div className="col-span-2 flex flex-col gap-5">
+    <div className="p-3 sm:p-5">
+      {/* 3-column grid at lg+; single column below. The right rail
+          (case facts + team) sits below the main content on
+          smaller screens so the user reads top-to-bottom. */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* ── Main column ─────────────────────────────────────────── */}
+        <div className="lg:col-span-2 flex flex-col gap-5">
           {/* Stage transition */}
           <Card>
             <CardContent className="px-4 py-4">
