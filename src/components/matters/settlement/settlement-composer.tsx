@@ -119,7 +119,7 @@ export function SettlementComposer({
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Gross amount" required>
           <input
             name="grossAmount"
@@ -149,7 +149,7 @@ export function SettlementComposer({
         </Field>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Advanced costs">
           <input
             name="advancedCosts"

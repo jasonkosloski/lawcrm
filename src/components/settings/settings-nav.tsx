@@ -102,8 +102,53 @@ export function SettingsNav({
   })).filter((section) => section.items.length > 0);
 
   return (
-    <aside className="w-52 shrink-0 border-r border-line py-5 pr-3">
-      <nav className="flex flex-col gap-5">
+    <aside
+      className={cn(
+        // lg+: vertical rail, fixed 208px, right-side hairline.
+        "lg:w-52 lg:shrink-0 lg:border-r lg:border-line lg:py-5 lg:pr-3",
+        // <lg: full-width horizontal scroll strip below the topbar.
+        // Section group headers ("Account" / "Firm") become inline
+        // labels separated by a vertical hairline so the user can
+        // still see the grouping. The bottom border replaces the
+        // right border so the strip reads as part of the topbar.
+        "border-b border-line lg:border-b-0"
+      )}
+    >
+      {/* Mobile / tablet: horizontal scroll. */}
+      <nav className="lg:hidden flex items-center gap-3 overflow-x-auto scrollbar-thin px-3 py-2">
+        {visibleSections.map((section, si) => (
+          <div key={section.label} className="flex items-center gap-2">
+            {si > 0 && (
+              <span aria-hidden className="h-3 w-px bg-line shrink-0" />
+            )}
+            <span className="text-2xs font-semibold uppercase tracking-wider text-ink-4 shrink-0">
+              {section.label}
+            </span>
+            {section.items.map((item) => {
+              const active =
+                pathname === item.href ||
+                pathname.startsWith(`${item.href}/`);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "shrink-0 inline-flex items-center px-2.5 py-1 rounded-full text-xs transition-colors",
+                    active
+                      ? "bg-brand-500 text-white"
+                      : "text-ink-2 bg-paper-2 hover:bg-[#eaf0f5] hover:text-brand-700"
+                  )}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
+      </nav>
+
+      {/* Desktop: vertical rail (current). */}
+      <nav className="hidden lg:flex flex-col gap-5">
         {visibleSections.map((section) => (
           <div key={section.label}>
             <div className="px-2.5 pb-1.5 text-2xs font-semibold uppercase tracking-wider text-ink-4">

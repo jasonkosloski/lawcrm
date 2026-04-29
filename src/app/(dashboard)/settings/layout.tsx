@@ -29,12 +29,14 @@ export default async function SettingsLayout({
     <>
       <TopBar title="Settings" crumbs="Settings" />
       <div className="flex-1 overflow-y-auto animate-page-enter">
-        <div className="flex h-full">
+        {/* Vertical stack below `lg` (nav strip on top, then content);
+            two-pane (rail + content) at lg+. */}
+        <div className="flex flex-col lg:flex-row h-full">
           <SettingsNav
             isAdmin={isAdmin}
             grantedPermissions={Array.from(granted)}
           />
-          <div className="flex-1 min-w-0 p-6 overflow-y-auto">{children}</div>
+          <div className="flex-1 min-w-0 p-3 sm:p-6 overflow-y-auto">{children}</div>
         </div>
       </div>
     </>

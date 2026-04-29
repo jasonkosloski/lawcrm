@@ -462,7 +462,7 @@ function Section({
 }
 
 function Row({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-2 gap-3">{children}</div>;
+  return <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{children}</div>;
 }
 
 function Field({

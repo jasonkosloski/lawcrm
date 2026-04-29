@@ -40,7 +40,7 @@ export function FirmEditForm({ firm }: { firm: FirmProfile }) {
   return (
     <form action={formAction} className="flex flex-col gap-6 max-w-2xl">
       <SectionHeader label="Identity" />
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Firm name" name="name" required error={errs.name?.[0]}>
           <input
             name="name"
@@ -88,7 +88,7 @@ export function FirmEditForm({ firm }: { firm: FirmProfile }) {
       </div>
 
       <SectionHeader label="Contact" />
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Phone" name="phone">
           <input
             name="phone"
@@ -110,7 +110,7 @@ export function FirmEditForm({ firm }: { firm: FirmProfile }) {
       </div>
 
       <SectionHeader label="Address" />
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Address line 1" name="addressLine1" className="col-span-2">
           <input
             name="addressLine1"

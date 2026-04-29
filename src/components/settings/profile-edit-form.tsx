@@ -60,7 +60,7 @@ export function ProfileEditForm({ profile }: { profile: EditableProfile }) {
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Display name" name="name" required error={errs.name?.[0]}>
           <input
             name="name"
