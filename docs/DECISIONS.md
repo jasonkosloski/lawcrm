@@ -208,3 +208,5 @@ Clicking a different column resets to that column's first-click (ascending).
 - (-) **Nested writes/reads through other models bypass the hook** (`prisma.user.update({ data: { emailAccounts: { create … } } })` would store plaintext; `include: { emailAccounts: true }` returns ciphertext). Convention: always touch tokens through `prisma.emailAccount.*`. Reads fail safe (ciphertext, not a leak).
 
 **Ripple:** Extending the client changed the `$transaction` callback type, so helper params that used `Prisma.TransactionClient` now use the `Tx` type exported from `src/lib/prisma.ts`.
+
+**Scope addendum (same day):** `MessengerAccount` carried the same time bomb (`accessToken` / `refreshToken` / `webhookSecret` for the Quo phone integration), so the extension covers both models — same key, same wire format, `webhookSecret` included.

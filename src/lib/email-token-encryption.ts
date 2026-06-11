@@ -1,9 +1,13 @@
 /**
  * Prisma client extension: transparent encryption-at-rest for
- * `EmailAccount.accessToken` / `refreshToken`.
+ * integration credentials —
+ *
+ *   - `EmailAccount.accessToken` / `refreshToken`
+ *   - `MessengerAccount.accessToken` / `refreshToken` / `webhookSecret`
  *
  * Applied to the singleton in `src/lib/prisma.ts`, so every
- * `prisma.emailAccount.*` call in the app gets it for free:
+ * `prisma.emailAccount.*` / `prisma.messengerAccount.*` call in the
+ * app gets it for free:
  *
  *   - writes (`create` / `update` / `upsert` / `createMany` /
  *     `updateMany` / nested `{ set: ... }`) encrypt both token
@@ -11,12 +15,12 @@
  *   - reads decrypt them on the way out, so feature code (the
  *     upcoming Gmail OAuth flow) only ever sees plaintext.
  *
- * Known boundary: only **top-level `emailAccount` operations** are
+ * Known boundary: only **top-level operations on these models** are
  * intercepted. A nested write through another model
  * (`prisma.user.update({ data: { emailAccounts: { create: ... } } })`)
  * or a nested read (`include: { emailAccounts: true }`) bypasses the
  * hook — writes would land plaintext, reads would surface ciphertext.
- * Always go through `prisma.emailAccount.*` when token fields are
+ * Always go through the model directly when credential fields are
  * involved. The reads direction fails safe (you see ciphertext, not
  * a leak); don't write tokens any other way.
  *
@@ -32,6 +36,13 @@ import {
 } from "@/lib/email-token-crypto";
 
 const TOKEN_FIELDS = ["accessToken", "refreshToken"] as const;
+const MESSENGER_FIELDS = [
+  "accessToken",
+  "refreshToken",
+  "webhookSecret",
+] as const;
+
+type FieldList = readonly string[];
 
 /** Encrypt a single write value: plain string or `{ set: string }`.
  *  Already-encrypted values pass through untouched so a read-modify-
@@ -50,14 +61,14 @@ function encryptWriteValue(value: unknown): unknown {
 }
 
 /** Encrypt token fields in a `data` payload (object or array form). */
-export function encryptTokenWrites<T>(data: T): T {
+export function encryptTokenWrites<T>(data: T, fields: FieldList = TOKEN_FIELDS): T {
   if (Array.isArray(data)) {
-    return data.map((row) => encryptTokenWrites(row)) as T;
+    return data.map((row) => encryptTokenWrites(row, fields)) as T;
   }
   if (!data || typeof data !== "object") return data;
   const record = data as Record<string, unknown>;
   let out = record;
-  for (const field of TOKEN_FIELDS) {
+  for (const field of fields) {
     if (!(field in record)) continue;
     const encrypted = encryptWriteValue(record[field]);
     if (encrypted !== record[field]) {
@@ -70,14 +81,14 @@ export function encryptTokenWrites<T>(data: T): T {
 
 /** Decrypt token fields in a query result (row, row[], or batch
  *  payloads like `{ count }`, which pass through untouched). */
-export function decryptTokenReads<T>(result: T): T {
+export function decryptTokenReads<T>(result: T, fields: FieldList = TOKEN_FIELDS): T {
   if (Array.isArray(result)) {
-    return result.map((row) => decryptTokenReads(row)) as T;
+    return result.map((row) => decryptTokenReads(row, fields)) as T;
   }
   if (!result || typeof result !== "object") return result;
   const record = result as Record<string, unknown>;
   let out = record;
-  for (const field of TOKEN_FIELDS) {
+  for (const field of fields) {
     const value = record[field];
     if (typeof value === "string" && isEncryptedToken(value)) {
       if (out === record) out = { ...record };
@@ -87,24 +98,37 @@ export function decryptTokenReads<T>(result: T): T {
   return out as T;
 }
 
+function makeOperationHook(fields: FieldList) {
+  return async function $allOperations({
+    args,
+    query,
+  }: {
+    args: unknown;
+    query: (args: unknown) => Promise<unknown>;
+  }) {
+    const payload = args as Record<string, unknown>;
+    if (payload && typeof payload === "object") {
+      // create/update/createMany/updateMany carry `data`;
+      // upsert carries `create` + `update`.
+      for (const key of ["data", "create", "update"] as const) {
+        if (key in payload) {
+          payload[key] = encryptTokenWrites(payload[key], fields);
+        }
+      }
+    }
+    const result = await query(args);
+    return decryptTokenReads(result, fields);
+  };
+}
+
 export const emailTokenEncryption = Prisma.defineExtension({
   name: "email-token-encryption",
   query: {
     emailAccount: {
-      async $allOperations({ args, query }) {
-        const payload = args as Record<string, unknown>;
-        if (payload && typeof payload === "object") {
-          // create/update/createMany/updateMany carry `data`;
-          // upsert carries `create` + `update`.
-          for (const key of ["data", "create", "update"] as const) {
-            if (key in payload) {
-              payload[key] = encryptTokenWrites(payload[key]);
-            }
-          }
-        }
-        const result = await query(args);
-        return decryptTokenReads(result);
-      },
+      $allOperations: makeOperationHook(TOKEN_FIELDS),
+    },
+    messengerAccount: {
+      $allOperations: makeOperationHook(MESSENGER_FIELDS),
     },
   },
 });

@@ -1380,8 +1380,8 @@ model EmailAccount {
   userId        String
   provider      String   @default("gmail") /// gmail | outlook | other
   emailAddress  String
-  accessToken   String?  /// OAuth access token (encrypted in production)
-  refreshToken  String?  /// OAuth refresh token (encrypted in production)
+  accessToken   String?  /// OAuth access token — encrypted at rest via src/lib/email-token-encryption.ts (ADR-011)
+  refreshToken  String?  /// OAuth refresh token — encrypted at rest via src/lib/email-token-encryption.ts (ADR-011)
   syncStatus    String   @default("disconnected") /// connected | syncing | disconnected | error
   lastSyncAt    DateTime?
   threadsIndexed Int     @default(0)
@@ -1510,9 +1510,11 @@ model EmailLabel {
 /// firm phone number, OAuth-style tokens, and the per-account
 /// webhook signing secret.
 ///
-/// SECURITY: `accessToken` / `refreshToken` / `webhookSecret` are
-/// plaintext today. Same posture as `EmailAccount` — flagged as a
-/// time bomb in docs/MVP_TODO.md. Encrypt-at-rest before going live.
+/// SECURITY: `accessToken` / `refreshToken` / `webhookSecret`
+/// encrypt at rest (AES-256-GCM) via the Prisma extension in
+/// src/lib/email-token-encryption.ts — same posture as
+/// `EmailAccount`. Write/read these fields only through top-level
+/// `prisma.messengerAccount.*` calls (see ADR-011).
 model MessengerAccount {
   id                String   @id @default(cuid())
   /// Owner — null when the line is shared firm-wide. Multi-user is

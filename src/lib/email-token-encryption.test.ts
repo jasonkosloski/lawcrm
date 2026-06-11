@@ -170,6 +170,38 @@ describe("emailAccount token encryption (integration)", () => {
     expect(isEncryptedToken(raw.accessToken!)).toBe(true);
   });
 
+  it("covers MessengerAccount tokens + webhookSecret too", async () => {
+    const created = await prisma.messengerAccount.create({
+      data: {
+        userId,
+        phoneNumber: "+13035551234",
+        accessToken: "quo-access",
+        refreshToken: "quo-refresh",
+        webhookSecret: "whsec_plain",
+      },
+    });
+    expect(created.accessToken).toBe("quo-access");
+    expect(created.webhookSecret).toBe("whsec_plain");
+
+    const rows = await prisma.$queryRaw<
+      Array<{
+        accessToken: string | null;
+        refreshToken: string | null;
+        webhookSecret: string | null;
+      }>
+    >`SELECT "accessToken", "refreshToken", "webhookSecret" FROM messenger_accounts WHERE id = ${created.id}`;
+    expect(isEncryptedToken(rows[0].accessToken!)).toBe(true);
+    expect(isEncryptedToken(rows[0].refreshToken!)).toBe(true);
+    expect(isEncryptedToken(rows[0].webhookSecret!)).toBe(true);
+
+    const fetched = await prisma.messengerAccount.findUniqueOrThrow({
+      where: { id: created.id },
+    });
+    expect(fetched.accessToken).toBe("quo-access");
+    expect(fetched.refreshToken).toBe("quo-refresh");
+    expect(fetched.webhookSecret).toBe("whsec_plain");
+  });
+
   it("leaves null tokens null and decrypts lists", async () => {
     await prisma.emailAccount.create({
       data: { userId, emailAddress: "no-tokens@example.com" },
