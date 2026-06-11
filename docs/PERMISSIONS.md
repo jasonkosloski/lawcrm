@@ -175,6 +175,7 @@ gets revisited.
 | Trust      | `trust`      | `record_transaction`                                             |
 | Firm       | `firm`       | `manage_team_directory`, `manage_roles`, `manage_permissions`, `edit_info`, `manage_practice_areas` |
 | Documents  | `documents`  | `delete_any`                                                     |
+| Communication | `communication` | `log_call`                                                |
 
 The full list (with labels and descriptions) lives in
 `src/lib/permissions.ts`. Grep for `key:` to enumerate.

@@ -25,6 +25,7 @@ export type ActivityType =
   | "event"
   | "filing"
   | "email"
+  | "call"
   | "evidence"
   | "deposition"
   | "settlement"
@@ -79,6 +80,8 @@ function defaultIconFor(type: ActivityType): string {
       return "video";
     case "email":
       return "mail";
+    case "call":
+      return "phone";
     case "document":
     case "filing":
       return "document";
@@ -102,6 +105,8 @@ function defaultSourceFor(type: ActivityType): string {
       return "Calendar";
     case "email":
       return "Email";
+    case "call":
+      return "Phone";
     case "document":
     case "filing":
       return "Documents";

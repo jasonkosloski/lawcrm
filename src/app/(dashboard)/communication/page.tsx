@@ -39,6 +39,9 @@ import {
   getMessengerThread,
   listMessengerThreads,
 } from "@/lib/queries/messenger";
+import { listContactPickerOptions } from "@/lib/queries/contacts";
+import { currentUserHasPermission } from "@/lib/permission-check";
+import { LogCallButton } from "@/components/communication/log-call-button";
 
 type View = "email" | "messages";
 
@@ -92,10 +95,16 @@ export default async function CommunicationPage({
 
   if (view === "messages") {
     const filter = parseMessengerFilter(sp.filter);
-    const [threads, selectedThread] = await Promise.all([
-      listMessengerThreads({ filter }),
-      threadId ? getMessengerThread(threadId) : Promise.resolve(null),
-    ]);
+    const canLogCall = await currentUserHasPermission(
+      "communication.log_call"
+    );
+    const [threads, selectedThread, callContacts, callMatters] =
+      await Promise.all([
+        listMessengerThreads({ filter }),
+        threadId ? getMessengerThread(threadId) : Promise.resolve(null),
+        canLogCall ? listContactPickerOptions() : Promise.resolve([]),
+        canLogCall ? getFilingMatterOptions() : Promise.resolve([]),
+      ]);
 
     return (
       <MailboxDrawerProvider>
@@ -123,6 +132,17 @@ export default async function CommunicationPage({
             threads={threads}
             filter={filter}
             selectedThreadId={threadId}
+            action={
+              canLogCall ? (
+                <LogCallButton
+                  contacts={callContacts}
+                  matters={callMatters.map((m) => ({
+                    id: m.id,
+                    name: m.name,
+                  }))}
+                />
+              ) : null
+            }
           />
           <MessengerThreadReader thread={selectedThread} />
         </div>

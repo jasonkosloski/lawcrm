@@ -165,6 +165,46 @@ export async function getContactById(id: string): Promise<ContactDetail | null> 
   };
 }
 
+/** Light option row for pickers (e.g. the Log-a-call composer's
+ *  contact typeahead). `phone` is the display number — primary
+ *  ContactPhone first, denormalized Contact.phone as fallback. */
+export type ContactPickerOption = {
+  id: string;
+  name: string;
+  type: string;
+  organization: string | null;
+  phone: string | null;
+};
+
+export async function listContactPickerOptions(): Promise<
+  ContactPickerOption[]
+> {
+  const contacts = await prisma.contact.findMany({
+    where: { isActive: true },
+    take: 500, // same safety-net cap as listContacts
+    orderBy: [{ name: "asc" }],
+    select: {
+      id: true,
+      name: true,
+      type: true,
+      organization: true,
+      phone: true,
+      phones: {
+        where: { isPrimary: true },
+        select: { number: true },
+        take: 1,
+      },
+    },
+  });
+  return contacts.map((c) => ({
+    id: c.id,
+    name: c.name,
+    type: c.type,
+    organization: c.organization,
+    phone: c.phones[0]?.number ?? c.phone,
+  }));
+}
+
 /**
  * Aggregate counts per type for the filter pills on /contacts.
  * Active contacts only.

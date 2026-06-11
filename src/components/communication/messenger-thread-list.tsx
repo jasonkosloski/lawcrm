@@ -61,10 +61,13 @@ export function MessengerThreadList({
   threads,
   filter,
   selectedThreadId,
+  action,
 }: {
   threads: MessengerThreadRow[];
   filter: MessengerFilter;
   selectedThreadId: string | null;
+  /** Optional header affordance — the "Log call" composer button. */
+  action?: React.ReactNode;
 }) {
   // Mobile drill-down — same shape as the email ThreadList. When a
   // thread is selected the reader takes over; otherwise the list
@@ -87,6 +90,7 @@ export function MessengerThreadList({
             {threads.length === 1 ? "conversation" : "conversations"}
           </div>
         </div>
+        {action}
       </div>
 
       {threads.length === 0 ? (

@@ -135,6 +135,7 @@ describe("expected-key invariants", () => {
     "events.edit",
     "events.delete",
     "events.edit_non_matter",
+    "communication.log_call",
   ])("%s exists in the catalog", (key) => {
     expect(isKnownPermission(key)).toBe(true);
   });

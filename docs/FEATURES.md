@@ -45,11 +45,13 @@ done. What's left is enumerated below.
 
 ### P1 — usability + governance
 
-- [ ] **Phone call / SMS / voicemail logging.** Email-only today.
-  Real practices live on the phone. Even a simple "log a call"
-  button (date, with-whom, duration, summary) would beat the current
-  zero. SMS will likely route through Twilio with per-matter phone
-  numbers; voicemail transcription depends on phone integration.
+- [~] **Phone call / SMS / voicemail logging.** Manual "Log a call"
+  v1 shipped (see Phase 4 in Shipped) — contact + direction +
+  outcome + duration + summary + optional matter filing, stored as
+  a `MessengerItem` so it renders inline in the Messages view.
+  Still left: log-a-call entry points on matter detail + contact +
+  lead pages, SMS send (Quo / Twilio), voicemail transcription,
+  edit/delete of manual logs.
 - [ ] **Document templates / template library.** No way to save and
   reuse a demand letter, discovery responses, retainer agreement.
 - [ ] **Search results page + global text search.** ⌘K palette
@@ -257,6 +259,20 @@ end-to-end" milestone — schema, action, query, UI all wired.
 The unified inbox lives at `/communication` (route reserved so SMS
 plugs in without a rename). Currently read-only — see remaining
 work for Gmail OAuth + send.
+
+- [x] **Manual call logging — v1** — "Log call" button on the
+  Messages view (thread-list header). Composer: contact typeahead
+  (auto-fills phone, editable / required when none on file),
+  direction, outcome (answered/missed/no answer), date-time,
+  duration (answered only), optional matter + summary. Action
+  `logCall` writes a `kind="call"` `MessengerItem` (providerEventId
+  `manual-<uuid>`) into the contact's thread — reuses the firm's
+  first active MessengerAccount or bootstraps a `provider="manual"`
+  one, normalizes phone to E.164, backfills `thread.contactId`,
+  advances `lastItemAt` without regressing. Call summaries now
+  render under the call chip in the thread reader. Activity-log
+  type `"call"` (Phone icon; Timeline "Communications" filter
+  includes it). Permission: `communication.log_call`.
 
 ### Phase 5 — Calendar & Time
 

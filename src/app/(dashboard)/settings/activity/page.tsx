@@ -26,6 +26,7 @@ import {
   FileText,
   Gavel,
   Mail,
+  Phone,
   StickyNote,
   Video,
   Zap,
@@ -42,6 +43,7 @@ import {
 const ACTIVITY_ICONS: Record<string, LucideIcon> = {
   gavel: Gavel,
   mail: Mail,
+  phone: Phone,
   video: Video,
   check: Check,
   zap: Zap,

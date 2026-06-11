@@ -404,6 +404,18 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       },
     ],
   },
+  {
+    id: "communication",
+    label: "Communication",
+    permissions: [
+      {
+        key: "communication.log_call",
+        label: "Log calls",
+        description:
+          "Manually record a phone call with a contact — direction, outcome, duration, summary, and optional matter filing. The call appears in the Messages inbox and, when filed, on the matter timeline.",
+      },
+    ],
+  },
 ];
 
 /// Flat key list, derived from the categories. Used by the action

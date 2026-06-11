@@ -325,32 +325,41 @@ function CallEvent({
     ? `Missed call · ${formatDistanceToNowStrict(item.occurredAt, { addSuffix: true })}`
     : `${item.direction === "inbound" ? "Inbound" : "Outbound"} call · ${formatDuration(item.callDurationSec)}`;
   return (
-    <div className="self-center group/call flex items-center gap-2">
-      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-line bg-paper-2/50 text-2xs text-ink-3">
-        <Icon size={11} className={missed ? "text-warn" : "text-ink-3"} />
-        <span className={missed ? "text-warn font-medium" : "text-ink-3"}>
-          {label}
-        </span>
-        <span className="font-mono text-ink-4">
-          {format(item.occurredAt, "h:mm a")}
-        </span>
+    <div className="self-center flex flex-col items-center gap-1 max-w-[26rem]">
+      <div className="group/call flex items-center gap-2">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-line bg-paper-2/50 text-2xs text-ink-3">
+          <Icon size={11} className={missed ? "text-warn" : "text-ink-3"} />
+          <span className={missed ? "text-warn font-medium" : "text-ink-3"}>
+            {label}
+          </span>
+          <span className="font-mono text-ink-4">
+            {format(item.occurredAt, "h:mm a")}
+          </span>
+        </div>
+        {/* Time-logged indicator stays visible (without hover) once
+            time exists — matches voicemail / SMS behavior. */}
+        {item.timeEntries.length > 0 && (
+          <CommTimeLoggedIndicator entries={item.timeEntries} compact />
+        )}
+        <div className="opacity-0 group-hover/call:opacity-100 transition-opacity">
+          <LogTimeOnCommButton
+            isFiled={isFiled}
+            variant="compact"
+            source={{
+              kind: "messenger",
+              itemId: item.id,
+              label: commLabel(contactLabel, item),
+            }}
+          />
+        </div>
       </div>
-      {/* Time-logged indicator stays visible (without hover) once
-          time exists — matches voicemail / SMS behavior. */}
-      {item.timeEntries.length > 0 && (
-        <CommTimeLoggedIndicator entries={item.timeEntries} compact />
+      {/* Call summary — schema stores it in `body` (manual call
+          logging writes it; provider call summaries land here too). */}
+      {item.body && (
+        <div className="text-2xs text-ink-3 bg-paper-2/50 border border-line rounded-md px-3 py-1.5 whitespace-pre-wrap text-left">
+          {item.body}
+        </div>
       )}
-      <div className="opacity-0 group-hover/call:opacity-100 transition-opacity">
-        <LogTimeOnCommButton
-          isFiled={isFiled}
-          variant="compact"
-          source={{
-            kind: "messenger",
-            itemId: item.id,
-            label: commLabel(contactLabel, item),
-          }}
-        />
-      </div>
     </div>
   );
 }

@@ -37,6 +37,7 @@ import {
   FileText,
   Gavel,
   Mail,
+  Phone,
   StickyNote,
   Video,
   Zap,
@@ -53,6 +54,7 @@ import {
 const ACTIVITY_ICONS: Record<string, LucideIcon> = {
   gavel: Gavel,
   mail: Mail,
+  phone: Phone,
   video: Video,
   check: Check,
   zap: Zap,
@@ -73,7 +75,7 @@ const FILTER_BUCKETS: Record<
 > = {
   all: { label: "All", types: [] },
   filings: { label: "Filings", types: ["filing"] },
-  communications: { label: "Communications", types: ["email"] },
+  communications: { label: "Communications", types: ["email", "call"] },
   deadlines: { label: "Deadlines", types: ["deadline"] },
   tasks: { label: "Tasks", types: ["task", "task_complete"] },
   notes: { label: "Notes", types: ["note"] },
