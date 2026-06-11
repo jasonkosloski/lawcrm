@@ -23,7 +23,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
-import { prisma } from "@/lib/prisma";
+import { prisma, type Tx } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
@@ -49,7 +49,7 @@ import {
  *  unique-index on Invoice.invoiceNumber rejects the second; the
  *  retry below catches the rare case. */
 async function nextInvoiceNumber(
-  tx: Prisma.TransactionClient
+  tx: Tx
 ): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `${year}-`;
@@ -72,7 +72,7 @@ async function nextInvoiceNumber(
  *  delta. Decimal-safe; refuses to overdraw. Caller is expected to
  *  also create the underlying TrustTransaction row. */
 async function adjustTrustBalance(
-  tx: Prisma.TransactionClient,
+  tx: Tx,
   matterId: string,
   deltaDecimal: Prisma.Decimal
 ): Promise<{ ok: boolean; error?: string }> {

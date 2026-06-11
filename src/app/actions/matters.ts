@@ -13,8 +13,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import type { Prisma } from "@/generated/prisma/client";
-import { prisma } from "@/lib/prisma";
+import { prisma, type Tx } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
@@ -128,7 +127,7 @@ const SOL_SOURCE_TYPE = "statute_of_limitations";
  *  - satisfied=false → deadline flipped back to "open"
  */
 async function syncMatterSolDeadline(
-  tx: Prisma.TransactionClient | typeof prisma,
+  tx: Tx | typeof prisma,
   opts: {
     matterId: string;
     trackSol: boolean;

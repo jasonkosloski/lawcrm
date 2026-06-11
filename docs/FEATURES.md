@@ -22,8 +22,9 @@ The remaining work clusters around three buckets:
 1. **External integrations** — Gmail send/OAuth, Google Calendar
    sync, SMS (Twilio), voicemail. Each unblocks a real workflow that
    today reads-only or requires a side trip out of the app.
-2. **Big polish** — mobile/responsive sweep, document templates,
-   reports dashboard.
+   (Token encryption-at-rest — the OAuth prerequisite — is done.)
+2. **Big polish** — document templates, reports dashboard
+   (mobile/responsive sweep shipped 2026-06).
 3. **Tech debt + consistency** — date format sweep, magic numbers
    into settings, status string literals, EmptyState component.
 
@@ -41,15 +42,6 @@ done. What's left is enumerated below.
   The single biggest broken promise of the app — a "unified inbox"
   you can't send from. Needs the OAuth flow, two-way sync, compose
   window, reply, and a "file thread to matter" action.
-- [ ] **Email token encryption-at-rest.** `EmailAccount.accessToken`
-  / `refreshToken` are plain string columns today. Empty until Gmail
-  OAuth lands, but a security incident the moment it does. Decide
-  on a Prisma extension or external secrets store **before** OAuth
-  ships.
-- [ ] **Mobile / responsive layout.** Sidebar doesn't collapse,
-  calendar + matters table assume desktop width, no breakpoints
-  anywhere. Field work — depositions, court appearances, client
-  meetings — is impossible on iPad/iPhone today.
 
 ### P1 — usability + governance
 
@@ -293,6 +285,19 @@ work for Gmail OAuth + send.
 
 ### Phase 9 — Polish & Production
 
+- [x] **Mobile / responsive sweep** — Drawer sidebar + hamburger
+  topbar shell, then per-surface passes: dashboard, matters list +
+  detail, calendar (week view, toolbar, agenda rail, all-day row),
+  intake, contacts, communication (mailbox drawer + reader header
+  reflow), matter billing, forms/modals/settings. Landed 2026-06
+  across the `feat(responsive)` commit series.
+- [x] **Email token encryption-at-rest** — `EmailAccount.accessToken`
+  / `refreshToken` encrypt with AES-256-GCM via a Prisma query
+  extension on the singleton client; key from `EMAIL_TOKEN_KEY`
+  (base64 32 bytes, per-environment). Versioned wire format
+  (`v1:<iv>:<tag>:<ciphertext>`) for future rotation. The Gmail
+  OAuth prerequisite. See ADR-011 + `src/lib/email-token-crypto.ts`
+  / `src/lib/email-token-encryption.ts`.
 - [~] **Authentication — Phase 1 (email + password, JWT sessions)** — Auth.js v5 + Prisma adapter + argon2id. `/login` page with generic error messages (no email enumeration), `?next=` round-trip via `src/proxy.ts`, sign-out from the sidebar profile strip. `Account` + `VerificationToken` tables provisioned for OAuth/password-reset later. **Phase 2** (MFA, OAuth, password reset, session revocation) deferred — see `docs/AUTH_PLAN.md`.
 - [x] **Database — production Postgres** — `prisma/schema.prisma` provider is `postgresql`; production runs on Vercel Postgres (POSTGRES_PRISMA_URL → DATABASE_URL pooled, POSTGRES_URL_NON_POOLING → DIRECT_DATABASE_URL direct). Build wired (`prisma generate && next build` + `postinstall: prisma generate`). Tests run against a local Docker container (`docker-compose.test.yml`); integration setup waits for the DB, pushes the schema, runs each test against a fresh state via `resetDb()` in `beforeEach`.
 

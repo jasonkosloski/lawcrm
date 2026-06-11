@@ -21,8 +21,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import type { Prisma, PrismaClient } from "@/generated/prisma/client";
-import { prisma } from "@/lib/prisma";
+import { prisma, type Tx } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import {
@@ -41,10 +40,6 @@ import { sanitizeUserHtml as sanitize } from "@/lib/sanitize-html";
 
 // ── Shared helpers ──────────────────────────────────────────────────────
 
-type Tx = Omit<
-  PrismaClient,
-  "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
->;
 
 /** Identifies the just-created primary record so sibling notes can
  *  link directly to it (e.g. a "court note" sibling on the Events
@@ -57,7 +52,7 @@ type PrimaryRef =
   | null;
 
 async function createCaptureRecord(
-  tx: Tx | Prisma.TransactionClient,
+  tx: Tx,
   cap: ValidCapture,
   matterId: string,
   userId: string,

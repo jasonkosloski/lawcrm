@@ -16,8 +16,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import type { Prisma } from "@/generated/prisma/client";
-import { prisma } from "@/lib/prisma";
+import { prisma, type Tx } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permission-check";
 import {
   PARTY_CATEGORIES,
@@ -40,7 +39,7 @@ type PhoneEntry = z.infer<typeof phoneEntrySchema>;
  *  number onto Contact.phone so pre-existing single-phone readers
  *  keep working. */
 async function syncContactPhones(
-  tx: Prisma.TransactionClient,
+  tx: Tx,
   contactId: string,
   phones: PhoneEntry[]
 ): Promise<void> {
@@ -102,7 +101,7 @@ const NULL_REPRESENTATION: ResolvedRepresentation = {
  *  MatterContact row. Throws when the picked id doesn't exist (caller
  *  rolls back the surrounding transaction). */
 async function resolveRepresentation(
-  tx: Prisma.TransactionClient,
+  tx: Tx,
   input: {
     mode: typeof PICK_EXISTING | typeof CREATE_NEW;
     pickedId: string | null;

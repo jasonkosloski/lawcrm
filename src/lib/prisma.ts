@@ -31,10 +31,7 @@
 
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma/client";
-
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
+import { emailTokenEncryption } from "@/lib/email-token-encryption";
 
 const createClient = () => {
   // DATABASE_URL is required. We deliberately don't fall back to a
@@ -49,10 +46,27 @@ const createClient = () => {
   }
   // Cap pool at 1 connection — see file header for the reasoning.
   const adapter = new PrismaPg({ connectionString, max: 1 });
-  return new PrismaClient({ adapter });
+  // OAuth token fields encrypt-at-rest via a query extension — see
+  // src/lib/email-token-encryption.ts.
+  return new PrismaClient({ adapter }).$extends(emailTokenEncryption);
+};
+
+const globalForPrisma = globalThis as unknown as {
+  prisma: ReturnType<typeof createClient> | undefined;
 };
 
 export const prisma = globalForPrisma.prisma ?? createClient();
 
 // Cache globally regardless of NODE_ENV — see file header.
 globalForPrisma.prisma = prisma;
+
+/**
+ * The client shape inside `prisma.$transaction(async (tx) => ...)`.
+ * Use this (not `Prisma.TransactionClient`) for helper params — the
+ * extended client has its own transaction type, and the generated
+ * `TransactionClient` no longer matches it.
+ */
+export type Tx = Omit<
+  typeof prisma,
+  "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
+>;
