@@ -48,10 +48,12 @@ done. What's left is enumerated below.
 - [~] **Phone call / SMS / voicemail logging.** Manual "Log a call"
   v1 shipped (see Phase 4 in Shipped) — contact + direction +
   outcome + duration + summary + optional matter filing, stored as
-  a `MessengerItem` so it renders inline in the Messages view.
-  Still left: log-a-call entry points on matter detail + contact +
-  lead pages, SMS send (Quo / Twilio), voicemail transcription,
-  edit/delete of manual logs.
+  a `MessengerItem` so it renders inline in the Messages view. The
+  matter-detail Communication tab now has an Email | Phone channel
+  toggle: the Phone channel lists the matter's filed calls/texts/
+  voicemails and hosts a matter-scoped Log-call composer. Still
+  left: entry points on contact + lead pages, SMS send (Quo /
+  Twilio), voicemail transcription, edit/delete of manual logs.
 - [ ] **Document templates / template library.** No way to save and
   reuse a demand letter, discovery responses, retainer agreement.
 - [ ] **Search results page + global text search.** ⌘K palette
@@ -273,6 +275,14 @@ work for Gmail OAuth + send.
   render under the call chip in the thread reader. Activity-log
   type `"call"` (Phone icon; Timeline "Communications" filter
   includes it). Permission: `communication.log_call`.
+- [x] **Matter-detail Phone channel** — Email | Phone segmented
+  toggle on the matter Communication tab (`?channel=phone`,
+  URL-driven). Phone channel lists every call / text / voicemail
+  filed to the matter (directly or via thread default routing —
+  `listMessengerItemsForMatter`), newest first, linking to the full
+  reader. Hosts the Log-call composer with the matter pre-selected
+  (no picker) and the matter's client + parties floated to the top
+  of the contact typeahead.
 
 ### Phase 5 — Calendar & Time
 

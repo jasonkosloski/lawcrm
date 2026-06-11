@@ -318,3 +318,73 @@ export async function getMessengerThread(
     })),
   };
 }
+
+/** Item-level row for the matter-detail Phone channel — one entry
+ *  per call / SMS / voicemail filed to the matter, with the thread's
+ *  contact resolved for display and `threadId` for the link back to
+ *  the full reader on /communication. */
+export type MatterMessengerItemRow = {
+  id: string;
+  threadId: string;
+  kind: MessengerKind;
+  direction: MessengerDirection;
+  callStatus: string | null;
+  callDurationSec: number | null;
+  /** SMS body / call summary / voicemail transcript fallback. */
+  body: string | null;
+  contactName: string | null;
+  contactPhone: string;
+  occurredAt: Date;
+};
+
+/**
+ * Calls + messages filed to a matter, newest first. An item counts
+ * as filed when it carries the matter directly (`item.matterId`) or
+ * inherits it from its thread's default routing (`item.matterId`
+ * null + `thread.defaultMatterId` matches) — the same resolution
+ * rule the reader uses.
+ */
+export async function listMessengerItemsForMatter(
+  matterId: string,
+  take = 100
+): Promise<MatterMessengerItemRow[]> {
+  const items = await prisma.messengerItem.findMany({
+    where: {
+      OR: [
+        { matterId },
+        { matterId: null, thread: { defaultMatterId: matterId } },
+      ],
+    },
+    orderBy: { occurredAt: "desc" },
+    take,
+    select: {
+      id: true,
+      threadId: true,
+      kind: true,
+      direction: true,
+      callStatus: true,
+      callDurationSec: true,
+      body: true,
+      transcript: true,
+      occurredAt: true,
+      thread: {
+        select: {
+          contactPhone: true,
+          contact: { select: { name: true } },
+        },
+      },
+    },
+  });
+  return items.map((i) => ({
+    id: i.id,
+    threadId: i.threadId,
+    kind: i.kind as MessengerKind,
+    direction: i.direction as MessengerDirection,
+    callStatus: i.callStatus,
+    callDurationSec: i.callDurationSec,
+    body: i.body ?? i.transcript,
+    contactName: i.thread.contact?.name ?? null,
+    contactPhone: i.thread.contactPhone,
+    occurredAt: i.occurredAt,
+  }));
+}

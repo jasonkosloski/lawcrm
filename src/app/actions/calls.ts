@@ -213,6 +213,7 @@ export async function logCall(
   if (matterId) {
     revalidatePath(`/matters/${matterId}`);
     revalidatePath(`/matters/${matterId}/timeline`);
+    revalidatePath(`/matters/${matterId}/communication`);
   }
 
   return { status: "ok" };

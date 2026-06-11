@@ -176,33 +176,64 @@ export type ContactPickerOption = {
   phone: string | null;
 };
 
-export async function listContactPickerOptions(): Promise<
-  ContactPickerOption[]
-> {
-  const contacts = await prisma.contact.findMany({
-    where: { isActive: true },
-    take: 500, // same safety-net cap as listContacts
-    orderBy: [{ name: "asc" }],
-    select: {
-      id: true,
-      name: true,
-      type: true,
-      organization: true,
-      phone: true,
-      phones: {
-        where: { isPrimary: true },
-        select: { number: true },
-        take: 1,
+export async function listContactPickerOptions(opts?: {
+  /** Float this matter's people (client + parties) to the top of
+   *  the list so the typeahead surfaces them first — used when the
+   *  picker opens in matter context. */
+  priorityMatterId?: string;
+}): Promise<ContactPickerOption[]> {
+  const [contacts, priorityIds] = await Promise.all([
+    prisma.contact.findMany({
+      where: { isActive: true },
+      take: 500, // same safety-net cap as listContacts
+      orderBy: [{ name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        organization: true,
+        phone: true,
+        phones: {
+          where: { isPrimary: true },
+          select: { number: true },
+          take: 1,
+        },
       },
-    },
-  });
-  return contacts.map((c) => ({
+    }),
+    opts?.priorityMatterId
+      ? Promise.all([
+          prisma.matterContact.findMany({
+            where: { matterId: opts.priorityMatterId },
+            select: { contactId: true },
+          }),
+          prisma.matter.findUnique({
+            where: { id: opts.priorityMatterId },
+            select: { clientId: true },
+          }),
+        ]).then(
+          ([parties, matter]) =>
+            new Set(
+              [...parties.map((p) => p.contactId), matter?.clientId].filter(
+                (id): id is string => Boolean(id)
+              )
+            )
+        )
+      : Promise.resolve(new Set<string>()),
+  ]);
+
+  const rows = contacts.map((c) => ({
     id: c.id,
     name: c.name,
     type: c.type,
     organization: c.organization,
     phone: c.phones[0]?.number ?? c.phone,
   }));
+  if (priorityIds.size === 0) return rows;
+  // Stable partition — matter people first, both halves still A→Z.
+  return [
+    ...rows.filter((c) => priorityIds.has(c.id)),
+    ...rows.filter((c) => !priorityIds.has(c.id)),
+  ];
 }
 
 /**

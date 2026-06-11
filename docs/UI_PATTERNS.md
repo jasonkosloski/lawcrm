@@ -131,6 +131,20 @@ reading `usePathname()` to pick the active tab. 8 tabs: Overview, Timeline,
 Documents, Parties, Deadlines, Tasks, Notes, Billing. Overview is the base
 route (`/matters/[id]`); other tabs are nested routes.
 
+### In-Tab Channel Toggle (Communication tabs)
+```
+Segmented control, same visual idiom as the matters Table/Kanban toggle
+Active: bg-brand-soft text-brand-700 · Inactive: text-ink-3
+URL-driven: ?channel=email|phone (default channel omits the param)
+Plain <Link>s, not router.replace — switching channel drops ?thread=,
+which is per-channel state
+```
+
+Implementation: `src/components/communication/channel-toggle.tsx`. Used on
+the matter-detail Communication tab to switch between the embedded email
+inbox and the matter Phone log (`matter-phone-log.tsx`). Action affordances
+(e.g. the "Log call" button) sit to the right of the toggle on the same row.
+
 ### Sortable Column Header
 
 Three-state click cycle: asc → desc → clear (see ADR-009).

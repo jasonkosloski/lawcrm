@@ -24,6 +24,7 @@ vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
 }));
 
+import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
@@ -171,6 +172,12 @@ describe("happy path", () => {
     expect(activity.userId).toBe(userId);
     expect(activity.title).toContain("Maria Alvarez");
     expect(activity.detail).toContain("5m");
+
+    // Matter surfaces refresh — including the Communication tab's
+    // Phone channel.
+    expect(revalidatePath).toHaveBeenCalledWith(
+      `/matters/${matterId}/communication`
+    );
   });
 
   test("missed calls store zero duration even when minutes were entered", async () => {
