@@ -37,6 +37,13 @@ import type {
   ConvertLeadFormState,
   DeclineLeadFormState,
 } from "@/lib/lead-conversion-form";
+import type { LeadStage } from "@/lib/constants/lead-stage";
+
+// Stage writes/compares below are typed against the centralized
+// LeadStage union (src/lib/constants/lead-stage.ts) so a typo can't
+// silently misclassify a lead.
+const CONVERTED = "converted" satisfies LeadStage;
+const DECLINED = "declined" satisfies LeadStage;
 
 // ── Convert ─────────────────────────────────────────────────────────────
 
@@ -110,7 +117,7 @@ export async function convertLeadToMatter(
       errors: { _form: ["Lead no longer exists"] },
     };
   }
-  if (lead.stage === "converted") {
+  if (lead.stage === CONVERTED) {
     return {
       status: "error",
       errors: { _form: ["Lead is already converted to a matter."] },
@@ -275,7 +282,7 @@ export async function convertLeadToMatter(
     await tx.lead.update({
       where: { id: leadId },
       data: {
-        stage: "converted",
+        stage: CONVERTED,
         convertedMatterId: matter.id,
       },
     });
@@ -328,7 +335,7 @@ export async function declineLead(
       errors: { _form: ["Lead no longer exists"] },
     };
   }
-  if (lead.stage === "converted") {
+  if (lead.stage === CONVERTED) {
     return {
       status: "error",
       errors: {
@@ -340,7 +347,7 @@ export async function declineLead(
   await prisma.lead.update({
     where: { id: leadId },
     data: {
-      stage: "declined",
+      stage: DECLINED,
       declineReason: parsed.data.reason || null,
     },
   });

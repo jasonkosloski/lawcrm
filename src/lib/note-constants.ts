@@ -37,37 +37,36 @@ export type ReactionEmoji = (typeof REACTION_EMOJIS)[number];
 
 // ── Captures (attached records) ────────────────────────────────────────
 
-export const TASK_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
-export const TASK_STATUSES = [
-  "open",
-  "in_progress",
-  "in_review",
-  "done",
-  "cancelled",
-] as const;
-export type TaskStatus = (typeof TASK_STATUSES)[number];
+// Status / priority value sets moved to their canonical per-domain
+// homes in `src/lib/constants/` (this file predates that layout and
+// has ~50 importers). Re-exported here so existing imports keep
+// working; new code should import from `@/lib/constants/*` directly.
+export {
+  TASK_PRIORITIES,
+  type TaskPriority,
+} from "@/lib/constants/priority";
+export {
+  TASK_STATUSES,
+  type TaskStatus,
+} from "@/lib/constants/task-status";
+export {
+  DEADLINE_STATUSES,
+  DEADLINE_KINDS,
+  type DeadlineStatus,
+  type DeadlineKind,
+} from "@/lib/constants/deadline-status";
+export {
+  TIME_ENTRY_STATUSES,
+  type TimeEntryStatus,
+} from "@/lib/constants/time-entry-status";
+export {
+  EVENT_TYPES,
+  type CalendarEventType,
+} from "@/lib/constants/calendar-event-type";
 
-export const DEADLINE_STATUSES = ["open", "completed", "waived"] as const;
-export type DeadlineStatus = (typeof DEADLINE_STATUSES)[number];
-
-export const TIME_ENTRY_STATUSES = [
-  "draft",
-  "submitted",
-  "billable",
-  "billed",
-  "written_off",
-] as const;
-export type TimeEntryStatus = (typeof TIME_ENTRY_STATUSES)[number];
-export const EVENT_TYPES = [
-  "meeting",
-  "deposition",
-  "hearing",
-  "intake",
-  "mediation",
-  "block_time",
-  "trial",
-] as const;
-export const DEADLINE_KINDS = ["critical", "auto_rule", "manual"] as const;
+import { TASK_PRIORITIES } from "@/lib/constants/priority";
+import { EVENT_TYPES } from "@/lib/constants/calendar-event-type";
+import { DEADLINE_KINDS } from "@/lib/constants/deadline-status";
 
 export type TaskCapture = {
   kind: "task";

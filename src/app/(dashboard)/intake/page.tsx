@@ -11,7 +11,8 @@
  */
 
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus, Inbox } from "lucide-react";
+import { EmptyState } from "@/components/shared/empty-state";
 import { TopBar } from "@/components/layout/topbar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -55,7 +56,9 @@ function ScoreBadge({ score }: { score: number | null }) {
 }
 
 function StageChip({ stage }: { stage: string }) {
-  const label = LEAD_STAGE_LABEL[stage] ?? stage;
+  // DB stage values arrive untyped — fall back to the raw slug
+  // for anything the label map doesn't know.
+  const label = (LEAD_STAGE_LABEL as Record<string, string>)[stage] ?? stage;
   const cls =
     stage === "new"
       ? "bg-brand-soft text-brand-700 border-brand-200"
@@ -181,8 +184,13 @@ export default async function IntakePage() {
             statute warning, stage). Tablet+ keeps the table. */}
         <ul className="md:hidden flex flex-col gap-2">
           {sorted.length === 0 ? (
-            <li className="rounded border border-line bg-card p-6 text-center text-xs text-ink-4">
-              No leads yet — new inquiries will show up here.
+            <li className="rounded border border-line bg-card">
+              <EmptyState
+                icon={Inbox}
+                title="No leads yet"
+                description="New inquiries will show up here."
+                className="py-6"
+              />
             </li>
           ) : (
             sorted.map((lead) => (
@@ -249,8 +257,13 @@ export default async function IntakePage() {
             <TableBody>
               {sorted.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-12 text-center text-xs text-ink-4">
-                    No leads yet — new inquiries will show up here.
+                  <TableCell colSpan={8} className="p-0">
+                    <EmptyState
+                      icon={Inbox}
+                      title="No leads yet"
+                      description="New inquiries will show up here."
+                      className="py-12"
+                    />
                   </TableCell>
                 </TableRow>
               ) : (

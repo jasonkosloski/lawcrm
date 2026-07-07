@@ -57,6 +57,20 @@ Pill-shaped: 10–11px, font-medium, border-radius: 999px
 - Ghost: dashed border, transparent bg, text-ink-3 (unfiled pill)
 ```
 
+### Empty State
+```
+Shared component: src/components/shared/empty-state.tsx
+- Icon (lucide, 18px, text-ink-4, aria-hidden) above a text-sm
+  font-semibold title, optional text-xs text-ink-3 description
+  (max-w-sm), optional CTA children slot.
+- Wrapping is the caller's job — drop inside a Card, a table
+  cell (colSpan + p-0), or a list <li>. Pass `framed` for the
+  standalone dashed-border card look (search page style).
+- Don't hand-roll new empty states; extend this one.
+- Count labels near lists use plural(n, "matter") from
+  src/lib/utils.ts — never hardcode "N matters".
+```
+
 ### Nav Item (Sidebar)
 ```
 Active: bg-brand-500, text-white, inner highlight shadow

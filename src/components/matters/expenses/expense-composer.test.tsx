@@ -10,7 +10,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("@/app/actions/expenses", () => ({
@@ -170,10 +170,14 @@ describe("ExpenseComposer — success path", () => {
       screen.getByRole("button", { name: /^log expense$/i })
     );
 
-    // After the success effect fires, the composer collapses
-    // back to the button form. Wait for the form fields to
-    // disappear.
-    await screen.findByRole("button", { name: /log expense/i });
-    expect(container.querySelector('[name="amount"]')).toBeNull();
+    // After the success effect fires, the composer collapses back
+    // to the button form. Wait on the FIELD disappearing — the
+    // collapsed trigger and the expanded submit button share the
+    // accessible name "Log expense", so findByRole(button) resolves
+    // on the still-mounted submit button and races the effect
+    // (observed flaky under pre-commit load).
+    await waitFor(() =>
+      expect(container.querySelector('[name="amount"]')).toBeNull()
+    );
   });
 });

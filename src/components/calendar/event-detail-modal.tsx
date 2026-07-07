@@ -51,7 +51,10 @@ import {
   updateCalendarEvent,
 } from "@/app/actions/calendar-events";
 import { updateCalendarEventInitialState } from "@/lib/calendar-event-form";
-import { EVENT_TYPES } from "@/lib/note-constants";
+import {
+  EVENT_TYPES,
+  EVENT_TYPE_LABEL,
+} from "@/lib/constants/calendar-event-type";
 import { EmailLink } from "@/components/ui/email-link";
 import {
   ATTENDEE_STATUS_LABEL,
@@ -67,15 +70,12 @@ import type {
 import { EventNotesSection } from "./event-notes-section";
 import { EventTimeEntriesSection } from "./event-time-entries-section";
 
+// Settable event-type labels are centralized; "deadline" is the
+// calendar's pseudo-event for projected deadlines (display-only,
+// never settable) so it's added here at the render layer.
 const TYPE_LABEL: Record<string, string> = {
-  meeting: "Meeting",
-  deposition: "Deposition",
-  hearing: "Hearing",
-  intake: "Intake",
-  block_time: "Block time",
+  ...EVENT_TYPE_LABEL,
   deadline: "Deadline",
-  mediation: "Mediation",
-  trial: "Trial",
 };
 
 // ── Editor state ────────────────────────────────────────────────────────

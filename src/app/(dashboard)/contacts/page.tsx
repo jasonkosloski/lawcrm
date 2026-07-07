@@ -20,7 +20,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { EmailLink } from "@/components/ui/email-link";
-import { Plus } from "lucide-react";
+import { Plus, Users } from "lucide-react";
+import { EmptyState } from "@/components/shared/empty-state";
 import {
   CONTACT_TYPE_LABEL,
   CONTACT_TYPES,
@@ -109,15 +110,16 @@ export default async function ContactsPage({
         </div>
 
         {rows.length === 0 ? (
-          <Card className="p-8 text-center">
-            <div className="text-sm font-semibold text-ink mb-1">
-              No contacts match.
-            </div>
-            <div className="text-xs text-ink-3">
-              {q || type
-                ? "Try clearing filters or searching for something else."
-                : "Add your first contact to start building the firm directory."}
-            </div>
+          <Card className="p-0">
+            <EmptyState
+              icon={Users}
+              title="No contacts match"
+              description={
+                q || type
+                  ? "Try clearing filters or searching for something else."
+                  : "Add your first contact to start building the firm directory."
+              }
+            />
           </Card>
         ) : (
           <>

@@ -14,6 +14,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { LEAD_CLOSED_STAGES } from "@/lib/constants/lead-stage";
 
 export type PaletteMatter = {
   kind: "matter";
@@ -104,7 +105,7 @@ export async function getPaletteData(): Promise<PaletteData> {
       take: PALETTE_CAP,
     }),
     prisma.lead.findMany({
-      where: { stage: { notIn: ["converted", "declined"] } },
+      where: { stage: { notIn: [...LEAD_CLOSED_STAGES] } },
       select: { id: true, name: true, email: true, stage: true },
       orderBy: { updatedAt: "desc" },
       take: PALETTE_CAP,

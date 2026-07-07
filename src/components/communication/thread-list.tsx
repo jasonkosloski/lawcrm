@@ -7,8 +7,9 @@
  */
 
 import Link from "next/link";
-import { BellRing, Paperclip, Star } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { BellRing, Inbox, Paperclip, Star } from "lucide-react";
+import { cn, plural } from "@/lib/utils";
+import { EmptyState } from "@/components/shared/empty-state";
 // Centralized date formatting. `lastMessageAt` is a recency label
 // (formatRelative is TZ-independent until its >30d calendar-date
 // fallback, which uses the viewer's zone); `followUpAt` is a
@@ -87,15 +88,19 @@ export function ThreadList({
             {matterLabel ?? FILTER_LABEL[filter]}
           </div>
           <div className="text-sm font-display font-medium text-ink">
-            {threads.length} {threads.length === 1 ? "thread" : "threads"}
+            {plural(threads.length, "thread")}
           </div>
         </div>
       </header>
 
       <ul className="flex-1 overflow-y-auto">
         {threads.length === 0 ? (
-          <li className="px-4 py-8 text-center text-xs text-ink-4">
-            Nothing here.
+          <li>
+            <EmptyState
+              icon={Inbox}
+              title="Nothing here"
+              description="Threads matching this mailbox will appear here."
+            />
           </li>
         ) : (
           threads.map((t) => (

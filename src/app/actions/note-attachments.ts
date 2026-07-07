@@ -23,10 +23,8 @@ import { getCurrentUserId } from "@/lib/current-user";
 // for anyone west of UTC. See parseLocalDate docs.
 import { parseLocalDate } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
-import {
-  DEADLINE_KINDS,
-  TASK_PRIORITIES,
-} from "@/lib/note-constants";
+import { DEADLINE_KINDS } from "@/lib/constants/deadline-status";
+import { TASK_PRIORITIES } from "@/lib/constants/priority";
 import { logActivity } from "@/lib/activity-log";
 import { isKnownUtbmsCode } from "@/lib/time-entry-constants";
 import type {

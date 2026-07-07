@@ -242,32 +242,98 @@ done. What's left is enumerated below.
   /settings/firm (Goals section, gated `firm.edit_info`; validated
   positive, one decimal, ≤24 daily / ≤744 monthly). Possible future
   refinement: per-USER overrides of the daily target.
-- [ ] **`/matters/[id]/intake/[id]/time` is a placeholder.** Doesn't
-  render anything meaningful. Either build it or remove the route.
-- [ ] **Status / priority / role values are scattered string
-  literals.** `"open"`, `"in_progress"`, `"urgent"`, `"lead"`,
-  `"paralegal"`, etc. live in dozens of files. Typos would silently
-  misclassify rows. Centralize as TS const unions in
-  `src/lib/constants/`.
-- [ ] **No shared `<EmptyState>` component.** Every page invents
-  its own. Extract one with a consistent treatment + optional CTA.
-- [ ] **Plurals are hardcoded.** "1 matters" / "1 deadlines"
-  appear in places that don't compute the singular. Small
-  `plural(n, "matter")` helper.
+- [ ] **`/intake/[id]/time` is a placeholder.** Verified
+  2026-07-07 that it CANNOT be built yet without a migration:
+  `TimeEntry` has no `leadId` column and `matterId` is `NOT NULL`
+  (confirmed in schema.prisma, the generated client, every
+  migration, git history — only f5b5d3b ever added a `leadId`, on
+  `Expense` — and the live test Postgres). `Expense.leadId` exists
+  but is a placeholder FK: `Expense.matterId` is still required, so
+  lead-only expenses can't be stored either, and no lead-scoped
+  log-time affordance exists anywhere in src (the only `lead*`
+  fields on time paths are `Matter.leadUserId` = lead *attorney*).
+  The placeholder card's copy is accurate. To build: add nullable
+  `TimeEntry.leadId` (+ relax or dual-FK `matterId`), wire
+  conversion roll-forward, then mirror the matter Time tab
+  lead-scoped.
+- [x] **Status / priority / role values are scattered string
+  literals.** Shipped 2026-07-07: `src/lib/constants/` is the
+  canonical client-safe home — per-domain files (task-status,
+  priority, deadline-status incl. kinds, time-entry-status incl.
+  WIP subset, lead-stage incl. open/closed partitions,
+  invoice-status incl. kinds, calendar-event-type,
+  settlement-status) export `as const` arrays + union types +
+  label maps, smoke-tested for drift (constants.test.ts).
+  Pre-existing half-central homes now re-export from there:
+  note-constants.ts (task/deadline/time-entry/event sets),
+  queries/leads.ts (LeadStage + labels), billing-form.ts (invoice
+  kinds; its transition maps are now typed
+  `Record<InvoiceStatus, InvoiceStatus[]>`). Server side migrated:
+  actions (tasks, deadlines, time-entries, calendar-events,
+  captures, note-attachments, inbox-actions, conversions, leads,
+  billing, settlements — the last two previously inlined
+  `["draft","submitted","billable"]` sweeps / anonymous z.enums)
+  and queries (billing WIP predicate, reports pipeline stages now
+  DERIVED from LEAD_OPEN_STAGES, sidebar/command-palette/leads
+  closed-stage filters). Note: Matter itself has no status column
+  (stage is a DB-backed FK), so there's no matter-status constant.
+  Component sweep is opportunistic and ongoing — row-action menus,
+  tasks/deadlines pages, and the event modal now consume the
+  central label maps.
+- [x] **No shared `<EmptyState>` component.** Shipped 2026-07-07:
+  `src/components/shared/empty-state.tsx` (icon + title + optional
+  description + CTA slot + `framed` dashed-card variant; see
+  UI_PATTERNS.md). Adopted at ~14 sites: search page (3), template
+  library, notifications feed, matter tasks/deadlines/events tabs,
+  contacts directory, intake queue (mobile + table), matters table
+  (mobile + table), email thread list. Remaining hand-rolled
+  empties (calendar day/week, time views, reports cards, settings)
+  migrate opportunistically as those files get touched.
+- [x] **Plurals are hardcoded.** Shipped 2026-07-07:
+  `plural(n, "matter")` + `pluralize(noun)` in `src/lib/utils.ts`
+  (regular rules + -es/-ies + irregulars map + explicit-plural
+  override). Fixed the real bug (matters-toolbar rendered
+  "1 matters") and converted the thread-list/thread-reader count
+  labels; existing correct ternaries elsewhere migrate
+  opportunistically.
 - [ ] **PracticeArea color vs Matter color drift.** Matter snapshots
   area color on create; if the area color changes, matters keep the
   old color. Document the decision in DECISIONS.md (or fix).
-- [ ] **Email labels render as raw `privileged_label` instead of
-  "Privileged".** Label-formatter helper.
+- [x] **Email labels render as raw `privileged_label` instead of
+  "Privileged".** Shipped 2026-07-07: `formatEmailLabel` in
+  `src/lib/format-label.ts` (strips `custom:` prefixes and
+  redundant `_label` suffixes, splits snake/kebab case,
+  title-cases) — used by the thread-reader label chips, which
+  previously did a first-underscore-only `.replace("_", " ")`.
+  The inbox deadline-kind select now uses DEADLINE_KIND_LABEL
+  instead of the same raw-replace trick.
 - [ ] **Inconsistent button sizes** across cards / tables / forms.
   Define a per-context size convention and sweep once.
-- [ ] **No HTML sanitization on user-entered text** (matter
-  description). `whitespace-pre-wrap` renders raw. Stored XSS risk
-  if multi-user / external email ever pipes content in. Note bodies
-  are already DOMPurified server-side.
-- [ ] **`NoteRead` table will grow unbounded.** No cleanup when a
-  note is deleted or archived. Cascade-delete on Note delete;
-  periodic cleanup job once row counts matter.
+- [x] **No HTML sanitization on user-entered text** (matter
+  description) — audited 2026-07-07, no gap. `matter.description`
+  renders as React-escaped JSX text (`{matter.description}` in
+  `src/app/(dashboard)/matters/[id]/page.tsx`), never via
+  `dangerouslySetInnerHTML`, so `whitespace-pre-wrap` is styling
+  escaped text — no stored-XSS path. Full sweep: every
+  `dangerouslySetInnerHTML` in src/ renders `Note.content` only
+  (matter overview pinned notes, note-card, row-attached-notes,
+  event-notes-section), and every `Note.content` write path
+  sanitizes at the boundary: `sanitizeUserHtml`
+  (src/lib/sanitize-html.ts) in notes.ts / captures.ts /
+  inbox-actions.ts, entity-escaping `textareaToHtml` in
+  note-on-entity.ts. (Note: sanitizer is `sanitize-html`, not
+  DOMPurify — swapped in 4a60f50.)
+- [x] **`NoteRead` table will grow unbounded.** Done by schema,
+  verified 2026-07-07: `deleteNote` is a hard `prisma.note.delete`
+  (no soft-delete stranding rows, and no archive path exists), and
+  both `NoteRead` and `NoteReaction` FKs carry `onDelete: Cascade`
+  (schema.prisma → note_reads / note_reactions), as does
+  `parentNoteId` for reply sub-threads. Proven by the
+  "deleteNote — hard delete cascades reads + reactions" suite in
+  `src/app/actions/notes.test.ts` (cascade on both tables, reply
+  cascade, scoping to the deleted note's rows). Remaining
+  nice-to-have only if row counts ever matter: periodic cleanup of
+  reads on very old notes.
 - [ ] **Document versioning.** No version field on Document. Will
   matter the second a draft pleading goes through 3+ revisions.
 - [ ] **Evidence viewer.** `Evidence`, `FlaggedMoment`,
@@ -276,15 +342,34 @@ done. What's left is enumerated below.
 - [ ] **Document management — folder tree, file grid, category
   filters.** Today the matter Documents tab covers per-matter; a
   firm-wide library is the next step.
-- [ ] **Dashboard customizable layout — v2 (reorder).** Up/down
-  arrow controls in the customize popover. Persist `order: cardKey[]`
-  alongside `visible` in `User.dashboardPrefs`.
+- [x] **Dashboard customizable layout — v2 (reorder).** Shipped
+  2026-07-07: up/down arrow controls per row in the customize
+  popover, grouped by column (main vs. right rail) since cards keep
+  a fixed column in v2. `order: cardKey[]` persisted alongside
+  `visible` in `User.dashboardPrefs`; `mergeOrder` mirrors
+  `mergeVisibility`'s defensive merge (unknown keys dropped, dupes
+  deduped, cards added post-save appended in default order).
+  Hidden cards stay listed and orderable — re-showing one restores
+  its saved slot. Order is sent whole from the client and sanitized
+  server-side (`setDashboardCardOrder`); the visibility action now
+  rewrites both halves of the blob so neither clobbers the other.
 - [ ] **Dashboard customizable layout — v3 (drag + resize).**
   Drag-to-reorder, per-card width control, role-based defaults
   tying into the customizable sidebar work.
-- [ ] **Command palette — v2.** Scoping prefixes (`@person`,
-  `#matter`, `>action`), create-new actions ("New matter", "New
-  task", etc.), fuzzy-match highlight inside results.
+- [~] **Command palette — v2.** SHIPPED: scoping prefixes
+  (`#matter`, `@person` — includes leads, `>action`) parsed by
+  `src/components/command-palette/prefix.ts` and enforced in the
+  cmdk filter via per-item kind tags; "Create" group ("New matter",
+  "New contact" — re-homed from Navigation, "New event", "New
+  intake / lead") — pure navigation, target pages enforce their own
+  permission gates since PaletteData carries no permission flags;
+  "Search everywhere" carries `#`/`@` into `/search?type=matter|contact`
+  and hides under `>`. REMAINING: fuzzy-match highlight inside
+  results; "New task" (no standalone create page yet); "Log a call"
+  (CallLogDialog needs contact-picker data + a URL affordance to
+  auto-open); "Start timer" (startTimer() silently replaces a
+  running session — needs the active-session flag in PaletteData to
+  be safe from the palette).
 - [ ] **Role-based & customizable sidebar.** Different sidebar
   content per role with per-user overrides. Generic "pinned items"
   concept spanning matters, reports, leads, contacts, saved-filter
@@ -344,7 +429,7 @@ end-to-end" milestone — schema, action, query, UI all wired.
 - [x] **Dashboard page** — KPI tiles, agenda, your tasks, activity feed, deadlines, firm pulse (live Prisma queries)
 - [x] **Dashboard — customizable layout (v1: show/hide)** — "Customize" popover in the dashboard topbar with one checkbox per card. Persisted as JSON on `User.dashboardPrefs` (`{ visible: Record<cardKey, boolean> }`). Defaults to all visible — new cards auto-appear without backfill. Optimistic UI flip + server action + revalidation.
 - [x] **Seed data** — Realistic mock data from the prototype
-- [x] **Command palette (⌘K)** — Global ⌘K opens the palette from anywhere. Unified search across matters (name/case number/client/area/stage), contacts, leads, users, and navigation destinations. Contextual "Pin/Unpin this matter" action on matter detail pages. Recents persisted in localStorage; empty state shows recents + pinned matters + suggestions. Token-AND filter so multi-word queries match across fields.
+- [x] **Command palette (⌘K)** — Global ⌘K opens the palette from anywhere. Unified search across matters (name/case number/client/area/stage), contacts, leads, users, and navigation destinations. Contextual "Pin/Unpin this matter" action on matter detail pages. Recents persisted in localStorage; empty state shows recents + pinned matters + suggestions. Token-AND filter so multi-word queries match across fields. v2: scoping prefixes (`#` matters, `@` people incl. leads, `>` actions) + a "Create" action group (New matter / contact / event / intake-lead — pure navigation, pages enforce their own permissions); prefixes carry into the "Search everywhere" row as `/search?type=`.
 - [x] **Sidebar — data-driven** — All sidebar content is live: per-user pinned matters (cuid hrefs), practice-area counts, main nav badges (open matters, unread email, active leads, hours today), current user profile.
 - [x] **Loading states** — `loading.tsx` per high-traffic segment (dashboard, matters list, matter detail, intake, calendar, communication, contacts) backed by a shared `<PageSkeleton variant="tiles|table|detail|grid">`.
 - [x] **Error boundaries** — Dashboard-segment `error.tsx` + `not-found.tsx` for missing matters/leads/contacts + root `global-error.tsx` as last-resort fallback.

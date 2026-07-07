@@ -14,6 +14,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { TIME_ENTRY_WIP_STATUSES } from "@/lib/constants/time-entry-status";
 
 export type WipEntry = {
   id: string;
@@ -132,9 +133,10 @@ export type MatterBilling = {
 const WIP_RECENT_LIMIT = 10;
 const TRUST_RECENT_LIMIT = 20;
 
-/// WIP-eligible time-entry statuses. Anything else is either
-/// already-billed (`billed`) or excluded (`written_off`).
-const WIP_STATUSES = ["draft", "submitted", "billable"] as const;
+/// WIP-eligible time-entry statuses — centralized (see
+/// constants/time-entry-status.ts) so this predicate can't drift
+/// from the sweep in actions/billing.ts.
+const WIP_STATUSES = TIME_ENTRY_WIP_STATUSES;
 
 /** Round a derived money value to cents. Individual Decimal →
  *  number conversions are fine, but arithmetic on the results

@@ -14,7 +14,9 @@
  * Next.js 16: `searchParams` is a Promise that must be awaited.
  */
 
+import { Search } from "lucide-react";
 import { TopBar } from "@/components/layout/topbar";
+import { EmptyState } from "@/components/shared/empty-state";
 import { SearchForm } from "@/components/search/search-form";
 import { SearchResults } from "@/components/search/search-results";
 import {
@@ -56,33 +58,31 @@ export default async function SearchPage({
           <SearchForm initialQuery={q} />
 
           {q.length === 0 ? (
-            <EmptyState>
-              Search everything — matters, contacts, leads, notes, documents,
-              tasks, deadlines, events, email, messages, and time entries.
-            </EmptyState>
+            <EmptyState
+              framed
+              icon={Search}
+              title="Search everything"
+              description="Matters, contacts, leads, notes, documents, tasks, deadlines, events, email, messages, and time entries."
+            />
           ) : !longEnough ? (
-            <EmptyState>
-              Keep typing — searches need at least {SEARCH_MIN_QUERY_LENGTH}{" "}
-              characters.
-            </EmptyState>
+            <EmptyState
+              framed
+              icon={Search}
+              title="Keep typing"
+              description={`Searches need at least ${SEARCH_MIN_QUERY_LENGTH} characters.`}
+            />
           ) : result.groups.length === 0 ? (
-            <EmptyState>
-              No results for &ldquo;{q}&rdquo;. Try fewer or different words —
-              matching is exact-substring for now.
-            </EmptyState>
+            <EmptyState
+              framed
+              icon={Search}
+              title={`No results for “${q}”`}
+              description="Try fewer or different words — matching is exact-substring for now."
+            />
           ) : (
             <SearchResults result={result} expandedType={expandedType} />
           )}
         </div>
       </div>
     </>
-  );
-}
-
-function EmptyState({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border border-dashed border-line-2 bg-card px-4 py-8 text-center text-xs text-ink-3">
-      {children}
-    </div>
   );
 }

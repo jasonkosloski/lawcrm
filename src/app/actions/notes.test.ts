@@ -11,6 +11,12 @@
  *     un-pin regardless of what the form submits.
  *   - markMatterNotesRead is idempotent (skipDuplicates) — re-marking
  *     already-read notes is one batch statement, no dupes, no throw.
+ *   - deleteNote is a HARD delete and the schema cascades clean up
+ *     the satellite tables: NoteRead + NoteReaction rows (onDelete:
+ *     Cascade on both FKs) and reply sub-threads (parentNoteId
+ *     Cascade) go with the note, so the read/reaction tables can't
+ *     accumulate orphans. Evidence for the "NoteRead table will
+ *     grow unbounded" roadmap entry being covered by the schema.
  *
  * Auth + permission gates are stubbed; the gate itself is covered in
  * `permission-check.integration.test.ts`.
@@ -29,6 +35,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import {
   createNote,
+  deleteNote,
   markMatterNotesRead,
   updateNote,
 } from "@/app/actions/notes";
@@ -43,6 +50,7 @@ import {
 
 const mockedGetUser = vi.mocked(getCurrentUserId);
 
+let firmId: string;
 let userId: string;
 let matterId: string;
 let otherMatterId: string;
@@ -53,7 +61,7 @@ beforeAll(() => {
 
 beforeEach(async () => {
   await resetDb();
-  const { firmId } = await seedFirm();
+  ({ firmId } = await seedFirm());
   const u = await seedUser({ firmId });
   userId = u.userId;
   mockedGetUser.mockResolvedValue(userId);
@@ -216,5 +224,92 @@ describe("markMatterNotesRead — idempotent batch", () => {
     const res = await markMatterNotesRead(["ghost-note-id"]);
     expect(res.ok).toBe(true);
     expect(await prisma.noteRead.count()).toBe(0);
+  });
+});
+
+describe("deleteNote — hard delete cascades reads + reactions", () => {
+  test("deleting a note removes its NoteRead and NoteReaction rows", async () => {
+    const noteId = await seedNote();
+    const other = await seedUser({ firmId });
+
+    await prisma.noteRead.createMany({
+      data: [
+        { userId, noteId },
+        { userId: other.userId, noteId },
+      ],
+    });
+    await prisma.noteReaction.createMany({
+      data: [
+        { userId, noteId, emoji: "👍" },
+        { userId: other.userId, noteId, emoji: "🔥" },
+      ],
+    });
+
+    // Author deletes their own note (no notes.delete_any needed).
+    const res = await deleteNote(noteId);
+    expect(res.ok).toBe(true);
+
+    // Row is GONE (hard delete, not a soft-delete flag) …
+    expect(await prisma.note.count()).toBe(0);
+    // … and the satellite tables cascaded to zero. This is what
+    // makes the "NoteRead grows unbounded" concern a non-issue for
+    // the delete path — the FK's onDelete: Cascade does the cleanup.
+    expect(await prisma.noteRead.count()).toBe(0);
+    expect(await prisma.noteReaction.count()).toBe(0);
+  });
+
+  test("deleting a parent note cascades the reply's reads + reactions too", async () => {
+    const parentId = await seedNote();
+    const reply = await prisma.note.create({
+      data: {
+        matterId,
+        authorId: userId,
+        parentNoteId: parentId,
+        content: "<p>Reply</p>",
+      },
+      select: { id: true },
+    });
+    await prisma.noteRead.create({
+      data: { userId, noteId: reply.id },
+    });
+    await prisma.noteReaction.create({
+      data: { userId, noteId: reply.id, emoji: "👍" },
+    });
+
+    const res = await deleteNote(parentId);
+    expect(res.ok).toBe(true);
+
+    // Reply went with the parent (parentNoteId Cascade), and the
+    // reply's read/reaction rows went with the reply.
+    expect(await prisma.note.count()).toBe(0);
+    expect(await prisma.noteRead.count()).toBe(0);
+    expect(await prisma.noteReaction.count()).toBe(0);
+  });
+
+  test("cascade only touches the deleted note's rows", async () => {
+    const doomed = await seedNote();
+    const survivor = await seedNote();
+    await prisma.noteRead.createMany({
+      data: [
+        { userId, noteId: doomed },
+        { userId, noteId: survivor },
+      ],
+    });
+    await prisma.noteReaction.createMany({
+      data: [
+        { userId, noteId: doomed, emoji: "👍" },
+        { userId, noteId: survivor, emoji: "👍" },
+      ],
+    });
+
+    const res = await deleteNote(doomed);
+    expect(res.ok).toBe(true);
+
+    const reads = await prisma.noteRead.findMany();
+    expect(reads).toHaveLength(1);
+    expect(reads[0].noteId).toBe(survivor);
+    const reactions = await prisma.noteReaction.findMany();
+    expect(reactions).toHaveLength(1);
+    expect(reactions[0].noteId).toBe(survivor);
   });
 });

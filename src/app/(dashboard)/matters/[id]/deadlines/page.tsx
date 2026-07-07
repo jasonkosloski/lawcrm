@@ -6,6 +6,8 @@
  * due date.
  */
 
+import { CalendarClock } from "lucide-react";
+import { EmptyState } from "@/components/shared/empty-state";
 import { Card } from "@/components/ui/card";
 import {
   Table,
@@ -19,25 +21,21 @@ import { DeadlineComposer } from "@/components/matters/captures/deadline-compose
 import { DeadlineRowMenu } from "@/components/deadlines/deadline-row-actions";
 import { EntitySourceChip } from "@/components/matters/entity-source-chip";
 import { RowAttachedNotes } from "@/components/matters/row-attached-notes";
-import { type DeadlineStatus } from "@/lib/note-constants";
+import {
+  DEADLINE_KIND_LABEL,
+  DEADLINE_STATUS_LABEL,
+  type DeadlineStatus,
+} from "@/lib/constants/deadline-status";
 // Due dates are date-only values (server-local midnight) — the
 // centralized default ("medium") with no TZ override keeps them on
 // the day grid they were saved on.
 import { formatDate } from "@/lib/format-date";
 import { getMatterDeadlines } from "@/lib/queries/matter-detail";
 
-const KIND_LABEL: Record<string, string> = {
-  critical: "Critical",
-  auto_rule: "Auto-rule",
-  manual: "Manual",
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  open: "Open",
-  completed: "Completed",
-  overdue: "Overdue",
-  waived: "Waived",
-};
+// Label maps are centralized (src/lib/constants/deadline-status.ts).
+// Widened to string-indexable here because DB values arrive untyped.
+const KIND_LABEL: Record<string, string> = DEADLINE_KIND_LABEL;
+const STATUS_LABEL: Record<string, string> = DEADLINE_STATUS_LABEL;
 
 function KindChip({ kind }: { kind: string }) {
   const label = KIND_LABEL[kind] ?? kind;
@@ -84,9 +82,12 @@ export default async function MatterDeadlinesPage({
       <DeadlineComposer matterId={id} />
 
       {deadlines.length === 0 ? (
-        <div className="text-xs text-ink-4 text-center py-6">
-          No deadlines yet — add one above.
-        </div>
+        <EmptyState
+          icon={CalendarClock}
+          title="No deadlines yet"
+          description="Add one above."
+          className="py-6"
+        />
       ) : (
       <Card className="p-0 overflow-hidden">
         <Table>

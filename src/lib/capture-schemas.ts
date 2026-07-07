@@ -12,12 +12,10 @@
  */
 
 import { z } from "zod";
-import {
-  DEADLINE_KINDS,
-  EVENT_TYPES,
-  NOTE_TYPES,
-  TASK_PRIORITIES,
-} from "@/lib/note-constants";
+import { NOTE_TYPES } from "@/lib/note-constants";
+import { DEADLINE_KINDS } from "@/lib/constants/deadline-status";
+import { EVENT_TYPES } from "@/lib/constants/calendar-event-type";
+import { TASK_PRIORITIES } from "@/lib/constants/priority";
 
 /** Date-only capture fields travel as "YYYY-MM-DD" (the wire format
  *  of <input type="date">). Enforcing the shape here lets the server

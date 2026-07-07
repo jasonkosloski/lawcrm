@@ -38,7 +38,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentFirm } from "@/lib/firm";
 import { getCurrentUserId } from "@/lib/current-user";
 import { canEditEvent } from "@/lib/calendar-visibility";
-import { EVENT_TYPES } from "@/lib/note-constants";
+import { EVENT_TYPES } from "@/lib/constants/calendar-event-type";
 import {
   currentUserHasPermission,
   requirePermission,

@@ -23,8 +23,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   DEADLINE_STATUSES,
+  DEADLINE_STATUS_LABEL as STATUS_LABEL,
   type DeadlineStatus,
-} from "@/lib/note-constants";
+} from "@/lib/constants/deadline-status";
 import { deleteDeadline, setDeadlineStatus } from "@/app/actions/deadlines";
 import { addTimeEntryToDeadline } from "@/app/actions/time-on-entity";
 import {
@@ -32,12 +33,6 @@ import {
   type EditableDeadline,
 } from "./edit-deadline-dialog";
 import { LogTimeOnEntityDialog } from "@/components/time-entries/log-time-on-entity-dialog";
-
-const STATUS_LABEL: Record<DeadlineStatus, string> = {
-  open: "Open",
-  completed: "Completed",
-  waived: "Waived",
-};
 
 export function DeadlineRowMenu({
   deadline,

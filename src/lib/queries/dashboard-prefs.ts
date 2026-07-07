@@ -7,21 +7,19 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import {
-  mergeVisibility,
-  type DashboardVisibility,
-} from "@/lib/dashboard-prefs";
+import { mergePrefs, type DashboardPrefs } from "@/lib/dashboard-prefs";
 
 /**
- * Load the current user's visibility prefs, merged with defaults so any
- * card not explicitly set is visible.
+ * Load the current user's dashboard prefs (visibility + card order),
+ * merged with defaults so any card not explicitly set is visible and
+ * any card missing from the stored order is appended in default order.
  */
-export async function getDashboardVisibility(
+export async function getDashboardPrefs(
   userId: string
-): Promise<DashboardVisibility> {
+): Promise<DashboardPrefs> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { dashboardPrefs: true },
   });
-  return mergeVisibility(user?.dashboardPrefs);
+  return mergePrefs(user?.dashboardPrefs);
 }

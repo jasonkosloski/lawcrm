@@ -8,6 +8,8 @@
  * deeper view; inline expansion is the friction-free capture path.
  */
 
+import { CalendarDays } from "lucide-react";
+import { EmptyState } from "@/components/shared/empty-state";
 import { notFound } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { EventDetailModal } from "@/components/calendar/event-detail-modal";
@@ -72,9 +74,12 @@ export default async function MatterEventsPage({
       <EventComposer matterId={id} />
 
       {events.length === 0 ? (
-        <div className="text-xs text-ink-4 text-center py-6">
-          No events yet — schedule one above.
-        </div>
+        <EmptyState
+          icon={CalendarDays}
+          title="No events yet"
+          description="Schedule one above."
+          className="py-6"
+        />
       ) : null}
 
       {upcoming.length > 0 && (

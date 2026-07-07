@@ -22,6 +22,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/shared/empty-state";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -109,16 +110,16 @@ export function TemplateLibrary({
 
       {active.length === 0 && archived.length === 0 && (
         <Card>
-          <CardContent className="p-8 text-center flex flex-col items-center gap-2">
-            <FileText size={18} className="text-ink-4" />
-            <div className="text-sm font-semibold text-ink">
-              No templates yet
-            </div>
-            <div className="text-xs text-ink-3 max-w-sm">
-              {canCreate
-                ? "Create your first template above — demand letters, retainers, and discovery cover letters are good starters."
-                : "Once someone with the template-create permission adds templates, they'll appear here and in every matter's Generate-from-template picker."}
-            </div>
+          <CardContent className="p-0">
+            <EmptyState
+              icon={FileText}
+              title="No templates yet"
+              description={
+                canCreate
+                  ? "Create your first template above — demand letters, retainers, and discovery cover letters are good starters."
+                  : "Once someone with the template-create permission adds templates, they'll appear here and in every matter's Generate-from-template picker."
+              }
+            />
           </CardContent>
         </Card>
       )}

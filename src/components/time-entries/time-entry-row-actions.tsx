@@ -23,8 +23,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   TIME_ENTRY_STATUSES,
+  TIME_ENTRY_STATUS_LABEL as STATUS_LABEL,
   type TimeEntryStatus,
-} from "@/lib/note-constants";
+} from "@/lib/constants/time-entry-status";
 import {
   deleteTimeEntry,
   setTimeEntryStatus,
@@ -33,14 +34,6 @@ import {
   EditTimeEntryDialog,
   type EditableTimeEntry,
 } from "./edit-time-entry-dialog";
-
-const STATUS_LABEL: Record<TimeEntryStatus, string> = {
-  draft: "Draft",
-  submitted: "Submitted",
-  billable: "Billable",
-  billed: "Billed",
-  written_off: "Written off",
-};
 
 export function TimeEntryRowMenu({
   entry,

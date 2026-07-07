@@ -20,6 +20,7 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
+import { LEAD_CLOSED_STAGES } from "@/lib/constants/lead-stage";
 
 export type SidebarUser = {
   id: string;
@@ -95,7 +96,7 @@ export async function getSidebarData(): Promise<SidebarData> {
     prisma.matter.count({ where: OPEN_MATTER_WHERE }),
     prisma.emailThread.count({ where: { isRead: false } }),
     prisma.lead.count({
-      where: { stage: { notIn: ["converted", "declined"] } },
+      where: { stage: { notIn: [...LEAD_CLOSED_STAGES] } },
     }),
     // Pinned matters for this user only, ordered by the pin createdAt
     // (most recently pinned first).

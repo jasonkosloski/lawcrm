@@ -15,6 +15,8 @@ import { MailOpen, Paperclip, Reply, ShieldCheck } from "lucide-react";
 // viewer's IANA zone (ADR-012). "datetime_medium" is the centralized
 // spelling of the "MMM d, yyyy, h:mm a" this header always used.
 import { formatDate } from "@/lib/format-date";
+import { formatEmailLabel } from "@/lib/format-label";
+import { plural } from "@/lib/utils";
 import type { ThreadDetail } from "@/lib/queries/communication";
 import { InboxActionButtons } from "./inbox-action-buttons";
 import { FollowUpButton } from "./follow-up-button";
@@ -96,8 +98,7 @@ export function ThreadReader({
             />
             <span className="text-ink-4">·</span>
             <span className="font-mono text-ink-4">
-              {thread.messageCount}{" "}
-              {thread.messageCount === 1 ? "message" : "messages"}
+              {plural(thread.messageCount, "message")}
             </span>
             {thread.labels.length > 0 && (
               <>
@@ -106,9 +107,9 @@ export function ThreadReader({
                   {thread.labels.map((l) => (
                     <span
                       key={l}
-                      className="text-2xs font-mono text-ink-3 bg-white px-1.5 py-px rounded border border-line"
+                      className="text-2xs text-ink-3 bg-white px-1.5 py-px rounded border border-line"
                     >
-                      {l.replace("_", " ")}
+                      {formatEmailLabel(l)}
                     </span>
                   ))}
                 </span>

@@ -19,7 +19,9 @@ import { getLeadById, LEAD_STAGE_LABEL } from "@/lib/queries/leads";
 import { getPracticeAreaOptions } from "@/lib/queries/practice-area-options";
 
 function StageChip({ stage }: { stage: string }) {
-  const label = LEAD_STAGE_LABEL[stage] ?? stage;
+  // DB stage values arrive untyped — fall back to the raw slug
+  // for anything the label map doesn't know.
+  const label = (LEAD_STAGE_LABEL as Record<string, string>)[stage] ?? stage;
   const cls =
     stage === "new"
       ? "bg-brand-soft text-brand-700 border-brand-200"

@@ -29,11 +29,9 @@ import { getCurrentUserId } from "@/lib/current-user";
 // still go through `new Date(...)`, which parses them as local.
 import { parseLocalDate } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
-import {
-  DEADLINE_KINDS,
-  EVENT_TYPES,
-  TASK_PRIORITIES,
-} from "@/lib/note-constants";
+import { DEADLINE_KINDS } from "@/lib/constants/deadline-status";
+import { EVENT_TYPES } from "@/lib/constants/calendar-event-type";
+import { TASK_PRIORITIES } from "@/lib/constants/priority";
 import {
   captureSchema,
   type CaptureFormState,

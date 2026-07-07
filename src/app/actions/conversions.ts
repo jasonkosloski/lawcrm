@@ -30,7 +30,8 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { parseLocalDate } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
-import { DEADLINE_KINDS, TASK_PRIORITIES } from "@/lib/note-constants";
+import { DEADLINE_KINDS } from "@/lib/constants/deadline-status";
+import { TASK_PRIORITIES } from "@/lib/constants/priority";
 import type { InboxActionFormState } from "@/lib/inbox-action-form";
 
 // ── Note → Task ─────────────────────────────────────────────────────────

@@ -40,11 +40,12 @@ import {
   inboxActionInitialState,
   type InboxActionFormState,
 } from "@/lib/inbox-action-form";
+import { todayDateString } from "@/lib/note-constants";
 import {
   DEADLINE_KINDS,
-  TASK_PRIORITIES,
-  todayDateString,
-} from "@/lib/note-constants";
+  DEADLINE_KIND_LABEL,
+} from "@/lib/constants/deadline-status";
+import { TASK_PRIORITIES } from "@/lib/constants/priority";
 
 export type InboxSource =
   | { kind: "email"; id: string; subject: string; snippet: string }
@@ -394,7 +395,7 @@ function CreateDeadlineDialog({
             >
               {DEADLINE_KINDS.map((k) => (
                 <option key={k} value={k}>
-                  {k.replace("_", " ")}
+                  {DEADLINE_KIND_LABEL[k]}
                 </option>
               ))}
             </select>

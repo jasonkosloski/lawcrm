@@ -30,11 +30,12 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { TASK_PRIORITIES } from "@/lib/constants/priority";
 import {
-  TASK_PRIORITIES,
   TASK_STATUSES,
   type TaskStatus,
-} from "@/lib/note-constants";
+  isTaskClosed,
+} from "@/lib/constants/task-status";
 import type { UpdateTaskFormState } from "@/lib/task-form";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
@@ -70,8 +71,8 @@ export async function setTaskStatus(
   // `completedAt` mirrors status — set when entering done/cancelled,
   // clear when leaving. Keeps queries that filter "completed in last 7
   // days" honest without an extra column write at the call site.
-  const isComplete = status === "done" || status === "cancelled";
-  const wasComplete = task.status === "done" || task.status === "cancelled";
+  const isComplete = isTaskClosed(status);
+  const wasComplete = isTaskClosed(task.status);
 
   await prisma.task.update({
     where: { id: taskId },
@@ -250,8 +251,8 @@ export async function updateTask(
   }
 
   const newStatus = parsed.data.status;
-  const isComplete = newStatus === "done" || newStatus === "cancelled";
-  const wasComplete = task.status === "done" || task.status === "cancelled";
+  const isComplete = isTaskClosed(newStatus);
+  const wasComplete = isTaskClosed(task.status);
 
   await prisma.task.update({
     where: { id: taskId },

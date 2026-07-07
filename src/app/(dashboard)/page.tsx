@@ -10,6 +10,7 @@
  * the slowest one.
  */
 
+import { Fragment, type ReactNode } from "react";
 import Link from "next/link";
 import { TopBar } from "@/components/layout/topbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,7 +20,8 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { maybeRunDeadlineNotificationSweep } from "@/lib/notification-sweeps";
 import { formatDate } from "@/lib/format-date";
-import { getDashboardVisibility } from "@/lib/queries/dashboard-prefs";
+import { cardsInColumn, type DashboardCardKey } from "@/lib/dashboard-prefs";
+import { getDashboardPrefs } from "@/lib/queries/dashboard-prefs";
 import {
   Briefcase,
   Check,
@@ -88,7 +90,7 @@ export default async function DashboardPage() {
     pulse,
     myTasks,
     followUps,
-    visibility,
+    prefs,
   ] = await Promise.all([
     getDashboardKpis(tz),
     getTodayAgenda(tz),
@@ -97,7 +99,7 @@ export default async function DashboardPage() {
     getFirmPulse(tz),
     getMyOpenTasks(tz),
     getFollowUpsDueToday(tz),
-    getDashboardVisibility(userId),
+    getDashboardPrefs(userId),
   ]);
 
   const kpiTiles = [
@@ -133,24 +135,14 @@ export default async function DashboardPage() {
 
   const mtdPct = Math.min(100, (pulse.billableMtd / pulse.billableGoal) * 100);
 
-  return (
-    <>
-      <TopBar
-        title="Today"
-        crumbs="Dashboard"
-        actions={<DashboardCustomizeButton initialVisibility={visibility} />}
-      />
-
-      <div className="flex-1 overflow-y-auto p-3 sm:p-5 animate-page-enter">
-        {/* Two-column on lg+, stack on smaller. The right rail
-            (deadlines + firm pulse) drops below the main column
-            on mobile/tablet so the user reads top-to-bottom
-            instead of side-to-side. */}
-        <div className="flex flex-col lg:flex-row gap-5">
-          {/* ── Main column ─────────────────────────────────────────────── */}
-          <div className="flex-1 min-w-0 flex flex-col gap-5">
-            {/* KPI tile grid — 1 / 2 / 4 columns at xs / sm / lg+. */}
-            {visibility.kpis && (
+  // Each card keyed by its pref key. The return below walks the
+  // user's saved order per column (main vs. right rail) and skips
+  // hidden cards. Cards keep a fixed column in v2 — the saved order
+  // only moves them within it (see DASHBOARD_CARD_COLUMNS in
+  // src/lib/dashboard-prefs.ts).
+  const cards: Record<DashboardCardKey, ReactNode> = {
+    // KPI tile grid — 1 / 2 / 4 columns at xs / sm / lg+.
+    kpis: (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               {kpiTiles.map((kpi) => {
                 const Icon = kpi.icon;
@@ -193,10 +185,10 @@ export default async function DashboardPage() {
                 );
               })}
             </div>
-            )}
+    ),
 
-            {/* Today's agenda */}
-            {visibility.agenda && (
+    // Today's agenda
+    agenda: (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold">
@@ -232,10 +224,10 @@ export default async function DashboardPage() {
                 )}
               </CardContent>
             </Card>
-            )}
+    ),
 
-            {/* Your tasks (assigned to current user, grouped by due date) */}
-            {visibility.tasks && (
+    // Your tasks (assigned to current user, grouped by due date)
+    tasks: (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -266,11 +258,11 @@ export default async function DashboardPage() {
                 )}
               </CardContent>
             </Card>
-            )}
+    ),
 
-            {/* Follow up today (email + messenger threads with a snooze
-                date today or earlier — overdue ones bubble to the top) */}
-            {visibility.followUps && (
+    // Follow up today (email + messenger threads with a snooze
+    // date today or earlier — overdue ones bubble to the top)
+    followUps: (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -300,10 +292,10 @@ export default async function DashboardPage() {
                 )}
               </CardContent>
             </Card>
-            )}
+    ),
 
-            {/* Recent activity */}
-            {visibility.activity && (
+    // Recent activity
+    activity: (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold">
@@ -350,15 +342,10 @@ export default async function DashboardPage() {
                 )}
               </CardContent>
             </Card>
-            )}
-          </div>
+    ),
 
-          {/* ── Right rail ─────────────────────────────────────────────────
-              At lg+ this is a 340px sidebar; below lg it stacks under the
-              main column at full width. */}
-          <div className="w-full lg:w-85 lg:shrink-0 flex flex-col gap-5">
-            {/* Deadlines this week */}
-            {visibility.deadlines && (
+    // Deadlines this week (right rail)
+    deadlines: (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold">
@@ -399,10 +386,10 @@ export default async function DashboardPage() {
                 )}
               </CardContent>
             </Card>
-            )}
+    ),
 
-            {/* Firm pulse */}
-            {visibility.pulse && (
+    // Firm pulse (right rail)
+    pulse: (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold">
@@ -448,7 +435,41 @@ export default async function DashboardPage() {
                 </div>
               </CardContent>
             </Card>
-            )}
+    ),
+  };
+
+  return (
+    <>
+      <TopBar
+        title="Today"
+        crumbs="Dashboard"
+        actions={<DashboardCustomizeButton initialPrefs={prefs} />}
+      />
+
+      <div className="flex-1 overflow-y-auto p-3 sm:p-5 animate-page-enter">
+        {/* Two-column on lg+, stack on smaller. The right rail
+            (deadlines + firm pulse) drops below the main column
+            on mobile/tablet so the user reads top-to-bottom
+            instead of side-to-side. */}
+        <div className="flex flex-col lg:flex-row gap-5">
+          {/* ── Main column — cards in the user's saved order ───────────── */}
+          <div className="flex-1 min-w-0 flex flex-col gap-5">
+            {cardsInColumn(prefs.order, "main")
+              .filter((key) => prefs.visible[key])
+              .map((key) => (
+                <Fragment key={key}>{cards[key]}</Fragment>
+              ))}
+          </div>
+
+          {/* ── Right rail — same treatment ────────────────────────────────
+              At lg+ this is a 340px sidebar; below lg it stacks under the
+              main column at full width. */}
+          <div className="w-full lg:w-85 lg:shrink-0 flex flex-col gap-5">
+            {cardsInColumn(prefs.order, "rail")
+              .filter((key) => prefs.visible[key])
+              .map((key) => (
+                <Fragment key={key}>{cards[key]}</Fragment>
+              ))}
           </div>
         </div>
       </div>

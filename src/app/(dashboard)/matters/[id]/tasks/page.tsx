@@ -5,6 +5,8 @@
  * Done). Each task shows priority, due date, and owner.
  */
 
+import { CheckSquare } from "lucide-react";
+import { EmptyState } from "@/components/shared/empty-state";
 import { Card } from "@/components/ui/card";
 import { TaskComposer } from "@/components/matters/captures/task-composer";
 import {
@@ -13,7 +15,11 @@ import {
 } from "@/components/tasks/task-row-actions";
 import { EntitySourceChip } from "@/components/matters/entity-source-chip";
 import { RowAttachedNotes } from "@/components/matters/row-attached-notes";
-import { type TaskStatus } from "@/lib/note-constants";
+import {
+  TASK_STATUSES,
+  TASK_STATUS_LABEL,
+  type TaskStatus,
+} from "@/lib/constants/task-status";
 import {
   getMatterTasks,
   type TaskRow,
@@ -25,15 +31,11 @@ import {
 import { getCurrentUserId } from "@/lib/current-user";
 import { formatDate as formatDateVariant } from "@/lib/format-date";
 
-const STATUS_ORDER = ["open", "in_progress", "in_review", "done", "cancelled"];
-
-const STATUS_LABEL: Record<string, string> = {
-  open: "Open",
-  in_progress: "In progress",
-  in_review: "In review",
-  done: "Done",
-  cancelled: "Cancelled",
-};
+// Ordering follows the canonical status list; labels are centralized
+// (src/lib/constants/task-status.ts). Widened to string-indexable
+// because DB values arrive untyped.
+const STATUS_ORDER: readonly string[] = TASK_STATUSES;
+const STATUS_LABEL: Record<string, string> = TASK_STATUS_LABEL;
 
 const PRIORITY_META: Record<
   string,
@@ -94,9 +96,12 @@ export default async function MatterTasksPage({
       />
 
       {tasks.length === 0 ? (
-        <div className="text-xs text-ink-4 text-center py-6">
-          No tasks yet — add the first one above.
-        </div>
+        <EmptyState
+          icon={CheckSquare}
+          title="No tasks yet"
+          description="Add the first one above."
+          className="py-6"
+        />
       ) : null}
 
       {orderedStatuses.map((status) => {

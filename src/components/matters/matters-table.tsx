@@ -6,7 +6,9 @@
  */
 
 import Link from "next/link";
+import { Briefcase } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/shared/empty-state";
 import {
   Table,
   TableBody,
@@ -32,8 +34,13 @@ export function MattersTable({ matters }: { matters: MatterListRow[] }) {
           here; sorting is most useful on a desktop scan anyway. */}
       <ul className="md:hidden flex flex-col gap-2">
         {matters.length === 0 ? (
-          <li className="rounded border border-line bg-card p-6 text-center text-xs text-ink-4">
-            No matters match these filters.
+          <li className="rounded border border-line bg-card">
+            <EmptyState
+              icon={Briefcase}
+              title="No matters match"
+              description="Try clearing a filter or two."
+              className="py-6"
+            />
           </li>
         ) : (
           matters.map((m) => <MatterCard key={m.id} m={m} />)
@@ -75,11 +82,13 @@ export function MattersTable({ matters }: { matters: MatterListRow[] }) {
         <TableBody>
           {matters.length === 0 ? (
             <TableRow>
-              <TableCell
-                colSpan={7}
-                className="py-12 text-center text-xs text-ink-4"
-              >
-                No matters match these filters.
+              <TableCell colSpan={7} className="p-0">
+                <EmptyState
+                  icon={Briefcase}
+                  title="No matters match"
+                  description="Try clearing a filter or two."
+                  className="py-12"
+                />
               </TableCell>
             </TableRow>
           ) : (

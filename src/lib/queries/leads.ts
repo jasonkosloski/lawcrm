@@ -8,45 +8,18 @@
 
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
+import { LEAD_CLOSED_STAGES } from "@/lib/constants/lead-stage";
 
-export type LeadStage =
-  | "new"
-  | "contacted"
-  | "qualifying"
-  | "meeting"
-  | "converted"
-  | "declined"
-  | "hold";
-
-/** Ordering for stages — new leads surface first, converted/declined
- *  drop to the bottom (they're done). */
-export const LEAD_STAGE_ORDER: LeadStage[] = [
-  "new",
-  "contacted",
-  "qualifying",
-  "meeting",
-  "hold",
-  "converted",
-  "declined",
-];
-
-export const LEAD_STAGE_LABEL: Record<string, string> = {
-  new: "New",
-  contacted: "Contacted",
-  qualifying: "Qualifying",
-  meeting: "Meeting",
-  hold: "On hold",
-  converted: "Converted",
-  declined: "Declined",
-};
-
-export const LEAD_SOURCE_LABEL: Record<string, string> = {
-  web: "Web form",
-  referral: "Referral",
-  phone: "Phone",
-  walk_in: "Walk-in",
-  court_appointment: "Court appt.",
-};
+// Stage value set + labels moved to their canonical client-safe home
+// in `src/lib/constants/lead-stage.ts` (this server-only file can't
+// be imported by client components). Re-exported for long-standing
+// importers; new code should import from the constants file.
+export {
+  type LeadStage,
+  LEAD_STAGE_ORDER,
+  LEAD_STAGE_LABEL,
+  LEAD_SOURCE_LABEL,
+} from "@/lib/constants/lead-stage";
 
 export type LeadListRow = {
   id: string;
@@ -110,7 +83,7 @@ export async function listLeads(): Promise<LeadListRow[]> {
     statuteWindow: l.statuteWindow,
     conflictCheck: l.conflictCheck,
     ageDays: Math.max(0, daysBetween(now, l.createdAt)),
-    isActive: !["converted", "declined"].includes(l.stage),
+    isActive: !(LEAD_CLOSED_STAGES as readonly string[]).includes(l.stage),
   }));
 }
 
@@ -196,7 +169,7 @@ export async function getLeadSummary() {
   const [activeCount, newTodayCount, conflictCount, convertedCount] =
     await Promise.all([
       prisma.lead.count({
-        where: { stage: { notIn: ["converted", "declined"] } },
+        where: { stage: { notIn: [...LEAD_CLOSED_STAGES] } },
       }),
       prisma.lead.count({ where: { createdAt: { gte: startOfToday } } }),
       prisma.lead.count({

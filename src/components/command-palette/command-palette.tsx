@@ -6,11 +6,20 @@
  *
  * 1. Contextual actions (shown only when relevant, e.g. on a matter page)
  * 2. Pinned + recent (empty-query state)
- * 3. Everything — matters, people, leads, navigation (search-query state)
+ * 3. Everything — matters, people, leads, navigation + create-new
+ *    actions (search-query state)
  *
- * Plus a permanent last row once the query is ≥2 chars: "Search
- * everywhere for …" → /search?q= (full-text content search — the
- * palette itself only jumps to entities it preloaded). It scores
+ * Scoping prefixes (v2): `#` matters, `@` people (contacts, users,
+ * leads), `>` actions (navigation + create-new + contextual). Parsed
+ * by parsePaletteQuery (./prefix.ts); enforced in the custom cmdk
+ * filter via per-item kind tags baked into each CommandItem value.
+ * Bare queries behave exactly as before.
+ *
+ * Plus a permanent last row once the (prefix-stripped) term is ≥2
+ * chars: "Search everywhere for …" → /search?q= (full-text content
+ * search — the palette itself only jumps to entities it preloaded).
+ * A #/@ scope narrows it via /search's ?type= group filter; under
+ * `>` the row hides (actions aren't full-text-searchable). It scores
  * lowest in the cmdk ranking, so Enter prefers real jump-to hits
  * and falls through to full-text search when nothing matches.
  *
@@ -38,11 +47,14 @@ import {
   BarChart3,
   Briefcase,
   Calendar,
+  CalendarPlus,
   Clock,
   DollarSign,
+  FilePlus2,
   Gavel,
   Home,
   Inbox,
+  ListPlus,
   Mail,
   Pin,
   PinOff,
@@ -66,6 +78,14 @@ import {
   type RecentRef,
 } from "@/lib/command-palette/recents";
 import { toggleMatterPin } from "@/app/actions/matter-pins";
+import {
+  parsePaletteQuery,
+  paletteValue,
+  scopeAllowsKind,
+  splitPaletteValue,
+  SCOPE_SEARCH_TYPE,
+} from "./prefix";
+import { CREATE_ACTIONS, CREATE_NAV_IDS } from "./create-actions";
 
 const ICON_MAP: Record<string, LucideIcon> = {
   home: Home,
@@ -82,7 +102,21 @@ const ICON_MAP: Record<string, LucideIcon> = {
   user: User,
   userSquare: UserSquare,
   briefcase: Briefcase,
+  filePlus: FilePlus2,
+  calendarPlus: CalendarPlus,
+  inboxPlus: ListPlus,
 };
+
+/** Navigation group, minus destinations re-homed to the Create group. */
+const NAV_ROWS = NAV_DESTINATIONS.filter((d) => !CREATE_NAV_IDS.has(d.id));
+
+/** Create group: "New matter" first, then the pre-existing "New
+ *  contact" nav destination, then the rest (event, intake/lead). */
+const CREATE_ROWS = [
+  ...CREATE_ACTIONS.slice(0, 1),
+  ...NAV_DESTINATIONS.filter((d) => CREATE_NAV_IDS.has(d.id)),
+  ...CREATE_ACTIONS.slice(1),
+];
 
 /** Sentinel `value` for the "Search everywhere" row. The custom
  *  filter special-cases it to a tiny positive score so the row is
@@ -168,14 +202,28 @@ export function CommandPalette({
     router.push(href);
   };
 
+  // Scope prefix (#/@/>) parsed once per keystroke; `term` is the
+  // query with the prefix stripped — what matching + /search use.
+  const parsed = useMemo(() => parsePaletteQuery(query), [query]);
+
   // Full-text escape hatch: the palette only jumps to entities it
   // preloaded; content questions route to /search. Selected via
-  // click or Enter (when it's the top — i.e. only — match).
+  // click or Enter (when it's the top — i.e. only — match). A scope
+  // prefix carries through as /search's ?type= group filter
+  // (#foo → matters full-text, @foo → contacts); the row hides
+  // entirely under `>` since actions aren't full-text-searchable.
+  const searchType = parsed.scope ? SCOPE_SEARCH_TYPE[parsed.scope] : null;
+  const searchRowVisible =
+    parsed.term.length >= SEARCH_MIN_QUERY_LENGTH &&
+    (parsed.scope === null || searchType !== null);
   const searchEverywhere = () => {
-    const q = query.trim();
-    if (q.length < SEARCH_MIN_QUERY_LENGTH) return;
+    if (!searchRowVisible) return;
     close();
-    router.push(`/search?q=${encodeURIComponent(q)}`);
+    router.push(
+      `/search?q=${encodeURIComponent(parsed.term)}${
+        searchType ? `&type=${searchType}` : ""
+      }`
+    );
   };
 
   const toggleCurrentPin = () => {
@@ -196,7 +244,11 @@ export function CommandPalette({
   const resolvedRecents = recents
     .map((ref): { ref: RecentRef; item: PaletteItem | null; nav: (typeof NAV_DESTINATIONS)[number] | null } | null => {
       if (ref.kind === "nav") {
-        const nav = NAV_DESTINATIONS.find((n) => n.id === ref.id) ?? null;
+        // Create-new actions store nav-kind refs too ("create:…" ids).
+        const nav =
+          NAV_DESTINATIONS.find((n) => n.id === ref.id) ??
+          CREATE_ACTIONS.find((n) => n.id === ref.id) ??
+          null;
         return nav ? { ref, item: null, nav } : null;
       }
       const item =
@@ -224,12 +276,19 @@ export function CommandPalette({
         label="Command palette"
         filter={(value, search) => {
           // "Search everywhere" always shows (its render is gated on
-          // query length) but with the lowest score so real matches
-          // outrank it — Enter only lands here when nothing else hits.
+          // term length + scope) but with the lowest score so real
+          // matches outrank it — Enter only lands here when nothing
+          // else hits.
           if (value === SEARCH_EVERYWHERE_VALUE) return 0.01;
-          if (!search) return 1;
-          const v = value.toLowerCase();
-          const q = search.toLowerCase().trim();
+          // Scope prefix (#/@/>): drop rows whose kind tag the scope
+          // excludes, then match the stripped term against the
+          // untagged text. Bare queries (scope null) match all kinds.
+          const { scope, term } = parsePaletteQuery(search);
+          const { kind, text } = splitPaletteValue(value);
+          if (scope && !scopeAllowsKind(scope, kind)) return 0;
+          if (!term) return 1;
+          const v = text.toLowerCase();
+          const q = term.toLowerCase();
           if (v.includes(q)) return 1;
           // Token-AND: every whitespace-separated term must be in the value.
           const tokens = q.split(/\s+/).filter(Boolean);
@@ -239,7 +298,7 @@ export function CommandPalette({
         <CommandInput
           value={query}
           onValueChange={setQuery}
-          placeholder="Type to search matters, people, actions…"
+          placeholder="Type to search — # matters · @ people · > actions"
         />
 
         <CommandList>
@@ -251,7 +310,10 @@ export function CommandPalette({
           {currentMatter && (
             <CommandGroup heading="On this matter">
               <CommandItem
-                value={`${currentMatter.isPinned ? "unpin" : "pin"} this matter ${currentMatter.name}`}
+                value={paletteValue(
+                  "action",
+                  `${currentMatter.isPinned ? "unpin" : "pin"} this matter ${currentMatter.name}`
+                )}
                 onSelect={toggleCurrentPin}
               >
                 {currentMatter.isPinned ? <PinOff /> : <Pin />}
@@ -273,7 +335,10 @@ export function CommandPalette({
                     return (
                       <CommandItem
                         key={`recent-${ref.kind}-${ref.id}`}
-                        value={`${nav.label} ${nav.keywords}`}
+                        value={paletteValue(
+                          "action",
+                          `${nav.label} ${nav.keywords}`
+                        )}
                         onSelect={() =>
                           go(nav.href, { kind: "nav", id: nav.id })
                         }
@@ -310,18 +375,46 @@ export function CommandPalette({
 
           {/* ── Navigation (always searchable, hidden when not matching) */}
           <CommandGroup heading="Navigation">
-            {NAV_DESTINATIONS.map((dest) => {
+            {NAV_ROWS.map((dest) => {
               const Icon = ICON_MAP[dest.icon] ?? Home;
               return (
                 <CommandItem
                   key={dest.id}
-                  value={`${dest.label} ${dest.keywords}`}
+                  value={paletteValue(
+                    "action",
+                    `${dest.label} ${dest.keywords}`
+                  )}
                   onSelect={() =>
                     go(dest.href, { kind: "nav", id: dest.id })
                   }
                 >
                   <Icon />
                   <span>{dest.label}</span>
+                </CommandItem>
+              );
+            })}
+          </CommandGroup>
+
+          {/* ── Create new (pure navigation; the target pages enforce
+              their own permission gates — PaletteData carries no
+              permission flags, see create-actions.ts) ─────────────── */}
+          <CommandGroup heading="Create">
+            {CREATE_ROWS.map((action) => {
+              const Icon = ICON_MAP[action.icon] ?? Home;
+              return (
+                <CommandItem
+                  key={action.id}
+                  value={paletteValue(
+                    "action",
+                    `${action.label} ${action.keywords}`
+                  )}
+                  onSelect={() =>
+                    go(action.href, { kind: "nav", id: action.id })
+                  }
+                >
+                  <Icon />
+                  <span>{action.label}</span>
+                  <CommandShortcut>{action.href}</CommandShortcut>
                 </CommandItem>
               );
             })}
@@ -344,7 +437,10 @@ export function CommandPalette({
                 return (
                   <CommandItem
                     key={`user-${u.id}`}
-                    value={`${u.name} ${u.jobTitle} ${u.initials} firm user`}
+                    value={paletteValue(
+                      "person",
+                      `${u.name} ${u.jobTitle} ${u.initials} firm user`
+                    )}
                     onSelect={() =>
                       go("/settings/team", { kind: "user", id: u.id })
                     }
@@ -363,7 +459,10 @@ export function CommandPalette({
                 return (
                   <CommandItem
                     key={`contact-${c.id}`}
-                    value={`${c.name} ${c.email ?? ""} ${c.organization ?? ""} ${c.contactType}`}
+                    value={paletteValue(
+                      "person",
+                      `${c.name} ${c.email ?? ""} ${c.organization ?? ""} ${c.contactType}`
+                    )}
                     onSelect={() =>
                       go(`/contacts/${c.id}`, { kind: "contact", id: c.id })
                     }
@@ -388,7 +487,10 @@ export function CommandPalette({
                 return (
                   <CommandItem
                     key={`lead-${l.id}`}
-                    value={`${l.name} ${l.email ?? ""} lead intake ${l.stage}`}
+                    value={paletteValue(
+                      "lead",
+                      `${l.name} ${l.email ?? ""} lead intake ${l.stage}`
+                    )}
                     onSelect={() =>
                       go("/intake", { kind: "lead", id: l.id })
                     }
@@ -406,8 +508,10 @@ export function CommandPalette({
               Full-text content search across notes, email, documents,
               time narratives, etc. — the query-layer counterpart is
               globalSearch in src/lib/queries/search.ts. Renders only
-              once the query is long enough to be searchable. */}
-          {query.trim().length >= SEARCH_MIN_QUERY_LENGTH && (
+              once the (prefix-stripped) term is long enough to be
+              searchable; a #/@ scope narrows it via ?type=, and the
+              row hides under > (actions have no full-text). */}
+          {searchRowVisible && (
             <CommandGroup heading="Everywhere">
               <CommandItem
                 value={SEARCH_EVERYWHERE_VALUE}
@@ -415,9 +519,11 @@ export function CommandPalette({
               >
                 <Search />
                 <span>
-                  Search everywhere for &ldquo;{query.trim()}&rdquo;
+                  Search everywhere for &ldquo;{parsed.term}&rdquo;
                 </span>
-                <CommandShortcut>full-text</CommandShortcut>
+                <CommandShortcut>
+                  {searchType ? `${searchType}s · ` : ""}full-text
+                </CommandShortcut>
               </CommandItem>
             </CommandGroup>
           )}
@@ -426,9 +532,10 @@ export function CommandPalette({
         {/* ── Footer: keyboard hints ────────────────────────────────── */}
         <div className="flex items-center justify-between border-t border-line px-3 py-2 text-2xs text-ink-4">
           <span>
-            <Kbd>↑</Kbd> <Kbd>↓</Kbd> navigate <Kbd>↵</Kbd> select
+            <Kbd>#</Kbd> matters <Kbd>@</Kbd> people <Kbd>&gt;</Kbd> actions
           </span>
           <span>
+            <Kbd>↑</Kbd> <Kbd>↓</Kbd> navigate <Kbd>↵</Kbd> select{" "}
             <Kbd>esc</Kbd> close
           </span>
         </div>
@@ -444,7 +551,10 @@ function MatterRow({
   matter: PaletteMatter;
   onGo: (href: string, ref: RecentRef) => void;
 }) {
-  const value = `${matter.name} ${matter.caseNumber ?? ""} ${matter.clientName ?? ""} ${matter.area} ${matter.stage}`;
+  const value = paletteValue(
+    "matter",
+    `${matter.name} ${matter.caseNumber ?? ""} ${matter.clientName ?? ""} ${matter.area} ${matter.stage}`
+  );
   return (
     <CommandItem
       value={value}
@@ -476,7 +586,10 @@ function RecentItemRow({
   if (item.kind === "contact") {
     return (
       <CommandItem
-        value={`${item.name} ${item.email ?? ""} ${item.organization ?? ""}`}
+        value={paletteValue(
+          "person",
+          `${item.name} ${item.email ?? ""} ${item.organization ?? ""}`
+        )}
         onSelect={() =>
           onGo(`/contacts/${item.id}`, { kind: "contact", id: item.id })
         }
@@ -489,7 +602,7 @@ function RecentItemRow({
   if (item.kind === "lead") {
     return (
       <CommandItem
-        value={`${item.name} lead ${item.stage}`}
+        value={paletteValue("lead", `${item.name} lead ${item.stage}`)}
         onSelect={() => onGo("/intake", { kind: "lead", id: item.id })}
       >
         <Inbox />
@@ -500,7 +613,7 @@ function RecentItemRow({
   if (item.kind === "user") {
     return (
       <CommandItem
-        value={`${item.name} ${item.jobTitle}`}
+        value={paletteValue("person", `${item.name} ${item.jobTitle}`)}
         onSelect={() =>
           onGo("/settings/team", { kind: "user", id: item.id })
         }

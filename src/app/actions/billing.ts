@@ -51,6 +51,7 @@ import {
   type InvoiceKind,
   type LineItemEditState,
 } from "@/lib/billing-form";
+import { TIME_ENTRY_WIP_STATUSES } from "@/lib/constants/time-entry-status";
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
@@ -172,7 +173,7 @@ export async function generateInvoiceFromWip(
           billable: true,
           noCharge: false,
           invoiceId: null,
-          status: { in: ["draft", "submitted", "billable"] },
+          status: { in: [...TIME_ENTRY_WIP_STATUSES] },
         },
         select: { id: true, amount: true },
       });
@@ -537,7 +538,7 @@ export async function setInvoiceStatus(
 
   const kind = invoice.kind as InvoiceKind;
   const allowed = invoiceStatusTransitions(invoice.status, kind);
-  if (!allowed.includes(next)) {
+  if (!(allowed as readonly string[]).includes(next)) {
     return {
       ok: false,
       error: `Can't transition ${invoice.status} → ${next}.`,
@@ -899,7 +900,7 @@ export async function bundleAsInternalRecord(
           billable: true,
           noCharge: false,
           invoiceId: null,
-          status: { in: ["draft", "submitted", "billable"] },
+          status: { in: [...TIME_ENTRY_WIP_STATUSES] },
         },
         select: { id: true, amount: true },
       });

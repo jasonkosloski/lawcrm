@@ -33,6 +33,10 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { dateKeyInTz, instantInTz } from "@/lib/format-date";
+import {
+  LEAD_OPEN_STAGES,
+  LEAD_STAGE_LABEL,
+} from "@/lib/constants/lead-stage";
 
 /** The viewer's current calendar date as [year, month, day] in their
  *  zone. Mirrors the private helper in queries/dashboard.ts. */
@@ -56,15 +60,14 @@ const startOfMonthInTz = (tz: string, monthsBack = 0): Date => {
 
 /** Intake pipeline stages in funnel order. `converted` / `declined`
  *  are terminal — they leave the queue and only surface via the
- *  conversion context, not the stage bars. Keep in sync with the
- *  Lead.stage docstring in prisma/schema.prisma. */
-const LEAD_PIPELINE_STAGES: readonly { stage: string; label: string }[] = [
-  { stage: "new", label: "New" },
-  { stage: "contacted", label: "Contacted" },
-  { stage: "qualifying", label: "Qualifying" },
-  { stage: "meeting", label: "Meeting" },
-  { stage: "hold", label: "On hold" },
-];
+ *  conversion context, not the stage bars. Derived from the
+ *  centralized stage constants so a new stage shows up here without
+ *  a second edit. */
+const LEAD_PIPELINE_STAGES: readonly { stage: string; label: string }[] =
+  LEAD_OPEN_STAGES.map((stage) => ({
+    stage,
+    label: LEAD_STAGE_LABEL[stage],
+  }));
 
 export type PipelineReport = {
   /** Active intake queue, one row per pipeline stage (funnel order).

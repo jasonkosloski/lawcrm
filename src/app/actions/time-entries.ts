@@ -31,7 +31,7 @@ import { requirePermission } from "@/lib/permission-check";
 import {
   TIME_ENTRY_STATUSES,
   type TimeEntryStatus,
-} from "@/lib/note-constants";
+} from "@/lib/constants/time-entry-status";
 import {
   isKnownUtbmsCode,
   type TimeEntryFormState,

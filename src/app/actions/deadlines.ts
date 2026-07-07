@@ -19,7 +19,7 @@ import {
   DEADLINE_KINDS,
   DEADLINE_STATUSES,
   type DeadlineStatus,
-} from "@/lib/note-constants";
+} from "@/lib/constants/deadline-status";
 import type { UpdateDeadlineFormState } from "@/lib/deadline-form";
 import { requirePermission } from "@/lib/permission-check";
 

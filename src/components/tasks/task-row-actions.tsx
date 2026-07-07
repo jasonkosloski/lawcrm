@@ -39,8 +39,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   TASK_STATUSES,
+  TASK_STATUS_LABEL as STATUS_LABEL,
   type TaskStatus,
-} from "@/lib/note-constants";
+} from "@/lib/constants/task-status";
 import { deleteTask, setTaskStatus } from "@/app/actions/tasks";
 import { addTimeEntryToTask } from "@/app/actions/time-on-entity";
 import { addNoteToTask } from "@/app/actions/note-on-entity";
@@ -49,14 +50,6 @@ import type { AssigneeOption } from "./assignee-select";
 import { LogTimeOnEntityDialog } from "@/components/time-entries/log-time-on-entity-dialog";
 import { AddNoteOnEntityDialog } from "@/components/notes/add-note-on-entity-dialog";
 import { ConvertTaskToDeadlineDialog } from "@/components/conversions/convert-dialogs";
-
-const STATUS_LABEL: Record<TaskStatus, string> = {
-  open: "Open",
-  in_progress: "In progress",
-  in_review: "In review",
-  done: "Done",
-  cancelled: "Cancelled",
-};
 
 export function TaskStatusToggle({
   taskId,

@@ -21,6 +21,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { EmptyState } from "@/components/shared/empty-state";
 import { formatDate, formatRelative } from "@/lib/format-date";
 import { notificationTypeMeta } from "@/lib/notification-type-meta";
 import {
@@ -81,13 +82,12 @@ export function NotificationsFeed({
       </div>
 
       {rows.length === 0 ? (
-        <div className="px-3 py-12 text-center">
-          <Bell size={22} className="mx-auto text-ink-4 mb-2" aria-hidden="true" />
-          <div className="text-xs text-ink-3">No notifications yet.</div>
-          <div className="text-2xs text-ink-4 mt-0.5">
-            Deadlines, task assignments, and settlement updates land here.
-          </div>
-        </div>
+        <EmptyState
+          icon={Bell}
+          title="No notifications yet"
+          description="Deadlines, task assignments, and settlement updates land here."
+          className="py-12"
+        />
       ) : (
         <ul>
           {rows.map((r) => (

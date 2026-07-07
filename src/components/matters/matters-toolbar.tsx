@@ -23,7 +23,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
+import { cn, plural } from "@/lib/utils";
 import {
   FEE_LABELS,
   type DeadlineFilter,
@@ -177,8 +177,8 @@ export function MattersToolbar({
         </div>
         <span className="text-xs text-ink-3">
           {visibleCount === totalCount
-            ? `${totalCount} matters`
-            : `${visibleCount} of ${totalCount} matters`}
+            ? plural(totalCount, "matter")
+            : `${visibleCount} of ${plural(totalCount, "matter")}`}
         </span>
         {anyActive && (
           <button

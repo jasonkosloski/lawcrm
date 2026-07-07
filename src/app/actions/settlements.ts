@@ -33,6 +33,10 @@ import { logActivity } from "@/lib/activity-log";
 import { createNotifications } from "@/lib/notifications";
 import { requirePermission } from "@/lib/permission-check";
 import type { SettlementFormState } from "@/lib/settlement-constants";
+import {
+  SETTLEMENT_STATUSES,
+  SETTLEMENT_LIEN_STATUSES,
+} from "@/lib/constants/settlement-status";
 
 // UI clients import `SettlementFormState` + `settlementInitialState`
 // directly from `@/lib/settlement-constants`. We don't re-export
@@ -87,7 +91,7 @@ const upsertSchema = z.object({
   /** Explicit fee column. Only used when percent is blank. */
   firmFee: moneyField(false),
   advancedCosts: moneyField(false),
-  status: z.enum(["pending", "approved", "disbursed", "closed"]),
+  status: z.enum(SETTLEMENT_STATUSES),
 });
 
 export async function upsertSettlement(
@@ -266,7 +270,7 @@ const lienUpdateSchema = z.object({
   /** Negotiated amount — blank means "still negotiating, use the
    *  original." Pass an explicit "0" to record a write-off. */
   negotiatedAmount: moneyField(false),
-  status: z.enum(["pending", "negotiating", "signed", "verified", "paid"]),
+  status: z.enum(SETTLEMENT_LIEN_STATUSES),
 });
 
 export async function updateSettlementLien(

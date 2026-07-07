@@ -33,17 +33,21 @@ export type LineItemEditState = {
 
 export const lineItemEditInitialState: LineItemEditState = { status: "idle" };
 
-/// Kind of invoice — see Invoice.kind on the schema. The "client"
-/// kind is the traditional bill-to-client AR invoice; "internal_record"
-/// is a record-of-work bundle for contingency / pro-bono cases that
-/// resolve without a fee petition.
-export const INVOICE_KINDS = ["client", "internal_record"] as const;
-export type InvoiceKind = (typeof INVOICE_KINDS)[number];
-
-export const INVOICE_KIND_LABEL: Record<InvoiceKind, string> = {
-  client: "Client invoice",
-  internal_record: "Internal record",
-};
+// Invoice status / kind value sets live in their canonical
+// client-safe home, `src/lib/constants/invoice-status.ts` — the
+// lifecycle LOGIC (transitions, guards, labels) stays here.
+// Re-exported so long-standing importers keep working.
+import {
+  type InvoiceKind,
+  type InvoiceStatus,
+} from "@/lib/constants/invoice-status";
+export {
+  INVOICE_KINDS,
+  INVOICE_KIND_LABEL,
+  INVOICE_STATUSES,
+  type InvoiceKind,
+  type InvoiceStatus,
+} from "@/lib/constants/invoice-status";
 
 /// State machines per kind. Client invoices flow through the full
 /// AR lifecycle: draft → approved → sent → partial → paid (with
@@ -59,7 +63,7 @@ export const INVOICE_KIND_LABEL: Record<InvoiceKind, string> = {
 /// guard, defending against the edge case where an old row sits
 /// in 'sent' with paidAmount > 0 (data drift from the pre-refactor
 /// schema).
-const CLIENT_TRANSITIONS: Record<string, string[]> = {
+const CLIENT_TRANSITIONS: Record<InvoiceStatus, InvoiceStatus[]> = {
   // Drafts are deletable (hard delete via deleteInvoice), not
   // voidable — there's nothing to "void" because no one has seen
   // the invoice yet. Void only makes sense once the doc has been
@@ -72,18 +76,22 @@ const CLIENT_TRANSITIONS: Record<string, string[]> = {
   void: [],
 };
 
-const INTERNAL_RECORD_TRANSITIONS: Record<string, string[]> = {
+const INTERNAL_RECORD_TRANSITIONS: Partial<
+  Record<InvoiceStatus, InvoiceStatus[]>
+> = {
   draft: ["paid", "void"],
   paid: ["void"],
   void: [],
 };
 
-/** Allowed status transitions for an invoice, scoped by its kind. */
+/** Allowed status transitions for an invoice, scoped by its kind.
+ *  Accepts any string (DB values arrive untyped) — unknown statuses
+ *  get an empty transition list. */
 export function invoiceStatusTransitions(
   status: string,
   kind: InvoiceKind = "client"
-): string[] {
-  const map =
+): InvoiceStatus[] {
+  const map: Partial<Record<string, InvoiceStatus[]>> =
     kind === "internal_record" ? INTERNAL_RECORD_TRANSITIONS : CLIENT_TRANSITIONS;
   return map[status] ?? [];
 }
@@ -120,7 +128,7 @@ export function canDeleteInvoice(
   return status === "draft";
 }
 
-const STATUS_LABEL_CLIENT: Record<string, string> = {
+const STATUS_LABEL_CLIENT: Record<InvoiceStatus, string> = {
   draft: "Draft",
   approved: "Approved",
   sent: "Sent",
@@ -129,7 +137,7 @@ const STATUS_LABEL_CLIENT: Record<string, string> = {
   void: "Void",
 };
 
-const STATUS_LABEL_INTERNAL: Record<string, string> = {
+const STATUS_LABEL_INTERNAL: Partial<Record<InvoiceStatus, string>> = {
   draft: "Draft",
   // "paid" on an internal record means "bundled and locked" — it's
   // a record, not money received.
@@ -138,12 +146,14 @@ const STATUS_LABEL_INTERNAL: Record<string, string> = {
 };
 
 /** Display label for an invoice status, scoped by kind so the same
- *  underlying status string reads naturally in both contexts. */
+ *  underlying status string reads naturally in both contexts.
+ *  Accepts any string (DB values arrive untyped) — unknown statuses
+ *  fall through unchanged. */
 export function invoiceStatusLabel(
   status: string,
   kind: InvoiceKind = "client"
 ): string {
-  const map =
+  const map: Partial<Record<string, string>> =
     kind === "internal_record" ? STATUS_LABEL_INTERNAL : STATUS_LABEL_CLIENT;
   return map[status] ?? status;
 }
