@@ -4,11 +4,11 @@ This file tracks decisions, trade-offs, and evolution of the Prisma schema as we
 
 ---
 
-## Current State (2026-04-24)
+## Model Inventory
 
-Initial schema with 25 models covering the full domain from the design handoff. This is a starting point, not final.
+46 models as of 2026-07-06: the initial 2026-04-24 snapshot plus everything added since (second table). When you add a model, add a row to the second table AND a changelog entry.
 
-### Models
+### Initial snapshot (2026-04-24)
 
 | Model | Status | Notes |
 |---|---|---|
@@ -40,6 +40,28 @@ Initial schema with 25 models covering the full domain from the design handoff. 
 | Note | Draft | Rich text — storage format (HTML vs Markdown) TBD |
 | ActivityLog | Draft | Append-only audit trail |
 | Automation | Draft | Steps stored as JSON — will need proper step model if we build an automation engine |
+
+### Added since the initial snapshot
+
+| Model | Added | Notes |
+|---|---|---|
+| UserMatterPin | 2026-04-24 | Per-user matter pins (replaced `Matter.isPinned`) — see ADR-010 |
+| PracticeArea | 2026-04-24 | Firm-configurable practice areas: color/order, SOL config (`statutePeriodDays`), `defaultBillingMode` |
+| MatterStage | 2026-04-24 | Per-practice-area lifecycle stages (name, order, `isTerminal`); unique on (practiceAreaId, name) |
+| ContactPhone | 2026-04-24 | Multi-phone per contact with free-text label, `isPrimary`, and ordering |
+| NoteRead | 2026-04-24 | Per-user read tracking on notes — drives default collapse state; composite PK (userId, noteId) |
+| NoteReaction | 2026-04-24 | Emoji reactions on notes; composite PK (userId, noteId, emoji) |
+| MessengerAccount | 2026-04-24 | Quo (OpenPhone) line — provider ids, E.164 number, OAuth tokens (encrypted at rest since 2026-06-10) |
+| MessengerThread | 2026-04-24 | One per (account, external number); resolved `contactId`, `defaultMatterId` routing, denormalized unread/lastItemAt |
+| MessengerItem | 2026-04-24 | SMS / call / voicemail item; idempotent on `providerEventId`; per-item `matterId` filing override |
+| Account | 2026-04-25 | Auth.js OAuth account table — empty until Google OAuth lands (see AUTH_PLAN.md) |
+| VerificationToken | 2026-04-25 | Auth.js token table — reserved for password-reset / email-verify flows |
+| Firm | 2026-04-25 | Firm profile; single-tenant today, `firmId` is the future multi-tenant scoping handle |
+| Role / UserRole | 2026-04-25 | First-class roles; Admin/default seeded as locked system roles |
+| InvoicePayment | 2026-04-25 | Per-invoice payment record across all channels; trust payments double-write to TrustTransaction |
+| Expense | 2026-04-27 | Out-of-pocket costs, distinct from TimeEntry; `billable` + `clientAdvanced` flags |
+| RolePermission | 2026-04-27 | (roleId, permission key) grants; key catalog lives in `src/lib/permissions.ts` |
+| Notification | 2026-04-27 | Per-recipient notification rows behind the bell; typed (`task_assigned`, `deadline_approaching`, …), `readAt` tracking |
 
 ---
 
@@ -86,6 +108,13 @@ These are places where the schema will likely change as we build:
 | 2026-04-27 | Added `Expense` model + reverse relations on `Matter`, `Invoice`, `Document` | First-class out-of-pocket cost tracking. Distinct from `TimeEntry` (firm labor) — Expense is real money paid externally. Two independent flags: `billable` (passes through to a client invoice) and `clientAdvanced` (client paid up-front; when false the firm advanced and expects reimbursement, drives the contingency settlement waterfall). `invoiceId` SetNull so the expense survives invoice purges; `receiptDocumentId` SetNull so deleting the receipt doesn't lose the expense. Free-string `category` (filing_fee / expert / travel / deposition / medical_record / postage / records / research / other) so adding categories is data, not a migration. Permission catalog gets four new keys: `matters.expense.view` / `.create` / `.edit` / `.delete`. |
 | 2026-04-27 | Added `RolePermission` model | First-class join table for "this role grants this permission key." The catalog of permission keys lives in `src/lib/permissions.ts` (app-defined, not data the firm owns) — adding a new permission is a code change, not a migration. Composite PK on (roleId, permission); unknown keys are tolerated on read so removing a permission from the catalog doesn't break existing rows. Admin role intentionally has no rows materialized — runtime check (`hasPermission`) treats Admin as "all granted" by name. The /settings/roles matrix UI drives this table; the runtime checks themselves still go through `requireAdmin()` for now and will swap to `hasPermission(...)` as features mature. |
 | 2026-04-27 | Added `MatterTeamMember.removedAt` + `removedBy` (soft-delete) | Removing someone from a matter team needs to preserve historical attribution — "who was on the case when the deposition happened?" only stays answerable if the row sticks around. Soft-delete via `removedAt` + `removedBy`; null = active. The (matterId, userId) unique stays in place: re-adding a former member upserts the row (clears removedAt + sets new role) rather than creating a duplicate. Index on (matterId, removedAt) so the active-roster query stays cheap. UI labels former members "[role] (former)" and dims them; queries that find the lead now scope to `removedAt: null` so a removed lead doesn't confuse attribution. |
+| 2026-04-24 | Added `PracticeArea` + `MatterStage` | Practice areas become firm data, not hardcoded strings — configurable at /settings/practice-areas with per-area lifecycle stages. Later grew SOL config (2026-04-27) and `defaultBillingMode` (2026-04-25). *(Backfilled 2026-07-06 — landed undocumented.)* |
+| 2026-04-24 | Added `ContactPhone` | Contacts hold multiple phone numbers with labels + a primary — one `Contact.phone` string wasn't enough once intake started capturing mobile + office + fax. *(Backfilled 2026-07-06.)* |
+| 2026-04-24 | Added `NoteRead` + `NoteReaction` | Per-user unread tracking (drives whether a note renders expanded) and emoji quick-reactions. Both composite-PK join tables cascading from User/Note. *(Backfilled 2026-07-06.)* |
+| 2026-04-24 | Added `MessengerAccount` / `MessengerThread` / `MessengerItem` | SMS + call + voicemail as **sibling models to Email\***, not a generalized `Communication*` table — resolves the open question below in favor of option (a): FK integrity and clean per-channel fields beat single-table simplicity; the unified inbox joins at read time. Provider is Quo (OpenPhone), idempotent webhook ingestion via unique `providerEventId`. *(Backfilled 2026-07-06.)* |
+| 2026-04-27 | Added `TimeEntry.leadId` (nullable) + made `matterId` nullable | Intake time (evaluation calls, conflict checks) attaches to a Lead before a Matter exists; lead conversion re-homes entries under the new matter. Resolves the `TimeEntry.leadId` open question. *(Backfilled 2026-07-06.)* |
+| 2026-04-27 | Added `Notification` | Per-recipient notification rows behind the topbar bell. Fan-out is the writer's job (no broadcast rows); typed via string `type` mapped to icon/tone in the UI. *(Backfilled 2026-07-06.)* |
+| 2026-06-10 | OAuth tokens on `EmailAccount` + `MessengerAccount` encrypted at rest | No column changes — a Prisma client extension (`src/lib/email-token-crypto.ts`) transparently encrypts on write / decrypts on read, so plaintext tokens never hit the DB. See ADR-011. |
 | 2026-04-25 | Refactored `Invoice.status` state machine: added `approved` + `partial` | New client-invoice flow is draft → approved → sent → partial → paid (void only when paidAmount=0). Previously the bare "Mark sent" / "Mark paid" buttons skipped any approval gate and silently flipped paidAmount; the new flow forces explicit Approve + Send dialogs and routes every payment through `recordInvoicePayment` (which writes an `InvoicePayment` row and chooses paid vs. partial based on coverage). Internal records keep their simpler draft → paid (= "Recorded") → void machine. Backfill: existing `sent` rows with paidAmount > 0 will display as "Sent · partial" via a UI drift chip and refuse void; the next payment recorded against them flips them to `partial` cleanly. No DB migration required — `status` is a string column. |
 
 ---
@@ -102,10 +131,12 @@ Keep a record of schema changes we considered and explicitly passed on, so we do
 
 Schema decisions deferred until the feature that forces them lands.
 
-- **Email vs. Communication model shape** — The /communication page will unify email + SMS (+ voicemail later). Current schema has `EmailAccount`, `EmailThread`, `EmailMessage`, `EmailLabel`, `EmailAttachment`. Two plausible paths when SMS lands: (a) add sibling `SmsThread` / `SmsMessage` models (FK integrity, clean per-channel querying, but more join work for unified inbox); (b) generalize to `Communication*` with a channel enum + channel-specific sub-fields (single-table simplicity, but JSON-ish shape for channel-specific metadata). Pick once we have real SMS requirements — likely when we integrate Twilio.
+### Resolved
 
-- **`TimeEntry.leadId`** — Intake work (evaluation calls, conflict checks, initial meetings) is valuable time-tracking data but `TimeEntry.matterId` is currently non-nullable. Add a nullable `leadId` so time can attach to a Lead before a Matter exists, plus a carry-forward step on lead conversion that re-homes those entries under the new matter. Drives the intake Time & Expenses tab from placeholder to real list.
+- **Email vs. Communication model shape** — Resolved (2026-04-24): sibling `Messenger*` models, not a generalized `Communication*` table. See changelog entry. Provider ended up Quo/OpenPhone, not Twilio.
+- **`TimeEntry.leadId`** — Shipped 2026-04-27; see changelog entry.
+- **`Expense` model** — Shipped 2026-04-27; see changelog entry.
 
-- **`Expense` model** — No expense tracking today. Matter-level expenses (filing fees, expert costs, travel, deposition transcripts) need their own table: `Expense { id, matterId, leadId?, date, description, category, amount, billable, clientAdvanced, receiptUrl?, invoiceId? }`. Drives the Expenses section on the Time & Expenses tab for both matters and leads. For contingent matters, track client-advanced vs firm-absorbed separately so settlement distribution can repay the firm from the gross.
+### Open
 
 - **Firm-wide trust + operating ledger (`FirmAccount` + generalized ledger)** — Today the firm has one implicit trust account (per-matter `Matter.trustBalance`, ledger via `TrustTransaction`) and no operating account at all. Long-term direction: a `FirmAccount { id, firmId, type ("trust" | "operating"), name, accountNumber?, routingNumber?, isPrimary }` so a firm can hold multiple accounts of each kind (general trust + per-major-client trust, operating + payroll, etc.). Unifies into a single `LedgerEntry` table with `firmAccountId`, `matterId?`, `invoiceId?`, signed amount, source-of-truth for both balance + audit. `TrustTransaction` becomes a view of `LedgerEntry where account.type="trust"`; `InvoicePayment` becomes the inbound side that produces a corresponding `LedgerEntry` on the destination operating (or trust, for trust transfers) account. The matter Billing tab's "Received payments" card is the matter-scoped slice of that future ledger — building it now buys the UX without forcing the schema generalization yet.
