@@ -56,3 +56,6 @@ next-env.d.ts
 # swaps the storage adapter (Vercel Blob / S3); keep the local
 # directory out of git.
 /uploads/
+
+# Claude Code local (per-machine) settings
+.claude/settings.local.json
