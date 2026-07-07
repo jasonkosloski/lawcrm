@@ -145,12 +145,16 @@ use selectively for the highest-leverage workflows.
 
 **Infrastructure** (already wired):
 
+- Tests run against a **dedicated dockerized Postgres** (tmpfs,
+  port 5433) started with
+  `docker compose -f docker-compose.test.yml up -d`. The
+  container outlives test runs (restart it to wipe state); your
+  dev `DATABASE_URL` is never touched.
 - `src/test/integration-setup.ts` — Vitest `globalSetup` that
-  runs ONCE before any test loads. Sets `DATABASE_URL` to
-  `file:./prisma/test.db`, deletes any leftover file, and
-  pushes the current schema via `npx prisma db push --url ...
-  --accept-data-loss`. Teardown deletes the file so re-runs
-  start clean.
+  runs ONCE before any test loads. Points `DATABASE_URL` /
+  `DIRECT_DATABASE_URL` at the test container, waits up to 30s
+  for it to accept connections, then pushes the current schema
+  via `npx prisma db push --accept-data-loss`.
 - `src/test/integration-helpers.ts` — `resetDb()` truncates
   every table in FK-safe order; fixture builders (`seedFirm`,
   `seedUser`, `seedPracticeArea`, `seedMatter`, `seedTimeEntry`,
@@ -306,14 +310,12 @@ config (in `vitest.config.ts`) scopes coverage to `src/lib/**` and
 `src/app/actions/**` — the rest is UI / wiring whose value is
 better measured by component + integration tests.
 
-**Current floor** (enforced in `vitest.config.ts`):
-
-| Metric     | Floor | Current |
-|------------|-------|---------|
-| Lines      | 22%   | 22.52%  |
-| Statements | 22%   | 22.53%  |
-| Functions  | 20%   | 21.03%  |
-| Branches   | 20%   | 20.57%  |
+**The floor lives in the `coverage.thresholds` block of
+`vitest.config.ts` — that's the source of truth, not this doc**
+(a snapshot table here drifted stale within weeks; don't
+reintroduce one). As of 2026-07-06 the floor is lines 24 /
+statements 24 / functions 23 / branches 22. Run
+`npm test -- --coverage` for current numbers.
 
 The target is "every public function in `src/lib/` has a test."
 We're not there yet — a lot of the gap is `src/app/actions/**`
@@ -359,3 +361,5 @@ end-to-end flow.
 | 2026-04-25 | Coverage push. New layer-1 tests for `format-phone`, `calendar-utils`, `matters-filters`, `dashboard-prefs`, `note-constants`, `capture-schemas`, plus a `file-storage` test that uses `process.chdir(mkdtempSync(...))` + dynamic import to control STORAGE_ROOT. New layer-3 tests for `firm.ts` admin helpers and the `activity-log` writer (icon/source mapping + fire-and-forget contract). Coverage threshold floors landed in `vitest.config.ts` (lines 17 / statements 17 / functions 17 / branches 15) — current numbers ~17.8%. Full suite: **361 tests across 24 files in ~12s**. |
 | 2026-04-25 | Coverage push round 2 + Button wrapper fix. Layer-3 tests for the task action surface (`setTaskStatus` / `updateTask` / `deleteTask` — completedAt mirroring + activity-log fan-out), the deadline action surface, and `toggleMatterPin` (idempotent toggle, per-user scoping). New layer-2 test for the Button wrapper locks in `nativeButton: false` inference when a `render` element is supplied — fixes a noisy console warning that fired across `/matters`, `/contacts`, `/intake`, and the catch-all not-found page when Button rendered a `<Link>` (anchor) via `render`. Threshold floors raised to lines 20 / statements 20 / functions 19 / branches 18. Full suite: **406 tests across 28 files in ~15s**. |
 | 2026-04-25 | RBAC gating sweep + time-entry tests. Closed all seven `TODO (auth)` markers in the action layer. Added six permission categories (`tasks`, `deadlines`, `notes`, `time_entries`, `parties`, `events`) with 20 new keys following the granularity convention; user-authored rows (notes, time entries) use the `_any` suffix only when crossing the ownership line, mirroring `documents.delete_any`. Wrapped `requirePermission(...)` around mutating actions in `tasks.ts`, `deadlines.ts`, `notes.ts`, `time-entries.ts`, `parties.ts`, `captures.ts`, and the `updateMatter` / `updateMatterStage` / `setMatterSolSatisfied` paths. Added a new `time-entries.test.ts` (22) covering create/update/status/delete plus the author-vs-`_any` gate logic. Existing `tasks.test.ts` + `deadlines.test.ts` got "RBAC gate" describe blocks asserting each action wires the right permission key. Threshold floors raised to lines 22 / statements 22 / functions 20 / branches 20. Full suite: **453 tests across 29 files in ~15s**. |
+| 2026-04-28 | Migrated the whole stack (prod + tests) from SQLite to Postgres. Integration tests now run against a dockerized tmpfs Postgres on port 5433 (`docker compose -f docker-compose.test.yml up -d`); `integration-setup.ts` waits for the container and pushes the schema instead of managing a `test.db` file. |
+| 2026-07-06 | Doc catch-up: layer-3 infrastructure section updated for the Postgres container (was still describing `prisma/test.db`), coverage snapshot table replaced with a pointer to `vitest.config.ts` (floors had moved to 24/24/23/22 without the doc noticing — commit 39ce382). Suite at this point: **712 tests across 48 files in ~25s**. |

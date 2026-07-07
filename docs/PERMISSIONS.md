@@ -166,19 +166,24 @@ The v1 catalog has some coarse `manage_*` keys (`matters.manage_team`,
 capability up front. Existing coarse keys get refined as each feature
 gets revisited.
 
-### Categories today
+### The current catalog
 
-| Category   | Catalog id   | Sample keys                                                      |
-|------------|--------------|------------------------------------------------------------------|
-| Matters    | `matters`    | `manage_team`, `edit`, `archive`, `delete`                       |
-| Billing    | `billing`    | `generate_invoice`, `approve_invoice`, `send_invoice`, `delete_draft`, `void_invoice`, `record_payment`, `apply_trust` |
-| Trust      | `trust`      | `record_transaction`                                             |
-| Firm       | `firm`       | `manage_team_directory`, `manage_roles`, `manage_permissions`, `edit_info`, `manage_practice_areas` |
-| Documents  | `documents`  | `delete_any`                                                     |
-| Communication | `communication` | `log_call`                                                |
+**`src/lib/permissions.ts` is the source of truth** — this doc
+deliberately does not duplicate the key list. (A hand-maintained
+table lived here once and drifted to 54% incomplete within two
+months; don't reintroduce one.) To enumerate:
 
-The full list (with labels and descriptions) lives in
-`src/lib/permissions.ts`. Grep for `key:` to enumerate.
+```bash
+# every category id
+grep -E '^\s+id:' src/lib/permissions.ts
+# every key with its label
+grep -E '^\s+key:' src/lib/permissions.ts
+```
+
+Or read `PERMISSION_CATEGORIES` directly — it's grouped and
+commented for exactly this purpose. The matrix UI at
+`/settings/roles` renders the same catalog, so it's also a live,
+always-current view of every category and key.
 
 ---
 
@@ -531,3 +536,4 @@ boxes."
 | 2026-04-27 | Added `RolePermission` join + matrix UI on `/settings/roles`. Catalog seeded.                       |
 | 2026-04-27 | Replaced every `requireAdmin()` write gate with `requirePermission(<specific-key>)`. Admin retained as wildcard. |
 | 2026-04-27 | `setRolePermissionAction` writes an `ActivityLog` entry on every non-no-op grant/revoke. Firm-scope (`matterId: null`). |
+| 2026-07-06 | Removed the hand-maintained "Categories today" table (it had drifted to cover 6 of 13 categories). The doc now points at `src/lib/permissions.ts` as the sole enumeration. |
