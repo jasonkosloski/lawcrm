@@ -11,17 +11,9 @@ import Link from "next/link";
 import { TopBar } from "@/components/layout/topbar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { EmailLink } from "@/components/ui/email-link";
 import { Plus, Users } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ContactsTable } from "@/components/contacts/contacts-table";
 import {
   CONTACT_TYPE_LABEL,
   CONTACT_TYPES,
@@ -37,10 +29,14 @@ export default async function ContactsPage({
   const q = typeof sp.q === "string" ? sp.q : undefined;
   const type = typeof sp.type === "string" ? sp.type : undefined;
 
-  const [rows, typeCounts, canCreate] = await Promise.all([
+  const [rows, typeCounts, canCreate, canEdit, canDelete] = await Promise.all([
     listContacts({ search: q, type }),
     getContactTypeCounts(),
     currentUserHasPermission("contacts.create"),
+    // Read-side flags for the bulk-action bar (Set type / Deactivate).
+    // The server actions re-gate; these just decide what to render.
+    currentUserHasPermission("contacts.edit"),
+    currentUserHasPermission("contacts.delete"),
   ]);
 
   const totalActive = Object.values(typeCounts).reduce((a, b) => a + b, 0);
@@ -169,60 +165,12 @@ export default async function ContactsPage({
             ))}
           </ul>
 
-          <Card className="p-0 overflow-hidden hidden md:block">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="pl-4">Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Organization</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead className="pr-4 text-right">Matters</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell className="pl-4">
-                      <Link
-                        href={`/contacts/${c.id}`}
-                        className="text-xs font-medium text-ink hover:text-brand-700"
-                      >
-                        {c.name}
-                      </Link>
-                      {c.conflictStatus === "flagged" && (
-                        <span className="ml-2 text-2xs font-medium text-warn">
-                          conflict
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-2xs text-ink-3">
-                      {CONTACT_TYPE_LABEL[
-                        c.type as keyof typeof CONTACT_TYPE_LABEL
-                      ] ?? c.type}
-                    </TableCell>
-                    <TableCell className="text-xs text-ink-3">
-                      {c.organization ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-2xs font-mono">
-                      {c.email ? (
-                        <EmailLink email={c.email} />
-                      ) : (
-                        <span className="text-ink-4">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-2xs font-mono text-ink-3">
-                      {c.phone ?? "—"}
-                    </TableCell>
-                    <TableCell className="pr-4 text-right text-xs font-mono text-ink-3">
-                      {c.matterCount > 0 ? c.matterCount : "—"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Card>
+          {/* Desktop: client table with checkbox selection + the
+              bulk-action bar (set type / export CSV / deactivate).
+              Selection is plain client state — not in the URL. */}
+          <div className="hidden md:block">
+            <ContactsTable rows={rows} canEdit={canEdit} canDelete={canDelete} />
+          </div>
           </>
         )}
       </div>

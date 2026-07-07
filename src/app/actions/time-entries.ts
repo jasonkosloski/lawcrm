@@ -3,9 +3,15 @@
  *
  * The matter Time tab's full `createTimeEntryWithCaptures` lives in
  * captures.ts (primary + attached siblings). These narrower actions
- * are for in-place creation from other surfaces — for now, the
- * event-scoped "log time for this event" composer on the Events
- * tab + event detail modal.
+ * are for in-place creation from other surfaces — the event-scoped
+ * "log time for this event" composer on the Events tab + event
+ * detail modal, and the lead-scoped intake composer on
+ * /intake/[id]/time (`createLeadTimeEntry`).
+ *
+ * Scope invariant: every entry is EXACTLY ONE of matter-scoped or
+ * lead-scoped (see src/lib/time-entry-scope.ts). The edit / status /
+ * delete actions below work on either scope and revalidate the
+ * matching surface via `revalidateEntryScope`.
  *
  * Accepts calendarEventId so the server links the entry directly to
  * the event; revalidation reaches back into the calendar and matter
@@ -36,6 +42,35 @@ import {
   isKnownUtbmsCode,
   type TimeEntryFormState,
 } from "@/lib/time-entry-constants";
+import { assertTimeEntryScope } from "@/lib/time-entry-scope";
+import type { LeadStage } from "@/lib/constants/lead-stage";
+
+// Typed against the centralized LeadStage union so a typo can't
+// silently let post-conversion intake logging through (leads.ts
+// pattern).
+const CONVERTED = "converted" satisfies LeadStage;
+
+/** Revalidate every surface that renders the entry, for either side
+ *  of the exactly-one-of scope invariant: the matter Time tab (+
+ *  overview, + events/calendar when event-linked) or the lead's
+ *  intake Time tab (+ lead overview). */
+function revalidateEntryScope(entry: {
+  matterId: string | null;
+  leadId: string | null;
+  calendarEventId?: string | null;
+}): void {
+  if (entry.matterId) {
+    revalidatePath(`/matters/${entry.matterId}/time`);
+    revalidatePath(`/matters/${entry.matterId}`);
+    if (entry.calendarEventId) {
+      revalidatePath(`/matters/${entry.matterId}/events`);
+      revalidatePath(`/calendar`);
+    }
+  } else if (entry.leadId) {
+    revalidatePath(`/intake/${entry.leadId}/time`);
+    revalidatePath(`/intake/${entry.leadId}`);
+  }
+}
 
 // Only catalog codes persist — the column feeds LEDES/insurer
 // exports later, so junk from a hand-crafted POST is worse than a
@@ -130,6 +165,95 @@ export async function createTimeEntry(
   return { status: "ok" };
 }
 
+// ── Lead-scoped create (intake time) ────────────────────────────────────
+
+// Same fields as the matter composer minus calendarEventId — intake
+// time has no matter events to hang off of.
+const leadTimeEntrySchema = timeEntrySchema.omit({ calendarEventId: true });
+
+/**
+ * "Log time on this lead" — intake calls, conflict checks,
+ * evaluation work done before a matter exists. Writes a lead-scoped
+ * TimeEntry (leadId set, matterId null — the exactly-one-of scope
+ * invariant, asserted below). On conversion these entries are
+ * re-homed onto the new matter by convertLeadToMatter.
+ *
+ * Converted leads are refused: their intake record already rolled
+ * forward, so a late entry here would strand on the lead forever.
+ * Declined leads still accept entries (wrap-up work is real firm
+ * overhead worth capturing).
+ */
+export async function createLeadTimeEntry(
+  leadId: string,
+  _prev: TimeEntryFormState,
+  formData: FormData
+): Promise<TimeEntryFormState> {
+  await requirePermission("time_entries.create");
+  const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
+  const parsed = leadTimeEntrySchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      status: "error",
+      errors: parsed.error.flatten().fieldErrors,
+      values: raw,
+    };
+  }
+
+  const lead = await prisma.lead.findUnique({
+    where: { id: leadId },
+    select: { id: true, stage: true },
+  });
+  if (!lead) {
+    return {
+      status: "error",
+      errors: { activity: ["Lead no longer exists"] },
+      values: raw,
+    };
+  }
+  if (lead.stage === CONVERTED) {
+    return {
+      status: "error",
+      errors: {
+        activity: [
+          "Lead is already converted — log this time on the matter instead.",
+        ],
+      },
+      values: raw,
+    };
+  }
+
+  const date = parseLocalDate(parsed.data.date);
+  if (!date) {
+    return {
+      status: "error",
+      errors: { date: ["Invalid date"] },
+      values: raw,
+    };
+  }
+
+  const userId = await getCurrentUserId();
+
+  await prisma.timeEntry.create({
+    data: {
+      ...assertTimeEntryScope({ matterId: null, leadId }),
+      userId,
+      date,
+      hours: Number(parsed.data.hours),
+      activity: parsed.data.activity,
+      narrative: parsed.data.narrative || null,
+      utbmsCode: parsed.data.utbmsCode || null,
+      billable: parsed.data.billable === "on",
+      noCharge: parsed.data.noCharge === "on",
+      privileged: parsed.data.privileged === "on",
+      source: "manual",
+    },
+  });
+
+  revalidatePath(`/intake/${leadId}/time`);
+  revalidatePath(`/intake/${leadId}`);
+  return { status: "ok" };
+}
+
 // ── Update ──────────────────────────────────────────────────────────────
 
 const updateTimeEntrySchema = z.object({
@@ -169,6 +293,7 @@ export async function updateTimeEntry(
     where: { id: timeEntryId },
     select: {
       matterId: true,
+      leadId: true,
       userId: true,
       calendarEventId: true,
       status: true,
@@ -242,12 +367,7 @@ export async function updateTimeEntry(
     },
   });
 
-  revalidatePath(`/matters/${entry.matterId}/time`);
-  revalidatePath(`/matters/${entry.matterId}`);
-  if (entry.calendarEventId) {
-    revalidatePath(`/matters/${entry.matterId}/events`);
-    revalidatePath(`/calendar`);
-  }
+  revalidateEntryScope(entry);
   return { status: "ok" };
 }
 
@@ -265,6 +385,7 @@ export async function setTimeEntryStatus(
     where: { id: timeEntryId },
     select: {
       matterId: true,
+      leadId: true,
       userId: true,
       calendarEventId: true,
       status: true,
@@ -307,12 +428,7 @@ export async function setTimeEntryStatus(
     data: { status },
   });
 
-  revalidatePath(`/matters/${entry.matterId}/time`);
-  revalidatePath(`/matters/${entry.matterId}`);
-  if (entry.calendarEventId) {
-    revalidatePath(`/matters/${entry.matterId}/events`);
-    revalidatePath(`/calendar`);
-  }
+  revalidateEntryScope(entry);
   return { ok: true };
 }
 
@@ -321,7 +437,14 @@ export async function deleteTimeEntry(
 ): Promise<{ ok: boolean; error?: string }> {
   const entry = await prisma.timeEntry.findUnique({
     where: { id: timeEntryId },
-    select: { id: true, matterId: true, userId: true, calendarEventId: true, status: true },
+    select: {
+      id: true,
+      matterId: true,
+      leadId: true,
+      userId: true,
+      calendarEventId: true,
+      status: true,
+    },
   });
   if (!entry) return { ok: false, error: "Time entry not found" };
   // Author can always delete their own unbilled entries; otherwise
@@ -341,11 +464,6 @@ export async function deleteTimeEntry(
 
   await prisma.timeEntry.delete({ where: { id: timeEntryId } });
 
-  revalidatePath(`/matters/${entry.matterId}/time`);
-  revalidatePath(`/matters/${entry.matterId}`);
-  if (entry.calendarEventId) {
-    revalidatePath(`/matters/${entry.matterId}/events`);
-    revalidatePath(`/calendar`);
-  }
+  revalidateEntryScope(entry);
   return { ok: true };
 }

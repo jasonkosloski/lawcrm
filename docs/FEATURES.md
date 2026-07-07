@@ -89,8 +89,14 @@ done. What's left is enumerated below.
   `/search?q=` results page grouped by type with highlighted
   snippets, counts, and per-group `?type=` expansion; ⌘K palette
   gets an always-last "Search everywhere" row. ILIKE v1 by design —
-  Postgres FTS is the upgrade path (ADR-014). Still left:
-  save-search, within-list keyword filters.
+  Postgres FTS is the upgrade path (ADR-014). Saved searches
+  (2026-07-07): per-user `SavedSearch` rows — a save toggle next to
+  the query input (captures the active `?type=` scope, dedupes on
+  (q, scope), un-saves when already saved) + a "Saved" chip strip
+  under it with kebab rename/delete. Identity-scoped actions
+  (`src/app/actions/saved-searches.ts`) with no permission key
+  (notifications precedent); ~50 rows per user. Still left:
+  within-list keyword filters.
 - [~] **Notifications — delivery channels.** In-app surface is done
   (see the shipped "v1" + "v2" entries: bell, feed page, deadline
   sweep + cron endpoint, task-assigned / settlement-step / team-add /
@@ -193,7 +199,7 @@ done. What's left is enumerated below.
   bar against the firm's daily goal (`Firm.dailyHoursGoal` via
   `getFirmGoals()` — editable on /settings/firm since 2026-07-07).
   Read-only v1 — entries link to the matter Time tab.
-- [~] **Standalone Contact UI v2.** Shipped 2026-07-07: granular
+- [x] **Standalone Contact UI v2.** Shipped 2026-07-07: granular
   `contacts.*` permission gates, multi-phone management UI
   (add/remove/relabel/reorder/set-primary with server-enforced
   invariants), conflict-flag control with required justification →
@@ -202,7 +208,21 @@ done. What's left is enumerated below.
   duplicate-row dedupe, client-of, leads, messenger threads,
   attendees, invoices), moves + dedupes phones, backfills null
   scalars, soft-retires the loser with `mergedIntoId` redirect.
-  Still left: bulk operations.
+  Bulk operations shipped 2026-07-07: checkbox column on the
+  desktop directory table (`ContactsTable`, plain client state —
+  not URL) with select-all-for-the-page and a selection bar
+  offering Set type (`contacts.edit`, one `updateMany`),
+  Deactivate (`contacts.delete`, soft-delete matching the single
+  path, confirm() first), and Export CSV (read-only, session-gated
+  only — name / type / organization / email / primary phone /
+  folded address / active, built via `src/lib/csv.ts` with
+  RFC 4180 escaping + a formula-injection guard). Batches are
+  deduped, all-or-nothing on validation, and capped at
+  `BULK_CONTACT_LIMIT` (100) client- AND server-side; each bulk op
+  writes ONE summary activity-log row (exports included — "who
+  pulled the contact list" is audit-worthy). Merged/inactive rows
+  never render in the list, so they're unselectable; the actions
+  still re-validate ids server-side.
 
 ### P2 — polish + tech debt
 
@@ -242,20 +262,26 @@ done. What's left is enumerated below.
   /settings/firm (Goals section, gated `firm.edit_info`; validated
   positive, one decimal, ≤24 daily / ≤744 monthly). Possible future
   refinement: per-USER overrides of the daily target.
-- [ ] **`/intake/[id]/time` is a placeholder.** Verified
-  2026-07-07 that it CANNOT be built yet without a migration:
-  `TimeEntry` has no `leadId` column and `matterId` is `NOT NULL`
-  (confirmed in schema.prisma, the generated client, every
-  migration, git history — only f5b5d3b ever added a `leadId`, on
-  `Expense` — and the live test Postgres). `Expense.leadId` exists
-  but is a placeholder FK: `Expense.matterId` is still required, so
-  lead-only expenses can't be stored either, and no lead-scoped
-  log-time affordance exists anywhere in src (the only `lead*`
-  fields on time paths are `Matter.leadUserId` = lead *attorney*).
-  The placeholder card's copy is accurate. To build: add nullable
-  `TimeEntry.leadId` (+ relax or dual-FK `matterId`), wire
-  conversion roll-forward, then mirror the matter Time tab
-  lead-scoped.
+- [x] **Intake time tracking (`/intake/[id]/time`).** Shipped
+  2026-07-07, on the schema change of the same date
+  (`TimeEntry.leadId` nullable + `matterId` relaxed, exactly-one-of
+  invariant — see SCHEMA_NOTES). The placeholder card is now the
+  lead-scoped mirror of the matter Time tab: `LeadTimeComposer`
+  (shared DurationFields/UtbmsCodeSelect primitives, billable
+  defaults OFF — intake is mostly firm overhead) posting through
+  `createLeadTimeEntry` (gated `time_entries.create`, refuses
+  converted leads), hours-only summary cards (no rates before a
+  matter exists), and the matter-idiom entry table reusing
+  `TimeEntryRowMenu` — edit/status/delete are scope-aware and
+  revalidate the intake tab. `convertLeadToMatter` re-homes all
+  lead entries onto the new matter inside its transaction and
+  activity-logs "N intake time entries carried forward";
+  converted leads show a read-only banner linking to the matter.
+  /time week+day views and global search render lead entries as
+  "Intake · {lead name}" linking to the intake tab. Still left:
+  lead-scoped EXPENSES (`Expense.matterId` is still required;
+  `Expense.leadId` remains an unwired placeholder) + their
+  conversion roll-forward.
 - [x] **Status / priority / role values are scattered string
   literals.** Shipped 2026-07-07: `src/lib/constants/` is the
   canonical client-safe home — per-domain files (task-status,

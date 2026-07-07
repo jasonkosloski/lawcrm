@@ -103,6 +103,7 @@ model User {
   notifications         Notification[]
   timerSession          TimerSession?
   documentTemplates     DocumentTemplate[]
+  savedSearches         SavedSearch[]
   /// Calendar events the user is an attendee on. Created via the
   /// event detail modal's attendee picker (or any future API
   /// that links a user to an event).
@@ -757,6 +758,10 @@ model Lead {
   /// the lead row; it just falls back to the legacy text columns.
   contact Contact? @relation("LeadContact", fields: [contactId], references: [id], onDelete: SetNull)
 
+  /// Intake time logged before conversion — re-homed onto the new
+  /// matter when the lead converts. See TimeEntry.leadId.
+  timeEntries TimeEntry[] @relation("LeadTimeEntries")
+
   @@index([stage])
   @@index([score])
   @@index([contactId])
@@ -1055,7 +1060,15 @@ model CalendarAttendee {
 /// A time entry — the core billing unit. Tracks work done on a matter.
 model TimeEntry {
   id         String   @id @default(cuid())
-  matterId   String
+  /// Nullable since 2026-07-07: intake time attaches to a Lead via
+  /// `leadId` before a Matter exists. App-enforced invariant:
+  /// EXACTLY ONE of (matterId, leadId) is set — never both, never
+  /// neither. Lead conversion re-homes lead entries onto the new
+  /// matter (leadId cleared, matterId set).
+  matterId   String?
+  /// Intake work (evaluation calls, conflict checks) logged against
+  /// a Lead. See the matterId invariant comment.
+  leadId     String?
   userId     String /// Attorney or staff who did the work
   date       DateTime /// Date the work was performed
   /// Duration in decimal hours (e.g. 1.5). Float is fine — these
@@ -1103,7 +1116,11 @@ model TimeEntry {
   emailMessageId  String?
   messengerItemId String?
 
-  matter         Matter         @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  matter         Matter?        @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  /// Cascade mirrors the matter side: deleting a lead deletes its
+  /// intake time (conversion re-homes entries BEFORE the lead would
+  /// ever be removed, and declined leads are kept, not deleted).
+  lead           Lead?          @relation("LeadTimeEntries", fields: [leadId], references: [id], onDelete: Cascade)
   user           User           @relation(fields: [userId], references: [id])
   invoice        Invoice?       @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   notes          Note[]         @relation("TimeEntryNotes")
@@ -1115,6 +1132,7 @@ model TimeEntry {
   messengerItem  MessengerItem? @relation("MessengerItemTimeEntries", fields: [messengerItemId], references: [id], onDelete: SetNull)
 
   @@index([matterId])
+  @@index([leadId])
   @@index([userId])
   @@index([date])
   @@index([status])
@@ -1938,4 +1956,26 @@ model DocumentTemplate {
 
   @@index([category, isActive])
   @@map("document_templates")
+}
+
+/// A saved global-search query — per-user shortcut back to a
+/// /search results page (optionally scoped to one entity type).
+/// Pure convenience row: no permission key (identity-scoped like
+/// notifications), cascade with the user.
+model SavedSearch {
+  id        String   @id @default(cuid())
+  userId    String
+  /// Display name shown in the saved list; defaults to the query
+  /// text client-side when the user doesn't rename it.
+  name      String
+  q         String
+  /// Optional SearchHitType scope (matches /search's ?type= param).
+  /// Null = all types.
+  type      String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("saved_searches")
 }

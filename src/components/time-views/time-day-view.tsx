@@ -195,8 +195,16 @@ function EntryCard({
       )}
 
       <div className="flex items-center gap-1.5 flex-wrap">
+        {/* Matter entries link to the matter Time tab; intake
+            (lead-scoped) entries to the lead's Time tab. */}
         <Link
-          href={`/matters/${entry.matterId}/time`}
+          href={
+            entry.matterId
+              ? `/matters/${entry.matterId}/time`
+              : entry.leadId
+                ? `/intake/${entry.leadId}/time`
+                : `/time`
+          }
           className="inline-flex items-center gap-1.5 min-w-0 text-2xs text-ink-2 hover:text-brand-700"
         >
           <span

@@ -32,7 +32,10 @@ import type {
 } from "@/lib/queries/search";
 import { SearchSnippet } from "./snippet";
 
-const TYPE_META: Record<SearchHitType, { label: string; icon: LucideIcon }> = {
+export const TYPE_META: Record<
+  SearchHitType,
+  { label: string; icon: LucideIcon }
+> = {
   matter: { label: "Matters", icon: Gavel },
   contact: { label: "Contacts", icon: User },
   lead: { label: "Leads", icon: Inbox },

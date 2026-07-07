@@ -24,6 +24,7 @@ import { getMyDayTime, getMyRunningTimer, getMyWeekTime } from "@/lib/queries/ti
 import {
   resetDb,
   seedFirm,
+  seedLead,
   seedMatter,
   seedPracticeArea,
   seedUser,
@@ -47,10 +48,12 @@ let matterBId: string; // default blue
 
 /** Entry factory — server-local midnight date, controllable source
  *  / flags. (seedTimeEntry pins date to `new Date()`, which these
- *  tests must control.) */
+ *  tests must control.) Scope with matterId OR leadId (intake
+ *  time) — exactly one, per the TimeEntry invariant. */
 async function createEntry(opts: {
   userId: string;
-  matterId: string;
+  matterId?: string;
+  leadId?: string;
   date: Date;
   hours: number;
   billable?: boolean;
@@ -64,7 +67,8 @@ async function createEntry(opts: {
   const row = await prisma.timeEntry.create({
     data: {
       userId: opts.userId,
-      matterId: opts.matterId,
+      matterId: opts.matterId ?? null,
+      leadId: opts.leadId ?? null,
       date: opts.date,
       hours: opts.hours,
       billable: opts.billable ?? true,
@@ -301,5 +305,59 @@ describe("getMyRunningTimer", () => {
       matterName: null,
       matterColor: null,
     });
+  });
+});
+
+// ── Lead-scoped (intake) entries in the /time views ─────────────────────
+
+describe("lead-scoped entries — intake context instead of a matter", () => {
+  const monday = new Date(2026, 5, 15);
+
+  test("getMyWeekTime: intake segment carries the lead's name + leadId, neutral color", async () => {
+    const { leadId } = await seedLead({ name: "Priya Patel" });
+    await createEntry({ userId, leadId, date: monday, hours: 0.75, billable: false });
+    await createEntry({ userId, matterId: matterAId, date: monday, hours: 1 });
+
+    const week = await getMyWeekTime(WEEK_KEYS);
+    const mon = week.days[1]!;
+    expect(mon.totalHours).toBe(1.75);
+
+    const intakeSeg = mon.segments.find((s) => s.leadId === leadId);
+    expect(intakeSeg).toMatchObject({
+      matterId: leadId, // segment key = lead id for intake time
+      matterName: "Intake · Priya Patel",
+      matterColor: "var(--color-ink-3)",
+      hours: 0.75,
+      billableHours: 0,
+    });
+    // The matter segment is untouched by the lead entry.
+    const matterSeg = mon.segments.find((s) => s.matterId === matterAId);
+    expect(matterSeg?.leadId).toBeUndefined();
+    expect(matterSeg?.hours).toBe(1);
+  });
+
+  test("getMyDayTime: intake row has null matterId, leadId set, lead-name context", async () => {
+    const { leadId } = await seedLead({ name: "Priya Patel" });
+    await createEntry({
+      userId,
+      leadId,
+      date: monday,
+      hours: 0.5,
+      activity: "Conflict check",
+      billable: false,
+    });
+
+    const day = await getMyDayTime("2026-06-15");
+    expect(day.logged).toHaveLength(1);
+    expect(day.logged[0]).toMatchObject({
+      matterId: null,
+      leadId,
+      matterName: "Intake · Priya Patel",
+      matterColor: "var(--color-ink-3)",
+      activity: "Conflict check",
+      hours: 0.5,
+    });
+    expect(day.totalHours).toBe(0.5);
+    expect(day.billableHours).toBe(0);
   });
 });

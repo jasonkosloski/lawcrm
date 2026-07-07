@@ -366,7 +366,13 @@ export type EventTimeEntry = {
   status: string;
   userName: string;
   userInitials: string;
-  matterId: string;
+  /** Null for lead-scoped (intake) entries — TimeEntry.matterId is
+   *  nullable since the exactly-one-of-(matterId, leadId) invariant
+   *  landed. In practice event-attached entries are always
+   *  matter-scoped today (every event composer is a matter surface),
+   *  but the type reflects the schema. No consumer reads this
+   *  per-row field; the section-level matter comes from the event. */
+  matterId: string | null;
 };
 
 /** Time entries directly attached to a specific calendar event

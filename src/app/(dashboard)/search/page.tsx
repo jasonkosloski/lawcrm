@@ -11,6 +11,11 @@
  * URL-driven: `?q=` is the query (GET form at the top re-submits
  * it), `?type=` expands one group to SEARCH_EXPANDED_TAKE rows.
  *
+ * Saved searches: a per-user chip strip under the input (rename /
+ * delete via kebab) + a save toggle next to the input capturing the
+ * current query + ?type= scope. Identity-scoped, no permission key
+ * — see src/app/actions/saved-searches.ts.
+ *
  * Next.js 16: `searchParams` is a Promise that must be awaited.
  */
 
@@ -19,12 +24,15 @@ import { TopBar } from "@/components/layout/topbar";
 import { EmptyState } from "@/components/shared/empty-state";
 import { SearchForm } from "@/components/search/search-form";
 import { SearchResults } from "@/components/search/search-results";
+import { SaveSearchButton } from "@/components/search/save-search-button";
+import { SavedSearchChips } from "@/components/search/saved-search-chips";
 import {
   globalSearch,
   isSearchHitType,
   SEARCH_MIN_QUERY_LENGTH,
   type GlobalSearchResult,
 } from "@/lib/queries/search";
+import { getSavedSearches } from "@/lib/queries/saved-searches";
 
 export default async function SearchPage({
   searchParams,
@@ -37,10 +45,22 @@ export default async function SearchPage({
   const expandedType = isSearchHitType(rawType) ? rawType : null;
 
   const longEnough = q.length >= SEARCH_MIN_QUERY_LENGTH;
-  const result: GlobalSearchResult = longEnough
-    ? await globalSearch(q, expandedType ? { type: expandedType } : undefined)
-    : { query: q, groups: [] };
+  const [result, savedSearches] = await Promise.all([
+    longEnough
+      ? globalSearch(q, expandedType ? { type: expandedType } : undefined)
+      : Promise.resolve<GlobalSearchResult>({ query: q, groups: [] }),
+    getSavedSearches(),
+  ]);
   const totalHits = result.groups.reduce((sum, g) => sum + g.total, 0);
+
+  // Is the active (query, scope) pair already saved? Case-insensitive
+  // on the query — matching the search's own case-insensitivity and
+  // the create action's dedupe rule.
+  const activeSavedId = longEnough
+    ? (savedSearches.find(
+        (s) => s.q.toLowerCase() === q.toLowerCase() && s.type === expandedType
+      )?.id ?? null)
+    : null;
 
   return (
     <>
@@ -55,7 +75,22 @@ export default async function SearchPage({
 
       <div className="flex-1 overflow-y-auto p-3 sm:p-5 animate-page-enter">
         <div className="max-w-3xl mx-auto flex flex-col gap-4">
-          <SearchForm initialQuery={q} />
+          <div className="flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <SearchForm initialQuery={q} />
+            </div>
+            {longEnough && (
+              <SaveSearchButton
+                query={q}
+                type={expandedType}
+                savedId={activeSavedId}
+              />
+            )}
+          </div>
+
+          {savedSearches.length > 0 && (
+            <SavedSearchChips rows={savedSearches} activeId={activeSavedId} />
+          )}
 
           {q.length === 0 ? (
             <EmptyState

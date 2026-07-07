@@ -639,6 +639,11 @@ export async function globalSearch(
           userId: true,
           matterId: true,
           matter: { select: { name: true } },
+          // Lead-scoped (intake) entries have no matter — exactly one
+          // of (matterId, leadId) is set. Pull the lead's name so the
+          // hit still carries a human context line.
+          leadId: true,
+          lead: { select: { name: true } },
         },
         orderBy: { date: "desc" },
         take,
@@ -657,8 +662,17 @@ export async function globalSearch(
           snippet:
             makeSnippet(t.activity, q) ??
             (canQuoteNarrative ? makeSnippet(t.narrative, q) : null),
-          href: `/matters/${t.matterId}/time`,
-          context: t.matter.name,
+          // Intake entries route to the lead's Time tab; the
+          // no-scope fallback (invariant breach) degrades to the
+          // standalone /time page rather than a broken matter link.
+          href: t.matterId
+            ? `/matters/${t.matterId}/time`
+            : t.leadId
+              ? `/intake/${t.leadId}/time`
+              : `/time`,
+          context:
+            t.matter?.name ??
+            (t.lead ? `Intake · ${t.lead.name}` : "Intake"),
         };
       }),
     };

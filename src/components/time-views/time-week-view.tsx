@@ -24,6 +24,11 @@ import { buildTimeHref } from "./time-view-utils";
  *  week doesn't blow tiny entries up to full-width bars. */
 const MIN_SCALE_HOURS = 8;
 
+/** Matter segments link to the matter Time tab; intake (lead-scoped)
+ *  segments — flagged by `leadId` — to the lead's Time tab. */
+const segmentTimeHref = (seg: { matterId: string; leadId?: string }): string =>
+  seg.leadId ? `/intake/${seg.leadId}/time` : `/matters/${seg.matterId}/time`;
+
 export function TimeWeekView({
   week,
   todayKey,
@@ -37,10 +42,18 @@ export function TimeWeekView({
     ...week.days.map((d) => d.totalHours)
   );
 
-  // Legend: every matter touched this week, deduped, widest first.
+  // Legend: every matter/lead touched this week, deduped, widest
+  // first. (Segments keyed by matter id — or lead id for intake
+  // time, which carries `leadId` for the intake-tab link.)
   const legend = new Map<
     string,
-    { matterId: string; matterName: string; matterColor: string; hours: number }
+    {
+      matterId: string;
+      matterName: string;
+      matterColor: string;
+      leadId?: string;
+      hours: number;
+    }
   >();
   for (const day of week.days) {
     for (const seg of day.segments) {
@@ -51,6 +64,7 @@ export function TimeWeekView({
           matterId: seg.matterId,
           matterName: seg.matterName,
           matterColor: seg.matterColor,
+          leadId: seg.leadId,
           hours: seg.hours,
         });
     }
@@ -89,7 +103,7 @@ export function TimeWeekView({
           {legendRows.map((m) => (
             <Link
               key={m.matterId}
-              href={`/matters/${m.matterId}/time`}
+              href={segmentTimeHref(m)}
               className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-line bg-white text-2xs text-ink-2 hover:border-brand-300 hover:text-brand-700"
             >
               <span
@@ -154,7 +168,7 @@ function DayRow({
           return (
             <Link
               key={seg.matterId}
-              href={`/matters/${seg.matterId}/time`}
+              href={segmentTimeHref(seg)}
               className="h-full flex hover:opacity-80 transition-opacity"
               style={{ width: `${(seg.hours / scale) * 100}%` }}
               title={`${seg.matterName} — ${seg.hours.toFixed(1)}h (${seg.billableHours.toFixed(1)}h billable)`}

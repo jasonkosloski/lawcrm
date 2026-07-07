@@ -88,6 +88,8 @@ const TABLES_IN_DELETE_ORDER = [
   "automations",
   // Per-user notifications reference user + matter; drop before users.
   "notifications",
+  // Per-user saved searches reference users; drop before users.
+  "saved_searches",
   // Users + firm at the bottom
   "users",
   "firms",
@@ -224,9 +226,13 @@ export async function seedMatter(opts: {
   return { matterId: matter.id };
 }
 
-/** A billable, un-invoiced TimeEntry on the given matter. */
+/** A billable, un-invoiced TimeEntry. Scope with `matterId` (the
+ *  usual case) OR `leadId` (intake time) — exactly one, per the
+ *  TimeEntry scope invariant; the helper doesn't police it so tests
+ *  can also seed deliberately-broken rows. */
 export async function seedTimeEntry(opts: {
-  matterId: string;
+  matterId?: string | null;
+  leadId?: string | null;
   userId: string;
   hours?: number;
   rate?: number;
@@ -240,7 +246,8 @@ export async function seedTimeEntry(opts: {
   const amount = opts.amount ?? hours * rate;
   const row = await prisma.timeEntry.create({
     data: {
-      matterId: opts.matterId,
+      matterId: opts.matterId ?? null,
+      leadId: opts.leadId ?? null,
       userId: opts.userId,
       date: new Date(),
       hours,

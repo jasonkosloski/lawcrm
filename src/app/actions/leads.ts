@@ -9,7 +9,10 @@
  *     becomes the matter's incidentDate, the SOL date is auto-computed
  *     from the area's statutePeriodDays, and the auto-managed critical
  *     SOL Deadline is created — same malpractice guard as the direct
- *     create path in matters.ts.
+ *     create path in matters.ts. Intake time entries logged on the
+ *     lead (TimeEntry.leadId) are re-homed onto the new matter inside
+ *     the same transaction (matterId set, leadId cleared) and the
+ *     roll-forward is activity-logged on the matter.
  *   - declineLead: capture an optional reason, mark stage "declined".
  *     Gated by intake.decline + written to the ActivityLog, matching
  *     the conflict-check siblings — declining removes a lead from the
@@ -184,7 +187,7 @@ export async function convertLeadToMatter(
   const solDate = computeSolDate(incidentDate, area.statutePeriodDays);
 
   // Single transaction so a half-converted lead can't exist.
-  const matterId = await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     // Every lead is attached to a Contact (Lead.contactId) — same
     // shape as Matter.clientId. The Patel-style "find by email"
     // dance lives in the create-lead flow now (so prior intakes for
@@ -278,6 +281,18 @@ export async function convertLeadToMatter(
       data: { userId, matterId: matter.id },
     });
 
+    // Roll intake time forward: every lead-scoped entry (evaluation
+    // calls, conflict checks) re-homes onto the new matter — matterId
+    // set, leadId cleared in one write, so the exactly-one-of scope
+    // invariant holds for every row throughout. Hours / flags /
+    // amounts are untouched: the entry is the same work, it just
+    // gained a matter. Must happen before the lead could ever be
+    // deleted — Lead→TimeEntry cascades.
+    const carried = await tx.timeEntry.updateMany({
+      where: { leadId },
+      data: { matterId: matter.id, leadId: null },
+    });
+
     // Mark lead converted so it leaves the active intake queue.
     await tx.lead.update({
       where: { id: leadId },
@@ -287,8 +302,24 @@ export async function convertLeadToMatter(
       },
     });
 
-    return matter.id;
+    return { matterId: matter.id, carriedCount: carried.count };
   });
+
+  const { matterId, carriedCount } = result;
+
+  // Audit trail for the roll-forward — the matter's timeline should
+  // say where its pre-conversion hours came from. Outside the
+  // transaction on purpose: logActivity is fire-and-forget by
+  // contract and must never roll back a completed conversion.
+  if (carriedCount > 0) {
+    await logActivity({
+      matterId,
+      userId,
+      type: "time_entry",
+      title: `${carriedCount} intake time ${carriedCount === 1 ? "entry" : "entries"} carried forward`,
+      detail: `Logged on the lead before conversion · ${lead.name}`,
+    });
+  }
 
   // Revalidate everything that displays leads or matters.
   revalidatePath("/intake");

@@ -70,11 +70,23 @@ const isBillable = (e: { billable: boolean; noCharge: boolean }): boolean =>
 
 // ── Week aggregate ──────────────────────────────────────────────────────
 
-/** One matter's slice of one day's bar. */
+/** Neutral dot/bar color for intake (lead-scoped) time — leads have
+ *  no color column, and intake work shouldn't visually compete with
+ *  matter colors. Same fallback the calendar uses for matterless
+ *  events. */
+const INTAKE_COLOR = "var(--color-ink-3)";
+
+/** One matter's (or lead's) slice of one day's bar. */
 export type WeekMatterSegment = {
+  /** Unique segment key: the matter's id, or — for intake time —
+   *  the LEAD's id (mirrored into `leadId` below so views can link
+   *  to `/intake/[id]/time` instead of a matter tab). */
   matterId: string;
   matterName: string;
   matterColor: string;
+  /** Set iff this segment is a lead's intake time (exactly one of
+   *  matterId-as-matter / leadId per the TimeEntry invariant). */
+  leadId?: string;
   hours: number;
   billableHours: number;
 };
@@ -121,10 +133,11 @@ export async function getMyWeekTime(dayKeys: string[]): Promise<MyWeekTime> {
       billable: true,
       noCharge: true,
       matter: { select: { id: true, name: true, color: true } },
+      lead: { select: { id: true, name: true } },
     },
   });
 
-  // day key → matter id → running segment.
+  // day key → matter/lead id → running segment.
   const byDay = new Map<string, Map<string, WeekMatterSegment>>();
   for (const key of dayKeys) byDay.set(key, new Map());
 
@@ -134,16 +147,29 @@ export async function getMyWeekTime(dayKeys: string[]): Promise<MyWeekTime> {
     // the keys when the keys are contiguous (a week). A sparse key
     // list would drop in-between days here by design.
     if (!day) continue;
-    let seg = day.get(e.matter.id);
+    // Exactly one of (matter, lead) is set per the TimeEntry
+    // invariant; the "Intake" fallback keeps hours visible (never
+    // silently dropped) if a breached row ever slips in.
+    const key = e.matter?.id ?? e.lead?.id ?? "intake";
+    let seg = day.get(key);
     if (!seg) {
-      seg = {
-        matterId: e.matter.id,
-        matterName: e.matter.name,
-        matterColor: e.matter.color,
-        hours: 0,
-        billableHours: 0,
-      };
-      day.set(e.matter.id, seg);
+      seg = e.matter
+        ? {
+            matterId: e.matter.id,
+            matterName: e.matter.name,
+            matterColor: e.matter.color,
+            hours: 0,
+            billableHours: 0,
+          }
+        : {
+            matterId: key,
+            matterName: e.lead ? `Intake · ${e.lead.name}` : "Intake",
+            matterColor: INTAKE_COLOR,
+            leadId: e.lead?.id,
+            hours: 0,
+            billableHours: 0,
+          };
+      day.set(key, seg);
     }
     seg.hours += e.hours;
     if (isBillable(e)) seg.billableHours += e.hours;
@@ -179,7 +205,14 @@ export async function getMyWeekTime(dayKeys: string[]): Promise<MyWeekTime> {
 
 export type DayTimeEntry = {
   id: string;
-  matterId: string;
+  /** Null for intake (lead-scoped) entries — see `leadId`. */
+  matterId: string | null;
+  /** Set iff the entry is intake time on a lead; views link these
+   *  to `/intake/[id]/time`. Exactly one of matterId / leadId is
+   *  set (TimeEntry invariant). */
+  leadId: string | null;
+  /** Context label: the matter's name, or "Intake · {lead name}"
+   *  for lead-scoped entries ("Intake" if scope is missing). */
   matterName: string;
   matterColor: string;
   activity: string;
@@ -229,14 +262,17 @@ export async function getMyDayTime(dayKey: string): Promise<MyDayTime> {
       source: true,
       amount: true,
       matter: { select: { id: true, name: true, color: true } },
+      lead: { select: { id: true, name: true } },
     },
   });
 
   const rows: DayTimeEntry[] = entries.map((e) => ({
     id: e.id,
-    matterId: e.matter.id,
-    matterName: e.matter.name,
-    matterColor: e.matter.color,
+    matterId: e.matter?.id ?? null,
+    leadId: e.lead?.id ?? null,
+    matterName:
+      e.matter?.name ?? (e.lead ? `Intake · ${e.lead.name}` : "Intake"),
+    matterColor: e.matter?.color ?? INTAKE_COLOR,
     activity: e.activity,
     narrative: e.narrative,
     hours: e.hours,

@@ -14,9 +14,11 @@
  *
  * Auth: gated on the granular contacts.* catalog keys —
  * `contacts.create` (createContact), `contacts.edit` (updateContact,
- * updateContactPhones, setContactConflictStatus), `contacts.delete`
- * (deleteContact), and `contacts.merge` (mergeContacts). Admins
- * short-circuit; other roles need explicit grants via the matrix.
+ * updateContactPhones, setContactConflictStatus, bulkSetContactType),
+ * `contacts.delete` (deleteContact, bulkDeactivateContacts), and
+ * `contacts.merge` (mergeContacts). Admins short-circuit; other
+ * roles need explicit grants via the matrix. `exportContactsCsv`
+ * mutates nothing, so it only requires a signed-in session.
  */
 
 "use server";
@@ -26,7 +28,14 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permission-check";
-import { CONTACT_TYPES } from "@/lib/contact-constants";
+import { getCurrentUserId } from "@/lib/current-user";
+import { buildCsv } from "@/lib/csv";
+import {
+  BULK_CONTACT_LIMIT,
+  CONTACT_TYPES,
+  CONTACT_TYPE_LABEL,
+  type ContactType,
+} from "@/lib/contact-constants";
 import {
   normalizeContactPhones,
   phoneDedupeKey,
@@ -583,4 +592,209 @@ export async function deleteContact(
 
   revalidatePath("/contacts");
   return { ok: true };
+}
+
+// ── Bulk operations ─────────────────────────────────────────────────────
+
+const bulkIdsSchema = z
+  .array(z.string().min(1))
+  .min(1, "No contacts selected")
+  .max(
+    BULK_CONTACT_LIMIT,
+    `Too many contacts selected — bulk actions run on up to ${BULK_CONTACT_LIMIT} at a time`
+  );
+
+type BulkContactRow = {
+  id: string;
+  name: string;
+  isActive: boolean;
+  mergedIntoId: string | null;
+};
+
+/**
+ * Shared front door for the bulk actions: validate the id list
+ * (non-empty, ≤ BULK_CONTACT_LIMIT after dedupe) and load the rows,
+ * refusing when any id doesn't resolve — a stale selection should
+ * fail loudly, not half-apply. `requireActive` additionally rejects
+ * inactive / merged-away rows (the directory never lists them, so
+ * hitting this means the selection went stale mid-flight).
+ */
+async function loadBulkContacts(
+  contactIds: unknown,
+  opts: { requireActive: boolean }
+): Promise<
+  { ok: false; error: string } | { ok: true; contacts: BulkContactRow[] }
+> {
+  const parsed = bulkIdsSchema.safeParse(contactIds);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid selection",
+    };
+  }
+  const ids = [...new Set(parsed.data)];
+
+  const contacts = await prisma.contact.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, name: true, isActive: true, mergedIntoId: true },
+    orderBy: [{ name: "asc" }],
+  });
+  if (contacts.length !== ids.length) {
+    return {
+      ok: false,
+      error: "Some selected contacts no longer exist — refresh and try again",
+    };
+  }
+  if (opts.requireActive) {
+    const stale = contacts.filter((c) => !c.isActive || c.mergedIntoId);
+    if (stale.length > 0) {
+      return {
+        ok: false,
+        error:
+          "The selection includes inactive or merged contacts — refresh and try again",
+      };
+    }
+  }
+  return { ok: true, contacts };
+}
+
+/** "A, B, C and 4 more" for bulk audit-entry details. */
+function summarizeNames(names: string[], max = 8): string {
+  if (names.length <= max) return names.join(", ");
+  return `${names.slice(0, max).join(", ")} and ${names.length - max} more`;
+}
+
+function pluralContacts(count: number): string {
+  return `${count} contact${count === 1 ? "" : "s"}`;
+}
+
+/**
+ * Bulk re-type: one updateMany setting `type` on every selected
+ * contact. All-or-nothing — any invalid id (or an inactive/merged
+ * row) rejects the whole batch. One summary audit entry, not N.
+ */
+export async function bulkSetContactType(
+  contactIds: string[],
+  type: string
+): Promise<{ ok: boolean; error?: string; count?: number }> {
+  const userId = await requirePermission("contacts.edit");
+
+  const parsedType = z.enum(CONTACT_TYPES).safeParse(type);
+  if (!parsedType.success) {
+    return { ok: false, error: "Unknown contact type" };
+  }
+
+  const loaded = await loadBulkContacts(contactIds, { requireActive: true });
+  if (!loaded.ok) return loaded;
+
+  const res = await prisma.contact.updateMany({
+    where: { id: { in: loaded.contacts.map((c) => c.id) } },
+    data: { type: parsedType.data },
+  });
+
+  await logContactActivity({
+    userId,
+    type: "bulk",
+    icon: "zap",
+    title: `Set type to "${CONTACT_TYPE_LABEL[parsedType.data]}" on ${pluralContacts(res.count)}`,
+    detail: summarizeNames(loaded.contacts.map((c) => c.name)),
+  });
+
+  revalidatePath("/contacts");
+  return { ok: true, count: res.count };
+}
+
+/**
+ * Bulk soft-delete — same semantics as the single `deleteContact`
+ * path: flip `isActive` to false and touch nothing else (matter
+ * links, threads, leads, invoices all keep their rows), so it only
+ * requires that every id exists. Already-inactive rows are a no-op,
+ * matching the single path's unconditional flip. One summary audit
+ * entry for the whole batch.
+ */
+export async function bulkDeactivateContacts(
+  contactIds: string[]
+): Promise<{ ok: boolean; error?: string; count?: number }> {
+  const userId = await requirePermission("contacts.delete");
+
+  const loaded = await loadBulkContacts(contactIds, { requireActive: false });
+  if (!loaded.ok) return loaded;
+
+  const res = await prisma.contact.updateMany({
+    where: { id: { in: loaded.contacts.map((c) => c.id) } },
+    data: { isActive: false },
+  });
+
+  await logContactActivity({
+    userId,
+    type: "bulk",
+    icon: "zap",
+    title: `Deactivated ${pluralContacts(res.count)}`,
+    detail: summarizeNames(loaded.contacts.map((c) => c.name)),
+  });
+
+  revalidatePath("/contacts");
+  return { ok: true, count: res.count };
+}
+
+/**
+ * CSV export of the selected contacts. Read-only, so it isn't gated
+ * on a contacts.* key — any signed-in user who can see the directory
+ * can export it (`getCurrentUserId` bounces signed-out callers).
+ * The export IS recorded in the firm activity log: for a law firm,
+ * "who pulled the contact list" is audit-worthy even without a
+ * mutation. Address folds address/city/state/zip into one column.
+ */
+export async function exportContactsCsv(
+  contactIds: string[]
+): Promise<
+  { ok: true; csv: string; filename: string } | { ok: false; error: string }
+> {
+  const userId = await getCurrentUserId();
+
+  const loaded = await loadBulkContacts(contactIds, { requireActive: false });
+  if (!loaded.ok) return loaded;
+
+  const rows = await prisma.contact.findMany({
+    where: { id: { in: loaded.contacts.map((c) => c.id) } },
+    orderBy: [{ name: "asc" }],
+    select: {
+      name: true,
+      type: true,
+      organization: true,
+      email: true,
+      phone: true,
+      address: true,
+      city: true,
+      state: true,
+      zip: true,
+      isActive: true,
+    },
+  });
+
+  const csv = buildCsv(
+    ["Name", "Type", "Organization", "Email", "Primary phone", "Address", "Active"],
+    rows.map((c) => [
+      c.name,
+      CONTACT_TYPE_LABEL[c.type as ContactType] ?? c.type,
+      c.organization,
+      c.email,
+      c.phone,
+      [c.address, c.city, [c.state, c.zip].filter(Boolean).join(" ")]
+        .filter(Boolean)
+        .join(", "),
+      c.isActive ? "yes" : "no",
+    ])
+  );
+
+  await logContactActivity({
+    userId,
+    type: "bulk",
+    icon: "document",
+    title: `Exported ${pluralContacts(rows.length)} to CSV`,
+    detail: summarizeNames(rows.map((c) => c.name)),
+  });
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  return { ok: true, csv, filename: `contacts-export-${stamp}.csv` };
 }

@@ -18,6 +18,11 @@
  *     unique-collision dedupe), phone move + dedupe, scalar backfill,
  *     loser retirement via isActive=false + mergedIntoId
  *   - delete: unconditional soft-delete via isActive=false
+ *   - bulk ops: all-or-nothing id validation + the batch-size cap,
+ *     bulkSetContactType (one updateMany + ONE summary audit row),
+ *     bulkDeactivateContacts (soft-delete semantics of the single
+ *     path), exportContactsCsv (session-only — no contacts.* gate —
+ *     escaping, address folding, active column, audit row)
  */
 
 import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
@@ -28,18 +33,24 @@ vi.mock("@/lib/permission-check", () => ({
   requirePermission: vi.fn(),
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
 }));
+vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/permission-check";
+import { getCurrentUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import {
+  bulkDeactivateContacts,
+  bulkSetContactType,
   createContact,
   deleteContact,
+  exportContactsCsv,
   mergeContacts,
   setContactConflictStatus,
   updateContact,
   updateContactPhones,
 } from "@/app/actions/contacts";
+import { BULK_CONTACT_LIMIT } from "@/lib/contact-constants";
 import { contactFormInitialState } from "@/lib/contact-form";
 import {
   resetDb,
@@ -88,6 +99,8 @@ beforeEach(async () => {
   // Gate passes by default; it returns the actor id like the real
   // implementation so the audit-log writes can chain it.
   mockedRequirePermission.mockResolvedValue(userId);
+  // exportContactsCsv is session-gated only — resolve to the actor.
+  vi.mocked(getCurrentUserId).mockResolvedValue(userId);
 });
 
 // ── Permission gates ────────────────────────────────────────────────────
@@ -118,6 +131,24 @@ describe("permission gates", () => {
     expect(mockedRequirePermission).toHaveBeenLastCalledWith(
       "contacts.delete"
     );
+
+    await bulkSetContactType([contactId], "witness");
+    expect(mockedRequirePermission).toHaveBeenLastCalledWith("contacts.edit");
+
+    await bulkDeactivateContacts([contactId]);
+    expect(mockedRequirePermission).toHaveBeenLastCalledWith(
+      "contacts.delete"
+    );
+  });
+
+  test("exportContactsCsv is session-gated only — no contacts.* key", async () => {
+    const { contactId } = await seedContact();
+    mockedRequirePermission.mockClear();
+
+    const res = await exportContactsCsv([contactId]);
+    expect(res.ok).toBe(true);
+    expect(getCurrentUserId).toHaveBeenCalled();
+    expect(mockedRequirePermission).not.toHaveBeenCalled();
   });
 
   // requirePermission redirects ungranted users — simulate the throw
@@ -832,5 +863,216 @@ describe("deleteContact", () => {
   test("reports a missing contact", async () => {
     const res = await deleteContact("gone");
     expect(res).toEqual({ ok: false, error: "Contact not found" });
+  });
+});
+
+// ── Bulk operations ─────────────────────────────────────────────────────
+
+describe("bulkSetContactType", () => {
+  test("re-types every selected contact and writes ONE summary audit row", async () => {
+    const { contactId: a } = await seedContact({ name: "Alpha" });
+    const { contactId: b } = await seedContact({ name: "Beta" });
+    const { contactId: untouched } = await seedContact({ name: "Gamma" });
+
+    const res = await bulkSetContactType([a, b], "expert");
+    expect(res).toEqual({ ok: true, count: 2 });
+
+    const rows = await prisma.contact.findMany({
+      where: { id: { in: [a, b] } },
+    });
+    expect(rows.map((c) => c.type)).toEqual(["expert", "expert"]);
+    expect(
+      (await prisma.contact.findUniqueOrThrow({ where: { id: untouched } }))
+        .type
+    ).not.toBe("expert");
+
+    const entries = await prisma.activityLog.findMany({
+      where: { type: "bulk" },
+    });
+    expect(entries).toHaveLength(1);
+    expect(entries[0].userId).toBe(userId);
+    expect(entries[0].title).toMatch(/Expert.*2 contacts/);
+    expect(entries[0].detail).toBe("Alpha, Beta");
+  });
+
+  test("dedupes repeated ids before counting", async () => {
+    const { contactId } = await seedContact();
+    const res = await bulkSetContactType([contactId, contactId], "judge");
+    expect(res).toEqual({ ok: true, count: 1 });
+  });
+
+  test("rejects an unknown type without writing", async () => {
+    const { contactId } = await seedContact({ type: "client" });
+    const res = await bulkSetContactType([contactId], "alien");
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/unknown/i);
+    expect(
+      (await prisma.contact.findUniqueOrThrow({ where: { id: contactId } }))
+        .type
+    ).toBe("client");
+  });
+
+  test("all-or-nothing: one missing id rejects the whole batch", async () => {
+    const { contactId } = await seedContact({ type: "client" });
+    const res = await bulkSetContactType([contactId, "gone"], "witness");
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/no longer exist/i);
+    expect(
+      (await prisma.contact.findUniqueOrThrow({ where: { id: contactId } }))
+        .type
+    ).toBe("client");
+    expect(await prisma.activityLog.count()).toBe(0);
+  });
+
+  test("rejects a selection containing an inactive contact", async () => {
+    const { contactId: active } = await seedContact({
+      name: "Live",
+      type: "client",
+    });
+    const { contactId: retired } = await seedContact({ name: "Gone" });
+    await prisma.contact.update({
+      where: { id: retired },
+      data: { isActive: false },
+    });
+
+    const res = await bulkSetContactType([active, retired], "witness");
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/inactive or merged/i);
+    expect(
+      (await prisma.contact.findUniqueOrThrow({ where: { id: active } })).type
+    ).toBe("client");
+  });
+
+  test("rejects empty and over-the-cap batches with clear errors", async () => {
+    const empty = await bulkSetContactType([], "client");
+    expect(empty.ok).toBe(false);
+    expect(empty.error).toMatch(/no contacts selected/i);
+
+    const tooMany = await bulkSetContactType(
+      Array.from({ length: BULK_CONTACT_LIMIT + 1 }, (_, i) => `id-${i}`),
+      "client"
+    );
+    expect(tooMany.ok).toBe(false);
+    expect(tooMany.error).toMatch(new RegExp(`${BULK_CONTACT_LIMIT}`));
+  });
+
+  test("bails before writing when the gate throws", async () => {
+    const { contactId } = await seedContact({ type: "client" });
+    mockedRequirePermission.mockRejectedValue(new Error("NEXT_REDIRECT:/"));
+    await expect(bulkSetContactType([contactId], "witness")).rejects.toThrow();
+    expect(
+      (await prisma.contact.findUniqueOrThrow({ where: { id: contactId } }))
+        .type
+    ).toBe("client");
+  });
+});
+
+describe("bulkDeactivateContacts", () => {
+  test("soft-deletes every selected contact and writes ONE audit row", async () => {
+    const { contactId: a } = await seedContact({ name: "Alpha" });
+    const { contactId: b } = await seedContact({ name: "Beta" });
+    const { contactId: survivor } = await seedContact({ name: "Gamma" });
+
+    const res = await bulkDeactivateContacts([a, b]);
+    expect(res).toEqual({ ok: true, count: 2 });
+
+    const rows = await prisma.contact.findMany({
+      where: { id: { in: [a, b] } },
+    });
+    expect(rows.map((c) => c.isActive)).toEqual([false, false]);
+    // Soft delete only — the rows survive, nothing else is touched.
+    expect(rows.map((c) => c.mergedIntoId)).toEqual([null, null]);
+    expect(
+      (await prisma.contact.findUniqueOrThrow({ where: { id: survivor } }))
+        .isActive
+    ).toBe(true);
+
+    const entries = await prisma.activityLog.findMany({
+      where: { type: "bulk" },
+    });
+    expect(entries).toHaveLength(1);
+    expect(entries[0].title).toMatch(/Deactivated 2 contacts/);
+    expect(entries[0].detail).toBe("Alpha, Beta");
+  });
+
+  test("all-or-nothing: one missing id rejects the whole batch", async () => {
+    const { contactId } = await seedContact();
+    const res = await bulkDeactivateContacts(["gone", contactId]);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/no longer exist/i);
+    expect(
+      (await prisma.contact.findUniqueOrThrow({ where: { id: contactId } }))
+        .isActive
+    ).toBe(true);
+  });
+
+  test("bails before writing when the gate throws", async () => {
+    const { contactId } = await seedContact();
+    mockedRequirePermission.mockRejectedValue(new Error("NEXT_REDIRECT:/"));
+    await expect(bulkDeactivateContacts([contactId])).rejects.toThrow();
+    expect(
+      (await prisma.contact.findUniqueOrThrow({ where: { id: contactId } }))
+        .isActive
+    ).toBe(true);
+  });
+});
+
+describe("exportContactsCsv", () => {
+  test("builds an escaped CSV with type label, folded address, and active flag", async () => {
+    const { contactId } = await seedContact({
+      name: "Whitfield, Dana",
+      email: "dana@example.com",
+      organization: "Acme LLC",
+      type: "opposing_counsel",
+    });
+    await prisma.contact.update({
+      where: { id: contactId },
+      data: {
+        phone: "(303) 555-0101",
+        address: "1 Main St",
+        city: "Denver",
+        state: "CO",
+        zip: "80202",
+      },
+    });
+
+    const res = await exportContactsCsv([contactId]);
+    if (!res.ok) throw new Error(res.error);
+
+    const lines = res.csv.trimEnd().split("\r\n");
+    expect(lines[0]).toBe(
+      "Name,Type,Organization,Email,Primary phone,Address,Active"
+    );
+    // Comma-bearing name and address are quote-wrapped.
+    expect(lines[1]).toBe(
+      '"Whitfield, Dana",Opposing counsel,Acme LLC,dana@example.com,(303) 555-0101,"1 Main St, Denver, CO 80202",yes'
+    );
+    expect(res.filename).toMatch(/^contacts-export-\d{4}-\d{2}-\d{2}\.csv$/);
+  });
+
+  test("includes inactive contacts, marked active=no, and logs ONE audit row", async () => {
+    const { contactId } = await seedContact({ name: "Retired Rex" });
+    await prisma.contact.update({
+      where: { id: contactId },
+      data: { isActive: false },
+    });
+
+    const res = await exportContactsCsv([contactId]);
+    if (!res.ok) throw new Error(res.error);
+    expect(res.csv).toMatch(/Retired Rex,.*,no\r\n$/);
+
+    const entries = await prisma.activityLog.findMany({
+      where: { type: "bulk" },
+    });
+    expect(entries).toHaveLength(1);
+    expect(entries[0].title).toMatch(/Exported 1 contact to CSV/);
+  });
+
+  test("errors on a missing id or an empty selection", async () => {
+    const missing = await exportContactsCsv(["gone"]);
+    expect(missing.ok).toBe(false);
+
+    const empty = await exportContactsCsv([]);
+    expect(empty.ok).toBe(false);
   });
 });

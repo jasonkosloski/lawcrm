@@ -12,6 +12,11 @@
  *     auto-computes the SOL date from the area's statutePeriodDays,
  *     and creates the auto-managed critical SOL Deadline — and does
  *     none of that for areas that don't track SOL.
+ *   - conversion rolls intake time forward: every lead-scoped
+ *     TimeEntry re-homes onto the new matter (matterId set, leadId
+ *     cleared — the exactly-one-of scope invariant holds), hours /
+ *     amounts are untouched, and the roll-forward is activity-logged
+ *     on the matter.
  *
  * The permission gate itself is stubbed (its resolution logic is
  * covered elsewhere); we assert the actions *invoke* it with the
@@ -38,7 +43,12 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { convertLeadToMatter, declineLead } from "@/app/actions/leads";
-import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
+import {
+  resetDb,
+  seedFirm,
+  seedTimeEntry,
+  seedUser,
+} from "@/test/integration-helpers";
 
 const mockedGetUser = vi.mocked(getCurrentUserId);
 const mockedRequirePermission = vi.mocked(requirePermission);
@@ -310,5 +320,131 @@ describe("convertLeadToMatter — SOL carry-over", () => {
     expect(matter.incidentDate).toBeNull();
     expect(matter.statuteOfLimitationsDate).toBeNull();
     expect(await prisma.deadline.count()).toBe(0);
+  });
+});
+
+// ── convertLeadToMatter — intake time roll-forward ──────────────────────
+
+describe("convertLeadToMatter — intake time roll-forward", () => {
+  test("re-homes lead time entries onto the new matter and logs a summary", async () => {
+    const { areaId, stageId } = await seedArea({});
+    const { leadId } = await seedIntakeLead();
+    // Two intake entries with distinct hours so totals are checkable.
+    await seedTimeEntry({ leadId, userId, hours: 0.5, rate: 0, amount: 0 });
+    await seedTimeEntry({ leadId, userId, hours: 1.25, rate: 0, amount: 0 });
+
+    await expect(
+      convertLeadToMatter(
+        leadId,
+        { status: "idle" },
+        convertForm({ areaId, stageId })
+      )
+    ).rejects.toThrow(/^REDIRECT:\/matters\//);
+
+    const matter = await prisma.matter.findFirstOrThrow({
+      select: { id: true },
+    });
+    const entries = await prisma.timeEntry.findMany({
+      select: { matterId: true, leadId: true, hours: true },
+      orderBy: { hours: "asc" },
+    });
+    // Both entries moved: matterId set, leadId cleared — the
+    // exactly-one-of scope invariant holds for every row.
+    expect(entries).toHaveLength(2);
+    for (const e of entries) {
+      expect(e.matterId).toBe(matter.id);
+      expect(e.leadId).toBeNull();
+    }
+    // Hours intact — the entry is the same work, just re-scoped.
+    expect(entries.map((e) => e.hours)).toEqual([0.5, 1.25]);
+    // Nothing remains attached to the lead.
+    expect(await prisma.timeEntry.count({ where: { leadId } })).toBe(0);
+
+    // Roll-forward summary lands in the matter's activity log.
+    const log = await prisma.activityLog.findFirst({
+      where: { matterId: matter.id, type: "time_entry" },
+      select: { title: true, userId: true },
+    });
+    expect(log).not.toBeNull();
+    expect(log!.title).toBe("2 intake time entries carried forward");
+    expect(log!.userId).toBe(userId);
+  });
+
+  test("singular title for a single carried entry", async () => {
+    const { areaId, stageId } = await seedArea({});
+    const { leadId } = await seedIntakeLead();
+    await seedTimeEntry({ leadId, userId, hours: 1, rate: 0, amount: 0 });
+
+    await expect(
+      convertLeadToMatter(
+        leadId,
+        { status: "idle" },
+        convertForm({ areaId, stageId })
+      )
+    ).rejects.toThrow(/^REDIRECT:/);
+
+    const log = await prisma.activityLog.findFirst({
+      where: { type: "time_entry" },
+      select: { title: true },
+    });
+    expect(log!.title).toBe("1 intake time entry carried forward");
+  });
+
+  test("no intake time → no roll-forward log, conversion unaffected", async () => {
+    const { areaId, stageId } = await seedArea({});
+    const { leadId } = await seedIntakeLead();
+
+    await expect(
+      convertLeadToMatter(
+        leadId,
+        { status: "idle" },
+        convertForm({ areaId, stageId })
+      )
+    ).rejects.toThrow(/^REDIRECT:/);
+
+    expect(
+      await prisma.activityLog.count({ where: { type: "time_entry" } })
+    ).toBe(0);
+  });
+
+  test("doesn't touch other leads' or other matters' entries", async () => {
+    const { areaId, stageId } = await seedArea({});
+    const { leadId } = await seedIntakeLead();
+    const otherLead = await prisma.lead.create({
+      data: { name: "Other Lead" },
+      select: { id: true },
+    });
+    // A matter that already exists, with its own entry.
+    const existingMatter = await prisma.matter.create({
+      data: {
+        name: "Existing Matter",
+        practiceAreaId: areaId,
+        stageId,
+        feeStructure: "hourly",
+      },
+      select: { id: true },
+    });
+    await seedTimeEntry({ leadId, userId, hours: 1 });
+    await seedTimeEntry({ leadId: otherLead.id, userId, hours: 2 });
+    await seedTimeEntry({ matterId: existingMatter.id, userId, hours: 3 });
+
+    await expect(
+      convertLeadToMatter(
+        leadId,
+        { status: "idle" },
+        convertForm({ areaId, stageId })
+      )
+    ).rejects.toThrow(/^REDIRECT:/);
+
+    // The other lead's entry stayed lead-scoped…
+    const otherEntry = await prisma.timeEntry.findFirstOrThrow({
+      where: { leadId: otherLead.id },
+      select: { matterId: true },
+    });
+    expect(otherEntry.matterId).toBeNull();
+    // …and the pre-existing matter's entry stayed put.
+    expect(
+      await prisma.timeEntry.count({ where: { matterId: existingMatter.id } })
+    ).toBe(1);
   });
 });

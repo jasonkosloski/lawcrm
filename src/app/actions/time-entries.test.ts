@@ -4,6 +4,9 @@
  * Covers:
  *   - createTimeEntry: validation, matter existence, calendar-event
  *     linking, source field write
+ *   - createLeadTimeEntry: lead-scoped writes (leadId set, matterId
+ *     null — the exactly-one-of scope invariant), converted-lead +
+ *     missing-lead guards, intake-tab revalidation
  *   - updateTimeEntry: validation, billed-row guard (regardless of
  *     the posted status), amount = hours × rate sync, field updates
  *   - setTimeEntryStatus: enum guard, missing-row guard, status
@@ -24,11 +27,13 @@ vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
 }));
 
+import { revalidatePath } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import {
+  createLeadTimeEntry,
   createTimeEntry,
   deleteTimeEntry,
   setTimeEntryStatus,
@@ -38,6 +43,7 @@ import { timeEntryInitialState } from "@/lib/time-entry-constants";
 import {
   resetDb,
   seedFirm,
+  seedLead,
   seedMatter,
   seedPracticeArea,
   seedTimeEntry,
@@ -673,5 +679,137 @@ describe("time-entries action gates", () => {
     expect(mockedRequirePermission).toHaveBeenCalledWith(
       "time_entries.edit_any"
     );
+  });
+});
+
+// ── createLeadTimeEntry (intake time) ───────────────────────────────────
+
+describe("createLeadTimeEntry", () => {
+  test("gates on time_entries.create", async () => {
+    mockedRequirePermission.mockClear();
+    const { leadId } = await seedLead();
+    await createLeadTimeEntry(leadId, timeEntryInitialState, buildCreateForm());
+    expect(mockedRequirePermission).toHaveBeenCalledWith("time_entries.create");
+  });
+
+  test("writes a lead-scoped entry: leadId set, matterId null (scope invariant)", async () => {
+    const { leadId } = await seedLead({ name: "Priya Patel" });
+    const res = await createLeadTimeEntry(
+      leadId,
+      timeEntryInitialState,
+      buildCreateForm({ hours: "0.5", activity: "Intake call", utbmsCode: "A106" })
+    );
+    expect(res.status).toBe("ok");
+
+    const entry = await prisma.timeEntry.findFirstOrThrow({
+      where: { leadId },
+      select: {
+        matterId: true,
+        leadId: true,
+        userId: true,
+        hours: true,
+        activity: true,
+        utbmsCode: true,
+        billable: true,
+        source: true,
+      },
+    });
+    expect(entry.leadId).toBe(leadId);
+    expect(entry.matterId).toBeNull();
+    expect(entry.userId).toBe(userId);
+    expect(entry.hours).toBe(0.5);
+    expect(entry.activity).toBe("Intake call");
+    expect(entry.utbmsCode).toBe("A106");
+    // No "billable" checkbox posted → non-billable (intake default).
+    expect(entry.billable).toBe(false);
+    expect(entry.source).toBe("manual");
+  });
+
+  test("revalidates the lead's intake tab, not a matter path", async () => {
+    const mockedRevalidate = vi.mocked(revalidatePath);
+    const { leadId } = await seedLead();
+    await createLeadTimeEntry(leadId, timeEntryInitialState, buildCreateForm());
+    expect(mockedRevalidate).toHaveBeenCalledWith(`/intake/${leadId}/time`);
+    const matterCalls = mockedRevalidate.mock.calls.filter(([p]) =>
+      String(p).startsWith("/matters/")
+    );
+    expect(matterCalls).toHaveLength(0);
+  });
+
+  test("refuses a converted lead — its intake time already rolled forward", async () => {
+    const lead = await prisma.lead.create({
+      data: { name: "Converted Lead", stage: "converted" },
+      select: { id: true },
+    });
+    const res = await createLeadTimeEntry(
+      lead.id,
+      timeEntryInitialState,
+      buildCreateForm()
+    );
+    expect(res.status).toBe("error");
+    expect(await prisma.timeEntry.count()).toBe(0);
+  });
+
+  test("errors when the lead no longer exists", async () => {
+    const res = await createLeadTimeEntry(
+      "nonexistent-lead",
+      timeEntryInitialState,
+      buildCreateForm()
+    );
+    expect(res.status).toBe("error");
+    expect(await prisma.timeEntry.count()).toBe(0);
+  });
+
+  test("validation still applies (0 hours rejected)", async () => {
+    const { leadId } = await seedLead();
+    const res = await createLeadTimeEntry(
+      leadId,
+      timeEntryInitialState,
+      buildCreateForm({ hours: "0" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.hours?.length).toBeGreaterThan(0);
+  });
+});
+
+// ── Scope-aware revalidation on edit/status/delete ──────────────────────
+
+describe("lead-scoped entries — edit/status/delete revalidate the intake tab", () => {
+  test("deleteTimeEntry on a lead entry revalidates /intake/[id]/time", async () => {
+    const { leadId } = await seedLead();
+    const { timeEntryId } = await seedTimeEntry({ leadId, userId });
+    const mockedRevalidate = vi.mocked(revalidatePath);
+    mockedRevalidate.mockClear();
+
+    const res = await deleteTimeEntry(timeEntryId);
+    expect(res.ok).toBe(true);
+    expect(mockedRevalidate).toHaveBeenCalledWith(`/intake/${leadId}/time`);
+    const matterCalls = mockedRevalidate.mock.calls.filter(([p]) =>
+      String(p).startsWith("/matters/")
+    );
+    expect(matterCalls).toHaveLength(0);
+  });
+
+  test("setTimeEntryStatus on a lead entry updates + revalidates the intake tab", async () => {
+    const { leadId } = await seedLead();
+    const { timeEntryId } = await seedTimeEntry({
+      leadId,
+      userId,
+      status: "draft",
+    });
+    const mockedRevalidate = vi.mocked(revalidatePath);
+    mockedRevalidate.mockClear();
+
+    const res = await setTimeEntryStatus(timeEntryId, "submitted");
+    expect(res.ok).toBe(true);
+    const row = await prisma.timeEntry.findUniqueOrThrow({
+      where: { id: timeEntryId },
+      select: { status: true, leadId: true, matterId: true },
+    });
+    expect(row.status).toBe("submitted");
+    // Scope untouched by a status flip.
+    expect(row.leadId).toBe(leadId);
+    expect(row.matterId).toBeNull();
+    expect(mockedRevalidate).toHaveBeenCalledWith(`/intake/${leadId}/time`);
   });
 });
