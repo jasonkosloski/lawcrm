@@ -58,14 +58,20 @@ describe("CommandPalette — fetch failure on open", () => {
     // must remain selectable after the failure.
     expect(screen.getByText("All matters")).toBeInTheDocument();
 
-    // A non-matching query must read "No results." — the pre-fix
-    // behavior was a permanent "Loading…" because `data` stayed null.
+    // A non-matching query must not strand the palette on
+    // "Loading…" (the pre-fix behavior, because `data` stayed null).
+    // Since the "Search everywhere" row shipped, a ≥2-char query
+    // always has that row visible, so cmdk's empty state ("No
+    // results.") no longer renders — assert the escape-hatch row
+    // instead, plus the absence of the stuck loading state.
     const user = setupUser();
     await user.type(
       screen.getByPlaceholderText(/type to search/i),
       "zzzz-no-such-thing"
     );
-    expect(await screen.findByText("No results.")).toBeInTheDocument();
+    expect(
+      await screen.findByText(/search everywhere for/i)
+    ).toBeInTheDocument();
     expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
 
     warn.mockRestore();
@@ -91,5 +97,62 @@ describe("CommandPalette — fetch failure on open", () => {
 
     render(<CommandPalette open onOpenChange={() => {}} />);
     expect(await screen.findByText("Smith v. Jones")).toBeInTheDocument();
+  });
+});
+
+describe("CommandPalette — 'Search everywhere' row", () => {
+  beforeEach(() => {
+    mockedFetch.mockResolvedValue({ items: [] });
+    push.mockReset();
+  });
+
+  test("hidden while the query is under the 2-char minimum", async () => {
+    render(<CommandPalette open onOpenChange={() => {}} />);
+    // Empty query → no row.
+    expect(screen.queryByText(/search everywhere/i)).not.toBeInTheDocument();
+    const user = setupUser();
+    await user.type(screen.getByPlaceholderText(/type to search/i), "a");
+    expect(screen.queryByText(/search everywhere/i)).not.toBeInTheDocument();
+  });
+
+  test("selecting the row routes to /search with the query URL-encoded, and closes", async () => {
+    const onOpenChange = vi.fn();
+    render(<CommandPalette open onOpenChange={onOpenChange} />);
+    const user = setupUser();
+    await user.type(
+      screen.getByPlaceholderText(/type to search/i),
+      "ambulance report"
+    );
+    const row = await screen.findByText(/search everywhere for/i);
+    await user.click(row);
+    expect(push).toHaveBeenCalledWith("/search?q=ambulance%20report");
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  test("coexists with jump-to matches instead of replacing them", async () => {
+    mockedFetch.mockResolvedValue({
+      items: [
+        {
+          kind: "matter",
+          id: "m1234567890abcdefghij",
+          name: "Ambulance v. City",
+          caseNumber: null,
+          clientName: null,
+          area: "pi",
+          stage: "Litigation",
+          color: "#336699",
+          isPinned: false,
+        },
+      ],
+    });
+    render(<CommandPalette open onOpenChange={() => {}} />);
+    const user = setupUser();
+    await user.type(
+      screen.getByPlaceholderText(/type to search/i),
+      "ambulance"
+    );
+    // Both the preloaded matter hit AND the full-text escape hatch.
+    expect(await screen.findByText("Ambulance v. City")).toBeInTheDocument();
+    expect(screen.getByText(/search everywhere for/i)).toBeInTheDocument();
   });
 });

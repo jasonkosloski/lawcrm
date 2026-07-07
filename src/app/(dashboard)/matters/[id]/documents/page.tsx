@@ -4,7 +4,9 @@
  * Filings, pleadings, correspondence, contracts, discovery, and
  * expert reports for this matter. Grouped by category. Per-row:
  * download (if the file actually exists) + delete (admin or
- * uploader). Inline upload composer at the top.
+ * uploader). Inline upload composer + "Generate from template"
+ * (template library merged against this matter's context) at the
+ * bottom.
  */
 
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,6 +20,8 @@ import {
 } from "@/components/ui/table";
 import { UploadDocumentForm } from "@/components/matters/documents/upload-document-form";
 import { DocumentRowActions } from "@/components/matters/documents/document-row-actions";
+import { GenerateFromTemplateDialog } from "@/components/templates/generate-from-template-dialog";
+import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { formatDate } from "@/lib/format-date";
@@ -89,14 +93,30 @@ export default async function MatterDocumentsPage({
   params,
 }: PageProps<"/matters/[id]">) {
   const { id } = await params;
-  const [documents, currentUserId, canDeleteAny, tz] = await Promise.all([
-    getMatterDocuments(id),
-    getCurrentUserId(),
-    currentUserHasPermission("documents.delete_any"),
-    // Upload timestamps are real instants — render them on the
-    // viewer's calendar, not the server's (UTC in prod).
-    getCurrentUserTimeZone(),
-  ]);
+  const [documents, currentUserId, canDeleteAny, canUpload, templates, tz] =
+    await Promise.all([
+      getMatterDocuments(id),
+      getCurrentUserId(),
+      currentUserHasPermission("documents.delete_any"),
+      // Gates the generate dialog's "Save to documents" affordance —
+      // previewing/copying merged text stays open to everyone.
+      currentUserHasPermission("documents.upload"),
+      // Active templates only — the generation picker never offers
+      // archived ones (soft-archive semantics on DocumentTemplate).
+      prisma.documentTemplate.findMany({
+        where: { isActive: true },
+        orderBy: [{ category: "asc" }, { name: "asc" }],
+        select: {
+          id: true,
+          name: true,
+          category: true,
+          description: true,
+        },
+      }),
+      // Upload timestamps are real instants — render them on the
+      // viewer's calendar, not the server's (UTC in prod).
+      getCurrentUserTimeZone(),
+    ]);
 
   if (documents.length === 0) {
     return (
@@ -114,7 +134,11 @@ export default async function MatterDocumentsPage({
             </div>
           </CardContent>
         </Card>
-        <UploadDocumentForm matterId={id} />
+        <DocumentComposerRow
+          matterId={id}
+          templates={templates}
+          canUpload={canUpload}
+        />
       </div>
     );
   }
@@ -218,7 +242,42 @@ export default async function MatterDocumentsPage({
         );
       })}
 
-      <UploadDocumentForm matterId={id} />
+      <DocumentComposerRow
+        matterId={id}
+        templates={templates}
+        canUpload={canUpload}
+      />
+    </div>
+  );
+}
+
+/** Upload composer + template generation side by side. The upload
+ *  form gets the growing slot so its expanded state keeps full
+ *  width; the generate trigger stays a compact button. */
+function DocumentComposerRow({
+  matterId,
+  templates,
+  canUpload,
+}: {
+  matterId: string;
+  templates: {
+    id: string;
+    name: string;
+    category: string;
+    description: string | null;
+  }[];
+  canUpload: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap items-start gap-2">
+      <div className="flex-1 min-w-64">
+        <UploadDocumentForm matterId={matterId} />
+      </div>
+      <GenerateFromTemplateDialog
+        matterId={matterId}
+        templates={templates}
+        canUpload={canUpload}
+      />
     </div>
   );
 }

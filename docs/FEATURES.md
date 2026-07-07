@@ -58,11 +58,39 @@ done. What's left is enumerated below.
   pre-selected, files matterless) and the contact-page entry point
   (contact fixed via `fixedContact`). Still left: SMS send
   (Quo / Twilio), voicemail transcription — both need providers.
-- [ ] **Document templates / template library.** No way to save and
-  reuse a demand letter, discovery responses, retainer agreement.
-- [ ] **Search results page + global text search.** ⌘K palette
-  covers narrow lookups. No results page, no save-search, no
-  within-list keyword search beyond the matter list filters.
+- [x] **Document templates / template library.** Shipped 2026-07-07:
+  firm-wide library at `/settings/templates` (visible to everyone;
+  manage affordances behind `documents.template.create/edit/delete`).
+  Templates carry `{{merge.field}}` tokens resolved by the engine in
+  `src/lib/template-merge.ts` — typed catalog (matter.*, client.*,
+  firm.*, user.name, today; exported for the editor's insert-field
+  picker), TZ-aware date formatting, and never-silent semantics:
+  unknown tokens stay verbatim + are reported (`unresolved`), known
+  fields with no data render "[key — not on file]" + are reported
+  (`missing`). Editor dialog has a live preview against an
+  obviously-fake sample context. Matter Documents tab gets "Generate
+  from template": pick (active only, grouped by category) → preview
+  against the REAL matter context with warnings → Copy text (ungated,
+  like preview) or Save to documents (gated `documents.upload`; writes
+  a .md via file-storage, creates a `source: "generated"` Document
+  row named "<template> — <date>.md", activity-logged). Archive is a
+  soft `isActive` flip (edit key); hard delete is separate (delete
+  key). Still left: rich-text/DOCX output, per-practice-area default
+  templates, versioning.
+- [~] **Search results page + global text search.** Shipped
+  2026-07-07: `globalSearch(q)` (`src/lib/queries/search.ts`) — one
+  parallel ILIKE batch across matters, contacts (active, unmerged),
+  leads, notes (HTML matched, tag-stripped snippets), documents,
+  tasks, deadlines, calendar events (run through the same
+  `canViewEventDetails` scrub as the calendar — private events never
+  match or leak), email threads/messages, messenger items, and time
+  entries (privileged narratives match only for their author). No
+  new permission keys — search inherits each entity's read model.
+  `/search?q=` results page grouped by type with highlighted
+  snippets, counts, and per-group `?type=` expansion; ⌘K palette
+  gets an always-last "Search everywhere" row. ILIKE v1 by design —
+  Postgres FTS is the upgrade path (ADR-014). Still left:
+  save-search, within-list keyword filters.
 - [~] **Notifications — delivery channels.** In-app surface is done
   (see the shipped "v1" + "v2" entries: bell, feed page, deadline
   sweep + cron endpoint, task-assigned / settlement-step / team-add /

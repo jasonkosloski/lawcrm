@@ -8,6 +8,12 @@
  * 2. Pinned + recent (empty-query state)
  * 3. Everything — matters, people, leads, navigation (search-query state)
  *
+ * Plus a permanent last row once the query is ≥2 chars: "Search
+ * everywhere for …" → /search?q= (full-text content search — the
+ * palette itself only jumps to entities it preloaded). It scores
+ * lowest in the cmdk ranking, so Enter prefers real jump-to hits
+ * and falls through to full-text search when nothing matches.
+ *
  * Selection → navigate (`router.push`) or invoke server action (pin).
  * Pinned/recent selections get pushed to localStorage so next open
  * remembers you.
@@ -40,6 +46,7 @@ import {
   Mail,
   Pin,
   PinOff,
+  Search,
   Settings,
   User,
   UserSquare,
@@ -76,6 +83,18 @@ const ICON_MAP: Record<string, LucideIcon> = {
   userSquare: UserSquare,
   briefcase: Briefcase,
 };
+
+/** Sentinel `value` for the "Search everywhere" row. The custom
+ *  filter special-cases it to a tiny positive score so the row is
+ *  always visible (never filtered out) but always sorts LAST —
+ *  cmdk orders by score, so jump-to hits keep first-Enter priority
+ *  and this row is the Enter target only when nothing else matches. */
+const SEARCH_EVERYWHERE_VALUE = "__search-everywhere__";
+
+/** Mirrors SEARCH_MIN_QUERY_LENGTH in src/lib/queries/search.ts.
+ *  Kept as a local literal because importing the query module here
+ *  would pull Prisma into the client bundle. */
+const SEARCH_MIN_QUERY_LENGTH = 2;
 
 const CONTACT_TYPE_LABEL: Record<string, string> = {
   client: "Client",
@@ -149,6 +168,16 @@ export function CommandPalette({
     router.push(href);
   };
 
+  // Full-text escape hatch: the palette only jumps to entities it
+  // preloaded; content questions route to /search. Selected via
+  // click or Enter (when it's the top — i.e. only — match).
+  const searchEverywhere = () => {
+    const q = query.trim();
+    if (q.length < SEARCH_MIN_QUERY_LENGTH) return;
+    close();
+    router.push(`/search?q=${encodeURIComponent(q)}`);
+  };
+
   const toggleCurrentPin = () => {
     if (!currentMatter) return;
     const matterId = currentMatter.id;
@@ -194,6 +223,10 @@ export function CommandPalette({
       <Command
         label="Command palette"
         filter={(value, search) => {
+          // "Search everywhere" always shows (its render is gated on
+          // query length) but with the lowest score so real matches
+          // outrank it — Enter only lands here when nothing else hits.
+          if (value === SEARCH_EVERYWHERE_VALUE) return 0.01;
           if (!search) return 1;
           const v = value.toLowerCase();
           const q = search.toLowerCase().trim();
@@ -366,6 +399,26 @@ export function CommandPalette({
                   </CommandItem>
                 );
               })}
+            </CommandGroup>
+          )}
+
+          {/* ── Search everywhere (footer row → /search?q=) ──────────
+              Full-text content search across notes, email, documents,
+              time narratives, etc. — the query-layer counterpart is
+              globalSearch in src/lib/queries/search.ts. Renders only
+              once the query is long enough to be searchable. */}
+          {query.trim().length >= SEARCH_MIN_QUERY_LENGTH && (
+            <CommandGroup heading="Everywhere">
+              <CommandItem
+                value={SEARCH_EVERYWHERE_VALUE}
+                onSelect={searchEverywhere}
+              >
+                <Search />
+                <span>
+                  Search everywhere for &ldquo;{query.trim()}&rdquo;
+                </span>
+                <CommandShortcut>full-text</CommandShortcut>
+              </CommandItem>
             </CommandGroup>
           )}
         </CommandList>

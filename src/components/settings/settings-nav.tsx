@@ -59,6 +59,13 @@ const SECTIONS: NavSection[] = [
         label: "Activity log",
         requires: "firm.view_activity",
       },
+      // Visible to everyone — generating FROM templates is ungated,
+      // so anyone may browse the library. Manage affordances inside
+      // the page gate on the documents.template.* keys.
+      {
+        href: "/settings/templates",
+        label: "Document templates",
+      },
       // Integrations + Billing & rates are placeholder pages today;
       // gated on edit_info as a stand-in until they get their own
       // permission keys.

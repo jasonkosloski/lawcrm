@@ -253,3 +253,22 @@ Clicking a different column resets to that column's first-click (ascending).
 - (+) One permission key governs all time-entry creation; no new keys to administer
 - (+) Timer state can't leak billing data to under-privileged users (there is none to leak)
 - (-) A user without `time_entries.create` can run a timer they can never stop-and-log (only discard) — acceptable: the widget is still honest about elapsed time, and granting the key later converts the running session losslessly
+
+## ADR-014: Global search is ILIKE v1, inheriting each entity's read model — Postgres FTS is the upgrade path
+
+**Date:** 2026-07-07
+**Status:** Accepted
+
+**Context:** Global text search (P1) needed a query strategy and an authorization posture. Options: (a) Prisma `contains` / `mode: "insensitive"` (ILIKE), (b) Postgres full-text search (tsvector + GIN), (c) an external engine (Meilisearch/Typesense).
+
+**Decision:**
+- **ILIKE v1** — one parallel `Promise.all` batch in `src/lib/queries/search.ts`, per-type `take` + total counts. Zero infrastructure, correct semantics, fine at this firm's data scale. The `SearchHit` shape (type/id/title/snippet/href/context) is engine-agnostic so the FTS swap is invisible to the page.
+- **Upgrade path when data outgrows it:** generated `tsvector` columns (or a materialized search view) + GIN indexes, `websearch_to_tsquery` + `ts_rank` ranking, `ts_headline` snippets. Not an external engine — one more moving part to host/sync for a single-firm app.
+- **No new permission keys.** Search inherits each entity's existing read model: calendar events run through the same `canViewEventDetails` resolver as the calendar (scrubbed BEFORE snippets are built), privileged time-entry narratives match only for their author, merged/inactive contacts are excluded. A search surface must never widen visibility.
+- **Documented approximations:** per-type totals for events (JS-resolver visibility, 200-row candidate window) and notes (markup-only matches dropped post-fetch) are upper bounds, noted in code.
+
+**Trade-offs:**
+- (+) Shipped with zero infra; authz posture is provably no-wider-than-existing surfaces
+- (+) Swap to FTS is contained in one file
+- (-) Leading-wildcard ILIKE can't use btree indexes — full scans on big tables (acceptable now, the trigger to revisit)
+- (-) No relevance ranking; results are grouped by type, recency-ordered within type

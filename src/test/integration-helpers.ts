@@ -61,6 +61,9 @@ const TABLES_IN_DELETE_ORDER = [
   "flagged_moments",
   "evidence",
   "documents",
+  // Template library rows reference users (createdById); drop
+  // before users.
+  "document_templates",
   // Matter membership
   "matter_team_members",
   "matter_contacts",
