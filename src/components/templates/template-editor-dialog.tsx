@@ -26,6 +26,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -350,7 +351,9 @@ function InsertFieldMenu({
       />
       <DropdownMenuContent align="end" className="min-w-56 max-h-80 overflow-y-auto">
         {MERGE_FIELD_GROUPS.map((group, gi) => (
-          <div key={group.group}>
+          // DropdownMenuLabel is Base UI's Menu.GroupLabel — it must
+          // sit inside a Menu.Group or the menu throws at open time.
+          <DropdownMenuGroup key={group.group}>
             {gi > 0 && <DropdownMenuSeparator />}
             <DropdownMenuLabel className="text-2xs font-mono uppercase tracking-wider text-ink-4">
               {group.group}
@@ -367,7 +370,7 @@ function InsertFieldMenu({
                 </span>
               </DropdownMenuItem>
             ))}
-          </div>
+          </DropdownMenuGroup>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
