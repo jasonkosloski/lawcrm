@@ -24,21 +24,20 @@
  * for the wire format and `week-day-column.tsx` for the per-cell
  * client components.
  *
- * **Optimistic moves.** This component owns the move dispatch
- * AND a local overlay of pending move targets. Drop / resize
- * fires the server action in a transition AND immediately
- * updates the overlay so the chip jumps to its new spot with
- * zero perceived latency. When the server confirms (router
- * revalidates the page, items prop changes), we clear pending
- * entries that the server agrees with so the chip stays put
- * with no flash. Failure rolls back the overlay and surfaces an
- * error.
+ * **Optimistic moves.** Move dispatch + the pending-move overlay
+ * live in the shared `useEventMoves` hook (also used by DayView):
+ * drop / resize fires the server action in a transition AND
+ * immediately updates the overlay so the chip jumps to its new
+ * spot with zero perceived latency. When the server confirms
+ * (router revalidates the page, items prop changes), pending
+ * entries the server agrees with are cleared so the chip stays
+ * put with no flash. Failure rolls back the overlay and surfaces
+ * an error.
  */
 
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
@@ -47,27 +46,17 @@ import {
   HOURS,
 } from "@/lib/calendar-utils";
 import { dateKeyInTz } from "@/lib/format-date";
-import { moveCalendarEvent } from "@/app/actions/calendar-events";
 import type {
   CalendarItem,
   CalendarEventRow,
   CalendarDeadlineRow,
 } from "@/lib/queries/calendar";
 import { WeekAllDayCell, WeekTimeColumn } from "./week-day-column";
-import {
-  applyPending,
-  reconcilePending,
-  type PendingMove,
-} from "./optimistic-moves";
+import { useEventMoves } from "./use-event-moves";
 
-/** Posted by the day cells when a chip lands somewhere new — drop
- *  on a time slot, drop on the all-day row, or chip-edge resize.
- *  The shape mirrors the move action's input minus the eventId
- *  (carried alongside). */
-export type MoveEventFn = (
-  eventId: string,
-  schedule: { isAllDay: boolean; start: Date; end: Date }
-) => void;
+// `MoveEventFn` moved to use-event-moves.ts when DayView landed;
+// re-exported so existing importers keep working.
+export type { MoveEventFn } from "./use-event-moves";
 
 export function WeekView({
   days,
@@ -90,66 +79,16 @@ export function WeekView({
    *  sees their local day. */
   userTz: string;
 }) {
-  const router = useRouter();
-  const [, startTransition] = useTransition();
-  const [pending, setPending] = useState<Map<string, PendingMove>>(
-    () => new Map()
-  );
-
-  // When fresh server data arrives, drop any pending entries the
-  // server now agrees with. Entries that DON'T match stay until
-  // the next move or rollback — that keeps the chip in its
-  // optimistic position even if a separate revalidate fires (e.g.
-  // an unrelated mutation triggered a `/calendar` revalidate).
-  useEffect(() => {
-    setPending((prev) => reconcilePending(items, prev));
-  }, [items]);
-
-  const moveEvent: MoveEventFn = (eventId, schedule) => {
-    // Apply optimistic overlay synchronously so the chip jumps now.
-    setPending((prev) => {
-      const next = new Map(prev);
-      next.set(eventId, {
-        isAllDay: schedule.isAllDay,
-        startTime: schedule.start,
-        endTime: schedule.end,
-      });
-      return next;
-    });
-    startTransition(async () => {
-      const res = await moveCalendarEvent(eventId, {
-        isAllDay: schedule.isAllDay,
-        startTime: schedule.start.toISOString(),
-        endTime: schedule.end.toISOString(),
-      });
-      if (!res.ok) {
-        // Roll back the overlay so the chip snaps to its real
-        // server-saved position, then surface the error.
-        setPending((prev) => {
-          const next = new Map(prev);
-          next.delete(eventId);
-          return next;
-        });
-        // eslint-disable-next-line no-alert
-        alert(res.error ?? "Couldn't move event.");
-        return;
-      }
-      // Refresh pulls the server's saved state into the items prop;
-      // the useEffect above clears matching pending entries on
-      // arrival, leaving the chip in place.
-      router.refresh();
-    });
-  };
+  // Shared optimistic-move pipeline (also used by DayView) —
+  // `renderItems` carries the pending overlay so a moved chip
+  // lands in its new column / time slot immediately.
+  const { renderItems, moveEvent } = useEventMoves(items);
 
   const now = new Date();
   // "Today" in the user's TZ — used to highlight the right column
   // header. Comparing as a YYYY-MM-DD string avoids any TZ math at
   // the comparison site.
   const todayKey = dateKeyInTz(now, userTz);
-
-  // Apply optimistic overlay before bucketing so a moved chip lands
-  // in its new column / time slot immediately.
-  const renderItems = applyPending(items, pending);
 
   // Bucket items by their user-TZ calendar date. Without the TZ,
   // an event at "Sunday 11pm MDT" (UTC: Monday 5am) would land in
@@ -228,10 +167,17 @@ export function WeekView({
           const dow = day.getUTCDay();
           const weekend = dow === 0 || dow === 6;
           return (
-            <div
+            // Whole header cell deep-links to the day's Day view.
+            // The href is built from `b.key` directly (not
+            // `buildCalendarHref`, whose `toDateParam` formats in
+            // the *browser's* TZ — a noon-UTC day Date would come
+            // out one day ahead for users east of UTC+11).
+            <Link
               key={b.key}
+              href={`/calendar?view=day&d=${b.key}`}
+              title="Open day view"
               className={cn(
-                "flex flex-col items-center gap-0.5 py-2 border-l border-line",
+                "flex flex-col items-center gap-0.5 py-2 border-l border-line transition-colors hover:bg-brand-tint/40",
                 weekend && "bg-paper"
               )}
             >
@@ -255,7 +201,7 @@ export function WeekView({
               >
                 {day.getUTCDate()}
               </div>
-            </div>
+            </Link>
           );
         })}
       </div>

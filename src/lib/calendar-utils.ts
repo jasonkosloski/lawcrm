@@ -5,10 +5,17 @@
  * page uses for state. All date arithmetic goes through `date-fns`.
  */
 
-import { format, parseISO, startOfDay } from "date-fns";
-import { dateKeyInTz } from "@/lib/format-date";
+import {
+  addDays,
+  addMonths,
+  format,
+  parseISO,
+  startOfDay,
+  startOfMonth,
+} from "date-fns";
+import { dateKeyInTz, instantInTz } from "@/lib/format-date";
 
-export type CalendarView = "week" | "month";
+export type CalendarView = "week" | "month" | "day";
 export const DEFAULT_VIEW: CalendarView = "week";
 
 /**
@@ -51,7 +58,9 @@ export function parseCalendarParams(
 ): { view: CalendarView; focal: Date } {
   const rawView = Array.isArray(sp.view) ? sp.view[0] : sp.view;
   const view: CalendarView =
-    rawView === "week" || rawView === "month" ? rawView : DEFAULT_VIEW;
+    rawView === "week" || rawView === "month" || rawView === "day"
+      ? rawView
+      : DEFAULT_VIEW;
 
   const todayFocal = () => parseISO(dateKeyInTz(now, tz));
 
@@ -83,6 +92,59 @@ export function buildCalendarHref(
   if (v !== DEFAULT_VIEW) params.set("view", v);
   params.set("d", toDateParam(d));
   return `/calendar?${params.toString()}`;
+}
+
+/**
+ * Compute the single-day range for `focal` in the given TZ —
+ * day-view sibling of `calendarWeekInTz` / `calendarMonthGridInTz`
+ * (format-date.ts). Lives here rather than there because the day
+ * key comes from the focal's own calendar components
+ * (`toDateParam`), NOT from re-interpreting the instant through
+ * the TZ: focal Dates are server-local midnights that losslessly
+ * encode the URL's `?d=` key (see `parseCalendarParams`). Running
+ * the instant through `dateKeyInTz` shifts users west of the
+ * server back one day — mostly invisible in week view (usually
+ * the same week) but ALWAYS wrong in day view.
+ *
+ * Returns:
+ *   - `day`: noon-UTC Date of the calendar day (same convention
+ *     as the week/month `days` arrays — UTC accessors yield the
+ *     user-calendar components on any server/browser TZ).
+ *   - `rangeStart` / `rangeEnd`: UTC instants of 00:00 and 23:59
+ *     wall-clock in `tz` — what the DB query needs. DST days
+ *     (23h / 25h) fall out of `instantInTz` for free.
+ */
+export function calendarDayInTz(
+  focal: Date,
+  tz: string
+): { day: Date; rangeStart: Date; rangeEnd: Date } {
+  const [y, m, d] = toDateParam(focal).split("-").map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  return {
+    day: new Date(Date.UTC(y, m - 1, d, 12)),
+    rangeStart: instantInTz(y, m, d, 0, 0, tz),
+    rangeEnd: instantInTz(y, m, d, 23, 59, tz),
+  };
+}
+
+/**
+ * Prev/next focal for the toolbar arrows: ±1 day in day view,
+ * ±7 days in week view, ±1 month (anchored to the 1st) in month
+ * view. Calendar-day arithmetic via date-fns — a step never lands
+ * mid-day, so `toDateParam` round-trips it losslessly across DST
+ * transitions and month/year boundaries.
+ */
+export function stepCalendarFocal(
+  view: CalendarView,
+  focal: Date,
+  dir: 1 | -1
+): Date {
+  if (view === "day") return addDays(focal, dir);
+  if (view === "week") return addDays(focal, 7 * dir);
+  return addMonths(startOfMonth(focal), dir);
 }
 
 /** Whole-hour labels used in week view, 6am → 9pm inclusive. */

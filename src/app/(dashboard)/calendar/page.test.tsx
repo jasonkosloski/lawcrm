@@ -42,6 +42,7 @@ vi.mock("@/components/calendar/calendar-toolbar", () => ({
 }));
 vi.mock("@/components/calendar/week-view", () => ({ WeekView: () => null }));
 vi.mock("@/components/calendar/month-view", () => ({ MonthView: () => null }));
+vi.mock("@/components/calendar/day-view", () => ({ DayView: () => null }));
 vi.mock("@/components/calendar/calendar-agenda", () => ({
   CalendarAgenda: () => null,
 }));

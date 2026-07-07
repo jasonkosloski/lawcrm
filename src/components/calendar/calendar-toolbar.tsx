@@ -2,26 +2,24 @@
  * Calendar Toolbar
  *
  * Renders above the calendar grid: prev / today / next navigation,
- * view toggle (Week / Month), and range label. Async server component
- * — all state lives in the URL and each control is a `<Link>`; the
- * only data read is the current user's time zone (for "Today").
+ * view toggle (Day / Week / Month), and range label. Async server
+ * component — all state lives in the URL and each control is a
+ * `<Link>`; the only data read is the current user's time zone
+ * (for "Today").
  */
 
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
-  addDays,
-  addMonths,
   format,
   parseISO,
-  startOfMonth,
   startOfWeek,
   endOfWeek,
-  endOfMonth,
 } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
   buildCalendarHref,
+  stepCalendarFocal,
   WEEK_STARTS_ON,
   type CalendarView,
 } from "@/lib/calendar-utils";
@@ -46,6 +44,9 @@ export function todayFocalInTz(now: Date, tz: string): Date {
 }
 
 function formatRangeLabel(view: CalendarView, focal: Date): string {
+  if (view === "day") {
+    return format(focal, "EEEE, MMMM d, yyyy");
+  }
   if (view === "week") {
     const start = startOfWeek(focal, { weekStartsOn: WEEK_STARTS_ON });
     const end = endOfWeek(focal, { weekStartsOn: WEEK_STARTS_ON });
@@ -66,14 +67,8 @@ export async function CalendarToolbar({
 }) {
   const userTz = await getCurrentUserTimeZone();
   const today = todayFocalInTz(new Date(), userTz);
-  const prev =
-    view === "week"
-      ? addDays(focal, -7)
-      : addMonths(startOfMonth(focal), -1);
-  const next =
-    view === "week"
-      ? addDays(focal, 7)
-      : addMonths(startOfMonth(focal), 1);
+  const prev = stepCalendarFocal(view, focal, -1);
+  const next = stepCalendarFocal(view, focal, 1);
 
   return (
     <div className="flex items-center justify-between gap-2 px-3 sm:px-5 py-3 border-b border-line shrink-0">
@@ -82,7 +77,7 @@ export async function CalendarToolbar({
           <Link
             href={buildCalendarHref(view, focal, { focal: prev })}
             className="p-1.5 text-ink-3 hover:text-brand-700 border-r border-line"
-            aria-label={view === "week" ? "Previous week" : "Previous month"}
+            aria-label={`Previous ${view}`}
           >
             <ChevronLeft size={14} />
           </Link>
@@ -95,7 +90,7 @@ export async function CalendarToolbar({
           <Link
             href={buildCalendarHref(view, focal, { focal: next })}
             className="p-1.5 text-ink-3 hover:text-brand-700"
-            aria-label={view === "week" ? "Next week" : "Next month"}
+            aria-label={`Next ${view}`}
           >
             <ChevronRight size={14} />
           </Link>
@@ -106,7 +101,7 @@ export async function CalendarToolbar({
       </div>
 
       <div className="inline-flex items-center rounded-md border border-line bg-white p-0.5">
-        {(["week", "month"] as CalendarView[]).map((v) => {
+        {(["day", "week", "month"] as CalendarView[]).map((v) => {
           const active = v === view;
           return (
             <Link

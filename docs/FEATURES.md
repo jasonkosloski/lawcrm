@@ -104,8 +104,21 @@ done. What's left is enumerated below.
   full form with matter picker, attendees + RSVP statuses, all-day
   toggle (already in edit), recurrence rules. Today: per-matter
   EventComposer + the inline NewEventComposer cover the common case.
-- [ ] **Calendar — Day view.** Single-day focus mode (deferred from
-  Phase 5).
+- [x] **Calendar — Day view.** Shipped 2026-07-07: `?view=day`
+  joins week/month in the URL-driven state (`parseCalendarParams`
+  / `buildCalendarHref`), with `calendarDayInTz` computing the
+  single-day fetch range in the viewer's TZ (DST-safe 23h/25h
+  days) and `stepCalendarFocal` centralizing the toolbar's ±1
+  day / ±7 day / ±1 month arrows. The view reuses the week view's
+  column primitives at full width — `WeekAllDayCell` (all-day
+  strip, still a drop target) + `WeekTimeColumn` (hour grid,
+  drag-to-reschedule + edge-resize intact via the extracted
+  `useEventMoves` hook) — plus a dedicated deadlines section
+  rendering full pills (title + matter + critical tag) instead of
+  the week view's thin bars. Week-view day headers and month-view
+  day numbers now deep-link into the day. Deferred: a
+  deadlines-only filter (tracked below) and any day-view-specific
+  chip enrichment beyond what full width already unlocks.
 - [ ] **Calendar — Deadlines-only filter.** Hide events and show
   just upcoming deadlines.
 - [ ] **Google Calendar sync.** OAuth + two-way sync.

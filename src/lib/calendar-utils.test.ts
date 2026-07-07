@@ -7,6 +7,7 @@ import { describe, expect, test } from "vitest";
 import {
   DEFAULT_VIEW,
   buildCalendarHref,
+  calendarDayInTz,
   eventHeightPx,
   eventTopPx,
   formatHourLabel,
@@ -16,6 +17,7 @@ import {
   layoutOverlappingEvents,
   nowOffsetPx,
   parseCalendarParams,
+  stepCalendarFocal,
   toDateParam,
 } from "./calendar-utils";
 
@@ -47,6 +49,22 @@ describe("parseCalendarParams", () => {
 
   test("view=month is honored", () => {
     expect(parseCalendarParams({ view: "month" }, TZ).view).toBe("month");
+  });
+
+  test("view=day is honored", () => {
+    expect(parseCalendarParams({ view: "day" }, TZ).view).toBe("day");
+  });
+
+  test("view=day round-trips with a d= date", () => {
+    const { view, focal } = parseCalendarParams(
+      { view: "day", d: "2026-07-07" },
+      TZ
+    );
+    expect(view).toBe("day");
+    expect(toDateParam(focal)).toBe("2026-07-07");
+    expect(buildCalendarHref(view, focal)).toBe(
+      "/calendar?view=day&d=2026-07-07"
+    );
   });
 
   test("unknown view falls back to default", () => {
@@ -132,6 +150,9 @@ describe("buildCalendarHref", () => {
   test("non-default view stays in the URL", () => {
     const href = buildCalendarHref("month", new Date("2026-04-15T12:00:00"));
     expect(href).toBe("/calendar?view=month&d=2026-04-15");
+    expect(buildCalendarHref("day", new Date("2026-04-15T12:00:00"))).toBe(
+      "/calendar?view=day&d=2026-04-15"
+    );
   });
 
   test("override applies to view + focal independently", () => {
@@ -146,6 +167,95 @@ describe("buildCalendarHref", () => {
 
   test("verifies DEFAULT_VIEW is week (test asserts the convention)", () => {
     expect(DEFAULT_VIEW).toBe("week");
+  });
+});
+
+describe("calendarDayInTz", () => {
+  // Focal Dates below are constructed with local components — the
+  // same shape parseCalendarParams produces (server-local midnight
+  // of the URL's date key) — so assertions hold in any runner TZ.
+  const focal = (y: number, m: number, d: number) => new Date(y, m - 1, d);
+
+  test("day is noon UTC of the focal's own calendar date", () => {
+    for (const tz of ["America/Denver", "UTC", "Asia/Tokyo"]) {
+      const { day } = calendarDayInTz(focal(2026, 7, 7), tz);
+      // Noon UTC → UTC accessors carry the calendar day for ANY tz;
+      // crucially the key is NOT shifted by re-interpreting the
+      // focal instant in the tz (which would move Denver back to
+      // July 6 on a UTC server).
+      expect(day.toISOString()).toBe("2026-07-07T12:00:00.000Z");
+    }
+  });
+
+  test("range spans 00:00–23:59 wall-clock in the user's TZ", () => {
+    // July 7 in Denver is MDT (UTC-6): midnight = 06:00Z.
+    const denver = calendarDayInTz(focal(2026, 7, 7), "America/Denver");
+    expect(denver.rangeStart.toISOString()).toBe("2026-07-07T06:00:00.000Z");
+    expect(denver.rangeEnd.toISOString()).toBe("2026-07-08T05:59:00.000Z");
+
+    // Tokyo (UTC+9): the same calendar day starts the prior UTC day.
+    const tokyo = calendarDayInTz(focal(2026, 7, 7), "Asia/Tokyo");
+    expect(tokyo.rangeStart.toISOString()).toBe("2026-07-06T15:00:00.000Z");
+    expect(tokyo.rangeEnd.toISOString()).toBe("2026-07-07T14:59:00.000Z");
+  });
+
+  test("spring-forward day is 23 hours (Denver, 2026-03-08)", () => {
+    // Midnight is still MST (UTC-7) → 07:00Z; 23:59 is MDT (UTC-6).
+    const { rangeStart, rangeEnd } = calendarDayInTz(
+      focal(2026, 3, 8),
+      "America/Denver"
+    );
+    expect(rangeStart.toISOString()).toBe("2026-03-08T07:00:00.000Z");
+    expect(rangeEnd.toISOString()).toBe("2026-03-09T05:59:00.000Z");
+  });
+
+  test("fall-back day is 25 hours (Denver, 2026-11-01)", () => {
+    // Midnight is MDT (UTC-6) → 06:00Z; 23:59 is MST (UTC-7).
+    const { rangeStart, rangeEnd } = calendarDayInTz(
+      focal(2026, 11, 1),
+      "America/Denver"
+    );
+    expect(rangeStart.toISOString()).toBe("2026-11-01T06:00:00.000Z");
+    expect(rangeEnd.toISOString()).toBe("2026-11-02T06:59:00.000Z");
+  });
+});
+
+describe("stepCalendarFocal", () => {
+  const focal = (y: number, m: number, d: number) => new Date(y, m - 1, d);
+  const step = (
+    view: Parameters<typeof stepCalendarFocal>[0],
+    f: Date,
+    dir: 1 | -1
+  ) => toDateParam(stepCalendarFocal(view, f, dir));
+
+  test("day view steps ±1 calendar day", () => {
+    expect(step("day", focal(2026, 7, 7), 1)).toBe("2026-07-08");
+    expect(step("day", focal(2026, 7, 7), -1)).toBe("2026-07-06");
+  });
+
+  test("day steps cross month + year boundaries", () => {
+    expect(step("day", focal(2026, 7, 31), 1)).toBe("2026-08-01");
+    expect(step("day", focal(2026, 1, 1), -1)).toBe("2025-12-31");
+  });
+
+  test("day steps stay calendar-true across DST transitions", () => {
+    // Whatever TZ the runner sits in, a ±1 step around the US DST
+    // dates must land on the adjacent calendar day (never 23:00 of
+    // the same day / 01:00 two days out — the classic +24h bug).
+    expect(step("day", focal(2026, 3, 8), 1)).toBe("2026-03-09");
+    expect(step("day", focal(2026, 3, 9), -1)).toBe("2026-03-08");
+    expect(step("day", focal(2026, 11, 1), 1)).toBe("2026-11-02");
+    expect(step("day", focal(2026, 11, 2), -1)).toBe("2026-11-01");
+  });
+
+  test("week view steps ±7 days", () => {
+    expect(step("week", focal(2026, 7, 7), 1)).toBe("2026-07-14");
+    expect(step("week", focal(2026, 7, 7), -1)).toBe("2026-06-30");
+  });
+
+  test("month view steps ±1 month anchored to the 1st", () => {
+    expect(step("month", focal(2026, 7, 15), 1)).toBe("2026-08-01");
+    expect(step("month", focal(2026, 7, 15), -1)).toBe("2026-06-01");
   });
 });
 

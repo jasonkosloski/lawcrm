@@ -115,18 +115,23 @@ export function MonthView({
                     : "bg-white"
               )}
             >
-              <div
+              {/* Day number deep-links to the day's Day view. The
+                  href reuses the cell's already-computed user-TZ
+                  date key rather than formatting the Date again. */}
+              <Link
+                href={`/calendar?view=day&d=${key}`}
+                title="Open day view"
                 className={cn(
-                  "inline-flex items-center justify-center w-5 h-5 rounded-full text-2xs font-mono self-end shrink-0",
+                  "inline-flex items-center justify-center w-5 h-5 rounded-full text-2xs font-mono self-end shrink-0 transition-colors",
                   isToday
-                    ? "bg-brand-500 text-white font-semibold"
+                    ? "bg-brand-500 text-white font-semibold hover:bg-brand-600"
                     : isInMonth
-                      ? "text-ink-2"
-                      : "text-ink-4"
+                      ? "text-ink-2 hover:bg-brand-tint hover:text-brand-700"
+                      : "text-ink-4 hover:bg-brand-tint hover:text-brand-700"
                 )}
               >
                 {day.getUTCDate()}
-              </div>
+              </Link>
               <div className="flex flex-col gap-0.5 overflow-hidden">
                 {visible.map((item) =>
                   item.kind === "event" ? (

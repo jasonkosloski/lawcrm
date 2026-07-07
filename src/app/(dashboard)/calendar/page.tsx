@@ -1,8 +1,8 @@
 /**
  * Calendar Page
  *
- * Week view (default) and Month view, both read-only. State lives in
- * the URL: `?view=week|month` and `?d=YYYY-MM-DD`. No external-calendar
+ * Week view (default), Month view, and Day view. State lives in the
+ * URL: `?view=week|month|day` and `?d=YYYY-MM-DD`. No external-calendar
  * integration yet — this is the internal view of CalendarEvents +
  * Deadlines stored in the DB.
  *
@@ -17,12 +17,13 @@ import { TopBar } from "@/components/layout/topbar";
 import { CalendarToolbar } from "@/components/calendar/calendar-toolbar";
 import { WeekView } from "@/components/calendar/week-view";
 import { MonthView } from "@/components/calendar/month-view";
+import { DayView } from "@/components/calendar/day-view";
 import { CalendarAgenda } from "@/components/calendar/calendar-agenda";
 import { EventDetailModal } from "@/components/calendar/event-detail-modal";
 import { CreateStackProvider } from "@/components/create-stack/create-stack-provider";
 import { CreateDock } from "@/components/create-stack/create-dock";
 import { NewEventButton } from "@/components/calendar/new-event-button";
-import { parseCalendarParams } from "@/lib/calendar-utils";
+import { calendarDayInTz, parseCalendarParams } from "@/lib/calendar-utils";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import {
   calendarMonthGridInTz,
@@ -53,7 +54,9 @@ export default async function CalendarPage({
   const { view, focal } = parseCalendarParams(sp, userTz);
   const week = calendarWeekInTz(focal, userTz);
   const monthGrid = calendarMonthGridInTz(focal, userTz);
-  const range = view === "week" ? week : monthGrid;
+  const dayRange = calendarDayInTz(focal, userTz);
+  const range =
+    view === "week" ? week : view === "month" ? monthGrid : dayRange;
 
   // Event-detail modal is URL-driven via ?event=<id> so refresh +
   // back-button both work. The modal's queries live in a separate
@@ -99,11 +102,18 @@ export default async function CalendarPage({
                 canEditEvents={canEditEvents}
                 userTz={userTz}
               />
-            ) : (
+            ) : view === "month" ? (
               <MonthView
                 focal={focal}
                 days={monthGrid.days}
                 items={items}
+                userTz={userTz}
+              />
+            ) : (
+              <DayView
+                day={dayRange.day}
+                items={items}
+                canEditEvents={canEditEvents}
                 userTz={userTz}
               />
             )}

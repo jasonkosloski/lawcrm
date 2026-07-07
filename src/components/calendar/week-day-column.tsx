@@ -1,5 +1,7 @@
 /**
- * Per-day client cells for WeekView.
+ * Per-day client cells for WeekView — and, at full width, DayView
+ * (day-view.tsx renders one of each; both were parameterized
+ * per-day from the start, so single-day reuse needed no changes).
  *
  * Two components, both client-side because they own drag/drop:
  *
