@@ -24,3 +24,28 @@ when the capability has those distinct access levels — don't lump
 into "manage_X"). Server actions gate via `requirePermission(...)`;
 read-side flags via `currentUserHasPermission(...)`. See
 **`docs/PERMISSIONS.md`** for the full reference.
+
+# Mutations are server actions
+
+All create/update/delete goes through server actions in
+`src/app/actions/[resource].ts` — permission-gated, activity-logged,
+`revalidatePath` for invalidation. Do NOT add API routes for
+mutations, and do NOT use React Query mutations (the package is
+installed but unused; older docs describing that pattern were wrong).
+Reads happen in server components via direct Prisma queries. See
+**`docs/ARCHITECTURE.md`** for the full picture.
+
+# Docs are non-optional
+
+`docs/` is living documentation (index at `docs/README.md`), updated
+as part of the change that makes it stale — not as a follow-up chore:
+
+- Schema change → entry in `docs/SCHEMA_NOTES.md` (models table + changelog)
+- Architectural choice → ADR in `docs/DECISIONS.md`
+- Feature started/shipped/descoped → status in `docs/FEATURES.md`
+- New reusable UI pattern → `docs/UI_PATTERNS.md`
+- Folder structure or data-flow change → `docs/ARCHITECTURE.md`
+
+Don't hand-duplicate what code already declares (permission key
+lists, test counts, coverage thresholds) — point at the source file
+instead.
