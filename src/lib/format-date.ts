@@ -339,6 +339,22 @@ export function instantInTz(
 }
 
 /**
+ * Focal contract for the calendar range helpers below: callers
+ * build `focal` as SERVER-LOCAL midnight of the intended calendar
+ * date (parseCalendarParams / parseTimeParams do
+ * `parseISO("YYYY-MM-DD")`), so the focal's own local calendar
+ * components ARE the intended date. Re-interpreting the instant
+ * through the viewer's TZ (`dateKeyInTz(focal, tz)`) shifts
+ * west-of-server viewers back a day — which silently rendered the
+ * previous WEEK when the focal was a Sunday and the previous MONTH
+ * when the focal was the 1st. The `tz` param is still what turns
+ * the chosen calendar days into exact query instants.
+ */
+function focalDateParts(focal: Date): [number, number, number] {
+  return [focal.getFullYear(), focal.getMonth() + 1, focal.getDate()];
+}
+
+/**
  * Compute the calendar week containing `focal` in the given TZ.
  *
  * Returns an array of seven day-noon-UTC Dates (one per column —
@@ -353,8 +369,7 @@ export function calendarWeekInTz(
   focal: Date,
   tz: string
 ): { days: Date[]; rangeStart: Date; rangeEnd: Date } {
-  const focalKey = dateKeyInTz(focal, tz);
-  const [fy, fm, fd] = focalKey.split("-").map(Number) as [number, number, number];
+  const [fy, fm, fd] = focalDateParts(focal);
   // Noon UTC of the focal date — used purely to compute the weekday.
   // Safe across every TZ from UTC-12 to UTC+11.
   const focalNoon = new Date(Date.UTC(fy, fm - 1, fd, 12));
@@ -402,8 +417,7 @@ export function calendarMonthGridInTz(
   focal: Date,
   tz: string
 ): { days: Date[]; rangeStart: Date; rangeEnd: Date } {
-  const focalKey = dateKeyInTz(focal, tz);
-  const [fy, fm] = focalKey.split("-").map(Number) as [number, number, number];
+  const [fy, fm] = focalDateParts(focal);
   // First day of the month at noon UTC.
   const firstNoon = new Date(Date.UTC(fy, fm - 1, 1, 12));
   // Sunday of the week containing the 1st.

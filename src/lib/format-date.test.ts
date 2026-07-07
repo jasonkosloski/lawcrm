@@ -11,6 +11,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { parseISO } from "date-fns";
 import {
   calendarMonthGridInTz,
   calendarWeekInTz,
@@ -372,10 +373,17 @@ describe("instantInTz", () => {
   });
 });
 
+// Focal contract (see focalDateParts in format-date.ts): callers
+// pass local midnight of the intended calendar date — what
+// parseISO("YYYY-MM-DD") produces. Tests build focals the same way
+// so they're machine-TZ independent. Turning "now" into that date
+// key in the VIEWER's zone happens upstream (parseCalendarParams,
+// covered in calendar-utils.test.ts).
+const focalFor = (key: string) => parseISO(key);
+
 describe("calendarWeekInTz", () => {
   test("focal mid-week returns Sun-Sat days, all noon UTC", () => {
-    // Tuesday April 28 in MDT.
-    const focal = new Date("2026-04-28T15:00:00.000Z");
+    const focal = focalFor("2026-04-28"); // a Tuesday
     const { days } = calendarWeekInTz(focal, "America/Denver");
     expect(days).toHaveLength(7);
     // First day = Sunday April 26, noon UTC.
@@ -385,7 +393,7 @@ describe("calendarWeekInTz", () => {
   });
 
   test("range covers Sunday 00:00 → Saturday 23:59 in user TZ", () => {
-    const focal = new Date("2026-04-28T15:00:00.000Z");
+    const focal = focalFor("2026-04-28");
     const { rangeStart, rangeEnd } = calendarWeekInTz(
       focal,
       "America/Denver"
@@ -397,20 +405,24 @@ describe("calendarWeekInTz", () => {
   });
 
   test("east-of-UTC TZ shifts the range the other direction", () => {
-    const focal = new Date("2026-04-28T15:00:00.000Z");
+    const focal = focalFor("2026-04-28");
     const { rangeStart } = calendarWeekInTz(focal, "Asia/Tokyo");
     // Sunday April 26 midnight Tokyo (UTC+9) = April 25 15:00 UTC.
     expect(rangeStart.toISOString()).toBe("2026-04-25T15:00:00.000Z");
   });
 
-  test("focal that's Saturday late-evening MDT still returns this week (not next)", () => {
-    // Saturday May 2, 11:30pm MDT = May 3 05:30 UTC.
-    // The user calls this "Saturday May 2" — the week should
-    // be April 26 through May 2.
-    const focal = new Date("2026-05-03T05:30:00.000Z");
-    const { days } = calendarWeekInTz(focal, "America/Denver");
-    expect(days[0]!.getUTCDate()).toBe(26); // Sunday April 26
-    expect(days[6]!.getUTCDate()).toBe(2); // Saturday May 2
+  test("Sunday focal renders ITS OWN week for a viewer west of the server (regression)", () => {
+    // Before focalDateParts, the helper re-interpreted the focal
+    // instant through the viewer TZ: local-midnight Sunday shifted
+    // back to Saturday for west-of-server viewers, silently
+    // rendering the PREVIOUS week. The focal's own calendar date is
+    // authoritative regardless of viewer TZ.
+    const focal = focalFor("2026-05-03"); // a Sunday
+    for (const tz of ["America/Denver", "Pacific/Honolulu", "Asia/Tokyo"]) {
+      const { days } = calendarWeekInTz(focal, tz);
+      expect(days[0]!.toISOString()).toBe("2026-05-03T12:00:00.000Z");
+      expect(days[6]!.toISOString()).toBe("2026-05-09T12:00:00.000Z");
+    }
   });
 });
 
@@ -418,7 +430,7 @@ describe("calendarMonthGridInTz", () => {
   test("April 2026 grid starts on Sunday March 29 (the prior week's Sunday)", () => {
     // April 2026: the 1st is a Wednesday, so the grid starts on
     // Sunday March 29.
-    const focal = new Date("2026-04-15T15:00:00.000Z");
+    const focal = focalFor("2026-04-15");
     const { days } = calendarMonthGridInTz(focal, "America/Denver");
     expect(days).toHaveLength(42);
     expect(days[0]!.toISOString()).toBe("2026-03-29T12:00:00.000Z");
@@ -427,7 +439,7 @@ describe("calendarMonthGridInTz", () => {
   });
 
   test("range bounds respect user TZ", () => {
-    const focal = new Date("2026-04-15T15:00:00.000Z");
+    const focal = focalFor("2026-04-15");
     const { rangeStart, rangeEnd } = calendarMonthGridInTz(
       focal,
       "America/Denver"
@@ -436,5 +448,17 @@ describe("calendarMonthGridInTz", () => {
     expect(rangeStart.toISOString()).toBe("2026-03-29T06:00:00.000Z");
     // Saturday May 9 23:59 MDT = May 10 05:59 UTC.
     expect(rangeEnd.toISOString()).toBe("2026-05-10T05:59:00.000Z");
+  });
+
+  test("1st-of-month focal renders ITS OWN month for a viewer west of the server (regression)", () => {
+    // Same failure mode as the week helper: re-interpreting a
+    // local-midnight July 1 focal through a west-of-server TZ
+    // yielded June 30 → the entire grid rendered June.
+    const focal = focalFor("2026-07-01"); // a Wednesday
+    for (const tz of ["America/Denver", "Pacific/Honolulu", "Asia/Tokyo"]) {
+      const { days } = calendarMonthGridInTz(focal, tz);
+      // Grid starts Sunday June 28 — the week containing July 1.
+      expect(days[0]!.toISOString()).toBe("2026-06-28T12:00:00.000Z");
+    }
   });
 });
