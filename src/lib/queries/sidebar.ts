@@ -19,6 +19,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { currentUserHasPermission } from "@/lib/permission-check";
 
 export type SidebarUser = {
   id: string;
@@ -49,6 +50,11 @@ export type SidebarData = {
   hoursToday: number;
   pinnedMatters: SidebarPinnedMatter[];
   areaCounts: SidebarAreaCount[];
+  /** Whether the viewer holds `reports.view` — gates the Reports
+   *  nav item (the /reports page re-checks server-side, so hiding
+   *  here is UX, not security). Same resolve-at-the-server, thread-
+   *  as-a-flag pattern as SettingsNav's grantedPermissions. */
+  canViewReports: boolean;
 };
 
 const startOfToday = (): Date => {
@@ -80,6 +86,7 @@ export async function getSidebarData(): Promise<SidebarData> {
     areaGroups,
     areas,
     hoursAgg,
+    canViewReports,
   ] = await Promise.all([
     prisma.user.findUnique({
       where: { id: currentUserId },
@@ -123,6 +130,9 @@ export async function getSidebarData(): Promise<SidebarData> {
       },
       _sum: { hours: true },
     }),
+    // Permission resolution is cached per-request (React cache()),
+    // so this shares the fetch with any page-level gate.
+    currentUserHasPermission("reports.view"),
   ]);
 
   const areaById = new Map(areas.map((a) => [a.id, a]));
@@ -153,5 +163,6 @@ export async function getSidebarData(): Promise<SidebarData> {
       color: p.matter.color,
     })),
     areaCounts,
+    canViewReports,
   };
 }

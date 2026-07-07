@@ -7,10 +7,16 @@
  */
 
 import { Lock } from "lucide-react";
-import type { FirmProfile } from "@/lib/firm";
+import type { FirmGoals, FirmProfile } from "@/lib/firm";
 import { formatDate } from "@/lib/format-date";
 
-export function FirmReadView({ firm }: { firm: FirmProfile }) {
+export function FirmReadView({
+  firm,
+  goals,
+}: {
+  firm: FirmProfile;
+  goals: FirmGoals;
+}) {
   const addressLines = [
     firm.addressLine1,
     firm.addressLine2,
@@ -51,6 +57,19 @@ export function FirmReadView({ firm }: { firm: FirmProfile }) {
             ))}
           </div>
         )}
+      </Section>
+
+      <Section label="Goals">
+        <Row
+          label="Daily hours goal"
+          value={`${goals.dailyHoursGoal.toFixed(1)}h`}
+          mono
+        />
+        <Row
+          label="Monthly billable goal"
+          value={`${goals.monthlyBillableGoal.toFixed(1)}h`}
+          mono
+        />
       </Section>
     </div>
   );

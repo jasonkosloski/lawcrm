@@ -1,8 +1,9 @@
 /**
  * Calendar URL helpers
  *
- * Parses and serializes the `?view=` and `?d=` params the calendar
- * page uses for state. All date arithmetic goes through `date-fns`.
+ * Parses and serializes the `?view=`, `?d=`, and `?show=` params the
+ * calendar page uses for state. All date arithmetic goes through
+ * `date-fns`.
  */
 
 import {
@@ -17,6 +18,30 @@ import { dateKeyInTz, instantInTz } from "@/lib/format-date";
 
 export type CalendarView = "week" | "month" | "day";
 export const DEFAULT_VIEW: CalendarView = "week";
+
+/**
+ * Item-kind filter: `all` (default) mixes events + deadlines the way
+ * the calendar always has; `deadlines` hides events so the calendar
+ * reads as a pure docket view. URL-driven (`?show=deadlines`) like
+ * view/date so it survives refresh, sharing, and back-button.
+ */
+export type CalendarShow = "all" | "deadlines";
+export const DEFAULT_SHOW: CalendarShow = "all";
+
+/**
+ * Apply the `?show=` filter to a fetched item list. The fetch stays a
+ * single `getCalendarItems` call regardless of the filter (events +
+ * deadlines come back interleaved from one round-trip); filtering
+ * happens at render. Structurally typed on `kind` so the client-safe
+ * utils module doesn't import the server query module's row types.
+ */
+export function filterCalendarItems<T extends { kind: "event" | "deadline" }>(
+  items: readonly T[],
+  show: CalendarShow
+): T[] {
+  if (show === "deadlines") return items.filter((i) => i.kind === "deadline");
+  return [...items];
+}
 
 /**
  * First day of the week.
@@ -37,7 +62,7 @@ export function isWeekend(date: Date): boolean {
 }
 
 /**
- * Parse `?view=` / `?d=` into calendar state.
+ * Parse `?view=` / `?d=` / `?show=` into calendar state.
  *
  * `tz` (the viewer's IANA zone) is required because the default focal
  * — first load without `?d=` — must be "today" on the *user's*
@@ -55,12 +80,18 @@ export function parseCalendarParams(
   sp: Record<string, string | string[] | undefined>,
   tz: string,
   now: Date = new Date()
-): { view: CalendarView; focal: Date } {
+): { view: CalendarView; focal: Date; show: CalendarShow } {
   const rawView = Array.isArray(sp.view) ? sp.view[0] : sp.view;
   const view: CalendarView =
     rawView === "week" || rawView === "month" || rawView === "day"
       ? rawView
       : DEFAULT_VIEW;
+
+  // Only the exact value "deadlines" flips the filter — anything
+  // else (missing, garbage, tampered) falls back to the default so
+  // a bad URL never blanks the calendar.
+  const rawShow = Array.isArray(sp.show) ? sp.show[0] : sp.show;
+  const show: CalendarShow = rawShow === "deadlines" ? "deadlines" : DEFAULT_SHOW;
 
   const todayFocal = () => parseISO(dateKeyInTz(now, tz));
 
@@ -75,22 +106,33 @@ export function parseCalendarParams(
   } else {
     focal = todayFocal();
   }
-  return { view, focal };
+  return { view, focal, show };
 }
 
 export const toDateParam = (d: Date): string => format(d, "yyyy-MM-dd");
 
-/** Build an href for the calendar page with new view/date values. */
+/**
+ * Build an href for the calendar page with new view/date/show values.
+ *
+ * `show` is a trailing param (defaulting to `all`) so pre-filter
+ * callers and tests keep working unchanged; like `view`, the default
+ * value is dropped from the URL for a cleaner address bar. The
+ * round-trip contract: any state this emits, `parseCalendarParams`
+ * reads back losslessly.
+ */
 export function buildCalendarHref(
   view: CalendarView,
   focal: Date,
-  override: { view?: CalendarView; focal?: Date } = {}
+  override: { view?: CalendarView; focal?: Date; show?: CalendarShow } = {},
+  show: CalendarShow = DEFAULT_SHOW
 ): string {
   const v = override.view ?? view;
   const d = override.focal ?? focal;
+  const s = override.show ?? show;
   const params = new URLSearchParams();
   if (v !== DEFAULT_VIEW) params.set("view", v);
   params.set("d", toDateParam(d));
+  if (s !== DEFAULT_SHOW) params.set("show", s);
   return `/calendar?${params.toString()}`;
 }
 

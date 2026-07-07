@@ -196,7 +196,13 @@ export function SidebarNav({ data }: { data: SidebarData }) {
     {
       label: "Firm",
       items: [
-        { id: "reports", label: "Reports", href: "/reports", icon: BarChart3 },
+        // Reports is permission-gated (reports.view) — the flag is
+        // resolved server-side in getSidebarData and threaded here,
+        // same pattern as SettingsNav's `requires`. The /reports
+        // page re-checks, so hiding the link is UX, not security.
+        ...(data.canViewReports
+          ? [{ id: "reports", label: "Reports", href: "/reports", icon: BarChart3 }]
+          : []),
         { id: "automations", label: "Automations", href: "/automations", icon: Zap },
         { id: "settings", label: "Settings", href: "/settings", icon: Settings },
       ],

@@ -271,6 +271,9 @@ export type TaskRow = {
   status: string;
   dueDate: Date | null;
   daysUntilDue: number | null;
+  /** Owner id (null = unassigned) — seeds the edit dialog's
+   *  assignee picker. Name/initials below drive the row badge. */
+  ownerId: string | null;
   ownerName: string | null;
   ownerInitials: string | null;
   createdAt: Date;
@@ -347,6 +350,7 @@ export async function getMatterTasks(matterId: string): Promise<TaskRow[]> {
     daysUntilDue: t.dueDate
       ? Math.ceil((t.dueDate.getTime() - now) / (24 * 60 * 60 * 1000))
       : null,
+    ownerId: t.ownerId,
     ownerName: t.owner?.name ?? null,
     ownerInitials: t.owner?.initials ?? null,
     createdAt: t.createdAt,

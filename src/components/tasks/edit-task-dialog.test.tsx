@@ -48,8 +48,14 @@ const baseTask: EditableTask = {
   description: null,
   priority: "normal",
   status: "open",
+  ownerId: null,
   dueDate: null,
 };
+
+const assignees = [
+  { id: "u1", name: "Ada Lovelace", initials: "AL" },
+  { id: "u2", name: "Grace Hopper", initials: "GH" },
+];
 
 // Radix locks body pointer-events while the dialog is open;
 // userEvent's computed-style check trips over that in happy-dom,
@@ -76,6 +82,7 @@ function Harness({ onOpenChange }: { onOpenChange: (o: boolean) => void }) {
           setOpen(o);
         }}
         task={baseTask}
+        assignees={assignees}
       />
     </>
   );
@@ -86,7 +93,12 @@ describe("EditTaskDialog — close on success", () => {
     const user = setupUser();
     const onOpenChange = vi.fn();
     render(
-      <EditTaskDialog open onOpenChange={onOpenChange} task={baseTask} />
+      <EditTaskDialog
+        open
+        onOpenChange={onOpenChange}
+        task={baseTask}
+        assignees={assignees}
+      />
     );
 
     await user.click(screen.getByRole("button", { name: /save/i }));
@@ -136,7 +148,12 @@ describe("EditTaskDialog — validation errors", () => {
     const user = setupUser();
     const onOpenChange = vi.fn();
     render(
-      <EditTaskDialog open onOpenChange={onOpenChange} task={baseTask} />
+      <EditTaskDialog
+        open
+        onOpenChange={onOpenChange}
+        task={baseTask}
+        assignees={assignees}
+      />
     );
 
     await user.click(screen.getByRole("button", { name: /save/i }));
@@ -168,5 +185,49 @@ describe("EditTaskDialog — validation errors", () => {
       await screen.findByRole("button", { name: /save/i })
     ).toBeInTheDocument();
     expect(screen.queryByText("Title is required")).not.toBeInTheDocument();
+  });
+});
+
+describe("EditTaskDialog — assignee picker", () => {
+  test("renders Unassigned + every assignee, defaulting to the task's owner", () => {
+    render(
+      <EditTaskDialog
+        open
+        onOpenChange={vi.fn()}
+        task={{ ...baseTask, ownerId: "u2" }}
+        assignees={assignees}
+      />
+    );
+    const select = screen.getByRole("combobox", {
+      name: /assignee/i,
+    }) as HTMLSelectElement;
+    expect(select.value).toBe("u2");
+    expect(
+      [...select.options].map((o) => o.textContent)
+    ).toEqual(["Unassigned", "Ada Lovelace", "Grace Hopper"]);
+  });
+
+  test("unassigned task defaults to the Unassigned option and posts ownerId", async () => {
+    const user = setupUser();
+    render(
+      <EditTaskDialog
+        open
+        onOpenChange={vi.fn()}
+        task={baseTask}
+        assignees={assignees}
+      />
+    );
+    const select = screen.getByRole("combobox", {
+      name: /assignee/i,
+    }) as HTMLSelectElement;
+    expect(select.value).toBe("");
+
+    // Pick an assignee, save — the picker's value must reach the
+    // action's FormData under the tri-state `ownerId` key.
+    await user.selectOptions(select, "u1");
+    await user.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(mockedAction).toHaveBeenCalledOnce());
+    const fd = mockedAction.mock.calls[0][2] as FormData;
+    expect(fd.get("ownerId")).toBe("u1");
   });
 });

@@ -21,6 +21,7 @@ import {
   buildCalendarHref,
   stepCalendarFocal,
   WEEK_STARTS_ON,
+  type CalendarShow,
   type CalendarView,
 } from "@/lib/calendar-utils";
 import { dateKeyInTz } from "@/lib/format-date";
@@ -58,12 +59,21 @@ function formatRangeLabel(view: CalendarView, focal: Date): string {
   return format(focal, "MMMM yyyy");
 }
 
+const SHOW_LABEL: Record<CalendarShow, string> = {
+  all: "All",
+  deadlines: "Deadlines",
+};
+
 export async function CalendarToolbar({
   view,
   focal,
+  show,
 }: {
   view: CalendarView;
   focal: Date;
+  /** Active `?show=` filter — every nav link carries it so
+   *  stepping weeks / switching views doesn't drop the filter. */
+  show: CalendarShow;
 }) {
   const userTz = await getCurrentUserTimeZone();
   const today = todayFocalInTz(new Date(), userTz);
@@ -75,20 +85,20 @@ export async function CalendarToolbar({
       <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         <div className="flex items-center border border-line rounded-md bg-white">
           <Link
-            href={buildCalendarHref(view, focal, { focal: prev })}
+            href={buildCalendarHref(view, focal, { focal: prev }, show)}
             className="p-1.5 text-ink-3 hover:text-brand-700 border-r border-line"
             aria-label={`Previous ${view}`}
           >
             <ChevronLeft size={14} />
           </Link>
           <Link
-            href={buildCalendarHref(view, focal, { focal: today })}
+            href={buildCalendarHref(view, focal, { focal: today }, show)}
             className="px-2.5 h-7 inline-flex items-center text-xs font-medium text-ink-2 hover:text-brand-700 border-r border-line"
           >
             Today
           </Link>
           <Link
-            href={buildCalendarHref(view, focal, { focal: next })}
+            href={buildCalendarHref(view, focal, { focal: next }, show)}
             className="p-1.5 text-ink-3 hover:text-brand-700"
             aria-label={`Next ${view}`}
           >
@@ -100,24 +110,50 @@ export async function CalendarToolbar({
         </h2>
       </div>
 
-      <div className="inline-flex items-center rounded-md border border-line bg-white p-0.5">
-        {(["day", "week", "month"] as CalendarView[]).map((v) => {
-          const active = v === view;
-          return (
-            <Link
-              key={v}
-              href={buildCalendarHref(view, focal, { view: v })}
-              className={cn(
-                "h-6 px-2.5 rounded text-2xs font-medium capitalize transition-colors",
-                active
-                  ? "bg-brand-soft text-brand-700"
-                  : "text-ink-3 hover:text-brand-700"
-              )}
-            >
-              {v}
-            </Link>
-          );
-        })}
+      <div className="flex items-center gap-1.5 sm:gap-2">
+        {/* Item-kind filter — segmented control matching the view
+            switcher's idiom. "Deadlines" collapses week/day to the
+            deadline strips and strips event pills from month. */}
+        <div className="inline-flex items-center rounded-md border border-line bg-white p-0.5">
+          {(["all", "deadlines"] as CalendarShow[]).map((s) => {
+            const active = s === show;
+            return (
+              <Link
+                key={s}
+                href={buildCalendarHref(view, focal, { show: s }, show)}
+                aria-current={active ? "true" : undefined}
+                className={cn(
+                  "h-6 px-2.5 rounded text-2xs font-medium transition-colors inline-flex items-center",
+                  active
+                    ? "bg-brand-soft text-brand-700"
+                    : "text-ink-3 hover:text-brand-700"
+                )}
+              >
+                {SHOW_LABEL[s]}
+              </Link>
+            );
+          })}
+        </div>
+
+        <div className="inline-flex items-center rounded-md border border-line bg-white p-0.5">
+          {(["day", "week", "month"] as CalendarView[]).map((v) => {
+            const active = v === view;
+            return (
+              <Link
+                key={v}
+                href={buildCalendarHref(view, focal, { view: v }, show)}
+                className={cn(
+                  "h-6 px-2.5 rounded text-2xs font-medium capitalize transition-colors",
+                  active
+                    ? "bg-brand-soft text-brand-700"
+                    : "text-ink-3 hover:text-brand-700"
+                )}
+              >
+                {v}
+              </Link>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

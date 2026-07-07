@@ -40,6 +40,7 @@ import {
   type ValidCapture,
 } from "@/lib/capture-schemas";
 import { logActivity } from "@/lib/activity-log";
+import { isAssignableUser, notifyTaskAssigned } from "@/lib/task-assignment";
 import { isKnownUtbmsCode } from "@/lib/time-entry-constants";
 import { getEffectiveCalendarDefaults } from "@/lib/calendar-defaults";
 import { sanitizeUserHtml as sanitize } from "@/lib/sanitize-html";
@@ -73,6 +74,10 @@ async function createCaptureRecord(
         // Capture date fields are schema-validated as YYYY-MM-DD
         // (see capture-schemas.ts), so parseLocalDate can't miss.
         dueDate: cap.dueDate ? parseLocalDate(cap.dueDate) : null,
+        // Sibling task captures have no assignee picker — they
+        // self-assign, which the actor-exclusion rule in
+        // notifyTaskAssigned makes notification-silent by
+        // construction. The PRIMARY task path (below) has a picker.
         ownerId: userId,
         // Sibling-capture link-back: if this task was created
         // alongside a primary event or deadline, point the FK back
@@ -212,6 +217,11 @@ const taskSchema = z.object({
   description: z.string().max(4000).optional().or(z.literal("")),
   dueDate: z.string().optional().or(z.literal("")),
   priority: z.enum(TASK_PRIORITIES).default("normal"),
+  /** Assignee picker value. Tri-state: field ABSENT (legacy form
+   *  without the picker) self-assigns like the old behavior; `""`
+   *  (the "Unassigned" option) creates ownerless; a user id assigns
+   *  (validated active in the action). */
+  ownerId: z.string().optional(),
   attachments: z.string().optional().default("[]"),
 });
 
@@ -254,6 +264,24 @@ export async function createTaskWithCaptures(
 
   const userId = await getCurrentUserId();
 
+  // Resolve the assignee picker's tri-state (see taskSchema):
+  // absent → self-assign (pre-picker behavior), "" → unassigned,
+  // id → that user, validated active. The actor is always
+  // assignable to themselves — no lookup needed.
+  const ownerId =
+    parsed.data.ownerId === undefined
+      ? userId
+      : parsed.data.ownerId === ""
+        ? null
+        : parsed.data.ownerId;
+  if (ownerId && ownerId !== userId && !(await isAssignableUser(ownerId))) {
+    return {
+      status: "error",
+      errors: { ownerId: ["Assignee not found or inactive"] },
+      values: raw,
+    };
+  }
+
   await prisma.$transaction(async (tx) => {
     const task = await tx.task.create({
       data: {
@@ -262,7 +290,7 @@ export async function createTaskWithCaptures(
         description: parsed.data.description || null,
         priority: parsed.data.priority,
         dueDate,
-        ownerId: userId,
+        ownerId,
       },
       select: { id: true },
     });
@@ -281,6 +309,17 @@ export async function createTaskWithCaptures(
     type: "task",
     title: "Task added",
     detail: parsed.data.title,
+  });
+  // Create-time assignment pings the assignee exactly like a
+  // reassignment would — same helper as setTaskOwner, so the
+  // actor-exclusion rule (no self-ping) applies here too. After
+  // the transaction: a failed notification never rolls back the
+  // create.
+  await notifyTaskAssigned({
+    ownerId,
+    actorId: userId,
+    taskTitle: parsed.data.title,
+    matterId,
   });
   return { status: "ok" };
 }

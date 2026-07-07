@@ -5,11 +5,13 @@
 
 import { describe, expect, test } from "vitest";
 import {
+  DEFAULT_SHOW,
   DEFAULT_VIEW,
   buildCalendarHref,
   calendarDayInTz,
   eventHeightPx,
   eventTopPx,
+  filterCalendarItems,
   formatHourLabel,
   HOURS,
   HOUR_HEIGHT_PX,
@@ -129,6 +131,47 @@ describe("parseCalendarParams", () => {
     );
     expect(toDateParam(focal)).toBe("2026-07-06");
   });
+
+  // ── ?show= (deadlines-only filter) ───────────────────────────────────
+
+  test("missing show → default 'all'", () => {
+    expect(parseCalendarParams({}, TZ).show).toBe("all");
+    expect(DEFAULT_SHOW).toBe("all");
+  });
+
+  test("show=deadlines is honored", () => {
+    expect(parseCalendarParams({ show: "deadlines" }, TZ).show).toBe(
+      "deadlines"
+    );
+  });
+
+  test("unknown show value falls back to 'all'", () => {
+    expect(parseCalendarParams({ show: "events" }, TZ).show).toBe("all");
+    expect(parseCalendarParams({ show: "" }, TZ).show).toBe("all");
+  });
+
+  test("array show takes the first value", () => {
+    expect(
+      parseCalendarParams({ show: ["deadlines", "all"] }, TZ).show
+    ).toBe("deadlines");
+  });
+
+  test("show round-trips through buildCalendarHref", () => {
+    const { view, focal, show } = parseCalendarParams(
+      { view: "day", d: "2026-07-07", show: "deadlines" },
+      TZ
+    );
+    const href = buildCalendarHref(view, focal, {}, show);
+    expect(href).toBe("/calendar?view=day&d=2026-07-07&show=deadlines");
+    // Parse the emitted href's params back — lossless round-trip.
+    const qs = Object.fromEntries(
+      new URLSearchParams(href.split("?")[1]!).entries()
+    );
+    const reparsed = parseCalendarParams(qs, TZ);
+    expect(reparsed.view).toBe("day");
+    expect(toDateParam(reparsed.focal)).toBe("2026-07-07");
+    expect(reparsed.show).toBe("deadlines");
+  });
 });
 
 describe("toDateParam", () => {
@@ -167,6 +210,68 @@ describe("buildCalendarHref", () => {
 
   test("verifies DEFAULT_VIEW is week (test asserts the convention)", () => {
     expect(DEFAULT_VIEW).toBe("week");
+  });
+
+  test("default show ('all') is dropped from the URL", () => {
+    const href = buildCalendarHref(
+      "week",
+      new Date("2026-04-15T12:00:00"),
+      {},
+      "all"
+    );
+    expect(href).toBe("/calendar?d=2026-04-15");
+  });
+
+  test("show=deadlines carries through nav overrides (prev/next, view switch)", () => {
+    // The toolbar's arrows override focal; the view switcher
+    // overrides view. Both must preserve the active filter.
+    const focal = new Date("2026-04-15T12:00:00");
+    expect(
+      buildCalendarHref("week", focal, { focal: new Date("2026-04-22T12:00:00") }, "deadlines")
+    ).toBe("/calendar?d=2026-04-22&show=deadlines");
+    expect(buildCalendarHref("week", focal, { view: "month" }, "deadlines")).toBe(
+      "/calendar?view=month&d=2026-04-15&show=deadlines"
+    );
+  });
+
+  test("override.show wins over the current show (the toggle itself)", () => {
+    const focal = new Date("2026-04-15T12:00:00");
+    expect(buildCalendarHref("week", focal, { show: "deadlines" }, "all")).toBe(
+      "/calendar?d=2026-04-15&show=deadlines"
+    );
+    expect(buildCalendarHref("week", focal, { show: "all" }, "deadlines")).toBe(
+      "/calendar?d=2026-04-15"
+    );
+  });
+});
+
+describe("filterCalendarItems", () => {
+  const items = [
+    { kind: "event" as const, id: "e1" },
+    { kind: "deadline" as const, id: "d1" },
+    { kind: "event" as const, id: "e2" },
+    { kind: "deadline" as const, id: "d2" },
+  ];
+
+  test("'all' keeps everything (order preserved)", () => {
+    expect(filterCalendarItems(items, "all").map((i) => i.id)).toEqual([
+      "e1",
+      "d1",
+      "e2",
+      "d2",
+    ]);
+  });
+
+  test("'deadlines' drops events", () => {
+    expect(filterCalendarItems(items, "deadlines").map((i) => i.id)).toEqual([
+      "d1",
+      "d2",
+    ]);
+  });
+
+  test("returns a new array (never mutates the fetch result)", () => {
+    const out = filterCalendarItems(items, "all");
+    expect(out).not.toBe(items);
   });
 });
 

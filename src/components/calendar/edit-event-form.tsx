@@ -347,8 +347,9 @@ export function EditEventForm({ event }: { event: EditableEvent }) {
 
 /** Date-only field — mirrors the look of `DateTimeField` but
  *  renders a `<input type="date">` and posts a YYYY-MM-DD value.
- *  Used by the all-day branch above. */
-function DateOnlyField({
+ *  Used by the all-day branch above and by the standalone create
+ *  form (new-event-form.tsx), which mirrors this form's fields. */
+export function DateOnlyField({
   name,
   value,
   onChange,

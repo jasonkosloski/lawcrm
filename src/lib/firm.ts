@@ -79,6 +79,39 @@ export async function getCurrentFirm(): Promise<FirmProfile> {
   return user.firm;
 }
 
+/** The firm-level productivity targets. Deliberately NOT part of
+ *  `FirmProfile` — the profile shape is mocked across many test
+ *  files and most callers (dashboard, /time) only need these two
+ *  numbers. Defaults live on the schema (6.0 / 200). */
+export type FirmGoals = {
+  /** Daily billable-hours target per person — dashboard "Hours
+   *  today" KPI + the /time day-view progress bar. */
+  dailyHoursGoal: number;
+  /** Monthly firm-wide billable-hours target — firm pulse card. */
+  monthlyBillableGoal: number;
+};
+
+/** The current user's firm goals. Same resolution path (and the
+ *  same no-firm integrity error) as `getCurrentFirm()`, but selects
+ *  only the two goal columns. */
+export async function getFirmGoals(): Promise<FirmGoals> {
+  const userId = await getCurrentUserId();
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      firm: {
+        select: { dailyHoursGoal: true, monthlyBillableGoal: true },
+      },
+    },
+  });
+  if (!user?.firm) {
+    throw new Error(
+      `User ${userId} has no firm assigned. This is a data integrity issue — re-run the seed or fix the row.`
+    );
+  }
+  return user.firm;
+}
+
 /** True when the current user holds the firm's "Admin" role and is
  *  active. Cheap — single user-by-id lookup with a count. Use the
  *  throwing variant `requireAdmin()` inside server actions where

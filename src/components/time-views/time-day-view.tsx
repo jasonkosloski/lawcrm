@@ -12,8 +12,9 @@
  *              read-only snapshot (elapsed computed at render) —
  *              the timer widget owns start/stop interaction
  *
- * Above the lanes: the day's total vs the daily target line
- * (DAILY_HOURS_GOAL — placeholder until FirmSettings lands).
+ * Above the lanes: the day's total vs the daily target line —
+ * `dailyHoursGoal` from the Firm row (editable on /settings/firm),
+ * threaded in by the page via `getFirmGoals()`.
  *
  * Read-only v1 (server component): every entry links to its
  * matter's Time tab for editing.
@@ -24,7 +25,7 @@ import { Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/format-date";
 import type { DayTimeEntry, MyDayTime, RunningTimer } from "@/lib/queries/time";
-import { DAILY_HOURS_GOAL, timeSourceLabel } from "./time-view-utils";
+import { timeSourceLabel } from "./time-view-utils";
 
 /** Same status-chip vocabulary as the matter Time tab
  *  (matters/[id]/time/page.tsx) so an entry reads identically on
@@ -50,14 +51,22 @@ export function TimeDayView({
   day,
   timer,
   userTz,
+  dailyHoursGoal,
 }: {
   day: MyDayTime;
   timer: RunningTimer | null;
   userTz: string;
+  /** Firm-level daily target (Firm.dailyHoursGoal) — the page
+   *  resolves it via `getFirmGoals()`. */
+  dailyHoursGoal: number;
 }) {
   return (
     <div className="flex-1 overflow-y-auto p-3 sm:p-5 flex flex-col gap-4">
-      <TargetLine totalHours={day.totalHours} billableHours={day.billableHours} />
+      <TargetLine
+        totalHours={day.totalHours}
+        billableHours={day.billableHours}
+        goal={dailyHoursGoal}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
         <Lane
@@ -89,17 +98,18 @@ export function TimeDayView({
 }
 
 /** Day total vs the daily goal, as a slim progress bar with the
- *  target tick. Goal is the shared placeholder constant — see
- *  DAILY_HOURS_GOAL for the FirmSettings note. */
+ *  target tick. */
 function TargetLine({
   totalHours,
   billableHours,
+  goal,
 }: {
   totalHours: number;
   billableHours: number;
+  goal: number;
 }) {
-  const pct = Math.min(100, (totalHours / DAILY_HOURS_GOAL) * 100);
-  const met = totalHours >= DAILY_HOURS_GOAL;
+  const pct = Math.min(100, (totalHours / goal) * 100);
+  const met = totalHours >= goal;
   return (
     <div className="rounded-md border border-line bg-card px-3 sm:px-4 py-3 flex flex-col gap-2">
       <div className="flex items-baseline justify-between gap-3">
@@ -112,7 +122,7 @@ function TargetLine({
           </span>
           <span className="text-ink-4">
             {" "}
-            of {DAILY_HOURS_GOAL.toFixed(1)}h target ·{" "}
+            of {goal.toFixed(1)}h target ·{" "}
             {billableHours.toFixed(1)}h billable
           </span>
         </span>

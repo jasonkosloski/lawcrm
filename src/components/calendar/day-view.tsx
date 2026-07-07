@@ -82,6 +82,7 @@ export function DayView({
   items,
   canEditEvents = false,
   userTz,
+  deadlinesOnly = false,
 }: {
   /** Noon-UTC Date of the displayed calendar day (from
    *  `calendarDayInTz`). Noon UTC keeps the Date's UTC calendar
@@ -97,6 +98,11 @@ export function DayView({
    *  user in MDT viewing on a UTC server still sees their local
    *  day. */
   userTz: string;
+  /** `?show=deadlines` layout mode. The page already filtered
+   *  `items` to deadlines; this flag drops the (empty) all-day
+   *  strip + hour grid and renders just the "due" section's full
+   *  pills — the day view's most prominent deadline treatment. */
+  deadlinesOnly?: boolean;
 }) {
   // Shared optimistic-move pipeline (same hook as WeekView).
   const { renderItems, moveEvent } = useEventMoves(items);
@@ -114,6 +120,34 @@ export function DayView({
     dayKey,
     userTz
   );
+
+  // Deadlines-only: the hour grid + all-day strip would be empty
+  // (events were filtered upstream), so render just the "due"
+  // section — full pills, critical-first — plus an explicit empty
+  // state so a quiet day doesn't read as a broken page.
+  if (deadlinesOnly) {
+    return (
+      <div className="flex flex-col flex-1 min-h-0 overflow-y-auto [--cal-gutter:36px] sm:[--cal-gutter:56px]">
+        <div
+          className="grid border-b border-line bg-card"
+          style={{ gridTemplateColumns: "var(--cal-gutter,56px) 1fr" }}
+        >
+          <div className="text-2xs font-mono text-ink-4 text-right pr-1.5 pt-2 border-r border-line">
+            due
+          </div>
+          <div className="flex flex-col gap-1 p-1.5 min-w-0">
+            {deadlines.length === 0 ? (
+              <p className="text-xs text-ink-4 italic px-1 py-2">
+                No deadlines on this day.
+              </p>
+            ) : (
+              deadlines.map((d) => <DayDeadlineRow key={d.id} deadline={d} />)
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-y-auto [--cal-gutter:36px] sm:[--cal-gutter:56px]">

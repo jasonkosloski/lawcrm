@@ -21,16 +21,6 @@ export type TimeView = "week" | "day";
 export const DEFAULT_TIME_VIEW: TimeView = "week";
 
 /**
- * Daily hours target rendered as the goal line on the day view.
- *
- * Duplicated from the hardcoded `hoursGoal: 6.0` in
- * `getDashboardKpis` (src/lib/queries/dashboard.ts). Both copies
- * are placeholders for a per-firm setting — when a FirmSettings
- * model lands, resolve the goal there and delete both constants.
- */
-export const DAILY_HOURS_GOAL = 6.0;
-
-/**
  * Parse `?view=` / `?d=` into time-page state.
  *
  * `tz` is required for the no-`?d=` default: take the user-local

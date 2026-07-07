@@ -459,6 +459,18 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
     ],
   },
   {
+    id: "reports",
+    label: "Reports",
+    permissions: [
+      {
+        key: "reports.view",
+        label: "View firm reports",
+        description:
+          "The /reports dashboard — intake pipeline, team utilization, AR aging, realization. Firm-wide financial and workload data, so it's gated separately from the personal dashboard.",
+      },
+    ],
+  },
+  {
     id: "communication",
     label: "Communication",
     permissions: [

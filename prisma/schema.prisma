@@ -190,6 +190,13 @@ model Firm {
   /// Default for "auto-add new team members to upcoming events
   /// on the matter". Same per-matter override pattern as above.
   autoAddTeamToUpcomingEvents Boolean   @default(true)
+  /// Daily billable-hours target per person — drives the dashboard
+  /// KPI ring and the /time day-view progress bar. Was hardcoded
+  /// at 6.0 in queries/dashboard.ts before it became firm data.
+  dailyHoursGoal              Float     @default(6.0)
+  /// Monthly firm-wide billable-hours target — drives the firm
+  /// pulse card. Was hardcoded at 200.
+  monthlyBillableGoal         Float     @default(200)
   createdAt                   DateTime  @default(now())
   updatedAt                   DateTime  @updatedAt
 

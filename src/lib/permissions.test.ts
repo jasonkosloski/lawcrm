@@ -147,6 +147,7 @@ describe("expected-key invariants", () => {
     "contacts.edit",
     "contacts.delete",
     "contacts.merge",
+    "reports.view",
   ])("%s exists in the catalog", (key) => {
     expect(isKnownPermission(key)).toBe(true);
   });

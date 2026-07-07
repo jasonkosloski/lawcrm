@@ -2,9 +2,10 @@
  * Calendar Page
  *
  * Week view (default), Month view, and Day view. State lives in the
- * URL: `?view=week|month|day` and `?d=YYYY-MM-DD`. No external-calendar
- * integration yet — this is the internal view of CalendarEvents +
- * Deadlines stored in the DB.
+ * URL: `?view=week|month|day`, `?d=YYYY-MM-DD`, and `?show=deadlines`
+ * (the deadlines-only filter — default mixes events + deadlines). No
+ * external-calendar integration yet — this is the internal view of
+ * CalendarEvents + Deadlines stored in the DB.
  *
  * Event creation reuses the same CreateStackProvider + CreateDock
  * pattern as the matter detail pages: the "New event" button opens a
@@ -23,7 +24,11 @@ import { EventDetailModal } from "@/components/calendar/event-detail-modal";
 import { CreateStackProvider } from "@/components/create-stack/create-stack-provider";
 import { CreateDock } from "@/components/create-stack/create-dock";
 import { NewEventButton } from "@/components/calendar/new-event-button";
-import { calendarDayInTz, parseCalendarParams } from "@/lib/calendar-utils";
+import {
+  calendarDayInTz,
+  filterCalendarItems,
+  parseCalendarParams,
+} from "@/lib/calendar-utils";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import {
   calendarMonthGridInTz,
@@ -51,7 +56,7 @@ export default async function CalendarPage({
   // which cut off the last 6 hours of Saturday and pull in 6 hours
   // from the prior Saturday).
   const userTz = await getCurrentUserTimeZone();
-  const { view, focal } = parseCalendarParams(sp, userTz);
+  const { view, focal, show } = parseCalendarParams(sp, userTz);
   const week = calendarWeekInTz(focal, userTz);
   const monthGrid = calendarMonthGridInTz(focal, userTz);
   const dayRange = calendarDayInTz(focal, userTz);
@@ -75,6 +80,12 @@ export default async function CalendarPage({
     currentUserHasPermission("events.edit"),
   ]);
 
+  // `?show=deadlines` filters at render — the fetch above is the
+  // same single getCalendarItems round-trip either way, so toggling
+  // the filter costs nothing extra server-side.
+  const visibleItems = filterCalendarItems(items, show);
+  const deadlinesOnly = show === "deadlines";
+
   const crumbBits = [
     `${summary.events} events`,
     `${summary.deadlines} deadlines`,
@@ -92,29 +103,33 @@ export default async function CalendarPage({
       />
 
       <div className="flex-1 flex flex-col min-h-0 animate-page-enter">
-        <CalendarToolbar view={view} focal={focal} />
+        <CalendarToolbar view={view} focal={focal} show={show} />
         <div className="flex-1 flex min-h-0">
           <div className="flex-1 min-w-0 flex flex-col">
             {view === "week" ? (
               <WeekView
                 days={week.days}
-                items={items}
+                items={visibleItems}
                 canEditEvents={canEditEvents}
                 userTz={userTz}
+                deadlinesOnly={deadlinesOnly}
               />
             ) : view === "month" ? (
+              // Month view needs no layout mode — the filtered
+              // items simply omit event pills from the cells.
               <MonthView
                 focal={focal}
                 days={monthGrid.days}
-                items={items}
+                items={visibleItems}
                 userTz={userTz}
               />
             ) : (
               <DayView
                 day={dayRange.day}
-                items={items}
+                items={visibleItems}
                 canEditEvents={canEditEvents}
                 userTz={userTz}
+                deadlinesOnly={deadlinesOnly}
               />
             )}
           </div>

@@ -803,7 +803,10 @@ function DraggableEventWrapper({
   );
 }
 
-function DeadlineChip({ deadline }: { deadline: CalendarDeadlineRow }) {
+/** Compact deadline chip used in the all-day strip — exported so the
+ *  week view's deadlines-only layout can render the same vocabulary
+ *  in its per-day columns. */
+export function DeadlineChip({ deadline }: { deadline: CalendarDeadlineRow }) {
   const cls =
     deadline.deadlineKind === "critical"
       ? "bg-warn-soft text-warn border-warn-border"

@@ -11,7 +11,6 @@
 import { describe, expect, test } from "vitest";
 import { format } from "date-fns";
 import {
-  DAILY_HOURS_GOAL,
   DEFAULT_TIME_VIEW,
   buildTimeHref,
   dayKeyFromNoonUtc,
@@ -92,11 +91,10 @@ describe("dayKeyFromNoonUtc", () => {
   });
 });
 
-describe("goal + source labels", () => {
-  test("daily goal mirrors the dashboard's hardcoded 6.0", () => {
-    // Duplicated on purpose — see the constant's FirmSettings note.
-    expect(DAILY_HOURS_GOAL).toBe(6.0);
-  });
+describe("source labels", () => {
+  // The old DAILY_HOURS_GOAL constant is gone — the day view's goal
+  // now comes from Firm.dailyHoursGoal via getFirmGoals() (covered
+  // in src/lib/firm.test.ts + queries/dashboard.test.ts).
 
   test("known sources get pretty labels, unknown pass through", () => {
     expect(timeSourceLabel("timer")).toBe("Timer");

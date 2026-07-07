@@ -607,6 +607,12 @@ const createCalendarEventSchema = z
      *  scope — the user's "personal" event in effect. When set,
      *  it's a matter event (visible to the matter team). */
     matterId: z.string().optional().or(z.literal("")),
+    /** JSON array of attendee entries (same wire format as the
+     *  update path: `{ kind, userId, contactId, name, email }`).
+     *  Optional — the quick composer doesn't post it, and an
+     *  empty list means "just me": the action auto-adds the
+     *  creator as a firm attendee either way. */
+    attendees: z.string().optional().default("[]"),
     /** Per-event visibility override. Defaults to "default"
      *  (resolver decides: creator + attendees + matter team see;
      *  everyone else sees Busy). "show_details" makes this event
@@ -645,6 +651,126 @@ const createCalendarEventSchema = z
     }
   });
 
+/** Resolved attendee entry for the create path — mirrors the
+ *  update path's pre-transaction resolution: linked user/contact
+ *  ids are validated against live rows BEFORE the transaction so
+ *  a stale payload fails the whole create cleanly (never an
+ *  attendee row with both FKs null, never a Contact minted from a
+ *  non-"new" entry that skipped the email checks). */
+type CreateResolvedAttendee = {
+  entry: AttendeeEntry;
+  userId: string | null;
+  contactId: string | null;
+};
+
+/** Parse + resolve the create form's attendees JSON. Returns the
+ *  resolved list or a user-facing error message for the
+ *  `attendees` field. Duplicate-email pre-checks for the
+ *  new-contact branch mirror updateCalendarEvent's (in-list dups
+ *  first, then the firm-scoped existing-contact check). */
+async function resolveCreateAttendees(
+  attendeesJson: string
+): Promise<
+  { ok: true; resolved: CreateResolvedAttendee[] } | { ok: false; error: string }
+> {
+  let attendeeList: AttendeeEntry[] = [];
+  try {
+    const decoded = JSON.parse(attendeesJson);
+    if (!Array.isArray(decoded)) throw new Error("not an array");
+    for (const raw of decoded) {
+      const r = attendeeEntrySchema.safeParse(raw);
+      if (!r.success) {
+        return {
+          ok: false,
+          error: r.error.issues[0]?.message ?? "Invalid attendee",
+        };
+      }
+      attendeeList.push(r.data);
+    }
+  } catch {
+    return { ok: false, error: "Attendee list was malformed — try again." };
+  }
+
+  const resolved: CreateResolvedAttendee[] = [];
+  for (const a of attendeeList) {
+    if (a.kind === "user") {
+      const u = a.userId
+        ? await prisma.user.findUnique({
+            where: { id: a.userId },
+            select: { id: true, isActive: true },
+          })
+        : null;
+      if (!u?.isActive) {
+        return {
+          ok: false,
+          error: `"${a.name}" is no longer an active firm user — remove them and pick again.`,
+        };
+      }
+      resolved.push({ entry: a, userId: u.id, contactId: null });
+    } else if (a.kind === "contact") {
+      const c = a.contactId
+        ? await prisma.contact.findUnique({
+            where: { id: a.contactId },
+            select: { id: true, isActive: true },
+          })
+        : null;
+      if (!c?.isActive) {
+        return {
+          ok: false,
+          error: `"${a.name}" no longer matches an active contact — remove them and pick again.`,
+        };
+      }
+      resolved.push({ entry: a, userId: null, contactId: c.id });
+    } else {
+      // kind === "new" — the Contact row is minted inside the
+      // create transaction so a failed create never leaves a
+      // half-created directory entry behind.
+      resolved.push({ entry: a, userId: null, contactId: null });
+    }
+  }
+
+  // Duplicate-email pre-flight for new-contact entries.
+  const newEmails = attendeeList
+    .filter((a) => a.kind === "new")
+    .map((a) => a.email!.trim().toLowerCase())
+    .filter((e) => e.length > 0);
+  const seen = new Set<string>();
+  for (const e of newEmails) {
+    if (seen.has(e)) {
+      return {
+        ok: false,
+        error: `Two new attendees share the email "${e}" — pick one or merge.`,
+      };
+    }
+    seen.add(e);
+  }
+  if (newEmails.length > 0) {
+    const firm = await getCurrentFirm();
+    const existing = await prisma.contact.findMany({
+      where: {
+        isActive: true,
+        email: { in: newEmails, mode: "insensitive" },
+        OR: [{ firmId: firm.id }, { firmId: null }],
+      },
+      select: { email: true, name: true },
+    });
+    const existingByEmail = new Map<string, string>(
+      existing
+        .filter((c) => c.email)
+        .map((c) => [c.email!.toLowerCase(), c.name])
+    );
+    const collision = newEmails.find((e) => existingByEmail.has(e));
+    if (collision) {
+      return {
+        ok: false,
+        error: `A contact with email "${collision}" already exists (${existingByEmail.get(collision)}). Pick them from the list instead of creating a duplicate.`,
+      };
+    }
+  }
+
+  return { ok: true, resolved };
+}
+
 /**
  * Create a calendar event from the standalone calendar page.
  * `matterId` is optional — without one the event is on the
@@ -652,6 +778,13 @@ const createCalendarEventSchema = z
  * through `createEventWithCaptures` because the calendar page's
  * composer doesn't surface attached siblings; the matter-detail
  * page still uses that richer flow.
+ *
+ * Attendees can be posted at create time (the full-page form's
+ * picker); the quick composer omits the field. Either way the
+ * creator is guaranteed onto the event as a firm attendee — the
+ * min-firm-attendee invariant holds from birth, and unlike the
+ * update path an external-only list isn't an error here: we just
+ * add the creator alongside it.
  *
  * Auth: gated on `events.create`. Same key for matter and
  * personal events — the gate is "can this user create calendar
@@ -679,9 +812,29 @@ export async function createCalendarEvent(
       ? parsed.data.matterId
       : null;
 
-  // Wrap the create + creator-attendee insert in a transaction
-  // so the min-firm-attendee invariant holds atomically — the
-  // event never exists without at least one firm attendee.
+  // Parse + resolve posted attendees (full-page form). Rejections
+  // happen before any write so a bad payload never half-creates.
+  const attendeeResolution = await resolveCreateAttendees(
+    parsed.data.attendees
+  );
+  if (!attendeeResolution.ok) {
+    return {
+      status: "error",
+      errors: { attendees: [attendeeResolution.error] },
+    };
+  }
+  const resolvedAttendees = attendeeResolution.resolved;
+  // Only resolve the firm when a new-contact entry needs a firmId
+  // stamp inside the transaction (the dup check already resolved
+  // it once; this second call is cheap and keeps the tx closure
+  // free of conditional awaits).
+  const firm = resolvedAttendees.some((r) => r.entry.kind === "new")
+    ? await getCurrentFirm()
+    : null;
+
+  // Wrap the create + attendee inserts in a transaction so the
+  // min-firm-attendee invariant holds atomically — the event
+  // never exists without at least one firm attendee.
   const created = await prisma.$transaction(async (tx) => {
     const ev = await tx.calendarEvent.create({
       data: {
@@ -699,23 +852,64 @@ export async function createCalendarEvent(
       },
       select: { id: true },
     });
-    // Auto-add the creator as a firm-user attendee. Snapshot
-    // their name + email so a future rename doesn't rewrite the
-    // attendee label. Status `accepted` (creator is implicitly
-    // attending — RSVP doesn't apply to "you scheduled this").
-    const creator = await tx.user.findUniqueOrThrow({
-      where: { id: createdById },
-      select: { name: true, email: true },
-    });
-    await tx.calendarAttendee.create({
-      data: {
-        eventId: ev.id,
-        userId: createdById,
-        name: creator.name,
-        email: creator.email,
-        status: "accepted",
-      },
-    });
+    // Auto-add the creator as a firm-user attendee — unless the
+    // posted list already includes them (the full-page picker
+    // lets you add yourself explicitly; don't double-row it).
+    // Snapshot their name + email so a future rename doesn't
+    // rewrite the attendee label. Status `accepted` (creator is
+    // implicitly attending — RSVP doesn't apply to "you
+    // scheduled this").
+    const creatorInList = resolvedAttendees.some(
+      (r) => r.userId === createdById
+    );
+    if (!creatorInList) {
+      const creator = await tx.user.findUniqueOrThrow({
+        where: { id: createdById },
+        select: { name: true, email: true },
+      });
+      await tx.calendarAttendee.create({
+        data: {
+          eventId: ev.id,
+          userId: createdById,
+          name: creator.name,
+          email: creator.email,
+          status: "accepted",
+        },
+      });
+    }
+
+    // Posted attendee rows — same branch semantics as the update
+    // path: linked users are implicitly `accepted`, external rows
+    // (contact pick or new-contact create) stay `pending` until a
+    // real RSVP flow lands. kind=new mints a Contact (type=other,
+    // firm-stamped) inside this transaction so a failed create
+    // never strands a directory row.
+    for (const r of resolvedAttendees) {
+      const a = r.entry;
+      let contactId = r.contactId;
+      if (a.kind === "new") {
+        const createdContact = await tx.contact.create({
+          data: {
+            firmId: firm!.id,
+            name: a.name.trim(),
+            email: a.email?.trim() || null,
+            type: "other",
+          },
+          select: { id: true },
+        });
+        contactId = createdContact.id;
+      }
+      await tx.calendarAttendee.create({
+        data: {
+          eventId: ev.id,
+          userId: r.userId,
+          contactId,
+          name: a.name.trim(),
+          email: a.email?.trim() || null,
+          status: r.userId ? "accepted" : "pending",
+        },
+      });
+    }
     return ev;
   });
 

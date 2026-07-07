@@ -124,6 +124,28 @@ export async function listFirmUsers(
   return shaped;
 }
 
+/** Compact user view for assignee pickers (task composer / edit
+ *  dialog). Just enough to render the select + the initials chip. */
+export type AssigneeOption = {
+  id: string;
+  name: string;
+  initials: string;
+};
+
+/** Active users of the current firm, name-ordered — the option list
+ *  for "assign this task to…" pickers. Inactive users are excluded
+ *  on purpose: they keep historical assignments but can't receive
+ *  new ones (mirrors the `isAssignableUser` write-side check in
+ *  src/lib/task-assignment.ts). */
+export async function listAssigneeOptions(): Promise<AssigneeOption[]> {
+  const firm = await getCurrentFirm();
+  return prisma.user.findMany({
+    where: { firmId: firm.id, isActive: true },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, initials: true },
+  });
+}
+
 /** Single-user fetch for the edit row. Returns null when not found
  *  (or out-of-firm — defense against URL-tampering once we go
  *  multi-tenant). */

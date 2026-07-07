@@ -33,6 +33,12 @@
  * entries the server agrees with are cleared so the chip stays
  * put with no flash. Failure rolls back the overlay and surfaces
  * an error.
+ *
+ * **Deadlines-only mode** (`?show=deadlines`): the page filters the
+ * items and passes `deadlinesOnly`, which swaps the all-day strip +
+ * hour grid for a single tall per-day "due" strip of deadline chips
+ * (critical-first). The sticky day-header row is shared between the
+ * two layouts.
  */
 
 "use client";
@@ -51,7 +57,7 @@ import type {
   CalendarEventRow,
   CalendarDeadlineRow,
 } from "@/lib/queries/calendar";
-import { WeekAllDayCell, WeekTimeColumn } from "./week-day-column";
+import { DeadlineChip, WeekAllDayCell, WeekTimeColumn } from "./week-day-column";
 import { useEventMoves } from "./use-event-moves";
 
 // `MoveEventFn` moved to use-event-moves.ts when DayView landed;
@@ -63,6 +69,7 @@ export function WeekView({
   items,
   canEditEvents = false,
   userTz,
+  deadlinesOnly = false,
 }: {
   /** Seven noon-UTC Dates for Sun-Sat of the displayed week, built
    *  in the user's TZ via `calendarWeekInTz`. Noon UTC keeps the
@@ -78,6 +85,11 @@ export function WeekView({
    *  highlight so a user in MDT viewing on a UTC server still
    *  sees their local day. */
   userTz: string;
+  /** `?show=deadlines` layout mode. The page already filtered
+   *  `items` down to deadlines; this flag collapses the hour grid
+   *  (which would render empty) into a single tall "due" strip —
+   *  one column per day, deadline chips sorted critical-first. */
+  deadlinesOnly?: boolean;
 }) {
   // Shared optimistic-move pipeline (also used by DayView) —
   // `renderItems` carries the pending overlay so a moved chip
@@ -126,6 +138,119 @@ export function WeekView({
     };
   });
 
+  // Sticky day-header row — shared by both layouts (normal and
+  // deadlines-only) so the week's chrome stays identical when the
+  // user toggles the filter.
+  const headerRow = (
+    <div
+      className="grid sticky top-0 z-10 bg-card border-b border-line"
+      style={{ gridTemplateColumns: "var(--cal-gutter,56px) repeat(7, 1fr)" }}
+    >
+      <div />
+      {byDayBuckets.map((b) => {
+        const day = b.day;
+        const dayIsToday = b.key === todayKey;
+        // The day Date is noon UTC, so getUTCDay() returns the
+        // correct weekday for the user-TZ calendar day this column
+        // represents. Avoids re-importing date-fns isSameDay /
+        // isWeekend, which use server-local TZ.
+        const dow = day.getUTCDay();
+        const weekend = dow === 0 || dow === 6;
+        return (
+          // Whole header cell deep-links to the day's Day view.
+          // The href is built from `b.key` directly (not
+          // `buildCalendarHref`, whose `toDateParam` formats in
+          // the *browser's* TZ — a noon-UTC day Date would come
+          // out one day ahead for users east of UTC+11). The
+          // active filter rides along so drilling into a day
+          // keeps the deadlines-only lens.
+          <Link
+            key={b.key}
+            href={`/calendar?view=day&d=${b.key}${deadlinesOnly ? "&show=deadlines" : ""}`}
+            title="Open day view"
+            className={cn(
+              "flex flex-col items-center gap-0.5 py-2 border-l border-line transition-colors hover:bg-brand-tint/40",
+              weekend && "bg-paper"
+            )}
+          >
+            <div
+              className={cn(
+                "text-2xs font-mono uppercase tracking-wider",
+                weekend ? "text-ink-4/80" : "text-ink-4"
+              )}
+            >
+              {format(day, "EEE")}
+            </div>
+            <div
+              className={cn(
+                "text-base font-display tracking-tight",
+                dayIsToday
+                  ? "text-brand-500 font-semibold"
+                  : weekend
+                    ? "text-ink-3"
+                    : "text-ink"
+              )}
+            >
+              {day.getUTCDate()}
+            </div>
+          </Link>
+        );
+      })}
+    </div>
+  );
+
+  // ── Deadlines-only layout ────────────────────────────────────────
+  //
+  // The hour grid + all-day event strip would both render empty
+  // (the page filtered events out), so collapse to the header row
+  // plus ONE tall per-day "due" strip. Chips reuse the all-day
+  // strip's DeadlineChip vocabulary but get the full column height,
+  // sorted critical-first like the day view's deadline section.
+  if (deadlinesOnly) {
+    const weekHasDeadlines = byDayBuckets.some((b) => b.deadlines.length > 0);
+    const rank = (d: CalendarDeadlineRow) =>
+      d.deadlineKind === "critical" ? 0 : 1;
+    return (
+      <div className="flex flex-col flex-1 min-h-0 overflow-y-auto [--cal-gutter:36px] sm:[--cal-gutter:56px]">
+        {headerRow}
+        <div
+          className="grid flex-1"
+          style={{
+            gridTemplateColumns: "var(--cal-gutter,56px) repeat(7, 1fr)",
+          }}
+        >
+          <div className="text-2xs font-mono text-ink-4 text-right pr-1.5 pt-2 border-r border-line">
+            due
+          </div>
+          {byDayBuckets.map((b) => {
+            const dow = b.day.getUTCDay();
+            const weekend = dow === 0 || dow === 6;
+            return (
+              <div
+                key={b.key}
+                className={cn(
+                  "border-l border-line p-1 flex flex-col gap-1 min-w-0",
+                  weekend && "bg-paper"
+                )}
+              >
+                {[...b.deadlines]
+                  .sort((a, z) => rank(a) - rank(z))
+                  .map((d) => (
+                    <DeadlineChip key={d.id} deadline={d} />
+                  ))}
+              </div>
+            );
+          })}
+        </div>
+        {!weekHasDeadlines && (
+          <div className="px-5 py-6 text-xs text-ink-4 italic text-center border-t border-line">
+            No deadlines this week.
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // Uniform all-day-row height across the week so the gridlines
   // below stay flush — even on a day with three chips the row
   // is the same height as a day with zero. Min of 28px gives
@@ -152,59 +277,7 @@ export function WeekView({
       className="flex flex-col flex-1 min-h-0 overflow-y-auto [--cal-gutter:36px] sm:[--cal-gutter:56px]"
     >
       {/* Day header row — sticky */}
-      <div
-        className="grid sticky top-0 z-10 bg-card border-b border-line"
-        style={{ gridTemplateColumns: "var(--cal-gutter,56px) repeat(7, 1fr)" }}
-      >
-        <div />
-        {byDayBuckets.map((b) => {
-          const day = b.day;
-          const dayIsToday = b.key === todayKey;
-          // The day Date is noon UTC, so getUTCDay() returns the
-          // correct weekday for the user-TZ calendar day this column
-          // represents. Avoids re-importing date-fns isSameDay /
-          // isWeekend, which use server-local TZ.
-          const dow = day.getUTCDay();
-          const weekend = dow === 0 || dow === 6;
-          return (
-            // Whole header cell deep-links to the day's Day view.
-            // The href is built from `b.key` directly (not
-            // `buildCalendarHref`, whose `toDateParam` formats in
-            // the *browser's* TZ — a noon-UTC day Date would come
-            // out one day ahead for users east of UTC+11).
-            <Link
-              key={b.key}
-              href={`/calendar?view=day&d=${b.key}`}
-              title="Open day view"
-              className={cn(
-                "flex flex-col items-center gap-0.5 py-2 border-l border-line transition-colors hover:bg-brand-tint/40",
-                weekend && "bg-paper"
-              )}
-            >
-              <div
-                className={cn(
-                  "text-2xs font-mono uppercase tracking-wider",
-                  weekend ? "text-ink-4/80" : "text-ink-4"
-                )}
-              >
-                {format(day, "EEE")}
-              </div>
-              <div
-                className={cn(
-                  "text-base font-display tracking-tight",
-                  dayIsToday
-                    ? "text-brand-500 font-semibold"
-                    : weekend
-                      ? "text-ink-3"
-                      : "text-ink"
-                )}
-              >
-                {day.getUTCDate()}
-              </div>
-            </Link>
-          );
-        })}
-      </div>
+      {headerRow}
 
       {/* All-day row — sits above the hour grid so the gridlines
           below align with the gutter labels exactly. */}

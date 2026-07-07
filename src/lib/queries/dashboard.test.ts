@@ -30,6 +30,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import {
   getDashboardKpis,
+  getFirmPulse,
   getMyOpenTasks,
   getTodayAgenda,
   getUpcomingDeadlines,
@@ -46,6 +47,7 @@ const NOW = new Date("2026-06-16T02:00:00Z");
 const DENVER = "America/Denver"; // June 15 evening at NOW
 const TOKYO = "Asia/Tokyo"; // June 16 morning at NOW
 
+let firmId: string;
 let matterId: string;
 let userId: string;
 
@@ -55,7 +57,7 @@ beforeAll(() => {
 
 beforeEach(async () => {
   await resetDb();
-  const { firmId } = await seedFirm();
+  ({ firmId } = await seedFirm());
   ({ userId } = await seedUser({ firmId }));
   const { areaId, stageId } = await seedPracticeArea();
   ({ matterId } = await seedMatter({
@@ -186,5 +188,27 @@ describe("getDashboardKpis — hoursToday sums the user's local day", () => {
 
     const tokyo = await getDashboardKpis(TOKYO);
     expect(tokyo.hoursToday).toBe(3);
+  });
+});
+
+describe("goals come from the Firm row, not hardcoded constants", () => {
+  test("fresh firm serves the schema defaults (6.0 / 200)", async () => {
+    const kpis = await getDashboardKpis(DENVER);
+    expect(kpis.hoursGoal).toBe(6.0);
+    const pulse = await getFirmPulse(DENVER);
+    expect(pulse.billableGoal).toBe(200);
+  });
+
+  test("configured firm goals flow through to KPIs + pulse", async () => {
+    await prisma.firm.update({
+      where: { id: firmId },
+      data: { dailyHoursGoal: 8.5, monthlyBillableGoal: 175 },
+    });
+
+    const kpis = await getDashboardKpis(DENVER);
+    expect(kpis.hoursGoal).toBe(8.5);
+
+    const pulse = await getFirmPulse(DENVER);
+    expect(pulse.billableGoal).toBe(175);
   });
 });

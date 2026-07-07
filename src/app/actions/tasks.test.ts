@@ -9,6 +9,8 @@
  *   - activity log fans out only on completed-state transitions
  *   - deleteTask removes the row + revalidates
  *   - updateTask zod validation, dueDate parsing, status transition
+ *   - updateTask owner tri-state (absent = untouched, "" = clear,
+ *     id = assign) + the assignment notification on real changes
  *   - setTaskOwner reassignment + the "task_assigned" notification
  *     (fires for the new owner, skipped on self-assign / no-op)
  *
@@ -423,6 +425,114 @@ describe("updateTask — happy path", () => {
     await updateTask(id, updateTaskInitialState, fd2);
     row = await prisma.task.findUnique({ where: { id } });
     expect(row!.completedAt).toBeNull();
+  });
+});
+
+describe("updateTask — owner tri-state + notification", () => {
+  /** Valid base form; tests set/omit ownerId. */
+  const taskForm = (overrides: Record<string, string> = {}): FormData => {
+    const fd = new FormData();
+    fd.set("title", "Draft motion");
+    fd.set("priority", "normal");
+    fd.set("status", "open");
+    for (const [k, v] of Object.entries(overrides)) fd.set(k, v);
+    return fd;
+  };
+
+  test("assigning another user sets the owner and notifies them", async () => {
+    const assignee = await seedUser({ firmId, email: "edit-assign@example.com" });
+    const id = await seedTask();
+
+    const res = await updateTask(
+      id,
+      updateTaskInitialState,
+      taskForm({ ownerId: assignee.userId })
+    );
+    expect(res.status).toBe("ok");
+
+    const row = await prisma.task.findUnique({ where: { id } });
+    expect(row!.ownerId).toBe(assignee.userId);
+
+    const notes = await prisma.notification.findMany({
+      where: { userId: assignee.userId },
+    });
+    expect(notes).toHaveLength(1);
+    expect(notes[0]!.type).toBe("task_assigned");
+    expect(notes[0]!.link).toBe(`/matters/${matterId}/tasks`);
+  });
+
+  test("absent ownerId field leaves the owner untouched", async () => {
+    const assignee = await seedUser({ firmId, email: "keep@example.com" });
+    const id = await seedTask({ ownerId: assignee.userId });
+
+    const res = await updateTask(id, updateTaskInitialState, taskForm());
+    expect(res.status).toBe("ok");
+    const row = await prisma.task.findUnique({ where: { id } });
+    expect(row!.ownerId).toBe(assignee.userId);
+    expect(await prisma.notification.count()).toBe(0);
+  });
+
+  test('ownerId="" clears the owner and never notifies', async () => {
+    const assignee = await seedUser({ firmId, email: "clear-edit@example.com" });
+    const id = await seedTask({ ownerId: assignee.userId });
+
+    const res = await updateTask(
+      id,
+      updateTaskInitialState,
+      taskForm({ ownerId: "" })
+    );
+    expect(res.status).toBe("ok");
+    const row = await prisma.task.findUnique({ where: { id } });
+    expect(row!.ownerId).toBeNull();
+    expect(await prisma.notification.count()).toBe(0);
+  });
+
+  test("unchanged owner doesn't re-notify (no-op save)", async () => {
+    const assignee = await seedUser({ firmId, email: "noop-edit@example.com" });
+    const id = await seedTask({ ownerId: assignee.userId });
+
+    const res = await updateTask(
+      id,
+      updateTaskInitialState,
+      taskForm({ ownerId: assignee.userId })
+    );
+    expect(res.status).toBe("ok");
+    expect(await prisma.notification.count()).toBe(0);
+  });
+
+  test("self-assignment saves but is notification-silent (actor exclusion)", async () => {
+    const id = await seedTask();
+    const res = await updateTask(
+      id,
+      updateTaskInitialState,
+      taskForm({ ownerId: userId })
+    );
+    expect(res.status).toBe("ok");
+    const row = await prisma.task.findUnique({ where: { id } });
+    expect(row!.ownerId).toBe(userId);
+    expect(await prisma.notification.count()).toBe(0);
+  });
+
+  test("inactive assignee comes back as an ownerId field error, nothing written", async () => {
+    const inactive = await seedUser({
+      firmId,
+      email: "edit-inactive@example.com",
+      isActive: false,
+    });
+    const id = await seedTask({ title: "Original title" });
+
+    const res = await updateTask(
+      id,
+      updateTaskInitialState,
+      taskForm({ title: "Changed title", ownerId: inactive.userId })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.ownerId?.[0]).toMatch(/inactive|not found/i);
+
+    // The whole update is rejected — not just the owner column.
+    const row = await prisma.task.findUnique({ where: { id } });
+    expect(row!.title).toBe("Original title");
+    expect(row!.ownerId).toBeNull();
   });
 });
 

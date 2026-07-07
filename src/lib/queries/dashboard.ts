@@ -23,6 +23,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { getFirmGoals } from "@/lib/firm";
 import { dateKeyInTz, formatRelative, instantInTz } from "@/lib/format-date";
 
 /** The viewer's current calendar date as [year, month, day] in their zone. */
@@ -66,7 +67,7 @@ export type DashboardKpis = {
 };
 
 export async function getDashboardKpis(tz: string): Promise<DashboardKpis> {
-  const [openMatters, mattersThisWeek, unreadEmail, flaggedEmail, hoursAgg, trustAgg] =
+  const [openMatters, mattersThisWeek, unreadEmail, flaggedEmail, hoursAgg, trustAgg, goals] =
     await Promise.all([
       prisma.matter.count({
         where: { isArchived: false, stage: { isTerminal: false } },
@@ -88,6 +89,9 @@ export async function getDashboardKpis(tz: string): Promise<DashboardKpis> {
         _sum: { trustBalance: true },
         _count: true,
       }),
+      // Firm-settable target (settings → Firm info); was a
+      // hardcoded 6.0 before Firm.dailyHoursGoal existed.
+      getFirmGoals(),
     ]);
 
   return {
@@ -97,7 +101,7 @@ export async function getDashboardKpis(tz: string): Promise<DashboardKpis> {
     unreadEmail,
     flaggedEmail,
     hoursToday: hoursAgg._sum.hours ?? 0,
-    hoursGoal: 6.0,
+    hoursGoal: goals.dailyHoursGoal,
     // Decimal → number at the API boundary. Display + KPI math
     // tolerates the precision floor; the Decimal stays canonical
     // in the DB. Same pattern below for invoice totals.
@@ -404,7 +408,7 @@ export type FirmPulse = {
 };
 
 export async function getFirmPulse(tz: string): Promise<FirmPulse> {
-  const [mtdAgg, invoiceAgg] = await Promise.all([
+  const [mtdAgg, invoiceAgg, goals] = await Promise.all([
     prisma.timeEntry.aggregate({
       where: { date: { gte: startOfMonthInTz(tz) }, billable: true },
       _sum: { hours: true },
@@ -412,6 +416,8 @@ export async function getFirmPulse(tz: string): Promise<FirmPulse> {
     prisma.invoice.aggregate({
       _sum: { totalAmount: true, paidAmount: true },
     }),
+    // Firm-settable target — was a hardcoded 200.
+    getFirmGoals(),
   ]);
 
   // Decimal → number at the API boundary; display arithmetic
@@ -423,7 +429,7 @@ export async function getFirmPulse(tz: string): Promise<FirmPulse> {
 
   return {
     billableMtd: mtdAgg._sum.hours ?? 0,
-    billableGoal: 200,
+    billableGoal: goals.monthlyBillableGoal,
     collectionRate,
     arOutstanding,
   };

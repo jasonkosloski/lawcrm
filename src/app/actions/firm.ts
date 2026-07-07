@@ -2,7 +2,8 @@
  * Firm profile server action.
  *
  * Single update path for the firm record — name, contact info,
- * address, EIN, website, established date. Gated on
+ * address, EIN, website, established date, productivity goals
+ * (daily hours / monthly billable targets). Gated on
  * `firm.edit_info` via `requirePermission(...)` (admin role
  * short-circuits to all granted), so the action is safe to expose
  * to any UI.
@@ -24,6 +25,24 @@ import {
   firmInitialState,
   type FirmFormState,
 } from "@/lib/firm-form";
+
+/** Goal fields arrive as strings from `<input type="number">`.
+ *  Validated here (not just by the input's min/max — those are
+ *  advisory client-side) as: a plain positive number with at most
+ *  ONE decimal place, within a sane ceiling. One decimal matches
+ *  how the goals render everywhere (`toFixed(1)`), so what the
+ *  admin types is exactly what the dashboard shows. */
+const goalField = (label: string, max: number) =>
+  z
+    .string()
+    .trim()
+    .min(1, `${label} is required`)
+    .refine(
+      (v) => /^\d+(\.\d)?$/.test(v),
+      `${label} must be a number with at most one decimal place`
+    )
+    .refine((v) => Number(v) > 0, `${label} must be greater than zero`)
+    .refine((v) => Number(v) <= max, `${label} can't exceed ${max}`);
 
 const firmSchema = z.object({
   name: z.string().trim().min(1, "Firm name is required").max(200),
@@ -58,6 +77,12 @@ const firmSchema = z.object({
    *  kept as a plain string here so a bad value surfaces as a field
    *  error, not a crash. */
   establishedAt: z.string().trim().optional().or(z.literal("")),
+  /** Daily billable-hours target per person. 24 = hours in a day. */
+  dailyHoursGoal: goalField("Daily hours goal", 24),
+  /** Monthly firm-wide billable target. 744 = 31 days × 24h — a
+   *  deliberately generous ceiling that still rejects fat-fingered
+   *  values like 2000. */
+  monthlyBillableGoal: goalField("Monthly billable goal", 744),
 });
 
 /** Parse the establishedAt field (`YYYY-MM-DD` from a
@@ -132,6 +157,9 @@ export async function updateFirmAction(
       zip: data.zip || null,
       country: data.country,
       establishedAt,
+      // Safe Number() — the goalField regex admits only \d+(\.\d)?
+      dailyHoursGoal: Number(data.dailyHoursGoal),
+      monthlyBillableGoal: Number(data.monthlyBillableGoal),
     },
   });
 

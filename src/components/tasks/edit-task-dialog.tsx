@@ -1,12 +1,11 @@
 /**
  * Edit Task Dialog
  *
- * Modal form for editing a task's core fields. Reuses the same field
- * primitives as the TaskComposer so the edit experience matches create.
- *
- * Owner reassignment is intentionally not exposed in v1 — there's no
- * team-picker component yet. Surfaces as an open follow-up in
- * docs/FEATURES.md (matter team editor).
+ * Modal form for editing a task's core fields — including the owner
+ * via the shared AssigneeSelect. Reuses the same field primitives as
+ * the TaskComposer so the edit experience matches create. Owner
+ * changes post through `updateTask`, which applies the same
+ * validation + "task_assigned" notification rules as setTaskOwner.
  */
 
 "use client";
@@ -37,6 +36,10 @@ import {
   updateTaskInitialState,
   type UpdateTaskFormState,
 } from "@/lib/task-form";
+import {
+  AssigneeSelect,
+  type AssigneeOption,
+} from "@/components/tasks/assignee-select";
 
 export type EditableTask = {
   id: string;
@@ -44,6 +47,8 @@ export type EditableTask = {
   description: string | null;
   priority: string;
   status: TaskStatus;
+  /** Current owner (null = unassigned) — seeds the assignee picker. */
+  ownerId: string | null;
   /**
    * Due date as a `Date` (or null when unset) — NOT a pre-formatted
    * string. The dialog converts it to the input's `YYYY-MM-DD` value via
@@ -75,10 +80,13 @@ export function EditTaskDialog({
   open,
   onOpenChange,
   task,
+  assignees,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   task: EditableTask;
+  /** Active firm users for the assignee picker. */
+  assignees: AssigneeOption[];
 }) {
   const action = updateTask.bind(null, task.id);
   const [state, formAction, isPending] = useActionState<
@@ -91,6 +99,9 @@ export function EditTaskDialog({
   const [dueDate, setDueDate] = useState(toDateInput(task.dueDate));
   const [priority, setPriority] = useState(task.priority);
   const [status, setStatus] = useState<TaskStatus>(task.status);
+  // "" = the Unassigned option — posts as ownerId="" which the
+  // action reads as "clear the owner" (tri-state; see updateTask).
+  const [ownerId, setOwnerId] = useState(task.ownerId ?? "");
 
   // Field errors are mirrored into local state rather than read straight
   // off `state.errors`: useActionState has no reset, and this component
@@ -112,6 +123,7 @@ export function EditTaskDialog({
       setDueDate(toDateInput(task.dueDate));
       setPriority(task.priority);
       setStatus(task.status);
+      setOwnerId(task.ownerId ?? "");
       setErrs({});
     }
   }, [open, task]);
@@ -172,6 +184,13 @@ export function EditTaskDialog({
               value: s,
               label: STATUS_LABEL[s],
             }))}
+          />
+
+          <AssigneeSelect
+            value={ownerId}
+            onChange={setOwnerId}
+            assignees={assignees}
+            error={errs.ownerId?.[0]}
           />
 
           <TextareaField

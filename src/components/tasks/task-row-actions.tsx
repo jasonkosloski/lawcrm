@@ -45,6 +45,7 @@ import { deleteTask, setTaskStatus } from "@/app/actions/tasks";
 import { addTimeEntryToTask } from "@/app/actions/time-on-entity";
 import { addNoteToTask } from "@/app/actions/note-on-entity";
 import { EditTaskDialog, type EditableTask } from "./edit-task-dialog";
+import type { AssigneeOption } from "./assignee-select";
 import { LogTimeOnEntityDialog } from "@/components/time-entries/log-time-on-entity-dialog";
 import { AddNoteOnEntityDialog } from "@/components/notes/add-note-on-entity-dialog";
 import { ConvertTaskToDeadlineDialog } from "@/components/conversions/convert-dialogs";
@@ -102,7 +103,15 @@ export function TaskStatusToggle({
   );
 }
 
-export function TaskRowMenu({ task }: { task: EditableTask }) {
+export function TaskRowMenu({
+  task,
+  assignees,
+}: {
+  task: EditableTask;
+  /** Active firm users — threaded through to the edit dialog's
+   *  assignee picker. */
+  assignees: AssigneeOption[];
+}) {
   const [editOpen, setEditOpen] = useState(false);
   const [logTimeOpen, setLogTimeOpen] = useState(false);
   const [addNoteOpen, setAddNoteOpen] = useState(false);
@@ -183,7 +192,12 @@ export function TaskRowMenu({ task }: { task: EditableTask }) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <EditTaskDialog open={editOpen} onOpenChange={setEditOpen} task={task} />
+      <EditTaskDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        task={task}
+        assignees={assignees}
+      />
 
       <LogTimeOnEntityDialog
         open={logTimeOpen}

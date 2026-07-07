@@ -19,7 +19,12 @@ vi.mock("@/app/actions/firm", () => ({
 }));
 
 import { FirmEditForm } from "./firm-edit-form";
-import type { FirmProfile } from "@/lib/firm";
+import type { FirmGoals, FirmProfile } from "@/lib/firm";
+
+const BASE_GOALS: FirmGoals = {
+  dailyHoursGoal: 6.0,
+  monthlyBillableGoal: 200,
+};
 
 const BASE_FIRM: FirmProfile = {
   id: "firm_1",
@@ -72,6 +77,7 @@ describe("FirmEditForm — establishedAt date input", () => {
           // "1998-07-03".
           establishedAt: new Date("1998-07-04T00:00:00.000Z"),
         }}
+        goals={BASE_GOALS}
       />
     );
     expect(establishedInput(container).defaultValue).toBe("1998-07-04");
@@ -84,13 +90,39 @@ describe("FirmEditForm — establishedAt date input", () => {
           ...BASE_FIRM,
           establishedAt: new Date("2003-01-05T00:00:00.000Z"),
         }}
+        goals={BASE_GOALS}
       />
     );
     expect(establishedInput(container).defaultValue).toBe("2003-01-05");
   });
 
   test("renders empty when establishedAt is null", () => {
-    const { container } = render(<FirmEditForm firm={BASE_FIRM} />);
+    const { container } = render(
+      <FirmEditForm firm={BASE_FIRM} goals={BASE_GOALS} />
+    );
     expect(establishedInput(container).defaultValue).toBe("");
+  });
+});
+
+describe("FirmEditForm — goal inputs", () => {
+  test("renders both goals as editable number inputs with the firm values", () => {
+    const { container } = render(
+      <FirmEditForm
+        firm={BASE_FIRM}
+        goals={{ dailyHoursGoal: 7.5, monthlyBillableGoal: 180 }}
+      />
+    );
+    const daily = container.querySelector<HTMLInputElement>(
+      'input[name="dailyHoursGoal"]'
+    );
+    const monthly = container.querySelector<HTMLInputElement>(
+      'input[name="monthlyBillableGoal"]'
+    );
+    expect(daily?.type).toBe("number");
+    expect(daily?.defaultValue).toBe("7.5");
+    expect(daily?.max).toBe("24");
+    expect(monthly?.type).toBe("number");
+    expect(monthly?.defaultValue).toBe("180");
+    expect(monthly?.max).toBe("744");
   });
 });

@@ -18,6 +18,11 @@ import {
   getMatterTasks,
   type TaskRow,
 } from "@/lib/queries/matter-detail";
+import {
+  listAssigneeOptions,
+  type AssigneeOption,
+} from "@/lib/queries/team";
+import { getCurrentUserId } from "@/lib/current-user";
 import { formatDate as formatDateVariant } from "@/lib/format-date";
 
 const STATUS_ORDER = ["open", "in_progress", "in_review", "done", "cancelled"];
@@ -61,7 +66,13 @@ export default async function MatterTasksPage({
   params,
 }: PageProps<"/matters/[id]">) {
   const { id } = await params;
-  const tasks = await getMatterTasks(id);
+  // Assignees feed the composer + edit-dialog pickers; the current
+  // user id is the composer's default selection (self-assign).
+  const [tasks, assignees, currentUserId] = await Promise.all([
+    getMatterTasks(id),
+    listAssigneeOptions(),
+    getCurrentUserId(),
+  ]);
 
   // Group by status
   const byStatus = new Map<string, TaskRow[]>();
@@ -76,7 +87,11 @@ export default async function MatterTasksPage({
 
   return (
     <div className="p-5 flex flex-col gap-5">
-      <TaskComposer matterId={id} />
+      <TaskComposer
+        matterId={id}
+        assignees={assignees}
+        currentUserId={currentUserId}
+      />
 
       {tasks.length === 0 ? (
         <div className="text-xs text-ink-4 text-center py-6">
@@ -99,7 +114,12 @@ export default async function MatterTasksPage({
             <Card className="p-0 overflow-hidden">
               <ul className="divide-y divide-line">
                 {rows.map((t) => (
-                  <TaskItem key={t.id} task={t} matterId={id} />
+                  <TaskItem
+                    key={t.id}
+                    task={t}
+                    matterId={id}
+                    assignees={assignees}
+                  />
                 ))}
               </ul>
             </Card>
@@ -110,7 +130,15 @@ export default async function MatterTasksPage({
   );
 }
 
-function TaskItem({ task, matterId }: { task: TaskRow; matterId: string }) {
+function TaskItem({
+  task,
+  matterId,
+  assignees,
+}: {
+  task: TaskRow;
+  matterId: string;
+  assignees: AssigneeOption[];
+}) {
   const priority = PRIORITY_META[task.priority] ?? PRIORITY_META.normal;
   const done = task.status === "done" || task.status === "cancelled";
   return (
@@ -173,8 +201,10 @@ function TaskItem({ task, matterId }: { task: TaskRow; matterId: string }) {
           description: task.description,
           priority: task.priority,
           status: task.status as TaskStatus,
+          ownerId: task.ownerId,
           dueDate: task.dueDate,
         }}
+        assignees={assignees}
       />
     </li>
   );

@@ -8,6 +8,10 @@
  *     day earlier), empty string nulls the column, and a malformed
  *     value comes back as a field error instead of an unhandled
  *     Prisma crash.
+ *   - goal fields (dailyHoursGoal / monthlyBillableGoal): persisted
+ *     as numbers, rejected when non-numeric / non-positive / over
+ *     the sane ceiling (24 daily, 744 monthly) / more than one
+ *     decimal place.
  */
 
 import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
@@ -59,11 +63,14 @@ beforeEach(async () => {
   });
 });
 
-/** Minimal valid form — tests override individual fields. */
+/** Minimal valid form — tests override individual fields. The goal
+ *  fields are required (the real form always posts them). */
 function firmForm(overrides: Record<string, string> = {}): FormData {
   const fd = new FormData();
   fd.set("name", "Kosloski Law");
   fd.set("country", "US");
+  fd.set("dailyHoursGoal", "6.0");
+  fd.set("monthlyBillableGoal", "200");
   for (const [k, v] of Object.entries(overrides)) fd.set(k, v);
   return fd;
 }
@@ -144,6 +151,53 @@ describe("updateFirmAction", () => {
       });
       expect(firm.name).toBe("Test Firm LLC");
       expect(firm.establishedAt).toBeNull();
+    });
+  });
+
+  describe("goal fields", () => {
+    test("persists both goals as numbers", async () => {
+      const res = await updateFirmAction(
+        firmInitialState,
+        firmForm({ dailyHoursGoal: "7.5", monthlyBillableGoal: "160" })
+      );
+      expect(res.status).toBe("ok");
+      const firm = await prisma.firm.findUniqueOrThrow({
+        where: { id: firmId },
+        select: { dailyHoursGoal: true, monthlyBillableGoal: true },
+      });
+      expect(firm.dailyHoursGoal).toBe(7.5);
+      expect(firm.monthlyBillableGoal).toBe(160);
+    });
+
+    test.each([
+      ["empty", ""],
+      ["non-numeric", "abc"],
+      ["zero", "0"],
+      ["negative", "-2"],
+      ["two decimals", "6.25"],
+      ["over the 24h ceiling", "25"],
+    ])("rejects a %s dailyHoursGoal", async (_label, value) => {
+      const res = await updateFirmAction(
+        firmInitialState,
+        firmForm({ dailyHoursGoal: value })
+      );
+      expect(res.status).toBe("error");
+      expect(res.errors?.dailyHoursGoal?.length).toBeGreaterThan(0);
+      // Nothing written — the row keeps the schema default.
+      const firm = await prisma.firm.findUniqueOrThrow({
+        where: { id: firmId },
+        select: { dailyHoursGoal: true },
+      });
+      expect(firm.dailyHoursGoal).toBe(6.0);
+    });
+
+    test("rejects a monthlyBillableGoal above 744", async () => {
+      const res = await updateFirmAction(
+        firmInitialState,
+        firmForm({ monthlyBillableGoal: "2000" })
+      );
+      expect(res.status).toBe("error");
+      expect(res.errors?.monthlyBillableGoal?.length).toBeGreaterThan(0);
     });
   });
 });

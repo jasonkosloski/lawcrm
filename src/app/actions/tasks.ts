@@ -10,13 +10,15 @@
  * Every mutation revalidates the matter tasks tab, the matter overview
  * (which previews open tasks), and the dashboard "Your tasks" card.
  *
- * Notifications: `setTaskOwner` writes a "task_assigned" row for the
- * new owner — unless they assigned it to themselves (same actor-
- * exclusion rule as the payment fan-out in `billing.ts`). The create
- * path in `captures.ts` always self-assigns (`ownerId: userId`), so a
- * create-time notification would always be suppressed by that rule;
- * when an owner picker lands on the composer, wire the same helper
- * there.
+ * Notifications: every owner-setting path (`setTaskOwner`,
+ * `updateTask`, and the create path in `captures.ts`, which has its
+ * own picker) funnels through `notifyTaskAssigned` in
+ * `src/lib/task-assignment.ts` — the new owner gets a
+ * "task_assigned" row unless they assigned it to themselves (same
+ * actor-exclusion rule as the payment fan-out in `billing.ts`).
+ * Only SIBLING task captures still hard-self-assign (no picker on
+ * the capture stack), which the actor-exclusion rule makes silent
+ * by construction.
  *
  * Auth: gated on `tasks.edit` (status + field edits + reassignment)
  * and `tasks.delete`. Admins short-circuit; other roles need explicit
@@ -37,7 +39,7 @@ import type { UpdateTaskFormState } from "@/lib/task-form";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
-import { createNotification } from "@/lib/notifications";
+import { isAssignableUser, notifyTaskAssigned } from "@/lib/task-assignment";
 
 /** Path-revalidate every surface that displays this task. */
 function revalidateForTask(matterId: string | null): void {
@@ -130,14 +132,8 @@ export async function setTaskOwner(
   if (!task) return { ok: false, error: "Task not found" };
   if (task.ownerId === ownerId) return { ok: true }; // no-op — don't re-notify
 
-  if (ownerId) {
-    const owner = await prisma.user.findUnique({
-      where: { id: ownerId },
-      select: { isActive: true },
-    });
-    if (!owner || !owner.isActive) {
-      return { ok: false, error: "Assignee not found or inactive" };
-    }
+  if (ownerId && !(await isAssignableUser(ownerId))) {
+    return { ok: false, error: "Assignee not found or inactive" };
   }
 
   await prisma.task.update({
@@ -147,26 +143,15 @@ export async function setTaskOwner(
 
   revalidateForTask(task.matterId);
 
-  // Tell the new owner — unless they just assigned it to themselves
-  // (same actor-exclusion rule as the invoice-payment fan-out in
-  // `billing.ts`). Fire-and-forget: a failed notification write never
-  // rolls back the reassignment.
-  if (ownerId && ownerId !== actorId) {
-    const matter = task.matterId
-      ? await prisma.matter.findUnique({
-          where: { id: task.matterId },
-          select: { name: true },
-        })
-      : null;
-    await createNotification({
-      userId: ownerId,
-      type: "task_assigned",
-      title: `Task assigned: ${task.title}`,
-      body: matter ? matter.name : "Firm-wide task",
-      link: task.matterId ? `/matters/${task.matterId}/tasks` : "/",
-      matterId: task.matterId,
-    });
-  }
+  // Tell the new owner — the helper applies the actor-exclusion +
+  // unassign rules. Fire-and-forget: a failed notification write
+  // never rolls back the reassignment.
+  await notifyTaskAssigned({
+    ownerId,
+    actorId,
+    taskTitle: task.title,
+    matterId: task.matterId,
+  });
 
   return { ok: true };
 }
@@ -197,6 +182,11 @@ const updateTaskSchema = z.object({
   dueDate: z.string().optional().or(z.literal("")),
   priority: z.enum(TASK_PRIORITIES).default("normal"),
   status: z.enum(TASK_STATUSES).default("open"),
+  /** Assignee picker value. Tri-state on purpose: field ABSENT
+   *  (a form without the picker) leaves the owner untouched;
+   *  `""` (the "Unassigned" option) clears it; a user id assigns
+   *  (validated active below). */
+  ownerId: z.string().optional(),
 });
 
 /** Convert the form's `YYYY-MM-DD` dueDate to local midnight of that
@@ -233,12 +223,29 @@ export async function updateTask(
 
   const task = await prisma.task.findUnique({
     where: { id: taskId },
-    select: { matterId: true, status: true },
+    select: { matterId: true, status: true, ownerId: true },
   });
   if (!task) {
     return {
       status: "error",
       errors: { title: ["Task no longer exists"] },
+    };
+  }
+
+  // Resolve the picker's tri-state (see the schema comment):
+  // undefined = leave alone, null = unassign, string = assign.
+  const nextOwnerId =
+    parsed.data.ownerId === undefined
+      ? undefined
+      : parsed.data.ownerId === ""
+        ? null
+        : parsed.data.ownerId;
+  const ownerChanged =
+    nextOwnerId !== undefined && nextOwnerId !== task.ownerId;
+  if (ownerChanged && nextOwnerId && !(await isAssignableUser(nextOwnerId))) {
+    return {
+      status: "error",
+      errors: { ownerId: ["Assignee not found or inactive"] },
     };
   }
 
@@ -254,6 +261,8 @@ export async function updateTask(
       dueDate: parseDueDate(parsed.data.dueDate),
       priority: parsed.data.priority,
       status: newStatus,
+      // undefined = Prisma skips the column (owner untouched).
+      ownerId: ownerChanged ? nextOwnerId : undefined,
       completedAt: isComplete
         ? wasComplete
           ? undefined
@@ -263,5 +272,17 @@ export async function updateTask(
   });
 
   revalidateForTask(task.matterId);
+
+  // Same assignment-notification rules as setTaskOwner — only when
+  // the owner actually changed, never on self-assign / unassign.
+  if (ownerChanged) {
+    await notifyTaskAssigned({
+      ownerId: nextOwnerId ?? null,
+      actorId: await getCurrentUserId(),
+      taskTitle: parsed.data.title,
+      matterId: task.matterId,
+    });
+  }
+
   return { status: "ok" };
 }

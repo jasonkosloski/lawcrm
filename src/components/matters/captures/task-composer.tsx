@@ -2,10 +2,14 @@
  * Task Composer — primary-task form at the top of the Tasks tab.
  *
  * Same shape as the note composer: a collapsed "Add a task" bar that
- * expands into a title + due + priority form with the CaptureStack
- * below for sibling records (events, deadlines, time, or a
- * quick-capture note). Save writes the task + siblings in one
+ * expands into a title + due + priority + assignee form with the
+ * CaptureStack below for sibling records (events, deadlines, time,
+ * or a quick-capture note). Save writes the task + siblings in one
  * transaction via createTaskWithCaptures.
+ *
+ * Assignee defaults to the CURRENT user (the pre-picker behavior);
+ * picking someone else notifies them on create (actor-exclusion —
+ * see notifyTaskAssigned). "Unassigned" posts `ownerId=""`.
  */
 
 "use client";
@@ -21,6 +25,10 @@ import {
   TASK_PRIORITIES,
   type NoteCapture,
 } from "@/lib/note-constants";
+import {
+  AssigneeSelect,
+  type AssigneeOption,
+} from "@/components/tasks/assignee-select";
 import { CaptureComposerShell } from "./capture-composer-shell";
 import {
   DateField,
@@ -29,7 +37,17 @@ import {
   TextareaField,
 } from "./primary-fields";
 
-export function TaskComposer({ matterId }: { matterId: string }) {
+export function TaskComposer({
+  matterId,
+  assignees,
+  currentUserId,
+}: {
+  matterId: string;
+  /** Active firm users for the assignee picker. */
+  assignees: AssigneeOption[];
+  /** The viewer — the picker's default selection (self-assign). */
+  currentUserId: string;
+}) {
   const [expanded, setExpanded] = useState(false);
   const action = createTaskWithCaptures.bind(null, matterId);
   // Wrapped useActionState: masks state left over from a previous
@@ -46,12 +64,14 @@ export function TaskComposer({ matterId }: { matterId: string }) {
   const [dueDate, setDueDate] = useState("");
   const [priority, setPriority] =
     useState<(typeof TASK_PRIORITIES)[number]>("normal");
+  const [ownerId, setOwnerId] = useState(currentUserId);
   const [description, setDescription] = useState("");
 
   const reset = () => {
     setTitle("");
     setDueDate("");
     setPriority("normal");
+    setOwnerId(currentUserId);
     setDescription("");
     setCaptures([]);
   };
@@ -113,6 +133,13 @@ export function TaskComposer({ matterId }: { matterId: string }) {
             options={TASK_PRIORITIES.map((p) => ({ value: p, label: p }))}
           />
         </div>
+
+        <AssigneeSelect
+          value={ownerId}
+          onChange={setOwnerId}
+          assignees={assignees}
+          error={errs.ownerId?.[0]}
+        />
 
         <TextareaField
           name="description"

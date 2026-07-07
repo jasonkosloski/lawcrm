@@ -8,7 +8,12 @@
 
 export type UpdateTaskFormState = {
   status: "idle" | "ok" | "error";
-  errors?: Partial<Record<"title" | "description" | "dueDate" | "priority" | "status", string[]>>;
+  errors?: Partial<
+    Record<
+      "title" | "description" | "dueDate" | "priority" | "status" | "ownerId",
+      string[]
+    >
+  >;
 };
 
 export const updateTaskInitialState: UpdateTaskFormState = { status: "idle" };

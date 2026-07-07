@@ -1183,6 +1183,172 @@ describe("createCalendarEvent", () => {
     expect(res.status).toBe("error");
     expect(res.errors?.visibility?.length).toBeGreaterThan(0);
   });
+
+  // ── Attendees at create time (full-page form) ─────────────────────────
+
+  test("no attendees field → creator auto-added (quick-composer compat)", async () => {
+    const res = await createCalendarEvent(
+      createCalendarEventInitialState,
+      buildForm()
+    );
+    expect(res.status).toBe("ok");
+    const rows = await prisma.calendarAttendee.findMany({
+      where: { eventId: res.eventId! },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.userId).toBe(userId);
+    expect(rows[0]!.status).toBe("accepted");
+  });
+
+  test("kind=user attendee is linked; creator still auto-added alongside", async () => {
+    const other = await seedUser({
+      firmId,
+      name: "Colleague",
+      email: "colleague@x.com",
+    });
+    const fd = buildForm();
+    fd.set(
+      "attendees",
+      JSON.stringify([
+        { kind: "user", userId: other.userId, name: "Colleague", email: "" },
+      ])
+    );
+    const res = await createCalendarEvent(createCalendarEventInitialState, fd);
+    expect(res.status).toBe("ok");
+    const rows = await prisma.calendarAttendee.findMany({
+      where: { eventId: res.eventId! },
+      orderBy: { name: "asc" },
+    });
+    expect(rows).toHaveLength(2);
+    const ids = rows.map((r) => r.userId).sort();
+    expect(ids).toEqual([other.userId, userId].sort());
+    expect(rows.every((r) => r.status === "accepted")).toBe(true);
+  });
+
+  test("creator included in the posted list is not duplicated", async () => {
+    const u = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const fd = buildForm();
+    fd.set(
+      "attendees",
+      JSON.stringify([
+        { kind: "user", userId, name: u.name, email: u.email },
+      ])
+    );
+    const res = await createCalendarEvent(createCalendarEventInitialState, fd);
+    expect(res.status).toBe("ok");
+    const rows = await prisma.calendarAttendee.findMany({
+      where: { eventId: res.eventId! },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.userId).toBe(userId);
+  });
+
+  test("kind=contact attendee is linked pending; external-only list is NOT an error (creator fills the invariant)", async () => {
+    const c = await prisma.contact.create({
+      data: { name: "Outside Counsel", type: "vendor", email: "oc@x.com" },
+      select: { id: true, name: true, email: true },
+    });
+    const fd = buildForm();
+    fd.set(
+      "attendees",
+      JSON.stringify([
+        { kind: "contact", contactId: c.id, name: c.name, email: c.email },
+      ])
+    );
+    const res = await createCalendarEvent(createCalendarEventInitialState, fd);
+    expect(res.status).toBe("ok");
+    const rows = await prisma.calendarAttendee.findMany({
+      where: { eventId: res.eventId! },
+    });
+    expect(rows).toHaveLength(2); // creator + contact
+    const contactRow = rows.find((r) => r.contactId === c.id)!;
+    expect(contactRow.status).toBe("pending");
+    expect(rows.some((r) => r.userId === userId)).toBe(true);
+  });
+
+  test("kind=new mints a firm-stamped Contact (type=other), pending", async () => {
+    const before = await prisma.contact.count();
+    const fd = buildForm();
+    fd.set(
+      "attendees",
+      JSON.stringify([
+        { kind: "new", name: "Fresh Face", email: "fresh@face.com" },
+      ])
+    );
+    const res = await createCalendarEvent(createCalendarEventInitialState, fd);
+    expect(res.status).toBe("ok");
+    expect(await prisma.contact.count()).toBe(before + 1);
+    const minted = await prisma.contact.findFirstOrThrow({
+      where: { name: "Fresh Face" },
+    });
+    expect(minted.type).toBe("other");
+    expect(minted.firmId).toBe(firmId);
+    const row = await prisma.calendarAttendee.findFirstOrThrow({
+      where: { eventId: res.eventId!, contactId: minted.id },
+    });
+    expect(row.status).toBe("pending");
+  });
+
+  test("malformed attendees JSON rejects — no event created", async () => {
+    const before = await prisma.calendarEvent.count();
+    const fd = buildForm();
+    fd.set("attendees", "not-json");
+    const res = await createCalendarEvent(createCalendarEventInitialState, fd);
+    expect(res.status).toBe("error");
+    expect(res.errors?.attendees?.[0]).toMatch(/malformed/i);
+    expect(await prisma.calendarEvent.count()).toBe(before);
+  });
+
+  test("kind=new without an email rejects — no event, no Contact", async () => {
+    const beforeEvents = await prisma.calendarEvent.count();
+    const beforeContacts = await prisma.contact.count();
+    const fd = buildForm();
+    fd.set(
+      "attendees",
+      JSON.stringify([{ kind: "new", name: "No Email", email: "" }])
+    );
+    const res = await createCalendarEvent(createCalendarEventInitialState, fd);
+    expect(res.status).toBe("error");
+    expect(res.errors?.attendees?.[0]).toMatch(/email/i);
+    expect(await prisma.calendarEvent.count()).toBe(beforeEvents);
+    expect(await prisma.contact.count()).toBe(beforeContacts);
+  });
+
+  test("stale contactId rejects pre-write — no event created", async () => {
+    const before = await prisma.calendarEvent.count();
+    const fd = buildForm();
+    fd.set(
+      "attendees",
+      JSON.stringify([
+        { kind: "contact", contactId: "no-such-contact", name: "Ghost", email: "" },
+      ])
+    );
+    const res = await createCalendarEvent(createCalendarEventInitialState, fd);
+    expect(res.status).toBe("error");
+    expect(res.errors?.attendees?.[0]).toMatch(/no longer matches/i);
+    expect(await prisma.calendarEvent.count()).toBe(before);
+  });
+
+  test("kind=new colliding with an existing firm contact's email rejects", async () => {
+    await prisma.contact.create({
+      data: {
+        firmId,
+        name: "Taken Email",
+        email: "taken@example.com",
+        type: "client",
+      },
+    });
+    const fd = buildForm();
+    fd.set(
+      "attendees",
+      JSON.stringify([
+        { kind: "new", name: "Duplicate", email: "taken@example.com" },
+      ])
+    );
+    const res = await createCalendarEvent(createCalendarEventInitialState, fd);
+    expect(res.status).toBe("error");
+    expect(res.errors?.attendees?.[0]).toMatch(/already exists/i);
+  });
 });
 
 // ── updateCalendarEvent edit-gate (visibility model) ───────────────────

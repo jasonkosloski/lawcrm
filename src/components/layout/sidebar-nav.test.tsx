@@ -80,6 +80,7 @@ const emptyData: SidebarData = {
   hoursToday: 0,
   pinnedMatters: [],
   areaCounts: [],
+  canViewReports: false,
 };
 
 /** The hamburger lives in the topbar in the real app; a minimal
@@ -126,6 +127,35 @@ describe("SidebarNav — Time nav item", () => {
 
     const timeLink = container.querySelector('a[href="/time"]');
     expect(timeLink!.textContent).toContain("2.5h");
+  });
+});
+
+describe("SidebarNav — Reports nav item gates on reports.view", () => {
+  test("hidden when the viewer lacks the permission", () => {
+    mockViewport(true);
+    const { container } = render(
+      <MobileNavProvider>
+        <SidebarNav data={emptyData} />
+      </MobileNavProvider>
+    );
+
+    expect(container.querySelector('a[href="/reports"]')).toBeNull();
+    // The rest of the Firm section still renders — gating removes
+    // only the one item, not its neighbors.
+    expect(container.querySelector('a[href="/settings"]')).not.toBeNull();
+  });
+
+  test("visible when canViewReports is true", () => {
+    mockViewport(true);
+    const { container } = render(
+      <MobileNavProvider>
+        <SidebarNav data={{ ...emptyData, canViewReports: true }} />
+      </MobileNavProvider>
+    );
+
+    const link = container.querySelector('a[href="/reports"]');
+    expect(link).not.toBeNull();
+    expect(link!.textContent).toBe("Reports");
   });
 });
 

@@ -98,12 +98,36 @@ done. What's left is enumerated below.
   — those channels fan out FROM `createNotification[s]`, reading the
   same Notification table (see the writer's docstring). Also left: a
   `vercel.json` cron schedule pointing at `/api/notification-sweep`
-  (+ CRON_SECRET env in prod), an owner picker UI to drive
-  `setTaskOwner`, and per-matter notification preferences.
-- [ ] **Calendar event create — v2.** Standalone `/calendar/events/new`
-  full form with matter picker, attendees + RSVP statuses, all-day
-  toggle (already in edit), recurrence rules. Today: per-matter
-  EventComposer + the inline NewEventComposer cover the common case.
+  (+ CRON_SECRET env in prod) and per-matter notification
+  preferences. The owner picker shipped 2026-07-07: AssigneeSelect
+  (Unassigned + active users, initials chip) on the task composer +
+  edit dialog; create/update/reassign all funnel through
+  `notifyTaskAssigned` (src/lib/task-assignment.ts) with the
+  actor-exclusion rule, so assigning someone else pings them even
+  at create time (sibling task captures still self-assign —
+  silent by construction).
+- [x] **Calendar event create — v2.** Shipped 2026-07-07: standalone
+  `/calendar/events/new` full-page form (`NewEventForm`) — title /
+  type / start–end / all-day (same reseed-on-toggle as the edit
+  form), location, video URL, description, searchable MATTER picker
+  (open matters, pinned first, optional — matterless = personal
+  event), the detail modal's attendee picker (users + contacts +
+  new-contact autocomplete, extracted to
+  `components/calendar/attendee-picker.tsx` and shared by both
+  surfaces), and the visibility toggle. Submits through
+  `createCalendarEvent` (still gated `events.create`), which now
+  accepts an optional `attendees` JSON at create time — same wire
+  format + resolution/dup-email rules as the update path, creator
+  auto-added as a firm attendee unless already in the list. Toolbar
+  "New event" now navigates to the page; a secondary zap button
+  keeps the docked quick composer as the fast inline path. On
+  success the form lands on `/calendar?event=<id>` with the detail
+  modal open. Remaining: recurrence (tracked below — needs an RRULE
+  data-model decision) and real RSVP statuses.
+- [ ] **Calendar — recurring events.** Deferred from event-create
+  v2: needs an RRULE data-model decision (schema change — series
+  row vs. materialized occurrences, exception handling) before any
+  UI. Explicitly out of scope until that ADR lands.
 - [x] **Calendar — Day view.** Shipped 2026-07-07: `?view=day`
   joins week/month in the URL-driven state (`parseCalendarParams`
   / `buildCalendarHref`), with `calendarDayInTz` computing the
@@ -116,11 +140,22 @@ done. What's left is enumerated below.
   `useEventMoves` hook) — plus a dedicated deadlines section
   rendering full pills (title + matter + critical tag) instead of
   the week view's thin bars. Week-view day headers and month-view
-  day numbers now deep-link into the day. Deferred: a
-  deadlines-only filter (tracked below) and any day-view-specific
-  chip enrichment beyond what full width already unlocks.
-- [ ] **Calendar — Deadlines-only filter.** Hide events and show
-  just upcoming deadlines.
+  day numbers now deep-link into the day. Deferred: any
+  day-view-specific chip enrichment beyond what full width already
+  unlocks.
+- [x] **Calendar — Deadlines-only filter.** Shipped 2026-07-07:
+  `?show=deadlines` joins view/date in the URL state
+  (`parseCalendarParams` / `buildCalendarHref` — default `all` is
+  dropped from the URL; the toolbar's nav arrows + view switcher
+  carry the filter). Toolbar gets an "All | Deadlines" segmented
+  control matching the view switcher's idiom. Single fetch either
+  way — `filterCalendarItems` filters at render. Per-view
+  treatment: month simply omits event pills; week collapses the
+  hour grid + all-day strip into one tall per-day "due" strip of
+  deadline chips (critical-first, shared sticky header row, empty
+  state); day drops to just the full-pill "due" section with an
+  explicit empty state. Week header deep-links keep the filter
+  when drilling into a day.
 - [ ] **Google Calendar sync.** OAuth + two-way sync.
 - [x] **Time tracking — week view.** Shipped 2026-07-07: standalone
   `/time` route (sidebar "Time"), URL-driven like the calendar and
@@ -155,9 +190,9 @@ done. What's left is enumerated below.
   — Logged lane (manual entries), Captured lane (source != manual,
   with via-Email/Timer/Calendar chips), live Timer lane (read-only
   snapshot; the widget owns interaction), and a day-total progress
-  bar against the 6.0h goal (constant duplicated from dashboard.ts
-  pending a FirmSettings home). Read-only v1 — entries link to the
-  matter Time tab.
+  bar against the firm's daily goal (`Firm.dailyHoursGoal` via
+  `getFirmGoals()` — editable on /settings/firm since 2026-07-07).
+  Read-only v1 — entries link to the matter Time tab.
 - [~] **Standalone Contact UI v2.** Shipped 2026-07-07: granular
   `contacts.*` permission gates, multi-phone management UI
   (add/remove/relabel/reorder/set-primary with server-enforced
@@ -171,8 +206,21 @@ done. What's left is enumerated below.
 
 ### P2 — polish + tech debt
 
-- [ ] **Reports dashboard.** Pipeline, utilization, AR aging,
-  realization rate. Deferred to its own sprint.
+- [x] **Reports dashboard.** Shipped 2026-07-07: `/reports` gated
+  on `reports.view` (page-level guard + sidebar nav item hidden
+  without it). Four server-rendered snapshot cards, CSS bars only
+  (no charting lib): Pipeline (intake funnel by lead stage, open
+  matters by practice area × stage, leads converted this quarter —
+  updatedAt proxy), Utilization (per-active-user billable vs total
+  this month with a capacity tick from `Firm.dailyHoursGoal` ×
+  business days, firm MTD vs `monthlyBillableGoal` — both read
+  fresh off the Firm row), AR aging (client invoices sent/partial
+  in 0–30/31–60/61–90/90+ buckets, Decimal-safe sums, top-5 oldest
+  with matter links), Realization (trailing 3 months worked →
+  billed → collected, cash-basis). Queries in
+  `src/lib/queries/reports.ts` (+integration tests), viewer-tz
+  month/quarter windows. Follow-ups: date-range picker, CSV
+  export, per-user drill-down.
 - [x] **Date format sweep.** Complete 2026-07-07 across the whole
   app (communication/intake surfaces included): every display
   callsite funnels through `formatDate`/`formatRelative` variants;
@@ -185,9 +233,15 @@ done. What's left is enumerated below.
   sweep: date-only strings parse to local midnight server-side and
   render without TZ override, so "March 15" stays March 15
   regardless of viewer/server zones.
-- [ ] **Hardcoded magic numbers in dashboard.** `pulse.billableGoal
-  = 200`, `hoursGoal = 6.0` in `src/lib/queries/dashboard.ts`.
-  Should come from FirmSettings or UserSettings.
+- [x] **Hardcoded magic numbers in dashboard.** Shipped 2026-07-07:
+  `Firm.dailyHoursGoal` (default 6.0) + `Firm.monthlyBillableGoal`
+  (default 200) replace the constants — dashboard KPIs + firm pulse
+  read them via `getFirmGoals()` (src/lib/firm.ts), the /time day
+  view gets the goal from its page (the duplicated
+  `DAILY_HOURS_GOAL` constant is gone), and both are editable on
+  /settings/firm (Goals section, gated `firm.edit_info`; validated
+  positive, one decimal, ≤24 daily / ≤744 monthly). Possible future
+  refinement: per-USER overrides of the daily target.
 - [ ] **`/matters/[id]/intake/[id]/time` is a placeholder.** Doesn't
   render anything meaningful. Either build it or remove the route.
 - [ ] **Status / priority / role values are scattered string

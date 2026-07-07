@@ -5,7 +5,8 @@
  * admins; non-admins see the read-only view instead. Fields are
  * grouped: Identity (name, short name, established, EIN, website,
  * logo) → Contact (phone, email) → Address (lines, city, state,
- * zip, country).
+ * zip, country) → Goals (daily hours + monthly billable targets,
+ * which drive the dashboard KPIs and the /time day-view goal line).
  *
  * Saved-state UX: the action toggles status="ok" on success; we
  * surface a brief "Saved" pill that fades after a few seconds (no
@@ -22,10 +23,16 @@ import {
   firmInitialState,
   type FirmFormState,
 } from "@/lib/firm-form";
-import type { FirmProfile } from "@/lib/firm";
+import type { FirmGoals, FirmProfile } from "@/lib/firm";
 import { formatDate } from "@/lib/format-date";
 
-export function FirmEditForm({ firm }: { firm: FirmProfile }) {
+export function FirmEditForm({
+  firm,
+  goals,
+}: {
+  firm: FirmProfile;
+  goals: FirmGoals;
+}) {
   const [state, formAction, isPending] = useActionState<
     FirmFormState,
     FormData
@@ -167,6 +174,46 @@ export function FirmEditForm({ firm }: { firm: FirmProfile }) {
             required
             defaultValue={firm.country}
             className={inputClass(!!errs.country)}
+          />
+        </Field>
+      </div>
+
+      <SectionHeader label="Goals" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Field
+          label="Daily hours goal"
+          name="dailyHoursGoal"
+          required
+          error={errs.dailyHoursGoal?.[0]}
+          hint="Per-person daily target — dashboard “Hours today” KPI and the Time day view."
+        >
+          <input
+            name="dailyHoursGoal"
+            type="number"
+            required
+            min={0.1}
+            max={24}
+            step={0.1}
+            defaultValue={goals.dailyHoursGoal}
+            className={inputClass(!!errs.dailyHoursGoal)}
+          />
+        </Field>
+        <Field
+          label="Monthly billable goal"
+          name="monthlyBillableGoal"
+          required
+          error={errs.monthlyBillableGoal?.[0]}
+          hint="Firm-wide billable hours per month — the Firm pulse card."
+        >
+          <input
+            name="monthlyBillableGoal"
+            type="number"
+            required
+            min={0.1}
+            max={744}
+            step={0.1}
+            defaultValue={goals.monthlyBillableGoal}
+            className={inputClass(!!errs.monthlyBillableGoal)}
           />
         </Field>
       </div>

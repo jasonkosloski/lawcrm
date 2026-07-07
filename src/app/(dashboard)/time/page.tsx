@@ -38,6 +38,7 @@ import {
 } from "@/components/time-views/time-view-utils";
 import { calendarWeekInTz, dateKeyInTz } from "@/lib/format-date";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
+import { getFirmGoals } from "@/lib/firm";
 import {
   getMyDayTime,
   getMyRunningTimer,
@@ -51,9 +52,12 @@ export default async function TimePage({ searchParams }: PageProps<"/time">) {
 
   if (view === "day") {
     const dayKey = toTimeDateParam(focal);
-    const [day, timer] = await Promise.all([
+    const [day, timer, goals] = await Promise.all([
       getMyDayTime(dayKey),
       getMyRunningTimer(),
+      // Daily target for the goal line — firm setting, editable on
+      // /settings/firm (was a hardcoded constant).
+      getFirmGoals(),
     ]);
     return (
       <>
@@ -63,7 +67,12 @@ export default async function TimePage({ searchParams }: PageProps<"/time">) {
         />
         <div className="flex-1 flex flex-col min-h-0 animate-page-enter">
           <TimeToolbar view={view} focal={focal} />
-          <TimeDayView day={day} timer={timer} userTz={userTz} />
+          <TimeDayView
+            day={day}
+            timer={timer}
+            userTz={userTz}
+            dailyHoursGoal={goals.dailyHoursGoal}
+          />
         </div>
       </>
     );

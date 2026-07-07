@@ -26,15 +26,26 @@ export default async function FirmSettingsPage() {
     currentUserHasPermission("firm.edit_info"),
   ]);
 
-  // Calendar default toggles aren't on the FirmProfile shape;
-  // pull them directly so the card has the live values.
-  const calendarDefaults = await prisma.firm.findUniqueOrThrow({
+  // Calendar default toggles + goal targets aren't on the
+  // FirmProfile shape; pull them directly so the card + form have
+  // the live values.
+  const firmSettings = await prisma.firm.findUniqueOrThrow({
     where: { id: firm.id },
     select: {
       autoAddTeamToNewEvents: true,
       autoAddTeamToUpcomingEvents: true,
+      dailyHoursGoal: true,
+      monthlyBillableGoal: true,
     },
   });
+  const calendarDefaults = {
+    autoAddTeamToNewEvents: firmSettings.autoAddTeamToNewEvents,
+    autoAddTeamToUpcomingEvents: firmSettings.autoAddTeamToUpcomingEvents,
+  };
+  const goals = {
+    dailyHoursGoal: firmSettings.dailyHoursGoal,
+    monthlyBillableGoal: firmSettings.monthlyBillableGoal,
+  };
 
   // Fetch the team count + admin list for the side panel — fast,
   // single query each. Admin invariant ("at least one admin") is
@@ -66,7 +77,11 @@ export default async function FirmSettingsPage() {
             Surfaces on letterhead, invoices, and matter documents.
           </p>
         </div>
-        {canEdit ? <FirmEditForm firm={firm} /> : <FirmReadView firm={firm} />}
+        {canEdit ? (
+          <FirmEditForm firm={firm} goals={goals} />
+        ) : (
+          <FirmReadView firm={firm} goals={goals} />
+        )}
 
         <div className="mt-6">
           <FirmCalendarDefaultsCard
