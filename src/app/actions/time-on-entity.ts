@@ -20,6 +20,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { parseLocalDate } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
+import { isKnownUtbmsCode } from "@/lib/time-entry-constants";
 import type { NoteAttachmentFormState } from "@/lib/note-attachment-form";
 
 /** Trim a string to N chars, appending "…" only when actually truncated. */
@@ -54,6 +55,13 @@ const timeSchema = z.object({
     }, "Hours must be > 0 and ≤ 24"),
   activity: z.string().trim().min(1, "Activity is required").max(200),
   narrative: z.string().max(4000).optional().or(z.literal("")),
+  // Catalog-validated so junk can't reach the column that later
+  // feeds LEDES/insurer exports. Empty = "no code".
+  utbmsCode: z
+    .string()
+    .trim()
+    .refine((v) => v === "" || isKnownUtbmsCode(v), "Unknown UTBMS code")
+    .optional(),
   billable: z.literal("on").optional(),
   noCharge: z.literal("on").optional(),
   privileged: z.literal("on").optional(),
@@ -92,6 +100,7 @@ export async function addTimeEntryToTask(
       hours: Number(parsed.data.hours),
       activity: parsed.data.activity,
       narrative: parsed.data.narrative || null,
+      utbmsCode: parsed.data.utbmsCode || null,
       billable: parsed.data.billable === "on",
       noCharge: parsed.data.noCharge === "on",
       privileged: parsed.data.privileged === "on",
@@ -148,6 +157,7 @@ export async function addTimeEntryToDeadline(
       hours: Number(parsed.data.hours),
       activity: parsed.data.activity,
       narrative: parsed.data.narrative || null,
+      utbmsCode: parsed.data.utbmsCode || null,
       billable: parsed.data.billable === "on",
       noCharge: parsed.data.noCharge === "on",
       privileged: parsed.data.privileged === "on",
@@ -208,6 +218,7 @@ export async function addTimeEntryToEmailMessage(
       hours: Number(parsed.data.hours),
       activity: parsed.data.activity,
       narrative: parsed.data.narrative || null,
+      utbmsCode: parsed.data.utbmsCode || null,
       billable: parsed.data.billable === "on",
       noCharge: parsed.data.noCharge === "on",
       privileged: parsed.data.privileged === "on",
@@ -287,6 +298,7 @@ export async function addTimeEntryToMessengerItem(
       hours: Number(parsed.data.hours),
       activity: parsed.data.activity,
       narrative: parsed.data.narrative || null,
+      utbmsCode: parsed.data.utbmsCode || null,
       billable: parsed.data.billable === "on",
       noCharge: parsed.data.noCharge === "on",
       privileged: parsed.data.privileged === "on",

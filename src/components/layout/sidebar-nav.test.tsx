@@ -105,6 +105,30 @@ function renderSidebar() {
   return container.querySelector("aside")!;
 }
 
+describe("SidebarNav — Time nav item", () => {
+  test("links to the standalone /time page", () => {
+    mockViewport(true);
+    const aside = renderSidebar();
+
+    const timeLink = aside.querySelector('a[href="/time"]');
+    expect(timeLink).not.toBeNull();
+    // Label only — zero hours today means no badge noise.
+    expect(timeLink!.textContent).toBe("Time");
+  });
+
+  test("shows today's hours as the badge when > 0", () => {
+    mockViewport(true);
+    const { container } = render(
+      <MobileNavProvider>
+        <SidebarNav data={{ ...emptyData, hoursToday: 2.5 }} />
+      </MobileNavProvider>
+    );
+
+    const timeLink = container.querySelector('a[href="/time"]');
+    expect(timeLink!.textContent).toContain("2.5h");
+  });
+});
+
 describe("SidebarNav — closed drawer is inert on mobile only", () => {
   test("mobile: closed drawer is inert; opening removes it; closing restores it", async () => {
     mockViewport(false);

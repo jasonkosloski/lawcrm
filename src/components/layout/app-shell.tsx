@@ -23,7 +23,12 @@
  */
 
 import { SidebarNav } from "./sidebar-nav";
+import { TimerWidget } from "./timer-widget";
 import { getSidebarData } from "@/lib/queries/sidebar";
+import {
+  getCurrentTimerSession,
+  getTimerMatterOptions,
+} from "@/lib/queries/timer";
 import { CommandPaletteProvider } from "@/components/command-palette/command-palette-provider";
 import { MobileNavProvider } from "./mobile-nav-provider";
 
@@ -32,7 +37,17 @@ interface AppShellProps {
 }
 
 export async function AppShell({ children }: AppShellProps) {
-  const sidebarData = await getSidebarData();
+  const [sidebarData, timerSession] = await Promise.all([
+    getSidebarData(),
+    getCurrentTimerSession(),
+  ]);
+  // The matter list only feeds the running timer's re-point panel +
+  // stop composer, so the idle state (the overwhelming majority of
+  // page renders) skips the query entirely. Right after an
+  // optimistic start the list is briefly empty until the layout
+  // revalidation lands — acceptable: the matter is only REQUIRED at
+  // stop time.
+  const timerMatterOptions = timerSession ? await getTimerMatterOptions() : [];
 
   return (
     <CommandPaletteProvider>
@@ -42,6 +57,11 @@ export async function AppShell({ children }: AppShellProps) {
           <main className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
             {children}
           </main>
+          {/* Floating bottom-right timer — on every authenticated page. */}
+          <TimerWidget
+            session={timerSession}
+            matterOptions={timerMatterOptions}
+          />
         </div>
       </MobileNavProvider>
     </CommandPaletteProvider>

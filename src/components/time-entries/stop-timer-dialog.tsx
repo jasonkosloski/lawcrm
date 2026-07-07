@@ -1,11 +1,18 @@
 /**
- * Log Time on Task / Deadline dialog.
+ * Stop Timer dialog — the composer the floating timer widget opens
+ * on Stop.
  *
- * Same fields as the time composers elsewhere — date, duration
- * (decimal hours or start–end pair), activity, narrative, UTBMS
- * code, billing flags. The action prop binds the parent (taskId or
- * deadlineId) so the same dialog handles both cases. Auto-closes on
- * successful save.
+ * Prefilled from the running TimerSession: elapsed hours (already
+ * rounded UP to the billing increment by the widget — the
+ * timer-elapsed duration mode), activity, and matter when the
+ * session has one. The matter is REQUIRED here even though the
+ * session's is nullable — a TimeEntry can't exist without one, so
+ * Save stays disabled until a matter is picked and the server
+ * (`stopTimer`) enforces it again.
+ *
+ * On success the server deletes the TimerSession in the same
+ * transaction that writes the entry (source: "timer"); this dialog
+ * just closes and tells the widget via onStopped.
  */
 
 "use client";
@@ -32,73 +39,76 @@ import {
   UtbmsCodeSelect,
 } from "@/components/time-entries/time-entry-fields";
 import { todayDateString } from "@/lib/note-constants";
-import {
-  noteAttachmentInitialState,
-  type NoteAttachmentFormState,
-} from "@/lib/note-attachment-form";
+import { stopTimer } from "@/app/actions/timer";
+import { timeEntryInitialState } from "@/lib/time-entry-constants";
+import type { TimerMatterOption } from "@/lib/queries/timer";
+import { cn } from "@/lib/utils";
 
-export function LogTimeOnEntityDialog({
+export function StopTimerDialog({
   open,
   onOpenChange,
-  action,
-  parentLabel,
-  parentKind,
+  onStopped,
+  matterOptions,
+  initialMatterId,
+  initialActivity,
+  initialHours,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Pre-bound server action — `addTimeEntryToTask.bind(null, id)` or
-   *  `addTimeEntryToDeadline.bind(null, id)` from the call site. */
-  action: (
-    prev: NoteAttachmentFormState,
-    formData: FormData
-  ) => Promise<NoteAttachmentFormState>;
-  /** What the time is being logged against, shown in the dialog
-   *  description so context is obvious. */
-  parentLabel: string;
-  parentKind: "task" | "deadline" | "email" | "message" | "call" | "voicemail";
+  /** Fired after a successful stop so the widget can drop its
+   *  optimistic session immediately (revalidation follows). */
+  onStopped: () => void;
+  matterOptions: TimerMatterOption[];
+  initialMatterId: string | null;
+  initialActivity: string | null;
+  /** Elapsed hours rounded UP to the billing increment — the
+   *  "timer-elapsed" duration mode prefill. Editable like any
+   *  hours value. */
+  initialHours: number;
 }) {
   // Wrapped useActionState: masks state left over from a previous
   // open, so a failed attempt's errors don't reappear when the
   // dialog is reopened. See src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    NoteAttachmentFormState,
-    FormData
-  >(action, noteAttachmentInitialState, open);
+  const [state, formAction, isPending] = useDialogActionState(
+    stopTimer,
+    timeEntryInitialState,
+    open
+  );
 
+  const [matterId, setMatterId] = useState(initialMatterId ?? "");
   const [date, setDate] = useState(todayDateString());
-  const [hours, setHours] = useState("");
-  const [activity, setActivity] = useState("");
+  const [hours, setHours] = useState(String(initialHours));
+  const [activity, setActivity] = useState(initialActivity ?? "");
   const [narrative, setNarrative] = useState("");
   const [utbmsCode, setUtbmsCode] = useState("");
   const [billable, setBillable] = useState(true);
   const [noCharge, setNoCharge] = useState(false);
   const [privileged, setPrivileged] = useState(false);
 
-  // Reset on open so each invocation starts fresh.
+  // Re-prefill on every open — elapsed keeps growing between opens,
+  // so the hours snapshot from mount time would go stale.
   useEffect(() => {
     if (!open) return;
+    setMatterId(initialMatterId ?? "");
     setDate(todayDateString());
-    setHours("");
-    setActivity("");
+    setHours(String(initialHours));
+    setActivity(initialActivity ?? "");
     setNarrative("");
     setUtbmsCode("");
     setBillable(true);
     setNoCharge(false);
     setPrivileged(false);
-  }, [open]);
+  }, [open, initialMatterId, initialActivity, initialHours]);
 
-  // Auto-close on successful save. Deps must be the state OBJECT, not
-  // `state.status`: useActionState keeps its state across submissions,
-  // and this component stays mounted between opens (dashboard/task rows
-  // keep it rendered), so after the first success the status string is
-  // "ok" forever — keyed on the string, a second log's fresh state
-  // object compares equal and the effect never re-fires, leaving the
-  // dialog silently open with a cleared form and inviting a duplicate
-  // entry. Object identity is the reliable "a submission just finished"
-  // signal (same fix as EditTaskDialog / RecordPaymentDialog).
+  // Close on success — keyed on the state OBJECT, not state.status
+  // (useActionState keeps state across submissions; see the identical
+  // comment in LogTimeOnEntityDialog).
   useEffect(() => {
-    if (state.status === "ok") onOpenChange(false);
-  }, [state, onOpenChange]);
+    if (state.status === "ok") {
+      onStopped();
+      onOpenChange(false);
+    }
+  }, [state, onStopped, onOpenChange]);
 
   const errs = state.errors ?? {};
 
@@ -106,15 +116,39 @@ export function LogTimeOnEntityDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            Log time on {parentKind}
-          </DialogTitle>
-          <DialogDescription className="truncate">
-            {parentLabel}
+          <DialogTitle>Stop timer &amp; log time</DialogTitle>
+          <DialogDescription>
+            Review the captured time — elapsed is rounded up to the
+            billing increment.
           </DialogDescription>
         </DialogHeader>
 
         <form action={formAction} className="flex flex-col gap-3">
+          <div className="flex flex-col gap-0.5">
+            <select
+              name="matterId"
+              value={matterId}
+              onChange={(e) => setMatterId(e.target.value)}
+              aria-label="Matter"
+              className={cn(
+                "h-8 px-2 rounded-md border bg-white text-xs",
+                matterId ? "text-ink" : "text-ink-4",
+                "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
+                errs.matterId ? "border-warn" : "border-line"
+              )}
+            >
+              <option value="">Select matter (required)</option>
+              {matterOptions.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+            {errs.matterId && (
+              <div className="text-2xs text-warn">{errs.matterId[0]}</div>
+            )}
+          </div>
+
           <div className="grid grid-cols-[auto_1fr] gap-2 items-start">
             <DateField
               name="date"
@@ -190,11 +224,13 @@ export function LogTimeOnEntityDialog({
               variant="ghost"
               onClick={() => onOpenChange(false)}
             >
-              Cancel
+              Keep running
             </Button>
             <Button
               type="submit"
-              disabled={isPending || !hours.trim() || !activity.trim()}
+              disabled={
+                isPending || !matterId || !hours.trim() || !activity.trim()
+              }
             >
               {isPending ? "Logging…" : "Log time"}
             </Button>

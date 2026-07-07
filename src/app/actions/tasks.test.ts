@@ -9,6 +9,8 @@
  *   - activity log fans out only on completed-state transitions
  *   - deleteTask removes the row + revalidates
  *   - updateTask zod validation, dueDate parsing, status transition
+ *   - setTaskOwner reassignment + the "task_assigned" notification
+ *     (fires for the new owner, skipped on self-assign / no-op)
  *
  * Auth + permission gates are stubbed; we already cover the gate
  * itself in `permission-check.integration.test.ts`. (No
@@ -33,6 +35,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import {
   deleteTask,
+  setTaskOwner,
   setTaskStatus,
   updateTask,
 } from "@/app/actions/tasks";
@@ -47,6 +50,7 @@ import {
 
 const mockedGetUser = vi.mocked(getCurrentUserId);
 
+let firmId: string;
 let userId: string;
 let matterId: string;
 
@@ -56,7 +60,8 @@ beforeAll(() => {
 
 beforeEach(async () => {
   await resetDb();
-  const { firmId } = await seedFirm();
+  const f = await seedFirm();
+  firmId = f.firmId;
   const u = await seedUser({ firmId });
   userId = u.userId;
   mockedGetUser.mockResolvedValue(userId);
@@ -78,6 +83,7 @@ const seedTask = async (overrides?: {
   status?: string;
   title?: string;
   completedAt?: Date | null;
+  ownerId?: string | null;
 }) => {
   const t = await prisma.task.create({
     data: {
@@ -85,6 +91,7 @@ const seedTask = async (overrides?: {
       title: overrides?.title ?? "Draft motion",
       status: overrides?.status ?? "open",
       completedAt: overrides?.completedAt ?? null,
+      ownerId: overrides?.ownerId ?? null,
     },
     select: { id: true },
   });
@@ -192,6 +199,87 @@ describe("setTaskStatus — activity log fan-out", () => {
     await setTaskStatus(id, "cancelled");
     const logs = await prisma.activityLog.findMany({ where: { matterId } });
     expect(logs).toHaveLength(0);
+  });
+});
+
+describe("setTaskOwner — assignment + notification", () => {
+  test("assigns the owner and notifies them with a task_assigned row", async () => {
+    const assignee = await seedUser({ firmId, email: "assignee@example.com" });
+    const id = await seedTask({ title: "Depose Officer Reyes" });
+
+    const res = await setTaskOwner(id, assignee.userId);
+    expect(res.ok).toBe(true);
+
+    const row = await prisma.task.findUnique({ where: { id } });
+    expect(row!.ownerId).toBe(assignee.userId);
+
+    const notes = await prisma.notification.findMany({
+      where: { userId: assignee.userId },
+    });
+    expect(notes).toHaveLength(1);
+    expect(notes[0]!.type).toBe("task_assigned");
+    expect(notes[0]!.title).toContain("Depose Officer Reyes");
+    expect(notes[0]!.link).toBe(`/matters/${matterId}/tasks`);
+    expect(notes[0]!.matterId).toBe(matterId);
+  });
+
+  test("self-assignment does NOT notify (actor exclusion)", async () => {
+    const id = await seedTask();
+    const res = await setTaskOwner(id, userId); // actor is `userId`
+    expect(res.ok).toBe(true);
+
+    const row = await prisma.task.findUnique({ where: { id } });
+    expect(row!.ownerId).toBe(userId);
+    expect(await prisma.notification.count()).toBe(0);
+  });
+
+  test("no-op reassignment to the same owner doesn't re-notify", async () => {
+    const assignee = await seedUser({ firmId, email: "again@example.com" });
+    const id = await seedTask({ ownerId: assignee.userId });
+
+    const res = await setTaskOwner(id, assignee.userId);
+    expect(res.ok).toBe(true);
+    expect(await prisma.notification.count()).toBe(0);
+  });
+
+  test("clearing the owner works and never notifies", async () => {
+    const assignee = await seedUser({ firmId, email: "cleared@example.com" });
+    const id = await seedTask({ ownerId: assignee.userId });
+
+    const res = await setTaskOwner(id, null);
+    expect(res.ok).toBe(true);
+    const row = await prisma.task.findUnique({ where: { id } });
+    expect(row!.ownerId).toBeNull();
+    expect(await prisma.notification.count()).toBe(0);
+  });
+
+  test("firm-wide task (matterId=null) notifies with a dashboard link", async () => {
+    const assignee = await seedUser({ firmId, email: "firmwide@example.com" });
+    const id = await seedTask({ matterId: null });
+
+    await setTaskOwner(id, assignee.userId);
+    const note = await prisma.notification.findFirst({
+      where: { userId: assignee.userId },
+    });
+    expect(note!.link).toBe("/");
+    expect(note!.matterId).toBeNull();
+    expect(note!.body).toMatch(/firm-wide/i);
+  });
+
+  test("rejects unknown task / unknown or inactive assignee", async () => {
+    expect((await setTaskOwner("missing", userId)).ok).toBe(false);
+
+    const id = await seedTask();
+    expect((await setTaskOwner(id, "no-such-user")).ok).toBe(false);
+
+    const inactive = await seedUser({
+      firmId,
+      email: "inactive@example.com",
+      isActive: false,
+    });
+    const res = await setTaskOwner(id, inactive.userId);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/inactive|not found/i);
   });
 });
 
@@ -374,5 +462,12 @@ describe("tasks action gate", () => {
     const id = await seedTask();
     await deleteTask(id);
     expect(mockedRequirePermission).toHaveBeenCalledWith("tasks.delete");
+  });
+
+  test("setTaskOwner gates on tasks.edit", async () => {
+    mockedRequirePermission.mockClear();
+    const id = await seedTask();
+    await setTaskOwner(id, null);
+    expect(mockedRequirePermission).toHaveBeenCalledWith("tasks.edit");
   });
 });

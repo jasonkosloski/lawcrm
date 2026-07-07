@@ -232,3 +232,24 @@ Clicking a different column resets to that column's first-click (ascending).
 - (+) Correct on a UTC production host AND on local dev (any zone), since parse/format use the same frame
 - (-) Date-only values are still `DateTime` columns; a true `DATE` column type would express intent better (revisit with a migration)
 - (-) A user whose TZ differs from the *server's* still sees date-only values on the server's day grid — acceptable because the value has no instant semantics; the day label always matches what was typed
+
+---
+
+## ADR-013: Timer sessions are pre-entries — ungated to run, gated to log
+
+**Date:** 2026-07-07
+**Status:** Accepted
+
+**Context:** The floating timer widget (P1) needed server actions for start / update / discard / stop. Project convention says every gated capability gets a granular permission key — so the question was which of these are actually "capabilities."
+
+**Decision:**
+- A `TimerSession` is **private per-user scratch state**, not a billing record: it stores `startedAt` + optional matter/activity and nothing a client is ever billed for. `startTimer` / `updateTimer` / `discardTimer` therefore carry **no permission key** — gating them would only stop a user from watching their own clock.
+- `stopTimer` — the one path that writes a `TimeEntry` (`source: "timer"`) — gates on the existing **`time_entries.create`**, same key as every other entry-creating action (`time-entries.ts`, `captures.ts`, `time-on-entity.ts`, `note-attachments.ts`). Denying that single key still closes ALL time-logging entry points, timer included.
+- Stop is transactional: TimeEntry create + TimerSession delete in one `$transaction`, so a crash can't both log the time and leave the clock running (double billing on retry). A stop from a stale dialog (session already discarded/stopped in another tab) errors instead of silently double-logging.
+- **Rounding convention:** timer-elapsed prefill rounds **UP** to `TIME_ENTRY_INCREMENT_HOURS = 0.25` (quarter-hour — the increment the schema already documents on `TimeEntry.hours`), minimum one increment. The value is a prefill, editable before save; the server re-validates only the normal 0–24h bounds.
+- Elapsed is **never stored** — computed from `startedAt` at read time (widget ticks client-side; no polling).
+
+**Trade-offs:**
+- (+) One permission key governs all time-entry creation; no new keys to administer
+- (+) Timer state can't leak billing data to under-privileged users (there is none to leak)
+- (-) A user without `time_entries.create` can run a timer they can never stop-and-log (only discard) — acceptable: the widget is still honest about elapsed time, and granting the key later converts the running session losslessly

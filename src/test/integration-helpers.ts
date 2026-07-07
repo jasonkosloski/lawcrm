@@ -65,6 +65,8 @@ const TABLES_IN_DELETE_ORDER = [
   "matter_team_members",
   "matter_contacts",
   "user_matter_pins",
+  // Timer scratch rows reference user + matter; drop before both.
+  "timer_sessions",
   "matters",
   // Lookups + lifecycle
   "leads",

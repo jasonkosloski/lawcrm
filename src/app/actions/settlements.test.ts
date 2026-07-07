@@ -9,6 +9,10 @@
  *     disbursed/closed.
  *   - addSettlementLien / updateSettlementLien refuse on
  *     disbursed/closed settlements.
+ *   - setApprovalStepStatus notification fan-out: approvals ping
+ *     the matter's active team (minus the actor) with the next
+ *     pending step; rejections ping the matter lead(s); repeats
+ *     and resets stay silent.
  *
  * Auth + permission gates are module-mocked so the tests focus
  * on the action's business logic. Permission semantics are
@@ -45,6 +49,7 @@ import {
 
 const mockedGetUser = vi.mocked(getCurrentUserId);
 
+let firmId: string;
 let userId: string;
 let matterId: string;
 
@@ -54,7 +59,8 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await resetDb();
-  const { firmId } = await seedFirm();
+  const f = await seedFirm();
+  firmId = f.firmId;
   const u = await seedUser({ firmId, name: "Test Attorney" });
   userId = u.userId;
   mockedGetUser.mockResolvedValue(userId);
@@ -247,6 +253,119 @@ describe("setApprovalStepStatus — chain transitions", () => {
     expect(row!.status).toBe("pending");
     expect(row!.approverId).toBeNull();
     expect(row!.approvedAt).toBeNull();
+  });
+});
+
+describe("setApprovalStepStatus — notification fan-out", () => {
+  let coCounselId: string;
+  let otherLeadId: string;
+
+  beforeEach(async () => {
+    // Roster: actor (lead, seeded by seedMatter), a co-counsel, a
+    // second lead, and a removed member who must never be pinged.
+    const cc = await seedUser({ firmId, email: "cc@example.com" });
+    coCounselId = cc.userId;
+    const lead2 = await seedUser({ firmId, email: "lead2@example.com" });
+    otherLeadId = lead2.userId;
+    const gone = await seedUser({ firmId, email: "gone@example.com" });
+    await prisma.matterTeamMember.createMany({
+      data: [
+        { matterId, userId: coCounselId, role: "co_counsel" },
+        { matterId, userId: otherLeadId, role: "lead" },
+        {
+          matterId,
+          userId: gone.userId,
+          role: "paralegal",
+          removedAt: new Date(),
+        },
+      ],
+    });
+    await upsertSettlement(
+      matterId,
+      settlementInitialState,
+      buildUpsertForm({ gross: "100000" })
+    );
+  });
+
+  const approvalsInOrder = () =>
+    prisma.settlementApproval.findMany({
+      where: { settlement: { matterId } },
+      orderBy: { step: "asc" },
+    });
+
+  test("approving a step notifies the active team (minus actor) with the next step", async () => {
+    const approvals = await approvalsInOrder();
+    await setApprovalStepStatus(approvals[0]!.id, "approved");
+
+    const rows = await prisma.notification.findMany({
+      where: { type: "settlement_step_approved" },
+    });
+    // Co-counsel + the other lead — not the actor, not the removed member.
+    expect(new Set(rows.map((r) => r.userId))).toEqual(
+      new Set([coCounselId, otherLeadId])
+    );
+    expect(rows[0]!.title).toContain(approvals[0]!.label);
+    // Whose turn it is next: step 2's label.
+    expect(rows[0]!.body).toContain(approvals[1]!.label);
+    expect(rows[0]!.link).toBe(`/matters/${matterId}/billing`);
+    expect(rows[0]!.matterId).toBe(matterId);
+  });
+
+  test("approving the FINAL step says the chain is complete", async () => {
+    const approvals = await approvalsInOrder();
+    for (const a of approvals) {
+      await setApprovalStepStatus(a.id, "approved");
+    }
+    const rows = await prisma.notification.findMany({
+      where: {
+        type: "settlement_step_approved",
+        title: { contains: approvals[3]!.label },
+      },
+    });
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows[0]!.body).toMatch(/all steps approved/i);
+  });
+
+  test("rejection notifies the OTHER matter lead(s), not the whole team", async () => {
+    const approvals = await approvalsInOrder();
+    await setApprovalStepStatus(approvals[2]!.id, "rejected", "Numbers off");
+
+    const rows = await prisma.notification.findMany({
+      where: { type: "settlement_step_rejected" },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.userId).toBe(otherLeadId); // actor-lead excluded
+    expect(rows[0]!.title).toContain(approvals[2]!.label);
+    expect(rows[0]!.body).toContain("Numbers off");
+  });
+
+  test("rejection by the only lead notifies nobody (actor exclusion)", async () => {
+    // Drop the second lead so the actor is the only one.
+    await prisma.matterTeamMember.updateMany({
+      where: { matterId, userId: otherLeadId },
+      data: { removedAt: new Date() },
+    });
+    const approvals = await approvalsInOrder();
+    await setApprovalStepStatus(approvals[0]!.id, "rejected");
+    expect(
+      await prisma.notification.count({
+        where: { type: "settlement_step_rejected" },
+      })
+    ).toBe(0);
+  });
+
+  test("re-applying the same status doesn't re-notify; reset to pending is silent", async () => {
+    const approvals = await approvalsInOrder();
+    await setApprovalStepStatus(approvals[0]!.id, "approved");
+    const afterFirst = await prisma.notification.count();
+
+    // Same status again — no transition, no new pings.
+    await setApprovalStepStatus(approvals[0]!.id, "approved");
+    expect(await prisma.notification.count()).toBe(afterFirst);
+
+    // Reset to pending — housekeeping, still silent.
+    await setApprovalStepStatus(approvals[0]!.id, "pending");
+    expect(await prisma.notification.count()).toBe(afterFirst);
   });
 });
 

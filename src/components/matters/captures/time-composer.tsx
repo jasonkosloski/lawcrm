@@ -1,5 +1,12 @@
 /**
  * Time Composer — primary-time-entry form at the top of the Time tab.
+ *
+ * v2 fields: duration modes (decimal hours or start–end pair via
+ * DurationFields), client-facing narrative, UTBMS code picker, and
+ * the billable / no-charge / privileged toggles. Everything posts
+ * through `createTimeEntryWithCaptures` — the range mode computes a
+ * plain `hours` value client-side so the action schema is unchanged
+ * in shape (utbmsCode is the only new field).
  */
 
 "use client";
@@ -21,6 +28,10 @@ import {
   TextField,
   TextareaField,
 } from "./primary-fields";
+import {
+  DurationFields,
+  UtbmsCodeSelect,
+} from "@/components/time-entries/time-entry-fields";
 
 export function TimeComposer({ matterId }: { matterId: string }) {
   const [expanded, setExpanded] = useState(false);
@@ -39,6 +50,7 @@ export function TimeComposer({ matterId }: { matterId: string }) {
   const [hours, setHours] = useState("");
   const [activity, setActivity] = useState("");
   const [narrative, setNarrative] = useState("");
+  const [utbmsCode, setUtbmsCode] = useState("");
   const [billable, setBillable] = useState(true);
   const [noCharge, setNoCharge] = useState(false);
   const [privileged, setPrivileged] = useState(false);
@@ -48,6 +60,7 @@ export function TimeComposer({ matterId }: { matterId: string }) {
     setHours("");
     setActivity("");
     setNarrative("");
+    setUtbmsCode("");
     setBillable(true);
     setNoCharge(false);
     setPrivileged(false);
@@ -98,13 +111,10 @@ export function TimeComposer({ matterId }: { matterId: string }) {
             onChange={setDate}
             error={errs.date?.[0]}
           />
-          <TextField
-            name="hours"
-            value={hours}
-            onChange={setHours}
-            placeholder="Hrs"
+          <DurationFields
+            hours={hours}
+            onHoursChange={setHours}
             error={errs.hours?.[0]}
-            className="w-20 font-mono"
             autoFocus
           />
           <TextField
@@ -125,7 +135,13 @@ export function TimeComposer({ matterId }: { matterId: string }) {
           error={errs.narrative?.[0]}
         />
 
-        <div className="flex items-center gap-3 text-2xs text-ink-2">
+        <div className="flex flex-wrap items-center gap-3 text-2xs text-ink-2">
+          <UtbmsCodeSelect
+            value={utbmsCode}
+            onChange={setUtbmsCode}
+            error={errs.utbmsCode?.[0]}
+            className="max-w-64"
+          />
           <label className="flex items-center gap-1 cursor-pointer select-none">
             <input
               type="checkbox"

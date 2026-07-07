@@ -30,6 +30,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { logActivity } from "@/lib/activity-log";
+import { createNotifications } from "@/lib/notifications";
 import { requirePermission } from "@/lib/permission-check";
 import type { SettlementFormState } from "@/lib/settlement-constants";
 
@@ -447,6 +448,69 @@ export async function setApprovalStepStatus(
     title: `Settlement step ${approval.step} (${approval.label}) → ${status}`,
     detail: notes ?? undefined,
   });
+
+  // ── Notification fan-out ──────────────────────────────────────────
+  // Only on a REAL transition (re-clicking the same status is a
+  // no-op ping-wise), and only for approve/reject — resets to
+  // "pending" are housekeeping, not news. The approval chain has no
+  // per-step assignee (approverId is a who-approved snapshot, not a
+  // who's-next assignment), so "the next approver" is addressed as
+  // the matter's active team: whoever holds
+  // `matters.settlement.approve` sees it in their bell.
+  if (approval.status !== status && status !== "pending") {
+    const matterId = approval.settlement.matterId;
+    const [matter, team] = await Promise.all([
+      prisma.matter.findUnique({
+        where: { id: matterId },
+        select: { name: true },
+      }),
+      prisma.matterTeamMember.findMany({
+        where: { matterId, removedAt: null },
+        select: { userId: true, role: true },
+      }),
+    ]);
+    const link = `/matters/${matterId}/billing`;
+
+    if (status === "approved") {
+      // Next pending step (post-update read, so the just-approved
+      // step is already excluded) — its label tells the team whose
+      // turn it is. No pending step left = the chain is complete.
+      const nextStep = await prisma.settlementApproval.findFirst({
+        where: { settlementId: approval.settlement.id, status: "pending" },
+        orderBy: { step: "asc" },
+        select: { step: true, label: true },
+      });
+      const recipients = team
+        .map((t) => t.userId)
+        .filter((id) => id !== actorId);
+      await createNotifications(recipients, {
+        type: "settlement_step_approved",
+        title: `Settlement step approved: ${approval.label}`,
+        body: nextStep
+          ? `${matter?.name ?? "Matter"} · next up: step ${nextStep.step} — ${nextStep.label}`
+          : `${matter?.name ?? "Matter"} · all steps approved — settlement ready to disburse`,
+        link,
+        matterId,
+      });
+    } else {
+      // Rejection goes to the matter lead(s) — the settlement's
+      // initiator isn't recorded on the row, and the lead owns
+      // unblocking the chain either way.
+      const recipients = team
+        .filter((t) => t.role === "lead")
+        .map((t) => t.userId)
+        .filter((id) => id !== actorId);
+      await createNotifications(recipients, {
+        type: "settlement_step_rejected",
+        title: `Settlement step rejected: ${approval.label}`,
+        body: notes?.trim()
+          ? `${matter?.name ?? "Matter"} · ${notes.trim()}`
+          : `${matter?.name ?? "Matter"} · step ${approval.step} of the approval chain`,
+        link,
+        matterId,
+      });
+    }
+  }
 
   revalidatePath(`/matters/${approval.settlement.matterId}/billing`);
   revalidatePath(`/matters/${approval.settlement.matterId}/timeline`);

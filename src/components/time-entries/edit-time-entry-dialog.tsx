@@ -26,6 +26,10 @@ import {
   TextareaField,
 } from "@/components/matters/captures/primary-fields";
 import {
+  DurationFields,
+  UtbmsCodeSelect,
+} from "@/components/time-entries/time-entry-fields";
+import {
   TIME_ENTRY_STATUSES,
   type TimeEntryStatus,
 } from "@/lib/note-constants";
@@ -41,6 +45,7 @@ export type EditableTimeEntry = {
   hours: number;
   activity: string;
   narrative: string | null;
+  utbmsCode: string | null;
   billable: boolean;
   noCharge: boolean;
   privileged: boolean;
@@ -94,6 +99,7 @@ export function EditTimeEntryDialog({
   const [hours, setHours] = useState(entry.hours.toString());
   const [activity, setActivity] = useState(entry.activity);
   const [narrative, setNarrative] = useState(entry.narrative ?? "");
+  const [utbmsCode, setUtbmsCode] = useState(entry.utbmsCode ?? "");
   const [billable, setBillable] = useState(entry.billable);
   const [noCharge, setNoCharge] = useState(entry.noCharge);
   const [privileged, setPrivileged] = useState(entry.privileged);
@@ -105,6 +111,7 @@ export function EditTimeEntryDialog({
       setHours(entry.hours.toString());
       setActivity(entry.activity);
       setNarrative(entry.narrative ?? "");
+      setUtbmsCode(entry.utbmsCode ?? "");
       setBillable(entry.billable);
       setNoCharge(entry.noCharge);
       setPrivileged(entry.privileged);
@@ -125,7 +132,7 @@ export function EditTimeEntryDialog({
         </DialogHeader>
 
         <form action={formAction} className="flex flex-col gap-3">
-          <div className="grid grid-cols-[1fr_auto] gap-2">
+          <div className="grid grid-cols-[auto_1fr] gap-2 items-start">
             <DateField
               name="date"
               value={date}
@@ -133,13 +140,10 @@ export function EditTimeEntryDialog({
               placeholder="Date"
               error={errs.date?.[0]}
             />
-            <TextField
-              name="hours"
-              value={hours}
-              onChange={setHours}
-              placeholder="Hours"
+            <DurationFields
+              hours={hours}
+              onHoursChange={setHours}
               error={errs.hours?.[0]}
-              className="w-24"
             />
           </div>
 
@@ -158,6 +162,12 @@ export function EditTimeEntryDialog({
             placeholder="Detailed narrative for the client (optional)"
             rows={3}
             error={errs.narrative?.[0]}
+          />
+
+          <UtbmsCodeSelect
+            value={utbmsCode}
+            onChange={setUtbmsCode}
+            error={errs.utbmsCode?.[0]}
           />
 
           <SelectField

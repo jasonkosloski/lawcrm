@@ -63,12 +63,15 @@ done. What's left is enumerated below.
 - [ ] **Search results page + global text search.** ⌘K palette
   covers narrow lookups. No results page, no save-search, no
   within-list keyword search beyond the matter list filters.
-- [~] **Notifications — finish out.** v1 shipped (Notification model,
-  bell + popover, mark-read, fan-out helpers, triggers for team-add
-  and invoice-payment). Still left: deadline-approaching cron,
-  task-assigned trigger (TaskOwner edits), settlement-step approver
-  fan-out, email/SMS/push delivery channels, `/notifications` full
-  feed page.
+- [~] **Notifications — delivery channels.** In-app surface is done
+  (see the shipped "v1" + "v2" entries: bell, feed page, deadline
+  sweep + cron endpoint, task-assigned / settlement-step / team-add /
+  invoice-payment triggers). Still left: email / SMS / push delivery
+  — those channels fan out FROM `createNotification[s]`, reading the
+  same Notification table (see the writer's docstring). Also left: a
+  `vercel.json` cron schedule pointing at `/api/notification-sweep`
+  (+ CRON_SECRET env in prod), an owner picker UI to drive
+  `setTaskOwner`, and per-matter notification preferences.
 - [ ] **Calendar event create — v2.** Standalone `/calendar/events/new`
   full form with matter picker, attendees + RSVP statuses, all-day
   toggle (already in edit), recurrence rules. Today: per-matter
@@ -78,14 +81,42 @@ done. What's left is enumerated below.
 - [ ] **Calendar — Deadlines-only filter.** Hide events and show
   just upcoming deadlines.
 - [ ] **Google Calendar sync.** OAuth + two-way sync.
-- [ ] **Time tracking — week view.** Hour bars per matter, running
-  totals.
-- [ ] **Time entry modal — UTBMS codes, narrative, billing toggles,
-  duration modes.**
-- [ ] **Timer widget.** Floating bottom-right, start/stop, auto-
-  capture from activity.
-- [ ] **Time reconciliation.** Day view with logged/captured/timer
-  lanes.
+- [x] **Time tracking — week view.** Shipped 2026-07-07: standalone
+  `/time` route (sidebar "Time"), URL-driven like the calendar and
+  timezone-correct via the user-tz date-key pattern. One row per
+  day, horizontal hour bars segmented per matter in matter color
+  (billable solid, non-billable dimmed), day + week running totals,
+  matter legend. Current-user only; an admin/manager user picker is
+  a future extension with its own permission key.
+- [x] **Time entry modal — UTBMS codes, narrative, billing toggles,
+  duration modes.** Shipped 2026-07-07: every time composer (Time-tab
+  TimeComposer, log-time-on-entity dialog, edit dialog, stop-timer
+  dialog) shares `DurationFields` (decimal hours OR start–end pair
+  computed client-side into the same `hours` field) and
+  `UtbmsCodeSelect` (A100 activity + L100 litigation task catalogs in
+  `src/lib/time-entry-constants.ts`, server-validated everywhere the
+  column is written). Narrative + billable/no-charge/privileged were
+  already in; the Time-tab rows render the UTBMS chip (label on
+  hover) and a "Timer" provenance marker.
+- [x] **Timer widget.** Shipped 2026-07-07: floating bottom-right
+  pill in AppShell (every page). Idle = minimal "Timer" start
+  affordance; running = client-side ticking elapsed (computed from
+  `TimerSession.startedAt`, no polling), matter name, mid-run
+  matter/activity re-point panel, two-step discard, and Stop → the
+  prefilled StopTimerDialog (elapsed rounded UP to the quarter-hour
+  `TIME_ENTRY_INCREMENT_HOURS`, minimum one increment; matter
+  REQUIRED; `source: "timer"`). Actions in `src/app/actions/timer.ts`
+  — start/update/discard need no permission key (a timer is a
+  pre-entry, not a billing record); `stopTimer` gates on
+  `time_entries.create`. Follow-ups: auto-capture from activity,
+  idle-detection prompts.
+- [x] **Time reconciliation.** Shipped 2026-07-07: `/time?view=day`
+  — Logged lane (manual entries), Captured lane (source != manual,
+  with via-Email/Timer/Calendar chips), live Timer lane (read-only
+  snapshot; the widget owns interaction), and a day-total progress
+  bar against the 6.0h goal (constant duplicated from dashboard.ts
+  pending a FirmSettings home). Read-only v1 — entries link to the
+  matter Time tab.
 - [~] **Standalone Contact UI v2.** Shipped 2026-07-07: granular
   `contacts.*` permission gates, multi-phone management UI
   (add/remove/relabel/reorder/set-primary with server-enforced
@@ -101,20 +132,18 @@ done. What's left is enumerated below.
 
 - [ ] **Reports dashboard.** Pipeline, utilization, AR aging,
   realization rate. Deferred to its own sprint.
-- [~] **Date format sweep.** Done except communication/intake/
-  contacts surfaces (owned by parallel work streams — thread-list,
-  follow-up-button, comm-time-logged-indicator, messenger/thread
-  readers, intake pages still on ad-hoc formatting). Everything
-  else funnels through `formatDate`/`formatRelative` variants;
-  dashboard queries take the viewer's TZ (`getTodayAgenda`,
-  `getMyOpenTasks`, `getUpcomingDeadlines`, `getDashboardKpis`,
-  `getFirmPulse`, `getFollowUpsDueToday`, `getRecentActivity`);
-  date-only inputs parse via `parseLocalDate` (see ADR-012).
-  `ui/calendar.tsx` (vendored react-day-picker) left alone.
-- [ ] **No timezone awareness in date pickers.** When users in
-  different cities enter "March 15", browser TZ may save it as a
-  different day. Fix: standardize on a `formatDateInTz` helper +
-  ISO date inputs, not Date objects.
+- [x] **Date format sweep.** Complete 2026-07-07 across the whole
+  app (communication/intake surfaces included): every display
+  callsite funnels through `formatDate`/`formatRelative` variants;
+  dashboard queries take the viewer's TZ; date-only inputs parse
+  via `parseLocalDate`/`parseLocalDateOrDateTime` (see ADR-012 for
+  the two date conventions; matters.ts SOL/incident dates are the
+  documented UTC-midnight exception). `ui/calendar.tsx` (vendored
+  react-day-picker) left alone.
+- [x] **Timezone awareness in date inputs.** Covered by the same
+  sweep: date-only strings parse to local midnight server-side and
+  render without TZ override, so "March 15" stays March 15
+  regardless of viewer/server zones.
 - [ ] **Hardcoded magic numbers in dashboard.** `pulse.billableGoal
   = 200`, `hoursGoal = 6.0` in `src/lib/queries/dashboard.ts`.
   Should come from FirmSettings or UserSettings.
@@ -351,6 +380,7 @@ work for Gmail OAuth + send.
 - [x] **Settings routes gated end-to-end on permission keys** — `/settings/practice-areas` (+ `[id]`) gates on `firm.manage_practice_areas`; `/settings/integrations` + `/settings/billing` use `firm.edit_info` as a placeholder; `/settings/activity` gates on `firm.view_activity`. Settings nav hides any entry the user can't see.
 - [x] **Practice area + stage editing** — `/settings/practice-areas/[id]` has full stage CRUD: create stage, rename, mark/unmark terminal, reorder up/down, archive (refused if any active matters still sit in the stage). All gated on `firm.manage_practice_areas`.
 - [x] **Notifications — v1 (in-app)** — `Notification` model (per-user, per-event row, `readAt` for unread state, optional matter scope). Writer helpers `createNotification` / `createNotifications` (fan-out + dedup) in `src/lib/notifications.ts` mirror the `logActivity` fire-and-forget contract. Topbar `NotificationBell` self-fetches every 60s + on dropdown open. Mark-one-read on row click; mark-all-read on header link. Per-user scoping in the action so a guessed id can't flip another user's row. Triggers wired today: matter team add (notifies the new member), invoice payment recorded (fans out to matter team minus actor). See "remaining work" for the rest.
+- [x] **Notifications — v2 (in-app complete)** — `/notifications` full feed page (newest-first, 50/page offset pagination via `?page=`, optimistic mark-read + mark-all-read, linked from the bell's "View all" footer); shared `NOTIFICATION_TYPE_META` (`src/lib/notification-type-meta.ts`) keys icon/tone by the `NotificationType` union so bell + feed render identically. New triggers: task assignment (`setTaskOwner` in `tasks.ts` — notifies the new owner, actor-excluded on self-assign) and settlement approval steps (`setApprovalStepStatus` — approve fans out to the active team minus actor with the next pending step's label; reject pings the matter lead(s); repeats/resets silent). Deadline sweep (`src/lib/notification-sweeps.ts`): 7-day + 1-day `deadline_approaching` notices and a one-time `deadline_overdue` flip, recipients = owner or active team when ownerless; idempotent via (userId, type, link) with the threshold encoded in the link's `due` param; invoked fire-and-forget from the dashboard behind an in-memory once-per-hour-per-instance throttle, and exposed unthrottled at `GET /api/notification-sweep` (CRON_SECRET bearer, fail-closed — a sanctioned system-endpoint exception to "mutations are server actions"). Delivery channels (email/SMS/push) intentionally out of scope — see "remaining work."
 
 ### Phase 9 — Polish & Production
 

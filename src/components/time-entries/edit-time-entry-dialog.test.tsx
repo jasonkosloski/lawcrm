@@ -35,6 +35,7 @@ const ENTRY: EditableTimeEntry = {
   hours: 1.5,
   activity: "Deposition prep",
   narrative: null,
+  utbmsCode: null,
   billable: true,
   noCharge: false,
   privileged: false,

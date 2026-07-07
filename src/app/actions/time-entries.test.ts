@@ -84,6 +84,9 @@ const buildCreateForm = (overrides: Partial<Record<string, string>> = {}) => {
   fd.set("hours", overrides.hours ?? "1.5");
   fd.set("activity", overrides.activity ?? "Drafting");
   fd.set("narrative", overrides.narrative ?? "");
+  if (overrides.utbmsCode !== undefined) {
+    fd.set("utbmsCode", overrides.utbmsCode);
+  }
   if (overrides.billable === "on") fd.set("billable", "on");
   if (overrides.calendarEventId) {
     fd.set("calendarEventId", overrides.calendarEventId);
@@ -233,6 +236,79 @@ describe("createTimeEntry — happy path", () => {
   });
 });
 
+// ── UTBMS code (create + update) ────────────────────────────────────────
+
+describe("utbmsCode field", () => {
+  test("create persists a catalog code; empty string normalizes to null", async () => {
+    await createTimeEntry(
+      matterId,
+      timeEntryInitialState,
+      buildCreateForm({ utbmsCode: "A103" })
+    );
+    const coded = await prisma.timeEntry.findFirstOrThrow({
+      where: { matterId },
+    });
+    expect(coded.utbmsCode).toBe("A103");
+
+    await createTimeEntry(
+      matterId,
+      timeEntryInitialState,
+      buildCreateForm({ utbmsCode: "", activity: "Uncoded work" })
+    );
+    const uncoded = await prisma.timeEntry.findFirstOrThrow({
+      where: { matterId, activity: "Uncoded work" },
+    });
+    expect(uncoded.utbmsCode).toBeNull();
+  });
+
+  test("create rejects a code outside the catalog", async () => {
+    const res = await createTimeEntry(
+      matterId,
+      timeEntryInitialState,
+      buildCreateForm({ utbmsCode: "X999" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.utbmsCode?.length).toBeGreaterThan(0);
+    expect(await prisma.timeEntry.count({ where: { matterId } })).toBe(0);
+  });
+
+  test("update sets and clears the code", async () => {
+    const { timeEntryId } = await seedTimeEntry({ matterId, userId });
+
+    await updateTimeEntry(
+      timeEntryId,
+      timeEntryInitialState,
+      buildUpdateForm({ utbmsCode: "L330" })
+    );
+    let row = await prisma.timeEntry.findUniqueOrThrow({
+      where: { id: timeEntryId },
+    });
+    expect(row.utbmsCode).toBe("L330");
+
+    // Posting empty (the picker's "no code" option) clears it.
+    await updateTimeEntry(
+      timeEntryId,
+      timeEntryInitialState,
+      buildUpdateForm({ utbmsCode: "" })
+    );
+    row = await prisma.timeEntry.findUniqueOrThrow({
+      where: { id: timeEntryId },
+    });
+    expect(row.utbmsCode).toBeNull();
+  });
+
+  test("update rejects a code outside the catalog", async () => {
+    const { timeEntryId } = await seedTimeEntry({ matterId, userId });
+    const res = await updateTimeEntry(
+      timeEntryId,
+      timeEntryInitialState,
+      buildUpdateForm({ utbmsCode: "BOGUS" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.utbmsCode?.length).toBeGreaterThan(0);
+  });
+});
+
 // ── updateTimeEntry ─────────────────────────────────────────────────────
 
 const buildUpdateForm = (overrides: Partial<Record<string, string>> = {}) => {
@@ -242,6 +318,9 @@ const buildUpdateForm = (overrides: Partial<Record<string, string>> = {}) => {
   fd.set("activity", overrides.activity ?? "Drafting");
   fd.set("narrative", overrides.narrative ?? "");
   fd.set("status", overrides.status ?? "draft");
+  if (overrides.utbmsCode !== undefined) {
+    fd.set("utbmsCode", overrides.utbmsCode);
+  }
   if (overrides.billable === "on") fd.set("billable", "on");
   return fd;
 };

@@ -45,6 +45,7 @@ import {
   type ExpenseCategory,
 } from "@/lib/expense-constants";
 import { type TimeEntryStatus } from "@/lib/note-constants";
+import { utbmsCodeLabel } from "@/lib/time-entry-constants";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import {
   getMatterExpenses,
@@ -281,6 +282,12 @@ function EntryRow({
             {entry.privileged && (
               <span className="text-2xs text-brand-700">Privileged</span>
             )}
+            {/* Timer-captured entries get a provenance marker — the
+                other sources render a spawnedFrom chip below, but a
+                timer has no parent entity to chip. */}
+            {entry.source === "timer" && (
+              <span className="text-2xs text-ink-4">Timer</span>
+            )}
           </div>
           <div className="flex items-center gap-1.5 flex-wrap mt-1">
             {entry.spawnedFrom && (
@@ -298,7 +305,19 @@ function EntryRow({
         </div>
       </TableCell>
       <TableCell className="text-2xs font-mono text-ink-4">
-        {entry.utbmsCode ?? "—"}
+        {entry.utbmsCode ? (
+          // Chip with the human label on hover — the catalog lives in
+          // time-entry-constants; unknown legacy codes fall back to
+          // the bare code.
+          <span
+            title={utbmsCodeLabel(entry.utbmsCode)}
+            className="inline-block px-1.5 py-0.5 rounded-full border border-line bg-paper-2 text-ink-3"
+          >
+            {entry.utbmsCode}
+          </span>
+        ) : (
+          "—"
+        )}
       </TableCell>
       <TableCell className="text-right font-mono text-xs text-ink">
         {entry.hours.toFixed(1)}
@@ -323,6 +342,7 @@ function EntryRow({
             hours: entry.hours,
             activity: entry.activity,
             narrative: entry.narrative,
+            utbmsCode: entry.utbmsCode,
             billable: entry.billable,
             noCharge: entry.noCharge,
             privileged: entry.privileged,

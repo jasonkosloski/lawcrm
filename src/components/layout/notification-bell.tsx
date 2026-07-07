@@ -18,21 +18,12 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import {
-  Bell,
-  BellDot,
-  Calendar,
-  CheckCircle2,
-  CircleAlert,
-  CircleX,
-  ClipboardCheck,
-  Coins,
-  ListChecks,
-  MessageSquare,
-  UserPlus,
-} from "lucide-react";
+import { Bell, BellDot } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatRelative } from "@/lib/format-date";
+// Icon + tone per type live in the shared meta so the /notifications
+// feed page renders rows identically to the dropdown.
+import { notificationTypeMeta } from "@/lib/notification-type-meta";
 import {
   fetchBellState,
   markAllNotificationsRead,
@@ -44,32 +35,6 @@ import type {
 } from "@/lib/queries/notifications";
 
 const POLL_MS = 60_000;
-
-const TYPE_ICON: Record<string, React.ComponentType<{ size?: number }>> = {
-  task_assigned: ClipboardCheck,
-  task_due_soon: ListChecks,
-  deadline_approaching: CircleAlert,
-  deadline_overdue: CircleX,
-  settlement_step_approved: CheckCircle2,
-  settlement_step_rejected: CircleX,
-  invoice_payment_recorded: Coins,
-  note_mentioned: MessageSquare,
-  matter_assigned: UserPlus,
-  generic: Calendar,
-};
-
-const TYPE_TONE: Record<string, string> = {
-  task_assigned: "text-brand-700",
-  task_due_soon: "text-warn",
-  deadline_approaching: "text-warn",
-  deadline_overdue: "text-warn",
-  settlement_step_approved: "text-ok",
-  settlement_step_rejected: "text-warn",
-  invoice_payment_recorded: "text-ok",
-  note_mentioned: "text-ink-3",
-  matter_assigned: "text-brand-700",
-  generic: "text-ink-3",
-};
 
 export function NotificationBell() {
   const [state, setState] = useState<NotificationsBell | null>(null);
@@ -251,6 +216,18 @@ export function NotificationBell() {
               ))}
             </ul>
           )}
+
+          {/* Footer — jump to the full paginated feed. Sticky so it
+              stays reachable when the dropdown scrolls. */}
+          <div className="sticky bottom-0 bg-white border-t border-line px-3 py-2 text-center">
+            <Link
+              href="/notifications"
+              onClick={() => setOpen(false)}
+              className="text-2xs font-mono uppercase tracking-wider text-brand-700 hover:underline underline-offset-2"
+            >
+              View all notifications
+            </Link>
+          </div>
         </div>
       )}
     </div>
@@ -266,8 +243,7 @@ function NotificationRowItem({
   onMarkRead: () => void;
   onClose: () => void;
 }) {
-  const Icon = TYPE_ICON[row.type] ?? Calendar;
-  const tone = TYPE_TONE[row.type] ?? "text-ink-3";
+  const { icon: Icon, tone } = notificationTypeMeta(row.type);
 
   const inner = (
     <div className="flex items-start gap-2.5 py-2 px-3">

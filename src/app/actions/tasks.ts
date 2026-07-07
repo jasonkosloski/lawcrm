@@ -1,5 +1,6 @@
 /**
- * Task server actions — update, delete, status toggle.
+ * Task server actions — update, delete, status toggle, owner
+ * (re)assignment.
  *
  * Mirrors the notes pattern in `notes.ts`. Create lives in
  * `captures.ts` because tasks can be created with sibling captures;
@@ -9,8 +10,17 @@
  * Every mutation revalidates the matter tasks tab, the matter overview
  * (which previews open tasks), and the dashboard "Your tasks" card.
  *
- * Auth: gated on `tasks.edit` (status + field edits) and `tasks.delete`.
- * Admins short-circuit; other roles need explicit grant via the matrix.
+ * Notifications: `setTaskOwner` writes a "task_assigned" row for the
+ * new owner — unless they assigned it to themselves (same actor-
+ * exclusion rule as the payment fan-out in `billing.ts`). The create
+ * path in `captures.ts` always self-assigns (`ownerId: userId`), so a
+ * create-time notification would always be suppressed by that rule;
+ * when an owner picker lands on the composer, wire the same helper
+ * there.
+ *
+ * Auth: gated on `tasks.edit` (status + field edits + reassignment)
+ * and `tasks.delete`. Admins short-circuit; other roles need explicit
+ * grant via the matrix.
  */
 
 "use server";
@@ -27,6 +37,7 @@ import type { UpdateTaskFormState } from "@/lib/task-form";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
+import { createNotification } from "@/lib/notifications";
 
 /** Path-revalidate every surface that displays this task. */
 function revalidateForTask(matterId: string | null): void {
@@ -93,6 +104,67 @@ export async function setTaskStatus(
       type: "task",
       title: "Task reopened",
       detail: task.title,
+    });
+  }
+
+  return { ok: true };
+}
+
+// ── Owner assignment ────────────────────────────────────────────────────
+
+/** Assign (or clear) a task's owner. Notifies the new owner via a
+ *  "task_assigned" notification — skipped on self-assignment (no
+ *  point pinging your own bell) and on no-op calls where the owner
+ *  didn't actually change. */
+export async function setTaskOwner(
+  taskId: string,
+  ownerId: string | null
+): Promise<{ ok: boolean; error?: string }> {
+  await requirePermission("tasks.edit");
+  const actorId = await getCurrentUserId();
+
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { matterId: true, ownerId: true, title: true },
+  });
+  if (!task) return { ok: false, error: "Task not found" };
+  if (task.ownerId === ownerId) return { ok: true }; // no-op — don't re-notify
+
+  if (ownerId) {
+    const owner = await prisma.user.findUnique({
+      where: { id: ownerId },
+      select: { isActive: true },
+    });
+    if (!owner || !owner.isActive) {
+      return { ok: false, error: "Assignee not found or inactive" };
+    }
+  }
+
+  await prisma.task.update({
+    where: { id: taskId },
+    data: { ownerId },
+  });
+
+  revalidateForTask(task.matterId);
+
+  // Tell the new owner — unless they just assigned it to themselves
+  // (same actor-exclusion rule as the invoice-payment fan-out in
+  // `billing.ts`). Fire-and-forget: a failed notification write never
+  // rolls back the reassignment.
+  if (ownerId && ownerId !== actorId) {
+    const matter = task.matterId
+      ? await prisma.matter.findUnique({
+          where: { id: task.matterId },
+          select: { name: true },
+        })
+      : null;
+    await createNotification({
+      userId: ownerId,
+      type: "task_assigned",
+      title: `Task assigned: ${task.title}`,
+      body: matter ? matter.name : "Firm-wide task",
+      link: task.matterId ? `/matters/${task.matterId}/tasks` : "/",
+      matterId: task.matterId,
     });
   }
 

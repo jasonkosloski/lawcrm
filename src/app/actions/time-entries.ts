@@ -32,7 +32,19 @@ import {
   TIME_ENTRY_STATUSES,
   type TimeEntryStatus,
 } from "@/lib/note-constants";
-import type { TimeEntryFormState } from "@/lib/time-entry-constants";
+import {
+  isKnownUtbmsCode,
+  type TimeEntryFormState,
+} from "@/lib/time-entry-constants";
+
+// Only catalog codes persist — the column feeds LEDES/insurer
+// exports later, so junk from a hand-crafted POST is worse than a
+// rejected form. Empty string / absent = "no code".
+const utbmsCodeField = z
+  .string()
+  .trim()
+  .refine((v) => v === "" || isKnownUtbmsCode(v), "Unknown UTBMS code")
+  .optional();
 
 const timeEntrySchema = z.object({
   date: z.string().min(1, "Date is required"),
@@ -45,6 +57,7 @@ const timeEntrySchema = z.object({
     }, "Hours must be > 0 and ≤ 24"),
   activity: z.string().trim().min(1, "Activity is required").max(200),
   narrative: z.string().max(4000).optional().or(z.literal("")),
+  utbmsCode: utbmsCodeField,
   billable: z.literal("on").optional(),
   noCharge: z.literal("on").optional(),
   privileged: z.literal("on").optional(),
@@ -99,6 +112,7 @@ export async function createTimeEntry(
       hours: Number(parsed.data.hours),
       activity: parsed.data.activity,
       narrative: parsed.data.narrative || null,
+      utbmsCode: parsed.data.utbmsCode || null,
       billable: parsed.data.billable === "on",
       noCharge: parsed.data.noCharge === "on",
       privileged: parsed.data.privileged === "on",
@@ -129,6 +143,7 @@ const updateTimeEntrySchema = z.object({
     }, "Hours must be > 0 and ≤ 24"),
   activity: z.string().trim().min(1, "Activity is required").max(200),
   narrative: z.string().max(4000).optional().or(z.literal("")),
+  utbmsCode: utbmsCodeField,
   billable: z.literal("on").optional(),
   noCharge: z.literal("on").optional(),
   privileged: z.literal("on").optional(),
@@ -211,6 +226,7 @@ export async function updateTimeEntry(
       hours: newHours,
       activity: parsed.data.activity,
       narrative: parsed.data.narrative || null,
+      utbmsCode: parsed.data.utbmsCode || null,
       billable: parsed.data.billable === "on",
       noCharge: parsed.data.noCharge === "on",
       privileged: parsed.data.privileged === "on",

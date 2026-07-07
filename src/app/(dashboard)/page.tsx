@@ -17,6 +17,7 @@ import { DashboardCustomizeButton } from "@/components/dashboard/customize-butto
 import { DashboardTaskRow } from "@/components/tasks/dashboard-task-row";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
+import { maybeRunDeadlineNotificationSweep } from "@/lib/notification-sweeps";
 import { formatDate } from "@/lib/format-date";
 import { getDashboardVisibility } from "@/lib/queries/dashboard-prefs";
 import {
@@ -66,6 +67,13 @@ const ACTIVITY_ICONS: Record<string, LucideIcon> = {
 };
 
 export default async function DashboardPage() {
+  // Opportunistic deadline sweep — fire-and-forget (never blocks the
+  // render, never throws) and self-throttled to once/hour per
+  // instance. The dashboard is the highest-traffic page, so it
+  // doubles as the poor-man's cron until a platform cron drives
+  // /api/notification-sweep.
+  void maybeRunDeadlineNotificationSweep();
+
   const userId = await getCurrentUserId();
   // "Today" everywhere below means the USER's calendar day — resolve
   // the viewer's zone once and thread it through every query (same

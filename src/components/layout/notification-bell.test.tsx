@@ -28,18 +28,24 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // Anchor stand-in tagged so tests can tell it apart from a raw <a>.
-// preventDefault keeps happy-dom from attempting a real navigation.
+// preventDefault keeps happy-dom from attempting a real navigation;
+// the caller's own onClick (e.g. the footer's close-popover handler)
+// still runs first, like the real next/link.
 vi.mock("next/link", () => ({
   default: ({
     href,
     children,
+    onClick,
     ...rest
   }: React.ComponentProps<"a"> & { href: string }) => (
     <a
       href={href}
       data-nextjs-link=""
       {...rest}
-      onClick={(e) => e.preventDefault()}
+      onClick={(e) => {
+        onClick?.(e);
+        e.preventDefault();
+      }}
     >
       {children}
     </a>
@@ -161,5 +167,33 @@ describe("NotificationBell — linked rows navigate client-side", () => {
     // Linked rows close the dropdown so it isn't left floating over
     // the destination page.
     expect(screen.queryByRole("menu")).toBeNull();
+  });
+});
+
+describe("NotificationBell — feed page footer", () => {
+  test("dropdown footer links to /notifications through next/link and closes on click", async () => {
+    const user = userEvent.setup();
+    await openBell(user);
+
+    const viewAll = screen.getByText(/view all notifications/i);
+    const anchor = viewAll.closest("a");
+    expect(anchor).toHaveAttribute("href", "/notifications");
+    // Same full-page-navigation trap as notification rows: the feed
+    // link must go through next/link.
+    expect(anchor).toHaveAttribute("data-nextjs-link");
+
+    await user.click(viewAll);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  test("footer renders even when the feed is empty (it's the discovery path)", async () => {
+    mockedFetch.mockResolvedValue(bell([]));
+    const user = userEvent.setup();
+    render(<NotificationBell />);
+    await user.click(
+      await screen.findByRole("button", { name: /^notifications$/i })
+    );
+    await screen.findByText(/no notifications yet/i);
+    expect(screen.getByText(/view all notifications/i)).toBeInTheDocument();
   });
 });
