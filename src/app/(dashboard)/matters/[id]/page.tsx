@@ -18,6 +18,10 @@ import { StageChanger } from "@/components/matters/stage-changer";
 import { StatuteOfLimitationsCard } from "@/components/matters/statute-of-limitations-card";
 import { EmailLink } from "@/components/ui/email-link";
 import { formatPhone } from "@/lib/format-phone";
+// Centralized date formatting — default "medium" matches the "Apr 15,
+// 2026" this page always used. Filed/trial are date-only values
+// (server-local midnight), so no TZ override.
+import { formatDate } from "@/lib/format-date";
 import { prisma } from "@/lib/prisma";
 import { getMatterById } from "@/lib/queries/matters";
 import {
@@ -32,15 +36,6 @@ const ROLE_LABEL: Record<string, string> = {
   paralegal: "Paralegal",
   investigator: "Investigator",
   of_counsel: "Of counsel",
-};
-
-const formatDate = (d: Date | null): string => {
-  if (!d) return "—";
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 };
 
 const formatMoney = (n: number): string => `$${n.toLocaleString("en-US")}`;
@@ -301,10 +296,7 @@ export default async function MatterOverviewPage({
                             ? `${Math.abs(t.daysUntilDue)}d late`
                             : `${t.daysUntilDue}d`
                           : t.dueDate
-                            ? t.dueDate.toLocaleDateString("en-US", {
-                                month: "short",
-                                day: "numeric",
-                              })
+                            ? formatDate(t.dueDate, "short")
                             : "—"}
                       </span>
                       {t.ownerInitials && (

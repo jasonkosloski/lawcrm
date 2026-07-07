@@ -21,17 +21,16 @@ import {
 } from "@/lib/billing-form";
 import type { FirmProfile } from "@/lib/firm";
 import type { InvoiceDetail } from "@/lib/queries/billing";
+import { formatDate as formatDateVariant } from "@/lib/format-date";
 import { EditableLineItemRow } from "./editable-line-item-row";
 
 const formatMoney = (n: number): string =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-const formatDate = (d: Date): string =>
-  d.toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
+// Letterhead meta dates ("long") + row dates ("short"). Line-item /
+// expense / payment dates are date-only values (server-local
+// midnight) — no TZ override, same day grid they were saved on.
+const formatDate = (d: Date): string => formatDateVariant(d, "long");
 
 const STATUS_META: Record<string, string> = {
   draft: "bg-paper-2 text-ink-3 border-line",
@@ -299,10 +298,7 @@ export function InvoicePreview({
                         className="border-b border-line/60 last:border-b-0 align-top"
                       >
                         <td className="py-2 font-mono text-ink-3 whitespace-nowrap pr-3">
-                          {li.date.toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                          })}
+                          {formatDateVariant(li.date, "short")}
                         </td>
                         <td className="py-2 pr-3">
                           <div className="text-ink">{li.activity}</div>
@@ -373,10 +369,7 @@ export function InvoicePreview({
                       className="border-b border-line/60 last:border-b-0 align-top"
                     >
                       <td className="py-2 font-mono text-ink-3 whitespace-nowrap pr-3">
-                        {ex.date.toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                        })}
+                        {formatDateVariant(ex.date, "short")}
                       </td>
                       <td className="py-2 pr-3">
                         <div className="text-ink">{ex.description}</div>
@@ -462,10 +455,7 @@ export function InvoicePreview({
                       className="border-b border-line/60 last:border-b-0 align-top"
                     >
                       <td className="py-2 font-mono text-ink-3 whitespace-nowrap pr-3">
-                        {p.date.toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                        })}
+                        {formatDateVariant(p.date, "short")}
                       </td>
                       <td className="py-2 pr-3">
                         <div className="text-ink">

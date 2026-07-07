@@ -537,3 +537,4 @@ boxes."
 | 2026-04-27 | Replaced every `requireAdmin()` write gate with `requirePermission(<specific-key>)`. Admin retained as wildcard. |
 | 2026-04-27 | `setRolePermissionAction` writes an `ActivityLog` entry on every non-no-op grant/revoke. Firm-scope (`matterId: null`). |
 | 2026-07-06 | Removed the hand-maintained "Categories today" table (it had drifted to cover 6 of 13 categories). The doc now points at `src/lib/permissions.ts` as the sole enumeration. |
+| 2026-07-07 | Feature-batch keys: new `contacts` category (`create`/`edit`/`delete`/`merge` — closes the TODO(permissions) in contacts.ts), `communication.edit_call`/`delete_call` (manual call logs only; provider items immutable), `documents.template.{create,edit,delete}` (library governance; generating FROM a template is ungated, saving output rides `documents.upload`). Grant to non-admin roles via /settings/roles. |

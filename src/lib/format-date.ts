@@ -27,12 +27,16 @@
 
 export type DateFormatVariant =
   | "short" // "Apr 15"
+  | "short_weekday" // "Wed, Apr 15"
   | "medium" // "Apr 15, 2026"
   | "long" // "April 15, 2026"
   | "full" // "Wed, April 15, 2026"
+  | "full_short" // "Wed, Apr 15, 2026"
+  | "full_long" // "Wednesday, April 15, 2026"
   | "iso" // "2026-04-15" (ISO date — date inputs)
   | "time" // "3:42 PM"
   | "datetime" // "Apr 15, 3:42 PM"
+  | "datetime_medium" // "Apr 15, 2026, 3:42 PM"
   | "datetime_long"; // "April 15, 2026 at 3:42 PM"
 
 const FORMAT_OPTS: Record<
@@ -40,10 +44,23 @@ const FORMAT_OPTS: Record<
   Intl.DateTimeFormatOptions
 > = {
   short: { month: "short", day: "numeric" },
+  short_weekday: { weekday: "short", month: "short", day: "numeric" },
   medium: { month: "short", day: "numeric", year: "numeric" },
   long: { month: "long", day: "numeric", year: "numeric" },
   full: {
     weekday: "short",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  },
+  full_short: {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  },
+  full_long: {
+    weekday: "long",
     month: "long",
     day: "numeric",
     year: "numeric",
@@ -53,6 +70,13 @@ const FORMAT_OPTS: Record<
   datetime: {
     month: "short",
     day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  },
+  datetime_medium: {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
     hour: "numeric",
     minute: "2-digit",
   },
@@ -180,6 +204,52 @@ export function formatDayBucket(
     });
   }
   return formatDate(d, "medium", tz);
+}
+
+// ── Date-only input parsing ────────────────────────────────────────────
+
+/**
+ * Parse a date-only string (`YYYY-MM-DD`, the wire format of
+ * `<input type="date">`) into **local midnight** of that calendar
+ * day.
+ *
+ * We never feed date-only strings to `new Date(value)` directly:
+ * the ISO short form parses as *UTC* midnight, so any server (or
+ * browser) west of UTC reads the value back a day early with local
+ * getters — and a form that round-trips the value drifts the date
+ * one day earlier per save. Local midnight keeps parse and display
+ * on the same day grid. A malformed value ("abc", tampered POST)
+ * returns null instead of an Invalid Date so callers surface a
+ * field error rather than a Prisma 500.
+ *
+ * This is the shared version of the pattern established in
+ * `parseLocalDueDate` (actions/deadlines.ts, tasks.ts),
+ * `parseEventBoundary` (actions/calendar-events.ts) and
+ * `parseLocalEstablishedAt` (actions/firm.ts) — new callsites
+ * should use this instead of re-deriving it.
+ */
+export function parseLocalDate(value: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!m) return null;
+  const [, y, mo, d] = m;
+  const date = new Date(Number(y), Number(mo) - 1, Number(d), 0, 0, 0, 0);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/**
+ * Like `parseLocalDate`, but tolerates a full ISO datetime
+ * (`2026-04-15T13:30:00.000Z` or datetime-local's
+ * `2026-04-15T13:30`) by falling through to `new Date(value)` —
+ * full datetimes carry their own time (and often zone) so the
+ * UTC-midnight trap doesn't apply. Use for fields that may be fed
+ * either shape (AI capture output, mixed API inputs).
+ */
+export function parseLocalDateOrDateTime(value: string): Date | null {
+  const dateOnly = parseLocalDate(value);
+  if (dateOnly) return dateOnly;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return null; // date-only but invalid
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 // ── Time-zone arithmetic ───────────────────────────────────────────────

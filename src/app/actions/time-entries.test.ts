@@ -156,6 +156,38 @@ describe("createTimeEntry — happy path", () => {
     expect(rows[0]!.userId).toBe(userId);
   });
 
+  test("date-only input lands on LOCAL midnight of that day (no UTC drift)", async () => {
+    // Reproducer for the west-of-UTC drift: `new Date("2026-04-01")`
+    // is UTC midnight, which local getters read back as March 31 in
+    // any zone west of UTC. parseLocalDate stores local midnight so
+    // the calendar day survives the round-trip.
+    const res = await createTimeEntry(
+      matterId,
+      timeEntryInitialState,
+      buildCreateForm({ date: "2026-04-01" })
+    );
+    expect(res.status).toBe("ok");
+
+    const row = await prisma.timeEntry.findFirstOrThrow({
+      where: { matterId },
+    });
+    expect(row.date.getFullYear()).toBe(2026);
+    expect(row.date.getMonth()).toBe(3);
+    expect(row.date.getDate()).toBe(1);
+    expect(row.date.getHours()).toBe(0);
+  });
+
+  test("malformed date is a field error, not an Invalid Date 500", async () => {
+    const res = await createTimeEntry(
+      matterId,
+      timeEntryInitialState,
+      buildCreateForm({ date: "not-a-date" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.date).toBeTruthy();
+    expect(await prisma.timeEntry.count({ where: { matterId } })).toBe(0);
+  });
+
   test("source defaults to 'manual'; switches to 'calendar' when calendarEventId is present", async () => {
     // Create a calendar event so the FK resolves.
     const ev = await prisma.calendarEvent.create({

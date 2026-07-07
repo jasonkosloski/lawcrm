@@ -51,9 +51,13 @@ done. What's left is enumerated below.
   a `MessengerItem` so it renders inline in the Messages view. The
   matter-detail Communication tab now has an Email | Phone channel
   toggle: the Phone channel lists the matter's filed calls/texts/
-  voicemails and hosts a matter-scoped Log-call composer. Still
-  left: entry points on contact + lead pages, SMS send (Quo /
-  Twilio), voicemail transcription, edit/delete of manual logs.
+  voicemails and hosts a matter-scoped Log-call composer. Edit /
+  delete of manual logs shipped (kebab on manual call items in the
+  thread reader + matter phone log; provider-synced items stay
+  immutable), as did the lead-page "Log call" entry point (contact
+  pre-selected, files matterless) and the contact-page entry point
+  (contact fixed via `fixedContact`). Still left: SMS send
+  (Quo / Twilio), voicemail transcription — both need providers.
 - [ ] **Document templates / template library.** No way to save and
   reuse a demand letter, discovery responses, retainer agreement.
 - [ ] **Search results page + global text search.** ⌘K palette
@@ -82,21 +86,31 @@ done. What's left is enumerated below.
   capture from activity.
 - [ ] **Time reconciliation.** Day view with logged/captured/timer
   lanes.
-- [ ] **Standalone Contact UI v2.** Conflict-flag UI (field exists
-  but only set programmatically), contact merge for duplicates,
-  bulk operations, multi-phone management UI per contact (today
-  only the primary is editable inline).
+- [~] **Standalone Contact UI v2.** Shipped 2026-07-07: granular
+  `contacts.*` permission gates, multi-phone management UI
+  (add/remove/relabel/reorder/set-primary with server-enforced
+  invariants), conflict-flag control with required justification →
+  activity log, and contact merge (`contacts.merge`) — one
+  transaction re-points every reference (matter links with
+  duplicate-row dedupe, client-of, leads, messenger threads,
+  attendees, invoices), moves + dedupes phones, backfills null
+  scalars, soft-retires the loser with `mergedIntoId` redirect.
+  Still left: bulk operations.
 
 ### P2 — polish + tech debt
 
 - [ ] **Reports dashboard.** Pipeline, utilization, AR aging,
   realization rate. Deferred to its own sprint.
-- [~] **Date format sweep.** Helper landed (`src/lib/format-date.ts`)
-  + 3 high-traffic surfaces migrated (matter Timeline, /settings/
-  activity, dashboard recent-activity). ~35 callsites still on
-  `toLocaleDateString` / direct date-fns usage. Mechanical sweep.
-  Also: pipe user TZ into `startOfToday()` / `endOfToday()` in the
-  dashboard queries (today they use server-local).
+- [~] **Date format sweep.** Done except communication/intake/
+  contacts surfaces (owned by parallel work streams — thread-list,
+  follow-up-button, comm-time-logged-indicator, messenger/thread
+  readers, intake pages still on ad-hoc formatting). Everything
+  else funnels through `formatDate`/`formatRelative` variants;
+  dashboard queries take the viewer's TZ (`getTodayAgenda`,
+  `getMyOpenTasks`, `getUpcomingDeadlines`, `getDashboardKpis`,
+  `getFirmPulse`, `getFollowUpsDueToday`, `getRecentActivity`);
+  date-only inputs parse via `parseLocalDate` (see ADR-012).
+  `ui/calendar.tsx` (vendored react-day-picker) left alone.
 - [ ] **No timezone awareness in date pickers.** When users in
   different cities enter "March 15", browser TZ may save it as a
   different day. Fix: standardize on a `formatDateInTz` helper +
@@ -275,6 +289,21 @@ work for Gmail OAuth + send.
   render under the call chip in the thread reader. Activity-log
   type `"call"` (Phone icon; Timeline "Communications" filter
   includes it). Permission: `communication.log_call`.
+- [x] **Manual call log edit / delete** — kebab menu on manually
+  logged call items (thread reader + matter Phone channel; gated by
+  `communication.edit_call` / `communication.delete_call`, item
+  flagged via the `manual-` providerEventId prefix →
+  `MessengerItemRow.isManual`). Edit reuses the log-call composer
+  (`CallLogDialog` edit mode) prefilled — outcome, direction,
+  when, duration, summary, matter re-file; contact + phone are
+  fixed (thread identity). `updateCallLog` / `deleteCallLog` refuse
+  provider-synced items (immutable records), recompute
+  `thread.lastItemAt` from surviving items, and delete the thread
+  when its last item goes (threads re-create on demand by
+  (account, phone) key). Spawned time entries / tasks / notes
+  survive a delete with their FK nulled. "Log call" also mounts on
+  the lead Communication tab with the lead's contact pre-selected
+  (no matter — conversion creates it).
 - [x] **Matter-detail Phone channel** — Email | Phone segmented
   toggle on the matter Communication tab (`?channel=phone`,
   URL-driven). Phone channel lists every call / text / voicemail

@@ -16,6 +16,11 @@
 import { useEffect, useState, useTransition } from "react";
 import { BellPlus, BellRing, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+// Client component — followUpAt is a date-only value (server-local
+// end-of-day, see actions/follow-ups.ts); the centralized variants
+// render it with no TZ override (browser-local after hydration),
+// matching the pre-migration output.
+import { formatDate } from "@/lib/format-date";
 import {
   Popover,
   PopoverContent,
@@ -72,7 +77,7 @@ export function FollowUpButton({
             disabled={pending}
             title={
               followUpAt
-                ? `Follow up by ${followUpAt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}`
+                ? `Follow up by ${formatDate(followUpAt, "short_weekday")}`
                 : "Set follow-up reminder"
             }
             className={cn(
@@ -214,11 +219,11 @@ function labelFor(d: Date): string {
   const now = new Date();
   if (d.getTime() < now.getTime() - 24 * 60 * 60 * 1000) {
     // More than a day overdue
-    return `Late: ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+    return `Late: ${formatDate(d, "short")}`;
   }
   if (isSameDay(d, now)) return "Today";
   const tomorrow = new Date(now);
   tomorrow.setDate(now.getDate() + 1);
   if (isSameDay(d, tomorrow)) return "Tomorrow";
-  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  return formatDate(d, "short_weekday");
 }

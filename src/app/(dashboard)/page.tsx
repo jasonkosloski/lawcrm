@@ -16,6 +16,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DashboardCustomizeButton } from "@/components/dashboard/customize-button";
 import { DashboardTaskRow } from "@/components/tasks/dashboard-task-row";
 import { getCurrentUserId } from "@/lib/current-user";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
+import { formatDate } from "@/lib/format-date";
 import { getDashboardVisibility } from "@/lib/queries/dashboard-prefs";
 import {
   Briefcase,
@@ -65,6 +67,11 @@ const ACTIVITY_ICONS: Record<string, LucideIcon> = {
 
 export default async function DashboardPage() {
   const userId = await getCurrentUserId();
+  // "Today" everywhere below means the USER's calendar day — resolve
+  // the viewer's zone once and thread it through every query (same
+  // pattern as /calendar). Sequential await before the fan-out: the
+  // queries all need it.
+  const tz = await getCurrentUserTimeZone();
   const [
     kpis,
     agenda,
@@ -75,13 +82,13 @@ export default async function DashboardPage() {
     followUps,
     visibility,
   ] = await Promise.all([
-    getDashboardKpis(),
-    getTodayAgenda(),
-    getRecentActivity(5),
-    getUpcomingDeadlines(7),
-    getFirmPulse(),
-    getMyOpenTasks(),
-    getFollowUpsDueToday(),
+    getDashboardKpis(tz),
+    getTodayAgenda(tz),
+    getRecentActivity(tz, 5),
+    getUpcomingDeadlines(tz, 7),
+    getFirmPulse(tz),
+    getMyOpenTasks(tz),
+    getFollowUpsDueToday(tz),
     getDashboardVisibility(userId),
   ]);
 
@@ -448,7 +455,9 @@ const formatTaskDue = (task: MyTaskItem): string => {
   if (task.daysUntilDue === 0) return "today";
   if (task.daysUntilDue === 1) return "tomorrow";
   if (task.daysUntilDue <= 7) return `${task.daysUntilDue}d`;
-  return task.dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  // Date-only value (stored at server-local midnight) — format in
+  // server TZ, no user-TZ override, or the day could shift.
+  return formatDate(task.dueDate, "short");
 };
 
 /**

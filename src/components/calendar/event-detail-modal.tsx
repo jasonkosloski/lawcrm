@@ -30,7 +30,9 @@ import {
 } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { format } from "date-fns";
+// Client component — event instants render via the centralized
+// variants with no TZ override (browser-local after hydration).
+import { formatDate } from "@/lib/format-date";
 import {
   ArrowRight,
   Calendar,
@@ -320,12 +322,9 @@ export function EventDetailModal({
   const startsAndEnds = committed.isAllDay
     ? "All day"
     : isSameDay(new Date(committed.startTime), new Date(committed.endTime))
-      ? `${format(new Date(committed.startTime), "h:mm a")} – ${format(new Date(committed.endTime), "h:mm a")}`
-      : `${format(new Date(committed.startTime), "MMM d, h:mm a")} – ${format(new Date(committed.endTime), "MMM d, h:mm a")}`;
-  const dateLabel = format(
-    new Date(committed.startTime),
-    "EEEE, MMMM d, yyyy"
-  );
+      ? `${formatDate(new Date(committed.startTime), "time")} – ${formatDate(new Date(committed.endTime), "time")}`
+      : `${formatDate(new Date(committed.startTime), "datetime")} – ${formatDate(new Date(committed.endTime), "datetime")}`;
+  const dateLabel = formatDate(new Date(committed.startTime), "full_long");
 
   // Busy-only view: viewer is allowed to see this slot is taken
   // but not what's on it. Render a minimal modal — time + the

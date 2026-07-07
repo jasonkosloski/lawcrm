@@ -19,6 +19,8 @@ import {
 import { UploadDocumentForm } from "@/components/matters/documents/upload-document-form";
 import { DocumentRowActions } from "@/components/matters/documents/document-row-actions";
 import { getCurrentUserId } from "@/lib/current-user";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
+import { formatDate } from "@/lib/format-date";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import {
   getMatterDocuments,
@@ -76,13 +78,6 @@ const STATUS_META: Record<string, { label: string; className: string }> = {
   },
 };
 
-const formatDate = (d: Date): string =>
-  d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-
 const formatSize = (bytes: number | null): string => {
   if (bytes === null || bytes === 0) return "—";
   if (bytes < 1024) return `${bytes} B`;
@@ -94,10 +89,13 @@ export default async function MatterDocumentsPage({
   params,
 }: PageProps<"/matters/[id]">) {
   const { id } = await params;
-  const [documents, currentUserId, canDeleteAny] = await Promise.all([
+  const [documents, currentUserId, canDeleteAny, tz] = await Promise.all([
     getMatterDocuments(id),
     getCurrentUserId(),
     currentUserHasPermission("documents.delete_any"),
+    // Upload timestamps are real instants — render them on the
+    // viewer's calendar, not the server's (UTC in prod).
+    getCurrentUserTimeZone(),
   ]);
 
   if (documents.length === 0) {
@@ -199,7 +197,7 @@ export default async function MatterDocumentsPage({
                           {d.uploaderInitials ?? "—"}
                         </TableCell>
                         <TableCell className="text-xs text-ink-3">
-                          {formatDate(d.createdAt)}
+                          {formatDate(d.createdAt, "medium", tz)}
                         </TableCell>
                         <TableCell className="pr-4 text-right">
                           {d.hasFile && (

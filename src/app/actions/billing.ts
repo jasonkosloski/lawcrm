@@ -33,6 +33,10 @@ import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma, type Tx } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+// Date-only inputs ("YYYY-MM-DD") must parse to LOCAL midnight —
+// `new Date(value)` reads them as UTC midnight, drifting the row a
+// day early for anyone west of UTC. See parseLocalDate docs.
+import { parseLocalDate } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { createNotifications } from "@/lib/notifications";
@@ -429,12 +433,17 @@ export async function updateInvoiceLineItem(
   // the reduce).
   const newAmount = newRate ? newRate.mul(newHours) : null;
 
+  const newDate = parseLocalDate(parsed.data.date);
+  if (!newDate) {
+    return { status: "error", errors: { date: ["Invalid date"] } };
+  }
+
   try {
     await prisma.$transaction(async (tx) => {
       await tx.timeEntry.update({
         where: { id: entry.id },
         data: {
-          date: new Date(parsed.data.date),
+          date: newDate,
           activity: parsed.data.activity,
           narrative: parsed.data.narrative || null,
           hours: newHours,
@@ -774,11 +783,18 @@ export async function addTrustTransaction(
   const signed =
     data.type === "deposit" ? positive : positive.neg();
 
+  // Optional date-only field: local midnight of the picked day, or
+  // "now" when left empty. Reject malformed values up front instead
+  // of aborting mid-transaction.
+  const txnDate = data.date ? parseLocalDate(data.date) : new Date();
+  if (!txnDate) {
+    return { status: "error", errors: { date: ["Invalid date"] } };
+  }
+
   try {
     const result = await prisma.$transaction(async (tx) => {
       const balanceCheck = await adjustTrustBalance(tx, matterId, signed);
       if (!balanceCheck.ok) throw new Error(balanceCheck.error);
-      const txnDate = data.date ? new Date(data.date) : new Date();
       const txn = await tx.trustTransaction.create({
         data: {
           matterId,
@@ -1077,6 +1093,14 @@ export async function recordInvoicePayment(
   const data = parsed.data;
   const requested = new Prisma.Decimal(data.amount);
 
+  // Optional date-only field: local midnight of the picked day, or
+  // "now" when left empty. Reject malformed values up front instead
+  // of aborting mid-transaction.
+  const txnDate = data.date ? parseLocalDate(data.date) : new Date();
+  if (!txnDate) {
+    return { status: "error", errors: { date: ["Invalid date"] } };
+  }
+
   try {
     const result = await prisma.$transaction(async (tx) => {
       // Row-lock the invoice before reading paidAmount: the
@@ -1128,7 +1152,6 @@ export async function recordInvoicePayment(
         );
       }
 
-      const txnDate = data.date ? new Date(data.date) : new Date();
 
       // Trust path: write the trust ledger leg + decrement the
       // matter trust balance, refusing on overdraw. The InvoicePayment

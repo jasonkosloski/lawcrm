@@ -12,7 +12,6 @@
  */
 
 import Link from "next/link";
-import { format, formatDistanceToNowStrict } from "date-fns";
 import {
   MessageSquare,
   Phone,
@@ -23,6 +22,11 @@ import {
   Briefcase,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+// Item timestamps are real instants — server-rendered, so display
+// threads the viewer's IANA zone (ADR-012); formatRelative for the
+// missed-call recency label is TZ-independent until its >30d
+// calendar-date fallback.
+import { formatDate, formatRelative } from "@/lib/format-date";
 import { BackToListButton } from "./back-to-list-button";
 import { MarkThreadRead } from "./mark-thread-read";
 import type {
@@ -34,6 +38,9 @@ import { FollowUpButton } from "./follow-up-button";
 import { setMessengerThreadFollowUp } from "@/app/actions/follow-ups";
 import { LogTimeOnCommButton } from "./log-time-on-comm-button";
 import { CommTimeLoggedIndicator } from "./comm-time-logged-indicator";
+import { ManualCallActions } from "./manual-call-actions";
+import type { CallMatterOption } from "./log-call-button";
+import { asCallOutcome, type EditableCallLog } from "@/lib/call-log-form";
 
 function prettyPhone(p: string): string {
   const digits = p.replace(/\D/g, "");
@@ -54,11 +61,37 @@ function formatDuration(sec: number | null): string {
   return `${m}m ${s}s`;
 }
 
+/** Read-side permission flags + option data for the manual-call
+ *  edit/delete affordances. Resolved by the server page with
+ *  currentUserHasPermission and threaded down to call items. */
+type CallLogAbility = {
+  canEdit: boolean;
+  canDelete: boolean;
+  matters: CallMatterOption[];
+};
+
 export function MessengerThreadReader({
   thread,
+  canEditCall = false,
+  canDeleteCall = false,
+  callMatters = [],
+  tz = null,
 }: {
   thread: MessengerThreadDetail | null;
+  /** `communication.edit_call` — shows Edit on manual call items. */
+  canEditCall?: boolean;
+  /** `communication.delete_call` — shows Delete on manual call items. */
+  canDeleteCall?: boolean;
+  /** Open-matter options for the edit dialog's re-file select. */
+  callMatters?: CallMatterOption[];
+  /** Viewer's IANA zone — item timestamps are real instants. */
+  tz?: string | null;
 }) {
+  const callAbility: CallLogAbility = {
+    canEdit: canEditCall,
+    canDelete: canDeleteCall,
+    matters: callMatters,
+  };
   if (!thread) {
     // Empty-state — only useful at lg+ where the list is visible
     // alongside. On mobile the list IS the home view; the
@@ -166,6 +199,8 @@ export function MessengerThreadReader({
                 // resolveMessengerMatter uses on the server.
                 it.matterId !== null || thread.defaultMatter !== null
               }
+              callAbility={callAbility}
+              tz={tz}
             />
           ))
         )}
@@ -186,14 +221,24 @@ function Item({
   item,
   contactLabel,
   isFiled,
+  callAbility,
+  tz,
 }: {
   item: MessengerItemRow;
   contactLabel: string;
   isFiled: boolean;
+  callAbility: CallLogAbility;
+  tz: string | null;
 }) {
   if (item.kind === "call")
     return (
-      <CallEvent item={item} contactLabel={contactLabel} isFiled={isFiled} />
+      <CallEvent
+        item={item}
+        contactLabel={contactLabel}
+        isFiled={isFiled}
+        callAbility={callAbility}
+        tz={tz}
+      />
     );
   if (item.kind === "voicemail")
     return (
@@ -201,10 +246,16 @@ function Item({
         item={item}
         contactLabel={contactLabel}
         isFiled={isFiled}
+        tz={tz}
       />
     );
   return (
-    <SmsBubble item={item} contactLabel={contactLabel} isFiled={isFiled} />
+    <SmsBubble
+      item={item}
+      contactLabel={contactLabel}
+      isFiled={isFiled}
+      tz={tz}
+    />
   );
 }
 
@@ -236,10 +287,12 @@ function SmsBubble({
   item,
   contactLabel,
   isFiled,
+  tz,
 }: {
   item: MessengerItemRow;
   contactLabel: string;
   isFiled: boolean;
+  tz: string | null;
 }) {
   const outbound = item.direction === "outbound";
   return (
@@ -281,7 +334,7 @@ function SmsBubble({
       </div>
       <div className="flex flex-col gap-1 pb-1">
         <span className="text-3xs font-mono text-ink-4">
-          {format(item.occurredAt, "h:mm a")}
+          {formatDate(item.occurredAt, "time", tz)}
         </span>
         {/* Time-logged indicator — always visible when there's time,
             so the bubble shows a hint of "0.4h logged" without hover. */}
@@ -316,11 +369,29 @@ function CallEvent({
   item,
   contactLabel,
   isFiled,
+  callAbility,
+  tz,
 }: {
   item: MessengerItemRow;
   contactLabel: string;
   isFiled: boolean;
+  callAbility: CallLogAbility;
+  tz: string | null;
 }) {
+  // Edit/delete only on manual logs — provider items are immutable.
+  const showCallActions =
+    item.isManual && (callAbility.canEdit || callAbility.canDelete);
+  const editable: EditableCallLog = {
+    id: item.id,
+    contactLabel,
+    direction: item.direction,
+    outcome: asCallOutcome(item.callStatus),
+    occurredAt: item.occurredAt,
+    durationSec: item.callDurationSec,
+    matterId: item.matterId,
+    matterName: item.matterName,
+    summary: item.body,
+  };
   const missed = item.callStatus === "missed" || item.callStatus === "no_answer";
   const Icon = missed
     ? PhoneMissed
@@ -328,7 +399,7 @@ function CallEvent({
       ? PhoneIncoming
       : PhoneOutgoing;
   const label = missed
-    ? `Missed call · ${formatDistanceToNowStrict(item.occurredAt, { addSuffix: true })}`
+    ? `Missed call · ${formatRelative(item.occurredAt, tz)}`
     : `${item.direction === "inbound" ? "Inbound" : "Outbound"} call · ${formatDuration(item.callDurationSec)}`;
   return (
     <div className="self-center flex flex-col items-center gap-1 max-w-[26rem]">
@@ -339,7 +410,7 @@ function CallEvent({
             {label}
           </span>
           <span className="font-mono text-ink-4">
-            {format(item.occurredAt, "h:mm a")}
+            {formatDate(item.occurredAt, "time", tz)}
           </span>
         </div>
         {/* Time-logged indicator stays visible (without hover) once
@@ -360,6 +431,18 @@ function CallEvent({
             }}
           />
         </div>
+        {/* Manual logs only: edit / delete kebab — same hover-reveal
+            treatment as the log-time button. */}
+        {showCallActions && (
+          <div className="[@media(hover:hover)]:opacity-0 group-hover/call:opacity-100 transition-opacity">
+            <ManualCallActions
+              item={editable}
+              canEdit={callAbility.canEdit}
+              canDelete={callAbility.canDelete}
+              matters={callAbility.matters}
+            />
+          </div>
+        )}
       </div>
       {/* Call summary — schema stores it in `body` (manual call
           logging writes it; provider call summaries land here too). */}
@@ -376,10 +459,12 @@ function VoicemailCard({
   item,
   contactLabel,
   isFiled,
+  tz,
 }: {
   item: MessengerItemRow;
   contactLabel: string;
   isFiled: boolean;
+  tz: string | null;
 }) {
   // Voicemails are the highest-leverage source for inbox actions —
   // the transcript usually contains an explicit ask ("call me back
@@ -400,7 +485,7 @@ function VoicemailCard({
           </span>
         )}
         <span className="ml-auto text-3xs font-mono text-ink-4">
-          {format(item.occurredAt, "h:mm a")}
+          {formatDate(item.occurredAt, "time", tz)}
         </span>
       </div>
       {item.transcript && (

@@ -20,8 +20,14 @@ import {
 import { Card } from "@/components/ui/card";
 import { formatDate } from "@/lib/format-date";
 import { formatPhone } from "@/lib/format-phone";
-import { formatCallDuration } from "@/lib/call-log-form";
+import {
+  asCallOutcome,
+  formatCallDuration,
+  type EditableCallLog,
+} from "@/lib/call-log-form";
 import type { MatterMessengerItemRow } from "@/lib/queries/messenger";
+import { ManualCallActions } from "./manual-call-actions";
+import type { CallMatterOption } from "./log-call-button";
 
 function itemIcon(item: MatterMessengerItemRow) {
   if (item.kind === "voicemail") return Voicemail;
@@ -46,8 +52,22 @@ function itemLabel(item: MatterMessengerItemRow): string {
 
 export function MatterPhoneLog({
   items,
+  canEditCall = false,
+  canDeleteCall = false,
+  matterName,
+  editMatters = [],
 }: {
   items: MatterMessengerItemRow[];
+  /** `communication.edit_call` / `.delete_call` — resolved by the
+   *  page; gate the kebab on manual call rows. */
+  canEditCall?: boolean;
+  canDeleteCall?: boolean;
+  /** Name of the matter this log belongs to — display label for a
+   *  row whose item-level filing IS this matter (rows here are filed
+   *  either to it or to nothing + inherited). */
+  matterName?: string;
+  /** Open-matter options for the edit dialog's re-file select. */
+  editMatters?: CallMatterOption[];
 }) {
   if (items.length === 0) {
     return (
@@ -74,11 +94,33 @@ export function MatterPhoneLog({
             item.kind === "call"
               ? formatCallDuration(item.callDurationSec)
               : null;
+          // Edit/delete only on manually logged calls — provider
+          // items are immutable records.
+          const showActions =
+            item.kind === "call" &&
+            item.isManual &&
+            (canEditCall || canDeleteCall);
+          const editable: EditableCallLog | null = showActions
+            ? {
+                id: item.id,
+                contactLabel:
+                  item.contactName ?? formatPhone(item.contactPhone),
+                direction: item.direction,
+                outcome: asCallOutcome(item.callStatus),
+                occurredAt: item.occurredAt,
+                durationSec: item.callDurationSec,
+                matterId: item.matterId,
+                // Rows here are filed to this matter or inherit it —
+                // when item-level filing exists it IS this matter.
+                matterName: item.matterId ? (matterName ?? null) : null,
+                summary: item.body,
+              }
+            : null;
           return (
-            <li key={item.id}>
+            <li key={item.id} className="flex items-stretch">
               <Link
                 href={`/communication?view=messages&thread=${item.threadId}`}
-                className="flex items-start gap-3 px-4 py-2.5 text-xs hover:bg-paper-2 transition-colors"
+                className="flex-1 min-w-0 flex items-start gap-3 px-4 py-2.5 text-xs hover:bg-paper-2 transition-colors"
               >
                 <Icon
                   size={13}
@@ -112,6 +154,16 @@ export function MatterPhoneLog({
                   {formatDate(item.occurredAt, "datetime")}
                 </span>
               </Link>
+              {editable && (
+                <div className="flex items-center pr-3 shrink-0">
+                  <ManualCallActions
+                    item={editable}
+                    canEdit={canEditCall}
+                    canDelete={canDeleteCall}
+                    matters={editMatters}
+                  />
+                </div>
+              )}
             </li>
           );
         })}

@@ -18,6 +18,10 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+// Date-only inputs ("YYYY-MM-DD") must parse to LOCAL midnight —
+// `new Date(value)` reads them as UTC midnight, drifting the day
+// for anyone west of UTC. See parseLocalDate docs.
+import { parseLocalDate } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
 import {
   DEADLINE_KINDS,
@@ -98,6 +102,13 @@ export async function addTaskToNote(
     };
   }
 
+  const dueDate = parsed.data.dueDate
+    ? parseLocalDate(parsed.data.dueDate)
+    : null;
+  if (parsed.data.dueDate && !dueDate) {
+    return { status: "error", errors: { dueDate: ["Invalid due date"] } };
+  }
+
   const userId = await getCurrentUserId();
   await prisma.task.create({
     data: {
@@ -106,7 +117,7 @@ export async function addTaskToNote(
       title: parsed.data.title,
       description: parsed.data.description || null,
       priority: parsed.data.priority,
-      dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
+      dueDate,
       ownerId: userId,
     },
   });
@@ -151,13 +162,18 @@ export async function addDeadlineToNote(
     };
   }
 
+  const dueDate = parseLocalDate(parsed.data.dueDate);
+  if (!dueDate) {
+    return { status: "error", errors: { dueDate: ["Invalid due date"] } };
+  }
+
   const userId = await getCurrentUserId();
   await prisma.deadline.create({
     data: {
       matterId: note.matterId,
       noteId,
       title: parsed.data.title,
-      dueDate: new Date(parsed.data.dueDate),
+      dueDate,
       kind: parsed.data.kind,
       description: parsed.data.description || null,
       ownerId: userId,
@@ -213,13 +229,18 @@ export async function addTimeEntryToNote(
     };
   }
 
+  const date = parseLocalDate(parsed.data.date);
+  if (!date) {
+    return { status: "error", errors: { date: ["Invalid date"] } };
+  }
+
   const userId = await getCurrentUserId();
   await prisma.timeEntry.create({
     data: {
       matterId: note.matterId,
       userId,
       noteId,
-      date: new Date(parsed.data.date),
+      date,
       hours: Number(parsed.data.hours),
       activity: parsed.data.activity,
       narrative: parsed.data.narrative || null,
@@ -343,7 +364,9 @@ export async function addCapturesToNoteBulk(
             noteId,
             title: cap.title,
             priority: cap.priority,
-            dueDate: cap.dueDate ? new Date(cap.dueDate) : null,
+            // Capture dates are schema-validated as YYYY-MM-DD
+            // (capture-schemas.ts), so parseLocalDate can't miss.
+            dueDate: cap.dueDate ? parseLocalDate(cap.dueDate) : null,
             ownerId: userId,
           },
         });
@@ -353,7 +376,7 @@ export async function addCapturesToNoteBulk(
             matterId: note.matterId,
             noteId,
             title: cap.title,
-            dueDate: new Date(cap.dueDate),
+            dueDate: parseLocalDate(cap.dueDate)!,
             kind: cap.kind_,
             description: cap.description || null,
             ownerId: userId,
@@ -365,7 +388,7 @@ export async function addCapturesToNoteBulk(
             matterId: note.matterId,
             userId,
             noteId,
-            date: new Date(cap.date),
+            date: parseLocalDate(cap.date)!,
             hours: Number(cap.hours),
             activity: cap.activity,
             narrative: cap.narrative || null,

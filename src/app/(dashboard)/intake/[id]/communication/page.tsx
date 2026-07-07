@@ -10,6 +10,11 @@
  * AND no phone). Clicking an email thread updates `?thread=<id>` in
  * place; SMS rows link out to the main `/communication?view=messages`
  * page since there's no embedded messenger reader today.
+ *
+ * "Log call" (gated on `communication.log_call`) opens the manual
+ * call composer with the lead's contact pre-selected — mirrors the
+ * matter Communication tab, except lead calls file to no matter
+ * (there isn't one yet; conversion is what creates it).
  */
 
 import Link from "next/link";
@@ -27,8 +32,15 @@ import {
   listMessengerThreadsForPhone,
   type MessengerThreadRow,
 } from "@/lib/queries/messenger";
+// Thread timestamps are real instants — render them on the viewer's
+// calendar via the centralized formatter + user TZ (ADR-012).
+import { formatDate } from "@/lib/format-date";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { formatPhone } from "@/lib/format-phone";
 import { getLeadById } from "@/lib/queries/leads";
+import { listContactPickerOptions } from "@/lib/queries/contacts";
+import { currentUserHasPermission } from "@/lib/permission-check";
+import { LogCallButton } from "@/components/communication/log-call-button";
 
 export default async function LeadCommunicationPage({
   params,
@@ -48,11 +60,36 @@ export default async function LeadCommunicationPage({
 
   // Email + SMS in parallel; either may be empty depending on what
   // contact channels we know about.
-  const [emailThreads, messengerThreads, filingOptions] = await Promise.all([
-    email ? listThreadsForEmail(email) : Promise.resolve([]),
-    phone ? listMessengerThreadsForPhone(phone) : Promise.resolve([]),
-    getFilingMatterOptions(),
-  ]);
+  const [emailThreads, messengerThreads, filingOptions, callContacts, tz] =
+    await Promise.all([
+      email ? listThreadsForEmail(email) : Promise.resolve([]),
+      phone ? listMessengerThreadsForPhone(phone) : Promise.resolve([]),
+      getFilingMatterOptions(),
+      // Contact typeahead options for the log-call composer — only
+      // when the gate passes AND the lead has a joined contact to
+      // pre-select (leads always do post-migration, but stay safe).
+      currentUserHasPermission("communication.log_call").then((can) =>
+        can && lead.contact ? listContactPickerOptions() : null
+      ),
+      getCurrentUserTimeZone(),
+    ]);
+
+  // "Log call" prefilled with the lead's contact. No matter picker
+  // options: a lead has no matter until conversion, so lead calls
+  // file as "No matter (general)" and live on the contact's thread.
+  const leadContact = lead.contact;
+  const logCallButton =
+    callContacts && leadContact ? (
+      <LogCallButton
+        contacts={callContacts}
+        fixedContact={{
+          id: leadContact.id,
+          name: leadContact.name,
+          organization: leadContact.organization,
+          phone: leadContact.phone ?? leadContact.phones[0]?.number ?? null,
+        }}
+      />
+    ) : null;
 
   // Only allow reading email threads that are actually in the lead's set.
   const threadId =
@@ -62,11 +99,18 @@ export default async function LeadCommunicationPage({
 
   const selectedThread = threadId ? await getThreadById(threadId) : null;
 
-  // Truly no contact info — show a single empty card.
+  // Truly no contact info — show a single empty card. The composer
+  // stays available (it accepts a typed phone number) so the first
+  // call can still be captured.
   if (!email && !phone) {
     return (
       <div className="p-5">
-        <div className="max-w-4xl">
+        <div className="max-w-4xl flex flex-col gap-3">
+          {logCallButton && (
+            <div className="flex items-center justify-end">
+              {logCallButton}
+            </div>
+          )}
           <Card>
             <div className="p-5 text-xs text-ink-3">
               This lead has no email or phone on file yet, so there&apos;s
@@ -81,6 +125,11 @@ export default async function LeadCommunicationPage({
 
   return (
     <div className="p-5 flex flex-col flex-1 min-h-0 gap-4">
+      {logCallButton && (
+        <div className="flex items-center justify-end shrink-0">
+          {logCallButton}
+        </div>
+      )}
       {email ? (
         <div className="flex flex-col flex-1 min-h-0 gap-3">
           <div className="text-2xs font-mono text-ink-4 shrink-0">
@@ -98,6 +147,7 @@ export default async function LeadCommunicationPage({
             basePath={`/intake/${id}/communication`}
             emptyLabel="No emails yet"
             emptyHint={`Emails to or from ${email} will surface here.`}
+            tz={tz}
           />
         </div>
       ) : (
@@ -113,6 +163,7 @@ export default async function LeadCommunicationPage({
         <SmsSection
           phone={phone}
           threads={messengerThreads}
+          tz={tz}
         />
       )}
     </div>
@@ -126,9 +177,12 @@ export default async function LeadCommunicationPage({
 function SmsSection({
   phone,
   threads,
+  tz,
 }: {
   phone: string;
   threads: MessengerThreadRow[];
+  /** Viewer's IANA zone — lastAt is a real instant. */
+  tz: string;
 }) {
   return (
     <div className="flex flex-col gap-2 shrink-0">
@@ -167,10 +221,7 @@ function SmsSection({
                     </span>
                   )}
                   <span className="text-2xs font-mono text-ink-4 shrink-0">
-                    {t.lastAt.toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                    })}
+                    {formatDate(t.lastAt, "short", tz)}
                   </span>
                 </Link>
               </li>

@@ -52,9 +52,12 @@ import {
   bulkAttachInitialState,
   type BulkAttachFormState,
 } from "@/lib/note-attachment-form";
+// Due dates + entry dates here are date-only values (server-local
+// midnight) — the centralized "short" variant with no TZ override
+// keeps them on the day grid they were saved on.
+import { formatDate as formatDateVariant } from "@/lib/format-date";
 
-const formatDate = (d: Date): string =>
-  d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+const formatDate = (d: Date): string => formatDateVariant(d, "short");
 
 type ComposerKind = "task" | "deadline" | "time" | "bulk" | null;
 

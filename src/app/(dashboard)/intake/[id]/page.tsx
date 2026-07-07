@@ -23,6 +23,12 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmailLink } from "@/components/ui/email-link";
 import { ConflictCheckCard } from "@/components/intake/conflict-check-card";
+// Centralized date formatting — default "medium" matches the
+// "Apr 15, 2026" this page always used. dateOfIncident is date-only
+// (server-local day grid, no TZ override); createdAt is a real
+// instant, so it threads the viewer's TZ (ADR-012).
+import { formatDate } from "@/lib/format-date";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { formatPhone } from "@/lib/format-phone";
 import { getLeadById, LEAD_SOURCE_LABEL } from "@/lib/queries/leads";
 import { runConflictMatcher } from "@/lib/conflict-check";
@@ -32,15 +38,6 @@ const ASSESSMENT_LABEL: Record<string, string> = {
   strong: "Strong",
   moderate: "Moderate",
   weak: "Weak",
-};
-
-const formatDate = (d: Date | null): string => {
-  if (!d) return "—";
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 };
 
 function AssessmentBar({
@@ -89,7 +86,7 @@ export default async function LeadOverviewPage({
   // Run the matcher live on every page load so a freshly added
   // contact / opposing party shows up without re-clicking "Run."
   // The matcher is read-only and bounded — see lib/conflict-check.ts.
-  const [conflictResult, canRunCheck, canOverride] = await Promise.all([
+  const [conflictResult, canRunCheck, canOverride, tz] = await Promise.all([
     runConflictMatcher({
       name: lead.contact?.name ?? lead.name ?? null,
       email: lead.contact?.email ?? lead.email ?? null,
@@ -97,6 +94,9 @@ export default async function LeadOverviewPage({
     }),
     currentUserHasPermission("intake.conflict_check.run"),
     currentUserHasPermission("intake.conflict_check.override"),
+    // "Received" is a real instant — render it on the viewer's
+    // calendar, not the server's (UTC in prod).
+    getCurrentUserTimeZone(),
   ]);
 
   return (
@@ -330,7 +330,7 @@ export default async function LeadOverviewPage({
                 />
                 <MetaRow
                   label="Received"
-                  value={formatDate(lead.createdAt)}
+                  value={formatDate(lead.createdAt, "medium", tz)}
                 />
               </dl>
             </CardContent>

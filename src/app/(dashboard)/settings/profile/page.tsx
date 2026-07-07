@@ -27,16 +27,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ProfileEditForm } from "@/components/settings/profile-edit-form";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentFirm } from "@/lib/firm";
+import { formatDate } from "@/lib/format-date";
 import { prisma } from "@/lib/prisma";
-
-const formatDate = (d: Date | null): string => {
-  if (!d) return "—";
-  return d.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-};
 
 export default async function ProfileSettingsPage() {
   const userId = await getCurrentUserId();
@@ -153,7 +145,13 @@ export default async function ProfileSettingsPage() {
                 value={user.isActive ? "Active" : "Deactivated"}
                 accent={user.isActive ? undefined : "warn"}
               />
-              <Row label="Member since" value={formatDate(user.createdAt)} />
+              {/* Real timestamp — anchor to the user's own zone
+                  (already loaded on this row) instead of the
+                  server's. */}
+              <Row
+                label="Member since"
+                value={formatDate(user.createdAt, "long", user.timeZone)}
+              />
             </dl>
 
             <div className="flex flex-col gap-1.5 pt-2 border-t border-line">

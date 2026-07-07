@@ -10,7 +10,6 @@
  */
 
 import Link from "next/link";
-import { formatDistanceToNowStrict } from "date-fns";
 import {
   PhoneIncoming,
   PhoneMissed,
@@ -20,6 +19,9 @@ import {
   Pin,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+// Centralized recency label — TZ-independent until the >30d
+// calendar-date fallback, which uses the viewer's zone.
+import { formatRelative } from "@/lib/format-date";
 import {
   isMissedCall,
   type MessengerThreadRow,
@@ -76,12 +78,16 @@ export function MessengerThreadList({
   filter,
   selectedThreadId,
   action,
+  tz = null,
 }: {
   threads: MessengerThreadRow[];
   filter: MessengerFilter;
   selectedThreadId: string | null;
   /** Optional header affordance — the "Log call" composer button. */
   action?: React.ReactNode;
+  /** Viewer's IANA zone — anchors formatRelative's calendar-date
+   *  fallback for threads older than ~30 days. */
+  tz?: string | null;
 }) {
   // Mobile drill-down — same shape as the email ThreadList. When a
   // thread is selected the reader takes over; otherwise the list
@@ -171,7 +177,7 @@ export function MessengerThreadList({
                         {t.contactName ?? prettyPhone(t.contactPhone)}
                       </span>
                       <span className="ml-auto text-2xs font-mono text-ink-4 shrink-0">
-                        {formatDistanceToNowStrict(t.lastAt, { addSuffix: false })}
+                        {formatRelative(t.lastAt, tz)}
                       </span>
                     </div>
 

@@ -55,6 +55,23 @@ describe("taskCaptureSchema", () => {
     expect(r.success).toBe(false);
   });
 
+  test("rejects malformed dueDate but keeps '' (optional)", () => {
+    const bad = taskCaptureSchema.safeParse({
+      kind: "task",
+      tempId: "t1",
+      title: "ok",
+      dueDate: "next tuesday",
+    });
+    expect(bad.success).toBe(false);
+    const empty = taskCaptureSchema.safeParse({
+      kind: "task",
+      tempId: "t1",
+      title: "ok",
+      dueDate: "",
+    });
+    expect(empty.success).toBe(true);
+  });
+
   test("rejects invalid priority", () => {
     const r = taskCaptureSchema.safeParse({
       kind: "task",
@@ -170,6 +187,16 @@ describe("deadlineCaptureSchema", () => {
     });
     expect(r.success).toBe(false);
   });
+
+  test("rejects non-YYYY-MM-DD dueDate (actions parseLocalDate rely on it)", () => {
+    const r = deadlineCaptureSchema.safeParse({
+      kind: "deadline",
+      tempId: "d1",
+      title: "ok",
+      dueDate: "05/30/2026",
+    });
+    expect(r.success).toBe(false);
+  });
 });
 
 describe("timeCaptureSchema", () => {
@@ -210,6 +237,11 @@ describe("timeCaptureSchema", () => {
   test("accepts exactly 24 hours (boundary)", () => {
     const r = timeCaptureSchema.safeParse({ ...base, hours: "24" });
     expect(r.success).toBe(true);
+  });
+
+  test("rejects non-YYYY-MM-DD date (actions parseLocalDate rely on it)", () => {
+    const r = timeCaptureSchema.safeParse({ ...base, date: "Apr 25, 2026" });
+    expect(r.success).toBe(false);
   });
 });
 

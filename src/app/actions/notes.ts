@@ -28,6 +28,10 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+// Capture date fields are schema-validated "YYYY-MM-DD" — parse to
+// LOCAL midnight via parseLocalDate. `new Date(value)` would read
+// them as UTC midnight and drift the day for anyone west of UTC.
+import { parseLocalDate } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
 import {
   NOTE_TYPES,
@@ -248,7 +252,7 @@ export async function createNote(
             noteId: created.id,
             title: cap.title,
             priority: cap.priority,
-            dueDate: cap.dueDate ? new Date(cap.dueDate) : null,
+            dueDate: cap.dueDate ? parseLocalDate(cap.dueDate) : null,
             ownerId: currentUserId,
           },
         });
@@ -271,7 +275,8 @@ export async function createNote(
             matterId,
             noteId: created.id,
             title: cap.title,
-            dueDate: new Date(cap.dueDate),
+            // Schema-validated as YYYY-MM-DD — parseLocalDate can't miss.
+            dueDate: parseLocalDate(cap.dueDate)!,
             kind: cap.kind_,
             description: cap.description || null,
             ownerId: currentUserId,
@@ -283,7 +288,7 @@ export async function createNote(
             matterId,
             userId: currentUserId,
             noteId: created.id,
-            date: new Date(cap.date),
+            date: parseLocalDate(cap.date)!,
             hours: Number(cap.hours),
             activity: cap.activity,
             narrative: cap.narrative || null,

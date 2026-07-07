@@ -32,6 +32,7 @@ import {
   UserPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatRelative } from "@/lib/format-date";
 import {
   fetchBellState,
   markAllNotificationsRead,
@@ -68,18 +69,6 @@ const TYPE_TONE: Record<string, string> = {
   note_mentioned: "text-ink-3",
   matter_assigned: "text-brand-700",
   generic: "text-ink-3",
-};
-
-const formatRelative = (d: Date): string => {
-  const ms = Date.now() - d.getTime();
-  const minutes = Math.floor(ms / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 };
 
 export function NotificationBell() {

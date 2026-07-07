@@ -16,11 +16,12 @@ import Link from "next/link";
 import { ExternalLink, Lock, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { deleteTimeEntry } from "@/app/actions/time-entries";
+// Entry dates are date-only values (server-local midnight) — the
+// centralized "short" variant with no TZ override keeps them on the
+// same day grid they were saved on.
+import { formatDate } from "@/lib/format-date";
 import type { EventTimeEntry } from "@/lib/queries/calendar";
 import { EventTimeEntryComposer } from "./event-time-entry-composer";
-
-const formatDate = (d: Date): string =>
-  d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
 export function EventTimeEntriesSection({
   eventId,
@@ -127,7 +128,7 @@ function EventTimeEntryItem({ entry }: { entry: EventTimeEntry }) {
           )}
         </div>
         <span className="font-mono text-2xs text-ink-3 shrink-0">
-          {formatDate(entry.date)}
+          {formatDate(entry.date, "short")}
         </span>
         <span
           className={cn(

@@ -17,6 +17,7 @@ import {
   Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/format-date";
 import { TableCell, TableRow } from "@/components/ui/table";
 import {
   DropdownMenu,
@@ -101,11 +102,7 @@ export function RoleRow({
         </span>
       </TableCell>
       <TableCell className="text-2xs text-ink-4">
-        {role.createdAt.toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-        })}
+        {formatDate(role.createdAt, "medium")}
       </TableCell>
       <TableCell className="pr-4 text-right">
         {isAdmin && (

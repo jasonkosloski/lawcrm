@@ -74,16 +74,19 @@ import {
   type InvoiceKind,
   type InvoicePaymentSource,
 } from "@/lib/billing-form";
+import { formatDate as formatDateVariant } from "@/lib/format-date";
 
 const formatMoney = (n: number): string =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-const formatDate = (d: Date): string =>
-  d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+// Billing dates on this page are a mix of date-only values (expense /
+// payment / trust-transaction dates, stored at server-local midnight)
+// and instants (invoice issue/due, minted with `new Date()`). Both
+// funnel through the centralized "medium" variant on the server-local
+// grid — the day the value was saved on. Threading the viewer's TZ
+// for the instant flavor is deferred until the two storage shapes
+// are split apart.
+const formatDate = (d: Date): string => formatDateVariant(d, "medium");
 
 const STATUS_META: Record<string, string> = {
   draft: "bg-paper-2 text-ink-3 border-line",

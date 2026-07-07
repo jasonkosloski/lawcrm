@@ -41,6 +41,9 @@ import {
 } from "@/lib/queries/messenger";
 import { listContactPickerOptions } from "@/lib/queries/contacts";
 import { currentUserHasPermission } from "@/lib/permission-check";
+// Message timestamps are real instants — the lists + readers render
+// them on the viewer's calendar, not the server's (ADR-012).
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { LogCallButton } from "@/components/communication/log-call-button";
 
 type View = "email" | "messages";
@@ -88,23 +91,33 @@ export default async function CommunicationPage({
 
   // Both views need cross-tab unread counts so the tab badges stay
   // honest regardless of which view the user is on.
-  const [emailCounts, messengerCounts] = await Promise.all([
+  const [emailCounts, messengerCounts, tz] = await Promise.all([
     getCommunicationCounts(),
     getMessengerMailboxCounts(),
+    getCurrentUserTimeZone(),
   ]);
 
   if (view === "messages") {
     const filter = parseMessengerFilter(sp.filter);
-    const canLogCall = await currentUserHasPermission(
-      "communication.log_call"
-    );
+    const [canLogCall, canEditCall, canDeleteCall] = await Promise.all([
+      currentUserHasPermission("communication.log_call"),
+      currentUserHasPermission("communication.edit_call"),
+      currentUserHasPermission("communication.delete_call"),
+    ]);
+    // The matter option list feeds both the log-call composer and
+    // the edit dialog's re-file select.
+    const needCallMatters = canLogCall || canEditCall;
     const [threads, selectedThread, callContacts, callMatters] =
       await Promise.all([
         listMessengerThreads({ filter }),
         threadId ? getMessengerThread(threadId) : Promise.resolve(null),
         canLogCall ? listContactPickerOptions() : Promise.resolve([]),
-        canLogCall ? getFilingMatterOptions() : Promise.resolve([]),
+        needCallMatters ? getFilingMatterOptions() : Promise.resolve([]),
       ]);
+    const callMatterOptions = callMatters.map((m) => ({
+      id: m.id,
+      name: m.name,
+    }));
 
     return (
       <MailboxDrawerProvider>
@@ -132,19 +145,23 @@ export default async function CommunicationPage({
             threads={threads}
             filter={filter}
             selectedThreadId={threadId}
+            tz={tz}
             action={
               canLogCall ? (
                 <LogCallButton
                   contacts={callContacts}
-                  matters={callMatters.map((m) => ({
-                    id: m.id,
-                    name: m.name,
-                  }))}
+                  matters={callMatterOptions}
                 />
               ) : null
             }
           />
-          <MessengerThreadReader thread={selectedThread} />
+          <MessengerThreadReader
+            thread={selectedThread}
+            canEditCall={canEditCall}
+            canDeleteCall={canDeleteCall}
+            callMatters={callMatterOptions}
+            tz={tz}
+          />
         </div>
       </MailboxDrawerProvider>
     );
@@ -201,10 +218,12 @@ export default async function CommunicationPage({
               : null
           }
           selectedThreadId={threadId}
+          tz={tz}
         />
         <ThreadReader
           thread={selectedThread}
           filingOptions={filingOptions}
+          tz={tz}
         />
       </div>
     </MailboxDrawerProvider>

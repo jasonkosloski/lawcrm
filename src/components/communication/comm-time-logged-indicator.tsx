@@ -19,6 +19,11 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight, Clock, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
+// Client component — TimeEntry.date is a date-only value (server-
+// local midnight); the centralized variant renders it with no TZ
+// override (browser-local after hydration), matching the
+// pre-migration output.
+import { formatDate } from "@/lib/format-date";
 
 export type CommTimeEntryView = {
   id: string;
@@ -118,10 +123,7 @@ export function CommTimeLoggedIndicator({
                 {e.activity}
               </span>
               <span className="font-mono text-ink-4 shrink-0">
-                {e.date.toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                })}
+                {formatDate(e.date, "short")}
               </span>
               <span className="font-mono text-ink shrink-0">
                 {e.hours.toFixed(1)}h

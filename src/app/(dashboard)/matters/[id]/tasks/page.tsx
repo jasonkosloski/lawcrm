@@ -18,6 +18,7 @@ import {
   getMatterTasks,
   type TaskRow,
 } from "@/lib/queries/matter-detail";
+import { formatDate as formatDateVariant } from "@/lib/format-date";
 
 const STATUS_ORDER = ["open", "in_progress", "in_review", "done", "cancelled"];
 
@@ -51,10 +52,10 @@ const PRIORITY_META: Record<
   },
 };
 
-const formatDate = (d: Date | null): string => {
-  if (!d) return "—";
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-};
+// Due dates are date-only values (server-local midnight) — the
+// centralized "short" variant with no TZ override keeps them on the
+// day grid they were saved on.
+const formatDate = (d: Date | null): string => formatDateVariant(d, "short");
 
 export default async function MatterTasksPage({
   params,

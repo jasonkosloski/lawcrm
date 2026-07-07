@@ -138,6 +138,15 @@ describe("expected-key invariants", () => {
     "events.edit_non_matter",
     "communication.file_email",
     "communication.log_call",
+    "communication.edit_call",
+    "communication.delete_call",
+    "documents.template.create",
+    "documents.template.edit",
+    "documents.template.delete",
+    "contacts.create",
+    "contacts.edit",
+    "contacts.delete",
+    "contacts.merge",
   ])("%s exists in the catalog", (key) => {
     expect(isKnownPermission(key)).toBe(true);
   });

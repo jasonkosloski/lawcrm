@@ -9,9 +9,11 @@
  */
 
 import Link from "next/link";
-import { formatDistanceToNowStrict } from "date-fns";
 import { Paperclip, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
+// Centralized recency label — TZ-independent until the >30d
+// calendar-date fallback, which uses the viewer's zone.
+import { formatRelative } from "@/lib/format-date";
 import { Card } from "@/components/ui/card";
 import type { ThreadListRow } from "@/lib/queries/communication";
 
@@ -25,6 +27,7 @@ export function EmbeddedThreadList({
   showMatterChip = true,
   threadHref = defaultThreadHref,
   selectedThreadId = null,
+  tz = null,
 }: {
   threads: ThreadListRow[];
   emptyLabel: string;
@@ -37,6 +40,9 @@ export function EmbeddedThreadList({
   threadHref?: (id: string) => string;
   /** Currently-selected thread id; highlighted in the list. */
   selectedThreadId?: string | null;
+  /** Viewer's IANA zone — anchors formatRelative's calendar-date
+   *  fallback for threads older than ~30 days. */
+  tz?: string | null;
 }) {
   if (threads.length === 0) {
     return (
@@ -85,19 +91,7 @@ export function EmbeddedThreadList({
                     </span>
                   )}
                   <span className="text-2xs font-mono text-ink-4 shrink-0">
-                    {formatDistanceToNowStrict(t.lastMessageAt, {
-                      addSuffix: false,
-                    })
-                      .replace(" hours", "h")
-                      .replace(" hour", "h")
-                      .replace(" minutes", "m")
-                      .replace(" minute", "m")
-                      .replace(" days", "d")
-                      .replace(" day", "d")
-                      .replace(" months", "mo")
-                      .replace(" month", "mo")
-                      .replace(" years", "y")
-                      .replace(" year", "y")}
+                    {formatRelative(t.lastMessageAt, tz)}
                   </span>
                 </div>
                 <div

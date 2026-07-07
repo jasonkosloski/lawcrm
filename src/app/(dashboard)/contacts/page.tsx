@@ -27,6 +27,7 @@ import {
   getContactTypeCounts,
   listContacts,
 } from "@/lib/queries/contacts";
+import { currentUserHasPermission } from "@/lib/permission-check";
 
 export default async function ContactsPage({
   searchParams,
@@ -35,9 +36,10 @@ export default async function ContactsPage({
   const q = typeof sp.q === "string" ? sp.q : undefined;
   const type = typeof sp.type === "string" ? sp.type : undefined;
 
-  const [rows, typeCounts] = await Promise.all([
+  const [rows, typeCounts, canCreate] = await Promise.all([
     listContacts({ search: q, type }),
     getContactTypeCounts(),
+    currentUserHasPermission("contacts.create"),
   ]);
 
   const totalActive = Object.values(typeCounts).reduce((a, b) => a + b, 0);
@@ -48,10 +50,12 @@ export default async function ContactsPage({
         title="Contacts"
         crumbs="Directory"
         actions={
-          <Button size="sm" render={<Link href="/contacts/new" />}>
-            <Plus />
-            New contact
-          </Button>
+          canCreate ? (
+            <Button size="sm" render={<Link href="/contacts/new" />}>
+              <Plus />
+              New contact
+            </Button>
+          ) : null
         }
       />
 

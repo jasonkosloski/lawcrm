@@ -44,6 +44,23 @@ vi.mock("./log-time-on-comm-button", () => ({
   // opacity classes control hover-reveal visibility.
   LogTimeOnCommButton: () => <span data-testid="log-time-btn" />,
 }));
+vi.mock("./manual-call-actions", () => ({
+  // Marker exposing the gating props — the real component pulls in
+  // the deleteCallLog server action (prisma), not loadable here.
+  ManualCallActions: ({
+    canEdit,
+    canDelete,
+  }: {
+    canEdit: boolean;
+    canDelete: boolean;
+  }) => (
+    <span
+      data-testid="manual-call-actions"
+      data-can-edit={String(canEdit)}
+      data-can-delete={String(canDelete)}
+    />
+  ),
+}));
 vi.mock("./mark-thread-read", () => ({
   // Marker exposing the props so the mount test below can assert the
   // reader wires the right channel + thread id. The real island
@@ -83,6 +100,7 @@ function makeItem(overrides: Partial<MessengerItemRow>): MessengerItemRow {
     // 2:05 PM — `h:mm a` never renders a leading zero, so header
     // text assertions below stay unambiguous about stray "0"s.
     occurredAt: new Date(2026, 6, 6, 14, 5, 0),
+    isManual: false,
     timeEntries: [],
     ...overrides,
   } as MessengerItemRow;
@@ -144,6 +162,53 @@ describe("mark-as-read island", () => {
   test("the empty state (no thread selected) mounts no island", () => {
     render(<MessengerThreadReader thread={null} />);
     expect(screen.queryByTestId("mark-thread-read")).toBeNull();
+  });
+});
+
+describe("manual-call edit/delete kebab gating", () => {
+  const manualCall = () =>
+    makeItem({
+      kind: "call",
+      body: "Discussed schedule",
+      callStatus: "answered",
+      callDurationSec: 300,
+      isManual: true,
+    });
+
+  test("manual call + permissions → kebab rendered with the flags", () => {
+    render(
+      <MessengerThreadReader
+        thread={makeThread([manualCall()])}
+        canEditCall
+        canDeleteCall={false}
+      />
+    );
+    const kebab = screen.getByTestId("manual-call-actions");
+    expect(kebab).toHaveAttribute("data-can-edit", "true");
+    expect(kebab).toHaveAttribute("data-can-delete", "false");
+  });
+
+  test("provider-synced call never gets the kebab, even with permissions", () => {
+    render(
+      <MessengerThreadReader
+        thread={makeThread([
+          makeItem({
+            kind: "call",
+            callStatus: "answered",
+            callDurationSec: 300,
+            isManual: false,
+          }),
+        ])}
+        canEditCall
+        canDeleteCall
+      />
+    );
+    expect(screen.queryByTestId("manual-call-actions")).toBeNull();
+  });
+
+  test("no permissions (default props) → no kebab on manual calls", () => {
+    render(<MessengerThreadReader thread={makeThread([manualCall()])} />);
+    expect(screen.queryByTestId("manual-call-actions")).toBeNull();
   });
 });
 

@@ -28,6 +28,9 @@ import {
 import { listMessengerItemsForMatter } from "@/lib/queries/messenger";
 import { listContactPickerOptions } from "@/lib/queries/contacts";
 import { currentUserHasPermission } from "@/lib/permission-check";
+// Message timestamps are real instants — the embedded reader renders
+// them on the viewer's calendar, not the server's (ADR-012).
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 
 export default async function MatterCommunicationPage({
   params,
@@ -48,24 +51,45 @@ export default async function MatterCommunicationPage({
   // getThreadById already scopes to the current user's accounts, so
   // it is safe to fetch eagerly here and discard below if the id
   // turns out not to belong to this matter.
-  const [matter, contacts, phoneItems, threads, filingOptions, requestedThread] =
-    await Promise.all([
-      prisma.matter.findUnique({
-        where: { id },
-        select: { id: true, name: true },
-      }),
-      // Contact options load only once the log-call gate passes —
-      // chained onto the check rather than a separate await stage.
-      currentUserHasPermission("communication.log_call").then((canLogCall) =>
-        canLogCall ? listContactPickerOptions({ priorityMatterId: id }) : null
-      ),
-      channel === "phone" ? listMessengerItemsForMatter(id) : null,
-      channel === "email" ? listThreadsForMatter(id) : null,
-      channel === "email" ? getFilingMatterOptions() : null,
-      channel === "email" && requestedThreadId
-        ? getThreadById(requestedThreadId)
-        : null,
-    ]);
+  const [
+    matter,
+    contacts,
+    phoneItems,
+    threads,
+    filingOptions,
+    requestedThread,
+    canEditCall,
+    canDeleteCall,
+    editMatters,
+    tz,
+  ] = await Promise.all([
+    prisma.matter.findUnique({
+      where: { id },
+      select: { id: true, name: true },
+    }),
+    // Contact options load only once the log-call gate passes —
+    // chained onto the check rather than a separate await stage.
+    currentUserHasPermission("communication.log_call").then((canLogCall) =>
+      canLogCall ? listContactPickerOptions({ priorityMatterId: id }) : null
+    ),
+    channel === "phone" ? listMessengerItemsForMatter(id) : null,
+    channel === "email" ? listThreadsForMatter(id) : null,
+    channel === "email" ? getFilingMatterOptions() : null,
+    channel === "email" && requestedThreadId
+      ? getThreadById(requestedThreadId)
+      : null,
+    currentUserHasPermission("communication.edit_call"),
+    currentUserHasPermission("communication.delete_call"),
+    // Re-file options for the edit dialog — phone channel only, and
+    // only when the edit gate passes (permission checks are
+    // per-request cached, so the duplicate check costs nothing).
+    channel === "phone"
+      ? currentUserHasPermission("communication.edit_call").then((can) =>
+          can ? getFilingMatterOptions() : null
+        )
+      : null,
+    getCurrentUserTimeZone(),
+  ]);
   if (!matter) notFound();
 
   const logCallButton = contacts ? (
@@ -83,7 +107,16 @@ export default async function MatterCommunicationPage({
           {logCallButton}
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto">
-          <MatterPhoneLog items={phoneItems ?? []} />
+          <MatterPhoneLog
+            items={phoneItems ?? []}
+            canEditCall={canEditCall}
+            canDeleteCall={canDeleteCall}
+            matterName={matter.name}
+            editMatters={(editMatters ?? []).map((m) => ({
+              id: m.id,
+              name: m.name,
+            }))}
+          />
         </div>
       </div>
     );
@@ -112,6 +145,7 @@ export default async function MatterCommunicationPage({
         emptyLabel="No communication filed to this matter"
         emptyHint="Emails and text messages filed to this matter will appear here. File a thread from the main inbox or let auto-filing catch it."
         showMatterChip={false}
+        tz={tz}
       />
     </div>
   );

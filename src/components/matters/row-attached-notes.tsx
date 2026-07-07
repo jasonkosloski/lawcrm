@@ -19,15 +19,11 @@ import Link from "next/link";
 import { ChevronDown, ChevronRight, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NOTE_TYPE_LABEL, type NoteType } from "@/lib/note-constants";
+// Client component — no user-TZ prop threaded here yet, so the
+// centralized "datetime" variant falls back to the runtime zone
+// (browser-local after hydration). See format-date.ts header.
+import { formatDate } from "@/lib/format-date";
 import type { AttachedNotePreview } from "@/lib/queries/matter-detail";
-
-const formatDateTime = (d: Date): string =>
-  d.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
 
 export function RowAttachedNotes({
   notes,
@@ -98,7 +94,7 @@ function NoteItem({
             {note.authorName}
           </span>
           <span className="text-[10px] font-mono text-ink-4">
-            {formatDateTime(note.createdAt)}
+            {formatDate(note.createdAt, "datetime")}
           </span>
         </div>
         <span className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full border bg-white text-ink-3 border-line shrink-0">

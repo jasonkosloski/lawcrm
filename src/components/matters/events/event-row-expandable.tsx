@@ -12,9 +12,12 @@
 "use client";
 
 import { useState } from "react";
-import { format, isSameDay } from "date-fns";
+import { isSameDay } from "date-fns";
 import { ChevronDown, Clock, Maximize2, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
+// Client component — event instants render via the centralized
+// variants with no TZ override (browser-local after hydration).
+import { formatDate } from "@/lib/format-date";
 import { EventLink } from "@/components/calendar/event-link";
 import { EventNotesSection } from "@/components/calendar/event-notes-section";
 import { EventTimeEntriesSection } from "@/components/calendar/event-time-entries-section";
@@ -63,8 +66,8 @@ export function EventRowExpandable({
   const timeLabel = event.isAllDay
     ? "All day"
     : isSameDay(event.startTime, event.endTime)
-      ? `${format(event.startTime, "h:mm a")} – ${format(event.endTime, "h:mm a")}`
-      : `${format(event.startTime, "MMM d, h:mm a")} – ${format(event.endTime, "MMM d, h:mm a")}`;
+      ? `${formatDate(event.startTime, "time")} – ${formatDate(event.endTime, "time")}`
+      : `${formatDate(event.startTime, "datetime")} – ${formatDate(event.endTime, "datetime")}`;
 
   const notesCount = event.notes.length;
   const timeCount = event.timeEntries.length;
@@ -94,7 +97,7 @@ export function EventRowExpandable({
             />
             <div className="flex flex-col leading-tight w-28 shrink-0">
               <span className="text-xs font-medium text-ink">
-                {format(event.startTime, "EEE, MMM d")}
+                {formatDate(event.startTime, "short_weekday")}
               </span>
               <span className="text-2xs font-mono text-ink-4">
                 {timeLabel}

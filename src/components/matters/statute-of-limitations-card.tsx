@@ -21,6 +21,7 @@
 import { useOptimistic, useTransition } from "react";
 import { CheckCircle2, Circle, Loader2, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/format-date";
 import { Card, CardContent } from "@/components/ui/card";
 import { setMatterSolSatisfied } from "@/app/actions/matters";
 
@@ -69,24 +70,13 @@ export function daysUntil(deadline: Date, now: Date): number {
  *  incident date): format on the UTC day grid, or users west of UTC
  *  see the previous day — a factually wrong deadline. */
 export function formatCalendarDate(d: Date): string {
-  return d.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+  return formatDate(d, "full_short", "UTC");
 }
 
 /** For real timestamps (satisfiedAt is `new Date()` at click time):
  *  the viewer's local zone is the right frame — do NOT force UTC. */
 function formatTimestampDate(d: Date): string {
-  return d.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatDate(d, "full_short");
 }
 
 export function StatuteOfLimitationsCard({

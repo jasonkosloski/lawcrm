@@ -24,6 +24,10 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+// Date-only inputs ("YYYY-MM-DD") must parse to LOCAL midnight —
+// `new Date(value)` reads them as UTC midnight, drifting the due
+// date a day early for anyone west of UTC. See parseLocalDate docs.
+import { parseLocalDate } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { DEADLINE_KINDS, TASK_PRIORITIES } from "@/lib/note-constants";
@@ -61,6 +65,13 @@ export async function convertNoteToTask(
     };
   }
 
+  const dueDate = parsed.data.dueDate
+    ? parseLocalDate(parsed.data.dueDate)
+    : null;
+  if (parsed.data.dueDate && !dueDate) {
+    return { status: "error", errors: { dueDate: ["Invalid due date"] } };
+  }
+
   const userId = await getCurrentUserId();
   await prisma.task.create({
     data: {
@@ -69,7 +80,7 @@ export async function convertNoteToTask(
       title: parsed.data.title,
       description: parsed.data.description || null,
       priority: parsed.data.priority,
-      dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
+      dueDate,
       ownerId: userId,
     },
   });
@@ -119,13 +130,18 @@ export async function convertTaskToDeadline(
     };
   }
 
+  const dueDate = parseLocalDate(parsed.data.dueDate);
+  if (!dueDate) {
+    return { status: "error", errors: { dueDate: ["Invalid due date"] } };
+  }
+
   const userId = await getCurrentUserId();
   await prisma.deadline.create({
     data: {
       matterId: task.matterId,
       parentTaskId: taskId,
       title: parsed.data.title,
-      dueDate: new Date(parsed.data.dueDate),
+      dueDate,
       kind: parsed.data.kind,
       description: parsed.data.description || null,
       ownerId: task.ownerId ?? userId,

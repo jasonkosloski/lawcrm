@@ -27,6 +27,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { parseLocalDate } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
 import {
   DEADLINE_KINDS,
@@ -101,16 +102,49 @@ function revalidateForSpawn(
 
 // ── Schemas ─────────────────────────────────────────────────────────────
 
+// Due dates are date-only "YYYY-MM-DD" from <input type="date"> —
+// parse to LOCAL midnight via parseLocalDate right in the schema.
+// `new Date(value)` would read them as UTC midnight and drift the
+// due date a day early for anyone west of UTC.
+
+/** Optional date-only field → local-midnight Date or null. */
+const optionalLocalDate = z
+  .string()
+  .optional()
+  .or(z.literal(""))
+  .transform((v, ctx) => {
+    if (!v) return null;
+    const d = parseLocalDate(v);
+    if (!d) {
+      ctx.addIssue({ code: "custom", message: "Invalid date" });
+      return z.NEVER;
+    }
+    return d;
+  });
+
+/** Required date-only field → local-midnight Date. */
+const requiredLocalDate = z
+  .string()
+  .min(1, "Due date is required")
+  .transform((v, ctx) => {
+    const d = parseLocalDate(v);
+    if (!d) {
+      ctx.addIssue({ code: "custom", message: "Invalid date" });
+      return z.NEVER;
+    }
+    return d;
+  });
+
 const taskSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(200),
   description: z.string().max(4000).optional().or(z.literal("")),
-  dueDate: z.string().optional().or(z.literal("")),
+  dueDate: optionalLocalDate,
   priority: z.enum(TASK_PRIORITIES).default("normal"),
 });
 
 const deadlineSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(200),
-  dueDate: z.string().min(1, "Due date is required"),
+  dueDate: requiredLocalDate,
   kind: z.enum(DEADLINE_KINDS).default("manual"),
   description: z.string().max(4000).optional().or(z.literal("")),
 });
@@ -148,7 +182,7 @@ export async function createTaskFromEmail(
       title: parsed.data.title,
       description: parsed.data.description || null,
       priority: parsed.data.priority,
-      dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
+      dueDate: parsed.data.dueDate,
       ownerId: userId,
     },
   });
@@ -187,7 +221,7 @@ export async function createDeadlineFromEmail(
       matterId: ctx.matterId,
       emailThreadId,
       title: parsed.data.title,
-      dueDate: new Date(parsed.data.dueDate),
+      dueDate: parsed.data.dueDate,
       kind: parsed.data.kind,
       description: parsed.data.description || null,
       ownerId: userId,
@@ -285,7 +319,7 @@ export async function createTaskFromMessage(
       title: parsed.data.title,
       description: parsed.data.description || null,
       priority: parsed.data.priority,
-      dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
+      dueDate: parsed.data.dueDate,
       ownerId: userId,
     },
   });
@@ -324,7 +358,7 @@ export async function createDeadlineFromMessage(
       matterId: ctx.matterId,
       messengerItemId,
       title: parsed.data.title,
-      dueDate: new Date(parsed.data.dueDate),
+      dueDate: parsed.data.dueDate,
       kind: parsed.data.kind,
       description: parsed.data.description || null,
       ownerId: userId,

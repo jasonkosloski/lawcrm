@@ -11,6 +11,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { isManualCallLog } from "@/lib/call-log-form";
 
 export type MessengerKind = "sms" | "call" | "voicemail";
 export type MessengerDirection = "inbound" | "outbound";
@@ -73,6 +74,9 @@ export type MessengerItemRow = {
   matterColor: string | null;
   isRead: boolean;
   occurredAt: Date;
+  /** Manually logged (providerEventId `manual-` prefix) — only these
+   *  get edit/delete affordances; provider items are immutable. */
+  isManual: boolean;
   /** Time entries logged "on this specific item." */
   timeEntries: MessengerItemTime[];
 };
@@ -353,6 +357,7 @@ export async function getMessengerThread(
       matterColor: i.matter?.color ?? null,
       isRead: i.isRead,
       occurredAt: i.occurredAt,
+      isManual: isManualCallLog(i.providerEventId),
       timeEntries: i.timeEntries.map((te) => ({
         id: te.id,
         hours: te.hours,
@@ -379,6 +384,12 @@ export type MatterMessengerItemRow = {
   callDurationSec: number | null;
   /** SMS body / call summary / voicemail transcript fallback. */
   body: string | null;
+  /** Item-level filing only (null may still inherit the thread's
+   *  default matter — that inheritance is what put it in this list). */
+  matterId: string | null;
+  /** Manually logged (providerEventId `manual-` prefix) — only these
+   *  get edit/delete affordances; provider items are immutable. */
+  isManual: boolean;
   contactName: string | null;
   contactPhone: string;
   occurredAt: Date;
@@ -407,12 +418,14 @@ export async function listMessengerItemsForMatter(
     select: {
       id: true,
       threadId: true,
+      providerEventId: true,
       kind: true,
       direction: true,
       callStatus: true,
       callDurationSec: true,
       body: true,
       transcript: true,
+      matterId: true,
       occurredAt: true,
       thread: {
         select: {
@@ -430,6 +443,8 @@ export async function listMessengerItemsForMatter(
     callStatus: i.callStatus,
     callDurationSec: i.callDurationSec,
     body: i.body ?? i.transcript,
+    matterId: i.matterId,
+    isManual: isManualCallLog(i.providerEventId),
     contactName: i.thread.contact?.name ?? null,
     contactPhone: i.thread.contactPhone,
     occurredAt: i.occurredAt,

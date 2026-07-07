@@ -38,7 +38,6 @@ export type ContactFormValues = {
   state: string;
   zip: string;
   notes: string;
-  conflictStatus: string;
 };
 
 const EMPTY_VALUES: ContactFormValues = {
@@ -52,14 +51,7 @@ const EMPTY_VALUES: ContactFormValues = {
   state: "",
   zip: "",
   notes: "",
-  conflictStatus: "clear",
 };
-
-const CONFLICT_OPTIONS = [
-  { value: "clear", label: "Clear" },
-  { value: "flagged", label: "Flagged" },
-  { value: "override", label: "Override (cleared with override)" },
-];
 
 export function ContactForm({
   action,
@@ -197,12 +189,9 @@ export function ContactForm({
           />
         </div>
 
-        <SelectField
-          name="conflictStatus"
-          value={v.conflictStatus}
-          onChange={(x) => set("conflictStatus", x)}
-          options={CONFLICT_OPTIONS}
-        />
+        {/* Conflict status intentionally not editable here — manual
+            changes require a justification and go through the
+            detail-page control so they hit the audit log. */}
 
         <TextareaField
           name="notes"

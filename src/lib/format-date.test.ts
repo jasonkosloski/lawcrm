@@ -19,6 +19,8 @@ import {
   formatDayBucket,
   formatRelative,
   instantInTz,
+  parseLocalDate,
+  parseLocalDateOrDateTime,
 } from "./format-date";
 
 // Anchor "now" so relative-time assertions are stable.
@@ -88,6 +90,99 @@ describe("formatDate", () => {
     const ny = formatDate(ts, "time", "America/New_York");
     expect(utc).not.toBe(ny);
     expect(ny).toMatch(/2:00/);
+  });
+
+  // 2026-04-15 is a Wednesday — the weekday variants below hang off it.
+  test("short_weekday adds the weekday, omits the year", () => {
+    const out = formatDate(
+      new Date("2026-04-15T12:00:00Z"),
+      "short_weekday",
+      "UTC"
+    );
+    expect(out).toMatch(/Wed/);
+    expect(out).toMatch(/Apr/);
+    expect(out).toMatch(/15/);
+    expect(out).not.toMatch(/2026/);
+  });
+
+  test("full_short: short weekday + short month + year", () => {
+    const out = formatDate(
+      new Date("2026-04-15T12:00:00Z"),
+      "full_short",
+      "UTC"
+    );
+    expect(out).toMatch(/Wed/);
+    expect(out).toMatch(/Apr/);
+    expect(out).not.toMatch(/April/);
+    expect(out).toMatch(/2026/);
+  });
+
+  test("full_long: long weekday + long month + year", () => {
+    const out = formatDate(
+      new Date("2026-04-15T12:00:00Z"),
+      "full_long",
+      "UTC"
+    );
+    expect(out).toMatch(/Wednesday/);
+    expect(out).toMatch(/April/);
+    expect(out).toMatch(/2026/);
+  });
+
+  test("datetime_medium adds the year to datetime", () => {
+    const out = formatDate(
+      new Date("2026-04-15T14:30:00Z"),
+      "datetime_medium",
+      "UTC"
+    );
+    expect(out).toMatch(/Apr/);
+    expect(out).toMatch(/2026/);
+    expect(out).toMatch(/2:30/);
+  });
+});
+
+describe("parseLocalDate", () => {
+  test("parses YYYY-MM-DD to LOCAL midnight (not UTC)", () => {
+    const d = parseLocalDate("2026-04-15");
+    expect(d).not.toBeNull();
+    // Local getters must read back the same calendar day — the
+    // whole point of the helper. `new Date("2026-04-15")` would
+    // fail this in any environment west of UTC.
+    expect(d!.getFullYear()).toBe(2026);
+    expect(d!.getMonth()).toBe(3);
+    expect(d!.getDate()).toBe(15);
+    expect(d!.getHours()).toBe(0);
+    expect(d!.getMinutes()).toBe(0);
+  });
+
+  test("rejects malformed values instead of yielding Invalid Date", () => {
+    expect(parseLocalDate("")).toBeNull();
+    expect(parseLocalDate("abc")).toBeNull();
+    expect(parseLocalDate("2026-4-5")).toBeNull(); // needs zero-padding
+    expect(parseLocalDate("2026-04-15T12:00")).toBeNull(); // datetime not allowed
+  });
+});
+
+describe("parseLocalDateOrDateTime", () => {
+  test("date-only goes through the local-midnight path", () => {
+    const d = parseLocalDateOrDateTime("2026-04-15");
+    expect(d!.getDate()).toBe(15);
+    expect(d!.getHours()).toBe(0);
+  });
+
+  test("datetime-local strings parse as local wall-clock time", () => {
+    const d = parseLocalDateOrDateTime("2026-04-15T13:30");
+    expect(d!.getDate()).toBe(15);
+    expect(d!.getHours()).toBe(13);
+    expect(d!.getMinutes()).toBe(30);
+  });
+
+  test("full ISO instants keep their exact moment", () => {
+    const d = parseLocalDateOrDateTime("2026-04-15T13:30:00.000Z");
+    expect(d!.getTime()).toBe(Date.parse("2026-04-15T13:30:00.000Z"));
+  });
+
+  test("garbage returns null", () => {
+    expect(parseLocalDateOrDateTime("not a date")).toBeNull();
   });
 });
 

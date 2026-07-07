@@ -86,8 +86,19 @@ export type ContactDetail = {
   zip: string | null;
   notes: string | null;
   conflictStatus: string;
+  /** Set when this record was merged away — the survivor's id. The
+   *  detail page redirects there instead of rendering. */
+  mergedIntoId: string | null;
   createdAt: Date;
   updatedAt: Date;
+  /** Full phone list, display order. The primary's number is also
+   *  mirrored on `phone` above. */
+  phones: Array<{
+    id: string;
+    label: string | null;
+    number: string;
+    isPrimary: boolean;
+  }>;
   /** Matters where this contact is the client (Matter.clientId). */
   asClientMatters: Array<{
     id: string;
@@ -111,6 +122,10 @@ export async function getContactById(id: string): Promise<ContactDetail | null> 
   const c = await prisma.contact.findUnique({
     where: { id },
     include: {
+      phones: {
+        orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+        select: { id: true, label: true, number: true, isPrimary: true },
+      },
       clientMatters: {
         where: { isArchived: false },
         select: {
@@ -145,8 +160,10 @@ export async function getContactById(id: string): Promise<ContactDetail | null> 
     zip: c.zip,
     notes: c.notes,
     conflictStatus: c.conflictStatus,
+    mergedIntoId: c.mergedIntoId,
     createdAt: c.createdAt,
     updatedAt: c.updatedAt,
+    phones: c.phones,
     asClientMatters: c.clientMatters.map((m) => ({
       id: m.id,
       name: m.name,

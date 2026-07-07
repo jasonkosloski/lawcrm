@@ -23,6 +23,11 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma, type Tx } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+// Date-only inputs ("YYYY-MM-DD") must parse to LOCAL midnight —
+// `new Date(value)` reads them as UTC midnight, drifting the day
+// for anyone west of UTC. Datetime-local values (event start/end)
+// still go through `new Date(...)`, which parses them as local.
+import { parseLocalDate } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
 import {
   DEADLINE_KINDS,
@@ -64,7 +69,9 @@ async function createCaptureRecord(
         matterId,
         title: cap.title,
         priority: cap.priority,
-        dueDate: cap.dueDate ? new Date(cap.dueDate) : null,
+        // Capture date fields are schema-validated as YYYY-MM-DD
+        // (see capture-schemas.ts), so parseLocalDate can't miss.
+        dueDate: cap.dueDate ? parseLocalDate(cap.dueDate) : null,
         ownerId: userId,
         // Sibling-capture link-back: if this task was created
         // alongside a primary event or deadline, point the FK back
@@ -92,7 +99,7 @@ async function createCaptureRecord(
       data: {
         matterId,
         title: cap.title,
-        dueDate: new Date(cap.dueDate),
+        dueDate: parseLocalDate(cap.dueDate)!,
         kind: cap.kind_,
         description: cap.description || null,
         ownerId: userId,
@@ -106,7 +113,7 @@ async function createCaptureRecord(
       data: {
         matterId,
         userId,
-        date: new Date(cap.date),
+        date: parseLocalDate(cap.date)!,
         hours: Number(cap.hours),
         activity: cap.activity,
         narrative: cap.narrative || null,
@@ -233,6 +240,17 @@ export async function createTaskWithCaptures(
     };
   }
 
+  const dueDate = parsed.data.dueDate
+    ? parseLocalDate(parsed.data.dueDate)
+    : null;
+  if (parsed.data.dueDate && !dueDate) {
+    return {
+      status: "error",
+      errors: { dueDate: ["Invalid due date"] },
+      values: raw,
+    };
+  }
+
   const userId = await getCurrentUserId();
 
   await prisma.$transaction(async (tx) => {
@@ -242,7 +260,7 @@ export async function createTaskWithCaptures(
         title: parsed.data.title,
         description: parsed.data.description || null,
         priority: parsed.data.priority,
-        dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
+        dueDate,
         ownerId: userId,
       },
       select: { id: true },
@@ -479,6 +497,15 @@ export async function createDeadlineWithCaptures(
     };
   }
 
+  const dueDate = parseLocalDate(parsed.data.dueDate);
+  if (!dueDate) {
+    return {
+      status: "error",
+      errors: { dueDate: ["Invalid due date"] },
+      values: raw,
+    };
+  }
+
   const userId = await getCurrentUserId();
 
   await prisma.$transaction(async (tx) => {
@@ -486,7 +513,7 @@ export async function createDeadlineWithCaptures(
       data: {
         matterId,
         title: parsed.data.title,
-        dueDate: new Date(parsed.data.dueDate),
+        dueDate,
         kind: parsed.data.kind,
         sourceRef: parsed.data.sourceRef || null,
         description: parsed.data.description || null,
@@ -558,6 +585,15 @@ export async function createTimeEntryWithCaptures(
     };
   }
 
+  const date = parseLocalDate(parsed.data.date);
+  if (!date) {
+    return {
+      status: "error",
+      errors: { date: ["Invalid date"] },
+      values: raw,
+    };
+  }
+
   const userId = await getCurrentUserId();
 
   await prisma.$transaction(async (tx) => {
@@ -565,7 +601,7 @@ export async function createTimeEntryWithCaptures(
       data: {
         matterId,
         userId,
-        date: new Date(parsed.data.date),
+        date,
         hours: Number(parsed.data.hours),
         activity: parsed.data.activity,
         narrative: parsed.data.narrative || null,

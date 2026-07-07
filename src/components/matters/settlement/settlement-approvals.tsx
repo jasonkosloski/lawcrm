@@ -27,6 +27,10 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+// approvedAt is a real timestamp; client component with no user-TZ
+// prop yet, so "datetime_medium" falls back to the runtime zone
+// (browser-local after hydration). See format-date.ts header.
+import { formatDate as formatDateVariant } from "@/lib/format-date";
 import { Button } from "@/components/ui/button";
 import { setApprovalStepStatus } from "@/app/actions/settlements";
 
@@ -40,16 +44,8 @@ type ApprovalRow = {
   notes: string | null;
 };
 
-const formatDate = (d: Date | null): string => {
-  if (!d) return "";
-  return d.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-};
+const formatDate = (d: Date | null): string =>
+  d ? formatDateVariant(d, "datetime_medium") : "";
 
 export function SettlementApprovals({
   approvals,

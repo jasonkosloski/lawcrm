@@ -17,7 +17,10 @@
  */
 
 import Link from "next/link";
-import { format } from "date-fns";
+// Entry/expense dates are date-only values (server-local midnight) —
+// the centralized "medium" variant with no TZ override keeps them on
+// the day grid they were saved on.
+import { formatDate } from "@/lib/format-date";
 import { Card } from "@/components/ui/card";
 import {
   Table,
@@ -248,7 +251,7 @@ function EntryRow({
   return (
     <TableRow>
       <TableCell className="pl-4 text-xs text-ink-3 whitespace-nowrap">
-        {format(entry.date, "MMM d, yyyy")}
+        {formatDate(entry.date, "medium")}
       </TableCell>
       <TableCell>
         <span
@@ -417,7 +420,7 @@ function ExpenseTableRow({
   return (
     <TableRow>
       <TableCell className="pl-4 text-xs text-ink-3 whitespace-nowrap">
-        {format(expense.date, "MMM d, yyyy")}
+        {formatDate(expense.date, "medium")}
       </TableCell>
       <TableCell className="text-xs text-ink">
         {expense.description}

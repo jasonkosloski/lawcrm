@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { deleteNote, toggleNotePin } from "@/app/actions/notes";
 import { NOTE_TYPE_LABEL, type NoteType } from "@/lib/note-constants";
+import { formatDate } from "@/lib/format-date";
 import type {
   NoteAttachedDeadline,
   NoteAttachedTask,
@@ -66,14 +67,9 @@ export type NoteCardNote = {
   attachedTimeEntries: NoteAttachedTimeEntry[];
 };
 
-const formatDateTime = (d: Date): string =>
-  d.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+// Client component — timestamps render via the centralized variants
+// with no TZ override (browser-local after hydration).
+const formatDateTime = (d: Date): string => formatDate(d, "datetime_medium");
 
 export function NoteCard({
   note,
@@ -297,10 +293,7 @@ function LinkChip({
           <span className="text-ink-4">Event</span>
           <span className="truncate text-ink-2">{link.label}</span>
           <span className="font-mono text-ink-4">
-            {link.startTime.toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-            })}
+            {formatDate(link.startTime, "short")}
           </span>
         </>
       ) : link.kind === "task" ? (

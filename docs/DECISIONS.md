@@ -210,3 +210,25 @@ Clicking a different column resets to that column's first-click (ascending).
 **Ripple:** Extending the client changed the `$transaction` callback type, so helper params that used `Prisma.TransactionClient` now use the `Tx` type exported from `src/lib/prisma.ts`.
 
 **Scope addendum (same day):** `MessengerAccount` carried the same time bomb (`accessToken` / `refreshToken` / `webhookSecret` for the Quo phone integration), so the extension covers both models — same key, same wire format, `webhookSecret` included.
+
+---
+
+## ADR-012: Two date storage conventions — date-only at local midnight, instants in user TZ
+
+**Date:** 2026-07-07
+**Status:** Accepted
+
+**Context:** The P2 timezone sweep surfaced two recurring bug classes: (1) date-only inputs (`<input type="date">` → `"YYYY-MM-DD"`) fed to `new Date(value)` parse as **UTC midnight**, so any viewer/server west of UTC reads the day back one earlier — and round-tripping forms drift the date a day per save; (2) "today" boundaries computed with server-local `startOfToday()` misclassify agenda/tasks/deadlines for any user whose calendar day differs from the server's (always, in a UTC production box).
+
+**Decision:**
+- **Date-only fields** (Task/Deadline `dueDate`, TimeEntry/Expense/TrustTransaction/InvoicePayment `date`, Firm `establishedAt`) store **server-local midnight** of the picked calendar day, parsed via the shared `parseLocalDate` (`src/lib/format-date.ts`). Display uses `formatDate` **without** a TZ override so the same server-local day grid renders back. Malformed input returns a field error, never an Invalid Date 500. Capture schemas enforce `YYYY-MM-DD` shape so transaction loops can parse non-null.
+- **Instants** (event start/end, createdAt-style timestamps) stay real UTC moments; display threads the viewer's IANA zone (`getCurrentUserTimeZone` → `formatDate(d, variant, tz)`) on server-rendered surfaces. Client components fall back to browser-local (already the user's zone after hydration).
+- **"Today" queries** (dashboard) resolve the user's calendar date via `dateKeyInTz`, then either round-trip it to server-local midnight (for date-only columns) or take true day bounds via `instantInTz` (for instant columns) — same approach the calendar's `parseCalendarParams` fix established.
+
+**Exception:** Matter `incidentDate` / `statuteOfLimitationsDate` keep their pre-existing **UTC-midnight** convention — parsing (`actions/matters.ts`), SOL math (`daysUntil`), and display (`formatCalendarDate`, UTC-anchored) are self-consistent and pinned by `sol.test.ts`. Migrating them means touching stored rows; deferred until a data migration is worth it.
+
+**Trade-offs:**
+- (+) One shared parser + one shared formatter family; drift bugs become impossible at new callsites by convention
+- (+) Correct on a UTC production host AND on local dev (any zone), since parse/format use the same frame
+- (-) Date-only values are still `DateTime` columns; a true `DATE` column type would express intent better (revisit with a migration)
+- (-) A user whose TZ differs from the *server's* still sees date-only values on the server's day grid — acceptable because the value has no instant semantics; the day label always matches what was typed

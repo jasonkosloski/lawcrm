@@ -30,33 +30,33 @@ datasource db {
 
 /// Firm team member — attorneys, paralegals, investigators, admin staff.
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
+  id                     String    @id @default(cuid())
+  email                  String    @unique
   /// Argon2id-hashed password. Null means the user can't log in via
   /// the credentials provider — they must use a linked OAuth account
   /// (none of those wired yet) or the firm admin must invite them.
   /// Set by the seed for dev users; set by the future invite flow
   /// for production users.
-  passwordHash String?
+  passwordHash           String?
   /// Auth.js standard field — set when the user verifies their email
   /// (or when an OAuth provider returns a verified email). Null for
   /// dev/seed users today; the verification flow that flips this is
   /// deferred to a later phase.
-  emailVerified DateTime?
+  emailVerified          DateTime?
   /// Auth.js standard field — profile photo URL pulled from OAuth
   /// providers when wired. Mirrors avatarUrl for now (legacy).
-  image     String?
-  name      String
-  initials  String   /// Two-letter initials for avatar display (e.g. "JM")
+  image                  String?
+  name                   String
+  initials               String /// Two-letter initials for avatar display (e.g. "JM")
   /// Display-only job title — Managing / Partner / Counsel /
   /// Paralegal / Investigator / Intake. Orthogonal to permission
   /// roles (see UserRole). Renamed from `role` once permission
   /// roles became first-class so the two concepts don't collide
   /// in code or UI.
-  jobTitle  String
-  avatarUrl String?  /// Optional profile photo URL
-  phone     String?
-  barNumber String?  /// State bar number (attorneys only)
+  jobTitle               String
+  avatarUrl              String? /// Optional profile photo URL
+  phone                  String?
+  barNumber              String? /// State bar number (attorneys only)
   /// IANA time-zone name ("America/Denver", "America/New_York"
   /// etc). Drives date formatting on every page that renders a
   /// time — dashboard "today's agenda," deadlines countdown,
@@ -64,7 +64,7 @@ model User {
   /// since that's where the firm operates today; later we'll
   /// surface a picker on /settings/profile and infer a sensible
   /// default from the browser at invite time.
-  timeZone  String   @default("America/Denver")
+  timeZone               String    @default("America/Denver")
   /// Default visibility for calendar events this user creates.
   /// `default` (the default-default — privacy first) applies
   /// the resolver's standard rules: only creator + attendees +
@@ -72,61 +72,63 @@ model User {
   /// `show_details` flips every event this user creates to
   /// publicly-visible-in-full unless overridden per-event. Set
   /// from /settings/profile.
-  defaultEventVisibility String @default("default") /// default | show_details
-  isActive  Boolean  @default(true)
+  defaultEventVisibility String    @default("default") /// default | show_details
+  isActive               Boolean   @default(true)
   /// FK to the firm this user belongs to. Nullable in the schema
   /// only because SQLite can't add a non-null column without a
   /// default; every code path treats it as required and the seed
   /// backfills every existing row. When we go multi-tenant this
   /// stays the canonical scoping column.
-  firmId    String?
+  firmId                 String?
   /// Per-user dashboard preferences. Currently `{ visible: Record<cardKey, boolean> }`.
   /// Null = use defaults (everything visible). Shape may grow to include order, etc.
-  dashboardPrefs Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  dashboardPrefs         Json?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   // Relationships
-  matterAssignments MatterTeamMember[]
-  timeEntries       TimeEntry[]
-  tasks             Task[]            @relation("TaskOwner")
-  activityLogs      ActivityLog[]
-  notes             Note[]
-  deadlines         Deadline[]        @relation("DeadlineOwner")
-  emailAccounts     EmailAccount[]
-  messengerAccounts MessengerAccount[]
-  approvals         SettlementApproval[]
-  flaggedMoments    FlaggedMoment[]
-  matterPins        UserMatterPin[]
-  noteReads         NoteRead[]
-  noteReactions     NoteReaction[]
-  notifications     Notification[]
+  matterAssignments     MatterTeamMember[]
+  timeEntries           TimeEntry[]
+  tasks                 Task[]               @relation("TaskOwner")
+  activityLogs          ActivityLog[]
+  notes                 Note[]
+  deadlines             Deadline[]           @relation("DeadlineOwner")
+  emailAccounts         EmailAccount[]
+  messengerAccounts     MessengerAccount[]
+  approvals             SettlementApproval[]
+  flaggedMoments        FlaggedMoment[]
+  matterPins            UserMatterPin[]
+  noteReads             NoteRead[]
+  noteReactions         NoteReaction[]
+  notifications         Notification[]
+  timerSession          TimerSession?
+  documentTemplates     DocumentTemplate[]
   /// Calendar events the user is an attendee on. Created via the
   /// event detail modal's attendee picker (or any future API
   /// that links a user to an event).
-  calendarAttendances CalendarAttendee[] @relation("CalendarAttendeeUser")
+  calendarAttendances   CalendarAttendee[]   @relation("CalendarAttendeeUser")
   /// Calendar events the user created. Used for audit; once
   /// permission-based visibility lands this is the "you can
   /// always see your own" branch. SetNull on user delete keeps
   /// the historical event row intact.
-  createdCalendarEvents CalendarEvent[] @relation("UserCreatedEvents")
+  createdCalendarEvents CalendarEvent[]      @relation("UserCreatedEvents")
   /// Auth.js Prisma adapter — linked OAuth providers (Google etc.).
   /// Empty until we wire OAuth; the table needs to exist now so
   /// adding a provider later is config-only.
-  accounts          Account[]
+  accounts              Account[]
   /// The firm this user belongs to. SetNull on delete — losing the
   /// firm row shouldn't blow away the user; the user is unusable
   /// until reassigned but their historical activity stays intact.
-  firm              Firm?       @relation(fields: [firmId], references: [id], onDelete: SetNull)
+  firm                  Firm?                @relation(fields: [firmId], references: [id], onDelete: SetNull)
   /// Permission roles — many-to-many via the UserRole join. Empty
   /// for a brand-new user until at least the firm's "default" role
   /// is auto-assigned by the invite path. Membership in the "Admin"
   /// system role is what grants admin powers.
-  userRoles         UserRole[]
+  userRoles             UserRole[]
   /// Reverse of UserRole.assignedBy — every assignment this user
   /// has performed. Useful for auditing role grants once that
   /// surfaces in the UI.
-  roleAssignments   UserRole[]  @relation("UserRoleAssignedBy")
+  roleAssignments       UserRole[]           @relation("UserRoleAssignedBy")
 
   @@index([firmId])
   @@map("users")
@@ -147,60 +149,60 @@ model User {
 /// scheme. Deferred bits (logo upload, IOLTA bank info, e-sign
 /// branding) get added as their features land; don't preempt.
 model Firm {
-  id            String   @id @default(cuid())
+  id                          String    @id @default(cuid())
   /// Display name — appears on letterhead, invoices, the topbar
   /// (eventually). Required.
-  name          String
+  name                        String
   /// Optional shorter "doing business as" / informal name used in
   /// places where the legal name is overkill ("Kosloski Law" vs
   /// "Kosloski Law Firm, P.C."). Falls back to `name` in renders.
-  shortName     String?
+  shortName                   String?
   /// Federal Employer Identification Number — formatted xx-xxxxxxx.
   /// Used on invoices + tax forms. Free-text so firms outside the
   /// US can store whatever ID their jurisdiction issues.
-  ein           String?
+  ein                         String?
   /// Public-facing website (https://…). Optional.
-  website       String?
+  website                     String?
   /// Main reception line, formatted as the firm prefers.
-  phone         String?
+  phone                       String?
   /// Main contact email — typically reception@ or info@ rather than
   /// any one attorney's address.
-  email         String?
+  email                       String?
   /// Primary office address — single physical location for v1; a
   /// future Office model can split if firms need multiple offices.
-  addressLine1  String?
-  addressLine2  String?
-  city          String?
-  state         String?
-  zip           String?
-  country       String   @default("US")
+  addressLine1                String?
+  addressLine2                String?
+  city                        String?
+  state                       String?
+  zip                         String?
+  country                     String    @default("US")
   /// Date the firm was founded — surfaces on the about/marketing
   /// material a firm pulls from this profile. Nullable.
-  establishedAt DateTime?
+  establishedAt               DateTime?
   /// URL to the firm's logo (square preferred, transparent
   /// background). Surfaces on letterhead, invoices, the login page
   /// branding once we wire it. Null = use the default app brand.
-  logoUrl       String?
+  logoUrl                     String?
   /// Default for "auto-add matter team to new calendar events".
   /// Per-matter override lives on Matter.autoAddTeamToNewEvents
   /// (null on the matter inherits this firm value).
-  autoAddTeamToNewEvents Boolean @default(true)
+  autoAddTeamToNewEvents      Boolean   @default(true)
   /// Default for "auto-add new team members to upcoming events
   /// on the matter". Same per-matter override pattern as above.
-  autoAddTeamToUpcomingEvents Boolean @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  autoAddTeamToUpcomingEvents Boolean   @default(true)
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
 
-  users         User[]
+  users    User[]
   /// Permission roles defined for this firm. Always includes the
   /// two system roles ("Admin" + "default") plus any custom roles
   /// firm admins create.
-  roles         Role[]
+  roles    Role[]
   /// Contacts owned by this firm — clients, opposing counsel,
   /// witnesses, experts, etc. Optional today (Contact.firmId is
   /// nullable for legacy rows); becomes the multi-tenancy scope
   /// once backfilled.
-  contacts      Contact[] @relation("FirmContacts")
+  contacts Contact[] @relation("FirmContacts")
 
   @@map("firms")
 }
@@ -229,7 +231,7 @@ model Role {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  firm        Firm       @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  firm        Firm             @relation(fields: [firmId], references: [id], onDelete: Cascade)
   userRoles   UserRole[]
   permissions RolePermission[]
 
@@ -301,7 +303,7 @@ model UserRole {
 model Account {
   id                String  @id @default(cuid())
   userId            String
-  type              String  /// "oauth" | "oidc" | "email" | "webauthn"
+  type              String /// "oauth" | "oidc" | "email" | "webauthn"
   provider          String
   providerAccountId String
   refresh_token     String?
@@ -339,18 +341,18 @@ model VerificationToken {
 /// Soft-delete only (`isActive = false`) so historical matters keep
 /// working even after an area is retired.
 model PracticeArea {
-  id           String   @id @default(cuid())
-  name         String   @unique /// Display name, e.g. "§1983" or "Housing/FHA"
-  label        String?  /// Optional longer label shown in sidebar/reports, e.g. "§1983 · Civil rights"
-  color        String   @default("#2563a8") /// Hex color — used for matter dots, sidebar, kanban
-  order        Int      @default(0) /// Sort order in pickers and settings UI
-  isActive     Boolean  @default(true)
+  id                      String   @id @default(cuid())
+  name                    String   @unique /// Display name, e.g. "§1983" or "Housing/FHA"
+  label                   String? /// Optional longer label shown in sidebar/reports, e.g. "§1983 · Civil rights"
+  color                   String   @default("#2563a8") /// Hex color — used for matter dots, sidebar, kanban
+  order                   Int      @default(0) /// Sort order in pickers and settings UI
+  isActive                Boolean  @default(true)
   /// Firms can flag practice areas that have a statute-of-limitations
   /// deadline the lawyers need to track. When true, matters in this
   /// area surface an SOL card on the overview + show SOL fields on
   /// the new/edit forms. False for areas like "Guardianships" where
   /// SOL isn't meaningful.
-  hasStatuteOfLimitations Boolean @default(false)
+  hasStatuteOfLimitations Boolean  @default(false)
   /// Statute period in days, computed from years + months + days
   /// the firm enters in settings. When set + a Matter in this
   /// area has an `incidentDate`, the create / update flow auto-
@@ -365,22 +367,22 @@ model PracticeArea {
   /// converts to days using a 365-day year + 30-day month
   /// convention (legal statute periods are nearly always defined
   /// this way — "two years" = 730 days, not "two solar years").
-  statutePeriodDays Int?
+  statutePeriodDays       Int?
   /// Source citation for the SOL period — "C.R.S. § 13-80-102"
   /// etc. Surfaced on the SOL card so the lawyer can verify the
   /// firm's configuration against the actual statute.
-  statuteSourceCitation String?
+  statuteSourceCitation   String?
   /// Default billing flow new matters in this area inherit on
   /// create. See `Matter.billingMode` for the per-matter override
   /// + the full enum of values. iteration 1: schema only — every
   /// mode currently routes through the traditional UX with a
   /// "flow not implemented" hint.
-  defaultBillingMode String @default("client")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  defaultBillingMode      String   @default("client")
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
-  stages   MatterStage[]
-  matters  Matter[]
+  stages  MatterStage[]
+  matters Matter[]
 
   @@map("practice_areas")
 }
@@ -390,15 +392,15 @@ model PracticeArea {
 /// which are excluded from "open matter" aggregations and displayed in
 /// a muted style on the stage stepper.
 model MatterStage {
-  id              String   @id @default(cuid())
-  practiceAreaId  String
-  practiceArea    PracticeArea @relation(fields: [practiceAreaId], references: [id], onDelete: Cascade)
-  name            String   /// Display name, e.g. "Intake" or "Discovery"
-  order           Int      @default(0) /// Position within the area's lifecycle
-  isTerminal      Boolean  @default(false) /// True for closing states (Settled, Closed)
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String       @id @default(cuid())
+  practiceAreaId String
+  practiceArea   PracticeArea @relation(fields: [practiceAreaId], references: [id], onDelete: Cascade)
+  name           String /// Display name, e.g. "Intake" or "Discovery"
+  order          Int          @default(0) /// Position within the area's lifecycle
+  isTerminal     Boolean      @default(false) /// True for closing states (Settled, Closed)
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   matters Matter[]
 
@@ -409,17 +411,17 @@ model MatterStage {
 
 /// A legal matter (case) — the central entity of the application.
 model Matter {
-  id             String   @id @default(cuid())
-  name           String   /// Display name, e.g. "Alvarez v. City of Aurora et al."
-  caseNumber     String?  /// Court docket number, e.g. "2026-CV-00481"
-  practiceAreaId String   /// FK → practice_areas
+  id             String       @id @default(cuid())
+  name           String /// Display name, e.g. "Alvarez v. City of Aurora et al."
+  caseNumber     String? /// Court docket number, e.g. "2026-CV-00481"
+  practiceAreaId String /// FK → practice_areas
   practiceArea   PracticeArea @relation(fields: [practiceAreaId], references: [id])
-  stageId        String   /// FK → matter_stages (must belong to the same practice area)
+  stageId        String /// FK → matter_stages (must belong to the same practice area)
   stage          MatterStage  @relation(fields: [stageId], references: [id])
-  court          String?  /// Court and judge, e.g. "D. Colorado · Hon. L. Martinez"
+  court          String? /// Court and judge, e.g. "D. Colorado · Hon. L. Martinez"
   filedDate      DateTime?
   trialDate      DateTime?
-  feeStructure   String   @default("contingent") /// contingent | hourly | flat | hybrid | pro_bono
+  feeStructure   String       @default("contingent") /// contingent | hourly | flat | hybrid | pro_bono
   /// Which billing flow the matter uses on the Billing tab —
   /// "client" (today's traditional invoicing), "court_voucher"
   /// (court-appointed, generate vouchers for agency reimbursement),
@@ -429,16 +431,16 @@ model Matter {
   /// `PracticeArea.defaultBillingMode` on create; can be overridden
   /// per-matter (a §1988-eligible case might swap from client →
   /// fee_petition mid-life). iteration 1: schema only.
-  billingMode    String   @default("client")
+  billingMode    String       @default("client")
   /// IOLTA trust balance for this matter. Decimal (not Float) for
   /// regulatory-grade precision — a $0.01 drift on real client trust
   /// money is a compliance violation.
-  trustBalance   Decimal  @default(0) /// Current IOLTA trust balance for this matter
+  trustBalance   Decimal      @default(0) /// Current IOLTA trust balance for this matter
   /// Work-in-progress total — same precision rationale as trustBalance.
-  wipAmount      Decimal  @default(0) /// Work-in-progress (unbilled hours value)
-  description    String?  /// Brief case summary
-  color          String   @default("#2563a8") /// Color dot for UI display — snapshot from practiceArea.color on create
-  isArchived     Boolean  @default(false)
+  wipAmount      Decimal      @default(0) /// Work-in-progress (unbilled hours value)
+  description    String? /// Brief case summary
+  color          String       @default("#2563a8") /// Color dot for UI display — snapshot from practiceArea.color on create
+  isArchived     Boolean      @default(false)
 
   /// Date the underlying cause-of-action accrued — typically the
   /// date of the injury / arrest / discrimination event / contract
@@ -447,7 +449,7 @@ model Matter {
   /// `statuteOfLimitationsDate` from `incidentDate +
   /// area.statutePeriodDays`. The user can override the computed
   /// value on the form.
-  incidentDate                   DateTime?
+  incidentDate DateTime?
 
   /// Statute-of-limitations tracking — only meaningful when the
   /// matter's practice area has hasStatuteOfLimitations=true. `Date`
@@ -455,52 +457,53 @@ model Matter {
   /// `Date` is auto-computed when both `incidentDate` and the
   /// area's `statutePeriodDays` are present, but the user can
   /// always override.
-  statuteOfLimitationsDate       DateTime?
-  statuteOfLimitationsSatisfied  Boolean   @default(false)
+  statuteOfLimitationsDate        DateTime?
+  statuteOfLimitationsSatisfied   Boolean   @default(false)
   statuteOfLimitationsSatisfiedAt DateTime? /// Audit: when it was flipped
-  statuteOfLimitationsNotes      String?   /// Free-text ("Complaint filed…", "Waived by stip", etc.)
+  statuteOfLimitationsNotes       String? /// Free-text ("Complaint filed…", "Waived by stip", etc.)
 
   /// Per-matter override for "auto-add team to new calendar
   /// events". `null` (the common case) inherits from
   /// Firm.autoAddTeamToNewEvents. Set to true/false when this
   /// matter wants to differ from the firm-wide default.
-  autoAddTeamToNewEvents       Boolean?
+  autoAddTeamToNewEvents      Boolean?
   /// Per-matter override for "auto-add new team members to
   /// upcoming events on the matter". Same inherit-from-firm
   /// shape as above.
-  autoAddTeamToUpcomingEvents  Boolean?
+  autoAddTeamToUpcomingEvents Boolean?
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Client relationship
   clientId String?
   client   Contact? @relation("MatterClient", fields: [clientId], references: [id])
 
   // Opposing party
-  opposingParty    String? /// Name of opposing party/counsel
-  opposingFirm     String? /// Opposing counsel's firm
+  opposingParty String? /// Name of opposing party/counsel
+  opposingFirm  String? /// Opposing counsel's firm
 
   // Relationships
-  teamMembers      MatterTeamMember[]
-  contacts         MatterContact[]
-  documents        Document[]
-  evidence         Evidence[]
-  deadlines        Deadline[]
-  timeEntries      TimeEntry[]
-  invoices         Invoice[]
-  expenses         Expense[]
-  tasks            Task[]
-  notes            Note[]
-  emailThreads     EmailThread[]
-  messengerThreadDefaults MessengerThread[] @relation("MessengerThreadDefaultMatter")
-  messengerItems   MessengerItem[]   @relation("MessengerItemMatter")
-  activityLogs     ActivityLog[]
-  calendarEvents   CalendarEvent[]
-  trustTransactions TrustTransaction[]
-  settlements      Settlement[]
-  pins             UserMatterPin[]
-  notifications    Notification[]
+  teamMembers             MatterTeamMember[]
+  contacts                MatterContact[]
+  documents               Document[]
+  evidence                Evidence[]
+  deadlines               Deadline[]
+  timeEntries             TimeEntry[]
+  invoices                Invoice[]
+  expenses                Expense[]
+  tasks                   Task[]
+  notes                   Note[]
+  emailThreads            EmailThread[]
+  messengerThreadDefaults MessengerThread[]  @relation("MessengerThreadDefaultMatter")
+  messengerItems          MessengerItem[]    @relation("MessengerItemMatter")
+  activityLogs            ActivityLog[]
+  calendarEvents          CalendarEvent[]
+  trustTransactions       TrustTransaction[]
+  settlements             Settlement[]
+  pins                    UserMatterPin[]
+  notifications           Notification[]
+  timerSessions           TimerSession[]
 
   @@index([stageId])
   @@index([practiceAreaId])
@@ -528,10 +531,10 @@ model UserMatterPin {
 
 /// Join table linking team members to matters with their role on the case.
 model MatterTeamMember {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   matterId  String
   userId    String
-  role      String   /// lead | co_counsel | paralegal | investigator | of_counsel
+  role      String /// lead | co_counsel | paralegal | investigator | of_counsel
   /// Soft-delete: when set, the user is no longer an active team
   /// member but the row is preserved so historical attribution
   /// (who was on the case when X happened?) stays answerable. The
@@ -544,7 +547,7 @@ model MatterTeamMember {
   /// trail without joining through ActivityLog. Nullable since the
   /// remover may have been deleted later.
   removedBy String?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -561,48 +564,55 @@ model MatterTeamMember {
 /// Any person or organization involved in the firm's work — clients, opposing
 /// parties, witnesses, experts, courts, vendors, medical providers, etc.
 model Contact {
-  id              String   @id @default(cuid())
+  id             String   @id @default(cuid())
   /// The firm this contact belongs to. Optional today so legacy
   /// rows (created before firm scoping was introduced) keep
   /// working. New writes always set it via the action layer; the
   /// long-term plan is to backfill all existing rows via a
   /// migration and tighten this to required, at which point
   /// every Contact query scopes to the caller's firm.
-  firmId          String?
-  name            String
-  email           String?
+  firmId         String?
+  name           String
+  email          String?
   /// Denormalized primary phone — kept in sync with the primary
   /// ContactPhone row (via writes in src/app/actions/parties.ts).
   /// Existing reads across the app keep working; new code that
   /// needs the full list queries `phones`.
-  phone           String?
-  organization    String?  /// Firm, company, or agency name
-  type            String   /// client | opposing_counsel | witness | expert | judge | court | vendor | medical_provider | government | other
-  address         String?
-  city            String?
-  state           String?
-  zip             String?
-  notes           String?
-  conflictStatus  String   @default("clear") /// clear | flagged | override
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  phone          String?
+  organization   String? /// Firm, company, or agency name
+  type           String /// client | opposing_counsel | witness | expert | judge | court | vendor | medical_provider | government | other
+  address        String?
+  city           String?
+  state          String?
+  zip            String?
+  notes          String?
+  conflictStatus String   @default("clear") /// clear | flagged | override
+  isActive       Boolean  @default(true)
+  /// Set when this record was merged into another contact: points
+  /// at the survivor. The row is soft-deleted (isActive=false) but
+  /// kept so old references/audit entries still resolve, and the
+  /// contact page can redirect to the survivor.
+  mergedIntoId   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  firm            Firm? @relation("FirmContacts", fields: [firmId], references: [id], onDelete: SetNull)
+  firm         Firm?     @relation("FirmContacts", fields: [firmId], references: [id], onDelete: SetNull)
+  mergedInto   Contact?  @relation("ContactMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedLosers Contact[] @relation("ContactMerge")
 
   // Relationships
-  mattersAsClient MatterContact[]
-  clientMatters   Matter[]  @relation("MatterClient")
-  phones          ContactPhone[]
-  messengerThreads MessengerThread[] @relation("MessengerThreadContact")
+  mattersAsClient     MatterContact[]
+  clientMatters       Matter[]           @relation("MatterClient")
+  phones              ContactPhone[]
+  messengerThreads    MessengerThread[]  @relation("MessengerThreadContact")
   /// Reverse of MatterContact.representationContact — every party
   /// row across every matter where this contact represents the other
   /// side. Lets the contact page surface "represents N parties."
-  representationOf MatterContact[] @relation("MatterContactRepresentation")
+  representationOf    MatterContact[]    @relation("MatterContactRepresentation")
   /// Reverse of Lead.contact — every intake record this contact has
   /// ever sat on. Lets the contact page surface prior intakes (even
   /// the ones that didn't convert).
-  leads Lead[] @relation("LeadContact")
+  leads               Lead[]             @relation("LeadContact")
   /// Calendar events this contact has been added as an attendee
   /// on. Created by the modal's attendee picker (existing-contact
   /// pick OR new-contact-from-arbitrary-name path).
@@ -644,18 +654,18 @@ model ContactPhone {
 /// practice areas in /settings. For now the five categories above
 /// are hardcoded in src/lib/party-constants.ts.
 model MatterContact {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   matterId  String
   contactId String
-  category  String   @default("other") /// client | opposing | lay_witness | expert_witness | other
-  role      String?  /// Optional subrole — plaintiff, defendant, opposing_counsel, GAL, medical_provider, etc.
+  category  String  @default("other") /// client | opposing | lay_witness | expert_witness | other
+  role      String? /// Optional subrole — plaintiff, defendant, opposing_counsel, GAL, medical_provider, etc.
   notes     String?
 
   /// Representation — who (if anyone) represents this non-client party.
   /// Only meaningful for opposing parties / witnesses / others; clients
   /// are represented by us. `isRepresented = false` explicitly means
   /// pro se / self-represented; null means unknown.
-  isRepresented       Boolean?
+  isRepresented           Boolean?
   /// Preferred: the representing attorney as a first-class Contact.
   /// Set when the rep is picked from the contact directory or
   /// created inline via the party composer. Same Contact can show
@@ -665,15 +675,15 @@ model MatterContact {
   /// compat read paths and as a fallback when the FK is null.
   /// New writes prefer the FK; the strings are populated alongside
   /// for transition only.
-  representationName  String?
-  representationFirm  String?
-  representationEmail String?
-  representationPhone String?
+  representationName      String?
+  representationFirm      String?
+  representationEmail     String?
+  representationPhone     String?
 
   createdAt DateTime @default(now())
 
-  matter  Matter  @relation(fields: [matterId], references: [id], onDelete: Cascade)
-  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  matter                Matter   @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  contact               Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
   /// SetNull (not Cascade) — losing the rep contact shouldn't blow
   /// away the party row; it just falls back to the legacy text fields
   /// (or empty) until a new rep is picked.
@@ -699,42 +709,42 @@ model MatterContact {
 /// `email` / `phone` columns remain as a fallback for un-backfilled
 /// rows; new code should prefer the joined `contact`.
 model Lead {
-  id                  String   @id @default(cuid())
+  id                      String    @id @default(cuid())
   /// FK to the prospective client's Contact. Nullable in the schema
   /// only because SQLite can't add a non-null column without a
   /// default; the create-lead action treats it as required and the
   /// seed backfills every existing row.
-  contactId           String?
-  name                String   /// Prospective client name (legacy mirror — prefer contact.name)
-  email               String?  /// Legacy mirror — prefer contact.email
-  phone               String?  /// Legacy mirror — prefer contact.phone
-  source              String?  /// web | referral | phone | walk_in | court_appointment
-  sourceDetail        String?  /// Additional source info, e.g. "referral · Fox"
-  summary             String?  /// Auto-extracted or manually entered case summary
-  location            String?  /// Incident location
-  dateOfIncident      DateTime?
-  injuries            String?  /// Comma-separated or freeform description
-  priorCounsel        Boolean  @default(false)
-  score               Int?     /// Lead quality score 0-100
-  liabilityAssessment String?  /// strong | moderate | weak
-  damagesAssessment   String?  /// strong | moderate | weak
-  defendantAbility    String?  /// Description of defendant's ability to satisfy judgment
-  statuteWindow       Int?     /// Days remaining on statute of limitations
-  conflictCheck       String   @default("pending") /// pending | clear | warn | conflict | override
+  contactId               String?
+  name                    String /// Prospective client name (legacy mirror — prefer contact.name)
+  email                   String? /// Legacy mirror — prefer contact.email
+  phone                   String? /// Legacy mirror — prefer contact.phone
+  source                  String? /// web | referral | phone | walk_in | court_appointment
+  sourceDetail            String? /// Additional source info, e.g. "referral · Fox"
+  summary                 String? /// Auto-extracted or manually entered case summary
+  location                String? /// Incident location
+  dateOfIncident          DateTime?
+  injuries                String? /// Comma-separated or freeform description
+  priorCounsel            Boolean   @default(false)
+  score                   Int? /// Lead quality score 0-100
+  liabilityAssessment     String? /// strong | moderate | weak
+  damagesAssessment       String? /// strong | moderate | weak
+  defendantAbility        String? /// Description of defendant's ability to satisfy judgment
+  statuteWindow           Int? /// Days remaining on statute of limitations
+  conflictCheck           String    @default("pending") /// pending | clear | warn | conflict | override
   /// When the matcher last ran. Drives the "checked X minutes ago"
   /// hint on the conflict card so the user knows whether the
   /// status reflects current data or a stale run.
-  conflictCheckedAt   DateTime?
+  conflictCheckedAt       DateTime?
   /// Set when an authorized user manually overrode a warn/conflict
   /// match — captures the rationale ("informed-consent waiver
   /// signed", "former client, no substantial relationship", etc.).
   /// Required for ethics compliance audit trails.
   conflictResolutionNotes String?
-  stage               String   @default("new") /// new | contacted | qualifying | meeting | converted | declined | hold
-  declineReason       String?
-  convertedMatterId   String?  /// If converted, links to the created matter
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  stage                   String    @default("new") /// new | contacted | qualifying | meeting | converted | declined | hold
+  declineReason           String?
+  convertedMatterId       String? /// If converted, links to the created matter
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   /// SetNull (not Cascade) — losing the contact shouldn't blow away
   /// the lead row; it just falls back to the legacy text columns.
@@ -754,18 +764,18 @@ model Lead {
 model Document {
   id          String   @id @default(cuid())
   matterId    String
-  name        String   /// Filename or display title
+  name        String /// Filename or display title
   category    String   @default("other") /// filing | pleading | correspondence | contract | intake | discovery | expert_report | evidence | vendor | archive | other
-  source      String?  /// ECF | email | scan | upload | generated | vendor
-  fileUrl     String?  /// Storage URL or local path
-  contentType String?  /// MIME type, e.g. "application/pdf"
-  fileSize    Int?     /// Size in bytes
+  source      String? /// ECF | email | scan | upload | generated | vendor
+  fileUrl     String? /// Storage URL or local path
+  contentType String? /// MIME type, e.g. "application/pdf"
+  fileSize    Int? /// Size in bytes
   status      String   @default("active") /// active | filed | received | review | archived
-  uploadedBy  String?  /// User ID who uploaded
+  uploadedBy  String? /// User ID who uploaded
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  matter             Matter    @relation(fields: [matterId], references: [id], onDelete: Cascade)
   /// Expenses that point at this document as their receipt. SetNull
   /// on the FK in Expense — deleting the receipt doesn't lose the
   /// expense itself.
@@ -783,23 +793,23 @@ model Document {
 /// A piece of evidence — body camera footage, dashcam, audio, photos, etc.
 /// Specialized for civil rights litigation where multimedia evidence is critical.
 model Evidence {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   matterId       String
-  type           String   /// bodycam_video | dashcam_video | audio | transcript | image | document | dispatch | cad_entry
+  type           String /// bodycam_video | dashcam_video | audio | transcript | image | document | dispatch | cad_entry
   description    String
-  source         String?  /// Where evidence came from, e.g. "APD", "witness", "court"
+  source         String? /// Where evidence came from, e.g. "APD", "witness", "court"
   dateRecorded   DateTime? /// When the evidence was originally captured
-  duration       String?  /// Length if video/audio, e.g. "00:14:22"
+  duration       String? /// Length if video/audio, e.g. "00:14:22"
   fileUrl        String?
   fileSize       Int?
-  resolution     String?  /// Video resolution, e.g. "1920×1080"
-  fps            Int?     /// Video frame rate
-  officerBadge   String?  /// Badge number if body camera
+  resolution     String? /// Video resolution, e.g. "1920×1080"
+  fps            Int? /// Video frame rate
+  officerBadge   String? /// Badge number if body camera
   incidentNumber String?
-  status         String   @default("raw") /// raw | synced | transcribed | flagged | reviewed
-  transcriptText String?  /// Full transcript text (if transcribed)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  status         String    @default("raw") /// raw | synced | transcribed | flagged | reviewed
+  transcriptText String? /// Full transcript text (if transcribed)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   matter         Matter          @relation(fields: [matterId], references: [id], onDelete: Cascade)
   flaggedMoments FlaggedMoment[]
@@ -815,10 +825,10 @@ model Evidence {
 model FlaggedMoment {
   id          String   @id @default(cuid())
   evidenceId  String
-  timestamp   String   /// Position in media, e.g. "00:03:42"
+  timestamp   String /// Position in media, e.g. "00:03:42"
   description String
-  category    String   /// critical | emphasis | anomaly | miranda | use_of_force | contradiction
-  flaggedById String   /// User who flagged this moment
+  category    String /// critical | emphasis | anomaly | miranda | use_of_force | contradiction
+  flaggedById String /// User who flagged this moment
   createdAt   DateTime @default(now())
 
   evidence  Evidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
@@ -830,10 +840,10 @@ model FlaggedMoment {
 
 /// Synchronization links between evidence items (e.g. body cam + dashcam aligned).
 model EvidenceSync {
-  id             String @id @default(cuid())
-  sourceId       String
-  targetId       String
-  timeOffset     Float  @default(0) /// Offset in seconds to align timelines
+  id         String @id @default(cuid())
+  sourceId   String
+  targetId   String
+  timeOffset Float  @default(0) /// Offset in seconds to align timelines
 
   source Evidence @relation("EvidenceSyncSource", fields: [sourceId], references: [id], onDelete: Cascade)
   target Evidence @relation("EvidenceSyncTarget", fields: [targetId], references: [id], onDelete: Cascade)
@@ -848,34 +858,34 @@ model EvidenceSync {
 
 /// A legal deadline — statute-driven, rule-driven, or manually created.
 model Deadline {
-  id          String    @id @default(cuid())
-  matterId    String
-  title       String    /// E.g. "CGIA notice due", "Discovery cutoff"
-  dueDate     DateTime
-  kind        String    @default("manual") /// critical | auto_rule | manual
-  sourceType  String?   /// statute | scheduling_order | filing_rule | custom
-  sourceRef   String?   /// Applicable statute or rule, e.g. "CRS §24-10-109"
-  description String?   /// Explanation of why/how this deadline applies
-  ownerId     String?   /// Responsible attorney
-  status      String    @default("open") /// open | completed | overdue | waived
+  id              String    @id @default(cuid())
+  matterId        String
+  title           String /// E.g. "CGIA notice due", "Discovery cutoff"
+  dueDate         DateTime
+  kind            String    @default("manual") /// critical | auto_rule | manual
+  sourceType      String? /// statute | scheduling_order | filing_rule | custom
+  sourceRef       String? /// Applicable statute or rule, e.g. "CRS §24-10-109"
+  description     String? /// Explanation of why/how this deadline applies
+  ownerId         String? /// Responsible attorney
+  status          String    @default("open") /// open | completed | overdue | waived
   /// When the deadline was added in the context of a specific note —
   /// the note becomes its parent and surfaces this deadline as an
   /// attached chip. Null for stand-alone deadlines (the common case).
-  noteId      String?
+  noteId          String?
   /// If spawned alongside a calendar event (event → deadline sibling).
   /// E.g. "scheduling-order deadline that emerged from this hearing."
-  eventId     String?
+  eventId         String?
   /// "Converted from task" — the task that was promoted to a
   /// deadline. Backlink for the EntitySource chip on the deadline.
-  parentTaskId String?
+  parentTaskId    String?
   /// Inbox-action sources: when this deadline was spawned from an
   /// email thread or messenger item via the "Create deadline"
   /// affordance.
   emailThreadId   String?
   messengerItemId String?
-  completedAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   matter        Matter         @relation(fields: [matterId], references: [id], onDelete: Cascade)
   owner         User?          @relation("DeadlineOwner", fields: [ownerId], references: [id])
@@ -978,17 +988,17 @@ model CalendarEvent {
   description String?
   isAllDay    Boolean  @default(false)
   zoomUrl     String?
-  color       String?  /// Override color for display
+  color       String? /// Override color for display
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  matter      Matter?             @relation(fields: [matterId], references: [id], onDelete: SetNull)
-  createdBy   User?               @relation("UserCreatedEvents", fields: [createdById], references: [id], onDelete: SetNull)
-  attendees   CalendarAttendee[]
-  notes       Note[]              @relation("CalendarEventNotes")
-  timeEntries TimeEntry[]         @relation("CalendarEventTimeEntries")
-  spawnedTasks     Task[]         @relation("EventSpawnedTasks")
-  spawnedDeadlines Deadline[]     @relation("EventSpawnedDeadlines")
+  matter           Matter?            @relation(fields: [matterId], references: [id], onDelete: SetNull)
+  createdBy        User?              @relation("UserCreatedEvents", fields: [createdById], references: [id], onDelete: SetNull)
+  attendees        CalendarAttendee[]
+  notes            Note[]             @relation("CalendarEventNotes")
+  timeEntries      TimeEntry[]        @relation("CalendarEventTimeEntries")
+  spawnedTasks     Task[]             @relation("EventSpawnedTasks")
+  spawnedDeadlines Deadline[]         @relation("EventSpawnedDeadlines")
 
   @@index([startTime])
   @@index([matterId])
@@ -1037,32 +1047,32 @@ model CalendarAttendee {
 
 /// A time entry — the core billing unit. Tracks work done on a matter.
 model TimeEntry {
-  id            String    @id @default(cuid())
-  matterId      String
-  userId        String    /// Attorney or staff who did the work
-  date          DateTime  /// Date the work was performed
+  id         String   @id @default(cuid())
+  matterId   String
+  userId     String /// Attorney or staff who did the work
+  date       DateTime /// Date the work was performed
   /// Duration in decimal hours (e.g. 1.5). Float is fine — these
   /// are quarter-hour increments and the value isn't itself money.
-  hours         Float     /// Duration in decimal hours (e.g. 1.5)
-  activity      String    /// Short description, e.g. "Motion to compel · draft & file"
-  narrative     String?   /// Detailed client-facing description
-  utbmsCode     String?   /// UTBMS activity code, e.g. "A101"
+  hours      Float /// Duration in decimal hours (e.g. 1.5)
+  activity   String /// Short description, e.g. "Motion to compel · draft & file"
+  narrative  String? /// Detailed client-facing description
+  utbmsCode  String? /// UTBMS activity code, e.g. "A101"
   /// Billing rate per hour. Decimal for money-precision. Null on
   /// contingent matters where there's no hourly rate.
-  rate          Decimal?  /// Billing rate per hour (null for contingent)
+  rate       Decimal? /// Billing rate per hour (null for contingent)
   /// Computed billable amount (hours × rate). Stored Decimal so we
   /// don't recompute on every read; the action that sets it is
   /// responsible for keeping it in sync.
-  amount        Decimal?  /// Computed billable amount (hours × rate)
-  billable      Boolean   @default(true)
-  noCharge      Boolean   @default(false) /// Write-off flag
-  privileged    Boolean   @default(false) /// Attorney-client privilege flag
-  source        String    @default("manual") /// manual | timer | email | calendar | document | task | evidence
-  sourceRef     String?   /// Reference to originating email/event/doc ID
-  status        String    @default("draft") /// draft | submitted | billable | billed | written_off
-  invoiceId     String?   /// Set when this entry is included in an invoice
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  amount     Decimal? /// Computed billable amount (hours × rate)
+  billable   Boolean  @default(true)
+  noCharge   Boolean  @default(false) /// Write-off flag
+  privileged Boolean  @default(false) /// Attorney-client privilege flag
+  source     String   @default("manual") /// manual | timer | email | calendar | document | task | evidence
+  sourceRef  String? /// Reference to originating email/event/doc ID
+  status     String   @default("draft") /// draft | submitted | billable | billed | written_off
+  invoiceId  String? /// Set when this entry is included in an invoice
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   /// Optional direct link to the calendar event this time entry
   /// came out of (a hearing, deposition, meeting, etc.). Stronger
@@ -1078,22 +1088,22 @@ model TimeEntry {
   /// time entry's relationship to its primary work item. Mirrors
   /// the noteId / calendarEventId pattern. Nullable since most
   /// entries are matter-scoped without a more specific parent.
-  taskId     String?
-  deadlineId String?
+  taskId          String?
+  deadlineId      String?
   /// "Log time on this email" / "Log time on this SMS / call /
   /// voicemail." Per-individual-item granularity (not the thread).
   /// Lawyer's clock for reading + responding to a specific message.
-  emailMessageId   String?
-  messengerItemId  String?
+  emailMessageId  String?
+  messengerItemId String?
 
-  matter        Matter         @relation(fields: [matterId], references: [id], onDelete: Cascade)
-  user          User           @relation(fields: [userId], references: [id])
-  invoice       Invoice?       @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  notes         Note[]         @relation("TimeEntryNotes")
-  event         CalendarEvent? @relation("CalendarEventTimeEntries", fields: [calendarEventId], references: [id], onDelete: SetNull)
-  parentNote    Note?          @relation("NoteAttachedTimeEntries", fields: [noteId], references: [id], onDelete: SetNull)
-  parentTask    Task?          @relation("TaskTimeEntries", fields: [taskId], references: [id], onDelete: SetNull)
-  parentDeadline Deadline?     @relation("DeadlineTimeEntries", fields: [deadlineId], references: [id], onDelete: SetNull)
+  matter         Matter         @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  user           User           @relation(fields: [userId], references: [id])
+  invoice        Invoice?       @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  notes          Note[]         @relation("TimeEntryNotes")
+  event          CalendarEvent? @relation("CalendarEventTimeEntries", fields: [calendarEventId], references: [id], onDelete: SetNull)
+  parentNote     Note?          @relation("NoteAttachedTimeEntries", fields: [noteId], references: [id], onDelete: SetNull)
+  parentTask     Task?          @relation("TaskTimeEntries", fields: [taskId], references: [id], onDelete: SetNull)
+  parentDeadline Deadline?      @relation("DeadlineTimeEntries", fields: [deadlineId], references: [id], onDelete: SetNull)
   emailMessage   EmailMessage?  @relation("EmailMessageTimeEntries", fields: [emailMessageId], references: [id], onDelete: SetNull)
   messengerItem  MessengerItem? @relation("MessengerItemTimeEntries", fields: [messengerItemId], references: [id], onDelete: SetNull)
 
@@ -1145,39 +1155,39 @@ model TimeEntry {
 /// suffices for a small charge." Required-receipt policy belongs
 /// in firm settings down the road.
 model Expense {
-  id              String    @id @default(cuid())
-  matterId        String
+  id                String   @id @default(cuid())
+  matterId          String
   /// Optional intake-time expenses. When a Lead converts to a
   /// Matter, expenses logged against the lead carry over via the
   /// conversion path (not yet wired — placeholder FK ready).
-  leadId          String?
+  leadId            String?
   /// User who logged the expense — drives the audit trail and the
   /// timeline-tab attribution. Required for new rows; legacy rows
   /// from a future bulk import may be null.
-  loggedBy        String?
-  date            DateTime  /// Date the cost was incurred (not the log date)
-  description     String    /// "Court filing fee — motion to compel"
+  loggedBy          String?
+  date              DateTime /// Date the cost was incurred (not the log date)
+  description       String /// "Court filing fee — motion to compel"
   /// UTBMS expense code (E-codes), e.g. "E102 Outside printing".
   /// Optional today; firms with strict billing standards may
   /// require it via a future setting.
-  utbmsCode       String?
+  utbmsCode         String?
   /// Open-ended category for grouping in the UI: filing_fee |
   /// expert | travel | deposition | medical_record | postage |
   /// records | research | other. String not enum so adding
   /// categories is data, not a migration.
-  category        String    @default("other")
-  amount          Decimal   /// Always positive — sign is implied by `clientAdvanced`
-  billable        Boolean   @default(true)
-  clientAdvanced  Boolean   @default(false)
+  category          String   @default("other")
+  amount            Decimal /// Always positive — sign is implied by `clientAdvanced`
+  billable          Boolean  @default(true)
+  clientAdvanced    Boolean  @default(false)
   /// Set when this expense is included on an invoice. SetNull on
   /// invoice delete so the expense survives invoice purges.
-  invoiceId       String?
+  invoiceId         String?
   /// Optional Document row for the receipt. SetNull so deleting
   /// the receipt document doesn't lose the expense.
   receiptDocumentId String?
-  notes           String?   /// Free-text memo
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  notes             String? /// Free-text memo
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   matter          Matter    @relation(fields: [matterId], references: [id], onDelete: Cascade)
   invoice         Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
@@ -1190,26 +1200,26 @@ model Expense {
 }
 
 model Invoice {
-  id           String    @id @default(cuid())
+  id            String   @id @default(cuid())
   invoiceNumber String   @unique /// Human-readable number, e.g. "2026-041"
-  matterId     String
-  clientId     String?   /// Contact ID for the billed client (null for internal records)
+  matterId      String
+  clientId      String? /// Contact ID for the billed client (null for internal records)
   /// Kind of bundle this row represents. Same data shape, different
   /// semantics + display + AR rules. See model docstring above.
-  kind         String    @default("client") /// client | internal_record
-  issueDate    DateTime
-  dueDate      DateTime
-  subtotal     Decimal   @default(0)
-  taxAmount    Decimal   @default(0)
-  totalAmount  Decimal   @default(0)
-  paidAmount   Decimal   @default(0)
-  status       String    @default("draft") /// draft | sent | open | overdue | paid | void
-  notes        String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  kind          String   @default("client") /// client | internal_record
+  issueDate     DateTime
+  dueDate       DateTime
+  subtotal      Decimal  @default(0)
+  taxAmount     Decimal  @default(0)
+  totalAmount   Decimal  @default(0)
+  paidAmount    Decimal  @default(0)
+  status        String   @default("draft") /// draft | sent | open | overdue | paid | void
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  matter     Matter      @relation(fields: [matterId], references: [id], onDelete: Cascade)
-  lineItems  TimeEntry[]
+  matter           Matter             @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  lineItems        TimeEntry[]
   /// Expenses billed on this invoice. Same shape as time entries
   /// — the invoice generation flow bundles billable + un-invoiced
   /// expenses alongside billable + un-invoiced time entries.
@@ -1218,13 +1228,13 @@ model Invoice {
   /// Populated by the "Pay from trust" action; the ledger row's
   /// `invoiceId` points back here. Lets the preview + ledger both
   /// surface the cross-link without separate queries.
-  trustPayments TrustTransaction[]
+  trustPayments    TrustTransaction[]
   /// Every payment recorded against this invoice — trust, check,
   /// ACH, cash, card, etc. This is what the invoice preview reads
   /// to render its "Payments received" section. Trust payments
   /// double-write here AND to TrustTransaction (the trust ledger
   /// remains the source of truth for the trust account itself).
-  payments InvoicePayment[]
+  payments         InvoicePayment[]
 
   @@index([matterId])
   @@index([status])
@@ -1244,13 +1254,13 @@ model Invoice {
 /// payment lands there's no trust row to read from. This table is
 /// the unified record of "what's been paid against this invoice."
 model InvoicePayment {
-  id          String   @id @default(cuid())
+  id          String            @id @default(cuid())
   invoiceId   String
   /// Where the money came from. Free string (not enum) so adding
   /// new channels (Stripe webhook, lockbox import) is config-only,
   /// not a migration. UI maps known sources to display labels.
-  source      String   /// trust | check | ach | cash | card | other
-  amount      Decimal  /// Always positive — payments add to paidAmount
+  source      String /// trust | check | ach | cash | card | other
+  amount      Decimal /// Always positive — payments add to paidAmount
   date        DateTime
   /// Free text — "Paid in full per email 4/12", "Partial — balance
   /// to follow", etc. Captured into the trust txn's description
@@ -1264,10 +1274,10 @@ model InvoicePayment {
   /// payment was applied regardless of whether the ledger entry
   /// survives. Unique because at most one InvoicePayment per trust
   /// txn ever exists.
-  trustTxnId  String?  @unique
+  trustTxnId  String?           @unique
   trustTxn    TrustTransaction? @relation(fields: [trustTxnId], references: [id], onDelete: SetNull)
-  createdBy   String?  /// User who recorded the payment
-  createdAt   DateTime @default(now())
+  createdBy   String? /// User who recorded the payment
+  createdAt   DateTime          @default(now())
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
@@ -1284,12 +1294,12 @@ model InvoicePayment {
 model TrustTransaction {
   id          String   @id @default(cuid())
   matterId    String
-  type        String   /// deposit | disbursement | transfer | refund | interest
-  amount      Decimal  /// Positive for deposits, negative for disbursements
+  type        String /// deposit | disbursement | transfer | refund | interest
+  amount      Decimal /// Positive for deposits, negative for disbursements
   description String
-  reference   String?  /// Check number, wire confirmation, etc.
+  reference   String? /// Check number, wire confirmation, etc.
   date        DateTime
-  createdBy   String?  /// User who recorded the transaction
+  createdBy   String? /// User who recorded the transaction
   reconciled  Boolean  @default(false)
   /// When this txn was created by paying an invoice from trust, the
   /// FK back to that invoice. Lets the ledger row link to the
@@ -1300,8 +1310,8 @@ model TrustTransaction {
   invoiceId   String?
   createdAt   DateTime @default(now())
 
-  matter  Matter   @relation(fields: [matterId], references: [id], onDelete: Cascade)
-  invoice Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  matter         Matter          @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  invoice        Invoice?        @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   /// The InvoicePayment row this trust txn produced (when it was
   /// created via Pay from trust). Lets the ledger surface "applied
   /// to invoice" detail without joining through Invoice.
@@ -1319,16 +1329,16 @@ model TrustTransaction {
 
 /// A settlement for a resolved matter — tracks distribution, liens, approvals.
 model Settlement {
-  id               String   @id @default(cuid())
-  matterId         String
-  grossAmount      Decimal  /// Total settlement amount
-  firmFee          Decimal  @default(0) /// Attorney fee
-  firmFeePercent   Decimal? /// Fee percentage (e.g. 33.33)
-  advancedCosts    Decimal  @default(0) /// Costs advanced by firm
-  clientNet        Decimal  @default(0) /// Net amount to client
-  status           String   @default("pending") /// pending | approved | disbursed | closed
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id             String   @id @default(cuid())
+  matterId       String
+  grossAmount    Decimal /// Total settlement amount
+  firmFee        Decimal  @default(0) /// Attorney fee
+  firmFeePercent Decimal? /// Fee percentage (e.g. 33.33)
+  advancedCosts  Decimal  @default(0) /// Costs advanced by firm
+  clientNet      Decimal  @default(0) /// Net amount to client
+  status         String   @default("pending") /// pending | approved | disbursed | closed
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   matter    Matter               @relation(fields: [matterId], references: [id], onDelete: Cascade)
   liens     SettlementLien[]
@@ -1340,13 +1350,13 @@ model Settlement {
 
 /// A lien against a settlement — medical providers, insurance subrogation, etc.
 model SettlementLien {
-  id               String  @id @default(cuid())
+  id               String   @id @default(cuid())
   settlementId     String
-  lienholder       String  /// Name of lienholder
+  lienholder       String /// Name of lienholder
   lienholderType   String? /// hospital | physician | insurance | government | other
   originalAmount   Decimal
   negotiatedAmount Decimal? /// Reduced amount after negotiation
-  status           String  @default("pending") /// pending | negotiating | signed | verified | paid
+  status           String   @default("pending") /// pending | negotiating | signed | verified | paid
 
   settlement Settlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
 
@@ -1357,9 +1367,9 @@ model SettlementLien {
 model SettlementApproval {
   id           String    @id @default(cuid())
   settlementId String
-  step         Int       /// Order in approval chain (1, 2, 3, 4)
-  label        String    /// E.g. "Client release", "Partner sign-off", "Bookkeeper reconciliation"
-  approverId   String?   /// User who approved
+  step         Int /// Order in approval chain (1, 2, 3, 4)
+  label        String /// E.g. "Client release", "Partner sign-off", "Bookkeeper reconciliation"
+  approverId   String? /// User who approved
   status       String    @default("pending") /// pending | approved | rejected
   approvedAt   DateTime?
   notes        String?
@@ -1376,17 +1386,17 @@ model SettlementApproval {
 
 /// A linked email account (e.g. Gmail OAuth integration).
 model EmailAccount {
-  id            String   @id @default(cuid())
-  userId        String
-  provider      String   @default("gmail") /// gmail | outlook | other
-  emailAddress  String
-  accessToken   String?  /// OAuth access token — encrypted at rest via src/lib/email-token-encryption.ts (ADR-011)
-  refreshToken  String?  /// OAuth refresh token — encrypted at rest via src/lib/email-token-encryption.ts (ADR-011)
-  syncStatus    String   @default("disconnected") /// connected | syncing | disconnected | error
-  lastSyncAt    DateTime?
-  threadsIndexed Int     @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id             String    @id @default(cuid())
+  userId         String
+  provider       String    @default("gmail") /// gmail | outlook | other
+  emailAddress   String
+  accessToken    String? /// OAuth access token — encrypted at rest via src/lib/email-token-encryption.ts (ADR-011)
+  refreshToken   String? /// OAuth refresh token — encrypted at rest via src/lib/email-token-encryption.ts (ADR-011)
+  syncStatus     String    @default("disconnected") /// connected | syncing | disconnected | error
+  lastSyncAt     DateTime?
+  threadsIndexed Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   threads EmailThread[]
@@ -1397,35 +1407,35 @@ model EmailAccount {
 
 /// An email thread — a conversation chain with one or more messages.
 model EmailThread {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   accountId      String
-  matterId       String?  /// Null for unfiled emails
-  externalId     String?  /// Gmail thread ID or provider-specific ID
+  matterId       String? /// Null for unfiled emails
+  externalId     String? /// Gmail thread ID or provider-specific ID
   subject        String
-  snippet        String?  /// Preview text for thread list
-  isRead         Boolean  @default(false)
-  isStarred      Boolean  @default(false)
-  isArchived     Boolean  @default(false)
-  hasAttachments Boolean  @default(false)
-  messageCount   Int      @default(1)
+  snippet        String? /// Preview text for thread list
+  isRead         Boolean   @default(false)
+  isStarred      Boolean   @default(false)
+  isArchived     Boolean   @default(false)
+  hasAttachments Boolean   @default(false)
+  messageCount   Int       @default(1)
   lastMessageAt  DateTime
   /// "Follow up by" snooze. Null = no follow-up tracked. When set,
   /// the thread surfaces in the dashboard "Follow up today" card and
   /// the thread-list row gets a date chip (overdue styled when past).
   /// Notifications themselves wait on Phase 8 — this is the data model.
   followUpAt     DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  account  EmailAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  matter   Matter?        @relation(fields: [matterId], references: [id], onDelete: SetNull)
-  messages EmailMessage[]
-  labels   EmailLabel[]
+  account          EmailAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  matter           Matter?        @relation(fields: [matterId], references: [id], onDelete: SetNull)
+  messages         EmailMessage[]
+  labels           EmailLabel[]
   /// Inverse for the inbox-to-action affordances on the email
   /// thread reader. Lets us list "things spawned from this thread."
-  spawnedNotes     Note[]     @relation("EmailThreadSpawnedNotes")
-  spawnedTasks     Task[]     @relation("EmailThreadSpawnedTasks")
-  spawnedDeadlines Deadline[] @relation("EmailThreadSpawnedDeadlines")
+  spawnedNotes     Note[]         @relation("EmailThreadSpawnedNotes")
+  spawnedTasks     Task[]         @relation("EmailThreadSpawnedTasks")
+  spawnedDeadlines Deadline[]     @relation("EmailThreadSpawnedDeadlines")
 
   @@index([accountId])
   @@index([matterId])
@@ -1438,12 +1448,12 @@ model EmailThread {
 model EmailMessage {
   id           String   @id @default(cuid())
   threadId     String
-  externalId   String?  /// Gmail message ID
+  externalId   String? /// Gmail message ID
   fromName     String
   fromEmail    String
-  toRecipients String   /// JSON array of {name, email} objects
-  ccRecipients String?  /// JSON array of {name, email} objects
-  body         String   /// Email body text (HTML or plain)
+  toRecipients String /// JSON array of {name, email} objects
+  ccRecipients String? /// JSON array of {name, email} objects
+  body         String /// Email body text (HTML or plain)
   sentAt       DateTime
   isPrivileged Boolean  @default(false) /// Flagged as attorney-client privileged
   createdAt    DateTime @default(now())
@@ -1462,11 +1472,11 @@ model EmailMessage {
 
 /// An attachment on an email message.
 model EmailAttachment {
-  id          String @id @default(cuid())
+  id          String  @id @default(cuid())
   messageId   String
   filename    String
   contentType String?
-  fileSize    Int?   /// Size in bytes
+  fileSize    Int? /// Size in bytes
   fileUrl     String? /// Storage URL after download
 
   message EmailMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
@@ -1516,12 +1526,12 @@ model EmailLabel {
 /// `EmailAccount`. Write/read these fields only through top-level
 /// `prisma.messengerAccount.*` calls (see ADR-011).
 model MessengerAccount {
-  id                String   @id @default(cuid())
+  id                String  @id @default(cuid())
   /// Owner — null when the line is shared firm-wide. Multi-user is
   /// not real today (auth is hardcoded), but this column means the
   /// "is this mine?" filter on the inbox doesn't need a refactor.
   userId            String?
-  provider          String   @default("quo") /// quo | openphone (legacy alias) | future
+  provider          String  @default("quo") /// quo | openphone (legacy alias) | future
   /// Quo's id for the account / number — used when calling their
   /// REST API for outbound + when matching webhook payloads.
   providerAccountId String?
@@ -1530,16 +1540,16 @@ model MessengerAccount {
   phoneNumber       String
   /// Optional display label, e.g. "Main", "Intake line", "Jason direct".
   label             String?
-  isActive          Boolean  @default(true)
+  isActive          Boolean @default(true)
 
-  accessToken       String?
-  refreshToken      String?
-  webhookSecret     String?
+  accessToken   String?
+  refreshToken  String?
+  webhookSecret String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user    User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user    User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
   threads MessengerThread[]
 
   @@unique([provider, phoneNumber])
@@ -1551,7 +1561,7 @@ model MessengerAccount {
 /// MessengerAccounts. SMS, calls, and voicemails all live as items
 /// inside this thread regardless of channel.
 model MessengerThread {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   accountId       String
   /// External party in E.164. Together with accountId this is unique.
   contactPhone    String
@@ -1567,10 +1577,10 @@ model MessengerThread {
   /// aggregate every page load. Maintained inside the inbound
   /// webhook handler + outbound send action.
   lastItemAt      DateTime
-  unreadCount     Int      @default(0)
-  isArchived      Boolean  @default(false)
+  unreadCount     Int       @default(0)
+  isArchived      Boolean   @default(false)
   /// Optional pinned-to-top flag for the inbox.
-  isPinned        Boolean  @default(false)
+  isPinned        Boolean   @default(false)
   /// "Follow up by" snooze — same semantics as EmailThread.followUpAt.
   /// When set, the thread surfaces in the dashboard "Follow up today"
   /// card and the thread-list row gets a date chip.
@@ -1601,8 +1611,8 @@ model MessengerItem {
   /// Provider event id — unique so webhook retries are idempotent.
   /// Use Quo's `eventId` (or `messageId` / `callId` if no event id).
   providerEventId String   @unique
-  kind            String   /// sms | call | voicemail
-  direction       String   /// inbound | outbound
+  kind            String /// sms | call | voicemail
+  direction       String /// inbound | outbound
   fromNumber      String
   toNumber        String
   /// SMS body or voicemail transcript or call summary. Null for
@@ -1632,16 +1642,16 @@ model MessengerItem {
   occurredAt      DateTime
   createdAt       DateTime @default(now())
 
-  thread MessengerThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  matter Matter?         @relation("MessengerItemMatter", fields: [matterId], references: [id], onDelete: SetNull)
+  thread           MessengerThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  matter           Matter?         @relation("MessengerItemMatter", fields: [matterId], references: [id], onDelete: SetNull)
   /// Inverse for the inbox-to-action affordances on messenger items
   /// (especially voicemails). Lets us list "things spawned from this
   /// message / call / voicemail."
-  spawnedNotes     Note[]     @relation("MessengerItemSpawnedNotes")
-  spawnedTasks     Task[]     @relation("MessengerItemSpawnedTasks")
-  spawnedDeadlines Deadline[] @relation("MessengerItemSpawnedDeadlines")
+  spawnedNotes     Note[]          @relation("MessengerItemSpawnedNotes")
+  spawnedTasks     Task[]          @relation("MessengerItemSpawnedTasks")
+  spawnedDeadlines Deadline[]      @relation("MessengerItemSpawnedDeadlines")
   /// Time entries logged "on this specific SMS / call / voicemail."
-  timeEntries      TimeEntry[] @relation("MessengerItemTimeEntries")
+  timeEntries      TimeEntry[]     @relation("MessengerItemTimeEntries")
 
   @@index([threadId, occurredAt])
   @@index([matterId])
@@ -1655,45 +1665,45 @@ model MessengerItem {
 
 /// A task or to-do item linked to a matter.
 model Task {
-  id          String    @id @default(cuid())
-  matterId    String?   /// Null for firm-wide tasks
-  title       String
-  description String?
-  priority    String    @default("normal") /// low | normal | high | urgent
-  status      String    @default("open") /// open | in_progress | in_review | done | cancelled
-  dueDate     DateTime?
-  ownerId     String?   /// Assigned team member
-  deadlineId  String?   /// If spawned from a deadline (deadline → task sibling-capture)
+  id              String    @id @default(cuid())
+  matterId        String? /// Null for firm-wide tasks
+  title           String
+  description     String?
+  priority        String    @default("normal") /// low | normal | high | urgent
+  status          String    @default("open") /// open | in_progress | in_review | done | cancelled
+  dueDate         DateTime?
+  ownerId         String? /// Assigned team member
+  deadlineId      String? /// If spawned from a deadline (deadline → task sibling-capture)
   /// If spawned alongside a calendar event (event → task sibling-capture).
   /// E.g. "task to prep witness questions for this hearing."
-  eventId     String?
+  eventId         String?
   /// When the task was created in the context of a specific note —
   /// the note becomes its parent and surfaces this task as an
   /// attached chip. Null for stand-alone tasks (the common case).
-  noteId      String?
+  noteId          String?
   /// Inbox-action sources: when this task was spawned from an
   /// email thread or a messenger item via the "Create task from
   /// this" affordance. Drives the "From email" / "From message"
   /// chip on the task card so users can navigate back to context.
   emailThreadId   String?
   messengerItemId String?
-  sortOrder   Int       @default(0) /// For manual ordering within status groups
-  completedAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  sortOrder       Int       @default(0) /// For manual ordering within status groups
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  matter        Matter?        @relation(fields: [matterId], references: [id], onDelete: Cascade)
-  owner         User?          @relation("TaskOwner", fields: [ownerId], references: [id])
-  notes         Note[]         @relation("TaskNotes")
-  parentNote    Note?          @relation("NoteAttachedTasks", fields: [noteId], references: [id], onDelete: SetNull)
-  emailThread   EmailThread?   @relation("EmailThreadSpawnedTasks", fields: [emailThreadId], references: [id], onDelete: SetNull)
-  messengerItem MessengerItem? @relation("MessengerItemSpawnedTasks", fields: [messengerItemId], references: [id], onDelete: SetNull)
-  parentEvent   CalendarEvent? @relation("EventSpawnedTasks", fields: [eventId], references: [id], onDelete: SetNull)
-  parentDeadline Deadline?     @relation("DeadlineSpawnedTasks", fields: [deadlineId], references: [id], onDelete: SetNull)
+  matter             Matter?        @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  owner              User?          @relation("TaskOwner", fields: [ownerId], references: [id])
+  notes              Note[]         @relation("TaskNotes")
+  parentNote         Note?          @relation("NoteAttachedTasks", fields: [noteId], references: [id], onDelete: SetNull)
+  emailThread        EmailThread?   @relation("EmailThreadSpawnedTasks", fields: [emailThreadId], references: [id], onDelete: SetNull)
+  messengerItem      MessengerItem? @relation("MessengerItemSpawnedTasks", fields: [messengerItemId], references: [id], onDelete: SetNull)
+  parentEvent        CalendarEvent? @relation("EventSpawnedTasks", fields: [eventId], references: [id], onDelete: SetNull)
+  parentDeadline     Deadline?      @relation("DeadlineSpawnedTasks", fields: [deadlineId], references: [id], onDelete: SetNull)
   /// Time logged "on this task" — the inverse of TimeEntry.taskId.
-  timeEntries    TimeEntry[]   @relation("TaskTimeEntries")
+  timeEntries        TimeEntry[]    @relation("TaskTimeEntries")
   /// Deadlines that were "Convert to deadline" promoted from this task.
-  convertedDeadlines Deadline[] @relation("TaskConvertedDeadlines")
+  convertedDeadlines Deadline[]     @relation("TaskConvertedDeadlines")
 
   @@index([matterId])
   @@index([status])
@@ -1715,7 +1725,7 @@ model Note {
   id        String   @id @default(cuid())
   matterId  String
   authorId  String
-  content   String   /// Rich text content (stored as HTML or Markdown)
+  content   String /// Rich text content (stored as HTML or Markdown)
   type      String   @default("note") /// note | strategy | chatter | memo
   isPinned  Boolean  @default(false)
   createdAt DateTime @default(now())
@@ -1780,13 +1790,13 @@ model Note {
 /// An activity log entry — tracks all notable events across the firm.
 model ActivityLog {
   id        String   @id @default(cuid())
-  matterId  String?  /// Null for firm-wide events
-  userId    String?  /// User who triggered the action (null for system events)
-  type      String   /// filing | email | evidence | deposition | task_complete | settlement | deposit | automation | deadline | note | document | time_entry
-  icon      String?  /// Icon name for display, e.g. "gavel", "mail", "dollar"
-  source    String?  /// PACER | Email | Evidence | SMS | Task | Trust | Automation | System
+  matterId  String? /// Null for firm-wide events
+  userId    String? /// User who triggered the action (null for system events)
+  type      String /// filing | email | evidence | deposition | task_complete | settlement | deposit | automation | deadline | note | document | time_entry
+  icon      String? /// Icon name for display, e.g. "gavel", "mail", "dollar"
+  source    String? /// PACER | Email | Evidence | SMS | Task | Trust | Automation | System
   title     String
-  detail    String?  /// Extended description
+  detail    String? /// Extended description
   timestamp DateTime @default(now())
 
   matter Matter? @relation(fields: [matterId], references: [id], onDelete: Cascade)
@@ -1804,11 +1814,11 @@ model ActivityLog {
 /// A reusable automation template — onboarding flows, document generation, etc.
 model Automation {
   id          String   @id @default(cuid())
-  name        String   /// E.g. "§1983 onboarding", "CGIA notice generation"
+  name        String /// E.g. "§1983 onboarding", "CGIA notice generation"
   description String?
-  trigger     String?  /// intake_convert | deadline_approaching | manual | stage_change
-  area        String?  /// Practice area this applies to (null = all)
-  steps       String   /// JSON array of automation steps
+  trigger     String? /// intake_convert | deadline_approaching | manual | stage_change
+  area        String? /// Practice area this applies to (null = all)
+  steps       String /// JSON array of automation steps
   isActive    Boolean  @default(true)
   runCount    Int      @default(0)
   createdAt   DateTime @default(now())
@@ -1830,7 +1840,7 @@ model Automation {
 /// no fan-out tables, no email/SMS/push delivery — those land later
 /// behind the same writer helper.
 model Notification {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   /// Who sees this notification. Notifications are strictly
   /// per-recipient — fan-out is the writer's job.
   userId    String
@@ -1855,7 +1865,7 @@ model Notification {
   /// Set when the user marks this row read (or "mark all read"
   /// flips every open row to readAt = now).
   readAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   matter Matter? @relation(fields: [matterId], references: [id], onDelete: SetNull)
@@ -1865,4 +1875,60 @@ model Notification {
   @@index([userId, readAt, createdAt])
   @@index([userId, createdAt])
   @@map("notifications")
+}
+
+/// One running timer per user (userId unique — starting a new timer
+/// replaces the old one). Persisted server-side so the timer
+/// survives reloads and follows the user across devices; elapsed
+/// time is computed from startedAt at read time, never ticked in
+/// the DB. Stopping the timer converts it into a TimeEntry
+/// (source = "timer") via the time-entry composer and deletes the
+/// row — a timer is a pre-entry, not a record.
+model TimerSession {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  /// Optional — a timer can start before the user knows which
+  /// matter the work belongs to; the stop-time composer requires
+  /// one before the TimeEntry is written.
+  matterId  String?
+  /// Pre-filled activity description, editable at stop time.
+  activity  String?
+  startedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  matter Matter? @relation(fields: [matterId], references: [id], onDelete: SetNull)
+
+  @@index([matterId])
+  @@map("timer_sessions")
+}
+
+/// Reusable document template (demand letter, discovery responses,
+/// retainer agreement, …). Body is plain text / Markdown carrying
+/// {{merge.fields}} — the field catalog and the merge engine live
+/// in src/lib/template-merge.ts (code owns the field list; adding a
+/// field is a code change, not data). Generation resolves fields
+/// from a matter + its client/firm context and either copies the
+/// result or saves it as a matter Document through the normal
+/// file-storage path.
+model DocumentTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  /// Free string so new categories are data, not a migration:
+  /// demand_letter | discovery | retainer | correspondence |
+  /// pleading | general.
+  category    String   @default("general")
+  description String?
+  body        String
+  /// Soft-archive — generation pickers hide inactive templates but
+  /// history stays intact.
+  isActive    Boolean  @default(true)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([category, isActive])
+  @@map("document_templates")
 }

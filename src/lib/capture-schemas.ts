@@ -19,11 +19,22 @@ import {
   TASK_PRIORITIES,
 } from "@/lib/note-constants";
 
+/** Date-only capture fields travel as "YYYY-MM-DD" (the wire format
+ *  of <input type="date">). Enforcing the shape here lets the server
+ *  actions parse them with `parseLocalDate` (local midnight — never
+ *  `new Date(...)`, which reads date-only strings as UTC midnight
+ *  and drifts the day for anyone west of UTC) without re-validating. */
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 export const taskCaptureSchema = z.object({
   kind: z.literal("task"),
   tempId: z.string(),
   title: z.string().trim().min(1, "Task title is required").max(200),
-  dueDate: z.string().optional().default(""),
+  dueDate: z
+    .string()
+    .optional()
+    .default("")
+    .refine((v) => v === "" || DATE_ONLY_RE.test(v), "Enter a valid date"),
   priority: z.enum(TASK_PRIORITIES).default("normal"),
 });
 
@@ -71,7 +82,10 @@ export const deadlineCaptureSchema = z.object({
   kind: z.literal("deadline"),
   tempId: z.string(),
   title: z.string().trim().min(1, "Deadline title is required").max(200),
-  dueDate: z.string().min(1, "Due date is required"),
+  dueDate: z
+    .string()
+    .min(1, "Due date is required")
+    .refine((v) => DATE_ONLY_RE.test(v), "Enter a valid date"),
   kind_: z.enum(DEADLINE_KINDS).default("manual"),
   description: z.string().max(4000).optional().default(""),
 });
@@ -79,7 +93,10 @@ export const deadlineCaptureSchema = z.object({
 export const timeCaptureSchema = z.object({
   kind: z.literal("time"),
   tempId: z.string(),
-  date: z.string().min(1, "Date is required"),
+  date: z
+    .string()
+    .min(1, "Date is required")
+    .refine((v) => DATE_ONLY_RE.test(v), "Enter a valid date"),
   hours: z
     .string()
     .min(1, "Hours required")

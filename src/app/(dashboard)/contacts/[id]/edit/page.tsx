@@ -1,19 +1,30 @@
 /**
  * Edit Contact page.
+ *
+ * Page-guarded on contacts.edit (the updateContact action re-checks
+ * server-side). Conflict status is NOT edited here — it goes through
+ * the detail page's justified control so changes hit the audit log.
+ * Merged-away contacts bounce to the surviving record.
  */
 
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { TopBar } from "@/components/layout/topbar";
 import { ContactForm } from "@/components/contacts/contact-form";
 import { updateContact } from "@/app/actions/contacts";
 import { getContactById } from "@/lib/queries/contacts";
+import { currentUserHasPermission } from "@/lib/permission-check";
 
 export default async function EditContactPage({
   params,
 }: PageProps<"/contacts/[id]/edit">) {
   const { id } = await params;
-  const c = await getContactById(id);
+  const [c, canEdit] = await Promise.all([
+    getContactById(id),
+    currentUserHasPermission("contacts.edit"),
+  ]);
   if (!c) notFound();
+  if (c.mergedIntoId) redirect(`/contacts/${c.mergedIntoId}`);
+  if (!canEdit) redirect(`/contacts/${id}`);
 
   const boundUpdate = updateContact.bind(null, id);
 
@@ -40,7 +51,6 @@ export default async function EditContactPage({
             state: c.state ?? "",
             zip: c.zip ?? "",
             notes: c.notes ?? "",
-            conflictStatus: c.conflictStatus,
           }}
         />
       </div>

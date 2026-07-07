@@ -10,8 +10,11 @@
  */
 
 import Link from "next/link";
-import { format } from "date-fns";
 import { MailOpen, Paperclip, Reply, ShieldCheck } from "lucide-react";
+// sentAt is a real instant — server-rendered, so display threads the
+// viewer's IANA zone (ADR-012). "datetime_medium" is the centralized
+// spelling of the "MMM d, yyyy, h:mm a" this header always used.
+import { formatDate } from "@/lib/format-date";
 import type { ThreadDetail } from "@/lib/queries/communication";
 import { InboxActionButtons } from "./inbox-action-buttons";
 import { FollowUpButton } from "./follow-up-button";
@@ -40,9 +43,12 @@ export function ThreadReader({
   /** Open-matter list passed in from the page server component so the
    *  file-to-matter picker can render synchronously. */
   filingOptions,
+  tz = null,
 }: {
   thread: ThreadDetail | null;
   filingOptions: FilingMatterOption[];
+  /** Viewer's IANA zone — message timestamps are real instants. */
+  tz?: string | null;
 }) {
   if (!thread) {
     // Empty-state placeholder — only useful on lg+ where the list
@@ -189,7 +195,7 @@ export function ThreadReader({
               </div>
               <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-1.5 shrink-0">
                 <div className="text-2xs font-mono text-ink-4 whitespace-nowrap">
-                  {format(m.sentAt, "MMM d, yyyy · h:mm a")}
+                  {formatDate(m.sentAt, "datetime_medium", tz)}
                 </div>
                 <div className="flex items-center gap-1.5">
                   <CommTimeLoggedIndicator

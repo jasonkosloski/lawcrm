@@ -1,20 +1,32 @@
 /**
  * Contact detail page.
  *
- * Profile + linked matters (where this contact is the client, and
- * where they appear as a non-client party). Edit + delete actions
- * live in the topbar.
+ * Profile + full phone list + linked matters (where this contact is
+ * the client, and where they appear as a non-client party). Edit /
+ * delete / merge / log-call actions live in the topbar, each behind
+ * its permission key. Contacts that were merged away redirect to the
+ * surviving record via `mergedIntoId`.
  */
 
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Pencil } from "lucide-react";
 import { TopBar } from "@/components/layout/topbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmailLink } from "@/components/ui/email-link";
 import { ContactDeleteButton } from "@/components/contacts/contact-delete-button";
-import { CONTACT_TYPE_LABEL, getContactById } from "@/lib/queries/contacts";
+import { ContactMergeMenu } from "@/components/contacts/contact-merge-menu";
+import { ContactPhonesCard } from "@/components/contacts/contact-phones-card";
+import { ConflictStatusControl } from "@/components/contacts/conflict-status-control";
+import { LogCallButton } from "@/components/communication/log-call-button";
+import { CONTACT_TYPE_LABEL } from "@/lib/contact-constants";
+import {
+  getContactById,
+  listContactPickerOptions,
+} from "@/lib/queries/contacts";
+import { getFilingMatterOptions } from "@/lib/queries/communication";
+import { currentUserHasPermission } from "@/lib/permission-check";
 
 const PARTY_CATEGORY_LABEL: Record<string, string> = {
   client: "Client",
@@ -24,12 +36,37 @@ const PARTY_CATEGORY_LABEL: Record<string, string> = {
   other: "Other",
 };
 
+const CONFLICT_LABEL: Record<string, string> = {
+  clear: "Clear",
+  flagged: "Flagged",
+  override: "Override",
+};
+
 export default async function ContactDetailPage({
   params,
 }: PageProps<"/contacts/[id]">) {
   const { id } = await params;
   const c = await getContactById(id);
   if (!c) notFound();
+  // Merged-away records keep their row for audit but the page always
+  // lands on the survivor.
+  if (c.mergedIntoId) redirect(`/contacts/${c.mergedIntoId}`);
+
+  const [canEdit, canDelete, canMerge, canLogCall] = await Promise.all([
+    currentUserHasPermission("contacts.edit"),
+    currentUserHasPermission("contacts.delete"),
+    currentUserHasPermission("contacts.merge"),
+    currentUserHasPermission("communication.log_call"),
+  ]);
+
+  // One picker fetch feeds both the merge dialog and the log-call
+  // composer; skip it entirely when neither is visible.
+  const [pickerOptions, callMatters] = await Promise.all([
+    canMerge || canLogCall
+      ? listContactPickerOptions()
+      : Promise.resolve([]),
+    canLogCall ? getFilingMatterOptions() : Promise.resolve([]),
+  ]);
 
   const typeLabel =
     CONTACT_TYPE_LABEL[c.type as keyof typeof CONTACT_TYPE_LABEL] ?? c.type;
@@ -55,14 +92,40 @@ export default async function ContactDetailPage({
         }
         actions={
           <>
-            <ContactDeleteButton contactId={c.id} contactName={c.name} />
-            <Button
-              size="sm"
-              render={<Link href={`/contacts/${c.id}/edit`} />}
-            >
-              <Pencil />
-              Edit
-            </Button>
+            {canLogCall && (
+              <LogCallButton
+                contacts={pickerOptions}
+                matters={callMatters.map((m) => ({
+                  id: m.id,
+                  name: m.name,
+                }))}
+                fixedContact={{
+                  id: c.id,
+                  name: c.name,
+                  organization: c.organization,
+                  phone: c.phone,
+                }}
+              />
+            )}
+            {canDelete && (
+              <ContactDeleteButton contactId={c.id} contactName={c.name} />
+            )}
+            {canEdit && (
+              <Button
+                size="sm"
+                render={<Link href={`/contacts/${c.id}/edit`} />}
+              >
+                <Pencil />
+                Edit
+              </Button>
+            )}
+            {canMerge && (
+              <ContactMergeMenu
+                contactId={c.id}
+                contactName={c.name}
+                candidates={pickerOptions.filter((o) => o.id !== c.id)}
+              />
+            )}
           </>
         }
       />
@@ -84,6 +147,30 @@ export default async function ContactDetailPage({
                   }
                 />
                 <Field label="Phone" value={c.phone ?? "—"} />
+                <Field
+                  label="Conflict check"
+                  value={
+                    <span className="inline-flex items-center gap-1.5">
+                      <span
+                        className={
+                          c.conflictStatus === "flagged"
+                            ? "text-warn font-medium"
+                            : c.conflictStatus === "override"
+                              ? "text-brand-700 font-medium"
+                              : "text-ink"
+                        }
+                      >
+                        {CONFLICT_LABEL[c.conflictStatus] ?? c.conflictStatus}
+                      </span>
+                      {canEdit && (
+                        <ConflictStatusControl
+                          contactId={c.id}
+                          currentStatus={c.conflictStatus}
+                        />
+                      )}
+                    </span>
+                  }
+                />
                 {fullAddress && (
                   <div className="col-span-2 pt-2 border-t border-line">
                     <dt className="text-ink-4 mb-0.5">Address</dt>
@@ -101,6 +188,12 @@ export default async function ContactDetailPage({
               </dl>
             </CardContent>
           </Card>
+
+          <ContactPhonesCard
+            contactId={c.id}
+            phones={c.phones}
+            canEdit={canEdit}
+          />
 
           <Card>
             <CardHeader className="pb-2">

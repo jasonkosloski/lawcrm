@@ -28,6 +28,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { updateInvoiceLineItem } from "@/app/actions/billing";
+import { formatDate, parseLocalDate } from "@/lib/format-date";
 import { lineItemEditInitialState } from "@/lib/billing-form";
 
 type Field = "date" | "activity" | "narrative" | "hours" | "rate";
@@ -45,10 +46,8 @@ const toIso = (d: Date): string => {
 const formatDateShort = (iso: string): string => {
   // Render `YYYY-MM-DD` back to "Apr 15" for view mode. Parse as
   // local date (not UTC) so the day doesn't slip a timezone over.
-  const [y, m, d] = iso.split("-").map((s) => Number(s));
-  if (!y || !m || !d) return iso;
-  const date = new Date(y, m - 1, d);
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const date = parseLocalDate(iso);
+  return date ? formatDate(date, "short") : iso;
 };
 
 type RowState = {

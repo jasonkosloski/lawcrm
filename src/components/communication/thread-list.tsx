@@ -8,8 +8,13 @@
 
 import Link from "next/link";
 import { BellRing, Paperclip, Star } from "lucide-react";
-import { formatDistanceToNowStrict } from "date-fns";
 import { cn } from "@/lib/utils";
+// Centralized date formatting. `lastMessageAt` is a recency label
+// (formatRelative is TZ-independent until its >30d calendar-date
+// fallback, which uses the viewer's zone); `followUpAt` is a
+// date-only value (server-local end-of-day, see actions/follow-ups),
+// so it renders on the server-local day grid with no TZ override.
+import { formatDate, formatRelative } from "@/lib/format-date";
 import type {
   CommunicationFilter,
   ThreadListRow,
@@ -44,6 +49,7 @@ export function ThreadList({
   matterId,
   matterLabel,
   selectedThreadId,
+  tz = null,
 }: {
   threads: ThreadListRow[];
   filter: CommunicationFilter;
@@ -53,6 +59,9 @@ export function ThreadList({
   matterId?: string | null;
   matterLabel?: string | null;
   selectedThreadId: string | null;
+  /** Viewer's IANA zone — anchors formatRelative's calendar-date
+   *  fallback for threads older than ~30 days. */
+  tz?: string | null;
 }) {
   // Mobile drill-down: when a thread is selected, the reader takes
   // the whole viewport and the list hides. When no thread is
@@ -116,19 +125,7 @@ export function ThreadList({
                     </span>
                   )}
                   <span className="text-2xs font-mono text-ink-4 shrink-0">
-                    {formatDistanceToNowStrict(t.lastMessageAt, {
-                      addSuffix: false,
-                    })
-                      .replace(" hours", "h")
-                      .replace(" hour", "h")
-                      .replace(" minutes", "m")
-                      .replace(" minute", "m")
-                      .replace(" days", "d")
-                      .replace(" day", "d")
-                      .replace(" months", "mo")
-                      .replace(" month", "mo")
-                      .replace(" years", "y")
-                      .replace(" year", "y")}
+                    {formatRelative(t.lastMessageAt, tz)}
                   </span>
                 </div>
                 <div
@@ -162,7 +159,7 @@ export function ThreadList({
                   <span className="ml-auto flex items-center gap-1.5">
                     {t.followUpAt && (
                       <span
-                        title={`Follow up by ${t.followUpAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
+                        title={`Follow up by ${formatDate(t.followUpAt, "short")}`}
                         className={cn(
                           "inline-flex items-center gap-0.5 text-3xs font-mono px-1 rounded",
                           t.followUpAt.getTime() < Date.now()
@@ -173,7 +170,7 @@ export function ThreadList({
                         <BellRing size={9} />
                         {t.followUpAt.getTime() < Date.now() - 24 * 60 * 60 * 1000
                           ? "Late"
-                          : t.followUpAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          : formatDate(t.followUpAt, "short")}
                       </span>
                     )}
                     {t.hasAttachments && (

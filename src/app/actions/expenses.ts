@@ -28,6 +28,10 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { logActivity } from "@/lib/activity-log";
+// Date-only input ("YYYY-MM-DD") must parse to LOCAL midnight —
+// `new Date(value)` reads it as UTC midnight, which drifts the
+// expense a day early for anyone west of UTC. See parseLocalDate.
+import { parseLocalDate } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
 import {
   EXPENSE_CATEGORIES,
@@ -124,11 +128,16 @@ export async function createExpense(
     data.receiptDocumentId
   );
 
+  const date = parseLocalDate(data.date);
+  if (!date) {
+    return { status: "error", errors: { date: ["Invalid date"] } };
+  }
+
   const expense = await prisma.expense.create({
     data: {
       matterId: matter.id,
       loggedBy: actorId,
-      date: new Date(data.date),
+      date,
       description: data.description,
       category: data.category,
       amount: new Prisma.Decimal(data.amount),
@@ -200,10 +209,15 @@ export async function updateExpense(
     data.receiptDocumentId
   );
 
+  const date = parseLocalDate(data.date);
+  if (!date) {
+    return { status: "error", errors: { date: ["Invalid date"] } };
+  }
+
   await prisma.expense.update({
     where: { id: expenseId },
     data: {
-      date: new Date(data.date),
+      date,
       description: data.description,
       category: data.category,
       amount: new Prisma.Decimal(data.amount),

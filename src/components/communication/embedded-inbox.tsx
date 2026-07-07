@@ -26,6 +26,7 @@ export function EmbeddedInbox({
   emptyLabel,
   emptyHint,
   showMatterChip = true,
+  tz = null,
 }: {
   threads: ThreadListRow[];
   selectedThread: ThreadDetail | null;
@@ -38,6 +39,9 @@ export function EmbeddedInbox({
   emptyLabel: string;
   emptyHint?: string;
   showMatterChip?: boolean;
+  /** Viewer's IANA zone — message timestamps are real instants
+   *  (ADR-012); forwarded to the list + reader panes. */
+  tz?: string | null;
 }) {
   const threadHref = (id: string): string => `${basePath}?thread=${id}`;
 
@@ -52,6 +56,7 @@ export function EmbeddedInbox({
           showMatterChip={showMatterChip}
           threadHref={threadHref}
           selectedThreadId={selectedThread?.id ?? null}
+          tz={tz}
         />
       </div>
 
@@ -61,6 +66,7 @@ export function EmbeddedInbox({
           <ThreadReader
             thread={selectedThread}
             filingOptions={filingOptions}
+            tz={tz}
           />
         </div>
       )}

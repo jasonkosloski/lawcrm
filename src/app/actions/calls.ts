@@ -20,7 +20,14 @@
  * single provider="manual" placeholder account holding the firm's
  * phone number.
  *
- * Auth: gated on `communication.log_call`.
+ * Edit / delete: ONLY manual items are mutable. Provider-synced
+ * items (anything without the `manual-` prefix) are the firm's
+ * immutable record of what actually happened on the line — both
+ * mutations refuse them outright. Thread denormalizations
+ * (`lastItemAt`) are recomputed from the surviving items so the
+ * inbox sort never points at a moved or deleted item.
+ *
+ * Auth: `communication.log_call` / `.edit_call` / `.delete_call`.
  */
 
 "use server";
@@ -33,10 +40,17 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { normalizePhone } from "@/lib/queries/messenger";
+// occurredAt is a datetime-local value ("2026-06-10T14:30") — but a
+// tampered/stale POST can arrive date-only ("2026-06-10"), which
+// `new Date(value)` reads as UTC midnight, drifting the call a day
+// early for anyone west of UTC. parseLocalDateOrDateTime keeps
+// datetime parsing as-is and pins date-only input to local midnight.
+import { parseLocalDateOrDateTime } from "@/lib/format-date";
 import {
   CALL_DIRECTIONS,
   CALL_OUTCOMES,
   formatCallDuration,
+  isManualCallLog,
   type CallLogFormState,
 } from "@/lib/call-log-form";
 
@@ -84,8 +98,8 @@ export async function logCall(
   }
   const input = parsed.data;
 
-  const occurredAt = new Date(input.occurredAt);
-  if (Number.isNaN(occurredAt.getTime())) {
+  const occurredAt = parseLocalDateOrDateTime(input.occurredAt);
+  if (!occurredAt) {
     return { status: "error", errors: { occurredAt: ["Invalid date / time"] } };
   }
 
@@ -217,6 +231,240 @@ export async function logCall(
   }
 
   return { status: "ok" };
+}
+
+// ── Edit ────────────────────────────────────────────────────────────────
+
+/** Same fields as `logCall` minus contact/phone — the contact is the
+ *  thread's identity (moving a call between people means re-logging
+ *  it), so edit covers outcome / direction / when / duration /
+ *  summary / matter filing only. */
+const updateCallSchema = logCallSchema
+  .omit({ contactId: true, phone: true })
+  .extend({ itemId: z.string().min(1) });
+
+export async function updateCallLog(
+  _prev: CallLogFormState,
+  formData: FormData
+): Promise<CallLogFormState> {
+  await requirePermission("communication.edit_call");
+  const userId = await getCurrentUserId();
+
+  const parsed = updateCallSchema.safeParse({
+    itemId: formData.get("itemId") ?? "",
+    direction: formData.get("direction") ?? "",
+    outcome: formData.get("outcome") ?? "",
+    occurredAt: formData.get("occurredAt") ?? "",
+    durationMin: formData.get("durationMin") ?? "",
+    matterId: formData.get("matterId") ?? "",
+    summary: formData.get("summary") ?? "",
+  });
+  if (!parsed.success) {
+    return { status: "error", errors: parsed.error.flatten().fieldErrors };
+  }
+  const input = parsed.data;
+
+  const occurredAt = parseLocalDateOrDateTime(input.occurredAt);
+  if (!occurredAt) {
+    return { status: "error", errors: { occurredAt: ["Invalid date / time"] } };
+  }
+
+  const item = await prisma.messengerItem.findUnique({
+    where: { id: input.itemId },
+    select: {
+      id: true,
+      providerEventId: true,
+      kind: true,
+      threadId: true,
+      direction: true,
+      fromNumber: true,
+      toNumber: true,
+      matterId: true,
+      thread: {
+        select: {
+          defaultMatterId: true,
+          contactPhone: true,
+          contact: { select: { name: true } },
+        },
+      },
+    },
+  });
+  if (!item) {
+    return { status: "error", errors: { form: ["Call log not found"] } };
+  }
+  // Provider-synced items are immutable records of what actually
+  // happened on the line — only manual logs may be corrected.
+  if (item.kind !== "call" || !isManualCallLog(item.providerEventId)) {
+    return {
+      status: "error",
+      errors: { form: ["Only manually logged calls can be edited."] },
+    };
+  }
+
+  const matterId = input.matterId || null;
+  if (matterId) {
+    const matter = await prisma.matter.findUnique({
+      where: { id: matterId },
+      select: { id: true },
+    });
+    if (!matter) {
+      return { status: "error", errors: { matterId: ["Matter not found"] } };
+    }
+  }
+
+  // Same duration derivation as logCall — unanswered calls have none.
+  const answered = input.outcome === "answered";
+  const durationSec =
+    answered && input.durationMin
+      ? Number(input.durationMin.trim()) * 60
+      : answered
+        ? null
+        : 0;
+
+  // Direction flip swaps the endpoints; the numbers themselves are
+  // fixed by the thread (contact side) + account (firm side).
+  const flipped = input.direction !== item.direction;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.messengerItem.update({
+      where: { id: item.id },
+      data: {
+        direction: input.direction,
+        fromNumber: flipped ? item.toNumber : item.fromNumber,
+        toNumber: flipped ? item.fromNumber : item.toNumber,
+        body: input.summary?.trim() || null,
+        callDurationSec: durationSec,
+        callStatus: input.outcome,
+        matterId,
+        occurredAt,
+      },
+    });
+    // occurredAt may have moved either way — recompute lastItemAt
+    // from all items so the inbox sort key never regresses or points
+    // at a time no item carries.
+    const agg = await tx.messengerItem.aggregate({
+      where: { threadId: item.threadId },
+      _max: { occurredAt: true },
+    });
+    await tx.messengerThread.update({
+      where: { id: item.threadId },
+      data: { lastItemAt: agg._max.occurredAt ?? occurredAt },
+    });
+  });
+
+  const contactLabel = item.thread.contact?.name ?? item.thread.contactPhone;
+  const duration = formatCallDuration(durationSec);
+  await logActivity({
+    matterId,
+    userId,
+    type: "call",
+    title: `Updated a logged call with ${contactLabel}`,
+    detail: [
+      input.direction === "inbound" ? "Inbound" : "Outbound",
+      answered ? null : "missed",
+      duration,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+  });
+
+  revalidateCallSurfaces([
+    item.matterId,
+    matterId,
+    item.thread.defaultMatterId,
+  ]);
+  return { status: "ok" };
+}
+
+// ── Delete ──────────────────────────────────────────────────────────────
+
+export async function deleteCallLog(
+  itemId: string
+): Promise<{ ok: boolean; error?: string }> {
+  await requirePermission("communication.delete_call");
+  const userId = await getCurrentUserId();
+
+  const item = await prisma.messengerItem.findUnique({
+    where: { id: itemId },
+    select: {
+      id: true,
+      providerEventId: true,
+      kind: true,
+      threadId: true,
+      direction: true,
+      matterId: true,
+      thread: {
+        select: {
+          defaultMatterId: true,
+          contactPhone: true,
+          contact: { select: { name: true } },
+        },
+      },
+    },
+  });
+  if (!item) return { ok: false, error: "Call log not found" };
+  // Provider-synced items are immutable records of what actually
+  // happened on the line — only manual logs may be removed.
+  if (item.kind !== "call" || !isManualCallLog(item.providerEventId)) {
+    return {
+      ok: false,
+      error:
+        "Only manually logged calls can be deleted — provider-synced items are permanent records.",
+    };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    // Time entries / tasks / notes spawned from this item survive the
+    // delete (their FKs SetNull) — billed time stays billed, it just
+    // loses its "logged on this call" link.
+    await tx.messengerItem.delete({ where: { id: item.id } });
+
+    const remaining = await tx.messengerItem.aggregate({
+      where: { threadId: item.threadId },
+      _count: true,
+      _max: { occurredAt: true },
+    });
+    if (remaining._count === 0) {
+      // Last item gone → delete the thread. Threads are keyed by
+      // (accountId, contactPhone) and re-created on demand by both
+      // logCall and the provider webhook path, so an empty shell
+      // holds no state worth keeping — leaving it would surface a
+      // blank conversation in the inbox with a stale lastItemAt.
+      await tx.messengerThread.delete({ where: { id: item.threadId } });
+    } else {
+      // lastItemAt must never point at the deleted item. unreadCount
+      // needs no adjustment: manual logs are always isRead.
+      await tx.messengerThread.update({
+        where: { id: item.threadId },
+        data: { lastItemAt: remaining._max.occurredAt! },
+      });
+    }
+  });
+
+  const contactLabel = item.thread.contact?.name ?? item.thread.contactPhone;
+  await logActivity({
+    matterId: item.matterId,
+    userId,
+    type: "call",
+    title: `Deleted a logged call with ${contactLabel}`,
+    detail: item.direction === "inbound" ? "Inbound" : "Outbound",
+  });
+
+  revalidateCallSurfaces([item.matterId, item.thread.defaultMatterId]);
+  return { ok: true };
+}
+
+/** Refresh /communication plus every matter whose Phone channel /
+ *  timeline could list the touched item — its own filing (old and
+ *  new on edit) and the thread's default routing target, since the
+ *  matter phone log resolves items through either. */
+function revalidateCallSurfaces(matterIds: Array<string | null>) {
+  revalidatePath("/communication");
+  for (const id of new Set(matterIds.filter((m): m is string => !!m))) {
+    revalidatePath(`/matters/${id}`);
+    revalidatePath(`/matters/${id}/timeline`);
+    revalidatePath(`/matters/${id}/communication`);
+  }
 }
 
 /** The MessengerAccount manual logs hang off. Reuses the firm's

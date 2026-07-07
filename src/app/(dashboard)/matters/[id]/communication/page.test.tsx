@@ -40,6 +40,12 @@ vi.mock("@/lib/permission-check", () => ({
 vi.mock("@/lib/prisma", () => ({
   prisma: { matter: { findUnique: vi.fn() } },
 }));
+// The page threads the viewer's TZ into the embedded inbox (message
+// timestamps are instants, ADR-012); the real getter pulls in
+// `server-only` + Prisma.
+vi.mock("@/lib/current-user-tz", () => ({
+  getCurrentUserTimeZone: vi.fn(async () => "America/Denver"),
+}));
 
 // Leaf components — the tests only care which props the page hands
 // them (selected thread id, log-call button presence), not markup.
@@ -174,8 +180,25 @@ describe("per-channel fetch plumbing", () => {
     expect(screen.getByTestId("phone-log")).toBeInTheDocument();
     expect(mockedPhoneItems).toHaveBeenCalledWith("matter_1");
     expect(mockedThreads).not.toHaveBeenCalled();
-    expect(mockedFiling).not.toHaveBeenCalled();
     // Even a pasted ?thread= id fetches nothing on the phone channel.
     expect(mockedThreadById).not.toHaveBeenCalled();
+  });
+
+  test("phone channel fetches filing options only for call editors", async () => {
+    // Filing options feed the edit dialog's re-file select on the
+    // phone channel — chained on communication.edit_call.
+    render(await MatterCommunicationPage(props({ channel: "phone" })));
+    expect(mockedFiling).toHaveBeenCalled();
+
+    vi.clearAllMocks();
+    mockedFindMatter.mockResolvedValue({
+      id: "matter_1",
+      name: "Smith v. Jones",
+    } as Awaited<ReturnType<typeof prisma.matter.findUnique>>);
+    mockedPhoneItems.mockResolvedValue([]);
+    mockedHasPermission.mockResolvedValue(false);
+
+    render(await MatterCommunicationPage(props({ channel: "phone" })));
+    expect(mockedFiling).not.toHaveBeenCalled();
   });
 });

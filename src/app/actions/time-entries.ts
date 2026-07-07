@@ -23,6 +23,10 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+// Date-only input ("YYYY-MM-DD") must parse to LOCAL midnight —
+// `new Date(value)` reads it as UTC midnight, which drifts the entry
+// a day early for anyone west of UTC. See parseLocalDate docs.
+import { parseLocalDate } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
 import {
   TIME_ENTRY_STATUSES,
@@ -76,13 +80,22 @@ export async function createTimeEntry(
     };
   }
 
+  const date = parseLocalDate(parsed.data.date);
+  if (!date) {
+    return {
+      status: "error",
+      errors: { date: ["Invalid date"] },
+      values: raw,
+    };
+  }
+
   const userId = await getCurrentUserId();
 
   await prisma.timeEntry.create({
     data: {
       matterId,
       userId,
-      date: new Date(parsed.data.date),
+      date,
       hours: Number(parsed.data.hours),
       activity: parsed.data.activity,
       narrative: parsed.data.narrative || null,
@@ -180,12 +193,21 @@ export async function updateTimeEntry(
     };
   }
 
+  const date = parseLocalDate(parsed.data.date);
+  if (!date) {
+    return {
+      status: "error",
+      errors: { date: ["Invalid date"] },
+      values: raw,
+    };
+  }
+
   const newHours = Number(parsed.data.hours);
 
   await prisma.timeEntry.update({
     where: { id: timeEntryId },
     data: {
-      date: new Date(parsed.data.date),
+      date,
       hours: newHours,
       activity: parsed.data.activity,
       narrative: parsed.data.narrative || null,

@@ -8,18 +8,7 @@
 
 import { Lock } from "lucide-react";
 import type { FirmProfile } from "@/lib/firm";
-
-const formatDate = (d: Date | null): string => {
-  if (!d) return "—";
-  // establishedAt is stored as UTC midnight — render in UTC or the
-  // date shifts a day back for viewers west of UTC.
-  return d.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-};
+import { formatDate } from "@/lib/format-date";
 
 export function FirmReadView({ firm }: { firm: FirmProfile }) {
   const addressLines = [
@@ -41,7 +30,10 @@ export function FirmReadView({ firm }: { firm: FirmProfile }) {
         <Row label="Short name" value={firm.shortName} />
         <Row label="EIN" value={firm.ein} mono />
         <Row label="Website" value={firm.website} />
-        <Row label="Established" value={formatDate(firm.establishedAt)} />
+        {/* Date-only value stored at server-local midnight (see
+            parseLocalEstablishedAt in actions/firm.ts) — format on
+            the same server-local day grid, no TZ override. */}
+        <Row label="Established" value={formatDate(firm.establishedAt, "long")} />
       </Section>
 
       <Section label="Contact">

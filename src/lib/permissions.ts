@@ -252,6 +252,54 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         description:
           "Delete documents uploaded by other firm members (uploaders can always delete their own).",
       },
+      {
+        key: "documents.template.create",
+        label: "Create document templates",
+        description:
+          "Add reusable templates (demand letters, discovery, retainers) to the firm template library. Anyone can generate documents FROM templates — these keys govern the library itself.",
+      },
+      {
+        key: "documents.template.edit",
+        label: "Edit document templates",
+        description:
+          "Change a template's name, category, or body. Edits affect every future generation, so treat like firm-wide content.",
+      },
+      {
+        key: "documents.template.delete",
+        label: "Delete document templates",
+        description:
+          "Archive or permanently remove templates from the library. Already-generated documents are untouched.",
+      },
+    ],
+  },
+  {
+    id: "contacts",
+    label: "Contacts",
+    permissions: [
+      {
+        key: "contacts.create",
+        label: "Create contacts",
+        description:
+          "Add people/organizations to the directory — the standalone New Contact form (inline creation during intake, matter setup, and call logging stays open to everyone; those flows gate on their own keys).",
+      },
+      {
+        key: "contacts.edit",
+        label: "Edit contacts",
+        description:
+          "Change a contact's profile, type, or phone numbers from the contact detail page.",
+      },
+      {
+        key: "contacts.delete",
+        label: "Deactivate contacts",
+        description:
+          "Soft-delete a contact from the directory (historical matter rows are preserved).",
+      },
+      {
+        key: "contacts.merge",
+        label: "Merge duplicate contacts",
+        description:
+          "Combine two contact records — every matter link, thread, note, and lead is re-pointed to the survivor and the duplicate is deactivated. Hard to undo; delegate carefully.",
+      },
     ],
   },
   {
@@ -425,6 +473,18 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         label: "Log calls",
         description:
           "Manually record a phone call with a contact — direction, outcome, duration, summary, and optional matter filing. The call appears in the Messages inbox and, when filed, on the matter timeline.",
+      },
+      {
+        key: "communication.edit_call",
+        label: "Edit logged calls",
+        description:
+          "Correct a manually logged call's outcome, duration, summary, or matter filing after the fact. Only manual logs are editable — provider-synced items are immutable records.",
+      },
+      {
+        key: "communication.delete_call",
+        label: "Delete logged calls",
+        description:
+          "Remove a manually logged call. Only manual logs are deletable — provider-synced items are immutable records.",
       },
     ],
   },

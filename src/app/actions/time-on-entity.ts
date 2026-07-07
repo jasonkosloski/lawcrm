@@ -17,6 +17,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { parseLocalDate } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import type { NoteAttachmentFormState } from "@/lib/note-attachment-form";
@@ -29,7 +30,21 @@ function snippet(s: string | null | undefined, max: number): string {
 }
 
 const timeSchema = z.object({
-  date: z.string().min(1, "Date is required"),
+  // Date-only "YYYY-MM-DD" from <input type="date"> → LOCAL midnight
+  // via parseLocalDate. `new Date(value)` would read it as UTC
+  // midnight, drifting the entry a day early for anyone west of UTC.
+  // Transform in the schema so all four actions below share the fix.
+  date: z
+    .string()
+    .min(1, "Date is required")
+    .transform((v, ctx) => {
+      const d = parseLocalDate(v);
+      if (!d) {
+        ctx.addIssue({ code: "custom", message: "Invalid date" });
+        return z.NEVER;
+      }
+      return d;
+    }),
   hours: z
     .string()
     .min(1, "Hours required")
@@ -73,7 +88,7 @@ export async function addTimeEntryToTask(
       matterId: task.matterId,
       userId,
       taskId,
-      date: new Date(parsed.data.date),
+      date: parsed.data.date,
       hours: Number(parsed.data.hours),
       activity: parsed.data.activity,
       narrative: parsed.data.narrative || null,
@@ -129,7 +144,7 @@ export async function addTimeEntryToDeadline(
       matterId: deadline.matterId,
       userId,
       deadlineId,
-      date: new Date(parsed.data.date),
+      date: parsed.data.date,
       hours: Number(parsed.data.hours),
       activity: parsed.data.activity,
       narrative: parsed.data.narrative || null,
@@ -189,7 +204,7 @@ export async function addTimeEntryToEmailMessage(
       matterId: msg.thread.matterId,
       userId,
       emailMessageId,
-      date: new Date(parsed.data.date),
+      date: parsed.data.date,
       hours: Number(parsed.data.hours),
       activity: parsed.data.activity,
       narrative: parsed.data.narrative || null,
@@ -268,7 +283,7 @@ export async function addTimeEntryToMessengerItem(
       matterId,
       userId,
       messengerItemId,
-      date: new Date(parsed.data.date),
+      date: parsed.data.date,
       hours: Number(parsed.data.hours),
       activity: parsed.data.activity,
       narrative: parsed.data.narrative || null,

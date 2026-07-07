@@ -20,6 +20,10 @@ import { DeadlineRowMenu } from "@/components/deadlines/deadline-row-actions";
 import { EntitySourceChip } from "@/components/matters/entity-source-chip";
 import { RowAttachedNotes } from "@/components/matters/row-attached-notes";
 import { type DeadlineStatus } from "@/lib/note-constants";
+// Due dates are date-only values (server-local midnight) — the
+// centralized default ("medium") with no TZ override keeps them on
+// the day grid they were saved on.
+import { formatDate } from "@/lib/format-date";
 import { getMatterDeadlines } from "@/lib/queries/matter-detail";
 
 const KIND_LABEL: Record<string, string> = {
@@ -68,13 +72,6 @@ function StatusChip({ status }: { status: string }) {
     </span>
   );
 }
-
-const formatDate = (d: Date): string =>
-  d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 
 export default async function MatterDeadlinesPage({
   params,
