@@ -24,7 +24,10 @@ import {
 import { CreateRoleForm } from "@/components/settings/create-role-form";
 import { PermissionsMatrix } from "@/components/settings/permissions-matrix";
 import { RoleRow } from "@/components/settings/role-row";
-import { currentUserHasPermission } from "@/lib/permission-check";
+import {
+  currentUserHasPermission,
+  getCurrentUserPermissions,
+} from "@/lib/permission-check";
 import {
   listFirmRoles,
   listRolePermissionGrants,
@@ -36,12 +39,18 @@ export default async function RolesSettingsPage() {
   //     (read view is firm-wide governance info)
   //   - role CRUD (create/rename/delete): firm.manage_roles
   //   - permission matrix toggles: firm.manage_permissions
-  const [roles, canManageRoles, canManagePerms, grantsMap] = await Promise.all([
-    listFirmRoles(),
-    currentUserHasPermission("firm.manage_roles"),
-    currentUserHasPermission("firm.manage_permissions"),
-    listRolePermissionGrants(),
-  ]);
+  // viewerIsAdmin feeds the matrix's meta-key lock: the server
+  // action only lets Admins grant/revoke firm.manage_permissions /
+  // firm.manage_roles, so the matrix greys those cells for
+  // non-admin editors instead of surfacing a server error on click.
+  const [roles, canManageRoles, canManagePerms, grantsMap, resolved] =
+    await Promise.all([
+      listFirmRoles(),
+      currentUserHasPermission("firm.manage_roles"),
+      currentUserHasPermission("firm.manage_permissions"),
+      listRolePermissionGrants(),
+      getCurrentUserPermissions(),
+    ]);
 
   // Convert the Map<roleId, Set<key>> into a plain object the
   // matrix component can serialize across the server/client
@@ -71,6 +80,7 @@ export default async function RolesSettingsPage() {
         }))}
         grants={grants}
         canEdit={canManagePerms}
+        viewerIsAdmin={resolved.isAdmin}
       />
 
       {/* Role list / management — rename, delete, member count. */}

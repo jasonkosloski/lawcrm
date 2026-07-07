@@ -32,23 +32,37 @@ export default async function MatterEventsPage({
   const sp = await searchParams;
 
   const rawEventParam = Array.isArray(sp.event) ? sp.event[0] : sp.event;
-  const eventId = typeof rawEventParam === "string" ? rawEventParam : null;
+  const requestedEventId =
+    typeof rawEventParam === "string" ? rawEventParam : null;
 
-  const [
-    matter,
-    events,
-    selectedEvent,
-    selectedEventNotes,
-    selectedEventTime,
-  ] = await Promise.all([
+  const [matter, events] = await Promise.all([
     getMatterById(id),
     getMatterEvents(id),
-    eventId ? getCalendarEventById(eventId) : Promise.resolve(null),
-    eventId ? getEventNotes(eventId) : Promise.resolve([]),
-    eventId ? getEventTimeEntries(eventId) : Promise.resolve([]),
   ]);
 
   if (!matter) notFound();
+
+  // Validate the requested event belongs to this matter — defends
+  // against a stale ?event= surviving navigation between matters
+  // and against URL tampering (same guard the billing tab applies
+  // to ?invoice=). A foreign-matter id must not open a modal here.
+  const eventId =
+    requestedEventId && events.some((e) => e.id === requestedEventId)
+      ? requestedEventId
+      : null;
+
+  // The event must resolve BEFORE notes/time entries are fetched:
+  // getCalendarEventById scrubs private events to a "Busy" shell, but
+  // getEventNotes/getEventTimeEntries carry no visibility check of
+  // their own. Fetching all three in parallel would ship note contents
+  // and time-entry narratives for an event the viewer can't see into
+  // the RSC payload — the modal declining to render them doesn't help,
+  // the data is already in the browser.
+  const selectedEvent = eventId ? await getCalendarEventById(eventId) : null;
+  const [selectedEventNotes, selectedEventTime] =
+    selectedEvent?.viewerCanSeeDetails && eventId
+      ? await Promise.all([getEventNotes(eventId), getEventTimeEntries(eventId)])
+      : [[], []];
 
   const upcoming = events.filter((e) => e.isUpcoming);
   const past = events.filter((e) => !e.isUpcoming).reverse(); // most recent first

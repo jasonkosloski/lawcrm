@@ -71,7 +71,13 @@ export function SettlementComposer({
       // expanded so the user can keep tweaking.
       setExpanded(false);
     }
-  }, [state.status, initial]);
+    // Deps key on the state OBJECT, not state.status: useActionState
+    // keeps its state across submissions, so after the first success
+    // the status string is "ok" forever and a second successful edit
+    // would skip the effect, leaving the form expanded. Each action
+    // invocation returns a fresh object, so identity is the reliable
+    // signal.
+  }, [state, initial]);
 
   if (!canEdit && !initial) {
     return (

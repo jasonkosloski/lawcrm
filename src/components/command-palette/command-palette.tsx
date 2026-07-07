@@ -120,7 +120,7 @@ export function CommandPalette({
         // the palette on "Loading…" — fall back to empty data so the
         // static navigation destinations stay usable. Reopening retries.
         console.warn("[command-palette] fetch failed", err);
-        if (!cancelled) setData({ items: [], pinnedMatterIds: [] });
+        if (!cancelled) setData({ items: [] });
       });
     return () => {
       cancelled = true;

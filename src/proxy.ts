@@ -37,9 +37,20 @@ const PUBLIC_PATH_PREFIXES = ["/login", "/api/auth"];
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Server layouts can't see the request URL, so we forward
+  // pathname + search as `x-pathname` (read by the dashboard layout to
+  // build /login?next=…). Always SET — overwriting any client-sent
+  // value — so the header can't be spoofed into an open-redirect vector.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", pathname + request.nextUrl.search);
+  const passThrough = () =>
+    // `request.headers` (not top-level `headers`) — top-level would set
+    // RESPONSE headers, leaking to clients instead of reaching layouts.
+    NextResponse.next({ request: { headers: requestHeaders } });
+
   // Public routes always pass.
   if (PUBLIC_PATH_PREFIXES.some((p) => pathname.startsWith(p))) {
-    return NextResponse.next();
+    return passThrough();
   }
 
   // Cheap presence check — never reads or validates the JWT itself.
@@ -47,7 +58,7 @@ export function proxy(request: NextRequest) {
     request.cookies.has(name)
   );
   if (hasSession) {
-    return NextResponse.next();
+    return passThrough();
   }
 
   // Bounce to /login with a `?next=` so we can land them back where

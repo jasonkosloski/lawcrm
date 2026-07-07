@@ -108,6 +108,7 @@ describe("expected-key invariants", () => {
     "firm.manage_practice_areas",
     "firm.view_activity",
     "firm.manage_team_directory",
+    "documents.upload",
     "documents.delete_any",
     "intake.conflict_check.run",
     "intake.conflict_check.override",
@@ -135,6 +136,7 @@ describe("expected-key invariants", () => {
     "events.edit",
     "events.delete",
     "events.edit_non_matter",
+    "communication.file_email",
     "communication.log_call",
   ])("%s exists in the catalog", (key) => {
     expect(isKnownPermission(key)).toBe(true);

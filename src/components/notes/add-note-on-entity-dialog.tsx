@@ -70,9 +70,16 @@ export function AddNoteOnEntityDialog({
     setType("note");
   }, [open]);
 
+  // Close on success. Deps key on the state OBJECT, not
+  // state.status: useActionState keeps its state across
+  // submissions, so after the first success the status string is
+  // "ok" forever and a second success would skip the effect,
+  // leaving the dialog open. Each action invocation returns a
+  // fresh object, so identity is the reliable "a submission just
+  // finished" signal.
   useEffect(() => {
     if (state.status === "ok") onOpenChange(false);
-  }, [state.status, onOpenChange]);
+  }, [state, onOpenChange]);
 
   const errs = state.errors ?? {};
 

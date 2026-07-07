@@ -49,12 +49,19 @@ export function TimeComposer({ matterId }: { matterId: string }) {
     setCaptures([]);
   };
 
+  // Reset + collapse on success. Deps key on the state OBJECT, not
+  // state.status: useActionState keeps its state across
+  // submissions, so after the first success the status string is
+  // "ok" forever and a second success would skip the effect,
+  // leaving the form expanded with stale values. Each action
+  // invocation returns a fresh object, so identity is the reliable
+  // signal.
   useEffect(() => {
     if (state.status === "ok") {
       reset();
       setExpanded(false);
     }
-  }, [state.status]);
+  }, [state]);
 
   const errs = state.errors ?? {};
 

@@ -241,6 +241,12 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
     label: "Documents",
     permissions: [
       {
+        key: "documents.upload",
+        label: "Upload documents",
+        description:
+          "Attach files to a matter via the Documents tab. Uploaders can always delete their own uploads.",
+      },
+      {
         key: "documents.delete_any",
         label: "Delete any document",
         description:
@@ -408,6 +414,12 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
     id: "communication",
     label: "Communication",
     permissions: [
+      {
+        key: "communication.file_email",
+        label: "File emails to matters",
+        description:
+          "File an email thread onto a matter (or unfile it back to the inbox) via the thread-reader picker. Filing changes the matter's record, so it's a matter mutation — not just an inbox convenience.",
+      },
       {
         key: "communication.log_call",
         label: "Log calls",

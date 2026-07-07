@@ -11,10 +11,10 @@
  *   - matters.expense.edit     → change fields after the fact
  *   - matters.expense.delete   → remove a row (refused once billed)
  *
- * The list-side `matters.expense.view` is enforced at the read
- * layer (see queries/matter-detail.ts → getMatterExpenses) and at
- * the page-level guard for the eventual /matters/[id]/time tab
- * expense section.
+ * The list-side `matters.expense.view` is enforced at the page
+ * level only (the /matters/[id]/time expense section gates before
+ * fetching) — the read-layer queries themselves do not check it,
+ * so any new caller of getMatterExpenses must add its own guard.
  *
  * Decimal correctness throughout: amount is stored as Prisma
  * Decimal and round-tripped via `new Prisma.Decimal(...)`.

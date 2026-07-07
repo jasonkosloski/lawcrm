@@ -84,10 +84,8 @@ describe("CommandPalette — fetch failure on open", () => {
           stage: "Litigation",
           color: "#336699",
           isPinned: false,
-          isArchived: false,
         },
       ],
-      pinnedMatterIds: [],
     };
     mockedFetch.mockResolvedValue(data);
 

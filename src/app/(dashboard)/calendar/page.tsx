@@ -40,15 +40,17 @@ export default async function CalendarPage({
   searchParams,
 }: PageProps<"/calendar">) {
   const sp = await searchParams;
-  const { view, focal } = parseCalendarParams(sp);
 
   // Resolve user TZ once and thread it through every calendar
-  // surface. The week/month range bounds + bucketing all live in
-  // user TZ so a user in MDT viewing "this week" gets Sunday 00:00
-  // MDT through Saturday 23:59 MDT (instead of UTC bounds, which
-  // cut off the last 6 hours of Saturday and pull in 6 hours from
-  // the prior Saturday).
+  // surface — including param parsing, whose default focal (first
+  // load without ?d=) must be "today" on the user's calendar, not
+  // the server's. The week/month range bounds + bucketing all live
+  // in user TZ so a user in MDT viewing "this week" gets Sunday
+  // 00:00 MDT through Saturday 23:59 MDT (instead of UTC bounds,
+  // which cut off the last 6 hours of Saturday and pull in 6 hours
+  // from the prior Saturday).
   const userTz = await getCurrentUserTimeZone();
+  const { view, focal } = parseCalendarParams(sp, userTz);
   const week = calendarWeekInTz(focal, userTz);
   const monthGrid = calendarMonthGridInTz(focal, userTz);
   const range = view === "week" ? week : monthGrid;

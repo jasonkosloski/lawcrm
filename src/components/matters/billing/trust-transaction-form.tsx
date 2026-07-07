@@ -37,12 +37,18 @@ export function TrustTransactionForm({ matterId }: { matterId: string }) {
   const [expanded, setExpanded] = useState(false);
   const [type, setType] = useState<TrustTxnType>("deposit");
 
+  // Collapse + reset on success. Deps key on the state OBJECT, not
+  // state.status: useActionState keeps its state across
+  // submissions, so after the first success the status string is
+  // "ok" forever and a second success would skip the effect,
+  // leaving the form expanded. Each action invocation returns a
+  // fresh object, so identity is the reliable signal.
   useEffect(() => {
     if (state.status === "ok") {
       setExpanded(false);
       setType("deposit");
     }
-  }, [state.status]);
+  }, [state]);
 
   if (!expanded) {
     return (

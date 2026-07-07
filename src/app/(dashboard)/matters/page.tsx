@@ -19,6 +19,7 @@ import { MattersKanban } from "@/components/matters/matters-kanban";
 import { prisma } from "@/lib/prisma";
 import { parseMattersParams } from "@/lib/matters-filters";
 import {
+  countMatters,
   getMattersFilterOptions,
   listMatters,
 } from "@/lib/queries/matters";
@@ -29,24 +30,16 @@ export default async function MattersListPage({
   const sp = await searchParams;
   const { filter, sort, view } = parseMattersParams(sp);
 
-  // Started outside Promise.all so the totalCount branch below can
-  // reuse the same promise instead of re-running the heavy list query.
-  const mattersPromise = listMatters(filter, sort);
-
   const [matters, options, totalCount, firmOpenCount, firmClosedCount] =
     await Promise.all([
-      mattersPromise,
+      listMatters(filter, sort),
       getMattersFilterOptions(),
-      // Denominator for "showing N of M" — the current filter minus the
-      // search term, so it honors every non-search filter (area, stage,
-      // fee, lead, archived default). Text search is the only filter
-      // listMatters applies in memory, so with no `q` the list result
-      // already IS the total — only a live search pays for the second
-      // query. (A prisma count would be cheaper still, but needs the
-      // where-builder exported from queries/matters.)
-      filter.q
-        ? listMatters({ ...filter, q: "" }).then((r) => r.length)
-        : mattersPromise.then((r) => r.length),
+      // Denominator for "showing N of M" — a DB-side count honoring
+      // every non-search filter (area, stage, fee, lead, archived
+      // default). Text search is applied in memory by listMatters, and
+      // countMatters ignores `q` by construction, so no filter copy is
+      // needed here. Also immune to LIST_MATTERS_CAP truncation.
+      countMatters(filter),
       // Firm-wide counts for the crumb — independent of the user's
       // current filter so the header keeps its reference point even
       // with show-closed off.

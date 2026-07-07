@@ -44,7 +44,12 @@ afterEach(() => {
 describe("PermissionsMatrix — read-only (canEdit=false)", () => {
   test("renders every role as a column header", () => {
     render(
-      <PermissionsMatrix roles={ROLES} grants={{}} canEdit={false} />
+      <PermissionsMatrix
+        roles={ROLES}
+        grants={{}}
+        canEdit={false}
+        viewerIsAdmin={false}
+      />
     );
     expect(screen.getByText("Admin")).toBeInTheDocument();
     expect(screen.getByText("default")).toBeInTheDocument();
@@ -57,6 +62,7 @@ describe("PermissionsMatrix — read-only (canEdit=false)", () => {
         roles={ROLES}
         grants={{ role_billing: [SAMPLE_KEY] }}
         canEdit={false}
+        viewerIsAdmin={false}
       />
     );
     const checkboxes = screen.getAllByRole("checkbox");
@@ -67,7 +73,7 @@ describe("PermissionsMatrix — read-only (canEdit=false)", () => {
 
   test("Admin column is fully checked regardless of grants", () => {
     render(
-      <PermissionsMatrix roles={ROLES} grants={{}} canEdit />
+      <PermissionsMatrix roles={ROLES} grants={{}} canEdit viewerIsAdmin />
     );
     // Every Admin-row checkbox should be checked. We find them by
     // aria-label which the matrix sets to "<permission> for <role>".
@@ -86,7 +92,7 @@ describe("PermissionsMatrix — read-only (canEdit=false)", () => {
 describe("PermissionsMatrix — Admin column lock", () => {
   test("Admin checkboxes are always disabled (even when canEdit)", () => {
     render(
-      <PermissionsMatrix roles={ROLES} grants={{}} canEdit />
+      <PermissionsMatrix roles={ROLES} grants={{}} canEdit viewerIsAdmin />
     );
     const adminBox = screen.getByRole("checkbox", {
       name: `Manage team members for Admin`,
@@ -97,7 +103,7 @@ describe("PermissionsMatrix — Admin column lock", () => {
 
   test("clicking the Admin row never calls the action", async () => {
     const user = userEvent.setup();
-    render(<PermissionsMatrix roles={ROLES} grants={{}} canEdit />);
+    render(<PermissionsMatrix roles={ROLES} grants={{}} canEdit viewerIsAdmin />);
 
     const adminBox = screen.getByRole("checkbox", {
       name: `Manage team members for Admin`,
@@ -112,7 +118,7 @@ describe("PermissionsMatrix — Admin column lock", () => {
 describe("PermissionsMatrix — toggling cells", () => {
   test("clicking an unchecked Billing-manager cell calls the action with granted=true", async () => {
     const user = userEvent.setup();
-    render(<PermissionsMatrix roles={ROLES} grants={{}} canEdit />);
+    render(<PermissionsMatrix roles={ROLES} grants={{}} canEdit viewerIsAdmin />);
 
     const cell = screen.getByRole("checkbox", {
       name: `Manage team members for Billing manager`,
@@ -136,6 +142,7 @@ describe("PermissionsMatrix — toggling cells", () => {
         roles={ROLES}
         grants={{ role_billing: [SAMPLE_KEY] }}
         canEdit
+        viewerIsAdmin
       />
     );
 
@@ -164,7 +171,7 @@ describe("PermissionsMatrix — toggling cells", () => {
         })
     );
     const user = userEvent.setup();
-    render(<PermissionsMatrix roles={ROLES} grants={{}} canEdit />);
+    render(<PermissionsMatrix roles={ROLES} grants={{}} canEdit viewerIsAdmin />);
 
     const cell = screen.getByRole("checkbox", {
       name: `Manage team members for Billing manager`,
@@ -186,7 +193,7 @@ describe("PermissionsMatrix — toggling cells", () => {
         })
     );
     const user = userEvent.setup();
-    render(<PermissionsMatrix roles={ROLES} grants={{}} canEdit />);
+    render(<PermissionsMatrix roles={ROLES} grants={{}} canEdit viewerIsAdmin />);
 
     const cell = screen.getByRole("checkbox", {
       name: `Manage team members for Billing manager`,
@@ -207,7 +214,7 @@ describe("PermissionsMatrix — toggling cells", () => {
 
   test("granting one cell doesn't flip another", async () => {
     const user = userEvent.setup();
-    render(<PermissionsMatrix roles={ROLES} grants={{}} canEdit />);
+    render(<PermissionsMatrix roles={ROLES} grants={{}} canEdit viewerIsAdmin />);
 
     const cellA = screen.getByRole("checkbox", {
       name: `Manage team members for Billing manager`,
@@ -222,6 +229,97 @@ describe("PermissionsMatrix — toggling cells", () => {
   });
 });
 
+describe("PermissionsMatrix — meta keys locked for non-admin editors", () => {
+  // Labels from the catalog for the two admin-only meta keys
+  // (firm.manage_permissions / firm.manage_roles). The server
+  // action rejects toggles on these from non-admins; the matrix
+  // must render them locked for a non-admin editor.
+  const MANAGE_PERMS_LABEL = "Set role permissions";
+  const MANAGE_ROLES_LABEL = "Create / rename / delete custom roles";
+
+  test("non-admin editor sees meta-key cells disabled; clicks never call the action", async () => {
+    const user = userEvent.setup();
+    render(
+      <PermissionsMatrix
+        roles={ROLES}
+        grants={{}}
+        canEdit
+        viewerIsAdmin={false}
+      />
+    );
+
+    for (const label of [MANAGE_PERMS_LABEL, MANAGE_ROLES_LABEL]) {
+      const cell = screen.getByRole("checkbox", {
+        name: `${label} for Billing manager`,
+      });
+      expect(cell).toBeDisabled();
+      await user.click(cell);
+      // The <td> wrapper has its own onClick — clicking the cell
+      // padding must be a no-op too, not just the disabled input.
+      await user.click(cell.closest("td")!);
+    }
+    expect(mockedAction).not.toHaveBeenCalled();
+  });
+
+  test("meta-key cell carries the admins-only tooltip for a non-admin editor", () => {
+    render(
+      <PermissionsMatrix
+        roles={ROLES}
+        grants={{}}
+        canEdit
+        viewerIsAdmin={false}
+      />
+    );
+    const cell = screen.getByRole("checkbox", {
+      name: `${MANAGE_PERMS_LABEL} for Billing manager`,
+    });
+    expect(cell.closest("td")).toHaveAttribute(
+      "title",
+      expect.stringMatching(/Only an Admin/)
+    );
+  });
+
+  test("non-meta cells stay editable for the non-admin editor", async () => {
+    const user = userEvent.setup();
+    render(
+      <PermissionsMatrix
+        roles={ROLES}
+        grants={{}}
+        canEdit
+        viewerIsAdmin={false}
+      />
+    );
+    const cell = screen.getByRole("checkbox", {
+      name: `Manage team members for Billing manager`,
+    });
+    expect(cell).toBeEnabled();
+    await user.click(cell);
+    expect(mockedAction).toHaveBeenCalledWith(
+      "role_billing",
+      SAMPLE_KEY,
+      true
+    );
+  });
+
+  test("admin editor sees meta-key cells normal and can toggle them", async () => {
+    const user = userEvent.setup();
+    render(
+      <PermissionsMatrix roles={ROLES} grants={{}} canEdit viewerIsAdmin />
+    );
+    const cell = screen.getByRole("checkbox", {
+      name: `${MANAGE_PERMS_LABEL} for Billing manager`,
+    });
+    expect(cell).toBeEnabled();
+    expect(cell.closest("td")).not.toHaveAttribute("title");
+    await user.click(cell);
+    expect(mockedAction).toHaveBeenCalledWith(
+      "role_billing",
+      "firm.manage_permissions",
+      true
+    );
+  });
+});
+
 describe("PermissionsMatrix — error revert", () => {
   test("server error reverts the optimistic flip + surfaces the warning", async () => {
     mockedAction.mockResolvedValueOnce({
@@ -229,7 +327,7 @@ describe("PermissionsMatrix — error revert", () => {
       error: "Admin grants every permission by definition.",
     });
     const user = userEvent.setup();
-    render(<PermissionsMatrix roles={ROLES} grants={{}} canEdit />);
+    render(<PermissionsMatrix roles={ROLES} grants={{}} canEdit viewerIsAdmin />);
 
     const cell = screen.getByRole("checkbox", {
       name: `${ANOTHER_KEY === "billing.send_invoice" ? "Send invoices" : ANOTHER_KEY} for Billing manager`,

@@ -38,9 +38,15 @@ export function GenerateInvoiceForm({
   >(action, billingInitialState);
   const [expanded, setExpanded] = useState(false);
 
+  // Collapse on success. Deps key on the state OBJECT, not
+  // state.status: useActionState keeps its state across
+  // submissions, so after the first success the status string is
+  // "ok" forever and a second success would skip the effect,
+  // leaving the form expanded. Each action invocation returns a
+  // fresh object, so identity is the reliable signal.
   useEffect(() => {
     if (state.status === "ok") setExpanded(false);
-  }, [state.status]);
+  }, [state]);
 
   if (entryCount === 0) {
     return (

@@ -25,7 +25,6 @@ export type PaletteMatter = {
   color: string;
   clientName: string | null;
   isPinned: boolean;
-  isArchived: boolean;
 };
 
 export type PaletteContact = {
@@ -61,7 +60,6 @@ export type PaletteItem =
 
 export type PaletteData = {
   items: PaletteItem[];
-  pinnedMatterIds: string[];
 };
 
 /** 500-row cap per kind, most-recently-updated first. Same safety
@@ -85,7 +83,6 @@ export async function getPaletteData(): Promise<PaletteData> {
         name: true,
         caseNumber: true,
         color: true,
-        isArchived: true,
         client: { select: { name: true } },
         practiceArea: { select: { name: true } },
         stage: { select: { name: true } },
@@ -132,7 +129,6 @@ export async function getPaletteData(): Promise<PaletteData> {
         color: m.color,
         clientName: m.client?.name ?? null,
         isPinned: m.pins.length > 0,
-        isArchived: m.isArchived,
       })
     ),
     ...contacts.map(
@@ -165,10 +161,5 @@ export async function getPaletteData(): Promise<PaletteData> {
     ),
   ];
 
-  return {
-    items,
-    pinnedMatterIds: matters
-      .filter((m) => m.pins.length > 0)
-      .map((m) => m.id),
-  };
+  return { items };
 }

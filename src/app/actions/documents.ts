@@ -6,10 +6,10 @@
  * Vercel Blob / S3 with no caller change.
  *
  * Auth model:
- *   - Upload: any signed-in member of the firm can attach to a
- *     matter that belongs to their firm. Admins aren't required for
- *     v1 (most firms want paralegals filing exhibits without
- *     waiting on a partner).
+ *   - Upload: gated on `documents.upload`. Admins always pass;
+ *     other roles need the key granted via /settings/roles (most
+ *     firms will grant it broadly — paralegals file exhibits
+ *     without waiting on a partner).
  *   - Delete: the original uploader OR any admin. Other members
  *     have to ask. This keeps "I uploaded the wrong PDF" recoverable
  *     without making delete a free-for-all.
@@ -29,7 +29,10 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentFirm } from "@/lib/firm";
-import { currentUserHasPermission } from "@/lib/permission-check";
+import {
+  currentUserHasPermission,
+  requirePermission,
+} from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { deleteFile, storeFile } from "@/lib/file-storage";
 import {
@@ -51,7 +54,7 @@ export async function uploadDocument(
   _prev: DocumentFormState,
   formData: FormData
 ): Promise<DocumentFormState> {
-  const userId = await getCurrentUserId();
+  const userId = await requirePermission("documents.upload");
   // getCurrentFirm() guards that the user belongs to a firm; the
   // result isn't used yet (single-tenant — every Matter is in the
   // seed firm) but calling it preserves the auth chain.

@@ -13,6 +13,7 @@
  * uses `stage.order` joined from the DB, not a hardcoded list.
  */
 
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import {
@@ -258,6 +259,21 @@ export async function listMatters(
   return filtered.sort(makeComparator(sort));
 }
 
+/**
+ * Count of matters matching `filter`, evaluated entirely in the DB —
+ * not subject to LIST_MATTERS_CAP. Reuses `buildWhere`, which ignores
+ * `filter.q` (text search is applied in memory by `listMatters`), so
+ * this is the "every filter except search" denominator the list page's
+ * "showing N of M" needs.
+ */
+export async function countMatters(
+  filter: MattersFilter = EMPTY_FILTER,
+  currentUserId?: string
+): Promise<number> {
+  const userId = currentUserId ?? (await getCurrentUserId());
+  return prisma.matter.count({ where: buildWhere(filter, userId) });
+}
+
 /** Filter options surfaced in the toolbar popovers. */
 export type MattersFilterOptions = {
   areas: string[];
@@ -327,8 +343,11 @@ export async function getMattersFilterOptions(): Promise<MattersFilterOptions> {
  * The returned object includes `isPinnedByCurrentUser` for the pin toggle
  * and flattens area/stage names so existing components read them as
  * scalar strings.
+ *
+ * Wrapped in React `cache()` so the [id] layout and the active tab page
+ * share one DB round-trip per request instead of each running the query.
  */
-export async function getMatterById(id: string) {
+export const getMatterById = cache(async (id: string) => {
   const userId = await getCurrentUserId();
   const matter = await prisma.matter.findUnique({
     where: { id },
@@ -388,6 +407,6 @@ export async function getMatterById(id: string) {
     trustBalance: trustBalance.toNumber(),
     wipAmount: wipAmount.toNumber(),
   };
-}
+});
 
 export type MatterDetail = NonNullable<Awaited<ReturnType<typeof getMatterById>>>;

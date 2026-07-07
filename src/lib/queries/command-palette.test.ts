@@ -10,8 +10,8 @@
  *      back as a runtime `undefined`, which TypeScript can't catch
  *      because the mapping reads it dynamically off the row).
  *
- *   2. Per-user pins — `isPinned` / `pinnedMatterIds` reflect the
- *      CALLER's pins only, not any other user's.
+ *   2. Per-user pins — `isPinned` reflects the CALLER's pins only,
+ *      not any other user's.
  *
  *   3. Filters — archived matters, inactive contacts/users, and
  *      converted/declined leads never reach the palette.
@@ -104,7 +104,6 @@ describe("getPaletteData", () => {
       color: "#2563a8", // schema default — pins that `color` survived the select
       clientName: "Cora Client",
       isPinned: true,
-      isArchived: false,
     });
     expect(
       data.items.find((i) => i.kind === "contact" && i.id === contactId)
@@ -134,7 +133,6 @@ describe("getPaletteData", () => {
       initials: "PP",
       jobTitle: "Attorney",
     });
-    expect(data.pinnedMatterIds).toEqual([matterId]);
   });
 
   test("isPinned reflects the caller's pins, not other users'", async () => {
@@ -154,7 +152,6 @@ describe("getPaletteData", () => {
       (i) => i.kind === "matter" && i.id === matterId
     );
     expect(matter).toMatchObject({ isPinned: false });
-    expect(data.pinnedMatterIds).toEqual([]);
   });
 
   test("excludes archived matters, inactive contacts/users, closed leads", async () => {

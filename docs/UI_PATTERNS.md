@@ -177,13 +177,6 @@ URL contract: multi-select uses repeated params (`?area=§1983&area=Housing/FHA`
 single-select uses a single param with defaults omitted. Parse/serialize
 centralised in `src/lib/matters-filters.ts`.
 
-### Tab Placeholder
-
-Shared empty state for matter detail tabs that haven't been built out yet.
-Uses a centered card in the tab content area with the tab name + a short
-description of what's coming. Lets users click through the full tab set
-without running into blank/404 pages. See `src/components/matters/tab-placeholder.tsx`.
-
 ### Command Palette
 
 Global ⌘K/Ctrl+K palette built on `cmdk` via shadcn's `Command` primitives.

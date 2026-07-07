@@ -6,6 +6,7 @@
  * statute) so the view layer stays pure rendering.
  */
 
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 
 export type LeadStage =
@@ -115,7 +116,10 @@ export async function listLeads(): Promise<LeadListRow[]> {
 
 export type LeadDetail = Awaited<ReturnType<typeof getLeadById>>;
 
-export async function getLeadById(id: string) {
+// Wrapped in React `cache()` so the lead [id] layout and the active tab
+// page share one DB round-trip per request instead of each running the
+// query (plus its converted-matter follow-up lookup).
+export const getLeadById = cache(async (id: string) => {
   const lead = await prisma.lead.findUnique({
     where: { id },
     include: {
@@ -180,7 +184,7 @@ export async function getLeadById(id: string) {
     displayEmail: lead.contact?.email ?? lead.email,
     displayPhone: lead.contact?.phone ?? lead.phone,
   };
-}
+});
 
 /** Aggregate counts for the intake-page header: total active, new today,
  *  conflict warnings. Cheap — small dataset. */

@@ -2,11 +2,11 @@
  * Matters list page — totalCount wiring.
  *
  * Pins the "showing N of M" denominator behavior:
- *   - no search active → the main list result is reused as the total
- *     (listMatters runs exactly once — no duplicate heavy query);
- *   - search active → a second listMatters runs with `q` stripped but
- *     every other filter preserved, so the denominator is the
- *     filtered-total, not the firm-wide total.
+ *   - the denominator comes from countMatters (DB-side count), never
+ *     from a second listMatters round-trip — even with a search active
+ *     the heavy list query runs exactly once;
+ *   - countMatters receives the parsed filter as-is (it ignores `q`
+ *     internally), so every non-search filter reaches the count.
  *
  * UI children are stubbed to data-attribute shells — this test is about
  * the query wiring in the server component, not rendering.
@@ -14,7 +14,11 @@
 
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { listMatters, getMattersFilterOptions } from "@/lib/queries/matters";
+import {
+  countMatters,
+  listMatters,
+  getMattersFilterOptions,
+} from "@/lib/queries/matters";
 import type { MatterListRow } from "@/lib/queries/matters";
 import type { MattersFilter } from "@/lib/matters-filters";
 import MattersListPage from "./page";
@@ -23,6 +27,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: { matter: { count: vi.fn().mockResolvedValue(0) } },
 }));
 vi.mock("@/lib/queries/matters", () => ({
+  countMatters: vi.fn(),
   listMatters: vi.fn(),
   getMattersFilterOptions: vi.fn(),
 }));
@@ -53,6 +58,7 @@ vi.mock("@/components/matters/matters-kanban", () => ({
   MattersKanban: () => <div data-testid="kanban" />,
 }));
 
+const countMattersMock = vi.mocked(countMatters);
 const listMattersMock = vi.mocked(listMatters);
 const optionsMock = vi.mocked(getMattersFilterOptions);
 
@@ -79,32 +85,34 @@ beforeEach(() => {
 });
 
 describe("totalCount denominator", () => {
-  test("no search → listMatters runs once and the list result doubles as the total", async () => {
+  test("total comes from countMatters, not a second listMatters", async () => {
     listMattersMock.mockResolvedValue([row("a"), row("b")]);
+    countMattersMock.mockResolvedValue(7);
 
     await renderPage({});
 
     expect(listMattersMock).toHaveBeenCalledTimes(1);
+    expect(countMattersMock).toHaveBeenCalledTimes(1);
     const toolbar = screen.getByTestId("toolbar");
     expect(toolbar.getAttribute("data-visible")).toBe("2");
-    expect(toolbar.getAttribute("data-total")).toBe("2");
+    expect(toolbar.getAttribute("data-total")).toBe("7");
   });
 
-  test("search active → total comes from a second query with q stripped", async () => {
-    listMattersMock
-      .mockResolvedValueOnce([row("a")]) // main list, q applied
-      .mockResolvedValueOnce([row("a"), row("b"), row("c")]); // count, q stripped
+  test("search active → still exactly one listMatters; count gets the filter", async () => {
+    listMattersMock.mockResolvedValue([row("a")]);
+    countMattersMock.mockResolvedValue(3);
 
     await renderPage({ q: "alvarez" });
 
-    expect(listMattersMock).toHaveBeenCalledTimes(2);
+    expect(listMattersMock).toHaveBeenCalledTimes(1);
     const toolbar = screen.getByTestId("toolbar");
     expect(toolbar.getAttribute("data-visible")).toBe("1");
     expect(toolbar.getAttribute("data-total")).toBe("3");
   });
 
-  test("count query preserves every non-search filter", async () => {
+  test("countMatters receives every non-search filter", async () => {
     listMattersMock.mockResolvedValue([row("a")]);
+    countMattersMock.mockResolvedValue(1);
 
     await renderPage({
       q: "alvarez",
@@ -112,9 +120,8 @@ describe("totalCount denominator", () => {
       stage: "Discovery",
     });
 
-    expect(listMattersMock).toHaveBeenCalledTimes(2);
-    const countFilter = listMattersMock.mock.calls[1][0] as MattersFilter;
-    expect(countFilter.q).toBe("");
+    expect(countMattersMock).toHaveBeenCalledTimes(1);
+    const countFilter = countMattersMock.mock.calls[0][0] as MattersFilter;
     expect(countFilter.areas).toEqual(["Civil Rights", "Family"]);
     expect(countFilter.stages).toEqual(["Discovery"]);
   });

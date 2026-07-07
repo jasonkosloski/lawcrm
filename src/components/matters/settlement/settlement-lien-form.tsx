@@ -39,7 +39,13 @@ export function SettlementLienForm({
       setLienholderType("");
       setOriginalAmount("");
     }
-  }, [state.status]);
+    // Deps key on the state OBJECT, not state.status: useActionState
+    // keeps its state across submissions, so after the first success
+    // the status string is "ok" forever and a second success would
+    // skip the effect, leaving stale values in the form. Each action
+    // invocation returns a fresh object, so identity is the reliable
+    // signal.
+  }, [state]);
 
   if (!expanded) {
     return (

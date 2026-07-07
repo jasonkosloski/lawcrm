@@ -11,10 +11,13 @@ import type { FirmProfile } from "@/lib/firm";
 
 const formatDate = (d: Date | null): string => {
   if (!d) return "—";
+  // establishedAt is stored as UTC midnight — render in UTC or the
+  // date shifts a day back for viewers west of UTC.
   return d.toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",
+    timeZone: "UTC",
   });
 };
 

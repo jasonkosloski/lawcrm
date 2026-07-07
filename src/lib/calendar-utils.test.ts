@@ -32,8 +32,12 @@ describe("isWeekend", () => {
 });
 
 describe("parseCalendarParams", () => {
+  // Repo-conventional default zone; the tz-sensitivity cases below
+  // use zones straddling a UTC midnight.
+  const TZ = "America/Denver";
+
   test("missing params → defaults (week view, today's date)", () => {
-    const { view, focal } = parseCalendarParams({});
+    const { view, focal } = parseCalendarParams({}, TZ);
     expect(view).toBe("week");
     // focal is start-of-today; we just check it's valid + within
     // a couple seconds of "now".
@@ -42,32 +46,70 @@ describe("parseCalendarParams", () => {
   });
 
   test("view=month is honored", () => {
-    expect(parseCalendarParams({ view: "month" }).view).toBe("month");
+    expect(parseCalendarParams({ view: "month" }, TZ).view).toBe("month");
   });
 
   test("unknown view falls back to default", () => {
-    expect(parseCalendarParams({ view: "year" }).view).toBe("week");
+    expect(parseCalendarParams({ view: "year" }, TZ).view).toBe("week");
   });
 
   test("ISO date in d= is parsed", () => {
-    const { focal } = parseCalendarParams({ d: "2026-06-15" });
+    const { focal } = parseCalendarParams({ d: "2026-06-15" }, TZ);
     expect(focal.getFullYear()).toBe(2026);
     expect(focal.getMonth()).toBe(5); // June (0-indexed)
     expect(focal.getDate()).toBe(15);
   });
 
   test("malformed date falls back to today", () => {
-    const { focal } = parseCalendarParams({ d: "not-a-date" });
+    const { focal } = parseCalendarParams({ d: "not-a-date" }, TZ);
     expect(focal).toBeInstanceOf(Date);
     expect(focal.getHours()).toBe(0);
   });
 
   test("array params take the first value", () => {
-    expect(parseCalendarParams({ view: ["month", "week"] }).view).toBe(
+    expect(parseCalendarParams({ view: ["month", "week"] }, TZ).view).toBe(
       "month"
     );
-    const { focal } = parseCalendarParams({ d: ["2026-01-01", "2026-12-31"] });
+    const { focal } = parseCalendarParams(
+      { d: ["2026-01-01", "2026-12-31"] },
+      TZ
+    );
     expect(focal.getMonth()).toBe(0);
+  });
+
+  // ── default focal is USER-tz today, not server-tz today ─────────────
+  //
+  // At 2026-07-06T03:30Z it is still July 5 in Denver (21:30 MDT) but
+  // already July 6 in Tokyo (12:30 JST). Whatever zone the server (or
+  // this test runner) sits in, the default focal must track the tz
+  // argument — one zone east and one west of any plausible server zone
+  // means at least one of these cases disagrees with server-local
+  // "today" and would fail against the old startOfDay(new Date()).
+  // `toDateParam(focal)` round-trips the user-local date key, so the
+  // assertions are runner-TZ independent.
+  const nearMidnightUtc = new Date("2026-07-06T03:30:00.000Z");
+
+  test("no d=, tz east of server around midnight → next calendar day", () => {
+    const { focal } = parseCalendarParams({}, "Asia/Tokyo", nearMidnightUtc);
+    expect(toDateParam(focal)).toBe("2026-07-06");
+  });
+
+  test("no d=, tz west of server around midnight → prior calendar day", () => {
+    const { focal } = parseCalendarParams(
+      {},
+      "America/Denver",
+      nearMidnightUtc
+    );
+    expect(toDateParam(focal)).toBe("2026-07-05");
+  });
+
+  test("malformed d= falls back to user-tz today, same rule", () => {
+    const { focal } = parseCalendarParams(
+      { d: "not-a-date" },
+      "Asia/Tokyo",
+      nearMidnightUtc
+    );
+    expect(toDateParam(focal)).toBe("2026-07-06");
   });
 });
 

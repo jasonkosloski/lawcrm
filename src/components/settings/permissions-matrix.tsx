@@ -20,6 +20,11 @@
  * Visible to everyone in the firm (read-only); only admins get
  * functional checkboxes — the parent page passes `canEdit` so
  * this component doesn't repeat the admin lookup.
+ *
+ * Meta-key rows (see ADMIN_ONLY_PERMISSIONS) are additionally
+ * locked for non-admin editors: the server action refuses those
+ * toggles from anyone without the Admin role, so the UI mirrors
+ * the wall instead of letting the click fail with a server error.
  */
 
 "use client";
@@ -37,15 +42,33 @@ type RoleColumn = {
   isSystem: boolean;
 };
 
+// Mirrors ADMIN_ONLY_PERMISSIONS in `src/app/actions/roles.ts` —
+// the meta keys govern access to access itself, and the server
+// action rejects grant/revoke from non-admin manage_permissions
+// holders. Kept as a local copy because the actions file is
+// "use server" and can only export async functions.
+const ADMIN_ONLY_PERMISSIONS = new Set([
+  "firm.manage_permissions",
+  "firm.manage_roles",
+]);
+
+const ADMIN_ONLY_TOOLTIP =
+  "Only an Admin can change who holds this permission — it controls who can delegate access.";
+
 export function PermissionsMatrix({
   roles,
   /** Map: roleId → Set of permission keys granted to that role. */
   grants,
   canEdit,
+  viewerIsAdmin,
 }: {
   roles: RoleColumn[];
   grants: Record<string, string[]>;
   canEdit: boolean;
+  /** True when the current user holds the Admin role. Non-admin
+   *  manage_permissions holders can edit everything EXCEPT the
+   *  meta keys — those cells render locked. */
+  viewerIsAdmin: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +100,9 @@ export function PermissionsMatrix({
     // the cell padding mid-flight queues extra toggles whose
     // inverse-apply reverts can interleave with the in-flight save.
     if (pending || !canEdit || isAdminRole(role)) return;
+    // Meta keys are admin-only server-side; don't fire a toggle
+    // that's guaranteed to bounce.
+    if (!viewerIsAdmin && ADMIN_ONLY_PERMISSIONS.has(key)) return;
     const current = grantsState[roleId]?.has(key) ?? false;
     const next = !current;
 
@@ -190,7 +216,13 @@ export function PermissionsMatrix({
                       </td>
                       {roles.map((r) => {
                         const granted = isGranted(r.id, p.key, r);
-                        const locked = isAdminRole(r) || !canEdit;
+                        // Non-admin editors see the meta-key cells
+                        // locked — same affordance as the always-
+                        // locked Admin column, plus a tooltip.
+                        const metaLocked =
+                          !viewerIsAdmin && ADMIN_ONLY_PERMISSIONS.has(p.key);
+                        const locked =
+                          isAdminRole(r) || !canEdit || metaLocked;
                         return (
                           <td
                             key={r.id}
@@ -198,6 +230,14 @@ export function PermissionsMatrix({
                               "px-2 py-2 text-center align-middle",
                               !locked && "cursor-pointer"
                             )}
+                            // Explain the lock only where it's the
+                            // reason — the Admin column and read-only
+                            // mode have their own messaging.
+                            title={
+                              metaLocked && canEdit && !isAdminRole(r)
+                                ? ADMIN_ONLY_TOOLTIP
+                                : undefined
+                            }
                             onClick={() => toggle(r.id, r, p.key)}
                           >
                             <input

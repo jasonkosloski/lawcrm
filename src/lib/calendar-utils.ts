@@ -6,6 +6,7 @@
  */
 
 import { format, parseISO, startOfDay } from "date-fns";
+import { dateKeyInTz } from "@/lib/format-date";
 
 export type CalendarView = "week" | "month";
 export const DEFAULT_VIEW: CalendarView = "week";
@@ -28,12 +29,31 @@ export function isWeekend(date: Date): boolean {
   return d === 0 || d === 6;
 }
 
+/**
+ * Parse `?view=` / `?d=` into calendar state.
+ *
+ * `tz` (the viewer's IANA zone) is required because the default focal
+ * — first load without `?d=` — must be "today" on the *user's*
+ * calendar, not the server's. `startOfDay(new Date())` resolves in
+ * server TZ: on a UTC production box a Denver user loading /calendar
+ * between 6pm and midnight local landed on tomorrow's week. Same bug
+ * class the toolbar's "Today" link already fixed (`todayFocalInTz` in
+ * calendar-toolbar.tsx) — take the user-local date key via
+ * `dateKeyInTz`, parse it back to a server-local-midnight Date, which
+ * `toDateParam` round-trips losslessly.
+ *
+ * `now` is injectable for tests only.
+ */
 export function parseCalendarParams(
-  sp: Record<string, string | string[] | undefined>
+  sp: Record<string, string | string[] | undefined>,
+  tz: string,
+  now: Date = new Date()
 ): { view: CalendarView; focal: Date } {
   const rawView = Array.isArray(sp.view) ? sp.view[0] : sp.view;
   const view: CalendarView =
     rawView === "week" || rawView === "month" ? rawView : DEFAULT_VIEW;
+
+  const todayFocal = () => parseISO(dateKeyInTz(now, tz));
 
   const rawDate = Array.isArray(sp.d) ? sp.d[0] : sp.d;
   let focal: Date;
@@ -41,10 +61,10 @@ export function parseCalendarParams(
     try {
       focal = startOfDay(parseISO(rawDate));
     } catch {
-      focal = startOfDay(new Date());
+      focal = todayFocal();
     }
   } else {
-    focal = startOfDay(new Date());
+    focal = todayFocal();
   }
   return { view, focal };
 }
