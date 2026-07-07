@@ -71,11 +71,24 @@ export function EditTimeEntryDialog({
   onOpenChange: (open: boolean) => void;
   entry: EditableTimeEntry;
 }) {
-  const action = updateTimeEntry.bind(null, entry.id);
+  // Close from inside the action, NOT from an effect keyed on the
+  // committed state. Two traps with the effect approach (the row menu
+  // keeps this dialog mounted across opens, so state persists):
+  //   1. `state.status` stays the string "ok" across saves, so an effect
+  //      keyed on it fires once and never again — the second save of the
+  //      same entry leaves the dialog stuck open.
+  //   2. React 19's useActionState can drop the post-action re-render
+  //      entirely when the reopen-reset effect below bails out (all
+  //      setStates are no-ops on an unchanged entry), so even keying on
+  //      the `state` object never sees the second "ok".
   const [state, formAction, isPending] = useActionState<
     TimeEntryFormState,
     FormData
-  >(action, timeEntryInitialState);
+  >(async (prev, formData) => {
+    const next = await updateTimeEntry(entry.id, prev, formData);
+    if (next.status === "ok") onOpenChange(false);
+    return next;
+  }, timeEntryInitialState);
 
   const [date, setDate] = useState(toDateInput(entry.date));
   const [hours, setHours] = useState(entry.hours.toString());
@@ -98,10 +111,6 @@ export function EditTimeEntryDialog({
       setStatus(entry.status);
     }
   }, [open, entry]);
-
-  useEffect(() => {
-    if (state.status === "ok") onOpenChange(false);
-  }, [state.status, onOpenChange]);
 
   const errs = state.errors ?? {};
 

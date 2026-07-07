@@ -9,8 +9,12 @@
  * those conventions, not "two solar years."
  *
  * Both directions live here so the practice-area form can
- * round-trip the user's input through the schema without losing
- * the year/month/day breakdown they typed.
+ * round-trip the user's input through the schema. The total-days
+ * value always round-trips exactly; the year/month/day breakdown
+ * only survives when the input already matches the greedy
+ * decomposition (months/days small enough not to roll into the
+ * next unit under the 365/30 convention — e.g. "18 months" packs
+ * to 540 days and unpacks as "1 year 5 months 25 days").
  */
 
 export type StatutePeriod = {
@@ -56,8 +60,15 @@ export function computeSolDate(
   if (!incidentDate || !statutePeriodDays || statutePeriodDays <= 0) {
     return null;
   }
+  // Incident dates are stored as UTC-midnight calendar dates (the
+  // <input type="date"> string parses to 00:00Z), and every display
+  // path reads them back via getUTC* — so the day arithmetic must be
+  // UTC too. Local-time setDate() would shift the result by an hour
+  // when the statute period crosses a DST boundary in the server's
+  // zone, landing at 23:00Z the previous day: a silent one-day-early
+  // SOL date.
   const result = new Date(incidentDate);
-  result.setDate(result.getDate() + statutePeriodDays);
+  result.setUTCDate(result.getUTCDate() + statutePeriodDays);
   return result;
 }
 

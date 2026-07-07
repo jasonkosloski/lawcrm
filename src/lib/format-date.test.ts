@@ -160,6 +160,44 @@ describe("formatDayBucket", () => {
   test("null returns the placeholder", () => {
     expect(formatDayBucket(null)).toBe("—");
   });
+
+  // The bucket must follow the USER's calendar days when tz is
+  // given — the exact production failure the file header warns
+  // about (UTC server, non-UTC user around midnight).
+  describe("tz-anchored buckets", () => {
+    // Monday April 27, 9:00am MDT.
+    const now = new Date("2026-04-27T15:00:00Z");
+
+    test("late-evening local entry stays 'Yesterday' even when UTC has rolled to today", () => {
+      // 2026-04-27T04:00:00Z = Sunday April 26, 10:00pm MDT — same
+      // UTC calendar day as `now`, but the prior day in Denver.
+      const lateSunday = new Date("2026-04-27T04:00:00Z");
+      expect(
+        formatDayBucket(lateSunday, { now, tz: "America/Denver" })
+      ).toBe("Yesterday");
+      expect(formatDayBucket(lateSunday, { now, tz: "UTC" })).toBe("Today");
+    });
+
+    test("east-of-UTC: same-UTC-day instant already 'Yesterday' in Tokyo", () => {
+      // `now` is April 28 00:00 in Tokyo (UTC+9); April 27 14:00 UTC
+      // is 11:00pm April 27 Tokyo — the previous Tokyo day.
+      const entry = new Date("2026-04-27T14:00:00Z");
+      expect(formatDayBucket(entry, { now, tz: "Asia/Tokyo" })).toBe(
+        "Yesterday"
+      );
+      expect(formatDayBucket(entry, { now, tz: "UTC" })).toBe("Today");
+    });
+
+    test("bucket and weekday label agree in the user's TZ", () => {
+      // 2026-04-25T05:00:00Z = Friday April 24, 11:00pm MDT. Denver
+      // sees 3 days back → within-week branch, and the label must
+      // say Friday (the Denver weekday), not Saturday (the UTC one).
+      const entry = new Date("2026-04-25T05:00:00Z");
+      expect(formatDayBucket(entry, { now, tz: "America/Denver" })).toBe(
+        "Friday"
+      );
+    });
+  });
 });
 
 // ── TZ helpers ─────────────────────────────────────────────────────────

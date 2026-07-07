@@ -96,8 +96,11 @@ describe("Admin role short-circuits to all-granted", () => {
     const { userId } = await seedUser({ firmId, roleIds: [adminRoleId] });
     mockedGetUser.mockResolvedValue(userId);
 
-    const { isAdmin } = await getCurrentUserPermissions();
+    const { isAdmin, granted } = await getCurrentUserPermissions();
     expect(isAdmin).toBe(true);
+    // Pins the documented contract: no "*" sentinel — `granted` is
+    // empty for admins, so callers must branch on `isAdmin`.
+    expect(granted.size).toBe(0);
   });
 
   test("requirePermission resolves quietly for admins", async () => {

@@ -18,6 +18,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { requirePermission } from "@/lib/permission-check";
 import {
   DEADLINE_KINDS,
   TASK_PRIORITIES,
@@ -80,6 +81,9 @@ export async function addTaskToNote(
   _prev: NoteAttachmentFormState,
   formData: FormData
 ): Promise<NoteAttachmentFormState> {
+  // Same gate as the standalone task composer — attaching to a note
+  // still creates a Task row, so the same capability applies.
+  await requirePermission("tasks.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = addTaskSchema.safeParse(raw);
   if (!parsed.success) {
@@ -132,6 +136,7 @@ export async function addDeadlineToNote(
   _prev: NoteAttachmentFormState,
   formData: FormData
 ): Promise<NoteAttachmentFormState> {
+  await requirePermission("deadlines.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = addDeadlineSchema.safeParse(raw);
   if (!parsed.success) {
@@ -193,6 +198,7 @@ export async function addTimeEntryToNote(
   _prev: NoteAttachmentFormState,
   formData: FormData
 ): Promise<NoteAttachmentFormState> {
+  await requirePermission("time_entries.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = addTimeEntrySchema.safeParse(raw);
   if (!parsed.success) {
@@ -241,6 +247,17 @@ const bulkSchema = z.object({
   /** JSON-stringified array of NoteCapture items from CaptureStack. */
   attachments: z.string().min(2, "Nothing to save"),
 });
+
+/** Permission key each capture kind's standalone create path gates
+ *  on (see `captures.ts`) — the bulk-attach surface must enforce the
+ *  same capabilities or it becomes a bypass. `note_sibling` has no
+ *  entry because the bulk loop deliberately ignores it. */
+const CAPTURE_CREATE_PERMISSION: Partial<Record<ValidCapture["kind"], string>> = {
+  task: "tasks.create",
+  deadline: "deadlines.create",
+  time: "time_entries.create",
+  event: "events.create",
+};
 
 /**
  * Bulk-attach the contents of a CaptureStack to a saved note in
@@ -294,6 +311,18 @@ export async function addCapturesToNoteBulk(
   }
   if (Object.keys(attachmentErrors).length > 0) {
     return { status: "error", errors: {}, attachmentErrors };
+  }
+
+  // Gate on the union of capabilities the payload exercises. One
+  // denied kind rejects the whole batch — it's a single transaction,
+  // so partially applying the stack would be surprising.
+  const requiredPermissions = new Set<string>();
+  for (const cap of validCaptures) {
+    const key = CAPTURE_CREATE_PERMISSION[cap.kind];
+    if (key) requiredPermissions.add(key);
+  }
+  for (const key of requiredPermissions) {
+    await requirePermission(key);
   }
 
   const note = await resolveNoteMatter(noteId);

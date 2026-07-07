@@ -127,6 +127,23 @@ const updateTaskSchema = z.object({
   status: z.enum(TASK_STATUSES).default("open"),
 });
 
+/** Convert the form's `YYYY-MM-DD` dueDate to local midnight of that
+ *  day. We don't use `new Date(value)` directly because that parses
+ *  ISO date-only as UTC midnight, while the edit dialog reads the
+ *  stored Date back with local-time getters — west of UTC the due
+ *  date would display a day early and drift a day earlier on every
+ *  unmodified save. Same rule as `parseEventBoundary` in
+ *  `calendar-events.ts`. Returns null on empty input or parse
+ *  failure. */
+function parseDueDate(value: string | undefined): Date | null {
+  if (!value) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!m) return null;
+  const [, y, mo, d] = m;
+  const date = new Date(Number(y), Number(mo) - 1, Number(d));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 export async function updateTask(
   taskId: string,
   _prev: UpdateTaskFormState,
@@ -162,7 +179,7 @@ export async function updateTask(
     data: {
       title: parsed.data.title,
       description: parsed.data.description || null,
-      dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
+      dueDate: parseDueDate(parsed.data.dueDate),
       priority: parsed.data.priority,
       status: newStatus,
       completedAt: isComplete

@@ -17,7 +17,7 @@
 
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -89,11 +89,38 @@ function isActive(
 const numBadge = (n: number): string | undefined =>
   n > 0 ? n.toString() : undefined;
 
+/** Tailwind `lg` breakpoint — must stay in sync with the `lg:`
+ *  classes below that switch the drawer into a persistent column.
+ *  Same pattern as MailboxDrawer (mailbox-drawer.tsx). */
+const DESKTOP_QUERY = "(min-width: 1024px)";
+
+function subscribeToDesktop(callback: () => void) {
+  const mql = window.matchMedia(DESKTOP_QUERY);
+  mql.addEventListener("change", callback);
+  return () => mql.removeEventListener("change", callback);
+}
+
+/** Whether the viewport is at `lg+`, where the sidebar is a
+ *  persistent column. Needed because `inert` on the closed drawer
+ *  is correct only on mobile — at `lg+` the same element is visible
+ *  and must stay interactive, and there's no CSS-only way to scope
+ *  an attribute to a breakpoint. Server snapshot assumes desktop so
+ *  SSR never ships an inert (unclickable) sidebar; on mobile the
+ *  drawer starts closed and gains `inert` at hydration. */
+function useIsDesktop(): boolean {
+  return useSyncExternalStore(
+    subscribeToDesktop,
+    () => window.matchMedia(DESKTOP_QUERY).matches,
+    () => true
+  );
+}
+
 export function SidebarNav({ data }: { data: SidebarData }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { openPalette } = useCommandPalette();
   const { open, close } = useMobileNav();
+  const isDesktop = useIsDesktop();
 
   // Auto-close the mobile drawer when the user navigates. Without
   // this the drawer would stay open after a Link tap, hiding the
@@ -206,10 +233,12 @@ export function SidebarNav({ data }: { data: SidebarData }) {
         style={{
           background: "linear-gradient(180deg, #f6f5ef 0%, #eef2f5 100%)",
         }}
-        // Hide from the a11y tree when the drawer is closed on
-        // mobile (so SR users don't tab through hidden links). At
-        // lg+ the sidebar is always visible regardless of `open`.
-        aria-hidden={!open ? undefined : false}
+        // Closed on mobile = translated off-canvas but still in the
+        // DOM, so `inert` pulls its links out of the tab order and
+        // the a11y tree. Must not apply at lg+ where this same
+        // element is the always-visible column — hence the media
+        // query instead of a plain `!open`.
+        inert={!open && !isDesktop}
       >
       {/* ── Firm logo + command palette trigger ──────────────────────────── */}
       <div className="flex items-center justify-between p-3 pb-2">

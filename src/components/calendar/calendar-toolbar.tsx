@@ -2,8 +2,9 @@
  * Calendar Toolbar
  *
  * Renders above the calendar grid: prev / today / next navigation,
- * view toggle (Week / Month), and range label. Pure server component
- * — all state lives in the URL and each control is a `<Link>`.
+ * view toggle (Week / Month), and range label. Async server component
+ * — all state lives in the URL and each control is a `<Link>`; the
+ * only data read is the current user's time zone (for "Today").
  */
 
 import Link from "next/link";
@@ -12,7 +13,7 @@ import {
   addDays,
   addMonths,
   format,
-  startOfDay,
+  parseISO,
   startOfMonth,
   startOfWeek,
   endOfWeek,
@@ -24,6 +25,25 @@ import {
   WEEK_STARTS_ON,
   type CalendarView,
 } from "@/lib/calendar-utils";
+import { dateKeyInTz } from "@/lib/format-date";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
+
+/**
+ * "Today" as a focal Date for the given user time zone.
+ *
+ * `startOfDay(new Date())` resolves in the *server's* TZ — on a UTC
+ * production box a user in America/Denver clicking "Today" between
+ * 6pm and midnight local would be sent to tomorrow's date (the same
+ * class of bug the range helpers migrated away from; see the note at
+ * the bottom of this file). Instead: take the user-local calendar
+ * date via `dateKeyInTz`, then parse it back to a Date. `parseISO`
+ * on a bare `yyyy-MM-dd` yields server-local midnight of that key,
+ * which `toDateParam` round-trips losslessly — the href always
+ * carries the user's date regardless of server TZ.
+ */
+export function todayFocalInTz(now: Date, tz: string): Date {
+  return parseISO(dateKeyInTz(now, tz));
+}
 
 function formatRangeLabel(view: CalendarView, focal: Date): string {
   if (view === "week") {
@@ -37,14 +57,15 @@ function formatRangeLabel(view: CalendarView, focal: Date): string {
   return format(focal, "MMMM yyyy");
 }
 
-export function CalendarToolbar({
+export async function CalendarToolbar({
   view,
   focal,
 }: {
   view: CalendarView;
   focal: Date;
 }) {
-  const today = startOfDay(new Date());
+  const userTz = await getCurrentUserTimeZone();
+  const today = todayFocalInTz(new Date(), userTz);
   const prev =
     view === "week"
       ? addDays(focal, -7)

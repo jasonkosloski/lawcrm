@@ -4,8 +4,16 @@
  * v1 keeps both flows minimal:
  *   - convertLeadToMatter: create a Matter from the lead's basic
  *     details + a Contact for the lead person, link them, mark the
- *     lead as converted, redirect to the new matter.
+ *     lead as converted, redirect to the new matter. When the target
+ *     area tracks a statute of limitations, the lead's dateOfIncident
+ *     becomes the matter's incidentDate, the SOL date is auto-computed
+ *     from the area's statutePeriodDays, and the auto-managed critical
+ *     SOL Deadline is created — same malpractice guard as the direct
+ *     create path in matters.ts.
  *   - declineLead: capture an optional reason, mark stage "declined".
+ *     Gated by intake.decline + written to the ActivityLog, matching
+ *     the conflict-check siblings — declining removes a lead from the
+ *     active intake queue, so who/why must be auditable.
  *
  * Practice-area-specific automations (CGIA notice deadlines for §1983,
  * HUD response for FHA, etc.) are explicit follow-ups in
@@ -23,12 +31,20 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
+import { logActivity } from "@/lib/activity-log";
+import { computeSolDate } from "@/lib/sol";
 import type {
   ConvertLeadFormState,
   DeclineLeadFormState,
 } from "@/lib/lead-conversion-form";
 
 // ── Convert ─────────────────────────────────────────────────────────────
+
+/** Signature of the one auto-managed SOL deadline per matter. MUST
+ *  match `SOL_SOURCE_TYPE` in matters.ts — updateMatter /
+ *  setMatterSolSatisfied find-and-update the row by this value, so a
+ *  drift here would orphan conversion-created SOL deadlines. */
+const SOL_SOURCE_TYPE = "statute_of_limitations";
 
 const convertSchema = z.object({
   practiceAreaId: z.string().trim().min(1, "Practice area is required"),
@@ -103,23 +119,34 @@ export async function convertLeadToMatter(
 
   // Validate the picked stage actually belongs to the picked area —
   // the form picker enforces this client-side, but the server is the
-  // source of truth.
+  // source of truth. Inactive areas / stages are rejected too: the
+  // direct create path (resolveAreaAndStage in matters.ts) forbids
+  // retired targets, and conversion must not be a back door into them
+  // via a stale or crafted form post.
   const [area, stage] = await Promise.all([
     prisma.practiceArea.findUnique({
       where: { id: parsed.data.practiceAreaId },
       // defaultBillingMode snapshots onto the new Matter so the
-      // billing tab shows the right flow from day one.
-      select: { id: true, color: true, defaultBillingMode: true },
+      // billing tab shows the right flow from day one. The SOL pair
+      // drives incidentDate / SOL-date carry-over from the lead.
+      select: {
+        id: true,
+        color: true,
+        isActive: true,
+        defaultBillingMode: true,
+        hasStatuteOfLimitations: true,
+        statutePeriodDays: true,
+      },
     }),
     prisma.matterStage.findUnique({
       where: { id: parsed.data.stageId },
-      select: { id: true, practiceAreaId: true },
+      select: { id: true, practiceAreaId: true, isActive: true },
     }),
   ]);
-  if (!area) {
+  if (!area || !area.isActive) {
     return {
       status: "error",
-      errors: { practiceAreaId: ["Practice area not found"] },
+      errors: { practiceAreaId: ["Practice area is not available"] },
     };
   }
   if (!stage || stage.practiceAreaId !== area.id) {
@@ -128,9 +155,26 @@ export async function convertLeadToMatter(
       errors: { stageId: ["Stage doesn't belong to the selected area"] },
     };
   }
+  if (!stage.isActive) {
+    return {
+      status: "error",
+      errors: { stageId: ["Stage is no longer active"] },
+    };
+  }
 
   const userId = await getCurrentUserId();
   const description = composeMatterDescription(lead);
+
+  // SOL carry-over — same rules as the direct create path: persist
+  // the incident date only when the area tracks SOL (so a lead
+  // converted into a non-SOL area doesn't leave a dangling date),
+  // and auto-compute the SOL date from the area's configured period.
+  // The lead form has no manual SOL-date override; per-matter
+  // overrides happen on the matter edit form after conversion.
+  const incidentDate = area.hasStatuteOfLimitations
+    ? lead.dateOfIncident
+    : null;
+  const solDate = computeSolDate(incidentDate, area.statutePeriodDays);
 
   // Single transaction so a half-converted lead can't exist.
   const matterId = await prisma.$transaction(async (tx) => {
@@ -187,9 +231,33 @@ export async function convertLeadToMatter(
         color: area.color,
         description: description || null,
         clientId: clientContactId,
+        incidentDate,
+        statuteOfLimitationsDate: solDate,
       },
       select: { id: true },
     });
+
+    // Auto-create the critical SOL Deadline when a date computed.
+    // The matter is brand-new inside this transaction, so there's no
+    // existing auto row to reconcile — a conditional create is the
+    // whole of syncMatterSolDeadline's contract here. Later edits
+    // (updateMatter / setMatterSolSatisfied in matters.ts) find this
+    // row by SOL_SOURCE_TYPE and keep it in sync.
+    if (solDate) {
+      await tx.deadline.create({
+        data: {
+          matterId: matter.id,
+          title: "Statute of limitations",
+          dueDate: solDate,
+          kind: "critical",
+          sourceType: SOL_SOURCE_TYPE,
+          // Converting user is the lead attorney (set just below) —
+          // same owner default as the direct create path.
+          ownerId: userId,
+          status: "open",
+        },
+      });
+    }
 
     // Lead attorney = the user doing the conversion. Solo-friendly
     // default; multi-user firms can re-assign on the matter detail
@@ -235,6 +303,12 @@ export async function declineLead(
   _prev: DeclineLeadFormState,
   formData: FormData
 ): Promise<DeclineLeadFormState> {
+  // Declining permanently removes the lead from the active intake
+  // queue — an intake decision, gated granularly like its
+  // conflict-check siblings rather than left open to any
+  // authenticated user. Fail-closed until the key is granted via
+  // the role matrix (admins always pass).
+  const actorId = await requirePermission("intake.decline");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = declineSchema.safeParse(raw);
   if (!parsed.success) {
@@ -269,6 +343,17 @@ export async function declineLead(
       stage: "declined",
       declineReason: parsed.data.reason || null,
     },
+  });
+
+  // matterId: null — declined leads never got a matter. Firm-scope
+  // audit entry so who declined (and why) is reviewable, matching
+  // the conflict-check actions.
+  await logActivity({
+    matterId: null,
+    userId: actorId,
+    type: "filing",
+    title: "Lead declined",
+    detail: parsed.data.reason || null,
   });
 
   revalidatePath("/intake");

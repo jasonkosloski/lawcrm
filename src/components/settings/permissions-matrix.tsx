@@ -72,7 +72,11 @@ export function PermissionsMatrix({
   };
 
   const toggle = (roleId: string, role: RoleColumn, key: string) => {
-    if (!canEdit || isAdminRole(role)) return;
+    // `pending` disables the checkbox, but the surrounding <td>'s
+    // onClick isn't a form control — guard here too, or clicking
+    // the cell padding mid-flight queues extra toggles whose
+    // inverse-apply reverts can interleave with the in-flight save.
+    if (pending || !canEdit || isAdminRole(role)) return;
     const current = grantsState[roleId]?.has(key) ?? false;
     const next = !current;
 

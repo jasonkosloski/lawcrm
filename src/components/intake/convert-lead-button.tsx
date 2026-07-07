@@ -42,6 +42,14 @@ const FEE_OPTIONS = [
   { value: "pro_bono", label: "Pro bono" },
 ];
 
+// Default stage for a freshly converted matter: terminal stages
+// ("Closed", "Declined", …) make no sense as a starting point, so skip
+// past them; fall back to the raw first stage if the area only has
+// terminal ones.
+function firstNonTerminalStage(area: PracticeAreaOption | undefined) {
+  return area?.stages.find((s) => !s.isTerminal) ?? area?.stages[0];
+}
+
 export function ConvertLeadButton({
   leadId,
   defaultMatterName,
@@ -60,24 +68,27 @@ export function ConvertLeadButton({
 
   const [name, setName] = useState(defaultMatterName);
   const [areaId, setAreaId] = useState(areas[0]?.id ?? "");
-  const [stageId, setStageId] = useState(areas[0]?.stages[0]?.id ?? "");
+  const [stageId, setStageId] = useState(
+    firstNonTerminalStage(areas[0])?.id ?? ""
+  );
   const [feeStructure, setFeeStructure] = useState("contingent");
 
   // Reset stage to the area's first non-terminal stage whenever the
   // user picks a different practice area.
   useEffect(() => {
-    const area = areas.find((a) => a.id === areaId);
-    if (!area) return;
-    const firstNonTerminal =
-      area.stages.find((s) => !s.isTerminal) ?? area.stages[0];
-    if (firstNonTerminal) setStageId(firstNonTerminal.id);
+    const stage = firstNonTerminalStage(areas.find((a) => a.id === areaId));
+    if (stage) setStageId(stage.id);
   }, [areaId, areas]);
 
-  // Reset state when reopened.
+  // Reset state when reopened. stageId must be reset here too — the
+  // area-sync effect above only fires when areaId *changes*, so if the
+  // area is already areas[0] a previously picked stage would otherwise
+  // survive the reopen.
   useEffect(() => {
     if (open) {
       setName(defaultMatterName);
       setAreaId(areas[0]?.id ?? "");
+      setStageId(firstNonTerminalStage(areas[0])?.id ?? "");
       setFeeStructure("contingent");
     }
   }, [open, defaultMatterName, areas]);

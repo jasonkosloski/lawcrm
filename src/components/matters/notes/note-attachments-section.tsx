@@ -262,7 +262,10 @@ function TaskChip({
     e.stopPropagation();
     if (!confirm(`Delete "${task.title}"?`)) return;
     startTransition(async () => {
-      await deleteTask(task.id);
+      // Surface failures (e.g. "Task not found") — otherwise the chip
+      // just un-dims and silently stays. Same pattern as TimeEntryItem.
+      const res = await deleteTask(task.id);
+      if (!res.ok && res.error) alert(res.error);
     });
   };
 
@@ -328,7 +331,10 @@ function DeadlineChip({
     e.stopPropagation();
     if (!confirm(`Delete "${deadline.title}"?`)) return;
     startTransition(async () => {
-      await deleteDeadline(deadline.id);
+      // Surface failures — otherwise the chip just un-dims and
+      // silently stays. Same pattern as TimeEntryItem.
+      const res = await deleteDeadline(deadline.id);
+      if (!res.ok && res.error) alert(res.error);
     });
   };
 
@@ -382,20 +388,34 @@ const TIME_STATUS_LABEL: Record<string, string> = {
 
 /** Aggregate hours per user, sorted by hours desc. Drives the
  *  collapsed-summary line so the user knows who logged how much
- *  without expanding the full list. */
-function aggregateByUser(
+ *  without expanding the full list.
+ *
+ *  Identity caveat: NoteAttachedTimeEntry carries no userId, so we
+ *  key by name+initials. Initials alone would merge two distinct
+ *  "JS" users into one row under the first user's name; with the
+ *  composite key, rows only merge when name AND initials match —
+ *  i.e. when the displayed attribution is identical anyway. The
+ *  real fix is a userId on the query type; switch the key to it
+ *  if/when that lands.
+ *
+ *  Exported for tests. */
+export function aggregateByUser(
   entries: NoteAttachedTimeEntry[]
-): Array<{ initials: string; name: string; hours: number }> {
+): Array<{ key: string; initials: string; name: string; hours: number }> {
   const byUser = new Map<
     string,
-    { initials: string; name: string; hours: number }
+    { key: string; initials: string; name: string; hours: number }
   >();
   for (const e of entries) {
-    const existing = byUser.get(e.userInitials);
+    // NUL separator: unlike a space it can't appear in a name,
+    // so "Jo hn"+"X" and "Jo"+"hn X" can't collide into one key.
+    const key = `${e.userName}\u0000${e.userInitials}`;
+    const existing = byUser.get(key);
     if (existing) {
       existing.hours += e.hours;
     } else {
-      byUser.set(e.userInitials, {
+      byUser.set(key, {
+        key,
         initials: e.userInitials,
         name: e.userName,
         hours: e.hours,
@@ -457,7 +477,7 @@ function TimeEntriesGroup({
             <span className="text-2xs font-mono text-ink-4 truncate">
               ·{" "}
               {byUser.map((u, i) => (
-                <span key={u.initials}>
+                <span key={u.key}>
                   {i > 0 && " · "}
                   <span title={u.name}>
                     {u.initials} {u.hours.toFixed(1)}h

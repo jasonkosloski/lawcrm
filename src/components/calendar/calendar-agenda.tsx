@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { EventLink } from "./event-link";
 import {
   dateKeyInTz,
+  formatDate,
   instantInTz} from "@/lib/format-date";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import {
@@ -137,7 +138,7 @@ export async function CalendarAgenda() {
                 <ul className="flex flex-col">
                   {group.items.map((item) =>
                     item.kind === "event" ? (
-                      <AgendaEvent key={item.id} event={item} />
+                      <AgendaEvent key={item.id} event={item} userTz={userTz} />
                     ) : (
                       <AgendaDeadline key={item.id} deadline={item} />
                     )
@@ -154,10 +155,37 @@ export async function CalendarAgenda() {
 
 // ── Row components ───────────────────────────────────────────────────────
 
-function AgendaEvent({ event }: { event: CalendarEventRow }) {
-  const timeLabel = event.isAllDay
-    ? "All day"
-    : format(event.startTime, "h:mmaaa").toLowerCase();
+/**
+ * Compact time label for an agenda row: "All day" or "3:30pm".
+ *
+ * Must format in the USER's TZ — the day headings above the rows are
+ * bucketed via `dateKeyInTz(…, userTz)`, so a server-local format here
+ * (UTC in production) would show a time shifted by the user's UTC
+ * offset under an otherwise-correct "Today" heading. The lowercase /
+ * no-space compaction keeps the label inside the rail's fixed w-12
+ * time column.
+ *
+ * Exported for tests.
+ */
+export function agendaTimeLabel(
+  startTime: Date,
+  isAllDay: boolean,
+  userTz: string
+): string {
+  if (isAllDay) return "All day";
+  // `formatDate` returns "3:30 PM" (Intl may use a narrow no-break
+  // space before the dayperiod — `\s` matches it).
+  return formatDate(startTime, "time", userTz).toLowerCase().replace(/\s+/g, "");
+}
+
+function AgendaEvent({
+  event,
+  userTz,
+}: {
+  event: CalendarEventRow;
+  userTz: string;
+}) {
+  const timeLabel = agendaTimeLabel(event.startTime, event.isAllDay, userTz);
   return (
     <li>
       <EventLink eventId={event.id} className="block">

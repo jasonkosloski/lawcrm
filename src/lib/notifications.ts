@@ -88,9 +88,11 @@ export async function createNotification(
 /**
  * Fan out a notification to multiple recipients. Used by triggers
  * like "settlement step approved" where every matter team member
- * with the right role should hear about it. Skips duplicates
- * (e.g. the actor themselves) by default — pass `includeActor` to
- * override.
+ * with the right role should hear about it. Duplicate recipient
+ * ids are collapsed to one row each — but this helper doesn't know
+ * who the acting user is, so callers must filter the actor out of
+ * `recipients` themselves (see the payment fan-out in
+ * `src/app/actions/billing.ts`) unless self-notifying is intended.
  */
 export async function createNotifications(
   recipients: readonly string[],

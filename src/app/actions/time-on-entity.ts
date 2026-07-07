@@ -5,6 +5,10 @@
  * scoped to a Task / Deadline parent. Resolves the parent's
  * matter, refuses if the parent is missing, sets the appropriate
  * FK so the entry's "From task" / "From deadline" chip renders.
+ *
+ * Auth: every action here gates on `time_entries.create` — same
+ * key as the sibling create paths (time-entries.ts, captures.ts),
+ * so denying that permission closes ALL time-logging entry points.
  */
 
 "use server";
@@ -13,6 +17,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import type { NoteAttachmentFormState } from "@/lib/note-attachment-form";
 
@@ -46,6 +51,7 @@ export async function addTimeEntryToTask(
   _prev: NoteAttachmentFormState,
   formData: FormData
 ): Promise<NoteAttachmentFormState> {
+  await requirePermission("time_entries.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = timeSchema.safeParse(raw);
   if (!parsed.success) {
@@ -101,6 +107,7 @@ export async function addTimeEntryToDeadline(
   _prev: NoteAttachmentFormState,
   formData: FormData
 ): Promise<NoteAttachmentFormState> {
+  await requirePermission("time_entries.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = timeSchema.safeParse(raw);
   if (!parsed.success) {
@@ -153,6 +160,7 @@ export async function addTimeEntryToEmailMessage(
   _prev: NoteAttachmentFormState,
   formData: FormData
 ): Promise<NoteAttachmentFormState> {
+  await requirePermission("time_entries.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = timeSchema.safeParse(raw);
   if (!parsed.success) {
@@ -214,6 +222,7 @@ export async function addTimeEntryToMessengerItem(
   _prev: NoteAttachmentFormState,
   formData: FormData
 ): Promise<NoteAttachmentFormState> {
+  await requirePermission("time_entries.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = timeSchema.safeParse(raw);
   if (!parsed.success) {

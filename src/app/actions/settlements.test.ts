@@ -7,7 +7,8 @@
  *   - setApprovalStepStatus auto-promotes the settlement to
  *     "approved" once every step approved; refuses on
  *     disbursed/closed.
- *   - addSettlementLien refuses on disbursed/closed settlements.
+ *   - addSettlementLien / updateSettlementLien refuse on
+ *     disbursed/closed settlements.
  *
  * Auth + permission gates are module-mocked so the tests focus
  * on the action's business logic. Permission semantics are
@@ -30,6 +31,7 @@ import { prisma } from "@/lib/prisma";
 import {
   addSettlementLien,
   setApprovalStepStatus,
+  updateSettlementLien,
   upsertSettlement,
 } from "@/app/actions/settlements";
 import { settlementInitialState } from "@/lib/settlement-constants";
@@ -298,6 +300,74 @@ describe("addSettlementLien — disbursed/closed gating", () => {
     expect(liens).toHaveLength(1);
     expect(liens[0]!.lienholder).toBe("Denver Health");
     expect(liens[0]!.originalAmount.toNumber()).toBe(12345.67);
+  });
+});
+
+describe("updateSettlementLien — disbursed/closed gating", () => {
+  /** Seed a pending settlement with one lien; return both ids. */
+  const seedSettlementWithLien = async () => {
+    await upsertSettlement(
+      matterId,
+      settlementInitialState,
+      buildUpsertForm({ gross: "100000" })
+    );
+    const s = await prisma.settlement.findFirstOrThrow({ where: { matterId } });
+    const lien = await prisma.settlementLien.create({
+      data: {
+        settlementId: s.id,
+        lienholder: "Denver Health",
+        lienholderType: "hospital",
+        originalAmount: "5000",
+      },
+    });
+    return { settlementId: s.id, lienId: lien.id };
+  };
+
+  const buildLienUpdateForm = (negotiated: string, status = "signed") => {
+    const fd = new FormData();
+    fd.set("negotiatedAmount", negotiated);
+    fd.set("status", status);
+    return fd;
+  };
+
+  test("refuses when the settlement is disbursed — waterfall inputs stay frozen", async () => {
+    const { settlementId, lienId } = await seedSettlementWithLien();
+    await prisma.settlement.update({
+      where: { id: settlementId },
+      data: { status: "disbursed" },
+    });
+
+    const res = await updateSettlementLien(
+      lienId,
+      settlementInitialState,
+      buildLienUpdateForm("2500")
+    );
+    expect(res.status).toBe("error");
+    expect(res.error).toMatch(/disbursed|closed/i);
+
+    // The row must be untouched — no negotiated amount, no status flip.
+    const row = await prisma.settlementLien.findUniqueOrThrow({
+      where: { id: lienId },
+    });
+    expect(row.negotiatedAmount).toBeNull();
+    expect(row.status).toBe("pending");
+  });
+
+  test("succeeds on a pending settlement + persists negotiated amount", async () => {
+    const { lienId } = await seedSettlementWithLien();
+
+    const res = await updateSettlementLien(
+      lienId,
+      settlementInitialState,
+      buildLienUpdateForm("2500")
+    );
+    expect(res.status).toBe("ok");
+
+    const row = await prisma.settlementLien.findUniqueOrThrow({
+      where: { id: lienId },
+    });
+    expect(row.negotiatedAmount!.toNumber()).toBe(2500);
+    expect(row.status).toBe("signed");
   });
 });
 

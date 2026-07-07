@@ -25,6 +25,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
+  dateKeyInTz,
   formatDate,
   formatDayBucket} from "@/lib/format-date";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
@@ -139,8 +140,10 @@ export default async function MatterTimelinePage({
 
   // Group rows by day so the timeline reads like a journal —
   // one date heading then the events under it. Headers reset on
-  // each new local day.
-  const groups = groupByDay(rows);
+  // each new day in the USER's time zone — the same zone the
+  // per-row timestamps render in, so headers and rows can't
+  // disagree when the server runs on UTC.
+  const groups = groupByDay(rows, tz);
 
   return (
     <div className="p-5 max-w-3xl flex flex-col gap-4">
@@ -254,28 +257,33 @@ export default async function MatterTimelinePage({
   );
 }
 
-/** Bucket rows into local-day groups for the journal-style header.
- *  "Today" / "Yesterday" labels for the first two; absolute date
- *  for everything older. Generic over the row shape so the
- *  caller's full ActivityRow type passes through unchanged. */
-function groupByDay<T extends { id: string; timestamp: Date }>(
-  rows: T[]
+/** Bucket rows into day groups (in the user's TZ) for the
+ *  journal-style header. "Today" / "Yesterday" labels for the
+ *  first two; absolute date for everything older. Days must be
+ *  the USER's calendar days — server-local `setHours(0,0,0,0)`
+ *  would bucket a 7 PM Mountain event under the next UTC day,
+ *  contradicting the TZ-anchored timestamp rendered on the row.
+ *  Generic over the row shape so the caller's full ActivityRow
+ *  type passes through unchanged. */
+export function groupByDay<T extends { id: string; timestamp: Date }>(
+  rows: T[],
+  tz: string,
+  now: Date = new Date()
 ): Array<{
   key: string;
   label: string;
   items: T[];
 }> {
-  const now = new Date();
-
   const groups = new Map<string, { label: string; items: T[] }>();
   for (const row of rows) {
-    const d = new Date(row.timestamp);
-    d.setHours(0, 0, 0, 0);
-    const key = d.toISOString().slice(0, 10);
+    const key = dateKeyInTz(row.timestamp, tz);
     if (!groups.has(key)) {
       // Centralized day-bucket labeling — same logic the firm
-      // activity page and other journal-style views use.
-      const label = formatDayBucket(d, { now });
+      // activity page and other journal-style views use. Label
+      // from the original instant (not a truncated Date) so the
+      // TZ-aware bucketing inside formatDayBucket sees the real
+      // timestamp.
+      const label = formatDayBucket(row.timestamp, { now, tz });
       groups.set(key, { label, items: [] });
     }
     groups.get(key)!.items.push(row);

@@ -14,9 +14,12 @@
  *     have to ask. This keeps "I uploaded the wrong PDF" recoverable
  *     without making delete a free-for-all.
  *
- * Multi-firm: matter-by-id lookup is scoped to the current user's
- * firm, so even if a userId from one firm got a foreign matterId
- * (URL tampering once we go multi-tenant) the action refuses.
+ * Multi-firm: the matter lookup is existence-by-id only — it is
+ * NOT firm-scoped, because Matter has no firmId column yet
+ * (single-tenant: every Matter lives in the seed firm, so the
+ * check can't fail cross-firm today). Before enabling
+ * multi-tenancy this MUST be scoped or a foreign matterId would
+ * be accepted — see the TODO inside `uploadDocument`.
  */
 
 "use server";

@@ -8,12 +8,21 @@
  * intent + revalidates the surfaces that surface it (the thread
  * reader chip, the thread list row chip, and the dashboard "Follow
  * up today" card).
+ *
+ * Access: follow-up is part of mailbox access (like read/star/file),
+ * so there's no separate permission key. Email threads are scoped to
+ * the caller's own connected mailboxes via `account: { userId }` —
+ * the same filter the thread readers use (getThreadById). Messenger
+ * lines can be firm-shared (MessengerAccount.userId is nullable) and
+ * the messenger readers are firm-wide, so there the session check is
+ * the gate.
  */
 
 "use server";
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUserId } from "@/lib/current-user";
 
 export async function setEmailThreadFollowUp(
   threadId: string,
@@ -22,13 +31,16 @@ export async function setEmailThreadFollowUp(
    *  doesn't expire at midnight that morning. */
   dateString: string | null
 ): Promise<{ ok: boolean; error?: string }> {
+  const userId = await getCurrentUserId();
   const followUpAt = parseEndOfDay(dateString);
   if (dateString && !followUpAt) {
     return { ok: false, error: "Invalid date" };
   }
 
-  const thread = await prisma.emailThread.findUnique({
-    where: { id: threadId },
+  // Scoped to the caller's own mailboxes — a thread in someone
+  // else's account is indistinguishable from a nonexistent one.
+  const thread = await prisma.emailThread.findFirst({
+    where: { id: threadId, account: { userId } },
     select: { matterId: true },
   });
   if (!thread) return { ok: false, error: "Thread not found" };
@@ -50,6 +62,9 @@ export async function setMessengerThreadFollowUp(
   threadId: string,
   dateString: string | null
 ): Promise<{ ok: boolean; error?: string }> {
+  // Messenger inbox is firm-wide (see module header) — session
+  // check only, no per-account scoping to mirror.
+  await getCurrentUserId();
   const followUpAt = parseEndOfDay(dateString);
   if (dateString && !followUpAt) {
     return { ok: false, error: "Invalid date" };

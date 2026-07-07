@@ -86,6 +86,26 @@ export async function deleteDeadline(
 
 // ── Update ──────────────────────────────────────────────────────────────
 
+/** Parse the form's dueDate field (`YYYY-MM-DD` from `<input type="date">`)
+ *  into local midnight of that day.
+ *
+ *  We don't use `new Date(value)` directly because that parses ISO
+ *  date-only strings as UTC midnight, which shifts the day for any
+ *  user west of UTC — and since the edit dialog reads the value back
+ *  with local getters, each save would drift the deadline a day
+ *  earlier. Mirrors parseEventBoundary (calendar-events.ts) and
+ *  parseEndOfDay (follow-ups.ts).
+ *
+ *  Returns null when the value can't be parsed (caller surfaces
+ *  the field error). */
+function parseLocalDueDate(value: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!m) return null;
+  const [, y, mo, d] = m;
+  const date = new Date(Number(y), Number(mo) - 1, Number(d), 0, 0, 0, 0);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 const updateDeadlineSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(200),
   dueDate: z.string().min(1, "Due date is required"),
@@ -110,6 +130,14 @@ export async function updateDeadline(
     };
   }
 
+  const dueDate = parseLocalDueDate(parsed.data.dueDate);
+  if (!dueDate) {
+    return {
+      status: "error",
+      errors: { dueDate: ["Invalid due date"] },
+    };
+  }
+
   const deadline = await prisma.deadline.findUnique({
     where: { id: deadlineId },
     select: { matterId: true, status: true },
@@ -129,7 +157,7 @@ export async function updateDeadline(
     where: { id: deadlineId },
     data: {
       title: parsed.data.title,
-      dueDate: new Date(parsed.data.dueDate),
+      dueDate,
       kind: parsed.data.kind,
       sourceRef: parsed.data.sourceRef || null,
       description: parsed.data.description || null,

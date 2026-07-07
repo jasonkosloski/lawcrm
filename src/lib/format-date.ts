@@ -136,14 +136,40 @@ export function formatDayBucket(
   const now = options.now ?? new Date();
   const tz = options.tz ?? undefined;
 
-  const startOfDay = (date: Date): number => {
-    const c = new Date(date);
-    c.setHours(0, 0, 0, 0);
-    return c.getTime();
-  };
-  const today = startOfDay(now);
-  const target = startOfDay(d);
-  const diffDays = Math.round((today - target) / (24 * 60 * 60 * 1000));
+  // Whole-calendar-day distance between `now` and the target. When a
+  // TZ is supplied the bucket must follow the USER's calendar days —
+  // server-local midnight (UTC in production) would call a 10pm-local
+  // entry "Today" for hours after the user's midnight, and could
+  // disagree with the TZ-anchored label rendering below.
+  let diffDays: number;
+  if (tz) {
+    // Same noon-UTC trick as the TZ-arithmetic section below: turn
+    // each instant into its YYYY-MM-DD key in the user's TZ, pin the
+    // key at noon UTC, and subtract — DST-proof whole days.
+    const noonUtcOfKey = (key: string): number => {
+      const [y, m, dd] = key.split("-").map(Number) as [
+        number,
+        number,
+        number,
+      ];
+      return Date.UTC(y, m - 1, dd, 12);
+    };
+    diffDays = Math.round(
+      (noonUtcOfKey(dateKeyInTz(now, tz)) - noonUtcOfKey(dateKeyInTz(d, tz))) /
+        (24 * 60 * 60 * 1000)
+    );
+  } else {
+    // No TZ threaded in yet — fall back to the runtime's local days
+    // (matches the file-header migration story for legacy callers).
+    const startOfDay = (date: Date): number => {
+      const c = new Date(date);
+      c.setHours(0, 0, 0, 0);
+      return c.getTime();
+    };
+    diffDays = Math.round(
+      (startOfDay(now) - startOfDay(d)) / (24 * 60 * 60 * 1000)
+    );
+  }
 
   if (diffDays === 0) return "Today";
   if (diffDays === 1) return "Yesterday";

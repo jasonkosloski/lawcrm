@@ -266,7 +266,41 @@ describe("updateTask — happy path", () => {
     expect(row!.description).toBe("More detail");
     expect(row!.priority).toBe("high");
     expect(row!.status).toBe("in_progress");
-    expect(row!.dueDate?.toISOString().slice(0, 10)).toBe("2026-08-01");
+    // Assert via local getters — the edit dialog reads dueDate back
+    // the same way, so this is the round-trip that must hold.
+    expect(row!.dueDate!.getFullYear()).toBe(2026);
+    expect(row!.dueDate!.getMonth()).toBe(7); // August (0-based)
+    expect(row!.dueDate!.getDate()).toBe(1);
+  });
+
+  test("dueDate is stored as LOCAL midnight, not UTC (regression)", async () => {
+    // `new Date("YYYY-MM-DD")` parses date-only ISO as UTC midnight;
+    // local-time getters then read the previous day anywhere west of
+    // UTC, and each unmodified save drifted the due date a day
+    // earlier. Pins the parseDueDate fix.
+    const id = await seedTask();
+    const fd = new FormData();
+    fd.set("title", "ok");
+    fd.set("dueDate", "2026-08-01");
+    fd.set("priority", "normal");
+    fd.set("status", "open");
+    await updateTask(id, updateTaskInitialState, fd);
+    const row = await prisma.task.findUnique({ where: { id } });
+    expect(row!.dueDate!.getTime()).toBe(new Date(2026, 7, 1).getTime());
+    expect(row!.dueDate!.getHours()).toBe(0);
+  });
+
+  test("malformed dueDate string is stored as null, not Invalid Date", async () => {
+    const id = await seedTask();
+    const fd = new FormData();
+    fd.set("title", "ok");
+    fd.set("dueDate", "08/01/2026"); // not YYYY-MM-DD
+    fd.set("priority", "normal");
+    fd.set("status", "open");
+    const res = await updateTask(id, updateTaskInitialState, fd);
+    expect(res.status).toBe("ok");
+    const row = await prisma.task.findUnique({ where: { id } });
+    expect(row!.dueDate).toBeNull();
   });
 
   test("normalizes empty dueDate / description to null", async () => {

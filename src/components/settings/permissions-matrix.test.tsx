@@ -176,6 +176,35 @@ describe("PermissionsMatrix — toggling cells", () => {
     resolveAction({ ok: true });
   });
 
+  test("clicking the cell padding mid-flight doesn't fire a second toggle", async () => {
+    // Hang the action so the first toggle stays in flight.
+    let resolveAction: (value: { ok: boolean }) => void = () => {};
+    mockedAction.mockImplementation(
+      () =>
+        new Promise<{ ok: boolean }>((resolve) => {
+          resolveAction = resolve;
+        })
+    );
+    const user = userEvent.setup();
+    render(<PermissionsMatrix roles={ROLES} grants={{}} canEdit />);
+
+    const cell = screen.getByRole("checkbox", {
+      name: `Manage team members for Billing manager`,
+    });
+    await user.click(cell);
+    expect(mockedAction).toHaveBeenCalledTimes(1);
+
+    // The disabled attribute blocks the checkbox itself, but the
+    // wrapping <td> has its own onClick — clicking the padding
+    // around the box must be a no-op while the save is pending.
+    const td = cell.closest("td");
+    expect(td).not.toBeNull();
+    await user.click(td!);
+    expect(mockedAction).toHaveBeenCalledTimes(1);
+
+    resolveAction({ ok: true });
+  });
+
   test("granting one cell doesn't flip another", async () => {
     const user = userEvent.setup();
     render(<PermissionsMatrix roles={ROLES} grants={{}} canEdit />);

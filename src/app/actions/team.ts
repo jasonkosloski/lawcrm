@@ -9,7 +9,9 @@
  *   1. "At least one Admin" — a firm without an active user holding
  *      the Admin role can't change its own settings, invite,
  *      deactivate, or reset passwords. Any write that would leave
- *      `countActiveAdmins() === 0` is rejected.
+ *      zero active admins is rejected — and the count is re-checked
+ *      INSIDE a Serializable transaction so two concurrent demotions
+ *      can't both slip past a stale pre-check (check-then-act).
  *   2. "default role is always assigned" — every active user holds
  *      the firm's "default" role. The invite path adds it; the
  *      update path silently re-adds it if a form somehow drops it.
@@ -24,6 +26,12 @@
  * we read them as an array, normalize, intersect with the firm's
  * actual roles (defense against URL-tampering / stale options), and
  * replace-all the join rows.
+ *
+ * Every successful mutation writes an activity-log entry (see
+ * roles.ts for the same treatment of permission flips) — invites,
+ * role/status changes, and password resets are governance actions a
+ * firm must be able to retrace. matterId is always null: firm scope,
+ * not matter scope.
  */
 
 "use server";
@@ -32,15 +40,16 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import * as argon2 from "argon2";
 import { randomBytes } from "node:crypto";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { logActivity } from "@/lib/activity-log";
 import {
   ADMIN_ROLE_NAME,
   DEFAULT_ROLE_NAME,
   getCurrentFirm,
 } from "@/lib/firm";
 import { requirePermission } from "@/lib/permission-check";
-import { countActiveAdmins } from "@/lib/queries/team";
 import {
   teamInitialState,
   type TeamFormState,
@@ -63,6 +72,17 @@ function generateTempPassword(): string {
 
 async function hashPassword(plain: string): Promise<string> {
   return argon2.hash(plain, { type: argon2.argon2id });
+}
+
+/** Thrown inside the update transaction when the in-transaction
+ *  admin recount says the write would leave zero active admins.
+ *  Sole purpose is to roll the transaction back and be mapped to
+ *  the friendly field error by the caller — never escapes the
+ *  action. */
+class LastActiveAdminError extends Error {
+  constructor() {
+    super("would leave the firm with no active Admin");
+  }
 }
 
 /** Pull every `roleId` value from the form data — multi-select
@@ -184,6 +204,20 @@ export async function inviteFirmMember(
     });
   });
 
+  // Audit trail — an invite mints credentials and grants roles in
+  // one shot; a firm needs to be able to retrace who added whom
+  // with what access. The temp password is deliberately NOT logged.
+  const grantedRoleNames = [...validRoleIds]
+    .map((id) => roleMap.byId.get(id)?.name ?? id)
+    .sort();
+  await logActivity({
+    matterId: null,
+    userId: currentUserId,
+    type: "filing",
+    title: `Invited ${parsed.data.name} to the firm`,
+    detail: `${parsed.data.email} — roles: ${grantedRoleNames.join(", ")}`,
+  });
+
   revalidatePath("/settings/team");
   revalidatePath("/settings/firm"); // member count + admin list
   revalidatePath("/settings/roles"); // member counts
@@ -290,9 +324,60 @@ export async function updateFirmMember(
   // inactive while being the last admin is rejected.
   const wasAdminActive = wasAdmin && target.isActive;
   const willBeAdminActive = willBeAdmin && newIsActive;
-  if (wasAdminActive && !willBeAdminActive) {
-    const remaining = await countActiveAdmins();
-    if (remaining <= 1) {
+
+  try {
+    await prisma.$transaction(
+      async (tx) => {
+        // The admin count MUST be read inside the transaction, at
+        // Serializable, or the invariant is a check-then-act race:
+        // two requests each demoting one of the firm's two remaining
+        // admins would both observe "2 remaining" against a stale
+        // snapshot, both pass, and the firm would end with zero
+        // active admins — unrecoverable, since every admin-gated
+        // action then fails. Serializable makes the count + role
+        // rewrite atomic; Postgres aborts one of two overlapping
+        // demotions with a serialization failure (P2034) instead.
+        if (wasAdminActive && !willBeAdminActive) {
+          const remaining = await tx.user.count({
+            where: {
+              firmId: firm.id,
+              isActive: true,
+              userRoles: { some: { role: { name: ADMIN_ROLE_NAME } } },
+            },
+          });
+          // `remaining` still includes the target — the demotion is
+          // written below, in this same transaction.
+          if (remaining <= 1) throw new LastActiveAdminError();
+        }
+
+        await tx.user.update({
+          where: { id: target.id },
+          data: {
+            name: parsed.data.name,
+            initials: parsed.data.initials.toUpperCase(),
+            jobTitle: parsed.data.jobTitle,
+            phone: parsed.data.phone || null,
+            barNumber: parsed.data.barNumber || null,
+            isActive: newIsActive,
+          },
+        });
+        // Replace-all on roles. Cheap (≤ a handful of rows per user) and
+        // matches the mental model of the multi-select form.
+        await tx.userRole.deleteMany({ where: { userId: target.id } });
+        if (validRoleIds.size > 0) {
+          await tx.userRole.createMany({
+            data: [...validRoleIds].map((roleId) => ({
+              userId: target.id,
+              roleId,
+              assignedById: currentUserId,
+            })),
+          });
+        }
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
+  } catch (err) {
+    if (err instanceof LastActiveAdminError) {
       return {
         status: "error",
         errors: {
@@ -303,32 +388,35 @@ export async function updateFirmMember(
         values: raw,
       };
     }
+    // P2034 = serialization failure — a concurrent team edit raced
+    // this one. Rare enough that "try again" beats an auto-retry
+    // loop that would re-run the invariant check anyway.
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === "P2034"
+    ) {
+      return {
+        status: "error",
+        errors: {
+          _form: ["Another team change happened at the same time — try again."],
+        },
+        values: raw,
+      };
+    }
+    throw err;
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.user.update({
-      where: { id: target.id },
-      data: {
-        name: parsed.data.name,
-        initials: parsed.data.initials.toUpperCase(),
-        jobTitle: parsed.data.jobTitle,
-        phone: parsed.data.phone || null,
-        barNumber: parsed.data.barNumber || null,
-        isActive: newIsActive,
-      },
-    });
-    // Replace-all on roles. Cheap (≤ a handful of rows per user) and
-    // matches the mental model of the multi-select form.
-    await tx.userRole.deleteMany({ where: { userId: target.id } });
-    if (validRoleIds.size > 0) {
-      await tx.userRole.createMany({
-        data: [...validRoleIds].map((roleId) => ({
-          userId: target.id,
-          roleId,
-          assignedById: currentUserId,
-        })),
-      });
-    }
+  // Audit trail — role grants/revocations and (de)activation are at
+  // least as sensitive as the permission-matrix flips roles.ts logs.
+  const roleNames = [...validRoleIds]
+    .map((id) => roleMap.byId.get(id)?.name ?? id)
+    .sort();
+  await logActivity({
+    matterId: null,
+    userId: currentUserId,
+    type: "filing",
+    title: `Updated team member ${parsed.data.name}`,
+    detail: `Roles: ${roleNames.join(", ")} — ${newIsActive ? "active" : "deactivated"}`,
   });
 
   revalidatePath("/settings/team");
@@ -348,7 +436,7 @@ export async function resetFirmMemberPassword(
   const firm = await getCurrentFirm();
   const target = await prisma.user.findFirst({
     where: { id: userId, firmId: firm.id },
-    select: { id: true },
+    select: { id: true, name: true },
   });
   if (!target) {
     return {
@@ -362,6 +450,18 @@ export async function resetFirmMemberPassword(
   await prisma.user.update({
     where: { id: target.id },
     data: { passwordHash },
+  });
+
+  // Audit trail — this replaces someone else's credentials and hands
+  // the temp password to the caller, which is account-takeover-shaped
+  // if abused. "Who reset whose password when" must be answerable;
+  // the temp password itself is deliberately NOT logged.
+  const actorId = await getCurrentUserId();
+  await logActivity({
+    matterId: null,
+    userId: actorId,
+    type: "filing",
+    title: `Reset password for ${target.name}`,
   });
 
   revalidatePath("/settings/team");

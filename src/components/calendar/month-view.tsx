@@ -7,11 +7,10 @@
  */
 
 import Link from "next/link";
-import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { EventLink } from "./event-link";
 import { WEEK_STARTS_ON } from "@/lib/calendar-utils";
-import { dateKeyInTz } from "@/lib/format-date";
+import { dateKeyInTz, formatDate } from "@/lib/format-date";
 import type {
   CalendarItem,
   CalendarEventRow,
@@ -131,7 +130,7 @@ export function MonthView({
               <div className="flex flex-col gap-0.5 overflow-hidden">
                 {visible.map((item) =>
                   item.kind === "event" ? (
-                    <EventPill key={item.id} event={item} />
+                    <EventPill key={item.id} event={item} userTz={userTz} />
                   ) : (
                     <DeadlinePill key={item.id} deadline={item} />
                   )
@@ -150,7 +149,32 @@ export function MonthView({
   );
 }
 
-function EventPill({ event }: { event: CalendarEventRow }) {
+/**
+ * Compact hour label for a timed pill — "9am", "12pm". Minutes are
+ * deliberately dropped to keep the pill on one line; the tooltip
+ * carries the full time.
+ *
+ * Must be anchored to the *user's* TZ: this renders on the server,
+ * where the runtime's local zone is UTC in production, so a
+ * TZ-naive formatter (date-fns `format`) would label a 9am Denver
+ * event "3pm" even though the bucketing above already placed it in
+ * the right day cell. Exported for tests.
+ */
+export function compactHourInTz(d: Date, tz: string): string {
+  return d
+    .toLocaleString("en-US", { hour: "numeric", timeZone: tz })
+    .replace(/\s+/g, "") // "9 AM" → "9AM" (ICU may emit U+202F)
+    .toLowerCase();
+}
+
+function EventPill({
+  event,
+  userTz,
+}: {
+  event: CalendarEventRow;
+  /** User's IANA TZ — time labels must render in it, not the server's. */
+  userTz: string;
+}) {
   // All-day pills get a filled background and two-line layout
   // (title + matter name) for at-a-glance scoping; timed pills
   // keep the single-line "9am — Title" treatment with a hairline
@@ -182,10 +206,10 @@ function EventPill({ event }: { event: CalendarEventRow }) {
       <div
         className="px-1 py-0.5 rounded-sm text-3xs leading-tight flex items-center gap-1 overflow-hidden hover:bg-brand-tint cursor-pointer"
         style={{ borderLeft: `2px solid ${event.color}` }}
-        title={`${format(event.startTime, "h:mm a")} — ${event.title}${event.matterName ? ` · ${event.matterName}` : ""}`}
+        title={`${formatDate(event.startTime, "time", userTz)} — ${event.title}${event.matterName ? ` · ${event.matterName}` : ""}`}
       >
         <span className="font-mono text-ink-4 shrink-0">
-          {format(event.startTime, "ha").toLowerCase()}
+          {compactHourInTz(event.startTime, userTz)}
         </span>
         <span className="truncate text-ink">{event.title}</span>
       </div>

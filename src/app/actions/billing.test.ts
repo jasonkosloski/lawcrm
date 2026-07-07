@@ -1,9 +1,11 @@
 /**
  * Integration tests for the billing action layer.
  *
- * Covers `generateInvoiceFromWip` end-to-end against a real test
- * SQLite DB: seeds a matter with billable time + expenses, runs
- * the action, asserts the resulting invoice + linkage.
+ * Runs end-to-end against the real test Postgres (`:5433`): seeds a
+ * matter with billable time + expenses, runs the actions, asserts
+ * the resulting invoices + linkage. Postgres matters here — the
+ * concurrency tests below pin `FOR UPDATE` row-lock behavior and
+ * the transaction-abort-on-failed-INSERT retry semantics.
  *
  * Auth context (`getCurrentUserId`) is module-mocked to return a
  * fixture userId. `next/cache.revalidatePath` is a no-op stub —
@@ -31,7 +33,13 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import {
+  addTrustTransaction,
+  approveInvoice,
+  bundleAsInternalRecord,
+  deleteInvoice,
   generateInvoiceFromWip,
+  recordInvoicePayment,
+  sendInvoice,
   setInvoiceStatus,
   updateInvoiceLineItem,
 } from "@/app/actions/billing";
@@ -561,5 +569,336 @@ describe("setInvoiceStatus — void unlinks both buckets", () => {
 
     const ex = await prisma.expense.findFirst({ where: { matterId } });
     expect(ex?.invoiceId).toBeNull();
+  });
+});
+
+describe("updateInvoiceLineItem — rate validation", () => {
+  test("rejects a negative rate (client min='0' isn't enforced on the cell-edit path)", async () => {
+    const { timeEntryId } = await seedTimeEntry({
+      matterId,
+      userId,
+      hours: 2,
+      rate: 250,
+      amount: 500,
+    });
+    await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
+
+    const res = await updateInvoiceLineItem(
+      timeEntryId,
+      lineItemEditInitialState,
+      buildLineItemForm({ rate: "-250" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.rate?.length).toBeGreaterThan(0);
+
+    // The entry and the invoice subtotal are untouched.
+    const te = await prisma.timeEntry.findUnique({ where: { id: timeEntryId } });
+    expect(te!.rate?.toNumber()).toBe(250);
+    expect(te!.amount?.toNumber()).toBe(500);
+  });
+
+  test("rejects a zero rate", async () => {
+    const { timeEntryId } = await seedTimeEntry({
+      matterId,
+      userId,
+      amount: 500,
+    });
+    await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
+
+    const res = await updateInvoiceLineItem(
+      timeEntryId,
+      lineItemEditInitialState,
+      buildLineItemForm({ rate: "0" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.rate?.length).toBeGreaterThan(0);
+  });
+});
+
+// ── setInvoiceStatus — client paid/partial funnel ───────────────────────
+//
+// Client invoices must reach paid/partial ONLY through
+// recordInvoicePayment so every status flip is paired with a real
+// InvoicePayment row. setInvoiceStatus refuses the shortcut; the
+// internal-record "Mark recorded" flip (which has no AR) still works.
+
+describe("setInvoiceStatus — client paid/partial funnel", () => {
+  test.each(["paid", "partial"])(
+    "refuses sent → %s on a client invoice and leaves the row untouched",
+    async (next) => {
+      await seedTimeEntry({ matterId, userId, amount: 500 });
+      await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
+      const inv = await prisma.invoice.findFirstOrThrow({ where: { matterId } });
+      await prisma.invoice.update({
+        where: { id: inv.id },
+        data: { status: "sent" },
+      });
+
+      const res = await setInvoiceStatus(inv.id, next);
+      expect(res.ok).toBe(false);
+      expect(res.error).toMatch(/Record payment/i);
+
+      const after = await prisma.invoice.findUnique({ where: { id: inv.id } });
+      expect(after!.status).toBe("sent");
+      expect(after!.paidAmount.toNumber()).toBe(0);
+    }
+  );
+
+  test("internal-record draft → paid ('Mark recorded') still sets paidAmount", async () => {
+    const inv = await prisma.invoice.create({
+      data: {
+        invoiceNumber: "2026-800",
+        matterId,
+        kind: "internal_record",
+        issueDate: new Date(),
+        dueDate: new Date(),
+        subtotal: 500,
+        totalAmount: 500,
+        paidAmount: 0,
+        status: "draft",
+      },
+      select: { id: true },
+    });
+
+    const res = await setInvoiceStatus(inv.id, "paid");
+    expect(res.ok).toBe(true);
+
+    const after = await prisma.invoice.findUnique({ where: { id: inv.id } });
+    expect(after!.status).toBe("paid");
+    expect(after!.paidAmount.toNumber()).toBe(500);
+  });
+});
+
+// ── sendInvoice — trustAmount validation ────────────────────────────────
+
+const buildSendForm = (overrides: Partial<Record<string, string>> = {}) => {
+  const fd = new FormData();
+  fd.set("method", overrides.method ?? "email");
+  fd.set("recipient", overrides.recipient ?? "client@example.com");
+  if (overrides.applyTrust !== undefined) fd.set("applyTrust", overrides.applyTrust);
+  if (overrides.trustAmount !== undefined) fd.set("trustAmount", overrides.trustAmount);
+  return fd;
+};
+
+describe("sendInvoice — trustAmount validation", () => {
+  test("garbage trustAmount returns a field error, not a raw DecimalError", async () => {
+    const res = await sendInvoice(
+      "irrelevant",
+      billingInitialState,
+      buildSendForm({ applyTrust: "true", trustAmount: "abc" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.trustAmount?.length).toBeGreaterThan(0);
+  });
+
+  test("sub-cent trustAmount is rejected (no fractional cents in the trust ledger)", async () => {
+    const res = await sendInvoice(
+      "irrelevant",
+      billingInitialState,
+      buildSendForm({ applyTrust: "true", trustAmount: "5.999" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.trustAmount?.length).toBeGreaterThan(0);
+  });
+
+  test("'$1,234.56'-style trustAmount passes format validation", async () => {
+    // Invoice doesn't exist, so the action fails LATER with
+    // "Invoice not found." — proving the amount itself parsed.
+    const res = await sendInvoice(
+      "no-such-invoice",
+      billingInitialState,
+      buildSendForm({ applyTrust: "true", trustAmount: "$1,234.56" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.trustAmount).toBeUndefined();
+    expect(res.error).toMatch(/not found/i);
+  });
+});
+
+// ── Concurrency — row locks + out-of-transaction number retry ───────────
+
+const buildPaymentForm = (amount: string) => {
+  const fd = new FormData();
+  fd.set("amount", amount);
+  fd.set("source", "check");
+  return fd;
+};
+
+describe("billing concurrency", () => {
+  test("two concurrent payments can't overpay — the row lock serializes them", async () => {
+    const inv = await prisma.invoice.create({
+      data: {
+        invoiceNumber: "2026-900",
+        matterId,
+        issueDate: new Date(),
+        dueDate: new Date(),
+        subtotal: 100,
+        totalAmount: 100,
+        paidAmount: 0,
+        status: "sent",
+      },
+      select: { id: true },
+    });
+
+    // Both request the full balance. Without the FOR UPDATE lock
+    // both pass the balance check (READ COMMITTED snapshot) and the
+    // invoice ends up with two payment rows + a clobbered paidAmount.
+    const [a, b] = await Promise.all([
+      recordInvoicePayment(inv.id, billingInitialState, buildPaymentForm("100")),
+      recordInvoicePayment(inv.id, billingInitialState, buildPaymentForm("100")),
+    ]);
+    expect([a.status, b.status].sort()).toEqual(["error", "ok"]);
+
+    const after = await prisma.invoice.findUnique({ where: { id: inv.id } });
+    expect(after!.paidAmount.toNumber()).toBe(100);
+    expect(after!.status).toBe("paid");
+    const payments = await prisma.invoicePayment.count({
+      where: { invoiceId: inv.id },
+    });
+    expect(payments).toBe(1);
+  });
+
+  test("two concurrent trust disbursements can't overdraw the matter trust", async () => {
+    await prisma.matter.update({
+      where: { id: matterId },
+      data: { trustBalance: 100 },
+    });
+    const buildTrustForm = () => {
+      const fd = new FormData();
+      fd.set("type", "disbursement");
+      fd.set("amount", "100");
+      fd.set("description", "Concurrent disbursement");
+      return fd;
+    };
+
+    const [a, b] = await Promise.all([
+      addTrustTransaction(matterId, billingInitialState, buildTrustForm()),
+      addTrustTransaction(matterId, billingInitialState, buildTrustForm()),
+    ]);
+    expect([a.status, b.status].sort()).toEqual(["error", "ok"]);
+
+    const matter = await prisma.matter.findUnique({ where: { id: matterId } });
+    expect(matter!.trustBalance.toNumber()).toBe(0);
+    const txns = await prisma.trustTransaction.count({ where: { matterId } });
+    expect(txns).toBe(1);
+  });
+
+  test("concurrent generates survive an invoice-number collision (retry re-runs the transaction)", async () => {
+    // Two matters, each with WIP — both generates race to mint the
+    // same next number. The loser's INSERT aborts its transaction;
+    // the retry must re-run the WHOLE transaction to succeed (a
+    // retry inside the aborted one always fails on Postgres).
+    await seedTimeEntry({ matterId, userId, amount: 100 });
+    const area = await seedPracticeArea();
+    const other = await seedMatter({
+      practiceAreaId: area.areaId,
+      stageId: area.stageId,
+      leadUserId: userId,
+    });
+    await seedTimeEntry({ matterId: other.matterId, userId, amount: 200 });
+
+    const [r1, r2] = await Promise.all([
+      generateInvoiceFromWip(matterId, billingInitialState, new FormData()),
+      generateInvoiceFromWip(other.matterId, billingInitialState, new FormData()),
+    ]);
+    expect(r1.status).toBe("ok");
+    expect(r2.status).toBe("ok");
+
+    const numbers = (
+      await prisma.invoice.findMany({ select: { invoiceNumber: true } })
+    ).map((i) => i.invoiceNumber);
+    expect(numbers).toHaveLength(2);
+    expect(new Set(numbers).size).toBe(2);
+  });
+});
+
+// ── RBAC gates ──────────────────────────────────────────────────────────
+//
+// Every billing mutation must call requirePermission with its
+// catalog key BEFORE doing any work. The mock passes everyone, so
+// these assert the key wiring, not the deny path (permission-check
+// itself is covered by its own tests).
+
+describe("billing RBAC gates", () => {
+  const mockedRequirePermission = vi.mocked(requirePermission);
+
+  test("generateInvoiceFromWip gates on billing.generate_invoice", async () => {
+    await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
+    expect(mockedRequirePermission).toHaveBeenCalledWith(
+      "billing.generate_invoice"
+    );
+  });
+
+  test("bundleAsInternalRecord gates on billing.generate_invoice", async () => {
+    await bundleAsInternalRecord(matterId, billingInitialState, new FormData());
+    expect(mockedRequirePermission).toHaveBeenCalledWith(
+      "billing.generate_invoice"
+    );
+  });
+
+  test.each([
+    ["approved", "billing.approve_invoice"],
+    ["sent", "billing.send_invoice"],
+    ["void", "billing.void_invoice"],
+    ["paid", "billing.approve_invoice"],
+    ["partial", "billing.record_payment"],
+  ])("setInvoiceStatus(→ %s) gates on %s", async (next, key) => {
+    await setInvoiceStatus("no-such-invoice", next);
+    expect(mockedRequirePermission).toHaveBeenCalledWith(key);
+  });
+
+  test("setInvoiceStatus refuses an unknown status without gating", async () => {
+    const res = await setInvoiceStatus("no-such-invoice", "banana");
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/unknown/i);
+    expect(mockedRequirePermission).not.toHaveBeenCalled();
+  });
+
+  test("deleteInvoice gates on billing.delete_draft", async () => {
+    await deleteInvoice("no-such-invoice");
+    expect(mockedRequirePermission).toHaveBeenCalledWith("billing.delete_draft");
+  });
+
+  test("approveInvoice gates on billing.approve_invoice", async () => {
+    await approveInvoice("no-such-invoice");
+    expect(mockedRequirePermission).toHaveBeenCalledWith(
+      "billing.approve_invoice"
+    );
+  });
+
+  test("addTrustTransaction gates on trust.record_transaction", async () => {
+    await addTrustTransaction(matterId, billingInitialState, new FormData());
+    expect(mockedRequirePermission).toHaveBeenCalledWith(
+      "trust.record_transaction"
+    );
+  });
+
+  test("recordInvoicePayment gates on billing.record_payment", async () => {
+    await recordInvoicePayment(
+      "no-such-invoice",
+      billingInitialState,
+      new FormData()
+    );
+    expect(mockedRequirePermission).toHaveBeenCalledWith(
+      "billing.record_payment"
+    );
+  });
+
+  test("sendInvoice gates on billing.send_invoice (no trust leg)", async () => {
+    await sendInvoice("no-such-invoice", billingInitialState, buildSendForm());
+    expect(mockedRequirePermission).toHaveBeenCalledWith("billing.send_invoice");
+    expect(mockedRequirePermission).not.toHaveBeenCalledWith(
+      "billing.apply_trust"
+    );
+  });
+
+  test("sendInvoice stacks billing.apply_trust when applyTrust is set", async () => {
+    await sendInvoice(
+      "no-such-invoice",
+      billingInitialState,
+      buildSendForm({ applyTrust: "true", trustAmount: "10" })
+    );
+    expect(mockedRequirePermission).toHaveBeenCalledWith("billing.send_invoice");
+    expect(mockedRequirePermission).toHaveBeenCalledWith("billing.apply_trust");
   });
 });

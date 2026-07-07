@@ -42,6 +42,7 @@ vi.mock("@/lib/current-user", () => ({
 import { prisma } from "@/lib/prisma";
 import {
   createCalendarEvent,
+  deleteCalendarEvent,
   moveCalendarEvent,
   updateCalendarEvent,
 } from "@/app/actions/calendar-events";
@@ -476,7 +477,7 @@ describe("updateCalendarEvent — typed attendee picker", () => {
     expect(rows[0]!.userId).toBeNull();
   });
 
-  test("kind=user with a stale userId silently skips the link (snapshot still saved)", async () => {
+  test("kind=user with a stale userId fails the save (no null/null attendee row)", async () => {
     const res = await updateCalendarEvent(
       eventId,
       updateCalendarEventInitialState,
@@ -491,17 +492,85 @@ describe("updateCalendarEvent — typed attendee picker", () => {
         ]),
       })
     );
-    // The event still saves — we don't blow up on a stale id.
-    // The attendee row carries the snapshot but no FK.
-    // (buildForm auto-prepends the seeded user; query by name to
-    // skip past it and grab the stale-id row we're testing.)
-    expect(res.status).toBe("ok");
-    const row = await prisma.calendarAttendee.findFirst({
-      where: { eventId, name: "Display Only" },
+    // Stale ids reject pre-transaction — the alternative (silent
+    // skip) writes an attendee row with BOTH FKs null and can
+    // dodge the min-firm-attendee invariant.
+    expect(res.status).toBe("error");
+    expect(res.errors?.attendees?.[0]).toMatch(/no longer an active firm user/i);
+    expect(
+      await prisma.calendarAttendee.count({ where: { eventId } })
+    ).toBe(0);
+    const row = await prisma.calendarEvent.findUnique({ where: { id: eventId } });
+    expect(row!.title).toBe("Strategy session"); // untouched
+  });
+
+  test("kind=user pointing at a deactivated user can't satisfy the min-firm-attendee rule", async () => {
+    const inactive = await seedUser({
+      firmId,
+      name: "Departed",
+      email: "gone@x.com",
     });
-    expect(row!.userId).toBeNull();
-    expect(row!.contactId).toBeNull();
-    expect(row!.name).toBe("Display Only");
+    await prisma.user.update({
+      where: { id: inactive.userId },
+      data: { isActive: false },
+    });
+    const res = await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm({
+        __skipDefaultUser: "1",
+        attendees: JSON.stringify([
+          {
+            kind: "user",
+            userId: inactive.userId,
+            name: "Departed",
+            email: "gone@x.com",
+          },
+        ]),
+      })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.attendees?.[0]).toMatch(/no longer an active firm user/i);
+  });
+
+  test("kind=user with an empty userId is rejected — does NOT mint a Contact", async () => {
+    // A stale client payload with kind=user but no id skipped both
+    // the email-required superRefine and the dup-email pre-check
+    // (both only cover kind=new); it must never reach the
+    // create-a-Contact branch.
+    const beforeCount = await prisma.contact.count();
+    const res = await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm({
+        attendees: JSON.stringify([
+          { kind: "user", userId: "", name: "Ghost", email: "" },
+        ]),
+      })
+    );
+    expect(res.status).toBe("error");
+    expect(await prisma.contact.count()).toBe(beforeCount);
+  });
+
+  test("kind=contact with a stale contactId fails the save — does NOT mint a Contact", async () => {
+    const beforeCount = await prisma.contact.count();
+    const res = await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm({
+        attendees: JSON.stringify([
+          {
+            kind: "contact",
+            contactId: "no-such-contact",
+            name: "Vanished Co.",
+            email: "",
+          },
+        ]),
+      })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.attendees?.[0]).toMatch(/no longer matches an active contact/i);
+    expect(await prisma.contact.count()).toBe(beforeCount);
   });
 
   test("legacy attendee (no kind) is treated as kind=new and creates a Contact", async () => {
@@ -860,15 +929,106 @@ describe("moveCalendarEvent — drag-and-drop reschedule", () => {
     expect(res.error).toMatch(/invalid/i);
   });
 
-  test("gates on events.edit", async () => {
-    const mocked = vi.mocked(requirePermission);
-    mocked.mockClear();
-    await moveCalendarEvent(eventId, {
-      isAllDay: false,
-      startTime: new Date("2026-05-08T09:00:00Z").toISOString(),
-      endTime: new Date("2026-05-08T10:00:00Z").toISOString(),
+  // Gate parity with updateCalendarEvent: the drag path runs the
+  // same canEditEvent resolver, so events.edit alone must not move
+  // another user's personal event, and a creator without any edit
+  // perms must still be able to drag their own.
+  const moveInput = {
+    isAllDay: false,
+    startTime: new Date("2026-05-08T09:00:00Z").toISOString(),
+    endTime: new Date("2026-05-08T10:00:00Z").toISOString(),
+  };
+
+  test("creator can move their own personal event without any edit perms", async () => {
+    const personal = await prisma.calendarEvent.create({
+      data: {
+        title: "Dentist",
+        type: "personal",
+        startTime: new Date("2026-05-01T09:00:00Z"),
+        endTime: new Date("2026-05-01T10:00:00Z"),
+        createdById: userId,
+      },
+      select: { id: true },
     });
-    expect(mocked).toHaveBeenCalledWith("events.edit");
+    const { currentUserHasPermission } = await import(
+      "@/lib/permission-check"
+    );
+    vi.mocked(currentUserHasPermission).mockResolvedValue(false);
+    const res = await moveCalendarEvent(personal.id, moveInput);
+    expect(res.ok).toBe(true);
+    const row = await prisma.calendarEvent.findUniqueOrThrow({
+      where: { id: personal.id },
+    });
+    expect(row.startTime.toISOString()).toBe(moveInput.startTime);
+  });
+
+  test("events.edit alone cannot move another user's personal event", async () => {
+    const other = await seedUser({
+      firmId,
+      name: "Move Target",
+      email: "movetarget@x.com",
+    });
+    const personal = await prisma.calendarEvent.create({
+      data: {
+        title: "Private slot",
+        type: "personal",
+        startTime: new Date("2026-05-01T09:00:00Z"),
+        endTime: new Date("2026-05-01T10:00:00Z"),
+        createdById: other.userId,
+      },
+      select: { id: true },
+    });
+    const { currentUserHasPermission } = await import(
+      "@/lib/permission-check"
+    );
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (key: string) => key === "events.edit"
+    );
+    const res = await moveCalendarEvent(personal.id, moveInput);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/permission/i);
+    const row = await prisma.calendarEvent.findUniqueOrThrow({
+      where: { id: personal.id },
+    });
+    expect(row.startTime.toISOString()).toBe("2026-05-01T09:00:00.000Z"); // unchanged
+  });
+
+  test("events.edit_non_matter unlocks moving another user's personal event", async () => {
+    const other = await seedUser({
+      firmId,
+      name: "Move Target 2",
+      email: "movetarget2@x.com",
+    });
+    const personal = await prisma.calendarEvent.create({
+      data: {
+        title: "Private slot",
+        type: "personal",
+        startTime: new Date("2026-05-01T09:00:00Z"),
+        endTime: new Date("2026-05-01T10:00:00Z"),
+        createdById: other.userId,
+      },
+      select: { id: true },
+    });
+    const { currentUserHasPermission } = await import(
+      "@/lib/permission-check"
+    );
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (key: string) => key === "events.edit_non_matter"
+    );
+    const res = await moveCalendarEvent(personal.id, moveInput);
+    expect(res.ok).toBe(true);
+  });
+
+  test("non-creator without events.edit cannot move a matter event", async () => {
+    // The seeded matter event has no createdById → no creator
+    // bypass; without events.edit the matter branch rejects.
+    const { currentUserHasPermission } = await import(
+      "@/lib/permission-check"
+    );
+    vi.mocked(currentUserHasPermission).mockResolvedValue(false);
+    const res = await moveCalendarEvent(eventId, moveInput);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/permission/i);
   });
 });
 
@@ -1238,5 +1398,127 @@ describe("updateCalendarEvent — edit gate (visibility model)", () => {
       where: { id: matterEvt.id },
     });
     expect(row.title).toBe("Matter meeting");
+  });
+});
+
+// ── deleteCalendarEvent — delete gate ───────────────────────────────────
+//
+// Mirrors the edit gate with `events.delete` in the permission slot:
+//
+//   1. Creator bypass — you can always delete your own event.
+//   2. Matter event — non-creators need `events.delete`.
+//   3. Another user's personal event — needs `events.delete` AND
+//      `events.edit_non_matter` (no dedicated delete_non_matter key
+//      yet; edit_non_matter is the cross-user personal-calendar grant).
+//
+// Every test sets the permission mock explicitly — implementations
+// persist across tests (no mockReset), same as the edit-gate suite.
+
+describe("deleteCalendarEvent — delete gate", () => {
+  const seedPersonalEvent = (createdById: string) =>
+    prisma.calendarEvent.create({
+      data: {
+        title: "Personal thing",
+        type: "personal",
+        startTime: new Date("2026-05-01T09:00:00Z"),
+        endTime: new Date("2026-05-01T10:00:00Z"),
+        createdById,
+      },
+      select: { id: true },
+    });
+
+  test("creator can delete their own personal event without any perms", async () => {
+    const personal = await seedPersonalEvent(userId);
+    const { currentUserHasPermission } = await import(
+      "@/lib/permission-check"
+    );
+    vi.mocked(currentUserHasPermission).mockResolvedValue(false);
+    const res = await deleteCalendarEvent(personal.id);
+    expect(res.ok).toBe(true);
+    expect(
+      await prisma.calendarEvent.findUnique({ where: { id: personal.id } })
+    ).toBeNull();
+  });
+
+  test("non-creator with events.delete can delete a matter event", async () => {
+    // Seeded matter event has no createdById → no creator bypass.
+    const { currentUserHasPermission } = await import(
+      "@/lib/permission-check"
+    );
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (key: string) => key === "events.delete"
+    );
+    const res = await deleteCalendarEvent(eventId);
+    expect(res.ok).toBe(true);
+    expect(res.matterId).toBe(matterId);
+    expect(
+      await prisma.calendarEvent.findUnique({ where: { id: eventId } })
+    ).toBeNull();
+  });
+
+  test("non-creator without events.delete cannot delete a matter event", async () => {
+    const { currentUserHasPermission } = await import(
+      "@/lib/permission-check"
+    );
+    vi.mocked(currentUserHasPermission).mockResolvedValue(false);
+    const res = await deleteCalendarEvent(eventId);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/permission/i);
+    // Hard delete never fired — the row is still there.
+    expect(
+      await prisma.calendarEvent.findUnique({ where: { id: eventId } })
+    ).not.toBeNull();
+  });
+
+  test("events.delete alone cannot delete another user's personal event", async () => {
+    const other = await seedUser({
+      firmId,
+      name: "Delete Target",
+      email: "deltarget@x.com",
+    });
+    const personal = await seedPersonalEvent(other.userId);
+    const { currentUserHasPermission } = await import(
+      "@/lib/permission-check"
+    );
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (key: string) => key === "events.delete"
+    );
+    const res = await deleteCalendarEvent(personal.id);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/permission/i);
+    expect(
+      await prisma.calendarEvent.findUnique({ where: { id: personal.id } })
+    ).not.toBeNull();
+  });
+
+  test("events.delete + events.edit_non_matter deletes another user's personal event", async () => {
+    const other = await seedUser({
+      firmId,
+      name: "Delete Target 2",
+      email: "deltarget2@x.com",
+    });
+    const personal = await seedPersonalEvent(other.userId);
+    const { currentUserHasPermission } = await import(
+      "@/lib/permission-check"
+    );
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (key: string) =>
+        key === "events.delete" || key === "events.edit_non_matter"
+    );
+    const res = await deleteCalendarEvent(personal.id);
+    expect(res.ok).toBe(true);
+    expect(
+      await prisma.calendarEvent.findUnique({ where: { id: personal.id } })
+    ).toBeNull();
+  });
+
+  test("missing event id surfaces a not-found error", async () => {
+    const { currentUserHasPermission } = await import(
+      "@/lib/permission-check"
+    );
+    vi.mocked(currentUserHasPermission).mockResolvedValue(true);
+    const res = await deleteCalendarEvent("no-such-event");
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/not found/i);
   });
 });

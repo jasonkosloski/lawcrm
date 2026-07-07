@@ -149,8 +149,10 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
   // ── Auto-name inputs (controlled) ────────────────────────────────────
+  // Both seed from the action-echoed values so nothing typed gets
+  // lost across a validation-error round trip.
   const [caseNumber, setCaseNumber] = useState<string>(vals.caseNumber ?? "");
-  const [location, setLocation] = useState<string>("");
+  const [location, setLocation] = useState<string>(vals.location ?? "");
 
   // ── Matter name state + dirty tracking ───────────────────────────────
   // If the server action re-rendered us after a validation error,

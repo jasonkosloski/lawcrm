@@ -754,11 +754,22 @@ export type MatterTimeSummary = {
   billedAmount: number;
 };
 
+/// Cap how many rows the Time tab pulls in one shot — same number
+/// as MATTER_ACTIVITY_LIMIT on the timeline. Long-running hourly
+/// matters accumulate thousands of entries, and each row here drags
+/// eight relation includes (note bodies included); entries past the
+/// cap need the eventual load-more / paginated viewer. Totals are
+/// NOT affected — getMatterTimeSummary aggregates in the database
+/// over every row.
+const MATTER_TIME_ENTRIES_LIMIT = 200;
+
 export async function getMatterTimeEntries(
-  matterId: string
+  matterId: string,
+  options: { limit?: number } = {}
 ): Promise<TimeEntryRow[]> {
   const rows = await prisma.timeEntry.findMany({
     where: { matterId },
+    take: options.limit ?? MATTER_TIME_ENTRIES_LIMIT,
     include: {
       user: { select: { name: true, initials: true } },
       parentNote: { select: { id: true, content: true } },
@@ -846,30 +857,33 @@ export async function getMatterTimeEntries(
 export async function getMatterTimeSummary(
   matterId: string
 ): Promise<MatterTimeSummary> {
-  const entries = await prisma.timeEntry.findMany({
+  // Aggregate in the database instead of fetching rows: the summary
+  // must cover EVERY entry the matter ever had (unlike the capped
+  // list above), so its cost can't be allowed to grow with row
+  // count. groupBy hands back at most billable × noCharge × status
+  // buckets (~20) regardless of how many entries exist, and the
+  // per-bucket amount sums are computed in Decimal by Postgres —
+  // no float accumulation across rows.
+  const grouped = await prisma.timeEntry.groupBy({
+    by: ["status", "billable", "noCharge"],
     where: { matterId },
-    select: {
-      hours: true,
-      amount: true,
-      billable: true,
-      noCharge: true,
-      status: true,
-    },
+    _sum: { hours: true, amount: true },
   });
 
   let totalHours = 0;
   let billableHours = 0;
   let unbilledAmount = 0;
   let billedAmount = 0;
-  for (const e of entries) {
-    totalHours += e.hours;
-    if (e.billable && !e.noCharge) {
-      billableHours += e.hours;
-      // amount is Prisma.Decimal | null. Convert to number for the
-      // running totals — at this scale rounding is irrelevant; the
-      // canonical money lives in the Decimal column.
-      const amount = e.amount?.toNumber() ?? 0;
-      if (e.status === "billed") billedAmount += amount;
+  for (const g of grouped) {
+    const hours = g._sum.hours ?? 0;
+    totalHours += hours;
+    if (g.billable && !g.noCharge) {
+      billableHours += hours;
+      // _sum.amount is Prisma.Decimal | null. Convert to number for
+      // the running totals — one rounding per bucket is irrelevant;
+      // the canonical money lives in the Decimal column.
+      const amount = g._sum.amount?.toNumber() ?? 0;
+      if (g.status === "billed") billedAmount += amount;
       else unbilledAmount += amount;
     }
   }

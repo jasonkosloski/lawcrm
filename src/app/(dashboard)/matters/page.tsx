@@ -29,15 +29,24 @@ export default async function MattersListPage({
   const sp = await searchParams;
   const { filter, sort, view } = parseMattersParams(sp);
 
+  // Started outside Promise.all so the totalCount branch below can
+  // reuse the same promise instead of re-running the heavy list query.
+  const mattersPromise = listMatters(filter, sort);
+
   const [matters, options, totalCount, firmOpenCount, firmClosedCount] =
     await Promise.all([
-      listMatters(filter, sort),
+      mattersPromise,
       getMattersFilterOptions(),
-      // Total (unfiltered) count for "showing N of M" — honors only the
-      // archived default so the denominator matches the default view.
-      listMatters({ ...filter, q: "" /* ignore search for total */ }, sort).then(
-        (r) => r.length
-      ),
+      // Denominator for "showing N of M" — the current filter minus the
+      // search term, so it honors every non-search filter (area, stage,
+      // fee, lead, archived default). Text search is the only filter
+      // listMatters applies in memory, so with no `q` the list result
+      // already IS the total — only a live search pays for the second
+      // query. (A prisma count would be cheaper still, but needs the
+      // where-builder exported from queries/matters.)
+      filter.q
+        ? listMatters({ ...filter, q: "" }).then((r) => r.length)
+        : mattersPromise.then((r) => r.length),
       // Firm-wide counts for the crumb — independent of the user's
       // current filter so the header keeps its reference point even
       // with show-closed off.

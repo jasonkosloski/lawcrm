@@ -20,12 +20,18 @@
  * The matcher is read-only and pure — the action layer wraps it
  * with persistence and audit logging.
  *
- * SQLite note: Prisma's `mode: "insensitive"` isn't supported on
- * SQLite, so the matcher pulls candidate sets with the literal
- * candidate value and re-filters in JS using normalize() to make
- * matching case- and whitespace-tolerant. The candidate sets are
- * bounded (top 200 contacts per match path) so this stays cheap
- * for any reasonable firm size.
+ * Matching runs in Postgres with `mode: "insensitive"` equality —
+ * every row is considered, with NO arbitrary row cap. (An earlier
+ * revision pulled a bounded candidate slice and re-filtered in JS,
+ * which silently missed conflicts once a table outgrew the cap —
+ * the worst possible failure mode for an ethics check.) Candidate
+ * values are pre-normalized via normalize() (trim + collapse
+ * whitespace), so candidate-side sloppiness can't miss a match;
+ * stored values are compared as-entered, so a stored record with
+ * irregular *internal* whitespace won't hit. Acceptable trade:
+ * that requires shadow normalized columns to fix, and it fails
+ * loud-ish (a near-miss) rather than silently dropping true
+ * matches past a row limit.
  */
 
 import { prisma } from "@/lib/prisma";
@@ -74,8 +80,6 @@ export function summarizeMatchSeverity(
   return "clear";
 }
 
-const CANDIDATE_LIMIT = 200;
-
 export async function runConflictMatcher(
   candidate: ConflictCandidate
 ): Promise<ConflictCheckResult> {
@@ -92,10 +96,11 @@ export async function runConflictMatcher(
 
   // ── Email match (hard signal when used in opposing-side roles) ─
   if (emailKey) {
-    // Pull every active contact with a non-null email, then filter
-    // in JS — Prisma SQLite doesn't support insensitive equals.
-    const contactsWithEmail = await prisma.contact.findMany({
-      where: { isActive: true, email: { not: null } },
+    const emailHits = await prisma.contact.findMany({
+      where: {
+        isActive: true,
+        email: { equals: emailKey, mode: "insensitive" },
+      },
       select: {
         id: true,
         name: true,
@@ -103,16 +108,15 @@ export async function runConflictMatcher(
         type: true,
         organization: true,
       },
-      take: CANDIDATE_LIMIT,
     });
-    const emailHits = contactsWithEmail.filter(
-      (c) => normalize(c.email) === emailKey
-    );
     for (const c of emailHits) {
+      // Hard tier requires the opposing-side use to be on an
+      // ACTIVE matter (see header) — archived files only warn.
       const opposingSideUse = await prisma.matterContact.count({
         where: {
           contactId: c.id,
           NOT: { category: "client" },
+          matter: { isArchived: false },
         },
       });
       matches.push({
@@ -121,7 +125,7 @@ export async function runConflictMatcher(
         matchedField: "email",
         description:
           opposingSideUse > 0
-            ? `${c.name} — same email; appears on opposing side of ${opposingSideUse} matter${opposingSideUse === 1 ? "" : "s"}`
+            ? `${c.name} — same email; appears on opposing side of ${opposingSideUse} active matter${opposingSideUse === 1 ? "" : "s"}`
             : `${c.name} — same email already in the firm's contact directory`,
         contactId: c.id,
       });
@@ -133,14 +137,19 @@ export async function runConflictMatcher(
   if (nameKey) {
     // Legacy free-text fields on Matter (opposingParty / opposingFirm).
     const matterCandidates = await prisma.matter.findMany({
-      where: { isArchived: false },
+      where: {
+        isArchived: false,
+        OR: [
+          { opposingParty: { equals: nameKey, mode: "insensitive" } },
+          { opposingFirm: { equals: nameKey, mode: "insensitive" } },
+        ],
+      },
       select: {
         id: true,
         name: true,
         opposingParty: true,
         opposingFirm: true,
       },
-      take: CANDIDATE_LIMIT,
     });
     for (const m of matterCandidates) {
       const partyKey = normalize(m.opposingParty);
@@ -165,23 +174,24 @@ export async function runConflictMatcher(
     }
 
     // Structured MatterContact path — non-client roles (opposing
-    // counsel, witness, etc.) joined to Contact. Filter in JS.
+    // counsel, witness, etc.) joined to Contact.
     const partyCandidates = await prisma.matterContact.findMany({
       where: {
         NOT: { category: "client" },
         matter: { isArchived: false },
+        contact: {
+          isActive: true,
+          name: { equals: nameKey, mode: "insensitive" },
+        },
       },
       select: {
         id: true,
         category: true,
         matter: { select: { id: true, name: true } },
-        contact: { select: { id: true, name: true, isActive: true } },
+        contact: { select: { id: true, name: true } },
       },
-      take: CANDIDATE_LIMIT,
     });
     for (const mc of partyCandidates) {
-      if (!mc.contact?.isActive) continue;
-      if (normalize(mc.contact.name) !== nameKey) continue;
       matches.push({
         kind: "matter_opposing_party",
         severity: "conflict",
@@ -196,13 +206,14 @@ export async function runConflictMatcher(
     // Soft signal: same name appears as any contact. Skip when
     // we already counted the contact via a higher-severity path.
     const nameCandidates = await prisma.contact.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        name: { equals: nameKey, mode: "insensitive" },
+      },
       select: { id: true, name: true, type: true },
-      take: CANDIDATE_LIMIT,
     });
     for (const c of nameCandidates) {
       if (seenContactIds.has(c.id)) continue;
-      if (normalize(c.name) !== nameKey) continue;
       matches.push({
         kind: "contact_name",
         severity: "warn",
@@ -217,13 +228,14 @@ export async function runConflictMatcher(
   // ── Organization soft match ──────────────────────────────────
   if (orgKey) {
     const orgCandidates = await prisma.contact.findMany({
-      where: { isActive: true, organization: { not: null } },
+      where: {
+        isActive: true,
+        organization: { equals: orgKey, mode: "insensitive" },
+      },
       select: { id: true, name: true, organization: true, type: true },
-      take: CANDIDATE_LIMIT,
     });
     for (const c of orgCandidates) {
       if (seenContactIds.has(c.id)) continue;
-      if (normalize(c.organization) !== orgKey) continue;
       matches.push({
         kind: "contact_name",
         severity: "warn",

@@ -512,19 +512,24 @@ function CreateNoteDialog({
 /** Roundtrip: HTML default → plain text textarea → HTML on submit.
  *  Newlines become paragraphs; the leading "From email/message:"
  *  italic survives the roundtrip via plain-text "From …" + blank
- *  line + the quoted body. */
-function stripHtmlForTextarea(html: string): string {
+ *  line + the quoted body.
+ *
+ *  Exported for tests only — not part of the component's API. */
+export function stripHtmlForTextarea(html: string): string {
   return html
     .replace(/<\/p>\s*<p>/g, "\n\n")
     .replace(/<blockquote>/g, "> ")
     .replace(/<\/blockquote>/g, "")
     .replace(/<em>(.*?)<\/em>/g, "$1")
     .replace(/<[^>]+>/g, "")
-    .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
+    // Decode &amp; LAST: a snippet containing literal "&lt;" arrives
+    // here as "&amp;lt;"; decoding &amp; first would turn that into
+    // "&lt;" and then a second pass into "<", corrupting the text.
+    .replace(/&amp;/g, "&")
     .trim();
 }
 

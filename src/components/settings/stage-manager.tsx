@@ -14,7 +14,7 @@
 
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import {
   Archive,
   ArchiveRestore,
@@ -224,7 +224,6 @@ function StageRow({
         <IconButton
           onClick={toggleActive}
           label={stage.isActive ? "Archive" : "Restore"}
-          asButton
         >
           {stage.isActive ? (
             <Archive size={12} />
@@ -249,12 +248,14 @@ function AddStageForm({ practiceAreaId }: { practiceAreaId: string }) {
   const [key, setKey] = useState(0);
 
   // Reset inputs after a successful add so the row is ready for
-  // another stage without stale values.
-  if (state.status === "ok" && (vals.name || vals.isTerminal)) {
-    // Bump the key to force a fresh input render with default values.
-    queueMicrotask(() => setKey((k) => k + 1));
-    state.values = {};
-  }
+  // another stage without stale values. The key bump remounts the
+  // form, re-seeding the inputs with empty defaults. Depends on the
+  // state object (not just status) so back-to-back successful adds
+  // each get a fresh form.
+  useEffect(() => {
+    if (state.status !== "ok") return;
+    setKey((k) => k + 1);
+  }, [state]);
 
   return (
     <form
@@ -310,19 +311,18 @@ function IconButton({
   disabled,
   label,
   children,
-  asButton,
 }: {
   onClick?: () => void;
   disabled?: boolean;
   label: string;
   children: React.ReactNode;
-  /** When true, renders a plain <button type="button"> instead of a
-   *  form-submitting button so the enclosing <form> doesn't fire. */
-  asButton?: boolean;
 }) {
   return (
     <button
-      type={asButton ? "button" : "button"}
+      // Always type="button" — these render inside the StageRow
+      // <form>, and a default (submit) type would fire the rename
+      // action on every move/archive click.
+      type="button"
       onClick={onClick}
       disabled={disabled}
       title={label}

@@ -16,11 +16,20 @@
  * Existing callers that just need the user id keep using this fn.
  */
 
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
-export async function getCurrentUserId(): Promise<string> {
+/**
+ * Cached per-request via React `cache()`: every `auth()` call runs
+ * the jwt callback, which fires a `user.count` DB query — and this
+ * function is called several times per request (a single
+ * `requirePermission` gate hits it twice: once directly, once inside
+ * the permission resolver). With the pg pool capped at 1 connection
+ * those redundant round-trips serialize, so deduping matters.
+ */
+export const getCurrentUserId = cache(async (): Promise<string> => {
   const session = await auth();
   if (!session?.user?.id) {
     // Anything past this point would dereference a missing user, so
@@ -28,16 +37,18 @@ export async function getCurrentUserId(): Promise<string> {
     redirect("/login");
   }
   return session.user.id;
-}
+});
 
 /** Read the current user's display fields for the sidebar / topbar.
  *  Returns null if not signed in (the layout is rendered for the
- *  login page too, so the null branch matters). */
-export async function getCurrentUser() {
+ *  login page too, so the null branch matters). Cached per-request
+ *  for the same reason as `getCurrentUserId` — layouts and pages
+ *  both call it during one render. */
+export const getCurrentUser = cache(async () => {
   const session = await auth();
   if (!session?.user?.id) return null;
   return prisma.user.findUnique({
     where: { id: session.user.id },
     select: { id: true, name: true, initials: true, jobTitle: true },
   });
-}
+});

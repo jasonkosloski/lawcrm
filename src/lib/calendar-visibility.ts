@@ -87,8 +87,12 @@ export function canViewEventDetails(input: VisibilityInput): boolean {
 // Edit permission rules:
 //
 //   1. Creator can always edit their own event.
-//   2. Matter event + viewer on matter team + viewer has
-//      `events.edit` → can edit.
+//   2. Matter event + viewer has `events.edit` → can edit.
+//      Deliberately NOT scoped to matter-team membership:
+//      matter events are firm business, and `events.edit` is
+//      the firm-wide grant that lets scheduling staff manage
+//      any case's calendar (see the permission's description
+//      in lib/permissions.ts).
 //   3. Non-matter event + viewer has `events.edit_non_matter`
 //      → can edit.
 //
@@ -112,6 +116,11 @@ export type EditInput = {
   viewerId: string;
   createdById: string | null;
   matterId: string | null;
+  /** NOT consulted by the edit gate — matter edits are gated on
+   *  `events.edit` alone (header rule 2). Kept in the shape so a
+   *  future team-scoped tightening can use it without reworking
+   *  the call sites in actions/calendar-events.ts, which already
+   *  populate it. */
   matterTeamUserIds: readonly string[];
   perms: EditPermissions;
 };
@@ -120,9 +129,9 @@ export function canEditEvent(input: EditInput): boolean {
   // Creator bypass.
   if (input.createdById && input.createdById === input.viewerId) return true;
   if (input.matterId) {
-    // Matter event — events.edit is the gate, regardless of
-    // matter-team membership. The matter-team check is the
-    // implicit "you have business in this case" assumption.
+    // Matter event — events.edit alone is the gate. Team
+    // membership is deliberately not required: matter events
+    // are firm business, not personal ones (header rule 2).
     return input.perms.hasEventsEdit;
   }
   // Non-matter event — needs the dedicated permission so a

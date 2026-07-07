@@ -100,7 +100,7 @@ export function LogTimeOnCommButton({
         onOpenChange={setOpen}
         action={action}
         parentLabel={source.label}
-        parentKind="task"
+        parentKind={source.kind === "email" ? "email" : "message"}
       />
     </>
   );

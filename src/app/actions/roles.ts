@@ -24,7 +24,10 @@ import {
   DEFAULT_ROLE_NAME,
   getCurrentFirm,
 } from "@/lib/firm";
-import { requirePermission } from "@/lib/permission-check";
+import {
+  getCurrentUserPermissions,
+  requirePermission,
+} from "@/lib/permission-check";
 import { isKnownPermission, permissionLabel } from "@/lib/permissions";
 import {
   roleInitialState,
@@ -34,6 +37,18 @@ import {
 const RESERVED_NAMES = new Set(
   [ADMIN_ROLE_NAME, DEFAULT_ROLE_NAME].map((n) => n.toLowerCase())
 );
+
+// The "meta" permissions govern access to access itself. Only an
+// Admin may grant or revoke them — otherwise any manage_permissions
+// holder could mint admin-equivalent peers (grant a role
+// manage_permissions plus everything else) with no admin
+// involvement. manage_roles rides along because renaming/deleting
+// roles is how you'd dismantle the delegation structure an admin
+// set up.
+const ADMIN_ONLY_PERMISSIONS = new Set([
+  "firm.manage_permissions",
+  "firm.manage_roles",
+]);
 
 const roleSchema = z.object({
   name: z
@@ -212,14 +227,27 @@ export async function setRolePermissionAction(
 ): Promise<{ ok: boolean; error?: string }> {
   // Distinct permission from manage_roles — granting permissions
   // is a higher-trust act than naming roles, since it controls
-  // who else can grant access. The matrix UI explicitly disables
-  // the cell for `firm.manage_permissions` on non-Admin rows for
-  // anyone who doesn't already have it (see PermissionsMatrix's
-  // canEdit gate), so a non-admin holder can edit other rows but
-  // not bootstrap themselves out of admin oversight.
+  // who else can grant access. A non-admin holder can edit other
+  // rows freely, but the meta keys (ADMIN_ONLY_PERMISSIONS) are
+  // guarded below so they can't bootstrap themselves — or a peer
+  // role — out of admin oversight.
   await requirePermission("firm.manage_permissions");
   if (!isKnownPermission(permission)) {
     return { ok: false, error: "Unknown permission key." };
+  }
+  // Server-side escalation guard: don't trust the matrix UI to hide
+  // these cells — a tampered request must hit the same wall. Both
+  // grant AND revoke are admin-only: revoking manage_permissions
+  // from a peer role is how a rogue delegate would lock out the
+  // other delegates.
+  if (ADMIN_ONLY_PERMISSIONS.has(permission)) {
+    const { isAdmin } = await getCurrentUserPermissions();
+    if (!isAdmin) {
+      return {
+        ok: false,
+        error: "Only an Admin can change who holds this permission.",
+      };
+    }
   }
 
   const firm = await getCurrentFirm();

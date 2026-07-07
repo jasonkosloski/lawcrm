@@ -107,10 +107,11 @@ export async function currentUserHasAnyPermission(
   return false;
 }
 
-/** All permissions effectively granted to the current user. Admins
- *  get a sentinel "*" entry alongside their explicit grants so
- *  callers that want to write `set.has(key) || set.has("*")` can
- *  branch on a single object. */
+/** The current user's resolved permissions. Callers MUST branch on
+ *  `isAdmin` before consulting `granted` — for admins `granted` is
+ *  empty (we never materialize the catalog for them), so
+ *  `granted.has(key)` alone silently denies admins everything.
+ *  There is no "*" sentinel. */
 export async function getCurrentUserPermissions(): Promise<{
   isAdmin: boolean;
   granted: Set<string>;

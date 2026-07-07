@@ -8,6 +8,10 @@
  *   - inactive users / contacts are excluded
  *   - excludeUserIds / excludeContactIds filter dedupe-style
  *   - per-bucket caps (6 each)
+ *   - matching happens in the DB: rows beyond any fetch-slice
+ *     are still findable (regression: filter used to run after
+ *     an uncapped-by-query `take`)
+ *   - results are name-ordered within each bucket
  */
 
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
@@ -160,6 +164,57 @@ describe("searchAttendees", () => {
     });
     expect(onlyContact).toHaveLength(1);
     expect(onlyContact[0]?.kind).toBe("contact");
+  });
+
+  test("finds rows beyond the first 30 — matching is done by the DB, not a post-fetch scan", async () => {
+    // Regression: the old implementation fetched 30 arbitrary
+    // rows per bucket and substring-filtered in JS, so anything
+    // outside that slice was unreachable. Bury one match under
+    // 40 non-matching contacts (and 32 non-matching users) and
+    // make sure the search still surfaces it.
+    await prisma.contact.createMany({
+      data: Array.from({ length: 40 }, (_, i) => ({
+        name: `Filler Contact ${String(i).padStart(2, "0")}`,
+        type: "vendor",
+      })),
+    });
+    await prisma.contact.create({
+      data: { name: "Zzz Needle Contact", type: "witness" },
+    });
+    for (let i = 0; i < 32; i++) {
+      await seedUser({
+        firmId,
+        name: `Filler User ${String(i).padStart(2, "0")}`,
+        email: `fu${i}@k.com`,
+        jobTitle: "Staff",
+      });
+    }
+    await seedUser({
+      firmId,
+      name: "Zzz Needle User",
+      email: "needle@k.com",
+      jobTitle: "Staff",
+    });
+
+    const out = await searchAttendees("needle");
+    expect(out).toHaveLength(2);
+    expect(out[0]).toMatchObject({ kind: "user", name: "Zzz Needle User" });
+    expect(out[1]).toMatchObject({
+      kind: "contact",
+      name: "Zzz Needle Contact",
+    });
+  });
+
+  test("results are name-ordered within each bucket (stable across calls)", async () => {
+    await seedUser({ firmId, name: "Charlie Sortme", email: "c@k.com" });
+    await seedUser({ firmId, name: "Alpha Sortme", email: "a@k.com" });
+    await seedUser({ firmId, name: "Bravo Sortme", email: "b@k.com" });
+    const out = await searchAttendees("Sortme");
+    expect(out.map((r) => r.name)).toEqual([
+      "Alpha Sortme",
+      "Bravo Sortme",
+      "Charlie Sortme",
+    ]);
   });
 
   test("per-bucket cap is 6 results each", async () => {

@@ -92,28 +92,33 @@ export async function getFirmActivity(
 
 /** Distinct list of users who appear as authors in the firm's
  *  activity log. Drives the user-filter dropdown on the audit
- *  page. */
+ *  page.
+ *
+ *  Uses `groupBy` (real SQL GROUP BY) rather than
+ *  `findMany({ distinct })` — Prisma dedupes `distinct` in-memory
+ *  in the query engine, which would materialize every ActivityLog
+ *  row (the fastest-growing table in the app) just to fill a
+ *  dropdown. */
 export async function listFirmActivityAuthors(): Promise<
   Array<{ id: string; name: string; initials: string | null }>
 > {
-  const rows = await prisma.activityLog.findMany({
+  const grouped = await prisma.activityLog.groupBy({
+    by: ["userId"],
     where: { userId: { not: null } },
-    select: {
-      user: { select: { id: true, name: true, initials: true } },
-    },
-    distinct: ["userId"],
   });
-  const seen = new Set<string>();
-  const out: Array<{ id: string; name: string; initials: string | null }> = [];
-  for (const r of rows) {
-    if (!r.user || seen.has(r.user.id)) continue;
-    seen.add(r.user.id);
-    out.push({
-      id: r.user.id,
-      name: r.user.name,
-      initials: r.user.initials ?? null,
-    });
-  }
-  out.sort((a, b) => a.name.localeCompare(b.name));
-  return out;
+  const userIds = grouped
+    .map((g) => g.userId)
+    .filter((id): id is string => id !== null);
+  if (userIds.length === 0) return [];
+  const users = await prisma.user.findMany({
+    where: { id: { in: userIds } },
+    select: { id: true, name: true, initials: true },
+  });
+  return users
+    .map((u) => ({
+      id: u.id,
+      name: u.name,
+      initials: u.initials ?? null,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }

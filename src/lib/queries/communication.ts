@@ -7,6 +7,7 @@
  * polymorphic Communication*).
  */
 
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 
@@ -284,8 +285,9 @@ export async function listThreadsForMatter(
 }
 
 /** Threads that touch a given email address (sender OR recipient).
- *  Recipients are stored as JSON strings so the final filter runs in
- *  memory after fetching the candidate set.
+ *  Sender matching runs exactly (case-insensitive) in SQL; recipients
+ *  are stored as JSON strings, so those match by substring in SQL and
+ *  get sharpened by a message-scoped verification pass below.
  *
  *  Used by the lead Communication tab — since Leads don't have direct
  *  EmailThread links today, email address is the matching key. Schema
@@ -298,63 +300,85 @@ export async function listThreadsForEmail(
   const normalized = email.toLowerCase();
   const userId = await getCurrentUserId();
 
-  // Quick candidate fetch: any thread with a message that sent to or
-  // from the email (via substring hit on toRecipients/ccRecipients
-  // JSON, or exact on fromEmail).
+  // Shared by both queries. The recipient `contains` is intentionally
+  // loose ("joe@x.com" also hits inside "bjoe@x.com") — the
+  // verification pass exact-matches the parsed addresses.
+  const matchOr: Prisma.EmailMessageWhereInput[] = [
+    { fromEmail: { equals: normalized, mode: "insensitive" } },
+    { toRecipients: { contains: normalized, mode: "insensitive" } },
+    { ccRecipients: { contains: normalized, mode: "insensitive" } },
+  ];
+
   const candidates = await prisma.emailThread.findMany({
     where: {
       account: { userId },
-      messages: {
-        some: {
-          OR: [
-            { fromEmail: { contains: normalized } },
-            { toRecipients: { contains: normalized } },
-            { ccRecipients: { contains: normalized } },
-          ],
-        },
-      },
+      messages: { some: { OR: matchOr } },
     },
+    // Same 500-thread cap as listThreads — a per-lead view never
+    // needs more, and without it a busy address pulls its entire
+    // history in one query.
+    take: 500,
     include: {
       matter: { select: { id: true, name: true, color: true } },
+      // First message only — just for fromDisplay. Recipient JSON for
+      // verification comes from the message-scoped query below;
+      // loading it here would scale with total mail volume in every
+      // candidate thread, not with the number of actual matches.
       messages: {
         orderBy: { sentAt: "asc" },
-        select: {
-          fromName: true,
-          fromEmail: true,
-          toRecipients: true,
-          ccRecipients: true,
-        },
+        take: 1,
+        select: { fromName: true, fromEmail: true },
       },
     },
     orderBy: { lastMessageAt: "desc" },
   });
+  if (candidates.length === 0) return [];
 
-  // Sharpen the match in memory so a substring collision doesn't
-  // produce a false positive.
-  const matches = candidates.filter((t) =>
-    t.messages.some((m) => {
-      if (m.fromEmail.toLowerCase() === normalized) return true;
-      const to = parseRecipients(m.toRecipients);
-      if (to.some((r) => r.email.toLowerCase() === normalized)) return true;
-      const cc = parseRecipients(m.ccRecipients);
-      return cc.some((r) => r.email.toLowerCase() === normalized);
-    })
-  );
+  // Verification pass: sharpen the recipient substring hits so a
+  // collision doesn't produce a false positive. Only fetches messages
+  // that hit the OR at all — not every message of every thread.
+  const hits = await prisma.emailMessage.findMany({
+    where: {
+      threadId: { in: candidates.map((t) => t.id) },
+      OR: matchOr,
+    },
+    select: {
+      threadId: true,
+      fromEmail: true,
+      toRecipients: true,
+      ccRecipients: true,
+    },
+  });
+  const verified = new Set<string>();
+  for (const m of hits) {
+    if (verified.has(m.threadId)) continue;
+    const isMatch =
+      m.fromEmail.toLowerCase() === normalized ||
+      parseRecipients(m.toRecipients).some(
+        (r) => r.email.toLowerCase() === normalized
+      ) ||
+      parseRecipients(m.ccRecipients).some(
+        (r) => r.email.toLowerCase() === normalized
+      );
+    if (isMatch) verified.add(m.threadId);
+  }
 
-  return matches.map((t) => ({
-    id: t.id,
-    subject: t.subject,
-    snippet: t.snippet,
-    isRead: t.isRead,
-    isStarred: t.isStarred,
-    hasAttachments: t.hasAttachments,
-    messageCount: t.messageCount,
-    lastMessageAt: t.lastMessageAt,
-    followUpAt: t.followUpAt,
-    fromDisplay:
-      t.messages[0]?.fromName ?? t.messages[0]?.fromEmail ?? "Unknown",
-    matter: t.matter,
-  }));
+  return candidates
+    .filter((t) => verified.has(t.id))
+    .map((t) => ({
+      id: t.id,
+      subject: t.subject,
+      snippet: t.snippet,
+      isRead: t.isRead,
+      isStarred: t.isStarred,
+      hasAttachments: t.hasAttachments,
+      messageCount: t.messageCount,
+      lastMessageAt: t.lastMessageAt,
+      followUpAt: t.followUpAt,
+      fromDisplay:
+        t.messages[0]?.fromName ?? t.messages[0]?.fromEmail ?? "Unknown",
+      matter: t.matter,
+    }));
 }
 
 export type CommunicationCounts = {

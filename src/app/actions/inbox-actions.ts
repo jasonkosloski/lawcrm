@@ -14,6 +14,11 @@
  *
  * Source-content prefill happens client-side in the inbox action
  * dialog, so these actions just trust the form payload.
+ *
+ * Auth: promoting a source into an entity is the same capability as
+ * creating that entity directly, so each action gates on the matching
+ * create key (`tasks.create` / `deadlines.create` / `notes.create`) —
+ * no separate "promote" permission.
  */
 
 "use server";
@@ -22,13 +27,18 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { requirePermission } from "@/lib/permission-check";
 import {
   DEADLINE_KINDS,
+  NOTE_TYPES,
   TASK_PRIORITIES,
 } from "@/lib/note-constants";
 import type { InboxActionFormState } from "@/lib/inbox-action-form";
 import { logActivity } from "@/lib/activity-log";
-import { sanitizeUserHtml as sanitize } from "@/lib/sanitize-html";
+import {
+  isEffectivelyEmpty,
+  sanitizeUserHtml as sanitize,
+} from "@/lib/sanitize-html";
 
 /** Resolve the matter for an email thread. Inbox actions require a
  *  filed source — unfiled threads can't spawn matter-scoped entities
@@ -107,17 +117,8 @@ const deadlineSchema = z.object({
 
 const noteSchema = z.object({
   content: z.string().max(200_000),
-  type: z.enum(["note", "strategy", "memo", "chatter"]).default("note"),
+  type: z.enum(NOTE_TYPES).default("note"),
 });
-
-function isEffectivelyEmpty(html: string): boolean {
-  return (
-    html
-      .replace(/<[^>]+>/g, "")
-      .replace(/&nbsp;| /g, "")
-      .trim().length === 0
-  );
-}
 
 // ── Email thread → ... ──────────────────────────────────────────────────
 
@@ -126,6 +127,7 @@ export async function createTaskFromEmail(
   _prev: InboxActionFormState,
   formData: FormData
 ): Promise<InboxActionFormState> {
+  await requirePermission("tasks.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = taskSchema.safeParse(raw);
   if (!parsed.success) {
@@ -166,6 +168,7 @@ export async function createDeadlineFromEmail(
   _prev: InboxActionFormState,
   formData: FormData
 ): Promise<InboxActionFormState> {
+  await requirePermission("deadlines.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = deadlineSchema.safeParse(raw);
   if (!parsed.success) {
@@ -206,6 +209,7 @@ export async function createNoteFromEmail(
   _prev: InboxActionFormState,
   formData: FormData
 ): Promise<InboxActionFormState> {
+  await requirePermission("notes.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = noteSchema.safeParse(raw);
   if (!parsed.success) {
@@ -260,6 +264,7 @@ export async function createTaskFromMessage(
   _prev: InboxActionFormState,
   formData: FormData
 ): Promise<InboxActionFormState> {
+  await requirePermission("tasks.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = taskSchema.safeParse(raw);
   if (!parsed.success) {
@@ -300,6 +305,7 @@ export async function createDeadlineFromMessage(
   _prev: InboxActionFormState,
   formData: FormData
 ): Promise<InboxActionFormState> {
+  await requirePermission("deadlines.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = deadlineSchema.safeParse(raw);
   if (!parsed.success) {
@@ -340,6 +346,7 @@ export async function createNoteFromMessage(
   _prev: InboxActionFormState,
   formData: FormData
 ): Promise<InboxActionFormState> {
+  await requirePermission("notes.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = noteSchema.safeParse(raw);
   if (!parsed.success) {

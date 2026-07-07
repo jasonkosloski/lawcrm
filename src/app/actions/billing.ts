@@ -7,10 +7,18 @@
  *   - Add manual trust deposits / disbursements / refunds (bumps
  *     `Matter.trustBalance` in the same transaction)
  *
- * Auth model: any signed-in firm member can perform these. Once
- * we have role-permission granularity, we'll gate "void invoice"
- * + "trust disbursement" behind a billing role; for v1 a solo
- * attorney + paralegal flow doesn't need that.
+ * Auth model: every mutation gates on a `billing.*` / `trust.*`
+ * key from the permission catalog (`src/lib/permissions.ts`):
+ *   - generateInvoiceFromWip, bundleAsInternalRecord → billing.generate_invoice
+ *   - approveInvoice + the approved/mark-recorded flips  → billing.approve_invoice
+ *   - sendInvoice + the sent flip                        → billing.send_invoice
+ *   - deleteInvoice                                      → billing.delete_draft
+ *   - void flips                                         → billing.void_invoice
+ *   - recordInvoicePayment                               → billing.record_payment
+ *   - sendInvoice's apply-trust leg                      → billing.apply_trust
+ *   - addTrustTransaction                                → trust.record_transaction
+ * Line-item edits keep the author-bypass / time_entries.edit_any
+ * posture of the standalone time-entry actions.
  *
  * Decimal correctness: every money operation goes through
  * `Prisma.Decimal` math (`.add()`, `.sub()`) so cents never drift.
@@ -46,8 +54,10 @@ import {
  *  Format: "YYYY-NNN" (e.g. 2026-007). Counts existing invoices
  *  whose number starts with the year prefix. Race condition path:
  *  if two concurrent generates land on the same number, the
- *  unique-index on Invoice.invoiceNumber rejects the second; the
- *  retry below catches the rare case. */
+ *  unique-index on Invoice.invoiceNumber rejects the second. The
+ *  caller then retries by re-running its WHOLE transaction — a
+ *  failed INSERT aborts the Postgres transaction (SQLSTATE 25P02),
+ *  so a retry inside the same transaction can never succeed. */
 async function nextInvoiceNumber(
   tx: Tx
 ): Promise<string> {
@@ -76,6 +86,13 @@ async function adjustTrustBalance(
   matterId: string,
   deltaDecimal: Prisma.Decimal
 ): Promise<{ ok: boolean; error?: string }> {
+  // Row-lock the matter before reading: the read-check-write on
+  // trustBalance is a lost-update hazard under READ COMMITTED —
+  // two concurrent disbursements would both pass the overdraw
+  // check and the second write would clobber the first. FOR UPDATE
+  // queues the competitor until this transaction commits, so it
+  // re-reads the already-adjusted balance.
+  await tx.$queryRaw`SELECT id FROM matters WHERE id = ${matterId} FOR UPDATE`;
   const m = await tx.matter.findUnique({
     where: { id: matterId },
     select: { trustBalance: true },
@@ -118,6 +135,7 @@ export async function generateInvoiceFromWip(
   _prev: BillingFormState,
   formData: FormData
 ): Promise<BillingFormState> {
+  await requirePermission("billing.generate_invoice");
   const userId = await getCurrentUserId();
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = generateSchema.safeParse(raw);
@@ -131,8 +149,10 @@ export async function generateInvoiceFromWip(
   // Single transaction: lock the WIP rows in, compute total, mint
   // the invoice, attach the rows, flip their status. If any step
   // fails the whole thing rolls back — no half-billed entries.
-  try {
-    const result = await prisma.$transaction(async (tx) => {
+  // Named so the invoice-number collision path below can re-run
+  // the whole transaction (see the P2002 catch).
+  const mintInvoice = () =>
+    prisma.$transaction(async (tx) => {
       const matter = await tx.matter.findUnique({
         where: { id: matterId },
         select: { id: true, name: true, clientId: true },
@@ -191,42 +211,28 @@ export async function generateInvoiceFromWip(
         issueDate.getTime() + parsed.data.dueDays * 24 * 60 * 60 * 1000
       );
 
-      // Number generation + create. Retry once on the rare unique-
-      // index collision (concurrent generate races).
-      let invoice;
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const number = await nextInvoiceNumber(tx);
-        try {
-          invoice = await tx.invoice.create({
-            data: {
-              invoiceNumber: number,
-              matterId: matter.id,
-              clientId: matter.clientId,
-              issueDate,
-              dueDate,
-              subtotal,
-              taxAmount: new Prisma.Decimal(0),
-              totalAmount: total,
-              paidAmount: new Prisma.Decimal(0),
-              status: "draft",
-              notes: parsed.data.notes || null,
-            },
-            select: { id: true, invoiceNumber: true },
-          });
-          break;
-        } catch (err) {
-          // P2002 = unique constraint. Retry next() once.
-          if (
-            err instanceof Prisma.PrismaClientKnownRequestError &&
-            err.code === "P2002" &&
-            attempt === 0
-          ) {
-            continue;
-          }
-          throw err;
-        }
-      }
-      if (!invoice) throw new Error("Failed to mint invoice number.");
+      // Number generation + create. On a concurrent-generate
+      // collision the unique index rejects this INSERT — which
+      // aborts the whole Postgres transaction, so the retry lives
+      // OUTSIDE `mintInvoice` (a retry in here would only see
+      // "current transaction is aborted" errors).
+      const number = await nextInvoiceNumber(tx);
+      const invoice = await tx.invoice.create({
+        data: {
+          invoiceNumber: number,
+          matterId: matter.id,
+          clientId: matter.clientId,
+          issueDate,
+          dueDate,
+          subtotal,
+          taxAmount: new Prisma.Decimal(0),
+          totalAmount: total,
+          paidAmount: new Prisma.Decimal(0),
+          status: "draft",
+          notes: parsed.data.notes || null,
+        },
+        select: { id: true, invoiceNumber: true },
+      });
 
       // Link every WIP entry to this invoice + flip status to billed.
       if (entries.length > 0) {
@@ -254,6 +260,25 @@ export async function generateInvoiceFromWip(
         total,
       };
     });
+
+  try {
+    // P2002 = duplicate invoiceNumber minted by a concurrent
+    // generate. That INSERT aborted its transaction, so retry once
+    // by re-running the whole transaction — the fresh run re-reads
+    // the committed numbers and picks the next free one.
+    let result: Awaited<ReturnType<typeof mintInvoice>>;
+    try {
+      result = await mintInvoice();
+    } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002"
+      ) {
+        result = await mintInvoice();
+      } else {
+        throw err;
+      }
+    }
 
     // Activity log title spells out both buckets so the audit
     // makes the bundle's composition readable at a glance.
@@ -319,15 +344,23 @@ const updateLineItemSchema = z.object({
       const n = Number(v);
       return Number.isFinite(n) && n > 0 && n <= 24;
     }, "Hours must be > 0 and ≤ 24"),
-  /** Optional. Empty string = leave unchanged (contingent /
-   *  no-rate matters). Set to a positive number to override. */
+  /** Optional. Empty string CLEARS rate and amount — the line stays
+   *  on the invoice but stops contributing to the subtotal
+   *  (contingent / no-rate matters). Forms must prefill the current
+   *  rate to preserve it. Non-empty must be a positive number —
+   *  the client's min="0" isn't enforced on the cell-edit path
+   *  (EditableLineItemRow posts FormData directly, bypassing the
+   *  <form>), so a negative rate has to be rejected here. */
   rate: z
     .string()
     .optional()
     .or(z.literal(""))
     .refine(
-      (v) => v === undefined || v === "" || Number.isFinite(Number(v)),
-      "Rate must be a number"
+      (v) =>
+        v === undefined ||
+        v === "" ||
+        (Number.isFinite(Number(v)) && Number(v) > 0),
+      "Rate must be a positive number"
     ),
 });
 
@@ -380,9 +413,10 @@ export async function updateInvoiceLineItem(
     await requirePermission("time_entries.edit_any");
   }
 
-  // Rate handling: empty string = preserve nothing changed (the row
-  // had no rate, e.g. a contingent matter, and the user didn't try
-  // to add one). Non-empty = parse + use.
+  // Rate handling: empty string clears BOTH rate and amount — the
+  // line drops out of the subtotal (contingent-style rows). There
+  // is no "leave unchanged" sentinel; a form that wants to keep the
+  // rate must prefill it. Non-empty = parse + use.
   const newRate =
     parsed.data.rate && parsed.data.rate.length > 0
       ? new Prisma.Decimal(parsed.data.rate)
@@ -452,10 +486,31 @@ export async function updateInvoiceLineItem(
 
 // ── Invoice status transitions ──────────────────────────────────────────
 
+/** Permission key gating each target status reachable through
+ *  setInvoiceStatus. "paid" via this action is only the internal-
+ *  record "Mark recorded" flip (client invoices reach paid/partial
+ *  exclusively through recordInvoicePayment), so it shares the
+ *  approve gate — both are "finalize the document" acts. "partial"
+ *  is client-only and always refused below with a pointer to
+ *  recordInvoicePayment; it gates on the payment key so the refusal
+ *  isn't reachable by users who couldn't record the payment anyway. */
+const SET_STATUS_PERMISSION: Record<string, string> = {
+  approved: "billing.approve_invoice",
+  sent: "billing.send_invoice",
+  void: "billing.void_invoice",
+  paid: "billing.approve_invoice",
+  partial: "billing.record_payment",
+};
+
 export async function setInvoiceStatus(
   invoiceId: string,
   next: string
 ): Promise<{ ok: boolean; error?: string }> {
+  const permissionKey = SET_STATUS_PERMISSION[next];
+  if (!permissionKey) {
+    return { ok: false, error: `Unknown invoice status "${next}".` };
+  }
+  await requirePermission(permissionKey);
   const userId = await getCurrentUserId();
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
@@ -477,6 +532,20 @@ export async function setInvoiceStatus(
     return {
       ok: false,
       error: `Can't transition ${invoice.status} → ${next}.`,
+    };
+  }
+
+  // Client invoices reach paid/partial ONLY through
+  // recordInvoicePayment — every status flip must be paired with a
+  // real InvoicePayment row + paidAmount bump. Flipping the status
+  // here would leave AR reading "paid" with zero collected, and the
+  // state is hard to repair (recordInvoicePayment refuses invoices
+  // that aren't sent/partial).
+  if (kind === "client" && (next === "paid" || next === "partial")) {
+    return {
+      ok: false,
+      error:
+        "Use Record payment instead — paid/partial is set automatically when the payment lands.",
     };
   }
 
@@ -505,11 +574,13 @@ export async function setInvoiceStatus(
       : { status: next };
 
   if (next === "void") {
-    // Void → unlink time entries so they go back into WIP under
-    // their original status, and unlink expenses so they're
-    // available to roll into a future invoice. Otherwise
-    // voiding strands billable hours at status="billed" and
-    // expenses pinned to a now-voided invoice.
+    // Void → unlink time entries so they go back into WIP. The
+    // pre-invoice status isn't stored anywhere, so every entry is
+    // reset to a uniform "billable" (a draft entry swept into the
+    // invoice comes back ready-to-bill, not as a draft). Expenses
+    // are unlinked too so they can roll into a future invoice.
+    // Otherwise voiding strands billable hours at status="billed"
+    // and expenses pinned to a now-voided invoice.
     await prisma.$transaction([
       prisma.timeEntry.updateMany({
         where: { invoiceId: invoice.id },
@@ -555,6 +626,7 @@ export async function setInvoiceStatus(
 export async function deleteInvoice(
   invoiceId: string
 ): Promise<{ ok: boolean; error?: string }> {
+  await requirePermission("billing.delete_draft");
   const userId = await getCurrentUserId();
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
@@ -610,13 +682,15 @@ export async function deleteInvoice(
 
 // ── Approve invoice ────────────────────────────────────────────────────
 //
-// Single-step transition draft → approved. Today this is just a
-// status flip; future iterations will gate it behind a billing-
-// approval role and capture the approver in an audit row.
+// Single-step transition draft → approved, gated behind
+// billing.approve_invoice. The approver lands in the activity log;
+// a dedicated audit row (approver + timestamp on the invoice) is
+// still future work.
 
 export async function approveInvoice(
   invoiceId: string
 ): Promise<{ ok: boolean; error?: string }> {
+  await requirePermission("billing.approve_invoice");
   const userId = await getCurrentUserId();
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
@@ -683,6 +757,7 @@ export async function addTrustTransaction(
   _prev: BillingFormState,
   formData: FormData
 ): Promise<BillingFormState> {
+  await requirePermission("trust.record_transaction");
   const userId = await getCurrentUserId();
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = trustTxnSchema.safeParse(raw);
@@ -779,6 +854,9 @@ export async function bundleAsInternalRecord(
   _prev: BillingFormState,
   formData: FormData
 ): Promise<BillingFormState> {
+  // Same key as generateInvoiceFromWip — bundling is the same
+  // "sweep WIP into a document" capability, just born-locked.
+  await requirePermission("billing.generate_invoice");
   const userId = await getCurrentUserId();
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = internalRecordSchema.safeParse(raw);
@@ -789,8 +867,10 @@ export async function bundleAsInternalRecord(
     };
   }
 
-  try {
-    const result = await prisma.$transaction(async (tx) => {
+  // Named so the invoice-number collision path can re-run the whole
+  // transaction — same shape as generateInvoiceFromWip.
+  const mintRecord = () =>
+    prisma.$transaction(async (tx) => {
       const matter = await tx.matter.findUnique({
         where: { id: matterId },
         select: { id: true, name: true, clientId: true },
@@ -836,45 +916,32 @@ export async function bundleAsInternalRecord(
 
       const issueDate = new Date();
 
-      let invoice;
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const number = await nextInvoiceNumber(tx);
-        try {
-          invoice = await tx.invoice.create({
-            data: {
-              invoiceNumber: number,
-              matterId: matter.id,
-              clientId: matter.clientId,
-              kind: "internal_record",
-              issueDate,
-              // No real due date — set equal to issue so daysUntilDue
-              // math doesn't surface anything alarming.
-              dueDate: issueDate,
-              subtotal,
-              taxAmount: new Prisma.Decimal(0),
-              totalAmount: total,
-              // Born already-locked as "Recorded" (status=paid, label
-              // flipped per kind). Avoids the "draft sitting there
-              // forever" fate of internal records.
-              paidAmount: total,
-              status: "paid",
-              notes: parsed.data.notes,
-            },
-            select: { id: true, invoiceNumber: true },
-          });
-          break;
-        } catch (err) {
-          if (
-            err instanceof Prisma.PrismaClientKnownRequestError &&
-            err.code === "P2002" &&
-            attempt === 0
-          ) {
-            continue;
-          }
-          throw err;
-        }
-      }
-      if (!invoice) throw new Error("Failed to mint record number.");
+      // Collision handling matches generateInvoiceFromWip: a P2002
+      // aborts the transaction, so the retry re-runs `mintRecord`
+      // from the outside rather than looping in here.
+      const number = await nextInvoiceNumber(tx);
+      const invoice = await tx.invoice.create({
+        data: {
+          invoiceNumber: number,
+          matterId: matter.id,
+          clientId: matter.clientId,
+          kind: "internal_record",
+          issueDate,
+          // No real due date — set equal to issue so daysUntilDue
+          // math doesn't surface anything alarming.
+          dueDate: issueDate,
+          subtotal,
+          taxAmount: new Prisma.Decimal(0),
+          totalAmount: total,
+          // Born already-locked as "Recorded" (status=paid, label
+          // flipped per kind). Avoids the "draft sitting there
+          // forever" fate of internal records.
+          paidAmount: total,
+          status: "paid",
+          notes: parsed.data.notes,
+        },
+        select: { id: true, invoiceNumber: true },
+      });
 
       // Same as client invoices — flip the entries to "billed" so
       // they leave WIP. Void unlinks them back. The "billed" status
@@ -901,6 +968,24 @@ export async function bundleAsInternalRecord(
         total,
       };
     });
+
+  try {
+    // Retry the whole transaction once on an invoice-number
+    // collision — see generateInvoiceFromWip for why the retry
+    // can't live inside the (aborted) transaction.
+    let result: Awaited<ReturnType<typeof mintRecord>>;
+    try {
+      result = await mintRecord();
+    } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002"
+      ) {
+        result = await mintRecord();
+      } else {
+        throw err;
+      }
+    }
 
     await logActivity({
       matterId: result.matter.id,
@@ -979,6 +1064,7 @@ export async function recordInvoicePayment(
   _prev: BillingFormState,
   formData: FormData
 ): Promise<BillingFormState> {
+  await requirePermission("billing.record_payment");
   const userId = await getCurrentUserId();
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = recordPaymentSchema.safeParse(raw);
@@ -993,6 +1079,15 @@ export async function recordInvoicePayment(
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      // Row-lock the invoice before reading paidAmount: the
+      // read-check-write below is a lost-update hazard under READ
+      // COMMITTED — two concurrent submissions of the same payment
+      // would both pass the balance check, both create payment
+      // rows, and the second paidAmount write would clobber the
+      // first (payments summing past paidAmount / past total).
+      // FOR UPDATE queues the competitor until this commits, so it
+      // re-reads the bumped balance and refuses.
+      await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${invoiceId} FOR UPDATE`;
       const invoice = await tx.invoice.findUnique({
         where: { id: invoiceId },
         select: {
@@ -1040,6 +1135,11 @@ export async function recordInvoicePayment(
       // row links back to the TrustTransaction for cross-navigation.
       let trustTxnId: string | null = null;
       if (data.source === "trust") {
+        // Same lost-update hazard on trustBalance — lock the matter
+        // row so concurrent disbursements can't both pass the
+        // overdraw check. Lock order is invoice → matter everywhere
+        // (here and sendInvoice) to keep deadlocks impossible.
+        await tx.$queryRaw`SELECT id FROM matters WHERE id = ${invoice.matterId} FOR UPDATE`;
         const matter = await tx.matter.findUnique({
           where: { id: invoice.matterId },
           select: { trustBalance: true },
@@ -1194,11 +1294,19 @@ const sendInvoiceSchema = z.object({
     .optional()
     .transform((v) => v === "true" || v === "on"),
   /** Amount of trust to apply, only consulted when applyTrust=true.
-   *  Defaults to MIN(trust balance, invoice balance) on the client. */
+   *  Defaults to MIN(trust balance, invoice balance) on the client.
+   *  Same strict money format as every other amount in this file —
+   *  a bare string would let "abc" throw a raw DecimalError at the
+   *  user and "5.999" put sub-cent amounts into the trust ledger. */
   trustAmount: z
     .string()
     .optional()
-    .or(z.literal("")),
+    .or(z.literal(""))
+    .transform((v) => (v ? v.replace(/[$,]/g, "") : v))
+    .refine(
+      (v) => !v || /^\d+(\.\d{1,2})?$/.test(v),
+      "Enter a valid amount"
+    ),
 });
 
 export async function sendInvoice(
@@ -1206,6 +1314,7 @@ export async function sendInvoice(
   _prev: BillingFormState,
   formData: FormData
 ): Promise<BillingFormState> {
+  await requirePermission("billing.send_invoice");
   const userId = await getCurrentUserId();
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = sendInvoiceSchema.safeParse(raw);
@@ -1216,6 +1325,11 @@ export async function sendInvoice(
     };
   }
   const data = parsed.data;
+  // Applying trust moves client money — a distinct capability from
+  // sending, so it stacks a second gate on top of send.
+  if (data.applyTrust) {
+    await requirePermission("billing.apply_trust");
+  }
   if (data.method === "mail") {
     return {
       status: "error",
@@ -1231,6 +1345,11 @@ export async function sendInvoice(
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      // Same lock discipline as recordInvoicePayment (invoice →
+      // matter): paidAmount is read-modify-written below, so a
+      // concurrent payment against this invoice must queue rather
+      // than race the balance check.
+      await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${invoiceId} FOR UPDATE`;
       const invoice = await tx.invoice.findUnique({
         where: { id: invoiceId },
         select: {
@@ -1259,6 +1378,9 @@ export async function sendInvoice(
       let trustApplied: Prisma.Decimal | null = null;
       let newPaid = invoice.paidAmount;
       if (data.applyTrust) {
+        // Lock the matter row (trustBalance read-modify-write) —
+        // see recordInvoicePayment's trust branch.
+        await tx.$queryRaw`SELECT id FROM matters WHERE id = ${invoice.matterId} FOR UPDATE`;
         const matter = await tx.matter.findUnique({
           where: { id: invoice.matterId },
           select: { trustBalance: true },
@@ -1266,12 +1388,13 @@ export async function sendInvoice(
         if (!matter) throw new Error("Matter not found.");
         const balance = invoice.totalAmount.sub(invoice.paidAmount);
         // Default: cap at MIN(trust, balance). User-supplied amount
-        // can step down but never up past the cap.
+        // can step down but never up past the cap. trustAmount was
+        // format-validated + $/comma-stripped by the schema.
         const cap = matter.trustBalance.lessThan(balance)
           ? matter.trustBalance
           : balance;
         const applied = data.trustAmount
-          ? new Prisma.Decimal(data.trustAmount.replace(/[$,]/g, ""))
+          ? new Prisma.Decimal(data.trustAmount)
           : cap;
         if (applied.lessThanOrEqualTo(0)) {
           throw new Error("Trust application amount must be greater than 0.");

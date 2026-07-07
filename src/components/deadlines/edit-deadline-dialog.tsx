@@ -97,9 +97,18 @@ export function EditDeadlineDialog({
     }
   }, [open, deadline]);
 
+  // Close on success. Deps must be the state OBJECT, not
+  // state.status: useActionState keeps its state across
+  // submissions, so after the first success the status string is
+  // "ok" forever. DeadlineRowMenu keeps this dialog mounted, so a
+  // second save of the same deadline returns a fresh object whose
+  // status compares equal — keyed on the string, the effect skips
+  // and the dialog silently stays open even though the save landed.
+  // Each action invocation returns a new object, so identity is
+  // the reliable "a submission just finished" signal.
   useEffect(() => {
     if (state.status === "ok") onOpenChange(false);
-  }, [state.status, onOpenChange]);
+  }, [state, onOpenChange]);
 
   const errs = state.errors ?? {};
 

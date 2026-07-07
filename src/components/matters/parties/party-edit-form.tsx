@@ -1,12 +1,13 @@
 /**
- * Party Edit Form — in-place editor for the MatterContact join row.
+ * Party Edit Form — in-place editor for a party on a matter.
  *
- * Scope is intentionally narrow: subrole, notes, and (when not a
- * client) representation info. The underlying Contact — name, email,
- * phone, organization — isn't editable here because those fields
- * live on the shared Contact record and touch every matter the
- * contact appears on. Editing them is a separate flow that hasn't
- * landed yet.
+ * Two write surfaces with very different blast radii:
+ *   1. The shared Contact record — name, email, organization, and
+ *      the multi-phone list. Contacts are firm-wide, so edits here
+ *      ripple to every matter the contact appears on (the form
+ *      warns the user under the phone editor).
+ *   2. The MatterContact join row — subrole, notes, and (when not
+ *      a client) representation info. Scoped to this matter only.
  */
 
 "use client";
@@ -212,9 +213,14 @@ export function PartyEditForm({
   const clearRepSelection = () => {
     setRepSelectedId(null);
     setRepSuggestionsOpen(false);
-    setRepFirm("");
-    setRepEmail("");
-    setRepPhone("");
+    // Restore the party's saved rep fields rather than blanking —
+    // an accidental pick + X + save must not overwrite existing
+    // representation data with empty strings. (The composer's
+    // identical helper wipes instead; it has no prior data.)
+    setRepQuery(party.representationName ?? "");
+    setRepFirm(party.representationFirm ?? "");
+    setRepEmail(party.representationEmail ?? "");
+    setRepPhone(party.representationPhone ?? "");
     repInputRef.current?.focus();
   };
 

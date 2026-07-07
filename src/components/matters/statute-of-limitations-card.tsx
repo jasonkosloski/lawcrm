@@ -44,15 +44,43 @@ export type StatuteOfLimitationsCardProps = {
 
 const ONE_DAY = 24 * 60 * 60 * 1000;
 
-function daysBetween(a: Date, b: Date): number {
-  const aMid = new Date(a);
-  aMid.setHours(0, 0, 0, 0);
-  const bMid = new Date(b);
-  bMid.setHours(0, 0, 0, 0);
-  return Math.round((bMid.getTime() - aMid.getTime()) / ONE_DAY);
+/**
+ * Whole calendar days from "now" until the stored SOL deadline.
+ *
+ * Date-only fields (SOL deadline, incident date) are stored as UTC
+ * midnight — the server parses the "YYYY-MM-DD" input with
+ * `new Date(...)`. Reading the deadline via local getters shifts it
+ * to the previous day for anyone west of UTC, so its calendar day
+ * must come from the getUTC* components. "Today" is the viewer's
+ * LOCAL calendar date. Both are placed on the UTC day grid so the
+ * subtraction counts whole days regardless of zone or DST.
+ */
+export function daysUntil(deadline: Date, now: Date): number {
+  const deadlineDay = Date.UTC(
+    deadline.getUTCFullYear(),
+    deadline.getUTCMonth(),
+    deadline.getUTCDate()
+  );
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((deadlineDay - today) / ONE_DAY);
 }
 
-function formatFullDate(d: Date): string {
+/** For date-only values stored as UTC midnight (SOL deadline,
+ *  incident date): format on the UTC day grid, or users west of UTC
+ *  see the previous day — a factually wrong deadline. */
+export function formatCalendarDate(d: Date): string {
+  return d.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+/** For real timestamps (satisfiedAt is `new Date()` at click time):
+ *  the viewer's local zone is the right frame — do NOT force UTC. */
+function formatTimestampDate(d: Date): string {
   return d.toLocaleDateString("en-US", {
     weekday: "short",
     month: "short",
@@ -103,7 +131,7 @@ export function StatuteOfLimitationsCard({
   }
 
   const now = new Date();
-  const days = daysBetween(now, date);
+  const days = daysUntil(date, now);
   const past = days < 0;
 
   // Tone: satisfied dominates; otherwise escalate by days.
@@ -163,7 +191,7 @@ export function StatuteOfLimitationsCard({
               {labelText}
             </div>
             <div className="text-2xs text-ink-3 font-mono">
-              {formatFullDate(date)}
+              {formatCalendarDate(date)}
             </div>
           </div>
 
@@ -191,7 +219,7 @@ export function StatuteOfLimitationsCard({
 
         {optimisticSatisfied && satisfiedAt && (
           <div className="text-2xs text-ink-4">
-            Marked satisfied {formatFullDate(satisfiedAt)}
+            Marked satisfied {formatTimestampDate(satisfiedAt)}
           </div>
         )}
 
@@ -206,7 +234,7 @@ export function StatuteOfLimitationsCard({
               <span>
                 from incident{" "}
                 <span className="font-mono">
-                  {formatFullDate(incidentDate)}
+                  {formatCalendarDate(incidentDate)}
                 </span>
               </span>
             )}

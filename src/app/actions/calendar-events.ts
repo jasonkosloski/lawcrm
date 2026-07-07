@@ -253,14 +253,77 @@ export async function updateCalendarEvent(
     };
   }
 
+  // Resolve linked user/contact entries BEFORE opening the
+  // transaction. Two reasons: (a) a missing/empty/stale id must
+  // fail the save with a field error — never silently write an
+  // attendee row with BOTH FKs null, and never let a non-"new"
+  // entry fall into the create-a-Contact branch (those entries
+  // skipped the email-required superRefine and the duplicate-email
+  // pre-check, so minting a Contact from them can create email-less
+  // or duplicate directory rows); (b) the min-firm-attendee check
+  // below has to count users that actually resolved — a deactivated
+  // user in a stale payload must not satisfy the invariant.
+  type ResolvedAttendee = {
+    entry: AttendeeEntry;
+    userId: string | null;
+    contactId: string | null;
+  };
+  const resolvedAttendees: ResolvedAttendee[] = [];
+  for (const a of attendeeList) {
+    if (a.kind === "user") {
+      const u = a.userId
+        ? await prisma.user.findUnique({
+            where: { id: a.userId },
+            select: { id: true, isActive: true },
+          })
+        : null;
+      if (!u?.isActive) {
+        return {
+          status: "error",
+          errors: {
+            attendees: [
+              `"${a.name}" is no longer an active firm user — remove them and pick again.`,
+            ],
+          },
+        };
+      }
+      resolvedAttendees.push({ entry: a, userId: u.id, contactId: null });
+    } else if (a.kind === "contact") {
+      const c = a.contactId
+        ? await prisma.contact.findUnique({
+            where: { id: a.contactId },
+            select: { id: true, isActive: true },
+          })
+        : null;
+      if (!c?.isActive) {
+        return {
+          status: "error",
+          errors: {
+            attendees: [
+              `"${a.name}" no longer matches an active contact — remove them and pick again.`,
+            ],
+          },
+        };
+      }
+      resolvedAttendees.push({ entry: a, userId: null, contactId: c.id });
+    } else {
+      // kind === "new" — the Contact row is minted inside the
+      // transaction below so a failed save never leaves a
+      // half-created directory entry behind.
+      resolvedAttendees.push({ entry: a, userId: null, contactId: null });
+    }
+  }
+
   // Min-firm-attendee invariant: every event must keep at least
   // one firm user attached. Stops a user from accidentally
   // orphaning an event (no one to surface it on a calendar, no
-  // one to follow up). Counts kind=user entries — external
-  // contacts/arbitrary names don't satisfy the rule because
-  // they aren't firm members.
-  const firmAttendeeCount = attendeeList.filter(
-    (a) => a.kind === "user" && a.userId
+  // one to follow up). Counts RESOLVED kind=user entries —
+  // external contacts/arbitrary names don't satisfy the rule
+  // because they aren't firm members, and the resolution above
+  // already rejected any user entry that didn't land on an
+  // active User row.
+  const firmAttendeeCount = resolvedAttendees.filter(
+    (r) => r.userId !== null
   ).length;
   if (firmAttendeeCount === 0) {
     return {
@@ -303,17 +366,19 @@ export async function updateCalendarEvent(
       seen.add(e);
     }
     if (newEmails.length > 0) {
-      // Firm-scoped uniqueness check. SQLite has no
-      // case-insensitive comparison helper Prisma can drive, so
-      // we pull candidate rows + match in JS. Bounds: this is a
-      // small list (the new-attendee count, never the whole
-      // Contact table). The OR-firmId-null branch matches legacy
+      // Firm-scoped uniqueness check, bounded by the new-attendee
+      // emails (`email: { in: ... }`) — never the whole Contact
+      // table. Postgres backs `mode: "insensitive"` so the
+      // case-folding happens in the query; the Map below only
+      // re-lowercases the returned handful of rows to pair each
+      // collision with the existing contact's name for the error
+      // message. The OR-firmId-null branch matches legacy
       // unbackfilled rows so single-tenant duplicates still get
       // caught — drop that clause once Contact.firmId is required.
       const existing = await prisma.contact.findMany({
         where: {
           isActive: true,
-          email: { not: null },
+          email: { in: newEmails, mode: "insensitive" },
           OR: [{ firmId: firm.id }, { firmId: null }],
         },
         select: { email: true, name: true },
@@ -364,30 +429,17 @@ export async function updateCalendarEvent(
     // (status defaults to "pending" today; RSVP isn't wired yet).
     await tx.calendarAttendee.deleteMany({ where: { eventId } });
 
-    if (attendeeList.length > 0) {
-      // Resolve each entry to a CalendarAttendee row. The
-      // arbitrary-name path also creates a Contact (type=other)
-      // so the firm's directory grows organically as people get
-      // invited to events.
-      for (const a of attendeeList) {
-        let userId: string | null = null;
-        let contactId: string | null = null;
+    if (resolvedAttendees.length > 0) {
+      // Each resolved entry becomes a CalendarAttendee row.
+      // Linked user/contact entries were validated (and their
+      // FKs resolved) before the transaction opened — only
+      // writes happen in here.
+      for (const r of resolvedAttendees) {
+        const a = r.entry;
+        const userId = r.userId;
+        let contactId = r.contactId;
 
-        if (a.kind === "user" && a.userId) {
-          // Validate the user actually exists + is active —
-          // defensive against a stale clientId.
-          const u = await tx.user.findUnique({
-            where: { id: a.userId },
-            select: { id: true, isActive: true },
-          });
-          if (u?.isActive) userId = u.id;
-        } else if (a.kind === "contact" && a.contactId) {
-          const c = await tx.contact.findUnique({
-            where: { id: a.contactId },
-            select: { id: true, isActive: true },
-          });
-          if (c?.isActive) contactId = c.id;
-        } else {
+        if (a.kind === "new") {
           // "new" branch — create a Contact (type=other) so the
           // arbitrary entry becomes a real directory row. The
           // pre-transaction check above already ruled out
@@ -445,9 +497,53 @@ export async function deleteCalendarEvent(
 ): Promise<{ ok: boolean; error?: string; matterId: string | null }> {
   const event = await prisma.calendarEvent.findUnique({
     where: { id: eventId },
-    select: { matterId: true },
+    select: {
+      matterId: true,
+      createdById: true,
+      matter: {
+        select: {
+          teamMembers: {
+            where: { removedAt: null },
+            select: { userId: true },
+          },
+        },
+      },
+    },
   });
   if (!event) return { ok: false, error: "Event not found", matterId: null };
+
+  // Delete gate mirrors the edit gate (canEditEvent) with
+  // `events.delete` slotted into the permission branch: creator
+  // bypass first (you can always delete your own event), then the
+  // granular key for matter events. Deleting ANOTHER user's
+  // personal event additionally requires `events.edit_non_matter`
+  // — there's no dedicated events.delete_non_matter key yet, and
+  // edit_non_matter is the existing "may reach into other users'
+  // personal calendars" grant, so events.delete alone must not
+  // erase someone's private event.
+  const viewerId = await getCurrentUserId();
+  const [hasEventsDelete, hasEventsEditNonMatter] = await Promise.all([
+    currentUserHasPermission("events.delete"),
+    currentUserHasPermission("events.edit_non_matter"),
+  ]);
+  const allowed = canEditEvent({
+    viewerId,
+    createdById: event.createdById,
+    matterId: event.matterId,
+    matterTeamUserIds:
+      event.matter?.teamMembers.map((m) => m.userId) ?? [],
+    perms: {
+      hasEventsEdit: hasEventsDelete,
+      hasEventsEditNonMatter: hasEventsDelete && hasEventsEditNonMatter,
+    },
+  });
+  if (!allowed) {
+    return {
+      ok: false,
+      error: "You don't have permission to delete this event.",
+      matterId: null,
+    };
+  }
 
   await prisma.calendarEvent.delete({ where: { id: eventId } });
 
@@ -619,8 +715,10 @@ export async function createCalendarEvent(
 // re-validates the boundary semantics (end >= start; non-empty;
 // parseable) before writing.
 //
-// Auth: gated on `events.edit`. Admins short-circuit; other roles need
-// the explicit grant via the matrix.
+// Auth: same `canEditEvent` resolver as `updateCalendarEvent` — a drag
+// is just a narrower edit, so it must not leak capabilities the form
+// path denies (`events.edit` alone doesn't reschedule another user's
+// personal event) nor deny ones it grants (creator bypass).
 
 const moveCalendarEventSchema = z
   .object({
@@ -664,7 +762,6 @@ export async function moveCalendarEvent(
   eventId: string,
   input: { isAllDay: boolean; startTime: string; endTime: string }
 ): Promise<{ ok: boolean; error?: string }> {
-  await requirePermission("events.edit");
   const parsed = moveCalendarEventSchema.safeParse(input);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
@@ -673,10 +770,46 @@ export async function moveCalendarEvent(
 
   const event = await prisma.calendarEvent.findUnique({
     where: { id: eventId },
-    select: { matterId: true },
+    select: {
+      matterId: true,
+      createdById: true,
+      matter: {
+        select: {
+          teamMembers: {
+            where: { removedAt: null },
+            select: { userId: true },
+          },
+        },
+      },
+    },
   });
   if (!event) {
     return { ok: false, error: "Event not found." };
+  }
+
+  // Same edit gate as updateCalendarEvent (see the header comment
+  // above) — a blanket requirePermission("events.edit") here would
+  // both over-grant (edit-holders dragging other users' personal
+  // events) and under-grant (creators without events.edit blocked
+  // from dragging their own).
+  const viewerId = await getCurrentUserId();
+  const [hasEventsEdit, hasEventsEditNonMatter] = await Promise.all([
+    currentUserHasPermission("events.edit"),
+    currentUserHasPermission("events.edit_non_matter"),
+  ]);
+  const allowed = canEditEvent({
+    viewerId,
+    createdById: event.createdById,
+    matterId: event.matterId,
+    matterTeamUserIds:
+      event.matter?.teamMembers.map((m) => m.userId) ?? [],
+    perms: { hasEventsEdit, hasEventsEditNonMatter },
+  });
+  if (!allowed) {
+    return {
+      ok: false,
+      error: "You don't have permission to move this event.",
+    };
   }
 
   await prisma.calendarEvent.update({

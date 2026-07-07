@@ -29,6 +29,7 @@ import {
   useContext,
   useEffect,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
@@ -44,6 +45,31 @@ type MailboxDrawerContextValue = {
 const MailboxDrawerContext = createContext<MailboxDrawerContextValue | null>(
   null
 );
+
+/** Tailwind `lg` breakpoint — must stay in sync with the `lg:`
+ *  classes below that switch the drawer into a persistent rail. */
+const DESKTOP_QUERY = "(min-width: 1024px)";
+
+function subscribeToDesktop(callback: () => void) {
+  const mql = window.matchMedia(DESKTOP_QUERY);
+  mql.addEventListener("change", callback);
+  return () => mql.removeEventListener("change", callback);
+}
+
+/** Whether the viewport is at `lg+`, where the drawer is a
+ *  persistent rail. Needed because `inert` on the closed drawer is
+ *  correct only on mobile — at `lg+` the same element is visible
+ *  and must stay interactive, and there's no CSS-only way to scope
+ *  an attribute to a breakpoint. Server snapshot assumes desktop so
+ *  SSR never ships an inert (unclickable) rail; on mobile the
+ *  drawer starts closed and gains `inert` at hydration. */
+function useIsDesktop(): boolean {
+  return useSyncExternalStore(
+    subscribeToDesktop,
+    () => window.matchMedia(DESKTOP_QUERY).matches,
+    () => true
+  );
+}
 
 function useMailboxDrawer(): MailboxDrawerContextValue {
   const ctx = useContext(MailboxDrawerContext);
@@ -120,6 +146,7 @@ export function MailboxDrawerTrigger({ label }: { label: string }) {
  *  becomes a fixed-position drawer with backdrop. */
 export function MailboxDrawer({ children }: { children: ReactNode }) {
   const { open, close } = useMailboxDrawer();
+  const isDesktop = useIsDesktop();
   return (
     <>
       {/* Backdrop (mobile only). */}
@@ -150,7 +177,12 @@ export function MailboxDrawer({ children }: { children: ReactNode }) {
           "lg:static lg:translate-x-0 lg:z-auto",
           "bg-card lg:bg-transparent shadow-2xl lg:shadow-none"
         )}
-        aria-hidden={!open ? undefined : false}
+        // Closed on mobile = translated off-canvas but still in the
+        // DOM, so `inert` pulls its links out of the tab order and
+        // the a11y tree. Must not apply at lg+ where this same
+        // element is the always-visible rail — hence the media
+        // query instead of a plain `!open`.
+        inert={!open && !isDesktop}
       >
         {/* Close button — mobile only. Positioned in the rail's
             top-right so it sits at the user's thumb. */}

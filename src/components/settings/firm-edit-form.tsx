@@ -23,6 +23,7 @@ import {
   type FirmFormState,
 } from "@/lib/firm-form";
 import type { FirmProfile } from "@/lib/firm";
+import { formatDate } from "@/lib/format-date";
 
 export function FirmEditForm({ firm }: { firm: FirmProfile }) {
   const [state, formAction, isPending] = useActionState<
@@ -33,8 +34,12 @@ export function FirmEditForm({ firm }: { firm: FirmProfile }) {
   const errs = state.errors ?? {};
 
   // Format the establishedAt date as YYYY-MM-DD for <input type="date">.
+  // Must go through formatDate("iso") — it reads the UTC calendar day.
+  // establishedAt is a date-only value stored at UTC midnight, so local
+  // getters would render the previous day for any browser west of UTC
+  // (and diverge from the UTC-server SSR output → hydration mismatch).
   const establishedDateValue = firm.establishedAt
-    ? `${firm.establishedAt.getFullYear()}-${String(firm.establishedAt.getMonth() + 1).padStart(2, "0")}-${String(firm.establishedAt.getDate()).padStart(2, "0")}`
+    ? formatDate(firm.establishedAt, "iso")
     : "";
 
   return (

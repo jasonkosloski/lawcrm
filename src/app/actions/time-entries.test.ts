@@ -4,8 +4,11 @@
  * Covers:
  *   - createTimeEntry: validation, matter existence, calendar-event
  *     linking, source field write
- *   - updateTimeEntry: validation, billed-row guard, field updates
- *   - setTimeEntryStatus: enum guard, missing-row guard, status update
+ *   - updateTimeEntry: validation, billed-row guard (regardless of
+ *     the posted status), amount = hours × rate sync, field updates
+ *   - setTimeEntryStatus: enum guard, missing-row guard, status
+ *     update, billed-transition guards (no manual bill/unbill while
+ *     an invoice is attached)
  *   - deleteTimeEntry: missing-row + billed-row guards
  *   - RBAC gates: each entry-point hits the right permission key,
  *     and edit/delete flow through `time_entries.{edit,delete}_any`
@@ -222,7 +225,7 @@ describe("updateTimeEntry", () => {
     expect(res.errors?.activity?.[0]).toMatch(/no longer exists/i);
   });
 
-  test("billed→billed update is refused (must unbill first)", async () => {
+  test("billed entry edit is refused (must unbill first)", async () => {
     const { timeEntryId } = await seedTimeEntry({
       matterId,
       userId,
@@ -235,6 +238,76 @@ describe("updateTimeEntry", () => {
     );
     expect(res.status).toBe("error");
     expect(res.errors?.activity?.[0]).toMatch(/billed/i);
+  });
+
+  test("billed guard can't be bypassed by posting a different status", async () => {
+    // Regression: the guard used to fire only when the *form* also
+    // said "billed" — posting "draft" (the schema default) slipped
+    // through and mutated an invoiced entry.
+    const { timeEntryId } = await seedTimeEntry({
+      matterId,
+      userId,
+      hours: 1,
+      status: "billed",
+    });
+    const res = await updateTimeEntry(
+      timeEntryId,
+      timeEntryInitialState,
+      buildUpdateForm({ hours: "9", status: "draft" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.activity?.[0]).toMatch(/billed/i);
+    // The row is untouched.
+    const row = await prisma.timeEntry.findUnique({ where: { id: timeEntryId } });
+    expect(row!.hours).toBe(1);
+    expect(row!.status).toBe("billed");
+  });
+
+  test("recomputes amount (hours × rate) when the entry has a rate", async () => {
+    // Reachable path: rate/amount set via updateInvoiceLineItem,
+    // invoice voided (entry back in WIP with rate intact), hours
+    // edited here — amount must follow or the next WIP invoice
+    // sums a stale Decimal.
+    const { timeEntryId } = await seedTimeEntry({
+      matterId,
+      userId,
+      hours: 1,
+      rate: 250,
+      amount: 250,
+      status: "billable",
+    });
+    const res = await updateTimeEntry(
+      timeEntryId,
+      timeEntryInitialState,
+      buildUpdateForm({ hours: "3", status: "billable" })
+    );
+    expect(res.status).toBe("ok");
+    const row = await prisma.timeEntry.findUnique({ where: { id: timeEntryId } });
+    expect(row!.hours).toBe(3);
+    expect(row!.amount!.toString()).toBe("750");
+  });
+
+  test("leaves amount alone on rate-less (contingent) entries", async () => {
+    const entry = await prisma.timeEntry.create({
+      data: {
+        matterId,
+        userId,
+        date: new Date(),
+        hours: 1,
+        activity: "Contingent work",
+        status: "draft",
+      },
+      select: { id: true },
+    });
+    const res = await updateTimeEntry(
+      entry.id,
+      timeEntryInitialState,
+      buildUpdateForm({ hours: "4" })
+    );
+    expect(res.status).toBe("ok");
+    const row = await prisma.timeEntry.findUnique({ where: { id: entry.id } });
+    expect(row!.hours).toBe(4);
+    expect(row!.amount).toBeNull();
   });
 
   test("persists field updates on a draft entry", async () => {
@@ -288,6 +361,65 @@ describe("setTimeEntryStatus", () => {
     expect(res.ok).toBe(true);
     const row = await prisma.timeEntry.findUnique({ where: { id: timeEntryId } });
     expect(row!.status).toBe("submitted");
+  });
+
+  test("refuses manual transitions TO billed", async () => {
+    // "billed" is owned by invoice generation — a hand flip would
+    // create a billed entry with no invoice behind it.
+    const { timeEntryId } = await seedTimeEntry({
+      matterId,
+      userId,
+      status: "billable",
+    });
+    const res = await setTimeEntryStatus(timeEntryId, "billed");
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/invoice/i);
+    const row = await prisma.timeEntry.findUnique({ where: { id: timeEntryId } });
+    expect(row!.status).toBe("billable");
+  });
+
+  test("refuses unbilling an entry that's still on an invoice", async () => {
+    // Flipping billed→billable while invoiceId stays set strands the
+    // entry: excluded from WIP yet still in the invoice's totals.
+    const invoice = await prisma.invoice.create({
+      data: {
+        invoiceNumber: "2026-777",
+        matterId,
+        issueDate: new Date(),
+        dueDate: new Date(),
+        subtotal: 250,
+        totalAmount: 250,
+        paidAmount: 0,
+      },
+      select: { id: true },
+    });
+    const { timeEntryId } = await seedTimeEntry({
+      matterId,
+      userId,
+      status: "billed",
+      invoiceId: invoice.id,
+    });
+    const res = await setTimeEntryStatus(timeEntryId, "billable");
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/void or delete/i);
+    const row = await prisma.timeEntry.findUnique({ where: { id: timeEntryId } });
+    expect(row!.status).toBe("billed");
+    expect(row!.invoiceId).toBe(invoice.id);
+  });
+
+  test("allows repairing a stranded billed entry with no invoice", async () => {
+    // billed + invoiceId null shouldn't happen through the normal
+    // pipeline, but if it does, the status flip is the escape hatch.
+    const { timeEntryId } = await seedTimeEntry({
+      matterId,
+      userId,
+      status: "billed",
+      invoiceId: null,
+    });
+    const res = await setTimeEntryStatus(timeEntryId, "billable");
+    expect(res.ok).toBe(true);
+    const row = await prisma.timeEntry.findUnique({ where: { id: timeEntryId } });
+    expect(row!.status).toBe("billable");
   });
 });
 

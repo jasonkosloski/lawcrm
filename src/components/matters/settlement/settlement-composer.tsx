@@ -22,6 +22,9 @@ import {
 type SettlementInitial = {
   grossAmount: number;
   firmFeePercent: number | null;
+  /** Stored explicit fee. No editable field in v1 — round-tripped
+   *  via a hidden input when firmFeePercent is null so saving
+   *  doesn't zero an explicitly-set fee. */
   firmFee: number;
   advancedCosts: number;
   status: string;
@@ -176,10 +179,21 @@ export function SettlementComposer({
         </Field>
       </div>
 
-      {/* Hidden: explicit firmFee (not exposed in v1 form — percent
-          drives it). We pass an empty string so the action falls
-          through to "use percent." */}
-      <input type="hidden" name="firmFee" value="" />
+      {/* Hidden: explicit firmFee (not editable in the v1 form —
+          percent drives it when set). Percent-driven settlements
+          submit "" so the action recomputes from percent.
+          Explicit-fee settlements (percent blank on the record)
+          round-trip the stored fee — submitting "" for those would
+          silently zero the fee on save. */}
+      <input
+        type="hidden"
+        name="firmFee"
+        value={
+          initial && initial.firmFeePercent === null
+            ? formatMoneyInput(initial.firmFee)
+            : ""
+        }
+      />
 
       {state.error && (
         <div className="text-2xs text-warn">{state.error}</div>

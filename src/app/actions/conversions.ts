@@ -11,6 +11,11 @@
  *
  * Both actions write activity log entries so the dashboard reflects
  * the conversion as a real user action.
+ *
+ * Auth: each conversion gates on the *target* entity's create
+ * permission (tasks.create / deadlines.create) — a conversion is just
+ * another way to create that entity, so it must not bypass the same
+ * gate the direct capture path enforces.
  */
 
 "use server";
@@ -19,6 +24,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { DEADLINE_KINDS, TASK_PRIORITIES } from "@/lib/note-constants";
 import type { InboxActionFormState } from "@/lib/inbox-action-form";
@@ -37,6 +43,7 @@ export async function convertNoteToTask(
   _prev: InboxActionFormState,
   formData: FormData
 ): Promise<InboxActionFormState> {
+  await requirePermission("tasks.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = noteToTaskSchema.safeParse(raw);
   if (!parsed.success) {
@@ -94,6 +101,7 @@ export async function convertTaskToDeadline(
   _prev: InboxActionFormState,
   formData: FormData
 ): Promise<InboxActionFormState> {
+  await requirePermission("deadlines.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = taskToDeadlineSchema.safeParse(raw);
   if (!parsed.success) {

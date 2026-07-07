@@ -73,6 +73,25 @@ describe("computeSolDate", () => {
     expect(sol!.toISOString().slice(0, 10)).toBe("2026-04-15");
   });
 
+  test("UTC-midnight incident crossing a DST boundary stays on the calendar day", () => {
+    // Incident dates arrive as UTC-midnight timestamps. Local-time
+    // setDate() in a DST-observing server zone used to land the
+    // result at 23:00Z of the PREVIOUS day when the statute period
+    // crossed spring-forward — a silent one-day-early SOL date.
+    // Pin TZ to a DST zone so the regression reproduces regardless
+    // of the machine running the suite (Node re-reads TZ at runtime).
+    const prevTz = process.env.TZ;
+    process.env.TZ = "America/Chicago"; // spring-forward 2026-03-08
+    try {
+      const incident = new Date("2026-01-15T00:00:00Z");
+      const sol = computeSolDate(incident, 180);
+      expect(sol!.toISOString()).toBe("2026-07-14T00:00:00.000Z");
+    } finally {
+      if (prevTz === undefined) delete process.env.TZ;
+      else process.env.TZ = prevTz;
+    }
+  });
+
   test("returns null when incident is missing", () => {
     expect(computeSolDate(null, 730)).toBeNull();
     expect(computeSolDate(undefined, 730)).toBeNull();

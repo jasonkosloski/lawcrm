@@ -111,9 +111,17 @@ export function CommandPalette({
     setQuery("");
     setRecents(readRecents());
     let cancelled = false;
-    getPaletteData().then((d) => {
-      if (!cancelled) setData(d);
-    });
+    getPaletteData()
+      .then((d) => {
+        if (!cancelled) setData(d);
+      })
+      .catch((err) => {
+        // A failed fetch (expired session, network blip) must not strand
+        // the palette on "Loading…" — fall back to empty data so the
+        // static navigation destinations stay usable. Reopening retries.
+        console.warn("[command-palette] fetch failed", err);
+        if (!cancelled) setData({ items: [], pinnedMatterIds: [] });
+      });
     return () => {
       cancelled = true;
     };

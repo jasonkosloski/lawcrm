@@ -9,6 +9,11 @@
  * time-entry layout — composer at top, table below, summary KPIs
  * inline. Each row carries its category + billable/client-advanced
  * flags + invoice link when billed.
+ *
+ * The expense section is the page-level enforcement point for
+ * `matters.expense.view` — getMatterExpenses itself does no
+ * permission check, so viewers without the key must not trigger
+ * the fetch, let alone see the section.
  */
 
 import Link from "next/link";
@@ -87,25 +92,33 @@ export default async function MatterTimePage({
   const [
     entries,
     summary,
-    expenses,
+    canViewExpenses,
     canCreateExpense,
     canDeleteExpense,
-    matterDocuments,
   ] = await Promise.all([
     getMatterTimeEntries(id),
     getMatterTimeSummary(id),
-    getMatterExpenses(id),
+    currentUserHasPermission("matters.expense.view"),
     currentUserHasPermission("matters.expense.create"),
     currentUserHasPermission("matters.expense.delete"),
-    // Pull the list of documents on this matter so the expense
-    // composer's receipt picker has options. Compact projection
-    // — name + id only — to keep the payload small.
-    prisma.document.findMany({
-      where: { matterId: id },
-      orderBy: { createdAt: "desc" },
-      select: { id: true, name: true },
-    }),
   ]);
+  // Expense data waits on the view gate: getMatterExpenses does no
+  // permission check itself, so amounts/receipts must not be fetched
+  // (never mind rendered) for viewers without matters.expense.view.
+  // The document list rides along — it only feeds the expense
+  // composer's receipt picker, which lives inside the gated section.
+  const [expenses, matterDocuments] = canViewExpenses
+    ? await Promise.all([
+        getMatterExpenses(id),
+        // Compact projection — name + id only — to keep the receipt
+        // picker payload small.
+        prisma.document.findMany({
+          where: { matterId: id },
+          orderBy: { createdAt: "desc" },
+          select: { id: true, name: true },
+        }),
+      ])
+    : [null, []];
   const expenseDocumentOptions: ExpenseDocumentOption[] = matterDocuments;
 
   if (entries.length === 0) {
@@ -115,13 +128,15 @@ export default async function MatterTimePage({
         <div className="text-xs text-ink-4 text-center py-6">
           No time logged yet — add an entry above.
         </div>
-        <ExpensesSection
-          matterId={id}
-          expenses={expenses}
-          canCreate={canCreateExpense}
-          canDelete={canDeleteExpense}
-          documentOptions={expenseDocumentOptions}
-        />
+        {expenses && (
+          <ExpensesSection
+            matterId={id}
+            expenses={expenses}
+            canCreate={canCreateExpense}
+            canDelete={canDeleteExpense}
+            documentOptions={expenseDocumentOptions}
+          />
+        )}
       </div>
     );
   }
@@ -187,13 +202,15 @@ export default async function MatterTimePage({
         </Card>
       </section>
 
-      <ExpensesSection
-        matterId={id}
-        expenses={expenses}
-        canCreate={canCreateExpense}
-        canDelete={canDeleteExpense}
-        documentOptions={expenseDocumentOptions}
-      />
+      {expenses && (
+        <ExpensesSection
+          matterId={id}
+          expenses={expenses}
+          canCreate={canCreateExpense}
+          canDelete={canDeleteExpense}
+          documentOptions={expenseDocumentOptions}
+        />
+      )}
     </div>
   );
 }

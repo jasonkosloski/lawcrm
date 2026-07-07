@@ -76,9 +76,18 @@ export function LogTimeOnEntityDialog({
     setPrivileged(false);
   }, [open]);
 
+  // Auto-close on successful save. Deps must be the state OBJECT, not
+  // `state.status`: useActionState keeps its state across submissions,
+  // and this component stays mounted between opens (dashboard/task rows
+  // keep it rendered), so after the first success the status string is
+  // "ok" forever — keyed on the string, a second log's fresh state
+  // object compares equal and the effect never re-fires, leaving the
+  // dialog silently open with a cleared form and inviting a duplicate
+  // entry. Object identity is the reliable "a submission just finished"
+  // signal (same fix as EditTaskDialog / RecordPaymentDialog).
   useEffect(() => {
     if (state.status === "ok") onOpenChange(false);
-  }, [state.status, onOpenChange]);
+  }, [state, onOpenChange]);
 
   const errs = state.errors ?? {};
 

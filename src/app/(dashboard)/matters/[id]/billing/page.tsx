@@ -117,6 +117,7 @@ export default async function MatterBillingPage({
     billing,
     firm,
     settlement,
+    canViewSettlement,
     canEditSettlement,
     canManageLiens,
     canApproveSettlement,
@@ -126,6 +127,11 @@ export default async function MatterBillingPage({
     getMatterBilling(id),
     getCurrentFirm(),
     getMatterSettlement(id),
+    // Gates the entire Settlement card — the waterfall (gross,
+    // firm fee, liens, client net) is the most sensitive number
+    // set on the matter, so billing-tab access alone isn't enough
+    // to see it.
+    currentUserHasPermission("matters.settlement.view"),
     currentUserHasPermission("matters.settlement.edit"),
     currentUserHasPermission("matters.settlement.manage_liens"),
     currentUserHasPermission("matters.settlement.approve"),
@@ -154,6 +160,7 @@ export default async function MatterBillingPage({
       matterId={id}
       billing={billing}
       settlement={settlement}
+      canViewSettlement={canViewSettlement}
       canEditSettlement={canEditSettlement}
       canManageLiens={canManageLiens}
       canApproveSettlement={canApproveSettlement}
@@ -247,6 +254,7 @@ function MainColumn({
   matterId,
   billing,
   settlement,
+  canViewSettlement,
   canEditSettlement,
   canManageLiens,
   canApproveSettlement,
@@ -256,6 +264,7 @@ function MainColumn({
   matterId: string;
   billing: MatterBilling;
   settlement: MatterSettlement | null;
+  canViewSettlement: boolean;
   canEditSettlement: boolean;
   canManageLiens: boolean;
   canApproveSettlement: boolean;
@@ -748,7 +757,12 @@ function MainColumn({
       </Card>
 
       {/* ── Settlement waterfall ───────────────────────────── */}
-      {(settlement || canEditSettlement) && (
+      {/* matters.settlement.view gates the whole card — without it
+          the user gets no hint a settlement exists, even if they
+          hold edit/approve keys (view is the floor; see
+          docs/PERMISSIONS.md). Within the card, edit/manage_liens/
+          approve gate their own affordances. */}
+      {canViewSettlement && (settlement || canEditSettlement) && (
         <SettlementCard
           matterId={matterId}
           settlement={settlement}

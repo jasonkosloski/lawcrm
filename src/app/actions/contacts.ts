@@ -16,8 +16,18 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUserId } from "@/lib/current-user";
 import { CONTACT_TYPES } from "@/lib/queries/contacts";
 import type { ContactFormState } from "@/lib/contact-form";
+
+// TODO(permissions): the proper gate is `requirePermission` with
+// granular contacts.create / contacts.edit / contacts.delete keys,
+// but no contacts.* entries exist in the catalog yet
+// (src/lib/permissions.ts) — adding them is a catalog + matrix-UI
+// change outside this file. Until then, `getCurrentUserId()` is the
+// authoritative auth check (the proxy only verifies cookie
+// *presence*), so every mutation below calls it first to bounce
+// invalid sessions to /login.
 
 const contactSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(200),
@@ -39,6 +49,8 @@ export async function createContact(
   _prev: ContactFormState,
   formData: FormData
 ): Promise<ContactFormState> {
+  await getCurrentUserId();
+
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = contactSchema.safeParse(raw);
   if (!parsed.success) {
@@ -90,6 +102,8 @@ export async function updateContact(
   _prev: ContactFormState,
   formData: FormData
 ): Promise<ContactFormState> {
+  await getCurrentUserId();
+
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = contactSchema.safeParse(raw);
   if (!parsed.success) {
@@ -111,8 +125,12 @@ export async function updateContact(
   }
 
   // Sync the denormalized phone + the primary ContactPhone row in
-  // one transaction so both stay aligned. If phone got cleared, drop
-  // the primary phone row (other rows on the contact are left alone).
+  // one transaction so both stay aligned. Invariant (see the
+  // ContactPhone schema comment): when any phone rows exist, exactly
+  // one is primary and its number mirrors onto Contact.phone. This
+  // form only edits "the" phone; extra rows added via the Parties
+  // tab are preserved, so clearing the field promotes the next row
+  // to primary rather than leaving a primary-less set.
   await prisma.$transaction(async (tx) => {
     await tx.contact.update({
       where: { id: contactId },
@@ -143,13 +161,21 @@ export async function updateContact(
           data: { number: parsed.data.phone },
         });
       } else {
+        // No unique constraint on (contactId, order), so slot the new
+        // row after the existing ones — isPrimary alone marks it as
+        // "the" phone. Hardcoding order 0 would collide with a
+        // non-primary row already at 0 (Parties-tab writes start there).
+        const maxOrder = await tx.contactPhone.aggregate({
+          where: { contactId },
+          _max: { order: true },
+        });
         await tx.contactPhone.create({
           data: {
             contactId,
             label: "Primary",
             number: parsed.data.phone,
             isPrimary: true,
-            order: 0,
+            order: (maxOrder._max.order ?? -1) + 1,
           },
         });
       }
@@ -157,6 +183,24 @@ export async function updateContact(
       await tx.contactPhone.deleteMany({
         where: { contactId, isPrimary: true },
       });
+      // Promote the lowest-order survivor so the one-primary invariant
+      // holds, and mirror it back onto Contact.phone (the update above
+      // nulled it). No survivors → contact genuinely has no phone.
+      const next = await tx.contactPhone.findFirst({
+        where: { contactId },
+        orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+        select: { id: true, number: true },
+      });
+      if (next) {
+        await tx.contactPhone.update({
+          where: { id: next.id },
+          data: { isPrimary: true },
+        });
+        await tx.contact.update({
+          where: { id: contactId },
+          data: { phone: next.number },
+        });
+      }
     }
   });
 
@@ -170,18 +214,20 @@ export async function updateContact(
 export async function deleteContact(
   contactId: string
 ): Promise<{ ok: boolean; error?: string }> {
+  await getCurrentUserId();
+
   const c = await prisma.contact.findUnique({
     where: { id: contactId },
-    select: {
-      id: true,
-      _count: { select: { clientMatters: true, mattersAsClient: true } },
-    },
+    select: { id: true },
   });
   if (!c) return { ok: false, error: "Contact not found" };
 
-  // If the contact is currently a client or party on any matter,
-  // hard-deleting would orphan rows. Soft-delete (isActive=false) so
-  // they fall out of the directory without breaking matter pages.
+  // Always soft-delete (isActive=false). Contacts hang off far more
+  // than matters — messenger threads, leads, representation links,
+  // calendar attendance — so a hard-delete path (even for "unused"
+  // contacts) would need to reason about all of them. Flipping the
+  // flag drops the contact from the directory without touching any
+  // of those rows.
   await prisma.contact.update({
     where: { id: contactId },
     data: { isActive: false },

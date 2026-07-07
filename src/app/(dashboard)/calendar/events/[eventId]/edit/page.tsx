@@ -9,13 +9,24 @@ import { notFound } from "next/navigation";
 import { TopBar } from "@/components/layout/topbar";
 import { EditEventForm } from "@/components/calendar/edit-event-form";
 import { getCalendarEventById } from "@/lib/queries/calendar";
+import { currentUserHasPermission } from "@/lib/permission-check";
 
 export default async function EditEventPage({
   params,
 }: PageProps<"/calendar/events/[eventId]/edit">) {
   const { eventId } = await params;
-  const event = await getCalendarEventById(eventId);
-  if (!event) notFound();
+  const [event, canEdit] = await Promise.all([
+    getCalendarEventById(eventId),
+    currentUserHasPermission("events.edit"),
+  ]);
+  // getCalendarEventById returns a scrubbed "Busy" placeholder (not
+  // null) when the viewer fails the visibility resolver — the modal
+  // needs that row to render a busy block. Here it would pre-fill the
+  // form with the scrubbed values ("Busy", null location/description,
+  // no attendees), and saving would overwrite the real event with
+  // them. So a scrubbed row is a 404 on this page, as is a viewer
+  // without events.edit (updateEvent gates the write regardless).
+  if (!event || !event.viewerCanSeeDetails || !canEdit) notFound();
 
   return (
     <>

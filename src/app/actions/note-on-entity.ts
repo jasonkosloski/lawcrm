@@ -10,6 +10,10 @@
  * textarea, not the full Tiptap editor used on the matter Notes tab.
  * We escape user input and convert newlines to `<br>` so the persisted
  * HTML matches what every other note renderer expects.
+ *
+ * Auth: both actions gate on `notes.create`, the same key as the
+ * primary composer in notes.ts — these are alternate doors into note
+ * authorship, not a separate capability.
  */
 
 "use server";
@@ -18,6 +22,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { NOTE_TYPES } from "@/lib/note-constants";
 import type { NoteAttachmentFormState } from "@/lib/note-attachment-form";
@@ -45,6 +50,9 @@ export async function addNoteToTask(
   _prev: NoteAttachmentFormState,
   formData: FormData
 ): Promise<NoteAttachmentFormState> {
+  // Same key as the primary note composer (notes.ts createNote) — the
+  // inline task composer is just another door into note authorship.
+  await requirePermission("notes.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = noteSchema.safeParse(raw);
   if (!parsed.success) {
@@ -61,14 +69,26 @@ export async function addNoteToTask(
     };
   }
   const userId = await getCurrentUserId();
-  await prisma.note.create({
-    data: {
-      matterId: task.matterId,
-      authorId: userId,
-      taskId,
-      content: textareaToHtml(parsed.data.content),
-      type: parsed.data.type,
-    },
+  // Hoist past the null-check so the narrowed type survives into the
+  // transaction closure below.
+  const matterId = task.matterId;
+  // Note + author's read marker in one transaction — the author always
+  // starts "read" on their own note (matches every other note writer),
+  // and a partial failure shouldn't leave the marker missing.
+  await prisma.$transaction(async (tx) => {
+    const created = await tx.note.create({
+      data: {
+        matterId,
+        authorId: userId,
+        taskId,
+        content: textareaToHtml(parsed.data.content),
+        type: parsed.data.type,
+      },
+      select: { id: true },
+    });
+    await tx.noteRead.create({
+      data: { userId, noteId: created.id },
+    });
   });
 
   revalidatePath(`/matters/${task.matterId}/tasks`);
@@ -94,6 +114,9 @@ export async function addNoteToDeadline(
   _prev: NoteAttachmentFormState,
   formData: FormData
 ): Promise<NoteAttachmentFormState> {
+  // Same key as the primary note composer (notes.ts createNote) — the
+  // inline deadline composer is just another door into note authorship.
+  await requirePermission("notes.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = noteSchema.safeParse(raw);
   if (!parsed.success) {
@@ -110,14 +133,21 @@ export async function addNoteToDeadline(
     };
   }
   const userId = await getCurrentUserId();
-  await prisma.note.create({
-    data: {
-      matterId: deadline.matterId,
-      authorId: userId,
-      deadlineId,
-      content: textareaToHtml(parsed.data.content),
-      type: parsed.data.type,
-    },
+  // See addNoteToTask — note + author's read marker, atomically.
+  await prisma.$transaction(async (tx) => {
+    const created = await tx.note.create({
+      data: {
+        matterId: deadline.matterId,
+        authorId: userId,
+        deadlineId,
+        content: textareaToHtml(parsed.data.content),
+        type: parsed.data.type,
+      },
+      select: { id: true },
+    });
+    await tx.noteRead.create({
+      data: { userId, noteId: created.id },
+    });
   });
 
   revalidatePath(`/matters/${deadline.matterId}/deadlines`);

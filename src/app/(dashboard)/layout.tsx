@@ -29,14 +29,21 @@ export default async function DashboardLayout({
     // Stale JWT, no session, or deactivated user. The jwt callback
     // in src/auth.ts wipes `userId` from the token in those cases.
     // Build the ?next= so they land back here after re-login.
+    //
+    // Next.js gives a layout no built-in way to learn the request
+    // path, so we rely on `x-pathname` (pathname + search) injected
+    // by src/proxy.ts via NextResponse.next({ request: { headers } }).
+    // (`x-invoke-path` was a Next internal that no longer surfaces —
+    // don't reach for it.) If the header is absent we fall back to a
+    // bare /login rather than guessing. The value is user-adjacent
+    // (a header), but /login sanitizes ?next= before redirecting, so
+    // a spoofed value can't turn into an open redirect.
     const h = await headers();
-    const path =
-      h.get("x-invoke-path") ?? h.get("x-pathname") ?? "/";
-    const search = h.get("x-invoke-query") ?? "";
-    const nextPath = path + (search ? `?${search}` : "");
-    const loginUrl = nextPath && nextPath !== "/"
-      ? `/login?next=${encodeURIComponent(nextPath)}`
-      : "/login";
+    const nextPath = h.get("x-pathname") ?? "";
+    const loginUrl =
+      nextPath && nextPath !== "/"
+        ? `/login?next=${encodeURIComponent(nextPath)}`
+        : "/login";
     redirect(loginUrl);
   }
   return <AppShell>{children}</AppShell>;

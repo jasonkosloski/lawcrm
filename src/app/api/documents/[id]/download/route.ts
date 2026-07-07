@@ -24,6 +24,24 @@ import type { Readable } from "node:stream";
 // the path is the auth boundary, not the bytes.
 export const dynamic = "force-dynamic";
 
+// Content types allowed to render inline in the browser. Everything
+// else is forced to `attachment`. This is an allowlist on purpose:
+// `Document.contentType` is the uploader's *client-declared* MIME
+// type (`file.type`, see `storeFile()` — the upload action validates
+// size only), so any user with upload access controls this string.
+// Serving attacker-declared `text/html` or `image/svg+xml` inline
+// would execute their markup on our origin for whoever clicks the
+// link — stored XSS riding a colleague's (possibly admin) session.
+// HTML and SVG are therefore deliberately absent; add new types only
+// if the browser can't execute script from them.
+const INLINE_SAFE_TYPES = new Set([
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+]);
+
 export async function GET(
   _req: NextRequest,
   ctx: { params: Promise<{ id: string }> }
@@ -89,16 +107,34 @@ export async function GET(
         },
       });
 
-  return new Response(webStream, {
-    headers: {
-      "Content-Type": doc.contentType ?? "application/octet-stream",
-      "Content-Length": String(fsStat.size),
-      // attachment + filename* (RFC 5987) handles non-ASCII names
-      // cleanly. The UI link uses target="_blank" so PDFs preview
-      // inline if the browser supports it; this header still lets
-      // "Save as" use the original name.
-      "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(doc.name)}`,
-      "Cache-Control": "private, no-cache, no-store, must-revalidate",
-    },
-  });
+  const contentType = doc.contentType ?? "application/octet-stream";
+  // Compare on the bare media type — a stored value like
+  // "text/html; charset=utf-8" must not slip past the allowlist.
+  const inlineSafe = INLINE_SAFE_TYPES.has(
+    contentType.split(";")[0].trim().toLowerCase()
+  );
+
+  const headers: Record<string, string> = {
+    "Content-Type": contentType,
+    "Content-Length": String(fsStat.size),
+    // Without nosniff, browsers may sniff even a benign declared
+    // type into something active (e.g. octet-stream → HTML).
+    "X-Content-Type-Options": "nosniff",
+    // filename* (RFC 5987) handles non-ASCII names cleanly. The UI
+    // link uses target="_blank" so allowlisted types (PDFs, images)
+    // preview inline; anything user-declared beyond that set is
+    // forced to download — see INLINE_SAFE_TYPES for why.
+    "Content-Disposition": `${inlineSafe ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(doc.name)}`,
+    "Cache-Control": "private, no-cache, no-store, must-revalidate",
+  };
+  if (!inlineSafe) {
+    // Defense in depth: even if some browser renders the attachment
+    // anyway, a sandboxed document gets a unique opaque origin — no
+    // script, no cookies, no session to ride. Not applied to the
+    // inline path because `sandbox` disables the plugin machinery
+    // Chrome's PDF viewer needs, which would break PDF previews.
+    headers["Content-Security-Policy"] = "sandbox";
+  }
+
+  return new Response(webStream, { headers });
 }

@@ -44,7 +44,11 @@ export type EditableTask = {
   description: string | null;
   priority: string;
   status: TaskStatus;
-  /** Plain `YYYY-MM-DD` string for the date input, or empty if no due date. */
+  /**
+   * Due date as a `Date` (or null when unset) — NOT a pre-formatted
+   * string. The dialog converts it to the input's `YYYY-MM-DD` value via
+   * `toDateInput`, which reads local date components (see below).
+   */
   dueDate: Date | null;
 };
 
@@ -88,6 +92,18 @@ export function EditTaskDialog({
   const [priority, setPriority] = useState(task.priority);
   const [status, setStatus] = useState<TaskStatus>(task.status);
 
+  // Field errors are mirrored into local state rather than read straight
+  // off `state.errors`: useActionState has no reset, and this component
+  // stays mounted across close/reopen (TaskRowMenu renders it
+  // unconditionally), so errors from a prior failed attempt would
+  // otherwise reappear on the next open even though the fields reset.
+  const [errs, setErrs] = useState<
+    NonNullable<UpdateTaskFormState["errors"]>
+  >({});
+  useEffect(() => {
+    setErrs(state.errors ?? {});
+  }, [state]);
+
   // Reset local state whenever the dialog opens with a fresh task.
   useEffect(() => {
     if (open) {
@@ -96,15 +112,21 @@ export function EditTaskDialog({
       setDueDate(toDateInput(task.dueDate));
       setPriority(task.priority);
       setStatus(task.status);
+      setErrs({});
     }
   }, [open, task]);
 
-  // Auto-close on successful save.
+  // Auto-close on successful save. Deps must be the state OBJECT, not
+  // `state.status`: useActionState keeps its state across submissions,
+  // and this component stays mounted between opens, so after the first
+  // success the status string is "ok" forever — keyed on the string, a
+  // second save's fresh state object compares equal and the effect never
+  // re-fires, leaving the dialog silently open. Object identity is the
+  // reliable "a submission just finished" signal (same fix as
+  // RecordPaymentDialog).
   useEffect(() => {
     if (state.status === "ok") onOpenChange(false);
-  }, [state.status, onOpenChange]);
-
-  const errs = state.errors ?? {};
+  }, [state, onOpenChange]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

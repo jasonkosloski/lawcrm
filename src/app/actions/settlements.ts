@@ -291,10 +291,23 @@ export async function updateSettlementLien(
     select: {
       id: true,
       lienholder: true,
-      settlement: { select: { matterId: true } },
+      settlement: { select: { matterId: true, status: true } },
     },
   });
   if (!lien) return { status: "error", error: "Lien not found." };
+  // Same post-disbursement lock as add/delete: the waterfall is
+  // recomputed on read, so editing a negotiated amount after the
+  // money moved would silently change firmFee/lienTotal/clientNet.
+  if (
+    lien.settlement.status === "disbursed" ||
+    lien.settlement.status === "closed"
+  ) {
+    return {
+      status: "error",
+      error:
+        "Settlement is disbursed/closed — liens are locked. Reopen it first.",
+    };
+  }
 
   await prisma.settlementLien.update({
     where: { id: lien.id },

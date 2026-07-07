@@ -192,19 +192,27 @@ export function EventDetailModal({
   );
   const [error, setError] = useState<string | null>(null);
 
-  // Re-sync local state if the underlying event prop changes
-  // (e.g., after a successful save + revalidate, or if the user
-  // opens a different event without unmounting). We compare by
-  // the keys that would actually change — a stable comparison
-  // beats deep-equal here.
+  // Re-sync local state whenever a fresh `event` prop lands —
+  // either the user opened a different event without unmounting,
+  // or the router.refresh() after a save delivered the committed
+  // row back. The latter matters: server-assigned ids and display
+  // extras only exist on the re-read (a picker-added attendee
+  // flips kind:"new" → "contact" here; without the re-seed every
+  // later whole-row commit would re-send it down the
+  // create-Contact path, and edits landed by other users would be
+  // clobbered). Skipped mid-save so a refresh can't overwrite the
+  // optimistic merge — the transition settling re-runs the effect
+  // via the `savePending` dep. Open inline editors are unaffected;
+  // they hold their own draft state while editing.
   const lastEventIdRef = useRef(event.id);
   useEffect(() => {
+    if (savePending) return;
+    setCommitted(buildInitialState(event));
     if (lastEventIdRef.current !== event.id) {
       lastEventIdRef.current = event.id;
-      setCommitted(buildInitialState(event));
       setError(null);
     }
-  }, [event]);
+  }, [event, savePending]);
 
   /** Commit a partial update: merges into committed state, builds
    *  full FormData (whole-row action), fires the update. On
@@ -236,8 +244,9 @@ export function EventDetailModal({
       fd.set("visibility", next.visibility);
       // Strip the display-only fields (initials / jobTitle /
       // contactType / status / attendeeId) so the wire format
-      // matches the action's zod schema. Display extras get
-      // re-populated on the next read after revalidate.
+      // matches the action's zod schema. Display extras flow back
+      // in when the re-sync effect re-seeds from the refreshed
+      // `event` prop after this save settles.
       fd.set(
         "attendees",
         JSON.stringify(
@@ -796,6 +805,10 @@ function InlineText({
             commit(e.currentTarget.value);
           } else if (e.key === "Escape") {
             e.preventDefault();
+            // Escape here means "cancel this edit" — stop it
+            // before the modal's window handler closes the
+            // whole modal.
+            e.stopPropagation();
             setEditing(false);
           }
         }}
@@ -908,6 +921,9 @@ function InlineTextarea({
             commit(e.currentTarget.value);
           } else if (e.key === "Escape") {
             e.preventDefault();
+            // Cancel the edit only — don't let the Escape
+            // bubble to the modal's close handler.
+            e.stopPropagation();
             setEditing(false);
           }
         }}
@@ -983,6 +999,9 @@ function InlineSelect({
         onKeyDown={(e) => {
           if (e.key === "Escape") {
             e.preventDefault();
+            // Cancel the picker only — don't let the Escape
+            // bubble to the modal's close handler.
+            e.stopPropagation();
             setEditing(false);
           }
         }}
@@ -1447,6 +1466,11 @@ function AttendeeAutocomplete({
         pickAddNew();
       }
     } else if (e.key === "Escape") {
+      // With the dropdown open, Escape means "dismiss the
+      // suggestions" — swallow it so the modal stays up. With it
+      // closed, let the event bubble so Escape closes the modal
+      // as usual.
+      if (open) e.stopPropagation();
       setOpen(false);
     }
   };

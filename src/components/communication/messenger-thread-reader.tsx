@@ -290,8 +290,10 @@ function SmsBubble({
         )}
       </div>
       {/* Hover-reveal log-time icon — keeps SMS bubbles uncluttered
-          at rest. Always visible on touch devices via opacity. */}
-      <div className="opacity-0 group-hover/msg:opacity-100 transition-opacity pb-1">
+          at rest. The hide-at-rest rule is gated to hover-capable
+          devices (hover:hover); touch has no hover to reveal it, so
+          there the button stays visible. */}
+      <div className="[@media(hover:hover)]:opacity-0 group-hover/msg:opacity-100 transition-opacity pb-1">
         <LogTimeOnCommButton
           isFiled={isFiled}
           variant="compact"
@@ -341,7 +343,9 @@ function CallEvent({
         {item.timeEntries.length > 0 && (
           <CommTimeLoggedIndicator entries={item.timeEntries} compact />
         )}
-        <div className="opacity-0 group-hover/call:opacity-100 transition-opacity">
+        {/* Same hover-reveal treatment as SMS bubbles — hidden at
+            rest only where hover exists; always visible on touch. */}
+        <div className="[@media(hover:hover)]:opacity-0 group-hover/call:opacity-100 transition-opacity">
           <LogTimeOnCommButton
             isFiled={isFiled}
             variant="compact"
@@ -384,7 +388,9 @@ function VoicemailCard({
         <span className="text-2xs font-mono uppercase tracking-wider text-ink-3">
           Voicemail
         </span>
-        {item.callDurationSec && (
+        {/* Explicit > 0 guard — a bare `&&` on a 0-second voicemail
+            (provider edge case) renders a literal "0" text node. */}
+        {item.callDurationSec != null && item.callDurationSec > 0 && (
           <span className="text-3xs font-mono text-ink-4">
             {formatDuration(item.callDurationSec)}
           </span>

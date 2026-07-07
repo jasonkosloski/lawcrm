@@ -35,8 +35,10 @@ export function CommTimeLoggedIndicator({
   /** When true, render with reduced padding for tight surfaces
    *  (SMS bubbles, call events). */
   compact = false,
-  /** Position the expanded panel above the chip instead of below
-   *  — useful for items near the bottom of a scrolling area. */
+  /** Align the chip and expanded panel to the right edge of the
+   *  container — for right-anchored surfaces like outbound SMS
+   *  bubbles. Does not affect vertical placement: the panel always
+   *  expands below the chip. */
   align = "left",
 }: {
   entries: CommTimeEntryView[];

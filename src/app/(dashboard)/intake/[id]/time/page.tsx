@@ -10,8 +10,12 @@
  *   - Optional roll-up when the lead converts — carry intake time
  *     entries over to the new matter's record
  *
- * Expenses similarly need an `Expense` model. Both are captured as
- * open questions in SCHEMA_NOTES.
+ * The `Expense` model and matter-level expense tracking already
+ * shipped (see the matter Time & Expenses tab). `Expense.leadId`
+ * exists as a placeholder FK, but `Expense.matterId` is still
+ * required and the conversion roll-forward isn't wired, so
+ * lead-only expenses can't be stored yet. Both gaps are captured
+ * as open questions in SCHEMA_NOTES.
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -54,9 +58,12 @@ export default function LeadTimePage() {
         <CardContent className="px-4 pb-4">
           <p className="text-xs text-ink-3 leading-relaxed">
             Reimbursable costs tied to intake (e.g., courthouse
-            records pulls, mileage) land here once the{" "}
+            records pulls, mileage) land here once expenses can
+            attach to a lead. The{" "}
             <code className="font-mono text-ink-3">Expense</code> model
-            exists.
+            shipped with the matter Time &amp; Expenses tab; what&apos;s
+            left is lead-scoped attachment (a matter is still required
+            today) and roll-forward on conversion.
           </p>
         </CardContent>
       </Card>

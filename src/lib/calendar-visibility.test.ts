@@ -178,11 +178,15 @@ describe("canEditEvent", () => {
     ).toBe(true);
   });
 
-  test("matter event: events.edit allows editing", () => {
+  test("matter event: events.edit allows editing even when the viewer is NOT on the matter team", () => {
+    // Deliberate policy (header rule 2): matter events are firm
+    // business, so events.edit is firm-wide and not scoped to
+    // team membership.
     expect(
       canEditEvent({
         ...baseEdit,
         matterId: "m1",
+        matterTeamUserIds: ["someone-else"],
         perms: { hasEventsEdit: true, hasEventsEditNonMatter: false },
       })
     ).toBe(true);

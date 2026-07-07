@@ -5,7 +5,7 @@
  * page uses for state. All date arithmetic goes through `date-fns`.
  */
 
-import { addDays, format, parseISO, startOfDay } from "date-fns";
+import { format, parseISO, startOfDay } from "date-fns";
 
 export type CalendarView = "week" | "month";
 export const DEFAULT_VIEW: CalendarView = "week";
@@ -65,7 +65,7 @@ export function buildCalendarHref(
   return `/calendar?${params.toString()}`;
 }
 
-/** Half-hour hour labels used in week view, 6am → 9pm inclusive. */
+/** Whole-hour labels used in week view, 6am → 9pm inclusive. */
 export const HOURS = Array.from({ length: 16 }, (_, i) => i + 6); // 6..21
 
 export const HOUR_HEIGHT_PX = 48;
@@ -90,7 +90,8 @@ export function eventHeightPx(start: Date, end: Date): number {
   return Math.max(24, hours * HOUR_HEIGHT_PX - 2);
 }
 
-/** Hour (fractional) of "now" within the grid, or null if outside range. */
+/** Top offset (px) of the "now" line within the hour grid, or null if
+ *  `now` is not on `day` or is outside the visible hour range. */
 export function nowOffsetPx(now: Date, day: Date): number | null {
   if (now.toDateString() !== day.toDateString()) return null;
   const h = now.getHours() + now.getMinutes() / 60;
@@ -205,6 +206,3 @@ export function layoutOverlappingEvents<T extends LayoutInput>(
 
   return result;
 }
-
-/** Add N days preserving local time; wraps around via date-fns. */
-export const addDaysLocal = addDays;

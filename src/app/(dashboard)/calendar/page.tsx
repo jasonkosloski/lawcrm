@@ -143,12 +143,18 @@ async function EventDetailLoader({
   eventId: string;
   canEdit: boolean;
 }) {
-  const [event, notes, timeEntries] = await Promise.all([
-    getCalendarEventById(eventId),
-    getEventNotes(eventId),
-    getEventTimeEntries(eventId),
-  ]);
+  // The event must resolve BEFORE notes/time entries are fetched:
+  // getCalendarEventById scrubs private events to a "Busy" shell, but
+  // getEventNotes/getEventTimeEntries carry no visibility check of
+  // their own. Fetching all three in parallel would ship note contents
+  // and time-entry narratives for an event the viewer can't see into
+  // the RSC payload — the modal declining to render them doesn't help,
+  // the data is already in the browser.
+  const event = await getCalendarEventById(eventId);
   if (!event) return null;
+  const [notes, timeEntries] = event.viewerCanSeeDetails
+    ? await Promise.all([getEventNotes(eventId), getEventTimeEntries(eventId)])
+    : [[], []];
   return (
     <EventDetailModal
       event={event}

@@ -260,50 +260,14 @@ export async function createMatter(
 
   const currentUserId = await getCurrentUserId();
 
-  // Verify the selected lead is a real user; fall through to the
-  // current user if the posted value is stale.
+  // Verify the selected lead is a real, active user; fall through to
+  // the current user if the posted value is stale or the user has
+  // since been deactivated (mirrors addMatterTeamMember's guard).
   const lead = await prisma.user.findUnique({
     where: { id: data.leadUserId },
-    select: { id: true },
+    select: { id: true, isActive: true },
   });
-  const leadUserId = lead?.id ?? currentUserId;
-
-  // Resolve client: either pick an existing Contact, create a new one
-  // inline, or leave null.
-  let clientId: string | null = null;
-  if (data.clientId === NEW_CLIENT_SENTINEL) {
-    const newClient = await prisma.contact.create({
-      data: {
-        name: data.newClientName!,
-        email: data.newClientEmail || null,
-        phone: data.newClientPhone || null,
-        organization: data.newClientOrganization || null,
-        type: "client",
-      },
-      select: { id: true },
-    });
-    clientId = newClient.id;
-    // Seed a first-class primary ContactPhone row so the contact
-    // starts with a real phone record the Parties edit form can
-    // manage. Denormalized Contact.phone above keeps old readers happy.
-    if (data.newClientPhone) {
-      await prisma.contactPhone.create({
-        data: {
-          contactId: clientId,
-          label: "Primary",
-          number: data.newClientPhone,
-          isPrimary: true,
-          order: 0,
-        },
-      });
-    }
-  } else if (data.clientId) {
-    const client = await prisma.contact.findUnique({
-      where: { id: data.clientId },
-      select: { id: true },
-    });
-    clientId = client?.id ?? null;
-  }
+  const leadUserId = lead?.isActive ? lead.id : currentUserId;
 
   // Only persist SOL fields when the area actually tracks them;
   // otherwise drop them on the floor so a stale form submission from
@@ -325,61 +289,107 @@ export async function createMatter(
       ? data.statuteOfLimitationsNotes || null
       : null;
 
-  const matter = await prisma.matter.create({
-    data: {
-      name: data.name,
-      practiceAreaId: resolved.practiceAreaId,
-      stageId: resolved.stageId,
-      feeStructure: data.feeStructure,
-      // Snapshot the area's defaultBillingMode onto the matter on
-      // create. Per-area changes don't rewrite history; per-matter
-      // override happens on the matter edit form.
-      billingMode: resolved.defaultBillingMode,
-      caseNumber: data.caseNumber || null,
-      court: data.court || null,
-      opposingParty: data.opposingParty || null,
-      opposingFirm: data.opposingFirm || null,
-      description: data.description || null,
-      color: resolved.color,
-      clientId,
-      incidentDate,
-      statuteOfLimitationsDate: solDate,
-      statuteOfLimitationsNotes: solNotes,
-      teamMembers: {
-        create: { userId: leadUserId, role: "lead" },
-      },
-      // Invariant: whenever a matter has a client, that contact
-      // surfaces as a MatterContact with category="client" so the
-      // Parties tab always shows them. Additional co-clients can
-      // still be added manually from the tab.
-      ...(clientId
-        ? {
-            contacts: {
-              create: { contactId: clientId, category: "client" },
-            },
-          }
-        : {}),
-      ...(data.pinForMe === "on"
-        ? {
-            pins: {
-              create: { userId: currentUserId },
-            },
-          }
-        : {}),
-    },
-  });
+  // Inline client, matter, and SOL deadline are dependent writes —
+  // one transaction so a failed matter.create can't strand an
+  // orphaned Contact (+ContactPhone), and a matter can't exist
+  // without its critical SOL Deadline. Mirrors updateMatter and
+  // convertLeadToMatter, which already run transactionally.
+  const matter = await prisma.$transaction(async (tx) => {
+    // Resolve client: either pick an existing Contact, create a new
+    // one inline, or leave null.
+    let clientId: string | null = null;
+    if (data.clientId === NEW_CLIENT_SENTINEL) {
+      const newClient = await tx.contact.create({
+        data: {
+          name: data.newClientName!,
+          email: data.newClientEmail || null,
+          phone: data.newClientPhone || null,
+          organization: data.newClientOrganization || null,
+          type: "client",
+        },
+        select: { id: true },
+      });
+      clientId = newClient.id;
+      // Seed a first-class primary ContactPhone row so the contact
+      // starts with a real phone record the Parties edit form can
+      // manage. Denormalized Contact.phone above keeps old readers happy.
+      if (data.newClientPhone) {
+        await tx.contactPhone.create({
+          data: {
+            contactId: clientId,
+            label: "Primary",
+            number: data.newClientPhone,
+            isPrimary: true,
+            order: 0,
+          },
+        });
+      }
+    } else if (data.clientId) {
+      const client = await tx.contact.findUnique({
+        where: { id: data.clientId },
+        select: { id: true },
+      });
+      clientId = client?.id ?? null;
+    }
 
-  // Auto-create the critical SOL Deadline when the area tracks SOL
-  // and a date was provided. Kept in sync via updateMatter +
-  // setMatterSolSatisfied below.
-  await syncMatterSolDeadline(prisma, {
-    matterId: matter.id,
-    trackSol: resolved.hasStatuteOfLimitations,
-    date: solDate,
-    notes: solNotes,
-    satisfied: false,
-    satisfiedAt: null,
-    ownerId: leadUserId,
+    const created = await tx.matter.create({
+      data: {
+        name: data.name,
+        practiceAreaId: resolved.practiceAreaId,
+        stageId: resolved.stageId,
+        feeStructure: data.feeStructure,
+        // Snapshot the area's defaultBillingMode onto the matter on
+        // create. Per-area changes don't rewrite history; per-matter
+        // override happens on the matter edit form.
+        billingMode: resolved.defaultBillingMode,
+        caseNumber: data.caseNumber || null,
+        court: data.court || null,
+        opposingParty: data.opposingParty || null,
+        opposingFirm: data.opposingFirm || null,
+        description: data.description || null,
+        color: resolved.color,
+        clientId,
+        incidentDate,
+        statuteOfLimitationsDate: solDate,
+        statuteOfLimitationsNotes: solNotes,
+        teamMembers: {
+          create: { userId: leadUserId, role: "lead" },
+        },
+        // Invariant: whenever a matter has a client, that contact
+        // surfaces as a MatterContact with category="client" so the
+        // Parties tab always shows them. Additional co-clients can
+        // still be added manually from the tab.
+        ...(clientId
+          ? {
+              contacts: {
+                create: { contactId: clientId, category: "client" },
+              },
+            }
+          : {}),
+        ...(data.pinForMe === "on"
+          ? {
+              pins: {
+                create: { userId: currentUserId },
+              },
+            }
+          : {}),
+      },
+    });
+
+    // Auto-create the critical SOL Deadline when the area tracks SOL
+    // and a date was provided. Kept in sync via updateMatter +
+    // setMatterSolSatisfied below.
+    await syncMatterSolDeadline(tx, {
+      matterId: created.id,
+      trackSol: resolved.hasStatuteOfLimitations,
+      date: solDate,
+      notes: solNotes,
+      satisfied: false,
+      satisfiedAt: null,
+      ownerId: leadUserId,
+    });
+
+    return created;
   });
 
   // Sidebar + matters list both read fresh data on next render.
@@ -469,13 +479,14 @@ export async function updateMatter(
   }
 
   // Verify lead + client IDs before writing so stale dropdown values
-  // don't point the matter at missing rows.
+  // don't point the matter at missing rows. The lead must also be
+  // active — same rule addMatterTeamMember enforces.
   const currentUserId = await getCurrentUserId();
   const lead = await prisma.user.findUnique({
     where: { id: data.leadUserId },
-    select: { id: true },
+    select: { id: true, isActive: true },
   });
-  const leadUserId = lead?.id ?? currentUserId;
+  const leadUserId = lead?.isActive ? lead.id : currentUserId;
 
   let clientId: string | null = null;
   if (data.clientId) {
@@ -507,6 +518,29 @@ export async function updateMatter(
       : null;
 
   await prisma.$transaction(async (tx) => {
+    // The matter row is the source of truth for the SOL-satisfied
+    // flag (setMatterSolSatisfied maintains it); the Deadline row is
+    // only a mirror. Deriving satisfied from the deadline instead
+    // would diverge once the date is cleared (deadline deleted, flag
+    // untouched) and later re-added (fresh "open" deadline vs. a
+    // still-true flag on the Overview card).
+    const existingMatter = await tx.matter.findUnique({
+      where: { id: matterId },
+      select: {
+        statuteOfLimitationsSatisfied: true,
+        statuteOfLimitationsSatisfiedAt: true,
+      },
+    });
+    // No SOL date (area doesn't track it, or the date was cleared)
+    // means there's nothing left to satisfy — reset the flags so a
+    // re-added date starts back at "open".
+    const isSatisfied = solDate
+      ? (existingMatter?.statuteOfLimitationsSatisfied ?? false)
+      : false;
+    const satisfiedAt = isSatisfied
+      ? (existingMatter?.statuteOfLimitationsSatisfiedAt ?? null)
+      : null;
+
     await tx.matter.update({
       where: { id: matterId },
       data: {
@@ -527,9 +561,10 @@ export async function updateMatter(
         incidentDate,
         statuteOfLimitationsDate: solDate,
         statuteOfLimitationsNotes: solNotes,
-        // If the area dropped SOL tracking, clear the satisfied flag
-        // as well so we don't carry stale state.
-        ...(resolved.hasStatuteOfLimitations
+        // Clear the satisfied flag whenever there's no SOL date to
+        // satisfy — covers both "area dropped SOL tracking" and
+        // "date cleared while the area still tracks SOL".
+        ...(isSatisfied
           ? {}
           : {
               statuteOfLimitationsSatisfied: false,
@@ -590,22 +625,16 @@ export async function updateMatter(
 
     // Sync the auto-managed SOL Deadline. When the new area tracks
     // SOL we upsert (create or update) the critical deadline; when
-    // it doesn't, the helper removes any stale row.
-    const existingSolDeadline = await tx.deadline.findFirst({
-      where: { matterId, sourceType: SOL_SOURCE_TYPE },
-      select: { status: true, completedAt: true },
-    });
-    // Preserve the existing satisfied state if there was one — the
-    // Overview card owns the manual toggle; edits to the deadline
-    // date shouldn't undo an earlier satisfied flip.
-    const isSatisfied = existingSolDeadline?.status === "completed";
+    // it doesn't, the helper removes any stale row. `isSatisfied`
+    // carries the matter's own flag through so the Overview card's
+    // manual toggle survives a date edit.
     await syncMatterSolDeadline(tx, {
       matterId,
       trackSol: resolved.hasStatuteOfLimitations,
       date: solDate,
       notes: solNotes,
       satisfied: isSatisfied,
-      satisfiedAt: existingSolDeadline?.completedAt ?? null,
+      satisfiedAt,
       ownerId: leadUserId,
     });
   });
@@ -625,8 +654,7 @@ export async function updateMatter(
  * practice area; cross-area transitions have to go through the full
  * edit flow (which can also adjust color + other area-scoped state).
  *
- * Today any signed-in user can transition any matter (no permission
- * gate yet — `matters.edit` will gate this once that key is wired).
+ * Auth: gated on `matters.edit`, same as the full edit flow.
  *
  * Unusual transitions are surfaced as an explicit confirmation
  * step, NOT as an outright refusal:

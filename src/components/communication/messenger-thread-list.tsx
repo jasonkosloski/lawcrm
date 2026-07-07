@@ -11,7 +11,14 @@
 
 import Link from "next/link";
 import { formatDistanceToNowStrict } from "date-fns";
-import { Phone, PhoneMissed, MessageSquare, Voicemail, Pin } from "lucide-react";
+import {
+  PhoneIncoming,
+  PhoneMissed,
+  PhoneOutgoing,
+  MessageSquare,
+  Voicemail,
+  Pin,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MessengerThreadRow } from "@/lib/queries/messenger";
 import type { MessengerFilter } from "./messenger-mailbox-rail";
@@ -44,15 +51,19 @@ function prettyPhone(p: string): string {
   return p;
 }
 
-/** Pick an icon for the last-item preview. */
+/** Pick an icon for the last-item preview. Calls get directional
+ *  (or missed) glyphs to match MatterPhoneLog's iconography. */
 function previewIcon(
   kind: MessengerThreadRow["lastKind"],
-  direction: MessengerThreadRow["lastDirection"]
+  direction: MessengerThreadRow["lastDirection"],
+  missed: boolean
 ) {
   if (kind === "voicemail") return <Voicemail size={11} className="text-ink-4" />;
   if (kind === "call") {
-    if (direction === "inbound") return <Phone size={11} className="text-ink-4" />;
-    return <Phone size={11} className="text-ink-4" />;
+    if (missed) return <PhoneMissed size={11} className="text-warn" />;
+    if (direction === "inbound")
+      return <PhoneIncoming size={11} className="text-ink-4" />;
+    return <PhoneOutgoing size={11} className="text-ink-4" />;
   }
   return <MessageSquare size={11} className="text-ink-4" />;
 }
@@ -105,6 +116,11 @@ export function MessengerThreadList({
         <ul className="flex-1 overflow-y-auto">
           {threads.map((t) => {
             const active = t.id === selectedThreadId;
+            // Known limitation: MessengerThreadRow doesn't carry the
+            // raw callStatus, so this keys off the derived preview
+            // string. A "no_answer" call, or a missed call whose
+            // summary was logged into body, won't be flagged here
+            // until the query exposes lastCallStatus.
             const isMissedCall =
               t.lastKind === "call" && t.lastBody === "Missed call";
             return (
@@ -158,7 +174,7 @@ export function MessengerThreadList({
                     </div>
 
                     <div className="flex items-center gap-1.5 mt-0.5">
-                      {previewIcon(t.lastKind, t.lastDirection)}
+                      {previewIcon(t.lastKind, t.lastDirection, isMissedCall)}
                       <span
                         className={cn(
                           "text-2xs truncate",

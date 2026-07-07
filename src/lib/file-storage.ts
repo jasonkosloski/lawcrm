@@ -13,7 +13,10 @@
  *
  * Storage is intentionally NOT public — files are never served
  * directly. Callers download via `/api/documents/[id]/download`,
- * which gates by session + firm-scope before streaming bytes.
+ * which gates by session before streaming bytes. Firm-scoping of
+ * the document lookup is deferred until Contact/Matter carry a
+ * firmId (see the route's `findFirst` comment) — do NOT assume
+ * tenant isolation here when adding a second firm.
  */
 
 import { createReadStream } from "node:fs";

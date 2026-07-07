@@ -17,6 +17,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import {
   Bell,
   BellDot,
@@ -132,18 +133,18 @@ export function NotificationBell() {
   }, [open]);
 
   const handleOpen = () => {
-    setOpen((prev) => {
-      const next = !prev;
-      // Re-fetch on open so the dropdown view is fresh — the
-      // 60s poll could be up to a minute stale.
-      if (next) {
-        startTransition(async () => {
-          const fresh = await fetchBellState();
-          setState(fresh);
-        });
-      }
-      return next;
-    });
+    // Re-fetch on open so the dropdown view is fresh — the 60s poll
+    // could be up to a minute stale. Fired OUTSIDE the setOpen
+    // updater: updaters run during render and must stay pure —
+    // startTransition inside one throws "Cannot call startTransition
+    // while rendering" and React's updater re-invocation can loop.
+    if (!open) {
+      startTransition(async () => {
+        const fresh = await fetchBellState();
+        setState(fresh);
+      });
+    }
+    setOpen((prev) => !prev);
   };
 
   const handleMarkOne = (row: NotificationRow) => {
@@ -329,9 +330,14 @@ function NotificationRowItem({
       onClick={handleClick}
     >
       {row.link ? (
-        <a href={row.link} className="block">
+        // next/link, not a raw <a>: a full-page navigation would
+        // unload the document and can abort the in-flight mark-read
+        // server action fired in handleClick, leaving the row unread
+        // server-side after the optimistic badge decrement. Client
+        // navigation keeps the transition alive.
+        <Link href={row.link} className="block">
           {inner}
-        </a>
+        </Link>
       ) : (
         <div>{inner}</div>
       )}

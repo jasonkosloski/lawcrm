@@ -9,6 +9,10 @@
  * tab bar), so the edit surface feels like a proper tab-scoped view
  * rather than a disconnected page. The Cancel + Save buttons route
  * back to the matter detail.
+ *
+ * The form itself is gated on `matters.edit` — same key `updateMatter`
+ * enforces server-side. Without it the page swaps in a read-only
+ * notice rather than a form whose submit can only fail.
  */
 
 import { notFound } from "next/navigation";
@@ -136,14 +140,30 @@ export default async function EditMatterPage({
   return (
     <div className="p-5">
       <div className="max-w-3xl flex flex-col gap-5">
-        <Card>
-          <CardContent className="p-5">
-            <EditMatterForm
-              matter={forEdit}
-              options={{ areas, clients, users }}
-            />
-          </CardContent>
-        </Card>
+        {/* Main edit form — gated on `matters.edit`, the same key the
+            `updateMatter` action requires. Rendering the form to a
+            user who can't submit it would only produce a server-side
+            error on save, so swap in a read-only notice instead
+            (mirrors the canManageTeam gate on the team card below). */}
+        {canEditMatter ? (
+          <Card>
+            <CardContent className="p-5">
+              <EditMatterForm
+                matter={forEdit}
+                options={{ areas, clients, users }}
+              />
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="p-5 text-xs text-ink-3">
+              Matter details are read-only for your role. Editing is
+              gated on the{" "}
+              <span className="text-ink font-medium">matters.edit</span>{" "}
+              permission, assigned via /settings/roles.
+            </CardContent>
+          </Card>
+        )}
 
         {/* Team management — gated on `matters.manage_team`. Admin
             always has it; other roles get it via the matrix on

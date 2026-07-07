@@ -16,7 +16,7 @@ import {
 } from "./billing-form";
 
 describe("invoiceStatusTransitions — client invoice flow", () => {
-  test("draft → approved or void only (drafts are deletable, not voidable)", () => {
+  test("draft → approved only (drafts are deletable, not voidable)", () => {
     expect(invoiceStatusTransitions("draft", "client")).toEqual(["approved"]);
   });
 

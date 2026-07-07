@@ -217,7 +217,8 @@ describe("updateDeadline — happy path", () => {
     expect(row!.kind).toBe("critical");
     expect(row!.sourceRef).toBe("CRS §24-10-109");
     expect(row!.description).toBe("Notice of claim");
-    expect(row!.dueDate.toISOString().slice(0, 10)).toBe("2026-09-15");
+    // Local midnight, not UTC — see the dueDate regression tests below.
+    expect(row!.dueDate.getTime()).toBe(new Date(2026, 8, 15).getTime());
   });
 
   test("normalizes empty sourceRef + description to null", async () => {
@@ -234,6 +235,48 @@ describe("updateDeadline — happy path", () => {
     const row = await prisma.deadline.findUnique({ where: { id } });
     expect(row!.sourceRef).toBeNull();
     expect(row!.description).toBeNull();
+  });
+
+  test("dueDate parses as LOCAL midnight, not UTC (no day drift west of UTC)", async () => {
+    // Regression: `new Date("2026-09-15")` parses as UTC midnight,
+    // which is the previous local day for any user west of UTC. The
+    // edit dialog reads dueDate back with local getters, so under the
+    // old parsing each save-reopen-save cycle drifted the deadline a
+    // day earlier. Pinning local midnight makes the round-trip stable
+    // in every timezone (the assertion is TZ-agnostic by comparing
+    // against a locally-constructed Date).
+    const id = await seedDeadline();
+    const fd = new FormData();
+    fd.set("title", "ok");
+    fd.set("dueDate", "2026-09-15");
+    fd.set("kind", "manual");
+    fd.set("status", "open");
+    const res = await updateDeadline(id, updateDeadlineInitialState, fd);
+    expect(res.status).toBe("ok");
+
+    const row = await prisma.deadline.findUnique({ where: { id } });
+    expect(row!.dueDate.getTime()).toBe(new Date(2026, 8, 15).getTime());
+    // Round-trip through local getters (what toDateInput does in the
+    // edit dialog) must reproduce the posted string — no drift.
+    const d = row!.dueDate;
+    const roundTripped = [
+      d.getFullYear(),
+      String(d.getMonth() + 1).padStart(2, "0"),
+      String(d.getDate()).padStart(2, "0"),
+    ].join("-");
+    expect(roundTripped).toBe("2026-09-15");
+  });
+
+  test("rejects a malformed dueDate that isn't YYYY-MM-DD", async () => {
+    const id = await seedDeadline();
+    const fd = new FormData();
+    fd.set("title", "ok");
+    fd.set("dueDate", "09/15/2026");
+    fd.set("kind", "manual");
+    fd.set("status", "open");
+    const res = await updateDeadline(id, updateDeadlineInitialState, fd);
+    expect(res.status).toBe("error");
+    expect(res.errors?.dueDate?.length).toBeGreaterThan(0);
   });
 
   test("status change to completed stamps completedAt; back to open clears it", async () => {

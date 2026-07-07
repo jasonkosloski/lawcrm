@@ -15,7 +15,8 @@
  *   - deleteNote: author bypass + `notes.delete_any` for crossing
  *     ownership
  *   - updateNote: author bypass + `notes.edit_any` for crossing
- *     ownership
+ *     ownership. Never touches isPinned — pinning stays behind
+ *     toggleNotePin's `notes.pin` gate.
  *   - markMatterNotesRead / toggleNoteReaction: ungated. Recording
  *     reads + reacting are reader-side actions; anyone with note
  *     visibility can do them.
@@ -49,7 +50,8 @@ const noteSchema = z.object({
   attachments: z.string().optional().default("[]"),
   /** Optional threading + entity associations. Each is a cuid; at
    *  most one of the entity FKs should be set per note, but we don't
-   *  enforce that in the schema. */
+   *  enforce that in the schema. createNote does verify each id
+   *  exists AND belongs to the target matter before writing. */
   parentNoteId: z.string().trim().optional().or(z.literal("")),
   calendarEventId: z.string().trim().optional().or(z.literal("")),
   taskId: z.string().trim().optional().or(z.literal("")),
@@ -137,6 +139,76 @@ export async function createNote(
       errors: { content: ["Matter not found"] },
       values: raw,
     };
+  }
+
+  // Association FKs come straight from the client (hidden inputs on
+  // the composer). Verify each provided id exists AND belongs to this
+  // matter before writing — a stale or forged id would otherwise blow
+  // up on the FK constraint inside the transaction (nonexistent id)
+  // or silently link the note across matters (valid id from a
+  // different matter). One Promise.all keeps the guard to a single
+  // extra round trip.
+  const assocLookups: Array<{
+    label: string;
+    query: Promise<{ matterId: string | null } | null>;
+  }> = [];
+  if (parsed.data.parentNoteId)
+    assocLookups.push({
+      label: "Parent note",
+      query: prisma.note.findUnique({
+        where: { id: parsed.data.parentNoteId },
+        select: { matterId: true },
+      }),
+    });
+  if (parsed.data.calendarEventId)
+    assocLookups.push({
+      label: "Linked event",
+      query: prisma.calendarEvent.findUnique({
+        where: { id: parsed.data.calendarEventId },
+        select: { matterId: true },
+      }),
+    });
+  if (parsed.data.taskId)
+    assocLookups.push({
+      label: "Linked task",
+      query: prisma.task.findUnique({
+        where: { id: parsed.data.taskId },
+        select: { matterId: true },
+      }),
+    });
+  if (parsed.data.deadlineId)
+    assocLookups.push({
+      label: "Linked deadline",
+      query: prisma.deadline.findUnique({
+        where: { id: parsed.data.deadlineId },
+        select: { matterId: true },
+      }),
+    });
+  if (parsed.data.timeEntryId)
+    assocLookups.push({
+      label: "Linked time entry",
+      query: prisma.timeEntry.findUnique({
+        where: { id: parsed.data.timeEntryId },
+        select: { matterId: true },
+      }),
+    });
+  if (assocLookups.length > 0) {
+    const rows = await Promise.all(assocLookups.map((l) => l.query));
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      // Strict same-matter check — a firm-wide task/event (null
+      // matterId) is also rejected; matter notes only attach to
+      // records of that matter.
+      if (!row || row.matterId !== matterId) {
+        return {
+          status: "error",
+          errors: {
+            content: [`${assocLookups[i].label} not found on this matter`],
+          },
+          values: raw,
+        };
+      }
+    }
   }
 
   const currentUserId = await getCurrentUserId();
@@ -335,7 +407,7 @@ export async function deleteNote(
   return { ok: true };
 }
 
-// ── Update (content + type + pin) ───────────────────────────────────────
+// ── Update (content + type) ─────────────────────────────────────────────
 
 export async function updateNote(
   noteId: string,
@@ -384,7 +456,10 @@ export async function updateNote(
     data: {
       content: clean,
       type: parsed.data.type,
-      isPinned: parsed.data.isPinned === "on",
+      // isPinned deliberately excluded — pinning is a firm-wide
+      // signal gated by `notes.pin` (see toggleNotePin). Routing it
+      // through here would both bypass that gate and silently reset
+      // the pin whenever the edit form omits the checkbox.
     },
   });
 
@@ -417,19 +492,11 @@ export async function markMatterNotesRead(
 
   await prisma.noteRead.createMany({
     data: validIds.map((noteId) => ({ userId, noteId })),
-    // SQLite doesn't support skipDuplicates on createMany, but the
-    // composite primary key throws uniqueness errors if we retry a
-    // note already marked read. Catch per-row below.
-  }).catch(async () => {
-    // Fall back to individual upserts if batch failed (e.g. one row
-    // was already present). Slower but correct.
-    for (const noteId of validIds) {
-      await prisma.noteRead.upsert({
-        where: { userId_noteId: { userId, noteId } },
-        update: {},
-        create: { userId, noteId },
-      });
-    }
+    // Re-marking an already-read note is the common case — the client
+    // fires on every page visit — so collisions on the composite PK
+    // are expected. Postgres supports skipDuplicates, which keeps the
+    // whole batch a single idempotent statement.
+    skipDuplicates: true,
   });
   return { ok: true };
 }

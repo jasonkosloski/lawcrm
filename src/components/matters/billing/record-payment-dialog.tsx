@@ -123,9 +123,18 @@ export function RecordPaymentDialog({
     setNotifyClient(!!clientEmail);
   }, [open, defaultAmount, clientEmail]);
 
+  // Close on success. Deps must be the state OBJECT, not
+  // state.status: useActionState keeps its state across
+  // submissions, so after the first success the status string is
+  // "ok" forever. Keying on the string means a second successful
+  // payment (partial → reopen → pay the rest) returns a fresh
+  // object whose status compares equal, the effect skips, and the
+  // dialog silently stays open — inviting a duplicate submission.
+  // Each action invocation returns a new object, so identity is
+  // the reliable "a submission just finished" signal.
   useEffect(() => {
     if (state.status === "ok") onOpenChange(false);
-  }, [state.status, onOpenChange]);
+  }, [state, onOpenChange]);
 
   const errs = state.errors ?? {};
   const parsedAmount = parseFloat(amount);

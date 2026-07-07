@@ -13,7 +13,7 @@
 
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { BellPlus, BellRing, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -40,10 +40,22 @@ export function FollowUpButton({
   const [pending, startTransition] = useTransition();
   const [picked, setPicked] = useState(toDateInput(followUpAt));
 
+  // Re-sync the date input on every open — `followUpAt` changes under
+  // us after a save (server revalidation), and the mount-time value
+  // would otherwise show a stale date that Save could silently
+  // reapply over the newer follow-up.
+  useEffect(() => {
+    if (open) setPicked(toDateInput(followUpAt));
+  }, [open, followUpAt]);
+
   const isOverdue = followUpAt !== null && followUpAt.getTime() < Date.now();
   const isToday = followUpAt !== null && isSameDay(followUpAt, new Date());
 
   const save = (dateString: string | null) => {
+    // Presets and Clear bypass the input — keep `picked` consistent
+    // with what was just submitted; the on-open resync above takes
+    // over once the server revalidates `followUpAt`.
+    setPicked(dateString ?? "");
     setOpen(false);
     startTransition(async () => {
       const res = await action(threadId, dateString);

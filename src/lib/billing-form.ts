@@ -120,10 +120,6 @@ export function canDeleteInvoice(
   return status === "draft";
 }
 
-/// Back-compat for callers that haven't moved to the kind-aware
-/// helper yet. New code should call `invoiceStatusTransitions(status, kind)`.
-export const INVOICE_STATUS_TRANSITIONS = CLIENT_TRANSITIONS;
-
 const STATUS_LABEL_CLIENT: Record<string, string> = {
   draft: "Draft",
   approved: "Approved",
@@ -151,9 +147,6 @@ export function invoiceStatusLabel(
     kind === "internal_record" ? STATUS_LABEL_INTERNAL : STATUS_LABEL_CLIENT;
   return map[status] ?? status;
 }
-
-/// Back-compat for callers that haven't moved yet.
-export const INVOICE_STATUS_LABEL = STATUS_LABEL_CLIENT;
 
 /// Channels the "Record payment" dialog offers. `trust` is in the
 /// list (so the action validates it) but the UI doesn't surface it

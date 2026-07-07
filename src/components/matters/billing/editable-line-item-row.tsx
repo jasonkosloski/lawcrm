@@ -126,9 +126,12 @@ export function EditableLineItemRow({
   };
 
   const commitField = (field: Field, raw: string) => {
-    // Trim the raw input — for textareas we preserve internal
-    // whitespace but strip outer.
-    const value = raw;
+    // Strip outer whitespace (internal whitespace survives — matters
+    // for the narrative textarea). Two things depend on this: the
+    // no-op check below must treat "Research " as unchanged from
+    // "Research", and the narrative is client-facing invoice text
+    // that the server schema does NOT trim.
+    const value = raw.trim();
     // No-op when nothing changed; flip back to view mode without
     // a server round-trip.
     if (value === committed[field]) {

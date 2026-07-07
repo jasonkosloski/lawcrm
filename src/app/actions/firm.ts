@@ -54,9 +54,31 @@ const firmSchema = z.object({
   zip: z.string().trim().max(20).optional().or(z.literal("")),
   country: z.string().trim().min(1).max(60).default("US"),
   /** ISO date string from a `<input type="date">`. Empty string =
-   *  null out the date. */
+   *  null out the date. Parsed by `parseLocalEstablishedAt` below —
+   *  kept as a plain string here so a bad value surfaces as a field
+   *  error, not a crash. */
   establishedAt: z.string().trim().optional().or(z.literal("")),
 });
+
+/** Parse the establishedAt field (`YYYY-MM-DD` from a
+ *  `<input type="date">`) into local midnight of that day.
+ *
+ *  We don't use `new Date(value)` directly for two reasons: a
+ *  tampered/malformed post (e.g. "abc") yields an Invalid Date that
+ *  Prisma rejects with an unhandled 500 instead of a field error,
+ *  and ISO date-only strings parse as UTC midnight, which renders a
+ *  day early for any user west of UTC. Mirrors parseLocalDueDate
+ *  (deadlines.ts) and parseEventBoundary (calendar-events.ts).
+ *
+ *  Returns null when the value can't be parsed (caller surfaces
+ *  the field error). */
+function parseLocalEstablishedAt(value: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!m) return null;
+  const [, y, mo, d] = m;
+  const date = new Date(Number(y), Number(mo) - 1, Number(d), 0, 0, 0, 0);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
 
 export async function updateFirmAction(
   _prev: FirmFormState,
@@ -77,8 +99,22 @@ export async function updateFirmAction(
     };
   }
 
-  const firm = await getCurrentFirm();
   const data = parsed.data;
+
+  // Validate the date before touching the DB — same friendly field
+  // error the zod failures above get, instead of a Prisma 500.
+  const establishedAt = data.establishedAt
+    ? parseLocalEstablishedAt(data.establishedAt)
+    : null;
+  if (data.establishedAt && !establishedAt) {
+    return {
+      status: "error",
+      errors: { establishedAt: ["Enter a valid date"] },
+      values: raw,
+    };
+  }
+
+  const firm = await getCurrentFirm();
 
   await prisma.firm.update({
     where: { id: firm.id },
@@ -95,7 +131,7 @@ export async function updateFirmAction(
       state: data.state || null,
       zip: data.zip || null,
       country: data.country,
-      establishedAt: data.establishedAt ? new Date(data.establishedAt) : null,
+      establishedAt,
     },
   });
 

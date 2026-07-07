@@ -139,7 +139,13 @@ export async function updateTimeEntry(
 
   const entry = await prisma.timeEntry.findUnique({
     where: { id: timeEntryId },
-    select: { matterId: true, userId: true, calendarEventId: true, status: true },
+    select: {
+      matterId: true,
+      userId: true,
+      calendarEventId: true,
+      status: true,
+      rate: true,
+    },
   });
   if (!entry) {
     return {
@@ -156,11 +162,15 @@ export async function updateTimeEntry(
     await requirePermission("time_entries.edit_any");
   }
 
-  // Once a time entry is on a sent invoice (status: billed), the
-  // accounting record is essentially closed. Editing those fields
-  // silently would put the invoice and the WIP out of sync. Block
-  // edits here too — same posture as `deleteTimeEntry`.
-  if (entry.status === "billed" && parsed.data.status === "billed") {
+  // Once a time entry is on an invoice (status: billed), the
+  // accounting record is essentially closed — its hours/amount are
+  // baked into the invoice's stored subtotal, and nothing here
+  // recomputes that. Block unconditionally on the entry's *current*
+  // status (never trust the posted status; it defaults to "draft") —
+  // same posture as `deleteTimeEntry`. Legitimate corrections go
+  // through `updateInvoiceLineItem`, which recomputes the invoice
+  // totals in the same transaction.
+  if (entry.status === "billed") {
     return {
       status: "error",
       errors: {
@@ -170,17 +180,27 @@ export async function updateTimeEntry(
     };
   }
 
+  const newHours = Number(parsed.data.hours);
+
   await prisma.timeEntry.update({
     where: { id: timeEntryId },
     data: {
       date: new Date(parsed.data.date),
-      hours: Number(parsed.data.hours),
+      hours: newHours,
       activity: parsed.data.activity,
       narrative: parsed.data.narrative || null,
       billable: parsed.data.billable === "on",
       noCharge: parsed.data.noCharge === "on",
       privileged: parsed.data.privileged === "on",
       status: parsed.data.status,
+      // Schema contract: `amount` is hours × rate, and "the action
+      // that sets it is responsible for keeping it in sync". An
+      // entry picks up a rate via `updateInvoiceLineItem` and keeps
+      // it if the invoice is later voided — so changing hours here
+      // must recompute amount or the next generateInvoiceFromWip
+      // sums a stale Decimal. Null rate (contingent matters) means
+      // there's no amount to sync.
+      ...(entry.rate ? { amount: entry.rate.mul(newHours) } : {}),
     },
   });
 
@@ -205,7 +225,13 @@ export async function setTimeEntryStatus(
 
   const entry = await prisma.timeEntry.findUnique({
     where: { id: timeEntryId },
-    select: { matterId: true, userId: true, calendarEventId: true },
+    select: {
+      matterId: true,
+      userId: true,
+      calendarEventId: true,
+      status: true,
+      invoiceId: true,
+    },
   });
   if (!entry) return { ok: false, error: "Time entry not found" };
 
@@ -213,6 +239,29 @@ export async function setTimeEntryStatus(
   const actorId = await getCurrentUserId();
   if (entry.userId !== actorId) {
     await requirePermission("time_entries.edit_any");
+  }
+
+  // "billed" belongs to the invoicing pipeline: generateInvoiceFromWip
+  // sets it (together with invoiceId), and voiding/deleting the
+  // invoice clears it. A manual flip in either direction desyncs the
+  // entry from the invoice's stored subtotal/totalAmount.
+  if (status === "billed" && entry.status !== "billed") {
+    return {
+      ok: false,
+      error:
+        "Entries are marked billed by invoice generation. Add this entry to an invoice instead.",
+    };
+  }
+  if (entry.status === "billed" && status !== "billed" && entry.invoiceId) {
+    // Unbilling while invoiceId stays set would strand the entry:
+    // excluded from future WIP runs, yet still counted in its old
+    // invoice's totals. Void/delete the invoice — that path already
+    // resets its entries back to WIP.
+    return {
+      ok: false,
+      error:
+        "Entry is on an invoice. Void or delete the invoice to return it to WIP.",
+    };
   }
 
   await prisma.timeEntry.update({
