@@ -12,6 +12,7 @@
 import { describe, expect, test } from "vitest";
 import {
   isEffectivelyEmpty,
+  sanitizeDocumentHtml,
   sanitizeUserHtml,
 } from "./sanitize-html";
 
@@ -135,6 +136,94 @@ describe("sanitizeUserHtml — output cleanliness", () => {
 
   test("only-whitespace input returns empty", () => {
     expect(sanitizeUserHtml("   \n  \t  ")).toBe("");
+  });
+});
+
+// ── Document profile (DOCX preview pipeline) ────────────────────────────
+
+describe("sanitizeDocumentHtml — document structure passes through", () => {
+  test("note-profile tags still pass (superset, not a replacement)", () => {
+    const html =
+      "<h2>Header</h2><p><strong>b</strong> <em>i</em> <u>u</u></p>" +
+      "<ul><li>one</li></ul>";
+    expect(sanitizeDocumentHtml(html)).toBe(html);
+  });
+
+  test("tables with colspan/rowspan survive", () => {
+    const html =
+      "<table><thead><tr><th colspan=\"2\">H</th></tr></thead>" +
+      "<tbody><tr><td rowspan=\"2\">a</td><td>b</td></tr></tbody></table>";
+    expect(sanitizeDocumentHtml(html)).toBe(html);
+  });
+
+  test("b / i / sup / sub / hr survive (mammoth custom style maps)", () => {
+    const html = "<p><b>b</b><i>i</i>x<sup>2</sup>H<sub>2</sub>O</p><hr />";
+    expect(sanitizeDocumentHtml(html)).toBe(html);
+  });
+
+  test("embedded images survive with data: URIs only", () => {
+    const data =
+      '<img src="data:image/png;base64,iVBORw0KGgo=" alt="exhibit" />';
+    expect(sanitizeDocumentHtml(data)).toBe(data);
+  });
+});
+
+describe("sanitizeDocumentHtml — still a security boundary", () => {
+  test("script tags + contents are discarded", () => {
+    const out = sanitizeDocumentHtml("<p>Hi</p><script>alert(1)</script>");
+    expect(out).toBe("<p>Hi</p>");
+  });
+
+  test("event handlers and style attributes are stripped", () => {
+    const out = sanitizeDocumentHtml(
+      '<td onclick="alert(1)" style="position:fixed">x</td>'
+    );
+    expect(out).not.toContain("onclick");
+    expect(out).not.toContain("style");
+  });
+
+  test("remote image sources are stripped (tracking-pixel canary)", () => {
+    const out = sanitizeDocumentHtml('<img src="https://evil.example/p.png" />');
+    expect(out).not.toContain("evil.example");
+  });
+
+  test("protocol-relative image sources are stripped", () => {
+    const out = sanitizeDocumentHtml('<img src="//evil.example/p.png" />');
+    expect(out).not.toContain("evil.example");
+  });
+
+  test("javascript: links are stripped, links get noopener/_blank", () => {
+    const out = sanitizeDocumentHtml(
+      '<a href="javascript:alert(1)">x</a><a href="https://example.com">y</a>'
+    );
+    expect(out).not.toContain("javascript:");
+    expect(out).toContain('rel="noopener noreferrer"');
+    expect(out).toContain('target="_blank"');
+  });
+
+  test("iframe / object / style blocks are discarded", () => {
+    const out = sanitizeDocumentHtml(
+      '<style>p{display:none}</style><iframe src="https://x"></iframe>' +
+        '<object data="x"></object><p>kept</p>'
+    );
+    expect(out).toBe("<p>kept</p>");
+  });
+});
+
+describe("sanitizeDocumentHtml — note profile is NOT loosened", () => {
+  test("tables are still stripped from the note profile", () => {
+    // The document profile is additive; the note sanitizer must keep
+    // rejecting tags only documents may carry.
+    const out = sanitizeUserHtml("<table><tr><td>x</td></tr></table>");
+    expect(out).not.toContain("<table");
+    expect(out).not.toContain("<td");
+  });
+
+  test("data-URI images are still stripped from the note profile", () => {
+    const out = sanitizeUserHtml(
+      '<img src="data:image/png;base64,iVBORw0KGgo=" />'
+    );
+    expect(out).not.toContain("<img");
   });
 });
 

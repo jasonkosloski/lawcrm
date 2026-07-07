@@ -512,6 +512,7 @@ model Matter {
   pins                    UserMatterPin[]
   notifications           Notification[]
   timerSessions           TimerSession[]
+  documentFolders         DocumentFolder[]
 
   @@index([stageId])
   @@index([practiceAreaId])
@@ -784,10 +785,15 @@ model Document {
   fileSize    Int? /// Size in bytes
   status      String   @default("active") /// active | filed | received | review | archived
   uploadedBy  String? /// User ID who uploaded
+  /// Folder within the matter's file tree. Null = matter root.
+  /// SetNull is the backstop — the folder-delete action re-parents
+  /// contents explicitly; files must never vanish with a folder.
+  folderId    String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  matter             Matter    @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  matter             Matter          @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  folder             DocumentFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
   /// Expenses that point at this document as their receipt. SetNull
   /// on the FK in Expense — deleting the receipt doesn't lose the
   /// expense itself.
@@ -795,6 +801,7 @@ model Document {
 
   @@index([matterId])
   @@index([category])
+  @@index([folderId])
   @@map("documents")
 }
 
@@ -1978,4 +1985,30 @@ model SavedSearch {
 
   @@index([userId, createdAt])
   @@map("saved_searches")
+}
+
+/// Per-matter folder tree for the document file system (discovery
+/// productions arrive as deep folder structures). Nesting via
+/// parentId; null parent = matter root. Sibling-name uniqueness is
+/// app-enforced (Postgres treats NULL parentIds as distinct, so a
+/// DB unique on (matterId, parentId, name) wouldn't cover roots).
+/// Deleting a folder re-parents its contents to the folder's parent
+/// (never silently deletes files) — enforced in the action layer.
+model DocumentFolder {
+  id          String   @id @default(cuid())
+  matterId    String
+  parentId    String?
+  name        String
+  order       Int      @default(0)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  matter    Matter           @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  parent    DocumentFolder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  DocumentFolder[] @relation("FolderTree")
+  documents Document[]
+
+  @@index([matterId, parentId])
+  @@map("document_folders")
 }

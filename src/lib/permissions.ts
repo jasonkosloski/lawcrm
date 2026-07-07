@@ -253,6 +253,30 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
           "Delete documents uploaded by other firm members (uploaders can always delete their own).",
       },
       {
+        key: "documents.folder.create",
+        label: "Create folders",
+        description:
+          "Add folders to a matter's document file tree (discovery productions arrive as deep folder structures).",
+      },
+      {
+        key: "documents.folder.edit",
+        label: "Rename folders",
+        description:
+          "Rename or reorder folders in a matter's document tree.",
+      },
+      {
+        key: "documents.folder.delete",
+        label: "Delete folders",
+        description:
+          "Remove a folder — its contents are re-parented up a level, never deleted with it.",
+      },
+      {
+        key: "documents.organize",
+        label: "Move documents between folders",
+        description:
+          "Re-file documents within a matter's folder tree. Distinct from upload/delete — organizing is often delegated to staff who shouldn't remove records.",
+      },
+      {
         key: "documents.template.create",
         label: "Create document templates",
         description:

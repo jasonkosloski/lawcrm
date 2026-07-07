@@ -56,11 +56,13 @@ const TABLES_IN_DELETE_ORDER = [
   // Tasks + deadlines reference matters/users
   "tasks",
   "deadlines",
-  // Documents + evidence
+  // Documents + evidence — documents before folders (Document.folderId
+  // is SetNull, but deleting in this order avoids the null churn).
   "evidence_syncs",
   "flagged_moments",
   "evidence",
   "documents",
+  "document_folders",
   // Template library rows reference users (createdById); drop
   // before users.
   "document_templates",
@@ -322,6 +324,48 @@ export async function seedMatterContact(opts: {
     select: { id: true },
   });
   return { matterContactId: mc.id };
+}
+
+/** A DocumentFolder in a matter's tree. Null/omitted parentId =
+ *  matter root. */
+export async function seedDocumentFolder(opts: {
+  matterId: string;
+  name: string;
+  parentId?: string | null;
+  order?: number;
+}): Promise<{ folderId: string }> {
+  const folder = await prisma.documentFolder.create({
+    data: {
+      matterId: opts.matterId,
+      parentId: opts.parentId ?? null,
+      name: opts.name,
+      order: opts.order ?? 0,
+    },
+    select: { id: true },
+  });
+  return { folderId: folder.id };
+}
+
+/** A Document row, optionally filed in a folder. No file blob —
+ *  folder tests care about rows, not bytes. */
+export async function seedDocument(opts: {
+  matterId: string;
+  name?: string;
+  folderId?: string | null;
+  uploadedBy?: string | null;
+}): Promise<{ documentId: string }> {
+  const doc = await prisma.document.create({
+    data: {
+      matterId: opts.matterId,
+      folderId: opts.folderId ?? null,
+      name: opts.name ?? "Test Document.pdf",
+      category: "other",
+      source: "upload",
+      uploadedBy: opts.uploadedBy ?? null,
+    },
+    select: { id: true },
+  });
+  return { documentId: doc.id };
 }
 
 /** A Lead. Optional contactId joins it to a Contact for the

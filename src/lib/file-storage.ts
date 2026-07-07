@@ -19,9 +19,11 @@
  * tenant isolation here when adding a second firm.
  */
 
-import { createReadStream } from "node:fs";
+import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, stat, unlink, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { Transform, type Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { dirname, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 
 /// All uploaded files live under this directory (gitignored). The
@@ -66,9 +68,9 @@ export async function storeFile(file: File): Promise<StoredFile> {
   const key = makeKey(file.name);
   const path = resolveKey(key);
   await mkdir(dirname(path), { recursive: true });
-  // Buffer the whole upload — fine for the sizes we'll see at MVP
-  // (≤25MB enforced upstream). Switch to streaming when we add
-  // chunked uploads or a real cloud backend.
+  // Buffer the whole upload — fine for the sizes we'll see through
+  // server-action forms (≤25MB enforced upstream). GB-scale
+  // discovery media goes through `storeStream` below instead.
   const buf = Buffer.from(await file.arrayBuffer());
   await writeFile(path, buf);
   return {
@@ -78,10 +80,64 @@ export async function storeFile(file: File): Promise<StoredFile> {
   };
 }
 
+/** Thrown by `storeStream` when the source exceeds `maxBytes`.
+ *  Callers map this to HTTP 413; the partial file is already gone
+ *  by the time this propagates. */
+export class FileTooLargeError extends Error {
+  readonly maxBytes: number;
+  constructor(maxBytes: number) {
+    super(`File exceeds the ${maxBytes}-byte limit`);
+    this.name = "FileTooLargeError";
+    this.maxBytes = maxBytes;
+  }
+}
+
+/** Stream an incoming file to disk without buffering it in memory —
+ *  the write path for GB-scale discovery media (the upload route
+ *  pipes busboy part streams straight through here). Peak memory is
+ *  one highWaterMark chunk, regardless of file size.
+ *
+ *  Enforces `maxBytes` while writing: one byte over and the pipeline
+ *  aborts with `FileTooLargeError`. Any failure (cap, disk, source
+ *  destroyed) unlinks the partial file — a Document row is only ever
+ *  created after a fully-successful write, so a partial on disk
+ *  would be an orphan. */
+export async function storeStream(
+  source: Readable,
+  originalName: string,
+  maxBytes: number
+): Promise<{ key: string; size: number }> {
+  const key = makeKey(originalName);
+  const path = resolveKey(key);
+  await mkdir(dirname(path), { recursive: true });
+  let size = 0;
+  const counter = new Transform({
+    transform(chunk: Buffer, _enc, cb) {
+      size += chunk.length;
+      if (size > maxBytes) cb(new FileTooLargeError(maxBytes));
+      else cb(null, chunk);
+    },
+  });
+  try {
+    await pipeline(source, counter, createWriteStream(path));
+  } catch (err) {
+    await unlink(path).catch(() => {});
+    throw err;
+  }
+  return { key, size };
+}
+
 /** Open a read stream for download routes. Wraps the on-disk
- *  path-traversal guard so callers can't be tricked. */
-export function openReadStream(key: string): NodeJS.ReadableStream {
-  return createReadStream(resolveKey(key));
+ *  path-traversal guard so callers can't be tricked.
+ *
+ *  `range` (both bounds inclusive, matching both `fs.createReadStream`
+ *  and HTTP `Range` semantics) serves single-range 206 responses —
+ *  media seeking reads a slice instead of the whole file. */
+export function openReadStream(
+  key: string,
+  range?: { start: number; end: number }
+): NodeJS.ReadableStream {
+  return createReadStream(resolveKey(key), range);
 }
 
 /** Best-effort delete — used when a Document row is removed.

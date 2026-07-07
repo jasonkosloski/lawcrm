@@ -6,6 +6,13 @@
  * client → contact's firmId — for v1 we just confirm the user can
  * see the matter), then streams the bytes from the storage adapter.
  *
+ * Supports single-range HTTP Range requests (`bytes=...`) so the
+ * document viewer's <video>/<audio> elements can seek GB-scale
+ * discovery media without pulling the whole file: 206 + Content-Range
+ * for a satisfiable range, 416 + `Content-Range: bytes *​/size` when
+ * the range lies past EOF, 200 full body otherwise (multi-range and
+ * malformed headers are lawfully ignored — see ./range.ts).
+ *
  * Why a route handler and not a public storage URL: the storage
  * key is opaque, but if we ever swapped to public-CDN URLs the
  * security boundary would move outside the app. Streaming through
@@ -18,6 +25,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { openReadStream, statFile } from "@/lib/file-storage";
+import { resolveRangeHeader } from "./range";
 import type { Readable } from "node:stream";
 
 // Per-request: never cache. Documents change owners + go away;
@@ -34,16 +42,33 @@ export const dynamic = "force-dynamic";
 // link — stored XSS riding a colleague's (possibly admin) session.
 // HTML and SVG are therefore deliberately absent; add new types only
 // if the browser can't execute script from them.
+//
+// The media + text entries exist for the discovery viewer: browsers
+// render video/audio/image/plain-text passively — no script context
+// is ever created for them, and `X-Content-Type-Options: nosniff`
+// (set on every response below) stops re-interpretation of the
+// bytes as anything active. text/plain and text/csv render as
+// inert text; markup inside them is displayed, not executed.
 const INLINE_SAFE_TYPES = new Set([
   "application/pdf",
   "image/png",
   "image/jpeg",
   "image/gif",
   "image/webp",
+  "video/mp4",
+  "video/webm",
+  "video/quicktime",
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/wav",
+  "audio/webm",
+  "audio/ogg",
+  "text/plain",
+  "text/csv",
 ]);
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: { params: Promise<{ id: string }> }
 ): Promise<Response> {
   const session = await auth();
@@ -92,9 +117,32 @@ export async function GET(
     return NextResponse.json({ error: "File missing" }, { status: 410 });
   }
 
+  // Resolve any Range request against the on-disk size. 416 gets
+  // `Content-Range: bytes */size` so the media element learns the
+  // real length and can retry with a valid offset.
+  const range = resolveRangeHeader(req.headers.get("range"), fsStat.size);
+  if (range.kind === "unsatisfiable") {
+    return NextResponse.json(
+      { error: "Range not satisfiable" },
+      {
+        status: 416,
+        headers: {
+          "Content-Range": `bytes */${fsStat.size}`,
+          "Accept-Ranges": "bytes",
+        },
+      }
+    );
+  }
+  const partial = range.kind === "partial";
+
   // Web-streams interop: Node's Readable converts via fromWeb /
   // toWeb. Next.js accepts a ReadableStream<Uint8Array> body.
-  const nodeStream = openReadStream(doc.fileUrl) as Readable;
+  // Ranged reads slice at the fs layer (createReadStream start/end,
+  // both inclusive) — a seek never reads the skipped bytes.
+  const nodeStream = openReadStream(
+    doc.fileUrl,
+    partial ? { start: range.start, end: range.end } : undefined
+  ) as Readable;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const webStream = (nodeStream as any).toWeb
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -116,7 +164,12 @@ export async function GET(
 
   const headers: Record<string, string> = {
     "Content-Type": contentType,
-    "Content-Length": String(fsStat.size),
+    "Content-Length": String(
+      partial ? range.end - range.start + 1 : fsStat.size
+    ),
+    // Advertise seekability — media elements probe this before
+    // issuing Range requests.
+    "Accept-Ranges": "bytes",
     // Without nosniff, browsers may sniff even a benign declared
     // type into something active (e.g. octet-stream → HTML).
     "X-Content-Type-Options": "nosniff",
@@ -135,6 +188,10 @@ export async function GET(
     // Chrome's PDF viewer needs, which would break PDF previews.
     headers["Content-Security-Policy"] = "sandbox";
   }
+  if (partial) {
+    headers["Content-Range"] =
+      `bytes ${range.start}-${range.end}/${fsStat.size}`;
+  }
 
-  return new Response(webStream, { headers });
+  return new Response(webStream, { status: partial ? 206 : 200, headers });
 }

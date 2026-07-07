@@ -96,6 +96,86 @@ export function sanitizeUserHtml(html: string): string {
   return sanitizeHtml(html, OPTIONS).trim();
 }
 
+// ── Document profile ────────────────────────────────────────────────────
+//
+// A wider, still-passive allowlist for HTML produced by *our own*
+// server-side converters (today: mammoth DOCX → HTML in
+// `src/lib/document-preview.ts`). Word documents carry structure the
+// Tiptap note profile deliberately lacks — tables, sup/sub, hr,
+// embedded images — so this is a separate, additive profile. The
+// note profile above is untouched: nothing here loosens what a note,
+// capture, or inbox reply may contain.
+//
+// Threat model is the same as notes: the input is attacker-influenced
+// (anyone with upload access controls the .docx bytes, and mammoth
+// faithfully converts whatever markup tricks live inside), so we
+// sanitize the converter's output before it ever reaches
+// `dangerouslySetInnerHTML`. Script contexts stay impossible:
+// no <script>/<iframe>/<style>, no event handlers or style attrs
+// (sanitize-html strips unlisted attributes), and image sources are
+// restricted to `data:` URIs — mammoth inlines embedded images as
+// data URIs, and a data-URI <img> is a non-scripting context even
+// for SVG payloads. http(s) image sources are deliberately absent:
+// remote images would leak reader IPs/timestamps to whoever planted
+// the URL in a discovery document (tracking-pixel canary).
+
+/** Note-profile tags + the passive structural tags Word documents
+ *  actually use (via mammoth's default style map). */
+const DOCUMENT_ALLOWED_TAGS = [
+  ...ALLOWED_TAGS,
+  // Raw bold/italic (mammoth emits strong/em, but sanitizing b/i is
+  // free and covers custom style maps).
+  "b",
+  "i",
+  "sup",
+  "sub",
+  "hr",
+  // Tables — contracts and discovery logs are full of them.
+  "table",
+  "caption",
+  "colgroup",
+  "col",
+  "thead",
+  "tbody",
+  "tfoot",
+  "tr",
+  "td",
+  "th",
+  // Embedded images (data: URIs only — see allowedSchemesByTag).
+  "img",
+];
+
+const DOCUMENT_ALLOWED_ATTRIBUTES: sanitizeHtml.IOptions["allowedAttributes"] =
+  {
+    ...ALLOWED_ATTRIBUTES,
+    td: ["colspan", "rowspan", "class"],
+    th: ["colspan", "rowspan", "class"],
+    col: ["span", "class"],
+    colgroup: ["span", "class"],
+    img: ["src", "alt", "class"],
+  };
+
+const DOCUMENT_OPTIONS: sanitizeHtml.IOptions = {
+  allowedTags: DOCUMENT_ALLOWED_TAGS,
+  allowedAttributes: DOCUMENT_ALLOWED_ATTRIBUTES,
+  allowedSchemes: ALLOWED_SCHEMES,
+  // Images: data URIs only (mammoth inlines embedded media). No
+  // remote fetches from inside a rendered document.
+  allowedSchemesByTag: { img: ["data"] },
+  // `//evil.example/x` would inherit our scheme and dodge the
+  // scheme allowlist — reject protocol-relative URLs outright.
+  allowProtocolRelative: false,
+  disallowedTagsMode: "discard",
+  transformTags: TRANSFORM_TAGS,
+};
+
+/** Sanitize converter-produced document HTML (DOCX preview). Same
+ *  guarantees as `sanitizeUserHtml`, wider passive-structure
+ *  allowlist. */
+export function sanitizeDocumentHtml(html: string): string {
+  return sanitizeHtml(html, DOCUMENT_OPTIONS).trim();
+}
+
 /** True when the sanitized HTML has any non-whitespace visible text.
  *  Used to reject empty notes (a user clicking "Save" on an editor
  *  that only contains whitespace + tag scaffolding). */

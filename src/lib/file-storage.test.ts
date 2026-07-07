@@ -6,8 +6,11 @@
  *
  * Coverage:
  *   - storeFile writes the bytes + returns key/size/contentType
+ *   - storeStream (the GB-scale upload path): byte counting, cap
+ *     enforcement, partial-file cleanup on abort
  *   - statFile reflects size after write; returns null for missing
- *   - openReadStream round-trips the bytes
+ *   - openReadStream round-trips the bytes; ranged reads return the
+ *     exact inclusive slice (feeds HTTP 206 responses)
  *   - deleteFile is best-effort (succeeds on missing files)
  *   - path-traversal keys are rejected (defense-in-depth)
  *
@@ -20,9 +23,16 @@
  */
 
 import { afterEach, beforeAll, describe, expect, test } from "vitest";
-import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Readable } from "node:stream";
 
 // `tmpdir()` on macOS is the `/var/...` symlink but `process.cwd()`
 // resolves it to the real `/private/var/...` path — normalize so
@@ -95,6 +105,58 @@ describe("storeFile", () => {
   });
 });
 
+describe("storeStream", () => {
+  test("streams chunks to disk and reports the byte count", async () => {
+    const { key, size } = await mod.storeStream(
+      Readable.from([Buffer.from("01234"), Buffer.from("56789")]),
+      "clip.mp4",
+      1024
+    );
+    expect(size).toBe(10);
+    expect(await mod.statFile(key)).toEqual({ size: 10 });
+    const onDisk = readFileSync(join(TEST_TMP, "uploads", key));
+    expect(onDisk.toString("utf8")).toBe("0123456789");
+  });
+
+  test("a file exactly at the cap is allowed", async () => {
+    const { size } = await mod.storeStream(
+      Readable.from([Buffer.alloc(8, "x")]),
+      "at-cap.bin",
+      8
+    );
+    expect(size).toBe(8);
+  });
+
+  test("one byte over the cap rejects and removes the partial file", async () => {
+    await expect(
+      mod.storeStream(
+        // Two chunks: the first fits, so bytes DO land on disk
+        // before the cap trips — that partial must be unlinked
+        // (a partial with no Document row is an invisible orphan).
+        Readable.from([Buffer.alloc(6, "a"), Buffer.alloc(3, "b")]),
+        "over-cap.bin",
+        8
+      )
+    ).rejects.toBeInstanceOf(mod.FileTooLargeError);
+
+    const leftovers = readdirSync(join(TEST_TMP, "uploads")).filter((f) =>
+      f.endsWith("__over-cap.bin")
+    );
+    expect(leftovers).toEqual([]);
+  });
+
+  test("FileTooLargeError carries the cap for the 413 message", async () => {
+    const err = await mod
+      .storeStream(Readable.from([Buffer.alloc(9, "z")]), "big.bin", 4)
+      .then(
+        () => null,
+        (e: unknown) => e
+      );
+    expect(err).toBeInstanceOf(mod.FileTooLargeError);
+    expect((err as InstanceType<FileStorage["FileTooLargeError"]>).maxBytes).toBe(4);
+  });
+});
+
 describe("statFile", () => {
   test("returns size after a successful write", async () => {
     const stored = await mod.storeFile(makeFile("12345", "five.txt"));
@@ -120,6 +182,16 @@ describe("openReadStream", () => {
     });
     const all = Buffer.concat(chunks).toString("utf8");
     expect(all).toBe("round-trip");
+  });
+
+  test("ranged read returns the exact inclusive slice", async () => {
+    // Both bounds inclusive — matches fs.createReadStream AND the
+    // HTTP Range contract the download route serves 206s from.
+    const stored = await mod.storeFile(makeFile("0123456789", "r.bin"));
+    const stream = mod.openReadStream(stored.key, { start: 2, end: 5 });
+    const chunks: Buffer[] = [];
+    for await (const c of stream) chunks.push(c as Buffer);
+    expect(Buffer.concat(chunks).toString("utf8")).toBe("2345");
   });
 });
 

@@ -999,17 +999,19 @@ export type DocumentRow = {
   /** Pre-resolved display name for the uploader so the row can show
    *  "by JK" without a second query. */
   uploaderInitials: string | null;
+  /** Uploader's full name — tooltip / accessible label next to the
+   *  initials. Null on seeded rows or deleted users. */
+  uploaderName: string | null;
+  /** Folder within the matter's file tree; null = matter root. */
+  folderId: string | null;
   createdAt: Date;
 };
 
-export async function getMatterDocuments(
-  matterId: string
+/** Batch-resolve uploader initials + names (one query, no N+1) and
+ *  shape raw Document rows into DocumentRow. */
+async function shapeDocumentRows(
+  rows: Awaited<ReturnType<typeof prisma.document.findMany>>
 ): Promise<DocumentRow[]> {
-  const rows = await prisma.document.findMany({
-    where: { matterId },
-    orderBy: [{ createdAt: "desc" }],
-  });
-  // Resolve uploader initials in one batch query rather than N+1.
   const uploaderIds = [
     ...new Set(rows.map((d) => d.uploadedBy).filter((v): v is string => !!v)),
   ];
@@ -1017,10 +1019,10 @@ export async function getMatterDocuments(
     uploaderIds.length > 0
       ? await prisma.user.findMany({
           where: { id: { in: uploaderIds } },
-          select: { id: true, initials: true },
+          select: { id: true, initials: true, name: true },
         })
       : [];
-  const initialsByUser = new Map(uploaders.map((u) => [u.id, u.initials]));
+  const byUser = new Map(uploaders.map((u) => [u.id, u]));
 
   return rows.map((d) => ({
     id: d.id,
@@ -1033,10 +1035,71 @@ export async function getMatterDocuments(
     hasFile: !!d.fileUrl,
     uploadedBy: d.uploadedBy,
     uploaderInitials: d.uploadedBy
-      ? initialsByUser.get(d.uploadedBy) ?? null
+      ? byUser.get(d.uploadedBy)?.initials ?? null
       : null,
+    uploaderName: d.uploadedBy ? byUser.get(d.uploadedBy)?.name ?? null : null,
+    folderId: d.folderId,
     createdAt: d.createdAt,
   }));
+}
+
+export async function getMatterDocuments(
+  matterId: string
+): Promise<DocumentRow[]> {
+  const rows = await prisma.document.findMany({
+    where: { matterId },
+    orderBy: [{ createdAt: "desc" }],
+  });
+  return shapeDocumentRows(rows);
+}
+
+/** Documents directly inside one folder of the matter's tree
+ *  (`folderId: null` = the matter root), ordered by name. The
+ *  browser shows one folder at a time — this is its file list. */
+export async function getFolderDocuments(
+  matterId: string,
+  folderId: string | null
+): Promise<DocumentRow[]> {
+  const rows = await prisma.document.findMany({
+    where: { matterId, folderId },
+    orderBy: [{ name: "asc" }],
+  });
+  return shapeDocumentRows(rows);
+}
+
+/** The matter's whole folder tree as FLAT rows in ONE query — tree
+ *  building (nesting, breadcrumbs, depth math) happens in JS via
+ *  src/lib/folder-tree.ts. */
+export async function getMatterDocumentFolders(
+  matterId: string
+): Promise<
+  { id: string; parentId: string | null; name: string; order: number }[]
+> {
+  return prisma.documentFolder.findMany({
+    where: { matterId },
+    select: { id: true, parentId: true, name: true, order: true },
+    orderBy: [{ order: "asc" }, { name: "asc" }],
+  });
+}
+
+/** Direct (non-recursive) document count per folder in one groupBy.
+ *  The root's count lives under the `root` key (groupBy can't key a
+ *  Record on null). Drives the count badges on the tree rail. */
+export async function getFolderDocumentCounts(
+  matterId: string
+): Promise<{ counts: Record<string, number>; rootCount: number }> {
+  const grouped = await prisma.document.groupBy({
+    by: ["folderId"],
+    where: { matterId },
+    _count: { _all: true },
+  });
+  const counts: Record<string, number> = {};
+  let rootCount = 0;
+  for (const g of grouped) {
+    if (g.folderId === null) rootCount = g._count._all;
+    else counts[g.folderId] = g._count._all;
+  }
+  return { counts, rootCount };
 }
 
 // ── Matter expenses ────────────────────────────────────────────────────
