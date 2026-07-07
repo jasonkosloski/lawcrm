@@ -10,7 +10,8 @@
 
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { FilePlus2, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { generateInvoiceFromWip } from "@/app/actions/billing";
@@ -31,12 +32,15 @@ export function GenerateInvoiceForm({
   amountTotal: number;
   entryCount: number;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const action = generateInvoiceFromWip.bind(null, matterId);
-  const [state, formAction, isPending] = useActionState<
+  // Wrapped useActionState: masks state left over from a previous
+  // expand, so a failed attempt's error banner doesn't reappear when
+  // the form is re-expanded. See src/hooks/use-dialog-action-state.ts.
+  const [state, formAction, isPending] = useDialogActionState<
     BillingFormState,
     FormData
-  >(action, billingInitialState);
-  const [expanded, setExpanded] = useState(false);
+  >(action, billingInitialState, expanded);
 
   // Collapse on success. Deps key on the state OBJECT, not
   // state.status: useActionState keeps its state across

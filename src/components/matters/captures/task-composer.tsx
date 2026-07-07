@@ -10,7 +10,8 @@
 
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { createTaskWithCaptures } from "@/app/actions/captures";
 import {
   captureInitialState,
@@ -29,13 +30,17 @@ import {
 } from "./primary-fields";
 
 export function TaskComposer({ matterId }: { matterId: string }) {
+  const [expanded, setExpanded] = useState(false);
   const action = createTaskWithCaptures.bind(null, matterId);
-  const [state, formAction, isPending] = useActionState<
+  // Wrapped useActionState: masks state left over from a previous
+  // expand, so a failed attempt's field/attachment errors don't
+  // reappear when the composer is re-expanded. See
+  // src/hooks/use-dialog-action-state.ts.
+  const [state, formAction, isPending] = useDialogActionState<
     CaptureFormState,
     FormData
-  >(action, captureInitialState);
+  >(action, captureInitialState, expanded);
 
-  const [expanded, setExpanded] = useState(false);
   const [captures, setCaptures] = useState<NoteCapture[]>([]);
   const [title, setTitle] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -51,12 +56,15 @@ export function TaskComposer({ matterId }: { matterId: string }) {
     setCaptures([]);
   };
 
+  // Reset + collapse on success. Deps key on the state OBJECT, not
+  // state.status — identity is the reliable "a submission just
+  // finished" signal (see TimeComposer for the full rationale).
   useEffect(() => {
     if (state.status === "ok") {
       reset();
       setExpanded(false);
     }
-  }, [state.status]);
+  }, [state]);
 
   const errs = state.errors ?? {};
 

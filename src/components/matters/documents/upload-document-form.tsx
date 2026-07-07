@@ -13,7 +13,8 @@
 
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { Plus, TriangleAlert, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { uploadDocument } from "@/app/actions/documents";
@@ -29,17 +30,23 @@ import {
 const MAX_MB = Math.round(MAX_DOCUMENT_BYTES / (1024 * 1024));
 
 export function UploadDocumentForm({ matterId }: { matterId: string }) {
+  const [expanded, setExpanded] = useState(false);
   const action = uploadDocument.bind(null, matterId);
-  const [state, formAction, isPending] = useActionState<
+  // Wrapped useActionState: masks state left over from a previous
+  // expand, so a failed attempt's error banner doesn't reappear when
+  // the form is re-expanded. See src/hooks/use-dialog-action-state.ts.
+  const [state, formAction, isPending] = useDialogActionState<
     DocumentFormState,
     FormData
-  >(action, documentInitialState);
-  const [expanded, setExpanded] = useState(false);
+  >(action, documentInitialState, expanded);
   const [filename, setFilename] = useState<string | null>(null);
   const [category, setCategory] = useState<DocumentCategory>("other");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Collapse + reset on successful upload.
+  // Collapse + reset on successful upload. Deps key on the state
+  // OBJECT, not state.status — identity is the reliable "a
+  // submission just finished" signal (see TimeComposer for the full
+  // rationale).
   useEffect(() => {
     if (state.status === "ok") {
       setExpanded(false);
@@ -47,7 +54,7 @@ export function UploadDocumentForm({ matterId }: { matterId: string }) {
       setCategory("other");
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
-  }, [state.status]);
+  }, [state]);
 
   if (!expanded) {
     return (

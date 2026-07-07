@@ -283,6 +283,20 @@ work for Gmail OAuth + send.
   reader. Hosts the Log-call composer with the matter pre-selected
   (no picker) and the matter's client + parties floated to the top
   of the contact typeahead.
+- [x] **Thread read tracking** — Opening a thread now marks it read
+  (previously unread badges were permanent). `markEmailThreadRead` /
+  `markMessengerThreadRead` in `src/app/actions/thread-read.ts` —
+  session-gated like notifications (read-state is viewing-inherent,
+  no catalog key), transactional flip of item flags + the
+  denormalized `MessengerThread.unreadCount` (heals counter drift),
+  no-op + no revalidation when already read. Fired by an invisible
+  `MarkThreadRead` island mounted in both thread readers.
+- [x] **Missed-call detection — status-based** — Thread list rows
+  flag missed calls from the raw `MessengerItem.callStatus`
+  (`lastCallStatus` on `MessengerThreadRow`) via the shared
+  `isMissedCall` predicate (inbound + missed/no_answer/declined;
+  busy/failed render neutrally), replacing the old
+  `lastBody === "Missed call"` string heuristic.
 
 ### Phase 5 — Calendar & Time
 

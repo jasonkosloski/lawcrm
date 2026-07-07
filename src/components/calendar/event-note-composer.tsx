@@ -15,7 +15,8 @@
 
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { Pin, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createNote } from "@/app/actions/notes";
@@ -34,18 +35,24 @@ export function EventNoteComposer({
   matterId: string;
   eventId: string;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const action = createNote.bind(null, matterId);
-  const [state, formAction, isPending] = useActionState<
+  // Wrapped useActionState: masks state left over from a previous
+  // expand, so a failed attempt's errors don't reappear when the
+  // composer is re-expanded. See src/hooks/use-dialog-action-state.ts.
+  const [state, formAction, isPending] = useDialogActionState<
     NoteFormState,
     FormData
-  >(action, noteInitialState);
+  >(action, noteInitialState, expanded);
 
-  const [expanded, setExpanded] = useState(false);
   const [html, setHtml] = useState("");
   const [type, setType] = useState<(typeof NOTE_TYPES)[number]>("note");
   const [pin, setPin] = useState(false);
   const [editorKey, setEditorKey] = useState(0);
 
+  // Reset + collapse on success. Deps key on the state OBJECT, not
+  // state.status — identity is the reliable "a submission just
+  // finished" signal (see TimeComposer for the full rationale).
   useEffect(() => {
     if (state.status !== "ok") return;
     setHtml("");
@@ -53,7 +60,7 @@ export function EventNoteComposer({
     setPin(false);
     setEditorKey((k) => k + 1);
     setExpanded(false);
-  }, [state.status]);
+  }, [state]);
 
   const errs = state.errors ?? {};
 

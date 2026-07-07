@@ -9,7 +9,8 @@
 
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { Pencil, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -42,16 +43,21 @@ export function SettlementComposer({
   initial: SettlementInitial;
   canEdit: boolean;
 }) {
-  const action = upsertSettlement.bind(null, matterId);
-  const [state, formAction, isPending] = useActionState<
-    SettlementFormState,
-    FormData
-  >(action, settlementInitialState);
-
   // Editing state. When there's an existing settlement we render a
   // "compact" mode showing the saved values + a pencil; opening
   // expands the full form.
   const [expanded, setExpanded] = useState(initial === null);
+
+  const action = upsertSettlement.bind(null, matterId);
+  // Wrapped useActionState: masks state left over from a previous
+  // expand, so a failed attempt's errors don't reappear when the
+  // form is re-expanded. (New-settlement creates never collapse, so
+  // for those the wrapper is inert — errors persist within the one
+  // long session, as before.) See src/hooks/use-dialog-action-state.ts.
+  const [state, formAction, isPending] = useDialogActionState<
+    SettlementFormState,
+    FormData
+  >(action, settlementInitialState, expanded);
 
   const [grossAmount, setGrossAmount] = useState(
     formatMoneyInput(initial?.grossAmount ?? 0)

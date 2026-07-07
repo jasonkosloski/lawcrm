@@ -20,6 +20,7 @@ import { LogTimeOnCommButton } from "./log-time-on-comm-button";
 import { CommTimeLoggedIndicator } from "./comm-time-logged-indicator";
 import { FileToMatterPicker } from "./file-to-matter-picker";
 import { BackToListButton } from "./back-to-list-button";
+import { MarkThreadRead } from "./mark-thread-read";
 import type { FilingMatterOption } from "@/lib/queries/communication";
 
 const formatSize = (bytes: number | null): string => {
@@ -60,6 +61,9 @@ export function ThreadReader({
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-paper-email overflow-y-auto">
+      {/* Opening the reader marks the thread read (idempotent island,
+          renders nothing). */}
+      <MarkThreadRead channel="email" threadId={thread.id} />
       {/* Subject header */}
       <header className="sticky top-0 z-10 bg-paper-email/95 backdrop-blur-sm px-4 sm:px-6 py-3 sm:py-4 border-b border-line">
         {/* Subject + back button — always at the top so it doesn't

@@ -11,7 +11,8 @@
 
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createTimeEntry } from "@/app/actions/time-entries";
@@ -28,13 +29,16 @@ export function EventTimeEntryComposer({
   matterId: string;
   eventId: string;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const action = createTimeEntry.bind(null, matterId);
-  const [state, formAction, isPending] = useActionState<
+  // Wrapped useActionState: masks state left over from a previous
+  // expand, so a failed attempt's errors don't reappear when the
+  // composer is re-expanded. See src/hooks/use-dialog-action-state.ts.
+  const [state, formAction, isPending] = useDialogActionState<
     TimeEntryFormState,
     FormData
-  >(action, timeEntryInitialState);
+  >(action, timeEntryInitialState, expanded);
 
-  const [expanded, setExpanded] = useState(false);
   const [date, setDate] = useState(todayDateString());
   const [hours, setHours] = useState("");
   const [activity, setActivity] = useState("");
@@ -53,11 +57,14 @@ export function EventTimeEntryComposer({
     setPrivileged(false);
   };
 
+  // Reset + collapse on success. Deps key on the state OBJECT, not
+  // state.status — identity is the reliable "a submission just
+  // finished" signal (see TimeComposer for the full rationale).
   useEffect(() => {
     if (state.status !== "ok") return;
     reset();
     setExpanded(false);
-  }, [state.status]);
+  }, [state]);
 
   const errs = state.errors ?? {};
   const hasContent = hours.trim().length > 0 && activity.trim().length > 0;

@@ -10,6 +10,13 @@
  * open and inviting a duplicate submission. Each action invocation
  * returns a fresh object, so object identity is the reliable
  * "a submission just finished" signal.
+ *
+ * The second regression pinned here: useActionState keeps a FAILED
+ * state forever too, and this component stays mounted across
+ * close/reopen — so without the useDialogActionState masking, a
+ * failed attempt's error banner reappears the next time the dialog
+ * opens, looking like a live failure. Stale errors must be masked
+ * on reopen; fresh errors and successes must still surface.
  */
 
 import { useState } from "react";
@@ -139,5 +146,93 @@ describe("RecordPaymentDialog — close on success", () => {
       await screen.findByText("Invoice is not in a payable state.")
     ).toBeInTheDocument();
     expect(onOpenChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("RecordPaymentDialog — stale error masking on reopen", () => {
+  // Shared harness: stateful parent drives `open` (like the invoice
+  // action bar does), with a reopen button standing in for clicking
+  // "Record payment" again. The component stays mounted across the
+  // close/reopen — only the dialog content unmounts — so
+  // useActionState still holds the failed state from round one.
+  function Harness() {
+    const [open, setOpen] = useState(true);
+    return (
+      <>
+        <button type="button" onClick={() => setOpen(true)}>
+          reopen dialog
+        </button>
+        <RecordPaymentDialog
+          {...baseProps}
+          open={open}
+          onOpenChange={setOpen}
+        />
+      </>
+    );
+  }
+
+  const submitButton = () =>
+    screen.getByRole("button", { name: /record \$/i });
+
+  const closeAndReopen = async (user: ReturnType<typeof setupUser>) => {
+    await user.click(screen.getByRole("button", { name: /^cancel$/i }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: /record \$/i })
+      ).not.toBeInTheDocument()
+    );
+    await user.click(screen.getByRole("button", { name: /reopen dialog/i }));
+    await screen.findByRole("button", { name: /record \$/i });
+  };
+
+  test("failed attempt's banner does NOT reappear on reopen; a new failure shows the new banner", async () => {
+    mockedAction.mockImplementation(async () => ({
+      status: "error" as const,
+      error: "First failure.",
+    }));
+    const user = setupUser();
+    render(<Harness />);
+
+    // Round one: submit fails → banner renders.
+    await user.click(submitButton());
+    expect(await screen.findByText("First failure.")).toBeInTheDocument();
+
+    // Close → reopen: the stale banner must be masked.
+    await closeAndReopen(user);
+    expect(screen.queryByText("First failure.")).not.toBeInTheDocument();
+
+    // Round two: a fresh failure must still surface — masking only
+    // hides state that predates this open session.
+    mockedAction.mockImplementation(async () => ({
+      status: "error" as const,
+      error: "Second failure.",
+    }));
+    await user.click(submitButton());
+    expect(await screen.findByText("Second failure.")).toBeInTheDocument();
+    expect(screen.queryByText("First failure.")).not.toBeInTheDocument();
+  });
+
+  test("success still closes the dialog after a failed-then-reopened session", async () => {
+    // Pins that the masking doesn't eat the close-on-success signal:
+    // error → close → reopen → successful submit must still close.
+    mockedAction.mockImplementation(async () => ({
+      status: "error" as const,
+      error: "Not payable yet.",
+    }));
+    const user = setupUser();
+    render(<Harness />);
+
+    await user.click(submitButton());
+    expect(await screen.findByText("Not payable yet.")).toBeInTheDocument();
+    await closeAndReopen(user);
+
+    mockedAction.mockImplementation(async () => ({ status: "ok" as const }));
+    await user.click(submitButton());
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: /record \$/i })
+      ).not.toBeInTheDocument()
+    );
+    expect(mockedAction).toHaveBeenCalledTimes(2);
   });
 });

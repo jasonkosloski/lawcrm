@@ -14,7 +14,8 @@
 
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -45,13 +46,16 @@ export function ExpenseComposer({
    *  dropdown. Empty list (the default) hides the receipt field. */
   documentOptions?: ExpenseDocumentOption[];
 }) {
+  const [expanded, setExpanded] = useState(false);
   const action = createExpense.bind(null, matterId);
-  const [state, formAction, isPending] = useActionState<
+  // Wrapped useActionState: masks state left over from a previous
+  // expand, so a failed attempt's errors don't reappear when the
+  // form is re-expanded. See src/hooks/use-dialog-action-state.ts.
+  const [state, formAction, isPending] = useDialogActionState<
     ExpenseFormState,
     FormData
-  >(action, expenseInitialState);
+  >(action, expenseInitialState, expanded);
 
-  const [expanded, setExpanded] = useState(false);
   const [date, setDate] = useState(todayIso());
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");

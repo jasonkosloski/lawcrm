@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BackToListButton } from "./back-to-list-button";
+import { MarkThreadRead } from "./mark-thread-read";
 import type {
   MessengerItemRow,
   MessengerThreadDetail,
@@ -89,6 +90,9 @@ export function MessengerThreadReader({
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-white">
+      {/* Opening the reader marks the thread read (idempotent island,
+          renders nothing). */}
+      <MarkThreadRead channel="messenger" threadId={thread.id} />
       {/* Header — identity row always at the top, action row floats
           right on sm+ and wraps below on `<sm` so the matter pill +
           follow-up button get full tap targets without squeezing

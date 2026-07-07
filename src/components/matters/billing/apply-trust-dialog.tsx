@@ -16,7 +16,8 @@
 
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import {
   Dialog,
   DialogContent,
@@ -62,10 +63,13 @@ export function ApplyTrustDialog({
   clientEmail: string | null;
 }) {
   const action = recordInvoicePayment.bind(null, invoiceId);
-  const [state, formAction, isPending] = useActionState<
+  // Wrapped useActionState: masks state left over from a previous
+  // open, so a failed attempt's error banner doesn't reappear when
+  // the dialog is reopened. See src/hooks/use-dialog-action-state.ts.
+  const [state, formAction, isPending] = useDialogActionState<
     BillingFormState,
     FormData
-  >(action, billingInitialState);
+  >(action, billingInitialState, open);
 
   // Default to MIN(trust, invoice balance) — the most common case
   // is "earn out as much as the retainer covers."

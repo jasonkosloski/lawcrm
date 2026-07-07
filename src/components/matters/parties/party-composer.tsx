@@ -15,13 +15,8 @@
 
 "use client";
 
-import {
-  useActionState,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { Plus, UserCheck, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createMatterContact } from "@/app/actions/parties";
@@ -56,15 +51,18 @@ export function PartyComposer({
   category: PartyCategory;
   contacts: ContactOption[];
 }) {
+  const [expanded, setExpanded] = useState(false);
   const action = createMatterContact.bind(null, matterId);
-  const [state, formAction, isPending] = useActionState<
+  // Wrapped useActionState: masks state left over from a previous
+  // expand, so a failed attempt's errors don't reappear when the
+  // composer is re-expanded. See src/hooks/use-dialog-action-state.ts.
+  const [state, formAction, isPending] = useDialogActionState<
     PartyFormState,
     FormData
-  >(action, partyInitialState);
+  >(action, partyInitialState, expanded);
 
   const showsRepresentation = category !== "client";
 
-  const [expanded, setExpanded] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
@@ -109,12 +107,15 @@ export function PartyComposer({
     setRepPhone("");
   };
 
+  // Reset + collapse on success. Deps key on the state OBJECT, not
+  // state.status — identity is the reliable "a submission just
+  // finished" signal (see TimeComposer for the full rationale).
   useEffect(() => {
     if (state.status === "ok") {
       reset();
       setExpanded(false);
     }
-  }, [state.status]);
+  }, [state]);
 
   const suggestions = useMemo(() => {
     const q = query.trim().toLowerCase();

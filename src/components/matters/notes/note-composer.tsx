@@ -11,12 +11,8 @@
 
 "use client";
 
-import {
-  useActionState,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useRef, useState } from "react";
+import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { Pin, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
@@ -32,13 +28,16 @@ import { NoteEditor } from "./note-editor";
 import { CaptureStack } from "@/components/matters/captures/capture-stack";
 
 export function NoteComposer({ matterId }: { matterId: string }) {
+  const [expanded, setExpanded] = useState(false);
   const boundCreate = createNote.bind(null, matterId);
-  const [state, formAction, isPending] = useActionState<
+  // Wrapped useActionState: masks state left over from a previous
+  // expand, so a failed attempt's errors don't reappear when the
+  // composer is re-expanded. See src/hooks/use-dialog-action-state.ts.
+  const [state, formAction, isPending] = useDialogActionState<
     NoteFormState,
     FormData
-  >(boundCreate, noteInitialState);
+  >(boundCreate, noteInitialState, expanded);
 
-  const [expanded, setExpanded] = useState(false);
   const [html, setHtml] = useState("");
   const [type, setType] = useState<(typeof NOTE_TYPES)[number]>("note");
   const [pin, setPin] = useState(false);
@@ -48,7 +47,10 @@ export function NoteComposer({ matterId }: { matterId: string }) {
   const [editorKey, setEditorKey] = useState(0);
   const formRef = useRef<HTMLFormElement>(null);
 
-  // Collapse + reset after a successful save.
+  // Collapse + reset after a successful save. Deps key on the state
+  // OBJECT, not state.status — identity is the reliable "a
+  // submission just finished" signal (see TimeComposer for the full
+  // rationale).
   useEffect(() => {
     if (state.status !== "ok") return;
     setHtml("");
@@ -57,7 +59,7 @@ export function NoteComposer({ matterId }: { matterId: string }) {
     setCaptures([]);
     setExpanded(false);
     setEditorKey((k) => k + 1);
-  }, [state.status]);
+  }, [state]);
 
   const errs = state.errors ?? {};
   const attachmentErrors = state.attachmentErrors ?? {};

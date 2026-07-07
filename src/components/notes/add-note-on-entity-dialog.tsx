@@ -14,7 +14,8 @@
 
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import {
   Dialog,
   DialogContent,
@@ -56,10 +57,13 @@ export function AddNoteOnEntityDialog({
   parentLabel: string;
   parentKind: "task" | "deadline";
 }) {
-  const [state, formAction, isPending] = useActionState<
+  // Wrapped useActionState: masks state left over from a previous
+  // open, so a failed attempt's errors don't reappear when the
+  // dialog is reopened. See src/hooks/use-dialog-action-state.ts.
+  const [state, formAction, isPending] = useDialogActionState<
     NoteAttachmentFormState,
     FormData
-  >(action, noteAttachmentInitialState);
+  >(action, noteAttachmentInitialState, open);
 
   const [content, setContent] = useState("");
   const [type, setType] = useState<NoteType>("note");

@@ -24,7 +24,8 @@
 
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import {
   Dialog,
   DialogContent,
@@ -63,10 +64,13 @@ export function SendInvoiceDialog({
   trustBalance: number;
 }) {
   const action = sendInvoice.bind(null, invoiceId);
-  const [state, formAction, isPending] = useActionState<
+  // Wrapped useActionState: masks state left over from a previous
+  // open, so a failed attempt's error banner doesn't reappear when
+  // the dialog is reopened. See src/hooks/use-dialog-action-state.ts.
+  const [state, formAction, isPending] = useDialogActionState<
     BillingFormState,
     FormData
-  >(action, billingInitialState);
+  >(action, billingInitialState, open);
 
   // The trust-apply checkbox only exists if there's trust to draw
   // from AND the invoice has an open balance.

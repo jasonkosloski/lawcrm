@@ -47,6 +47,7 @@ function makeThread(overrides: Partial<MessengerThreadRow>): MessengerThreadRow 
     lastBody: "Hello",
     lastKind: "sms",
     lastDirection: "inbound",
+    lastCallStatus: null,
     lastAt: new Date("2026-07-01T12:00:00Z"),
     unreadCount: 0,
     isPinned: false,
@@ -71,18 +72,57 @@ describe("MessengerThreadList — preview icon per item kind", () => {
   // stable hook for asserting which glyph rendered.
   test.each([
     [
-      "inbound call → PhoneIncoming",
-      makeThread({ lastKind: "call", lastDirection: "inbound", lastBody: "Inbound call" }),
+      "inbound answered call → PhoneIncoming",
+      makeThread({
+        lastKind: "call",
+        lastDirection: "inbound",
+        lastBody: "Inbound call",
+        lastCallStatus: "answered",
+      }),
       "lucide-phone-incoming",
     ],
     [
       "outbound call → PhoneOutgoing",
-      makeThread({ lastKind: "call", lastDirection: "outbound", lastBody: "Outbound call" }),
+      makeThread({
+        lastKind: "call",
+        lastDirection: "outbound",
+        lastBody: "Outbound call",
+        lastCallStatus: "answered",
+      }),
       "lucide-phone-outgoing",
     ],
     [
       "missed call → PhoneMissed",
-      makeThread({ lastKind: "call", lastDirection: "inbound", lastBody: "Missed call" }),
+      makeThread({
+        lastKind: "call",
+        lastDirection: "inbound",
+        lastBody: "Missed call",
+        lastCallStatus: "missed",
+      }),
+      "lucide-phone-missed",
+    ],
+    [
+      // Regression: the old check compared lastBody to the literal
+      // string "Missed call", so a no_answer call never got flagged.
+      "no_answer call → PhoneMissed",
+      makeThread({
+        lastKind: "call",
+        lastDirection: "inbound",
+        lastBody: "Missed call",
+        lastCallStatus: "no_answer",
+      }),
+      "lucide-phone-missed",
+    ],
+    [
+      // Regression: a missed call whose summary was logged into body
+      // used to lose the missed glyph because body !== "Missed call".
+      "missed call with summary body → PhoneMissed",
+      makeThread({
+        lastKind: "call",
+        lastDirection: "inbound",
+        lastBody: "Client called about the deposition",
+        lastCallStatus: "missed",
+      }),
       "lucide-phone-missed",
     ],
     [
@@ -102,8 +142,57 @@ describe("MessengerThreadList — preview icon per item kind", () => {
 
   test("missed-call rows style the preview text as warn", () => {
     const { getByText } = renderList(
-      makeThread({ lastKind: "call", lastDirection: "inbound", lastBody: "Missed call" })
+      makeThread({
+        lastKind: "call",
+        lastDirection: "inbound",
+        lastBody: "Missed call",
+        lastCallStatus: "missed",
+      })
     );
     expect(getByText("Missed call").className).toContain("text-warn");
+  });
+
+  test("no_answer call with a summary body still gets the missed treatment", () => {
+    const { getByText, container } = renderList(
+      makeThread({
+        lastKind: "call",
+        lastDirection: "inbound",
+        lastBody: "Tried to reach the office",
+        lastCallStatus: "no_answer",
+      })
+    );
+    expect(container.querySelector(".lucide-phone-missed")).not.toBeNull();
+    expect(getByText("Tried to reach the office").className).toContain(
+      "text-warn"
+    );
+  });
+
+  test("answered call with a summary body does not get the missed treatment", () => {
+    const { getByText, container } = renderList(
+      makeThread({
+        lastKind: "call",
+        lastDirection: "inbound",
+        lastBody: "Discussed settlement terms",
+        lastCallStatus: "answered",
+      })
+    );
+    expect(container.querySelector(".lucide-phone-missed")).toBeNull();
+    expect(container.querySelector(".lucide-phone-incoming")).not.toBeNull();
+    expect(getByText("Discussed settlement terms").className).not.toContain(
+      "text-warn"
+    );
+  });
+
+  test("busy inbound call renders neutrally (matches reader / phone log)", () => {
+    const { container } = renderList(
+      makeThread({
+        lastKind: "call",
+        lastDirection: "inbound",
+        lastBody: "Inbound call",
+        lastCallStatus: "busy",
+      })
+    );
+    expect(container.querySelector(".lucide-phone-missed")).toBeNull();
+    expect(container.querySelector(".lucide-phone-incoming")).not.toBeNull();
   });
 });

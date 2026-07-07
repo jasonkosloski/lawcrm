@@ -9,7 +9,8 @@
 
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import {
   Dialog,
   DialogContent,
@@ -56,10 +57,13 @@ export function ConvertNoteToTaskDialog({
   defaultDescription: string;
 }) {
   const action = convertNoteToTask.bind(null, noteId);
-  const [state, formAction, isPending] = useActionState<
+  // Wrapped useActionState: masks state left over from a previous
+  // open, so a failed attempt's errors don't reappear when the
+  // dialog is reopened. See src/hooks/use-dialog-action-state.ts.
+  const [state, formAction, isPending] = useDialogActionState<
     InboxActionFormState,
     FormData
-  >(action, inboxActionInitialState);
+  >(action, inboxActionInitialState, open);
 
   const [title, setTitle] = useState(defaultTitle);
   const [description, setDescription] = useState(defaultDescription);
@@ -74,9 +78,15 @@ export function ConvertNoteToTaskDialog({
     setPriority("normal");
   }, [open, defaultTitle, defaultDescription]);
 
+  // Close on success. Deps key on the state OBJECT, not
+  // state.status: useActionState keeps its state across submissions,
+  // so after the first success the status string is "ok" forever and
+  // a second successful conversion would skip the effect, leaving
+  // the dialog open. Each action invocation returns a fresh object,
+  // so identity is the reliable signal.
   useEffect(() => {
     if (state.status === "ok") onOpenChange(false);
-  }, [state.status, onOpenChange]);
+  }, [state, onOpenChange]);
 
   const errs = state.errors ?? {};
 
@@ -168,10 +178,11 @@ export function ConvertTaskToDeadlineDialog({
   defaultDescription: string;
 }) {
   const action = convertTaskToDeadline.bind(null, taskId);
-  const [state, formAction, isPending] = useActionState<
+  // Wrapped useActionState — see ConvertNoteToTaskDialog above.
+  const [state, formAction, isPending] = useDialogActionState<
     InboxActionFormState,
     FormData
-  >(action, inboxActionInitialState);
+  >(action, inboxActionInitialState, open);
 
   const [title, setTitle] = useState(defaultTitle);
   const [dueDate, setDueDate] = useState(defaultDueDate);
@@ -186,9 +197,11 @@ export function ConvertTaskToDeadlineDialog({
     setDescription(defaultDescription);
   }, [open, defaultTitle, defaultDueDate, defaultDescription]);
 
+  // Close on success — identity-keyed for the same reason as the
+  // note → task dialog above.
   useEffect(() => {
     if (state.status === "ok") onOpenChange(false);
-  }, [state.status, onOpenChange]);
+  }, [state, onOpenChange]);
 
   const errs = state.errors ?? {};
 

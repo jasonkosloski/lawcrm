@@ -20,7 +20,10 @@ import {
   Pin,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { MessengerThreadRow } from "@/lib/queries/messenger";
+import {
+  isMissedCall,
+  type MessengerThreadRow,
+} from "@/lib/queries/messenger";
 import type { MessengerFilter } from "./messenger-mailbox-rail";
 import { MailboxDrawerTrigger } from "./mailbox-drawer";
 
@@ -116,13 +119,12 @@ export function MessengerThreadList({
         <ul className="flex-1 overflow-y-auto">
           {threads.map((t) => {
             const active = t.id === selectedThreadId;
-            // Known limitation: MessengerThreadRow doesn't carry the
-            // raw callStatus, so this keys off the derived preview
-            // string. A "no_answer" call, or a missed call whose
-            // summary was logged into body, won't be flagged here
-            // until the query exposes lastCallStatus.
-            const isMissedCall =
-              t.lastKind === "call" && t.lastBody === "Missed call";
+            // Real status check — which statuses count as "missed"
+            // (and why busy/failed don't) is documented on
+            // MISSED_CALL_STATUSES in @/lib/queries/messenger.
+            const missedCall =
+              t.lastKind === "call" &&
+              isMissedCall(t.lastDirection, t.lastCallStatus);
             return (
               <li key={t.id}>
                 <Link
@@ -174,11 +176,11 @@ export function MessengerThreadList({
                     </div>
 
                     <div className="flex items-center gap-1.5 mt-0.5">
-                      {previewIcon(t.lastKind, t.lastDirection, isMissedCall)}
+                      {previewIcon(t.lastKind, t.lastDirection, missedCall)}
                       <span
                         className={cn(
                           "text-2xs truncate",
-                          isMissedCall
+                          missedCall
                             ? "text-warn"
                             : t.unreadCount > 0
                               ? "text-ink-2 font-medium"

@@ -4,7 +4,8 @@
 
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { createTimeEntryWithCaptures } from "@/app/actions/captures";
 import {
   captureInitialState,
@@ -22,13 +23,17 @@ import {
 } from "./primary-fields";
 
 export function TimeComposer({ matterId }: { matterId: string }) {
+  const [expanded, setExpanded] = useState(false);
   const action = createTimeEntryWithCaptures.bind(null, matterId);
-  const [state, formAction, isPending] = useActionState<
+  // Wrapped useActionState: masks state left over from a previous
+  // expand, so a failed attempt's field/attachment errors don't
+  // reappear when the composer is re-expanded. See
+  // src/hooks/use-dialog-action-state.ts.
+  const [state, formAction, isPending] = useDialogActionState<
     CaptureFormState,
     FormData
-  >(action, captureInitialState);
+  >(action, captureInitialState, expanded);
 
-  const [expanded, setExpanded] = useState(false);
   const [captures, setCaptures] = useState<NoteCapture[]>([]);
   const [date, setDate] = useState(todayDateString());
   const [hours, setHours] = useState("");

@@ -11,7 +11,8 @@
 
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { Plus, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { addTrustTransaction } from "@/app/actions/billing";
@@ -29,12 +30,15 @@ const todayIso = (): string => {
 };
 
 export function TrustTransactionForm({ matterId }: { matterId: string }) {
+  const [expanded, setExpanded] = useState(false);
   const action = addTrustTransaction.bind(null, matterId);
-  const [state, formAction, isPending] = useActionState<
+  // Wrapped useActionState: masks state left over from a previous
+  // expand, so a failed attempt's error banner doesn't reappear when
+  // the form is re-expanded. See src/hooks/use-dialog-action-state.ts.
+  const [state, formAction, isPending] = useDialogActionState<
     BillingFormState,
     FormData
-  >(action, billingInitialState);
-  const [expanded, setExpanded] = useState(false);
+  >(action, billingInitialState, expanded);
   const [type, setType] = useState<TrustTxnType>("deposit");
 
   // Collapse + reset on success. Deps key on the state OBJECT, not

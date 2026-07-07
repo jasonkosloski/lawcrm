@@ -29,6 +29,11 @@ export type MessengerThreadRow = {
   lastBody: string | null;
   lastKind: MessengerKind | null;
   lastDirection: MessengerDirection | null;
+  /** Raw call status of the most recent item (see MessengerItem.callStatus:
+   *  answered | missed | voicemail | busy | failed | no_answer | declined).
+   *  Null for SMS or brand-new threads. Lets the UI detect missed calls
+   *  from the real status instead of parsing the preview string. */
+  lastCallStatus: string | null;
   lastAt: Date;
   unreadCount: number;
   isPinned: boolean;
@@ -92,6 +97,44 @@ export type MessengerThreadDetail = {
   followUpAt: Date | null;
   items: MessengerItemRow[];
 };
+
+/**
+ * Call statuses that get the "missed" treatment (warn color,
+ * PhoneMissed glyph) when the call is inbound.
+ *
+ * Value space is MessengerItem.callStatus: answered | missed |
+ * voicemail | busy | failed | no_answer | declined.
+ *
+ * Included: `missed` and `no_answer` (caller rang out — the same
+ * pair the thread reader and MatterPhoneLog already flag), plus
+ * `declined` (a deliberately-rejected inbound call still means the
+ * caller reached nobody and likely needs follow-up).
+ *
+ * Excluded by choice: `busy` and `failed` — those signal line or
+ * network trouble on the connection itself rather than a caller the
+ * firm failed to pick up, and the sibling call surfaces (thread
+ * reader, matter phone log) render them neutrally. Flagging them
+ * here would make the inbox disagree with the reader it opens into.
+ */
+export const MISSED_CALL_STATUSES: ReadonlySet<string> = new Set([
+  "missed",
+  "no_answer",
+  "declined",
+]);
+
+/** True when an item (or thread preview) represents a missed call:
+ *  an inbound call whose status is in MISSED_CALL_STATUSES. Pure —
+ *  safe to use from components. */
+export function isMissedCall(
+  direction: MessengerDirection | null,
+  callStatus: string | null
+): boolean {
+  return (
+    direction === "inbound" &&
+    callStatus !== null &&
+    MISSED_CALL_STATUSES.has(callStatus)
+  );
+}
 
 const SAFE_MEDIA: MessengerItemRow["mediaUrls"] = [];
 
@@ -173,7 +216,10 @@ export async function listMessengerThreads({
     const lastBody =
       last?.body ??
       (last?.kind === "call"
-        ? last.callStatus === "missed"
+        ? isMissedCall(
+            (last.direction ?? null) as MessengerDirection | null,
+            last.callStatus
+          )
           ? "Missed call"
           : last.direction === "inbound"
             ? "Inbound call"
@@ -193,6 +239,7 @@ export async function listMessengerThreads({
       lastBody,
       lastKind: (last?.kind ?? null) as MessengerKind | null,
       lastDirection: (last?.direction ?? null) as MessengerDirection | null,
+      lastCallStatus: last?.callStatus ?? null,
       lastAt: t.lastItemAt,
       unreadCount: t.unreadCount,
       isPinned: t.isPinned,

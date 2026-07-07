@@ -11,7 +11,8 @@
 
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -61,10 +62,15 @@ export function ConvertLeadButton({
 }) {
   const [open, setOpen] = useState(false);
   const action = convertLeadToMatter.bind(null, leadId);
-  const [state, formAction, isPending] = useActionState<
+  // Wrapped useActionState: masks state left over from a previous
+  // open, so a failed attempt's error banner doesn't reappear when
+  // the dialog is reopened. (Success redirects to the new matter, so
+  // there's no close-on-success effect here.) See
+  // src/hooks/use-dialog-action-state.ts.
+  const [state, formAction, isPending] = useDialogActionState<
     ConvertLeadFormState,
     FormData
-  >(action, convertLeadInitialState);
+  >(action, convertLeadInitialState, open);
 
   const [name, setName] = useState(defaultMatterName);
   const [areaId, setAreaId] = useState(areas[0]?.id ?? "");

@@ -1,15 +1,24 @@
 /**
- * Integration tests for matter-scoped messenger queries.
+ * Integration tests for messenger queries.
  *
  * `listMessengerItemsForMatter` drives the Phone channel of the
  * matter-detail Communication tab — these pin down the filing
  * resolution rule (direct item.matterId OR inherited from
  * thread.defaultMatterId), cross-matter isolation, and ordering.
+ *
+ * `listMessengerThreads` feeds the inbox thread list — pinned here:
+ * `lastCallStatus` carries the raw status of the most recent item so
+ * the UI detects missed calls (incl. no_answer, and calls whose
+ * summary occupies body) without parsing the preview string.
  */
 
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { prisma } from "@/lib/prisma";
-import { listMessengerItemsForMatter } from "@/lib/queries/messenger";
+import {
+  isMissedCall,
+  listMessengerItemsForMatter,
+  listMessengerThreads,
+} from "@/lib/queries/messenger";
 import {
   resetDb,
   seedFirm,
@@ -26,6 +35,8 @@ async function seedItem(opts: {
   threadId: string;
   matterId?: string | null;
   kind?: string;
+  direction?: string;
+  callStatus?: string | null;
   body?: string | null;
   occurredAt: string;
 }): Promise<string> {
@@ -34,7 +45,8 @@ async function seedItem(opts: {
       threadId: opts.threadId,
       providerEventId: `test-${Math.random().toString(36).slice(2)}`,
       kind: opts.kind ?? "call",
-      direction: "outbound",
+      direction: opts.direction ?? "outbound",
+      callStatus: opts.callStatus ?? null,
       fromNumber: "+13035550100",
       toNumber: "+13035550182",
       body: opts.body ?? null,
@@ -165,5 +177,96 @@ describe("listMessengerItemsForMatter", () => {
 
   test("returns empty for a matter with no filed items", async () => {
     expect(await listMessengerItemsForMatter(matterId)).toEqual([]);
+  });
+});
+
+describe("listMessengerThreads — lastCallStatus + call preview", () => {
+  async function seedThread(phone: string): Promise<string> {
+    const t = await prisma.messengerThread.create({
+      data: {
+        accountId,
+        contactPhone: phone,
+        lastItemAt: new Date("2026-06-10T12:00"),
+      },
+      select: { id: true },
+    });
+    return t.id;
+  }
+
+  test("exposes the raw call status of the most recent item", async () => {
+    const threadId = await seedThread("+13035550182");
+    // Older answered call must not leak into the preview fields.
+    await seedItem({
+      threadId,
+      direction: "inbound",
+      callStatus: "answered",
+      occurredAt: "2026-06-09T10:00",
+    });
+    await seedItem({
+      threadId,
+      direction: "inbound",
+      callStatus: "no_answer",
+      occurredAt: "2026-06-10T10:00",
+    });
+
+    const [row] = await listMessengerThreads();
+    expect(row.lastKind).toBe("call");
+    expect(row.lastCallStatus).toBe("no_answer");
+    // no_answer inbound with no body derives the missed preview too.
+    expect(row.lastBody).toBe("Missed call");
+  });
+
+  test("answered call with a summary body keeps body and status distinct", async () => {
+    const threadId = await seedThread("+13035550182");
+    await seedItem({
+      threadId,
+      direction: "inbound",
+      callStatus: "answered",
+      body: "Discussed settlement terms",
+      occurredAt: "2026-06-10T10:00",
+    });
+
+    const [row] = await listMessengerThreads();
+    expect(row.lastCallStatus).toBe("answered");
+    expect(row.lastBody).toBe("Discussed settlement terms");
+  });
+
+  test("sms threads carry a null lastCallStatus", async () => {
+    const threadId = await seedThread("+13035550182");
+    await seedItem({
+      threadId,
+      kind: "sms",
+      direction: "inbound",
+      body: "Hello",
+      occurredAt: "2026-06-10T10:00",
+    });
+
+    const [row] = await listMessengerThreads();
+    expect(row.lastKind).toBe("sms");
+    expect(row.lastCallStatus).toBeNull();
+  });
+});
+
+describe("isMissedCall", () => {
+  test.each([
+    ["missed", true],
+    ["no_answer", true],
+    ["declined", true],
+    // busy/failed excluded on purpose — see MISSED_CALL_STATUSES.
+    ["busy", false],
+    ["failed", false],
+    ["answered", false],
+  ] as const)("inbound %s → %s", (status, expected) => {
+    expect(isMissedCall("inbound", status)).toBe(expected);
+  });
+
+  test("outbound calls are never missed, regardless of status", () => {
+    expect(isMissedCall("outbound", "missed")).toBe(false);
+    expect(isMissedCall("outbound", "no_answer")).toBe(false);
+  });
+
+  test("null direction or status is not missed", () => {
+    expect(isMissedCall(null, "missed")).toBe(false);
+    expect(isMissedCall("inbound", null)).toBe(false);
   });
 });

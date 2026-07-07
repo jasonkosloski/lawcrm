@@ -7,7 +7,8 @@
 
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import {
   Dialog,
   DialogContent,
@@ -74,10 +75,13 @@ export function EditDeadlineDialog({
   deadline: EditableDeadline;
 }) {
   const action = updateDeadline.bind(null, deadline.id);
-  const [state, formAction, isPending] = useActionState<
+  // Wrapped useActionState: masks state left over from a previous
+  // open, so a failed attempt's field errors don't reappear when
+  // the dialog is reopened. See src/hooks/use-dialog-action-state.ts.
+  const [state, formAction, isPending] = useDialogActionState<
     UpdateDeadlineFormState,
     FormData
-  >(action, updateDeadlineInitialState);
+  >(action, updateDeadlineInitialState, open);
 
   const [title, setTitle] = useState(deadline.title);
   const [dueDate, setDueDate] = useState(toDateInput(deadline.dueDate));

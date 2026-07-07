@@ -44,6 +44,24 @@ vi.mock("./log-time-on-comm-button", () => ({
   // opacity classes control hover-reveal visibility.
   LogTimeOnCommButton: () => <span data-testid="log-time-btn" />,
 }));
+vi.mock("./mark-thread-read", () => ({
+  // Marker exposing the props so the mount test below can assert the
+  // reader wires the right channel + thread id. The real island
+  // imports server actions (prisma) — not loadable in happy-dom.
+  MarkThreadRead: ({
+    threadId,
+    channel,
+  }: {
+    threadId: string;
+    channel: string;
+  }) => (
+    <span
+      data-testid="mark-thread-read"
+      data-thread-id={threadId}
+      data-channel={channel}
+    />
+  ),
+}));
 
 function makeItem(overrides: Partial<MessengerItemRow>): MessengerItemRow {
   return {
@@ -112,6 +130,20 @@ describe("VoicemailCard duration guard", () => {
       />
     );
     expect(screen.getByText("1m 2s")).toBeInTheDocument();
+  });
+});
+
+describe("mark-as-read island", () => {
+  test("opening a thread mounts MarkThreadRead with the messenger channel + thread id", () => {
+    render(<MessengerThreadReader thread={makeThread([makeItem({})])} />);
+    const island = screen.getByTestId("mark-thread-read");
+    expect(island).toHaveAttribute("data-channel", "messenger");
+    expect(island).toHaveAttribute("data-thread-id", "thread-1");
+  });
+
+  test("the empty state (no thread selected) mounts no island", () => {
+    render(<MessengerThreadReader thread={null} />);
+    expect(screen.queryByTestId("mark-thread-read")).toBeNull();
   });
 });
 

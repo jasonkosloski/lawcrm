@@ -9,7 +9,8 @@
 
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,10 +32,13 @@ import {
 export function DeclineLeadButton({ leadId }: { leadId: string }) {
   const [open, setOpen] = useState(false);
   const action = declineLead.bind(null, leadId);
-  const [state, formAction, isPending] = useActionState<
+  // Wrapped useActionState: masks state left over from a previous
+  // open, so a failed attempt's error banner doesn't reappear when
+  // the dialog is reopened. See src/hooks/use-dialog-action-state.ts.
+  const [state, formAction, isPending] = useDialogActionState<
     DeclineLeadFormState,
     FormData
-  >(action, declineLeadInitialState);
+  >(action, declineLeadInitialState, open);
 
   const [reason, setReason] = useState("");
 
@@ -43,10 +47,13 @@ export function DeclineLeadButton({ leadId }: { leadId: string }) {
   }, [open]);
 
   // Close on success — server revalidation re-renders the layout with
-  // the resolved-lead topbar variant.
+  // the resolved-lead topbar variant. Deps key on the state OBJECT,
+  // not state.status: useActionState keeps its state across
+  // submissions, so keyed on the string the effect would never
+  // re-fire for a later success. Identity is the reliable signal.
   useEffect(() => {
     if (state.status === "ok") setOpen(false);
-  }, [state.status]);
+  }, [state]);
 
   const errs = state.errors ?? {};
   const formError = errs._form?.[0];

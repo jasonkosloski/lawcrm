@@ -1,8 +1,32 @@
 /**
- * Calendar event server actions — update, delete.
+ * Calendar event server actions — create, update, move, delete.
  *
  * Edit lives at /calendar/events/[eventId]/edit (linked from the event
  * detail modal). Delete fires from the modal footer with a confirm.
+ * Move is the calendar's drag-and-drop reschedule (narrow fast-path
+ * edit: schedule fields only).
+ *
+ * ## Authorization model
+ *
+ * Every mutation that targets an EXISTING event by id (update, move,
+ * delete) loads the event first and gates through `canEditEvent` in
+ * lib/calendar-visibility.ts — never a blanket permission key alone,
+ * which would let a holder of the general grant modify another user's
+ * private event they can't even see. The resolver's rules:
+ *
+ *   1. Creator bypass — you can always edit/move/delete your own
+ *      event, no permission keys required.
+ *   2. Matter event — non-creators need `events.edit` (`events.delete`
+ *      for deletes). Deliberately not scoped to matter-team
+ *      membership: matter events are firm business.
+ *   3. Another user's personal (non-matter) event — non-creators need
+ *      `events.edit_non_matter` (deletes: `events.delete` AND
+ *      `events.edit_non_matter`; there's no dedicated
+ *      delete_non_matter key yet).
+ *
+ * Creation (`createCalendarEvent`) has no per-event target, so it
+ * gates on `events.create` alone. Any new per-event mutation added to
+ * this file must follow the load-then-`canEditEvent` shape above.
  */
 
 "use server";
