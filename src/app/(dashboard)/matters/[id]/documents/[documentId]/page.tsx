@@ -3,10 +3,11 @@
  *
  * Renders one discovery file inline: PDF (iframe), images
  * (click-to-zoom), video/audio (Range-streamed with a playback-rate
- * control for long recordings), Word .docx (server-side mammoth →
- * sanitized HTML on a paper sheet), text/CSV (capped read, table
- * when the CSV parses cleanly). Everything else — and every
- * conversion failure — gets a graceful download card.
+ * control for long recordings), Word .docx (client-side docx-preview
+ * for layout fidelity, precomputed server-side mammoth HTML as its
+ * fallback), text/CSV (capped read, table when the CSV parses
+ * cleanly). Everything else — and every conversion failure — gets a
+ * graceful download card.
  *
  * Server component. The document is loaded scoped to the matter in
  * the URL (`getDocumentForViewer`) — a documentId that belongs to a
@@ -57,6 +58,7 @@ import { TextReview } from "@/components/evidence/text-review";
 import { DocumentReview } from "@/components/evidence/document-review";
 import type { RailMoment } from "@/components/evidence/moments-rail";
 import { DocxViewer } from "@/components/documents-viewer/docx-viewer";
+import { DocxPreviewRenderer } from "@/components/documents-viewer/docx-preview-renderer";
 import {
   CsvTablePreview,
   TextPreview,
@@ -360,22 +362,39 @@ async function renderBody(
         />
       );
     case "docx": {
+      // Primary render is client-side docx-preview (layout-faithful:
+      // tab stops, cell alignment, page-shaped sections) fetching the
+      // download route. The mammoth conversion below is its FALLBACK
+      // — precomputed here so the swap on a parse failure is instant
+      // (this is what every docx view cost before docx-preview
+      // existed; converting lazily would need a new API route).
       const result = await renderStoredDocxToSafeHtml(fileUrl);
-      if (!result.ok) {
-        return (
-          <DocumentReview {...shared}>
-            <ViewerFallbackCard
-              title="Preview unavailable"
-              detail={result.reason}
-              downloadHref={downloadHref}
-              downloadName={doc.name}
-            />
-          </DocumentReview>
-        );
-      }
+      const fallback = result.ok ? (
+        <DocxViewer safeHtml={result.html} />
+      ) : (
+        <ViewerFallbackCard
+          title="Preview unavailable"
+          detail={result.reason}
+          downloadHref={downloadHref}
+          downloadName={doc.name}
+        />
+      );
+      // Always TextReview (not DocumentReview) even when mammoth
+      // failed — docx-preview regularly succeeds where mammoth
+      // can't, and quote anchors are this renderer's anchor kind.
+      // awaitContentReady defers the ?flag= relocation until the
+      // client render (or fallback swap) settles.
       return (
-        <TextReview initialQuote={review.initialQuote} {...shared}>
-          <DocxViewer safeHtml={result.html} />
+        <TextReview
+          initialQuote={review.initialQuote}
+          awaitContentReady
+          {...shared}
+        >
+          <DocxPreviewRenderer
+            src={downloadHref}
+            name={doc.name}
+            fallback={fallback}
+          />
         </TextReview>
       );
     }

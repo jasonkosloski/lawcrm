@@ -1,8 +1,11 @@
 /**
- * Word (.docx) preview body — renders HTML that was converted by
- * mammoth AND sanitized through `sanitizeDocumentHtml`
- * (`src/lib/document-preview.ts`) before it reaches this component.
- * Never hand this component unsanitized markup.
+ * Word (.docx) FALLBACK preview body — the semantic mammoth render,
+ * shown only when the primary layout-faithful renderer
+ * (`docx-preview-renderer.tsx`) fails to fetch or parse the file.
+ * Renders HTML that was converted by mammoth AND sanitized through
+ * `sanitizeDocumentHtml` (`src/lib/document-preview.ts`) before it
+ * reaches this component. Never hand this component unsanitized
+ * markup.
  *
  * The paper container mimics a printed page (max-width, white sheet,
  * generous padding); element styling is applied via arbitrary

@@ -4,11 +4,20 @@
  *
  * Two conversions happen here rather than in the browser:
  *
- *   1. DOCX → sanitized HTML via mammoth. The bytes live behind the
- *      storage adapter (`Document.fileUrl` is a storage key, not a
- *      URL), and mammoth's output is attacker-influenced markup —
- *      whoever uploaded the .docx controls it — so the HTML is passed
- *      through `sanitizeDocumentHtml` before the page ever renders it.
+ *   1. DOCX → sanitized HTML via mammoth — since the docx-preview
+ *      upgrade this is the viewer's FALLBACK, not its primary
+ *      renderer. The primary render is client-side docx-preview
+ *      (layout-faithful — see
+ *      `src/components/documents-viewer/docx-preview-renderer.tsx`);
+ *      the page still precomputes this conversion on every docx view
+ *      and passes it down so the swap on a docx-preview failure is
+ *      instant (mammoth is also the more forgiving parser, so it
+ *      often still yields text for damaged files). The bytes live
+ *      behind the storage adapter (`Document.fileUrl` is a storage
+ *      key, not a URL), and mammoth's output is attacker-influenced
+ *      markup — whoever uploaded the .docx controls it — so the HTML
+ *      is passed through `sanitizeDocumentHtml` before the page ever
+ *      renders it.
  *   2. text/csv preview — a capped read (1 MB) so a multi-GB log
  *      dump can't balloon the server render.
  *

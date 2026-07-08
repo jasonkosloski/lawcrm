@@ -24,6 +24,15 @@
  * text node contains, so quotes captured across paragraph/cell
  * boundaries may save fine but fail to relocate — that lands on the
  * same not-found notice (see quote-locate.ts).
+ *
+ * Async bodies: the docx-preview renderer fetches + renders AFTER
+ * mount, so its text isn't walkable at hydration. With
+ * `awaitContentReady` the ?flag= deep-link relocation waits for the
+ * body's bubbling VIEWER_CONTENT_READY_EVENT (fired on both the
+ * successful render and the fallback swap) instead of running
+ * against an empty container and showing a spurious not-found
+ * notice. Server-rendered bodies (mammoth sheet, text, CSV) omit
+ * the prop and keep the immediate rAF behavior.
  */
 
 "use client";
@@ -32,6 +41,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Flag, SearchX } from "lucide-react";
 import { MAX_QUOTE_CHARS } from "@/lib/flag-anchor";
 import { locateQuote } from "@/lib/quote-locate";
+import { VIEWER_CONTENT_READY_EVENT } from "@/components/documents-viewer/content-ready-event";
 import { ReviewPanel } from "./review-panel";
 import type { ComposerAnchor } from "./flag-composer";
 import type { RailMoment } from "./moments-rail";
@@ -42,6 +52,7 @@ const HIGHLIGHT_MS = 2500;
 export function TextReview({
   documentId,
   initialQuote,
+  awaitContentReady = false,
   moments,
   currentUserId,
   canCreate,
@@ -52,6 +63,10 @@ export function TextReview({
   documentId: string;
   /** From the page's ?flag= deep link — highlight this quote on load. */
   initialQuote: string | null;
+  /** Set when the body renders its text asynchronously (docx-preview)
+   *  — defers the initialQuote relocation until the body dispatches
+   *  VIEWER_CONTENT_READY_EVENT. */
+  awaitContentReady?: boolean;
   moments: RailMoment[];
   currentUserId: string;
   canCreate: boolean;
@@ -178,12 +193,31 @@ export function TextReview({
 
   // ?flag= deep link — relocate + highlight on mount (the body is
   // server-rendered, so the text is already in the DOM; the rAF
-  // waits out hydration paint). Deps are stable, so this runs once.
+  // waits out hydration paint). Async bodies (awaitContentReady)
+  // announce themselves instead — wait for their bubbling ready
+  // event so we don't walk an empty container. Deps are stable, so
+  // this runs once.
   useEffect(() => {
     if (!initialQuote) return;
+    if (awaitContentReady) {
+      const container = containerRef.current;
+      if (!container) return;
+      let raf = 0;
+      const onReady = () => {
+        // rAF waits out the commit that revealed the content.
+        raf = requestAnimationFrame(() => navigateToQuote(initialQuote));
+      };
+      container.addEventListener(VIEWER_CONTENT_READY_EVENT, onReady, {
+        once: true,
+      });
+      return () => {
+        container.removeEventListener(VIEWER_CONTENT_READY_EVENT, onReady);
+        cancelAnimationFrame(raf);
+      };
+    }
     const raf = requestAnimationFrame(() => navigateToQuote(initialQuote));
     return () => cancelAnimationFrame(raf);
-  }, [initialQuote, navigateToQuote]);
+  }, [initialQuote, awaitContentReady, navigateToQuote]);
 
   useEffect(
     () => () => {
