@@ -152,6 +152,15 @@ export async function GET(request: NextRequest): Promise<Response> {
   // Tokens are encrypted at rest by the ADR-011 Prisma extension —
   // this top-level emailAccount.upsert is exactly the interception
   // point it covers.
+  //
+  // `grantedScopes` persists the token response's `scope` — the
+  // scopes Google ACTUALLY granted (the user can untick boxes on
+  // the consent screen, and pre-calendar connections never asked).
+  // Written on connect AND reconnect so re-consenting an old
+  // account lights up calendar sync (`hasCalendarScope` gates it).
+  // Google always includes `scope` on the authorization_code grant;
+  // if it were ever absent we keep the previous value rather than
+  // clobbering a known grant with null.
   await prisma.emailAccount.upsert({
     where: { userId_emailAddress: { userId, emailAddress } },
     create: {
@@ -160,6 +169,7 @@ export async function GET(request: NextRequest): Promise<Response> {
       emailAddress,
       accessToken,
       refreshToken: tokens.refresh_token!,
+      grantedScopes: tokens.scope ?? null,
       syncStatus: "connected",
     },
     update: {
@@ -168,6 +178,7 @@ export async function GET(request: NextRequest): Promise<Response> {
       ...(tokens.refresh_token
         ? { refreshToken: tokens.refresh_token }
         : {}),
+      ...(tokens.scope ? { grantedScopes: tokens.scope } : {}),
       syncStatus: "connected",
       syncError: null,
     },

@@ -9,8 +9,9 @@
  * Google's endpoints are a URL-dispatching fetch mock; auth is
  * mocked; the DATABASE IS REAL (test Postgres) because the point is
  * the EmailAccount row: upsert-by-(userId,emailAddress), the JSON
- * access-token envelope, and ciphertext at rest (asserted via raw
- * SQL, the email-token-encryption.test.ts idiom).
+ * access-token envelope, `grantedScopes` persistence (the calendar-
+ * sync gate) on connect AND reconnect, and ciphertext at rest
+ * (asserted via raw SQL, the email-token-encryption.test.ts idiom).
  *
  * Also pinned: every rejection path (state forgery, consent denial,
  * exchange failure) writes NO row and redirects with a machine code
@@ -36,6 +37,11 @@ import { GET } from "./route";
 
 const mockedAuth = vi.mocked(auth);
 
+/** What Google reports it actually granted — mirrors the connect
+ *  scope list incl. the calendar scope. */
+const GRANTED_SCOPE_STRING =
+  "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/calendar.events";
+
 const ENV_KEYS = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "AUTH_SECRET", "AUTH_URL"] as const;
 const savedEnv: Partial<Record<string, string | undefined>> = {};
 
@@ -56,6 +62,7 @@ function stubGoogle(handlers?: {
             access_token: "ya29.exchanged",
             expires_in: 3599,
             refresh_token: "1//refresh-token",
+            scope: GRANTED_SCOPE_STRING,
           }),
           { status: 200 }
         )
@@ -143,6 +150,8 @@ describe("GET /api/integrations/google/callback", () => {
     expect(account.syncStatus).toBe("connected");
     expect(account.syncError).toBeNull();
     expect(account.refreshToken).toBe("1//refresh-token");
+    // The token response's `scope` persists — the calendar-sync gate.
+    expect(account.grantedScopes).toBe(GRANTED_SCOPE_STRING);
     const envelope = parseAccessTokenEnvelope(account.accessToken);
     expect(envelope?.token).toBe("ya29.exchanged");
     expect(envelope?.expiresAt).toBeGreaterThan(Date.now());
@@ -157,12 +166,14 @@ describe("GET /api/integrations/google/callback", () => {
   });
 
   it("reconnect: updates the existing row in place (no duplicate) and keeps the old refresh token when Google omits one", async () => {
-    // Pre-existing account in error state with an old refresh token.
+    // Pre-existing account in error state with an old refresh token
+    // AND a pre-calendar scope grant.
     const existing = await prisma.emailAccount.create({
       data: {
         userId,
         emailAddress: "jason.k@gmail.com",
         refreshToken: "1//old-refresh",
+        grantedScopes: "openid email https://www.googleapis.com/auth/gmail.modify",
         syncStatus: "error",
         syncError: "Google authorization was revoked",
       },
@@ -172,8 +183,13 @@ describe("GET /api/integrations/google/callback", () => {
       token: () =>
         new Response(
           // No refresh_token in the exchange (can happen despite
-          // prompt=consent if Google collapses the re-grant).
-          JSON.stringify({ access_token: "ya29.re", expires_in: 3599 }),
+          // prompt=consent if Google collapses the re-grant) — but
+          // scope, which Google always sends, now grants calendar.
+          JSON.stringify({
+            access_token: "ya29.re",
+            expires_in: 3599,
+            scope: GRANTED_SCOPE_STRING,
+          }),
           { status: 200 }
         ),
     });
@@ -187,9 +203,39 @@ describe("GET /api/integrations/google/callback", () => {
     expect(rows[0].syncStatus).toBe("connected");
     expect(rows[0].syncError).toBeNull();
     expect(rows[0].refreshToken).toBe("1//old-refresh"); // kept
+    // Reconnect refreshes the grant record — the "Reconnect to
+    // enable calendar sync" path depends on this write.
+    expect(rows[0].grantedScopes).toBe(GRANTED_SCOPE_STRING);
     expect(parseAccessTokenEnvelope(rows[0].accessToken)?.token).toBe(
       "ya29.re"
     );
+  });
+
+  it("reconnect with NO scope in the response keeps the previously recorded grant", async () => {
+    await prisma.emailAccount.create({
+      data: {
+        userId,
+        emailAddress: "jason.k@gmail.com",
+        refreshToken: "1//old-refresh",
+        grantedScopes: GRANTED_SCOPE_STRING,
+        syncStatus: "connected",
+      },
+    });
+    stubGoogle({
+      token: () =>
+        new Response(
+          JSON.stringify({ access_token: "ya29.re2", expires_in: 3599 }),
+          { status: 200 }
+        ),
+    });
+    const { state, nonce } = createOAuthState();
+    await GET(makeCallbackRequest({ code: "c", state, nonce }));
+
+    const account = await prisma.emailAccount.findFirstOrThrow({
+      where: { userId },
+    });
+    // A known grant is never clobbered with null.
+    expect(account.grantedScopes).toBe(GRANTED_SCOPE_STRING);
   });
 
   it("CSRF: rejects a state that doesn't match the browser nonce — no row, no token calls", async () => {

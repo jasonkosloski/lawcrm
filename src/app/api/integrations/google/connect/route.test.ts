@@ -84,6 +84,11 @@ describe("GET /api/integrations/google/connect", () => {
     expect(location.searchParams.get("scope")).toContain(
       "https://www.googleapis.com/auth/gmail.send"
     );
+    // Calendar events scope rides the same consent — two-way
+    // calendar sync gates on Google actually granting it.
+    expect(location.searchParams.get("scope")).toContain(
+      "https://www.googleapis.com/auth/calendar.events"
+    );
   });
 
   it("prefers AUTH_URL for the redirect URI when set", async () => {

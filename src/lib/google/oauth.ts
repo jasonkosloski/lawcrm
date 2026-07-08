@@ -29,6 +29,7 @@
  */
 
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { CALENDAR_EVENTS_SCOPE } from "@/lib/google/calendar-shared";
 
 export const GOOGLE_AUTH_ENDPOINT =
   "https://accounts.google.com/o/oauth2/v2/auth";
@@ -39,13 +40,19 @@ export const GOOGLE_REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke";
 
 /** gmail.modify (read/label/archive for sync) + gmail.send, plus
  *  openid+email so the callback can learn WHICH address was
- *  connected without a second consent. Deliberately NOT the
- *  full-power `https://mail.google.com/` scope. */
+ *  connected without a second consent, plus calendar.events for
+ *  two-way calendar sync (events only — deliberately NOT the
+ *  full `calendar` scope, and NOT the full-power
+ *  `https://mail.google.com/` scope). Accounts connected before
+ *  the calendar scope joined this list lack it in
+ *  `EmailAccount.grantedScopes`; features gate on
+ *  `hasCalendarScope` and prompt to reconnect. */
 export const GMAIL_SCOPES = [
   "openid",
   "email",
   "https://www.googleapis.com/auth/gmail.modify",
   "https://www.googleapis.com/auth/gmail.send",
+  CALENDAR_EVENTS_SCOPE,
 ] as const;
 
 /** Nonce cookie for the state double-submit. Path-scoped to the

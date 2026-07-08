@@ -1035,13 +1035,14 @@ model CalendarEvent {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  matter           Matter?            @relation(fields: [matterId], references: [id], onDelete: SetNull)
-  createdBy        User?              @relation("UserCreatedEvents", fields: [createdById], references: [id], onDelete: SetNull)
+  matter           Matter?             @relation(fields: [matterId], references: [id], onDelete: SetNull)
+  createdBy        User?               @relation("UserCreatedEvents", fields: [createdById], references: [id], onDelete: SetNull)
   attendees        CalendarAttendee[]
-  notes            Note[]             @relation("CalendarEventNotes")
-  timeEntries      TimeEntry[]        @relation("CalendarEventTimeEntries")
-  spawnedTasks     Task[]             @relation("EventSpawnedTasks")
-  spawnedDeadlines Deadline[]         @relation("EventSpawnedDeadlines")
+  notes            Note[]              @relation("CalendarEventNotes")
+  googleSyncs      CalendarEventSync[]
+  timeEntries      TimeEntry[]         @relation("CalendarEventTimeEntries")
+  spawnedTasks     Task[]              @relation("EventSpawnedTasks")
+  spawnedDeadlines Deadline[]          @relation("EventSpawnedDeadlines")
 
   @@index([startTime])
   @@index([matterId])
@@ -1442,27 +1443,37 @@ model SettlementApproval {
 
 /// A linked email account (e.g. Gmail OAuth integration).
 model EmailAccount {
-  id             String    @id @default(cuid())
-  userId         String
-  provider       String    @default("gmail") /// gmail | outlook | other
-  emailAddress   String
-  accessToken    String? /// OAuth access token — encrypted at rest via src/lib/email-token-encryption.ts (ADR-011)
-  refreshToken   String? /// OAuth refresh token — encrypted at rest via src/lib/email-token-encryption.ts (ADR-011)
-  syncStatus     String    @default("disconnected") /// connected | syncing | disconnected | error
-  lastSyncAt     DateTime?
-  threadsIndexed Int       @default(0)
+  id                String    @id @default(cuid())
+  userId            String
+  provider          String    @default("gmail") /// gmail | outlook | other
+  emailAddress      String
+  accessToken       String? /// OAuth access token — encrypted at rest via src/lib/email-token-encryption.ts (ADR-011)
+  refreshToken      String? /// OAuth refresh token — encrypted at rest via src/lib/email-token-encryption.ts (ADR-011)
+  syncStatus        String    @default("disconnected") /// connected | syncing | disconnected | error
+  lastSyncAt        DateTime?
+  threadsIndexed    Int       @default(0)
   /// Gmail incremental-sync cursor (users.history.list). Null until
   /// the first full sync completes; reset to null to force a full
   /// re-sync (e.g. after a 404 historyId-expired from Google).
-  historyId      String?
+  historyId         String?
+  /// Space-separated OAuth scopes Google actually granted (token
+  /// response `scope`). Lets features gate on capability: calendar
+  /// sync activates only when the calendar scope is present —
+  /// older connections show "Reconnect to enable calendar sync".
+  grantedScopes     String?
+  /// Google Calendar incremental-sync cursor (events.list
+  /// nextSyncToken). Null until the first full pull; reset on 410
+  /// GONE to force a windowed full re-pull.
+  calendarSyncToken String?
   /// Last sync failure, surfaced on /settings/integrations. Cleared
   /// on the next successful sync.
-  syncError      String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  syncError         String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  threads EmailThread[]
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  threads       EmailThread[]
+  calendarSyncs CalendarEventSync[]
 
   @@unique([userId, emailAddress])
   @@map("email_accounts")
@@ -2044,4 +2055,36 @@ model DocumentFolder {
 
   @@index([matterId, parentId])
   @@map("document_folders")
+}
+
+/// Per-(event, Google account) sync mapping for two-way Google
+/// Calendar sync. One CRM event can live on several users\' Google
+/// calendars (each attendee syncs their own copy); one row per
+/// pairing. Echo-loop prevention: events we push carry a private
+/// extendedProperty marker with the CRM event id, and the pull
+/// engine skips rows whose googleEventId already maps here with a
+/// matching updated stamp. Conflict policy v1: last-write-wins by
+/// updated timestamp (see src/lib/google/calendar-shared.ts).
+model CalendarEventSync {
+  id               String    @id @default(cuid())
+  eventId          String
+  /// The Google connection (EmailAccount doubles as the Google
+  /// account record) whose calendar holds this copy.
+  accountId        String
+  googleEventId    String
+  /// Which Google calendar — "primary" for v1.
+  googleCalendarId String    @default("primary")
+  /// Google\'s `updated` stamp at last sync — the freshness anchor
+  /// for last-write-wins.
+  googleUpdatedAt  DateTime?
+  lastSyncedAt     DateTime  @default(now())
+  createdAt        DateTime  @default(now())
+
+  event   CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  account EmailAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, accountId])
+  @@unique([accountId, googleEventId])
+  @@index([accountId])
+  @@map("calendar_event_syncs")
 }

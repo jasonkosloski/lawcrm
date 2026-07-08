@@ -12,9 +12,18 @@
  * account failures are isolated inside `syncAllEmailAccounts` (one
  * revoked mailbox never blocks the firm), so this handler only
  * 500s on infrastructure-level failures.
+ *
+ * The Google Calendar pull piggybacks the same sweep for calendar-
+ * scoped accounts (`pullCalendarForAllAccounts` — per-account
+ * isolation inside, plus a catch here so even a wholesale calendar
+ * failure never blocks the mail sweep or fails the request).
  */
 
 import { syncAllEmailAccounts } from "@/lib/google/gmail-sync";
+import {
+  pullCalendarForAllAccounts,
+  type CalendarPullResult,
+} from "@/lib/google/google-calendar-sync";
 
 export async function GET(request: Request): Promise<Response> {
   const secret = process.env.CRON_SECRET;
@@ -24,6 +33,14 @@ export async function GET(request: Request): Promise<Response> {
 
   try {
     const results = await syncAllEmailAccounts();
+
+    let calendar: CalendarPullResult[] = [];
+    try {
+      calendar = await pullCalendarForAllAccounts();
+    } catch (err) {
+      console.error("[email-sync] calendar pull failed", err);
+    }
+
     return Response.json({
       ok: true,
       accounts: results.length,
@@ -36,6 +53,18 @@ export async function GET(request: Request): Promise<Response> {
         threadsSynced,
         ...(error ? { error } : {}),
       })),
+      calendar: calendar.map(
+        ({ accountId, ok, mode, imported, updated, deletedEvents, unlinked, error }) => ({
+          accountId,
+          ok,
+          mode,
+          imported,
+          updated,
+          deletedEvents,
+          unlinked,
+          ...(error ? { error } : {}),
+        })
+      ),
     });
   } catch (err) {
     console.error("[email-sync] sweep failed", err);

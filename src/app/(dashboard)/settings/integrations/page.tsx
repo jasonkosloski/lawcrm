@@ -20,13 +20,13 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { googleIntegrationConfigured } from "@/lib/google/oauth";
+import { hasCalendarScope } from "@/lib/google/calendar-shared";
 import { formatDate } from "@/lib/format-date";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { GmailIntegrationCard } from "@/components/settings/gmail-integration-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const UPCOMING_INTEGRATIONS = [
-  "Google Calendar (per-user OAuth for event sync)",
   "Westlaw / research tools",
   "E-signature (DocuSign or similar)",
   "IOLTA trust account bank feed",
@@ -52,6 +52,7 @@ export default async function IntegrationsSettingsPage({
       syncStatus: true,
       lastSyncAt: true,
       syncError: true,
+      grantedScopes: true,
       _count: { select: { threads: true } },
     },
   });
@@ -98,6 +99,7 @@ export default async function IntegrationsSettingsPage({
           oldestThreadLabel: oldestByAccount.has(a.id)
             ? formatDate(oldestByAccount.get(a.id)!, "medium", tz)
             : null,
+          calendarSyncEnabled: hasCalendarScope(a.grantedScopes),
         }))}
       />
 

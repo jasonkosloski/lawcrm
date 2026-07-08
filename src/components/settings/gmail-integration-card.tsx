@@ -5,8 +5,11 @@
  * allows several addresses per user — list + "Connect another"),
  * the one-shot ?connected/?error banners from the OAuth callback
  * redirect, and per-account status: sync chip, last sync, thread
- * count, surfaced syncError, Disconnect with an inline two-step
- * confirm (the codebase's lightweight confirm idiom — no dialog).
+ * count, calendar-scope line ("Calendar sync on" vs a "Reconnect
+ * to enable calendar sync" link when the connection predates the
+ * calendar scope), surfaced syncError, Disconnect with an inline
+ * two-step confirm (the codebase's lightweight confirm idiom — no
+ * dialog).
  *
  * "Load older emails" (Email v1.1): the initial import is capped at
  * the newest 200 threads / 90 days, so each connected account with
@@ -29,7 +32,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { History, Mail, Plus } from "lucide-react";
+import { CalendarDays, History, Mail, Plus } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -72,6 +75,11 @@ export interface GmailAccountView {
    *  backfill anchor. Null = no local threads yet (button hidden;
    *  the initial sync owns the first window). */
   oldestThreadLabel: string | null;
+  /** hasCalendarScope(grantedScopes), computed server-side. False =
+   *  the connection predates the calendar scope — the row shows a
+   *  "Reconnect to enable calendar sync" link (the connect flow
+   *  re-consents and upserts the row in place). */
+  calendarSyncEnabled: boolean;
 }
 
 export function GmailIntegrationCard({
@@ -95,8 +103,9 @@ export function GmailIntegrationCard({
           Gmail
         </CardTitle>
         <p className="text-xs text-ink-3">
-          Sync and send email from your own Google mailbox. Filed threads
-          stay on their matters even if you disconnect.
+          Sync and send email from your own Google mailbox — calendar sync
+          rides the same connection. Filed threads stay on their matters
+          even if you disconnect.
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -277,6 +286,27 @@ function GmailAccountRow({ account }: { account: GmailAccountView }) {
           )}
         </span>
       </div>
+
+      {/* Calendar sync status — scope-gated. Older connections
+          lack the calendar scope; reconnecting (same connect URL —
+          the callback upserts the row in place) grants it. Hidden
+          on disconnected rows: their Reconnect button already
+          covers it. */}
+      {!isDisconnected && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <CalendarDays size={12} className="text-ink-4" />
+          {account.calendarSyncEnabled ? (
+            <span className="text-2xs text-ink-3">Calendar sync on</span>
+          ) : (
+            <a
+              href={CONNECT_URL}
+              className="text-2xs text-brand-600 hover:underline"
+            >
+              Reconnect to enable calendar sync
+            </a>
+          )}
+        </div>
+      )}
 
       {/* Older-mail backfill — only when there's local mail to
           anchor on and the mailbox is still connected. */}

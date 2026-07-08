@@ -39,6 +39,9 @@ const TABLES_IN_DELETE_ORDER = [
   "invoices",
   "settlements",
   // Calendar / messaging — drop attendees + items before parents
+  // (calendar_event_syncs references BOTH calendar_events and
+  // email_accounts, so it goes before either parent).
+  "calendar_event_syncs",
   "calendar_attendees",
   "calendar_events",
   "email_attachments",
@@ -406,6 +409,56 @@ export async function seedFlaggedMoment(opts: {
     select: { id: true },
   });
   return { flagId: flag.id };
+}
+
+/** A CalendarEvent — defaults to a matterless personal meeting an
+ *  hour long. Pass `attendees` to shape the Google-calendar-sync
+ *  cancellation-rule matrix (userId XOR contactId per row). */
+export async function seedCalendarEvent(opts: {
+  createdById?: string | null;
+  matterId?: string | null;
+  title?: string;
+  type?: string;
+  visibility?: string;
+  startTime?: Date;
+  endTime?: Date;
+  isAllDay?: boolean;
+  attendees?: Array<{
+    userId?: string | null;
+    contactId?: string | null;
+    name: string;
+    email?: string | null;
+  }>;
+}): Promise<{ eventId: string }> {
+  const startTime = opts.startTime ?? new Date("2026-08-01T15:00:00.000Z");
+  const endTime =
+    opts.endTime ?? new Date(startTime.getTime() + 60 * 60 * 1000);
+  const event = await prisma.calendarEvent.create({
+    data: {
+      createdById: opts.createdById ?? null,
+      matterId: opts.matterId ?? null,
+      title: opts.title ?? "Test Event",
+      type: opts.type ?? "meeting",
+      visibility: opts.visibility ?? "default",
+      startTime,
+      endTime,
+      isAllDay: opts.isAllDay ?? false,
+      ...(opts.attendees && opts.attendees.length > 0
+        ? {
+            attendees: {
+              create: opts.attendees.map((a) => ({
+                userId: a.userId ?? null,
+                contactId: a.contactId ?? null,
+                name: a.name,
+                email: a.email ?? null,
+              })),
+            },
+          }
+        : {}),
+    },
+    select: { id: true },
+  });
+  return { eventId: event.id };
 }
 
 /** A Lead. Optional contactId joins it to a Contact for the

@@ -3,9 +3,12 @@
  *
  * Pins the auth posture (session-only, identity-scoped — the action
  * syncs the CURRENT user's mailboxes and can't be pointed at anyone
- * else's) and the revalidation contract. The sync engine itself is
- * exercised through its own suite; here `gmailFetch` is a minimal
- * fake and the DB is real.
+ * else's), the revalidation contract, and the piggybacked Google
+ * Calendar pull (scoped accounts get a calendar pass off the same
+ * "Sync now" trigger; a calendar failure never blocks the mail
+ * results). The sync engines themselves are exercised through
+ * their own suites; here `gmailFetch` is a minimal fake and the DB
+ * is real.
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -54,18 +57,26 @@ beforeEach(async () => {
   });
 });
 
-async function seedAccount(ownerId: string, email: string): Promise<string> {
+async function seedAccount(
+  ownerId: string,
+  email: string,
+  opts?: { grantedScopes?: string }
+): Promise<string> {
   const account = await prisma.emailAccount.create({
     data: {
       userId: ownerId,
       emailAddress: email,
       refreshToken: "rt",
       syncStatus: "connected",
+      grantedScopes: opts?.grantedScopes ?? null,
     },
     select: { id: true },
   });
   return account.id;
 }
+
+const CALENDAR_SCOPES =
+  "openid email https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/calendar.events";
 
 describe("syncMyEmailAccounts", () => {
   it("syncs the current user's accounts only and revalidates", async () => {
@@ -93,9 +104,84 @@ describe("syncMyEmailAccounts", () => {
 
   it("returns empty results (ok, no revalidation) when nothing is connected", async () => {
     const res = await syncMyEmailAccounts();
-    expect(res).toEqual({ ok: true, results: [] });
+    expect(res).toEqual({ ok: true, results: [], calendar: [] });
     expect(mockedRevalidate).not.toHaveBeenCalled();
     expect(mockedFetch).not.toHaveBeenCalled();
+  });
+
+  it("also pulls Google Calendar for calendar-scoped accounts (Sync now covers calendar)", async () => {
+    const mine = await seedAccount(userId, "me@gmail.com", {
+      grantedScopes: CALENDAR_SCOPES,
+    });
+    mockedFetch.mockImplementation(async (_accountId, path) => {
+      if (path.startsWith("https://www.googleapis.com/calendar/v3/")) {
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                id: "g-1",
+                status: "confirmed",
+                summary: "Google-born",
+                start: { dateTime: "2026-08-01T15:00:00.000Z" },
+                end: { dateTime: "2026-08-01T16:00:00.000Z" },
+                updated: "2026-07-01T00:00:00.000Z",
+              },
+            ],
+            nextSyncToken: "st-1",
+          }),
+          { status: 200 }
+        );
+      }
+      const body = path.includes("/labels")
+        ? { labels: [] }
+        : path.includes("/profile")
+          ? { historyId: "h1" }
+          : { threads: [] };
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+
+    const res = await syncMyEmailAccounts();
+    expect(res.ok).toBe(true);
+    expect(res.calendar).toHaveLength(1);
+    expect(res.calendar[0]).toMatchObject({
+      accountId: mine,
+      ok: true,
+      imported: 1,
+    });
+    expect(
+      await prisma.calendarEvent.count({ where: { title: "Google-born" } })
+    ).toBe(1);
+    expect(mockedRevalidate).toHaveBeenCalledWith("/calendar");
+  });
+
+  it("unscoped accounts skip calendar cleanly — no /calendar revalidation", async () => {
+    await seedAccount(userId, "me@gmail.com"); // no calendar scope
+    const res = await syncMyEmailAccounts();
+    expect(res.ok).toBe(true);
+    expect(res.calendar[0]).toMatchObject({ ok: true, mode: "skipped" });
+    expect(mockedRevalidate).not.toHaveBeenCalledWith("/calendar");
+  });
+
+  it("a calendar failure never blocks the mail results (ok stays the email verdict)", async () => {
+    const mine = await seedAccount(userId, "me@gmail.com", {
+      grantedScopes: CALENDAR_SCOPES,
+    });
+    mockedFetch.mockImplementation(async (_accountId, path) => {
+      if (path.startsWith("https://www.googleapis.com/calendar/v3/")) {
+        return new Response("boom", { status: 500 });
+      }
+      const body = path.includes("/labels")
+        ? { labels: [] }
+        : path.includes("/profile")
+          ? { historyId: "h1" }
+          : { threads: [] };
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+
+    const res = await syncMyEmailAccounts();
+    expect(res.ok).toBe(true); // mail synced fine
+    expect(res.results[0]).toMatchObject({ accountId: mine, ok: true });
+    expect(res.calendar[0]).toMatchObject({ ok: false });
   });
 
   it("surfaces per-account failures without throwing (ok:false in results)", async () => {

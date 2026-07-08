@@ -38,6 +38,15 @@ vi.mock("@/lib/firm", () => ({
 vi.mock("@/lib/current-user", () => ({
   getCurrentUserId: vi.fn(),
 }));
+// Google Calendar push hooks — mocked so action tests never hit
+// the (also-mocked-in-its-own-tests) Google plumbing. The real
+// module NEVER rejects, so resolving undefined is contract-true.
+// Hook firing is pinned in the "Google Calendar push hooks"
+// describe at the bottom of this file.
+vi.mock("@/lib/google/google-calendar-push", () => ({
+  pushEventToGoogle: vi.fn().mockResolvedValue(undefined),
+  deleteEventFromGoogle: vi.fn().mockResolvedValue(undefined),
+}));
 
 import { prisma } from "@/lib/prisma";
 import {
@@ -48,6 +57,10 @@ import {
 } from "@/app/actions/calendar-events";
 import { getCurrentFirm } from "@/lib/firm";
 import { getCurrentUserId } from "@/lib/current-user";
+import {
+  deleteEventFromGoogle,
+  pushEventToGoogle,
+} from "@/lib/google/google-calendar-push";
 import { requirePermission } from "@/lib/permission-check";
 import {
   createCalendarEventInitialState,
@@ -1686,5 +1699,122 @@ describe("deleteCalendarEvent — delete gate", () => {
     const res = await deleteCalendarEvent("no-such-event");
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/not found/i);
+  });
+});
+
+describe("Google Calendar push hooks", () => {
+  // The push module itself is mocked (its behavior is covered in
+  // src/lib/google/google-calendar-push.test.ts); these tests pin
+  // WHERE the hooks fire: every local commit path pushes, delete
+  // sweeps Google BEFORE the CRM row (and its cascading mappings)
+  // disappears, and failed validation never reaches Google.
+  const mockedPush = vi.mocked(pushEventToGoogle);
+  const mockedDelete = vi.mocked(deleteEventFromGoogle);
+
+  const buildCreateForm = () => {
+    const fd = new FormData();
+    fd.set("title", "Push me");
+    fd.set("type", "meeting");
+    fd.set("startTime", "2026-06-01T13:00");
+    fd.set("endTime", "2026-06-01T14:00");
+    return fd;
+  };
+
+  test("createCalendarEvent fires pushEventToGoogle with the new event id (quick-composer shape: no attendees field)", async () => {
+    const res = await createCalendarEvent(
+      createCalendarEventInitialState,
+      buildCreateForm()
+    );
+    expect(res.status).toBe("ok");
+    expect(mockedPush).toHaveBeenCalledTimes(1);
+    expect(mockedPush).toHaveBeenCalledWith(res.eventId);
+  });
+
+  test("createCalendarEvent full-form path (attendees posted) also fires the push", async () => {
+    const fd = buildCreateForm();
+    fd.set(
+      "attendees",
+      JSON.stringify([
+        { kind: "user", userId, name: "Test User", email: "" },
+      ])
+    );
+    const res = await createCalendarEvent(
+      createCalendarEventInitialState,
+      fd
+    );
+    expect(res.status).toBe("ok");
+    expect(mockedPush).toHaveBeenCalledWith(res.eventId);
+  });
+
+  test("failed create validation never pushes", async () => {
+    const fd = buildCreateForm();
+    fd.set("title", "");
+    const res = await createCalendarEvent(createCalendarEventInitialState, fd);
+    expect(res.status).toBe("error");
+    expect(mockedPush).not.toHaveBeenCalled();
+  });
+
+  test("updateCalendarEvent fires pushEventToGoogle after the commit", async () => {
+    const res = await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm()
+    );
+    expect(res.status).toBe("ok");
+    expect(mockedPush).toHaveBeenCalledTimes(1);
+    expect(mockedPush).toHaveBeenCalledWith(eventId);
+  });
+
+  test("failed update validation never pushes", async () => {
+    const res = await updateCalendarEvent(
+      eventId,
+      updateCalendarEventInitialState,
+      buildForm({
+        startTime: "2026-06-01T14:00",
+        endTime: "2026-06-01T13:00",
+      })
+    );
+    expect(res.status).toBe("error");
+    expect(mockedPush).not.toHaveBeenCalled();
+  });
+
+  test("moveCalendarEvent fires pushEventToGoogle after the reschedule", async () => {
+    const res = await moveCalendarEvent(eventId, {
+      isAllDay: false,
+      startTime: "2026-05-02T09:00:00.000Z",
+      endTime: "2026-05-02T10:00:00.000Z",
+    });
+    expect(res.ok).toBe(true);
+    expect(mockedPush).toHaveBeenCalledTimes(1);
+    expect(mockedPush).toHaveBeenCalledWith(eventId);
+  });
+
+  test("deleteCalendarEvent calls deleteEventFromGoogle BEFORE the CRM row is deleted", async () => {
+    // The ordering matters because the CalendarEventSync mappings
+    // cascade away with the event — the sweep must run while
+    // they're still readable. Pin it by checking the row still
+    // exists at sweep time.
+    let eventExistedAtSweepTime: boolean | null = null;
+    mockedDelete.mockImplementationOnce(async (id: string) => {
+      eventExistedAtSweepTime =
+        (await prisma.calendarEvent.findUnique({ where: { id } })) !== null;
+    });
+
+    const res = await deleteCalendarEvent(eventId);
+    expect(res.ok).toBe(true);
+    expect(mockedDelete).toHaveBeenCalledTimes(1);
+    expect(mockedDelete).toHaveBeenCalledWith(eventId);
+    expect(eventExistedAtSweepTime).toBe(true);
+    expect(
+      await prisma.calendarEvent.findUnique({ where: { id: eventId } })
+    ).toBeNull();
+    // Delete never pushes an update.
+    expect(mockedPush).not.toHaveBeenCalled();
+  });
+
+  test("delete of a missing event never sweeps Google", async () => {
+    const res = await deleteCalendarEvent("no-such-event");
+    expect(res.ok).toBe(false);
+    expect(mockedDelete).not.toHaveBeenCalled();
   });
 });

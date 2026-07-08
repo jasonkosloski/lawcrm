@@ -9,7 +9,9 @@
  * with the right account id (and NOT reaching it on cancel), and
  * the "Load older emails" backfill affordance (anchor date + button
  * only with local mail on a connected account, action wiring,
- * imported-count / error feedback).
+ * imported-count / error feedback), and the calendar-scope status
+ * line ("Calendar sync on" vs the reconnect link for pre-calendar
+ * grants; hidden entirely on disconnected rows).
  */
 
 import { beforeEach, describe, expect, test, vi } from "vitest";
@@ -54,6 +56,7 @@ const CONNECTED_ACCOUNT: GmailAccountView = {
   threadCount: 42,
   syncError: null,
   oldestThreadLabel: "Apr 8, 2026",
+  calendarSyncEnabled: true,
 };
 
 function renderCard(overrides?: Partial<Parameters<typeof GmailIntegrationCard>[0]>) {
@@ -154,6 +157,43 @@ describe("GmailIntegrationCard", () => {
     await user.click(screen.getByText("Cancel"));
     expect(mockedDisconnect).not.toHaveBeenCalled();
     expect(screen.queryByText("Disconnect mailbox?")).not.toBeInTheDocument();
+  });
+});
+
+describe("calendar sync status line", () => {
+  test("scoped account shows Calendar sync on (no reconnect link)", () => {
+    renderCard({ accounts: [CONNECTED_ACCOUNT] });
+    expect(screen.getByText("Calendar sync on")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Reconnect to enable calendar sync")
+    ).not.toBeInTheDocument();
+  });
+
+  test("pre-calendar grant shows the reconnect link pointing at the connect route", () => {
+    renderCard({
+      accounts: [{ ...CONNECTED_ACCOUNT, calendarSyncEnabled: false }],
+    });
+    expect(screen.queryByText("Calendar sync on")).not.toBeInTheDocument();
+    const link = screen
+      .getByText("Reconnect to enable calendar sync")
+      .closest("a");
+    expect(link).toHaveAttribute("href", "/api/integrations/google/connect");
+  });
+
+  test("hidden on a disconnected account (its Reconnect button already covers it)", () => {
+    renderCard({
+      accounts: [
+        {
+          ...CONNECTED_ACCOUNT,
+          syncStatus: "disconnected",
+          calendarSyncEnabled: false,
+        },
+      ],
+    });
+    expect(
+      screen.queryByText("Reconnect to enable calendar sync")
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Calendar sync on")).not.toBeInTheDocument();
   });
 });
 

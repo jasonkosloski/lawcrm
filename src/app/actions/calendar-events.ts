@@ -38,6 +38,10 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentFirm } from "@/lib/firm";
 import { getCurrentUserId } from "@/lib/current-user";
 import { canEditEvent } from "@/lib/calendar-visibility";
+import {
+  deleteEventFromGoogle,
+  pushEventToGoogle,
+} from "@/lib/google/google-calendar-push";
 import { EVENT_TYPES } from "@/lib/constants/calendar-event-type";
 import {
   currentUserHasPermission,
@@ -510,6 +514,12 @@ export async function updateCalendarEvent(
     }
   });
 
+  // Google Calendar push — AFTER the local commit (local state is
+  // the user's intent). Never rejects: token-less/unscoped
+  // creators skip silently, failures warn and leave the CRM save
+  // intact. See src/lib/google/google-calendar-push.ts.
+  await pushEventToGoogle(eventId);
+
   revalidateForEvent(event.matterId);
   return { status: "ok" };
 }
@@ -568,6 +578,15 @@ export async function deleteCalendarEvent(
       matterId: null,
     };
   }
+
+  // Google Calendar delete — BEFORE the CRM row goes: the
+  // CalendarEventSync mappings cascade away with the event, and
+  // this is the last moment they're readable. Never rejects, so a
+  // Google failure can't block the CRM delete — the trade-off
+  // (documented in google-calendar-push.ts) is that a transient
+  // failure orphans the Google copy until the user removes it
+  // manually there. Accepted for v1.
+  await deleteEventFromGoogle(eventId);
 
   await prisma.calendarEvent.delete({ where: { id: eventId } });
 
@@ -913,6 +932,12 @@ export async function createCalendarEvent(
     return ev;
   });
 
+  // Google Calendar push — after the local commit. Covers BOTH
+  // create paths (the quick composer and the full-page form post
+  // through this action). Never rejects; see
+  // src/lib/google/google-calendar-push.ts.
+  await pushEventToGoogle(created.id);
+
   // Calendar refreshes via revalidate so the newly-created
   // event shows up on the next render.
   revalidatePath("/calendar");
@@ -1038,6 +1063,10 @@ export async function moveCalendarEvent(
       endTime: new Date(parsed.data.endTime),
     },
   });
+
+  // Google Calendar push — a drag is an edit; the reschedule flows
+  // out the same way. Never rejects.
+  await pushEventToGoogle(eventId);
 
   revalidateForEvent(event.matterId);
   return { ok: true };

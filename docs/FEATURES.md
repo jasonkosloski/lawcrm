@@ -187,7 +187,62 @@ done. What's left is enumerated below.
   state); day drops to just the full-pill "due" section with an
   explicit empty state. Week header deep-links keep the filter
   when drilling into a day.
-- [ ] **Google Calendar sync.** OAuth + two-way sync.
+- [x] **Google Calendar sync.** Shipped 2026-07-08: two-way sync of
+  each user's `primary` Google calendar, riding the existing Gmail
+  connection (the `calendar.events` scope joined the connect flow;
+  Google's actual grant persists to `EmailAccount.grantedScopes`,
+  and pre-calendar connections get a "Reconnect to enable calendar
+  sync" link on the integrations card). **Pull** (`src/lib/google/
+  google-calendar-sync.ts`): syncToken incremental with 410 → full
+  windowed re-pull (now−30d … now+400d, `singleEvents=true` — the
+  CRM has no recurrence model, so instances import individually);
+  Google-born events import as personal matterless meetings owned
+  by the connection's user; marked events (the
+  `extendedProperties.private.lawcrmEventId` echo marker) update by
+  mapping. **Push** (parallel: `google-calendar-push.ts` hooks on
+  the calendar-events actions). Shared contract in
+  `calendar-shared.ts`. Policies: (1) **last-write-wins** by
+  timestamp — Google's `updated` must be strictly newer than the
+  CRM row's `updatedAt` to overwrite, and pull writes go through
+  prisma directly (never the server actions) so a pull can never
+  trigger a push echo; (2) **conservative cancellation** — deleting
+  an event in Google deletes the CRM event ONLY when it's clearly a
+  personal Google-born one (sole mapping + no matter + no attendees
+  beyond the account owner); otherwise only the sync mapping drops
+  and the firm event survives — cleaning a personal Google calendar
+  can never delete a firm deposition; (3) **attendees never sync to
+  Google** (Google auto-emails invites — a malpractice generator);
+  (4) v1 imports every non-cancelled item incl. tentative/
+  transparent. Triggers piggyback email sync: the "Sync now" button
+  and the /api/email-sync cron cover calendar with zero new UI;
+  per-account isolation means a broken calendar never blocks mail. In progress —
+  the shared contract (resource mapping, echo marker, LWW policy)
+  lives in `src/lib/google/calendar-shared.ts`; mappings in
+  `CalendarEventSync` (one row per event × Google account).
+  - **Push half (CRM → Google) — landed.**
+    `src/lib/google/google-calendar-push.ts`, hooked into the
+    calendar-event server actions after each local commit
+    (create both paths / update / move → push; delete → Google
+    sweep BEFORE the CRM row deletes, since the mappings cascade
+    away with it). Policy: creator-only (attendee fan-out is a
+    follow-up), exactly ONE calendar per creator — the oldest
+    connected account with the calendar scope (duplicate copies
+    across a user's own calendars are noise; an account already
+    holding the event's mapping wins so pulled events PATCH their
+    original copy instead of duplicating). Insert vs update
+    decided by the mapping row; pushed resources always carry the
+    `lawcrmEventId` echo marker and NEVER attendees (Google
+    auto-emails invites — see calendar-shared.ts). Never-rejects
+    discipline (mirrors gmail-writeback): local mutation always
+    wins; token-less/unscoped creators skip silently; revoked
+    grants mark the account reconnect-required; transient
+    failures warn. Delete semantics, honestly: 404/410 tolerated,
+    but a transient Google failure during delete orphans the
+    Google copy (the CRM delete proceeds and the mapping is gone,
+    so nothing retries) — manual cleanup at Google, acceptable v1.
+  - **Pull half (Google → CRM) + OAuth scope plumbing** — the
+    incremental pull engine (`google-calendar-sync.ts`), sync-token
+    lifecycle, and the integrations-card surface.
 - [x] **Time tracking — week view.** Shipped 2026-07-07: standalone
   `/time` route (sidebar "Time"), URL-driven like the calendar and
   timezone-correct via the user-tz date-key pattern. One row per
@@ -476,11 +531,12 @@ done. What's left is enumerated below.
 - [~] **Settings — Integrations.** Gmail is live: per-user connect /
   reconnect / disconnect card (address, sync-status chip, last sync,
   thread count, syncError surfaced, multi-account list), callback
-  banners, "not configured" env guidance. Page is self-service (no
-  permission key — connecting YOUR mailbox is identity-scoped like
-  notifications). Remaining: Google Calendar, Westlaw, e-sign,
-  IOLTA bank feed, PACER — each lights up when its underlying
-  feature phase lands.
+  banners, "not configured" env guidance. Google Calendar rides the
+  same card (per-account "Calendar sync on" vs "Reconnect to enable
+  calendar sync" scope line). Page is self-service (no permission
+  key — connecting YOUR mailbox is identity-scoped like
+  notifications). Remaining: Westlaw, e-sign, IOLTA bank feed,
+  PACER — each lights up when its underlying feature phase lands.
 - [ ] **Settings — Billing & rates.** Default hourly rate, UTBMS
   code library, invoice templates, payment terms.
 - [ ] **Lead → matter conversion — v2 automations.** Practice-area
