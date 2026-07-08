@@ -176,6 +176,110 @@ export function sanitizeDocumentHtml(html: string): string {
   return sanitizeHtml(html, DOCUMENT_OPTIONS).trim();
 }
 
+// ── Email profile ───────────────────────────────────────────────────────
+//
+// For PROVIDER-SYNCED email bodies (Gmail sync writes through this at
+// persist time — see `src/lib/google/gmail-sync.ts`). Real-world mail
+// is the most hostile HTML we ingest: it arrives from arbitrary
+// senders and is rendered inside the thread reader, so this profile
+// is a hard security boundary, applied at WRITE time so nothing
+// unsanitized ever sits in `EmailMessage.body`.
+//
+// Deltas vs. the document profile:
+//   - `div` allowed — mail clients emit div-soup layouts; dropping
+//     the tag (keeping text) would destroy paragraph structure.
+//   - a SAFE SUBSET of inline styles survives via `allowedStyles`
+//     (colors, font size/family/weight/style, text decoration/align).
+//     Every value is regex-validated; `url(...)`, `expression(...)`,
+//     `position`, etc. are impossible because the property allowlist
+//     simply doesn't include them.
+//   - EXTERNAL IMAGES ARE BLOCKED: a remote <img src="https://…">
+//     is a tracking pixel / read receipt — rendering it would leak
+//     the reader's IP + open-time to opposing counsel. Any img whose
+//     src is not a `data:` URI is rewritten to a visible
+//     "[image blocked]" placeholder (alt text preserved when
+//     present). Inline `data:` images render — they're a
+//     non-scripting context and involve no network fetch.
+//     Follow-up (documented in FEATURES): a per-thread "load remote
+//     images" affordance would require keeping the original URL,
+//     which we deliberately do not.
+//
+// Everything else matches the document profile: no script/iframe/
+// form/style tags, no event handlers, no javascript:/data: links,
+// no protocol-relative URLs.
+
+export const BLOCKED_IMAGE_PLACEHOLDER = "[image blocked]";
+
+const EMAIL_ALLOWED_TAGS = [...DOCUMENT_ALLOWED_TAGS, "div", "center", "small"];
+
+const EMAIL_ALLOWED_ATTRIBUTES: sanitizeHtml.IOptions["allowedAttributes"] = {
+  ...DOCUMENT_ALLOWED_ATTRIBUTES,
+  "*": ["class", "style"],
+  img: ["src", "alt", "class", "width", "height"],
+};
+
+/** Regex-validated inline-style subset. Deliberately excludes any
+ *  property that can trigger a fetch (background-image), reposition
+ *  content over the app chrome (position), or hide phishing text
+ *  (display / visibility are also excluded — a "display:none" body
+ *  full of hidden text should show its text). */
+const EMAIL_ALLOWED_STYLES: sanitizeHtml.IOptions["allowedStyles"] = {
+  "*": {
+    color: [/^[a-zA-Z]+$/, /^#[0-9a-fA-F]{3,8}$/, /^rgba?\([\d\s,.%]+\)$/],
+    "background-color": [
+      /^[a-zA-Z]+$/,
+      /^#[0-9a-fA-F]{3,8}$/,
+      /^rgba?\([\d\s,.%]+\)$/,
+    ],
+    "font-size": [/^\d+(\.\d+)?(px|pt|em|rem|%)$/],
+    "font-family": [/^[\w\s'",-]+$/],
+    "font-weight": [/^(bold|bolder|lighter|normal|\d{3})$/],
+    "font-style": [/^(italic|normal|oblique)$/],
+    "text-decoration": [/^(underline|line-through|none)$/],
+    "text-align": [/^(left|right|center|justify)$/],
+  },
+};
+
+const EMAIL_TRANSFORM_TAGS: sanitizeHtml.IOptions["transformTags"] = {
+  ...TRANSFORM_TAGS,
+  // Remote images = tracking pixels. Keep data: URIs (inline, no
+  // network); everything else (http/https/cid/protocol-relative)
+  // becomes a visible placeholder so the reader knows content was
+  // withheld.
+  img: (tagName, attribs) => {
+    const src = (attribs.src ?? "").trim();
+    if (/^data:/i.test(src)) {
+      return { tagName, attribs };
+    }
+    const alt = (attribs.alt ?? "").trim();
+    return {
+      tagName: "span",
+      attribs: { class: "email-blocked-image" },
+      text: alt ? `[image blocked: ${alt}]` : BLOCKED_IMAGE_PLACEHOLDER,
+    };
+  },
+};
+
+const EMAIL_OPTIONS: sanitizeHtml.IOptions = {
+  allowedTags: EMAIL_ALLOWED_TAGS,
+  allowedAttributes: EMAIL_ALLOWED_ATTRIBUTES,
+  allowedStyles: EMAIL_ALLOWED_STYLES,
+  allowedSchemes: ALLOWED_SCHEMES,
+  // Belt + braces behind the img transform: only data: survives.
+  allowedSchemesByTag: { img: ["data"] },
+  allowProtocolRelative: false,
+  disallowedTagsMode: "discard",
+  transformTags: EMAIL_TRANSFORM_TAGS,
+};
+
+/** Sanitize provider-synced email HTML. Applied at WRITE time by the
+ *  Gmail sync engine — `EmailMessage.body` only ever contains output
+ *  of this function (or of the plain-text→HTML fallback, which also
+ *  passes through here). */
+export function sanitizeEmailHtml(html: string): string {
+  return sanitizeHtml(html, EMAIL_OPTIONS).trim();
+}
+
 /** True when the sanitized HTML has any non-whitespace visible text.
  *  Used to reject empty notes (a user clicking "Save" on an editor
  *  that only contains whitespace + tag scaffolding). */

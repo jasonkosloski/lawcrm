@@ -188,6 +188,34 @@
   white-space: pre-wrap;
 }
 
+/* Sanitized-HTML email bodies (Gmail-synced / CRM-sent): block
+   elements carry their own flow, so pre-wrap would double every
+   newline between tags. Plain-text legacy bodies keep pre-wrap. */
+.email-body-html {
+  white-space: normal;
+}
+.email-body-html p {
+  margin: 0 0 0.7em;
+}
+.email-body-html blockquote {
+  margin: 0.5em 0 0.5em 0.75em;
+  padding-left: 0.75em;
+  border-left: 2px solid var(--color-line);
+  color: var(--color-ink-2);
+}
+.email-body-html a {
+  color: var(--color-brand-700);
+  text-decoration: underline;
+}
+.email-body-html table {
+  border-collapse: collapse;
+  max-width: 100%;
+}
+.email-body-html img {
+  max-width: 100%;
+  height: auto;
+}
+
 /* ── Card hover lift (blue-tinted shadow from design spec) ──────────────────── */
 .card-hover {
   transition: box-shadow 0.16s ease, border-color 0.16s ease;

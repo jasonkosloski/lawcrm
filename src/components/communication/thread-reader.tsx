@@ -10,7 +10,7 @@
  */
 
 import Link from "next/link";
-import { MailOpen, Paperclip, Reply, ShieldCheck } from "lucide-react";
+import { MailOpen, Paperclip, ShieldCheck } from "lucide-react";
 // sentAt is a real instant — server-rendered, so display threads the
 // viewer's IANA zone (ADR-012). "datetime_medium" is the centralized
 // spelling of the "MMM d, yyyy, h:mm a" this header always used.
@@ -26,6 +26,8 @@ import { CommTimeLoggedIndicator } from "./comm-time-logged-indicator";
 import { FileToMatterPicker } from "./file-to-matter-picker";
 import { BackToListButton } from "./back-to-list-button";
 import { MarkThreadRead } from "./mark-thread-read";
+import { ReplySection } from "./reply-section";
+import { isHtmlEmailBody } from "@/lib/email-body";
 import type { FilingMatterOption } from "@/lib/queries/communication";
 
 const formatSize = (bytes: number | null): string => {
@@ -217,10 +219,24 @@ export function ThreadReader({
 
             {/* Body — uses the email-body class from globals.css (Fraunces,
                 13.5px, line-height 1.62 per UI_PATTERNS). Slightly tighter
-                horizontal padding on phones to maximize reading width. */}
-            <div className="email-body px-3 sm:px-4 py-4 text-ink break-words">
-              {m.body}
-            </div>
+                horizontal padding on phones to maximize reading width.
+                Two body shapes coexist: Gmail-synced (and CRM-sent)
+                messages store sanitized HTML — nothing unsanitized ever
+                reaches EmailMessage.body (sanitizeEmailHtml at the sync/
+                send write boundary), so dangerouslySetInnerHTML is safe
+                here. Legacy/seeded bodies are plain text and keep the
+                pre-wrap text path (rendering them as HTML would collapse
+                their newlines). */}
+            {isHtmlEmailBody(m.body) ? (
+              <div
+                className="email-body email-body-html px-3 sm:px-4 py-4 text-ink break-words"
+                dangerouslySetInnerHTML={{ __html: m.body }}
+              />
+            ) : (
+              <div className="email-body px-3 sm:px-4 py-4 text-ink break-words">
+                {m.body}
+              </div>
+            )}
 
             {/* Attachments */}
             {m.attachments.length > 0 && (
@@ -245,14 +261,10 @@ export function ThreadReader({
           </article>
         ))}
 
-        {/* Reply stub — disabled placeholder */}
-        <div className="bg-white rounded-lg border border-dashed border-line px-3 sm:px-4 py-4 sm:py-5 flex items-center gap-2 text-xs text-ink-4">
-          <Reply size={13} className="shrink-0" />
-          <span>
-            Reply, forward, and file-to-matter actions land in a follow-up
-            pass.
-          </span>
-        </div>
+        {/* Reply / Reply all — self-fetching server island (permission
+            + account state + derived recipients), so the embedded
+            matter/intake readers get it without new page props. */}
+        <ReplySection thread={thread} />
       </div>
     </div>
   );

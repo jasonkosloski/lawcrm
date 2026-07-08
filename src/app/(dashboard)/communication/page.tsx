@@ -45,6 +45,9 @@ import { currentUserHasPermission } from "@/lib/permission-check";
 // them on the viewer's calendar, not the server's (ADR-012).
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { LogCallButton } from "@/components/communication/log-call-button";
+import { getCurrentUserId } from "@/lib/current-user";
+import { maybeKickEmailSync } from "@/lib/google/gmail-sync";
+import { SyncNowButton } from "@/components/communication/sync-now-button";
 
 type View = "email" | "messages";
 
@@ -168,6 +171,13 @@ export default async function CommunicationPage({
   }
 
   // Email view (default)
+  // Opportunistic Gmail sync kick — fire-and-forget, throttled to
+  // once per 5 min per user inside `maybeKickEmailSync` (in-memory,
+  // like the dashboard's notification sweep). Never blocks or fails
+  // the page render; freshly synced mail shows on the next load.
+  void getCurrentUserId()
+    .then((userId) => maybeKickEmailSync(userId))
+    .catch(() => {});
   const filter = parseEmailFilter(sp.filter);
   // Per-pinned-matter drilldown: ?matter=<id> overrides matter-related
   // filter behavior to scope the list to that single matter.
@@ -189,6 +199,7 @@ export default async function CommunicationPage({
       <TopBar
         title="Communication"
         crumbs={`${emailCounts.all} total · ${emailCounts.unread} unread`}
+        actions={<SyncNowButton />}
         below={
           <CommunicationTabs
             view="email"

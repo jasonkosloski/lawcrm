@@ -1451,6 +1451,13 @@ model EmailAccount {
   syncStatus     String    @default("disconnected") /// connected | syncing | disconnected | error
   lastSyncAt     DateTime?
   threadsIndexed Int       @default(0)
+  /// Gmail incremental-sync cursor (users.history.list). Null until
+  /// the first full sync completes; reset to null to force a full
+  /// re-sync (e.g. after a 404 historyId-expired from Google).
+  historyId      String?
+  /// Last sync failure, surfaced on /settings/integrations. Cleared
+  /// on the next successful sync.
+  syncError      String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -1493,6 +1500,7 @@ model EmailThread {
   spawnedTasks     Task[]         @relation("EmailThreadSpawnedTasks")
   spawnedDeadlines Deadline[]     @relation("EmailThreadSpawnedDeadlines")
 
+  @@unique([accountId, externalId])
   @@index([accountId])
   @@index([matterId])
   @@index([lastMessageAt])
@@ -1522,6 +1530,7 @@ model EmailMessage {
   /// from the inbox-action affordance at the thread level.
   timeEntries TimeEntry[]       @relation("EmailMessageTimeEntries")
 
+  @@unique([threadId, externalId])
   @@index([threadId])
   @@map("email_messages")
 }

@@ -535,6 +535,12 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
           "Manually record a phone call with a contact — direction, outcome, duration, summary, and optional matter filing. The call appears in the Messages inbox and, when filed, on the matter timeline.",
       },
       {
+        key: "communication.send_email",
+        label: "Send email",
+        description:
+          "Compose new emails and reply to threads from a connected Gmail account. Every send goes out from the sender's OWN connected mailbox — this key governs whether they can send from inside the CRM at all.",
+      },
+      {
         key: "communication.edit_call",
         label: "Edit logged calls",
         description:

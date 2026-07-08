@@ -66,13 +66,13 @@ const SECTIONS: NavSection[] = [
         href: "/settings/templates",
         label: "Document templates",
       },
-      // Integrations + Billing & rates are placeholder pages today;
-      // gated on edit_info as a stand-in until they get their own
-      // permission keys.
+      // Integrations is self-service — connecting YOUR OWN mailbox
+      // is identity-scoped like profile/notifications, so everyone
+      // sees it. Billing & rates stays a placeholder gated on
+      // edit_info as a stand-in until it gets its own keys.
       {
         href: "/settings/integrations",
         label: "Integrations",
-        requires: "firm.edit_info",
       },
       {
         href: "/settings/billing",

@@ -43,7 +43,9 @@ src/
 │   ├── api/                  # Sanctioned route handlers ONLY: auth handler,
 │   │                         #   document download (streams local / 302s blob),
 │   │                         #   streaming upload (local driver), blob upload
-│   │                         #   token+callback. Data mutations do NOT go here.
+│   │                         #   token+callback, Google OAuth redirect legs
+│   │                         #   (integrations/google/connect+callback).
+│   │                         #   Data mutations do NOT go here.
 │   ├── login/                # Public login page
 │   ├── print/                # Print-friendly renderings (outside app shell)
 │   ├── layout.tsx            # Root layout (fonts, providers)

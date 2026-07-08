@@ -138,6 +138,7 @@ describe("expected-key invariants", () => {
     "events.edit_non_matter",
     "communication.file_email",
     "communication.log_call",
+    "communication.send_email",
     "communication.edit_call",
     "communication.delete_call",
     "documents.template.create",

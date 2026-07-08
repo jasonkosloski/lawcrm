@@ -21,6 +21,7 @@ import type {
   ThreadListRow,
 } from "@/lib/queries/communication";
 import { MailboxDrawerTrigger } from "./mailbox-drawer";
+import { ComposeEmailLauncher } from "./compose-email-launcher";
 
 function rowHref(
   threadId: string,
@@ -91,6 +92,10 @@ export function ThreadList({
             {plural(threads.length, "thread")}
           </div>
         </div>
+        {/* Compose — async server island: gates itself on
+            communication.send_email + the user's connected accounts
+            ("Connect Gmail" link when there are none). */}
+        <ComposeEmailLauncher />
       </header>
 
       <ul className="flex-1 overflow-y-auto">

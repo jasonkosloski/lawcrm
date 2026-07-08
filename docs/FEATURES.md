@@ -37,11 +37,23 @@ done. What's left is enumerated below.
 
 ### P0 — production-ready blockers
 
-- [ ] **Gmail OAuth + email send / reply / file-to-matter.** The
-  Communication tab is read-only today (`src/app/(dashboard)/communication/page.tsx`).
-  The single biggest broken promise of the app — a "unified inbox"
-  you can't send from. Needs the OAuth flow, two-way sync, compose
-  window, reply, and a "file thread to matter" action.
+- [x] **Gmail OAuth + email send / reply / file-to-matter.** All
+  three integration phases shipped (see Phase 4 in Shipped) — the
+  "unified inbox you can't send from" is no more. **Phase 1 (OAuth
+  connect flow):** per-user Google OAuth, tokens encrypted at rest,
+  the `gmail-client` helper sync/send build on. **Phase 2 (sync
+  engine):** historyId incremental sync + capped initial import,
+  write-time HTML sanitization, "Sync now" / page-load kick / CRON
+  triggers. **Phase 3 (send/reply):** compose from the inbox header
+  + reply/reply-all in the thread reader, gated on
+  `communication.send_email`, always from the current user's own
+  connected mailbox. Follow-up queue (P1-and-below altitude now):
+  attachments + rich text on send (plain text v1); read-state/star
+  writeback to Gmail; attachment BYTES on demand (metadata already
+  syncs); older-mail backfill past the initial-import cap; "load
+  remote images" opt-in (blocked as tracking pixels today); store
+  Message-ID/References headers so replies set clean In-Reply-To
+  instead of leaning on Gmail's threadId threading.
 
 ### P1 — usability + governance
 
@@ -448,9 +460,13 @@ done. What's left is enumerated below.
 - [ ] **Settings — Security.** Change password, 2FA, active
   sessions, sign-in history. Blocked on Auth Phase 2 (see
   `docs/AUTH_PLAN.md`).
-- [ ] **Settings — Integrations.** Per-integration connection
-  status + OAuth flows (Gmail, Google Calendar, Westlaw, e-sign,
-  IOLTA bank feed, PACER). Each lights up when its underlying
+- [~] **Settings — Integrations.** Gmail is live: per-user connect /
+  reconnect / disconnect card (address, sync-status chip, last sync,
+  thread count, syncError surfaced, multi-account list), callback
+  banners, "not configured" env guidance. Page is self-service (no
+  permission key — connecting YOUR mailbox is identity-scoped like
+  notifications). Remaining: Google Calendar, Westlaw, e-sign,
+  IOLTA bank feed, PACER — each lights up when its underlying
   feature phase lands.
 - [ ] **Settings — Billing & rates.** Default hourly rate, UTBMS
   code library, invoice templates, payment terms.
@@ -546,12 +562,104 @@ end-to-end" milestone — schema, action, query, UI all wired.
 - [x] **Decline lead** — Topbar action with optional internal reason; flips `Lead.stage` to "declined" and bounces the lead from the active queue.
 - [x] **Convert lead to matter — v1** — Topbar action with practice area + initial stage + matter name + fee structure. Single-transaction creates Matter + Contact (or reuses one matching the lead's email) + MatterTeamMember + UserMatterPin. Lead summary/location/incident date/injuries/source flow into Matter.description.
 
-### Phase 4 — Communication (read-only today)
+### Phase 4 — Communication (Gmail live: sync + send)
 
 The unified inbox lives at `/communication` (route reserved so SMS
-plugs in without a rename). Currently read-only — see remaining
-work for Gmail OAuth + send.
+plugs in without a rename). Real Gmail mail syncs in (sync-engine
+entry below) and goes out (send/reply entry below) — plain-text
+sends v1; attachments + rich text are queued follow-ups.
 
+- [x] **Gmail OAuth connect flow (integration phase 1)** — Per-user
+  Google OAuth: any firm member connects THEIR OWN mailbox(es) from
+  /settings/integrations; nothing user-specific hardcoded (creds
+  from `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` only, redirect URI
+  derived from request origin / `AUTH_URL`). Redirect routes
+  `/api/integrations/google/{connect,callback}` (sanctioned
+  route-handler exceptions — browser OAuth dance) with a signed
+  state + httpOnly nonce cookie CSRF gate; `access_type=offline` +
+  `prompt=consent` guarantees a refresh_token on every (re)connect.
+  Callback upserts `EmailAccount` per (userId, emailAddress) —
+  tokens encrypted at rest (ADR-011); access-token expiry rides
+  INSIDE the encrypted column as a `{token, expiresAt}` JSON
+  envelope (no schema change needed). `src/lib/google/gmail-client.ts`
+  is the contract sync/send build on: `getGmailAccessToken`
+  (refresh-on-expiry, persists rotation, flips the account to
+  `error`+`syncError` on `invalid_grant`) and `gmailFetch` (gmail/v1
+  wrapper, one refresh-and-retry on 401). `disconnectEmailAccount`
+  is owner-only (mailbox is personal — no admin override; the
+  admin-altitude lever is deactivating the user), best-effort
+  Google revoke, clears tokens, KEEPS threads (firm records).
+- [x] **Gmail sync engine (integration phase 2)** —
+  `src/lib/google/gmail-sync.ts`. Incremental sync via
+  `users/me/history` from the stored `historyId` cursor (affected
+  threads refetched whole `format=full`; cursor-expired 404 falls
+  back to a full resync transparently). Full/initial sync is CAPPED:
+  newest **200 threads / 90 days** (`FULL_SYNC_MAX_THREADS` /
+  `FULL_SYNC_MAX_AGE_DAYS`; the age bound rides `q=newer_than:90d`)
+  — older-mail backfill is a follow-up; the cap is a product choice,
+  not recorded as a sync error. Idempotent upserts on the
+  (accountId|threadId, externalId) uniques update ONLY
+  provider-owned columns — app-owned state survives every resync:
+  `matterId` filing, `followUpAt`, spawned notes/tasks/deadlines,
+  `isPrivileged`, app-vocabulary labels, downloaded attachment
+  `fileUrl`s. Gmail user labels land in the `custom:*` namespace
+  (sync-owned, reconciled each pass; system + `CATEGORY_*` ids are
+  filtered — the interesting ones only feed `isRead`/`isStarred`/
+  `isArchived`). Bodies: MIME walk prefers text/html, falls back to
+  escaped/paragraphed text/plain, then snippet; small in-house
+  RFC 5322 address-list + RFC 2047 encoded-word parsing
+  (`gmail-message-parse.ts`). **Every body is sanitized at WRITE
+  time** through the new email profile in `src/lib/sanitize-html.ts`
+  (script/iframe/form/handlers stripped, safe inline-style subset
+  kept, REMOTE IMAGES BLOCKED as tracking pixels → visible
+  "[image blocked]" note; `data:` images render). Attachments are
+  METADATA-ONLY rows (Gmail attachmentId parked as
+  `fileUrl: "gmail:<id>"`); on-demand byte download is a follow-up.
+  Known limitation: read/star/archive flags treat Gmail as source of
+  truth until writeback ships, so in-app "mark read" can revert on
+  resync. Triggers: `syncMyEmailAccounts()` server action
+  (session-only, identity-scoped like `disconnectEmailAccount`) +
+  "Sync now" button in the Communication topbar; a throttled
+  page-load kick (`maybeKickEmailSync`, in-memory 5-min/user/
+  instance, same idiom as the notification sweep); and headless
+  `GET /api/email-sync` (CRON_SECRET bearer, fail-closed, syncs ALL
+  users' connected accounts with per-account failure isolation).
+  Failure semantics: `GmailAuthError` → account `error` + stop until
+  reconnect; transient failures restore status and record
+  `syncError` (cleared on next success).
+- [x] **Gmail send / reply (integration phase 3)** — Compose button
+  in the inbox thread-list header (`ComposeEmailLauncher`, a
+  self-fetching server island: hidden without
+  `communication.send_email`; "Connect Gmail" link to
+  /settings/integrations when the user has no connected account;
+  From picker only with several accounts) + Reply / Reply-all
+  composer at the bottom of the thread reader (`ReplySection` —
+  works in the full inbox AND the embedded matter/intake readers,
+  no page-prop threading). Multi-user: every send goes from the
+  CURRENT USER's own connected `EmailAccount` — ownership enforced
+  in the action's WHERE clause, another user's accountId/thread
+  never resolves. Actions (`src/app/actions/email-send.ts`, both
+  gated `communication.send_email`): `sendEmail` + `replyToThread`
+  build RFC 2822 multipart/alternative MIME via the pure
+  client-safe builder `src/lib/google/mime.ts` (RFC 2047 subject/
+  name encoding, header-injection stripping, 76-col base64 part
+  bodies, unwrapped base64url `raw` for the API, Message-ID left to
+  Gmail) and POST `users/me/messages/send` through `gmailFetch`.
+  Reply recipients derive from the last INBOUND message (reply →
+  its From; reply-all → From+To+Cc minus the account's own address,
+  deduped case-insensitively), "Re:" subject without stacking, and
+  an edit-recipients override path. Threading honesty: Message-ID/
+  References aren't stored locally, so replies pin Gmail's
+  `threadId` in the send payload instead of fabricating In-Reply-To
+  (sync will backfill clean headers later). On success the sent
+  message + thread upsert locally on the sync engine's own unique
+  keys ((accountId, externalId) / (threadId, externalId)) so the
+  next sync pass converges on the same rows; filed threads
+  activity-log "Email sent"/"Email reply sent". Every failure path
+  (auth revoked → reconnect message, transient Google, HTTP errors,
+  validation) returns `{ok:false,error}` and the composers PRESERVE
+  the draft. Plain text v1 (sent as text + minimal HTML
+  paragraphs); attachments + rich text are documented follow-ups.
 - [x] **Manual call logging — v1** — "Log call" button on the
   Messages view (thread-list header). Composer: contact typeahead
   (auto-fills phone, editable / required when none on file),
