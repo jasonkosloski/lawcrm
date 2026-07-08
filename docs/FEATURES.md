@@ -47,13 +47,26 @@ done. What's left is enumerated below.
   triggers. **Phase 3 (send/reply):** compose from the inbox header
   + reply/reply-all in the thread reader, gated on
   `communication.send_email`, always from the current user's own
-  connected mailbox. Follow-up queue (P1-and-below altitude now):
-  attachments + rich text on send (plain text v1); read-state/star
-  writeback to Gmail; attachment BYTES on demand (metadata already
-  syncs); older-mail backfill past the initial-import cap; "load
-  remote images" opt-in (blocked as tracking pixels today); store
-  Message-ID/References headers so replies set clean In-Reply-To
-  instead of leaning on Gmail's threadId threading.
+  connected mailbox. **Email v1.1 (attachments):** attachment bytes
+  on demand (fetch-once-then-cache download/view route) + the
+  file-to-matter-documents bridge — see the shipped entry in
+  Phase 4. **Email v1.1 (writeback + backfill):** read/star/archive
+  changes now write back to Gmail's labels (no more double inbox)
+  and "Load older emails" walks windows past the initial-import
+  cap — see the shipped entry in Phase 4. **Email v1.1 (rich-text
+  compose):** compose + reply now use the shared Tiptap editor;
+  outbound HTML is sanitized server-side before the MIME builder —
+  see the shipped entry in Phase 4. Follow-up queue
+  (P1-and-below altitude now): attachments on send (receive side
+  shipped); per-user signatures (the `getEmailSignature()` seam in
+  `src/lib/email-signature.ts` is ready — make it async, look up +
+  sanitize the stored signature); "load remote images" opt-in
+  (blocked as tracking pixels today); store Message-ID/References
+  headers so replies set clean In-Reply-To instead of leaning on
+  Gmail's threadId threading; archive/star affordances in the
+  thread READER header (today they live on list rows); swipe/tap
+  affordances for star+archive on touch (the row cluster is
+  hover/keyboard-reveal).
 
 ### P1 — usability + governance
 
@@ -566,8 +579,9 @@ end-to-end" milestone — schema, action, query, UI all wired.
 
 The unified inbox lives at `/communication` (route reserved so SMS
 plugs in without a rename). Real Gmail mail syncs in (sync-engine
-entry below) and goes out (send/reply entry below) — plain-text
-sends v1; attachments + rich text are queued follow-ups.
+entry below) and goes out (send/reply entry below) — rich-text
+sends as of Email v1.1; attachments-on-send + per-user signatures
+are queued follow-ups.
 
 - [x] **Gmail OAuth connect flow (integration phase 1)** — Per-user
   Google OAuth: any firm member connects THEIR OWN mailbox(es) from
@@ -614,10 +628,13 @@ sends v1; attachments + rich text are queued follow-ups.
   kept, REMOTE IMAGES BLOCKED as tracking pixels → visible
   "[image blocked]" note; `data:` images render). Attachments are
   METADATA-ONLY rows (Gmail attachmentId parked as
-  `fileUrl: "gmail:<id>"`); on-demand byte download is a follow-up.
-  Known limitation: read/star/archive flags treat Gmail as source of
-  truth until writeback ships, so in-app "mark read" can revert on
-  resync. Triggers: `syncMyEmailAccounts()` server action
+  `fileUrl: "gmail:<id>"`); on-demand byte download shipped in
+  Email v1.1 (entry below).
+  Read/star/archive flags stay provider-derived on resync — correct
+  (not a limitation) since Email v1.1: in-app flag changes write
+  back to Gmail's labels, so the label-derived flags converge
+  instead of reverting (see the writeback entry below). Triggers:
+  `syncMyEmailAccounts()` server action
   (session-only, identity-scoped like `disconnectEmailAccount`) +
   "Sync now" button in the Communication topbar; a throttled
   page-load kick (`maybeKickEmailSync`, in-memory 5-min/user/
@@ -658,8 +675,70 @@ sends v1; attachments + rich text are queued follow-ups.
   activity-log "Email sent"/"Email reply sent". Every failure path
   (auth revoked → reconnect message, transient Google, HTTP errors,
   validation) returns `{ok:false,error}` and the composers PRESERVE
-  the draft. Plain text v1 (sent as text + minimal HTML
-  paragraphs); attachments + rich text are documented follow-ups.
+  the draft. Rich text shipped as Email v1.1 (next entry);
+  attachments-on-send is a documented follow-up.
+- [x] **Rich-text compose (Email v1.1)** — Compose + reply bodies
+  are the shared Tiptap editor (`src/components/shared/
+  rich-text-editor.tsx` — the note editor's implementation,
+  extracted; `NoteEditor` is now a re-export alias so all notes
+  surfaces are untouched). Toolbar: heading, bold, italic, strike,
+  inline code, bullet/numbered lists, blockquote — same surface as
+  notes, in lockstep with the sanitizer's note profile. Wire shape:
+  `bodyHtml` = the editor's raw HTML, SANITIZED SERVER-SIDE in
+  `email-send.ts` via `sanitizeUserHtml` (note profile — the exact
+  allowlist for our own editor's output and stricter than the
+  inbound email profile, so a hostile client can't smuggle inline
+  styles/images into mail wearing our From) before it reaches the
+  MIME builder; `bodyText` = `htmlToText()` downgrade
+  (`src/lib/html-to-text.ts`, zero-dep: blocks → blank lines, lists
+  → "- "/"1. " with nesting indents, links → "text (url)", entities
+  decoded, `<pre>` whitespace preserved). The locally persisted
+  sent-message body is now the sanitized wire HTML (fulfilling the
+  `email-body.ts` safe-by-construction contract, so sent mail
+  renders rich in the reader); snippets stay plain text. Draft
+  preservation is unchanged — the composers hold the editor HTML in
+  state and the editor re-mounts from it after failures/reopens.
+  Signatures: nothing automatic v1 — `getEmailSignature()`
+  (`src/lib/email-signature.ts`) seeds the composers and returns
+  null; per-user signatures only change that function.
+- [x] **Email attachments — bytes on demand + file to matter
+  (Email v1.1)** — Sync keeps storing metadata-only rows; bytes
+  materialize on first use. `GET
+  /api/email-attachments/[id]/download` (sanctioned file-transfer
+  route, sibling of the documents download): scoped attachment →
+  message → thread → account to the CURRENT user's mailbox —
+  deliberately matching the `getThreadById` read model (inbox reads
+  are owner-scoped, not firm-wide). First hit fetches the bytes
+  from Gmail (`users/me/messages/{mid}/attachments/{aid}`,
+  base64url), caches via `storeFile`, and flips `fileUrl` from
+  `gmail:<id>` to a storage key EXACTLY once (conditional
+  updateMany; concurrent losers adopt the winner's copy); later
+  hits serve from storage with zero Gmail calls. Disconnected
+  account + uncached bytes → 409 with a reconnect message (parked
+  id preserved for retry after reconnect). Serving mirrors the
+  documents route verbatim: shared inline allowlist (extracted to
+  `src/lib/inline-safe-types.ts` so the two routes can't drift —
+  sender-declared `EmailAttachment.contentType` is
+  attacker-controlled), nosniff everywhere, CSP sandbox on forced
+  attachments, single-range 206, blob keys 302. **File to matter:**
+  `fileAttachmentToMatter` (gated `documents.upload`,
+  `src/app/actions/email-attachments.ts`) ensures bytes are cached
+  (shared `src/lib/email-attachments.ts` helper), then writes an
+  independent COPY under its own storage key (Document delete
+  unlinks `fileUrl`, so keys are never shared) as a
+  `category: "correspondence"` / `source: "email"` Document —
+  contentType re-derived server-side from the filename extension,
+  never the sender's claim. Re-filing the same attachment to the
+  same matter no-ops (`alreadyFiled`, heuristic name+size match —
+  no attachment FK on Document yet); filing to a second matter is
+  an independent copy. Activity-logged ("Filed email attachment").
+  UI: `AttachmentChips` (extracted from the thread reader, both
+  hosts) — Download, View (inline-safe types only), and
+  "File to matter…" dialog defaulting to the thread's filing, with
+  a per-matter folder picker (`listMatterFolders`). Follow-ups: an
+  attachment FK on Document for exact dedupe/provenance chips;
+  bulk "file all attachments"; attachment chips in the thread
+  LIST; send-side attachments (tracked above).
 - [x] **Manual call logging — v1** — "Log call" button on the
   Messages view (thread-list header). Composer: contact typeahead
   (auto-fills phone, editable / required when none on file),
@@ -704,6 +783,42 @@ sends v1; attachments + rich text are queued follow-ups.
   denormalized `MessengerThread.unreadCount` (heals counter drift),
   no-op + no revalidation when already read. Fired by an invisible
   `MarkThreadRead` island mounted in both thread readers.
+- [x] **Email v1.1 — Gmail writeback (read/star/archive) + older-mail
+  backfill** — Shipped 2026-07-07. **Writeback**
+  (`src/lib/google/gmail-writeback.ts`): in-app flag changes push
+  label modifies to Gmail (`threads/{id}/modify` — mark-read removes
+  UNREAD, star adds/removes STARRED, archive removes/adds INBOX), so
+  the provider reflects CRM intent instead of reverting it on the
+  next resync (the double-inbox fix). Local write ALWAYS commits
+  first; `writebackGmailThread` never rejects — disconnected
+  (token-less) accounts skip silently, `GmailAuthError` records the
+  reconnect signal on `account.syncError`, transients console.warn.
+  Echo-safe by construction: sync derives flags from labels
+  idempotently and never triggers writeback, so
+  writeback → resync converges (no loop). Actions: mark-read
+  writeback rides `markEmailThreadRead` (no-op stays
+  writeback-free); new `src/app/actions/email-thread-flags.ts`
+  (`toggleEmailThreadStar` / `setEmailThreadArchived`) — session-
+  gated + mailbox-scoped like read-state, archive no-ops on
+  same-state. UI: hover/keyboard-reveal star + archive cluster on
+  inbox thread-list rows AND the embedded matter/lead lists
+  (`ThreadRowActions`, a sibling-of-the-Link overlay — no buttons
+  inside anchors; star optimistic with revert), plus a new
+  **Archived** mailbox view in the rail (`filter=archived`; Inbox
+  already excluded archived, so archived rows now have a home).
+  Reader-header affordances are a noted follow-up (reader owned by
+  the attachments/reader track). **Backfill**
+  (`backfillEmailAccount` in gmail-sync.ts +
+  `backfillMyEmailAccount` owner-scoped action): "Load older emails"
+  per account on the /settings/integrations Gmail card (shows the
+  oldest-thread anchor date, pending state, imported count). Each
+  click walks ONE window of up to `BACKFILL_MAX_THREADS` (200)
+  threads strictly older than the oldest local thread —
+  `q=before:<epoch seconds, rounded up>` (no now-relative
+  `newer_than`, which can't anchor a window), newest-first, already-
+  local threads skipped without spending the cap; clicks stack by
+  re-anchoring. Stays out of the sync status machine (`historyId` /
+  `lastSyncAt` untouched; `threadsIndexed` refreshed).
 - [x] **Missed-call detection — status-based** — Thread list rows
   flag missed calls from the raw `MessengerItem.callStatus`
   (`lastCallStatus` on `MessengerThreadRow`) via the shared

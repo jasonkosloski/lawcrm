@@ -11,15 +11,25 @@
  * Both actions must no-op WITHOUT revalidating when already read —
  * the island fires on every thread open, so a useless revalidation
  * would re-render the inbox on every click.
+ *
+ * Gmail writeback (v1.1): `gmail-writeback` is mocked — its
+ * never-rejects contract has its own suite. Here we pin WHEN it
+ * fires (first read of an externalId-bearing thread, `remove
+ * UNREAD`) and when it must not (no-op re-read, local-only thread,
+ * foreign thread).
  */
 
 import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
+vi.mock("@/lib/google/gmail-writeback", () => ({
+  writebackGmailThread: vi.fn().mockResolvedValue(undefined),
+}));
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/current-user";
+import { writebackGmailThread } from "@/lib/google/gmail-writeback";
 import { prisma } from "@/lib/prisma";
 import {
   markEmailThreadRead,
@@ -35,11 +45,14 @@ import {
 
 const mockedGetUser = vi.mocked(getCurrentUserId);
 const mockedRevalidate = vi.mocked(revalidatePath);
+const mockedWriteback = vi.mocked(writebackGmailThread);
 
 let userId: string;
 let otherUserId: string;
 let matterId: string;
+let myAccountId: string;
 let emailThreadId: string;
+let gmailThreadId: string; // mine, with an externalId (Gmail-synced)
 let otherUsersThreadId: string;
 let messengerThreadId: string;
 
@@ -96,7 +109,8 @@ beforeEach(async () => {
       select: { id: true },
     }),
   ]);
-  const [t1, t2] = await Promise.all([
+  myAccountId = mine.id;
+  const [t1, t2, t3] = await Promise.all([
     prisma.emailThread.create({
       data: {
         accountId: mine.id,
@@ -110,7 +124,18 @@ beforeEach(async () => {
     prisma.emailThread.create({
       data: {
         accountId: theirs.id,
+        externalId: "gt-theirs",
         subject: "Privileged — settlement strategy",
+        isRead: false,
+        lastMessageAt: new Date("2026-06-01T10:00:00Z"),
+      },
+      select: { id: true },
+    }),
+    prisma.emailThread.create({
+      data: {
+        accountId: mine.id,
+        externalId: "gt-read-1",
+        subject: "Gmail-synced thread",
         isRead: false,
         lastMessageAt: new Date("2026-06-01T10:00:00Z"),
       },
@@ -119,6 +144,7 @@ beforeEach(async () => {
   ]);
   emailThreadId = t1.id;
   otherUsersThreadId = t2.id;
+  gmailThreadId = t3.id;
 
   // Firm-shared messenger line (userId null) + one thread on it.
   const line = await prisma.messengerAccount.create({
@@ -168,9 +194,38 @@ describe("markEmailThreadRead", () => {
     expect(mockedRevalidate).not.toHaveBeenCalled();
   });
 
+  test("Gmail-synced thread fires writeback removing UNREAD after the local flip", async () => {
+    const res = await markEmailThreadRead(gmailThreadId);
+    expect(res).toEqual({ ok: true });
+
+    const thread = await prisma.emailThread.findUniqueOrThrow({
+      where: { id: gmailThreadId },
+      select: { isRead: true },
+    });
+    expect(thread.isRead).toBe(true);
+    expect(mockedWriteback).toHaveBeenCalledExactlyOnceWith(
+      myAccountId,
+      "gt-read-1",
+      { removeLabelIds: ["UNREAD"] }
+    );
+  });
+
+  test("no-op re-read fires NO writeback", async () => {
+    await markEmailThreadRead(gmailThreadId);
+    mockedWriteback.mockClear();
+
+    await markEmailThreadRead(gmailThreadId);
+    expect(mockedWriteback).not.toHaveBeenCalled();
+  });
+
+  test("thread without an externalId (local-only) fires NO writeback", async () => {
+    await markEmailThreadRead(emailThreadId);
+    expect(mockedWriteback).not.toHaveBeenCalled();
+  });
+
   test("cannot flip a thread in another user's mailbox", async () => {
     // Signed in as `userId`, targeting the other user's thread —
-    // silent no-op, row untouched, nothing revalidated.
+    // silent no-op, row untouched, nothing revalidated, no writeback.
     const res = await markEmailThreadRead(otherUsersThreadId);
     expect(res).toEqual({ ok: true });
 
@@ -180,6 +235,7 @@ describe("markEmailThreadRead", () => {
     });
     expect(thread.isRead).toBe(false);
     expect(mockedRevalidate).not.toHaveBeenCalled();
+    expect(mockedWriteback).not.toHaveBeenCalled();
   });
 
   test("throws (login redirect) before writing when there is no session", async () => {

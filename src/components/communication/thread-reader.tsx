@@ -10,7 +10,7 @@
  */
 
 import Link from "next/link";
-import { MailOpen, Paperclip, ShieldCheck } from "lucide-react";
+import { MailOpen, ShieldCheck } from "lucide-react";
 // sentAt is a real instant — server-rendered, so display threads the
 // viewer's IANA zone (ADR-012). "datetime_medium" is the centralized
 // spelling of the "MMM d, yyyy, h:mm a" this header always used.
@@ -24,25 +24,20 @@ import { setEmailThreadFollowUp } from "@/app/actions/follow-ups";
 import { LogTimeOnCommButton } from "./log-time-on-comm-button";
 import { CommTimeLoggedIndicator } from "./comm-time-logged-indicator";
 import { FileToMatterPicker } from "./file-to-matter-picker";
+import { AttachmentChips } from "./attachment-chips";
+import { currentUserHasPermission } from "@/lib/permission-check";
 import { BackToListButton } from "./back-to-list-button";
 import { MarkThreadRead } from "./mark-thread-read";
 import { ReplySection } from "./reply-section";
 import { isHtmlEmailBody } from "@/lib/email-body";
 import type { FilingMatterOption } from "@/lib/queries/communication";
 
-const formatSize = (bytes: number | null): string => {
-  if (bytes === null || bytes === 0) return "—";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-};
-
 const formatRecipients = (
   list: Array<{ name?: string; email: string }>
 ): string =>
   list.map((r) => (r.name ? `${r.name} <${r.email}>` : r.email)).join(", ");
 
-export function ThreadReader({
+export async function ThreadReader({
   thread,
   /** Open-matter list passed in from the page server component so the
    *  file-to-matter picker can render synchronously. */
@@ -68,6 +63,13 @@ export function ThreadReader({
       </div>
     );
   }
+
+  // Read-side flag for the attachment chips' "File to matter…"
+  // affordance (async server component — same self-fetching idiom
+  // as ReplySection, so both hosts get it without new page props).
+  const canFileAttachments = await currentUserHasPermission(
+    "documents.upload"
+  );
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-paper-email overflow-y-auto">
@@ -238,26 +240,14 @@ export function ThreadReader({
               </div>
             )}
 
-            {/* Attachments */}
-            {m.attachments.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 px-3 sm:px-4 py-3 border-t border-line bg-paper-2/40">
-                {m.attachments.map((a) => (
-                  <div
-                    key={a.id}
-                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-line bg-white text-2xs text-ink-2 max-w-full"
-                    title={`${a.filename} — ${formatSize(a.fileSize)}`}
-                  >
-                    <Paperclip size={11} className="text-ink-4 shrink-0" />
-                    <span className="font-medium truncate max-w-48">
-                      {a.filename}
-                    </span>
-                    <span className="font-mono text-ink-4 shrink-0">
-                      {formatSize(a.fileSize)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+            {/* Attachments — download / view / file-to-matter chips
+                (renders nothing for attachment-less messages). */}
+            <AttachmentChips
+              attachments={m.attachments}
+              canFile={canFileAttachments}
+              defaultMatter={thread.matter}
+              matterOptions={filingOptions}
+            />
           </article>
         ))}
 

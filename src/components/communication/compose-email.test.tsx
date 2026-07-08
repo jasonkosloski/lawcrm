@@ -1,15 +1,23 @@
 /**
  * ComposeEmailButton tests — account-picker states (none / one /
- * several), client-side address validation, action wiring, and the
- * draft-preservation contract on send failure.
+ * several), client-side address validation, action wiring (rich
+ * HTML body + htmlToText downgrade), and the draft-preservation
+ * contract on send failure.
  *
  * Server action + router are mocked at module level per the house
  * pattern (docs/TESTING.md layer 2). Inputs are queried by [name]
  * (the form primitives don't htmlFor-associate labels).
+ *
+ * The shared RichTextEditor is mocked: Tiptap/ProseMirror needs
+ * real contenteditable + Selection APIs that happy-dom lacks. The
+ * stub preserves the editor's exact contract — uncontrolled after
+ * mount, seeded from `initialHTML`, emits an HTML string via
+ * `onChange` — so everything the composer owns (state, wiring,
+ * downgrade, draft preservation) is tested for real.
  */
 
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ComposeEmailButton } from "./compose-email";
@@ -17,6 +25,25 @@ import { ComposeEmailButton } from "./compose-email";
 vi.mock("@/app/actions/email-send", () => ({
   sendEmail: vi.fn(),
   replyToThread: vi.fn(),
+}));
+
+vi.mock("@/components/shared/rich-text-editor", () => ({
+  RichTextEditor: ({
+    initialHTML,
+    onChange,
+    placeholder,
+  }: {
+    initialHTML?: string;
+    onChange: (html: string) => void;
+    placeholder?: string;
+  }) => (
+    <textarea
+      name="body"
+      defaultValue={initialHTML ?? ""}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  ),
 }));
 
 const refresh = vi.fn();
@@ -97,9 +124,34 @@ describe("ComposeEmailButton — account states", () => {
         to: ["alice@example.com"],
         cc: [],
         subject: "Retainer",
+        // The stub editor emits its raw value as HTML; plain words
+        // downgrade to themselves.
         bodyText: "Hi Alice",
-        bodyHtml: "<p>Hi Alice</p>",
+        bodyHtml: "Hi Alice",
       })
+    );
+  });
+
+  test("rich body round-trip: editor HTML up as bodyHtml, htmlToText as bodyText", async () => {
+    const user = setupUser();
+    mockedSendEmail.mockResolvedValue({ ok: true, threadId: "t1" });
+    render(<ComposeEmailButton accounts={ONE_ACCOUNT} />);
+
+    await openAndFill(user);
+    const richHtml =
+      '<p>Hi <strong>Alice</strong>,</p><p>Next steps:</p><ul><li><p>Sign the <a href="https://firm.com/retainer">retainer</a></p></li><li><p>Send documents</p></li></ul>';
+    fireEvent.change(field("body"), { target: { value: richHtml } });
+
+    await user.click(screen.getByRole("button", { name: /^send$/i }));
+    await waitFor(() =>
+      expect(mockedSendEmail).toHaveBeenCalledWith(
+        "acc-1",
+        expect.objectContaining({
+          bodyHtml: richHtml, // raw — sanitizing is the action's job
+          bodyText:
+            "Hi Alice,\n\nNext steps:\n\n- Sign the retainer (https://firm.com/retainer)\n- Send documents",
+        })
+      )
     );
   });
 
@@ -191,5 +243,17 @@ describe("ComposeEmailButton — validation + draft preservation", () => {
 
     await user.type(field("body"), "Hi");
     expect(screen.getByRole("button", { name: /^send$/i })).toBeEnabled();
+  });
+
+  test("empty-document scaffolding (<p></p>) keeps Send disabled", async () => {
+    const user = setupUser();
+    render(<ComposeEmailButton accounts={ONE_ACCOUNT} />);
+
+    await user.click(screen.getByRole("button", { name: /compose/i }));
+    await screen.findByText("New email");
+    await user.type(field("to"), "alice@example.com");
+    // An emptied Tiptap document is tags without text.
+    fireEvent.change(field("body"), { target: { value: "<p></p>" } });
+    expect(screen.getByRole("button", { name: /^send$/i })).toBeDisabled();
   });
 });

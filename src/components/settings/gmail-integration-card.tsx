@@ -8,6 +8,15 @@
  * count, surfaced syncError, Disconnect with an inline two-step
  * confirm (the codebase's lightweight confirm idiom — no dialog).
  *
+ * "Load older emails" (Email v1.1): the initial import is capped at
+ * the newest 200 threads / 90 days, so each connected account with
+ * local mail shows its oldest-thread date and a backfill button.
+ * One click = one window of up to 200 older threads
+ * (`backfillMyEmailAccount` → `backfillEmailAccount`); clicks stack,
+ * each re-anchoring at the new oldest thread. The result count (or
+ * error) renders inline, then the page refresh picks up the moved
+ * oldest date + thread count.
+ *
  * When the deploy has no GOOGLE_CLIENT_ID/SECRET, renders setup
  * guidance instead of a connect button that would bounce.
  *
@@ -20,7 +29,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Mail, Plus } from "lucide-react";
+import { History, Mail, Plus } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -31,6 +40,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { disconnectEmailAccount } from "@/app/actions/email-accounts";
+import { backfillMyEmailAccount } from "@/app/actions/email-sync";
 
 const CONNECT_URL = "/api/integrations/google/connect";
 
@@ -58,6 +68,10 @@ export interface GmailAccountView {
   lastSyncLabel: string | null;
   threadCount: number;
   syncError: string | null;
+  /** Preformatted date of the account's OLDEST local thread — the
+   *  backfill anchor. Null = no local threads yet (button hidden;
+   *  the initial sync owns the first window). */
+  oldestThreadLabel: string | null;
 }
 
 export function GmailIntegrationCard({
@@ -157,6 +171,32 @@ function GmailAccountRow({ account }: { account: GmailAccountView }) {
   const [confirming, setConfirming] = useState(false);
   const [pending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | null>(null);
+  const [backfillPending, startBackfill] = useTransition();
+  /** Last backfill outcome — "Imported N…" / "No older…" / error. */
+  const [backfillNote, setBackfillNote] = useState<string | null>(null);
+  const [backfillFailed, setBackfillFailed] = useState(false);
+
+  const loadOlder = () => {
+    startBackfill(async () => {
+      const res = await backfillMyEmailAccount(account.id);
+      if (res.ok) {
+        setBackfillFailed(false);
+        setBackfillNote(
+          res.threadsSynced > 0
+            ? `Imported ${res.threadsSynced} older ${
+                res.threadsSynced === 1 ? "thread" : "threads"
+              }.`
+            : "No older emails found."
+        );
+      } else {
+        setBackfillFailed(true);
+        setBackfillNote(res.error ?? "Couldn't load older emails.");
+      }
+      // Server action revalidates; refresh moves the oldest-thread
+      // date + thread count on this card.
+      router.refresh();
+    });
+  };
 
   const chip = STATUS_CHIP[account.syncStatus] ?? {
     label: account.syncStatus,
@@ -237,6 +277,36 @@ function GmailAccountRow({ account }: { account: GmailAccountView }) {
           )}
         </span>
       </div>
+
+      {/* Older-mail backfill — only when there's local mail to
+          anchor on and the mailbox is still connected. */}
+      {!isDisconnected && account.oldestThreadLabel && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-2xs text-ink-4">
+            Oldest thread {account.oldestThreadLabel}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-ink-3"
+            disabled={backfillPending}
+            onClick={loadOlder}
+          >
+            <History size={12} />
+            {backfillPending ? "Loading older…" : "Load older emails"}
+          </Button>
+          {backfillNote && !backfillPending && (
+            <span
+              className={cn(
+                "text-2xs",
+                backfillFailed ? "text-danger" : "text-ink-3"
+              )}
+            >
+              {backfillNote}
+            </span>
+          )}
+        </div>
+      )}
 
       {account.syncError && (
         <p className="mt-1.5 text-2xs text-danger">{account.syncError}</p>

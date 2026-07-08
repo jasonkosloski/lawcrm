@@ -10,6 +10,10 @@
  *     user; the headless cron path (/api/email-sync).
  *   - `maybeKickEmailSync(userId)` — throttled fire-and-forget kick
  *     for the communication page load (see below).
+ *   - `backfillEmailAccount(accountId)` — one WINDOW of older mail
+ *     beyond what the capped initial import brought in (the "Load
+ *     older emails" button on /settings/integrations; see the
+ *     backfill section below).
  *
  * Sync strategy
  * -------------
@@ -30,7 +34,8 @@
  * count bound stops pagination). The cap keeps a first connect from
  * ingesting a decade of mail; it's a product decision documented in
  * docs/FEATURES.md, deliberately NOT recorded in `syncError` (a
- * benign cap is not an error). Older mail backfill is a follow-up.
+ * benign cap is not an error). Older mail is fetched on demand via
+ * `backfillEmailAccount` (below), one capped window per call.
  *
  * Idempotency: threads upsert on the (accountId, externalId) unique,
  * messages on (threadId, externalId) — re-running any sync is safe.
@@ -46,9 +51,14 @@
  * `EmailMessage.isPrivileged`, and app-vocabulary EmailLabel rows
  * (privileged, opposing_counsel, …). Gmail user labels live in the
  * `custom:*` namespace, which the sync engine owns and reconciles.
- * KNOWN LIMITATION: isRead/isStarred/isArchived treat Gmail as the
- * source of truth, so a thread marked read in-app flips back to
- * unread on resync until read-state writeback ships (follow-up).
+ * isRead/isStarred/isArchived stay PROVIDER-DERIVED here — and
+ * that's now correct rather than a limitation, because in-app flag
+ * changes write back to Gmail's labels (`gmail-writeback.ts`:
+ * mark-read removes UNREAD, star adds/removes STARRED, archive
+ * removes/adds INBOX). Gmail reflects CRM intent shortly after the
+ * local mutation, so the label-derived flags this sync computes
+ * converge on the same values instead of reverting them; and since
+ * sync never triggers writeback, there is no echo loop.
  *
  * Attachments: METADATA ONLY (filename, contentType, fileSize, and
  * the Gmail attachmentId stored as `fileUrl: "gmail:<id>"` for the
@@ -101,6 +111,9 @@ export const FULL_SYNC_MAX_THREADS = 200;
 /** Initial-import cap: nothing older than this many days
  *  (`q=newer_than:Nd` on the thread list call). */
 export const FULL_SYNC_MAX_AGE_DAYS = 90;
+/** Backfill cap: at most this many threads imported per
+ *  `backfillEmailAccount` call (one "Load older emails" click). */
+export const BACKFILL_MAX_THREADS = 200;
 /** Gmail history.list page size (500 is the API max). */
 const HISTORY_PAGE_SIZE = 500;
 /** Gmail threads.list page size during a full sync. */
@@ -347,6 +360,172 @@ async function runFullSync(
   } while (pageToken && threadsSynced < FULL_SYNC_MAX_THREADS);
 
   return { newHistoryId, threadsSynced };
+}
+
+// ── Older-mail backfill ──────────────────────────────────────────────────
+
+export type BackfillResult = {
+  accountId: string;
+  emailAddress: string;
+  ok: boolean;
+  /** NEW threads imported this window (existing ones don't count). */
+  threadsSynced: number;
+  /** Upper bound of the window walked — the oldest local thread's
+   *  lastMessageAt at call time. Null = mailbox has no local threads
+   *  yet (run a sync first; the initial import owns that window). */
+  before: Date | null;
+  error?: string;
+};
+
+/**
+ * Import ONE window of mail older than everything already local.
+ *
+ * Windowing (honest against Gmail query semantics): Gmail's
+ * `before:`/`after:` operators accept epoch SECONDS, and
+ * `newer_than:Nd` is always relative to NOW — so an anchored
+ * "90 days ending at X" window can't be expressed with newer_than.
+ * The simplest correct design is a pure upper bound: list threads
+ * with `q=before:<oldest local lastMessageAt, rounded UP to the next
+ * second>` (round up so sub-second truncation can never skip mail;
+ * the anchor thread re-matching is harmless — upserts are
+ * idempotent). Gmail returns matches newest-first, so walking the
+ * list with a `BACKFILL_MAX_THREADS` cap yields exactly the next
+ * `N` threads older than the anchor.
+ *
+ * Cap stacking: each call re-anchors at the CURRENT oldest local
+ * thread, so repeated calls walk successively older windows —
+ * clicking "Load older emails" k times reaches ~k×200 threads back.
+ * Already-local threads returned by the query (boundary overlap,
+ * or a prior partial window) are skipped WITHOUT consuming the cap
+ * or a thread fetch.
+ *
+ * Deliberately outside the sync status machine: `historyId` (the
+ * incremental cursor), `syncStatus`, and `lastSyncAt` are never
+ * touched — backfill extends history; sync owns the present.
+ * `threadsIndexed` is refreshed since the card displays it.
+ *
+ * Failure semantics mirror `syncEmailAccount`: `GmailAuthError` →
+ * account flipped to error + `ok:false`; transient → `syncError`
+ * noted and the error RETHROWN for the caller (the server action
+ * catches it into `{ok:false}`).
+ */
+export async function backfillEmailAccount(
+  accountId: string,
+  opts?: { maxThreads?: number }
+): Promise<BackfillResult> {
+  const account = await prisma.emailAccount.findUnique({
+    where: { id: accountId },
+    select: { id: true, emailAddress: true },
+  });
+  if (!account) {
+    throw new GmailSyncError("Email account not found.");
+  }
+
+  const oldest = await prisma.emailThread.findFirst({
+    where: { accountId },
+    orderBy: { lastMessageAt: "asc" },
+    select: { lastMessageAt: true },
+  });
+  if (!oldest) {
+    // Nothing local to anchor on — the initial (capped) sync owns
+    // the first window. Not an error; the UI hides the button.
+    return {
+      accountId,
+      emailAddress: account.emailAddress,
+      ok: true,
+      threadsSynced: 0,
+      before: null,
+    };
+  }
+
+  const before = oldest.lastMessageAt;
+  // Round UP: `before:` is second-granular and we must not lose the
+  // sub-second remainder (missing mail is worse than re-walking the
+  // anchor thread, which the existing-set skip below handles).
+  const beforeSeconds = Math.ceil(before.getTime() / 1000);
+  const cap = opts?.maxThreads ?? BACKFILL_MAX_THREADS;
+
+  try {
+    const labelMap = await fetchLabelMap(accountId);
+    let threadsSynced = 0;
+    let pageToken: string | undefined;
+    do {
+      const params = new URLSearchParams({
+        maxResults: String(THREAD_LIST_PAGE_SIZE),
+        q: `before:${beforeSeconds}`,
+      });
+      if (pageToken) params.set("pageToken", pageToken);
+      const res = await gmailFetch(accountId, `/users/me/threads?${params}`);
+      if (!res.ok) {
+        throw new GmailSyncError(`Gmail thread list failed (${res.status}).`);
+      }
+      const data = (await res.json()) as ThreadListResponse;
+      const pageIds = (data.threads ?? []).map((t) => t.id);
+      // Skip already-local threads (boundary overlap / prior partial
+      // window) without spending the cap or a thread fetch on them.
+      const existing = new Set(
+        (
+          await prisma.emailThread.findMany({
+            where: { accountId, externalId: { in: pageIds } },
+            select: { externalId: true },
+          })
+        ).map((t) => t.externalId)
+      );
+      for (const id of pageIds) {
+        if (existing.has(id)) continue;
+        if (threadsSynced >= cap) {
+          return await finishBackfill(account, threadsSynced, before);
+        }
+        if (await syncOneThread(accountId, id, labelMap)) threadsSynced++;
+      }
+      pageToken = data.nextPageToken;
+    } while (pageToken && threadsSynced < cap);
+
+    return await finishBackfill(account, threadsSynced, before);
+  } catch (err) {
+    if (err instanceof GmailAuthError) {
+      await prisma.emailAccount.updateMany({
+        where: { id: accountId },
+        data: { syncStatus: "error", syncError: err.message },
+      });
+      return {
+        accountId,
+        emailAddress: account.emailAddress,
+        ok: false,
+        threadsSynced: 0,
+        before,
+        error: err.message,
+      };
+    }
+    const message =
+      err instanceof Error && err.message ? err.message : "Backfill failed.";
+    await prisma.emailAccount.updateMany({
+      where: { id: accountId },
+      data: { syncError: `Last backfill failed: ${message}` },
+    });
+    throw err;
+  }
+}
+
+async function finishBackfill(
+  account: { id: string; emailAddress: string },
+  threadsSynced: number,
+  before: Date
+): Promise<BackfillResult> {
+  const threadsIndexed = await prisma.emailThread.count({
+    where: { accountId: account.id },
+  });
+  await prisma.emailAccount.updateMany({
+    where: { id: account.id },
+    data: { threadsIndexed },
+  });
+  return {
+    accountId: account.id,
+    emailAddress: account.emailAddress,
+    ok: true,
+    threadsSynced,
+    before,
+  };
 }
 
 // ── Thread fetch + upsert ────────────────────────────────────────────────

@@ -6,34 +6,44 @@
  * (?connected / known ?error code / UNKNOWN code must render the
  * generic line — never the raw code), syncError surfacing, and the
  * two-step disconnect confirm actually reaching the server action
- * with the right account id (and NOT reaching it on cancel).
+ * with the right account id (and NOT reaching it on cancel), and
+ * the "Load older emails" backfill affordance (anchor date + button
+ * only with local mail on a connected account, action wiring,
+ * imported-count / error feedback).
  */
 
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-// Mock the server action + router BEFORE importing the component.
+// Mock the server actions + router BEFORE importing the component.
 vi.mock("@/app/actions/email-accounts", () => ({
   disconnectEmailAccount: vi.fn(async () => ({ ok: true })),
+}));
+vi.mock("@/app/actions/email-sync", () => ({
+  backfillMyEmailAccount: vi.fn(async () => ({ ok: true, threadsSynced: 0 })),
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
 }));
 
 import { disconnectEmailAccount } from "@/app/actions/email-accounts";
+import { backfillMyEmailAccount } from "@/app/actions/email-sync";
 import {
   GmailIntegrationCard,
   type GmailAccountView,
 } from "./gmail-integration-card";
 
 const mockedDisconnect = vi.mocked(disconnectEmailAccount);
+const mockedBackfill = vi.mocked(backfillMyEmailAccount);
 
 beforeEach(() => {
   // Call history would otherwise leak across tests (the disconnect
   // test's call would satisfy the cancel test's not-called check's
   // inverse).
   mockedDisconnect.mockClear();
+  mockedBackfill.mockClear();
+  mockedBackfill.mockResolvedValue({ ok: true, threadsSynced: 0 });
 });
 
 const CONNECTED_ACCOUNT: GmailAccountView = {
@@ -43,6 +53,7 @@ const CONNECTED_ACCOUNT: GmailAccountView = {
   lastSyncLabel: "Jul 7, 2026, 9:14 AM",
   threadCount: 42,
   syncError: null,
+  oldestThreadLabel: "Apr 8, 2026",
 };
 
 function renderCard(overrides?: Partial<Parameters<typeof GmailIntegrationCard>[0]>) {
@@ -143,5 +154,68 @@ describe("GmailIntegrationCard", () => {
     await user.click(screen.getByText("Cancel"));
     expect(mockedDisconnect).not.toHaveBeenCalled();
     expect(screen.queryByText("Disconnect mailbox?")).not.toBeInTheDocument();
+  });
+});
+
+describe("Load older emails (backfill)", () => {
+  test("shows the oldest-thread anchor date next to the button", () => {
+    renderCard({ accounts: [CONNECTED_ACCOUNT] });
+    expect(screen.getByText("Oldest thread Apr 8, 2026")).toBeInTheDocument();
+    expect(screen.getByText("Load older emails")).toBeInTheDocument();
+  });
+
+  test("hidden when the account has no local threads to anchor on", () => {
+    renderCard({
+      accounts: [{ ...CONNECTED_ACCOUNT, oldestThreadLabel: null }],
+    });
+    expect(screen.queryByText("Load older emails")).not.toBeInTheDocument();
+  });
+
+  test("hidden on a disconnected account", () => {
+    renderCard({
+      accounts: [{ ...CONNECTED_ACCOUNT, syncStatus: "disconnected" }],
+    });
+    expect(screen.queryByText("Load older emails")).not.toBeInTheDocument();
+  });
+
+  test("click calls the action with the account id and reports the imported count", async () => {
+    const user = userEvent.setup();
+    mockedBackfill.mockResolvedValue({ ok: true, threadsSynced: 37 });
+    renderCard({ accounts: [CONNECTED_ACCOUNT] });
+
+    await user.click(screen.getByText("Load older emails"));
+
+    expect(mockedBackfill).toHaveBeenCalledExactlyOnceWith("acct-1");
+    await waitFor(() => {
+      expect(
+        screen.getByText("Imported 37 older threads.")
+      ).toBeInTheDocument();
+    });
+  });
+
+  test("reports when the window found nothing older", async () => {
+    const user = userEvent.setup();
+    renderCard({ accounts: [CONNECTED_ACCOUNT] });
+
+    await user.click(screen.getByText("Load older emails"));
+    await waitFor(() => {
+      expect(screen.getByText("No older emails found.")).toBeInTheDocument();
+    });
+  });
+
+  test("surfaces a failed backfill inline without losing the button", async () => {
+    const user = userEvent.setup();
+    mockedBackfill.mockResolvedValue({
+      ok: false,
+      threadsSynced: 0,
+      error: "Gmail is down",
+    });
+    renderCard({ accounts: [CONNECTED_ACCOUNT] });
+
+    await user.click(screen.getByText("Load older emails"));
+    await waitFor(() => {
+      expect(screen.getByText("Gmail is down")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Load older emails")).toBeInTheDocument();
   });
 });

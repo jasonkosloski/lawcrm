@@ -41,6 +41,7 @@ import type {
   GmailThread,
 } from "./gmail-message-parse";
 import {
+  backfillEmailAccount,
   FULL_SYNC_MAX_AGE_DAYS,
   FULL_SYNC_MAX_THREADS,
   GmailSyncError,
@@ -625,6 +626,182 @@ describe("failure semantics", () => {
     });
     expect(healed.syncError).toBeNull();
     expect(healed.syncStatus).toBe("connected");
+  });
+});
+
+// ── Older-mail backfill ──────────────────────────────────────────────────
+
+describe("backfillEmailAccount", () => {
+  /** Anchor with a sub-second remainder so the round-UP is pinned:
+   *  ceil(1_767_000_000_500 / 1000) = 1_767_000_001. */
+  const ANCHOR_MS = 1_767_000_000_500;
+
+  async function seedLocalAnchor(accountId: string): Promise<void> {
+    await prisma.emailThread.create({
+      data: {
+        accountId,
+        externalId: "t-anchor",
+        subject: "Oldest local",
+        lastMessageAt: new Date(ANCHOR_MS),
+      },
+    });
+  }
+
+  function olderThreads(): GmailThread[] {
+    // Fake list order is newest-first: anchor (already local), then
+    // two genuinely older threads.
+    return [
+      {
+        id: "t-anchor",
+        messages: [
+          gmailMsg({ id: "ma", threadId: "t-anchor", internalDate: ANCHOR_MS }),
+        ],
+      },
+      {
+        id: "t-old1",
+        messages: [
+          gmailMsg({
+            id: "mo1",
+            threadId: "t-old1",
+            subject: "Older 1",
+            internalDate: ANCHOR_MS - 86_400_000,
+          }),
+        ],
+      },
+      {
+        id: "t-old2",
+        messages: [
+          gmailMsg({
+            id: "mo2",
+            threadId: "t-old2",
+            subject: "Older 2",
+            internalDate: ANCHOR_MS - 2 * 86_400_000,
+          }),
+        ],
+      },
+    ];
+  }
+
+  it("walks one window below the oldest local thread (q=before:<epoch s, rounded up>)", async () => {
+    const accountId = await seedAccount();
+    await seedLocalAnchor(accountId);
+    installFakeGmail({ labels: [], threads: olderThreads() });
+
+    const result = await backfillEmailAccount(accountId);
+    expect(result).toMatchObject({
+      accountId,
+      ok: true,
+      threadsSynced: 2,
+      before: new Date(ANCHOR_MS),
+    });
+
+    // The list query anchors on epoch SECONDS, rounded up so the
+    // sub-second remainder can't skip mail.
+    const listCall = requestedPaths().find((p) =>
+      p.startsWith("/users/me/threads?")
+    );
+    expect(listCall).toContain(encodeURIComponent("before:1767000001"));
+    // No now-relative operator sneaks into an anchored window.
+    expect(listCall).not.toContain("newer_than");
+
+    // Already-local anchor thread was skipped WITHOUT a refetch…
+    expect(
+      requestedPaths().some((p) => p.includes("/users/me/threads/t-anchor"))
+    ).toBe(false);
+    // …and both older threads landed.
+    expect(await prisma.emailThread.count({ where: { accountId } })).toBe(3);
+
+    const account = await prisma.emailAccount.findUniqueOrThrow({
+      where: { id: accountId },
+    });
+    expect(account.threadsIndexed).toBe(3);
+    // Backfill stays out of the sync status machine.
+    expect(account.historyId).toBeNull();
+    expect(account.lastSyncAt).toBeNull();
+    expect(account.syncError).toBeNull();
+  });
+
+  it("is idempotent — re-running the same window imports nothing new", async () => {
+    const accountId = await seedAccount();
+    await seedLocalAnchor(accountId);
+    installFakeGmail({ labels: [], threads: olderThreads() });
+
+    await backfillEmailAccount(accountId);
+    const second = await backfillEmailAccount(accountId);
+
+    expect(second.ok).toBe(true);
+    expect(second.threadsSynced).toBe(0);
+    // Second call re-anchored at the NEW oldest thread (t-old2).
+    expect(second.before).toEqual(new Date(ANCHOR_MS - 2 * 86_400_000));
+    expect(await prisma.emailThread.count({ where: { accountId } })).toBe(3);
+    expect(await prisma.emailMessage.count()).toBe(2);
+  });
+
+  it("honors the per-call thread cap (newest-first within the window)", async () => {
+    const accountId = await seedAccount();
+    await seedLocalAnchor(accountId);
+    installFakeGmail({ labels: [], threads: olderThreads() });
+
+    const result = await backfillEmailAccount(accountId, { maxThreads: 1 });
+    expect(result.threadsSynced).toBe(1);
+
+    const externalIds = new Set(
+      (
+        await prisma.emailThread.findMany({
+          where: { accountId },
+          select: { externalId: true },
+        })
+      ).map((t) => t.externalId)
+    );
+    expect(externalIds.has("t-old1")).toBe(true); // newest of the window
+    expect(externalIds.has("t-old2")).toBe(false); // next click's window
+  });
+
+  it("no local threads → nothing to anchor on, no Gmail traffic", async () => {
+    const accountId = await seedAccount();
+    installFakeGmail({ labels: [], threads: olderThreads() });
+
+    const result = await backfillEmailAccount(accountId);
+    expect(result).toMatchObject({ ok: true, threadsSynced: 0, before: null });
+    expect(mockedFetch).not.toHaveBeenCalled();
+  });
+
+  it("GmailAuthError → account marked error, ok:false, no throw", async () => {
+    const accountId = await seedAccount();
+    await seedLocalAnchor(accountId);
+    mockedFetch.mockRejectedValue(
+      new GmailAuthError("Reconnect this mailbox.", accountId)
+    );
+
+    const result = await backfillEmailAccount(accountId);
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("Reconnect this mailbox.");
+
+    const account = await prisma.emailAccount.findUniqueOrThrow({
+      where: { id: accountId },
+    });
+    expect(account.syncStatus).toBe("error");
+    expect(account.syncError).toBe("Reconnect this mailbox.");
+  });
+
+  it("transient failure → syncError notes the backfill, error rethrown", async () => {
+    const accountId = await seedAccount();
+    await seedLocalAnchor(accountId);
+    installFakeGmail({
+      labels: [],
+      threads: [],
+      failWith: { pathPrefix: "/users/me/labels", status: 500 },
+    });
+
+    await expect(backfillEmailAccount(accountId)).rejects.toThrow(
+      GmailSyncError
+    );
+
+    const account = await prisma.emailAccount.findUniqueOrThrow({
+      where: { id: accountId },
+    });
+    expect(account.syncStatus).toBe("connected"); // NOT error
+    expect(account.syncError).toContain("Last backfill failed");
   });
 });
 

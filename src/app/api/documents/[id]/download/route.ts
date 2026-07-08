@@ -37,6 +37,7 @@ import {
   openReadStream,
   statFile,
 } from "@/lib/file-storage";
+import { isInlineSafeType } from "@/lib/inline-safe-types";
 import { resolveRangeHeader } from "./range";
 import type { Readable } from "node:stream";
 
@@ -52,39 +53,11 @@ export const dynamic = "force-dynamic";
 // no session to ride, so the redirect branch reuses this set purely
 // as a UX signal (inline-viewable vs force-download) — see ADR-015.
 //
-// This is an allowlist on purpose:
-// `Document.contentType` is the uploader's *client-declared* MIME
-// type (`file.type`, see `storeFile()` — the upload action validates
-// size only), so any user with upload access controls this string.
-// Serving attacker-declared `text/html` or `image/svg+xml` inline
-// would execute their markup on our origin for whoever clicks the
-// link — stored XSS riding a colleague's (possibly admin) session.
-// HTML and SVG are therefore deliberately absent; add new types only
-// if the browser can't execute script from them.
-//
-// The media + text entries exist for the discovery viewer: browsers
-// render video/audio/image/plain-text passively — no script context
-// is ever created for them, and `X-Content-Type-Options: nosniff`
-// (set on every response below) stops re-interpretation of the
-// bytes as anything active. text/plain and text/csv render as
-// inert text; markup inside them is displayed, not executed.
-const INLINE_SAFE_TYPES = new Set([
-  "application/pdf",
-  "image/png",
-  "image/jpeg",
-  "image/gif",
-  "image/webp",
-  "video/mp4",
-  "video/webm",
-  "video/quicktime",
-  "audio/mpeg",
-  "audio/mp4",
-  "audio/wav",
-  "audio/webm",
-  "audio/ogg",
-  "text/plain",
-  "text/csv",
-]);
+// The set itself (and the full XSS reasoning: uploader-controlled
+// `Document.contentType`, deliberately-absent HTML/SVG) lives in
+// `src/lib/inline-safe-types.ts` — imported above — SHARED with the
+// email-attachment download route so the two allowlists can never
+// drift.
 
 export async function GET(
   req: NextRequest,
@@ -138,11 +111,9 @@ export async function GET(
   }
 
   const contentType = doc.contentType ?? "application/octet-stream";
-  // Compare on the bare media type — a stored value like
-  // "text/html; charset=utf-8" must not slip past the allowlist.
-  const inlineSafe = INLINE_SAFE_TYPES.has(
-    contentType.split(";")[0].trim().toLowerCase()
-  );
+  // Bare-media-type comparison lives in the shared predicate — a
+  // stored "text/html; charset=utf-8" must not slip past.
+  const inlineSafe = isInlineSafeType(contentType);
 
   // ── Blob-stored document → 302 to the blob CDN ─────────────────
   // Range/seeking is the CDN's job from here; we never proxy the

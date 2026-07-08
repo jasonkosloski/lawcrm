@@ -56,6 +56,22 @@ export default async function IntegrationsSettingsPage({
     },
   });
 
+  // Oldest local thread per account — anchors the "Load older
+  // emails" backfill button (each click walks one window below it).
+  const oldestByAccount = new Map<string, Date>();
+  if (accounts.length > 0) {
+    const oldest = await prisma.emailThread.groupBy({
+      by: ["accountId"],
+      where: { accountId: { in: accounts.map((a) => a.id) } },
+      _min: { lastMessageAt: true },
+    });
+    for (const o of oldest) {
+      if (o._min.lastMessageAt) {
+        oldestByAccount.set(o.accountId, o._min.lastMessageAt);
+      }
+    }
+  }
+
   return (
     <div className="max-w-3xl space-y-6">
       <div>
@@ -79,6 +95,9 @@ export default async function IntegrationsSettingsPage({
             : null,
           threadCount: a._count.threads,
           syncError: a.syncError,
+          oldestThreadLabel: oldestByAccount.has(a.id)
+            ? formatDate(oldestByAccount.get(a.id)!, "medium", tz)
+            : null,
         }))}
       />
 

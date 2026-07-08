@@ -64,6 +64,7 @@ function parseEmailFilter(
     v === "inbox" ||
     v === "unread" ||
     v === "starred" ||
+    v === "archived" ||
     v === "unfiled" ||
     v === "filed" ||
     v === "untimed" ||

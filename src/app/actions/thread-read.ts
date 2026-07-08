@@ -16,6 +16,14 @@
  * Both actions no-op cleanly when the thread is already read — no
  * writes, no revalidations — because the island fires on every open.
  *
+ * Gmail writeback (Email v1.1): after the local flip, email threads
+ * that came from Gmail (externalId set) push a `remove UNREAD` label
+ * modify so the provider agrees — otherwise the next resync would
+ * flip the thread back to unread (the double-inbox problem). The
+ * writeback is failure-isolated (`writebackGmailThread` never
+ * rejects; auth errors land on account.syncError, transients warn)
+ * and the no-op path stays writeback-free.
+ *
  * Auth: session gate only (`getCurrentUserId()`), no permission-
  * catalog key — mirroring notifications' `markNotificationRead`.
  * Read-state is inherent to viewing: anyone who can open the reader
@@ -32,6 +40,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { writebackGmailThread } from "@/lib/google/gmail-writeback";
 
 export async function markEmailThreadRead(
   threadId: string
@@ -51,8 +60,16 @@ export async function markEmailThreadRead(
 
   const thread = await prisma.emailThread.findUnique({
     where: { id: threadId },
-    select: { matterId: true },
+    select: { matterId: true, accountId: true, externalId: true },
   });
+  // Provider writeback — only for threads that exist at Gmail
+  // (externalId). Awaiting is safe: the wrapper never rejects, and
+  // token-less (disconnected) accounts skip inside it.
+  if (thread?.externalId) {
+    await writebackGmailThread(thread.accountId, thread.externalId, {
+      removeLabelIds: ["UNREAD"],
+    });
+  }
   revalidateUnreadSurfaces(thread?.matterId ?? null);
   return { ok: true };
 }

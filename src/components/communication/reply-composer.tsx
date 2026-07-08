@@ -6,7 +6,9 @@
  * Collapsed: "Reply" / "Reply all" affordances (Reply all only when
  * it would actually add recipients). Expanded: server-derived
  * recipients shown read-only with an Edit toggle (comma-separated,
- * client-validated), plain-text body, Send with pending state.
+ * client-validated), rich-text body (shared Tiptap editor, Email
+ * v1.1 — HTML goes up as `bodyHtml` for server-side sanitizing +
+ * an `htmlToText` downgrade as `bodyText`), Send with pending state.
  *
  * Draft contract: the body survives mode switches, collapse, and —
  * critically — send failures; it only clears after a successful
@@ -25,11 +27,11 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, Reply, ReplyAll } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  TextField,
-  TextareaField,
-} from "@/components/matters/captures/primary-fields";
-import { parseAddressList, plainTextToHtml } from "@/lib/google/mime";
+import { TextField } from "@/components/matters/captures/primary-fields";
+import { RichTextEditor } from "@/components/shared/rich-text-editor";
+import { parseAddressList } from "@/lib/google/mime";
+import { htmlToText } from "@/lib/html-to-text";
+import { getEmailSignature } from "@/lib/email-signature";
 import { replyToThread } from "@/app/actions/email-send";
 
 export type ReplyRecipient = { name?: string; email: string };
@@ -61,7 +63,9 @@ export function ReplyComposer({
   const [editing, setEditing] = useState(false);
   const [toInput, setToInput] = useState("");
   const [ccInput, setCcInput] = useState("");
-  const [body, setBody] = useState("");
+  // Editor HTML — survives collapse/mode switches (the editor
+  // re-mounts from it) and only resets on a successful send.
+  const [body, setBody] = useState(() => getEmailSignature() ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -83,6 +87,10 @@ export function ReplyComposer({
     setError(null);
     // body intentionally NOT reset — mode switches keep the draft.
   };
+
+  // Empty-document guard ("<p></p>" scaffolding) + the wire's
+  // text/plain part in one.
+  const bodyText = htmlToText(body);
 
   const handleSend = (): void => {
     let overrides: { to?: string[]; cc?: string[] } = {};
@@ -107,13 +115,15 @@ export function ReplyComposer({
 
     startTransition(async () => {
       const result = await replyToThread(threadId, {
-        bodyText: body,
-        bodyHtml: plainTextToHtml(body),
+        // Editor HTML goes up as-is — the action sanitizes it
+        // (note profile) before it reaches the MIME builder.
+        bodyText,
+        bodyHtml: body,
         replyAll: mode === "replyAll",
         ...overrides,
       });
       if (result.ok) {
-        setBody("");
+        setBody(getEmailSignature() ?? "");
         setMode(null);
         setEditing(false);
         router.refresh();
@@ -227,12 +237,10 @@ export function ReplyComposer({
         </div>
 
         <div className="px-3 sm:px-4 py-3 flex flex-col gap-2">
-          <TextareaField
-            name="body"
-            value={body}
+          <RichTextEditor
+            initialHTML={body}
             onChange={setBody}
             placeholder="Write your reply…"
-            rows={5}
           />
           {error && <div className="text-2xs text-warn">{error}</div>}
           <div className="flex items-center justify-end gap-2">
@@ -243,7 +251,7 @@ export function ReplyComposer({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isPending || !body.trim()}>
+            <Button type="submit" disabled={isPending || !bodyText.trim()}>
               {isPending ? "Sending…" : "Send"}
             </Button>
           </div>

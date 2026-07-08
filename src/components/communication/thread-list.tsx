@@ -22,6 +22,7 @@ import type {
 } from "@/lib/queries/communication";
 import { MailboxDrawerTrigger } from "./mailbox-drawer";
 import { ComposeEmailLauncher } from "./compose-email-launcher";
+import { ThreadRowActions } from "./thread-row-actions";
 
 function rowHref(
   threadId: string,
@@ -40,6 +41,7 @@ const FILTER_LABEL: Record<CommunicationFilter, string> = {
   all: "All mail",
   unread: "Unread",
   starred: "Starred",
+  archived: "Archived",
   unfiled: "Unfiled",
   filed: "On a matter",
   untimed: "Untimed (mine)",
@@ -109,7 +111,10 @@ export function ThreadList({
           </li>
         ) : (
           threads.map((t) => (
-            <li key={t.id}>
+            // `relative group` hosts the hover-reveal star/archive
+            // cluster, which must be a SIBLING of the Link (no
+            // interactive content inside an anchor).
+            <li key={t.id} className="relative group">
               <Link
                 href={rowHref(t.id, filter, matterId ?? null)}
                 scroll={false}
@@ -189,6 +194,8 @@ export function ThreadList({
                         className="text-ink-4 shrink-0"
                       />
                     )}
+                    {/* Static starred indicator (display only — the
+                        toggle lives in the hover cluster). */}
                     {t.isStarred && (
                       <Star
                         size={11}
@@ -198,6 +205,11 @@ export function ThreadList({
                   </span>
                 </div>
               </Link>
+              <ThreadRowActions
+                threadId={t.id}
+                isStarred={t.isStarred}
+                isArchived={t.isArchived}
+              />
             </li>
           ))
         )}

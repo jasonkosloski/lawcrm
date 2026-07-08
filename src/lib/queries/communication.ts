@@ -20,6 +20,9 @@ export type CommunicationFilter =
   | "all"
   | "unread"
   | "starred"
+  /** Threads archived out of the working inbox (isArchived) — the
+   *  counterpart view now that the list rows can archive. */
+  | "archived"
   | "unfiled"
   /** Threads associated with any matter (matterId IS NOT NULL). */
   | "filed"
@@ -33,6 +36,8 @@ export type ThreadListRow = {
   snippet: string | null;
   isRead: boolean;
   isStarred: boolean;
+  /** Drives the row's archive/unarchive affordance. */
+  isArchived: boolean;
   hasAttachments: boolean;
   messageCount: number;
   lastMessageAt: Date;
@@ -59,6 +64,7 @@ export async function listThreads(
   };
   if (filter === "unread") where.isRead = false;
   if (filter === "starred") where.isStarred = true;
+  if (filter === "archived") where.isArchived = true;
   if (filter === "unfiled") where.matterId = null;
   if (filter === "filed") where.matterId = { not: null };
   if (filter === "untimed") {
@@ -105,6 +111,7 @@ export async function listThreads(
     snippet: t.snippet,
     isRead: t.isRead,
     isStarred: t.isStarred,
+    isArchived: t.isArchived,
     hasAttachments: t.hasAttachments,
     messageCount: t.messageCount,
     lastMessageAt: t.lastMessageAt,
@@ -274,6 +281,7 @@ export async function listThreadsForMatter(
     snippet: t.snippet,
     isRead: t.isRead,
     isStarred: t.isStarred,
+    isArchived: t.isArchived,
     hasAttachments: t.hasAttachments,
     messageCount: t.messageCount,
     lastMessageAt: t.lastMessageAt,
@@ -371,6 +379,7 @@ export async function listThreadsForEmail(
       snippet: t.snippet,
       isRead: t.isRead,
       isStarred: t.isStarred,
+      isArchived: t.isArchived,
       hasAttachments: t.hasAttachments,
       messageCount: t.messageCount,
       lastMessageAt: t.lastMessageAt,
@@ -386,6 +395,7 @@ export type CommunicationCounts = {
   all: number;
   unread: number;
   starred: number;
+  archived: number;
   unfiled: number;
   filed: number;
   untimed: number;
@@ -395,7 +405,7 @@ export async function getCommunicationCounts(): Promise<CommunicationCounts> {
   const userId = await getCurrentUserId();
   const base = { account: { userId } };
   const now = new Date();
-  const [inbox, all, unread, starred, unfiled, filed, untimed] =
+  const [inbox, all, unread, starred, archived, unfiled, filed, untimed] =
     await Promise.all([
       prisma.emailThread.count({
         where: {
@@ -407,6 +417,7 @@ export async function getCommunicationCounts(): Promise<CommunicationCounts> {
       prisma.emailThread.count({ where: base }),
       prisma.emailThread.count({ where: { ...base, isRead: false } }),
       prisma.emailThread.count({ where: { ...base, isStarred: true } }),
+      prisma.emailThread.count({ where: { ...base, isArchived: true } }),
       prisma.emailThread.count({ where: { ...base, matterId: null } }),
       prisma.emailThread.count({ where: { ...base, matterId: { not: null } } }),
       prisma.emailThread.count({
@@ -418,7 +429,7 @@ export async function getCommunicationCounts(): Promise<CommunicationCounts> {
         },
       }),
     ]);
-  return { inbox, all, unread, starred, unfiled, filed, untimed };
+  return { inbox, all, unread, starred, archived, unfiled, filed, untimed };
 }
 
 /** Compact matter row used by the file-to-matter picker on the

@@ -11,9 +11,12 @@
  *
  * Draft preservation is a hard contract: fields only reset after a
  * successful send — closing the dialog or hitting a send error keeps
- * everything typed. Body is plain text v1, sent as text +
- * minimal-HTML paragraphs (rich text + attachments are documented
- * follow-ups in FEATURES).
+ * everything typed. Body is rich text (Email v1.1): the shared
+ * Tiptap editor holds HTML; on send it goes up as `bodyHtml` (the
+ * server action sanitizes it before the MIME builder) plus an
+ * `htmlToText` downgrade as `bodyText`. Attachments + per-user
+ * signatures are documented follow-ups in FEATURES —
+ * `getEmailSignature()` is the seam for the latter.
  */
 
 "use client";
@@ -34,9 +37,11 @@ import { Button } from "@/components/ui/button";
 import {
   SelectField,
   TextField,
-  TextareaField,
 } from "@/components/matters/captures/primary-fields";
-import { parseAddressList, plainTextToHtml } from "@/lib/google/mime";
+import { RichTextEditor } from "@/components/shared/rich-text-editor";
+import { parseAddressList } from "@/lib/google/mime";
+import { htmlToText } from "@/lib/html-to-text";
+import { getEmailSignature } from "@/lib/email-signature";
 import { sendEmail } from "@/app/actions/email-send";
 
 export type SendableEmailAccount = {
@@ -55,12 +60,14 @@ export function ComposeEmailButton({
   const router = useRouter();
 
   // Draft state lives at THIS level so closing the dialog never
-  // loses it — reset happens only on a successful send.
+  // loses it — reset happens only on a successful send. `body` is
+  // the editor's HTML; the editor re-mounts from it when the dialog
+  // reopens (it's uncontrolled after mount).
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [to, setTo] = useState("");
   const [cc, setCc] = useState("");
   const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
+  const [body, setBody] = useState(() => getEmailSignature() ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -82,9 +89,14 @@ export function ComposeEmailButton({
     setTo("");
     setCc("");
     setSubject("");
-    setBody("");
+    setBody(getEmailSignature() ?? "");
     setError(null);
   };
+
+  // The editor emits tag scaffolding ("<p></p>") for an empty
+  // document — gate Send on the visible text, which doubles as the
+  // wire's text/plain part.
+  const bodyText = htmlToText(body);
 
   const handleSend = (): void => {
     const toParsed = parseAddressList(to);
@@ -108,8 +120,10 @@ export function ComposeEmailButton({
         to: toParsed.addresses,
         cc: ccParsed.addresses,
         subject: subject.trim(),
-        bodyText: body,
-        bodyHtml: plainTextToHtml(body),
+        // Editor HTML goes up as-is — the action sanitizes it
+        // (note profile) before it reaches the MIME builder.
+        bodyText,
+        bodyHtml: body,
       });
       if (result.ok) {
         resetDraft();
@@ -153,8 +167,7 @@ export function ComposeEmailButton({
                   (<span className="text-ink-2">{accounts[0].emailAddress}</span>)
                 </>
               ) : null}
-              . Plain text for now — attachments and formatting are on
-              the way.
+              . Attachments are on the way.
             </DialogDescription>
           </DialogHeader>
 
@@ -200,12 +213,10 @@ export function ComposeEmailButton({
               onChange={setSubject}
               placeholder="Subject"
             />
-            <TextareaField
-              name="body"
-              value={body}
+            <RichTextEditor
+              initialHTML={body}
               onChange={setBody}
               placeholder="Write your email…"
-              rows={8}
             />
 
             {error && <div className="text-2xs text-warn">{error}</div>}
@@ -220,7 +231,7 @@ export function ComposeEmailButton({
               </Button>
               <Button
                 type="submit"
-                disabled={isPending || !to.trim() || !body.trim()}
+                disabled={isPending || !to.trim() || !bodyText.trim()}
               >
                 {isPending ? "Sending…" : "Send"}
               </Button>

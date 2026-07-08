@@ -1,12 +1,19 @@
 /**
  * ReplyComposer tests — collapsed→expanded modes, server-derived
  * recipient prefill (read-only until Edit), reply vs reply-all
- * action wiring (overrides ONLY when edited), and the
- * draft-preservation contract on failure.
+ * action wiring (overrides ONLY when edited; rich HTML body +
+ * htmlToText downgrade), and the draft-preservation contract on
+ * failure.
+ *
+ * The shared RichTextEditor is mocked (Tiptap needs real
+ * contenteditable/Selection APIs happy-dom lacks) with a stub that
+ * preserves its contract: uncontrolled after mount, seeded from
+ * `initialHTML`, emits an HTML string via `onChange` — so the
+ * composer's own state/wiring/draft logic is tested for real.
  */
 
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ReplyComposer, type ReplyDefaults } from "./reply-composer";
@@ -14,6 +21,25 @@ import { ReplyComposer, type ReplyDefaults } from "./reply-composer";
 vi.mock("@/app/actions/email-send", () => ({
   sendEmail: vi.fn(),
   replyToThread: vi.fn(),
+}));
+
+vi.mock("@/components/shared/rich-text-editor", () => ({
+  RichTextEditor: ({
+    initialHTML,
+    onChange,
+    placeholder,
+  }: {
+    initialHTML?: string;
+    onChange: (html: string) => void;
+    placeholder?: string;
+  }) => (
+    <textarea
+      name="body"
+      defaultValue={initialHTML ?? ""}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  ),
 }));
 
 const refresh = vi.fn();
@@ -94,11 +120,35 @@ describe("ReplyComposer — prefill + wiring", () => {
     await waitFor(() =>
       expect(mockedReply).toHaveBeenCalledWith("t1", {
         bodyText: "Thanks!",
-        bodyHtml: "<p>Thanks!</p>",
+        // The stub editor emits its raw value as HTML.
+        bodyHtml: "Thanks!",
         replyAll: false,
       })
     );
     await waitFor(() => expect(refresh).toHaveBeenCalled());
+  });
+
+  test("rich body round-trip: editor HTML up as bodyHtml, htmlToText as bodyText", async () => {
+    const user = setupUser();
+    mockedReply.mockResolvedValue({ ok: true, threadId: "t1" });
+    renderComposer();
+
+    await user.click(screen.getByRole("button", { name: /^reply$/i }));
+    const richHtml =
+      '<p>Thanks <em>so much</em>!</p><ol><li><p>Filed</p></li><li><p>Served — see <a href="https://court.gov/x">the order</a></p></li></ol>';
+    fireEvent.change(bodyField(), { target: { value: richHtml } });
+    await user.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() =>
+      expect(mockedReply).toHaveBeenCalledWith(
+        "t1",
+        expect.objectContaining({
+          bodyHtml: richHtml, // raw — sanitizing is the action's job
+          bodyText:
+            "Thanks so much!\n\n1. Filed\n2. Served — see the order (https://court.gov/x)",
+        })
+      )
+    );
   });
 
   test("Reply all passes replyAll: true and previews the wider list", async () => {

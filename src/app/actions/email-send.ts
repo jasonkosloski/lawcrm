@@ -11,6 +11,17 @@
  * expected failures. `GmailAuthError` surfaces its own
  * user-presentable "reconnect from Settings → Integrations" message.
  *
+ * Outbound HTML boundary (Email v1.1): the composers send the rich
+ * editor's raw HTML; it is SANITIZED HERE, server-side, before it
+ * reaches the MIME builder — never trust the client. The profile is
+ * `sanitizeUserHtml` (note profile): it's the exact allowlist for
+ * our own Tiptap editor's output and stricter than the email
+ * profile, which exists for hostile INBOUND mail and additionally
+ * tolerates div-soup/inline styles/data-images a hostile client
+ * could otherwise smuggle into mail wearing our From header. If
+ * sanitizing leaves nothing, the text/plain body is upgraded via
+ * `plainTextToHtml` (also sanitizer-shaped by construction).
+ *
  * Local persistence after a successful send: the Gmail response
  * carries `{ id, threadId }`; we upsert the sent message + its
  * thread against the SAME unique keys the sync engine converges on
@@ -35,6 +46,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
 import { requirePermission } from "@/lib/permission-check";
+import { sanitizeUserHtml } from "@/lib/sanitize-html";
 import { GmailAuthError, gmailFetch } from "@/lib/google/gmail-client";
 import { GoogleOAuthError } from "@/lib/google/oauth";
 import {
@@ -119,13 +131,17 @@ export async function sendEmail(
 
   const subject = input.subject.trim();
   const sentAt = new Date();
+  // Outbound boundary: strip anything the note profile disallows
+  // BEFORE the MIME builder sees it (see module header).
+  const bodyHtml =
+    sanitizeUserHtml(input.bodyHtml) || plainTextToHtml(input.bodyText);
   const mime = buildMimeMessage({
     from: { name: account.user.name, email: account.emailAddress },
     to: to.addresses,
     cc: cc.addresses,
     subject,
     text: input.bodyText,
-    html: input.bodyHtml.trim() || plainTextToHtml(input.bodyText),
+    html: bodyHtml,
     date: sentAt,
   });
 
@@ -143,6 +159,7 @@ export async function sendEmail(
     fromEmail: account.emailAddress,
     to: to.addresses,
     cc: cc.addresses,
+    bodyHtml,
     bodyText: input.bodyText,
     sentAt,
   });
@@ -237,6 +254,9 @@ export async function replyToThread(
 
   const subject = buildReplySubject(thread.subject);
   const sentAt = new Date();
+  // Same outbound sanitize boundary as sendEmail (module header).
+  const bodyHtml =
+    sanitizeUserHtml(input.bodyHtml) || plainTextToHtml(input.bodyText);
   const mime = buildMimeMessage({
     from: {
       name: thread.account.user.name,
@@ -246,7 +266,7 @@ export async function replyToThread(
     cc,
     subject,
     text: input.bodyText,
-    html: input.bodyHtml.trim() || plainTextToHtml(input.bodyText),
+    html: bodyHtml,
     date: sentAt,
     // No In-Reply-To/References — Message-ID headers aren't stored
     // locally (see module header). Gmail threads via `threadId`.
@@ -269,6 +289,7 @@ export async function replyToThread(
     fromEmail: thread.account.emailAddress,
     to,
     cc,
+    bodyHtml,
     bodyText: input.bodyText,
     sentAt,
     // Prefer appending to the thread the user replied from when
@@ -395,6 +416,11 @@ function serializeRecipients(list: MimeAddress[]): string {
  *   3. Thread rollups (messageCount / lastMessageAt / snippet)
  *      recompute from actual rows so repeated writes converge.
  *
+ * The stored message body is the SANITIZED HTML that went on the
+ * wire — that's the contract `src/lib/email-body.ts` documents
+ * (HTML bodies are safe-by-construction for the reader's
+ * dangerouslySetInnerHTML path). Snippets stay plain text.
+ *
  * Unique-collision races with a concurrently-running sync fall back
  * to a refetch — last writer wins on the rollups, both point at the
  * same row.
@@ -408,6 +434,9 @@ async function persistSentMessage(opts: {
   fromEmail: string;
   to: MimeAddress[];
   cc: MimeAddress[];
+  /** Already-sanitized HTML (the wire body) — stored verbatim. */
+  bodyHtml: string;
+  /** Plain-text body — snippet source only. */
   bodyText: string;
   sentAt: Date;
   localThreadId?: string;
@@ -488,7 +517,7 @@ async function persistSentMessage(opts: {
       fromEmail: opts.fromEmail,
       toRecipients: serializeRecipients(opts.to),
       ccRecipients: opts.cc.length > 0 ? serializeRecipients(opts.cc) : null,
-      body: opts.bodyText,
+      body: opts.bodyHtml,
       sentAt: opts.sentAt,
     },
     // Sync may later enrich this row (clean headers, HTML body);

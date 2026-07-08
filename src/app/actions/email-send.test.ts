@@ -6,10 +6,12 @@
  *
  * Covers: permission gate wiring, ownership scoping (another user's
  * account/thread never resolves), recipient validation, MIME payload
- * shape on the wire (decoded from the raw field), local upsert
- * unique-key convergence with the sync engine's row shape, reply
- * recipient derivation (reply vs reply-all vs overrides),
- * draft-preserving failure paths (auth / transient / HTTP).
+ * shape on the wire (decoded from the raw field), OUTBOUND HTML
+ * SANITIZATION (hostile bodyHtml never reaches the wire or the
+ * local row — Email v1.1), local upsert unique-key convergence with
+ * the sync engine's row shape, reply recipient derivation (reply vs
+ * reply-all vs overrides), draft-preserving failure paths
+ * (auth / transient / HTTP).
  */
 
 import { beforeEach, describe, expect, test, vi } from "vitest";
@@ -126,6 +128,17 @@ function sentPayload(call = 0): { raw: string; threadId?: string; mime: string }
     ...body,
     mime: Buffer.from(body.raw, "base64url").toString("utf-8"),
   };
+}
+
+/** Decode the text/html part out of the wire MIME (base64, 76-col
+ *  wrapped, terminated by the next boundary line). */
+function wireHtml(mime: string): string {
+  const idx = mime.indexOf("Content-Type: text/html");
+  expect(idx).toBeGreaterThan(-1);
+  const start = mime.indexOf("\r\n\r\n", idx) + 4;
+  const end = mime.indexOf("\r\n--", start);
+  const b64 = mime.slice(start, end).replace(/\r\n/g, "");
+  return Buffer.from(b64, "base64").toString("utf-8");
 }
 
 async function seedActor(): Promise<{ userId: string; firmId: string }> {
@@ -326,6 +339,70 @@ describe("sendEmail — wire + local upsert", () => {
   });
 });
 
+describe("sendEmail — outbound HTML sanitization (Email v1.1)", () => {
+  test("hostile bodyHtml is sanitized BEFORE the MIME builder — nothing dangerous on the wire", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    mockedGmailFetch.mockResolvedValue(gmailOk());
+
+    await sendEmail(accountId, {
+      ...BASE_SEND,
+      bodyHtml:
+        '<p>Hi</p><script>alert(1)</script>' +
+        '<p onclick="steal()">Click <a href="javascript:alert(2)">here</a></p>' +
+        '<img src="https://evil.example/pixel.png" onerror="alert(3)">' +
+        '<iframe src="https://evil.example"></iframe>' +
+        '<p style="position:fixed">styled</p>',
+    });
+
+    const html = wireHtml(sentPayload().mime);
+    expect(html).toContain("<p>Hi</p>");
+    expect(html).toContain("styled"); // text survives, style attr doesn't
+    expect(html).not.toContain("<script");
+    expect(html).not.toContain("alert(1)"); // discard mode drops contents
+    expect(html).not.toContain("onclick");
+    expect(html).not.toContain("onerror");
+    expect(html).not.toContain("javascript:");
+    expect(html).not.toContain("<img");
+    expect(html).not.toContain("<iframe");
+    expect(html).not.toContain("style=");
+  });
+
+  test("editor-shaped rich HTML passes through intact and persists as the local body", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    mockedGmailFetch.mockResolvedValue(gmailOk("gm-9", "gt-9"));
+
+    const rich =
+      "<p>Hi <strong>Alice</strong>,</p><ul><li><p>One</p></li><li><p>Two</p></li></ul>";
+    await sendEmail(accountId, { ...BASE_SEND, bodyHtml: rich });
+
+    expect(wireHtml(sentPayload().mime)).toBe(rich);
+
+    // Local copy stores the sanitized wire HTML (email-body.ts
+    // contract: HTML bodies are safe-by-construction), snippet
+    // stays plain text.
+    const msg = await prisma.emailMessage.findFirst();
+    expect(msg?.body).toBe(rich);
+    const thread = await prisma.emailThread.findFirst();
+    expect(thread?.snippet).toBe("Hi Alice, See attached.");
+  });
+
+  test("bodyHtml that sanitizes to nothing falls back to paragraphed bodyText", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    mockedGmailFetch.mockResolvedValue(gmailOk());
+
+    await sendEmail(accountId, {
+      ...BASE_SEND,
+      bodyText: "Hi Alice",
+      bodyHtml: "<script>alert(1)</script>",
+    });
+
+    expect(wireHtml(sentPayload().mime)).toBe("<p>Hi Alice</p>");
+  });
+});
+
 describe("sendEmail — failure paths preserve the draft contract", () => {
   test("GmailAuthError → its reconnect message, no local rows", async () => {
     const { userId } = await seedActor();
@@ -503,6 +580,38 @@ describe("replyToThread — recipient derivation on the wire", () => {
     const result = await replyToThread(threadId, BASE_REPLY);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toMatch(/edit the recipients/i);
+  });
+});
+
+describe("replyToThread — outbound HTML sanitization (Email v1.1)", () => {
+  test("hostile bodyHtml is sanitized on the reply wire too", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    const { threadId } = await seedThread({ accountId });
+    await seedMessage({
+      threadId,
+      fromEmail: "alice@example.com",
+      to: [{ email: "me@firm.com" }],
+    });
+    mockedGmailFetch.mockResolvedValue(gmailOk("gm-2", "gt-1"));
+
+    await replyToThread(threadId, {
+      ...BASE_REPLY,
+      bodyHtml:
+        '<p>Done.</p><script>alert(1)</script><img src="https://evil.example/p.png">',
+    });
+
+    const html = wireHtml(sentPayload().mime);
+    expect(html).toContain("<p>Done.</p>");
+    expect(html).not.toContain("<script");
+    expect(html).not.toContain("alert(1)");
+    expect(html).not.toContain("<img");
+
+    // The persisted reply body is the sanitized HTML, not the input.
+    const msg = await prisma.emailMessage.findFirst({
+      where: { fromEmail: "me@firm.com" },
+    });
+    expect(msg?.body).toBe("<p>Done.</p>");
   });
 });
 

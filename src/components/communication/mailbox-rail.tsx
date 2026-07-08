@@ -7,7 +7,8 @@
  * whole thing is deep-linkable and back-button-honest.
  *
  * Three sections:
- *   - Mailboxes — flat filters: All / Unread / Starred / Untimed
+ *   - Mailboxes — flat filters: All / Unread / Starred / Archived /
+ *     Untimed
  *   - By matter — Filed / Unfiled
  *   - Pinned matters — one entry per pinned matter with email count
  */
@@ -43,6 +44,9 @@ const MAILBOX_ITEMS: RailItem[] = [
   { filter: "all", label: "All mail", icon: Layers },
   { filter: "unread", label: "Unread", icon: MailOpen },
   { filter: "starred", label: "Starred", icon: Star },
+  // Where rows archived from the list land — pairs with the archive
+  // affordance on thread rows (Email v1.1).
+  { filter: "archived", label: "Archived", icon: Archive },
   { filter: "untimed", label: "Untimed (mine)", icon: Clock },
 ];
 

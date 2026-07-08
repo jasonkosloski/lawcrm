@@ -23,7 +23,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { gmailFetch } from "@/lib/google/gmail-client";
 import { prisma } from "@/lib/prisma";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
-import { syncMyEmailAccounts } from "./email-sync";
+import { backfillMyEmailAccount, syncMyEmailAccounts } from "./email-sync";
 
 const mockedGetUser = vi.mocked(getCurrentUserId);
 const mockedRevalidate = vi.mocked(revalidatePath);
@@ -105,5 +105,95 @@ describe("syncMyEmailAccounts", () => {
     const res = await syncMyEmailAccounts();
     expect(res.ok).toBe(false);
     expect(res.results[0]).toMatchObject({ ok: false, error: "Gmail is down" });
+  });
+});
+
+describe("backfillMyEmailAccount", () => {
+  /** One local thread so the backfill has an anchor; the fake Gmail
+   *  list then serves one OLDER thread to import. */
+  async function seedAnchoredMailbox(ownerId: string): Promise<string> {
+    const accountId = await seedAccount(ownerId, "me@gmail.com");
+    await prisma.emailThread.create({
+      data: {
+        accountId,
+        externalId: "t-anchor",
+        subject: "Oldest local",
+        lastMessageAt: new Date(1_767_000_000_000),
+      },
+    });
+    return accountId;
+  }
+
+  function installOlderThread(): void {
+    const older = {
+      id: "t-older",
+      messages: [
+        {
+          id: "m-older",
+          threadId: "t-older",
+          labelIds: ["INBOX"],
+          snippet: "older mail",
+          internalDate: String(1_767_000_000_000 - 86_400_000),
+          payload: {
+            mimeType: "text/plain",
+            headers: [
+              { name: "From", value: "Jane <jane@x.co>" },
+              { name: "To", value: "me@gmail.com" },
+              { name: "Subject", value: "Older thread" },
+            ],
+            body: {
+              data: Buffer.from("hi", "utf8").toString("base64url"),
+            },
+          },
+        },
+      ],
+    };
+    mockedFetch.mockImplementation(async (_accountId, path) => {
+      const body = path.includes("/labels")
+        ? { labels: [] }
+        : path.includes("/threads/t-older")
+          ? older
+          : path.includes("/threads?")
+            ? { threads: [{ id: "t-anchor" }, { id: "t-older" }] }
+            : {};
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+  }
+
+  it("imports the next older window for the caller's own account and revalidates", async () => {
+    const accountId = await seedAnchoredMailbox(userId);
+    installOlderThread();
+
+    const res = await backfillMyEmailAccount(accountId);
+    expect(res).toEqual({ ok: true, threadsSynced: 1 });
+
+    expect(
+      await prisma.emailThread.count({
+        where: { accountId, externalId: "t-older" },
+      })
+    ).toBe(1);
+    expect(mockedRevalidate).toHaveBeenCalledWith("/communication");
+    expect(mockedRevalidate).toHaveBeenCalledWith("/settings/integrations");
+  });
+
+  it("refuses another user's accountId without touching Google", async () => {
+    const theirAccount = await seedAnchoredMailbox(otherUserId);
+
+    const res = await backfillMyEmailAccount(theirAccount);
+    expect(res).toEqual({
+      ok: false,
+      threadsSynced: 0,
+      error: "Email account not found.",
+    });
+    expect(mockedFetch).not.toHaveBeenCalled();
+    expect(mockedRevalidate).not.toHaveBeenCalled();
+  });
+
+  it("catches transient engine failures into {ok:false, error}", async () => {
+    const accountId = await seedAnchoredMailbox(userId);
+    mockedFetch.mockRejectedValue(new Error("Gmail is down"));
+
+    const res = await backfillMyEmailAccount(accountId);
+    expect(res).toMatchObject({ ok: false, error: "Gmail is down" });
   });
 });

@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { formatRelative } from "@/lib/format-date";
 import { Card } from "@/components/ui/card";
 import type { ThreadListRow } from "@/lib/queries/communication";
+import { ThreadRowActions } from "./thread-row-actions";
 
 const defaultThreadHref = (id: string): string =>
   `/communication?thread=${id}`;
@@ -63,7 +64,9 @@ export function EmbeddedThreadList({
         {threads.map((t) => {
           const isSelected = t.id === selectedThreadId;
           return (
-            <li key={t.id}>
+            // `relative group` hosts the hover-reveal star/archive
+            // cluster (sibling of the Link — see ThreadRowActions).
+            <li key={t.id} className="relative group">
               <Link
                 href={threadHref(t.id)}
                 scroll={false}
@@ -126,6 +129,8 @@ export function EmbeddedThreadList({
                     {t.hasAttachments && (
                       <Paperclip size={11} className="text-ink-4 shrink-0" />
                     )}
+                    {/* Display-only star; the toggle lives in the
+                        hover cluster. */}
                     {t.isStarred && (
                       <Star
                         size={11}
@@ -135,6 +140,11 @@ export function EmbeddedThreadList({
                   </span>
                 </div>
               </Link>
+              <ThreadRowActions
+                threadId={t.id}
+                isStarred={t.isStarred}
+                isArchived={t.isArchived}
+              />
             </li>
           );
         })}
