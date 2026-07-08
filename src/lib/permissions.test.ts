@@ -152,6 +152,9 @@ describe("expected-key invariants", () => {
     "contacts.delete",
     "contacts.merge",
     "reports.view",
+    "evidence.flag.create",
+    "evidence.flag.edit_any",
+    "evidence.flag.delete_any",
   ])("%s exists in the catalog", (key) => {
     expect(isKnownPermission(key)).toBe(true);
   });

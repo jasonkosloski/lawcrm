@@ -42,6 +42,15 @@
  * (`contentTypeForFilename`); the client-declared part type is
  * ignored. Unknown extensions store as application/octet-stream,
  * which the download route serves as attachment-only.
+ *
+ * LOCAL STORAGE DRIVER ONLY (501 otherwise). Under the vercel-blob
+ * driver, uploads go client-direct via ./blob/route.ts — prod
+ * serverless bodies cap at ~4.5MB, so this route physically cannot
+ * receive GB media on Vercel. This route is NOT dead code though:
+ * blob's `onUploadCompleted` callback can't reach localhost, so
+ * local dev keeps uploading through here (see ./blob/blob-upload.ts
+ * for the full story). The uploader component picks its path from
+ * the active driver.
  */
 
 import { Readable } from "node:stream";
@@ -55,6 +64,7 @@ import { currentUserHasPermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import {
   FileTooLargeError,
+  activeStorageDriver,
   deleteFile,
   storeStream,
 } from "@/lib/file-storage";
@@ -104,6 +114,20 @@ export async function POST(req: NextRequest): Promise<Response> {
     return NextResponse.json(
       { error: "You don't have permission to upload documents." },
       { status: 403 }
+    );
+  }
+
+  // Streaming-to-disk only makes sense on the local driver; under
+  // vercel-blob the uploader goes client-direct instead. A stale
+  // client hitting this anyway gets a clear 501, not a silent write
+  // to an ephemeral serverless filesystem.
+  if (activeStorageDriver() !== "local") {
+    return NextResponse.json(
+      {
+        error:
+          "This deployment uses client-direct uploads — POST /api/documents/upload/blob.",
+      },
+      { status: 501 }
     );
   }
 

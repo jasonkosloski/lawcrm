@@ -40,6 +40,13 @@ import {
 } from "./invoice-status";
 import { EVENT_TYPES, EVENT_TYPE_LABEL } from "./calendar-event-type";
 import {
+  FLAG_CATEGORIES,
+  FLAG_CATEGORY_LABEL,
+  FLAG_CATEGORY_TONE,
+  FLAG_TONE_CHIP_CLASS,
+  flagCategoryChipClass,
+} from "./flag-category";
+import {
   SETTLEMENT_STATUSES,
   SETTLEMENT_STATUS_LABEL,
   SETTLEMENT_LIEN_STATUSES,
@@ -151,6 +158,33 @@ describe("calendar event type", () => {
   test("no duplicates, labels cover", () => {
     expectNoDuplicates(EVENT_TYPES);
     expectLabelsCover(EVENT_TYPES, EVENT_TYPE_LABEL);
+  });
+});
+
+describe("flag category", () => {
+  test("no duplicates, labels cover", () => {
+    expectNoDuplicates(FLAG_CATEGORIES);
+    expectLabelsCover(FLAG_CATEGORIES, FLAG_CATEGORY_LABEL);
+  });
+
+  test("every category has a tone and every tone has chip classes", () => {
+    expect(Object.keys(FLAG_CATEGORY_TONE).sort()).toEqual(
+      [...FLAG_CATEGORIES].sort()
+    );
+    for (const c of FLAG_CATEGORIES) {
+      const tone = FLAG_CATEGORY_TONE[c];
+      expect(FLAG_TONE_CHIP_CLASS[tone]).toBeTruthy();
+      expect(flagCategoryChipClass(c)).toBe(FLAG_TONE_CHIP_CLASS[tone]);
+    }
+  });
+
+  test("tones follow the review vocabulary (warn / brand / neutral)", () => {
+    expect(FLAG_CATEGORY_TONE.critical).toBe("warn");
+    expect(FLAG_CATEGORY_TONE.use_of_force).toBe("warn");
+    expect(FLAG_CATEGORY_TONE.miranda).toBe("brand");
+    expect(FLAG_CATEGORY_TONE.contradiction).toBe("brand");
+    expect(FLAG_CATEGORY_TONE.emphasis).toBe("neutral");
+    expect(FLAG_CATEGORY_TONE.anomaly).toBe("neutral");
   });
 });
 

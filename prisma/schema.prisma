@@ -794,6 +794,7 @@ model Document {
 
   matter             Matter          @relation(fields: [matterId], references: [id], onDelete: Cascade)
   folder             DocumentFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  flaggedMoments     FlaggedMoment[]
   /// Expenses that point at this document as their receipt. SetNull
   /// on the FK in Expense — deleting the receipt doesn't lose the
   /// expense itself.
@@ -841,18 +842,41 @@ model Evidence {
 }
 
 /// A notable moment flagged in a piece of evidence (e.g. use-of-force incident).
+/// A flagged moment (or span) in a piece of media under review —
+/// "use of force at 03:42", "Miranda given 12:10–12:35". Reshaped
+/// 2026-07-07 (zero rows existed; the original evidence UI never
+/// shipped): moments now attach to Document rows — media lives in
+/// the per-matter file system — with `evidenceId` kept nullable for
+/// a future dedicated Evidence pipeline. App-enforced invariant:
+/// exactly one of (documentId, evidenceId) is set. Timestamps are
+/// float seconds (precise seek); `endSeconds` null = point moment,
+/// set = span.
 model FlaggedMoment {
   id          String   @id @default(cuid())
-  evidenceId  String
-  timestamp   String /// Position in media, e.g. "00:03:42"
+  documentId  String?
+  evidenceId  String?
+  /// Anchor — AT MOST ONE kind, matched to the document type
+  /// (app-enforced in the action layer). All nullable: an
+  /// anchorless flag annotates the document as a whole.
+  ///   media (audio/video): timeSeconds (+ optional endSeconds span)
+  ///   pdf:                 pageNumber (native viewer opens #page=N)
+  ///   rendered text (docx/txt/csv): quote — captured selection,
+  ///     scroll-to-highlight on the render
+  timeSeconds Float? /// Media position, seconds from start
+  endSeconds  Float? /// Media span end — null for a point moment
+  pageNumber  Int? /// PDF page (1-based)
+  quote       String? /// Selected text anchor for rendered documents
   description String
   category    String /// critical | emphasis | anomaly | miranda | use_of_force | contradiction
   flaggedById String /// User who flagged this moment
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  evidence  Evidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
-  flaggedBy User     @relation(fields: [flaggedById], references: [id])
+  document  Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  evidence  Evidence? @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  flaggedBy User      @relation(fields: [flaggedById], references: [id])
 
+  @@index([documentId, timeSeconds])
   @@index([evidenceId])
   @@map("flagged_moments")
 }

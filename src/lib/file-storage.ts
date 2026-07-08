@@ -1,166 +1,146 @@
 /**
- * File storage adapter — server-only.
+ * File storage facade — server-only.
  *
- * The thin layer between server actions and wherever bytes actually
- * live. Today: local filesystem at `./uploads/{key}`. Tomorrow:
- * Vercel Blob, S3, or whatever — change this file, leave every
- * caller alone.
+ * The thin layer between server actions / routes and wherever bytes
+ * actually live. Two drivers (ADR-015):
  *
- * Keys are content-addressable-ish: `{cuid}__{slugified-name}`. The
- * cuid is the source of truth for "which row points at which file";
- * the human-readable suffix is a debugging convenience when you
- * `ls uploads/` and want to know what you're looking at.
+ *   - `local`        ./uploads/{key} on disk. Dev default; what the
+ *                    test suite runs against. Ephemeral on Vercel,
+ *                    so never the prod driver there.
+ *   - `vercel-blob`  Vercel Blob via @vercel/blob. Active whenever
+ *                    BLOB_READ_WRITE_TOKEN is set (an explicit
+ *                    STORAGE_DRIVER env var wins over detection —
+ *                    e.g. STORAGE_DRIVER=local keeps dev on disk
+ *                    even after `vercel env pull` drops the token
+ *                    into .env).
  *
- * Storage is intentionally NOT public — files are never served
- * directly. Callers download via `/api/documents/[id]/download`,
- * which gates by session before streaming bytes. Firm-scoping of
- * the document lookup is deferred until Contact/Matter carry a
- * firmId (see the route's `findFirst` comment) — do NOT assume
- * tenant isolation here when adding a second firm.
+ * Dispatch rules — WRITES pick by active driver, READS/DELETES pick
+ * by key shape:
+ *
+ *   Blob-stored keys are full https:// URLs (see storage-key.ts for
+ *   the mapping); local keys are bare `{rand}__{name}` strings. So
+ *   `deleteFile` / `statFile` route on `isBlobKey(key)` rather than
+ *   on the active driver — after a driver switch, documents written
+ *   under the OLD driver still delete/stat/serve correctly instead
+ *   of being stranded.
+ *
+ * Driver capability gaps are loud, not silent:
+ *   - `storeStream` is local-only. Under the blob driver, GB-scale
+ *     uploads must go client-direct (browser → Vercel Blob) because
+ *     prod serverless bodies cap at ~4.5MB — a server-side stream
+ *     write would be lying about what production can do. The
+ *     streaming route guards on the driver before calling this.
+ *   - `openReadStream` refuses blob keys — the download route 302s
+ *     to the blob URL instead of proxying bytes.
+ *
+ * Storage is NOT public under the local driver — files are served
+ * only via `/api/documents/[id]/download`, which gates by session.
+ * Under the blob driver, blob URLs are unguessable-but-public bearer
+ * URLs on an isolated origin; the download route still gates who is
+ * ever HANDED a URL. Trade-offs recorded honestly in ADR-015.
  */
 
-import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, stat, unlink, writeFile } from "node:fs/promises";
-import { Transform, type Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
-import { dirname, resolve } from "node:path";
-import { randomBytes } from "node:crypto";
+import type { Readable } from "node:stream";
+import {
+  FileTooLargeError,
+  deleteFileLocal,
+  openReadStreamLocal,
+  statFileLocal,
+  storeFileLocal,
+  storeStreamLocal,
+  type StoredFile,
+} from "./storage/local-driver";
+import {
+  blobDownloadUrl,
+  deleteFileBlob,
+  statFileBlob,
+  storeFileBlob,
+} from "./storage/blob-driver";
+import { isBlobKey, type StorageDriver } from "./storage/storage-key";
 
-/// All uploaded files live under this directory (gitignored). The
-/// path is resolved once at module load — every storage call uses
-/// the same root regardless of process cwd.
-const STORAGE_ROOT = resolve(process.cwd(), "uploads");
+export { FileTooLargeError, type StoredFile };
+export { isBlobKey, type StorageDriver };
+export { blobDownloadUrl };
 
-/** Generate a storage key. The cuid-ish prefix prevents collisions
- *  even when two users upload the same filename in the same second. */
-function makeKey(originalName: string): string {
-  const id = randomBytes(12).toString("base64url"); // ~16 chars
-  // Strip path traversal + control chars; keep dots for the
-  // extension so disk listings stay scannable.
-  const safe = originalName
-    .replace(/[/\\\x00-\x1f]/g, "_")
-    .replace(/^\.+/, "")
-    .slice(0, 120);
-  return `${id}__${safe}`;
-}
-
-/** Absolute on-disk path for a key. Throws if the resolved path
- *  escapes STORAGE_ROOT (defense against path-traversal in keys
- *  loaded from the DB — keys we generate here are safe, but a
- *  belt-and-suspenders check is cheap). */
-function resolveKey(key: string): string {
-  const full = resolve(STORAGE_ROOT, key);
-  if (!full.startsWith(STORAGE_ROOT + "/") && full !== STORAGE_ROOT) {
-    throw new Error(`Refusing to read outside STORAGE_ROOT: ${key}`);
-  }
-  return full;
-}
-
-export type StoredFile = {
-  /** Storage key; round-trip into `Document.fileUrl`. */
-  key: string;
-  size: number;
-  contentType: string;
-};
-
-/** Persist an uploaded `File` and return what the DB needs to store. */
-export async function storeFile(file: File): Promise<StoredFile> {
-  const key = makeKey(file.name);
-  const path = resolveKey(key);
-  await mkdir(dirname(path), { recursive: true });
-  // Buffer the whole upload — fine for the sizes we'll see through
-  // server-action forms (≤25MB enforced upstream). GB-scale
-  // discovery media goes through `storeStream` below instead.
-  const buf = Buffer.from(await file.arrayBuffer());
-  await writeFile(path, buf);
-  return {
-    key,
-    size: buf.byteLength,
-    contentType: file.type || "application/octet-stream",
-  };
-}
-
-/** Thrown by `storeStream` when the source exceeds `maxBytes`.
- *  Callers map this to HTTP 413; the partial file is already gone
- *  by the time this propagates. */
-export class FileTooLargeError extends Error {
-  readonly maxBytes: number;
-  constructor(maxBytes: number) {
-    super(`File exceeds the ${maxBytes}-byte limit`);
-    this.name = "FileTooLargeError";
-    this.maxBytes = maxBytes;
-  }
-}
-
-/** Stream an incoming file to disk without buffering it in memory —
- *  the write path for GB-scale discovery media (the upload route
- *  pipes busboy part streams straight through here). Peak memory is
- *  one highWaterMark chunk, regardless of file size.
+/**
+ * Which driver new writes go to. Resolution order:
+ *   1. STORAGE_DRIVER env, when set — must be "local" or
+ *      "vercel-blob"; anything else throws (a typo'd driver name
+ *      silently falling back to disk would lose prod uploads).
+ *   2. BLOB_READ_WRITE_TOKEN present → "vercel-blob".
+ *   3. Otherwise "local".
  *
- *  Enforces `maxBytes` while writing: one byte over and the pipeline
- *  aborts with `FileTooLargeError`. Any failure (cap, disk, source
- *  destroyed) unlinks the partial file — a Document row is only ever
- *  created after a fully-successful write, so a partial on disk
- *  would be an orphan. */
+ * Read per-call (not at module load) so env changes in tests — and
+ * Vercel's runtime-injected token — are always honored.
+ */
+export function activeStorageDriver(): StorageDriver {
+  const explicit = process.env.STORAGE_DRIVER;
+  if (explicit !== undefined && explicit !== "") {
+    if (explicit !== "local" && explicit !== "vercel-blob") {
+      throw new Error(
+        `Unknown STORAGE_DRIVER "${explicit}" — expected "local" or "vercel-blob".`
+      );
+    }
+    if (explicit === "vercel-blob" && !process.env.BLOB_READ_WRITE_TOKEN) {
+      throw new Error(
+        'STORAGE_DRIVER="vercel-blob" requires BLOB_READ_WRITE_TOKEN to be set.'
+      );
+    }
+    return explicit;
+  }
+  return process.env.BLOB_READ_WRITE_TOKEN ? "vercel-blob" : "local";
+}
+
+/** Persist an uploaded `File` and return what the DB needs to store
+ *  (`key` round-trips into `Document.fileUrl`). Small files only
+ *  under the blob driver — see the module docstring. */
+export async function storeFile(file: File): Promise<StoredFile> {
+  return activeStorageDriver() === "vercel-blob"
+    ? storeFileBlob(file)
+    : storeFileLocal(file);
+}
+
+/** Stream an incoming file to storage without buffering — the
+ *  GB-scale write path. LOCAL DRIVER ONLY; throws under vercel-blob
+ *  (prod GB uploads go client-direct, see /api/documents/upload/blob). */
 export async function storeStream(
   source: Readable,
   originalName: string,
   maxBytes: number
 ): Promise<{ key: string; size: number }> {
-  const key = makeKey(originalName);
-  const path = resolveKey(key);
-  await mkdir(dirname(path), { recursive: true });
-  let size = 0;
-  const counter = new Transform({
-    transform(chunk: Buffer, _enc, cb) {
-      size += chunk.length;
-      if (size > maxBytes) cb(new FileTooLargeError(maxBytes));
-      else cb(null, chunk);
-    },
-  });
-  try {
-    await pipeline(source, counter, createWriteStream(path));
-  } catch (err) {
-    await unlink(path).catch(() => {});
-    throw err;
+  if (activeStorageDriver() !== "local") {
+    throw new Error(
+      "storeStream is local-driver-only — under vercel-blob, large uploads go client-direct (POST /api/documents/upload/blob)."
+    );
   }
-  return { key, size };
+  return storeStreamLocal(source, originalName, maxBytes);
 }
 
-/** Open a read stream for download routes. Wraps the on-disk
- *  path-traversal guard so callers can't be tricked.
- *
- *  `range` (both bounds inclusive, matching both `fs.createReadStream`
- *  and HTTP `Range` semantics) serves single-range 206 responses —
- *  media seeking reads a slice instead of the whole file. */
+/** Open a read stream for download routes (local keys only — blob
+ *  documents are served by 302ing to their URL, never proxied). */
 export function openReadStream(
   key: string,
   range?: { start: number; end: number }
 ): NodeJS.ReadableStream {
-  return createReadStream(resolveKey(key), range);
-}
-
-/** Best-effort delete — used when a Document row is removed.
- *  Swallows "file gone" errors so the DB delete still wins. */
-export async function deleteFile(key: string): Promise<void> {
-  try {
-    await unlink(resolveKey(key));
-  } catch (err) {
-    // ENOENT just means the file was already gone — fine.
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  if (isBlobKey(key)) {
+    throw new Error(
+      "openReadStream cannot stream a blob URL — redirect to it instead."
+    );
   }
+  return openReadStreamLocal(key, range);
 }
 
-/** Existence + size probe for the download route to set
- *  Content-Length without re-reading the whole file. */
+/** Best-effort delete — used when a Document row is removed and on
+ *  upload-failure cleanup. Dispatches on KEY SHAPE, not the active
+ *  driver, so rows written under a previous driver still clean up. */
+export async function deleteFile(key: string): Promise<void> {
+  return isBlobKey(key) ? deleteFileBlob(key) : deleteFileLocal(key);
+}
+
+/** Existence + size probe (download route: missing file → 410).
+ *  Key-shape dispatch, same rationale as `deleteFile`. */
 export async function statFile(
   key: string
 ): Promise<{ size: number } | null> {
-  try {
-    const s = await stat(resolveKey(key));
-    return { size: s.size };
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw err;
-  }
+  return isBlobKey(key) ? statFileBlob(key) : statFileLocal(key);
 }

@@ -13,18 +13,30 @@
  * the range lies past EOF, 200 full body otherwise (multi-range and
  * malformed headers are lawfully ignored — see ./range.ts).
  *
- * Why a route handler and not a public storage URL: the storage
- * key is opaque, but if we ever swapped to public-CDN URLs the
- * security boundary would move outside the app. Streaming through
- * here keeps every download under the session check + audit
- * surface, regardless of which storage backend lives behind
- * `src/lib/file-storage.ts`.
+ * Two serving modes, chosen per-document by KEY SHAPE (ADR-015):
+ *
+ *   - Local key (bare `{rand}__{name}`): stream the bytes from disk
+ *     through this route, exactly as before. The session check is
+ *     the security boundary for every byte.
+ *   - Blob key (full https:// URL): 302 to the blob URL. Vercel's
+ *     CDN handles Range/seeking natively, so GB media never transits
+ *     our serverless functions. The session check still gates who is
+ *     ever HANDED the URL — but the URL itself is an
+ *     unguessable-but-public bearer URL on an isolated origin
+ *     (blob.vercel-storage.com). See ADR-015 for the honest
+ *     trade-off, including why the inline-XSS allowlist below is
+ *     moot for that path but MUST stay for the local one.
  */
 
 import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { openReadStream, statFile } from "@/lib/file-storage";
+import {
+  blobDownloadUrl,
+  isBlobKey,
+  openReadStream,
+  statFile,
+} from "@/lib/file-storage";
 import { resolveRangeHeader } from "./range";
 import type { Readable } from "node:stream";
 
@@ -33,7 +45,14 @@ import type { Readable } from "node:stream";
 export const dynamic = "force-dynamic";
 
 // Content types allowed to render inline in the browser. Everything
-// else is forced to `attachment`. This is an allowlist on purpose:
+// else is forced to `attachment`. This allowlist matters ONLY for
+// the LOCAL streaming path — it defends OUR origin, where inline
+// HTML/SVG would execute with our cookies. Blob-stored documents
+// are served from blob.vercel-storage.com, an isolated origin with
+// no session to ride, so the redirect branch reuses this set purely
+// as a UX signal (inline-viewable vs force-download) — see ADR-015.
+//
+// This is an allowlist on purpose:
 // `Document.contentType` is the uploader's *client-declared* MIME
 // type (`file.type`, see `storeFile()` — the upload action validates
 // size only), so any user with upload access controls this string.
@@ -109,12 +128,41 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Confirm the file actually exists on disk — DB-row vs filesystem
-  // can drift if a previous delete only got the row. Treat as 410
-  // Gone so the UI can prune the stale row.
+  // Confirm the file actually exists — DB-row vs storage can drift
+  // if a previous delete only got the row. `statFile` dispatches on
+  // key shape (disk stat vs blob `head`). Treat as 410 Gone so the
+  // UI can prune the stale row.
   const fsStat = await statFile(doc.fileUrl);
   if (!fsStat) {
     return NextResponse.json({ error: "File missing" }, { status: 410 });
+  }
+
+  const contentType = doc.contentType ?? "application/octet-stream";
+  // Compare on the bare media type — a stored value like
+  // "text/html; charset=utf-8" must not slip past the allowlist.
+  const inlineSafe = INLINE_SAFE_TYPES.has(
+    contentType.split(";")[0].trim().toLowerCase()
+  );
+
+  // ── Blob-stored document → 302 to the blob CDN ─────────────────
+  // Range/seeking is the CDN's job from here; we never proxy the
+  // bytes. Disposition forcing works differently than the local
+  // path: @vercel/blob (v2.6.0) does NOT let us set a custom
+  // Content-Disposition at upload — the CDN serves inline with the
+  // filename derived from the pathname, and the only lever is the
+  // `?download=1` query param, which flips the same blob to
+  // `attachment`. So: allowlisted types redirect to the bare URL
+  // (inline preview), everything else to the ?download=1 variant.
+  // The redirect itself must never be cached — it's the auth
+  // boundary; the blob URL behind it is bearer-token-ish (ADR-015).
+  if (isBlobKey(doc.fileUrl)) {
+    const target = inlineSafe ? doc.fileUrl : blobDownloadUrl(doc.fileUrl);
+    return NextResponse.redirect(target, {
+      status: 302,
+      headers: {
+        "Cache-Control": "private, no-cache, no-store, must-revalidate",
+      },
+    });
   }
 
   // Resolve any Range request against the on-disk size. 416 gets
@@ -154,13 +202,6 @@ export async function GET(
           nodeStream.on("error", (err) => controller.error(err));
         },
       });
-
-  const contentType = doc.contentType ?? "application/octet-stream";
-  // Compare on the bare media type — a stored value like
-  // "text/html; charset=utf-8" must not slip past the allowlist.
-  const inlineSafe = INLINE_SAFE_TYPES.has(
-    contentType.split(";")[0].trim().toLowerCase()
-  );
 
   const headers: Record<string, string> = {
     "Content-Type": contentType,

@@ -483,6 +483,30 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
     ],
   },
   {
+    id: "evidence",
+    label: "Evidence review",
+    permissions: [
+      {
+        key: "evidence.flag.create",
+        label: "Flag moments in media",
+        description:
+          "Mark timestamped moments/spans while reviewing bodycam, dashcam, or call recordings — category + note, surfaced on the matter's Evidence review page. Creators can always edit their own flags.",
+      },
+      {
+        key: "evidence.flag.edit_any",
+        label: "Edit anyone's flags",
+        description:
+          "Change another reviewer's flagged moments (category, note, timestamps). Own flags are always editable without this.",
+      },
+      {
+        key: "evidence.flag.delete_any",
+        label: "Delete anyone's flags",
+        description:
+          "Remove another reviewer's flagged moments. Own flags are always deletable without this.",
+      },
+    ],
+  },
+  {
     id: "reports",
     label: "Reports",
     permissions: [

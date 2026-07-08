@@ -2,6 +2,13 @@
  * Multi-file upload — "Upload files" toolbar button on the document
  * browser. Uploads INTO the currently browsed folder.
  *
+ * TWO TRANSPORT PATHS, picked by the `storageDriver` prop (the
+ * documents-tab server component reads `activeStorageDriver()` and
+ * passes it down — a client component can't read env vars). The
+ * visible UX — button, batch progress bar, cancel, error strip — is
+ * identical either way.
+ *
+ * ── local (dev default) ─────────────────────────────────────────
  * Posts to POST /api/documents/upload (the streaming busboy route —
  * server actions can't take GB-scale bodies). Contract requirements
  * honored here:
@@ -17,20 +24,33 @@
  * XMLHttpRequest, not fetch: fetch can't report UPLOAD progress
  * (Response streams cover download only) — xhr.upload.onprogress is
  * the only way to drive a real progress bar for multi-GB media.
- * Progress is per-batch (bytes sent / total). On success we
- * router.refresh() — the route's revalidatePath alone doesn't
- * re-render an already-mounted client view.
+ *
+ * ── vercel-blob (production) ────────────────────────────────────
+ * `upload()` from @vercel/blob/client, one call per file: browser →
+ * token route (/api/documents/upload/blob, which gates + validates)
+ * → bytes go STRAIGHT to Vercel Blob (multipart, so GB media clears
+ * the ~4.5MB serverless body cap) → Vercel calls the token route
+ * back to create the Document row. Files upload sequentially;
+ * progress aggregates loaded bytes across the batch so the bar
+ * reads the same as the XHR path. Two honest divergences from the
+ * local contract, both server-enforced per-file rather than
+ * per-batch: (1) batches are NOT all-or-nothing — files completed
+ * before a failure stay uploaded (each is its own transfer);
+ * (2) the Document row is created by an async callback, so a
+ * just-finished file can lag the first refresh by a beat — we
+ * refresh again shortly after to catch it.
  *
  * Size caps are pre-checked client-side with the SAME constants the
- * route enforces (100 MiB standard / ~2 GiB media, by server-derived
+ * server enforces (100 MiB standard / ~2 GiB media, by server-derived
  * type) so a doomed 4 GB upload fails instantly instead of at 100%.
  */
 
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { TriangleAlert, Upload, X } from "lucide-react";
+import { upload } from "@vercel/blob/client";
 import { cn } from "@/lib/utils";
 import {
   MAX_FILES_PER_BATCH,
@@ -39,6 +59,10 @@ import {
   contentTypeForFilename,
   isMediaType,
 } from "@/app/api/documents/upload/upload-config";
+import {
+  makeStorageKey,
+  type StorageDriver,
+} from "@/lib/storage/storage-key";
 
 /** Picker filter: pdf / word / excel (+ppt, text) / images / audio /
  *  video. The server derives the real MIME from the extension and
@@ -69,20 +93,35 @@ export function MultiFileUpload({
   matterId,
   folderId,
   folderName,
+  storageDriver,
 }: {
   matterId: string;
   /** Upload destination — the currently browsed folder (null = root). */
   folderId: string | null;
   /** Display name for the button tooltip. */
   folderName: string | null;
+  /** Which transport to use — from `activeStorageDriver()` on the
+   *  server. Defaults to local so nothing breaks if a callsite
+   *  hasn't been plumbed yet. */
+  storageDriver?: StorageDriver;
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
-  const xhrRef = useRef<XMLHttpRequest | null>(null);
+  /** Whatever can cancel the in-flight batch — the XHR for the
+   *  local path, an AbortController for the blob path. */
+  const cancelRef = useRef<{ abort: () => void } | null>(null);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [fileCount, setFileCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(
+    () => () => {
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    },
+    []
+  );
 
   const reset = () => {
     setUploading(false);
@@ -91,7 +130,7 @@ export function MultiFileUpload({
     if (inputRef.current) inputRef.current.value = "";
   };
 
-  /** Client-side mirror of the route's guards — instant feedback for
+  /** Client-side mirror of the server's guards — instant feedback for
    *  the obvious rejections; the server remains the authority. */
   const preflightError = (files: File[]): string | null => {
     if (files.length > MAX_FILES_PER_BATCH) {
@@ -112,15 +151,8 @@ export function MultiFileUpload({
     return null;
   };
 
-  const startUpload = (files: File[]) => {
-    setError(null);
-    const rejected = preflightError(files);
-    if (rejected) {
-      setError(rejected);
-      if (inputRef.current) inputRef.current.value = "";
-      return;
-    }
-
+  /** local driver: one multipart POST to the streaming route. */
+  const startXhrUpload = (files: File[]) => {
     // Field order per the route contract: target BEFORE file parts.
     const fd = new FormData();
     fd.append("matterId", matterId);
@@ -128,10 +160,7 @@ export function MultiFileUpload({
     for (const f of files) fd.append("files", f, f.name);
 
     const xhr = new XMLHttpRequest();
-    xhrRef.current = xhr;
-    setUploading(true);
-    setFileCount(files.length);
-    setProgress(0);
+    cancelRef.current = xhr;
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) {
@@ -139,7 +168,7 @@ export function MultiFileUpload({
       }
     };
     xhr.onload = () => {
-      xhrRef.current = null;
+      cancelRef.current = null;
       if (xhr.status === 200) {
         reset();
         router.refresh();
@@ -156,17 +185,104 @@ export function MultiFileUpload({
       }
     };
     xhr.onerror = () => {
-      xhrRef.current = null;
+      cancelRef.current = null;
       reset();
       setError("Upload failed — check your connection and try again.");
     };
     xhr.onabort = () => {
-      xhrRef.current = null;
+      cancelRef.current = null;
       reset();
     };
 
     xhr.open("POST", "/api/documents/upload");
     xhr.send(fd);
+  };
+
+  /** vercel-blob driver: client-direct upload per file. */
+  const startBlobUpload = async (files: File[]) => {
+    const controller = new AbortController();
+    cancelRef.current = { abort: () => controller.abort() };
+
+    const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
+    const loadedPerFile = files.map(() => 0);
+    const reportProgress = () => {
+      const loaded = loadedPerFile.reduce((sum, n) => sum + n, 0);
+      setProgress(
+        totalBytes > 0 ? Math.round((loaded / totalBytes) * 100) : 0
+      );
+    };
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        // The browser names the blob pathname using the SAME opaque
+        // key scheme the server uses everywhere else; the token
+        // route re-validates the shape. The declared contentType is
+        // derived from the key with the same shared function the
+        // route uses for allowedContentTypes — they can't disagree.
+        const key = makeStorageKey(f.name);
+        await upload(key, f, {
+          access: "public",
+          handleUploadUrl: "/api/documents/upload/blob",
+          contentType: contentTypeForFilename(key),
+          clientPayload: JSON.stringify({
+            matterId,
+            folderId,
+            name: f.name,
+          }),
+          // Chunked-parallel transfer with per-part retries — the
+          // sane mode for GB-scale media.
+          multipart: true,
+          abortSignal: controller.signal,
+          onUploadProgress: ({ loaded }) => {
+            loadedPerFile[i] = loaded;
+            reportProgress();
+          },
+        });
+        loadedPerFile[i] = f.size;
+        reportProgress();
+      }
+      cancelRef.current = null;
+      reset();
+      // The Document rows are created by Vercel's completion
+      // callback, which races this refresh. Refresh now (usually
+      // wins) and once more shortly after (catches the stragglers).
+      router.refresh();
+      refreshTimerRef.current = setTimeout(() => router.refresh(), 2000);
+    } catch (err) {
+      cancelRef.current = null;
+      reset();
+      if (!controller.signal.aborted) {
+        // Completed files stay uploaded (per-file transfers can't be
+        // all-or-nothing); the second refresh shows what landed.
+        setError(
+          err instanceof Error && err.message
+            ? err.message
+            : "Upload failed — check your connection and try again."
+        );
+        router.refresh();
+      }
+    }
+  };
+
+  const startUpload = (files: File[]) => {
+    setError(null);
+    const rejected = preflightError(files);
+    if (rejected) {
+      setError(rejected);
+      if (inputRef.current) inputRef.current.value = "";
+      return;
+    }
+
+    setUploading(true);
+    setFileCount(files.length);
+    setProgress(0);
+
+    if (storageDriver === "vercel-blob") {
+      void startBlobUpload(files);
+    } else {
+      startXhrUpload(files);
+    }
   };
 
   if (uploading) {
@@ -192,7 +308,7 @@ export function MultiFileUpload({
         </span>
         <button
           type="button"
-          onClick={() => xhrRef.current?.abort()}
+          onClick={() => cancelRef.current?.abort()}
           aria-label="Cancel upload"
           className="text-ink-4 hover:text-ink-2"
         >

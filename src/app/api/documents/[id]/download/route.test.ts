@@ -27,6 +27,10 @@ vi.mock("@/lib/prisma", () => ({
 vi.mock("@/lib/file-storage", () => ({
   openReadStream: vi.fn(),
   statFile: vi.fn(),
+  // Real (trivial) implementations — the route's blob branch keys
+  // off these, and mocking them away would un-test the dispatch.
+  isBlobKey: (key: string) => key.startsWith("https://"),
+  blobDownloadUrl: (url: string) => `${url}?download=1`,
 }));
 
 import { auth } from "@/auth";
@@ -225,5 +229,72 @@ describe("GET /api/documents/[id]/download — Range requests", () => {
     });
     expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
     expect(res.headers.get("Content-Disposition")).toMatch(/^inline;/);
+  });
+});
+
+describe("GET /api/documents/[id]/download — blob-stored documents (302)", () => {
+  const BLOB_URL =
+    "https://abc123.public.blob.vercel-storage.com/AAAAAAAAAAAAAAAA__clip.mp4";
+
+  /** Same happy wiring as `download()` but with a blob-URL fileUrl —
+   *  the shape that selects the redirect branch (ADR-015). */
+  async function downloadBlob(
+    contentType: string | null,
+    opts?: { missing?: boolean }
+  ): Promise<Response> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedAuth.mockResolvedValue({ user: { id: "u1" } } as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedFindUser.mockResolvedValue({ firmId: "f1" } as any);
+    mockedFindDoc.mockResolvedValue({
+      id: "d1",
+      name: "clip.mp4",
+      contentType,
+      fileUrl: BLOB_URL,
+      fileSize: 100,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    mockedStat.mockResolvedValue(opts?.missing ? null : { size: 100 });
+
+    const req = new Request("http://localhost/api/documents/d1/download");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return GET(req as any, { params: Promise.resolve({ id: "d1" }) });
+  }
+
+  test("inline-safe type → 302 to the bare blob URL, never proxied", async () => {
+    const res = await downloadBlob("video/mp4");
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Location")).toBe(BLOB_URL);
+    // The bytes must not flow through the route.
+    expect(mockedOpen).not.toHaveBeenCalled();
+  });
+
+  test("non-inline-safe type → 302 to the ?download=1 attachment URL", async () => {
+    // text/html on the isolated blob origin can't ride our session,
+    // but forcing download preserves the local path's UX contract.
+    const res = await downloadBlob("text/html");
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Location")).toBe(`${BLOB_URL}?download=1`);
+  });
+
+  test("redirect (the auth boundary) is never cacheable", async () => {
+    const res = await downloadBlob("video/mp4");
+    expect(res.headers.get("Cache-Control")).toContain("no-store");
+  });
+
+  test("blob gone (stat null) → 410, same as a missing local file", async () => {
+    const res = await downloadBlob("video/mp4", { missing: true });
+    expect(res.status).toBe(410);
+  });
+
+  test("still 401 without a session — the gate precedes the redirect", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedAuth.mockResolvedValue(null as any);
+    const req = new Request("http://localhost/api/documents/d1/download");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = await GET(req as any, {
+      params: Promise.resolve({ id: "d1" }),
+    });
+    expect(res.status).toBe(401);
   });
 });

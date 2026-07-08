@@ -347,12 +347,15 @@ export async function seedDocumentFolder(opts: {
 }
 
 /** A Document row, optionally filed in a folder. No file blob —
- *  folder tests care about rows, not bytes. */
+ *  folder tests care about rows, not bytes. Pass `contentType`
+ *  (e.g. "video/mp4") for media-renderer-dependent tests
+ *  (flagged moments). */
 export async function seedDocument(opts: {
   matterId: string;
   name?: string;
   folderId?: string | null;
   uploadedBy?: string | null;
+  contentType?: string | null;
 }): Promise<{ documentId: string }> {
   const doc = await prisma.document.create({
     data: {
@@ -362,10 +365,47 @@ export async function seedDocument(opts: {
       category: "other",
       source: "upload",
       uploadedBy: opts.uploadedBy ?? null,
+      contentType: opts.contentType ?? null,
     },
     select: { id: true },
   });
   return { documentId: doc.id };
+}
+
+/** A FlaggedMoment on a document — evidence-review fixture.
+ *  Defaults to a time anchor at 0:30; pass `pageNumber` / `quote`
+ *  for the other anchor kinds (timeSeconds then defaults to null),
+ *  or an explicit `timeSeconds: null` alone for an anchorless flag. */
+export async function seedFlaggedMoment(opts: {
+  documentId: string;
+  flaggedById: string;
+  timeSeconds?: number | null;
+  endSeconds?: number | null;
+  pageNumber?: number | null;
+  quote?: string | null;
+  category?: string;
+  description?: string;
+}): Promise<{ flagId: string }> {
+  const timeSeconds =
+    opts.timeSeconds !== undefined
+      ? opts.timeSeconds
+      : opts.pageNumber != null || opts.quote != null
+        ? null
+        : 30;
+  const flag = await prisma.flaggedMoment.create({
+    data: {
+      documentId: opts.documentId,
+      timeSeconds,
+      endSeconds: opts.endSeconds ?? null,
+      pageNumber: opts.pageNumber ?? null,
+      quote: opts.quote ?? null,
+      category: opts.category ?? "emphasis",
+      description: opts.description ?? "Test flagged moment",
+      flaggedById: opts.flaggedById,
+    },
+    select: { id: true },
+  });
+  return { flagId: flag.id };
 }
 
 /** A Lead. Optional contactId joins it to a Contact for the

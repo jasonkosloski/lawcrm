@@ -44,6 +44,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { formatDate } from "@/lib/format-date";
 import { currentUserHasPermission } from "@/lib/permission-check";
+import { activeStorageDriver } from "@/lib/file-storage";
 import {
   MAX_FOLDER_DEPTH,
   buildFolderTree,
@@ -241,6 +242,10 @@ export default async function MatterDocumentsPage({
                 matterId={id}
                 folderId={selectedId}
                 folderName={selectedName}
+                // Transport selector: local → streaming XHR route,
+                // vercel-blob → client-direct upload (client
+                // components can't read env, so the server decides).
+                storageDriver={activeStorageDriver()}
               />
             )}
           </div>

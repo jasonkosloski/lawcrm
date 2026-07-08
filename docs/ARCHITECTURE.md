@@ -13,6 +13,7 @@ _Last reviewed: 2026-07-06. If the folder tree or data-flow section stops matchi
 | ORM | Prisma 7 | Type-safe queries, migration system, great DX |
 | Database | PostgreSQL everywhere | Hosted Prisma Postgres for dev, pooled Postgres in prod; tests use a dockerized Postgres (`docker-compose.test.yml`, port 5433) |
 | Auth | Auth.js v5 + argon2id | Credentials provider, JWT sessions; see [AUTH_PLAN.md](./AUTH_PLAN.md) |
+| File storage | Driver facade: local disk (dev) / Vercel Blob (prod) | `src/lib/file-storage.ts` + `src/lib/storage/`; prod uploads go client-direct, serving 302s to the blob CDN — ADR-015 |
 | Testing | Vitest + happy-dom | See [TESTING.md](./TESTING.md) |
 | Fonts | Inter / JetBrains Mono / Fraunces | Per design handoff — UI / metadata / display |
 
@@ -39,8 +40,10 @@ src/
 │   │                         #   integrations, notifications, activity, security, profile
 │   ├── actions/              # ★ ALL mutations live here — ~34 "use server" modules
 │   │                         #   (matters, billing, tasks, notes, calls, settlements, …)
-│   ├── api/                  # Only 2 routes: auth handler + document download.
-│   │                         #   Data mutations do NOT go here.
+│   ├── api/                  # Sanctioned route handlers ONLY: auth handler,
+│   │                         #   document download (streams local / 302s blob),
+│   │                         #   streaming upload (local driver), blob upload
+│   │                         #   token+callback. Data mutations do NOT go here.
 │   ├── login/                # Public login page
 │   ├── print/                # Print-friendly renderings (outside app shell)
 │   ├── layout.tsx            # Root layout (fonts, providers)
@@ -98,6 +101,13 @@ state (e.g. `useOptimistic`), not a client cache.
 - **Token encryption at rest**: OAuth tokens on `EmailAccount` / `MessengerAccount`
   are transparently encrypted/decrypted by a Prisma client extension
   (`src/lib/email-token-crypto.ts`, `src/lib/email-token-encryption.ts`). See ADR-011.
+- **Document storage**: driver facade in `src/lib/file-storage.ts` — `local`
+  (./uploads/, dev) or `vercel-blob` (prod; auto-selected by
+  `BLOB_READ_WRITE_TOKEN`, `STORAGE_DRIVER` overrides). GB uploads go
+  client-direct to Vercel Blob via a permission-gated token route; downloads
+  are session-gated, then streamed (local) or 302'd to the blob CDN. Blob URLs
+  are unguessable-but-public bearer URLs on an isolated origin — trade-offs in
+  ADR-015.
 - **Audit log**: mutating actions record to the activity log (`src/lib/activity-log.ts`),
   surfaced at Settings → Activity.
 

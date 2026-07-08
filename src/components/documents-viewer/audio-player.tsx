@@ -15,9 +15,35 @@ import { AudioLines } from "lucide-react";
 
 const RATES = [1, 1.25, 1.5, 2] as const;
 
-export function AudioPlayer({ src, name }: { src: string; name: string }) {
+/** Apply an element to a caller-supplied ref (function or object).
+ *  Module-level so the component body never mutates its own props —
+ *  the react-hooks immutability rule (rightly) flags that pattern. */
+function assignRef<T>(ref: React.Ref<T> | undefined, el: T | null): void {
+  if (typeof ref === "function") ref(el);
+  else if (ref) (ref as React.RefObject<T | null>).current = el;
+}
+
+export function AudioPlayer({
+  src,
+  name,
+  mediaRef,
+}: {
+  src: string;
+  name: string;
+  /** Optional handle on the underlying <audio> — the evidence-review
+   *  wrapper (`MediaReview`) reads currentTime (flag capture) and
+   *  writes it (rail seeks). Kept separate from the internal
+   *  playback-rate ref via a merging callback ref. */
+  mediaRef?: React.Ref<HTMLAudioElement>;
+}) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [rate, setRate] = useState<number>(1);
+
+  // Merge the internal rate-control ref with the optional external one.
+  const setRefs = (el: HTMLAudioElement | null) => {
+    audioRef.current = el;
+    assignRef(mediaRef, el);
+  };
 
   const applyRate = (r: number) => {
     setRate(r);
@@ -34,7 +60,7 @@ export function AudioPlayer({ src, name }: { src: string; name: string }) {
         {/* Transcript support is a queued follow-up (FEATURES.md);
             recordings have no caption track at upload time. */}
         <audio
-          ref={audioRef}
+          ref={setRefs}
           src={src}
           controls
           preload="metadata"

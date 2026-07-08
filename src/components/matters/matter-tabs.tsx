@@ -32,6 +32,7 @@ const TABS = [
   { slug: "events", label: "Events" },
   { slug: "communication", label: "Communication" },
   { slug: "documents", label: "Documents" },
+  { slug: "evidence", label: "Evidence" },
   { slug: "parties", label: "Parties" },
   { slug: "deadlines", label: "Deadlines" },
   { slug: "tasks", label: "Tasks" },
@@ -70,7 +71,7 @@ export function MatterTabs({ matterId }: { matterId: string }) {
 
   return (
     <div className="flex items-center border-b border-line px-3 sm:px-5 gap-2">
-      {/* Horizontal scroll on small screens — 11 tabs don't fit on
+      {/* Horizontal scroll on small screens — 12 tabs don't fit on
           a phone, so we let the user swipe through them. The active
           tab is anchored visually by its border-bottom. */}
       <nav className="flex gap-1 flex-1 overflow-x-auto scrollbar-thin -mb-px">
