@@ -15,13 +15,20 @@ documentation index.
 
 ```bash
 npm install                      # also wires the husky pre-commit hook
-cp .env.example .env             # then fill in DATABASE_URL etc.
+cp .env.example .env             # then fill in DATABASE_URL etc. (below)
 npx prisma migrate deploy        # apply migrations to your dev Postgres
+npm run db:seed                  # demo firm + users (dev DB only!)
 npm run dev                      # http://localhost:3000
 ```
 
-Local dev needs a Postgres (hosted Prisma Postgres or your own — see
-`.env.example`). Schema changes ship as migrations
+**Dev database:** a dedicated Prisma Postgres, `lawcrm-dev`, attached
+to the Vercel project's Development environment as
+`DEVDB_DATABASE_URL`. Put that value in `.env` as both
+`DATABASE_URL` and `DIRECT_DATABASE_URL`. **Never point local dev at
+the production database** (`DATABASE_URL` in Vercel) — the seed
+overwrites data and resets every user's password. Watch out for
+`vercel env pull` / `vercel link`: they write Development variables
+into `.env.local`, which Next.js loads *over* `.env`. Schema changes ship as migrations
 (`npx prisma migrate dev --name <change>`) — see ADR-016 in
 `docs/DECISIONS.md`. Auth is email + password; create a user via the seed
 or sign-up flow, then log in at `/login`.

@@ -11,7 +11,7 @@ _Last reviewed: 2026-07-06. If the folder tree or data-flow section stops matchi
 | Data loading | React Server Components + Prisma | Pages query the DB directly on the server; no client fetch layer |
 | Mutations | Server actions (`src/app/actions/`) | Permission-gated, audit-logged, `revalidatePath` for cache invalidation |
 | ORM | Prisma 7 | Type-safe queries, migration system, great DX |
-| Database | PostgreSQL everywhere | Hosted Prisma Postgres for dev, pooled Postgres in prod; tests use a dockerized Postgres (`docker-compose.test.yml`, port 5433) |
+| Database | PostgreSQL everywhere | Prisma Postgres (Vercel integration) — separate `lawcrm-dev` database for local dev, production database for prod; tests use a dockerized Postgres (`docker-compose.test.yml`, port 5433) |
 | Auth | Auth.js v5 + argon2id | Credentials provider, JWT sessions; see [AUTH_PLAN.md](./AUTH_PLAN.md) |
 | File storage | Driver facade: local disk (dev) / Vercel Blob (prod) | `src/lib/file-storage.ts` + `src/lib/storage/`; prod uploads go client-direct, serving 302s to the blob CDN — ADR-015 |
 | Testing | Vitest + happy-dom | See [TESTING.md](./TESTING.md) |

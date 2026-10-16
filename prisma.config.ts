@@ -2,8 +2,7 @@
 // out of the schema). Runtime queries use DATABASE_URL via the
 // PrismaPg adapter; CLI tools (`prisma migrate`, `prisma db push`)
 // use the same URL by default and DIRECT_DATABASE_URL only if you
-// explicitly need a non-pooled URL for migrations (Vercel Postgres
-// pgbouncer mode).
+// explicitly need a separate non-pooled URL for migrations.
 import "dotenv/config";
 import { defineConfig } from "prisma/config";
 
