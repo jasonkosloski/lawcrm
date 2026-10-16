@@ -124,16 +124,23 @@ export default async function DashboardPage() {
       icon: Clock,
       variant: "accent" as const,
     },
-    {
-      label: "Trust balance",
-      value: formatMoney(kpis.trustBalance),
-      change: `across ${kpis.trustMatterCount} matters`,
-      icon: DollarSign,
-      variant: "ok" as const,
-    },
+    // Firm-wide trust total: null (tile omitted) without reports.view.
+    ...(kpis.trustBalance !== null
+      ? [
+          {
+            label: "Trust balance",
+            value: formatMoney(kpis.trustBalance),
+            change: `across ${kpis.trustMatterCount ?? 0} matters`,
+            icon: DollarSign,
+            variant: "ok" as const,
+          },
+        ]
+      : []),
   ];
 
-  const mtdPct = Math.min(100, (pulse.billableMtd / pulse.billableGoal) * 100);
+  const mtdPct = pulse
+    ? Math.min(100, (pulse.billableMtd / pulse.billableGoal) * 100)
+    : 0;
 
   // Each card keyed by its pref key. The return below walks the
   // user's saved order per column (main vs. right rail) and skips
@@ -389,7 +396,8 @@ export default async function DashboardPage() {
     ),
 
     // Firm pulse (right rail)
-    pulse: (
+    // Null without reports.view — the card renders nothing.
+    pulse: pulse && (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold">

@@ -21,9 +21,12 @@
  *    the user's local day via `instantInTz`.
  */
 
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getFirmGoals } from "@/lib/firm";
+import { currentUserHasPermission } from "@/lib/permission-check";
+import { canViewEventDetails } from "@/lib/calendar-visibility";
 import { dateKeyInTz, formatRelative, instantInTz } from "@/lib/format-date";
 
 /** The viewer's current calendar date as [year, month, day] in their zone. */
@@ -62,11 +65,16 @@ export type DashboardKpis = {
   flaggedEmail: number;
   hoursToday: number;
   hoursGoal: number;
-  trustBalance: number;
-  trustMatterCount: number;
+  /** Firm-wide trust total. `null` when the viewer lacks `reports.view`
+   *  (firm-wide financials are "gated separately from the personal
+   *  dashboard") — the page omits the tile. */
+  trustBalance: number | null;
+  trustMatterCount: number | null;
 };
 
 export async function getDashboardKpis(tz: string): Promise<DashboardKpis> {
+  const userId = await getCurrentUserId();
+  const canViewFinancials = await currentUserHasPermission("reports.view");
   const [openMatters, mattersThisWeek, unreadEmail, flaggedEmail, hoursAgg, trustAgg, goals] =
     await Promise.all([
       prisma.matter.count({
@@ -78,17 +86,28 @@ export async function getDashboardKpis(tz: string): Promise<DashboardKpis> {
           createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
         },
       }),
-      prisma.emailThread.count({ where: { isRead: false } }),
-      prisma.emailLabel.count({ where: { label: "urgent" } }),
+      // Email is per-mailbox: count only threads in the VIEWER's own
+      // accounts (EmailThread -> EmailAccount.userId), matching the
+      // Communication tab's counts. Another user's unread/urgent mail
+      // must not move this viewer's tile.
+      prisma.emailThread.count({
+        where: { isRead: false, account: { userId } },
+      }),
+      prisma.emailLabel.count({
+        where: { label: "urgent", thread: { account: { userId } } },
+      }),
       prisma.timeEntry.aggregate({
         where: { date: { gte: startOfTodayInTz(tz), lte: endOfTodayInTz(tz) } },
         _sum: { hours: true },
       }),
-      prisma.matter.aggregate({
-        where: { trustBalance: { gt: 0 } },
-        _sum: { trustBalance: true },
-        _count: true,
-      }),
+      // Firm-wide trust total: skipped entirely without reports.view.
+      canViewFinancials
+        ? prisma.matter.aggregate({
+            where: { trustBalance: { gt: 0 } },
+            _sum: { trustBalance: true },
+            _count: true,
+          })
+        : Promise.resolve(null),
       // Firm-settable target (settings → Firm info); was a
       // hardcoded 6.0 before Firm.dailyHoursGoal existed.
       getFirmGoals(),
@@ -105,8 +124,8 @@ export async function getDashboardKpis(tz: string): Promise<DashboardKpis> {
     // Decimal → number at the API boundary. Display + KPI math
     // tolerates the precision floor; the Decimal stays canonical
     // in the DB. Same pattern below for invoice totals.
-    trustBalance: trustAgg._sum.trustBalance?.toNumber() ?? 0,
-    trustMatterCount: trustAgg._count,
+    trustBalance: trustAgg ? (trustAgg._sum.trustBalance?.toNumber() ?? 0) : null,
+    trustMatterCount: trustAgg ? trustAgg._count : null,
   };
 }
 
@@ -138,23 +157,60 @@ const formatTime = (d: Date, tz: string): string => {
 };
 
 export async function getTodayAgenda(tz: string): Promise<AgendaItem[]> {
+  const viewerId = await getCurrentUserId();
   // Real instants — bound by the true UTC extent of the user's
   // local day (not the date-key round-trip used for date-only
   // columns above).
   const [y, m, d] = todayYmdInTz(tz);
   const dayStart = instantInTz(y, m, d, 0, 0, tz);
   const dayEnd = instantInTz(y, m, d, 23, 59, tz);
+  // Same inputs queries/calendar.ts feeds the visibility resolver:
+  // creator + creator default, attendee user ids, active matter team.
   const events = await prisma.calendarEvent.findMany({
     where: { startTime: { gte: dayStart, lte: dayEnd } },
     orderBy: { startTime: "asc" },
     include: {
       matter: {
-        select: { practiceArea: { select: { name: true, color: true } } },
+        select: {
+          id: true,
+          practiceArea: { select: { name: true, color: true } },
+          teamMembers: {
+            where: { removedAt: null },
+            select: { userId: true },
+          },
+        },
       },
+      createdBy: { select: { defaultEventVisibility: true } },
+      attendees: { select: { userId: true } },
     },
   });
 
   return events.map((e) => {
+    const canSee = canViewEventDetails({
+      viewerId,
+      createdById: e.createdById,
+      eventVisibility: e.visibility,
+      creatorDefaultEventVisibility:
+        e.createdBy?.defaultEventVisibility ?? null,
+      matterId: e.matter?.id ?? null,
+      attendeeUserIds: e.attendees
+        .map((a) => a.userId)
+        .filter((id): id is string => !!id),
+      matterTeamUserIds: e.matter?.teamMembers.map((t) => t.userId) ?? [],
+    });
+
+    // Busy scrub — identical to the calendar's: the time block stays,
+    // title / practice area / color are replaced server-side.
+    if (!canSee) {
+      return {
+        id: e.id,
+        time: formatTime(e.startTime, tz),
+        title: "Busy",
+        area: "Firm",
+        color: "var(--color-ink-3)",
+      };
+    }
+
     const pa = e.matter?.practiceArea;
     return {
       id: e.id,
@@ -183,10 +239,39 @@ export async function getRecentActivity(
   tz: string,
   limit = 5
 ): Promise<ActivityItem[]> {
+  const [canViewSettlements, canViewExpenses, canViewFirmActivity] =
+    await Promise.all([
+      currentUserHasPermission("matters.settlement.view"),
+      currentUserHasPermission("matters.expense.view"),
+      currentUserHasPermission("firm.view_activity"),
+    ]);
   const entries = await prisma.activityLog.findMany({
-    // Sign-in/password audit rows are governance, not work — they
-    // live on /settings/activity + /settings/security only.
-    where: { type: { not: "auth" } },
+    where: {
+      // Sign-in/password audit rows are governance, not work — they
+      // live on /settings/activity + /settings/security only.
+      type: { not: "auth" },
+      AND: [
+        // Settlement rows carry gross amounts + lienholders: same key
+        // that gates the settlement UI.
+        ...(canViewSettlements ? [] : [{ type: { not: "settlement" } }]),
+        // Expense rows (type "filing", "Expense logged · $X · desc")
+        // carry amounts + descriptions: gated by matters.expense.view.
+        ...(canViewExpenses
+          ? []
+          : [
+              {
+                NOT: {
+                  matterId: { not: null },
+                  title: { startsWith: "Expense " },
+                },
+              },
+            ]),
+        // Firm-scope rows (matterId null: role grants, conflict-check
+        // overrides, lead declines, rule edits) are the governance
+        // feed /settings/activity gates on firm.view_activity.
+        ...(canViewFirmActivity ? [] : [{ matterId: { not: null } }]),
+      ],
+    },
     orderBy: { timestamp: "desc" },
     take: limit,
   });
@@ -217,9 +302,16 @@ export type FollowUpItem = {
 
 export async function getFollowUpsDueToday(tz: string): Promise<FollowUpItem[]> {
   const end = endOfTodayInTz(tz);
+  const userId = await getCurrentUserId();
   const [emails, messages] = await Promise.all([
     prisma.emailThread.findMany({
-      where: { followUpAt: { lte: end }, isArchived: false },
+      // Viewer's own mailbox only (EmailThread -> EmailAccount.userId),
+      // in the where so `take` can't be eaten by other users' threads.
+      where: {
+        followUpAt: { lte: end },
+        isArchived: false,
+        account: { userId },
+      },
       orderBy: { followUpAt: "asc" },
       take: 50,
       include: {
@@ -410,30 +502,55 @@ export type FirmPulse = {
   arOutstanding: number;
 };
 
-export async function getFirmPulse(tz: string): Promise<FirmPulse> {
-  const [mtdAgg, invoiceAgg, goals] = await Promise.all([
+// Invoice filters mirror /reports (queries/reports.ts getArAgingReport):
+// receivables are client invoices in sent / partial. Void, draft /
+// approved (not yet sent) and internal records (born "paid") are never
+// A/R. The collection rate is collected / billed over client invoices
+// that have actually gone out: sent, partial and paid.
+const AR_OPEN_STATUSES = ["sent", "partial"];
+const BILLED_STATUSES = ["sent", "partial", "paid"];
+
+/** Firm-wide pulse. Returns `null` for viewers without `reports.view`
+ *  (billable hours, A/R and collection rate are firm-wide financials,
+ *  gated like /reports) without running the aggregates. */
+export async function getFirmPulse(tz: string): Promise<FirmPulse | null> {
+  if (!(await currentUserHasPermission("reports.view"))) return null;
+
+  const [mtdAgg, openInvoices, billedAgg, goals] = await Promise.all([
     prisma.timeEntry.aggregate({
       where: { date: { gte: startOfMonthInTz(tz) }, billable: true },
       _sum: { hours: true },
     }),
+    prisma.invoice.findMany({
+      where: { kind: "client", status: { in: AR_OPEN_STATUSES } },
+      select: { totalAmount: true, paidAmount: true },
+    }),
     prisma.invoice.aggregate({
+      where: { kind: "client", status: { in: BILLED_STATUSES } },
       _sum: { totalAmount: true, paidAmount: true },
     }),
     // Firm-settable target — was a hardcoded 200.
     getFirmGoals(),
   ]);
 
-  // Decimal → number at the API boundary; display arithmetic
-  // (collection rate, AR) tolerates the precision floor.
-  const total = invoiceAgg._sum.totalAmount?.toNumber() ?? 0;
-  const paid = invoiceAgg._sum.paidAmount?.toNumber() ?? 0;
-  const collectionRate = total > 0 ? (paid / total) * 100 : 0;
-  const arOutstanding = Math.max(0, total - paid);
+  // A/R: per-invoice outstanding, skipping fully-paid-but-unflipped
+  // rows exactly like the aging report. Decimal until the boundary.
+  let arOutstanding = new Prisma.Decimal(0);
+  for (const inv of openInvoices) {
+    const outstanding = inv.totalAmount.minus(inv.paidAmount);
+    if (outstanding.gt(0)) arOutstanding = arOutstanding.plus(outstanding);
+  }
+
+  const billed = billedAgg._sum.totalAmount ?? new Prisma.Decimal(0);
+  const collected = billedAgg._sum.paidAmount ?? new Prisma.Decimal(0);
+  const collectionRate = billed.gt(0)
+    ? collected.div(billed).mul(100).toNumber()
+    : 0;
 
   return {
     billableMtd: mtdAgg._sum.hours ?? 0,
     billableGoal: goals.monthlyBillableGoal,
     collectionRate,
-    arOutstanding,
+    arOutstanding: arOutstanding.toNumber(),
   };
 }

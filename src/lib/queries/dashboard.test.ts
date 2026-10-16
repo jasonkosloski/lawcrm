@@ -44,6 +44,12 @@ import {
   seedUser,
 } from "@/test/integration-helpers";
 
+/** Make a user an Admin (every permission) so permission-gated
+ *  dashboard data is visible to them. */
+async function makeAdmin(uid: string): Promise<void> {
+  await prisma.userRole.create({ data: { userId: uid, roleId: adminRoleId } });
+}
+
 const NOW = new Date("2026-06-16T02:00:00Z");
 const DENVER = "America/Denver"; // June 15 evening at NOW
 const TOKYO = "Asia/Tokyo"; // June 16 morning at NOW
@@ -51,6 +57,7 @@ const TOKYO = "Asia/Tokyo"; // June 16 morning at NOW
 let firmId: string;
 let matterId: string;
 let userId: string;
+let adminRoleId: string;
 
 beforeAll(() => {
   expect(process.env.DATABASE_URL).toMatch(/lawcrm_test/);
@@ -58,7 +65,7 @@ beforeAll(() => {
 
 beforeEach(async () => {
   await resetDb();
-  ({ firmId } = await seedFirm());
+  ({ firmId, adminRoleId } = await seedFirm());
   ({ userId } = await seedUser({ firmId }));
   const { areaId, stageId } = await seedPracticeArea();
   ({ matterId } = await seedMatter({
@@ -194,13 +201,15 @@ describe("getDashboardKpis — hoursToday sums the user's local day", () => {
 
 describe("goals come from the Firm row, not hardcoded constants", () => {
   test("fresh firm serves the schema defaults (6.0 / 200)", async () => {
+    await makeAdmin(userId);
     const kpis = await getDashboardKpis(DENVER);
     expect(kpis.hoursGoal).toBe(6.0);
     const pulse = await getFirmPulse(DENVER);
-    expect(pulse.billableGoal).toBe(200);
+    expect(pulse!.billableGoal).toBe(200);
   });
 
   test("configured firm goals flow through to KPIs + pulse", async () => {
+    await makeAdmin(userId);
     await prisma.firm.update({
       where: { id: firmId },
       data: { dailyHoursGoal: 8.5, monthlyBillableGoal: 175 },
@@ -210,7 +219,7 @@ describe("goals come from the Firm row, not hardcoded constants", () => {
     expect(kpis.hoursGoal).toBe(8.5);
 
     const pulse = await getFirmPulse(DENVER);
-    expect(pulse.billableGoal).toBe(175);
+    expect(pulse!.billableGoal).toBe(175);
   });
 });
 
