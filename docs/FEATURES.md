@@ -127,10 +127,13 @@ done. What's left is enumerated below.
   sweep + cron endpoint, task-assigned / settlement-step / team-add /
   invoice-payment triggers). Still left: email / SMS / push delivery
   — those channels fan out FROM `createNotification[s]`, reading the
-  same Notification table (see the writer's docstring). Also left: a
-  `vercel.json` cron schedule pointing at `/api/notification-sweep`
-  (+ CRON_SECRET env in prod) and per-matter notification
-  preferences. The owner picker shipped 2026-07-07: AssigneeSelect
+  same Notification table (see the writer's docstring). Also left:
+  per-matter notification preferences. Scheduling shipped 2026-10-16:
+  `vercel.json` crons run `/api/notification-sweep` hourly and
+  `/api/email-sync` (mail + calendar pull) every 5 minutes, with
+  `CRON_SECRET` set in production; the auth proxy exempts both paths
+  (they self-authenticate via the bearer secret), and
+  `src/vercel-config.test.ts` pins that wiring. The owner picker shipped 2026-07-07: AssigneeSelect
   (Unassigned + active users, initials chip) on the task composer +
   edit dialog; create/update/reassign all funnel through
   `notifyTaskAssigned` (src/lib/task-assignment.ts) with the
