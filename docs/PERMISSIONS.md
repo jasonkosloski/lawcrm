@@ -166,6 +166,13 @@ The v1 catalog has some coarse `manage_*` keys (`matters.manage_team`,
 capability up front. Existing coarse keys get refined as each feature
 gets revisited.
 
+### Keys that gate more than one surface
+
+- `matters.manage_team` gates `addMatterTeamMember` **and** changing the
+  lead attorney from the matter edit form (`updateMatter` returns a
+  field error otherwise; the form locks the field). `matters.edit`
+  alone can edit everything else on the matter.
+
 ### The current catalog
 
 **`src/lib/permissions.ts` is the source of truth** — this doc

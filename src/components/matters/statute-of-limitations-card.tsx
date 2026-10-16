@@ -22,6 +22,7 @@ import { useOptimistic, useTransition } from "react";
 import { CheckCircle2, Circle, Loader2, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/format-date";
+import { computeSolDate } from "@/lib/sol";
 import { Card, CardContent } from "@/components/ui/card";
 import { setMatterSolSatisfied } from "@/app/actions/matters";
 
@@ -41,6 +42,11 @@ export type StatuteOfLimitationsCardProps = {
    *  attorney sees how the date was derived. Cosmetic — the
    *  field doesn't change the underlying data. */
   incidentDate?: Date | null;
+  /** The practice area's statute period (total days). When provided,
+   *  the "from incident" provenance is shown only if the date really
+   *  is incident + period; otherwise the date is a manual override and
+   *  the line says so instead of implying it was derived. */
+  statutePeriodDays?: number | null;
   /** Server-resolved `matters.edit` (the key `setMatterSolSatisfied`
    *  enforces). Without it the toggle isn't rendered — the heading
    *  already reads "Satisfied" / the countdown either way. */
@@ -91,6 +97,7 @@ export function StatuteOfLimitationsCard({
   notes,
   citation,
   incidentDate,
+  statutePeriodDays,
   canEdit,
 }: StatuteOfLimitationsCardProps) {
   const [optimisticSatisfied, setOptimisticSatisfied] =
@@ -104,6 +111,18 @@ export function StatuteOfLimitationsCard({
       if (!res.ok && res.error) alert(res.error);
     });
   };
+
+  // Only claim "from incident" when the date matches incident + period
+  // (needs the period; without it we can't tell, so keep the old copy).
+  const computedFromIncident = computeSolDate(
+    incidentDate,
+    statutePeriodDays
+  );
+  const isManualDate =
+    !!date &&
+    !!computedFromIncident &&
+    computedFromIncident.toISOString().slice(0, 10) !==
+      date.toISOString().slice(0, 10);
 
   // No date set yet — gentle prompt instead of countdown chrome.
   if (!date) {
@@ -227,7 +246,20 @@ export function StatuteOfLimitationsCard({
             sees the strongest signal we have. */}
         {(citation || incidentDate) && (
           <div className="text-2xs text-ink-4 flex flex-wrap items-center gap-x-1.5">
-            {incidentDate && (
+            {incidentDate && isManualDate && (
+              <span>
+                manual date (incident{" "}
+                <span className="font-mono">
+                  {formatCalendarDate(incidentDate)}
+                </span>{" "}
+                + period would give{" "}
+                <span className="font-mono">
+                  {formatCalendarDate(computedFromIncident!)}
+                </span>
+                )
+              </span>
+            )}
+            {incidentDate && !isManualDate && (
               <span>
                 from incident{" "}
                 <span className="font-mono">

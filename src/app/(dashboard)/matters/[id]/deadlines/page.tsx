@@ -194,6 +194,7 @@ export default async function MatterDeadlinesPage({
                       kind: d.kind,
                       sourceRef: d.sourceRef,
                       dueDate: d.dueDate,
+                      sourceType: d.sourceType,
                       // `overdue` is computed; persisted statuses are open/completed/waived.
                       // Coerce overdue → open so the menu radio shows the underlying state.
                       status: (d.status === "overdue"

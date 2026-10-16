@@ -32,6 +32,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useTransition,
 } from "react";
 import { Sparkles, UserCheck, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -126,6 +127,20 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
     CreateMatterState,
     FormData
   >(createMatter, createMatterInitialState);
+  // Submit via onSubmit + startTransition rather than
+  // `<form action={formAction}>`: React 19 auto-resets the form after a
+  // function action, reverting every <select> (area, stage, fee, lead)
+  // to its mount value after a validation error — so the corrected
+  // resubmit would create the matter with the wrong values.
+  const [, startTransition] = useTransition();
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const submitter = (e.nativeEvent as SubmitEvent).submitter as
+      | HTMLElement
+      | null;
+    const fd = new FormData(e.currentTarget, submitter);
+    startTransition(() => formAction(fd));
+  };
 
   const vals = state.values ?? {};
   const errs = state.errors ?? {};
@@ -263,7 +278,7 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
     : null;
 
   return (
-    <form action={formAction} className="flex flex-col gap-6">
+    <form onSubmit={onSubmit} className="flex flex-col gap-6">
       {/* ── Core ────────────────────────────────────────────────── */}
       <Section title="Core">
         <div className="flex flex-col gap-1">

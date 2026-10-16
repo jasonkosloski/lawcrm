@@ -34,32 +34,42 @@ export default async function EditMatterPage({
 }: PageProps<"/matters/[id]/edit">) {
   const { id } = await params;
 
+  // The matter loads first: the client / lead option lists must always
+  // include the matter's CURRENT client and lead, even when that contact
+  // was deactivated / re-typed or that user left the firm. Otherwise the
+  // selects have no matching option, the browser shows the first one, and
+  // an unrelated save silently detaches the client or reassigns the lead.
+  const matter = await prisma.matter.findUnique({
+    where: { id },
+    include: {
+      // Pull every team membership (active + former) so the
+      // edit page can render both buckets. The dedicated
+      // team-management section uses this; the lead-finder
+      // below scopes to active rows.
+      teamMembers: {
+        orderBy: [{ removedAt: "asc" }, { createdAt: "asc" }],
+        include: {
+          user: {
+            select: { id: true, name: true, jobTitle: true, initials: true },
+          },
+        },
+      },
+    },
+  });
+  if (!matter) notFound();
+
+  const activeLead = matter.teamMembers.find(
+    (m) => m.role === "lead" && !m.removedAt
+  );
+
   const [
-    matter,
     areas,
-    clients,
-    users,
+    clientRows,
+    userRows,
     canManageTeam,
     canEditMatter,
     firmDefaults,
   ] = await Promise.all([
-    prisma.matter.findUnique({
-      where: { id },
-      include: {
-        // Pull every team membership (active + former) so the
-        // edit page can render both buckets. The dedicated
-        // team-management section uses this; the lead-finder
-        // below scopes to active rows.
-        teamMembers: {
-          orderBy: [{ removedAt: "asc" }, { createdAt: "asc" }],
-          include: {
-            user: {
-              select: { id: true, name: true, jobTitle: true, initials: true },
-            },
-          },
-        },
-      },
-    }),
     prisma.practiceArea.findMany({
       where: { isActive: true },
       orderBy: [{ order: "asc" }, { name: "asc" }],
@@ -77,13 +87,23 @@ export default async function EditMatterPage({
       },
     }),
     prisma.contact.findMany({
-      where: { type: "client", isActive: true },
-      select: { id: true, name: true, organization: true },
+      where: {
+        OR: [
+          { type: "client", isActive: true },
+          ...(matter.clientId ? [{ id: matter.clientId }] : []),
+        ],
+      },
+      select: { id: true, name: true, organization: true, isActive: true },
       orderBy: { name: "asc" },
     }),
     prisma.user.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true, jobTitle: true },
+      where: {
+        OR: [
+          { isActive: true },
+          ...(activeLead ? [{ id: activeLead.userId }] : []),
+        ],
+      },
+      select: { id: true, name: true, jobTitle: true, isActive: true },
       orderBy: { name: "asc" },
     }),
     currentUserHasPermission("matters.manage_team"),
@@ -99,11 +119,23 @@ export default async function EditMatterPage({
     }),
   ]);
 
-  if (!matter) notFound();
-
-  const activeLead = matter.teamMembers.find(
-    (m) => m.role === "lead" && !m.removedAt
-  );
+  const clients = clientRows.map((c) => ({
+    id: c.id,
+    name: c.name,
+    organization: c.organization,
+    inactive: !c.isActive,
+  }));
+  // Lead picker: active users plus the (possibly deactivated) current
+  // lead. The team-management card below only ever gets active users.
+  const leadOptions = userRows.map((u) => ({
+    id: u.id,
+    name: u.name,
+    jobTitle: u.jobTitle,
+    inactive: !u.isActive,
+  }));
+  const users = userRows
+    .filter((u) => u.isActive)
+    .map((u) => ({ id: u.id, name: u.name, jobTitle: u.jobTitle }));
 
   const forEdit: MatterForEdit = {
     id: matter.id,
@@ -150,7 +182,8 @@ export default async function EditMatterPage({
             <CardContent className="p-5">
               <EditMatterForm
                 matter={forEdit}
-                options={{ areas, clients, users }}
+                options={{ areas, clients, users: leadOptions }}
+                canChangeLead={canManageTeam}
               />
             </CardContent>
           </Card>

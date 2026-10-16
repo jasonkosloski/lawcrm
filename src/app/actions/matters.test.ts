@@ -9,9 +9,10 @@
  *     the SOL sync: clearing the SOL date resets the flag, so a
  *     re-added date starts back at "open" instead of diverging from a
  *     stale satisfied flag; a plain date edit preserves the flag.
- *   - Deactivated users can't be assigned as lead attorney — both
- *     create and update fall back to the current user, matching
- *     addMatterTeamMember's active-user guard.
+ *   - Deactivated users can't be assigned as lead attorney — create
+ *     falls back to the current user, update returns a field error
+ *     (never silently swaps the lead), matching addMatterTeamMember's
+ *     active-user guard.
  *
  * Auth + permission gates are stubbed; the gate itself is covered in
  * `permission-check.integration.test.ts`.
@@ -38,7 +39,15 @@ vi.mock("next/navigation", () => ({
 
 import { getCurrentUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
-import { createMatter, updateMatter } from "@/app/actions/matters";
+import {
+  currentUserHasPermission,
+  requirePermission,
+} from "@/lib/permission-check";
+import {
+  createMatter,
+  setMatterSolSatisfied,
+  updateMatter,
+} from "@/app/actions/matters";
 import {
   NEW_CLIENT_SENTINEL,
   createMatterInitialState,
@@ -72,6 +81,9 @@ beforeEach(async () => {
   const u = await seedUser({ firmId });
   userId = u.userId;
   mockedGetUser.mockResolvedValue(userId);
+  vi.mocked(currentUserHasPermission).mockResolvedValue(true);
+  // requirePermission returns the actor id (used for audit rows).
+  vi.mocked(requirePermission).mockResolvedValue(userId);
   // SOL-tracking area so the SOL fields aren't dropped on the floor.
   const area = await seedPracticeArea({ hasStatuteOfLimitations: true });
   areaId = area.areaId;
@@ -338,16 +350,17 @@ describe("deactivated lead attorney", () => {
       leadUserId: userId,
     });
 
-    await expect(
-      updateMatter(
-        matterId,
-        updateMatterInitialState,
-        updateForm({ leadUserId: inactive.userId })
-      )
-    ).rejects.toThrow(/__REDIRECT__/);
+    // A deliberate change to an inactive user is a field error — it no
+    // longer silently falls back to the current user.
+    const result = await updateMatter(
+      matterId,
+      updateMatterInitialState,
+      updateForm({ leadUserId: inactive.userId })
+    );
+    expect(result.status).toBe("error");
+    expect(result.errors?.leadUserId?.[0]).toMatch(/active user/i);
 
-    // Fallback keeps the current user as lead; the deactivated user
-    // never joins the team.
+    // The lead is unchanged; the deactivated user never joins the team.
     const lead = await prisma.matterTeamMember.findFirst({
       where: { matterId, role: "lead", removedAt: null },
       select: { userId: true },
@@ -358,5 +371,501 @@ describe("deactivated lead attorney", () => {
         where: { matterId, userId: inactive.userId },
       })
     ).toBe(0);
+  });
+
+  test("saving with an unchanged, since-deactivated lead keeps them as lead (F082)", async () => {
+    const departed = await seedUser({ firmId, isActive: false });
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: departed.userId,
+    });
+
+    await expect(
+      updateMatter(
+        matterId,
+        updateMatterInitialState,
+        updateForm({ leadUserId: departed.userId, court: "D. Colo." })
+      )
+    ).rejects.toThrow(/__REDIRECT__/);
+
+    const members = await prisma.matterTeamMember.findMany({
+      where: { matterId },
+      select: { userId: true, role: true },
+    });
+    expect(members).toEqual([{ userId: departed.userId, role: "lead" }]);
+    expect(
+      (await prisma.matter.findUniqueOrThrow({ where: { id: matterId } })).court
+    ).toBe("D. Colo.");
+  });
+
+  test("saving with an unchanged, since-deactivated client keeps the client (F082)", async () => {
+    const client = await prisma.contact.create({
+      data: { name: "Maria Alvarez", type: "client", isActive: false },
+    });
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    await prisma.matter.update({
+      where: { id: matterId },
+      data: { clientId: client.id },
+    });
+
+    await expect(
+      updateMatter(
+        matterId,
+        updateMatterInitialState,
+        updateForm({ clientId: client.id })
+      )
+    ).rejects.toThrow(/__REDIRECT__/);
+
+    expect(
+      (await prisma.matter.findUniqueOrThrow({ where: { id: matterId } }))
+        .clientId
+    ).toBe(client.id);
+  });
+});
+
+// ── Lead attorney change needs matters.manage_team ──────────────────────
+
+describe("updateMatter lead change authorization (F138/F300/F767)", () => {
+  test("an editor without manage_team cannot swap the lead", async () => {
+    const other = await seedUser({ firmId, name: "Other Attorney" });
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (key) => key !== "matters.manage_team"
+    );
+
+    const result = await updateMatter(
+      matterId,
+      updateMatterInitialState,
+      updateForm({ leadUserId: other.userId })
+    );
+    expect(result.status).toBe("error");
+    expect(result.errors?.leadUserId?.[0]).toMatch(/manage the case team/i);
+    const lead = await prisma.matterTeamMember.findFirst({
+      where: { matterId, role: "lead", removedAt: null },
+    });
+    expect(lead?.userId).toBe(userId);
+  });
+
+  test("an editor without manage_team can still save with the lead unchanged (or omitted)", async () => {
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (key) => key !== "matters.manage_team"
+    );
+
+    await expect(
+      updateMatter(matterId, updateMatterInitialState, updateForm())
+    ).rejects.toThrow(/__REDIRECT__/);
+    const noLeadField = updateForm({ court: "Omitted lead" });
+    noLeadField.delete("leadUserId");
+    await expect(
+      updateMatter(matterId, updateMatterInitialState, noLeadField)
+    ).rejects.toThrow(/__REDIRECT__/);
+    const lead = await prisma.matterTeamMember.findFirst({
+      where: { matterId, role: "lead", removedAt: null },
+    });
+    expect(lead?.userId).toBe(userId);
+  });
+
+  test("with manage_team the lead swaps, demotes the old lead and is audited", async () => {
+    const other = await seedUser({ firmId, name: "Other Attorney" });
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+
+    await expect(
+      updateMatter(
+        matterId,
+        updateMatterInitialState,
+        updateForm({ leadUserId: other.userId })
+      )
+    ).rejects.toThrow(/__REDIRECT__/);
+
+    const members = await prisma.matterTeamMember.findMany({
+      where: { matterId },
+      select: { userId: true, role: true },
+    });
+    expect(members).toContainEqual({ userId: other.userId, role: "lead" });
+    expect(members).toContainEqual({ userId, role: "co_counsel" });
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { matterId, title: "Lead attorney changed" },
+    });
+    expect(log.detail).toContain("Other Attorney");
+  });
+});
+
+// ── SOL: auto-derived vs manual override on edit (F013/F014) ────────────
+
+describe("updateMatter SOL recompute", () => {
+  /** Matter in a SOL area with the given incident + SOL dates and the
+   *  mirrored deadline. */
+  const seedSolMatter = async (opts: {
+    incident: string | null;
+    sol: string | null;
+    notes?: string;
+    deadlineOwner?: string | null;
+    deadlineStatus?: string;
+    satisfied?: boolean;
+  }) => {
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    await prisma.matter.update({
+      where: { id: matterId },
+      data: {
+        incidentDate: opts.incident ? new Date(opts.incident) : null,
+        statuteOfLimitationsDate: opts.sol ? new Date(opts.sol) : null,
+        statuteOfLimitationsNotes: opts.notes ?? null,
+        statuteOfLimitationsSatisfied: opts.satisfied ?? false,
+      },
+    });
+    if (opts.sol) {
+      await prisma.deadline.create({
+        data: {
+          matterId,
+          title: "Statute of limitations",
+          dueDate: new Date(opts.sol),
+          kind: "critical",
+          sourceType: SOL_SOURCE_TYPE,
+          status: opts.deadlineStatus ?? "open",
+          ownerId: opts.deadlineOwner === undefined ? userId : opts.deadlineOwner,
+        },
+      });
+    }
+    return matterId;
+  };
+  const setPeriod = (days: number | null, id = areaId) =>
+    prisma.practiceArea.update({
+      where: { id },
+      data: { statutePeriodDays: days },
+    });
+  const readSol = async (matterId: string) => {
+    const m = await prisma.matter.findUniqueOrThrow({
+      where: { id: matterId },
+      select: {
+        incidentDate: true,
+        statuteOfLimitationsDate: true,
+        statuteOfLimitationsNotes: true,
+      },
+    });
+    const d = await prisma.deadline.findFirst({
+      where: { matterId, sourceType: SOL_SOURCE_TYPE },
+    });
+    return {
+      incident: m.incidentDate?.toISOString().slice(0, 10) ?? null,
+      sol: m.statuteOfLimitationsDate?.toISOString().slice(0, 10) ?? null,
+      notes: m.statuteOfLimitationsNotes,
+      deadline: d?.dueDate.toISOString().slice(0, 10) ?? null,
+      deadlineRow: d,
+    };
+  };
+  const save = (matterId: string, over: Record<string, string>) =>
+    expect(
+      updateMatter(matterId, updateMatterInitialState, updateForm(over))
+    ).rejects.toThrow(/__REDIRECT__/);
+
+  test("an auto-derived SOL follows a corrected incident date even when the stored date is posted back", async () => {
+    await setPeriod(730);
+    // 2024-06-01 + 730 days = 2026-06-01 (auto-derived).
+    const matterId = await seedSolMatter({
+      incident: "2024-06-01",
+      sol: "2026-06-01",
+    });
+
+    // Old form behaviour: the stored date comes back as a "override".
+    await save(matterId, {
+      incidentDate: "2024-03-01",
+      statuteOfLimitationsDate: "2026-06-01",
+    });
+
+    const r = await readSol(matterId);
+    expect(r.sol).toBe("2026-03-01");
+    expect(r.deadline).toBe("2026-03-01");
+  });
+
+  test("an auto-derived SOL also recomputes when the override input is left empty", async () => {
+    await setPeriod(730);
+    const matterId = await seedSolMatter({
+      incident: "2024-06-01",
+      sol: "2026-06-01",
+    });
+    await save(matterId, { incidentDate: "2024-03-01" });
+    const r = await readSol(matterId);
+    expect(r.sol).toBe("2026-03-01");
+    expect(r.deadline).toBe("2026-03-01");
+  });
+
+  test("a manual override that never matched the computed value is kept", async () => {
+    await setPeriod(730);
+    // Tolling agreement pushed the SOL out; incident + period = 2026-06-01.
+    const matterId = await seedSolMatter({
+      incident: "2024-06-01",
+      sol: "2027-01-15",
+    });
+
+    await save(matterId, {
+      incidentDate: "2024-03-01",
+      statuteOfLimitationsDate: "2027-01-15",
+    });
+
+    const r = await readSol(matterId);
+    expect(r.sol).toBe("2027-01-15");
+    expect(r.deadline).toBe("2027-01-15");
+  });
+
+  test("a typed date different from the stored one is a manual override", async () => {
+    await setPeriod(730);
+    const matterId = await seedSolMatter({
+      incident: "2024-06-01",
+      sol: "2026-06-01",
+    });
+    await save(matterId, {
+      incidentDate: "2024-06-01",
+      statuteOfLimitationsDate: "2026-09-09",
+    });
+    const r = await readSol(matterId);
+    expect(r.sol).toBe("2026-09-09");
+    expect(r.deadline).toBe("2026-09-09");
+  });
+
+  test("switching to another SOL area recomputes from that area's period", async () => {
+    await setPeriod(730);
+    const other = await seedPracticeArea({ hasStatuteOfLimitations: true });
+    await setPeriod(365, other.areaId);
+    const matterId = await seedSolMatter({
+      incident: "2024-06-01",
+      sol: "2026-06-01",
+    });
+
+    await save(matterId, {
+      practiceAreaId: other.areaId,
+      stageId: other.stageId,
+      incidentDate: "2024-06-01",
+      statuteOfLimitationsDate: "2026-06-01",
+    });
+
+    const r = await readSol(matterId);
+    expect(r.sol).toBe("2025-06-01");
+    expect(r.deadline).toBe("2025-06-01");
+  });
+
+  test("a matter with no SOL yet gets one computed on save", async () => {
+    await setPeriod(730);
+    const matterId = await seedSolMatter({ incident: null, sol: null });
+    await save(matterId, { incidentDate: "2024-06-01" });
+    const r = await readSol(matterId);
+    expect(r.sol).toBe("2026-06-01");
+    expect(r.deadline).toBe("2026-06-01");
+  });
+
+  test("switching to an area without SOL tracking keeps incident date, SOL date/notes and the deadline", async () => {
+    await setPeriod(730);
+    const noSol = await seedPracticeArea({ hasStatuteOfLimitations: false });
+    const matterId = await seedSolMatter({
+      incident: "2024-11-15",
+      sol: "2026-11-15",
+      notes: "tolled by agreement",
+    });
+
+    await save(matterId, {
+      practiceAreaId: noSol.areaId,
+      stageId: noSol.stageId,
+    });
+
+    const r = await readSol(matterId);
+    expect(r.incident).toBe("2024-11-15");
+    expect(r.sol).toBe("2026-11-15");
+    expect(r.notes).toBe("tolled by agreement");
+    expect(r.deadline).toBe("2026-11-15");
+  });
+
+  test("an area that stopped tracking SOL does not wipe its matters on an unrelated edit", async () => {
+    const matterId = await seedSolMatter({
+      incident: "2024-11-15",
+      sol: "2026-11-15",
+      notes: "keep me",
+    });
+    await prisma.practiceArea.update({
+      where: { id: areaId },
+      data: { hasStatuteOfLimitations: false },
+    });
+
+    await save(matterId, { name: "Typo fixed" });
+
+    const r = await readSol(matterId);
+    expect(r.sol).toBe("2026-11-15");
+    expect(r.incident).toBe("2024-11-15");
+    expect(r.notes).toBe("keep me");
+    expect(r.deadline).toBe("2026-11-15");
+  });
+
+  test("a malformed date is a field error, not a Prisma failure", async () => {
+    const matterId = await seedSolMatter({ incident: null, sol: null });
+    const bad = await updateMatter(
+      matterId,
+      updateMatterInitialState,
+      updateForm({
+        incidentDate: "not-a-date",
+        statuteOfLimitationsDate: "2026-02-31",
+      })
+    );
+    expect(bad.status).toBe("error");
+    expect(bad.errors?.incidentDate).toBeDefined();
+    expect(bad.errors?.statuteOfLimitationsDate).toBeDefined();
+
+    const badCreate = await createMatter(
+      createMatterInitialState,
+      createForm({ incidentDate: "garbage" })
+    );
+    expect(badCreate.status).toBe("error");
+    expect(badCreate.errors?.incidentDate).toBeDefined();
+  });
+
+  test("a matter save keeps the SOL deadline's status and owner (F315)", async () => {
+    const other = await seedUser({ firmId, name: "Deadline Owner" });
+    const matterId = await seedSolMatter({
+      incident: null,
+      sol: "2027-06-01",
+      deadlineOwner: other.userId,
+      deadlineStatus: "waived",
+    });
+
+    await save(matterId, {
+      statuteOfLimitationsDate: "2027-06-01",
+      court: "D. Colo.",
+    });
+
+    const r = await readSol(matterId);
+    expect(r.deadlineRow?.ownerId).toBe(other.userId);
+    expect(r.deadlineRow?.status).toBe("waived");
+  });
+
+  test("the SOL deadline owner follows a lead swap when the old lead owned it", async () => {
+    const other = await seedUser({ firmId, name: "New Lead" });
+    const matterId = await seedSolMatter({ incident: null, sol: "2027-06-01" });
+    await save(matterId, {
+      statuteOfLimitationsDate: "2027-06-01",
+      leadUserId: other.userId,
+    });
+    const r = await readSol(matterId);
+    expect(r.deadlineRow?.ownerId).toBe(other.userId);
+  });
+
+  test("setMatterSolSatisfied keeps the deadline owner and writes an audit row (F315/F301)", async () => {
+    const matterId = await seedSolMatter({ incident: null, sol: "2027-06-01" });
+
+    await expect(setMatterSolSatisfied(matterId, true)).resolves.toEqual({
+      ok: true,
+    });
+    let r = await readSol(matterId);
+    expect(r.deadlineRow?.ownerId).toBe(userId);
+    expect(r.deadlineRow?.status).toBe("completed");
+
+    await setMatterSolSatisfied(matterId, false);
+    r = await readSol(matterId);
+    expect(r.deadlineRow?.ownerId).toBe(userId);
+    expect(r.deadlineRow?.status).toBe("open");
+
+    const logs = await prisma.activityLog.findMany({
+      where: { matterId, type: "deadline" },
+      orderBy: { timestamp: "asc" },
+      select: { title: true, userId: true, detail: true },
+    });
+    expect(logs.map((l) => l.title)).toEqual([
+      "Statute of limitations marked satisfied",
+      "Statute of limitations reopened",
+    ]);
+    expect(logs[0].userId).toBe(userId);
+    expect(logs[0].detail).toContain("2027-06-01");
+  });
+});
+
+// ── Audit trail ─────────────────────────────────────────────────────────
+
+describe("matter audit trail", () => {
+  test("createMatter writes a 'Matter created' row", async () => {
+    await expect(
+      createMatter(createMatterInitialState, createForm())
+    ).rejects.toThrow(/__REDIRECT__/);
+    const matter = await prisma.matter.findFirstOrThrow();
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { matterId: matter.id, title: "Matter created" },
+    });
+    expect(log.userId).toBe(userId);
+    expect(log.detail).toContain("Doe v. Acme");
+  });
+
+  test("updateMatter logs the old -> new SOL date, field changes and stage moves", async () => {
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    await prisma.matter.update({
+      where: { id: matterId },
+      data: { statuteOfLimitationsDate: new Date("2026-06-01") },
+    });
+    const stage2 = await prisma.matterStage.create({
+      data: { practiceAreaId: areaId, name: "Discovery", order: 1 },
+    });
+
+    await expect(
+      updateMatter(
+        matterId,
+        updateMatterInitialState,
+        updateForm({
+          statuteOfLimitationsDate: "2027-01-01",
+          court: "D. Colo.",
+          stageId: stage2.id,
+        })
+      )
+    ).rejects.toThrow(/__REDIRECT__/);
+
+    const sol = await prisma.activityLog.findFirstOrThrow({
+      where: { matterId, title: "Statute of limitations changed" },
+    });
+    expect(sol.detail).toBe("2026-06-01 → 2027-01-01");
+    expect(sol.type).toBe("deadline");
+    const updated = await prisma.activityLog.findFirstOrThrow({
+      where: { matterId, title: "Matter updated" },
+    });
+    expect(updated.detail).toContain("court");
+    expect(
+      await prisma.activityLog.count({
+        where: { matterId, title: "Stage moved: Intake → Discovery" },
+      })
+    ).toBe(1);
+  });
+
+  test("an unchanged save writes no audit noise", async () => {
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    await expect(
+      updateMatter(
+        matterId,
+        updateMatterInitialState,
+        updateForm({ name: "Test Matter", feeStructure: "hourly" })
+      )
+    ).rejects.toThrow(/__REDIRECT__/);
+    expect(await prisma.activityLog.count({ where: { matterId } })).toBe(0);
   });
 });

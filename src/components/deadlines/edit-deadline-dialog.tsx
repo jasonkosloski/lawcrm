@@ -29,6 +29,7 @@ import {
   DEADLINE_STATUSES,
   type DeadlineStatus,
 } from "@/lib/note-constants";
+import { SOL_SOURCE_TYPE } from "@/lib/sol";
 import { updateDeadline } from "@/app/actions/deadlines";
 import {
   updateDeadlineInitialState,
@@ -43,6 +44,9 @@ export type EditableDeadline = {
   sourceRef: string | null;
   dueDate: Date;
   status: DeadlineStatus;
+  /** `statute_of_limitations` marks the auto-managed SOL mirror row:
+   *  only its status is editable here (the matter owns the rest). */
+  sourceType?: string | null;
 };
 
 const KIND_LABEL: Record<string, string> = {
@@ -115,6 +119,7 @@ export function EditDeadlineDialog({
   }, [state, onOpenChange]);
 
   const errs = state.errors ?? {};
+  const isSol = deadline.sourceType === SOL_SOURCE_TYPE;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -127,41 +132,64 @@ export function EditDeadlineDialog({
         </DialogHeader>
 
         <form action={formAction} className="flex flex-col gap-3">
-          <TextField
-            name="title"
-            value={title}
-            onChange={setTitle}
-            placeholder="Deadline title"
-            error={errs.title?.[0]}
-            autoFocus
-          />
+          {isSol ? (
+            <div className="flex flex-col gap-2 rounded-md border border-line bg-paper-2 px-3 py-2 text-sm">
+              <div className="font-medium text-ink">{deadline.title}</div>
+              <div className="text-ink-3">
+                Due {dueDate || "—"}. This deadline is the matter&apos;s statute
+                of limitations and is managed on the matter edit page. Only its
+                status can be changed here.
+              </div>
+              {errs.dueDate?.[0] && (
+                <div role="alert" className="text-xs text-destructive">
+                  {errs.dueDate[0]}
+                </div>
+              )}
+              {/* Posted only to satisfy the shared form schema; the
+                  server ignores everything but status for this row. */}
+              <input type="hidden" name="title" value={deadline.title} />
+              <input type="hidden" name="dueDate" value={dueDate} />
+              <input type="hidden" name="kind" value={deadline.kind} />
+            </div>
+          ) : (
+            <>
+              <TextField
+                name="title"
+                value={title}
+                onChange={setTitle}
+                placeholder="Deadline title"
+                error={errs.title?.[0]}
+                autoFocus
+              />
 
-          <div className="grid grid-cols-[1fr_auto] gap-2">
-            <DateField
-              name="dueDate"
-              value={dueDate}
-              onChange={setDueDate}
-              placeholder="Due date"
-              error={errs.dueDate?.[0]}
-            />
-            <SelectField
-              name="kind"
-              value={kind}
-              onChange={setKind}
-              options={DEADLINE_KINDS.map((k) => ({
-                value: k,
-                label: KIND_LABEL[k] ?? k,
-              }))}
-            />
-          </div>
+              <div className="grid grid-cols-[1fr_auto] gap-2">
+                <DateField
+                  name="dueDate"
+                  value={dueDate}
+                  onChange={setDueDate}
+                  placeholder="Due date"
+                  error={errs.dueDate?.[0]}
+                />
+                <SelectField
+                  name="kind"
+                  value={kind}
+                  onChange={setKind}
+                  options={DEADLINE_KINDS.map((k) => ({
+                    value: k,
+                    label: KIND_LABEL[k] ?? k,
+                  }))}
+                />
+              </div>
 
-          <TextField
-            name="sourceRef"
-            value={sourceRef}
-            onChange={setSourceRef}
-            placeholder='Source reference (e.g. "CRS §24-10-109")'
-            error={errs.sourceRef?.[0]}
-          />
+              <TextField
+                name="sourceRef"
+                value={sourceRef}
+                onChange={setSourceRef}
+                placeholder='Source reference (e.g. "CRS §24-10-109")'
+                error={errs.sourceRef?.[0]}
+              />
+            </>
+          )}
 
           <SelectField
             name="status"
@@ -173,14 +201,16 @@ export function EditDeadlineDialog({
             }))}
           />
 
-          <TextareaField
-            name="description"
-            value={description}
-            onChange={setDescription}
-            placeholder="Why this deadline applies (optional)"
-            rows={3}
-            error={errs.description?.[0]}
-          />
+          {!isSol && (
+            <TextareaField
+              name="description"
+              value={description}
+              onChange={setDescription}
+              placeholder="Why this deadline applies (optional)"
+              rows={3}
+              error={errs.description?.[0]}
+            />
+          )}
 
           <DialogFooter>
             <Button

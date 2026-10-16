@@ -11,10 +11,15 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useActionState, useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { updateMatter } from "@/app/actions/matters";
-import { formatStatutePeriod } from "@/lib/sol";
+import {
+  computeSolDate,
+  formatStatutePeriod,
+  parseSolDateInput,
+  solDayKey,
+} from "@/lib/sol";
 import {
   BILLING_MODES,
   BILLING_MODE_LABEL,
@@ -69,16 +74,36 @@ export type EditAreaOption = {
 
 export type EditMatterFormOptions = {
   areas: EditAreaOption[];
-  clients: Array<{ id: string; name: string; organization: string | null }>;
-  users: Array<{ id: string; name: string; jobTitle: string }>;
+  /** `inactive` marks the matter's current client when that contact
+   *  has since been deactivated — kept in the list so a save never
+   *  detaches them. */
+  clients: Array<{
+    id: string;
+    name: string;
+    organization: string | null;
+    inactive?: boolean;
+  }>;
+  /** Lead picker: active users plus the matter's current lead even when
+   *  deactivated (`inactive`). */
+  users: Array<{
+    id: string;
+    name: string;
+    jobTitle: string;
+    inactive?: boolean;
+  }>;
 };
 
 export function EditMatterForm({
   matter,
   options,
+  canChangeLead = false,
 }: {
   matter: MatterForEdit;
   options: EditMatterFormOptions;
+  /** Changing the lead attorney is a team change (matters.manage_team,
+   *  enforced by `updateMatter`). Without it the field is locked and
+   *  the current lead is posted back unchanged. */
+  canChangeLead?: boolean;
 }) {
   // Bind matterId into the server action so the form's action prop
   // can stay `(prev, formData) => state`.
@@ -87,6 +112,21 @@ export function EditMatterForm({
     UpdateMatterState,
     FormData
   >(boundAction, updateMatterInitialState);
+  // Submit through onSubmit + startTransition instead of
+  // `<form action={formAction}>`: React 19 resets the form after any
+  // function action, which would revert every <select> to its mount
+  // value after a validation error — so the corrected resubmit would
+  // save the wrong area / stage / fee / client / lead. Without an
+  // `action` prop there is no automatic reset and the user's picks stay.
+  const [, startTransition] = useTransition();
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const submitter = (e.nativeEvent as SubmitEvent).submitter as
+      | HTMLElement
+      | null;
+    const fd = new FormData(e.currentTarget, submitter);
+    startTransition(() => formAction(fd));
+  };
 
   // On validation error, echo back the user's submitted values so
   // nothing typed gets lost. On first render, use the matter's
@@ -95,6 +135,24 @@ export function EditMatterForm({
   const errs = state.errors ?? {};
   const dateInputValue = (d: Date | null): string =>
     d ? d.toISOString().slice(0, 10) : "";
+  // The stored SOL date is either auto-derived (it equals incident +
+  // the stored area's period) or a manual override. Only a real
+  // override is pre-filled into the "Deadline date" input; an
+  // auto-derived date is shown as a live preview instead, so changing
+  // the incident date or area recomputes it on save. (Mirrors the
+  // server's rule in resolveEditedSolDate.)
+  const storedArea = options.areas.find((a) => a.id === matter.practiceAreaId);
+  const storedAuto = computeSolDate(
+    matter.incidentDate,
+    storedArea?.statutePeriodDays
+  );
+  const storedIsAuto =
+    !matter.statuteOfLimitationsDate ||
+    (!!storedAuto &&
+      solDayKey(storedAuto) === solDayKey(matter.statuteOfLimitationsDate));
+  const storedOverrideValue = storedIsAuto
+    ? ""
+    : dateInputValue(matter.statuteOfLimitationsDate);
   const init = {
     name: vals.name ?? matter.name,
     feeStructure: vals.feeStructure ?? matter.feeStructure,
@@ -104,14 +162,15 @@ export function EditMatterForm({
     clientId: vals.clientId ?? matter.clientId ?? "",
     opposingParty: vals.opposingParty ?? matter.opposingParty ?? "",
     opposingFirm: vals.opposingFirm ?? matter.opposingFirm ?? "",
-    leadUserId:
-      vals.leadUserId ?? matter.leadUserId ?? options.users[0]?.id ?? "",
+    // No fallback to the first user: a matter with no (or a missing)
+    // lead shows the placeholder and posts nothing rather than
+    // silently picking someone.
+    leadUserId: vals.leadUserId ?? matter.leadUserId ?? "",
     description: vals.description ?? matter.description ?? "",
     incidentDate:
       vals.incidentDate ?? dateInputValue(matter.incidentDate),
     statuteOfLimitationsDate:
-      vals.statuteOfLimitationsDate ??
-      dateInputValue(matter.statuteOfLimitationsDate),
+      vals.statuteOfLimitationsDate ?? storedOverrideValue,
     statuteOfLimitationsNotes:
       vals.statuteOfLimitationsNotes ??
       matter.statuteOfLimitationsNotes ??
@@ -130,7 +189,29 @@ export function EditMatterForm({
   const [practiceAreaId, setPracticeAreaId] = useState<string>(initialAreaId);
   const [stageId, setStageId] = useState<string>(initialStageId);
 
+  const [incidentDateInput, setIncidentDateInput] = useState<string>(
+    init.incidentDate
+  );
+  const [solOverride, setSolOverride] = useState<string>(
+    init.statuteOfLimitationsDate
+  );
+
   const selectedArea = options.areas.find((a) => a.id === practiceAreaId);
+  // Live "what auto-compute will produce" from the incident input and
+  // the currently selected area.
+  const parsedIncident = incidentDateInput
+    ? parseSolDateInput(incidentDateInput)
+    : null;
+  const autoPreview = computeSolDate(
+    parsedIncident,
+    selectedArea?.statutePeriodDays
+  );
+  const previewLabel = autoPreview
+    ? autoPreview.toLocaleDateString("en-US", {
+        timeZone: "UTC",
+        dateStyle: "medium",
+      })
+    : null;
   const stageOptions = selectedArea?.stages ?? [];
 
   const handleAreaChange = (nextAreaId: string) => {
@@ -141,7 +222,7 @@ export function EditMatterForm({
   };
 
   return (
-    <form action={formAction} className="flex flex-col gap-6">
+    <form onSubmit={onSubmit} className="flex flex-col gap-6">
       <Section title="Core">
         <Field label="Matter name" name="name" required error={errs.name}>
           <input
@@ -273,6 +354,7 @@ export function EditMatterForm({
                 <option key={c.id} value={c.id}>
                   {c.name}
                   {c.organization ? ` · ${c.organization}` : ""}
+                  {c.inactive ? " (inactive)" : ""}
                 </option>
               ))}
             </select>
@@ -281,22 +363,41 @@ export function EditMatterForm({
           <Field
             label="Lead attorney"
             name="leadUserId"
-            required
+            required={canChangeLead}
             error={errs.leadUserId}
+            hint={
+              canChangeLead
+                ? undefined
+                : "Changing the lead attorney requires permission to manage the case team."
+            }
           >
             <select
               id="leadUserId"
-              name="leadUserId"
+              name={canChangeLead ? "leadUserId" : undefined}
               defaultValue={init.leadUserId}
-              required
+              required={canChangeLead}
+              disabled={!canChangeLead}
               className={selectCls(!!errs.leadUserId)}
             >
+              {init.leadUserId === "" && (
+                <option value="">Choose a lead…</option>
+              )}
               {options.users.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name} · {u.jobTitle}
+                  {u.inactive ? " (inactive)" : ""}
                 </option>
               ))}
             </select>
+            {/* A disabled select isn't submitted — post the current
+                lead back so the save leaves it unchanged. */}
+            {!canChangeLead && (
+              <input
+                type="hidden"
+                name="leadUserId"
+                value={matter.leadUserId ?? ""}
+              />
+            )}
           </Field>
         </Row>
 
@@ -382,7 +483,8 @@ export function EditMatterForm({
                 id="incidentDate"
                 name="incidentDate"
                 type="date"
-                defaultValue={init.incidentDate}
+                value={incidentDateInput}
+                onChange={(e) => setIncidentDateInput(e.target.value)}
                 className={inputCls(!!errs.incidentDate)}
               />
             </Field>
@@ -390,15 +492,34 @@ export function EditMatterForm({
               label="Deadline date"
               name="statuteOfLimitationsDate"
               error={errs.statuteOfLimitationsDate}
-              hint="Manual override — wins over auto-compute."
+              hint={
+                solOverride
+                  ? "Manual override — kept as typed; it won't follow the incident date or area."
+                  : previewLabel
+                    ? `Auto-computed: ${previewLabel}. Leave blank to keep following the incident date.`
+                    : "Leave blank to auto-compute once an incident date and statute period are set."
+              }
             >
               <input
                 id="statuteOfLimitationsDate"
                 name="statuteOfLimitationsDate"
                 type="date"
-                defaultValue={init.statuteOfLimitationsDate}
+                value={solOverride}
+                onChange={(e) => setSolOverride(e.target.value)}
                 className={inputCls(!!errs.statuteOfLimitationsDate)}
               />
+              {solOverride && (
+                <div className="flex items-center gap-2 text-2xs text-ink-3">
+                  {previewLabel && <span>Auto value would be {previewLabel}.</span>}
+                  <button
+                    type="button"
+                    onClick={() => setSolOverride("")}
+                    className="underline hover:text-brand-700"
+                  >
+                    Reset to computed
+                  </button>
+                </div>
+              )}
             </Field>
           </Row>
           <Row>
@@ -419,6 +540,15 @@ export function EditMatterForm({
           </Row>
         </Section>
       )}
+
+      {!selectedArea?.hasStatuteOfLimitations &&
+        (matter.statuteOfLimitationsDate || matter.incidentDate) && (
+          <p className="text-2xs text-ink-3">
+            This practice area doesn&apos;t track statute of limitations. The
+            matter&apos;s incident date, SOL date, notes and SOL deadline are
+            kept as they are.
+          </p>
+        )}
 
       <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
         <Link

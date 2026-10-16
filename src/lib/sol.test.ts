@@ -13,9 +13,139 @@ import { describe, expect, test } from "vitest";
 import {
   computeSolDate,
   formatStatutePeriod,
+  isAutoDerivedSol,
   packStatuteDays,
+  parseSolDateInput,
+  resolveEditedSolDate,
   unpackStatuteDays,
 } from "./sol";
+
+const d = (s: string) => new Date(s);
+const key = (x: Date | null) => (x ? x.toISOString().slice(0, 10) : null);
+
+describe("parseSolDateInput", () => {
+  test("parses a valid date to UTC midnight (same instant as new Date)", () => {
+    expect(parseSolDateInput("2026-06-01")?.toISOString()).toBe(
+      "2026-06-01T00:00:00.000Z"
+    );
+    expect(parseSolDateInput("2024-02-29")).not.toBeNull();
+  });
+  test("rejects malformed and non-existent days", () => {
+    for (const bad of ["", "garbage", "2026-6-1", "2026-02-31", "2025-02-29", "2026-13-01", "2026-06-01T00:00"]) {
+      expect(parseSolDateInput(bad)).toBeNull();
+    }
+  });
+});
+
+describe("isAutoDerivedSol", () => {
+  test("null SOL is auto; matching computed is auto; anything else is manual", () => {
+    expect(isAutoDerivedSol({ storedSol: null, storedIncident: null, storedPeriodDays: null })).toBe(true);
+    expect(isAutoDerivedSol({ storedSol: d("2026-06-01"), storedIncident: d("2024-06-01"), storedPeriodDays: 730 })).toBe(true);
+    expect(isAutoDerivedSol({ storedSol: d("2027-01-15"), storedIncident: d("2024-06-01"), storedPeriodDays: 730 })).toBe(false);
+    // Cannot be computed -> treated as a manual date (kept, never recomputed).
+    expect(isAutoDerivedSol({ storedSol: d("2026-06-01"), storedIncident: null, storedPeriodDays: 730 })).toBe(false);
+  });
+});
+
+describe("resolveEditedSolDate", () => {
+  const base = {
+    storedIncident: d("2024-06-01"),
+    storedPeriodDays: 730,
+    periodDays: 730,
+  };
+  test("auto-derived stored date re-posted untouched follows a new incident date", () => {
+    const out = resolveEditedSolDate({
+      ...base,
+      posted: d("2026-06-01"),
+      stored: d("2026-06-01"),
+      incident: d("2024-03-01"),
+    });
+    expect(key(out)).toBe("2026-03-01");
+  });
+  test("empty posted date auto-computes", () => {
+    const out = resolveEditedSolDate({
+      ...base,
+      posted: null,
+      stored: d("2026-06-01"),
+      incident: d("2024-03-01"),
+    });
+    expect(key(out)).toBe("2026-03-01");
+  });
+  test("manual stored date re-posted untouched is kept", () => {
+    const out = resolveEditedSolDate({
+      ...base,
+      posted: d("2027-01-15"),
+      stored: d("2027-01-15"),
+      incident: d("2024-03-01"),
+    });
+    expect(key(out)).toBe("2027-01-15");
+  });
+  test("a different posted date always wins", () => {
+    const out = resolveEditedSolDate({
+      ...base,
+      posted: d("2026-09-09"),
+      stored: d("2026-06-01"),
+      incident: d("2024-03-01"),
+    });
+    expect(key(out)).toBe("2026-09-09");
+  });
+  test("a new area with a different period recomputes", () => {
+    const out = resolveEditedSolDate({
+      ...base,
+      periodDays: 365,
+      posted: d("2026-06-01"),
+      stored: d("2026-06-01"),
+      incident: d("2024-06-01"),
+    });
+    expect(key(out)).toBe("2025-06-01");
+  });
+  test("moving to an area with no configured period keeps the stored date rather than dropping it", () => {
+    const out = resolveEditedSolDate({
+      ...base,
+      periodDays: null,
+      posted: d("2026-06-01"),
+      stored: d("2026-06-01"),
+      incident: d("2024-06-01"),
+    });
+    expect(key(out)).toBe("2026-06-01");
+  });
+  test("clearing the incident date keeps the stored SOL (no silent loss of a live statute date)", () => {
+    const out = resolveEditedSolDate({
+      ...base,
+      posted: null,
+      stored: d("2026-06-01"),
+      incident: null,
+    });
+    expect(key(out)).toBe("2026-06-01");
+    // Same when the unchanged stored date is re-posted.
+    const reposted = resolveEditedSolDate({
+      ...base,
+      posted: d("2026-06-01"),
+      stored: d("2026-06-01"),
+      incident: null,
+    });
+    expect(key(reposted)).toBe("2026-06-01");
+  });
+  test("emptying a manual override with no incident date is a deliberate clear", () => {
+    const out = resolveEditedSolDate({
+      ...base,
+      posted: null,
+      stored: d("2027-01-15"), // not incident + period -> manual
+      incident: null,
+    });
+    expect(out).toBeNull();
+  });
+  test("no stored date and no incident stays null", () => {
+    expect(
+      resolveEditedSolDate({
+        ...base,
+        posted: null,
+        stored: null,
+        incident: null,
+      })
+    ).toBeNull();
+  });
+});
 
 describe("packStatuteDays", () => {
   test("plain 2 years = 730 days", () => {

@@ -15,12 +15,21 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma, type Tx } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-import { requirePermission } from "@/lib/permission-check";
+import {
+  currentUserHasPermission,
+  requirePermission,
+} from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { createNotification } from "@/lib/notifications";
 import { getEffectiveCalendarDefaults } from "@/lib/calendar-defaults";
 import { BILLING_MODES } from "@/lib/billing-mode-constants";
-import { computeSolDate } from "@/lib/sol";
+import {
+  SOL_SOURCE_TYPE,
+  computeSolDate,
+  parseSolDateInput,
+  resolveEditedSolDate,
+  solDayKey,
+} from "@/lib/sol";
 import { applyAutoDefaults, describeDefaults } from "@/lib/automations/apply";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import {
@@ -113,20 +122,24 @@ const createMatterSchema = z
     }
   });
 
-/** Signature we use to identify the one auto-managed SOL deadline
- *  per matter. Manually-created deadlines (kind="critical" via the
- *  Deadlines tab composer) don't set this `sourceType`, so we can
- *  find-and-update cleanly without clobbering unrelated rows. */
-const SOL_SOURCE_TYPE = "statute_of_limitations";
+// SOL_SOURCE_TYPE (src/lib/sol.ts) identifies the one auto-managed SOL
+// deadline per matter. Manually-created deadlines (kind="critical" via
+// the Deadlines tab composer) don't set it, so we can find-and-update
+// cleanly without clobbering unrelated rows.
 
 /** Keeps the auto-managed "Statute of limitations" Deadline row in
  *  sync with the matter's SOL fields. Called from create + update +
  *  setMatterSolSatisfied so all three paths maintain the invariant:
  *
  *  - SOL date present → a critical Deadline exists with that dueDate
- *  - SOL cleared / area no longer tracks SOL → deadline is removed
- *  - satisfied=true → deadline status flipped to "completed"
- *  - satisfied=false → deadline flipped back to "open"
+ *  - SOL cleared → deadline is removed
+ *  - `applyStatus` (setMatterSolSatisfied): satisfied=true → status
+ *    "completed", satisfied=false → "open". Plain matter saves leave an
+ *    existing row's status alone (someone may have completed/waived it
+ *    on the Deadlines tab) and only use the flag when (re)creating it.
+ *  - `ownerId` is used when creating the row; on an existing row it is
+ *    applied only when provided (undefined = keep the current owner), so
+ *    toggling "satisfied" can't orphan the deadline's owner.
  */
 async function syncMatterSolDeadline(
   tx: Tx | typeof prisma,
@@ -137,7 +150,10 @@ async function syncMatterSolDeadline(
     notes: string | null;
     satisfied: boolean;
     satisfiedAt: Date | null;
-    ownerId: string | null;
+    ownerId?: string | null;
+    /** Owner for a newly created row when `ownerId` is undefined. */
+    createOwnerId?: string | null;
+    applyStatus?: boolean;
   }
 ): Promise<void> {
   const existing = await tx.deadline.findFirst({
@@ -154,23 +170,55 @@ async function syncMatterSolDeadline(
     return;
   }
 
-  const data = {
+  const status = opts.satisfied ? "completed" : "open";
+  const completedAt = opts.satisfied ? opts.satisfiedAt : null;
+  const base = {
     title: "Statute of limitations",
     dueDate: opts.date,
     kind: "critical" as const,
     sourceType: SOL_SOURCE_TYPE,
     description: opts.notes,
-    ownerId: opts.ownerId,
-    status: opts.satisfied ? "completed" : "open",
-    completedAt: opts.satisfied ? opts.satisfiedAt : null,
   };
   if (existing) {
-    await tx.deadline.update({ where: { id: existing.id }, data });
+    await tx.deadline.update({
+      where: { id: existing.id },
+      data: {
+        ...base,
+        ...(opts.ownerId !== undefined ? { ownerId: opts.ownerId } : {}),
+        ...(opts.applyStatus ? { status, completedAt } : {}),
+      },
+    });
   } else {
     await tx.deadline.create({
-      data: { matterId: opts.matterId, ...data },
+      data: {
+        matterId: opts.matterId,
+        ...base,
+        ownerId: opts.ownerId ?? opts.createOwnerId ?? null,
+        status,
+        completedAt,
+      },
     });
   }
+}
+
+/** Strictly parse the posted incident + SOL date strings (only when the
+ *  area tracks SOL — otherwise they are ignored). A malformed value
+ *  becomes a field error instead of an Invalid Date reaching Prisma. */
+function parseSolDates(
+  tracks: boolean,
+  incidentRaw: string | undefined,
+  solRaw: string | undefined
+):
+  | { ok: true; incident: Date | null; sol: Date | null }
+  | { ok: false; errors: Record<string, string[]> } {
+  if (!tracks) return { ok: true, incident: null, sol: null };
+  const errors: Record<string, string[]> = {};
+  const incident = incidentRaw ? parseSolDateInput(incidentRaw) : null;
+  if (incidentRaw && !incident) errors.incidentDate = ["Enter a valid date"];
+  const sol = solRaw ? parseSolDateInput(solRaw) : null;
+  if (solRaw && !sol) errors.statuteOfLimitationsDate = ["Enter a valid date"];
+  if (Object.keys(errors).length > 0) return { ok: false, errors };
+  return { ok: true, incident, sol };
 }
 
 /**
@@ -186,6 +234,7 @@ async function resolveAreaAndStage(
       ok: true;
       practiceAreaId: string;
       stageId: string;
+      areaName: string;
       color: string;
       hasStatuteOfLimitations: boolean;
       /** Total-days statute period configured by the firm. Drives
@@ -202,6 +251,7 @@ async function resolveAreaAndStage(
     where: { id: practiceAreaId },
     select: {
       id: true,
+      name: true,
       color: true,
       isActive: true,
       hasStatuteOfLimitations: true,
@@ -226,6 +276,7 @@ async function resolveAreaAndStage(
     ok: true,
     practiceAreaId: area.id,
     stageId: resolvedStageId,
+    areaName: area.name,
     color: area.color,
     hasStatuteOfLimitations: area.hasStatuteOfLimitations,
     statutePeriodDays: area.statutePeriodDays,
@@ -277,17 +328,21 @@ export async function createMatter(
   // Only persist SOL fields when the area actually tracks them;
   // otherwise drop them on the floor so a stale form submission from
   // an area that used to track SOL doesn't leave dangling dates.
-  const incidentDate =
-    resolved.hasStatuteOfLimitations && data.incidentDate
-      ? new Date(data.incidentDate)
-      : null;
+  const parsedDates = parseSolDates(
+    resolved.hasStatuteOfLimitations,
+    data.incidentDate,
+    data.statuteOfLimitationsDate
+  );
+  if (!parsedDates.ok) {
+    return { status: "error", errors: parsedDates.errors, values: raw };
+  }
+  const incidentDate = parsedDates.incident;
   // Manual override wins; otherwise auto-compute from
   // incidentDate + the area's statutePeriodDays.
   const solDate =
     resolved.hasStatuteOfLimitations
-      ? data.statuteOfLimitationsDate
-        ? new Date(data.statuteOfLimitationsDate)
-        : computeSolDate(incidentDate, resolved.statutePeriodDays)
+      ? (parsedDates.sol ??
+        computeSolDate(incidentDate, resolved.statutePeriodDays))
       : null;
   const solNotes =
     resolved.hasStatuteOfLimitations
@@ -408,6 +463,19 @@ export async function createMatter(
     return { matter: created, defaults };
   });
 
+  await logActivity({
+    matterId: matter.id,
+    userId: currentUserId,
+    type: "filing",
+    title: "Matter created",
+    detail: [
+      `${data.name} — ${resolved.areaName}`,
+      solDate ? `Statute of limitations ${solDayKey(solDate)}` : null,
+    ]
+      .filter(Boolean)
+      .join("; "),
+  });
+
   const defaultsLine = describeDefaults(defaults);
   if (defaultsLine) {
     await logActivity({
@@ -449,7 +517,11 @@ const updateMatterSchema = z.object({
   clientId: z.string().trim().optional().or(z.literal("")),
   opposingParty: z.string().trim().max(200).optional().or(z.literal("")),
   opposingFirm: z.string().trim().max(200).optional().or(z.literal("")),
-  leadUserId: z.string().trim().min(1, "Lead attorney is required"),
+  /** Optional on update: omitted/blank leaves the current lead alone
+   *  (the edit form locks the field without matters.manage_team).
+   *  A value that differs from the current lead is a team change and
+   *  needs that key. */
+  leadUserId: z.string().trim().optional().or(z.literal("")),
   description: z.string().trim().max(4000).optional().or(z.literal("")),
   incidentDate: z
     .string()
@@ -504,67 +576,163 @@ export async function updateMatter(
     };
   }
 
-  // Verify lead + client IDs before writing so stale dropdown values
-  // don't point the matter at missing rows. The lead must also be
-  // active — same rule addMatterTeamMember enforces.
-  const currentUserId = await getCurrentUserId();
-  const lead = await prisma.user.findUnique({
-    where: { id: data.leadUserId },
-    select: { id: true, isActive: true },
+  // Everything the diff + authorization checks below compare against.
+  const stored = await prisma.matter.findUnique({
+    where: { id: matterId },
+    select: {
+      name: true,
+      caseNumber: true,
+      court: true,
+      feeStructure: true,
+      billingMode: true,
+      opposingParty: true,
+      opposingFirm: true,
+      description: true,
+      clientId: true,
+      client: { select: { name: true } },
+      practiceAreaId: true,
+      practiceArea: { select: { name: true } },
+      stageId: true,
+      stage: { select: { name: true, isTerminal: true } },
+      teamMembers: {
+        where: { role: "lead", removedAt: null },
+        select: { userId: true, user: { select: { name: true } } },
+      },
+    },
   });
-  const leadUserId = lead?.isActive ? lead.id : currentUserId;
-
-  let clientId: string | null = null;
-  if (data.clientId) {
-    const client = await prisma.contact.findUnique({
-      where: { id: data.clientId },
-      select: { id: true },
-    });
-    clientId = client?.id ?? null;
+  if (!stored) {
+    return {
+      status: "error",
+      errors: { name: ["Matter not found"] },
+      values: raw,
+    };
   }
 
-  // Same SOL guard as createMatter — if the new area doesn't track
-  // SOL, null out any date/notes so switching areas doesn't leave
-  // orphaned SOL data. Auto-compute when an explicit SOL date
-  // wasn't posted but an incident date + statute period are
-  // available; explicit value wins.
-  const incidentDate =
-    resolved.hasStatuteOfLimitations && data.incidentDate
-      ? new Date(data.incidentDate)
-      : null;
-  const solDate =
-    resolved.hasStatuteOfLimitations
-      ? data.statuteOfLimitationsDate
-        ? new Date(data.statuteOfLimitationsDate)
-        : computeSolDate(incidentDate, resolved.statutePeriodDays)
-      : null;
-  const solNotes =
-    resolved.hasStatuteOfLimitations
-      ? data.statuteOfLimitationsNotes || null
-      : null;
+  const currentUserId = await getCurrentUserId();
 
-  await prisma.$transaction(async (tx) => {
-    // The matter row is the source of truth for the SOL-satisfied
-    // flag (setMatterSolSatisfied maintains it); the Deadline row is
-    // only a mirror. Deriving satisfied from the deadline instead
-    // would diverge once the date is cleared (deadline deleted, flag
-    // untouched) and later re-added (fresh "open" deadline vs. a
-    // still-true flag on the Overview card).
-    const existingMatter = await tx.matter.findUnique({
+  // Lead attorney. An unchanged (or omitted) lead is never re-validated:
+  // a lead who has since been deactivated stays lead until someone
+  // deliberately swaps them. A *change* is a team change, so it needs
+  // matters.manage_team (same key as addMatterTeamMember) and must
+  // target an active user — it never silently becomes the current user.
+  const currentLead = stored.teamMembers[0] ?? null;
+  let leadUserId: string | null = currentLead?.userId ?? null;
+  let newLeadName: string | null = null;
+  if (data.leadUserId && data.leadUserId !== currentLead?.userId) {
+    if (!(await currentUserHasPermission("matters.manage_team"))) {
+      return {
+        status: "error",
+        errors: {
+          leadUserId: [
+            "Changing the lead attorney requires permission to manage the case team.",
+          ],
+        },
+        values: raw,
+      };
+    }
+    const lead = await prisma.user.findUnique({
+      where: { id: data.leadUserId },
+      select: { id: true, name: true, isActive: true },
+    });
+    if (!lead?.isActive) {
+      return {
+        status: "error",
+        errors: { leadUserId: ["Lead attorney must be an active user."] },
+        values: raw,
+      };
+    }
+    leadUserId = lead.id;
+    newLeadName = lead.name;
+  }
+  const leadChanged = leadUserId !== (currentLead?.userId ?? null);
+
+  // Client. An unchanged client is kept as-is (it may since have been
+  // deactivated or re-typed — still the matter's client); a different
+  // pick must exist.
+  let clientId: string | null = null;
+  let newClientName: string | null = null;
+  if (data.clientId) {
+    if (data.clientId === stored.clientId) {
+      clientId = stored.clientId;
+      newClientName = stored.client?.name ?? null;
+    } else {
+      const client = await prisma.contact.findUnique({
+        where: { id: data.clientId },
+        select: { id: true, name: true },
+      });
+      if (!client) {
+        return {
+          status: "error",
+          errors: { clientId: ["That client no longer exists"] },
+          values: raw,
+        };
+      }
+      clientId = client.id;
+      newClientName = client.name;
+    }
+  }
+
+  // SOL inputs are only meaningful when the (new) area tracks SOL. When
+  // it doesn't, the matter's incident date, SOL date/notes and SOL
+  // deadline are left exactly as they are — switching to a non-tracking
+  // area (or an admin un-ticking SOL on an area) must never wipe them.
+  const parsedDates = parseSolDates(
+    resolved.hasStatuteOfLimitations,
+    data.incidentDate,
+    data.statuteOfLimitationsDate
+  );
+  if (!parsedDates.ok) {
+    return { status: "error", errors: parsedDates.errors, values: raw };
+  }
+
+  const newStage = await prisma.matterStage.findUnique({
+    where: { id: resolved.stageId },
+    select: { name: true, isTerminal: true },
+  });
+
+  const sol = await prisma.$transaction(async (tx) => {
+    // The matter row is the source of truth for the SOL fields and the
+    // satisfied flag (setMatterSolSatisfied maintains it); the Deadline
+    // row is only a mirror. Read the stored values here, inside the
+    // transaction, so the auto-vs-manual decision and the diff agree
+    // with what we overwrite.
+    const cur = await tx.matter.findUniqueOrThrow({
       where: { id: matterId },
       select: {
+        incidentDate: true,
+        statuteOfLimitationsDate: true,
+        statuteOfLimitationsNotes: true,
         statuteOfLimitationsSatisfied: true,
         statuteOfLimitationsSatisfiedAt: true,
+        practiceArea: { select: { statutePeriodDays: true } },
       },
     });
-    // No SOL date (area doesn't track it, or the date was cleared)
-    // means there's nothing left to satisfy — reset the flags so a
-    // re-added date starts back at "open".
+
+    let incidentDate = cur.incidentDate;
+    let solDate = cur.statuteOfLimitationsDate;
+    let solNotes = cur.statuteOfLimitationsNotes;
+    if (resolved.hasStatuteOfLimitations) {
+      incidentDate = parsedDates.incident;
+      // Auto-derived SOL follows the incident date / area period;
+      // a real manual override is kept (see resolveEditedSolDate).
+      solDate = resolveEditedSolDate({
+        posted: parsedDates.sol,
+        stored: cur.statuteOfLimitationsDate,
+        storedIncident: cur.incidentDate,
+        storedPeriodDays: cur.practiceArea.statutePeriodDays,
+        incident: parsedDates.incident,
+        periodDays: resolved.statutePeriodDays,
+      });
+      solNotes = data.statuteOfLimitationsNotes || null;
+    }
+    // No SOL date (date cleared while the area tracks SOL) means
+    // there's nothing left to satisfy — reset the flags so a re-added
+    // date starts back at "open". Untracked areas leave them alone.
     const isSatisfied = solDate
-      ? (existingMatter?.statuteOfLimitationsSatisfied ?? false)
+      ? cur.statuteOfLimitationsSatisfied
       : false;
     const satisfiedAt = isSatisfied
-      ? (existingMatter?.statuteOfLimitationsSatisfiedAt ?? null)
+      ? cur.statuteOfLimitationsSatisfiedAt
       : null;
 
     await tx.matter.update({
@@ -584,18 +752,21 @@ export async function updateMatter(
         description: data.description || null,
         color: resolved.color,
         clientId,
-        incidentDate,
-        statuteOfLimitationsDate: solDate,
-        statuteOfLimitationsNotes: solNotes,
-        // Clear the satisfied flag whenever there's no SOL date to
-        // satisfy — covers both "area dropped SOL tracking" and
-        // "date cleared while the area still tracks SOL".
-        ...(isSatisfied
-          ? {}
-          : {
-              statuteOfLimitationsSatisfied: false,
-              statuteOfLimitationsSatisfiedAt: null,
-            }),
+        ...(resolved.hasStatuteOfLimitations
+          ? {
+              incidentDate,
+              statuteOfLimitationsDate: solDate,
+              statuteOfLimitationsNotes: solNotes,
+              // Clear the satisfied flag whenever there's no SOL date
+              // to satisfy.
+              ...(isSatisfied
+                ? {}
+                : {
+                    statuteOfLimitationsSatisfied: false,
+                    statuteOfLimitationsSatisfiedAt: null,
+                  }),
+            }
+          : {}),
       },
     });
 
@@ -604,17 +775,17 @@ export async function updateMatter(
     // to co_counsel (humane swap, not an off-team kick), and the
     // new lead is upserted — restoring a former-member row if
     // they previously left the team.
-    const existingLead = await tx.matterTeamMember.findFirst({
-      where: { matterId, role: "lead", removedAt: null },
-      select: { id: true, userId: true },
-    });
-    if (existingLead && existingLead.userId !== leadUserId) {
-      await tx.matterTeamMember.update({
-        where: { id: existingLead.id },
-        data: { role: "co_counsel" },
+    if (leadChanged && leadUserId) {
+      const existingLead = await tx.matterTeamMember.findFirst({
+        where: { matterId, role: "lead", removedAt: null },
+        select: { id: true, userId: true },
       });
-    }
-    if (!existingLead || existingLead.userId !== leadUserId) {
+      if (existingLead && existingLead.userId !== leadUserId) {
+        await tx.matterTeamMember.update({
+          where: { id: existingLead.id },
+          data: { role: "co_counsel" },
+        });
+      }
       await tx.matterTeamMember.upsert({
         where: {
           matterId_userId: { matterId, userId: leadUserId },
@@ -649,21 +820,130 @@ export async function updateMatter(
       });
     }
 
-    // Sync the auto-managed SOL Deadline. When the new area tracks
-    // SOL we upsert (create or update) the critical deadline; when
-    // it doesn't, the helper removes any stale row. `isSatisfied`
-    // carries the matter's own flag through so the Overview card's
-    // manual toggle survives a date edit.
-    await syncMatterSolDeadline(tx, {
-      matterId,
-      trackSol: resolved.hasStatuteOfLimitations,
-      date: solDate,
-      notes: solNotes,
-      satisfied: isSatisfied,
-      satisfiedAt,
-      ownerId: leadUserId,
-    });
+    // Mirror the SOL fields onto the auto-managed critical Deadline
+    // (upsert, or remove when the date was cleared). Skipped entirely
+    // when the area doesn't track SOL — the deadline stays put with the
+    // preserved matter fields. A plain save keeps the deadline's status
+    // and owner; the owner follows the lead only when the lead actually
+    // changed and the old lead (or nobody) owned it.
+    if (resolved.hasStatuteOfLimitations) {
+      const existingSol = await tx.deadline.findFirst({
+        where: { matterId, sourceType: SOL_SOURCE_TYPE },
+        select: { ownerId: true },
+      });
+      const ownerFollowsLead =
+        leadChanged &&
+        (existingSol?.ownerId == null ||
+          existingSol.ownerId === currentLead?.userId);
+      await syncMatterSolDeadline(tx, {
+        matterId,
+        trackSol: true,
+        date: solDate,
+        notes: solNotes,
+        satisfied: isSatisfied,
+        satisfiedAt,
+        ownerId: existingSol
+          ? ownerFollowsLead
+            ? leadUserId
+            : undefined
+          : leadUserId,
+      });
+    }
+
+    return {
+      before: {
+        incident: cur.incidentDate,
+        date: cur.statuteOfLimitationsDate,
+        notes: cur.statuteOfLimitationsNotes,
+      },
+      after: { incident: incidentDate, date: solDate, notes: solNotes },
+    };
   });
+
+  // ── Audit trail (after commit; a log failure never rolls back) ───────
+  // Field names, ids and dates only — never the matter's privileged
+  // free text.
+  const dayOrNone = (d: Date | null) => (d ? solDayKey(d) : "none");
+  const changed: string[] = [];
+  const diff = (label: string, a: unknown, b: unknown) => {
+    if ((a ?? "") !== (b ?? "")) changed.push(label);
+  };
+  diff("name", stored.name, data.name);
+  diff("case number", stored.caseNumber, data.caseNumber || null);
+  diff("court", stored.court, data.court || null);
+  diff("fee structure", stored.feeStructure, data.feeStructure);
+  if (data.billingMode) diff("billing mode", stored.billingMode, data.billingMode);
+  diff("opposing party", stored.opposingParty, data.opposingParty || null);
+  diff("opposing firm", stored.opposingFirm, data.opposingFirm || null);
+  diff("summary", stored.description, data.description || null);
+  if (stored.practiceAreaId !== resolved.practiceAreaId) {
+    changed.push(
+      `practice area ${stored.practiceArea.name} → ${resolved.areaName}`
+    );
+  }
+  if (stored.clientId !== clientId) {
+    changed.push(
+      `client ${stored.client?.name ?? "none"} → ${newClientName ?? "none"}`
+    );
+  }
+  if (
+    resolved.hasStatuteOfLimitations &&
+    dayOrNone(sol.before.incident) !== dayOrNone(sol.after.incident)
+  ) {
+    changed.push(
+      `incident date ${dayOrNone(sol.before.incident)} → ${dayOrNone(sol.after.incident)}`
+    );
+  }
+  if (
+    resolved.hasStatuteOfLimitations &&
+    (sol.before.notes ?? "") !== (sol.after.notes ?? "")
+  ) {
+    changed.push("statute of limitations notes");
+  }
+  if (changed.length > 0) {
+    await logActivity({
+      matterId,
+      userId: currentUserId,
+      type: "filing",
+      title: "Matter updated",
+      detail: `Changed: ${changed.join("; ")}`,
+    });
+  }
+
+  if (
+    resolved.hasStatuteOfLimitations &&
+    dayOrNone(sol.before.date) !== dayOrNone(sol.after.date)
+  ) {
+    await logActivity({
+      matterId,
+      userId: currentUserId,
+      type: "deadline",
+      title: "Statute of limitations changed",
+      detail: `${dayOrNone(sol.before.date)} → ${dayOrNone(sol.after.date)}`,
+    });
+  }
+
+  if (stored.stageId !== resolved.stageId && newStage) {
+    await logActivity({
+      matterId,
+      userId: currentUserId,
+      type: "filing",
+      title:
+        stored.stage.isTerminal && !newStage.isTerminal
+          ? `Reopened from ${stored.stage.name} → ${newStage.name}`
+          : `Stage moved: ${stored.stage.name} → ${newStage.name}`,
+    });
+  }
+
+  if (leadChanged) {
+    await logActivity({
+      matterId,
+      userId: currentUserId,
+      type: "filing",
+      title: "Lead attorney changed",
+      detail: `${currentLead?.user.name ?? "none"} → ${newLeadName ?? "none"}`,
+    });
+  }
 
   revalidatePath("/", "layout");
   redirect(`/matters/${matterId}`);
@@ -807,14 +1087,19 @@ export async function setMatterSolSatisfied(
   matterId: string,
   satisfied: boolean
 ): Promise<{ ok: boolean; error?: string }> {
-  await requirePermission("matters.edit");
+  const userId = await requirePermission("matters.edit");
   const matter = await prisma.matter.findUnique({
     where: { id: matterId },
     select: {
       id: true,
       statuteOfLimitationsDate: true,
       statuteOfLimitationsNotes: true,
+      statuteOfLimitationsSatisfied: true,
       practiceArea: { select: { hasStatuteOfLimitations: true } },
+      teamMembers: {
+        where: { role: "lead", removedAt: null },
+        select: { userId: true },
+      },
     },
   });
   if (!matter) return { ok: false, error: "Matter not found" };
@@ -847,9 +1132,28 @@ export async function setMatterSolSatisfied(
       notes: matter.statuteOfLimitationsNotes,
       satisfied,
       satisfiedAt,
-      ownerId: null,
+      // Keep the deadline's current owner. Only a re-created row (the
+      // old one was removed) falls back to the lead.
+      ownerId: undefined,
+      applyStatus: true,
+      createOwnerId: matter.teamMembers[0]?.userId ?? null,
     });
   });
+
+  // Who cleared (or re-opened) the statute — a timestamp alone can't say.
+  if (matter.statuteOfLimitationsSatisfied !== satisfied) {
+    await logActivity({
+      matterId,
+      userId,
+      type: "deadline",
+      title: satisfied
+        ? "Statute of limitations marked satisfied"
+        : "Statute of limitations reopened",
+      detail: matter.statuteOfLimitationsDate
+        ? `SOL date ${solDayKey(matter.statuteOfLimitationsDate)}`
+        : null,
+    });
+  }
 
   revalidatePath(`/matters/${matterId}`);
   revalidatePath(`/matters/${matterId}/deadlines`);

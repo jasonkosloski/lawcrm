@@ -26,6 +26,7 @@ vi.mock("@/lib/permission-check", () => ({
 }));
 
 import { prisma } from "@/lib/prisma";
+import { requirePermission } from "@/lib/permission-check";
 import {
   deleteDeadline,
   setDeadlineStatus,
@@ -52,6 +53,8 @@ beforeEach(async () => {
   const { firmId } = await seedFirm();
   const u = await seedUser({ firmId });
   userId = u.userId;
+  // requirePermission returns the actor id, which the audit rows use.
+  vi.mocked(requirePermission).mockResolvedValue(userId);
   const area = await seedPracticeArea();
   const m = await seedMatter({
     practiceAreaId: area.areaId,
@@ -308,8 +311,6 @@ describe("updateDeadline — happy path", () => {
 // to set up gates. The mocked function is a spy — read `.mock.calls`
 // to verify each action wired the gate to the right key.
 
-import { requirePermission } from "@/lib/permission-check";
-
 describe("deadlines action gate", () => {
   const mockedRequirePermission = vi.mocked(requirePermission);
 
@@ -337,5 +338,188 @@ describe("deadlines action gate", () => {
     const id = await seedDeadline();
     await deleteDeadline(id);
     expect(mockedRequirePermission).toHaveBeenCalledWith("deadlines.delete");
+  });
+});
+
+// ── Statute-of-limitations mirror is managed from the matter ───────────
+
+describe("auto-managed SOL deadline (F090/F096/F040/F022/F279)", () => {
+  const seedSolDeadline = async (status = "open") => {
+    const d = await prisma.deadline.create({
+      data: {
+        matterId,
+        title: "Statute of limitations",
+        dueDate: new Date("2027-06-01T00:00:00Z"),
+        kind: "critical",
+        sourceType: "statute_of_limitations",
+        status,
+        ownerId: userId,
+      },
+      select: { id: true },
+    });
+    return d.id;
+  };
+  const editForm = (over: Record<string, string> = {}) => {
+    const fd = new FormData();
+    fd.set("title", "Statute of limitations");
+    fd.set("dueDate", "2027-06-01");
+    fd.set("kind", "critical");
+    fd.set("status", "open");
+    for (const [k, v] of Object.entries(over)) fd.set(k, v);
+    return fd;
+  };
+
+  test("deleteDeadline refuses and points at the matter", async () => {
+    const id = await seedSolDeadline();
+    const res = await deleteDeadline(id);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/managed on the matter/i);
+    expect(await prisma.deadline.count({ where: { id } })).toBe(1);
+  });
+
+  test("updateDeadline refuses to move the due date", async () => {
+    const id = await seedSolDeadline();
+    const res = await updateDeadline(
+      id,
+      updateDeadlineInitialState,
+      editForm({ dueDate: "2027-03-01" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.dueDate?.[0]).toMatch(/managed on the matter/i);
+    const row = await prisma.deadline.findUniqueOrThrow({ where: { id } });
+    expect(row.dueDate.toISOString()).toBe("2027-06-01T00:00:00.000Z");
+  });
+
+  test("updateDeadline with the unchanged date only applies the status and leaves the mirror fields alone", async () => {
+    const id = await seedSolDeadline();
+    const res = await updateDeadline(
+      id,
+      updateDeadlineInitialState,
+      editForm({ status: "completed", title: "Renamed", kind: "manual" })
+    );
+    expect(res.status).toBe("ok");
+    const row = await prisma.deadline.findUniqueOrThrow({ where: { id } });
+    expect(row.status).toBe("completed");
+    expect(row.completedAt).not.toBeNull();
+    expect(row.title).toBe("Statute of limitations");
+    expect(row.kind).toBe("critical");
+    expect(row.dueDate.toISOString()).toBe("2027-06-01T00:00:00.000Z");
+  });
+
+  test("a browser west of UTC posts the previous day: still status-only success", async () => {
+    const id = await seedSolDeadline();
+    const res = await updateDeadline(
+      id,
+      updateDeadlineInitialState,
+      editForm({ dueDate: "2027-05-31", status: "waived" })
+    );
+    expect(res.status).toBe("ok");
+    const row = await prisma.deadline.findUniqueOrThrow({ where: { id } });
+    expect(row.status).toBe("waived");
+    expect(row.dueDate.toISOString()).toBe("2027-06-01T00:00:00.000Z");
+  });
+
+  test("a date two or more days off is still refused as a move", async () => {
+    const id = await seedSolDeadline();
+    const res = await updateDeadline(
+      id,
+      updateDeadlineInitialState,
+      editForm({ dueDate: "2027-05-30" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.dueDate?.[0]).toMatch(/managed on the matter/i);
+  });
+
+  test("setDeadlineStatus (complete / reopen) stays allowed", async () => {
+    const id = await seedSolDeadline();
+    expect((await setDeadlineStatus(id, "completed")).ok).toBe(true);
+    expect(
+      (await prisma.deadline.findUniqueOrThrow({ where: { id } })).status
+    ).toBe("completed");
+    expect((await setDeadlineStatus(id, "open")).ok).toBe(true);
+  });
+
+  test("other critical deadlines (no SOL sourceType) remain editable and deletable", async () => {
+    const id = await seedDeadline({ kind: "critical" });
+    expect(
+      (
+        await updateDeadline(
+          id,
+          updateDeadlineInitialState,
+          editForm({ title: "Discovery cutoff", dueDate: "2027-03-01" })
+        )
+      ).status
+    ).toBe("ok");
+    expect((await deleteDeadline(id)).ok).toBe(true);
+  });
+});
+
+// ── Audit trail ─────────────────────────────────────────────────────────
+
+describe("deadline audit trail (F189/F220/F142)", () => {
+  const logs = () =>
+    prisma.activityLog.findMany({
+      where: { matterId, type: "deadline" },
+      orderBy: { timestamp: "asc" },
+      select: { title: true, detail: true, userId: true },
+    });
+
+  test("status changes are logged with old -> new, and no-ops are not", async () => {
+    const id = await seedDeadline({ title: "Answer due" });
+    await setDeadlineStatus(id, "completed");
+    await setDeadlineStatus(id, "completed"); // no change
+    await setDeadlineStatus(id, "open");
+    const rows = await logs();
+    expect(rows.map((r) => r.title)).toEqual([
+      "Deadline completed",
+      "Deadline reopened",
+    ]);
+    expect(rows[0].detail).toContain("Answer due");
+    expect(rows[0].detail).toContain("open → completed");
+    expect(rows[0].userId).toBe(userId);
+  });
+
+  test("a due-date edit is logged as rescheduled with both dates", async () => {
+    const id = await seedDeadline({
+      title: "Discovery cutoff",
+      dueDate: new Date(2026, 10, 3), // local Nov 3, 2026
+    });
+    const fd = new FormData();
+    fd.set("title", "Discovery cutoff");
+    fd.set("dueDate", "2026-12-15");
+    fd.set("kind", "manual");
+    fd.set("status", "open");
+    await updateDeadline(id, updateDeadlineInitialState, fd);
+    const rows = await logs();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].title).toBe("Deadline rescheduled");
+    expect(rows[0].detail).toContain("2026-11-03 → 2026-12-15");
+  });
+
+  test("an edit that changes nothing writes no row", async () => {
+    const id = await seedDeadline({
+      title: "Same",
+      dueDate: new Date(2026, 11, 1),
+    });
+    const fd = new FormData();
+    fd.set("title", "Same");
+    fd.set("dueDate", "2026-12-01");
+    fd.set("kind", "manual");
+    fd.set("status", "open");
+    await updateDeadline(id, updateDeadlineInitialState, fd);
+    expect(await logs()).toHaveLength(0);
+  });
+
+  test("a delete is logged with the title captured before the row went away", async () => {
+    const id = await seedDeadline({
+      title: "CGIA notice due",
+      dueDate: new Date(2026, 5, 10),
+    });
+    await deleteDeadline(id);
+    const rows = await logs();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].title).toBe("Deadline deleted");
+    expect(rows[0].detail).toContain("CGIA notice due");
+    expect(rows[0].detail).toContain("2026-06-10");
   });
 });

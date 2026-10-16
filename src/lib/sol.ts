@@ -84,3 +84,113 @@ export function formatStatutePeriod(totalDays: number | null): string {
   if (days > 0) parts.push(`${days} day${days === 1 ? "" : "s"}`);
   return parts.join(" ");
 }
+
+/** `sourceType` that marks the one auto-managed "Statute of
+ *  limitations" Deadline per matter. The Matter SOL fields are
+ *  authoritative; that Deadline row is only a mirror, so the deadline
+ *  actions refuse to move or delete it. One shared constant for the
+ *  matter and deadline actions. */
+export const SOL_SOURCE_TYPE = "statute_of_limitations";
+
+/** `YYYY-MM-DD` of a date-only value stored as UTC midnight (the SOL /
+ *  incident convention — see computeSolDate). */
+export function solDayKey(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+/** Strictly parse an `<input type="date">` string (`YYYY-MM-DD`) into
+ *  UTC midnight — the same instant `new Date("YYYY-MM-DD")` yields —
+ *  but returns null for anything malformed or a non-existent calendar
+ *  day (2026-02-31), so a tampered post becomes a field error instead
+ *  of an Invalid Date reaching Prisma. */
+export function parseSolDateInput(value: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!m) return null;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const date = new Date(Date.UTC(y, mo - 1, d));
+  if (
+    date.getUTCFullYear() !== y ||
+    date.getUTCMonth() !== mo - 1 ||
+    date.getUTCDate() !== d
+  ) {
+    return null;
+  }
+  return date;
+}
+
+/** Was the stored SOL date derived automatically (as opposed to typed
+ *  in as a manual override)? Nothing records provenance, so infer it:
+ *  a null SOL is trivially auto, and a stored date equal to what the
+ *  stored incident date + stored area period compute is auto. A date
+ *  that matches nothing computable is treated as a manual override —
+ *  the safe direction (it is kept, never silently recomputed). */
+export function isAutoDerivedSol(input: {
+  storedSol: Date | null;
+  storedIncident: Date | null;
+  storedPeriodDays: number | null;
+}): boolean {
+  if (!input.storedSol) return true;
+  const computed = computeSolDate(input.storedIncident, input.storedPeriodDays);
+  return !!computed && solDayKey(computed) === solDayKey(input.storedSol);
+}
+
+/** Decide the SOL date to persist when an existing matter is edited.
+ *
+ *  - Posted date differs from the stored one -> the user typed it:
+ *    manual override wins.
+ *  - Posted date equals the stored one (the form pre-fills a real
+ *    override) -> keep it if it was a manual override; if it was
+ *    auto-derived, recompute from the posted incident date + the
+ *    (possibly new) area period so an incident correction or area
+ *    switch can't leave a stale statute date.
+ *  - Posted date empty -> auto-compute (the form leaves the override
+ *    empty while the SOL is auto-derived).
+ *  When auto-compute is impossible only because the new area has no
+ *  period configured, or because the incident date of an auto-derived
+ *  date was cleared, the stored date is kept rather than silently dropped. */
+export function resolveEditedSolDate(input: {
+  posted: Date | null;
+  stored: Date | null;
+  storedIncident: Date | null;
+  storedPeriodDays: number | null;
+  incident: Date | null;
+  periodDays: number | null;
+}): Date | null {
+  const { posted, stored } = input;
+  const auto = () => {
+    const computed = computeSolDate(input.incident, input.periodDays);
+    if (!computed && stored && input.incident && !input.periodDays) {
+      return stored;
+    }
+    // Clearing the incident date (a mis-click) must not silently drop
+    // a live AUTO-derived statute date: keep the stored one. A manual
+    // override that the user emptied is a deliberate clear and still
+    // clears.
+    if (
+      !computed &&
+      stored &&
+      !input.incident &&
+      isAutoDerivedSol({
+        storedSol: stored,
+        storedIncident: input.storedIncident,
+        storedPeriodDays: input.storedPeriodDays,
+      })
+    ) {
+      return stored;
+    }
+    return computed;
+  };
+  if (posted) {
+    if (stored && solDayKey(posted) === solDayKey(stored)) {
+      return isAutoDerivedSol({
+        storedSol: stored,
+        storedIncident: input.storedIncident,
+        storedPeriodDays: input.storedPeriodDays,
+      })
+        ? auto()
+        : stored;
+    }
+    return posted;
+  }
+  return auto();
+}

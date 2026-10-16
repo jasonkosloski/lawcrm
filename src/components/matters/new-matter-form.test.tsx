@@ -117,3 +117,52 @@ describe("NewMatterForm — validation-error re-seed", () => {
     );
   });
 });
+
+describe("NewMatterForm — selections survive a validation error (F095)", () => {
+  test("fee structure and lead keep the user's picks after the server returns an error, and are re-posted", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const { waitFor } = await import("@testing-library/react");
+    const { createMatter } = await import("@/app/actions/matters");
+    const posted: FormData[] = [];
+    vi.mocked(createMatter).mockImplementation(async (_prev, fd) => {
+      posted.push(fd);
+      return posted.length === 1
+        ? {
+            status: "error" as const,
+            errors: { newClientEmail: ["Add an email or phone"] },
+            values: {},
+          }
+        : { status: "idle" as const };
+    });
+
+    const twoUsers: NewMatterFormOptions = {
+      ...options,
+      users: [
+        ...options.users,
+        { id: "u2", name: "Eli Active", jobTitle: "Paralegal", initials: "EA" },
+      ],
+    };
+    const user = userEvent.setup();
+    render(<NewMatterForm options={twoUsers} />);
+
+    await user.type(
+      screen.getByPlaceholderText(/client name/i),
+      "Alvarez, Maria"
+    );
+    await user.selectOptions(screen.getByLabelText(/fee structure/i), "hourly");
+    await user.selectOptions(screen.getByLabelText(/lead attorney/i), "u2");
+
+    await user.click(screen.getByRole("button", { name: /create matter/i }));
+    await waitFor(() => expect(posted).toHaveLength(1));
+    await screen.findByText(/add an email or phone/i);
+
+    // The auto-reset used to snap these back to the mount defaults.
+    expect(screen.getByLabelText(/fee structure/i)).toHaveValue("hourly");
+    expect(screen.getByLabelText(/lead attorney/i)).toHaveValue("u2");
+
+    await user.click(screen.getByRole("button", { name: /create matter/i }));
+    await waitFor(() => expect(posted).toHaveLength(2));
+    expect(posted[1].get("feeStructure")).toBe("hourly");
+    expect(posted[1].get("leadUserId")).toBe("u2");
+  });
+});

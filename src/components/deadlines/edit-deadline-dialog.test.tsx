@@ -151,3 +151,28 @@ describe("EditDeadlineDialog — close on success", () => {
     expect(onOpenChange).not.toHaveBeenCalled();
   });
 });
+
+describe("EditDeadlineDialog — auto-managed SOL row", () => {
+  const solDeadline: EditableDeadline = {
+    ...deadline,
+    title: "Statute of limitations",
+    sourceRef: null,
+    sourceType: "statute_of_limitations",
+  };
+
+  test("renders the date read-only and only offers the status", () => {
+    render(
+      <EditDeadlineDialog
+        open
+        onOpenChange={vi.fn()}
+        deadline={solDeadline}
+      />
+    );
+    expect(screen.getByText(/managed on the matter edit page/i)).toBeInTheDocument();
+    // No editable title / due date / description inputs.
+    expect(screen.queryByPlaceholderText("Deadline title")).toBeNull();
+    expect(screen.queryByPlaceholderText("Due date")).toBeNull();
+    expect(screen.queryByPlaceholderText(/why this deadline applies/i)).toBeNull();
+    expect(screen.getByRole("button", { name: /^save$/i })).toBeInTheDocument();
+  });
+});

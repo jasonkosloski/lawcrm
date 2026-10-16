@@ -130,6 +130,36 @@ describe("StatuteOfLimitationsCard — rendered countdown", () => {
   });
 });
 
+describe("StatuteOfLimitationsCard — provenance line (F013)", () => {
+  test("a date that is incident + period is described as 'from incident'", () => {
+    vi.setSystemTime(new Date("2026-07-06T18:00:00Z"));
+    render(
+      <StatuteOfLimitationsCard
+        {...baseProps}
+        date={new Date("2026-07-01T00:00:00Z")}
+        incidentDate={new Date("2024-07-01T00:00:00Z")}
+        statutePeriodDays={730}
+      />
+    );
+    expect(screen.getByText(/from incident/i)).toBeInTheDocument();
+    expect(screen.queryByText(/manual date/i)).toBeNull();
+  });
+
+  test("a date that is NOT incident + period is flagged manual instead of implying it derives from the incident", () => {
+    vi.setSystemTime(new Date("2026-07-06T18:00:00Z"));
+    render(
+      <StatuteOfLimitationsCard
+        {...baseProps}
+        date={new Date("2027-01-15T00:00:00Z")}
+        incidentDate={new Date("2024-07-01T00:00:00Z")}
+        statutePeriodDays={730}
+      />
+    );
+    expect(screen.getByText(/manual date/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^from incident/i)).toBeNull();
+  });
+});
+
 describe("StatuteOfLimitationsCard — matters.edit gating", () => {
   const date = new Date("2026-09-01T00:00:00Z");
 

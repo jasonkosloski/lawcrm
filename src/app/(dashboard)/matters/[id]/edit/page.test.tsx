@@ -37,11 +37,34 @@ vi.mock("@/lib/permission-check", () => ({
 // Leaf client components — they carry their own hooks / server-action
 // wiring. We only care whether the page mounts them, so each becomes
 // a testid stub.
+// Capture the props the page hands the form (option lists, lead lock).
+const formProps = vi.hoisted(() => ({
+  current: undefined as
+    | {
+        options: {
+          clients: Array<{ id: string; inactive?: boolean }>;
+          users: Array<{ id: string; inactive?: boolean }>;
+        };
+        canChangeLead?: boolean;
+      }
+    | undefined,
+}));
+const teamProps = vi.hoisted(() => ({
+  current: undefined as
+    | { userOptions: Array<{ id: string }> }
+    | undefined,
+}));
 vi.mock("@/components/matters/edit-matter-form", () => ({
-  EditMatterForm: () => <div data-testid="edit-matter-form" />,
+  EditMatterForm: (props: NonNullable<typeof formProps.current>) => {
+    formProps.current = props;
+    return <div data-testid="edit-matter-form" />;
+  },
 }));
 vi.mock("@/components/matters/matter-team-management", () => ({
-  MatterTeamManagement: () => <div data-testid="team-management" />,
+  MatterTeamManagement: (props: NonNullable<typeof teamProps.current>) => {
+    teamProps.current = props;
+    return <div data-testid="team-management" />;
+  },
 }));
 vi.mock("@/components/settings/calendar-defaults-card", () => ({
   MatterCalendarDefaultsCard: () => (
@@ -125,5 +148,82 @@ describe("EditMatterPage — matters.edit gate", () => {
     await renderPage();
     expect(screen.getByTestId("edit-matter-form")).toBeTruthy();
     expect(screen.queryByTestId("team-management")).toBeNull();
+  });
+});
+
+describe("EditMatterPage — option lists keep the current client and lead (F082/F311)", () => {
+  const withTeam = {
+    ...matter,
+    teamMembers: [
+      {
+        id: "tm1",
+        userId: "u-lead",
+        role: "lead",
+        removedAt: null,
+        createdAt: new Date(),
+        user: { id: "u-lead", name: "Dana Lead", jobTitle: "Attorney", initials: "DL" },
+      },
+    ],
+  };
+
+  test("client and user queries always include the matter's current client and active lead", async () => {
+    grant("matters.edit");
+    vi.mocked(prisma.matter.findUnique).mockResolvedValue(
+      withTeam as unknown as Awaited<ReturnType<typeof prisma.matter.findUnique>>
+    );
+    render(
+      await EditMatterPage({
+        params: Promise.resolve({ id: "m1" }),
+      } as Parameters<typeof EditMatterPage>[0])
+    );
+    const clientWhere = vi.mocked(prisma.contact.findMany).mock.calls[0][0]!
+      .where;
+    expect(clientWhere).toEqual({
+      OR: [{ type: "client", isActive: true }, { id: "c1" }],
+    });
+    const userWhere = vi.mocked(prisma.user.findMany).mock.calls[0][0]!.where;
+    expect(userWhere).toEqual({
+      OR: [{ isActive: true }, { id: "u-lead" }],
+    });
+  });
+
+  test("inactive rows are flagged for the form and kept out of the team card's picker", async () => {
+    grant("matters.edit", "matters.manage_team");
+    vi.mocked(prisma.matter.findUnique).mockResolvedValue(
+      withTeam as unknown as Awaited<ReturnType<typeof prisma.matter.findUnique>>
+    );
+    vi.mocked(prisma.contact.findMany).mockResolvedValueOnce([
+      { id: "c1", name: "Maria", organization: null, isActive: false },
+    ] as never);
+    vi.mocked(prisma.user.findMany).mockResolvedValueOnce([
+      { id: "u-lead", name: "Dana Lead", jobTitle: "Attorney", isActive: false },
+      { id: "u2", name: "Eli Active", jobTitle: "Paralegal", isActive: true },
+    ] as never);
+    render(
+      await EditMatterPage({
+        params: Promise.resolve({ id: "m1" }),
+      } as Parameters<typeof EditMatterPage>[0])
+    );
+    expect(formProps.current?.options.clients).toEqual([
+      expect.objectContaining({ id: "c1", inactive: true }),
+    ]);
+    expect(formProps.current?.options.users).toEqual([
+      expect.objectContaining({ id: "u-lead", inactive: true }),
+      expect.objectContaining({ id: "u2", inactive: false }),
+    ]);
+    // Team card never offers the departed user.
+    expect(teamProps.current?.userOptions.map((u) => u.id)).toEqual(["u2"]);
+  });
+
+  test("the lead field is only unlocked with matters.manage_team (F138/F300/F767)", async () => {
+    grant("matters.edit");
+    await renderPage();
+    expect(formProps.current?.canChangeLead).toBe(false);
+  });
+
+  test("manage_team unlocks the lead field", async () => {
+    grant("matters.edit", "matters.manage_team");
+    await renderPage();
+    expect(formProps.current?.canChangeLead).toBe(true);
   });
 });
