@@ -213,7 +213,7 @@ export async function inviteFirmMember(
   await logActivity({
     matterId: null,
     userId: currentUserId,
-    type: "filing",
+    type: "auth",
     title: `Invited ${parsed.data.name} to the firm`,
     detail: `${parsed.data.email} — roles: ${grantedRoleNames.join(", ")}`,
   });
@@ -414,7 +414,7 @@ export async function updateFirmMember(
   await logActivity({
     matterId: null,
     userId: currentUserId,
-    type: "filing",
+    type: "auth",
     title: `Updated team member ${parsed.data.name}`,
     detail: `Roles: ${roleNames.join(", ")} — ${newIsActive ? "active" : "deactivated"}`,
   });
@@ -460,7 +460,7 @@ export async function resetFirmMemberPassword(
   await logActivity({
     matterId: null,
     userId: actorId,
-    type: "filing",
+    type: "auth",
     title: `Reset password for ${target.name}`,
   });
 

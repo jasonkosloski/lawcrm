@@ -240,7 +240,7 @@ describe("audit trail — team mutations write activity-log entries", () => {
     expect(res.invitePassword).toBeTruthy();
 
     const log = await prisma.activityLog.findFirstOrThrow({
-      where: { userId: actor.userId, type: "filing" },
+      where: { userId: actor.userId, type: "auth" },
     });
     expect(log.matterId).toBeNull();
     expect(log.title).toContain("Invited New Hire");
@@ -270,7 +270,7 @@ describe("audit trail — team mutations write activity-log entries", () => {
     expect(res.status).toBe("ok");
 
     const log = await prisma.activityLog.findFirstOrThrow({
-      where: { userId: actor.userId, type: "filing" },
+      where: { userId: actor.userId, type: "auth" },
     });
     expect(log.matterId).toBeNull();
     expect(log.title).toContain("Updated team member Member");
@@ -297,7 +297,7 @@ describe("audit trail — team mutations write activity-log entries", () => {
     expect(row.passwordHash).toBeTruthy();
 
     const log = await prisma.activityLog.findFirstOrThrow({
-      where: { userId: actor.userId, type: "filing" },
+      where: { userId: actor.userId, type: "auth" },
     });
     expect(log.matterId).toBeNull();
     expect(log.title).toBe("Reset password for Target Member");

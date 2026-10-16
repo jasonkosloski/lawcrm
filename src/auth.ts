@@ -1,44 +1,32 @@
 /**
  * Auth.js (next-auth v5) configuration.
  *
- * Single source of truth for authentication. Re-exports the four
- * helpers Next.js callers need (`auth`, `signIn`, `signOut`, plus
- * the route `handlers`) so app code never imports from `next-auth`
- * directly.
+ * Single source of truth for authentication. Re-exports the helpers
+ * Next.js callers need (`auth`, `signIn`, `signOut`,
+ * `unstable_update`, plus the route `handlers`) so app code never
+ * imports from `next-auth` directly.
  *
  * Strategy:
- *   - Email + argon2id-hashed password via the Credentials provider.
- *   - JWT sessions (no Session table) — keeps the surface small for
- *     v1; we swap to DB sessions when multi-user revoke-other-
- *     sessions UI lands.
+ *   - Email + argon2id-hashed password via the Credentials provider
+ *     (`authorizeCredentials` — no-enumeration + audit rules live
+ *     there).
+ *   - JWT sessions (no Session table). Revocation without a session
+ *     row: the token carries a password fingerprint, so a password
+ *     change/reset signs out every other session (ADR-017,
+ *     `validateSessionToken`).
  *   - Prisma adapter wired up so adding Google OAuth (or any
  *     provider) later is a config-only change — Account +
  *     VerificationToken tables are already there.
- *
- * Security notes:
- *   - `authorize` returns `null` for *every* failure mode (bad
- *     password, missing user, deactivated account). Never reveal
- *     which one — that prevents email enumeration.
- *   - Constant-time compare comes for free with argon2.verify.
- *   - `User.passwordHash === null` means "no credentials login" —
- *     reject without ever calling argon2.
- *   - `User.isActive === false` reject — keeps deactivated employees
- *     out without deleting their historical activity.
  */
 
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
-import * as argon2 from "argon2";
-import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { authorizeCredentials } from "@/lib/credentials-authorize";
+import { validateSessionToken } from "@/lib/session-token";
 
-const credentialsSchema = z.object({
-  email: z.string().trim().toLowerCase().email(),
-  password: z.string().min(1),
-});
-
-export const { handlers, auth, signIn, signOut } = NextAuth({
+export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   adapter: PrismaAdapter(prisma),
   // JWT sessions — no DB Session row written. Swap to "database"
   // when we want true revocation; needs a Session model + a non-
@@ -55,41 +43,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(raw) {
-        // Validate shape first — Auth.js hands us `Partial<Record<...>>`
-        // from the form, so we can't trust it.
-        const parsed = credentialsSchema.safeParse(raw);
-        if (!parsed.success) return null;
-
-        const user = await prisma.user.findUnique({
-          where: { email: parsed.data.email },
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            image: true,
-            passwordHash: true,
-            isActive: true,
-          },
-        });
-        // Same null return for every failure mode — never tell the
-        // caller whether it was the email, the password, or the
-        // active flag. Email enumeration prevention.
-        if (!user || !user.passwordHash || !user.isActive) return null;
-
-        const ok = await argon2.verify(user.passwordHash, parsed.data.password);
-        if (!ok) return null;
-
-        // The shape returned here lands in the `jwt` callback as the
-        // `user` arg on first sign-in. We only forward what we want
-        // on the session.
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          image: user.image,
-        };
-      },
+      // Body lives in src/lib/credentials-authorize.ts (tested there).
+      authorize: authorizeCredentials,
     }),
     // Future providers — config-only when we wire them. Account
     // table is already in the schema, so no migration needed.
@@ -103,26 +58,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     // Runs on sign-in (when `user` is present) AND on every
-    // subsequent request that reads the JWT. We re-validate the
-    // user against the DB on every request so a stale JWT (e.g.
-    // user deleted, deactivated, or DB reset between sign-in and
-    // now) can't be used to access the app. When invalid, we
-    // strip `userId` from the token — the session callback then
-    // returns a session without a user.id, and `getCurrentUserId`
-    // bounces to /login. Cookie clears on the next sign-in.
-    async jwt({ token, user }) {
-      if (user) {
-        token.userId = user.id;
-      }
-      if (token.userId) {
-        const valid = await prisma.user.count({
-          where: { id: token.userId as string, isActive: true },
-        });
-        if (valid === 0) {
-          delete token.userId;
-        }
-      }
-      return token;
+    // subsequent request that reads the JWT. Re-validates the user
+    // (exists + active) and the password fingerprint (ADR-017) —
+    // see src/lib/session-token.ts. An invalid token loses its
+    // userId; the session callback then returns no user.id, and
+    // `getCurrentUserId` bounces to /login.
+    async jwt({ token, user, trigger }) {
+      return validateSessionToken(token, {
+        signInUserId: user?.id,
+        trigger,
+      });
     },
     // Expose the validated userId on session.user.id. When the JWT
     // has no userId (because validation in the jwt callback wiped

@@ -27,6 +27,7 @@ import {
   Gavel,
   Mail,
   Phone,
+  ShieldCheck,
   StickyNote,
   Video,
   Zap,
@@ -52,6 +53,7 @@ const ACTIVITY_ICONS: Record<string, LucideIcon> = {
   clock: Clock,
   dollar: DollarSign,
   briefcase: Briefcase,
+  shield: ShieldCheck,
 };
 
 const FILTER_BUCKETS: Record<
@@ -70,6 +72,7 @@ const FILTER_BUCKETS: Record<
     types: ["deposit", "settlement"],
   },
   events: { label: "Events", types: ["event"] },
+  security: { label: "Security", types: ["auth"] },
 };
 
 const PILL_ORDER = [
@@ -82,6 +85,7 @@ const PILL_ORDER = [
   "time",
   "financial",
   "events",
+  "security",
 ] as const;
 
 // Date rendering routes through the centralized formatter.

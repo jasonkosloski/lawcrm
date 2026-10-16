@@ -184,6 +184,9 @@ export async function getRecentActivity(
   limit = 5
 ): Promise<ActivityItem[]> {
   const entries = await prisma.activityLog.findMany({
+    // Sign-in/password audit rows are governance, not work — they
+    // live on /settings/activity + /settings/security only.
+    where: { type: { not: "auth" } },
     orderBy: { timestamp: "desc" },
     take: limit,
   });

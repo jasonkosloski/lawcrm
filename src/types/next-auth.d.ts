@@ -23,5 +23,9 @@ declare module "next-auth/jwt" {
   interface JWT {
     /** Mirrors User.id; populated in the jwt callback on sign-in. */
     userId?: string;
+    /** Password fingerprint (src/lib/session-fingerprint.ts, ADR-017)
+     *  — a mismatch against the user's current hash drops the
+     *  session. */
+    pwv?: string;
   }
 }

@@ -315,3 +315,22 @@ Clicking a different column resets to that column's first-click (ascending).
 - (+) Fresh environments come up with `prisma migrate deploy` instead of a drift-prone push
 - (-) One-time manual baseline step per existing database (above)
 - (-) The build does not run `migrate deploy` yet — preview deployments share env vars with production on many setups, and an automatic migration from a preview build is how a prod DB gets changed by an unmerged branch. Wiring it into the deploy pipeline is a separate decision.
+
+## ADR-017: Password fingerprint in the JWT — revoke sessions on password change without a Session table
+
+**Date:** 2026-10-16
+**Status:** Accepted
+
+**Context:** Sessions are stateless JWTs (`docs/AUTH_PLAN.md`). With no session row to delete, changing or resetting a password left every existing session — including a stolen one — valid until expiry. Switching to database sessions is the textbook fix but is a schema change plus a session-strategy change, and the credentials provider has caveats with DB sessions.
+
+**Decision:**
+- The JWT carries `pwv`, a 16-hex-char SHA-256 digest of the user's argon2 hash (`src/lib/session-fingerprint.ts`). It's stamped at sign-in.
+- The `jwt` callback (`validateSessionToken`, `src/lib/session-token.ts`) already reads the user row on every request to reject deleted/deactivated users; it now also compares the fingerprint and strips the session on mismatch. No extra query.
+- `changePasswordAction` calls `unstable_update()` after writing the new hash — the callback runs with `trigger: "update"` and re-stamps the current session, so the user who changed the password stays signed in while every other session is dropped. An admin reset (`resetFirmMemberPassword`) signs the target out everywhere, as it should.
+- Tokens minted before this shipped have no `pwv` and are dropped: one forced re-login per user at deploy.
+
+**Trade-offs:**
+- (+) Real "sign out everywhere" on password change/reset with zero schema change
+- (+) The cookie never contains the hash itself — only a digest of it
+- (-) Revocation is all-or-nothing: no "sign out just that one device" — that still needs DB sessions (per-device session list stays deferred)
+- (-) Relies on the per-request user lookup in the `jwt` callback; if that query is ever removed for performance, this check goes with it

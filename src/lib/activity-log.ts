@@ -31,7 +31,11 @@ export type ActivityType =
   | "settlement"
   | "deposit"
   | "automation"
-  | "document";
+  | "document"
+  /** Sign-in / password events (src/lib/auth-events.ts writes most of
+   *  them). Firm-wide, shown under "Security" on /settings/activity,
+   *  excluded from the dashboard feed. */
+  | "auth";
 
 export async function logActivity(input: {
   matterId: string | null;
@@ -85,6 +89,8 @@ function defaultIconFor(type: ActivityType): string {
     case "document":
     case "filing":
       return "document";
+    case "auth":
+      return "shield";
     default:
       return "zap";
   }
@@ -110,6 +116,8 @@ function defaultSourceFor(type: ActivityType): string {
     case "document":
     case "filing":
       return "Documents";
+    case "auth":
+      return "Security";
     default:
       return "System";
   }

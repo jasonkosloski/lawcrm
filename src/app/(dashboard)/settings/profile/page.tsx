@@ -98,14 +98,7 @@ export default async function ProfileSettingsPage() {
           >
             Security
           </Link>{" "}
-          (coming soon — for now, an admin can reset it on{" "}
-          <Link
-            href="/settings/team"
-            className="text-brand-700 hover:underline"
-          >
-            Team
-          </Link>
-          ).
+          — changing it signs you out on every other device.
         </div>
       </div>
 

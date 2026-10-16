@@ -32,6 +32,7 @@ import {
   getDashboardKpis,
   getFirmPulse,
   getMyOpenTasks,
+  getRecentActivity,
   getTodayAgenda,
   getUpcomingDeadlines,
 } from "@/lib/queries/dashboard";
@@ -210,5 +211,18 @@ describe("goals come from the Firm row, not hardcoded constants", () => {
 
     const pulse = await getFirmPulse(DENVER);
     expect(pulse.billableGoal).toBe(175);
+  });
+});
+
+describe("getRecentActivity — security audit rows stay off the dashboard", () => {
+  test("auth events are excluded; work activity is shown", async () => {
+    await prisma.activityLog.createMany({
+      data: [
+        { userId, type: "auth", title: "Signed in", timestamp: new Date(NOW.getTime() - 1000) },
+        { userId, matterId, type: "note", title: "Added a note", timestamp: new Date(NOW.getTime() - 2000) },
+      ],
+    });
+    const items = await getRecentActivity(DENVER);
+    expect(items.map((i) => i.title)).toEqual(["Added a note"]);
   });
 });

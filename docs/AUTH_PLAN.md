@@ -53,6 +53,13 @@ The proxy remains optimistic (cookie-presence only) so it's fast and Edge-compat
 - Seed users get hashed passwords; the dev password is printed once at seed end.
 - `Account` + `VerificationToken` tables exist so adding Google later is config-only.
 
+## Phase 2 progress (2026-10-16)
+
+- **Change password** on `/settings/security` (`changePasswordAction` in `src/app/actions/auth.ts`; policy in `src/lib/password-policy.ts`).
+- **Auth audit trail** + the user's own recent activity list (see the deferred table below).
+- **Password change/reset signs out other sessions** — ADR-017. Tokens issued before this shipped carry no fingerprint, so every user signs in once more after the deploy.
+- Credentials `authorize` and the `jwt` callback body moved to `src/lib/credentials-authorize.ts` / `src/lib/session-token.ts` so they're tested against a real DB.
+
 ## What's deferred (and where it'd go when we revisit)
 
 | Feature | Where it lands later |
@@ -62,12 +69,12 @@ The proxy remains optimistic (cookie-presence only) so it's fast and Edge-compat
 | Password reset | New `/forgot-password` + `/reset-password?token=…` routes; emit single-use hashed tokens via the `VerificationToken` table; invalidate sessions on reset. |
 | Email verification | Send-on-signup + on-email-change; consume tokens via `VerificationToken`; flip `User.emailVerified`. |
 | MFA / TOTP | New `User.totpSecret` + `RecoveryCode` table; second step in the login flow; `/account/mfa` enroll. |
-| Session list / revoke individual sessions | Switch `session.strategy` from `"jwt"` to `"database"`, add `Session` table, build `/account/sessions` UI. |
+| Session list / revoke individual sessions | Switch `session.strategy` from `"jwt"` to `"database"`, add `Session` table, build `/account/sessions` UI. (Revoke-ALL-other-sessions on password change/reset already works without this — password fingerprint in the JWT, ADR-017.) |
 | Idle timeout / absolute lifetime | Session callback timestamps; configurable in firm settings. |
 | Account lockout | Counter on `User` (or separate `LoginAttempt` table) + cooldown window. |
 | Pwned-passwords corpus check | Call HaveIBeenPwned k-anonymity range API in the credentials authorize step. |
 | RBAC / roles / permissions | `User.role` already exists. Add `requirePermission(perm)` helper, codify role→permission map in `src/lib/permissions.ts`, gate UI + actions. |
-| Audit log of auth events | Reuse `ActivityLog` (or new `AuthEvent` table) — write on login_success, login_failure, logout, password_change, role_change. |
+| ~~Audit log of auth events~~ | **Shipped 2026-10-16** — `ActivityLog` rows with `type: "auth"` via `src/lib/auth-events.ts` (sign-in, failed sign-in for real accounts, sign-out, password change) + team invite/update/reset. |
 | Rate limiting | In-process bucket today (none); Redis/Upstash sliding window in prod. |
 | Re-auth challenge for sensitive actions | Custom `requireRecentAuth(maxAgeMin)` helper checking session age. |
 | Multi-tenancy (`firmId` on session) | Add `Firm` model + `User.firmId`; extend the `jwt` + `session` callbacks to put `firmId` on the session; audit every query for `where: { firmId }`. |

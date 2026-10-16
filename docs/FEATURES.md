@@ -528,9 +528,23 @@ done. What's left is enumerated below.
 - [ ] **Export / print to PDF — beyond invoices.** Invoices ✓ (chrome-
   free `/print/invoices/[id]` route, browser Save-as-PDF). Demand
   letters + trust reports still pending.
-- [ ] **Settings — Security.** Change password, 2FA, active
-  sessions, sign-in history. Blocked on Auth Phase 2 (see
-  `docs/AUTH_PLAN.md`).
+- [~] **Settings — Security.** Shipped 2026-10-16:
+  `/settings/security` (identity-scoped, no permission key) with
+  **change password** (`changePasswordAction` — current password
+  required, `src/lib/password-policy.ts` rules: 12–256 chars, not
+  the email, not the current password) and the user's own **recent
+  account activity**. **Auth audit:** sign-ins, failed sign-ins
+  (real accounts only, with reason — unknown emails are never
+  logged), sign-outs, password changes, plus admin invite / member
+  update / password reset, all land in `ActivityLog` as
+  `type: "auth"` with IP + user agent (`src/lib/auth-events.ts`) —
+  filterable under "Security" on /settings/activity, excluded from
+  the dashboard feed. **Session revocation without a Session
+  table:** a password fingerprint in the JWT signs out every other
+  session on change/reset (ADR-017). Still left: 2FA, per-device
+  session list, password reset by email (needs an email delivery
+  provider), login lockout/rate limiting (needs a schema change —
+  waits on the production migration baseline, ADR-016).
 - [~] **Settings — Integrations.** Gmail is live: per-user connect /
   reconnect / disconnect card (address, sync-status chip, last sync,
   thread count, syncError surfaced, multi-account list), callback
