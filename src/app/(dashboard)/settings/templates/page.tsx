@@ -20,8 +20,10 @@ import {
   TemplateLibrary,
   type TemplateListItem,
 } from "@/components/templates/template-library";
+import { requireUser } from "@/lib/current-user";
 
 export default async function TemplatesSettingsPage() {
+  await requireUser();
   const [templates, { isAdmin, granted }, tz] = await Promise.all([
     prisma.documentTemplate.findMany({
       orderBy: [{ isActive: "desc" }, { category: "asc" }, { name: "asc" }],

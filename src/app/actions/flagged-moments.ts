@@ -280,6 +280,11 @@ export async function updateFlaggedMoment(
   flagId: string,
   input: FlagInput
 ): Promise<FlagActionResult> {
+  // Authenticate before validating or touching the DB — an
+  // unauthenticated caller must not get "Flag not found" /
+  // validation answers (existence oracle) or cost a query.
+  const actorId = await getCurrentUserId();
+
   const parsed = flagSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
 
@@ -297,7 +302,6 @@ export async function updateFlaggedMoment(
   if (!flag) return { ok: false, error: "Flag not found" };
 
   // Creator can always edit their own; otherwise gate.
-  const actorId = await getCurrentUserId();
   if (flag.flaggedById !== actorId) {
     await requirePermission("evidence.flag.edit_any");
   }
@@ -337,6 +341,9 @@ export async function updateFlaggedMoment(
 export async function deleteFlaggedMoment(
   flagId: string
 ): Promise<FlagActionResult> {
+  // Authenticate before any DB read (see updateFlaggedMoment).
+  const actorId = await getCurrentUserId();
+
   const flag = await prisma.flaggedMoment.findUnique({
     where: { id: flagId },
     select: {
@@ -352,7 +359,6 @@ export async function deleteFlaggedMoment(
   if (!flag) return { ok: false, error: "Flag not found" };
 
   // Creator can always delete their own; otherwise gate.
-  const actorId = await getCurrentUserId();
   if (flag.flaggedById !== actorId) {
     await requirePermission("evidence.flag.delete_any");
   }

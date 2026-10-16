@@ -27,6 +27,7 @@ import {
 } from "@/lib/queries/contacts";
 import { getFilingMatterOptions } from "@/lib/queries/communication";
 import { currentUserHasPermission } from "@/lib/permission-check";
+import { requireUser } from "@/lib/current-user";
 
 const PARTY_CATEGORY_LABEL: Record<string, string> = {
   client: "Client",
@@ -45,6 +46,7 @@ const CONFLICT_LABEL: Record<string, string> = {
 export default async function ContactDetailPage({
   params,
 }: PageProps<"/contacts/[id]">) {
+  await requireUser();
   const { id } = await params;
   const c = await getContactById(id);
   if (!c) notFound();

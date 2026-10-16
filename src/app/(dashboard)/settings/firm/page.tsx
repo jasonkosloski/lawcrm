@@ -19,8 +19,10 @@ import { FirmCalendarDefaultsCard } from "@/components/settings/calendar-default
 import { getCurrentFirm } from "@/lib/firm";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
+import { requireUser } from "@/lib/current-user";
 
 export default async function FirmSettingsPage() {
+  await requireUser();
   const [firm, canEdit] = await Promise.all([
     getCurrentFirm(),
     currentUserHasPermission("firm.edit_info"),

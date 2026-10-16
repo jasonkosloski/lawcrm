@@ -14,12 +14,14 @@
 import { TopBar } from "@/components/layout/topbar";
 import { SettingsNav } from "@/components/settings/settings-nav";
 import { getCurrentUserPermissions } from "@/lib/permission-check";
+import { requireUser } from "@/lib/current-user";
 
 export default async function SettingsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  await requireUser();
   // Resolve once at the layout, threaded into the nav so each item
   // can decide its own visibility. Each underlying write also
   // re-checks server-side via `requirePermission(...)` so a deep-

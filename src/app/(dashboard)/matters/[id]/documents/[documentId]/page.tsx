@@ -39,7 +39,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { getDocumentForViewer } from "@/lib/queries/document-viewer";
 import { getDocumentFlaggedMoments } from "@/lib/queries/evidence";
-import { getCurrentUserId } from "@/lib/current-user";
+import { getCurrentUserId, requireUser } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { MAX_MEDIA_SECONDS } from "@/lib/media-time";
@@ -111,6 +111,7 @@ export default async function DocumentViewerPage({
   params,
   searchParams,
 }: PageProps<"/matters/[id]/documents/[documentId]">) {
+  await requireUser();
   const { id, documentId } = await params;
   const [doc, tz] = await Promise.all([
     getDocumentForViewer(id, documentId),

@@ -45,7 +45,7 @@ import { currentUserHasPermission } from "@/lib/permission-check";
 // them on the viewer's calendar, not the server's (ADR-012).
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { LogCallButton } from "@/components/communication/log-call-button";
-import { getCurrentUserId } from "@/lib/current-user";
+import { getCurrentUserId, requireUser } from "@/lib/current-user";
 import { maybeKickEmailSync } from "@/lib/google/gmail-sync";
 import { SyncNowButton } from "@/components/communication/sync-now-button";
 
@@ -88,6 +88,7 @@ function parseMessengerFilter(
 export default async function CommunicationPage({
   searchParams,
 }: PageProps<"/communication">) {
+  await requireUser();
   const sp = await searchParams;
   const view = parseView(sp.view);
   const rawThread = Array.isArray(sp.thread) ? sp.thread[0] : sp.thread;

@@ -34,8 +34,10 @@ import { PipelineCard } from "@/components/reports/pipeline-card";
 import { UtilizationCard } from "@/components/reports/utilization-card";
 import { ArAgingCard } from "@/components/reports/ar-aging-card";
 import { RealizationCard } from "@/components/reports/realization-card";
+import { requireUser } from "@/lib/current-user";
 
 export default async function ReportsPage() {
+  await requireUser();
   // Page-level gate. Same shape as /settings/activity.
   const ok = await currentUserHasPermission("reports.view");
   if (!ok) redirect("/");

@@ -69,6 +69,11 @@ const ACTIVITY_ICONS: Record<string, LucideIcon> = {
 };
 
 export default async function DashboardPage() {
+  // Authenticate before anything else — including the fire-and-forget
+  // sweep below, which touches the DB and must not run for an
+  // unauthenticated request.
+  const userId = await getCurrentUserId();
+
   // Opportunistic deadline sweep — fire-and-forget (never blocks the
   // render, never throws) and self-throttled to once/hour per
   // instance. The dashboard is the highest-traffic page, so it
@@ -76,7 +81,6 @@ export default async function DashboardPage() {
   // /api/notification-sweep.
   void maybeRunDeadlineNotificationSweep();
 
-  const userId = await getCurrentUserId();
   // "Today" everywhere below means the USER's calendar day — resolve
   // the viewer's zone once and thread it through every query (same
   // pattern as /calendar). Sequential await before the fan-out: the

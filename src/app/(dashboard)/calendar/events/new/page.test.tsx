@@ -14,6 +14,10 @@ import { render, screen } from "@testing-library/react";
 import type { FilingMatterOption } from "@/lib/queries/communication";
 
 const NOT_FOUND_SENTINEL = "TEST_NEXT_NOT_FOUND";
+// Page auth guard (src/lib/current-user.ts) — session exists here.
+vi.mock("@/lib/current-user", () => ({
+  requireUser: vi.fn(async () => "user_1"),
+}));
 vi.mock("next/navigation", () => ({
   notFound: vi.fn(() => {
     throw new Error(NOT_FOUND_SENTINEL);

@@ -39,6 +39,23 @@ export const getCurrentUserId = cache(async (): Promise<string> => {
   return session.user.id;
 });
 
+/**
+ * Page / layout auth guard. Call as the FIRST statement of every
+ * `page.tsx` and `layout.tsx` (before any data read): Next renders a
+ * page without re-running its parent layouts on partial (RSC)
+ * navigations, and the proxy only checks that a session cookie is
+ * present, so a layout is not an auth gate. Redirects to `/login`
+ * when there is no valid session (throws NEXT_REDIRECT — never wrap
+ * it in try/catch). Returns the user id for convenience. Cached via
+ * `getCurrentUserId`, so repeat calls in one request are free.
+ *
+ * `src/app/page-guards.test.ts` statically enforces that every page
+ * calls a guard.
+ */
+export async function requireUser(): Promise<string> {
+  return getCurrentUserId();
+}
+
 /** Read the current user's display fields for the sidebar / topbar.
  *  Returns null if not signed in (the layout is rendered for the
  *  login page too, so the null branch matters). Cached per-request

@@ -22,6 +22,28 @@ Every server action and page guard funnels through one of two helpers:
 
 ---
 
+## Page and layout guards
+
+A layout is **not** an auth gate: Next renders a page on partial (RSC)
+navigations without re-running its parent layouts, and `src/proxy.ts`
+only checks that a session cookie exists. So every `page.tsx` and
+`layout.tsx` under `src/app/(dashboard)` and `src/app/print` must call
+a guard as the **first `await`** of its default export, before reading
+any data:
+
+- `requireUser()` (`src/lib/current-user.ts`) - session only; use when
+  the page has no finer permission key.
+- `requirePermission(key)` / `requireAdmin()` - session plus a key / the Admin role.
+- `getCurrentUserId()` - also redirects, but prefer `requireUser()` for readability.
+
+`currentUserHasPermission` is a read-side flag, not a guard. Guards
+redirect by throwing, so never wrap them in try/catch.
+`src/app/page-guards.test.ts` enforces this by source scan, with a
+commented allowlist for pages owned by packages that have not landed
+their guard yet. See ADR-028 in [DECISIONS.md](./DECISIONS.md).
+
+---
+
 ## The mental model
 
 There are three concepts; keeping them straight makes the rest of this
@@ -172,6 +194,7 @@ gets revisited.
   lead attorney from the matter edit form (`updateMatter` returns a
   field error otherwise; the form locks the field). `matters.edit`
   alone can edit everything else on the matter.
+
 ### Cross-key gates worth knowing
 
 - **`parties.edit` + `contacts.edit`** — the Parties-tab edit form
@@ -332,7 +355,7 @@ write.
 
 A note or primary capture (task / event / deadline / time entry) can
 carry "sibling" captures that create further records. **Siblings do not
-inherit the primary's gate** (ADR-020): every record kind must clear
+inherit the primary's gate** (ADR-025): every record kind must clear
 its own create key, whichever surface carried it.
 
 | Kind created | Key |
@@ -599,6 +622,7 @@ boxes."
 | `src/lib/permissions.ts`                                          | Static catalog + helpers (`PERMISSION_KEYS`, `isKnownPermission`)|
 | `src/lib/permission-check.ts`                                     | Runtime helpers (`currentUserHasPermission`, `requirePermission`, `requirePermissions`, etc.) |
 | `src/lib/capture-permissions.ts`                                  | Kind to create-key map + `requiredCapturePermissions` for captures/notes |
+| `src/lib/current-user.ts`                                         | `getCurrentUserId` / `requireUser` (session guards for pages)   |
 | `src/lib/firm.ts`                                                 | `requireAdmin` / `isCurrentUserAdmin` (admin-as-concept)        |
 | `src/lib/role-constants.ts`                                       | `ADMIN_ROLE_NAME` / `DEFAULT_ROLE_NAME`                         |
 | `src/app/actions/roles.ts`                                        | Role CRUD + `setRolePermissionAction`                           |
@@ -625,10 +649,14 @@ boxes."
 | 2026-10-16 | New `automations` category (ADR-019): `automations.view` (Settings → Automations), `automations.deadline_rule.{create,edit,delete}`, `automations.task_list.{create,edit,delete}` (edit covers items + archive), `automations.defaults.{create,delete}` (what applies automatically to new matters). Applying a rule/list to a matter rides `deadlines.create` / `tasks.create`. Grant to non-admin roles via /settings/roles. |
 | 2026-10-16 | `firm.manage_team_directory` joined `ADMIN_ONLY_PERMISSIONS` (now exported from `src/lib/permissions.ts`); team.ts refuses non-Admin escalation (grant/remove Admin, invite Admin, edit/deactivate an Admin, reset/unlock an Admin-class account). `intake.decline` added to the catalog. Role create/rename/delete and permission flips write `type: "auth"` activity entries. |
 
+
 ## Read-side gates on matter tabs
 
-Beyond page-level keys, some matter data is filtered per viewer inside the query (see ADR-020 in `DECISIONS.md`):
+Beyond page-level keys, some matter data is filtered per viewer inside the query (see ADR-021 in `DECISIONS.md`):
 
 - **Events tab / event labels** — calendar event visibility (`canViewEventDetails`), not a permission key: events the viewer can't see are "Busy".
 - **Timeline** — settlement rows need `matters.settlement.view`, expense rows need `matters.expense.view`; without them the rows are omitted (`activityMoneyFilters` in `src/lib/queries/matter-detail.ts`).
-| 2026-10-16 | Captures and notes enforce per-kind create gates (siblings no longer inherit the primary's gate, ADR-020): `requirePermissions` + `requiredCapturePermissions`; pinning at create needs `notes.pin`; deleting a note others replied to needs `notes.delete_any`; note edit/pin/delete write activity entries. No new keys. |
+
+| 2026-10-16 | Captures and notes enforce per-kind create gates (siblings no longer inherit the primary's gate, ADR-025): `requirePermissions` + `requiredCapturePermissions`; pinning at create needs `notes.pin`; deleting a note others replied to needs `notes.delete_any`; note edit/pin/delete write activity entries. No new keys. |
+
+| 2026-10-16 | Added `requireUser()` and the "Page and layout guards" rule (ADR-028): every page/layout self-authenticates; `/matters/new` now requires `matters.create`. No new permission keys. |

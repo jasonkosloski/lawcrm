@@ -30,6 +30,7 @@ import {
   getMatterNotes,
   getMatterTasks,
 } from "@/lib/queries/matter-detail";
+import { requireUser } from "@/lib/current-user";
 
 const ROLE_LABEL: Record<string, string> = {
   lead: "Lead attorney",
@@ -44,6 +45,7 @@ const formatMoney = (n: number): string => `$${n.toLocaleString("en-US")}`;
 export default async function MatterOverviewPage({
   params,
 }: PageProps<"/matters/[id]">) {
+  await requireUser();
   const { id } = await params;
   const matter = await getMatterById(id);
   if (!matter) notFound();

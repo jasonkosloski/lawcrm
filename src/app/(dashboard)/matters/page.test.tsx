@@ -23,6 +23,10 @@ import type { MatterListRow } from "@/lib/queries/matters";
 import type { MattersFilter } from "@/lib/matters-filters";
 import MattersListPage from "./page";
 
+// Page auth guard (src/lib/current-user.ts) — session exists here.
+vi.mock("@/lib/current-user", () => ({
+  requireUser: vi.fn(async () => "user_1"),
+}));
 vi.mock("@/lib/prisma", () => ({
   prisma: { matter: { count: vi.fn().mockResolvedValue(0) } },
 }));

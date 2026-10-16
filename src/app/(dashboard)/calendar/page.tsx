@@ -41,10 +41,12 @@ import {
   getEventNotes,
   getEventTimeEntries,
 } from "@/lib/queries/calendar";
+import { requireUser } from "@/lib/current-user";
 
 export default async function CalendarPage({
   searchParams,
 }: PageProps<"/calendar">) {
+  await requireUser();
   const sp = await searchParams;
 
   // Resolve user TZ once and thread it through every calendar

@@ -31,6 +31,7 @@ import {
   listLeads,
   type LeadListRow,
 } from "@/lib/queries/leads";
+import { requireUser } from "@/lib/current-user";
 
 const ASSESSMENT_LABEL: Record<string, string> = {
   strong: "Strong",
@@ -144,6 +145,7 @@ function AssessmentBadges({ row }: { row: LeadListRow }) {
 }
 
 export default async function IntakePage() {
+  await requireUser();
   const [leads, summary] = await Promise.all([listLeads(), getLeadSummary()]);
 
   // Sort: active leads first (score desc), then inactive (by createdAt desc).

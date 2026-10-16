@@ -41,11 +41,13 @@ import { getLeadById } from "@/lib/queries/leads";
 import { listContactPickerOptions } from "@/lib/queries/contacts";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { LogCallButton } from "@/components/communication/log-call-button";
+import { requireUser } from "@/lib/current-user";
 
 export default async function LeadCommunicationPage({
   params,
   searchParams,
 }: PageProps<"/intake/[id]/communication">) {
+  await requireUser();
   const { id } = await params;
   const sp = await searchParams;
   const rawThread = Array.isArray(sp.thread) ? sp.thread[0] : sp.thread;

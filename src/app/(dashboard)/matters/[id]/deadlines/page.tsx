@@ -34,6 +34,7 @@ import { getMatterDeadlines } from "@/lib/queries/matter-detail";
 import { listDeadlineRules } from "@/lib/queries/automations";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { ApplyDeadlineRuleDialog } from "@/components/automations/apply-deadline-rule-dialog";
+import { requireUser } from "@/lib/current-user";
 
 // Label maps are centralized (src/lib/constants/deadline-status.ts).
 // Widened to string-indexable here because DB values arrive untyped.
@@ -77,6 +78,7 @@ function StatusChip({ status }: { status: string }) {
 export default async function MatterDeadlinesPage({
   params,
 }: PageProps<"/matters/[id]">) {
+  await requireUser();
   const { id } = await params;
   const [deadlines, canCreate] = await Promise.all([
     getMatterDeadlines(id),

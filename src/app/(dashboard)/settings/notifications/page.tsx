@@ -1,6 +1,8 @@
 import { SettingsPlaceholder } from "@/components/settings/settings-placeholder";
+import { requireUser } from "@/lib/current-user";
 
-export default function NotificationsSettingsPage() {
+export default async function NotificationsSettingsPage() {
+  await requireUser();
   return (
     <SettingsPlaceholder
       title="Notifications"

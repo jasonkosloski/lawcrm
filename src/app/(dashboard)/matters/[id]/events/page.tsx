@@ -11,6 +11,7 @@
 import { CalendarDays } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
 import { notFound } from "next/navigation";
+import { requireUser } from "@/lib/current-user";
 import { Card } from "@/components/ui/card";
 import { EventDetailModal } from "@/components/calendar/event-detail-modal";
 import { EventComposer } from "@/components/matters/captures/event-composer";
@@ -30,6 +31,8 @@ export default async function MatterEventsPage({
   params,
   searchParams,
 }: PageProps<"/matters/[id]/events">) {
+  // Pages guard themselves: layouts don't re-run on soft navigation (ADR-028).
+  await requireUser();
   const { id } = await params;
   const sp = await searchParams;
 

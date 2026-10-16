@@ -32,8 +32,10 @@ import {
   listFirmRoles,
   listRolePermissionGrants,
 } from "@/lib/queries/team";
+import { requireUser } from "@/lib/current-user";
 
 export default async function RolesSettingsPage() {
+  await requireUser();
   // Three independent permission gates on this page:
   //   - role list visibility: open to every signed-in firm member
   //     (read view is firm-wide governance info)

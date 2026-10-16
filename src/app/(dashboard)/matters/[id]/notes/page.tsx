@@ -16,10 +16,12 @@ import { getMatterNotes } from "@/lib/queries/matter-detail";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { NoteComposer } from "@/components/matters/notes/note-composer";
 import { NotesTabBody } from "@/components/matters/notes/notes-tab-body";
+import { requireUser } from "@/lib/current-user";
 
 export default async function MatterNotesPage({
   params,
 }: PageProps<"/matters/[id]">) {
+  await requireUser();
   const { id } = await params;
   const [notes, canPin] = await Promise.all([
     getMatterNotes(id),

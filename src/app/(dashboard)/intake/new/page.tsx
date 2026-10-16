@@ -12,8 +12,10 @@
 import Link from "next/link";
 import { TopBar } from "@/components/layout/topbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { requireUser } from "@/lib/current-user";
 
-export default function NewIntakePage() {
+export default async function NewIntakePage() {
+  await requireUser();
   return (
     <>
       <TopBar title="New intake" crumbs="Intake / New" />

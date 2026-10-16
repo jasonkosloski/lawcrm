@@ -31,11 +31,13 @@ import { currentUserHasPermission } from "@/lib/permission-check";
 // Message timestamps are real instants — the embedded reader renders
 // them on the viewer's calendar, not the server's (ADR-012).
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
+import { requireUser } from "@/lib/current-user";
 
 export default async function MatterCommunicationPage({
   params,
   searchParams,
 }: PageProps<"/matters/[id]/communication">) {
+  await requireUser();
   const { id } = await params;
   const sp = await searchParams;
   const rawChannel = Array.isArray(sp.channel) ? sp.channel[0] : sp.channel;

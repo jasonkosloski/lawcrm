@@ -100,6 +100,9 @@ state (e.g. `useOptimistic`), not a client cache.
   (password fingerprint, ADR-017). Sign-in lockout is a reserve/settle under a
   per-email Postgres advisory lock (ADR-020); redirects after login go through the
   strict `safeRedirectPath` (`src/lib/safe-redirect.ts`).
+- **Page guards**: layouts are not auth gates (not re-run on partial navigations);
+  every `page.tsx`/`layout.tsx` calls `requireUser()` (or a stronger guard) as its
+  first `await`, enforced by `src/app/page-guards.test.ts` (ADR-028).
 - **Permissions**: granular keys in `src/lib/permissions.ts`, enforced in every
   server action via `requirePermission(...)` and in read paths via
   `currentUserHasPermission(...)`. Full model in [PERMISSIONS.md](./PERMISSIONS.md).
@@ -119,7 +122,7 @@ state (e.g. `useOptimistic`), not a client cache.
 - **Captures / notes**: a note or primary capture may create sibling records
   (task / event / deadline / time / note). Each kind is gated by its own create
   key, computed up front by `src/lib/capture-permissions.ts` and enforced with
-  `requirePermissions` (ADR-020). Events minted this way share
+  `requirePermissions` (ADR-025). Events minted this way share
   `src/lib/calendar-default-attendees.ts` (default attendees, min-firm-attendee
   invariant) with the calendar create path and are pushed to Google Calendar
   after commit.

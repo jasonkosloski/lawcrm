@@ -16,6 +16,7 @@
  */
 
 import { notFound } from "next/navigation";
+import { requireUser } from "@/lib/current-user";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   EditMatterForm,
@@ -32,6 +33,8 @@ import { prisma } from "@/lib/prisma";
 export default async function EditMatterPage({
   params,
 }: PageProps<"/matters/[id]/edit">) {
+  // Pages guard themselves: layouts don't re-run on soft navigation (ADR-028).
+  await requireUser();
   const { id } = await params;
 
   // The matter loads first: the client / lead option lists must always

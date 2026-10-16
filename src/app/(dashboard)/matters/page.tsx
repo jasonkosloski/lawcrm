@@ -23,10 +23,12 @@ import {
   getMattersFilterOptions,
   listMatters,
 } from "@/lib/queries/matters";
+import { requireUser } from "@/lib/current-user";
 
 export default async function MattersListPage({
   searchParams,
 }: PageProps<"/matters">) {
+  await requireUser();
   const sp = await searchParams;
   const { filter, sort, view } = parseMattersParams(sp);
 

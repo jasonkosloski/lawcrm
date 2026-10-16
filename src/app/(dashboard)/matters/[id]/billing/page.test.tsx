@@ -29,6 +29,7 @@ vi.mock("@/lib/queries/settlements", () => ({
 vi.mock("@/lib/firm", () => ({ getCurrentFirm: vi.fn() }));
 vi.mock("@/lib/current-user", () => ({
   getCurrentUserId: vi.fn(async () => "user_1"),
+  requireUser: vi.fn(async () => "user_1"),
 }));
 vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn(),
@@ -65,6 +66,9 @@ vi.mock("@/components/matters/settlement/settlement-lien-form", () => ({
 import { getMatterBilling } from "@/lib/queries/billing";
 import { getMatterSettlement } from "@/lib/queries/settlements";
 import { currentUserHasPermission } from "@/lib/permission-check";
+import { getCurrentUserId, requireUser } from "@/lib/current-user";
+import { getCurrentFirm } from "@/lib/firm";
+import { getInvoiceById } from "@/lib/queries/billing";
 import type { MatterBilling } from "@/lib/queries/billing";
 import type { MatterSettlement } from "@/lib/queries/settlements";
 import MatterBillingPage from "./page";
@@ -158,5 +162,23 @@ describe("MatterBillingPage — matters.settlement.view gate", () => {
     await renderPage({ settlement: null });
     expect(screen.queryByTestId("settlement-composer")).toBeNull();
     expect(screen.queryByText("Gross settlement")).toBeNull();
+  });
+});
+
+describe("MatterBillingPage — session guard", () => {
+  test("unauthenticated: requireUser redirects before any query runs", async () => {
+    vi.mocked(requireUser).mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
+    await expect(
+      MatterBillingPage({
+        params: Promise.resolve({ id: "m1" }),
+        searchParams: Promise.resolve({ invoice: "inv_1" }),
+      } as Parameters<typeof MatterBillingPage>[0])
+    ).rejects.toThrow("NEXT_REDIRECT");
+    expect(getMatterBilling).not.toHaveBeenCalled();
+    expect(getInvoiceById).not.toHaveBeenCalled();
+    expect(getMatterSettlement).not.toHaveBeenCalled();
+    expect(getCurrentFirm).not.toHaveBeenCalled();
+    expect(getCurrentUserId).not.toHaveBeenCalled();
+    expect(currentUserHasPermission).not.toHaveBeenCalled();
   });
 });

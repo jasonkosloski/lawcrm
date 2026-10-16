@@ -21,6 +21,10 @@ import type {
   TimeEntryRow,
 } from "@/lib/queries/matter-detail";
 
+// Page auth guard (src/lib/current-user.ts) — session exists here.
+vi.mock("@/lib/current-user", () => ({
+  requireUser: vi.fn(async () => "user_1"),
+}));
 vi.mock("@/lib/queries/matter-detail", () => ({
   getMatterExpenses: vi.fn(),
   getMatterTimeEntries: vi.fn(),

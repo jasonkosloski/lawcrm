@@ -6,7 +6,9 @@
  */
 
 import { redirect } from "next/navigation";
+import { requireUser } from "@/lib/current-user";
 
-export default function SettingsIndexPage() {
+export default async function SettingsIndexPage() {
+  await requireUser();
   redirect("/settings/profile");
 }

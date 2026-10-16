@@ -41,6 +41,7 @@ import {
   summarizeLeadTime,
   type LeadTimeEntryRow,
 } from "@/lib/queries/lead-time";
+import { requireUser } from "@/lib/current-user";
 
 const STATUS_META: Record<string, { label: string; className: string }> = {
   draft: {
@@ -80,6 +81,7 @@ const SOURCE_LABEL: Record<string, string> = {
 export default async function LeadTimePage({
   params,
 }: PageProps<"/intake/[id]/time">) {
+  await requireUser();
   const { id } = await params;
   const [lead, entries] = await Promise.all([
     // Stage decides whether the composer renders: converted leads

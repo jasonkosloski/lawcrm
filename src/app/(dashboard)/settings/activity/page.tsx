@@ -40,6 +40,7 @@ import {
   getFirmActivity,
   listFirmActivityAuthors,
 } from "@/lib/queries/firm-activity";
+import { requireUser } from "@/lib/current-user";
 
 const ACTIVITY_ICONS: Record<string, LucideIcon> = {
   gavel: Gavel,
@@ -93,6 +94,7 @@ const PILL_ORDER = [
 export default async function FirmActivityPage({
   searchParams,
 }: PageProps<"/settings/activity">) {
+  await requireUser();
   // Page-level gate. Settings sidebar hides this link for users
   // without the permission, but a deep-link still bounces here.
   const ok = await currentUserHasPermission("firm.view_activity");

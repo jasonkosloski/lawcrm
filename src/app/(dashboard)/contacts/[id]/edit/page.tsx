@@ -13,10 +13,12 @@ import { ContactForm } from "@/components/contacts/contact-form";
 import { updateContact } from "@/app/actions/contacts";
 import { getContactById } from "@/lib/queries/contacts";
 import { currentUserHasPermission } from "@/lib/permission-check";
+import { requireUser } from "@/lib/current-user";
 
 export default async function EditContactPage({
   params,
 }: PageProps<"/contacts/[id]/edit">) {
+  await requireUser();
   const { id } = await params;
   const [c, canEdit] = await Promise.all([
     getContactById(id),

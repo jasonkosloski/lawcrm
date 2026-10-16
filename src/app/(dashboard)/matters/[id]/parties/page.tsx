@@ -36,10 +36,12 @@ import {
   PARTY_CATEGORY_LABEL,
   type PartyCategory,
 } from "@/lib/party-constants";
+import { requireUser } from "@/lib/current-user";
 
 export default async function MatterPartiesPage({
   params,
 }: PageProps<"/matters/[id]">) {
+  await requireUser();
   const { id } = await params;
 
   const [parties, contacts, canEditContact] = await Promise.all([

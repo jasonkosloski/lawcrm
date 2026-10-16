@@ -14,11 +14,13 @@
  * skip the auto-print so the user isn't ambushed by it on every
  * refresh.
  *
- * Auth: uses the same gating model as the live preview —
- * `getInvoiceById` returns null for missing ids; we 404 in that
- * case. The richer "user can see this invoice's matter" check
- * inherits from the firm scope (single-tenant today; multi-tenant
- * via session.firmId later).
+ * Auth: requires a signed-in user (`requireUser`, first statement —
+ * this route sits outside the (dashboard) layout, so the page must
+ * authenticate itself). There is no billing view permission key and
+ * no matter-team check: any signed-in staff member can print any
+ * invoice by id, same as the matter Billing tab. `getInvoiceById`
+ * returns null for missing ids; we 404 in that case. Firm scoping
+ * is not enforced (single-tenant today).
  */
 
 import { notFound } from "next/navigation";
@@ -26,6 +28,7 @@ import { InvoicePreview } from "@/components/matters/billing/invoice-preview";
 import { PrintToolbar } from "@/components/matters/billing/print-toolbar";
 import { getCurrentFirm } from "@/lib/firm";
 import { getInvoiceById } from "@/lib/queries/billing";
+import { requireUser } from "@/lib/current-user";
 
 export default async function PrintInvoicePage({
   params,
@@ -34,6 +37,7 @@ export default async function PrintInvoicePage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ autoprint?: string }>;
 }) {
+  await requireUser();
   const [{ id }, sp, firm] = await Promise.all([
     params,
     searchParams,

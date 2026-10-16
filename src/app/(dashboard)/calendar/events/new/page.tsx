@@ -17,8 +17,10 @@ import { TopBar } from "@/components/layout/topbar";
 import { NewEventForm } from "@/components/calendar/new-event-form";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { getFilingMatterOptions } from "@/lib/queries/communication";
+import { requireUser } from "@/lib/current-user";
 
 export default async function NewEventPage() {
+  await requireUser();
   const canCreate = await currentUserHasPermission("events.create");
   if (!canCreate) notFound();
 

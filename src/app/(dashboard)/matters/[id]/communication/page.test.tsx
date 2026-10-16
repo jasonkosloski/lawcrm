@@ -23,6 +23,10 @@ import { render, screen } from "@testing-library/react";
 import type { ThreadDetail, ThreadListRow } from "@/lib/queries/communication";
 import type { ContactPickerOption } from "@/lib/queries/contacts";
 
+// Page auth guard (src/lib/current-user.ts) — session exists here.
+vi.mock("@/lib/current-user", () => ({
+  requireUser: vi.fn(async () => "user_1"),
+}));
 vi.mock("@/lib/queries/communication", () => ({
   getFilingMatterOptions: vi.fn(),
   getThreadById: vi.fn(),

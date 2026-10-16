@@ -6,6 +6,8 @@
  *   - `getCurrentUserId` redirects to `/login` when signed out.
  *   - `getCurrentUser` returns null when signed out (login layout
  *     renders too — the null branch is load-bearing).
+ *   - `requireUser` (the page guard) returns the id or redirects to
+ *     `/login`.
  *   - Both resolvers are wrapped in React `cache()` so repeated
  *     calls in one request pay a single `auth()` (and DB) hit.
  *
@@ -56,7 +58,11 @@ vi.mock("@/lib/prisma", () => ({
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser, getCurrentUserId } from "@/lib/current-user";
+import {
+  getCurrentUser,
+  getCurrentUserId,
+  requireUser,
+} from "@/lib/current-user";
 
 const mockedAuth = vi.mocked(auth);
 const mockedFindUnique = vi.mocked(prisma.user.findUnique);
@@ -119,5 +125,23 @@ describe("getCurrentUser", () => {
     await getCurrentUser();
     expect(mockedAuth).toHaveBeenCalledTimes(1);
     expect(mockedFindUnique).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("requireUser", () => {
+  test("returns the session user id", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    await expect(requireUser()).resolves.toBe("user-1");
+  });
+
+  test("redirects to /login when there is no session", async () => {
+    mockedAuth.mockResolvedValue(null as never);
+    await expect(requireUser()).rejects.toThrow("__REDIRECT__:/login");
+    expect(redirect).toHaveBeenCalledWith("/login");
+  });
+
+  test("redirects when the session carries no user id", async () => {
+    mockedAuth.mockResolvedValue({ user: {} } as never);
+    await expect(requireUser()).rejects.toThrow("__REDIRECT__:/login");
   });
 });

@@ -30,6 +30,7 @@ import { CreateDock } from "@/components/create-stack/create-dock";
 import { CreateStackProvider } from "@/components/create-stack/create-stack-provider";
 import { getMatterById } from "@/lib/queries/matters";
 import { currentUserHasPermission } from "@/lib/permission-check";
+import { requireUser } from "@/lib/current-user";
 
 const FEE_LABEL: Record<string, string> = {
   contingent: "Contingent",
@@ -43,6 +44,7 @@ export default async function MatterDetailLayout({
   children,
   params,
 }: LayoutProps<"/matters/[id]">) {
+  await requireUser();
   const { id } = await params;
   const [matter, canEditMatter, canManageTeam] = await Promise.all([
     getMatterById(id),

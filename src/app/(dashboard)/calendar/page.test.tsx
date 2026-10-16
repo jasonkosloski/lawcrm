@@ -18,6 +18,10 @@
 import { describe, expect, test, vi, afterEach } from "vitest";
 import type { ReactElement } from "react";
 
+// Page auth guard (src/lib/current-user.ts) — session exists here.
+vi.mock("@/lib/current-user", () => ({
+  requireUser: vi.fn(async () => "user_1"),
+}));
 vi.mock("@/lib/queries/calendar", () => ({
   getCalendarEventById: vi.fn(),
   getCalendarItems: vi.fn().mockResolvedValue([]),

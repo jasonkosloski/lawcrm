@@ -386,13 +386,6 @@ The original decision stored date-only values at **server-local** midnight and d
 - (-) The firm owns the legal periods; the app ships none, so correctness of each rule is a firm configuration responsibility
 
 ## ADR-020: Sign-in lockout is a reserve/settle under a per-email advisory lock; per-account (not per-IP) lock is an accepted DoS risk
-## ADR-020: Matter tabs honour calendar visibility and money-view permissions
-## ADR-020: Security-header baseline, no CSP yet, and "no class on user HTML"
-## ADR-020: Google sync skips only deterministic failures; catch-up never advances past an open gap; Google cancel is unlink-only
-## ADR-020: Invoice line items are draft-only; money is rounded per line (HALF_UP, cents)
-## ADR-020: Captures do not inherit the primary's permission gate - every record kind clears its own create key
-## ADR-020: Conflict matcher scope — own-contact exclusion, inactive parties stay hard
-## ADR-020: The Matter owns the statute of limitations; the SOL Deadline row is a mirror
 
 **Date:** 2026-10-16
 **Status:** Accepted
@@ -412,6 +405,13 @@ The original decision stored date-only values at **server-local** midnight and d
 - (+) No schema change; same audit rows drive the lock and the history
 - (-) A deliberate lockout DoS against any known email remains possible until edge rate limiting is configured
 - (-) Each login attempt takes a short DB transaction (pool is capped at 1 connection per process, so concurrent attempts queue)
+
+
+## ADR-021: Matter tabs honour calendar visibility and money-view permissions
+
+**Date:** 2026-10-16
+**Status:** Accepted
+
 **Context:** The calendar scrubs events a viewer may not see to "Busy" (`canViewEventDetails`), but the matter Events tab shipped raw titles, notes, locations and time entries to every user, and the Timeline showed settlement and expense amounts to users lacking `matters.settlement.view` / `matters.expense.view`.
 
 **Decision:**
@@ -428,6 +428,13 @@ The original decision stored date-only values at **server-local** midnight and d
 **Trade-offs:**
 - (+) One privacy rule across calendar, Events tab and event chips
 - (-) A viewer with `matters.settlement.view` revoked sees no trace that a settlement exists on the timeline
+
+
+## ADR-022: Security-header baseline, no CSP yet, and "no class on user HTML"
+
+**Date:** 2026-10-16
+**Status:** Accepted
+
 **Context:** The W6b content-security sweep found (a) no response security headers, (b) sanitizer profiles that let `class` through on inbound email and note HTML while the app ships a global Tailwind stylesheet (a hostile `class="fixed inset-0 z-50 bg-white"` overlays the whole CRM), (c) a prefix check in `src/proxy.ts` that was not path-boundary aware, and (d) docx-preview output whose `<style>` text (built from unescaped document strings) was appended to the live page before sanitation.
 
 **Decision:**
@@ -443,6 +450,13 @@ The original decision stored date-only values at **server-local** midnight and d
 - (-) No CSP means an XSS bug elsewhere is not contained by the browser; the sanitizers remain the primary boundary
 - (-) Read-time sanitizing costs a parse per note/email render (bounded by the existing list caps)
 - (-) Lenient server-side email validation for contacts, parties and calendar attendees (F987) is still open; `EmailLink` encodes the address at render time
+
+
+## ADR-023: Google sync skips only deterministic failures; catch-up never advances past an open gap; Google cancel is unlink-only
+
+**Date:** 2026-10-16
+**Status:** Accepted
+
 **Context:** Gmail/Calendar sync had two opposite failure modes: one poisoned message (NUL byte, bad date) wedged a mailbox forever because the pass aborted before the cursor advanced, and the history-expired fallback was a 200-thread import that left a permanent gap (backfill only walks below the oldest local thread). Isolating failures naively would trade the first problem for silent, permanent loss on a database blip. Separately, a Google-side cancel could hard-delete a CRM event shaped like a personal import, which a CRM-born matterless "meeting" also is.
 
 **Decision:**
@@ -458,6 +472,12 @@ The original decision stored date-only values at **server-local** midnight and d
 - (-) A catch-up pass costs one extra `format=minimal` request per already-local thread
 - (-) Google-born imports deleted in Google linger in the CRM until removed; a durable fix needs `CalendarEvent.origin` (and `EmailAccount.backfillBefore` for an explicit backfill anchor) - deferred schema work
 
+
+## ADR-024: Invoice line items are draft-only; money is rounded per line (HALF_UP, cents)
+
+**Date:** 2026-10-16
+**Status:** Accepted
+
 **Context:** Line-item editing was allowed until an invoice was `sent`, so an approver could sign off on a total that then changed, and it was gated only on authorship. Computed amounts (hours x rate, line and invoice totals, payments, trust applications) were stored unrounded, so sub-cent values leaked into totals and aggregates.
 
 **Decision:**
@@ -471,6 +491,13 @@ The original decision stored date-only values at **server-local** midnight and d
 - (+) Concurrent approve/send/void/edit can't silently overwrite each other
 - (-) Fixing a typo on an approved invoice costs a void and regenerate
 - (-) Columns are still wider than 2 dp until the planned DECIMAL(14,2) migration
+
+
+## ADR-025: Captures do not inherit the primary's permission gate - every record kind clears its own create key
+
+**Date:** 2026-10-16
+**Status:** Accepted
+
 **Context:** Notes and the primary composers (task / event / deadline / time) can carry sibling captures that create other record kinds in the same transaction. Each entry point used to gate only on the primary's key, so a role holding just `notes.create` could mint tasks, deadlines, events or billable time entries through a note's attachments, bypassing the specific keys (and ADR-013's "denying `time_entries.create` closes every time-logging entry point").
 
 **Decision:**
@@ -484,6 +511,13 @@ The original decision stored date-only values at **server-local** midnight and d
 - (+) Denial happens before any write, so there is no partial thread to clean up
 - (-) A denial redirects to `/`, so a user whose draft carries an attachment they may not create loses the draft; the capture stack still offers every kind (follow-up: pass allowed kinds + `canPin` into `CaptureStack`)
 - (-) Keys are plain strings (no `PermissionKey` union exists); `capture-permissions.test.ts` asserts every mapped key is known to `isKnownPermission`
+
+
+## ADR-026: Conflict matcher scope — own-contact exclusion, inactive parties stay hard
+
+**Date:** 2026-10-16
+**Status:** Accepted
+
 **Context:** Every lead hangs off a Contact built from the very name/email/organization the conflict check scans, so the matcher matched the lead against itself and a lead could never come back "clear". Separately, the hard tier required `Contact.isActive`, but deactivating a contact only flips that flag and leaves its `MatterContact` rows on active matters — so deactivating an opposing party silently removed the conflict.
 
 **Decision:**
@@ -494,6 +528,13 @@ The original decision stored date-only values at **server-local** midnight and d
 **Trade-offs:**
 - (+) A genuinely clean lead can be cleared; a deactivated adverse party can't hide a conflict
 - (-) A deactivated party on an old open matter keeps raising conflicts until the matter is archived or the party row is removed
+
+
+## ADR-027: The Matter owns the statute of limitations; the SOL Deadline row is a mirror
+
+**Date:** 2026-10-16
+**Status:** Accepted
+
 **Context:** The SOL lived in two places: `Matter.statuteOfLimitationsDate` (+ incident date, notes, satisfied flags) and an auto-created `Deadline` (`sourceType = statute_of_limitations`). Either could be edited independently, so the next matter save silently reverted a deadline edit (or vice versa), editing the incident date left a stale statute date, and a deadline delete removed a live statute with no trace. Missing an SOL is malpractice.
 
 **Decision:**
@@ -508,3 +549,24 @@ The original decision stored date-only values at **server-local** midnight and d
 - (-) Auto-vs-manual is inferred: a manual date that happens to equal the computed one is treated as auto and will follow later incident/area edits
 - (-) The 365/30-day period arithmetic is unchanged; real calendar-aware periods need a schema change (scheduled separately)
 
+
+---
+
+## ADR-028: Layouts are not auth gates; every page authenticates itself
+
+**Date:** 2026-10-16
+**Status:** Accepted
+
+**Context:** The (dashboard) layout called `auth()` and redirected, and the docs described it as the authoritative gate. But Next renders a page on a partial (RSC) navigation without re-running its parent layouts, and the proxy only checks that a session cookie is present. A page that read data without its own guard could therefore be reached with a stale or forged cookie, and several pages (billing tab, invoice print route, matters list, lead detail) did exactly that.
+
+**Decision:**
+- Every `page.tsx` and `layout.tsx` under `src/app/(dashboard)` and `src/app/print` calls a session guard as the **first `await`** of its default export, before any data read: `requireUser()` (`src/lib/current-user.ts`; redirects to `/login`, never wrap in try/catch), or a stronger `requirePermission(key)` / `requireAdmin()` / `getCurrentUserId()`. All are React-`cache()`d, so repeat calls in a request are free.
+- `currentUserHasPermission` is a read-side flag and does not count as a guard.
+- `src/app/page-guards.test.ts` statically enforces the rule (first `await` is a guard; no `prisma.` before it). It carries a commented allowlist for pages whose owning work package has not yet added a guard; entries are removed as guards land.
+- The (dashboard) layout and the proxy remain a UX convenience (redirect early, render the shell for signed-in users), not the security boundary.
+- Where no billing read permission key exists (matter Billing tab, invoice print route), only the session guard was added; no key was invented because that would change who can see billing. Introducing one is a separate decision.
+
+**Trade-offs:**
+- (+) Authentication no longer depends on which layouts happen to run
+- (+) A new page that forgets the guard fails CI instead of shipping
+- (-) One extra line per page; a static scan cannot see guards hidden behind conditionals or helpers, so reviewers still read the first lines of each page

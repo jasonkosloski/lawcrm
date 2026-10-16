@@ -13,10 +13,17 @@ import { TopBar } from "@/components/layout/topbar";
 import { Card, CardContent } from "@/components/ui/card";
 import { NewMatterForm } from "@/components/matters/new-matter-form";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUserId } from "@/lib/current-user";
+import { requirePermission } from "@/lib/permission-check";
 
 export default async function NewMatterPage() {
-  const [areas, clients, users, currentUserId] = await Promise.all([
+  // Same key `createMatter` enforces on submit: without it the form
+  // could only fail (bouncing to "/" and discarding everything typed),
+  // so redirect before rendering it. Also the session guard — this
+  // page must authenticate itself (a layout is not a gate). Returns
+  // the user id.
+  const currentUserId = await requirePermission("matters.create");
+
+  const [areas, clients, users] = await Promise.all([
     prisma.practiceArea.findMany({
       where: { isActive: true },
       orderBy: [{ order: "asc" }, { name: "asc" }],
@@ -49,7 +56,6 @@ export default async function NewMatterPage() {
       select: { id: true, name: true, jobTitle: true, initials: true },
       orderBy: { name: "asc" },
     }),
-    getCurrentUserId(),
   ]);
 
   return (

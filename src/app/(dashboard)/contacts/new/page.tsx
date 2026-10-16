@@ -10,8 +10,10 @@ import { TopBar } from "@/components/layout/topbar";
 import { ContactForm } from "@/components/contacts/contact-form";
 import { createContact } from "@/app/actions/contacts";
 import { currentUserHasPermission } from "@/lib/permission-check";
+import { requireUser } from "@/lib/current-user";
 
 export default async function NewContactPage() {
+  await requireUser();
   const canCreate = await currentUserHasPermission("contacts.create");
   if (!canCreate) redirect("/contacts");
 

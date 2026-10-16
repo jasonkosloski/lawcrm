@@ -31,7 +31,7 @@ import {
   listAssigneeOptions,
   type AssigneeOption,
 } from "@/lib/queries/team";
-import { getCurrentUserId } from "@/lib/current-user";
+import { getCurrentUserId, requireUser } from "@/lib/current-user";
 import { formatDate as formatDateVariant } from "@/lib/format-date";
 
 // Ordering follows the canonical status list; labels are centralized
@@ -70,6 +70,7 @@ const formatDate = (d: Date | null): string => formatDateVariant(d, "short");
 export default async function MatterTasksPage({
   params,
 }: PageProps<"/matters/[id]">) {
+  await requireUser();
   const { id } = await params;
   // Assignees feed the composer + edit-dialog pickers; the current
   // user id is the composer's default selection (self-assign).

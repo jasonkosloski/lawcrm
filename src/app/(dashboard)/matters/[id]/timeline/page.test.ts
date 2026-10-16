@@ -29,12 +29,12 @@ vi.mock("@/lib/queries/matter-detail", () => ({
   getMatterActivity: vi.fn(async () => []),
   getMatterActivityTypeCounts: vi.fn(async () => ({})),
 }));
-vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
+vi.mock("@/lib/current-user", () => ({ requireUser: vi.fn() }));
 vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn(),
 }));
 
-import { getCurrentUserId } from "@/lib/current-user";
+import { requireUser } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import {
   getMatterActivity,
@@ -50,21 +50,21 @@ const renderTimeline = () =>
 
 describe("MatterTimelinePage — session + money gating", () => {
   afterEach(() => {
-    vi.mocked(getCurrentUserId).mockReset();
+    vi.mocked(requireUser).mockReset();
     vi.mocked(currentUserHasPermission).mockReset();
     vi.mocked(getMatterActivity).mockClear();
     vi.mocked(getMatterActivityTypeCounts).mockClear();
   });
 
   it("bounces a missing session before any data is read", async () => {
-    vi.mocked(getCurrentUserId).mockRejectedValue(new Error("NEXT_REDIRECT"));
+    vi.mocked(requireUser).mockRejectedValue(new Error("NEXT_REDIRECT"));
     await expect(renderTimeline()).rejects.toThrow("NEXT_REDIRECT");
     expect(getMatterActivity).not.toHaveBeenCalled();
     expect(getMatterActivityTypeCounts).not.toHaveBeenCalled();
   });
 
   it("viewer lacking settlement/expense view keys gets both queries restricted", async () => {
-    vi.mocked(getCurrentUserId).mockResolvedValue("u1");
+    vi.mocked(requireUser).mockResolvedValue("u1");
     vi.mocked(currentUserHasPermission).mockResolvedValue(false);
     await renderTimeline();
     expect(getMatterActivity).toHaveBeenCalledWith(
@@ -81,7 +81,7 @@ describe("MatterTimelinePage — session + money gating", () => {
   });
 
   it("each key is resolved independently", async () => {
-    vi.mocked(getCurrentUserId).mockResolvedValue("u1");
+    vi.mocked(requireUser).mockResolvedValue("u1");
     vi.mocked(currentUserHasPermission).mockImplementation(
       async (key: string) => key === "matters.expense.view"
     );

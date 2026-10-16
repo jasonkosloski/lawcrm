@@ -15,6 +15,10 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import type { ContactDetail } from "@/lib/queries/contacts";
 
+// Page auth guard (src/lib/current-user.ts) — session exists here.
+vi.mock("@/lib/current-user", () => ({
+  requireUser: vi.fn(async () => "user_1"),
+}));
 vi.mock("next/navigation", () => ({
   notFound: vi.fn(() => {
     throw new Error("NOT_FOUND");

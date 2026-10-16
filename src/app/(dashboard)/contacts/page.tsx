@@ -21,10 +21,12 @@ import {
   listContacts,
 } from "@/lib/queries/contacts";
 import { currentUserHasPermission } from "@/lib/permission-check";
+import { requireUser } from "@/lib/current-user";
 
 export default async function ContactsPage({
   searchParams,
 }: PageProps<"/contacts">) {
+  await requireUser();
   const sp = await searchParams;
   const q = typeof sp.q === "string" ? sp.q : undefined;
   const type = typeof sp.type === "string" ? sp.type : undefined;

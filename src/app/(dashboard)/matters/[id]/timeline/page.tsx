@@ -47,7 +47,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUserId } from "@/lib/current-user";
+import { requireUser } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import {
   getMatterActivity,
@@ -109,19 +109,14 @@ export default async function MatterTimelinePage({
   params,
   searchParams,
 }: PageProps<"/matters/[id]/timeline">) {
+  // Pages guard themselves: layouts don't re-run on soft navigation (ADR-028).
+  await requireUser();
   const { id } = await params;
   const sp = await searchParams;
   const rawType = Array.isArray(sp.type) ? sp.type[0] : sp.type;
   const filterKey =
     typeof rawType === "string" && rawType in FILTER_BUCKETS ? rawType : "all";
   const bucket = FILTER_BUCKETS[filterKey];
-
-  // Session guard of the page's own. The (dashboard) / [id] layouts
-  // do not re-render on a sibling-tab soft navigation, and
-  // getCurrentUserTimeZone swallows the login redirect, so without
-  // this a revoked session could still pull the feed. Redirects to
-  // /login when there is no session.
-  await getCurrentUserId();
 
   // Settlement + expense rows carry amounts in their titles; show
   // them only to viewers holding the matching view keys (the billing

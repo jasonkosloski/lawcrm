@@ -16,8 +16,10 @@ import {
   listTaskLists,
 } from "@/lib/queries/automations";
 import { AutomationsLibrary } from "@/components/automations/automations-library";
+import { requireUser } from "@/lib/current-user";
 
 export default async function AutomationsSettingsPage() {
+  await requireUser();
   const { isAdmin, granted } = await getCurrentUserPermissions();
   const can = (key: string) => isAdmin || granted.has(key);
   if (!can("automations.view")) redirect("/");

@@ -33,12 +33,14 @@ import {
   type GlobalSearchResult,
 } from "@/lib/queries/search";
 import { getSavedSearches } from "@/lib/queries/saved-searches";
+import { requireUser } from "@/lib/current-user";
 
 export default async function SearchPage({
   searchParams,
 }: {
   searchParams: Promise<{ q?: string | string[]; type?: string | string[] }>;
 }) {
+  await requireUser();
   const sp = await searchParams;
   const q = (Array.isArray(sp.q) ? sp.q[0] : sp.q)?.trim() ?? "";
   const rawType = Array.isArray(sp.type) ? sp.type[0] : sp.type;

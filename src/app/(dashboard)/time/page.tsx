@@ -44,8 +44,10 @@ import {
   getMyRunningTimer,
   getMyWeekTime,
 } from "@/lib/queries/time";
+import { requireUser } from "@/lib/current-user";
 
 export default async function TimePage({ searchParams }: PageProps<"/time">) {
+  await requireUser();
   const sp = await searchParams;
   const userTz = await getCurrentUserTimeZone();
   const { view, focal } = parseTimeParams(sp, userTz);

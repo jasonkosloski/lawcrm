@@ -40,7 +40,7 @@ import { MultiFileUpload } from "@/components/matters/documents/multi-file-uploa
 import { NewFolderButton } from "@/components/matters/documents/new-folder-button";
 import { GenerateFromTemplateDialog } from "@/components/templates/generate-from-template-dialog";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUserId } from "@/lib/current-user";
+import { getCurrentUserId, requireUser } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { formatDate } from "@/lib/format-date";
 import { currentUserHasPermission } from "@/lib/permission-check";
@@ -106,6 +106,7 @@ export default async function MatterDocumentsPage({
   params,
   searchParams,
 }: PageProps<"/matters/[id]/documents">) {
+  await requireUser();
   const { id } = await params;
   const sp = await searchParams;
   const rawFolder = typeof sp.folder === "string" ? sp.folder : null;

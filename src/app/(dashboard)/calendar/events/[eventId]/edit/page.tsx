@@ -10,10 +10,12 @@ import { TopBar } from "@/components/layout/topbar";
 import { EditEventForm } from "@/components/calendar/edit-event-form";
 import { getCalendarEventById } from "@/lib/queries/calendar";
 import { currentUserHasPermission } from "@/lib/permission-check";
+import { requireUser } from "@/lib/current-user";
 
 export default async function EditEventPage({
   params,
 }: PageProps<"/calendar/events/[eventId]/edit">) {
+  await requireUser();
   const { eventId } = await params;
   const [event, canEdit] = await Promise.all([
     getCalendarEventById(eventId),

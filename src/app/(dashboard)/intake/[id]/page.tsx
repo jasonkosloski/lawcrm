@@ -8,6 +8,7 @@
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { requireUser } from "@/lib/current-user";
 import {
   Ban,
   Building2,
@@ -79,6 +80,8 @@ function AssessmentBar({
 export default async function LeadOverviewPage({
   params,
 }: PageProps<"/intake/[id]">) {
+  // Pages guard themselves: layouts don't re-run on soft navigation (ADR-028).
+  await requireUser();
   const { id } = await params;
   const lead = await getLeadById(id);
   if (!lead) notFound();

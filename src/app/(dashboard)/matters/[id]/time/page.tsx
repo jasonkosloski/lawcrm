@@ -54,6 +54,7 @@ import {
   type ExpenseRow,
   type TimeEntryRow,
 } from "@/lib/queries/matter-detail";
+import { requireUser } from "@/lib/current-user";
 
 const STATUS_META: Record<
   string,
@@ -92,6 +93,7 @@ const formatMoney = (n: number | null): string => {
 export default async function MatterTimePage({
   params,
 }: PageProps<"/matters/[id]/time">) {
+  await requireUser();
   const { id } = await params;
   const [
     entries,

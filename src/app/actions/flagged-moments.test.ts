@@ -515,3 +515,38 @@ describe("deleteFlaggedMoment — ownership", () => {
     expect(res.error).toMatch(/not found/i);
   });
 });
+
+describe("update/delete — authenticate before touching the DB", () => {
+  // The real getCurrentUserId redirects (throws) with no session.
+  // Unknown ids and invalid input must surface that redirect, not a
+  // "Flag not found" / validation answer (existence oracle).
+  test("updateFlaggedMoment with no session rejects before lookup or validation", async () => {
+    mockedGetUser.mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
+    const findSpy = vi.spyOn(prisma.flaggedMoment, "findUnique");
+    await expect(
+      updateFlaggedMoment("ghost-flag", { ...validInput, description: "" })
+    ).rejects.toThrow("NEXT_REDIRECT");
+    expect(findSpy).not.toHaveBeenCalled();
+    findSpy.mockRestore();
+  });
+
+  test("deleteFlaggedMoment with no session rejects before lookup", async () => {
+    mockedGetUser.mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
+    const findSpy = vi.spyOn(prisma.flaggedMoment, "findUnique");
+    await expect(deleteFlaggedMoment("ghost-flag")).rejects.toThrow(
+      "NEXT_REDIRECT"
+    );
+    expect(findSpy).not.toHaveBeenCalled();
+    findSpy.mockRestore();
+  });
+
+  test("a real flag survives an unauthenticated delete attempt", async () => {
+    const { flagId } = await seedFlaggedMoment({
+      documentId: videoDocId,
+      flaggedById: userId,
+    });
+    mockedGetUser.mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
+    await expect(deleteFlaggedMoment(flagId)).rejects.toThrow();
+    expect(await prisma.flaggedMoment.count()).toBe(1);
+  });
+});

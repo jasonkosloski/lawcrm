@@ -21,12 +21,14 @@ import {
   getNotificationsFeed,
   NOTIFICATIONS_PAGE_SIZE,
 } from "@/lib/queries/notifications";
+import { requireUser } from "@/lib/current-user";
 
 export default async function NotificationsPage({
   searchParams,
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
+  await requireUser();
   const sp = await searchParams;
   const feed = await getNotificationsFeed(Number(sp.page ?? "1"));
 

@@ -17,6 +17,7 @@ import { ConvertLeadButton } from "@/components/intake/convert-lead-button";
 import { DeclineLeadButton } from "@/components/intake/decline-lead-button";
 import { getLeadById, LEAD_STAGE_LABEL } from "@/lib/queries/leads";
 import { getPracticeAreaOptions } from "@/lib/queries/practice-area-options";
+import { requireUser } from "@/lib/current-user";
 
 function StageChip({ stage }: { stage: string }) {
   // DB stage values arrive untyped — fall back to the raw slug
@@ -45,6 +46,7 @@ export default async function LeadDetailLayout({
   children,
   params,
 }: LayoutProps<"/intake/[id]">) {
+  await requireUser();
   const { id } = await params;
   const [lead, areas] = await Promise.all([
     getLeadById(id),
