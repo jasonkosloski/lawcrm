@@ -16,12 +16,14 @@ documentation index.
 ```bash
 npm install                      # also wires the husky pre-commit hook
 cp .env.example .env             # then fill in DATABASE_URL etc.
-npx prisma db push               # sync schema to your dev Postgres
+npx prisma migrate deploy        # apply migrations to your dev Postgres
 npm run dev                      # http://localhost:3000
 ```
 
 Local dev needs a Postgres (hosted Prisma Postgres or your own — see
-`.env.example`). Auth is email + password; create a user via the seed
+`.env.example`). Schema changes ship as migrations
+(`npx prisma migrate dev --name <change>`) — see ADR-016 in
+`docs/DECISIONS.md`. Auth is email + password; create a user via the seed
 or sign-up flow, then log in at `/login`.
 
 ## Tests
