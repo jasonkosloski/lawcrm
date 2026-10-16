@@ -63,6 +63,7 @@ export function RecordPaymentDialog({
   invoiceBalance,
   trustBalance,
   clientEmail,
+  canApplyTrust = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -78,17 +79,23 @@ export function RecordPaymentDialog({
    *  "no email on file" hint so the lawyer knows why they can't
    *  notify. */
   clientEmail: string | null;
+  /** Whether the viewer holds `billing.apply_trust`. Paying from
+   *  trust moves client money and the server refuses source=trust
+   *  without the key, so the Trust method is hidden for everyone
+   *  else. Defaults to false (hidden) so a caller that forgets the
+   *  prop can't expose the option. */
+  canApplyTrust?: boolean;
 }) {
-  // Trust appears as a method only when the matter actually has
-  // funds in trust to draw from. Other channels are always
-  // available.
+  // Trust appears as a method only when the viewer may apply trust
+  // AND the matter actually has funds in trust to draw from. Other
+  // channels are always available.
   const selectableSources: InvoicePaymentSource[] = [
     "check",
     "ach",
     "cash",
     "card",
     "other",
-    ...(trustBalance > 0 ? (["trust"] as const) : []),
+    ...(canApplyTrust && trustBalance > 0 ? (["trust"] as const) : []),
   ];
   const action = recordInvoicePayment.bind(null, invoiceId);
   // Wrapped useActionState: masks state left over from a previous

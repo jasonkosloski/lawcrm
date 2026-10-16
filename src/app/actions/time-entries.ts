@@ -27,7 +27,9 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { roundMoney } from "@/lib/money";
 import { getCurrentUserId } from "@/lib/current-user";
 // Date-only input ("YYYY-MM-DD") must parse to LOCAL midnight —
 // `new Date(value)` reads it as UTC midnight, which drifts the entry
@@ -422,7 +424,9 @@ export async function updateTimeEntry(
       // must recompute amount or the next generateInvoiceFromWip
       // sums a stale Decimal. Null rate (contingent matters) means
       // there's no amount to sync.
-      ...(entry.rate ? { amount: entry.rate.mul(newHours) } : {}),
+      ...(entry.rate
+        ? { amount: roundMoney(entry.rate.mul(new Prisma.Decimal(newHours))) }
+        : {}),
     },
   });
 

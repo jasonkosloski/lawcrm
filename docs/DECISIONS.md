@@ -389,6 +389,7 @@ The original decision stored date-only values at **server-local** midnight and d
 ## ADR-020: Matter tabs honour calendar visibility and money-view permissions
 ## ADR-020: Security-header baseline, no CSP yet, and "no class on user HTML"
 ## ADR-020: Google sync skips only deterministic failures; catch-up never advances past an open gap; Google cancel is unlink-only
+## ADR-020: Invoice line items are draft-only; money is rounded per line (HALF_UP, cents)
 
 **Date:** 2026-10-16
 **Status:** Accepted
@@ -454,3 +455,16 @@ The original decision stored date-only values at **server-local** midnight and d
 - (-) A catch-up pass costs one extra `format=minimal` request per already-local thread
 - (-) Google-born imports deleted in Google linger in the CRM until removed; a durable fix needs `CalendarEvent.origin` (and `EmailAccount.backfillBefore` for an explicit backfill anchor) - deferred schema work
 
+**Context:** Line-item editing was allowed until an invoice was `sent`, so an approver could sign off on a total that then changed, and it was gated only on authorship. Computed amounts (hours x rate, line and invoice totals, payments, trust applications) were stored unrounded, so sub-cent values leaked into totals and aggregates.
+
+**Decision:**
+- Approved invoices are not editable in place: line items (hours / rate) can be changed only while the invoice is `draft`, under `billing.generate_invoice` (plus author-or-`time_entries.edit_any`), with the status re-checked under a row lock and an activity-log row written. To change an approved or sent invoice, void it and regenerate from WIP.
+- Paying from trust (`recordInvoicePayment` source `trust`) needs `billing.apply_trust`, the same key as the dedicated apply-trust path.
+- Every persisted computed amount goes through `roundMoney` (`src/lib/money.ts`): `ROUND_HALF_UP` to 2 dp, applied per line before summing, so the invoice total is the sum of displayed line amounts. Hours are validated to 2 dp on new input.
+- Status transitions use a status predicate (`updateMany where id and status = expected`); 0 rows is a conflict error. WIP generation links only still-unbilled entries and aborts on a count mismatch.
+
+**Trade-offs:**
+- (+) What the approver sees is what is billed; totals reconcile to the cent
+- (+) Concurrent approve/send/void/edit can't silently overwrite each other
+- (-) Fixing a typo on an approved invoice costs a void and regenerate
+- (-) Columns are still wider than 2 dp until the planned DECIMAL(14,2) migration

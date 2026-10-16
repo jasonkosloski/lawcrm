@@ -236,3 +236,50 @@ describe("RecordPaymentDialog — stale error masking on reopen", () => {
     expect(mockedAction).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("RecordPaymentDialog — Trust method needs billing.apply_trust", () => {
+  const methodValues = () =>
+    Array.from(
+      (document.querySelector('select[name="source"]') as HTMLSelectElement)
+        .options
+    ).map((o) => o.value);
+
+  test("hides Trust when the viewer lacks apply_trust, even with funds in trust", () => {
+    render(
+      <RecordPaymentDialog
+        {...baseProps}
+        trustBalance={900}
+        open
+        onOpenChange={vi.fn()}
+      />
+    );
+    expect(methodValues()).not.toContain("trust");
+    expect(methodValues()).toContain("check");
+  });
+
+  test("offers Trust when the viewer holds apply_trust and the matter has trust funds", () => {
+    render(
+      <RecordPaymentDialog
+        {...baseProps}
+        trustBalance={900}
+        canApplyTrust
+        open
+        onOpenChange={vi.fn()}
+      />
+    );
+    expect(methodValues()).toContain("trust");
+  });
+
+  test("hides Trust when the viewer may apply trust but the matter has none", () => {
+    render(
+      <RecordPaymentDialog
+        {...baseProps}
+        trustBalance={0}
+        canApplyTrust
+        open
+        onOpenChange={vi.fn()}
+      />
+    );
+    expect(methodValues()).not.toContain("trust");
+  });
+});

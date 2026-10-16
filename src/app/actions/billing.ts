@@ -16,14 +16,22 @@
  *   - void flips                                         → billing.void_invoice
  *   - recordInvoicePayment                               → billing.record_payment
  *   - sendInvoice's apply-trust leg                      → billing.apply_trust
+ *   - recordInvoicePayment with source=trust             → billing.apply_trust
  *   - addTrustTransaction                                → trust.record_transaction
- * Line-item edits keep the author-bypass / time_entries.edit_any
- * posture of the standalone time-entry actions.
+ *   - updateInvoiceLineItem                              → billing.generate_invoice
+ *     (stacked with the author / time_entries.edit_any check of the
+ *     standalone time-entry actions; DRAFT invoices only)
  *
  * Decimal correctness: every money operation goes through
  * `Prisma.Decimal` math (`.add()`, `.sub()`) so cents never drift.
  * Numbers from the form are parsed once into Decimal and round-
- * tripped through the DB.
+ * tripped through the DB. Every computed amount that is written
+ * (line amounts, invoice totals, payments, trust applications) is
+ * rounded to cents with `roundMoney` (HALF_UP, `src/lib/money.ts`).
+ *
+ * Error hygiene: intentional refusals throw `UserFacingError` and are
+ * shown verbatim; any other exception is logged server-side and the
+ * client gets a generic message (`toUserMessage`).
  */
 
 "use server";
@@ -39,6 +47,8 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { parseLocalDate } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
+import { hasAtMostDecimals, roundMoney } from "@/lib/money";
+import { UserFacingError, toUserMessage } from "@/lib/user-facing-error";
 import { createNotifications } from "@/lib/notifications";
 import {
   invoiceStatusTransitions,
@@ -103,7 +113,7 @@ async function adjustTrustBalance(
     select: { trustBalance: true },
   });
   if (!m) return { ok: false, error: "Matter not found" };
-  const next = m.trustBalance.add(deltaDecimal);
+  const next = roundMoney(m.trustBalance.add(deltaDecimal));
   if (next.isNegative()) {
     return {
       ok: false,
@@ -117,7 +127,53 @@ async function adjustTrustBalance(
   return { ok: true };
 }
 
-// ── Generate invoice from WIP ───────────────────────────────────────────
+/** Sum of per-line amounts, each rounded to cents first (invoice
+ *  convention: total = sum of the lines as printed). Null amounts
+ *  (unpriced / contingent lines) contribute nothing. */
+function sumLineAmounts(
+  amounts: ReadonlyArray<Prisma.Decimal | null>
+): Prisma.Decimal {
+  return amounts.reduce<Prisma.Decimal>(
+    (acc, a) => (a ? acc.add(roundMoney(a)) : acc),
+    new Prisma.Decimal(0)
+  );
+}
+
+/** Link the WIP rows an invoice was computed from. Each updateMany is
+ *  predicated on the row still being unbilled (`invoiceId: null`, and
+ *  a WIP status for time entries); if fewer rows move than were read
+ *  (a concurrent generate got there first) the transaction aborts so
+ *  the invoice total can never disagree with its line items. */
+async function linkWipToInvoice(
+  tx: Tx,
+  invoiceId: string,
+  entries: ReadonlyArray<{ id: string }>,
+  expenseRows: ReadonlyArray<{ id: string }>
+): Promise<void> {
+  const changed = new UserFacingError(
+    "Billable time or expenses changed while the invoice was being created — refresh and try again."
+  );
+  if (entries.length > 0) {
+    const res = await tx.timeEntry.updateMany({
+      where: {
+        id: { in: entries.map((e) => e.id) },
+        invoiceId: null,
+        status: { in: [...TIME_ENTRY_WIP_STATUSES] },
+      },
+      data: { invoiceId, status: "billed" },
+    });
+    if (res.count !== entries.length) throw changed;
+  }
+  // Expenses don't have a status enum like time entries — the
+  // `invoiceId` itself is the "billed" signal.
+  if (expenseRows.length > 0) {
+    const res = await tx.expense.updateMany({
+      where: { id: { in: expenseRows.map((e) => e.id) }, invoiceId: null },
+      data: { invoiceId },
+    });
+    if (res.count !== expenseRows.length) throw changed;
+  }
+}
 
 const generateSchema = z.object({
   /** Days from issueDate until dueDate. 30 by default — overridable
@@ -158,11 +214,19 @@ export async function generateInvoiceFromWip(
   // the whole transaction (see the P2002 catch).
   const mintInvoice = () =>
     prisma.$transaction(async (tx) => {
+      // Serialize generates/bundles on the same matter: lock the
+      // matter row BEFORE reading WIP, so a concurrent generate
+      // queues here and then sees the entries already linked
+      // (it reports "Nothing unbilled") instead of re-pointing
+      // them at a second invoice. Lock order is matter only — no
+      // invoice row exists yet — so it can't cycle with the
+      // payment paths (invoice → matter).
+      await tx.$queryRaw`SELECT id FROM matters WHERE id = ${matterId} FOR UPDATE`;
       const matter = await tx.matter.findUnique({
         where: { id: matterId },
         select: { id: true, name: true, clientId: true },
       });
-      if (!matter) throw new Error("Matter not found");
+      if (!matter) throw new UserFacingError("Matter not found");
 
       // Re-pull WIP entries inside the transaction so we don't bill
       // a row a second clock-tick. Only billable + uncharged + un-
@@ -193,20 +257,16 @@ export async function generateInvoiceFromWip(
       });
 
       if (entries.length === 0 && expenseRows.length === 0) {
-        throw new Error(
+        throw new UserFacingError(
           "Nothing unbilled to invoice — log billable time or expenses first."
         );
       }
 
-      const timeSubtotal = entries.reduce(
-        (acc, e) => (e.amount ? acc.add(e.amount) : acc),
-        new Prisma.Decimal(0)
+      const subtotal = roundMoney(
+        sumLineAmounts(entries.map((e) => e.amount)).add(
+          sumLineAmounts(expenseRows.map((e) => e.amount))
+        )
       );
-      const expenseSubtotal = expenseRows.reduce(
-        (acc, e) => acc.add(e.amount),
-        new Prisma.Decimal(0)
-      );
-      const subtotal = timeSubtotal.add(expenseSubtotal);
       // No tax for v1 — firm settings will introduce a per-state
       // rate later. Total = subtotal.
       const total = subtotal;
@@ -240,21 +300,10 @@ export async function generateInvoiceFromWip(
       });
 
       // Link every WIP entry to this invoice + flip status to billed.
-      if (entries.length > 0) {
-        await tx.timeEntry.updateMany({
-          where: { id: { in: entries.map((e) => e.id) } },
-          data: { invoiceId: invoice.id, status: "billed" },
-        });
-      }
-      // Link every billable expense to the invoice. Expenses
-      // don't have a status enum like time entries — the
-      // `invoiceId` itself is the "billed" signal.
-      if (expenseRows.length > 0) {
-        await tx.expense.updateMany({
-          where: { id: { in: expenseRows.map((e) => e.id) } },
-          data: { invoiceId: invoice.id },
-        });
-      }
+      // Belt-and-braces with the matter lock above: only rows that
+      // are STILL unbilled are linked, and a short count aborts the
+      // transaction so an entry can never move between invoices.
+      await linkWipToInvoice(tx, invoice.id, entries, expenseRows);
 
       return {
         invoiceId: invoice.id,
@@ -318,25 +367,34 @@ export async function generateInvoiceFromWip(
   } catch (err) {
     return {
       status: "error",
-      error: err instanceof Error ? err.message : "Couldn't generate invoice.",
+      error: toUserMessage(
+        err,
+        "Couldn't generate invoice.",
+        "billing.generateInvoiceFromWip"
+      ),
     };
   }
 }
 
-// ── Invoice line-item editing (un-sent invoices only) ──────────────────
+// ── Invoice line-item editing (DRAFT invoices only) ────────────────────
 //
 // Editing a line item directly mutates the underlying TimeEntry row +
 // re-derives the invoice's subtotal / total in the same transaction.
-// Only allowed while the invoice is still in the firm's possession
-// — `draft` or `approved`. Once `sent`, the client has the doc; in-
-// place edits would diverge from what they received and break the
-// audit trail. Void + regenerate is the right path then.
+// Only allowed while the invoice is still a DRAFT. Once `approved` a
+// partner has signed off on a specific total (and `sent` means the
+// client has the doc), so an in-place edit would silently change an
+// approved amount. Void + regenerate is the right path then
+// (approved → void is allowed).
 //
-// Permission model mirrors the standalone `updateTimeEntry`: the
-// entry's author can always edit their own; other actors need
-// `time_entries.edit_any`. Admins short-circuit either path.
+// Permission model: this action prices invoices (it is the only place
+// a rate is set) and rewrites the invoice total, so it needs
+// `billing.generate_invoice` — the same key that creates the draft.
+// On top of that it keeps the standalone `updateTimeEntry` posture:
+// the entry's author can edit their own; other actors need
+// `time_entries.edit_any`. Admins short-circuit either path. Every
+// edit lands in the activity log with old and new values.
 
-const editableInvoiceStatuses = new Set(["draft", "approved"]);
+const editableInvoiceStatuses = new Set(["draft"]);
 
 const updateLineItemSchema = z.object({
   date: z.string().min(1, "Date is required"),
@@ -344,6 +402,7 @@ const updateLineItemSchema = z.object({
   narrative: z.string().max(4000).optional().or(z.literal("")),
   hours: z
     .string()
+    .trim()
     .min(1, "Hours required")
     .refine((v) => {
       const n = Number(v);
@@ -358,6 +417,7 @@ const updateLineItemSchema = z.object({
    *  <form>), so a negative rate has to be rejected here. */
   rate: z
     .string()
+    .trim()
     .optional()
     .or(z.literal(""))
     .refine(
@@ -374,6 +434,9 @@ export async function updateInvoiceLineItem(
   _prev: LineItemEditState,
   formData: FormData
 ): Promise<LineItemEditState> {
+  // Pricing an invoice line rewrites the invoice total: gate it on
+  // the billing key, not just authorship.
+  await requirePermission("billing.generate_invoice");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = updateLineItemSchema.safeParse(raw);
   if (!parsed.success) {
@@ -391,6 +454,7 @@ export async function updateInvoiceLineItem(
       matterId: true,
       invoiceId: true,
       status: true,
+      hours: true,
       invoice: { select: { id: true, status: true } },
     },
   });
@@ -407,7 +471,7 @@ export async function updateInvoiceLineItem(
   if (!editableInvoiceStatuses.has(entry.invoice.status)) {
     return {
       status: "error",
-      error: `Invoice is ${entry.invoice.status}. Line items can only be edited on draft or approved invoices.`,
+      error: `Invoice is ${entry.invoice.status}. Line items can only be edited on draft invoices.`,
     };
   }
 
@@ -418,6 +482,21 @@ export async function updateInvoiceLineItem(
     await requirePermission("time_entries.edit_any");
   }
 
+  // Hours are billed in 2-decimal units. An UNCHANGED stored value
+  // (e.g. a timer entry of 0.3333h whose narrative is being edited)
+  // is let through — the cell editor re-posts every field — but a
+  // newly typed value must not carry more than 2 decimals.
+  const newHoursNum = Number(parsed.data.hours);
+  if (
+    !hasAtMostDecimals(parsed.data.hours, 2) &&
+    newHoursNum !== entry.hours
+  ) {
+    return {
+      status: "error",
+      errors: { hours: ["Hours can have at most 2 decimal places."] },
+    };
+  }
+
   // Rate handling: empty string clears BOTH rate and amount — the
   // line drops out of the subtotal (contingent-style rows). There
   // is no "leave unchanged" sentinel; a form that wants to keep the
@@ -426,13 +505,15 @@ export async function updateInvoiceLineItem(
     parsed.data.rate && parsed.data.rate.length > 0
       ? new Prisma.Decimal(parsed.data.rate)
       : null;
-  const newHours = Number(parsed.data.hours);
-  // Amount = hours * rate when both are present. When rate is null,
-  // amount is null too — the entry sits on the invoice but doesn't
-  // contribute to the subtotal (matches the existing
-  // generateInvoiceFromWip path that filters `e.amount ? ...` in
-  // the reduce).
-  const newAmount = newRate ? newRate.mul(newHours) : null;
+  // Amount = hours * rate rounded to cents when both are present.
+  // When rate is null, amount is null too — the entry sits on the
+  // invoice but doesn't contribute to the subtotal (matches the
+  // existing generateInvoiceFromWip path that skips null amounts).
+  // Multiply the exact decimal hours (not the float) so 0.1-style
+  // values can't introduce binary noise before rounding.
+  const newAmount = newRate
+    ? roundMoney(newRate.mul(new Prisma.Decimal(parsed.data.hours)))
+    : null;
 
   const newDate = parseLocalDate(parsed.data.date);
   if (!newDate) {
@@ -440,14 +521,44 @@ export async function updateInvoiceLineItem(
   }
 
   try {
-    await prisma.$transaction(async (tx) => {
+    const outcome = await prisma.$transaction(async (tx) => {
+      // Lock the invoice and re-check its status under the lock: an
+      // approve (or send/void) that landed after the pre-check above
+      // must not be edited out from under its signer.
+      await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${entry.invoice!.id} FOR UPDATE`;
+      const invoice = await tx.invoice.findUnique({
+        where: { id: entry.invoice!.id },
+        select: {
+          id: true,
+          invoiceNumber: true,
+          status: true,
+          subtotal: true,
+          totalAmount: true,
+        },
+      });
+      if (!invoice) throw new UserFacingError("Invoice not found.");
+      if (!editableInvoiceStatuses.has(invoice.status)) {
+        throw new UserFacingError(
+          `Invoice is ${invoice.status}. Line items can only be edited on draft invoices.`
+        );
+      }
+      const before = await tx.timeEntry.findUnique({
+        where: { id: entry.id },
+        select: { invoiceId: true, hours: true, rate: true, amount: true },
+      });
+      if (!before || before.invoiceId !== invoice.id) {
+        throw new UserFacingError(
+          "This entry is no longer on that invoice — refresh and try again."
+        );
+      }
+
       await tx.timeEntry.update({
         where: { id: entry.id },
         data: {
           date: newDate,
           activity: parsed.data.activity,
           narrative: parsed.data.narrative || null,
-          hours: newHours,
+          hours: newHoursNum,
           rate: newRate,
           amount: newAmount,
         },
@@ -459,28 +570,40 @@ export async function updateInvoiceLineItem(
       // small (dozens, not thousands).
       const [timeEntries, expenses] = await Promise.all([
         tx.timeEntry.findMany({
-          where: { invoiceId: entry.invoice!.id },
+          where: { invoiceId: invoice.id },
           select: { amount: true },
         }),
         tx.expense.findMany({
-          where: { invoiceId: entry.invoice!.id },
+          where: { invoiceId: invoice.id },
           select: { amount: true },
         }),
       ]);
-      const timeSubtotal = timeEntries.reduce(
-        (acc, e) => (e.amount ? acc.add(e.amount) : acc),
-        new Prisma.Decimal(0)
+      const subtotal = roundMoney(
+        sumLineAmounts(timeEntries.map((e) => e.amount)).add(
+          sumLineAmounts(expenses.map((e) => e.amount))
+        )
       );
-      const expenseSubtotal = expenses.reduce(
-        (acc, e) => acc.add(e.amount),
-        new Prisma.Decimal(0)
-      );
-      const subtotal = timeSubtotal.add(expenseSubtotal);
       // No tax in v1 — total = subtotal. Mirrors generateInvoiceFromWip.
       await tx.invoice.update({
-        where: { id: entry.invoice!.id },
+        where: { id: invoice.id },
         data: { subtotal, totalAmount: subtotal },
       });
+      return { invoice, before, subtotal };
+    });
+
+    const fmt = (d: Prisma.Decimal | null) =>
+      d ? `$${d.toFixed(2)}` : "none";
+    await logActivity({
+      matterId: entry.matterId,
+      userId: actorId,
+      type: "filing",
+      title: `Invoice ${outcome.invoice.invoiceNumber} line item edited`,
+      detail:
+        `${parsed.data.activity}: ` +
+        `hours ${outcome.before.hours} → ${newHoursNum}, ` +
+        `rate ${fmt(outcome.before.rate)} → ${fmt(newRate)}, ` +
+        `amount ${fmt(outcome.before.amount)} → ${fmt(newAmount)}; ` +
+        `invoice total ${fmt(outcome.invoice.totalAmount)} → ${fmt(outcome.subtotal)}`,
     });
 
     revalidatePath(`/matters/${entry.matterId}/billing`);
@@ -489,7 +612,11 @@ export async function updateInvoiceLineItem(
   } catch (err) {
     return {
       status: "error",
-      error: err instanceof Error ? err.message : "Couldn't update line item.",
+      error: toUserMessage(
+        err,
+        "Couldn't update line item.",
+        "billing.updateInvoiceLineItem"
+      ),
     };
   }
 }
@@ -511,6 +638,11 @@ const SET_STATUS_PERMISSION: Record<string, string> = {
   paid: "billing.approve_invoice",
   partial: "billing.record_payment",
 };
+
+/** Returned when a status write loses a race with another change to
+ *  the same invoice (its status / paid amount moved since we read it). */
+const INVOICE_CHANGED_ERROR =
+  "This invoice was changed by someone else just now — refresh and try again.";
 
 export async function setInvoiceStatus(
   invoiceId: string,
@@ -578,33 +710,48 @@ export async function setInvoiceStatus(
   // place setInvoiceStatus sets paidAmount directly. Client-invoice
   // payments are funneled through recordInvoicePayment so every
   // status flip is paired with a real payment row.
-  const data: Prisma.InvoiceUpdateInput =
+  const data: Prisma.InvoiceUpdateManyMutationInput =
     next === "paid" && kind === "internal_record"
       ? { status: next, paidAmount: invoice.totalAmount }
       : { status: next };
 
-  if (next === "void") {
-    // Void → unlink time entries so they go back into WIP. The
-    // pre-invoice status isn't stored anywhere, so every entry is
-    // reset to a uniform "billable" (a draft entry swept into the
-    // invoice comes back ready-to-bill, not as a draft). Expenses
-    // are unlinked too so they can roll into a future invoice.
-    // Otherwise voiding strands billable hours at status="billed"
-    // and expenses pinned to a now-voided invoice.
-    await prisma.$transaction([
-      prisma.timeEntry.updateMany({
+  // The checks above ran against a snapshot read outside any
+  // transaction. Make the write conditional on that snapshot still
+  // being true (status AND paidAmount): a payment / send / approve
+  // that committed in between makes the predicate match 0 rows and
+  // we refuse instead of voiding a paid invoice (or re-flipping a
+  // moved one). The predicate runs FIRST in the transaction, before
+  // any entries are unlinked.
+  const transitioned = await prisma.$transaction(async (tx) => {
+    const claimed = await tx.invoice.updateMany({
+      where: {
+        id: invoice.id,
+        status: invoice.status,
+        paidAmount: invoice.paidAmount,
+      },
+      data,
+    });
+    if (claimed.count === 0) return false;
+    if (next === "void") {
+      // Void → unlink time entries so they go back into WIP. The
+      // pre-invoice status isn't stored anywhere, so every entry is
+      // reset to a uniform "billable" (a draft entry swept into the
+      // invoice comes back ready-to-bill, not as a draft). Expenses
+      // are unlinked too so they can roll into a future invoice.
+      // Otherwise voiding strands billable hours at status="billed"
+      // and expenses pinned to a now-voided invoice.
+      await tx.timeEntry.updateMany({
         where: { invoiceId: invoice.id },
         data: { invoiceId: null, status: "billable" },
-      }),
-      prisma.expense.updateMany({
+      });
+      await tx.expense.updateMany({
         where: { invoiceId: invoice.id },
         data: { invoiceId: null },
-      }),
-      prisma.invoice.update({ where: { id: invoice.id }, data }),
-    ]);
-  } else {
-    await prisma.invoice.update({ where: { id: invoice.id }, data });
-  }
+      });
+    }
+    return true;
+  });
+  if (!transitioned) return { ok: false, error: INVOICE_CHANGED_ERROR };
 
   await logActivity({
     matterId: invoice.matterId,
@@ -668,13 +815,35 @@ export async function deleteInvoice(
   // anyway), and the TimeEntry → Invoice SetNull would handle the
   // unlink for free, but we want status: "billable" too — SetNull
   // alone leaves status="billed".
-  await prisma.$transaction([
-    prisma.timeEntry.updateMany({
+  //
+  // The eligibility check above read a snapshot outside the
+  // transaction; lock the row and re-run it under the lock so a
+  // concurrent approve / payment can't slip a no-longer-draft invoice
+  // through the delete.
+  const deleted = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${invoice.id} FOR UPDATE`;
+    const fresh = await tx.invoice.findUnique({
+      where: { id: invoice.id },
+      select: { kind: true, status: true, paidAmount: true },
+    });
+    if (
+      !fresh ||
+      !canDeleteInvoice(
+        fresh.status,
+        fresh.paidAmount.toNumber(),
+        fresh.kind as InvoiceKind
+      )
+    ) {
+      return false;
+    }
+    await tx.timeEntry.updateMany({
       where: { invoiceId: invoice.id },
       data: { invoiceId: null, status: "billable" },
-    }),
-    prisma.invoice.delete({ where: { id: invoice.id } }),
-  ]);
+    });
+    await tx.invoice.delete({ where: { id: invoice.id } });
+    return true;
+  });
+  if (!deleted) return { ok: false, error: INVOICE_CHANGED_ERROR };
 
   await logActivity({
     matterId: invoice.matterId,
@@ -723,10 +892,13 @@ export async function approveInvoice(
     };
   }
 
-  await prisma.invoice.update({
-    where: { id: invoice.id },
+  // Conditional on the status we validated above (see
+  // setInvoiceStatus): 0 rows means someone else moved it first.
+  const approved = await prisma.invoice.updateMany({
+    where: { id: invoice.id, status: "draft", kind: "client" },
     data: { status: "approved" },
   });
+  if (approved.count === 0) return { ok: false, error: INVOICE_CHANGED_ERROR };
 
   await logActivity({
     matterId: invoice.matterId,
@@ -778,7 +950,7 @@ export async function addTrustTransaction(
     };
   }
   const data = parsed.data;
-  const positive = new Prisma.Decimal(data.amount);
+  const positive = roundMoney(data.amount);
   // Disbursement / refund are stored as negative amounts so trust
   // sums match the balance directly. Deposits stay positive.
   const signed =
@@ -795,7 +967,7 @@ export async function addTrustTransaction(
   try {
     const result = await prisma.$transaction(async (tx) => {
       const balanceCheck = await adjustTrustBalance(tx, matterId, signed);
-      if (!balanceCheck.ok) throw new Error(balanceCheck.error);
+      if (!balanceCheck.ok) throw new UserFacingError(balanceCheck.error ?? "Trust update failed.");
       const txn = await tx.trustTransaction.create({
         data: {
           matterId,
@@ -835,7 +1007,11 @@ export async function addTrustTransaction(
   } catch (err) {
     return {
       status: "error",
-      error: err instanceof Error ? err.message : "Couldn't record transaction.",
+      error: toUserMessage(
+        err,
+        "Couldn't record transaction.",
+        "billing.addTrustTransaction"
+      ),
     };
   }
 }
@@ -888,11 +1064,19 @@ export async function bundleAsInternalRecord(
   // transaction — same shape as generateInvoiceFromWip.
   const mintRecord = () =>
     prisma.$transaction(async (tx) => {
+      // Serialize generates/bundles on the same matter: lock the
+      // matter row BEFORE reading WIP, so a concurrent generate
+      // queues here and then sees the entries already linked
+      // (it reports "Nothing unbilled") instead of re-pointing
+      // them at a second invoice. Lock order is matter only — no
+      // invoice row exists yet — so it can't cycle with the
+      // payment paths (invoice → matter).
+      await tx.$queryRaw`SELECT id FROM matters WHERE id = ${matterId} FOR UPDATE`;
       const matter = await tx.matter.findUnique({
         where: { id: matterId },
         select: { id: true, name: true, clientId: true },
       });
-      if (!matter) throw new Error("Matter not found");
+      if (!matter) throw new UserFacingError("Matter not found");
 
       const entries = await tx.timeEntry.findMany({
         where: {
@@ -917,18 +1101,14 @@ export async function bundleAsInternalRecord(
         select: { id: true, amount: true },
       });
       if (entries.length === 0 && expenseRows.length === 0) {
-        throw new Error("Nothing unbilled to bundle.");
+        throw new UserFacingError("Nothing unbilled to bundle.");
       }
 
-      const timeSubtotal = entries.reduce(
-        (acc, e) => (e.amount ? acc.add(e.amount) : acc),
-        new Prisma.Decimal(0)
+      const subtotal = roundMoney(
+        sumLineAmounts(entries.map((e) => e.amount)).add(
+          sumLineAmounts(expenseRows.map((e) => e.amount))
+        )
       );
-      const expenseSubtotal = expenseRows.reduce(
-        (acc, e) => acc.add(e.amount),
-        new Prisma.Decimal(0)
-      );
-      const subtotal = timeSubtotal.add(expenseSubtotal);
       const total = subtotal;
 
       const issueDate = new Date();
@@ -963,19 +1143,9 @@ export async function bundleAsInternalRecord(
       // Same as client invoices — flip the entries to "billed" so
       // they leave WIP. Void unlinks them back. The "billed" status
       // here doesn't mean "billed to a client"; it means "linked to
-      // a bundling document, no longer in WIP".
-      if (entries.length > 0) {
-        await tx.timeEntry.updateMany({
-          where: { id: { in: entries.map((e) => e.id) } },
-          data: { invoiceId: invoice.id, status: "billed" },
-        });
-      }
-      if (expenseRows.length > 0) {
-        await tx.expense.updateMany({
-          where: { id: { in: expenseRows.map((e) => e.id) } },
-          data: { invoiceId: invoice.id },
-        });
-      }
+      // a bundling document, no longer in WIP". Guarded the same way
+      // (see linkWipToInvoice).
+      await linkWipToInvoice(tx, invoice.id, entries, expenseRows);
 
       return {
         invoiceId: invoice.id,
@@ -1024,8 +1194,11 @@ export async function bundleAsInternalRecord(
   } catch (err) {
     return {
       status: "error",
-      error:
-        err instanceof Error ? err.message : "Couldn't bundle internal record.",
+      error: toUserMessage(
+        err,
+        "Couldn't bundle internal record.",
+        "billing.bundleAsInternalRecord"
+      ),
     };
   }
 }
@@ -1092,7 +1265,14 @@ export async function recordInvoicePayment(
     };
   }
   const data = parsed.data;
-  const requested = new Prisma.Decimal(data.amount);
+  // Paying from trust moves client money — the same distinct
+  // capability sendInvoice stacks for its apply-trust leg. Kept
+  // outside the try/catch below: a denied gate must redirect, not
+  // become a form error.
+  if (data.source === "trust") {
+    await requirePermission("billing.apply_trust");
+  }
+  const requested = roundMoney(data.amount);
 
   // Optional date-only field: local midnight of the picked day, or
   // "now" when left empty. Reject malformed values up front instead
@@ -1131,24 +1311,28 @@ export async function recordInvoicePayment(
           matter: { select: { client: { select: { email: true } } } },
         },
       });
-      if (!invoice) throw new Error("Invoice not found.");
+      if (!invoice) throw new UserFacingError("Invoice not found.");
       if (invoice.kind !== "client") {
-        throw new Error(
+        throw new UserFacingError(
           "Payments only apply to client invoices — internal records have no AR balance."
         );
       }
       if (invoice.status !== "sent" && invoice.status !== "partial") {
-        throw new Error(
+        throw new UserFacingError(
           `Payments are only recordable on sent or partially-paid invoices (this one is ${invoice.status}). Approve and send the invoice first.`
         );
       }
 
-      const balance = invoice.totalAmount.sub(invoice.paidAmount);
+      // Balance at cent precision: older rows may carry sub-cent
+      // totals (unrounded hours x rate), which would otherwise make
+      // the displayed balance unpayable.
+      const invoiceTotal = roundMoney(invoice.totalAmount);
+      const balance = invoiceTotal.sub(roundMoney(invoice.paidAmount));
       if (balance.lessThanOrEqualTo(0)) {
-        throw new Error("Invoice has no outstanding balance.");
+        throw new UserFacingError("Invoice has no outstanding balance.");
       }
       if (requested.greaterThan(balance)) {
-        throw new Error(
+        throw new UserFacingError(
           `Amount exceeds the invoice's $${balance.toFixed(2)} balance — record the balance or less.`
         );
       }
@@ -1168,9 +1352,9 @@ export async function recordInvoicePayment(
           where: { id: invoice.matterId },
           select: { trustBalance: true },
         });
-        if (!matter) throw new Error("Matter not found.");
+        if (!matter) throw new UserFacingError("Matter not found.");
         if (requested.greaterThan(matter.trustBalance)) {
-          throw new Error(
+          throw new UserFacingError(
             `Trust balance is $${matter.trustBalance.toFixed(2)} — not enough to cover $${requested.toFixed(2)}.`
           );
         }
@@ -1190,7 +1374,7 @@ export async function recordInvoicePayment(
         trustTxnId = trustTxn.id;
         await tx.matter.update({
           where: { id: invoice.matterId },
-          data: { trustBalance: matter.trustBalance.sub(requested) },
+          data: { trustBalance: roundMoney(matter.trustBalance.sub(requested)) },
         });
       }
 
@@ -1207,8 +1391,8 @@ export async function recordInvoicePayment(
         },
       });
 
-      const newPaid = invoice.paidAmount.add(requested);
-      const fullyPaid = newPaid.greaterThanOrEqualTo(invoice.totalAmount);
+      const newPaid = roundMoney(invoice.paidAmount.add(requested));
+      const fullyPaid = newPaid.greaterThanOrEqualTo(invoiceTotal);
       await tx.invoice.update({
         where: { id: invoice.id },
         data: {
@@ -1285,8 +1469,11 @@ export async function recordInvoicePayment(
   } catch (err) {
     return {
       status: "error",
-      error:
-        err instanceof Error ? err.message : "Couldn't record the payment.",
+      error: toUserMessage(
+        err,
+        "Couldn't record the payment.",
+        "billing.recordInvoicePayment"
+      ),
     };
   }
 }
@@ -1386,12 +1573,12 @@ export async function sendInvoice(
           paidAmount: true,
         },
       });
-      if (!invoice) throw new Error("Invoice not found.");
+      if (!invoice) throw new UserFacingError("Invoice not found.");
       if (invoice.kind !== "client") {
-        throw new Error("Only client invoices get sent.");
+        throw new UserFacingError("Only client invoices get sent.");
       }
       if (invoice.status !== "approved") {
-        throw new Error(
+        throw new UserFacingError(
           `Send is only available on approved invoices (this one is ${invoice.status}). Approve it first.`
         );
       }
@@ -1409,22 +1596,24 @@ export async function sendInvoice(
           where: { id: invoice.matterId },
           select: { trustBalance: true },
         });
-        if (!matter) throw new Error("Matter not found.");
-        const balance = invoice.totalAmount.sub(invoice.paidAmount);
+        if (!matter) throw new UserFacingError("Matter not found.");
+        const balance = roundMoney(invoice.totalAmount).sub(
+          roundMoney(invoice.paidAmount)
+        );
         // Default: cap at MIN(trust, balance). User-supplied amount
         // can step down but never up past the cap. trustAmount was
         // format-validated + $/comma-stripped by the schema.
         const cap = matter.trustBalance.lessThan(balance)
           ? matter.trustBalance
           : balance;
-        const applied = data.trustAmount
-          ? new Prisma.Decimal(data.trustAmount)
-          : cap;
+        const applied = roundMoney(
+          data.trustAmount ? new Prisma.Decimal(data.trustAmount) : cap
+        );
         if (applied.lessThanOrEqualTo(0)) {
-          throw new Error("Trust application amount must be greater than 0.");
+          throw new UserFacingError("Trust application amount must be greater than 0.");
         }
         if (applied.greaterThan(cap)) {
-          throw new Error(
+          throw new UserFacingError(
             `Can apply at most $${cap.toFixed(2)} from trust (limited by ${
               matter.trustBalance.lessThan(balance) ? "trust balance" : "invoice balance"
             }).`
@@ -1445,7 +1634,7 @@ export async function sendInvoice(
         });
         await tx.matter.update({
           where: { id: invoice.matterId },
-          data: { trustBalance: matter.trustBalance.sub(applied) },
+          data: { trustBalance: roundMoney(matter.trustBalance.sub(applied)) },
         });
         await tx.invoicePayment.create({
           data: {
@@ -1459,13 +1648,15 @@ export async function sendInvoice(
             createdBy: userId,
           },
         });
-        newPaid = invoice.paidAmount.add(applied);
+        newPaid = roundMoney(invoice.paidAmount.add(applied));
         trustApplied = applied;
       }
 
       // Final status: paid if trust covered the whole thing, partial
       // if it covered some, sent otherwise.
-      const fullyPaid = newPaid.greaterThanOrEqualTo(invoice.totalAmount);
+      const fullyPaid = newPaid.greaterThanOrEqualTo(
+        roundMoney(invoice.totalAmount)
+      );
       const finalStatus = fullyPaid
         ? "paid"
         : trustApplied
@@ -1514,7 +1705,11 @@ export async function sendInvoice(
   } catch (err) {
     return {
       status: "error",
-      error: err instanceof Error ? err.message : "Couldn't send the invoice.",
+      error: toUserMessage(
+        err,
+        "Couldn't send the invoice.",
+        "billing.sendInvoice"
+      ),
     };
   }
 }

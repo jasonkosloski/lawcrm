@@ -503,6 +503,26 @@ describe("updateTimeEntry", () => {
     expect(row!.amount).toBeNull();
   });
 
+  test("rounds the recomputed amount to cents (0.25h x 187.50 -> 46.88)", async () => {
+    const { timeEntryId } = await seedTimeEntry({
+      matterId,
+      userId,
+      status: "draft",
+    });
+    await prisma.timeEntry.update({
+      where: { id: timeEntryId },
+      data: { rate: new Prisma.Decimal("187.50") },
+    });
+    const res = await updateTimeEntry(
+      timeEntryId,
+      timeEntryInitialState,
+      buildUpdateForm({ hours: "0.25" })
+    );
+    expect(res.status).toBe("ok");
+    const row = await prisma.timeEntry.findUnique({ where: { id: timeEntryId } });
+    expect(row!.amount!.toString()).toBe("46.88");
+  });
+
   test("persists field updates on a draft entry", async () => {
     const { timeEntryId } = await seedTimeEntry({
       matterId,

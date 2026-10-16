@@ -177,7 +177,11 @@ export function EditableLineItemRow({
     const r = Number(committed.rate);
     if (!Number.isFinite(h) || h <= 0) return null;
     if (!committed.rate || !Number.isFinite(r) || r <= 0) return null;
-    return h * r;
+    // Round to cents (half up) like the server does, so the preview
+    // matches the stored amount. The epsilon nudges float products
+    // such as 0.25 * 187.50 = 46.875 (exactly representable) and
+    // 1.005-style values onto the correct side of the half-cent.
+    return Math.round((h * r + 1e-9) * 100) / 100;
   })();
 
   // ── Cell renderers ────────────────────────────────────────────────────
@@ -321,8 +325,8 @@ export function EditableLineItemRow({
         {editing === "hours" ? (
           <AutoFocusInput
             type="number"
-            step="0.1"
-            min="0.1"
+            step="0.01"
+            min="0.01"
             max="24"
             defaultValue={draft}
             className={cn(inputBase, "w-16 text-right")}

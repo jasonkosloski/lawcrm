@@ -58,8 +58,9 @@ export function InvoicePreview({
    *  multiple printed pages. Used by `/print/invoices/[id]`. */
   printMode?: boolean;
   /** When true, the invoice itself is in an editable status
-   *  (draft or approved). Per-row gating then filters down by
-   *  author / `time_entries.edit_any`. Always false in
+   *  (draft only) and the viewer holds `billing.generate_invoice`.
+   *  Per-row gating then filters down by author /
+   *  `time_entries.edit_any`. Always false in
    *  `printMode`; the printed copy never shows edit chrome. */
   editable?: boolean;
   /** Drives the per-row author bypass on the edit pencil — an

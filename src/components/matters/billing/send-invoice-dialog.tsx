@@ -54,6 +54,7 @@ export function SendInvoiceDialog({
   invoiceBalance,
   clientEmail,
   trustBalance,
+  canApplyTrust = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -62,6 +63,10 @@ export function SendInvoiceDialog({
   invoiceBalance: number;
   clientEmail: string | null;
   trustBalance: number;
+  /** Whether the viewer holds `billing.apply_trust`. Applying trust
+   *  at send moves client money and the server refuses it without
+   *  the key, so the option is hidden for everyone else. */
+  canApplyTrust?: boolean;
 }) {
   const action = sendInvoice.bind(null, invoiceId);
   // Wrapped useActionState: masks state left over from a previous
@@ -74,7 +79,8 @@ export function SendInvoiceDialog({
 
   // The trust-apply checkbox only exists if there's trust to draw
   // from AND the invoice has an open balance.
-  const trustEligible = trustBalance > 0 && invoiceBalance > 0;
+  const trustEligible =
+    canApplyTrust && trustBalance > 0 && invoiceBalance > 0;
   const defaultTrustApply = useMemo(
     () => Math.min(trustBalance, invoiceBalance),
     [trustBalance, invoiceBalance]

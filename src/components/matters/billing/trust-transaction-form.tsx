@@ -11,7 +11,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { Plus, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -40,6 +40,20 @@ export function TrustTransactionForm({ matterId }: { matterId: string }) {
     FormData
   >(action, billingInitialState, expanded);
   const [type, setType] = useState<TrustTxnType>("deposit");
+  // Dispatch via onSubmit + startTransition instead of
+  // <form action={formAction}>: React 19 resets every form-action
+  // form after the action settles — error or not — which wipes the
+  // typed fields (and snaps an uncontrolled-looking select back to
+  // its first option) when the server returns a validation /
+  // business-rule error. A manual dispatch keeps the user's input so
+  // they can correct and resubmit. Native `required` validation
+  // still runs before onSubmit fires.
+  const [, startSubmit] = useTransition();
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    startSubmit(() => formAction(fd));
+  };
 
   // Collapse + reset on success. Deps key on the state OBJECT, not
   // state.status: useActionState keeps its state across
@@ -75,7 +89,7 @@ export function TrustTransactionForm({ matterId }: { matterId: string }) {
 
   return (
     <form
-      action={formAction}
+      onSubmit={onSubmit}
       className="flex flex-col gap-3 p-3 rounded-md border border-line bg-paper-2/40"
     >
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

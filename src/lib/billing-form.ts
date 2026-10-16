@@ -158,10 +158,11 @@ export function invoiceStatusLabel(
   return map[status] ?? status;
 }
 
-/// Channels the "Record payment" dialog offers. `trust` is in the
-/// list (so the action validates it) but the UI doesn't surface it
-/// — the dedicated "Pay from trust" flow handles that case so we
-/// can also write the trust ledger leg in the same transaction.
+/// Channels the "Record payment" action accepts. `trust` is in the
+/// list so the action validates it; it writes the trust ledger leg
+/// in the same transaction and requires `billing.apply_trust` (the
+/// Record-payment dialog and the Apply-trust dialog only offer it to
+/// users holding that key).
 export const INVOICE_PAYMENT_SOURCES = [
   "check",
   "ach",

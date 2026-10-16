@@ -43,6 +43,7 @@ import {
   setInvoiceStatus,
   updateInvoiceLineItem,
 } from "@/app/actions/billing";
+import { Prisma } from "@/generated/prisma/client";
 import { lineItemEditInitialState } from "@/lib/billing-form";
 import {
   resetDb,
@@ -367,7 +368,7 @@ describe("updateInvoiceLineItem — guards", () => {
     expect(res.error).toMatch(/isn't on an invoice/i);
   });
 
-  test.each(["sent", "partial", "paid", "void"])(
+  test.each(["approved", "sent", "partial", "paid", "void"])(
     "rejects when invoice status is %s",
     async (status) => {
       const { timeEntryId } = await seedTimeEntry({
@@ -396,7 +397,7 @@ describe("updateInvoiceLineItem — guards", () => {
     }
   );
 
-  test("allows edits on draft AND approved invoices", async () => {
+  test("allows edits on a draft invoice but refuses once it is approved", async () => {
     const { timeEntryId } = await seedTimeEntry({
       matterId,
       userId,
@@ -421,12 +422,20 @@ describe("updateInvoiceLineItem — guards", () => {
       where: { id: inv.id },
       data: { status: "approved" },
     });
+    // Approval signs off on a specific total: an in-place edit after
+    // that would silently change it (F019/F157). This test used to pin
+    // "approved edits are fine".
     const approvedRes = await updateInvoiceLineItem(
       timeEntryId,
       lineItemEditInitialState,
-      buildLineItemForm({ activity: "Approved-state edit" })
+      buildLineItemForm({ activity: "Approved-state edit", hours: "9" })
     );
-    expect(approvedRes.status).toBe("ok");
+    expect(approvedRes.status).toBe("error");
+    expect(approvedRes.error).toMatch(/approved/i);
+    const te = await prisma.timeEntry.findUniqueOrThrow({
+      where: { id: timeEntryId },
+    });
+    expect(te.activity).not.toBe("Approved-state edit");
   });
 
   test("rejects empty activity / 0 hours / out-of-range hours", async () => {
@@ -900,5 +909,534 @@ describe("billing RBAC gates", () => {
     );
     expect(mockedRequirePermission).toHaveBeenCalledWith("billing.send_invoice");
     expect(mockedRequirePermission).toHaveBeenCalledWith("billing.apply_trust");
+  });
+});
+
+// ── Line-item billing gate + audit trail (F019 / F157) ─────────────────
+
+describe("updateInvoiceLineItem — billing gate + audit trail", () => {
+  const mockedRequirePermission = vi.mocked(requirePermission);
+
+  test("gates on billing.generate_invoice even for the entry's author", async () => {
+    mockedRequirePermission.mockClear();
+    const { timeEntryId } = await seedTimeEntry({ matterId, userId, amount: 500 });
+    await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
+    await updateInvoiceLineItem(
+      timeEntryId,
+      lineItemEditInitialState,
+      buildLineItemForm()
+    );
+    expect(mockedRequirePermission).toHaveBeenCalledWith(
+      "billing.generate_invoice"
+    );
+  });
+
+  test("a denied billing gate stops the edit before anything is written", async () => {
+    const { timeEntryId } = await seedTimeEntry({
+      matterId,
+      userId,
+      hours: 2,
+      rate: 250,
+      amount: 500,
+    });
+    await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
+    mockedRequirePermission.mockImplementation(async (key: string) => {
+      if (key === "billing.generate_invoice") throw new Error("NEXT_REDIRECT");
+      return "test-user";
+    });
+    try {
+      await expect(
+        updateInvoiceLineItem(
+          timeEntryId,
+          lineItemEditInitialState,
+          buildLineItemForm({ hours: "10", rate: "999" })
+        )
+      ).rejects.toThrow("NEXT_REDIRECT");
+    } finally {
+      mockedRequirePermission.mockReset();
+      mockedRequirePermission.mockResolvedValue("test-user");
+    }
+    const te = await prisma.timeEntry.findUniqueOrThrow({
+      where: { id: timeEntryId },
+    });
+    expect(te.rate?.toNumber()).toBe(250);
+    expect(te.amount?.toNumber()).toBe(500);
+  });
+
+  test("writes an activity-log row with old and new values", async () => {
+    const { timeEntryId } = await seedTimeEntry({
+      matterId,
+      userId,
+      hours: 2,
+      rate: 250,
+      amount: 500,
+    });
+    await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
+    await updateInvoiceLineItem(
+      timeEntryId,
+      lineItemEditInitialState,
+      buildLineItemForm({ hours: "3", rate: "300" })
+    );
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { matterId, title: { contains: "line item edited" } },
+    });
+    expect(log.userId).toBe(userId);
+    expect(log.detail).toContain("hours 2 → 3");
+    expect(log.detail).toContain("rate $250.00 → $300.00");
+    expect(log.detail).toContain("amount $500.00 → $900.00");
+    expect(log.detail).toContain("invoice total $500.00 → $900.00");
+  });
+
+  test("an approve that lands after the pre-check wins: the edit is refused under the lock", async () => {
+    const { timeEntryId } = await seedTimeEntry({ matterId, userId, amount: 500 });
+    await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
+    const inv = await prisma.invoice.findFirstOrThrow({ where: { matterId } });
+    // The pre-check read still sees a draft; by the time the
+    // transaction locks the row it has been approved.
+    const realFind = prisma.timeEntry.findUnique.bind(prisma.timeEntry);
+    const spy = vi
+      .spyOn(prisma.timeEntry, "findUnique")
+      .mockImplementationOnce((async (args: unknown) => {
+        const row = await realFind(args as never);
+        await prisma.invoice.update({
+          where: { id: inv.id },
+          data: { status: "approved" },
+        });
+        return row;
+      }) as never);
+    try {
+      const res = await updateInvoiceLineItem(
+        timeEntryId,
+        lineItemEditInitialState,
+        buildLineItemForm({ hours: "9", rate: "1000" })
+      );
+      expect(res.status).toBe("error");
+      expect(res.error).toMatch(/approved/i);
+    } finally {
+      spy.mockRestore();
+    }
+    const after = await prisma.invoice.findUniqueOrThrow({ where: { id: inv.id } });
+    expect(after.totalAmount.toNumber()).toBe(500);
+  });
+});
+
+// ── Money rounding (F028 / F164) ───────────────────────────────────────
+
+describe("money rounding — line items + payments", () => {
+  test("0.25h x $187.50 is stored as 46.88, the invoice total is 46.88, and paying 46.88 marks it paid", async () => {
+    const { timeEntryId } = await seedTimeEntry({ matterId, userId, amount: 100 });
+    await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
+    const res = await updateInvoiceLineItem(
+      timeEntryId,
+      lineItemEditInitialState,
+      buildLineItemForm({ hours: "0.25", rate: "187.50" })
+    );
+    expect(res.status).toBe("ok");
+    const te = await prisma.timeEntry.findUniqueOrThrow({ where: { id: timeEntryId } });
+    expect(te.amount?.toString()).toBe("46.88");
+    const inv = await prisma.invoice.findFirstOrThrow({ where: { matterId } });
+    expect(inv.subtotal.toString()).toBe("46.88");
+    expect(inv.totalAmount.toString()).toBe("46.88");
+
+    await prisma.invoice.update({ where: { id: inv.id }, data: { status: "sent" } });
+    const pay = await recordInvoicePayment(
+      inv.id,
+      billingInitialState,
+      buildPaymentForm("46.88")
+    );
+    expect(pay.status).toBe("ok");
+    const paid = await prisma.invoice.findUniqueOrThrow({ where: { id: inv.id } });
+    expect(paid.status).toBe("paid");
+    expect(paid.paidAmount.toString()).toBe("46.88");
+  });
+
+  test("a legacy sub-cent invoice total (46.875) can still be paid in full at 46.88", async () => {
+    const inv = await prisma.invoice.create({
+      data: {
+        invoiceNumber: "2026-901",
+        matterId,
+        issueDate: new Date(),
+        dueDate: new Date(),
+        subtotal: "46.875",
+        totalAmount: "46.875",
+        paidAmount: 0,
+        status: "sent",
+      },
+      select: { id: true },
+    });
+    const pay = await recordInvoicePayment(
+      inv.id,
+      billingInitialState,
+      buildPaymentForm("46.88")
+    );
+    expect(pay.status).toBe("ok");
+    const after = await prisma.invoice.findUniqueOrThrow({ where: { id: inv.id } });
+    expect(after.status).toBe("paid");
+  });
+
+  test("rejects hours with more than 2 decimals when the hours value changes", async () => {
+    const { timeEntryId } = await seedTimeEntry({
+      matterId,
+      userId,
+      hours: 2,
+      rate: 275,
+      amount: 550,
+    });
+    await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
+    const res = await updateInvoiceLineItem(
+      timeEntryId,
+      lineItemEditInitialState,
+      buildLineItemForm({ hours: "0.123", rate: "275" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.hours?.[0]).toMatch(/2 decimal/i);
+    const te = await prisma.timeEntry.findUniqueOrThrow({ where: { id: timeEntryId } });
+    expect(te.hours).toBe(2);
+  });
+
+  test("a stored 4-decimal hours value can be re-posted unchanged (editing the narrative)", async () => {
+    const { timeEntryId } = await seedTimeEntry({
+      matterId,
+      userId,
+      hours: 0.3333,
+      rate: 100,
+      amount: 33.33,
+    });
+    await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
+    const res = await updateInvoiceLineItem(
+      timeEntryId,
+      lineItemEditInitialState,
+      buildLineItemForm({ hours: "0.3333", rate: "100", narrative: "typo fix" })
+    );
+    expect(res.status).toBe("ok");
+    const te = await prisma.timeEntry.findUniqueOrThrow({ where: { id: timeEntryId } });
+    expect(te.amount?.toString()).toBe("33.33");
+  });
+
+  test("generate rounds legacy sub-cent entry amounts line by line", async () => {
+    await seedTimeEntry({ matterId, userId, hours: 1, rate: 1, amount: 46.875 });
+    await seedTimeEntry({ matterId, userId, hours: 1, rate: 1, amount: 10.004 });
+    await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
+    const inv = await prisma.invoice.findFirstOrThrow({ where: { matterId } });
+    expect(inv.totalAmount.toString()).toBe("56.88"); // 46.88 + 10.00
+  });
+});
+
+// ── Paying from trust needs billing.apply_trust (F020/F029/F031/F077) ──
+
+describe("recordInvoicePayment — trust source gate", () => {
+  const mockedRequirePermission = vi.mocked(requirePermission);
+
+  const seedSentInvoice = async () => {
+    const inv = await prisma.invoice.create({
+      data: {
+        invoiceNumber: "2026-902",
+        matterId,
+        issueDate: new Date(),
+        dueDate: new Date(),
+        subtotal: 100,
+        totalAmount: 100,
+        paidAmount: 0,
+        status: "sent",
+      },
+      select: { id: true },
+    });
+    await prisma.matter.update({
+      where: { id: matterId },
+      data: { trustBalance: 500 },
+    });
+    return inv.id;
+  };
+  const sourceForm = (source: string) => {
+    const fd = new FormData();
+    fd.set("amount", "40");
+    fd.set("source", source);
+    return fd;
+  };
+
+  test("source=trust additionally requires billing.apply_trust; source=check does not", async () => {
+    const invId = await seedSentInvoice();
+    mockedRequirePermission.mockClear();
+    await recordInvoicePayment(invId, billingInitialState, sourceForm("check"));
+    expect(mockedRequirePermission).toHaveBeenCalledWith("billing.record_payment");
+    expect(mockedRequirePermission).not.toHaveBeenCalledWith("billing.apply_trust");
+
+    mockedRequirePermission.mockClear();
+    await recordInvoicePayment(invId, billingInitialState, sourceForm("trust"));
+    expect(mockedRequirePermission).toHaveBeenCalledWith("billing.apply_trust");
+  });
+
+  test("a user with record_payment but not apply_trust cannot move trust funds", async () => {
+    const invId = await seedSentInvoice();
+    mockedRequirePermission.mockImplementation(async (key: string) => {
+      if (key === "billing.apply_trust") throw new Error("NEXT_REDIRECT");
+      return "test-user";
+    });
+    try {
+      await expect(
+        recordInvoicePayment(invId, billingInitialState, sourceForm("trust"))
+      ).rejects.toThrow("NEXT_REDIRECT");
+      // Non-trust payments still work for the same user.
+      const ok = await recordInvoicePayment(
+        invId,
+        billingInitialState,
+        sourceForm("check")
+      );
+      expect(ok.status).toBe("ok");
+    } finally {
+      mockedRequirePermission.mockReset();
+      mockedRequirePermission.mockResolvedValue("test-user");
+    }
+    expect(await prisma.trustTransaction.count({ where: { matterId } })).toBe(0);
+    const m = await prisma.matter.findUniqueOrThrow({ where: { id: matterId } });
+    expect(m.trustBalance.toNumber()).toBe(500);
+  });
+});
+
+// ── Double-billing races (F156 / F235 / F338) ──────────────────────────
+
+describe("generate / bundle — double-billing races", () => {
+  test("two concurrent generates on the SAME matter bill each entry exactly once", async () => {
+    await seedTimeEntry({ matterId, userId, amount: 100 });
+    await seedTimeEntry({ matterId, userId, amount: 200 });
+    await seedExpense({ matterId, amount: 50 });
+
+    const [a, b] = await Promise.all([
+      generateInvoiceFromWip(matterId, billingInitialState, new FormData()),
+      generateInvoiceFromWip(matterId, billingInitialState, new FormData()),
+    ]);
+    expect([a.status, b.status].sort()).toEqual(["error", "ok"]);
+
+    const invoices = await prisma.invoice.findMany({
+      where: { matterId },
+      include: { lineItems: true, expenseLineItems: true },
+    });
+    expect(invoices).toHaveLength(1);
+    expect(invoices[0]!.lineItems).toHaveLength(2);
+    expect(invoices[0]!.expenseLineItems).toHaveLength(1);
+    expect(invoices[0]!.totalAmount.toNumber()).toBe(350);
+  });
+
+  test("a generate and a bundle on the same matter can't both claim the entries", async () => {
+    await seedTimeEntry({ matterId, userId, amount: 100 });
+    const fd = new FormData();
+    fd.set("notes", "closing out");
+    const [a, b] = await Promise.all([
+      generateInvoiceFromWip(matterId, billingInitialState, new FormData()),
+      bundleAsInternalRecord(matterId, billingInitialState, fd),
+    ]);
+    expect([a.status, b.status].sort()).toEqual(["error", "ok"]);
+    expect(await prisma.invoice.count({ where: { matterId } })).toBe(1);
+  });
+
+  test("entries billed after the WIP read abort the generate (link count mismatch) and roll back", async () => {
+    const { timeEntryId } = await seedTimeEntry({ matterId, userId, amount: 100 });
+    const other = await prisma.invoice.create({
+      data: {
+        invoiceNumber: "2026-950",
+        matterId,
+        issueDate: new Date(),
+        dueDate: new Date(),
+        subtotal: 100,
+        totalAmount: 100,
+        paidAmount: 0,
+        status: "draft",
+      },
+      select: { id: true },
+    });
+    // Simulate a competing invoice claiming the entry AFTER this
+    // transaction read its WIP set but BEFORE it linked the rows:
+    // wrap the transaction client so invoice.create first steals the
+    // entry. Without the `invoiceId: null` predicate + count check
+    // the updateMany would silently re-point it at the new invoice.
+    const realTransaction = prisma.$transaction.bind(prisma);
+    const txSpy = vi.spyOn(prisma, "$transaction").mockImplementationOnce(((
+      cb: (tx: unknown) => Promise<unknown>
+    ) =>
+      realTransaction((tx) =>
+        cb(
+          new Proxy(tx, {
+            get(target, prop, receiver) {
+              const value = Reflect.get(target, prop, receiver);
+              if (prop !== "invoice") return value;
+              return new Proxy(value, {
+                get(t2, p2, r2) {
+                  const v2 = Reflect.get(t2, p2, r2);
+                  if (p2 !== "create") return v2;
+                  return async (args: unknown) => {
+                    await tx.timeEntry.update({
+                      where: { id: timeEntryId },
+                      data: { invoiceId: other.id, status: "billed" },
+                    });
+                    return v2.call(t2, args);
+                  };
+                },
+              });
+            },
+          })
+        )
+      )) as never);
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const res = await generateInvoiceFromWip(
+        matterId,
+        billingInitialState,
+        new FormData()
+      );
+      expect(res.status).toBe("error");
+      expect(res.error).toMatch(/changed while the invoice was being created/i);
+    } finally {
+      txSpy.mockRestore();
+      consoleSpy.mockRestore();
+    }
+    // Rolled back: no second invoice, and the entry was NOT re-pointed.
+    expect(await prisma.invoice.count({ where: { matterId } })).toBe(1);
+    const te = await prisma.timeEntry.findUniqueOrThrow({ where: { id: timeEntryId } });
+    expect(te.invoiceId).toBeNull();
+    expect(te.status).toBe("billable");
+  });
+});
+
+// ── Status transitions lose cleanly to concurrent changes (F132/F274) ──
+
+describe("invoice status transitions — conflict handling", () => {
+  let counter = 0;
+  const seedInvoiceWithEntry = async (status: string, paidAmount = 0) => {
+    counter += 1;
+    const inv = await prisma.invoice.create({
+      data: {
+        invoiceNumber: `2026-97${counter}`,
+        matterId,
+        issueDate: new Date(),
+        dueDate: new Date(),
+        subtotal: 100,
+        totalAmount: 100,
+        paidAmount,
+        status,
+      },
+      select: { id: true },
+    });
+    const { timeEntryId } = await seedTimeEntry({
+      matterId,
+      userId,
+      amount: 100,
+      status: "billed",
+      invoiceId: inv.id,
+    });
+    return { invoiceId: inv.id, timeEntryId };
+  };
+
+  test("void loses cleanly to a payment that committed after the read", async () => {
+    const { invoiceId, timeEntryId } = await seedInvoiceWithEntry("sent", 40);
+    // Stale snapshot as setInvoiceStatus would have read it a moment
+    // before the payment landed: sent, nothing paid.
+    const realFind = prisma.invoice.findUnique.bind(prisma.invoice);
+    const spy = vi
+      .spyOn(prisma.invoice, "findUnique")
+      .mockImplementationOnce((async (args: unknown) => {
+        const row = (await realFind(args as never)) as object | null;
+        return row && { ...row, paidAmount: new Prisma.Decimal(0) };
+      }) as never);
+    try {
+      const res = await setInvoiceStatus(invoiceId, "void");
+      expect(res.ok).toBe(false);
+      expect(res.error).toMatch(/changed/i);
+    } finally {
+      spy.mockRestore();
+    }
+    const after = await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId } });
+    expect(after.status).toBe("sent");
+    expect(after.paidAmount.toNumber()).toBe(40);
+    // The void's unlink never ran.
+    const te = await prisma.timeEntry.findUniqueOrThrow({ where: { id: timeEntryId } });
+    expect(te.invoiceId).toBe(invoiceId);
+    expect(te.status).toBe("billed");
+  });
+
+  test("approve is refused when the draft was already moved on", async () => {
+    const { invoiceId } = await seedInvoiceWithEntry("draft");
+    const realFind = prisma.invoice.findUnique.bind(prisma.invoice);
+    const spy = vi
+      .spyOn(prisma.invoice, "findUnique")
+      .mockImplementationOnce((async (args: unknown) => {
+        const row = await realFind(args as never);
+        await prisma.invoice.update({
+          where: { id: invoiceId },
+          data: { status: "sent" },
+        });
+        return row;
+      }) as never);
+    try {
+      const res = await approveInvoice(invoiceId);
+      expect(res.ok).toBe(false);
+      expect(res.error).toMatch(/changed/i);
+    } finally {
+      spy.mockRestore();
+    }
+    const after = await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId } });
+    expect(after.status).toBe("sent");
+  });
+
+  test("delete is refused (nothing unlinked) when the draft was approved after the read", async () => {
+    const { invoiceId, timeEntryId } = await seedInvoiceWithEntry("draft");
+    const realFind = prisma.invoice.findUnique.bind(prisma.invoice);
+    const spy = vi
+      .spyOn(prisma.invoice, "findUnique")
+      .mockImplementationOnce((async (args: unknown) => {
+        const row = await realFind(args as never);
+        await prisma.invoice.update({
+          where: { id: invoiceId },
+          data: { status: "approved" },
+        });
+        return row;
+      }) as never);
+    try {
+      const res = await deleteInvoice(invoiceId);
+      expect(res.ok).toBe(false);
+      expect(res.error).toMatch(/changed/i);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await prisma.invoice.count({ where: { id: invoiceId } })).toBe(1);
+    const te = await prisma.timeEntry.findUniqueOrThrow({ where: { id: timeEntryId } });
+    expect(te.invoiceId).toBe(invoiceId);
+  });
+});
+
+// ── Generic client errors (F416 / F449) ────────────────────────────────
+
+describe("billing actions — generic client errors", () => {
+  test("an unexpected (Prisma-style) failure is logged server-side and not leaked", async () => {
+    await seedTimeEntry({ matterId, userId, amount: 100 });
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const leaky = new Error(
+      "Invalid `prisma.invoice.create()` invocation in /var/task/.next/server/chunks/x.js:12"
+    );
+    const txSpy = vi.spyOn(prisma, "$transaction").mockRejectedValueOnce(leaky);
+    try {
+      const res = await generateInvoiceFromWip(
+        matterId,
+        billingInitialState,
+        new FormData()
+      );
+      expect(res.status).toBe("error");
+      expect(res.error).toBe("Couldn't generate invoice.");
+      expect(consoleSpy).toHaveBeenCalledWith(
+        "[billing.generateInvoiceFromWip]",
+        leaky
+      );
+    } finally {
+      txSpy.mockRestore();
+      consoleSpy.mockRestore();
+    }
+  });
+
+  test("intentional refusals still reach the user verbatim", async () => {
+    const res = await generateInvoiceFromWip(
+      matterId,
+      billingInitialState,
+      new FormData()
+    );
+    expect(res.error).toMatch(/Nothing unbilled/i);
   });
 });

@@ -125,6 +125,8 @@ export default async function MatterBillingPage({
     canManageLiens,
     canApproveSettlement,
     canEditAnyTimeEntry,
+    canApplyTrust,
+    canEditLineItems,
     currentUserId,
   ] = await Promise.all([
     getMatterBilling(id),
@@ -143,6 +145,13 @@ export default async function MatterBillingPage({
     // always edit their own (per-row check below) — this gates
     // the cross-author path.
     currentUserHasPermission("time_entries.edit_any"),
+    // Paying an invoice from trust moves client money: gates the
+    // Apply-trust button, the Trust payment method and apply-at-send
+    // (the server enforces the same key).
+    currentUserHasPermission("billing.apply_trust"),
+    // Line-item edits price the invoice; the server requires the
+    // same key that creates the draft.
+    currentUserHasPermission("billing.generate_invoice"),
     getCurrentUserId(),
   ]);
 
@@ -205,6 +214,7 @@ export default async function MatterBillingPage({
             trustBalance={billing.trust.balance}
             paidAmount={selectedInvoice.paidAmount}
             clientEmail={selectedInvoice.clientEmail}
+            canApplyTrust={canApplyTrust}
           />
           {/* Print / Save as PDF — opens the print route in a new
               tab with auto-print enabled so the browser dialog
@@ -234,14 +244,10 @@ export default async function MatterBillingPage({
           <InvoicePreview
             invoice={selectedInvoice}
             firm={firm}
-            // Line items are editable while the invoice is still
-            // in the firm's possession — `draft` or `approved`.
-            // Once `sent`, edits would diverge from the doc the
-            // client received.
-            editable={
-              selectedInvoice.status === "draft" ||
-              selectedInvoice.status === "approved"
-            }
+            // Line items are editable only while the invoice is a
+            // `draft` (approval signs off on a specific total), and
+            // only for users holding billing.generate_invoice.
+            editable={selectedInvoice.status === "draft" && canEditLineItems}
             currentUserId={currentUserId}
             canEditAnyTimeEntry={canEditAnyTimeEntry}
           />

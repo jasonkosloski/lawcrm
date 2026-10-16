@@ -10,7 +10,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { FilePlus2, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -41,6 +41,20 @@ export function GenerateInvoiceForm({
     BillingFormState,
     FormData
   >(action, billingInitialState, expanded);
+  // Dispatch via onSubmit + startTransition instead of
+  // <form action={formAction}>: React 19 resets every form-action
+  // form after the action settles — error or not — which wipes the
+  // typed fields (and snaps an uncontrolled-looking select back to
+  // its first option) when the server returns a validation /
+  // business-rule error. A manual dispatch keeps the user's input so
+  // they can correct and resubmit. Native `required` validation
+  // still runs before onSubmit fires.
+  const [, startSubmit] = useTransition();
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    startSubmit(() => formAction(fd));
+  };
 
   // Collapse on success. Deps key on the state OBJECT, not
   // state.status: useActionState keeps its state across
@@ -80,7 +94,7 @@ export function GenerateInvoiceForm({
 
   return (
     <form
-      action={formAction}
+      onSubmit={onSubmit}
       className="flex flex-col gap-3 p-3 rounded-md border border-line bg-paper-2/40"
     >
       <div className="text-xs text-ink">
@@ -105,12 +119,12 @@ export function GenerateInvoiceForm({
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
-            Notes (optional)
+            Notes to client (optional, printed on invoice)
           </label>
           <input
             name="notes"
             type="text"
-            placeholder="Internal note on this invoice"
+            placeholder="Printed on the invoice the client receives"
             maxLength={2000}
             className="h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
           />

@@ -76,6 +76,12 @@ export function InvoiceActionBar({
   /** Pre-fills the Send dialog's recipient field. Editable in the
    *  dialog if the firm wants a one-shot override. */
   clientEmail = null,
+  /** Whether the viewer holds `billing.apply_trust`. Gates every
+   *  trust-moving affordance (Apply trust button, Trust payment
+   *  method, apply-at-send). Defaults to false so a caller that
+   *  forgets it can't expose them; the server enforces the key
+   *  regardless. */
+  canApplyTrust = false,
 }: {
   invoiceId: string;
   invoiceNumber: string;
@@ -85,6 +91,7 @@ export function InvoiceActionBar({
   trustBalance?: number;
   paidAmount?: number;
   clientEmail?: string | null;
+  canApplyTrust?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [sendOpen, setSendOpen] = useState(false);
@@ -102,7 +109,8 @@ export function InvoiceActionBar({
   // states as Record payment, plus the trust > 0 condition. The
   // generic Record payment path still includes Trust as a method,
   // but this button is the one-click "earn out the retainer" flow.
-  const canApplyTrust = canRecordPayment && trustBalance > 0;
+  const showApplyTrust =
+    canApplyTrust && canRecordPayment && trustBalance > 0;
   const canMarkRecorded =
     kind === "internal_record" &&
     invoiceStatusTransitions(currentStatus, kind).includes("paid");
@@ -113,7 +121,7 @@ export function InvoiceActionBar({
     !canApprove &&
     !canSend &&
     !canRecordPayment &&
-    !canApplyTrust &&
+    !showApplyTrust &&
     !canMarkRecorded &&
     !deleteAllowed &&
     !voidAllowed;
@@ -191,7 +199,7 @@ export function InvoiceActionBar({
             // Promote Apply-trust to primary when it's available —
             // it's the more decisive one-click action. Record payment
             // becomes secondary in that case.
-            canApplyTrust
+            showApplyTrust
               ? "border border-line bg-white text-ink hover:border-brand-300 hover:text-brand-700"
               : "bg-brand-500 text-white hover:bg-brand-600",
             "transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
@@ -203,7 +211,7 @@ export function InvoiceActionBar({
         </button>
       )}
 
-      {canApplyTrust && (
+      {showApplyTrust && (
         <button
           type="button"
           onClick={() => setApplyTrustOpen(true)}
@@ -287,6 +295,7 @@ export function InvoiceActionBar({
           invoiceBalance={invoiceBalance}
           clientEmail={clientEmail}
           trustBalance={trustBalance}
+          canApplyTrust={canApplyTrust}
         />
       )}
       {canRecordPayment && (
@@ -298,9 +307,10 @@ export function InvoiceActionBar({
           invoiceBalance={invoiceBalance}
           trustBalance={trustBalance}
           clientEmail={clientEmail}
+          canApplyTrust={canApplyTrust}
         />
       )}
-      {canApplyTrust && (
+      {showApplyTrust && (
         <ApplyTrustDialog
           open={applyTrustOpen}
           onOpenChange={setApplyTrustOpen}

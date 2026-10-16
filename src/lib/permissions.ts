@@ -148,7 +148,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         key: "billing.generate_invoice",
         label: "Generate invoice from WIP",
         description:
-          "Bundle a matter's approved time entries into a draft invoice.",
+          "Bundle a matter's approved time entries into a draft invoice, and price (hours / rate) its line items while it is still a draft.",
       },
       {
         key: "billing.approve_invoice",
@@ -184,7 +184,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         key: "billing.apply_trust",
         label: "Apply trust to invoices",
         description:
-          "Run the four-leg trust transfer that earns funds out of the matter trust toward an outstanding invoice balance.",
+          "Run the four-leg trust transfer that earns funds out of the matter trust toward an outstanding invoice balance, including recording a payment with the Trust method.",
       },
     ],
   },
