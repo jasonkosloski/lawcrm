@@ -391,6 +391,7 @@ The original decision stored date-only values at **server-local** midnight and d
 ## ADR-020: Google sync skips only deterministic failures; catch-up never advances past an open gap; Google cancel is unlink-only
 ## ADR-020: Invoice line items are draft-only; money is rounded per line (HALF_UP, cents)
 ## ADR-020: Captures do not inherit the primary's permission gate - every record kind clears its own create key
+## ADR-020: Conflict matcher scope — own-contact exclusion, inactive parties stay hard
 
 **Date:** 2026-10-16
 **Status:** Accepted
@@ -482,3 +483,14 @@ The original decision stored date-only values at **server-local** midnight and d
 - (+) Denial happens before any write, so there is no partial thread to clean up
 - (-) A denial redirects to `/`, so a user whose draft carries an attachment they may not create loses the draft; the capture stack still offers every kind (follow-up: pass allowed kinds + `canPin` into `CaptureStack`)
 - (-) Keys are plain strings (no `PermissionKey` union exists); `capture-permissions.test.ts` asserts every mapped key is known to `isKnownPermission`
+**Context:** Every lead hangs off a Contact built from the very name/email/organization the conflict check scans, so the matcher matched the lead against itself and a lead could never come back "clear". Separately, the hard tier required `Contact.isActive`, but deactivating a contact only flips that flag and leaves its `MatterContact` rows on active matters — so deactivating an opposing party silently removed the conflict.
+
+**Decision:**
+- The candidate's own Contact (`ownContactId`, from `Lead.contactId`) is skipped by the soft "already in the directory" warnings. The hard tier still considers it: if the person is also an opposing-side party on an active matter, that is a real conflict.
+- Contacts that are deactivated but still parties on non-archived matters stay in the hard tier. Only contacts merged away (`mergedIntoId` set; their rows moved to the survivor) are excluded. The soft warn still applies to active contacts only.
+- Conflict-check audit entries identify the lead: the title carries the name, the detail begins `lead {id}:`.
+
+**Trade-offs:**
+- (+) A genuinely clean lead can be cleared; a deactivated adverse party can't hide a conflict
+- (-) A deactivated party on an old open matter keeps raising conflicts until the matter is archived or the party row is removed
+

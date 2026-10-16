@@ -39,6 +39,7 @@ export async function runLeadConflictCheck(
     select: {
       id: true,
       conflictCheck: true,
+      contactId: true,
       // Pull the joined Contact's identity fields when available,
       // falling back to the legacy free-text columns on Lead.
       contact: { select: { name: true, email: true, organization: true } },
@@ -47,11 +48,14 @@ export async function runLeadConflictCheck(
     },
   });
   if (!lead) return { ok: false, error: "Lead not found." };
+  const leadLabel = lead.contact?.name ?? lead.name;
 
   const result = await runConflictMatcher({
     name: lead.contact?.name ?? lead.name,
     email: lead.contact?.email ?? lead.email,
     organization: lead.contact?.organization ?? null,
+    // The lead's own Contact must not match itself.
+    ownContactId: lead.contactId,
   });
 
   // Don't clobber an existing manual override. If the user
@@ -75,11 +79,15 @@ export async function runLeadConflictCheck(
     matterId: null,
     userId: actorId,
     type: "filing",
-    title: `Conflict check run on lead — ${result.severity}`,
-    detail:
+    // ActivityLog has no lead reference, so the lead is named in the
+    // title and identified by id in the detail (audit review asks
+    // "who cleared the conflict on lead X").
+    title: `Conflict check run on lead ${leadLabel} — ${result.severity}`,
+    detail: `lead ${leadId}: ${
       result.matches.length > 0
         ? `${result.matches.length} match${result.matches.length === 1 ? "" : "es"}`
-        : "No matches",
+        : "No matches"
+    }`,
   });
 
   revalidatePath(`/intake/${leadId}`);
@@ -117,7 +125,12 @@ export async function overrideLeadConflictCheck(
 
   const lead = await prisma.lead.findUnique({
     where: { id: leadId },
-    select: { id: true, conflictCheck: true },
+    select: {
+      id: true,
+      conflictCheck: true,
+      name: true,
+      contact: { select: { name: true } },
+    },
   });
   if (!lead) return { ok: false, error: "Lead not found." };
   if (lead.conflictCheck !== "warn" && lead.conflictCheck !== "conflict") {
@@ -140,8 +153,8 @@ export async function overrideLeadConflictCheck(
     matterId: null,
     userId: actorId,
     type: "filing",
-    title: `Conflict check overridden on lead`,
-    detail: parsed.data.notes,
+    title: `Conflict check overridden on lead ${lead.contact?.name ?? lead.name}`,
+    detail: `lead ${leadId}: ${parsed.data.notes}`,
   });
 
   revalidatePath(`/intake/${leadId}`);

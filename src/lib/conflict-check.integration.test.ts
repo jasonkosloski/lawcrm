@@ -314,3 +314,166 @@ describe("runConflictMatcher — severity rollup", () => {
     expect(result.severity).toBe("clear");
   });
 });
+
+describe("runConflictMatcher — the lead's own Contact (ownContactId)", () => {
+  test("own contact matching by email + name + organization → clear", async () => {
+    const own = await seedContact({
+      name: "Jessica Hale",
+      email: "jhale@example.com",
+      organization: "Hale Co",
+      type: "client",
+    });
+    const result = await runConflictMatcher({
+      name: "Jessica Hale",
+      email: "jhale@example.com",
+      organization: "Hale Co",
+      ownContactId: own.contactId,
+    });
+    expect(result.severity).toBe("clear");
+    expect(result.matches).toHaveLength(0);
+  });
+
+  test("without ownContactId the same candidate self-matches (warn)", async () => {
+    await seedContact({
+      name: "Jessica Hale",
+      email: "jhale@example.com",
+      type: "client",
+    });
+    const result = await runConflictMatcher({
+      name: "Jessica Hale",
+      email: "jhale@example.com",
+      organization: null,
+    });
+    expect(result.severity).toBe("warn");
+  });
+
+  test("own contact that is ALSO opposing on an active matter → still conflict", async () => {
+    const own = await seedContact({
+      name: "Jessica Hale",
+      email: "jhale@example.com",
+      type: "client",
+    });
+    await seedMatterContact({
+      matterId,
+      contactId: own.contactId,
+      category: "opposing",
+    });
+    const result = await runConflictMatcher({
+      name: "Jessica Hale",
+      email: "jhale@example.com",
+      organization: null,
+      ownContactId: own.contactId,
+    });
+    expect(result.severity).toBe("conflict");
+    expect(result.matches.some((m) => m.contactId === own.contactId)).toBe(
+      true,
+    );
+  });
+
+  test("a DIFFERENT contact with the same email/name still warns", async () => {
+    const own = await seedContact({
+      name: "Jessica Hale",
+      email: "jhale@example.com",
+      type: "client",
+    });
+    const other = await seedContact({
+      name: "Jessica Hale",
+      email: "jhale@example.com",
+      type: "client",
+    });
+    const result = await runConflictMatcher({
+      name: "Jessica Hale",
+      email: "jhale@example.com",
+      organization: null,
+      ownContactId: own.contactId,
+    });
+    expect(result.severity).toBe("warn");
+    expect(result.matches.length).toBeGreaterThan(0);
+    expect(result.matches.every((m) => m.contactId === other.contactId)).toBe(
+      true,
+    );
+  });
+});
+
+describe("runConflictMatcher — deactivated contacts still on matters", () => {
+  test("deactivated opposing party (by name) is still a hard conflict", async () => {
+    const opposing = await seedContact({
+      name: "Gone Inactive",
+      type: "opposing",
+      isActive: false,
+    });
+    await seedMatterContact({
+      matterId,
+      contactId: opposing.contactId,
+      category: "opposing",
+    });
+    const result = await runConflictMatcher({
+      name: "Gone Inactive",
+      email: null,
+      organization: null,
+    });
+    expect(result.severity).toBe("conflict");
+    expect(result.matches[0]!.contactId).toBe(opposing.contactId);
+  });
+
+  test("deactivated opposing party (by email) is still a hard conflict", async () => {
+    const opposing = await seedContact({
+      name: "Gone Inactive",
+      email: "gone@opposing.com",
+      type: "opposing",
+      isActive: false,
+    });
+    await seedMatterContact({
+      matterId,
+      contactId: opposing.contactId,
+      category: "opposing",
+    });
+    const result = await runConflictMatcher({
+      name: null,
+      email: "gone@opposing.com",
+      organization: null,
+    });
+    expect(result.severity).toBe("conflict");
+    expect(result.matches[0]!.kind).toBe("contact_email");
+  });
+
+  test("deactivated contact with NO matter involvement stays out of the soft warn tiers", async () => {
+    await seedContact({
+      name: "Retired Contact",
+      email: "retired@example.com",
+      organization: "Retired Org",
+      isActive: false,
+    });
+    const result = await runConflictMatcher({
+      name: "Retired Contact",
+      email: "retired@example.com",
+      organization: "Retired Org",
+    });
+    expect(result.severity).toBe("clear");
+  });
+
+  test("a contact merged away is not matched (the survivor carries the rows)", async () => {
+    const survivor = await seedContact({ name: "Survivor" });
+    const loser = await seedContact({
+      name: "Merged Loser",
+      email: "loser@example.com",
+      isActive: false,
+    });
+    const { prisma } = await import("@/lib/prisma");
+    await prisma.contact.update({
+      where: { id: loser.contactId },
+      data: { mergedIntoId: survivor.contactId },
+    });
+    await seedMatterContact({
+      matterId,
+      contactId: loser.contactId,
+      category: "opposing",
+    });
+    const result = await runConflictMatcher({
+      name: "Merged Loser",
+      email: "loser@example.com",
+      organization: null,
+    });
+    expect(result.severity).toBe("clear");
+  });
+});

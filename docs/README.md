@@ -13,6 +13,7 @@ This folder contains living documentation for the CRM build. These files are mai
 | [TESTING.md](./TESTING.md) | Testing discipline — what to test, layer conventions, running commands |
 | [UI_PATTERNS.md](./UI_PATTERNS.md) | Reusable UI patterns, component conventions, design system implementation notes |
 | [DECISIONS.md](./DECISIONS.md) | Architectural Decision Records (ADRs) — why we chose X over Y |
+| [DEPLOY_BACKFILLS.md](./DEPLOY_BACKFILLS.md) | One-off idempotent data repairs to run once per environment after certain deploys |
 | [AUTH_PLAN.md](./AUTH_PLAN.md) | Auth strategy — Phase 1 (email + password) shipped; later phases deferred |
 
 ## How we use these docs

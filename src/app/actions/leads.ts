@@ -50,6 +50,19 @@ import type { LeadStage } from "@/lib/constants/lead-stage";
 const CONVERTED = "converted" satisfies LeadStage;
 const DECLINED = "declined" satisfies LeadStage;
 
+const ALREADY_CONVERTED_ERROR = "Lead is already converted to a matter.";
+const ALREADY_DECLINED_ERROR = "Lead is already declined.";
+const DECLINED_BEFORE_CONVERT_ERROR =
+  "This lead was declined. Reopen it before converting.";
+const DECLINE_AFTER_CONVERT_ERROR =
+  "Lead is already converted — can't decline a matter that exists.";
+
+/** Thrown inside the conversion transaction when the stage claim
+ *  matches no row (the lead changed stage after we read it), so the
+ *  whole transaction rolls back and the caller maps it to a form
+ *  error based on the lead's current stage. */
+class LeadClaimLostError extends Error {}
+
 // ── Convert ─────────────────────────────────────────────────────────────
 
 /** Signature of the one auto-managed SOL deadline per matter. MUST
@@ -125,7 +138,7 @@ export async function convertLeadToMatter(
   if (lead.stage === CONVERTED) {
     return {
       status: "error",
-      errors: { _form: ["Lead is already converted to a matter."] },
+      errors: { _form: [ALREADY_CONVERTED_ERROR] },
     };
   }
 
@@ -193,6 +206,23 @@ export async function convertLeadToMatter(
 
   // Single transaction so a half-converted lead can't exist.
   const result = await prisma.$transaction(async (tx) => {
+    // Claim the lead FIRST, with a predicate on the exact stage we
+    // read. That read is outside the transaction, so a double-click /
+    // second tab / second attorney could pass the checks above; this
+    // conditional write is the real guard. Under READ COMMITTED a
+    // concurrent claimer blocks on this row lock, re-evaluates the
+    // predicate, and matches 0 rows. A decline that committed after
+    // our read also fails the predicate, so it is never overwritten.
+    // (Converting a lead that was ALREADY declined when read stays
+    // allowed, and clears the stale decline reason so a converted lead
+    // never carries one.) convertedMatterId is set once the matter
+    // exists.
+    const claimed = await tx.lead.updateMany({
+      where: { id: leadId, stage: lead.stage },
+      data: { stage: CONVERTED, declineReason: null },
+    });
+    if (claimed.count === 0) throw new LeadClaimLostError();
+
     // Every lead is attached to a Contact (Lead.contactId) — same
     // shape as Matter.clientId. The Patel-style "find by email"
     // dance lives in the create-lead flow now (so prior intakes for
@@ -248,6 +278,12 @@ export async function convertLeadToMatter(
         clientId: clientContactId,
         incidentDate,
         statuteOfLimitationsDate: solDate,
+        // Invariant shared with createMatter / updateMatter: whenever
+        // a matter has a client, that contact is also a MatterContact
+        // with category="client" so the Parties tab shows them.
+        contacts: {
+          create: { contactId: clientContactId, category: "client" },
+        },
       },
       select: { id: true },
     });
@@ -319,7 +355,26 @@ export async function convertLeadToMatter(
     });
 
     return { matterId: matter.id, carriedCount: carried.count, defaults };
+  }).catch((err: unknown) => {
+    // Lost the claim race — surfaced below as a form error. Anything
+    // else is a real failure and must propagate.
+    if (err instanceof LeadClaimLostError) return null;
+    throw err;
   });
+  if (!result) {
+    const current = await prisma.lead.findUnique({
+      where: { id: leadId },
+      select: { stage: true },
+    });
+    const message = !current
+      ? "Lead no longer exists"
+      : current.stage === CONVERTED
+        ? ALREADY_CONVERTED_ERROR
+        : current.stage === DECLINED
+          ? DECLINED_BEFORE_CONVERT_ERROR
+          : "This lead changed while you were converting it. Reload and try again.";
+    return { status: "error", errors: { _form: [message] } };
+  }
 
   const { matterId, carriedCount, defaults } = result;
 
@@ -392,7 +447,7 @@ export async function declineLead(
 
   const lead = await prisma.lead.findUnique({
     where: { id: leadId },
-    select: { stage: true },
+    select: { stage: true, name: true, contact: { select: { name: true } } },
   });
   if (!lead) {
     return {
@@ -403,19 +458,36 @@ export async function declineLead(
   if (lead.stage === CONVERTED) {
     return {
       status: "error",
-      errors: {
-        _form: ["Lead is already converted — can't decline a matter that exists."],
-      },
+      errors: { _form: [DECLINE_AFTER_CONVERT_ERROR] },
     };
   }
+  if (lead.stage === DECLINED) {
+    return { status: "error", errors: { _form: [ALREADY_DECLINED_ERROR] } };
+  }
 
-  await prisma.lead.update({
-    where: { id: leadId },
+  // Conditional write: a convert (or another decline) that committed
+  // between the read above and this write must not be overwritten —
+  // that would flip a converted lead to declined, or rewrite the
+  // stored reason and double-log the decline.
+  const declined = await prisma.lead.updateMany({
+    where: { id: leadId, stage: { notIn: [CONVERTED, DECLINED] } },
     data: {
       stage: DECLINED,
       declineReason: parsed.data.reason || null,
     },
   });
+  if (declined.count === 0) {
+    const current = await prisma.lead.findUnique({
+      where: { id: leadId },
+      select: { stage: true },
+    });
+    const message = !current
+      ? "Lead no longer exists"
+      : current.stage === CONVERTED
+        ? DECLINE_AFTER_CONVERT_ERROR
+        : ALREADY_DECLINED_ERROR;
+    return { status: "error", errors: { _form: [message] } };
+  }
 
   // matterId: null — declined leads never got a matter. Firm-scope
   // audit entry so who declined (and why) is reviewable, matching
@@ -424,8 +496,11 @@ export async function declineLead(
     matterId: null,
     userId: actorId,
     type: "filing",
-    title: "Lead declined",
-    detail: parsed.data.reason || null,
+    // ActivityLog has no lead reference, so the lead is named in the
+    // title and identified by id in the detail (same as the
+    // conflict-check entries).
+    title: `Lead declined: ${lead.contact?.name ?? lead.name}`,
+    detail: `lead ${leadId}: ${parsed.data.reason ?? ""}`,
   });
 
   revalidatePath("/intake");

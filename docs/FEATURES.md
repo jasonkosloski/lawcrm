@@ -720,6 +720,10 @@ end-to-end" milestone — schema, action, query, UI all wired.
 - [x] **Decline lead** — Topbar action with optional internal reason; flips `Lead.stage` to "declined" and bounces the lead from the active queue.
 - [x] **Convert lead to matter — v1** — Topbar action with practice area + initial stage + matter name + fee structure. Single-transaction creates Matter + Contact (or reuses one matching the lead's email) + MatterTeamMember + UserMatterPin. Lead summary/location/incident date/injuries/source flow into Matter.description.
 
+- [x] **Lead conversion + conflict-check integrity (W8b)** — `convertLeadToMatter` claims the lead with a conditional `updateMany` (id + the stage it read) inside the transaction: a double submit, or a stale tab after a concurrent convert/decline, matches 0 rows, rolls back, and returns a clear form error (already converted / declined / gone) instead of a second matter. It also creates the client `MatterContact` row like `createMatter` (Parties tab shows the client) and clears any stale `declineReason`. `declineLead` is likewise conditional (`stage notIn converted, declined`): a second decline changes nothing and writes no second audit row. Conflict matcher: the lead's own Contact never matches itself, and *deactivated* contacts that are still parties on active matters stay in the hard (opposing-side) tier. Audit titles now name the lead (`Conflict check run on lead {name} — {severity}`, `Lead declined: {name}`) with `lead {id}: …` in the detail. **Deploy step:** run the client party-row backfill (`docs/DEPLOY_BACKFILLS.md`) once per environment.
+  - [ ] Open: gate conversion on a clear/overridden conflict check (today conversion does not require one).
+  - [ ] Open: warn when deactivating a contact who is still a party on an active matter (the matcher now covers it, but the deactivation UI is silent).
+
 ### Phase 4 — Communication (Gmail live: sync + send)
 
 The unified inbox lives at `/communication` (route reserved so SMS

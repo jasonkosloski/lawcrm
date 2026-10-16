@@ -91,6 +91,7 @@ export default async function LeadOverviewPage({
       name: lead.contact?.name ?? lead.name ?? null,
       email: lead.contact?.email ?? lead.email ?? null,
       organization: lead.contact?.organization ?? null,
+      ownContactId: lead.contactId,
     }),
     currentUserHasPermission("intake.conflict_check.run"),
     currentUserHasPermission("intake.conflict_check.override"),

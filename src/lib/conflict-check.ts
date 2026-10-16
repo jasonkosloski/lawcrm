@@ -60,6 +60,14 @@ export type ConflictCandidate = {
   name: string | null;
   email: string | null;
   organization: string | null;
+  /** The candidate's OWN Contact row (a lead's Lead.contactId). Every
+   *  lead hangs off a Contact built from the same name / email /
+   *  organization being scanned, so without this the lead matches
+   *  itself and can never come back "clear". It is skipped only by the
+   *  soft "already in the directory" warn paths. The hard tier still
+   *  considers it: if the person is ALSO on the opposing side of an
+   *  active matter, that is a real conflict, not a self-match. */
+  ownContactId?: string | null;
 };
 
 /** Normalize for case-insensitive comparison. Lowercase + trim +
@@ -86,6 +94,7 @@ export async function runConflictMatcher(
   const nameKey = normalize(candidate.name);
   const emailKey = normalize(candidate.email);
   const orgKey = normalize(candidate.organization);
+  const ownContactId = candidate.ownContactId ?? null;
 
   if (!nameKey && !emailKey && !orgKey) {
     return { severity: "clear", matches: [] };
@@ -96,14 +105,20 @@ export async function runConflictMatcher(
 
   // ── Email match (hard signal when used in opposing-side roles) ─
   if (emailKey) {
+    // Deactivated contacts are INCLUDED: deleting / bulk-deactivating a
+    // contact only flips isActive and leaves its MatterContact rows on
+    // active matters, so an inactive opposing party is still a party.
+    // Contacts merged away are excluded (their rows moved to the
+    // survivor, which matches in their place).
     const emailHits = await prisma.contact.findMany({
       where: {
-        isActive: true,
+        mergedIntoId: null,
         email: { equals: emailKey, mode: "insensitive" },
       },
       select: {
         id: true,
         name: true,
+        isActive: true,
         email: true,
         type: true,
         organization: true,
@@ -119,6 +134,12 @@ export async function runConflictMatcher(
           matter: { isArchived: false },
         },
       });
+      seenContactIds.add(c.id);
+      // The soft "already in the directory" warn applies to active
+      // contacts only, and never to the candidate's own Contact.
+      if (opposingSideUse === 0 && (!c.isActive || c.id === ownContactId)) {
+        continue;
+      }
       matches.push({
         kind: "contact_email",
         severity: opposingSideUse > 0 ? "conflict" : "warn",
@@ -129,7 +150,6 @@ export async function runConflictMatcher(
             : `${c.name} — same email already in the firm's contact directory`,
         contactId: c.id,
       });
-      seenContactIds.add(c.id);
     }
   }
 
@@ -179,8 +199,10 @@ export async function runConflictMatcher(
       where: {
         NOT: { category: "client" },
         matter: { isArchived: false },
+        // Includes deactivated contacts (still parties on the matter);
+        // excludes contacts merged away (rows already moved).
         contact: {
-          isActive: true,
+          mergedIntoId: null,
           name: { equals: nameKey, mode: "insensitive" },
         },
       },
@@ -213,7 +235,7 @@ export async function runConflictMatcher(
       select: { id: true, name: true, type: true },
     });
     for (const c of nameCandidates) {
-      if (seenContactIds.has(c.id)) continue;
+      if (seenContactIds.has(c.id) || c.id === ownContactId) continue;
       matches.push({
         kind: "contact_name",
         severity: "warn",
@@ -235,7 +257,7 @@ export async function runConflictMatcher(
       select: { id: true, name: true, organization: true, type: true },
     });
     for (const c of orgCandidates) {
-      if (seenContactIds.has(c.id)) continue;
+      if (seenContactIds.has(c.id) || c.id === ownContactId) continue;
       matches.push({
         kind: "contact_name",
         severity: "warn",

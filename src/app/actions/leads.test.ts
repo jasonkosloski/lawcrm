@@ -171,12 +171,15 @@ describe("declineLead", () => {
     );
 
     const entry = await prisma.activityLog.findFirst({
-      where: { title: "Lead declined" },
-      select: { userId: true, detail: true, matterId: true },
+      where: { title: { startsWith: "Lead declined" } },
+      select: { userId: true, title: true, detail: true, matterId: true },
     });
     expect(entry).not.toBeNull();
     expect(entry!.userId).toBe(userId);
-    expect(entry!.detail).toBe("Conflict of interest");
+    // The entry identifies WHICH lead (name in the title, id in the
+    // detail) — ActivityLog has no lead reference.
+    expect(entry!.title).toBe("Lead declined: Priya Patel");
+    expect(entry!.detail).toBe(`lead ${leadId}: Conflict of interest`);
     // Declined leads never got a matter — firm-scope entry.
     expect(entry!.matterId).toBeNull();
   });
@@ -504,5 +507,297 @@ describe("convertLeadToMatter — automatic defaults (ADR-019)", () => {
     ).rejects.toThrow(/^REDIRECT:/);
     const titles = (await prisma.activityLog.findMany()).map((l) => l.title);
     expect(titles).toEqual(["Converted from lead: Priya Patel"]);
+  });
+});
+
+// ── Conversion integrity ────────────────────────────────────────────────
+
+/** Make the next pre-transaction `lead.findUnique` report a stale
+ *  stage, simulating a request that read the lead before another one
+ *  committed. */
+function stubStaleLeadRead(staleStage: string) {
+  const real = prisma.lead.findUnique.bind(prisma.lead) as (
+    a: unknown,
+  ) => Promise<object | null>;
+  return vi.spyOn(prisma.lead, "findUnique").mockImplementationOnce((async (
+    args: unknown,
+  ) => {
+    const row = await real(args);
+    return row ? { ...row, stage: staleStage } : row;
+  }) as never);
+}
+
+describe("convertLeadToMatter — client party row", () => {
+  test("creates the client MatterContact row (lead with a Contact)", async () => {
+    const { areaId, stageId } = await seedArea({});
+    const contact = await prisma.contact.create({
+      data: { name: "Priya Patel", type: "client", email: "priya@example.com" },
+      select: { id: true },
+    });
+    const lead = await prisma.lead.create({
+      data: { name: "Priya Patel", contactId: contact.id },
+      select: { id: true },
+    });
+
+    await expect(
+      convertLeadToMatter(
+        lead.id,
+        { status: "idle" },
+        convertForm({ areaId, stageId }),
+      ),
+    ).rejects.toThrow(/REDIRECT:/);
+
+    const matter = await prisma.matter.findFirstOrThrow({
+      select: { id: true, clientId: true },
+    });
+    expect(matter.clientId).toBe(contact.id);
+    const rows = await prisma.matterContact.findMany({
+      where: { matterId: matter.id },
+      select: { contactId: true, category: true },
+    });
+    expect(rows).toEqual([{ contactId: contact.id, category: "client" }]);
+  });
+
+  test("creates the client MatterContact row (legacy lead without a Contact)", async () => {
+    const { areaId, stageId } = await seedArea({});
+    const { leadId } = await seedIntakeLead();
+
+    await expect(
+      convertLeadToMatter(
+        leadId,
+        { status: "idle" },
+        convertForm({ areaId, stageId }),
+      ),
+    ).rejects.toThrow(/REDIRECT:/);
+
+    const matter = await prisma.matter.findFirstOrThrow({
+      select: { id: true, clientId: true },
+    });
+    expect(matter.clientId).not.toBeNull();
+    const rows = await prisma.matterContact.findMany({
+      where: { matterId: matter.id },
+      select: { contactId: true, category: true },
+    });
+    expect(rows).toEqual([{ contactId: matter.clientId, category: "client" }]);
+  });
+});
+
+describe("convertLeadToMatter — idempotent under concurrency", () => {
+  test("two simultaneous conversions create exactly one matter", async () => {
+    const { areaId, stageId } = await seedArea({
+      hasSol: true,
+      periodDays: 730,
+    });
+    const { leadId } = await seedIntakeLead({
+      dateOfIncident: new Date("2024-01-15T00:00:00.000Z"),
+    });
+
+    const attempts = await Promise.all(
+      [0, 1].map(() =>
+        convertLeadToMatter(
+          leadId,
+          { status: "idle" },
+          convertForm({ areaId, stageId }),
+        ).then(
+          (r) => ({ threw: false as const, r }),
+          (e: Error) => ({ threw: true as const, message: e.message }),
+        ),
+      ),
+    );
+
+    // Winner reaches the redirect; loser gets the form error.
+    expect(attempts.filter((a) => a.threw)).toHaveLength(1);
+    const loser = attempts.find((a) => !a.threw);
+    expect(loser && !loser.threw && loser.r.errors?._form?.[0]).toMatch(
+      /already converted/i,
+    );
+
+    expect(await prisma.matter.count()).toBe(1);
+    expect(await prisma.deadline.count()).toBe(1); // one SOL deadline
+    const matter = await prisma.matter.findFirstOrThrow({
+      select: { id: true },
+    });
+    const lead = await prisma.lead.findUniqueOrThrow({
+      where: { id: leadId },
+      select: { stage: true, convertedMatterId: true },
+    });
+    expect(lead).toEqual({ stage: "converted", convertedMatterId: matter.id });
+  });
+
+  test("a stale 'new' read cannot convert an already-converted lead", async () => {
+    const { areaId, stageId } = await seedArea({});
+    const { leadId } = await seedIntakeLead({ stage: "converted" });
+    const spy = stubStaleLeadRead("new");
+
+    const res = await convertLeadToMatter(
+      leadId,
+      { status: "idle" },
+      convertForm({ areaId, stageId }),
+    );
+    spy.mockRestore();
+
+    expect(res.status).toBe("error");
+    expect(res.errors?._form?.[0]).toMatch(/already converted/i);
+    expect(await prisma.matter.count()).toBe(0);
+  });
+});
+
+describe("declineLead — idempotent under concurrency", () => {
+  test("a stale 'new' read cannot flip a converted lead to declined", async () => {
+    const { leadId } = await seedIntakeLead({ stage: "converted" });
+    const spy = stubStaleLeadRead("new");
+
+    const res = await declineLead(
+      leadId,
+      { status: "idle" },
+      declineForm("too late"),
+    );
+    spy.mockRestore();
+
+    expect(res.status).toBe("error");
+    const lead = await prisma.lead.findUniqueOrThrow({
+      where: { id: leadId },
+      select: { stage: true, declineReason: true },
+    });
+    expect(lead.stage).toBe("converted");
+    expect(lead.declineReason).toBeNull();
+    expect(
+      await prisma.activityLog.count({
+        where: { title: { startsWith: "Lead declined" } },
+      }),
+    ).toBe(0);
+  });
+
+  test("declining twice is a no-op: one audit row, reason untouched", async () => {
+    const { leadId } = await seedIntakeLead();
+    const first = await declineLead(
+      leadId,
+      { status: "idle" },
+      declineForm("Statute already ran"),
+    );
+    expect(first.status).toBe("ok");
+
+    // A stale tab / double submit, even with an empty reason.
+    const second = await declineLead(
+      leadId,
+      { status: "idle" },
+      declineForm(""),
+    );
+    expect(second.status).toBe("error");
+    expect(second.errors?._form?.[0]).toMatch(/already declined/i);
+
+    const lead = await prisma.lead.findUniqueOrThrow({
+      where: { id: leadId },
+      select: { stage: true, declineReason: true },
+    });
+    expect(lead).toEqual({
+      stage: "declined",
+      declineReason: "Statute already ran",
+    });
+    expect(
+      await prisma.activityLog.count({
+        where: { title: { startsWith: "Lead declined" } },
+      }),
+    ).toBe(1);
+  });
+
+  test("a stale 'new' read cannot re-decline an already-declined lead", async () => {
+    const { leadId } = await seedIntakeLead({ stage: "declined" });
+    await prisma.lead.update({
+      where: { id: leadId },
+      data: { declineReason: "original" },
+    });
+    const spy = stubStaleLeadRead("new");
+
+    const res = await declineLead(
+      leadId,
+      { status: "idle" },
+      declineForm("overwrite"),
+    );
+    spy.mockRestore();
+
+    expect(res.status).toBe("error");
+    expect(res.errors?._form?.[0]).toMatch(/already declined/i);
+    const lead = await prisma.lead.findUniqueOrThrow({
+      where: { id: leadId },
+      select: { declineReason: true },
+    });
+    expect(lead.declineReason).toBe("original");
+    expect(
+      await prisma.activityLog.count({
+        where: { title: { startsWith: "Lead declined" } },
+      }),
+    ).toBe(0);
+  });
+
+  test("two simultaneous declines log exactly one decision", async () => {
+    const { leadId } = await seedIntakeLead();
+    const results = await Promise.all(
+      ["first", "second"].map((reason) =>
+        declineLead(leadId, { status: "idle" }, declineForm(reason)),
+      ),
+    );
+    expect(results.filter((r) => r.status === "ok")).toHaveLength(1);
+    expect(
+      await prisma.activityLog.count({
+        where: { title: { startsWith: "Lead declined" } },
+      }),
+    ).toBe(1);
+  });
+});
+
+describe("convertLeadToMatter — vs. decline", () => {
+  test("a decline committed after convert's read is not overwritten", async () => {
+    const { areaId, stageId } = await seedArea({});
+    const { leadId } = await seedIntakeLead({ stage: "declined" });
+    await prisma.lead.update({
+      where: { id: leadId },
+      data: { declineReason: "Statute already ran" },
+    });
+    // convert read the lead as 'new' before the decline committed.
+    const spy = stubStaleLeadRead("new");
+
+    const res = await convertLeadToMatter(
+      leadId,
+      { status: "idle" },
+      convertForm({ areaId, stageId }),
+    );
+    spy.mockRestore();
+
+    expect(res.status).toBe("error");
+    expect(res.errors?._form?.[0]).toMatch(/declined/i);
+    expect(await prisma.matter.count()).toBe(0);
+    const lead = await prisma.lead.findUniqueOrThrow({
+      where: { id: leadId },
+      select: { stage: true, declineReason: true, convertedMatterId: true },
+    });
+    expect(lead).toEqual({
+      stage: "declined",
+      declineReason: "Statute already ran",
+      convertedMatterId: null,
+    });
+  });
+
+  test("converting a lead that was declined when read clears its decline reason", async () => {
+    const { areaId, stageId } = await seedArea({});
+    const { leadId } = await seedIntakeLead({ stage: "declined" });
+    await prisma.lead.update({
+      where: { id: leadId },
+      data: { declineReason: "Changed their mind later" },
+    });
+
+    await expect(
+      convertLeadToMatter(
+        leadId,
+        { status: "idle" },
+        convertForm({ areaId, stageId }),
+      ),
+    ).rejects.toThrow(/^REDIRECT:/);
+
+    const lead = await prisma.lead.findUniqueOrThrow({
+      where: { id: leadId },
+      select: { stage: true, declineReason: true },
+    });
+    expect(lead).toEqual({ stage: "converted", declineReason: null });
   });
 });
