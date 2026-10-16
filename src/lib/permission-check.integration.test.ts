@@ -8,6 +8,7 @@
  *   - Multiple roles → union of grants.
  *   - Inactive users get nothing (even with admin role).
  *   - `requirePermission(...)` throws (redirect) when missing.
+ *   - `requirePermissions([...])` needs EVERY key (all-or-redirect).
  *   - `currentUserHasAnyPermission([...])` matches the doc.
  */
 
@@ -33,6 +34,7 @@ import {
   currentUserHasPermission,
   getCurrentUserPermissions,
   requirePermission,
+  requirePermissions,
 } from "@/lib/permission-check";
 import {
   resetDb,
@@ -200,6 +202,48 @@ describe("requirePermission — redirect on miss", () => {
 
     const out = await requirePermission("billing.send_invoice");
     expect(out).toBe(userId);
+  });
+});
+
+describe("requirePermissions — every key required", () => {
+  test("passes when all keys are held, returns the userId", async () => {
+    const { userId } = await seedUser({ firmId, roleIds: [customRoleId] });
+    mockedGetUser.mockResolvedValue(userId);
+    expect(await requirePermissions(["billing.send_invoice"])).toBe(userId);
+  });
+
+  test("an empty list passes", async () => {
+    const { userId } = await seedUser({ firmId, roleIds: [defaultRoleId] });
+    mockedGetUser.mockResolvedValue(userId);
+    expect(await requirePermissions([])).toBe(userId);
+  });
+
+  test("redirects when ANY one key is missing, even if others are held", async () => {
+    const { userId } = await seedUser({ firmId, roleIds: [customRoleId] });
+    mockedGetUser.mockResolvedValue(userId);
+    await expect(
+      requirePermissions(["billing.send_invoice", "matters.delete"])
+    ).rejects.toThrow(/__REDIRECT__:\//);
+  });
+
+  test("admins pass regardless of keys", async () => {
+    const { userId } = await seedUser({ firmId, roleIds: [adminRoleId] });
+    mockedGetUser.mockResolvedValue(userId);
+    expect(
+      await requirePermissions(["matters.delete", "billing.send_invoice"])
+    ).toBe(userId);
+  });
+
+  test("inactive users are denied (even holding the keys)", async () => {
+    const { userId } = await seedUser({
+      firmId,
+      roleIds: [customRoleId],
+      isActive: false,
+    });
+    mockedGetUser.mockResolvedValue(userId);
+    await expect(
+      requirePermissions(["billing.send_invoice"])
+    ).rejects.toThrow(/__REDIRECT__:\//);
   });
 });
 

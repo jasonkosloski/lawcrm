@@ -12,9 +12,12 @@
  *
  * Auth: each entry-point gates on the primary's create permission
  * (tasks.create / events.create / deadlines.create /
- * time_entries.create). Sibling captures inherit the primary's
- * gate — the model is "if you can create X, you can attach a Y to
- * it." Admins short-circuit either way.
+ * time_entries.create) AND, before any write, on the create
+ * permission of every sibling kind it carries (see
+ * `requiredCapturePermissions`; a pinned sibling note also needs
+ * notes.pin). Siblings do NOT inherit the primary's gate — denying
+ * time_entries.create closes every time-logging entry point
+ * (ADR-013). Admins short-circuit either way.
  */
 
 "use server";
@@ -28,7 +31,16 @@ import { getCurrentUserId } from "@/lib/current-user";
 // for anyone west of UTC. Datetime-local values (event start/end)
 // still go through `new Date(...)`, which parses them as local.
 import { parseLocalDate } from "@/lib/format-date";
-import { requirePermission } from "@/lib/permission-check";
+import {
+  requirePermission,
+  requirePermissions,
+} from "@/lib/permission-check";
+import { requiredCapturePermissions } from "@/lib/capture-permissions";
+import {
+  addDefaultEventAttendees,
+  resolveAutoAddTeam,
+} from "@/lib/calendar-default-attendees";
+import { pushEventToGoogle } from "@/lib/google/google-calendar-push";
 import { DEADLINE_KINDS } from "@/lib/constants/deadline-status";
 import { EVENT_TYPES } from "@/lib/constants/calendar-event-type";
 import { TASK_PRIORITIES } from "@/lib/constants/priority";
@@ -56,11 +68,34 @@ type PrimaryRef =
   | { kind: "time"; id: string }
   | null;
 
+/** Per-request context for sibling creation. `autoAddTeam` is the
+ *  effective calendar default, resolved BEFORE the transaction;
+ *  `createdEventIds` collects sibling events so the caller can push
+ *  them to Google Calendar AFTER the commit (never inside the tx). */
+type CaptureCtx = { autoAddTeam: boolean; createdEventIds: string[] };
+
+async function buildCaptureCtx(
+  matterId: string,
+  captures: ValidCapture[]
+): Promise<CaptureCtx> {
+  return {
+    autoAddTeam: await resolveAutoAddTeam(matterId, captures),
+    createdEventIds: [],
+  };
+}
+
+/** Push sibling/primary events to the creator's Google Calendar
+ *  after the local commit. `pushEventToGoogle` never rejects. */
+async function pushCreatedEvents(ids: string[]): Promise<void> {
+  for (const id of ids) await pushEventToGoogle(id);
+}
+
 async function createCaptureRecord(
   tx: Tx,
   cap: ValidCapture,
   matterId: string,
   userId: string,
+  ctx: CaptureCtx,
   linkToPrimary: PrimaryRef = null
 ): Promise<void> {
   if (cap.kind === "task") {
@@ -88,16 +123,28 @@ async function createCaptureRecord(
       },
     });
   } else if (cap.kind === "event") {
-    await tx.calendarEvent.create({
+    // Same shape as the primary event path: a creator (so the push to
+    // Google and the creator's edit rights work) plus the default
+    // attendees (min-firm-attendee invariant).
+    const ev = await tx.calendarEvent.create({
       data: {
         matterId,
+        createdById: userId,
         title: cap.title,
         type: cap.type,
         startTime: new Date(cap.startTime),
         endTime: new Date(cap.endTime),
         location: cap.location || null,
       },
+      select: { id: true },
     });
+    await addDefaultEventAttendees(tx, {
+      eventId: ev.id,
+      matterId,
+      userId,
+      autoAddTeam: ctx.autoAddTeam,
+    });
+    ctx.createdEventIds.push(ev.id);
   } else if (cap.kind === "deadline") {
     await tx.deadline.create({
       data: {
@@ -260,7 +307,11 @@ export async function createTaskWithCaptures(
     };
   }
 
+  // Every sibling kind must clear its own create gate BEFORE any
+  // write (the primary's key was checked above).
+  await requirePermissions(requiredCapturePermissions(attach.captures));
   const userId = await getCurrentUserId();
+  const ctx = await buildCaptureCtx(matterId, attach.captures);
 
   // Resolve the assignee picker's tri-state (see taskSchema):
   // absent → self-assign (pre-picker behavior), "" → unassigned,
@@ -293,13 +344,14 @@ export async function createTaskWithCaptures(
       select: { id: true },
     });
     for (const cap of attach.captures) {
-      await createCaptureRecord(tx, cap, matterId, userId, {
+      await createCaptureRecord(tx, cap, matterId, userId, ctx, {
         kind: "task",
         id: task.id,
       });
     }
   });
 
+  await pushCreatedEvents(ctx.createdEventIds);
   revalidateTouched(matterId, attach.captures, "task");
   await logActivity({
     matterId,
@@ -398,6 +450,7 @@ export async function createEventWithCaptures(
     };
   }
 
+  await requirePermissions(requiredCapturePermissions(attach.captures));
   const userId = await getCurrentUserId();
 
   // Resolve calendar defaults BEFORE the transaction so we can
@@ -405,8 +458,12 @@ export async function createEventWithCaptures(
   // resolver inherits matter override → firm setting; result
   // is a concrete boolean.
   const defaults = await getEffectiveCalendarDefaults(matterId);
+  const ctx: CaptureCtx = {
+    autoAddTeam: defaults.autoAddTeamToNewEvents,
+    createdEventIds: [],
+  };
 
-  await prisma.$transaction(async (tx) => {
+  const eventId = await prisma.$transaction(async (tx) => {
     const event = await tx.calendarEvent.create({
       data: {
         matterId,
@@ -422,70 +479,25 @@ export async function createEventWithCaptures(
       select: { id: true },
     });
     for (const cap of attach.captures) {
-      await createCaptureRecord(tx, cap, matterId, userId, {
+      await createCaptureRecord(tx, cap, matterId, userId, ctx, {
         kind: "event",
         id: event.id,
       });
     }
-
-    // Auto-add matter team members as attendees when the
-    // effective setting says so. Each team member becomes a
-    // typed `kind: user` attendee — same shape the modal
-    // picker creates. We snapshot name/email so a future
-    // user rename doesn't silently rewrite past attendance.
-    //
-    // The creator is added either as part of the team list
-    // (when they're on the matter team) or as a fallback after
-    // the team-add block — either way, the
-    // min-firm-attendee invariant holds.
-    const creatorAttendee = await tx.user.findUniqueOrThrow({
-      where: { id: userId },
-      select: { name: true, email: true },
+    // Default attendees (matter team when auto-add is on, creator
+    // always) — shared with the sibling-event paths.
+    await addDefaultEventAttendees(tx, {
+      eventId: event.id,
+      matterId,
+      userId,
+      autoAddTeam: defaults.autoAddTeamToNewEvents,
     });
-    let creatorAlreadyAdded = false;
-    if (defaults.autoAddTeamToNewEvents) {
-      const team = await tx.matterTeamMember.findMany({
-        where: { matterId, removedAt: null },
-        select: {
-          user: { select: { id: true, name: true, email: true } },
-        },
-      });
-      if (team.length > 0) {
-        await tx.calendarAttendee.createMany({
-          // Auto-added teammates are implicitly attending — the
-          // event was just created on their matter, presumably
-          // because they're going to be at it. Status `accepted`
-          // suppresses the modal's pending pill (which would
-          // otherwise read as "everyone's still deciding").
-          data: team.map((t) => ({
-            eventId: event.id,
-            userId: t.user.id,
-            name: t.user.name,
-            email: t.user.email,
-            status: "accepted",
-          })),
-        });
-        if (team.some((t) => t.user.id === userId)) {
-          creatorAlreadyAdded = true;
-        }
-      }
-    }
-    // Fallback: ensure the creator is on the attendee list.
-    // Without it a creator-not-on-team + auto-add-off (or empty
-    // team) would leave the event with zero firm attendees,
-    // violating the invariant.
-    if (!creatorAlreadyAdded) {
-      await tx.calendarAttendee.create({
-        data: {
-          eventId: event.id,
-          userId,
-          name: creatorAttendee.name,
-          email: creatorAttendee.email,
-          status: "accepted",
-        },
-      });
-    }
+    return event.id;
   });
+
+  // Google Calendar push — after the local commit, like the
+  // calendar-events.ts create path. Never rejects.
+  await pushCreatedEvents([eventId, ...ctx.createdEventIds]);
 
   revalidateTouched(matterId, attach.captures, "event");
   await logActivity({
@@ -544,7 +556,9 @@ export async function createDeadlineWithCaptures(
     };
   }
 
+  await requirePermissions(requiredCapturePermissions(attach.captures));
   const userId = await getCurrentUserId();
+  const ctx = await buildCaptureCtx(matterId, attach.captures);
 
   await prisma.$transaction(async (tx) => {
     const deadline = await tx.deadline.create({
@@ -560,13 +574,14 @@ export async function createDeadlineWithCaptures(
       select: { id: true },
     });
     for (const cap of attach.captures) {
-      await createCaptureRecord(tx, cap, matterId, userId, {
+      await createCaptureRecord(tx, cap, matterId, userId, ctx, {
         kind: "deadline",
         id: deadline.id,
       });
     }
   });
 
+  await pushCreatedEvents(ctx.createdEventIds);
   revalidateTouched(matterId, attach.captures, "deadline");
   await logActivity({
     matterId,
@@ -639,7 +654,9 @@ export async function createTimeEntryWithCaptures(
     };
   }
 
+  await requirePermissions(requiredCapturePermissions(attach.captures));
   const userId = await getCurrentUserId();
+  const ctx = await buildCaptureCtx(matterId, attach.captures);
 
   await prisma.$transaction(async (tx) => {
     const entry = await tx.timeEntry.create({
@@ -659,13 +676,14 @@ export async function createTimeEntryWithCaptures(
       select: { id: true },
     });
     for (const cap of attach.captures) {
-      await createCaptureRecord(tx, cap, matterId, userId, {
+      await createCaptureRecord(tx, cap, matterId, userId, ctx, {
         kind: "time",
         id: entry.id,
       });
     }
   });
 
+  await pushCreatedEvents(ctx.createdEventIds);
   revalidateTouched(matterId, attach.captures, "time");
   await logActivity({
     matterId,

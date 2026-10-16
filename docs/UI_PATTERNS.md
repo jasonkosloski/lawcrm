@@ -159,6 +159,15 @@ the matter-detail Communication tab to switch between the embedded email
 inbox and the matter Phone log (`matter-phone-log.tsx`). Action affordances
 (e.g. the "Log call" button) sit to the right of the toggle on the same row.
 
+### Permission-aware composer controls (`NoteComposer` `canPin`)
+
+Composer controls that map to a gated capability take an explicit
+boolean prop computed server-side with `currentUserHasPermission` and
+default it to `false` so the control fails closed (`<NoteComposer canPin />`
+shows the Pin toggle; omitted hides it and never submits `isPinned`).
+The prop is cosmetic: the server action re-checks (`notes.pin`) on every
+call. Pages rendering the composer must pass the flag.
+
 ### Sortable Column Header
 
 Three-state click cycle: asc → desc → clear (see ADR-009).

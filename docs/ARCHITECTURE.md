@@ -116,6 +116,13 @@ state (e.g. `useOptimistic`), not a client cache.
   pure date planning in `deadline-plan.ts`, transactional apply in `apply.ts`),
   applied on demand from a matter or automatically on `matter_created` via
   AutoApply defaults (ADR-019).
+- **Captures / notes**: a note or primary capture may create sibling records
+  (task / event / deadline / time / note). Each kind is gated by its own create
+  key, computed up front by `src/lib/capture-permissions.ts` and enforced with
+  `requirePermissions` (ADR-020). Events minted this way share
+  `src/lib/calendar-default-attendees.ts` (default attendees, min-firm-attendee
+  invariant) with the calendar create path and are pushed to Google Calendar
+  after commit.
 - **Audit log**: mutating actions record to the activity log (`src/lib/activity-log.ts`),
   surfaced at Settings → Activity.
 

@@ -298,6 +298,50 @@ Throws a `redirect("/")` when the check fails — same UX as
 `requireAdmin()` had for non-admins. Returns the userId for chaining
 into the action body.
 
+### Multi-key guard (`requirePermissions`)
+
+```ts
+import { requirePermissions } from "@/lib/permission-check";
+
+await requirePermissions(["tasks.create", "events.create"]);
+```
+
+Requires EVERY key (empty list passes; Admin always passes), resolving
+grants once and bouncing to `/` on the first missing key. Use it when
+one request creates several record kinds, and call it BEFORE the first
+write.
+
+### Captures and notes: per-kind create gates
+
+A note or primary capture (task / event / deadline / time entry) can
+carry "sibling" captures that create further records. **Siblings do not
+inherit the primary's gate** (ADR-020): every record kind must clear
+its own create key, whichever surface carried it.
+
+| Kind created | Key |
+|---|---|
+| task | `tasks.create` |
+| event | `events.create` |
+| deadline | `deadlines.create` |
+| time entry | `time_entries.create` |
+| note (sibling or primary) | `notes.create` |
+| pinned note / pinned sibling note | `notes.pin` (in addition to `notes.create`) |
+
+The required set is computed from the capture list by
+`requiredCapturePermissions` (`src/lib/capture-permissions.ts`, pure and
+unit-tested) and enforced with `requirePermissions` before any write in
+`createNote` (`notes.ts`), the primary composers (`captures.ts`) and the
+bulk-attach action (`note-attachments.ts`, which ignores `note_sibling`).
+Pinning at create time needs `notes.pin` exactly like toggling a pin
+later; the Pin toggle in `NoteComposer` is hidden without it (`canPin`).
+
+### Deleting a note that has replies
+
+`deleteNote` cascades to every reply (any depth). The author-may-delete
+rule covers the author's own words only: if anyone **else** replied, the
+delete also destroys their content, so it requires `notes.delete_any`
+even for the author. Non-authors always need `notes.delete_any`.
+
 ### `requireAdmin()` / `isCurrentUserAdmin()` — when to use them
 
 The admin-as-concept helpers in `src/lib/firm.ts` stay. Use them when
@@ -536,7 +580,8 @@ boxes."
 |-------------------------------------------------------------------|-----------------------------------------------------------------|
 | `prisma/schema.prisma`                                            | `Role`, `UserRole`, `RolePermission` definitions                |
 | `src/lib/permissions.ts`                                          | Static catalog + helpers (`PERMISSION_KEYS`, `isKnownPermission`)|
-| `src/lib/permission-check.ts`                                     | Runtime helpers (`currentUserHasPermission`, `requirePermission`, etc.) |
+| `src/lib/permission-check.ts`                                     | Runtime helpers (`currentUserHasPermission`, `requirePermission`, `requirePermissions`, etc.) |
+| `src/lib/capture-permissions.ts`                                  | Kind to create-key map + `requiredCapturePermissions` for captures/notes |
 | `src/lib/firm.ts`                                                 | `requireAdmin` / `isCurrentUserAdmin` (admin-as-concept)        |
 | `src/lib/role-constants.ts`                                       | `ADMIN_ROLE_NAME` / `DEFAULT_ROLE_NAME`                         |
 | `src/app/actions/roles.ts`                                        | Role CRUD + `setRolePermissionAction`                           |
@@ -569,3 +614,4 @@ Beyond page-level keys, some matter data is filtered per viewer inside the query
 
 - **Events tab / event labels** — calendar event visibility (`canViewEventDetails`), not a permission key: events the viewer can't see are "Busy".
 - **Timeline** — settlement rows need `matters.settlement.view`, expense rows need `matters.expense.view`; without them the rows are omitted (`activityMoneyFilters` in `src/lib/queries/matter-detail.ts`).
+| 2026-10-16 | Captures and notes enforce per-kind create gates (siblings no longer inherit the primary's gate, ADR-020): `requirePermissions` + `requiredCapturePermissions`; pinning at create needs `notes.pin`; deleting a note others replied to needs `notes.delete_any`; note edit/pin/delete write activity entries. No new keys. |

@@ -26,9 +26,23 @@ import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vi
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
-vi.mock("@/lib/permission-check", () => ({
-  requirePermission: vi.fn().mockResolvedValue("test-user"),
-  currentUserHasPermission: vi.fn().mockResolvedValue(true),
+vi.mock("@/lib/permission-check", () => {
+  const requirePermission = vi.fn().mockResolvedValue("test-user");
+  return {
+    requirePermission,
+    // Multi-key gate: delegate per key so tests can deny one key via
+    // the requirePermission mock (and assert which keys were demanded).
+    requirePermissions: vi.fn(async (keys: Iterable<string>) => {
+      for (const key of keys) await requirePermission(key);
+      return "test-user";
+    }),
+    currentUserHasPermission: vi.fn().mockResolvedValue(true),
+  };
+});
+// Sibling/primary events push to Google after commit; the push module
+// is covered by its own suite, so stub it and assert the calls.
+vi.mock("@/lib/google/google-calendar-push", () => ({
+  pushEventToGoogle: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { getCurrentUserId } from "@/lib/current-user";

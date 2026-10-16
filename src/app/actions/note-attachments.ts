@@ -22,7 +22,16 @@ import { getCurrentUserId } from "@/lib/current-user";
 // `new Date(value)` reads them as UTC midnight, drifting the day
 // for anyone west of UTC. See parseLocalDate docs.
 import { parseLocalDate } from "@/lib/format-date";
-import { requirePermission } from "@/lib/permission-check";
+import {
+  requirePermission,
+  requirePermissions,
+} from "@/lib/permission-check";
+import { requiredCapturePermissions } from "@/lib/capture-permissions";
+import {
+  addDefaultEventAttendees,
+  resolveAutoAddTeam,
+} from "@/lib/calendar-default-attendees";
+import { pushEventToGoogle } from "@/lib/google/google-calendar-push";
 import { DEADLINE_KINDS } from "@/lib/constants/deadline-status";
 import { TASK_PRIORITIES } from "@/lib/constants/priority";
 import { logActivity } from "@/lib/activity-log";
@@ -276,17 +285,6 @@ const bulkSchema = z.object({
   attachments: z.string().min(2, "Nothing to save"),
 });
 
-/** Permission key each capture kind's standalone create path gates
- *  on (see `captures.ts`) — the bulk-attach surface must enforce the
- *  same capabilities or it becomes a bypass. `note_sibling` has no
- *  entry because the bulk loop deliberately ignores it. */
-const CAPTURE_CREATE_PERMISSION: Partial<Record<ValidCapture["kind"], string>> = {
-  task: "tasks.create",
-  deadline: "deadlines.create",
-  time: "time_entries.create",
-  event: "events.create",
-};
-
 /**
  * Bulk-attach the contents of a CaptureStack to a saved note in
  * one transaction. Mirrors the capture-loop in `createNote` but
@@ -341,17 +339,15 @@ export async function addCapturesToNoteBulk(
     return { status: "error", errors: {}, attachmentErrors };
   }
 
-  // Gate on the union of capabilities the payload exercises. One
-  // denied kind rejects the whole batch — it's a single transaction,
-  // so partially applying the stack would be surprising.
-  const requiredPermissions = new Set<string>();
-  for (const cap of validCaptures) {
-    const key = CAPTURE_CREATE_PERMISSION[cap.kind];
-    if (key) requiredPermissions.add(key);
-  }
-  for (const key of requiredPermissions) {
-    await requirePermission(key);
-  }
+  // Gate on the union of capabilities the payload exercises (shared
+  // with createNote / the primary composers). One denied kind rejects
+  // the whole batch — it's a single transaction, so partially applying
+  // the stack would be surprising. `note_sibling` is ignored by this
+  // surface's loop (replies belong to the reply composer), so it needs
+  // no key here.
+  await requirePermissions(
+    requiredCapturePermissions(validCaptures, { ignoreKinds: ["note_sibling"] })
+  );
 
   const note = await resolveNoteMatter(noteId);
   if (!note) {
@@ -362,6 +358,8 @@ export async function addCapturesToNoteBulk(
   }
 
   const userId = await getCurrentUserId();
+  const autoAddTeam = await resolveAutoAddTeam(note.matterId, validCaptures);
+  const createdEventIds: string[] = [];
   await prisma.$transaction(async (tx) => {
     for (const cap of validCaptures) {
       if (cap.kind === "task") {
@@ -406,21 +404,36 @@ export async function addCapturesToNoteBulk(
         // Events have their own primary surface; the link from
         // note-via-eventId is a thinner association. Don't set
         // noteId — Note.calendarEventId is the existing channel.
-        await tx.calendarEvent.create({
+        // Creator + default attendees, same as the Events composer, so
+        // the creator can see/edit it and it can sync to Google.
+        const ev = await tx.calendarEvent.create({
           data: {
             matterId: note.matterId,
+            createdById: userId,
             title: cap.title,
             type: cap.type,
             startTime: new Date(cap.startTime),
             endTime: new Date(cap.endTime),
             location: cap.location || null,
           },
+          select: { id: true },
         });
+        await addDefaultEventAttendees(tx, {
+          eventId: ev.id,
+          matterId: note.matterId,
+          userId,
+          autoAddTeam,
+        });
+        createdEventIds.push(ev.id);
       }
       // `note_sibling` deliberately ignored — replies belong to
       // the reply composer, not the bulk-attach surface.
     }
   });
+
+  // Google Calendar push for the new events — after the commit.
+  // Never rejects.
+  for (const id of createdEventIds) await pushEventToGoogle(id);
 
   // Revalidate every kind that was touched.
   const kinds = new Set(validCaptures.map((c) => c.kind));

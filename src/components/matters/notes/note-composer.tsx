@@ -27,7 +27,17 @@ import {
 import { NoteEditor } from "./note-editor";
 import { CaptureStack } from "@/components/matters/captures/capture-stack";
 
-export function NoteComposer({ matterId }: { matterId: string }) {
+export function NoteComposer({
+  matterId,
+  canPin = false,
+}: {
+  matterId: string;
+  /** Whether the viewer holds `notes.pin`. The Pin toggle is hidden
+   *  without it — createNote rejects a pinned note from anyone who
+   *  lacks the key. Defaults to false (hidden) so a caller that
+   *  forgets to resolve it fails closed. */
+  canPin?: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
   const boundCreate = createNote.bind(null, matterId);
   // Wrapped useActionState: masks state left over from a previous
@@ -75,7 +85,7 @@ export function NoteComposer({ matterId }: { matterId: string }) {
           {/* Hidden fields mirror local state so the submit carries them. */}
           <input type="hidden" name="content" value={html} />
           <input type="hidden" name="type" value={type} />
-          {pin && <input type="hidden" name="isPinned" value="on" />}
+          {canPin && pin && <input type="hidden" name="isPinned" value="on" />}
           <input
             type="hidden"
             name="attachments"
@@ -135,24 +145,26 @@ export function NoteComposer({ matterId }: { matterId: string }) {
                     ))}
                   </div>
 
-                  {/* Pin toggle */}
-                  <button
-                    type="button"
-                    onClick={() => setPin((p) => !p)}
-                    aria-pressed={pin}
-                    className={cn(
-                      "inline-flex items-center gap-1 h-6 px-2 rounded-md text-2xs font-medium border transition-colors",
-                      pin
-                        ? "bg-brand-soft text-brand-700 border-brand-200"
-                        : "bg-white text-ink-3 border-line hover:text-brand-700 hover:border-brand-300"
-                    )}
-                  >
-                    <Pin
-                      size={11}
-                      className={pin ? "fill-brand-500 text-brand-500" : ""}
-                    />
-                    Pin
-                  </button>
+                  {/* Pin toggle — notes.pin holders only */}
+                  {canPin && (
+                    <button
+                      type="button"
+                      onClick={() => setPin((p) => !p)}
+                      aria-pressed={pin}
+                      className={cn(
+                        "inline-flex items-center gap-1 h-6 px-2 rounded-md text-2xs font-medium border transition-colors",
+                        pin
+                          ? "bg-brand-soft text-brand-700 border-brand-200"
+                          : "bg-white text-ink-3 border-line hover:text-brand-700 hover:border-brand-300"
+                      )}
+                    >
+                      <Pin
+                        size={11}
+                        className={pin ? "fill-brand-500 text-brand-500" : ""}
+                      />
+                      Pin
+                    </button>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">

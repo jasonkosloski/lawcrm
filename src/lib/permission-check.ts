@@ -119,6 +119,26 @@ export async function getCurrentUserPermissions(): Promise<{
   return resolveCurrentUserPermissions();
 }
 
+/** Multi-key server-action guard. Requires EVERY key in `permissions`
+ *  (an empty list passes). Resolves the user's grants once, then
+ *  bounces to the dashboard on the first missing key — before the
+ *  caller has written anything. Used by actions that create several
+ *  record kinds in one request (note/primary captures), where each
+ *  kind must clear its own create gate. Admin always passes. Returns
+ *  the userId like `requirePermission`. */
+export async function requirePermissions(
+  permissions: Iterable<string>
+): Promise<string> {
+  const userId = await getCurrentUserId();
+  const { isAdmin, granted } = await resolveCurrentUserPermissions();
+  if (!isAdmin) {
+    for (const key of permissions) {
+      if (!granted.has(key)) redirect("/");
+    }
+  }
+  return userId;
+}
+
 /** Server-action guard. Bounces users without `permission` to the
  *  dashboard. Admin always passes. Returns the userId for chaining
  *  into the action body, mirroring `requireAdmin()`. */

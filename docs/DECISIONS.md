@@ -390,6 +390,7 @@ The original decision stored date-only values at **server-local** midnight and d
 ## ADR-020: Security-header baseline, no CSP yet, and "no class on user HTML"
 ## ADR-020: Google sync skips only deterministic failures; catch-up never advances past an open gap; Google cancel is unlink-only
 ## ADR-020: Invoice line items are draft-only; money is rounded per line (HALF_UP, cents)
+## ADR-020: Captures do not inherit the primary's permission gate - every record kind clears its own create key
 
 **Date:** 2026-10-16
 **Status:** Accepted
@@ -468,3 +469,16 @@ The original decision stored date-only values at **server-local** midnight and d
 - (+) Concurrent approve/send/void/edit can't silently overwrite each other
 - (-) Fixing a typo on an approved invoice costs a void and regenerate
 - (-) Columns are still wider than 2 dp until the planned DECIMAL(14,2) migration
+**Context:** Notes and the primary composers (task / event / deadline / time) can carry sibling captures that create other record kinds in the same transaction. Each entry point used to gate only on the primary's key, so a role holding just `notes.create` could mint tasks, deadlines, events or billable time entries through a note's attachments, bypassing the specific keys (and ADR-013's "denying `time_entries.create` closes every time-logging entry point").
+
+**Decision:**
+- The set of required keys is computed from the capture list BEFORE any write (`requiredCapturePermissions`, `src/lib/capture-permissions.ts`) and enforced with `requirePermissions` (`src/lib/permission-check.ts`): `tasks.create`, `events.create`, `deadlines.create`, `time_entries.create`, `notes.create`, plus `notes.pin` when a primary note or sibling note is pinned.
+- The same helper backs `createNote`, the primary composers in `captures.ts` and the bulk-attach action, so no surface can drift.
+- Deleting a note cascades to its replies, so when anyone other than the actor replied (any depth) the delete needs `notes.delete_any` even for the author.
+- Event records minted through captures behave like the calendar create path: `createdById`, default attendees (`src/lib/calendar-default-attendees.ts`) and a post-commit Google Calendar push.
+
+**Trade-offs:**
+- (+) One key per capability holds regardless of which composer carried it
+- (+) Denial happens before any write, so there is no partial thread to clean up
+- (-) A denial redirects to `/`, so a user whose draft carries an attachment they may not create loses the draft; the capture stack still offers every kind (follow-up: pass allowed kinds + `canPin` into `CaptureStack`)
+- (-) Keys are plain strings (no `PermissionKey` union exists); `capture-permissions.test.ts` asserts every mapped key is known to `isKnownPermission`

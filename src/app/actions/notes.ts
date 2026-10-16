@@ -9,11 +9,16 @@
  * can render it with dangerouslySetInnerHTML without re-sanitizing.
  *
  * Auth:
- *   - createNote: `notes.create`
+ *   - createNote: `notes.create`, PLUS the create key of every
+ *     capture kind it carries (tasks/events/deadlines/time_entries
+ *     .create) and `notes.pin` when the note or a sibling note is
+ *     pinned — all checked before any write
  *   - toggleNotePin: `notes.pin` (no author bypass — pinning is a
  *     firm-wide signal, usually reserved for case leads)
  *   - deleteNote: author bypass + `notes.delete_any` for crossing
- *     ownership
+ *     ownership. The author bypass does NOT extend to a thread
+ *     other people replied to: the delete cascades to replies, so
+ *     removing a note with others' replies needs `notes.delete_any`
  *   - updateNote: author bypass + `notes.edit_any` for crossing
  *     ownership. Never touches isPinned — pinning stays behind
  *     toggleNotePin's `notes.pin` gate.
@@ -26,13 +31,23 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
+import { prisma, type Tx } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 // Capture date fields are schema-validated "YYYY-MM-DD" — parse to
 // LOCAL midnight via parseLocalDate. `new Date(value)` would read
 // them as UTC midnight and drift the day for anyone west of UTC.
 import { parseLocalDate } from "@/lib/format-date";
-import { requirePermission } from "@/lib/permission-check";
+import {
+  currentUserHasPermission,
+  requirePermission,
+  requirePermissions,
+} from "@/lib/permission-check";
+import { requiredCapturePermissions } from "@/lib/capture-permissions";
+import {
+  addDefaultEventAttendees,
+  resolveAutoAddTeam,
+} from "@/lib/calendar-default-attendees";
+import { pushEventToGoogle } from "@/lib/google/google-calendar-push";
 import {
   NOTE_TYPES,
   REACTION_EMOJIS,
@@ -66,6 +81,15 @@ const noteSchema = z.object({
 // Capture schemas + types live in src/lib/capture-schemas.ts so both
 // this action and the Task/Event/Deadline/Time composers' actions
 // can share a single parse + validation path.
+
+/** Short plain-text preview of note HTML for activity-log entries. */
+function notePreview(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+}
 
 // ── Create ──────────────────────────────────────────────────────────────
 
@@ -131,6 +155,15 @@ export async function createNote(
       values: raw,
     };
   }
+
+  // Every record kind the note carries must clear its own create
+  // gate (and pinning needs notes.pin) BEFORE any write — notes.create
+  // alone must not mint tasks / deadlines / events / billable time.
+  await requirePermissions(
+    requiredCapturePermissions(validCaptures, {
+      pinRequested: parsed.data.isPinned === "on",
+    })
+  );
 
   // Guard the matter actually exists — cheap, avoids cryptic FK errors.
   const matter = await prisma.matter.findUnique({
@@ -216,6 +249,9 @@ export async function createNote(
   }
 
   const currentUserId = await getCurrentUserId();
+  // Calendar defaults for any sibling event, resolved before the tx.
+  const autoAddTeam = await resolveAutoAddTeam(matterId, validCaptures);
+  const createdEventIds: string[] = [];
 
   // One transaction — note plus all captures. If anything fails we
   // roll back everything so the user never sees a partial save.
@@ -259,16 +295,28 @@ export async function createNote(
       } else if (cap.kind === "event") {
         // Events deliberately don't carry noteId — the events tab is
         // their primary surface; the note's link chip is sufficient.
-        await tx.calendarEvent.create({
+        // They do carry a creator + the default attendees (same as the
+        // Events composer) so the creator can see/edit them and the
+        // Google push has an owner to push for.
+        const ev = await tx.calendarEvent.create({
           data: {
             matterId,
+            createdById: currentUserId,
             title: cap.title,
             type: cap.type,
             startTime: new Date(cap.startTime),
             endTime: new Date(cap.endTime),
             location: cap.location || null,
           },
+          select: { id: true },
         });
+        await addDefaultEventAttendees(tx, {
+          eventId: ev.id,
+          matterId,
+          userId: currentUserId,
+          autoAddTeam,
+        });
+        createdEventIds.push(ev.id);
       } else if (cap.kind === "deadline") {
         await tx.deadline.create({
           data: {
@@ -313,6 +361,10 @@ export async function createNote(
     }
   });
 
+  // Google Calendar push for sibling events — after the commit,
+  // never inside the transaction. Never rejects.
+  for (const id of createdEventIds) await pushEventToGoogle(id);
+
   revalidatePath(`/matters/${matterId}/notes`);
   // Overview tab shows a pinned-note preview + deadline/task previews
   // that can move when captures are attached. Any captures also feed
@@ -341,12 +393,7 @@ export async function createNote(
   // Activity log — let the dashboard "Recent activity" reflect the
   // real write. Title is a short preview of the note body so the
   // entry is meaningful without expanding it.
-  const previewText =
-    clean
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 80) || "Note added";
+  const previewText = notePreview(clean) || "Note added";
   await logActivity({
     matterId,
     userId: currentUserId,
@@ -363,10 +410,16 @@ export async function createNote(
 export async function toggleNotePin(
   noteId: string
 ): Promise<{ ok: boolean; error?: string }> {
-  await requirePermission("notes.pin");
+  const actorId = await requirePermission("notes.pin");
   const note = await prisma.note.findUnique({
     where: { id: noteId },
-    select: { id: true, isPinned: true, matterId: true, calendarEventId: true },
+    select: {
+      id: true,
+      isPinned: true,
+      matterId: true,
+      calendarEventId: true,
+      content: true,
+    },
   });
   if (!note) return { ok: false, error: "Note not found" };
 
@@ -381,17 +434,50 @@ export async function toggleNotePin(
     revalidatePath(`/matters/${note.matterId}/events`);
     revalidatePath(`/calendar`);
   }
+  await logActivity({
+    matterId: note.matterId,
+    userId: actorId,
+    type: "note",
+    title: note.isPinned ? "Note unpinned" : "Note pinned",
+    detail: notePreview(note.content),
+  });
   return { ok: true };
 }
 
 // ── Delete ──────────────────────────────────────────────────────────────
+
+/** Every descendant reply of `rootId` (any depth) with its author.
+ *  Replies nest, and the schema cascades the whole sub-thread, so a
+ *  one-level lookup would miss deeper replies by other people. */
+async function collectReplies(
+  tx: Tx,
+  rootId: string
+): Promise<Array<{ id: string; authorId: string | null }>> {
+  const found: Array<{ id: string; authorId: string | null }> = [];
+  let level = [rootId];
+  while (level.length > 0) {
+    const rows = await tx.note.findMany({
+      where: { parentNoteId: { in: level } },
+      select: { id: true, authorId: true },
+    });
+    found.push(...rows);
+    level = rows.map((r) => r.id);
+  }
+  return found;
+}
 
 export async function deleteNote(
   noteId: string
 ): Promise<{ ok: boolean; error?: string }> {
   const note = await prisma.note.findUnique({
     where: { id: noteId },
-    select: { id: true, authorId: true, matterId: true, calendarEventId: true },
+    select: {
+      id: true,
+      authorId: true,
+      matterId: true,
+      calendarEventId: true,
+      content: true,
+    },
   });
   if (!note) return { ok: false, error: "Note not found" };
 
@@ -400,8 +486,33 @@ export async function deleteNote(
   if (note.authorId !== actorId) {
     await requirePermission("notes.delete_any");
   }
+  const canDeleteAny = await currentUserHasPermission("notes.delete_any");
 
-  await prisma.note.delete({ where: { id: noteId } });
+  // The delete cascades to every reply. The author bypass covers
+  // the author's own words only: if anyone else replied (at any
+  // depth) removing the thread destroys their content, so it takes
+  // notes.delete_any. Counted + deleted in one transaction to keep
+  // the check and the delete close together; at READ COMMITTED this
+  // narrows, not closes, the window - a reply inserted between the
+  // count and the delete would still cascade. Accepted: the window
+  // is milliseconds and replies are only deleted along with a thread
+  // the caller was already entitled to remove.
+  const outcome = await prisma.$transaction(async (tx) => {
+    const replies = await collectReplies(tx, noteId);
+    const othersReplies = replies.filter((r) => r.authorId !== actorId).length;
+    if (othersReplies > 0 && !canDeleteAny) {
+      return { blocked: true as const, othersReplies };
+    }
+    await tx.note.delete({ where: { id: noteId } });
+    return { blocked: false as const, replyCount: replies.length };
+  });
+  if (outcome.blocked) {
+    return {
+      ok: false,
+      error:
+        "Other people have replied to this note, so deleting it would delete their replies too. Ask someone with permission to delete it.",
+    };
+  }
 
   revalidatePath(`/matters/${note.matterId}/notes`);
   revalidatePath(`/matters/${note.matterId}`);
@@ -409,6 +520,16 @@ export async function deleteNote(
     revalidatePath(`/matters/${note.matterId}/events`);
     revalidatePath(`/calendar`);
   }
+  await logActivity({
+    matterId: note.matterId,
+    userId: actorId,
+    type: "note",
+    title: "Note deleted",
+    detail:
+      outcome.replyCount > 0
+        ? `${notePreview(note.content)} (+ ${outcome.replyCount} ${outcome.replyCount === 1 ? "reply" : "replies"})`
+        : notePreview(note.content),
+  });
   return { ok: true };
 }
 
@@ -470,6 +591,13 @@ export async function updateNote(
 
   revalidatePath(`/matters/${note.matterId}/notes`);
   revalidatePath(`/matters/${note.matterId}`);
+  await logActivity({
+    matterId: note.matterId,
+    userId: actorId,
+    type: "note",
+    title: "Note edited",
+    detail: notePreview(clean),
+  });
   return { status: "ok" };
 }
 
