@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated Prisma client + the static design prototype
+    // (in-browser Babel JSX, never built or imported by the app).
+    "src/generated/**",
+    "design_handoff_kosloski_law_crm/**",
   ]),
 ]);
 
