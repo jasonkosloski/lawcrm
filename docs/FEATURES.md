@@ -14,7 +14,7 @@ on what's shipped today: intake → matter → time → billing → trust →
 settlement, with calendar, deadlines, tasks, notes, documents,
 contacts, communication (read), audit log, and granular permissions.
 Authentication is real (Auth.js + argon2id). Production deploy is
-on Postgres (Vercel Postgres) with the build wired to regenerate the
+on Prisma Postgres (via the Vercel integration) with the build wired to regenerate the
 Prisma client.
 
 The remaining work clusters around three buckets:
@@ -925,7 +925,7 @@ are queued follow-ups.
   / `src/lib/email-token-encryption.ts`.
 - [~] **Authentication — Phase 1 (email + password, JWT sessions)** — Auth.js v5 + Prisma adapter + argon2id. `/login` page with generic error messages (no email enumeration), `?next=` round-trip via `src/proxy.ts`, sign-out from the sidebar profile strip. `Account` + `VerificationToken` tables provisioned for OAuth/password-reset later. **Phase 2** (MFA, OAuth, password reset, session revocation) deferred — see `docs/AUTH_PLAN.md`.
 - [x] **Document storage — production Vercel Blob (ADR-015)** — `src/lib/file-storage.ts` is a facade over `local` (./uploads/, dev default, unchanged) and `vercel-blob` drivers (`src/lib/storage/`); `BLOB_READ_WRITE_TOKEN` selects blob, `STORAGE_DRIVER` overrides. One key scheme (`{rand16}__{name}`) everywhere — blob rows store the full blob URL in `Document.fileUrl`, and reads/deletes dispatch on key shape so driver switches never strand old rows. Prod uploads are client-direct (`/api/documents/upload/blob`: `handleUpload` token route — session + `documents.upload` + matter/folder scoping + extension-derived allowedContentTypes/size caps; Vercel's signed callback creates the Document row). The busboy streaming route stays for local dev (blob's completion callback can't reach localhost) and 501s under the blob driver. Downloads 302 to the blob CDN (Range = CDN's job; non-inline-safe types get `?download=1`); blob URLs are unguessable-but-public bearer URLs on an isolated origin — honest trade-offs in ADR-015. Landed 2026-07-07.
-- [x] **Database — production Postgres** — `prisma/schema.prisma` provider is `postgresql`; production runs on Vercel Postgres (POSTGRES_PRISMA_URL → DATABASE_URL pooled, POSTGRES_URL_NON_POOLING → DIRECT_DATABASE_URL direct). Build wired (`prisma generate && next build` + `postinstall: prisma generate`). Tests run against a local Docker container (`docker-compose.test.yml`); integration setup waits for the DB, pushes the schema, runs each test against a fresh state via `resetDb()` in `beforeEach`.
+- [x] **Database — production Postgres** — `prisma/schema.prisma` provider is `postgresql`; production runs on Prisma Postgres via the Vercel Marketplace integration (injects `DATABASE_URL`); local dev uses a separate Prisma Postgres, `lawcrm-dev` (`DEVDB_DATABASE_URL` on the Development env — see README). Schema changes ship as migrations since 2026-10-16 (ADR-016). Build wired (`prisma generate && next build` + `postinstall: prisma generate`). Tests run against a local Docker container (`docker-compose.test.yml`); integration setup waits for the DB, pushes the schema, runs each test against a fresh state via `resetDb()` in `beforeEach`.
 
 ---
 

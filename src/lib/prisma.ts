@@ -6,7 +6,7 @@
  * production.
  *
  * Prisma 7.x requires a driver adapter. We use `@prisma/adapter-pg`
- * against a Postgres URL (Vercel Postgres in production, a local
+ * against a Postgres URL (Prisma Postgres in production, a local
  * Docker container for tests, your dev DB for local dev).
  *
  * **Serverless connection-pool sizing:** the default `pg` pool is

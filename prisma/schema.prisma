@@ -5,10 +5,10 @@
 // application. Covers matters, contacts, email, time & billing, documents,
 // evidence, deadlines, tasks, trust accounting, and team management.
 //
-// Database: PostgreSQL. Vercel Postgres in production; a local
-// Docker container (docker-compose.test.yml) for tests; the dev URL
-// is whatever you point DATABASE_URL at (Vercel branch DB or your
-// own local Postgres).
+// Database: PostgreSQL. Prisma Postgres (Vercel integration) in
+// production; a separate `lawcrm-dev` Prisma Postgres for local dev
+// (see README); a local Docker container (docker-compose.test.yml)
+// for tests.
 // =============================================================================
 
 generator client {
