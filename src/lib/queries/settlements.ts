@@ -67,7 +67,9 @@ export async function getMatterSettlement(
 ): Promise<MatterSettlement | null> {
   const row = await prisma.settlement.findFirst({
     where: { matterId },
-    orderBy: { createdAt: "desc" },
+    // Oldest first: upsertSettlement locks and updates the oldest row,
+    // so reads must resolve to the same row (F364).
+    orderBy: { createdAt: "asc" },
     include: {
       liens: { orderBy: { id: "asc" } },
       approvals: {

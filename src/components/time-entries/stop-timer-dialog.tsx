@@ -49,6 +49,7 @@ export function StopTimerDialog({
   onOpenChange,
   onStopped,
   matterOptions,
+  sessionId,
   initialMatterId,
   initialActivity,
   initialHours,
@@ -59,6 +60,9 @@ export function StopTimerDialog({
    *  optimistic session immediately (revalidation follows). */
   onStopped: () => void;
   matterOptions: TimerMatterOption[];
+  /** The TimerSession this dialog was opened for; stopTimer consumes
+   *  exactly this session (never "whatever is running now"). */
+  sessionId: string;
   initialMatterId: string | null;
   initialActivity: string | null;
   /** Elapsed hours rounded UP to the billing increment — the
@@ -124,6 +128,7 @@ export function StopTimerDialog({
         </DialogHeader>
 
         <form action={formAction} className="flex flex-col gap-3">
+          <input type="hidden" name="sessionId" value={sessionId} />
           <div className="flex flex-col gap-0.5">
             <select
               name="matterId"

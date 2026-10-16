@@ -103,3 +103,76 @@ describe("SettlementComposer — permission gating", () => {
     expect(container.firstChild).toBeNull();
   });
 });
+
+describe("SettlementComposer — status rules + re-seed (F115 / F116)", () => {
+  const statusSelect = () =>
+    screen.getByRole("combobox") as HTMLSelectElement;
+  const optionValues = () =>
+    Array.from(statusSelect().options).map((o) => o.value);
+
+  test("a new settlement offers no status choice — it posts 'pending'", () => {
+    const { container } = render(
+      <SettlementComposer matterId="m1" initial={null} canEdit />
+    );
+    expect(screen.queryByRole("combobox")).toBeNull();
+    const hidden = container.querySelector<HTMLInputElement>(
+      'input[name="status"]'
+    );
+    expect(hidden?.value).toBe("pending");
+  });
+
+  test("existing settlement only offers the current status, reopen and the next stage", async () => {
+    render(
+      <SettlementComposer
+        matterId="m1"
+        initial={{ ...PERCENT_INITIAL, status: "approved" }}
+        canEdit
+      />
+    );
+    await expandForm();
+    expect(optionValues()).toEqual(["approved", "pending", "disbursed"]);
+  });
+
+  test("without the approve permission the status is read-only and posts unchanged", async () => {
+    const { container } = render(
+      <SettlementComposer
+        matterId="m1"
+        initial={{ ...PERCENT_INITIAL, status: "approved" }}
+        canEdit
+        canApprove={false}
+      />
+    );
+    await expandForm();
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(
+      container.querySelector<HTMLInputElement>('input[name="status"]')?.value
+    ).toBe("approved");
+  });
+
+  test("re-seeds from the server copy when it changes (auto-promotion must not be posted back as 'pending')", async () => {
+    const { container, rerender } = render(
+      <SettlementComposer matterId="m1" initial={PERCENT_INITIAL} canEdit />
+    );
+    await expandForm();
+    expect(statusSelect().value).toBe("pending");
+
+    // All steps approved on the same card -> server promotes the
+    // settlement; the page re-renders the composer with new props.
+    rerender(
+      <SettlementComposer
+        matterId="m1"
+        initial={{
+          ...PERCENT_INITIAL,
+          status: "approved",
+          advancedCosts: 2500,
+        }}
+        canEdit
+      />
+    );
+    expect(statusSelect().value).toBe("approved");
+    expect(
+      container.querySelector<HTMLInputElement>('input[name="advancedCosts"]')
+        ?.value
+    ).toBe("2500.00");
+  });
+});

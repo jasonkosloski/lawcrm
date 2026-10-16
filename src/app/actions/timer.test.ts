@@ -85,8 +85,14 @@ afterEach(() => {
 const getSession = () =>
   prisma.timerSession.findUnique({ where: { userId } });
 
-const buildStopForm = (overrides: Partial<Record<string, string>> = {}) => {
+// Posts the id of the session that's running RIGHT NOW unless the
+// test overrides it (the stop dialog always holds a real session id).
+const buildStopForm = async (
+  overrides: Partial<Record<string, string>> = {}
+) => {
   const fd = new FormData();
+  const current = await getSession();
+  fd.set("sessionId", overrides.sessionId ?? current?.id ?? "no-session");
   fd.set("matterId", overrides.matterId ?? matterId);
   fd.set("date", overrides.date ?? "2026-07-06");
   fd.set("hours", overrides.hours ?? "0.5");
@@ -120,12 +126,27 @@ describe("startTimer", () => {
     expect(session?.activity).toBe("Doc review");
   });
 
-  test("replaces an existing session instead of erroring", async () => {
+  test("refuses to replace a running timer (stale tab must not reset the clock)", async () => {
     await startTimer({ matterId, activity: "First" });
     const first = await getSession();
 
-    // Restart on a clean slate — new clock, no carried-over matter.
     const res = await startTimer({ activity: "Second" });
+    expect(res.ok).toBe(false);
+    expect(res.code).toBe("already_running");
+
+    // Nothing was written: same row, same clock, same fields.
+    const after = await getSession();
+    expect(after?.id).toBe(first!.id);
+    expect(after?.activity).toBe("First");
+    expect(after?.matterId).toBe(matterId);
+    expect(after?.startedAt.getTime()).toBe(first!.startedAt.getTime());
+  });
+
+  test("replace: true restarts on a clean slate with a NEW session id", async () => {
+    await startTimer({ matterId, activity: "First" });
+    const first = await getSession();
+
+    const res = await startTimer({ activity: "Second", replace: true });
     expect(res.ok).toBe(true);
 
     const sessions = await prisma.timerSession.findMany({
@@ -134,6 +155,7 @@ describe("startTimer", () => {
     expect(sessions).toHaveLength(1);
     expect(sessions[0].activity).toBe("Second");
     expect(sessions[0].matterId).toBeNull();
+    expect(sessions[0].id).not.toBe(first!.id);
     expect(sessions[0].startedAt.getTime()).toBeGreaterThanOrEqual(
       first!.startedAt.getTime()
     );
@@ -218,7 +240,7 @@ describe("stopTimer", () => {
 
     const res = await stopTimer(
       timeEntryInitialState,
-      buildStopForm({
+      await buildStopForm({
         hours: "1.25",
         activity: "Deposition prep",
         narrative: "Prepared outline for Smith deposition",
@@ -245,7 +267,7 @@ describe("stopTimer", () => {
 
   test("gates on time_entries.create", async () => {
     await startTimer({ matterId });
-    await stopTimer(timeEntryInitialState, buildStopForm());
+    await stopTimer(timeEntryInitialState, await buildStopForm());
     expect(mockedRequirePermission).toHaveBeenCalledWith(
       "time_entries.create"
     );
@@ -255,7 +277,7 @@ describe("stopTimer", () => {
     await startTimer();
     const res = await stopTimer(
       timeEntryInitialState,
-      buildStopForm({ matterId: "" })
+      await buildStopForm({ matterId: "" })
     );
     expect(res.status).toBe("error");
     expect(res.errors?.matterId?.length).toBeGreaterThan(0);
@@ -268,7 +290,7 @@ describe("stopTimer", () => {
     await startTimer();
     const res = await stopTimer(
       timeEntryInitialState,
-      buildStopForm({ matterId: "nope" })
+      await buildStopForm({ matterId: "nope" })
     );
     expect(res.status).toBe("error");
     expect(res.errors?.matterId?.[0]).toMatch(/not found/i);
@@ -278,7 +300,7 @@ describe("stopTimer", () => {
     await startTimer({ matterId });
     const res = await stopTimer(
       timeEntryInitialState,
-      buildStopForm({ utbmsCode: "X999" })
+      await buildStopForm({ utbmsCode: "X999" })
     );
     expect(res.status).toBe("error");
     expect(res.errors?.utbmsCode?.length).toBeGreaterThan(0);
@@ -288,9 +310,55 @@ describe("stopTimer", () => {
   test("stale-dialog guard: no session → error, no entry (prevents double-log)", async () => {
     // Timer discarded in "another tab" — the still-open stop dialog
     // must not create a second entry.
-    const res = await stopTimer(timeEntryInitialState, buildStopForm());
+    const res = await stopTimer(timeEntryInitialState, await buildStopForm());
     expect(res.status).toBe("error");
     expect(res.errors?.activity?.[0]).toMatch(/no running timer/i);
     expect(await prisma.timeEntry.count()).toBe(0);
+  });
+
+  test("stops only the session id the dialog holds — a replaced timer is untouched", async () => {
+    // Tab A opened the stop dialog for session 1; in tab B the user
+    // discarded it and started a new timer. Tab A's "Log time" must
+    // neither log the stale prefill nor consume the new clock.
+    await startTimer({ matterId, activity: "Old" });
+    const old = await getSession();
+    await startTimer({ activity: "New", replace: true });
+    const fresh = await getSession();
+
+    const res = await stopTimer(
+      timeEntryInitialState,
+      await buildStopForm({ sessionId: old!.id })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.activity?.[0]).toMatch(/no running timer/i);
+    expect(await prisma.timeEntry.count()).toBe(0);
+    expect((await getSession())?.id).toBe(fresh!.id);
+  });
+
+  test("requires the session id (no implicit 'whatever is running')", async () => {
+    await startTimer({ matterId });
+    const fd = await buildStopForm();
+    fd.delete("sessionId");
+    const res = await stopTimer(timeEntryInitialState, fd);
+    expect(res.status).toBe("error");
+    expect(res.errors?.sessionId?.length).toBeGreaterThan(0);
+    expect(await prisma.timeEntry.count()).toBe(0);
+    expect(await getSession()).not.toBeNull();
+  });
+
+  test("two racing stops log exactly one entry and the loser gets the friendly error", async () => {
+    await startTimer({ matterId });
+    const a = await buildStopForm();
+    const b = await buildStopForm();
+    const [r1, r2] = await Promise.all([
+      stopTimer(timeEntryInitialState, a),
+      stopTimer(timeEntryInitialState, b),
+    ]);
+    const statuses = [r1.status, r2.status].sort();
+    expect(statuses).toEqual(["error", "ok"]);
+    const loser = r1.status === "error" ? r1 : r2;
+    expect(loser.errors?.activity?.[0]).toMatch(/no running timer/i);
+    expect(await prisma.timeEntry.count()).toBe(1);
+    expect(await getSession()).toBeNull();
   });
 });

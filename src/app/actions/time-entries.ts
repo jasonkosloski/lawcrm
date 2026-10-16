@@ -34,6 +34,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 // a day early for anyone west of UTC. See parseLocalDate docs.
 import { parseLocalDate } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
+import { logActivity } from "@/lib/activity-log";
 import {
   TIME_ENTRY_STATUSES,
   type TimeEntryStatus,
@@ -71,6 +72,9 @@ function revalidateEntryScope(entry: {
     revalidatePath(`/intake/${entry.leadId}`);
   }
 }
+
+const BILLED_BY_INVOICE_ERROR =
+  "Entries are marked billed by invoice generation. Add this entry to an invoice instead.";
 
 // Only catalog codes persist — the column feeds LEDES/insurer
 // exports later, so junk from a hand-crafted POST is worse than a
@@ -137,6 +141,25 @@ export async function createTimeEntry(
     };
   }
 
+  // A linked event must exist AND belong to this matter (createNote
+  // does the same) — otherwise a hand-posted id links the entry's
+  // narrative into another matter's event modal, and a stale id
+  // would surface as a raw FK error instead of a field error.
+  const calendarEventId = parsed.data.calendarEventId || null;
+  if (calendarEventId) {
+    const event = await prisma.calendarEvent.findUnique({
+      where: { id: calendarEventId },
+      select: { matterId: true },
+    });
+    if (!event || event.matterId !== matterId) {
+      return {
+        status: "error",
+        errors: { calendarEventId: ["Event not found on this matter"] },
+        values: raw,
+      };
+    }
+  }
+
   const userId = await getCurrentUserId();
 
   await prisma.timeEntry.create({
@@ -151,17 +174,26 @@ export async function createTimeEntry(
       billable: parsed.data.billable === "on",
       noCharge: parsed.data.noCharge === "on",
       privileged: parsed.data.privileged === "on",
-      source: parsed.data.calendarEventId ? "calendar" : "manual",
-      calendarEventId: parsed.data.calendarEventId || null,
+      source: calendarEventId ? "calendar" : "manual",
+      calendarEventId,
     },
   });
 
   revalidatePath(`/matters/${matterId}/time`);
   revalidatePath(`/matters/${matterId}`);
-  if (parsed.data.calendarEventId) {
+  if (calendarEventId) {
     revalidatePath(`/matters/${matterId}/events`);
     revalidatePath(`/calendar`);
   }
+  await logActivity({
+    matterId,
+    userId,
+    type: "time_entry",
+    title: `Time logged · ${parsed.data.hours}h`,
+    // Privileged entries never copy their narrative into the
+    // firm-wide activity feed.
+    detail: parsed.data.privileged === "on" ? undefined : parsed.data.activity,
+  });
   return { status: "ok" };
 }
 
@@ -251,6 +283,14 @@ export async function createLeadTimeEntry(
 
   revalidatePath(`/intake/${leadId}/time`);
   revalidatePath(`/intake/${leadId}`);
+  // Lead-scoped: no matter to hang the row on (matterId null).
+  await logActivity({
+    matterId: null,
+    userId,
+    type: "time_entry",
+    title: `Intake time logged · ${parsed.data.hours}h`,
+    // No matter team to scope the feed row to, so no activity text.
+  });
   return { status: "ok" };
 }
 
@@ -271,7 +311,10 @@ const updateTimeEntrySchema = z.object({
   billable: z.literal("on").optional(),
   noCharge: z.literal("on").optional(),
   privileged: z.literal("on").optional(),
-  status: z.enum(TIME_ENTRY_STATUSES).default("draft"),
+  // Optional with NO default: a form that omits the field must leave
+  // the stored status alone (a default would silently reset a
+  // billable/submitted entry to draft).
+  status: z.enum(TIME_ENTRY_STATUSES).optional(),
 });
 
 export async function updateTimeEntry(
@@ -298,6 +341,8 @@ export async function updateTimeEntry(
       calendarEventId: true,
       status: true,
       rate: true,
+      hours: true,
+      privileged: true,
     },
   });
   if (!entry) {
@@ -333,6 +378,19 @@ export async function updateTimeEntry(
     };
   }
 
+  // "billed" is owned by invoice generation (same rule as
+  // setTimeEntryStatus). The current-status guard above already
+  // rejected billed rows, so a posted "billed" here is always a
+  // manual flip that would strand the entry outside WIP and off
+  // every invoice.
+  if (parsed.data.status === "billed") {
+    return {
+      status: "error",
+      errors: { status: [BILLED_BY_INVOICE_ERROR] },
+      values: raw,
+    };
+  }
+
   const date = parseLocalDate(parsed.data.date);
   if (!date) {
     return {
@@ -355,7 +413,8 @@ export async function updateTimeEntry(
       billable: parsed.data.billable === "on",
       noCharge: parsed.data.noCharge === "on",
       privileged: parsed.data.privileged === "on",
-      status: parsed.data.status,
+      // Only write status when the form actually posted one.
+      ...(parsed.data.status ? { status: parsed.data.status } : {}),
       // Schema contract: `amount` is hours × rate, and "the action
       // that sets it is responsible for keeping it in sync". An
       // entry picks up a rate via `updateInvoiceLineItem` and keeps
@@ -368,6 +427,23 @@ export async function updateTimeEntry(
   });
 
   revalidateEntryScope(entry);
+  const changes: string[] = [];
+  if (entry.hours !== newHours) changes.push(`${entry.hours}h → ${newHours}h`);
+  if (parsed.data.status && parsed.data.status !== entry.status) {
+    changes.push(`status ${entry.status} → ${parsed.data.status}`);
+  }
+  await logActivity({
+    matterId: entry.matterId,
+    userId: actorId,
+    type: "time_entry",
+    title: `Time entry edited · ${newHours}h`,
+    // Privileged (before or after this edit): hours/status changes
+    // only, never the activity text.
+    detail: (entry.privileged || parsed.data.privileged === "on"
+      ? changes
+      : [parsed.data.activity, ...changes]
+    ).join(" · ") || undefined,
+  });
   return { status: "ok" };
 }
 
@@ -405,11 +481,7 @@ export async function setTimeEntryStatus(
   // invoice clears it. A manual flip in either direction desyncs the
   // entry from the invoice's stored subtotal/totalAmount.
   if (status === "billed" && entry.status !== "billed") {
-    return {
-      ok: false,
-      error:
-        "Entries are marked billed by invoice generation. Add this entry to an invoice instead.",
-    };
+    return { ok: false, error: BILLED_BY_INVOICE_ERROR };
   }
   if (entry.status === "billed" && status !== "billed" && entry.invoiceId) {
     // Unbilling while invoiceId stays set would strand the entry:
@@ -429,6 +501,12 @@ export async function setTimeEntryStatus(
   });
 
   revalidateEntryScope(entry);
+  await logActivity({
+    matterId: entry.matterId,
+    userId: actorId,
+    type: "time_entry",
+    title: `Time entry status changed · ${entry.status} → ${status}`,
+  });
   return { ok: true };
 }
 
@@ -444,6 +522,9 @@ export async function deleteTimeEntry(
       userId: true,
       calendarEventId: true,
       status: true,
+      hours: true,
+      activity: true,
+      privileged: true,
     },
   });
   if (!entry) return { ok: false, error: "Time entry not found" };
@@ -465,5 +546,12 @@ export async function deleteTimeEntry(
   await prisma.timeEntry.delete({ where: { id: timeEntryId } });
 
   revalidateEntryScope(entry);
+  await logActivity({
+    matterId: entry.matterId,
+    userId: actorId,
+    type: "time_entry",
+    title: `Time entry deleted · ${entry.hours}h`,
+    detail: entry.privileged ? undefined : entry.activity,
+  });
   return { ok: true };
 }

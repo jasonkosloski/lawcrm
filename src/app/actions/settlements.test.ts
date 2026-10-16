@@ -31,6 +31,7 @@ vi.mock("@/lib/permission-check", () => ({
 }));
 
 import { getCurrentUserId } from "@/lib/current-user";
+import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import {
   addSettlementLien,
@@ -48,6 +49,21 @@ import {
 } from "@/test/integration-helpers";
 
 const mockedGetUser = vi.mocked(getCurrentUserId);
+const mockedHasPermission = vi.mocked(currentUserHasPermission);
+
+/** Give `userIds` a role carrying matters.settlement.view — the
+ *  approval notifications only reach members who hold it. */
+async function grantSettlementView(userIds: string[]): Promise<void> {
+  const role = await prisma.role.create({
+    data: { firmId, name: `Settlement viewer ${Math.random()}` },
+  });
+  await prisma.rolePermission.create({
+    data: { roleId: role.id, permission: "matters.settlement.view" },
+  });
+  await prisma.userRole.createMany({
+    data: userIds.map((userId) => ({ userId, roleId: role.id })),
+  });
+}
 
 let firmId: string;
 let userId: string;
@@ -134,11 +150,11 @@ describe("upsertSettlement — seeding", () => {
     const approvalIds = settlementBefore!.approvals.map((a) => a.id).sort();
     expect(approvalIds).toHaveLength(4);
 
-    // Update gross + status.
+    // Update gross (pending settlement, status unchanged).
     const res = await upsertSettlement(
       matterId,
       settlementInitialState,
-      buildUpsertForm({ gross: "150000", status: "approved" })
+      buildUpsertForm({ gross: "150000" })
     );
     expect(res.status).toBe("ok");
 
@@ -152,7 +168,7 @@ describe("upsertSettlement — seeding", () => {
       approvalIds
     );
     expect(settlementAfter!.grossAmount.toNumber()).toBe(150000);
-    expect(settlementAfter!.status).toBe("approved");
+    expect(settlementAfter!.status).toBe("pending");
   });
 
   test("computes firm fee from percent on read (33.33% of 100k = 33330)", async () => {
@@ -280,6 +296,10 @@ describe("setApprovalStepStatus — notification fan-out", () => {
         },
       ],
     });
+    // Only members who hold matters.settlement.view are pinged —
+    // grant it to the co-counsel and the second lead (the removed
+    // member is excluded by removedAt regardless).
+    await grantSettlementView([coCounselId, otherLeadId, gone.userId]);
     await upsertSettlement(
       matterId,
       settlementInitialState,
@@ -366,6 +386,435 @@ describe("setApprovalStepStatus — notification fan-out", () => {
     // Reset to pending — housekeeping, still silent.
     await setApprovalStepStatus(approvals[0]!.id, "pending");
     expect(await prisma.notification.count()).toBe(afterFirst);
+  });
+});
+
+describe("setApprovalStepStatus — only settlement viewers are notified (F888)", () => {
+  test("a team member without matters.settlement.view gets no ping", async () => {
+    const viewer = await seedUser({ firmId, email: "viewer@example.com" });
+    const noView = await seedUser({ firmId, email: "noview@example.com" });
+    await prisma.matterTeamMember.createMany({
+      data: [
+        { matterId, userId: viewer.userId, role: "co_counsel" },
+        { matterId, userId: noView.userId, role: "paralegal" },
+      ],
+    });
+    await grantSettlementView([viewer.userId]);
+    await upsertSettlement(
+      matterId,
+      settlementInitialState,
+      buildUpsertForm({ gross: "100000" })
+    );
+    const approval = await prisma.settlementApproval.findFirstOrThrow({
+      where: { settlement: { matterId }, step: 1 },
+    });
+    await setApprovalStepStatus(approval.id, "approved");
+
+    const rows = await prisma.notification.findMany({
+      where: { type: "settlement_step_approved" },
+    });
+    expect(rows.map((r) => r.userId)).toEqual([viewer.userId]);
+  });
+
+  test("admins count as holders (wildcard role)", async () => {
+    const admin = await seedUser({ firmId, email: "admin@example.com" });
+    const role = await prisma.role.upsert({
+      where: { firmId_name: { firmId, name: "Admin" } },
+      update: {},
+      create: { firmId, name: "Admin", isSystem: true },
+    });
+    await prisma.userRole.create({
+      data: { userId: admin.userId, roleId: role.id },
+    });
+    await prisma.matterTeamMember.create({
+      data: { matterId, userId: admin.userId, role: "co_counsel" },
+    });
+    await upsertSettlement(
+      matterId,
+      settlementInitialState,
+      buildUpsertForm({ gross: "100000" })
+    );
+    const approval = await prisma.settlementApproval.findFirstOrThrow({
+      where: { settlement: { matterId }, step: 1 },
+    });
+    await setApprovalStepStatus(approval.id, "approved");
+    const rows = await prisma.notification.findMany({
+      where: { type: "settlement_step_approved" },
+    });
+    expect(rows.map((r) => r.userId)).toEqual([admin.userId]);
+  });
+});
+
+describe("setApprovalStepStatus — argument validation (F886)", () => {
+  let approvalId: string;
+  beforeEach(async () => {
+    await upsertSettlement(
+      matterId,
+      settlementInitialState,
+      buildUpsertForm({ gross: "100000" })
+    );
+    approvalId = (
+      await prisma.settlementApproval.findFirstOrThrow({
+        where: { settlement: { matterId }, step: 1 },
+      })
+    ).id;
+  });
+
+  test("rejects an unknown status without writing or notifying", async () => {
+    const res = await setApprovalStepStatus(approvalId, "done" as never);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/invalid/i);
+    const row = await prisma.settlementApproval.findUniqueOrThrow({
+      where: { id: approvalId },
+    });
+    expect(row.status).toBe("pending");
+    expect(await prisma.notification.count()).toBe(0);
+  });
+
+  test("rejects non-string / oversized notes instead of throwing", async () => {
+    const bad = await setApprovalStepStatus(
+      approvalId,
+      "approved",
+      42 as never
+    );
+    expect(bad.ok).toBe(false);
+    const long = await setApprovalStepStatus(
+      approvalId,
+      "approved",
+      "x".repeat(401)
+    );
+    expect(long.ok).toBe(false);
+    const row = await prisma.settlementApproval.findUniqueOrThrow({
+      where: { id: approvalId },
+    });
+    expect(row.status).toBe("pending");
+  });
+
+  test("rejects an empty approval id", async () => {
+    const res = await setApprovalStepStatus("", "approved");
+    expect(res.ok).toBe(false);
+  });
+});
+
+// ── Status + amount rules (F115 / F141 / F394 / F365) ───────────────────
+
+describe("upsertSettlement — status transitions", () => {
+  const deny = () => mockedHasPermission.mockResolvedValueOnce(false);
+  const openSettlement = async (gross = "100000") => {
+    await upsertSettlement(
+      matterId,
+      settlementInitialState,
+      buildUpsertForm({ gross })
+    );
+    return prisma.settlement.findFirstOrThrow({
+      where: { matterId },
+      include: { approvals: true },
+    });
+  };
+  const approveAll = async (settlementId: string) => {
+    await prisma.settlementApproval.updateMany({
+      where: { settlementId },
+      data: { status: "approved", approverId: userId, approvedAt: new Date() },
+    });
+  };
+  const edit = (opts: Parameters<typeof buildUpsertForm>[0]) =>
+    upsertSettlement(matterId, settlementInitialState, buildUpsertForm(opts));
+  const statusOf = async () =>
+    (await prisma.settlement.findFirstOrThrow({ where: { matterId } })).status;
+
+  test("create is always pending — a non-pending status is refused, nothing is created", async () => {
+    const res = await edit({ gross: "100000", status: "disbursed" });
+    expect(res.status).toBe("error");
+    expect(res.error).toMatch(/pending/i);
+    expect(await prisma.settlement.count({ where: { matterId } })).toBe(0);
+  });
+
+  test("an edit-holder WITHOUT approve cannot move status to approved/disbursed/closed", async () => {
+    const s = await openSettlement();
+    await approveAll(s.id);
+    for (const target of ["approved", "disbursed", "closed"]) {
+      deny();
+      const res = await edit({ gross: "100000", status: target });
+      expect(res.status).toBe("error");
+      expect(res.error).toMatch(/approval permission/i);
+    }
+    expect(await statusOf()).toBe("pending");
+  });
+
+  test("approved requires every step approved, even with the approve permission", async () => {
+    const s = await openSettlement();
+    await prisma.settlementApproval.update({
+      where: { id: s.approvals[0]!.id },
+      data: { status: "approved" },
+    });
+    const res = await edit({ gross: "100000", status: "approved" });
+    expect(res.status).toBe("error");
+    expect(res.error).toMatch(/every approval step/i);
+    expect(await statusOf()).toBe("pending");
+  });
+
+  test("walks pending -> approved -> disbursed -> closed with the approve permission; no skipping", async () => {
+    const s = await openSettlement();
+    // Can't jump straight to disbursed/closed.
+    expect((await edit({ gross: "100000", status: "disbursed" })).status).toBe(
+      "error"
+    );
+    expect((await edit({ gross: "100000", status: "closed" })).status).toBe(
+      "error"
+    );
+    await approveAll(s.id);
+    expect((await edit({ gross: "100000", status: "approved" })).status).toBe(
+      "ok"
+    );
+    expect((await edit({ gross: "100000", status: "closed" })).status).toBe(
+      "error"
+    );
+    expect((await edit({ gross: "100000", status: "disbursed" })).status).toBe(
+      "ok"
+    );
+    expect((await edit({ gross: "100000", status: "closed" })).status).toBe(
+      "ok"
+    );
+    expect(await statusOf()).toBe("closed");
+  });
+
+  test("an unchanged status never needs the approve permission", async () => {
+    await openSettlement();
+    deny();
+    const res = await edit({ gross: "120000" }); // pending -> pending
+    expect(res.status).toBe("ok");
+  });
+
+  test("reopening (any state -> pending) needs the approve permission", async () => {
+    const s = await openSettlement();
+    await prisma.settlement.update({
+      where: { id: s.id },
+      data: { status: "disbursed" },
+    });
+    deny();
+    const denied = await edit({ gross: "100000", status: "pending" });
+    expect(denied.status).toBe("error");
+    expect(await statusOf()).toBe("disbursed");
+
+    const ok = await edit({ gross: "100000", status: "pending" });
+    expect(ok.status).toBe("ok");
+    expect(await statusOf()).toBe("pending");
+  });
+});
+
+describe("upsertSettlement — amount locks", () => {
+  const edit = (opts: Parameters<typeof buildUpsertForm>[0]) =>
+    upsertSettlement(matterId, settlementInitialState, buildUpsertForm(opts));
+  const row = () => prisma.settlement.findFirstOrThrow({ where: { matterId } });
+
+  const seedAt = async (status: string, allApproved = false) => {
+    await edit({ gross: "100000", feePct: "33.33", costs: "500" });
+    const s = await row();
+    await prisma.settlement.update({ where: { id: s.id }, data: { status } });
+    if (allApproved) {
+      await prisma.settlementApproval.updateMany({
+        where: { settlementId: s.id },
+        data: {
+          status: "approved",
+          approverId: userId,
+          approvedAt: new Date(),
+        },
+      });
+    }
+    return s.id;
+  };
+
+  test.each(["disbursed", "closed"])(
+    "%s: changing gross / fee % / costs is refused and the row is untouched",
+    async (status) => {
+      await seedAt(status);
+      for (const attempt of [
+        { gross: "90000", feePct: "33.33", costs: "500", status },
+        { gross: "100000", feePct: "40", costs: "500", status },
+        { gross: "100000", feePct: "33.33", costs: "900", status },
+        // Reopening AND editing in one submit is still a change on a
+        // locked settlement: reopen first, then edit.
+        { gross: "90000", feePct: "33.33", costs: "500", status: "pending" },
+      ]) {
+        const res = await edit(attempt);
+        expect(res.status).toBe("error");
+        expect(res.error).toMatch(/locked|reopen/i);
+      }
+      const after = await row();
+      expect(after.grossAmount.toNumber()).toBe(100000);
+      expect(after.firmFeePercent!.toNumber()).toBe(33.33);
+      expect(after.advancedCosts.toNumber()).toBe(500);
+      expect(after.status).toBe(status);
+    }
+  );
+
+  test("disbursed: an unchanged resave (same numbers) is not a change", async () => {
+    await seedAt("disbursed");
+    const res = await edit({
+      gross: "100000.00",
+      feePct: "33.33",
+      costs: "500.00",
+      status: "disbursed",
+    });
+    expect(res.status).toBe("ok");
+  });
+
+  test("reopen, then edit works as a two-step flow", async () => {
+    await seedAt("disbursed");
+    expect(
+      (
+        await edit({
+          gross: "100000",
+          feePct: "33.33",
+          costs: "500",
+          status: "pending",
+        })
+      ).status
+    ).toBe("ok");
+    expect(
+      (await edit({ gross: "95000", feePct: "33.33", costs: "500" })).status
+    ).toBe("ok");
+    expect((await row()).grossAmount.toNumber()).toBe(95000);
+  });
+
+  test("approved: changing the numbers resets every approval and drops to pending", async () => {
+    const id = await seedAt("approved", true);
+    const res = await edit({
+      gross: "80000",
+      feePct: "33.33",
+      costs: "500",
+      status: "approved",
+    });
+    expect(res.status).toBe("ok");
+    const after = await row();
+    expect(after.status).toBe("pending");
+    expect(after.grossAmount.toNumber()).toBe(80000);
+    const approvals = await prisma.settlementApproval.findMany({
+      where: { settlementId: id },
+    });
+    expect(approvals).toHaveLength(4);
+    expect(
+      approvals.every(
+        (a) => a.status === "pending" && !a.approverId && !a.approvedAt
+      )
+    ).toBe(true);
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { matterId, type: "settlement", title: { contains: "updated" } },
+      orderBy: { timestamp: "desc" },
+    });
+    expect(log.detail).toMatch(/approvals reset/i);
+  });
+
+  test("approved: an edit-only user cannot change amounts (would wipe approvals)", async () => {
+    const id = await seedAt("approved", true);
+    mockedHasPermission.mockResolvedValueOnce(false);
+    const res = await edit({
+      gross: "80000",
+      feePct: "33.33",
+      costs: "500",
+      status: "approved",
+    });
+    expect(res.status).toBe("error");
+    expect(res.error).toMatch(/approval permission/i);
+    expect((await row()).grossAmount.toNumber()).toBe(100000);
+    expect((await row()).status).toBe("approved");
+    expect(
+      await prisma.settlementApproval.count({
+        where: { settlementId: id, status: "approved" },
+      })
+    ).toBe(4);
+  });
+
+  test("approved: an unchanged resave keeps the approvals and the status", async () => {
+    const id = await seedAt("approved", true);
+    const res = await edit({
+      gross: "100000",
+      feePct: "33.33",
+      costs: "500",
+      status: "approved",
+    });
+    expect(res.status).toBe("ok");
+    expect((await row()).status).toBe("approved");
+    expect(
+      await prisma.settlementApproval.count({
+        where: { settlementId: id, status: "approved" },
+      })
+    ).toBe(4);
+  });
+
+  test("a numbers change combined with a forward status change is refused", async () => {
+    await seedAt("approved", true);
+    const res = await edit({
+      gross: "80000",
+      feePct: "33.33",
+      costs: "500",
+      status: "disbursed",
+    });
+    expect(res.status).toBe("error");
+    expect(res.error).toMatch(/separately/i);
+    expect((await row()).status).toBe("approved");
+  });
+
+  test("pending with partial approvals: numbers change leaves approvals alone", async () => {
+    const id = await seedAt("pending");
+    const first = await prisma.settlementApproval.findFirstOrThrow({
+      where: { settlementId: id, step: 1 },
+    });
+    await prisma.settlementApproval.update({
+      where: { id: first.id },
+      data: { status: "approved" },
+    });
+    await edit({ gross: "99000", feePct: "33.33", costs: "500" });
+    const after = await prisma.settlementApproval.findUniqueOrThrow({
+      where: { id: first.id },
+    });
+    expect(after.status).toBe("approved");
+  });
+});
+
+describe("upsertSettlement — concurrent create + deterministic lookup (F364)", () => {
+  test("two simultaneous 'Open settlement' submits create exactly one settlement", async () => {
+    const results = await Promise.all([
+      upsertSettlement(
+        matterId,
+        settlementInitialState,
+        buildUpsertForm({ gross: "100000" })
+      ),
+      upsertSettlement(
+        matterId,
+        settlementInitialState,
+        buildUpsertForm({ gross: "110000" })
+      ),
+    ]);
+    expect(results.map((r) => r.status)).toEqual(["ok", "ok"]);
+    const rows = await prisma.settlement.findMany({
+      where: { matterId },
+      include: { approvals: true },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.approvals).toHaveLength(4);
+  });
+
+  test("with pre-existing duplicates, edits always target the OLDEST row", async () => {
+    const mk = (createdAt: Date, gross: number) =>
+      prisma.settlement.create({
+        data: { matterId, grossAmount: gross, createdAt },
+        select: { id: true },
+      });
+    const older = await mk(new Date("2026-01-01T00:00:00Z"), 1000);
+    const newer = await mk(new Date("2026-02-01T00:00:00Z"), 2000);
+    const res = await upsertSettlement(
+      matterId,
+      settlementInitialState,
+      buildUpsertForm({ gross: "5000", feePct: "" })
+    );
+    expect(res.status).toBe("ok");
+    const [o, n] = await Promise.all([
+      prisma.settlement.findUniqueOrThrow({ where: { id: older.id } }),
+      prisma.settlement.findUniqueOrThrow({ where: { id: newer.id } }),
+    ]);
+    expect(o.grossAmount.toNumber()).toBe(5000);
+    expect(n.grossAmount.toNumber()).toBe(2000);
   });
 });
 

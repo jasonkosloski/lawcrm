@@ -31,9 +31,14 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { logActivity } from "@/lib/activity-log";
 import { createNotifications } from "@/lib/notifications";
-import { requirePermission } from "@/lib/permission-check";
+import {
+  currentUserHasPermission,
+  requirePermission,
+} from "@/lib/permission-check";
+import { filterUsersWithPermission } from "@/lib/permission-holders";
 import type { SettlementFormState } from "@/lib/settlement-constants";
 import {
+  SETTLEMENT_APPROVAL_STATUSES,
   SETTLEMENT_STATUSES,
   SETTLEMENT_LIEN_STATUSES,
 } from "@/lib/constants/settlement-status";
@@ -118,11 +123,6 @@ export async function upsertSettlement(
   });
   if (!matter) return { status: "error", error: "Matter not found." };
 
-  const existing = await prisma.settlement.findFirst({
-    where: { matterId },
-    select: { id: true },
-  });
-
   const grossAmount = new Prisma.Decimal(data.grossAmount);
   const firmFeePercent = data.firmFeePercent
     ? new Prisma.Decimal(data.firmFeePercent)
@@ -139,58 +139,194 @@ export async function upsertSettlement(
     ? new Prisma.Decimal(data.advancedCosts)
     : new Prisma.Decimal(0);
 
-  if (existing) {
-    await prisma.settlement.update({
+  // Only the approval chain / sign-off permission moves a settlement
+  // forward (approved -> disbursed -> closed) or back (reopen).
+  // Resolved up front: the gate runs inside the transaction below.
+  const canApprove = await currentUserHasPermission(
+    "matters.settlement.approve"
+  );
+
+  // Serialize per matter: lookup + create (or the guarded update)
+  // run under a transaction-scoped advisory lock keyed on the
+  // matter, so two tabs/users racing "Open settlement" cannot both
+  // see "no row" and create two settlements with two approval
+  // chains. (A unique constraint on matterId comes later in a
+  // migration; this closes the race until then.) The lookup is
+  // ordered so duplicates already in the table resolve to the same
+  // row every time.
+  const outcome = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`settlement:${matterId}`}))`;
+
+    const existing = await tx.settlement.findFirst({
+      where: { matterId },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        status: true,
+        grossAmount: true,
+        firmFeePercent: true,
+        firmFee: true,
+        advancedCosts: true,
+        approvals: { select: { status: true } },
+      },
+    });
+
+    if (!existing) {
+      // A new settlement always starts pending — approval and
+      // disbursement are reached through the chain, never at create.
+      if (data.status !== "pending") {
+        return {
+          kind: "error" as const,
+          error: "A new settlement always starts as pending.",
+        };
+      }
+      // Seed the default 4-step approval chain on first create. The
+      // labels reflect the typical contingency-distribution workflow;
+      // firms with a different chain can edit step labels later when
+      // we expose a "manage steps" UI.
+      await tx.settlement.create({
+        data: {
+          matterId,
+          grossAmount,
+          firmFeePercent,
+          firmFee,
+          advancedCosts,
+          status: "pending",
+          approvals: {
+            create: [
+              { step: 1, label: "Client release signed" },
+              { step: 2, label: "Lien negotiations finalized" },
+              { step: 3, label: "Partner sign-off" },
+              { step: 4, label: "Trust ledger reconciliation" },
+            ],
+          },
+        },
+        select: { id: true },
+      });
+      return { kind: "created" as const };
+    }
+
+    // ── Status transitions ────────────────────────────────────────
+    const from = existing.status;
+    const to = data.status;
+    const statusChanged = to !== from;
+    if (statusChanged) {
+      const allStepsApproved =
+        existing.approvals.length > 0 &&
+        existing.approvals.every((a) => a.status === "approved");
+      let denied: string | null = null;
+      if (!canApprove) {
+        denied =
+          "Changing a settlement's status requires the settlement approval permission.";
+      } else if (to === "pending") {
+        // Reopen — legal from any state; amounts stay locked until
+        // the reopen has been saved (checked below).
+      } else if (to === "approved") {
+        if (from !== "pending") {
+          denied = `Can't move a ${from} settlement to approved — reopen it first.`;
+        } else if (!allStepsApproved) {
+          denied = "Every approval step must be approved first.";
+        }
+      } else if (to === "disbursed") {
+        if (from !== "approved") {
+          denied = "Only an approved settlement can be marked disbursed.";
+        }
+      } else if (to === "closed") {
+        if (from !== "disbursed") {
+          denied = "Only a disbursed settlement can be closed.";
+        }
+      }
+      if (denied) return { kind: "error" as const, error: denied };
+    }
+
+    // ── Amount locks ──────────────────────────────────────────────
+    // Compare Decimals with .equals (never numbers). The composer
+    // round-trips the stored values, so an unchanged save is not a
+    // change.
+    const amountsChanged =
+      !existing.grossAmount.equals(grossAmount) ||
+      !existing.firmFee.equals(firmFee) ||
+      !existing.advancedCosts.equals(advancedCosts) ||
+      (existing.firmFeePercent === null) !== (firmFeePercent === null) ||
+      (existing.firmFeePercent !== null &&
+        firmFeePercent !== null &&
+        !existing.firmFeePercent.equals(firmFeePercent));
+
+    if (amountsChanged && (from === "disbursed" || from === "closed")) {
+      return {
+        kind: "error" as const,
+        error:
+          "Settlement is disbursed/closed — amounts are locked. Reopen it (set status to pending) and save, then edit the amounts.",
+      };
+    }
+    if (amountsChanged && statusChanged && to !== "pending") {
+      return {
+        kind: "error" as const,
+        error: "Save amount changes separately from a status change.",
+      };
+    }
+
+    // Approvals vouch for specific numbers. If the chain was
+    // complete (approved, or every step approved on a reopened
+    // settlement) and the numbers change, the sign-offs no longer
+    // apply: clear every step and drop back to pending.
+    const chainComplete =
+      from === "approved" ||
+      (existing.approvals.length > 0 &&
+        existing.approvals.every((a) => a.status === "approved"));
+    const resetApprovals = amountsChanged && chainComplete;
+    if (resetApprovals && !canApprove) {
+      // Wiping approvers' sign-offs is an approval-chain action; an
+      // edit-only user must not be able to destroy attestations.
+      return {
+        kind: "error" as const,
+        error:
+          "Changing amounts on a fully approved settlement resets its approvals and requires the settlement approval permission.",
+      };
+    }
+    if (resetApprovals) {
+      await tx.settlementApproval.updateMany({
+        where: { settlementId: existing.id },
+        data: { status: "pending", approverId: null, approvedAt: null },
+      });
+    }
+    const nextStatus = resetApprovals ? "pending" : to;
+
+    await tx.settlement.update({
       where: { id: existing.id },
       data: {
         grossAmount,
         firmFeePercent,
         firmFee,
         advancedCosts,
-        status: data.status,
+        status: nextStatus,
       },
     });
+    return { kind: "updated" as const, status: nextStatus, resetApprovals };
+  });
+
+  if (outcome.kind === "error") {
+    return { status: "error", error: outcome.error };
+  }
+
+  if (outcome.kind === "updated") {
     await logActivity({
       matterId,
       userId: actorId,
       type: "settlement",
       title: `Settlement updated · gross $${grossAmount.toFixed(2)}`,
-      detail: `Status: ${data.status}`,
+      detail: outcome.resetApprovals
+        ? `Status: ${outcome.status} · amounts changed — all approvals reset`
+        : `Status: ${outcome.status}`,
     });
   } else {
-    // Seed the default 4-step approval chain on first create. The
-    // labels reflect the typical contingency-distribution workflow;
-    // firms with a different chain can edit step labels later when
-    // we expose a "manage steps" UI.
-    const created = await prisma.settlement.create({
-      data: {
-        matterId,
-        grossAmount,
-        firmFeePercent,
-        firmFee,
-        advancedCosts,
-        status: data.status,
-        approvals: {
-          create: [
-            { step: 1, label: "Client release signed" },
-            { step: 2, label: "Lien negotiations finalized" },
-            { step: 3, label: "Partner sign-off" },
-            { step: 4, label: "Trust ledger reconciliation" },
-          ],
-        },
-      },
-      select: { id: true },
-    });
     await logActivity({
       matterId,
       userId: actorId,
       type: "settlement",
       title: `Settlement opened · gross $${grossAmount.toFixed(2)}`,
-      detail: `Status: ${data.status} · 4-step approval chain seeded`,
+      detail: "Status: pending · 4-step approval chain seeded",
     });
-    // The created variable is unused locally but kept so future
-    // logic that needs the new id has it.
-    void created;
   }
 
   revalidatePath(`/matters/${matterId}/billing`);
@@ -384,13 +520,31 @@ export async function deleteSettlementLien(
  *  the current user when transitioning to "approved" (the
  *  attribution is the audit). Resetting to "pending" or
  *  rejecting clears the snapshot. */
+const approvalStepSchema = z.object({
+  approvalId: z.string().min(1),
+  status: z.enum(SETTLEMENT_APPROVAL_STATUSES),
+  notes: z.string().trim().max(400).optional(),
+});
+
 export async function setApprovalStepStatus(
-  approvalId: string,
-  status: "pending" | "approved" | "rejected",
-  notes?: string
+  approvalIdArg: string,
+  statusArg: "pending" | "approved" | "rejected",
+  notesArg?: string
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("matters.settlement.approve");
   const actorId = await getCurrentUserId();
+
+  // Server actions are public endpoints: the TypeScript signature is
+  // not validation. Reject unknown statuses / non-string notes before
+  // they reach the DB, the activity title or the notification branch.
+  const parsedArgs = approvalStepSchema.safeParse({
+    approvalId: approvalIdArg,
+    status: statusArg,
+    notes: notesArg,
+  });
+  if (!parsedArgs.success) return { ok: false, error: "Invalid request." };
+  const { approvalId, status } = parsedArgs.data;
+  const notes = parsedArgs.data.notes;
 
   const approval = await prisma.settlementApproval.findUnique({
     where: { id: approvalId },
@@ -450,7 +604,7 @@ export async function setApprovalStepStatus(
     userId: actorId,
     type: "settlement",
     title: `Settlement step ${approval.step} (${approval.label}) → ${status}`,
-    detail: notes ?? undefined,
+    detail: notes || undefined,
   });
 
   // ── Notification fan-out ──────────────────────────────────────────
@@ -459,8 +613,10 @@ export async function setApprovalStepStatus(
   // "pending" are housekeeping, not news. The approval chain has no
   // per-step assignee (approverId is a who-approved snapshot, not a
   // who's-next assignment), so "the next approver" is addressed as
-  // the matter's active team: whoever holds
-  // `matters.settlement.approve` sees it in their bell.
+  // the matter's active team — narrowed to members who can actually
+  // see the settlement (`matters.settlement.view`; the billing page
+  // hides the card from everyone else, so a ping would be a dead-end
+  // link that also leaks that a settlement exists).
   if (approval.status !== status && status !== "pending") {
     const matterId = approval.settlement.matterId;
     const [matter, team] = await Promise.all([
@@ -484,9 +640,10 @@ export async function setApprovalStepStatus(
         orderBy: { step: "asc" },
         select: { step: true, label: true },
       });
-      const recipients = team
-        .map((t) => t.userId)
-        .filter((id) => id !== actorId);
+      const recipients = await filterUsersWithPermission(
+        team.map((t) => t.userId).filter((id) => id !== actorId),
+        "matters.settlement.view"
+      );
       await createNotifications(recipients, {
         type: "settlement_step_approved",
         title: `Settlement step approved: ${approval.label}`,
@@ -500,10 +657,13 @@ export async function setApprovalStepStatus(
       // Rejection goes to the matter lead(s) — the settlement's
       // initiator isn't recorded on the row, and the lead owns
       // unblocking the chain either way.
-      const recipients = team
-        .filter((t) => t.role === "lead")
-        .map((t) => t.userId)
-        .filter((id) => id !== actorId);
+      const recipients = await filterUsersWithPermission(
+        team
+          .filter((t) => t.role === "lead")
+          .map((t) => t.userId)
+          .filter((id) => id !== actorId),
+        "matters.settlement.view"
+      );
       await createNotifications(recipients, {
         type: "settlement_step_rejected",
         title: `Settlement step rejected: ${approval.label}`,

@@ -5,6 +5,13 @@
  * math (firm fee, lien total, client net) lives on the read side
  * — this form only captures the user-entered numbers (gross,
  * fee %, advanced costs, status).
+ *
+ * Status rules mirror the server (upsertSettlement): a new
+ * settlement is always "pending"; an existing one can only be
+ * reopened or stepped forward one stage, and only by someone holding
+ * the approve permission. The form re-seeds from server data
+ * whenever `initial` changes (a save, or an approval-chain
+ * auto-promotion) so it never posts a stale status or amounts.
  */
 
 "use client";
@@ -34,14 +41,41 @@ type SettlementInitial = {
 const formatMoneyInput = (n: number): string =>
   n > 0 ? n.toFixed(2) : "";
 
+/** Statuses reachable from `current`, matching the server's rules:
+ *  stay, reopen to pending, or step forward one stage. */
+function statusOptions(current: string): string[] {
+  const next: Record<string, string[]> = {
+    pending: ["approved"],
+    approved: ["disbursed"],
+    disbursed: ["closed"],
+    closed: [],
+  };
+  const forward = next[current] ?? [];
+  return current === "pending"
+    ? ["pending", ...forward]
+    : [current, "pending", ...forward];
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  pending: "Pending",
+  approved: "Approved",
+  disbursed: "Disbursed",
+  closed: "Closed",
+};
+
 export function SettlementComposer({
   matterId,
   initial,
   canEdit,
+  canApprove = true,
 }: {
   matterId: string;
   initial: SettlementInitial;
   canEdit: boolean;
+  /** Holds matters.settlement.approve. When false the status is
+   *  shown read-only — the server refuses status changes without
+   *  it. Defaults to true so the server stays the authority. */
+  canApprove?: boolean;
 }) {
   // Editing state. When there's an existing settlement we render a
   // "compact" mode showing the saved values + a pencil; opening
@@ -69,6 +103,26 @@ export function SettlementComposer({
     formatMoneyInput(initial?.advancedCosts ?? 0)
   );
   const [status, setStatus] = useState(initial?.status ?? "pending");
+
+  // Re-seed from the server copy whenever it changes. useState only
+  // reads `initial` on mount, and this instance survives every
+  // revalidation — so after an approval-chain auto-promotion (or a
+  // teammate's edit) the select would still hold the old status and
+  // the next Save would silently post it back.
+  const reseed = (src: SettlementInitial) => {
+    setGrossAmount(formatMoneyInput(src?.grossAmount ?? 0));
+    setFirmFeePercent(
+      src?.firmFeePercent != null ? String(src.firmFeePercent) : ""
+    );
+    setAdvancedCosts(formatMoneyInput(src?.advancedCosts ?? 0));
+    setStatus(src?.status ?? "pending");
+  };
+  const initialKey = JSON.stringify(initial);
+  const [seededKey, setSeededKey] = useState(initialKey);
+  if (seededKey !== initialKey) {
+    setSeededKey(initialKey);
+    reseed(initial);
+  }
 
   useEffect(() => {
     if (state.status === "ok" && initial !== null) {
@@ -102,7 +156,12 @@ export function SettlementComposer({
     return (
       <button
         type="button"
-        onClick={() => setExpanded(true)}
+        onClick={() => {
+          // Opening always starts from the latest server values, not
+          // a draft left over from a cancelled edit.
+          reseed(initial);
+          setExpanded(true);
+        }}
         className="inline-flex items-center gap-1.5 text-2xs text-ink-3 hover:text-brand-700 hover:underline"
       >
         <Pencil size={11} />
@@ -177,17 +236,30 @@ export function SettlementComposer({
           />
         </Field>
         <Field label="Status">
-          <select
-            name="status"
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className={inputClass}
-          >
-            <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
-            <option value="disbursed">Disbursed</option>
-            <option value="closed">Closed</option>
-          </select>
+          {initial === null || !canApprove ? (
+            // New settlements always start pending; without the
+            // approve permission the status can't change. Either
+            // way, post the current value unchanged.
+            <>
+              <input type="hidden" name="status" value={status} />
+              <div className="h-8 px-2.5 flex items-center rounded-md border border-line bg-paper text-xs text-ink-3">
+                {STATUS_LABEL[status] ?? status}
+              </div>
+            </>
+          ) : (
+            <select
+              name="status"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              className={inputClass}
+            >
+              {statusOptions(initial.status).map((s) => (
+                <option key={s} value={s}>
+                  {STATUS_LABEL[s] ?? s}
+                </option>
+              ))}
+            </select>
+          )}
         </Field>
       </div>
 

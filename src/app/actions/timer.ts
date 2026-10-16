@@ -12,8 +12,13 @@
  * time-on-entity.ts). Denying that one key still closes ALL
  * time-logging entry points, timer included.
  *
- * One session per user (userId is @unique) — starting a new timer
- * replaces any existing one via upsert. Elapsed time is never
+ * One session per user (userId is @unique). Starting a timer while
+ * one is already running is REFUSED (`code: "already_running"`) unless
+ * the caller passes `replace: true` — a stale tab or second device
+ * must never silently reset a clock that is still running. An
+ * explicit replace deletes the old row and creates a new one (new
+ * id), so a stop dialog still holding the old id can't consume the
+ * new clock. Elapsed time is never
  * stored; it's computed from `startedAt` at read time (widget ticks
  * client-side, stop composer prefills the rounded value). Stop
  * creates the TimeEntry (source: "timer") and deletes the session
@@ -37,7 +42,12 @@ import {
   type TimeEntryFormState,
 } from "@/lib/time-entry-constants";
 
-type TimerResult = { ok: boolean; error?: string };
+type TimerResult = {
+  ok: boolean;
+  error?: string;
+  /** Machine-readable refusal reason the widget acts on. */
+  code?: "already_running";
+};
 
 const timerFieldsSchema = z.object({
   matterId: z.string().trim().max(64).nullish(),
@@ -65,17 +75,22 @@ async function matterMissingError(
 // ── Start ───────────────────────────────────────────────────────────────
 
 /**
- * Start (or restart) the current user's timer. Matter + activity are
- * optional — a timer can start before the user knows what the work
- * belongs to; the stop composer requires a matter before the
- * TimeEntry is written. Replaces any existing session (userId is
- * unique): the old clock is discarded, not merged — same behavior
- * as every commercial timer widget, and the widget's stop/discard
- * affordances make losing a running clock an explicit choice.
+ * Start the current user's timer. Matter + activity are optional — a
+ * timer can start before the user knows what the work belongs to;
+ * the stop composer requires a matter before the TimeEntry is
+ * written.
+ *
+ * If a session already exists the call is refused with
+ * `{ ok: false, code: "already_running" }` and nothing is written:
+ * the widget's idle pill is rendered from a server snapshot that can
+ * be stale in another tab/device, and silently resetting a running
+ * clock loses billable time. Pass `replace: true` for a deliberate
+ * restart (the old clock is discarded, not merged).
  */
 export async function startTimer(input?: {
   matterId?: string | null;
   activity?: string | null;
+  replace?: boolean;
 }): Promise<TimerResult> {
   const userId = await getCurrentUserId();
   const parsed = timerFieldsSchema.safeParse(input ?? {});
@@ -89,14 +104,39 @@ export async function startTimer(input?: {
     activity: parsed.data.activity || null,
     startedAt: new Date(),
   };
-  await prisma.timerSession.upsert({
-    where: { userId },
-    create: { userId, ...data },
-    update: data,
-  });
+  try {
+    if (input?.replace === true) {
+      // Delete + create (new id) in one transaction. A concurrent
+      // start that wins the unique index between the two statements
+      // surfaces as P2002 — treat it as the conflict it is.
+      await prisma.$transaction([
+        prisma.timerSession.deleteMany({ where: { userId } }),
+        prisma.timerSession.create({ data: { userId, ...data } }),
+      ]);
+    } else {
+      await prisma.timerSession.create({ data: { userId, ...data } });
+    }
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      return {
+        ok: false,
+        code: "already_running",
+        error: "A timer is already running.",
+      };
+    }
+    throw err;
+  }
 
   revalidateTimerWidget();
   return { ok: true };
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    (err as { code?: unknown }).code === "P2002"
+  );
 }
 
 // ── Update (mid-run) ────────────────────────────────────────────────────
@@ -157,6 +197,11 @@ export async function discardTimer(): Promise<TimerResult> {
 // ── Stop → TimeEntry ────────────────────────────────────────────────────
 
 const stopTimerSchema = z.object({
+  // The id of the TimerSession the dialog was opened for. Stopping
+  // consumes THAT session only — a stale dialog whose timer was
+  // discarded/replaced elsewhere must not log its prefill and
+  // delete the newer clock.
+  sessionId: z.string().trim().min(1, "Timer session is required").max(64),
   // The stop composer REQUIRES a matter — the TimerSession's matter
   // is nullable, but a TimeEntry's is not.
   matterId: z.string().trim().min(1, "Matter is required"),
@@ -188,7 +233,10 @@ const stopTimerSchema = z.object({
  * `time_entries.create` like the sibling create actions. Writes the
  * TimeEntry (source: "timer") and deletes the session in a single
  * transaction so a crash can't both log the time AND leave the
- * clock running (double billing on a retry).
+ * clock running (double billing on a retry). The delete is keyed on
+ * the posted `sessionId` and counts rows, so two racing stops (or a
+ * stop racing a discard) resolve to one entry and a friendly error
+ * instead of a P2025 crash.
  */
 export async function stopTimer(
   _prev: TimeEntryFormState,
@@ -207,24 +255,15 @@ export async function stopTimer(
 
   const userId = await getCurrentUserId();
 
-  // The session must still exist — if it was discarded or stopped in
-  // another tab, silently creating a second entry from a stale
-  // dialog is exactly the double-log this guard prevents.
-  const session = await prisma.timerSession.findUnique({
-    where: { userId },
+  // The session the dialog was opened for must still exist — if it
+  // was discarded, stopped or replaced in another tab, silently
+  // creating a second entry from a stale dialog is exactly the
+  // double-log this guard prevents.
+  const session = await prisma.timerSession.findFirst({
+    where: { id: parsed.data.sessionId, userId },
     select: { id: true },
   });
-  if (!session) {
-    return {
-      status: "error",
-      errors: {
-        activity: [
-          "No running timer — it may have been stopped or discarded in another tab.",
-        ],
-      },
-      values: raw,
-    };
-  }
+  if (!session) return staleTimerState(raw);
 
   const matter = await prisma.matter.findUnique({
     where: { id: parsed.data.matterId },
@@ -247,26 +286,36 @@ export async function stopTimer(
     };
   }
 
-  await prisma.$transaction([
-    prisma.timeEntry.create({
-      data: {
-        matterId: parsed.data.matterId,
-        userId,
-        date,
-        hours: Number(parsed.data.hours),
-        activity: parsed.data.activity,
-        narrative: parsed.data.narrative || null,
-        utbmsCode: parsed.data.utbmsCode || null,
-        billable: parsed.data.billable === "on",
-        noCharge: parsed.data.noCharge === "on",
-        privileged: parsed.data.privileged === "on",
-        // "timer" is a documented TimeEntry.source value — marks
-        // the entry as captured by the running clock, not typed in.
-        source: "timer",
-      },
-    }),
-    prisma.timerSession.delete({ where: { id: session.id } }),
-  ]);
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Consume exactly the session the client holds. count === 0
+      // means a concurrent stop/discard/replace got there first.
+      const consumed = await tx.timerSession.deleteMany({
+        where: { id: session.id, userId },
+      });
+      if (consumed.count === 0) throw new StaleTimerError();
+      await tx.timeEntry.create({
+        data: {
+          matterId: parsed.data.matterId,
+          userId,
+          date,
+          hours: Number(parsed.data.hours),
+          activity: parsed.data.activity,
+          narrative: parsed.data.narrative || null,
+          utbmsCode: parsed.data.utbmsCode || null,
+          billable: parsed.data.billable === "on",
+          noCharge: parsed.data.noCharge === "on",
+          privileged: parsed.data.privileged === "on",
+          // "timer" is a documented TimeEntry.source value — marks
+          // the entry as captured by the running clock, not typed in.
+          source: "timer",
+        },
+      });
+    });
+  } catch (err) {
+    if (err instanceof StaleTimerError) return staleTimerState(raw);
+    throw err;
+  }
 
   revalidatePath(`/matters/${parsed.data.matterId}/time`);
   revalidatePath(`/matters/${parsed.data.matterId}`);
@@ -279,4 +328,18 @@ export async function stopTimer(
     detail: parsed.data.activity,
   });
   return { status: "ok" };
+}
+
+class StaleTimerError extends Error {}
+
+function staleTimerState(raw: Record<string, string>): TimeEntryFormState {
+  return {
+    status: "error",
+    errors: {
+      activity: [
+        "No running timer — it may have been stopped or discarded in another tab.",
+      ],
+    },
+    values: raw,
+  };
 }

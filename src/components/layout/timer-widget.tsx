@@ -25,6 +25,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Play, Square, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -43,6 +44,8 @@ import type {
 } from "@/lib/queries/timer";
 import { StopTimerDialog } from "@/components/time-entries/stop-timer-dialog";
 
+const OPTIMISTIC_SESSION_ID = "optimistic";
+
 export function TimerWidget({
   session: serverSession,
   matterOptions,
@@ -53,6 +56,7 @@ export function TimerWidget({
   // Optimistic overlay: local session state wins until the next
   // server value arrives (start/discard flip it immediately; the
   // action's layout revalidation then confirms).
+  const router = useRouter();
   const [session, setSession] = useState(serverSession);
   useEffect(() => setSession(serverSession), [serverSession]);
 
@@ -93,14 +97,22 @@ export function TimerWidget({
   const onStart = () => {
     // Optimistic: show the running pill immediately.
     setSession({
-      id: "optimistic",
+      id: OPTIMISTIC_SESSION_ID,
       matterId: null,
       matterName: null,
       activity: null,
       startedAt: new Date().toISOString(),
     });
     startTransition(async () => {
-      await startTimer();
+      const res = await startTimer();
+      if (!res.ok) {
+        // Refused (a timer is already running elsewhere — this tab's
+        // idle pill was stale) or failed: drop the optimistic copy
+        // and re-read the server state so the real running clock is
+        // adopted instead of being silently replaced.
+        setSession(serverSession);
+        router.refresh();
+      }
     });
   };
 
@@ -227,7 +239,11 @@ export function TimerWidget({
             );
             setStopOpen(true);
           }}
-          className="flex items-center justify-center w-6 h-6 rounded-full bg-white/15 hover:bg-white/25 transition-colors ml-1"
+          // The optimistic placeholder has no real session id yet —
+          // stopTimer consumes a specific session id, so wait for the
+          // server copy.
+          disabled={session.id === OPTIMISTIC_SESSION_ID}
+          className="flex items-center justify-center w-6 h-6 rounded-full bg-white/15 hover:bg-white/25 transition-colors ml-1 disabled:opacity-50"
           title="Stop timer and log time"
           aria-label="Stop timer"
         >
@@ -254,6 +270,7 @@ export function TimerWidget({
         onOpenChange={setStopOpen}
         onStopped={() => setSession(null)}
         matterOptions={matterOptions}
+        sessionId={session.id}
         initialMatterId={session.matterId}
         initialActivity={session.activity}
         initialHours={stopHours}

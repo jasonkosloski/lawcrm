@@ -94,6 +94,7 @@ const buildCreateForm = (overrides: Partial<Record<string, string>> = {}) => {
     fd.set("utbmsCode", overrides.utbmsCode);
   }
   if (overrides.billable === "on") fd.set("billable", "on");
+  if (overrides.privileged === "on") fd.set("privileged", "on");
   if (overrides.calendarEventId) {
     fd.set("calendarEventId", overrides.calendarEventId);
   }
@@ -231,6 +232,45 @@ describe("createTimeEntry — happy path", () => {
     expect(manual!.source).toBe("manual");
   });
 
+  test("rejects a calendarEventId that doesn't exist (field error, not an FK 500)", async () => {
+    const res = await createTimeEntry(
+      matterId,
+      timeEntryInitialState,
+      buildCreateForm({ calendarEventId: "no-such-event" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.calendarEventId?.[0]).toMatch(/not found/i);
+    expect(await prisma.timeEntry.count({ where: { matterId } })).toBe(0);
+  });
+
+  test("rejects a calendarEventId that belongs to another matter", async () => {
+    const area = await seedPracticeArea({ name: "Other area" });
+    const other = await seedMatter({
+      practiceAreaId: area.areaId,
+      stageId: area.stageId,
+      leadUserId: userId,
+      name: "Other Matter",
+    });
+    const ev = await prisma.calendarEvent.create({
+      data: {
+        matterId: other.matterId,
+        title: "Private event on another matter",
+        startTime: new Date("2026-04-01T10:00:00Z"),
+        endTime: new Date("2026-04-01T11:00:00Z"),
+        type: "meeting",
+      },
+      select: { id: true },
+    });
+    const res = await createTimeEntry(
+      matterId,
+      timeEntryInitialState,
+      buildCreateForm({ calendarEventId: ev.id })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.calendarEventId?.[0]).toMatch(/not found/i);
+    expect(await prisma.timeEntry.count()).toBe(0);
+  });
+
   test("normalizes empty narrative to null", async () => {
     await createTimeEntry(
       matterId,
@@ -328,6 +368,7 @@ const buildUpdateForm = (overrides: Partial<Record<string, string>> = {}) => {
     fd.set("utbmsCode", overrides.utbmsCode);
   }
   if (overrides.billable === "on") fd.set("billable", "on");
+  if (overrides.privileged === "on") fd.set("privileged", "on");
   return fd;
 };
 
@@ -378,6 +419,41 @@ describe("updateTimeEntry", () => {
     const row = await prisma.timeEntry.findUnique({ where: { id: timeEntryId } });
     expect(row!.hours).toBe(1);
     expect(row!.status).toBe("billed");
+  });
+
+  test("refuses a manual flip to 'billed' on an unbilled entry and leaves the row unchanged", async () => {
+    const { timeEntryId } = await seedTimeEntry({
+      matterId,
+      userId,
+      hours: 1,
+      status: "billable",
+    });
+    const res = await updateTimeEntry(
+      timeEntryId,
+      timeEntryInitialState,
+      buildUpdateForm({ hours: "5", status: "billed" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.status?.[0]).toMatch(/invoice/i);
+    const row = await prisma.timeEntry.findUnique({ where: { id: timeEntryId } });
+    expect(row!.status).toBe("billable");
+    expect(row!.hours).toBe(1);
+    expect(row!.invoiceId).toBeNull();
+  });
+
+  test("an omitted status leaves the stored status alone (no silent reset to draft)", async () => {
+    const { timeEntryId } = await seedTimeEntry({
+      matterId,
+      userId,
+      status: "billable",
+    });
+    const fd = buildUpdateForm({ hours: "2" });
+    fd.delete("status");
+    const res = await updateTimeEntry(timeEntryId, timeEntryInitialState, fd);
+    expect(res.status).toBe("ok");
+    const row = await prisma.timeEntry.findUnique({ where: { id: timeEntryId } });
+    expect(row!.hours).toBe(2);
+    expect(row!.status).toBe("billable");
   });
 
   test("recomputes amount (hours × rate) when the entry has a rate", async () => {
@@ -575,6 +651,94 @@ describe("deleteTimeEntry", () => {
     const res = await deleteTimeEntry("missing");
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/not found/i);
+  });
+});
+
+// ── Activity log (audit trail on billing records) ───────────────────────
+
+describe("time-entry mutations write an activity log row", () => {
+  const logs = (where: object = {}) =>
+    prisma.activityLog.findMany({
+      where: { type: "time_entry", ...where },
+      orderBy: { timestamp: "asc" },
+    });
+
+  test("create, edit, status change and delete each log under the matter", async () => {
+    await createTimeEntry(
+      matterId,
+      timeEntryInitialState,
+      buildCreateForm({ hours: "2", activity: "Drafting complaint" })
+    );
+    const entry = await prisma.timeEntry.findFirstOrThrow({
+      where: { matterId },
+    });
+    await updateTimeEntry(
+      entry.id,
+      timeEntryInitialState,
+      buildUpdateForm({ hours: "3", activity: "Drafting complaint" })
+    );
+    await setTimeEntryStatus(entry.id, "written_off");
+    await deleteTimeEntry(entry.id);
+
+    const rows = await logs({ matterId });
+    expect(rows.map((r) => r.title)).toEqual([
+      "Time logged · 2h",
+      "Time entry edited · 3h",
+      "Time entry status changed · draft → written_off",
+      "Time entry deleted · 3h",
+    ]);
+    expect(rows[1]!.detail).toContain("2h → 3h");
+    expect(rows.every((r) => r.userId === userId)).toBe(true);
+  });
+
+  test("lead-scoped create logs with a null matter", async () => {
+    const { leadId } = await seedLead();
+    await createLeadTimeEntry(
+      leadId,
+      timeEntryInitialState,
+      buildCreateForm({ hours: "0.5" })
+    );
+    const rows = await logs();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.matterId).toBeNull();
+  });
+
+  test("a privileged entry's activity text never reaches the activity feed", async () => {
+    const secret = "Interview with confidential informant";
+    await createTimeEntry(
+      matterId,
+      timeEntryInitialState,
+      buildCreateForm({ hours: "1", activity: secret, privileged: "on" })
+    );
+    const entry = await prisma.timeEntry.findFirstOrThrow({
+      where: { matterId },
+    });
+    expect(entry.privileged).toBe(true);
+    await updateTimeEntry(
+      entry.id,
+      timeEntryInitialState,
+      buildUpdateForm({ hours: "2", activity: secret, privileged: "on" })
+    );
+    await deleteTimeEntry(entry.id);
+    const rows = await logs({ matterId });
+    expect(rows).toHaveLength(3);
+    for (const r of rows) {
+      expect(r.title).not.toContain(secret);
+      expect(r.detail ?? "").not.toContain(secret);
+    }
+  });
+
+  test("refused mutations log nothing", async () => {
+    const { timeEntryId } = await seedTimeEntry({
+      matterId,
+      userId,
+      status: "billed",
+    });
+    await updateTimeEntry(timeEntryId, timeEntryInitialState, buildUpdateForm());
+    await deleteTimeEntry(timeEntryId);
+    const open = await seedTimeEntry({ matterId, userId, status: "billable" });
+    await setTimeEntryStatus(open.timeEntryId, "billed"); // refused
+    expect(await logs({ matterId })).toHaveLength(0);
   });
 });
 

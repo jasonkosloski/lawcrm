@@ -174,10 +174,14 @@ export function EditTimeEntryDialog({
             name="status"
             value={status}
             onChange={(v) => setStatus(v as TimeEntryStatus)}
-            options={TIME_ENTRY_STATUSES.map((s) => ({
-              value: s,
-              label: STATUS_LABEL[s],
-            }))}
+            // "Billed" is set only by invoice generation; the server
+            // refuses it here, so don't offer it.
+            options={TIME_ENTRY_STATUSES.filter((s) => s !== "billed").map(
+              (s) => ({
+                value: s,
+                label: STATUS_LABEL[s],
+              })
+            )}
           />
 
           <div className="flex flex-wrap items-center gap-4 text-xs">

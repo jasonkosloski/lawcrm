@@ -826,6 +826,7 @@ function SettlementCard({
               matterId={matterId}
               initial={null}
               canEdit={canEdit}
+              canApprove={canApprove}
             />
           </>
         ) : (
@@ -959,6 +960,7 @@ function SettlementCard({
                   status: settlement.status,
                 }}
                 canEdit={canEdit}
+                canApprove={canApprove}
               />
             )}
           </>
