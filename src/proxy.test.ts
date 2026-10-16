@@ -55,6 +55,28 @@ describe("proxy auth gate", () => {
     expect(res.headers.has("location")).toBe(false);
   });
 
+  // Regression: Vercel Cron + Blob's upload-completed callback send no
+  // session cookie; redirecting them meant the jobs never ran and
+  // client-direct uploads never created Document rows.
+  it.each([
+    "/api/email-sync",
+    "/api/notification-sweep",
+    "/api/documents/upload/blob",
+  ])("passes self-authenticated machine endpoint %s through without a cookie", (path) => {
+    const res = proxy(
+      makeRequest(path, { headers: { authorization: "Bearer x" } })
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.has("location")).toBe(false);
+  });
+
+  it("keeps lookalike paths of machine endpoints behind the gate", () => {
+    for (const path of ["/api/email-sync-admin", "/api/documents/upload"]) {
+      const res = proxy(makeRequest(path));
+      expect(res.status).toBe(307);
+    }
+  });
+
   it("passes authenticated requests through", () => {
     const res = proxy(makeRequest("/matters", { cookie: SESSION_COOKIE }));
     expect(res.status).toBe(200);
