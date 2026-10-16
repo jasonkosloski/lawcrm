@@ -18,6 +18,8 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/auth";
 import { AppShell } from "@/components/layout/app-shell";
+import { UserTimeZoneProvider } from "@/components/user-time-zone";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 
 export default async function DashboardLayout({
   children,
@@ -46,5 +48,12 @@ export default async function DashboardLayout({
         : "/login";
     redirect(loginUrl);
   }
-  return <AppShell>{children}</AppShell>;
+  // Client components format instants and fill datetime-local inputs in
+  // the user's profile zone via useUserTimeZone() (ADR-012).
+  const timeZone = await getCurrentUserTimeZone();
+  return (
+    <UserTimeZoneProvider timeZone={timeZone}>
+      <AppShell>{children}</AppShell>
+    </UserTimeZoneProvider>
+  );
 }

@@ -13,18 +13,28 @@
 
 import "server-only";
 
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 
-export async function getCurrentUserTimeZone(): Promise<string> {
+export const DEFAULT_TIME_ZONE = "America/Denver";
+
+/**
+ * Cached per request — layouts, pages and actions each ask for it.
+ *
+ * `getCurrentUserId()` stays OUTSIDE the try: with no session it throws
+ * Next's redirect to /login, and swallowing that would let a signed-out
+ * request carry on rendering with the default zone.
+ */
+export const getCurrentUserTimeZone = cache(async (): Promise<string> => {
+  const userId = await getCurrentUserId();
   try {
-    const userId = await getCurrentUserId();
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { timeZone: true },
     });
-    return user?.timeZone ?? "America/Denver";
+    return user?.timeZone ?? DEFAULT_TIME_ZONE;
   } catch {
-    return "America/Denver";
+    return DEFAULT_TIME_ZONE;
   }
-}
+});

@@ -31,6 +31,10 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("next/headers", () => ({ headers: vi.fn() }));
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
+// server-only module (Prisma); the zone comes from the user's profile.
+vi.mock("@/lib/current-user-tz", () => ({
+  getCurrentUserTimeZone: vi.fn(async () => "Pacific/Honolulu"),
+}));
 
 // Leaf layout chrome — we only care that children pass through.
 vi.mock("@/components/layout/app-shell", () => ({
@@ -42,6 +46,7 @@ vi.mock("@/components/layout/app-shell", () => ({
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/auth";
+import { useUserTimeZone } from "@/components/user-time-zone";
 import DashboardLayout from "./layout";
 
 const mockedAuth = vi.mocked(auth);
@@ -117,5 +122,16 @@ describe("DashboardLayout — authenticated", () => {
       "page content"
     );
     expect(mockedRedirect).not.toHaveBeenCalled();
+  });
+
+  test("hands the user's profile zone (not the runtime's) to client components", async () => {
+    signedIn();
+    function ZoneProbe() {
+      return <span>{useUserTimeZone()}</span>;
+    }
+    render(await DashboardLayout({ children: <ZoneProbe /> }));
+    expect(screen.getByTestId("app-shell")).toHaveTextContent(
+      "Pacific/Honolulu"
+    );
   });
 });

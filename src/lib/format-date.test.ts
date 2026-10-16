@@ -13,15 +13,25 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { parseISO } from "date-fns";
 import {
+  addDaysToKey,
   calendarMonthGridInTz,
   calendarWeekInTz,
   dateKeyInTz,
+  dateOnlyKey,
+  dateOnlyRange,
+  daysBetweenKeys,
+  daysUntilDateOnly,
   formatDate,
+  formatDateOnly,
   formatDayBucket,
   formatRelative,
   instantInTz,
+  parseDateOnly,
   parseLocalDate,
   parseLocalDateOrDateTime,
+  parseWallClock,
+  todayKey,
+  toWallClockInput,
 } from "./format-date";
 
 // Anchor "now" so relative-time assertions are stable.
@@ -459,6 +469,167 @@ describe("calendarMonthGridInTz", () => {
       const { days } = calendarMonthGridInTz(focal, tz);
       // Grid starts Sunday June 28 — the week containing July 1.
       expect(days[0]!.toISOString()).toBe("2026-06-28T12:00:00.000Z");
+    }
+  });
+});
+
+// ── Date-only values + wall-clock input (ADR-012) ─────────────────────
+//
+// Everything below must hold in ANY process time zone: the suite runs
+// in the developer's zone (`npm test`) and in UTC (`npm run test:utc`,
+// the production server's zone). None of these assertions may depend
+// on which one is active.
+
+describe("parseDateOnly", () => {
+  test("stores the calendar date at UTC midnight", () => {
+    expect(parseDateOnly("2026-04-15")?.toISOString()).toBe(
+      "2026-04-15T00:00:00.000Z"
+    );
+  });
+
+  test("accepts leap days only in leap years", () => {
+    expect(parseDateOnly("2028-02-29")?.toISOString()).toBe(
+      "2028-02-29T00:00:00.000Z"
+    );
+    expect(parseDateOnly("2026-02-29")).toBeNull();
+  });
+
+  test.each([
+    "2026-02-31",
+    "2026-13-01",
+    "2026-00-10",
+    "0026-01-01",
+    "2026-4-15",
+    "2026-04-15T10:00",
+    "",
+    "abc",
+  ])("rejects %j", (value) => {
+    expect(parseDateOnly(value)).toBeNull();
+  });
+});
+
+describe("dateOnlyKey / formatDateOnly", () => {
+  const stored = parseDateOnly("2026-04-15")!;
+  // Rows written by the legacy server-local parser on a Denver laptop.
+  const legacyDenverMidnight = new Date("2026-04-15T06:00:00Z");
+
+  test("reads the calendar date in UTC, for new and legacy rows alike", () => {
+    expect(dateOnlyKey(stored)).toBe("2026-04-15");
+    expect(dateOnlyKey(legacyDenverMidnight)).toBe("2026-04-15");
+    expect(dateOnlyKey(new Date("2026-04-15T23:59:59Z"))).toBe("2026-04-15");
+  });
+
+  test("iso formatting matches dateOnlyKey", () => {
+    expect(formatDate(stored, "iso")).toBe(dateOnlyKey(stored));
+  });
+
+  test("never shifts the day, whatever zone renders it", () => {
+    for (const d of [stored, legacyDenverMidnight]) {
+      const out = formatDateOnly(d, "medium");
+      expect(out).toMatch(/Apr/);
+      expect(out).toMatch(/15/);
+      expect(out).toMatch(/2026/);
+    }
+    expect(formatDateOnly(null)).toBe("—");
+  });
+});
+
+describe("todayKey / daysUntilDateOnly", () => {
+  // 8 PM Apr 27 in Denver is already Apr 28 in UTC.
+  const eveningInDenver = new Date("2026-04-28T02:00:00Z");
+
+  test("today follows the viewer's zone", () => {
+    expect(todayKey("America/Denver", eveningInDenver)).toBe("2026-04-27");
+    expect(todayKey("UTC", eveningInDenver)).toBe("2026-04-28");
+  });
+
+  test("an item due today is 0 days away, not overdue, all evening", () => {
+    const dueToday = parseDateOnly("2026-04-27")!;
+    expect(daysUntilDateOnly(dueToday, "America/Denver", eveningInDenver)).toBe(0);
+    expect(
+      daysUntilDateOnly(parseDateOnly("2026-04-28")!, "America/Denver", eveningInDenver)
+    ).toBe(1);
+    expect(
+      daysUntilDateOnly(parseDateOnly("2026-04-26")!, "America/Denver", eveningInDenver)
+    ).toBe(-1);
+  });
+
+  test("legacy rows count the same as new ones", () => {
+    const legacy = new Date("2026-04-27T06:00:00Z");
+    expect(daysUntilDateOnly(legacy, "America/Denver", eveningInDenver)).toBe(0);
+  });
+});
+
+describe("day-key arithmetic", () => {
+  test("addDaysToKey crosses month, year and leap-day boundaries", () => {
+    expect(addDaysToKey("2028-02-28", 1)).toBe("2028-02-29");
+    expect(addDaysToKey("2026-02-28", 1)).toBe("2026-03-01");
+    expect(addDaysToKey("2026-12-31", 1)).toBe("2027-01-01");
+    expect(addDaysToKey("2026-01-01", -1)).toBe("2025-12-31");
+  });
+
+  test("daysBetweenKeys counts calendar days across DST changes", () => {
+    expect(daysBetweenKeys("2026-03-07", "2026-03-09")).toBe(2);
+    expect(daysBetweenKeys("2026-11-02", "2026-10-31")).toBe(-2);
+    expect(daysBetweenKeys("2026-04-15", "2026-04-15")).toBe(0);
+  });
+
+  test("dateOnlyRange is half-open on UTC midnights and keeps legacy rows in their day", () => {
+    const range = dateOnlyRange("2026-04-15", "2026-04-21");
+    expect(range.gte.toISOString()).toBe("2026-04-15T00:00:00.000Z");
+    expect(range.lt.toISOString()).toBe("2026-04-22T00:00:00.000Z");
+    const legacyLastDay = new Date("2026-04-21T06:00:00Z");
+    expect(legacyLastDay >= range.gte && legacyLastDay < range.lt).toBe(true);
+  });
+});
+
+describe("parseWallClock / toWallClockInput", () => {
+  test("reads datetime-local values in the given zone, not the process zone", () => {
+    expect(parseWallClock("2026-04-15T09:30", "America/Denver")?.toISOString()).toBe(
+      "2026-04-15T15:30:00.000Z"
+    ); // MDT, UTC-6
+    expect(parseWallClock("2026-01-15T09:30", "America/Denver")?.toISOString()).toBe(
+      "2026-01-15T16:30:00.000Z"
+    ); // MST, UTC-7
+    expect(parseWallClock("2026-04-15T09:30", "UTC")?.toISOString()).toBe(
+      "2026-04-15T09:30:00.000Z"
+    );
+    expect(
+      parseWallClock("2026-04-15T09:30:45", "America/Denver")?.toISOString()
+    ).toBe("2026-04-15T15:30:45.000Z");
+  });
+
+  test("takes values with an explicit zone as-is", () => {
+    expect(parseWallClock("2026-04-15T09:30:00Z", "America/Denver")?.toISOString()).toBe(
+      "2026-04-15T09:30:00.000Z"
+    );
+    expect(
+      parseWallClock("2026-04-15T09:30:00-06:00", "Asia/Tokyo")?.toISOString()
+    ).toBe("2026-04-15T15:30:00.000Z");
+  });
+
+  test.each(["2026-04-15", "2026-02-31T10:00", "2026-04-15T24:00", "2026-04-15T09:60", "soon", ""])(
+    "rejects %j",
+    (value) => {
+      expect(parseWallClock(value, "America/Denver")).toBeNull();
+    }
+  );
+
+  test("prefill formats the instant in the given zone with a 00-23 hour", () => {
+    expect(toWallClockInput(new Date("2026-04-15T15:30:00Z"), "America/Denver")).toBe(
+      "2026-04-15T09:30"
+    );
+    expect(toWallClockInput(new Date("2026-04-15T06:00:00Z"), "America/Denver")).toBe(
+      "2026-04-15T00:00"
+    );
+  });
+
+  test("a value round-trips through prefill and parse without drifting", () => {
+    for (const tz of ["America/Denver", "UTC", "Asia/Tokyo", "Pacific/Honolulu"]) {
+      for (const value of ["2026-04-15T09:30", "2026-11-01T23:45", "2026-03-08T00:15"]) {
+        const instant = parseWallClock(value, tz)!;
+        expect(toWallClockInput(instant, tz)).toBe(value);
+      }
     }
   });
 });

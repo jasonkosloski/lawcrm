@@ -104,16 +104,10 @@ export function formatDate(
   tz?: string | null
 ): string {
   if (!d) return "—";
-  if (variant === "iso") {
-    // ISO format intentionally ignores the user's TZ — it's used
-    // for date <input type="date"> values which are TZ-naive
-    // calendar dates. Compute in UTC to match what the input
-    // expects.
-    const yy = d.getUTCFullYear();
-    const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-    const dd = String(d.getUTCDate()).padStart(2, "0");
-    return `${yy}-${mm}-${dd}`;
-  }
+  // ISO format intentionally ignores the user's TZ — it's used for
+  // date <input type="date"> values, which are TZ-naive calendar
+  // dates (ADR-012: date-only values are read in UTC).
+  if (variant === "iso") return dateOnlyKey(d);
   const opts: Intl.DateTimeFormatOptions = { ...FORMAT_OPTS[variant] };
   if (tz) opts.timeZone = tz;
   return d.toLocaleString("en-US", opts);
@@ -206,9 +200,199 @@ export function formatDayBucket(
   return formatDate(d, "medium", tz);
 }
 
-// ── Date-only input parsing ────────────────────────────────────────────
+// ── Date-only values (ADR-012) ─────────────────────────────────────────
+//
+// A date-only value — Task/Deadline `dueDate`, TimeEntry / Expense /
+// TrustTransaction / InvoicePayment `date`, Firm `establishedAt`,
+// Matter `incidentDate` / `statuteOfLimitationsDate`, all-day event
+// bounds — is a CALENDAR DATE, not an instant. It is stored as UTC
+// midnight of that date and its calendar date is always read in UTC:
+// no time zone (the viewer's, the browser's or the server's) is ever
+// applied to it. That makes parse and display agree on every machine:
+// a UTC production server, a developer laptop in Denver and a browser
+// anywhere.
+//
+// Rows written before this convention by `parseLocalDate` on a server
+// at or west of UTC sit at that server's local midnight (00:00Z in
+// production, 06:00/07:00Z on a Denver laptop) — still inside the right
+// UTC day, so UTC reads and half-open UTC day ranges handle them too.
+
+/** A calendar date as `YYYY-MM-DD`. */
+export type DayKey = string;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const DAY_KEY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+function utcMsOfKey(key: DayKey): number {
+  const m = DAY_KEY_RE.exec(key);
+  if (!m) throw new RangeError(`Not a YYYY-MM-DD day key: ${key}`);
+  return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+}
 
 /**
+ * Parse `YYYY-MM-DD` (the wire format of `<input type="date">`) into
+ * the stored form of a date-only value: UTC midnight of that date.
+ * Returns null for malformed input or impossible dates (2026-02-31)
+ * so callers surface a field error instead of an Invalid Date 500.
+ */
+export function parseDateOnly(value: string): Date | null {
+  const m = DAY_KEY_RE.exec(value);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const date = new Date(Date.UTC(y, mo - 1, d));
+  // Date.UTC rolls 2026-02-31 over into March and maps years 0-99 to
+  // 1900-1999; a round-trip check rejects both.
+  if (
+    date.getUTCFullYear() !== y ||
+    date.getUTCMonth() !== mo - 1 ||
+    date.getUTCDate() !== d
+  ) {
+    return null;
+  }
+  return date;
+}
+
+/** The calendar date of a stored date-only value, as `YYYY-MM-DD`. */
+export function dateOnlyKey(d: Date): DayKey {
+  const yy = String(d.getUTCFullYear()).padStart(4, "0");
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+export type DateOnlyFormatVariant = Exclude<
+  DateFormatVariant,
+  "time" | "datetime" | "datetime_medium" | "datetime_long"
+>;
+
+/**
+ * Format a date-only value for display. Safe on the server and in
+ * client components alike — it never shifts the day. (Use
+ * `formatDate(d, variant, tz)` for instants instead.)
+ */
+export function formatDateOnly(
+  d: Date | null | undefined,
+  variant: DateOnlyFormatVariant = "medium"
+): string {
+  return formatDate(d, variant, "UTC");
+}
+
+/** Today's calendar date for a viewer in `tz`. */
+export function todayKey(tz: string, now: Date = new Date()): DayKey {
+  return dateKeyInTz(now, tz);
+}
+
+/** Shift a day key by `days` (negative goes back). */
+export function addDaysToKey(key: DayKey, days: number): DayKey {
+  return dateOnlyKey(new Date(utcMsOfKey(key) + days * DAY_MS));
+}
+
+/** Whole calendar days from `from` to `to` (positive when `to` is later). */
+export function daysBetweenKeys(from: DayKey, to: DayKey): number {
+  return Math.round((utcMsOfKey(to) - utcMsOfKey(from)) / DAY_MS);
+}
+
+/**
+ * Whole days from the viewer's today to a date-only value: 0 = due
+ * today, 1 = tomorrow, negative = overdue. Never compare a date-only
+ * value to `new Date()` directly — that marks items overdue on their
+ * due day (and the evening before, west of UTC).
+ */
+export function daysUntilDateOnly(
+  d: Date,
+  tz: string,
+  now: Date = new Date()
+): number {
+  return daysBetweenKeys(todayKey(tz, now), dateOnlyKey(d));
+}
+
+/**
+ * Prisma bounds selecting date-only values from `firstKey` through
+ * `lastKey` inclusive: `{ dueDate: dateOnlyRange(a, b) }`. Half-open
+ * on UTC midnights, so legacy rows stored at a western server's local
+ * midnight still land in their day.
+ */
+export function dateOnlyRange(
+  firstKey: DayKey,
+  lastKey: DayKey
+): { gte: Date; lt: Date } {
+  return {
+    gte: new Date(utcMsOfKey(firstKey)),
+    lt: new Date(utcMsOfKey(addDaysToKey(lastKey, 1))),
+  };
+}
+
+// ── Wall-clock input (instants typed as local time) ────────────────────
+//
+// `<input type="datetime-local">` posts a zone-less "YYYY-MM-DDTHH:mm".
+// `new Date()` would read it in the SERVER's zone (UTC in production),
+// storing every event, call and capture hours off. These two helpers
+// pin the conversion to the user's profile zone in both directions —
+// parse on the server with `getCurrentUserTimeZone()`, prefill in
+// client components with `useUserTimeZone()` — so a value round-trips
+// through a form without drifting.
+
+const WALL_CLOCK_RE =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?$/;
+const EXPLICIT_ZONE_RE = /^\d{4}-\d{2}-\d{2}T.*(?:[zZ]|[+-]\d{2}:?\d{2})$/;
+
+/**
+ * Parse a datetime-local value as wall-clock time in `tz`. A value
+ * that already carries `Z` or a `±hh:mm` offset is an unambiguous
+ * instant and is taken as-is. Returns null for anything else
+ * (malformed, date-only, impossible date or time).
+ */
+export function parseWallClock(value: string, tz: string): Date | null {
+  const m = WALL_CLOCK_RE.exec(value);
+  if (m) {
+    const hour = Number(m[4]);
+    const minute = Number(m[5]);
+    const second = m[6] ? Number(m[6]) : 0;
+    if (!parseDateOnly(`${m[1]}-${m[2]}-${m[3]}`)) return null;
+    if (hour > 23 || minute > 59 || second > 59) return null;
+    const at = instantInTz(
+      Number(m[1]),
+      Number(m[2]),
+      Number(m[3]),
+      hour,
+      minute,
+      tz
+    );
+    return new Date(at.getTime() + second * 1000);
+  }
+  if (EXPLICIT_ZONE_RE.test(value)) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  return null;
+}
+
+/** Format an instant as a datetime-local input value ("YYYY-MM-DDTHH:mm") in `tz`. */
+export function toWallClockInput(d: Date, tz: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(d);
+  const get = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((p) => p.type === type)?.value ?? "00";
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
+}
+
+// ── Legacy date-only parsing ───────────────────────────────────────────
+
+/**
+ * @deprecated Use `parseDateOnly` (UTC midnight). This server-local
+ * parser predates the UTC convention in ADR-012; on the UTC production
+ * host the two return the same instant. Kept only until every caller
+ * has moved over.
+ *
  * Parse a date-only string (`YYYY-MM-DD`, the wire format of
  * `<input type="date">`) into **local midnight** of that calendar
  * day.
@@ -237,6 +421,10 @@ export function parseLocalDate(value: string): Date | null {
 }
 
 /**
+ * @deprecated Use `parseDateOnly` for date-only values and
+ * `parseWallClock(value, tz)` for datetimes — a zone-less datetime-local
+ * value fed to `new Date()` here is read in the server's zone.
+ *
  * Like `parseLocalDate`, but tolerates a full ISO datetime
  * (`2026-04-15T13:30:00.000Z` or datetime-local's
  * `2026-04-15T13:30`) by falling through to `new Date(value)` —
