@@ -19,6 +19,8 @@
  * Allowlist:
  *   - /login — the form itself
  *   - /api/auth/* — Auth.js handlers (sign-in callbacks, CSRF, etc.)
+ *   - SELF_AUTHENTICATED_PATHS — cron + blob-callback endpoints that
+ *     carry their own credential instead of a cookie
  *   - Static assets (Next handles via the matcher exclusion below)
  */
 
@@ -33,6 +35,23 @@ const SESSION_COOKIE_NAMES = [
 ];
 
 const PUBLIC_PATH_PREFIXES = ["/login", "/api/auth"];
+
+/**
+ * Endpoints called by machines that never carry a session cookie —
+ * redirecting them to /login means they silently never run. Each one
+ * authenticates itself, so skipping the cookie check widens nothing:
+ *   - cron endpoints require `Authorization: Bearer <CRON_SECRET>`
+ *     (fail-closed when unset)
+ *   - the blob upload route checks session + `documents.upload` when
+ *     issuing tokens, and Vercel's completion callback is
+ *     signature-verified by `handleUpload`
+ * Exact matches only — a lookalike path stays behind the gate.
+ */
+const SELF_AUTHENTICATED_PATHS = new Set([
+  "/api/email-sync",
+  "/api/notification-sweep",
+  "/api/documents/upload/blob",
+]);
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -49,7 +68,10 @@ export function proxy(request: NextRequest) {
     NextResponse.next({ request: { headers: requestHeaders } });
 
   // Public routes always pass.
-  if (PUBLIC_PATH_PREFIXES.some((p) => pathname.startsWith(p))) {
+  if (
+    PUBLIC_PATH_PREFIXES.some((p) => pathname.startsWith(p)) ||
+    SELF_AUTHENTICATED_PATHS.has(pathname)
+  ) {
     return passThrough();
   }
 
