@@ -57,6 +57,15 @@ export async function POST(request: Request): Promise<Response> {
     const status = err instanceof UploadTokenError ? err.status : 400;
     const message =
       err instanceof Error ? err.message : "Upload handling failed.";
+    // The @vercel/blob client discards this body and shows only
+    // "Failed to retrieve the client token", so the server log is
+    // the one place the real reason surfaces. Event type + status +
+    // message only — never the payload (it carries file names).
+    console.error("[blob-upload] request failed", {
+      event: body?.type,
+      status,
+      message,
+    });
     return NextResponse.json({ error: message }, { status });
   }
 }
