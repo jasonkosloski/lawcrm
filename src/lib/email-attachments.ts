@@ -44,8 +44,7 @@ import { prisma } from "@/lib/prisma";
 import { GmailAuthError, gmailFetch } from "@/lib/google/gmail-client";
 import {
   deleteFile,
-  isBlobKey,
-  openReadStream,
+  readStoredFile,
   storeFile,
 } from "@/lib/file-storage";
 import { contentTypeForFilename } from "@/app/api/documents/upload/upload-config";
@@ -193,16 +192,7 @@ export async function ensureAttachmentBytes(
  *  them. Attachment-scale only (Gmail caps ~25MB) — never point
  *  this at GB-scale discovery media. */
 export async function readStoredBytes(key: string): Promise<Buffer> {
-  if (isBlobKey(key)) {
-    const res = await fetch(key);
-    if (!res.ok) {
-      throw new Error(`Blob fetch failed with ${res.status} for stored file.`);
-    }
-    return Buffer.from(await res.arrayBuffer());
-  }
-  const chunks: Buffer[] = [];
-  for await (const chunk of openReadStream(key)) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-  return Buffer.concat(chunks);
+  const bytes = await readStoredFile(key);
+  if (!bytes) throw new Error("Stored attachment bytes are missing.");
+  return bytes;
 }

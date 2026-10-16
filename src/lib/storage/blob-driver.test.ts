@@ -4,10 +4,11 @@
  * and `getDownloadUrl` are kept via importOriginal so instanceof
  * branches and URL munging run for real.
  *
- * What's pinned: the argument contracts we send the SDK (access,
- * contentType, addRandomSuffix/allowOverwrite OFF, the cache TTL),
- * the key↔URL mapping (put under a `{rand}__{name}` pathname, hand
- * back the FULL blob URL as the storage key), and the
+ * What's pinned: the argument contracts we send the SDK (PRIVATE
+ * access, contentType, addRandomSuffix/allowOverwrite OFF, the cache
+ * TTL), the key↔URL mapping (put under a `{rand}__{name}` pathname,
+ * hand back the FULL blob URL as the storage key), signed-URL scoping
+ * (one pathname, get-only, TTL by media vs document) and the
  * BlobNotFoundError → null/no-op translations that keep the facade
  * contract identical to the local driver's.
  */
@@ -16,14 +17,34 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("@vercel/blob", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@vercel/blob")>();
-  return { ...actual, put: vi.fn(), del: vi.fn(), head: vi.fn() };
+  return {
+    ...actual,
+    put: vi.fn(),
+    del: vi.fn(),
+    head: vi.fn(),
+    get: vi.fn(),
+    issueSignedToken: vi.fn(),
+    presignUrl: vi.fn(),
+  };
 });
 
-import { BlobNotFoundError, del, head, put } from "@vercel/blob";
+import {
+  BlobNotFoundError,
+  del,
+  get,
+  head,
+  issueSignedToken,
+  presignUrl,
+  put,
+} from "@vercel/blob";
 import {
   BLOB_CACHE_MAX_AGE_SECONDS,
-  blobDownloadUrl,
+  SIGNED_MEDIA_URL_TTL_MS,
+  SIGNED_URL_TTL_MS,
+  blobPathname,
   deleteFileBlob,
+  readBlobBytes,
+  signedBlobUrl,
   statFileBlob,
   storeFileBlob,
 } from "./blob-driver";
@@ -32,7 +53,7 @@ const mockedPut = vi.mocked(put);
 const mockedDel = vi.mocked(del);
 const mockedHead = vi.mocked(head);
 
-const STORE = "https://abc123.public.blob.vercel-storage.com";
+const STORE = "https://abc123.private.blob.vercel-storage.com";
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -60,7 +81,7 @@ describe("storeFileBlob", () => {
     expect(pathname).toMatch(/^[A-Za-z0-9_-]{16}__brief\.pdf$/);
     expect(body).toBe(file);
     expect(opts).toEqual({
-      access: "public",
+      access: "private",
       contentType: "application/pdf",
       // Our key already carries the entropy; a Vercel-added suffix
       // would diverge the pathname from the key scheme.
@@ -140,11 +161,96 @@ describe("statFileBlob", () => {
   });
 });
 
-describe("blobDownloadUrl", () => {
-  test("appends the CDN's ?download=1 attachment forcer", () => {
-    // Real getDownloadUrl (not mocked) — pins the actual SDK
-    // behavior we lean on for disposition forcing.
-    const url = blobDownloadUrl(`${STORE}/k__report.html`);
-    expect(url).toBe(`${STORE}/k__report.html?download=1`);
+describe("blobPathname", () => {
+  test("recovers the (decoded) pathname from a stored URL", () => {
+    expect(blobPathname(`${STORE}/k__brief%20v2.pdf`)).toBe("k__brief v2.pdf");
+  });
+});
+
+describe("signedBlobUrl", () => {
+  const signed = `${STORE}/k__brief.pdf?vercel-blob-delegation=d&vercel-blob-signature=s`;
+
+  function wire() {
+    vi.mocked(issueSignedToken).mockResolvedValue({
+      delegationToken: "d",
+      clientSigningToken: "c",
+      validUntil: 0,
+    });
+    vi.mocked(presignUrl).mockResolvedValue({ presignedUrl: signed });
+  }
+
+  test("scopes the token to one pathname, get-only, short-lived", async () => {
+    wire();
+    const before = Date.now();
+    const url = await signedBlobUrl(`${STORE}/k__brief.pdf`);
+    expect(url).toBe(signed);
+
+    const tokenOpts = vi.mocked(issueSignedToken).mock.calls[0][0];
+    expect(tokenOpts.pathname).toBe("k__brief.pdf");
+    expect(tokenOpts.operations).toEqual(["get"]);
+    expect(tokenOpts.validUntil! - before).toBeGreaterThanOrEqual(SIGNED_URL_TTL_MS - 50);
+    expect(tokenOpts.validUntil! - before).toBeLessThanOrEqual(SIGNED_URL_TTL_MS + 1000);
+
+    expect(vi.mocked(presignUrl).mock.calls[0][1]).toMatchObject({
+      operation: "get",
+      pathname: "k__brief.pdf",
+      access: "private",
+      validUntil: tokenOpts.validUntil,
+    });
+  });
+
+  test("media gets the long lifetime (seeking through long recordings)", async () => {
+    wire();
+    const before = Date.now();
+    await signedBlobUrl(`${STORE}/k__bodycam.mp4`, { media: true });
+    const { validUntil } = vi.mocked(issueSignedToken).mock.calls[0][0];
+    expect(validUntil! - before).toBeGreaterThanOrEqual(SIGNED_MEDIA_URL_TTL_MS - 50);
+  });
+
+  test("download appends the CDN attachment flag outside the signature", async () => {
+    wire();
+    const url = new URL(await signedBlobUrl(`${STORE}/k__brief.pdf`, { download: true }));
+    expect(url.searchParams.get("download")).toBe("1");
+    expect(url.searchParams.get("vercel-blob-signature")).toBe("s");
+  });
+});
+
+describe("readBlobBytes", () => {
+  function streamOf(...parts: string[]) {
+    return new ReadableStream<Uint8Array>({
+      start(c) {
+        for (const p of parts) c.enqueue(new TextEncoder().encode(p));
+        c.close();
+      },
+    });
+  }
+
+  test("authenticated private get, ranged to the cap", async () => {
+    vi.mocked(get).mockResolvedValue({
+      statusCode: 200,
+      stream: streamOf("hello ", "world"),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    const buf = await readBlobBytes(`${STORE}/k__a.txt`, 5);
+    expect(buf?.toString()).toBe("hello");
+    expect(vi.mocked(get)).toHaveBeenCalledWith(`${STORE}/k__a.txt`, {
+      access: "private",
+      headers: { range: "bytes=0-4" },
+    });
+  });
+
+  test("uncapped read returns everything", async () => {
+    vi.mocked(get).mockResolvedValue({
+      statusCode: 200,
+      stream: streamOf("a", "b", "c"),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    expect((await readBlobBytes(`${STORE}/k__a.txt`))?.toString()).toBe("abc");
+    expect(vi.mocked(get).mock.calls[0][1]).toEqual({ access: "private" });
+  });
+
+  test("missing blob → null", async () => {
+    vi.mocked(get).mockResolvedValue(null);
+    await expect(readBlobBytes(`${STORE}/k__gone.txt`)).resolves.toBeNull();
   });
 });

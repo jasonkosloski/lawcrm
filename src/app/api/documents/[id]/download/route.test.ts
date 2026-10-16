@@ -30,7 +30,12 @@ vi.mock("@/lib/file-storage", () => ({
   // Real (trivial) implementations — the route's blob branch keys
   // off these, and mocking them away would un-test the dispatch.
   isBlobKey: (key: string) => key.startsWith("https://"),
-  blobDownloadUrl: (url: string) => `${url}?download=1`,
+  // Stand-in for presigning: echoes the options so the route's
+  // inline/attachment + media/document choices are observable.
+  signedBlobUrl: vi.fn(
+    async (url: string, opts: { download?: boolean; media?: boolean } = {}) =>
+      `${url}?signed=1${opts.media ? "&ttl=media" : ""}${opts.download ? "&download=1" : ""}`
+  ),
 }));
 
 import { auth } from "@/auth";
@@ -234,7 +239,7 @@ describe("GET /api/documents/[id]/download — Range requests", () => {
 
 describe("GET /api/documents/[id]/download — blob-stored documents (302)", () => {
   const BLOB_URL =
-    "https://abc123.public.blob.vercel-storage.com/AAAAAAAAAAAAAAAA__clip.mp4";
+    "https://abc123.private.blob.vercel-storage.com/AAAAAAAAAAAAAAAA__clip.mp4";
 
   /** Same happy wiring as `download()` but with a blob-URL fileUrl —
    *  the shape that selects the redirect branch (ADR-015). */
@@ -261,20 +266,21 @@ describe("GET /api/documents/[id]/download — blob-stored documents (302)", () 
     return GET(req as any, { params: Promise.resolve({ id: "d1" }) });
   }
 
-  test("inline-safe type → 302 to the bare blob URL, never proxied", async () => {
+  test("inline-safe media → 302 to a signed inline URL (media TTL), never proxied", async () => {
     const res = await downloadBlob("video/mp4");
     expect(res.status).toBe(302);
-    expect(res.headers.get("Location")).toBe(BLOB_URL);
+    // Never the bare stored URL — a private blob needs a signature.
+    expect(res.headers.get("Location")).toBe(`${BLOB_URL}?signed=1&ttl=media`);
     // The bytes must not flow through the route.
     expect(mockedOpen).not.toHaveBeenCalled();
   });
 
-  test("non-inline-safe type → 302 to the ?download=1 attachment URL", async () => {
+  test("non-inline-safe type → 302 to a signed attachment URL", async () => {
     // text/html on the isolated blob origin can't ride our session,
     // but forcing download preserves the local path's UX contract.
     const res = await downloadBlob("text/html");
     expect(res.status).toBe(302);
-    expect(res.headers.get("Location")).toBe(`${BLOB_URL}?download=1`);
+    expect(res.headers.get("Location")).toBe(`${BLOB_URL}?signed=1&download=1`);
   });
 
   test("redirect (the auth boundary) is never cacheable", async () => {

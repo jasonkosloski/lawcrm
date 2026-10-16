@@ -15,15 +15,14 @@
  */
 
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { Readable } from "node:stream";
 import JSZip from "jszip";
 
 vi.mock("@/lib/file-storage", () => ({
   statFile: vi.fn(),
-  openReadStream: vi.fn(),
+  readStoredFile: vi.fn(),
 }));
 
-import { openReadStream, statFile } from "@/lib/file-storage";
+import { readStoredFile, statFile } from "@/lib/file-storage";
 import {
   DOCX_MAX_BYTES,
   TEXT_PREVIEW_MAX_BYTES,
@@ -47,13 +46,12 @@ beforeEach(() => {
     if (!files.has(key)) return null;
     return { size: statSizeOverride.get(key) ?? files.get(key)!.length };
   });
-  vi.mocked(openReadStream).mockImplementation(
-    (key: string, range?: { start: number; end: number }) => {
+  // Facade contract: bytes up to `maxBytes`, null when gone.
+  vi.mocked(readStoredFile).mockImplementation(
+    async (key: string, maxBytes?: number) => {
       const buf = files.get(key);
-      if (!buf) throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
-      // fs.createReadStream range semantics: both bounds inclusive.
-      const slice = range ? buf.subarray(range.start, range.end + 1) : buf;
-      return Readable.from([slice]) as unknown as NodeJS.ReadableStream;
+      if (!buf) return null;
+      return maxBytes !== undefined ? buf.subarray(0, maxBytes) : buf;
     }
   );
 });
@@ -156,14 +154,12 @@ describe("renderStoredDocxToSafeHtml — failure paths", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toMatch(/larger than 25 MB/);
-    expect(vi.mocked(openReadStream)).not.toHaveBeenCalled();
+    expect(vi.mocked(readStoredFile)).not.toHaveBeenCalled();
   });
 
   test("storage read error → reason, not a throw", async () => {
     files.set("boom", Buffer.from("x"));
-    vi.mocked(openReadStream).mockImplementation(() => {
-      throw new Error("disk detached");
-    });
+    vi.mocked(readStoredFile).mockRejectedValue(new Error("disk detached"));
     const result = await renderStoredDocxToSafeHtml("boom");
     expect(result).toEqual({
       ok: false,
@@ -205,11 +201,11 @@ describe("readStoredTextPreview", () => {
     if (!result.ok) return;
     expect(result.truncated).toBe(true);
     expect(result.text.length).toBe(TEXT_PREVIEW_MAX_BYTES);
-    // The read itself must be ranged — never pull bytes past the cap.
-    expect(vi.mocked(openReadStream)).toHaveBeenCalledWith("t2", {
-      start: 0,
-      end: TEXT_PREVIEW_MAX_BYTES - 1,
-    });
+    // The read itself must be capped — never pull bytes past it.
+    expect(vi.mocked(readStoredFile)).toHaveBeenCalledWith(
+      "t2",
+      TEXT_PREVIEW_MAX_BYTES
+    );
   });
 
   test("missing file → reason", async () => {

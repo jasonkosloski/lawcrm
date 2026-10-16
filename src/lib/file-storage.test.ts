@@ -195,6 +195,23 @@ describe("openReadStream", () => {
   });
 });
 
+describe("readStoredFile (local driver)", () => {
+  test("reads the whole file when uncapped or under the cap", async () => {
+    const stored = await mod.storeFile(makeFile("0123456789", "all.txt"));
+    expect((await mod.readStoredFile(stored.key))?.toString()).toBe("0123456789");
+    expect((await mod.readStoredFile(stored.key, 50))?.toString()).toBe("0123456789");
+  });
+
+  test("caps the read at maxBytes", async () => {
+    const stored = await mod.storeFile(makeFile("0123456789", "cap.txt"));
+    expect((await mod.readStoredFile(stored.key, 4))?.toString()).toBe("0123");
+  });
+
+  test("missing file → null", async () => {
+    expect(await mod.readStoredFile("AAAAAAAAAAAAAAAA__gone.txt")).toBeNull();
+  });
+});
+
 describe("deleteFile", () => {
   test("removes the file on disk", async () => {
     const stored = await mod.storeFile(makeFile("byebye", "x.txt"));

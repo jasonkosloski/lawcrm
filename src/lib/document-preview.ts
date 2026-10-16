@@ -31,7 +31,7 @@
  */
 
 import mammoth from "mammoth";
-import { openReadStream, statFile } from "@/lib/file-storage";
+import { readStoredFile, statFile } from "@/lib/file-storage";
 import { sanitizeDocumentHtml } from "@/lib/sanitize-html";
 
 /** Ceiling for buffering a .docx into memory for conversion. Matches
@@ -46,24 +46,18 @@ export type DocxPreviewResult =
   | { ok: true; html: string }
   | { ok: false; reason: string };
 
-/** Buffer a stored file fully into memory, bounded by `maxBytes`
- *  (bytes past the cap are never read — the fs read is ranged). */
+/** Buffer a stored file into memory, bounded by `maxBytes` (bytes
+ *  past the cap are never read). Works on both drivers — blob keys
+ *  go through an authenticated, ranged read of the private store. */
 async function readStoredBytes(
   key: string,
   maxBytes: number
 ): Promise<{ buffer: Buffer; truncated: boolean } | null> {
   const stat = await statFile(key);
   if (!stat) return null;
-  const truncated = stat.size > maxBytes;
-  const stream = openReadStream(
-    key,
-    truncated ? { start: 0, end: maxBytes - 1 } : undefined
-  );
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-  return { buffer: Buffer.concat(chunks), truncated };
+  const buffer = await readStoredFile(key, maxBytes);
+  if (!buffer) return null;
+  return { buffer, truncated: stat.size > maxBytes };
 }
 
 /**

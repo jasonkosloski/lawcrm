@@ -276,7 +276,7 @@ Clicking a different column resets to that column's first-click (ascending).
 ## ADR-015: Driver-based document storage — local disk in dev, Vercel Blob (client-direct + 302 serving) in prod
 
 **Date:** 2026-07-07
-**Status:** Accepted
+**Status:** Accepted — the *public-access* parts (bearer URLs, redirect to the bare blob URL) are superseded by ADR-018 (private store + presigned URLs). Driver selection, key scheme, client-direct uploads and 302 serving still stand.
 
 **Context:** `src/lib/file-storage.ts` wrote to `./uploads/` — ephemeral on Vercel's serverless filesystem, so every uploaded document would vanish between deploys/invocations. Worse, Vercel caps serverless request bodies at ~4.5MB, so the streaming busboy upload route (`/api/documents/upload`) physically cannot receive GB-scale discovery media in production, no matter where it writes.
 
@@ -334,3 +334,23 @@ Clicking a different column resets to that column's first-click (ascending).
 - (+) The cookie never contains the hash itself — only a digest of it
 - (-) Revocation is all-or-nothing: no "sign out just that one device" — that still needs DB sessions (per-device session list stays deferred)
 - (-) Relies on the per-request user lookup in the `jwt` callback; if that query is ever removed for performance, this check goes with it
+
+## ADR-018: Private Blob store + presigned URLs for documents
+
+**Date:** 2026-10-16
+**Status:** Accepted (supersedes ADR-015's public-access trade-off)
+
+**Context:** ADR-015 put documents in a *public* Blob store: anyone holding a file's URL could fetch it, with the download route only controlling who was handed the URL. That was a stated trade-off while no real data existed. With the store going live for privileged client files (discovery, medical records, bodycam), a leaked link (forwarded email, browser history, a log line) granting access until deletion isn't acceptable. Vercel Blob's private access is generally available, and the store was still empty — the cheapest moment to switch.
+
+**Decision:**
+- One **private** store. Every write (`put`, client-direct `upload`) uses `access: "private"`; the stored key is still the full blob URL (`*.private.blob.vercel-storage.com/{key}`), so key-shape dispatch is unchanged.
+- **Serving:** `/api/documents/[id]/download` and `/api/email-attachments/[id]/download` keep their session/scope checks, then 302 to a presigned GET URL from `signedBlobUrl` (`issueSignedToken` scoped to the one pathname, `get` only, then `presignUrl`). Lifetime: 15 minutes, or 6 hours for audio/video — a media element re-uses the redirect target for every Range request while seeking, so a short URL would break playback partway through a long recording. `download=1` (attachment disposition) is appended outside the signed payload. The redirect itself is `no-store`.
+- **Server reads:** `readStoredFile` → `readBlobBytes`, an authenticated `get()` with a Range header for capped reads.
+- Verified live against a private store before shipping: bare URL → 403; signed → 200; `download=1` → attachment with the signature intact; Range → 206; CORS allows the client-side docx renderer's fetch; a signature replayed against another pathname → 403.
+
+**Trade-offs:**
+- (+) A stored URL is no longer a credential; exposure from a leaked link is bounded to one file for minutes (hours for media)
+- (+) Fixed server-side docx/text/CSV previews on the blob driver, which had been calling the local-only stream reader
+- (-) One extra control-plane call (`issueSignedToken`) per download redirect
+- (-) A signed media URL stays valid for up to 6 hours if leaked — scoped to that single file
+- (-) Signed URLs can't be revoked early; deleting the file is the kill switch (bounded further by the 1-hour CDN cache TTL)

@@ -100,7 +100,7 @@ describe("vercel-blob driver → client-direct upload()", () => {
     expect(pathname).toMatch(/^[A-Za-z0-9_-]{16}__depo\.mp4$/);
     expect((file as File).name).toBe("depo.mp4");
     expect(opts).toMatchObject({
-      access: "public",
+      access: "private",
       handleUploadUrl: "/api/documents/upload/blob",
       // Derived from the KEY via the shared extension map — always
       // agrees with the token route's allowedContentTypes.

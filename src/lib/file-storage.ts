@@ -31,13 +31,13 @@
  *     write would be lying about what production can do. The
  *     streaming route guards on the driver before calling this.
  *   - `openReadStream` refuses blob keys — the download route 302s
- *     to the blob URL instead of proxying bytes.
+ *     to a short-lived signed URL (`signedBlobUrl`) instead of
+ *     proxying bytes. Server-side reads use `readStoredFile`.
  *
- * Storage is NOT public under the local driver — files are served
- * only via `/api/documents/[id]/download`, which gates by session.
- * Under the blob driver, blob URLs are unguessable-but-public bearer
- * URLs on an isolated origin; the download route still gates who is
- * ever HANDED a URL. Trade-offs recorded honestly in ADR-015.
+ * Storage is never public. Local: files are served only via
+ * `/api/documents/[id]/download`, which gates by session. Blob: a
+ * PRIVATE store (ADR-018) — a stored URL alone fetches nothing; the
+ * download route mints a per-file signed URL after the same gate.
  */
 
 import type { Readable } from "node:stream";
@@ -51,8 +51,9 @@ import {
   type StoredFile,
 } from "./storage/local-driver";
 import {
-  blobDownloadUrl,
   deleteFileBlob,
+  readBlobBytes,
+  signedBlobUrl,
   statFileBlob,
   storeFileBlob,
 } from "./storage/blob-driver";
@@ -60,7 +61,7 @@ import { isBlobKey, type StorageDriver } from "./storage/storage-key";
 
 export { FileTooLargeError, type StoredFile };
 export { isBlobKey, type StorageDriver };
-export { blobDownloadUrl };
+export { signedBlobUrl };
 
 /**
  * Which driver new writes go to. Resolution order:
@@ -128,6 +129,30 @@ export function openReadStream(
     );
   }
   return openReadStreamLocal(key, range);
+}
+
+/**
+ * Buffer a stored file's bytes, whichever driver holds them, reading
+ * at most `maxBytes` (ranged on both drivers — bytes past the cap are
+ * never read). `null` when the file is gone. Preview / attachment
+ * scale only — never GB-scale media.
+ */
+export async function readStoredFile(
+  key: string,
+  maxBytes?: number
+): Promise<Buffer | null> {
+  if (isBlobKey(key)) return readBlobBytes(key, maxBytes);
+  const stat = await statFileLocal(key);
+  if (!stat) return null;
+  const range =
+    maxBytes !== undefined && stat.size > maxBytes
+      ? { start: 0, end: maxBytes - 1 }
+      : undefined;
+  const chunks: Buffer[] = [];
+  for await (const chunk of openReadStreamLocal(key, range)) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
 }
 
 /** Best-effort delete — used when a Document row is removed and on

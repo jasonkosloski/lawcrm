@@ -16,10 +16,10 @@
  *   - local:        `Document.fileUrl` = the bare key; bytes at
  *                    `./uploads/{key}`.
  *   - vercel-blob:  the key is the blob *pathname*; the SDK returns
- *                    `https://<store>.public.blob.vercel-storage.com/{key}`
+ *                    `https://<store>.private.blob.vercel-storage.com/{key}`
  *                    and `Document.fileUrl` stores that FULL URL
- *                    (it's what `del`/`head` accept and what the
- *                    download route redirects to). `isBlobKey`
+ *                    (it's what `del`/`head`/`get` accept; the
+ *                    download route signs it per request — ADR-018). `isBlobKey`
  *                    distinguishes the two forms, so reads/deletes
  *                    can dispatch per-document rather than per-env —
  *                    a driver switch never strands existing rows.

@@ -222,7 +222,9 @@ export function MultiFileUpload({
         // route uses for allowedContentTypes — they can't disagree.
         const key = makeStorageKey(f.name);
         await upload(key, f, {
-          access: "public",
+          // Must match the store: documents live in a PRIVATE Blob
+          // store and are only ever served via signed URLs (ADR-018).
+          access: "private",
           handleUploadUrl: "/api/documents/upload/blob",
           contentType: contentTypeForFilename(key),
           clientPayload: JSON.stringify({

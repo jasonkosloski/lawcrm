@@ -9,7 +9,7 @@
  * .contentType is SENDER-declared, i.e. attacker-controlled, so the
  * same stored-XSS reasoning applies verbatim), nosniff on every
  * response, CSP sandbox on forced attachments, single-range 206
- * support, blob keys 302 to the CDN.
+ * support, blob keys 302 to a short-lived presigned URL (ADR-018).
  *
  * Scoping: attachment → message → thread → account, and the account
  * must belong to the CURRENT user. This deliberately matches the
@@ -34,9 +34,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import {
-  blobDownloadUrl,
   isBlobKey,
   openReadStream,
+  signedBlobUrl,
   statFile,
 } from "@/lib/file-storage";
 import { isInlineSafeType } from "@/lib/inline-safe-types";
@@ -104,11 +104,11 @@ export async function GET(
   const contentType = attachment.contentType ?? "application/octet-stream";
   const inlineSafe = isInlineSafeType(contentType);
 
-  // Blob-cached attachment → 302 to the CDN (never proxied); the
-  // redirect is the auth boundary and must not be cached. Same
-  // inline-vs-?download=1 split as documents (ADR-015).
+  // Blob-cached attachment → 302 to a presigned URL (never
+  // proxied); the redirect is the auth boundary and must not be
+  // cached. Same inline-vs-attachment split as documents (ADR-018).
   if (isBlobKey(key)) {
-    const target = inlineSafe ? key : blobDownloadUrl(key);
+    const target = await signedBlobUrl(key, { download: !inlineSafe });
     return NextResponse.redirect(target, {
       status: 302,
       headers: {

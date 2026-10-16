@@ -18,23 +18,23 @@
  *   - Local key (bare `{rand}__{name}`): stream the bytes from disk
  *     through this route, exactly as before. The session check is
  *     the security boundary for every byte.
- *   - Blob key (full https:// URL): 302 to the blob URL. Vercel's
- *     CDN handles Range/seeking natively, so GB media never transits
- *     our serverless functions. The session check still gates who is
- *     ever HANDED the URL — but the URL itself is an
- *     unguessable-but-public bearer URL on an isolated origin
- *     (blob.vercel-storage.com). See ADR-015 for the honest
- *     trade-off, including why the inline-XSS allowlist below is
- *     moot for that path but MUST stay for the local one.
+ *   - Blob key (full https:// URL into the PRIVATE store): 302 to a
+ *     short-lived presigned URL for that one file, minted only after
+ *     the session check (ADR-018). Vercel's CDN handles Range/seeking
+ *     natively, so GB media never transits our serverless functions.
+ *     The stored URL alone fetches nothing. Content is served from
+ *     blob.vercel-storage.com — an isolated origin — which is why the
+ *     inline-XSS allowlist below is a UX signal there but MUST stay
+ *     for the local path (ADR-015).
  */
 
 import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import {
-  blobDownloadUrl,
   isBlobKey,
   openReadStream,
+  signedBlobUrl,
   statFile,
 } from "@/lib/file-storage";
 import { isInlineSafeType } from "@/lib/inline-safe-types";
@@ -115,19 +115,20 @@ export async function GET(
   // stored "text/html; charset=utf-8" must not slip past.
   const inlineSafe = isInlineSafeType(contentType);
 
-  // ── Blob-stored document → 302 to the blob CDN ─────────────────
+  // ── Blob-stored document → 302 to a presigned URL ──────────────
   // Range/seeking is the CDN's job from here; we never proxy the
-  // bytes. Disposition forcing works differently than the local
-  // path: @vercel/blob (v2.6.0) does NOT let us set a custom
-  // Content-Disposition at upload — the CDN serves inline with the
-  // filename derived from the pathname, and the only lever is the
-  // `?download=1` query param, which flips the same blob to
-  // `attachment`. So: allowlisted types redirect to the bare URL
-  // (inline preview), everything else to the ?download=1 variant.
-  // The redirect itself must never be cached — it's the auth
-  // boundary; the blob URL behind it is bearer-token-ish (ADR-015).
+  // bytes. Disposition: @vercel/blob can't set a custom
+  // Content-Disposition at upload; the lever is the CDN's
+  // `download=1` param. Allowlisted types sign for inline viewing,
+  // everything else for attachment. Media gets the long signed-URL
+  // lifetime so seeking through a long recording keeps working
+  // (ADR-018). The redirect must never be cached — it's the auth
+  // boundary.
   if (isBlobKey(doc.fileUrl)) {
-    const target = inlineSafe ? doc.fileUrl : blobDownloadUrl(doc.fileUrl);
+    const target = await signedBlobUrl(doc.fileUrl, {
+      download: !inlineSafe,
+      media: /^(audio|video)\//i.test(contentType),
+    });
     return NextResponse.redirect(target, {
       status: 302,
       headers: {
