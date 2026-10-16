@@ -28,7 +28,9 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   try {
-    const result = await runDeadlineNotificationSweep();
+    const result = await runDeadlineNotificationSweep(new Date(), {
+      revalidate: true,
+    });
     return Response.json({ ok: true, ...result });
   } catch (err) {
     console.error("[notification-sweep] sweep failed", err);

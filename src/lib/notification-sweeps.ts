@@ -99,7 +99,14 @@ function bucketFor(dueDate: Date, now: Date): Bucket | null {
  * `now` is injectable for tests ("advance a week, sweep again").
  */
 export async function runDeadlineNotificationSweep(
-  now: Date = new Date()
+  now: Date = new Date(),
+  opts: {
+    /** Refresh cached layouts so the bell badge updates. Only valid
+     *  from a Route Handler / Server Action (the cron route passes
+     *  true) — Next refuses revalidatePath during a page render,
+     *  which is where the dashboard's fire-and-forget call runs. */
+    revalidate?: boolean;
+  } = {}
 ): Promise<SweepResult> {
   const soonCutoff = new Date(
     now.getTime() + DEADLINE_SOON_THRESHOLD_DAYS * DAY_MS
@@ -185,15 +192,9 @@ export async function runDeadlineNotificationSweep(
 
   if (fresh.length > 0) {
     await prisma.notification.createMany({ data: fresh });
-    // Refresh the bell badge. Guarded: revalidatePath is a no-go in
-    // some invocation contexts (e.g. mid-render on the dashboard
-    // fire-and-forget path) — the rows are already written and the
-    // bell's 60s poll picks them up regardless.
-    try {
-      revalidatePath("/", "layout");
-    } catch (err) {
-      console.warn("[notification-sweeps] revalidate skipped", err);
-    }
+    // Without revalidation (dashboard path) the bell's 60s poll still
+    // picks the new rows up.
+    if (opts.revalidate) revalidatePath("/", "layout");
   }
 
   return { scanned: deadlines.length, created: fresh.length };

@@ -26,6 +26,7 @@ import {
 } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/prisma";
 import {
@@ -277,5 +278,28 @@ describe("maybeRunDeadlineNotificationSweep — hourly throttle", () => {
     expect(warn).toHaveBeenCalled();
     spy.mockRestore();
     warn.mockRestore();
+  });
+});
+
+// Regression: the dashboard runs the sweep during page render, where
+// Next refuses revalidatePath (it used to throw-and-warn every load).
+describe("runDeadlineNotificationSweep — cache revalidation is opt-in", () => {
+  beforeEach(() => {
+    vi.mocked(revalidatePath).mockClear();
+  });
+
+  test("the throttled dashboard path never revalidates", async () => {
+    resetSweepThrottleForTests();
+    await seedDeadline({ dueDate: new Date(NOW.getTime() + 3 * DAY_MS) });
+    const result = await maybeRunDeadlineNotificationSweep(NOW);
+    expect(result.created).toBeGreaterThan(0);
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  test("the cron path revalidates when it created notifications", async () => {
+    await seedDeadline({ dueDate: new Date(NOW.getTime() + 3 * DAY_MS) });
+    const result = await runDeadlineNotificationSweep(NOW, { revalidate: true });
+    expect(result.created).toBeGreaterThan(0);
+    expect(revalidatePath).toHaveBeenCalledWith("/", "layout");
   });
 });
