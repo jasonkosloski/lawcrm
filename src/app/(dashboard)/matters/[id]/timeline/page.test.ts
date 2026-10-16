@@ -11,7 +11,7 @@
  * rendered beside them.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // page.tsx is a server component — its import graph pulls
 // `server-only` + Prisma via the TZ getter and the matter-detail
@@ -20,13 +20,78 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/current-user-tz", () => ({
   getCurrentUserTimeZone: vi.fn(async () => "America/Denver"),
 }));
-vi.mock("@/lib/prisma", () => ({ prisma: {} }));
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    matter: { findUnique: vi.fn(async () => ({ id: "m1" })) },
+  },
+}));
 vi.mock("@/lib/queries/matter-detail", () => ({
   getMatterActivity: vi.fn(async () => []),
   getMatterActivityTypeCounts: vi.fn(async () => ({})),
 }));
+vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
+vi.mock("@/lib/permission-check", () => ({
+  currentUserHasPermission: vi.fn(),
+}));
 
-import { groupByDay } from "./page";
+import { getCurrentUserId } from "@/lib/current-user";
+import { currentUserHasPermission } from "@/lib/permission-check";
+import {
+  getMatterActivity,
+  getMatterActivityTypeCounts,
+} from "@/lib/queries/matter-detail";
+import MatterTimelinePage, { groupByDay } from "./page";
+
+const renderTimeline = () =>
+  MatterTimelinePage({
+    params: Promise.resolve({ id: "m1" }),
+    searchParams: Promise.resolve({}),
+  } as Parameters<typeof MatterTimelinePage>[0]);
+
+describe("MatterTimelinePage — session + money gating", () => {
+  afterEach(() => {
+    vi.mocked(getCurrentUserId).mockReset();
+    vi.mocked(currentUserHasPermission).mockReset();
+    vi.mocked(getMatterActivity).mockClear();
+    vi.mocked(getMatterActivityTypeCounts).mockClear();
+  });
+
+  it("bounces a missing session before any data is read", async () => {
+    vi.mocked(getCurrentUserId).mockRejectedValue(new Error("NEXT_REDIRECT"));
+    await expect(renderTimeline()).rejects.toThrow("NEXT_REDIRECT");
+    expect(getMatterActivity).not.toHaveBeenCalled();
+    expect(getMatterActivityTypeCounts).not.toHaveBeenCalled();
+  });
+
+  it("viewer lacking settlement/expense view keys gets both queries restricted", async () => {
+    vi.mocked(getCurrentUserId).mockResolvedValue("u1");
+    vi.mocked(currentUserHasPermission).mockResolvedValue(false);
+    await renderTimeline();
+    expect(getMatterActivity).toHaveBeenCalledWith(
+      "m1",
+      expect.objectContaining({
+        canViewSettlement: false,
+        canViewExpense: false,
+      })
+    );
+    expect(getMatterActivityTypeCounts).toHaveBeenCalledWith("m1", {
+      canViewSettlement: false,
+      canViewExpense: false,
+    });
+  });
+
+  it("each key is resolved independently", async () => {
+    vi.mocked(getCurrentUserId).mockResolvedValue("u1");
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (key: string) => key === "matters.expense.view"
+    );
+    await renderTimeline();
+    expect(getMatterActivityTypeCounts).toHaveBeenCalledWith("m1", {
+      canViewSettlement: false,
+      canViewExpense: true,
+    });
+  });
+});
 
 /** Minimal row shape — groupByDay is generic over the rest. */
 const row = (id: string, iso: string) => ({

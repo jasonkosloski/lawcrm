@@ -72,6 +72,7 @@ const matterEvent: MatterEventRow = {
   color: "var(--color-ink-3)",
   attendeeCount: 1,
   isUpcoming: true,
+  viewerCanSeeDetails: true,
   notes: [],
   timeEntries: [],
 };

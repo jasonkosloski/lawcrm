@@ -386,6 +386,7 @@ The original decision stored date-only values at **server-local** midnight and d
 - (-) The firm owns the legal periods; the app ships none, so correctness of each rule is a firm configuration responsibility
 
 ## ADR-020: Sign-in lockout is a reserve/settle under a per-email advisory lock; per-account (not per-IP) lock is an accepted DoS risk
+## ADR-020: Matter tabs honour calendar visibility and money-view permissions
 
 **Date:** 2026-10-16
 **Status:** Accepted
@@ -405,3 +406,19 @@ The original decision stored date-only values at **server-local** midnight and d
 - (+) No schema change; same audit rows drive the lock and the history
 - (-) A deliberate lockout DoS against any known email remains possible until edge rate limiting is configured
 - (-) Each login attempt takes a short DB transaction (pool is capped at 1 connection per process, so concurrent attempts queue)
+**Context:** The calendar scrubs events a viewer may not see to "Busy" (`canViewEventDetails`), but the matter Events tab shipped raw titles, notes, locations and time entries to every user, and the Timeline showed settlement and expense amounts to users lacking `matters.settlement.view` / `matters.expense.view`.
+
+**Decision:**
+- **Events tab** (`getMatterEvents`): same resolver as the calendar. Rows the viewer can't see become a Busy shell (id + times only; no title, location, zoom link, attendee count, notes or time entries) built server-side, so nothing reaches the RSC payload.
+- **Event labels on other tabs**: "From event" chips on Deadlines/Tasks and the event link on Notes go through `eventLabelForViewer`, which returns "Busy" when the resolver says no.
+- **Timeline money rows are omitted, not redacted** (`activityMoneyFilters`): settlement rows (`type = "settlement"`) need `matters.settlement.view`; expense rows (type `filing`, title prefix from `src/lib/expense-activity.ts`, shared with the writer in `expenses.ts`) need `matters.expense.view`. Omitting is simpler than parsing amounts out of free-text titles, and the type counts on the filter pills are filtered identically. Callers that don't pass the flags fail closed.
+- **Timeline page** resolves the session itself (`getCurrentUserId`) before reading any feed data.
+
+**Known gaps (follow-ups):**
+- Event-attached content on the Notes and Time tabs (a note or time entry whose parent is a hidden event) is matter-wide: the label is scrubbed, the note body / time narrative is not. Matter-level access, not event visibility, governs those tabs today.
+- Trust-application `deposit` rows ("Trust applied to invoice … $amount") still show to every viewer on the Financial pill and under All; deciding whether they need a billing-view gate is left to the billing permissions work.
+- The Parties, Evidence and Deadlines pages and the dashboard/firm activity feeds (`getTodayAgenda`, `getRecentActivity`, `getFirmActivity`) have no own session guard / money filter yet; `activityMoneyFilters` is exported for them.
+
+**Trade-offs:**
+- (+) One privacy rule across calendar, Events tab and event chips
+- (-) A viewer with `matters.settlement.view` revoked sees no trace that a settlement exists on the timeline

@@ -28,6 +28,11 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { logActivity } from "@/lib/activity-log";
+import {
+  expenseDeletedTitle,
+  expenseEditedTitle,
+  expenseLoggedTitle,
+} from "@/lib/expense-activity";
 // Date-only input ("YYYY-MM-DD") must parse to LOCAL midnight —
 // `new Date(value)` reads it as UTC midnight, which drifts the
 // expense a day early for anyone west of UTC. See parseLocalDate.
@@ -154,7 +159,7 @@ export async function createExpense(
     matterId: matter.id,
     userId: actorId,
     type: "filing",
-    title: `Expense logged · $${expense.amount.toFixed(2)} · ${data.description}`,
+    title: expenseLoggedTitle(expense.amount, data.description),
     detail: `Category: ${EXPENSE_CATEGORY_LABEL[data.category]}${data.clientAdvanced === "on" ? " · client-advanced" : ""}${data.billable !== "on" ? " · non-billable" : ""}`,
   });
 
@@ -233,7 +238,7 @@ export async function updateExpense(
     matterId: existing.matterId,
     userId: actorId,
     type: "filing",
-    title: `Expense edited · ${data.description}`,
+    title: expenseEditedTitle(data.description),
   });
 
   revalidatePath(`/matters/${existing.matterId}/time`);
@@ -275,7 +280,7 @@ export async function deleteExpense(
     matterId: existing.matterId,
     userId: actorId,
     type: "filing",
-    title: `Expense deleted · $${existing.amount.toFixed(2)} · ${existing.description}`,
+    title: expenseDeletedTitle(existing.amount, existing.description),
   });
 
   revalidatePath(`/matters/${existing.matterId}/time`);

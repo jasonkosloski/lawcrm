@@ -57,11 +57,14 @@ export function EventRowExpandable({
   matterId: string;
   matterName: string;
 }) {
+  // "Busy" shell rows (viewer can't see this event's details) carry
+  // no notes/time and expose no expand or modal affordance.
+  const canSeeDetails = event.viewerCanSeeDetails;
   const hasAttachments =
     event.notes.length > 0 || event.timeEntries.length > 0;
   // Auto-expand when there's already something attached so the user
   // sees the thread + time logs on first load.
-  const [expanded, setExpanded] = useState(hasAttachments);
+  const [expanded, setExpanded] = useState(canSeeDetails && hasAttachments);
 
   const timeLabel = event.isAllDay
     ? "All day"
@@ -87,8 +90,9 @@ export function EventRowExpandable({
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          aria-expanded={expanded}
-          className="flex-1 min-w-0 block text-left"
+          aria-expanded={canSeeDetails ? expanded : undefined}
+          disabled={!canSeeDetails}
+          className="flex-1 min-w-0 block text-left disabled:cursor-default"
         >
           <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-brand-tint transition-colors">
             <span
@@ -147,37 +151,41 @@ export function EventRowExpandable({
                 {event.attendeeCount === 1 ? "attendee" : "attendees"}
               </span>
             )}
-            <ChevronDown
-              size={14}
-              className={cn(
-                "text-ink-3 shrink-0 transition-transform",
-                expanded && "rotate-180",
-                hasAttachments && !expanded && "text-brand-700"
-              )}
-            />
+            {canSeeDetails && (
+              <ChevronDown
+                size={14}
+                className={cn(
+                  "text-ink-3 shrink-0 transition-transform",
+                  expanded && "rotate-180",
+                  hasAttachments && !expanded && "text-brand-700"
+                )}
+              />
+            )}
           </div>
         </button>
 
         {/* Open full view — the modal lives here now, as an opt-in
             zoom rather than the default click behavior. */}
-        <EventLink
-          eventId={event.id}
-          className={cn(
-            "flex items-center px-3 border-l border-line shrink-0 transition-colors",
-            "text-ink-3 hover:bg-paper-2 hover:text-brand-700"
-          )}
-        >
-          <span
-            title="Open full event view"
-            aria-label="Open full event view"
-            className="inline-flex items-center"
+        {canSeeDetails && (
+          <EventLink
+            eventId={event.id}
+            className={cn(
+              "flex items-center px-3 border-l border-line shrink-0 transition-colors",
+              "text-ink-3 hover:bg-paper-2 hover:text-brand-700"
+            )}
           >
-            <Maximize2 size={13} />
-          </span>
-        </EventLink>
+            <span
+              title="Open full event view"
+              aria-label="Open full event view"
+              className="inline-flex items-center"
+            >
+              <Maximize2 size={13} />
+            </span>
+          </EventLink>
+        )}
       </div>
 
-      {expanded && (
+      {canSeeDetails && expanded && (
         <div className="px-5 py-3 border-t border-line bg-paper-2/30 flex flex-col gap-4">
           <EventNotesSection
             eventId={event.id}

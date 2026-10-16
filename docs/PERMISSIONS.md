@@ -562,3 +562,10 @@ boxes."
 | 2026-07-07 | Evidence review keys wired: `evidence.flag.create` gates "Flag this moment" on media in the document viewer; `evidence.flag.edit_any` / `evidence.flag.delete_any` cross ownership on other reviewers' flags — creators always edit/delete their OWN flags without any key (same ownership pattern as `notes.edit_any`/`notes.delete_any`). Server actions in `src/app/actions/flagged-moments.ts`; read-side flags drive the composer button + rail kebabs. |
 | 2026-10-16 | New `automations` category (ADR-019): `automations.view` (Settings → Automations), `automations.deadline_rule.{create,edit,delete}`, `automations.task_list.{create,edit,delete}` (edit covers items + archive), `automations.defaults.{create,delete}` (what applies automatically to new matters). Applying a rule/list to a matter rides `deadlines.create` / `tasks.create`. Grant to non-admin roles via /settings/roles. |
 | 2026-10-16 | `firm.manage_team_directory` joined `ADMIN_ONLY_PERMISSIONS` (now exported from `src/lib/permissions.ts`); team.ts refuses non-Admin escalation (grant/remove Admin, invite Admin, edit/deactivate an Admin, reset/unlock an Admin-class account). `intake.decline` added to the catalog. Role create/rename/delete and permission flips write `type: "auth"` activity entries. |
+
+## Read-side gates on matter tabs
+
+Beyond page-level keys, some matter data is filtered per viewer inside the query (see ADR-020 in `DECISIONS.md`):
+
+- **Events tab / event labels** — calendar event visibility (`canViewEventDetails`), not a permission key: events the viewer can't see are "Busy".
+- **Timeline** — settlement rows need `matters.settlement.view`, expense rows need `matters.expense.view`; without them the rows are omitted (`activityMoneyFilters` in `src/lib/queries/matter-detail.ts`).

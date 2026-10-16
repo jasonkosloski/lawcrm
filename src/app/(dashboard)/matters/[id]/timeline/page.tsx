@@ -47,6 +47,8 @@ import {
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUserId } from "@/lib/current-user";
+import { currentUserHasPermission } from "@/lib/permission-check";
 import {
   getMatterActivity,
   getMatterActivityTypeCounts,
@@ -114,6 +116,24 @@ export default async function MatterTimelinePage({
     typeof rawType === "string" && rawType in FILTER_BUCKETS ? rawType : "all";
   const bucket = FILTER_BUCKETS[filterKey];
 
+  // Session guard of the page's own. The (dashboard) / [id] layouts
+  // do not re-render on a sibling-tab soft navigation, and
+  // getCurrentUserTimeZone swallows the login redirect, so without
+  // this a revoked session could still pull the feed. Redirects to
+  // /login when there is no session.
+  await getCurrentUserId();
+
+  // Settlement + expense rows carry amounts in their titles; show
+  // them only to viewers holding the matching view keys (the billing
+  // and time tabs gate the same numbers the same way). Rows are
+  // omitted entirely rather than redacted, and the pill counts use
+  // the same filter so they never hint at hidden rows.
+  const [canViewSettlement, canViewExpense] = await Promise.all([
+    currentUserHasPermission("matters.settlement.view"),
+    currentUserHasPermission("matters.expense.view"),
+  ]);
+  const access = { canViewSettlement, canViewExpense };
+
   const matter = await prisma.matter.findUnique({
     where: { id },
     select: { id: true },
@@ -123,8 +143,9 @@ export default async function MatterTimelinePage({
   const [rows, counts, tz] = await Promise.all([
     getMatterActivity(id, {
       types: bucket.types.length > 0 ? bucket.types : undefined,
+      ...access,
     }),
-    getMatterActivityTypeCounts(id),
+    getMatterActivityTypeCounts(id, access),
     getCurrentUserTimeZone(),
   ]);
 

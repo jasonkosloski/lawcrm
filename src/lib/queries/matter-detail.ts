@@ -10,8 +10,69 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { canViewEventDetails } from "@/lib/calendar-visibility";
+import { EXPENSE_ACTIVITY_TITLE_PREFIX } from "@/lib/expense-activity";
 import { REACTION_EMOJIS } from "@/lib/note-constants";
 import type { EventNote, EventTimeEntry } from "@/lib/queries/calendar";
+
+// ── Event references from other tabs ─────────────────────────────────────
+//
+// Deadlines, tasks and notes can point at a calendar event ("From
+// event" chips, the Notes tab link). The label is the event title, so
+// it obeys the same Busy rule as the calendar and the Events tab
+// (canViewEventDetails): a viewer who only sees the event as Busy
+// gets "Busy" here too, never the title.
+
+/** Select for an event relation that will be rendered as a label.
+ *  Carries everything canViewEventDetails needs. */
+const EVENT_REF_SELECT = {
+  id: true,
+  title: true,
+  startTime: true,
+  createdById: true,
+  visibility: true,
+  matterId: true,
+  createdBy: { select: { defaultEventVisibility: true } },
+  attendees: { select: { userId: true } },
+  matter: {
+    select: {
+      teamMembers: { where: { removedAt: null }, select: { userId: true } },
+    },
+  },
+} satisfies Prisma.CalendarEventSelect;
+
+type EventRef = Prisma.CalendarEventGetPayload<{
+  select: typeof EVENT_REF_SELECT;
+}>;
+
+/** The event's title, or "Busy" when the viewer may not see its
+ *  details. */
+export function eventLabelForViewer(event: EventRef, viewerId: string): string {
+  const canSee = canViewEventDetails({
+    viewerId,
+    createdById: event.createdById,
+    eventVisibility: event.visibility,
+    creatorDefaultEventVisibility:
+      event.createdBy?.defaultEventVisibility ?? null,
+    matterId: event.matterId,
+    attendeeUserIds: event.attendees
+      .map((a) => a.userId)
+      .filter((id): id is string => !!id),
+    matterTeamUserIds: event.matter?.teamMembers.map((m) => m.userId) ?? [],
+  });
+  return canSee ? event.title : "Busy";
+}
+
+/** {id, title} shape resolveEntitySource expects, with the title
+ *  scrubbed for viewers who can't see the event. */
+function scrubEventRef(
+  event: EventRef | null,
+  viewerId: string
+): { id: string; title: string } | null {
+  return event
+    ? { id: event.id, title: eventLabelForViewer(event, viewerId) }
+    : null;
+}
 
 // ── Parties ──────────────────────────────────────────────────────────────
 
@@ -175,6 +236,7 @@ export type DeadlineRow = {
 export async function getMatterDeadlines(
   matterId: string
 ): Promise<DeadlineRow[]> {
+  const viewerId = await getCurrentUserId();
   const rows = await prisma.deadline.findMany({
     where: { matterId },
     include: {
@@ -194,7 +256,7 @@ export async function getMatterDeadlines(
           },
         },
       },
-      parentEvent: { select: { id: true, title: true } },
+      parentEvent: { select: EVENT_REF_SELECT },
       parentTask: { select: { id: true, title: true } },
       notes: {
         select: {
@@ -230,7 +292,7 @@ export async function getMatterDeadlines(
         note: d.parentNote,
         email: d.emailThread,
         messenger: d.messengerItem,
-        event: d.parentEvent,
+        event: scrubEventRef(d.parentEvent, viewerId),
         task: d.parentTask,
       }),
       attachedNotes: d.notes.map((n) => ({
@@ -300,6 +362,7 @@ export type AttachedNotePreview = {
 };
 
 export async function getMatterTasks(matterId: string): Promise<TaskRow[]> {
+  const viewerId = await getCurrentUserId();
   const rows = await prisma.task.findMany({
     where: { matterId },
     include: {
@@ -321,7 +384,7 @@ export async function getMatterTasks(matterId: string): Promise<TaskRow[]> {
           },
         },
       },
-      parentEvent: { select: { id: true, title: true } },
+      parentEvent: { select: EVENT_REF_SELECT },
       parentDeadline: { select: { id: true, title: true } },
       // Notes attached to this task (Note.taskId === task.id) —
       // surfaces in the row's inline expandable panel. Sorted oldest-
@@ -358,7 +421,7 @@ export async function getMatterTasks(matterId: string): Promise<TaskRow[]> {
       note: t.parentNote,
       email: t.emailThread,
       messenger: t.messengerItem,
-      event: t.parentEvent,
+      event: scrubEventRef(t.parentEvent, viewerId),
       deadline: t.parentDeadline,
     }),
     attachedNotes: t.notes.map((n) => ({
@@ -550,7 +613,7 @@ export async function getMatterNotes(matterId: string): Promise<NoteRow[]> {
     include: {
       author: { select: { name: true, initials: true } },
       parent: { select: { id: true, content: true } },
-      event: { select: { id: true, title: true, startTime: true } },
+      event: { select: EVENT_REF_SELECT },
       task: { select: { id: true, title: true } },
       deadline: { select: { id: true, title: true, dueDate: true } },
       timeEntry: {
@@ -633,7 +696,7 @@ export async function getMatterNotes(matterId: string): Promise<NoteRow[]> {
       link = {
         kind: "event",
         id: n.event.id,
-        label: n.event.title,
+        label: eventLabelForViewer(n.event, userId),
         startTime: n.event.startTime,
       };
     } else if (n.task) {
@@ -909,6 +972,12 @@ export type MatterEventRow = {
   attendeeCount: number;
   /** True when the event is in the future relative to "now". */
   isUpcoming: boolean;
+  /** False when the viewer may only see this event as "Busy" (same
+   *  rule as the calendar, see canViewEventDetails). The row is then
+   *  a scrubbed shell: title "Busy", no location / zoom link /
+   *  attendee count, and empty notes + timeEntries. The UI hides the
+   *  expand affordance for these rows. */
+  viewerCanSeeDetails: boolean;
   /** All notes attached to this event, pinned-first / most-recent-
    *  first. The Events tab renders these inline in an expandable
    *  section under the row; the event detail modal uses the
@@ -922,10 +991,23 @@ export type MatterEventRow = {
 export async function getMatterEvents(
   matterId: string
 ): Promise<MatterEventRow[]> {
+  const viewerId = await getCurrentUserId();
   const rows = await prisma.calendarEvent.findMany({
     where: { matterId },
     include: {
-      matter: { select: { color: true } },
+      matter: {
+        select: {
+          color: true,
+          // Active team only — same shape getCalendarItems feeds the
+          // visibility resolver.
+          teamMembers: {
+            where: { removedAt: null },
+            select: { userId: true },
+          },
+        },
+      },
+      createdBy: { select: { defaultEventVisibility: true } },
+      attendees: { select: { userId: true } },
       _count: { select: { attendees: true } },
       notes: {
         include: { author: { select: { name: true, initials: true } } },
@@ -939,43 +1021,82 @@ export async function getMatterEvents(
     orderBy: { startTime: "asc" },
   });
   const now = Date.now();
-  return rows.map((e) => ({
-    id: e.id,
-    title: e.title,
-    type: e.type,
-    startTime: e.startTime,
-    endTime: e.endTime,
-    isAllDay: e.isAllDay,
-    location: e.location,
-    zoomUrl: e.zoomUrl,
-    color: e.matter?.color ?? e.color ?? "var(--color-ink-3)",
-    attendeeCount: e._count.attendees,
-    isUpcoming: e.endTime.getTime() >= now,
-    notes: e.notes.map((n) => ({
-      id: n.id,
-      type: n.type,
-      content: n.content,
-      isPinned: n.isPinned,
-      authorName: n.author.name,
-      authorInitials: n.author.initials,
-      createdAt: n.createdAt,
-      matterId: n.matterId,
-    })),
-    timeEntries: e.timeEntries.map((t) => ({
-      id: t.id,
-      date: t.date,
-      hours: t.hours,
-      activity: t.activity,
-      narrative: t.narrative,
-      billable: t.billable,
-      noCharge: t.noCharge,
-      privileged: t.privileged,
-      status: t.status,
-      userName: t.user.name,
-      userInitials: t.user.initials,
-      matterId: t.matterId,
-    })),
-  }));
+  return rows.map((e): MatterEventRow => {
+    const canSee = canViewEventDetails({
+      viewerId,
+      createdById: e.createdById,
+      eventVisibility: e.visibility,
+      creatorDefaultEventVisibility:
+        e.createdBy?.defaultEventVisibility ?? null,
+      matterId: e.matterId,
+      attendeeUserIds: e.attendees
+        .map((a) => a.userId)
+        .filter((id): id is string => !!id),
+      matterTeamUserIds: e.matter?.teamMembers.map((m) => m.userId) ?? [],
+    });
+
+    if (!canSee) {
+      // Busy shell — mirrors getCalendarItems. Id + times stay (the
+      // ?event= guard and the upcoming/past split need them); every
+      // detail field is stripped server-side so it never reaches the
+      // RSC payload.
+      return {
+        id: e.id,
+        title: "Busy",
+        type: "block_time",
+        startTime: e.startTime,
+        endTime: e.endTime,
+        isAllDay: e.isAllDay,
+        location: null,
+        zoomUrl: null,
+        color: "var(--color-ink-3)",
+        attendeeCount: 0,
+        isUpcoming: e.endTime.getTime() >= now,
+        viewerCanSeeDetails: false,
+        notes: [],
+        timeEntries: [],
+      };
+    }
+
+    return {
+      id: e.id,
+      title: e.title,
+      type: e.type,
+      startTime: e.startTime,
+      endTime: e.endTime,
+      isAllDay: e.isAllDay,
+      location: e.location,
+      zoomUrl: e.zoomUrl,
+      color: e.matter?.color ?? e.color ?? "var(--color-ink-3)",
+      attendeeCount: e._count.attendees,
+      isUpcoming: e.endTime.getTime() >= now,
+      viewerCanSeeDetails: true,
+      notes: e.notes.map((n) => ({
+        id: n.id,
+        type: n.type,
+        content: n.content,
+        isPinned: n.isPinned,
+        authorName: n.author.name,
+        authorInitials: n.author.initials,
+        createdAt: n.createdAt,
+        matterId: n.matterId,
+      })),
+      timeEntries: e.timeEntries.map((t) => ({
+        id: t.id,
+        date: t.date,
+        hours: t.hours,
+        activity: t.activity,
+        narrative: t.narrative,
+        billable: t.billable,
+        noCharge: t.noCharge,
+        privileged: t.privileged,
+        status: t.status,
+        userName: t.user.name,
+        userInitials: t.user.initials,
+        matterId: t.matterId,
+      })),
+    };
+  });
 }
 
 // ── Documents ────────────────────────────────────────────────────────────
@@ -1223,15 +1344,55 @@ export type ActivityRow = {
 /// load-more / paginated viewer.
 const MATTER_ACTIVITY_LIMIT = 200;
 
+/** What the viewer may see of money-bearing activity rows. Both
+ *  default to false (hidden) so a caller that forgets to resolve the
+ *  permissions fails closed. */
+export type ActivityMoneyAccess = {
+  /** Holds matters.settlement.view — settlement / lien rows carry
+   *  gross, lienholder and negotiated amounts in their titles. */
+  canViewSettlement?: boolean;
+  /** Holds matters.expense.view — expense rows (logged as type
+   *  "filing", title prefix "Expense ") carry amounts + descriptions. */
+  canViewExpense?: boolean;
+};
+
+/** Prisma AND-clauses that hide the rows a viewer may not see.
+ *  Settlement rows are hidden whole (type "settlement"); expense rows
+ *  by their title prefix. Exported for tests. */
+export function activityMoneyFilters(
+  access: ActivityMoneyAccess
+): Prisma.ActivityLogWhereInput[] {
+  const clauses: Prisma.ActivityLogWhereInput[] = [];
+  if (!access.canViewSettlement) {
+    clauses.push({ type: { not: "settlement" } });
+  }
+  if (!access.canViewExpense) {
+    clauses.push({
+      NOT: {
+        type: "filing",
+        title: { startsWith: EXPENSE_ACTIVITY_TITLE_PREFIX },
+      },
+    });
+  }
+  return clauses;
+}
+
 /** Pull the matter's activity log rows (newest first), joined to
  *  the author for display. Optional `types` filter narrows to a
  *  specific category — used by the URL-driven filter pills on the
- *  Timeline tab. */
+ *  Timeline tab. Settlement / expense rows are omitted unless the
+ *  caller passes the matching `canView*` flag. */
 export async function getMatterActivity(
   matterId: string,
-  options: { types?: readonly string[]; limit?: number } = {}
+  options: {
+    types?: readonly string[];
+    limit?: number;
+  } & ActivityMoneyAccess = {}
 ): Promise<ActivityRow[]> {
-  const where: Prisma.ActivityLogWhereInput = { matterId };
+  const where: Prisma.ActivityLogWhereInput = {
+    matterId,
+    AND: activityMoneyFilters(options),
+  };
   if (options.types && options.types.length > 0) {
     where.type = { in: [...options.types] };
   }
@@ -1260,11 +1421,12 @@ export async function getMatterActivity(
  *  the filter pills' badge counts so the user can see "8 emails / 3
  *  filings / 12 notes" before clicking. */
 export async function getMatterActivityTypeCounts(
-  matterId: string
+  matterId: string,
+  access: ActivityMoneyAccess = {}
 ): Promise<Record<string, number>> {
   const grouped = await prisma.activityLog.groupBy({
     by: ["type"],
-    where: { matterId },
+    where: { matterId, AND: activityMoneyFilters(access) },
     _count: { type: true },
   });
   const out: Record<string, number> = {};

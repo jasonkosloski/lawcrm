@@ -29,6 +29,12 @@ import {
   getCalendarItems,
 } from "@/lib/queries/calendar";
 import {
+  getMatterDeadlines,
+  getMatterEvents,
+  getMatterNotes,
+  getMatterTasks,
+} from "@/lib/queries/matter-detail";
+import {
   resetDb,
   seedFirm,
   seedMatter,
@@ -337,5 +343,160 @@ describe("getCalendarEventById — visibility stripping", () => {
   test("returns null for a missing event id", async () => {
     const e = await getCalendarEventById("does-not-exist");
     expect(e).toBeNull();
+  });
+});
+
+describe("getMatterEvents — matter Events tab visibility stripping", () => {
+  beforeEach(async () => {
+    // Attach a note and a privileged time entry to the matter event so
+    // a leak would be visible in the result.
+    await prisma.note.create({
+      data: {
+        matterId,
+        authorId: creatorId,
+        content: "Secret strategy note",
+        calendarEventId: matterEventId,
+      },
+    });
+    await prisma.timeEntry.create({
+      data: {
+        matterId,
+        userId: creatorId,
+        calendarEventId: matterEventId,
+        date: new Date("2026-06-15"),
+        hours: 1,
+        activity: "Prep",
+        narrative: "Privileged narrative",
+        privileged: true,
+      },
+    });
+    await prisma.calendarEvent.update({
+      where: { id: matterEventId },
+      data: { zoomUrl: "https://zoom.example/secret" },
+    });
+  });
+
+  test("non-team, non-attendee viewer gets a Busy shell with nothing but times", async () => {
+    const rows = await getMatterEvents(matterId);
+    expect(rows).toHaveLength(1);
+    const r = rows[0];
+    // Identity + times survive (ids feed the ?event= guard; times feed
+    // the upcoming/past split).
+    expect(r.id).toBe(matterEventId);
+    expect(r.startTime).toEqual(new Date("2026-06-15T13:00:00Z"));
+    expect(r.endTime).toEqual(new Date("2026-06-15T14:00:00Z"));
+    expect(r.viewerCanSeeDetails).toBe(false);
+    expect(r.title).toBe("Busy");
+    expect(r.type).toBe("block_time");
+    expect(r.location).toBeNull();
+    expect(r.zoomUrl).toBeNull();
+    expect(r.attendeeCount).toBe(0);
+    expect(r.notes).toEqual([]);
+    expect(r.timeEntries).toEqual([]);
+    expect(JSON.stringify(r)).not.toMatch(
+      /Strategy session|Conference room|Secret strategy|Privileged narrative|zoom\.example/
+    );
+  });
+
+  test("matter team member sees the full row", async () => {
+    await prisma.matterTeamMember.create({
+      data: { matterId, userId: viewerId, role: "co_counsel" },
+    });
+    const [r] = await getMatterEvents(matterId);
+    expect(r.viewerCanSeeDetails).toBe(true);
+    expect(r.title).toBe("Strategy session");
+    expect(r.location).toBe("Conference room");
+    expect(r.zoomUrl).toBe("https://zoom.example/secret");
+    expect(r.notes.map((n) => n.content)).toEqual(["Secret strategy note"]);
+    expect(r.timeEntries.map((t) => t.narrative)).toEqual([
+      "Privileged narrative",
+    ]);
+  });
+
+  test("a removed team member is back to Busy", async () => {
+    await prisma.matterTeamMember.create({
+      data: {
+        matterId,
+        userId: viewerId,
+        role: "co_counsel",
+        removedAt: new Date(),
+      },
+    });
+    const [r] = await getMatterEvents(matterId);
+    expect(r.viewerCanSeeDetails).toBe(false);
+    expect(r.title).toBe("Busy");
+  });
+
+  test("creator, attendee and show_details override each unlock", async () => {
+    mockedGetUser.mockResolvedValue(creatorId);
+    expect((await getMatterEvents(matterId))[0].viewerCanSeeDetails).toBe(true);
+
+    mockedGetUser.mockResolvedValue(outsideUserId);
+    expect((await getMatterEvents(matterId))[0].viewerCanSeeDetails).toBe(false);
+    await prisma.calendarAttendee.create({
+      data: {
+        eventId: matterEventId,
+        userId: outsideUserId,
+        name: "Outside",
+        status: "accepted",
+      },
+    });
+    expect((await getMatterEvents(matterId))[0].viewerCanSeeDetails).toBe(true);
+
+    mockedGetUser.mockResolvedValue(viewerId);
+    expect((await getMatterEvents(matterId))[0].viewerCanSeeDetails).toBe(false);
+    await prisma.calendarEvent.update({
+      where: { id: matterEventId },
+      data: { visibility: "show_details" },
+    });
+    expect((await getMatterEvents(matterId))[0].title).toBe("Strategy session");
+  });
+});
+
+describe("event labels on sibling matter tabs — same Busy rule", () => {
+  beforeEach(async () => {
+    await prisma.deadline.create({
+      data: {
+        matterId,
+        title: "File response",
+        dueDate: new Date("2026-06-20T00:00:00Z"),
+        eventId: matterEventId,
+      },
+    });
+    await prisma.task.create({
+      data: { matterId, title: "Prep witness", eventId: matterEventId },
+    });
+    await prisma.note.create({
+      data: {
+        matterId,
+        authorId: creatorId,
+        content: "<p>court note</p>",
+        calendarEventId: matterEventId,
+      },
+    });
+  });
+
+  test("viewer who sees the event as Busy never gets its title in the From-event chip or note link", async () => {
+    const [d] = await getMatterDeadlines(matterId);
+    expect(d.spawnedFrom).toEqual({
+      kind: "event",
+      id: matterEventId,
+      label: "Busy",
+    });
+    const [t] = await getMatterTasks(matterId);
+    expect(t.spawnedFrom?.label).toBe("Busy");
+    const [n] = await getMatterNotes(matterId);
+    expect(n.link?.kind).toBe("event");
+    expect(n.link?.label).toBe("Busy");
+  });
+
+  test("a viewer who can see the event gets the real title", async () => {
+    mockedGetUser.mockResolvedValue(creatorId);
+    const [d] = await getMatterDeadlines(matterId);
+    expect(d.spawnedFrom?.label).toBe("Strategy session");
+    const [t] = await getMatterTasks(matterId);
+    expect(t.spawnedFrom?.label).toBe("Strategy session");
+    const [n] = await getMatterNotes(matterId);
+    expect(n.link?.label).toBe("Strategy session");
   });
 });
