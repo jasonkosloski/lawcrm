@@ -20,13 +20,19 @@ import { prisma } from "@/lib/prisma";
 export type AuthEventKind =
   | "sign_in"
   | "sign_in_failed"
+  /** Refused during a lockout — password not even checked. Kept
+   *  distinct from sign_in_failed so it doesn't extend the lock. */
+  | "sign_in_blocked"
   | "sign_out"
   | "password_changed"
   | "password_change_failed";
 
-const TITLES: Record<AuthEventKind, string> = {
+/** Row titles — also the query keys for lockout counting
+ *  (src/lib/credentials-authorize.ts), so change with care. */
+export const AUTH_EVENT_TITLES: Record<AuthEventKind, string> = {
   sign_in: "Signed in",
   sign_in_failed: "Failed sign-in",
+  sign_in_blocked: "Blocked sign-in (too many failures)",
   sign_out: "Signed out",
   password_changed: "Changed password",
   password_change_failed: "Failed password change",
@@ -64,7 +70,7 @@ export async function logAuthEvent(input: {
         type: "auth",
         icon: "shield",
         source: "Security",
-        title: TITLES[input.kind],
+        title: AUTH_EVENT_TITLES[input.kind],
         detail,
       },
     });

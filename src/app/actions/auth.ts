@@ -80,7 +80,13 @@ export async function loginAction(
     // anything that isn't a CredentialsSignin so the redirect
     // bubbles to Next.
     if (err instanceof AuthError) {
-      return { status: "error", error: "Invalid email or password." };
+      // Same text for every failure, lockout included — a distinct
+      // "locked" message would confirm the account exists.
+      return {
+        status: "error",
+        error:
+          "Invalid email or password. After repeated failures, sign-in pauses for 15 minutes.",
+      };
     }
     throw err;
   }

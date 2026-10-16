@@ -543,8 +543,11 @@ done. What's left is enumerated below.
   table:** a password fingerprint in the JWT signs out every other
   session on change/reset (ADR-017). Still left: 2FA, per-device
   session list, password reset by email (needs an email delivery
-  provider), login lockout/rate limiting (needs a schema change —
-  waits on the production migration baseline, ADR-016).
+  provider). **Login lockout** shipped the same day with no schema
+  change: 5 failed sign-ins in 15 minutes (since the last success)
+  pause that account's sign-in until the window passes, counted from
+  the audit rows (`isLockedOut` in `src/lib/credentials-authorize.ts`);
+  the login error text is identical either way (no enumeration).
 - [~] **Settings — Integrations.** Gmail is live: per-user connect /
   reconnect / disconnect card (address, sync-status chip, last sync,
   thread count, syncError surfaced, multi-account list), callback

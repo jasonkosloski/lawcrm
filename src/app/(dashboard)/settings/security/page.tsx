@@ -71,7 +71,7 @@ export default async function SecuritySettingsPage() {
                     <div
                       className={cn(
                         "text-xs font-medium",
-                        e.title.startsWith("Failed") ? "text-warn" : "text-ink"
+                        /^(Failed|Blocked)/.test(e.title) ? "text-warn" : "text-ink"
                       )}
                     >
                       {e.title}

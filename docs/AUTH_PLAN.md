@@ -71,7 +71,7 @@ The proxy remains optimistic (cookie-presence only) so it's fast and Edge-compat
 | MFA / TOTP | New `User.totpSecret` + `RecoveryCode` table; second step in the login flow; `/account/mfa` enroll. |
 | Session list / revoke individual sessions | Switch `session.strategy` from `"jwt"` to `"database"`, add `Session` table, build `/account/sessions` UI. (Revoke-ALL-other-sessions on password change/reset already works without this — password fingerprint in the JWT, ADR-017.) |
 | Idle timeout / absolute lifetime | Session callback timestamps; configurable in firm settings. |
-| Account lockout | Counter on `User` (or separate `LoginAttempt` table) + cooldown window. |
+| ~~Account lockout~~ | **Shipped 2026-10-16** — 5 failures / 15 min per account, counted from `auth` audit rows (`isLockedOut`, `src/lib/credentials-authorize.ts`); no schema. Per-IP throttling across many accounts is still open (see Rate limiting). |
 | Pwned-passwords corpus check | Call HaveIBeenPwned k-anonymity range API in the credentials authorize step. |
 | RBAC / roles / permissions | `User.role` already exists. Add `requirePermission(perm)` helper, codify role→permission map in `src/lib/permissions.ts`, gate UI + actions. |
 | ~~Audit log of auth events~~ | **Shipped 2026-10-16** — `ActivityLog` rows with `type: "auth"` via `src/lib/auth-events.ts` (sign-in, failed sign-in for real accounts, sign-out, password change) + team invite/update/reset. |
