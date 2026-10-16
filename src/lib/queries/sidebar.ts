@@ -20,6 +20,7 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
+import { visibleEmailThreadWhere } from "@/lib/email-visibility";
 import { LEAD_CLOSED_STAGES } from "@/lib/constants/lead-stage";
 
 export type SidebarUser = {
@@ -94,7 +95,15 @@ export async function getSidebarData(): Promise<SidebarData> {
       select: { id: true, name: true, initials: true, jobTitle: true },
     }),
     prisma.matter.count({ where: OPEN_MATTER_WHERE }),
-    prisma.emailThread.count({ where: { isRead: false } }),
+    // Own mailbox only (never coworkers' unread volume), and archived
+    // threads don't count — the badge means "unread in my inbox".
+    prisma.emailThread.count({
+      where: {
+        ...visibleEmailThreadWhere(currentUserId),
+        isRead: false,
+        isArchived: false,
+      },
+    }),
     prisma.lead.count({
       where: { stage: { notIn: [...LEAD_CLOSED_STAGES] } },
     }),

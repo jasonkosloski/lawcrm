@@ -29,6 +29,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { parseLocalDate } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
+import { visibleEmailThreadWhere } from "@/lib/email-visibility";
 import { NOTE_TYPES } from "@/lib/note-constants";
 import { DEADLINE_KINDS } from "@/lib/constants/deadline-status";
 import { TASK_PRIORITIES } from "@/lib/constants/priority";
@@ -41,12 +42,15 @@ import {
 
 /** Resolve the matter for an email thread. Inbox actions require a
  *  filed source — unfiled threads can't spawn matter-scoped entities
- *  because there's no matter to attach them to. */
+ *  because there's no matter to attach them to. Only the mailbox
+ *  owner may promote a thread: someone else's thread resolves to
+ *  null, exactly like an unknown id. */
 async function resolveEmailMatter(
-  emailThreadId: string
+  emailThreadId: string,
+  userId: string
 ): Promise<{ matterId: string } | null> {
-  const t = await prisma.emailThread.findUnique({
-    where: { id: emailThreadId },
+  const t = await prisma.emailThread.findFirst({
+    where: { id: emailThreadId, ...visibleEmailThreadWhere(userId) },
     select: { matterId: true },
   });
   if (!t || !t.matterId) return null;
@@ -165,14 +169,14 @@ export async function createTaskFromEmail(
   if (!parsed.success) {
     return { status: "error", errors: parsed.error.flatten().fieldErrors };
   }
-  const ctx = await resolveEmailMatter(emailThreadId);
+  const userId = await getCurrentUserId();
+  const ctx = await resolveEmailMatter(emailThreadId, userId);
   if (!ctx) {
     return {
       status: "error",
       errors: { title: ["Email thread isn't filed to a matter — file it first."] },
     };
   }
-  const userId = await getCurrentUserId();
   await prisma.task.create({
     data: {
       matterId: ctx.matterId,
@@ -206,14 +210,14 @@ export async function createDeadlineFromEmail(
   if (!parsed.success) {
     return { status: "error", errors: parsed.error.flatten().fieldErrors };
   }
-  const ctx = await resolveEmailMatter(emailThreadId);
+  const userId = await getCurrentUserId();
+  const ctx = await resolveEmailMatter(emailThreadId, userId);
   if (!ctx) {
     return {
       status: "error",
       errors: { title: ["Email thread isn't filed to a matter — file it first."] },
     };
   }
-  const userId = await getCurrentUserId();
   await prisma.deadline.create({
     data: {
       matterId: ctx.matterId,
@@ -251,14 +255,14 @@ export async function createNoteFromEmail(
   if (isEffectivelyEmpty(clean)) {
     return { status: "error", errors: { content: ["Note can't be empty"] } };
   }
-  const ctx = await resolveEmailMatter(emailThreadId);
+  const userId = await getCurrentUserId();
+  const ctx = await resolveEmailMatter(emailThreadId, userId);
   if (!ctx) {
     return {
       status: "error",
       errors: { content: ["Email thread isn't filed to a matter — file it first."] },
     };
   }
-  const userId = await getCurrentUserId();
   const created = await prisma.note.create({
     data: {
       matterId: ctx.matterId,

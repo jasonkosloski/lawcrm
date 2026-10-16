@@ -595,3 +595,83 @@ describe("globalSearch — take, totals, and ?type= expansion", () => {
     expect(res.groups.map((g) => g.type)).toEqual(["task"]);
   });
 });
+
+describe("globalSearch — email mailbox privacy", () => {
+  /** A thread on `ownerId`'s own mailbox whose subject, snippet and
+   *  body all contain the needle. Filed to the shared matter so a
+   *  "filed threads are firm-visible" regression would show up too. */
+  async function seedOwnedThread(ownerId: string, tag: string) {
+    const account = await prisma.emailAccount.create({
+      data: { userId: ownerId, emailAddress: `${tag}@firm.test` },
+      select: { id: true },
+    });
+    return prisma.emailThread.create({
+      data: {
+        accountId: account.id,
+        subject: `Needle subject ${tag}`,
+        snippet: `Needle snippet ${tag}`,
+        matterId,
+        lastMessageAt: new Date("2026-07-01T12:00:00Z"),
+        messages: {
+          create: {
+            fromName: "Client",
+            fromEmail: "client@example.test",
+            toRecipients: "[]",
+            body: `Needle body text ${tag}`,
+            sentAt: new Date("2026-07-01T12:00:00Z"),
+          },
+        },
+      },
+      select: { id: true },
+    });
+  }
+
+  test("user B never sees user A's threads - hits, total or serialized result", async () => {
+    const a = await seedOwnedThread(otherId, "alpha-private");
+    const mine = await seedOwnedThread(viewerId, "bravo-mine");
+
+    const res = await globalSearch("needle");
+    const g = groupOf(res, "email")!;
+    expect(g.hits.map((h) => h.id)).toEqual([mine.id]);
+    expect(g.total).toBe(1);
+    expect(g.hits.map((h) => h.id)).not.toContain(a.id);
+
+    const json = JSON.stringify(res);
+    expect(json).not.toContain("alpha-private");
+    expect(json).toContain("bravo-mine");
+
+    // Same query as the other user flips the picture.
+    mockedGetUser.mockResolvedValue(otherId);
+    const asOwner = groupOf(await globalSearch("needle"), "email")!;
+    expect(asOwner.hits.map((h) => h.id)).toEqual([a.id]);
+    expect(asOwner.total).toBe(1);
+  });
+
+  test("a body-only match on another mailbox leaks neither body nor group", async () => {
+    const account = await prisma.emailAccount.create({
+      data: { userId: otherId, emailAddress: "other@firm.test" },
+      select: { id: true },
+    });
+    await prisma.emailThread.create({
+      data: {
+        accountId: account.id,
+        subject: "Quarterly update",
+        lastMessageAt: new Date("2026-07-01T12:00:00Z"),
+        messages: {
+          create: {
+            fromName: "Partner",
+            fromEmail: "p@firm.test",
+            toRecipients: "[]",
+            body: "settlement authority is $250k",
+            sentAt: new Date("2026-07-01T12:00:00Z"),
+          },
+        },
+      },
+    });
+    const res = await globalSearch("authority");
+    const json = JSON.stringify(res);
+    expect(json).not.toContain("Quarterly update");
+    expect(json).not.toContain("250k");
+    expect(groupOf(res, "email")?.total ?? 0).toBe(0);
+  });
+});

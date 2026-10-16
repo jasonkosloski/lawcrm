@@ -11,7 +11,10 @@
  *
  * Auth: gated on `communication.file_email` — filing/unfiling moves
  * an email onto (or off) a matter's record, so it's a matter-record
- * mutation, not just an inbox convenience.
+ * mutation, not just an inbox convenience. Mailboxes are personal, so
+ * only the mailbox owner may file / unfile / move a thread
+ * (`visibleEmailThreadWhere`); any other caller gets "Thread not
+ * found" and nothing is written or logged.
  */
 
 "use server";
@@ -20,6 +23,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
 import { requirePermission } from "@/lib/permission-check";
+import { visibleEmailThreadWhere } from "@/lib/email-visibility";
 
 export async function setEmailThreadMatter(
   threadId: string,
@@ -28,8 +32,8 @@ export async function setEmailThreadMatter(
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("communication.file_email");
 
-  const thread = await prisma.emailThread.findUnique({
-    where: { id: threadId },
+  const thread = await prisma.emailThread.findFirst({
+    where: { id: threadId, ...visibleEmailThreadWhere(userId) },
     select: { id: true, subject: true, matterId: true },
   });
   if (!thread) return { ok: false, error: "Thread not found" };

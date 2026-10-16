@@ -139,3 +139,74 @@ describe("addTimeEntryToTask — creation", () => {
     expect(entry.source).toBe("task");
   });
 });
+
+// ── Email message: mailbox ownership ────────────────────────────────────
+
+describe("addTimeEntryToEmailMessage — mailbox ownership", () => {
+  /** A message in `ownerId`'s mailbox, thread filed to the test matter. */
+  async function seedMessage(ownerId: string) {
+    const account = await prisma.emailAccount.create({
+      data: { userId: ownerId, emailAddress: `box-${ownerId}@example.com` },
+      select: { id: true },
+    });
+    const thread = await prisma.emailThread.create({
+      data: {
+        accountId: account.id,
+        matterId,
+        subject: "Privileged: settlement authority",
+        lastMessageAt: new Date("2026-06-10T14:30:00Z"),
+        messages: {
+          create: {
+            fromName: "Client C.",
+            fromEmail: "c@client.test",
+            toRecipients: "[]",
+            body: "secret body",
+            sentAt: new Date("2026-06-10T14:30:00Z"),
+          },
+        },
+      },
+      select: { messages: { select: { id: true } } },
+    });
+    return thread.messages[0].id;
+  }
+
+  test("the mailbox owner can log time on their own message", async () => {
+    const messageId = await seedMessage(userId);
+    const res = await addTimeEntryToEmailMessage(
+      messageId,
+      noteAttachmentInitialState,
+      buildTimeForm()
+    );
+    expect(res.status).toBe("ok");
+    const entry = await prisma.timeEntry.findFirstOrThrow({
+      select: { emailMessageId: true, userId: true, source: true },
+    });
+    expect(entry).toEqual({
+      emailMessageId: messageId,
+      userId,
+      source: "email",
+    });
+  });
+
+  test("another user cannot log time on a colleague's private message", async () => {
+    const { firmId } = await prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { firmId: true },
+    });
+    const { userId: ownerId } = await seedUser({ firmId: firmId as string });
+    const messageId = await seedMessage(ownerId);
+
+    // userId (the mocked actor) does not own this mailbox.
+    const res = await addTimeEntryToEmailMessage(
+      messageId,
+      noteAttachmentInitialState,
+      buildTimeForm()
+    );
+    expect(res.status).toBe("error");
+    expect(await prisma.timeEntry.count()).toBe(0);
+    // Nothing about the victim's email reaches the activity log.
+    const logs = JSON.stringify(await prisma.activityLog.findMany());
+    expect(logs).not.toContain("settlement authority");
+    expect(logs).not.toContain("Client C.");
+  });
+});

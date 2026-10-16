@@ -160,3 +160,60 @@ describe("unfiling", () => {
     expect(await prisma.activityLog.count()).toBe(0);
   });
 });
+
+describe("mailbox ownership", () => {
+  /** A thread in ANOTHER user's mailbox, optionally pre-filed. */
+  async function seedForeignThread(filedTo?: string): Promise<string> {
+    const { firmId } = await prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { firmId: true },
+    });
+    const { userId: ownerId } = await seedUser({ firmId: firmId as string });
+    const account = await prisma.emailAccount.create({
+      data: { userId: ownerId, emailAddress: "owner@example.com" },
+      select: { id: true },
+    });
+    const thread = await prisma.emailThread.create({
+      data: {
+        accountId: account.id,
+        matterId: filedTo ?? null,
+        subject: "Privileged: settlement authority",
+        lastMessageAt: new Date("2026-06-10T14:30"),
+      },
+      select: { id: true },
+    });
+    return thread.id;
+  }
+
+  test("a non-owner cannot file a colleague's thread to a matter", async () => {
+    const threadId = await seedForeignThread();
+    const res = await setEmailThreadMatter(threadId, matterId);
+    expect(res).toEqual({ ok: false, error: "Thread not found" });
+    const thread = await prisma.emailThread.findUniqueOrThrow({
+      where: { id: threadId },
+    });
+    expect(thread.matterId).toBeNull();
+    // Nothing (least of all the subject) reaches a matter timeline.
+    expect(await prisma.activityLog.count()).toBe(0);
+  });
+
+  test("a non-owner cannot unfile or move a colleague's filed thread", async () => {
+    const threadId = await seedForeignThread(matterId);
+    vi.mocked(revalidatePath).mockClear();
+
+    expect(await setEmailThreadMatter(threadId, null)).toEqual({
+      ok: false,
+      error: "Thread not found",
+    });
+    expect(await setEmailThreadMatter(threadId, matterId)).toEqual({
+      ok: false,
+      error: "Thread not found",
+    });
+    const thread = await prisma.emailThread.findUniqueOrThrow({
+      where: { id: threadId },
+    });
+    expect(thread.matterId).toBe(matterId);
+    expect(await prisma.activityLog.count()).toBe(0);
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+});

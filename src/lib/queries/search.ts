@@ -35,13 +35,18 @@
  *   - Contacts: active only, merged losers (`mergedIntoId` set)
  *     excluded — same posture as the contacts directory.
  *
+ *   - Email is mailbox-personal: only threads on the viewer's own
+ *     EmailAccount match (`visibleEmailThreadWhere`, src/lib/
+ *     email-visibility.ts) — hits, snippets and the group total.
+ *
  * Everything else (matters, notes, documents, tasks, deadlines,
- * email, messenger) is firm-visible today, matching the read model
- * of its own list page.
+ * messenger) is firm-visible today, matching the read model of its
+ * own list page.
  */
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { visibleEmailThreadWhere } from "@/lib/email-visibility";
 import { canViewEventDetails } from "@/lib/calendar-visibility";
 import {
   SNIPPET_MARK_END,
@@ -514,11 +519,19 @@ export async function globalSearch(
     // body. The matched message is fetched alongside (filtered
     // include, newest first) so the snippet can quote the actual
     // matching body when subject/snippet didn't match.
+    // Mailboxes are personal: scope to the viewer's own threads via
+    // the shared read-model helper. The same `where` feeds findMany
+    // AND count, so neither hits nor the total leak other mailboxes.
     const where = {
-      OR: [
-        { subject: ci },
-        { snippet: ci },
-        { messages: { some: { body: ci } } },
+      AND: [
+        visibleEmailThreadWhere(viewerId),
+        {
+          OR: [
+            { subject: ci },
+            { snippet: ci },
+            { messages: { some: { body: ci } } },
+          ],
+        },
       ],
     };
     const [rows, total] = await Promise.all([

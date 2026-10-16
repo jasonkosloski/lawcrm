@@ -349,3 +349,58 @@ describe("messenger promotions", () => {
     expect(note.reads.map((r) => r.userId)).toContain(userId);
   });
 });
+
+// ── Email promotions: mailbox ownership ─────────────────────────────────
+
+describe("email promotions — mailbox ownership", () => {
+  /** A filed thread in ANOTHER user's mailbox. */
+  async function seedForeignFiledThread(): Promise<string> {
+    const { firmId } = await prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { firmId: true },
+    });
+    const { userId: ownerId } = await seedUser({ firmId: firmId as string });
+    const account = await prisma.emailAccount.create({
+      data: { userId: ownerId, emailAddress: `owner-${next()}@lawcrm.test` },
+      select: { id: true },
+    });
+    const thread = await prisma.emailThread.create({
+      data: {
+        accountId: account.id,
+        matterId,
+        subject: "Privileged: settlement authority",
+        lastMessageAt: new Date("2026-06-01T10:00:00Z"),
+      },
+      select: { id: true },
+    });
+    return thread.id;
+  }
+
+  test("a non-owner cannot spawn a task, deadline or note from a colleague's thread", async () => {
+    const foreign = await seedForeignFiledThread();
+
+    const task = await createTaskFromEmail(
+      foreign,
+      inboxActionInitialState,
+      taskForm()
+    );
+    const deadline = await createDeadlineFromEmail(
+      foreign,
+      inboxActionInitialState,
+      deadlineForm()
+    );
+    const note = await createNoteFromEmail(
+      foreign,
+      inboxActionInitialState,
+      noteForm()
+    );
+
+    expect(task.status).toBe("error");
+    expect(deadline.status).toBe("error");
+    expect(note.status).toBe("error");
+    expect(await prisma.task.count()).toBe(0);
+    expect(await prisma.deadline.count()).toBe(0);
+    expect(await prisma.note.count()).toBe(0);
+    expect(await prisma.activityLog.count()).toBe(0);
+  });
+});

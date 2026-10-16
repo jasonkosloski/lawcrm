@@ -20,6 +20,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { parseLocalDate } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
+import { visibleEmailMessageWhere } from "@/lib/email-visibility";
 import { isKnownUtbmsCode } from "@/lib/time-entry-constants";
 import type { NoteAttachmentFormState } from "@/lib/note-attachment-form";
 
@@ -191,9 +192,12 @@ export async function addTimeEntryToEmailMessage(
   if (!parsed.success) {
     return { status: "error", errors: parsed.error.flatten().fieldErrors };
   }
+  const userId = await getCurrentUserId();
   // Pull the message and its thread so we can resolve the matter.
-  const msg = await prisma.emailMessage.findUnique({
-    where: { id: emailMessageId },
+  // Mailbox-personal: only the owner of the account may log time on a
+  // message; someone else's message looks exactly like a missing one.
+  const msg = await prisma.emailMessage.findFirst({
+    where: { id: emailMessageId, ...visibleEmailMessageWhere(userId) },
     select: {
       id: true,
       fromName: true,
@@ -208,7 +212,6 @@ export async function addTimeEntryToEmailMessage(
       },
     };
   }
-  const userId = await getCurrentUserId();
   await prisma.timeEntry.create({
     data: {
       matterId: msg.thread.matterId,
