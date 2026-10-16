@@ -59,6 +59,13 @@ const TABLES_IN_DELETE_ORDER = [
   // Tasks + deadlines reference matters/users
   "tasks",
   "deadlines",
+  // Automation libraries (ADR-019) — after tasks/deadlines (their
+  // provenance FKs), children before parents. deadline_rules
+  // self-references with RESTRICT; resetDb nulls those links first.
+  "auto_applies",
+  "task_list_items",
+  "task_lists",
+  "deadline_rules",
   // Documents + evidence — documents before folders (Document.folderId
   // is SetNull, but deleting in this order avoids the null churn).
   "evidence_syncs",
@@ -104,11 +111,14 @@ const TABLES_IN_DELETE_ORDER = [
  *  doesn't support TRUNCATE). Wrapped in a transaction so a
  *  partial failure leaves no half-cleaned state. */
 export async function resetDb(): Promise<void> {
-  await prisma.$transaction(
-    TABLES_IN_DELETE_ORDER.map((table) =>
+  await prisma.$transaction([
+    // deadline_rules.anchorRuleId → deadline_rules is ON DELETE
+    // RESTRICT (checked per row), so break the chain before deleting.
+    prisma.$executeRawUnsafe(`UPDATE deadline_rules SET "anchorRuleId" = NULL`),
+    ...TABLES_IN_DELETE_ORDER.map((table) =>
       prisma.$executeRawUnsafe(`DELETE FROM ${table}`)
-    )
-  );
+    ),
+  ]);
 }
 
 // ── Fixture builders ────────────────────────────────────────────────────

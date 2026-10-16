@@ -354,3 +354,24 @@ Clicking a different column resets to that column's first-click (ascending).
 - (-) One extra control-plane call (`issueSignedToken`) per download redirect
 - (-) A signed media URL stays valid for up to 6 hours if leaked — scoped to that single file
 - (-) Signed URLs can't be revoked early; deleting the file is the kill switch (bounded further by the 1-hour CDN cache TTL)
+
+## ADR-019: Deadline rules + task lists as firm libraries, applied on demand or by AutoApply defaults
+
+**Date:** 2026-10-16
+**Status:** Accepted
+
+**Context:** Lead conversion (and the New-matter form) created only the SOL deadline; every other recurring deadline (government-notice periods, response windows, pretrial dates) and every recurring checklist was entered by hand. The roadmap item framed this as per-practice-area conversion logic, but the firm needs the same rules and checklists at other times too — after service, at a stage change, whenever.
+
+**Decision:**
+- **Two firm libraries**, decoupled from any trigger: `DeadlineRule` (title, kind, anchor, signed `offsetDays` + the `offsetUnit` it was entered in, citation, notes) and `TaskList` + ordered `TaskListItem`s (priority, assign to lead/unassigned, optional due offset from the apply date). Managed on Settings → Automations under granular `automations.*` keys.
+- **Anchors**: `incident_date`, `matter_opened`, `prompt` (asked at apply time), `rule` (another rule's deadline on the same matter). Rule-to-rule links are refused if they'd loop; `anchorRuleId` is ON DELETE RESTRICT, and the delete action explains which rules depend on it.
+- **Date math in calendar-day keys** (`src/lib/automations/deadline-plan.ts`, pure): each anchor is read with the getters matching how it's stored (UTC-midnight incident dates per ADR-012's SOL exception; local-midnight deadline dates; the actor's TZ for "matter opened"), the offset is added in UTC arithmetic, and the result is stored like every other date-only deadline. Months/years convert at 30/365 days — the SOL convention — and the UI always shows the day count beside them.
+- **Applying is a separate concern** (`src/lib/automations/apply.ts`, takes a transaction client): manual applies report duplicates (confirm to re-apply) and unresolvable anchors (ask for a date); automatic applies skip duplicates and turn an undatable rule into a "Set date: …" task for the lead — never silently dropped. Generated rows carry provenance (`Deadline.deadlineRuleId`, `Task.taskListId`, both SetNull). Manual apply is gated on the capability exercised (`deadlines.create` / `tasks.create`), not the library keys.
+- **Wiring layer**: `AutoApply` rows (`trigger`, nullable `practiceAreaId` = all areas, exactly one of rule/list). The only trigger today is `matter_created`, fired from both creation paths through one `applyAutoDefaults` call inside the creating transaction. New triggers add a value, not a table.
+- The pre-existing `Automation` model (JSON steps, never used) is left untouched and unrelated.
+
+**Trade-offs:**
+- (+) One library serves conversion, new matters, and any later moment; firms edit rules without a deploy
+- (+) Dates can't drift by a day regardless of server/user TZ (pinned by tests in Denver)
+- (-) Dates are snapshotted at apply time — moving the trial date doesn't move "30 days before trial" (recalculate-dependents is a follow-up)
+- (-) The firm owns the legal periods; the app ships none, so correctness of each rule is a firm configuration responsibility

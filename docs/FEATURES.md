@@ -523,8 +523,30 @@ done. What's left is enumerated below.
   content per role with per-user overrides. Generic "pinned items"
   concept spanning matters, reports, leads, contacts, saved-filter
   URLs. Depends on auth (shipped) + a `UserPreferences` model.
-- [ ] **Automations.** Template library, trigger configuration.
-  Phase 8 placeholder.
+- [~] **Automations — deadline rules + task lists.** Shipped
+  2026-10-16 (ADR-019): Settings → Automations holds the firm's
+  **deadline rules** ("N days/months/years after/before" an anchor:
+  incident date, matter opened, a date entered when applied, or
+  another rule's deadline on the same matter — chains resolve in
+  dependency order, loops are refused on save; the offset displays in
+  the unit it was entered, so "182 days" never reads "6 months 2
+  days") and **task lists** (ordered items: priority, assign to the
+  matter's lead attorney or nobody, optional due offset from the
+  apply date). Apply either to any matter from its Deadlines / Tasks
+  tab (gated `deadlines.create` / `tasks.create`; re-applying asks
+  first; an unresolvable anchor asks for the date). **Automatic
+  defaults** (AutoApply rows: rule/list × practice area or all) fire
+  on `matter_created` — both the New-matter form and lead conversion
+  — inside the creating transaction; rules that can't be dated yet
+  become a "Set date: …" task for the lead instead of being dropped.
+  Generated rows carry provenance (`Deadline.deadlineRuleId`,
+  `Task.taskListId`), and every application is activity-logged.
+  Keys: `automations.view`, `automations.deadline_rule.*`,
+  `automations.task_list.*`, `automations.defaults.{create,delete}`.
+  Follow-ups: recalculate dependent deadlines when an anchor date
+  moves (v1 snapshots dates at apply time); task due dates relative to
+  a deadline; more triggers (stage change); assignment notifications
+  for auto-created tasks.
 - [ ] **Export / print to PDF — beyond invoices.** Invoices ✓ (chrome-
   free `/print/invoices/[id]` route, browser Save-as-PDF). Demand
   letters + trust reports still pending.
@@ -559,11 +581,13 @@ done. What's left is enumerated below.
   PACER — each lights up when its underlying feature phase lands.
 - [ ] **Settings — Billing & rates.** Default hourly rate, UTBMS
   code library, invoice templates, payment terms.
-- [ ] **Lead → matter conversion — v2 automations.** Practice-area
-  -specific automations: §1983 spawns a CGIA notice deadline +
-  task; FHA spawns a HUD response deadline; CADA starts the 90-day
-  EEOC right-to-sue clock. Plus initial deadline templates per
-  area.
+- [x] **Lead → matter conversion — v2 automations.** Shipped
+  2026-10-16 via the generic Automations feature above rather than
+  hardcoded per-area logic: the firm configures deadline rules /
+  task lists and sets them as defaults for a practice area (e.g.
+  §1983 → CGIA notice rule + intake checklist). Conversion now also
+  logs "Converted from lead: <name>" on the matter timeline. The
+  legal periods themselves are firm-entered, not shipped.
 - [ ] **`/matters/new` v2 follow-ups.** Matter-name pattern as firm
   setting (per-area overrides), case location as a real schema
   field, multi-member team assignment, tag-from-existing-lead,

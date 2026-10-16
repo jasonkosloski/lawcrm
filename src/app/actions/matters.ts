@@ -21,6 +21,8 @@ import { createNotification } from "@/lib/notifications";
 import { getEffectiveCalendarDefaults } from "@/lib/calendar-defaults";
 import { BILLING_MODES } from "@/lib/billing-mode-constants";
 import { computeSolDate } from "@/lib/sol";
+import { applyAutoDefaults, describeDefaults } from "@/lib/automations/apply";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import {
   MATTER_TEAM_ROLES,
   matterTeamRoleLabel,
@@ -258,7 +260,10 @@ export async function createMatter(
     };
   }
 
-  const currentUserId = await getCurrentUserId();
+  const [currentUserId, tz] = await Promise.all([
+    getCurrentUserId(),
+    getCurrentUserTimeZone(),
+  ]);
 
   // Verify the selected lead is a real, active user; fall through to
   // the current user if the posted value is stale or the user has
@@ -294,7 +299,7 @@ export async function createMatter(
   // orphaned Contact (+ContactPhone), and a matter can't exist
   // without its critical SOL Deadline. Mirrors updateMatter and
   // convertLeadToMatter, which already run transactionally.
-  const matter = await prisma.$transaction(async (tx) => {
+  const { matter, defaults } = await prisma.$transaction(async (tx) => {
     // Resolve client: either pick an existing Contact, create a new
     // one inline, or leave null.
     let clientId: string | null = null;
@@ -389,8 +394,29 @@ export async function createMatter(
       ownerId: leadUserId,
     });
 
-    return created;
+    // Firm-configured defaults (Settings → Automations): deadline
+    // rules + task lists set to apply when a matter is created in
+    // this practice area (or any). Same transaction — a matter never
+    // exists without the deadlines the firm said it must have.
+    const defaults = await applyAutoDefaults(tx, {
+      matterId: created.id,
+      practiceAreaId: resolved.practiceAreaId,
+      trigger: "matter_created",
+      tz,
+    });
+
+    return { matter: created, defaults };
   });
+
+  const defaultsLine = describeDefaults(defaults);
+  if (defaultsLine) {
+    await logActivity({
+      matterId: matter.id,
+      userId: currentUserId,
+      type: "automation",
+      title: defaultsLine,
+    });
+  }
 
   // Sidebar + matters list both read fresh data on next render.
   revalidatePath("/", "layout");

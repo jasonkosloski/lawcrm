@@ -19,6 +19,11 @@
 
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
+// The action resolves the actor's TZ (automation date math);
+// current-user-tz is server-only, so stub it (same as other suites).
+vi.mock("@/lib/current-user-tz", () => ({
+  getCurrentUserTimeZone: vi.fn(async () => "UTC"),
+}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("@/lib/permission-check", () => ({
@@ -152,6 +157,40 @@ describe("createMatter transaction", () => {
     expect(await prisma.matter.count()).toBe(0);
     expect(await prisma.contact.count()).toBe(0);
     expect(await prisma.contactPhone.count()).toBe(0);
+  });
+});
+
+describe("createMatter — automatic defaults (ADR-019)", () => {
+  test("applies matter_created defaults for the area in the same transaction", async () => {
+    const rule = await prisma.deadlineRule.create({
+      data: { title: "Client intake meeting", anchor: "matter_opened", offsetDays: 7 },
+    });
+    // Incident-anchored with no incident date → becomes a "Set date" task.
+    const needsDate = await prisma.deadlineRule.create({
+      data: { title: "CGIA notice", anchor: "incident_date", offsetDays: 182 },
+    });
+    await prisma.autoApply.createMany({
+      data: [
+        { practiceAreaId: areaId, deadlineRuleId: rule.id },
+        { practiceAreaId: areaId, deadlineRuleId: needsDate.id },
+      ],
+    });
+
+    await expect(
+      createMatter(createMatterInitialState, createForm())
+    ).rejects.toThrow(/__REDIRECT__:\/matters\//);
+
+    const matter = await prisma.matter.findFirstOrThrow({ select: { id: true } });
+    expect(
+      await prisma.deadline.count({ where: { matterId: matter.id, deadlineRuleId: rule.id } })
+    ).toBe(1);
+    const setDate = await prisma.task.findFirstOrThrow({ where: { matterId: matter.id } });
+    expect(setDate.title).toBe("Set date: CGIA notice");
+    expect(setDate.ownerId).toBe(userId);
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { matterId: matter.id, type: "automation" },
+    });
+    expect(log.title).toBe('Automatic defaults applied: 1 deadline, 1 "set date" task');
   });
 });
 

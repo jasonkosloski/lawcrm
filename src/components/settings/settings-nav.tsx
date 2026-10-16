@@ -55,6 +55,11 @@ const SECTIONS: NavSection[] = [
         requires: "firm.manage_practice_areas",
       },
       {
+        href: "/settings/automations",
+        label: "Automations",
+        requires: "automations.view",
+      },
+      {
         href: "/settings/activity",
         label: "Activity log",
         requires: "firm.view_activity",

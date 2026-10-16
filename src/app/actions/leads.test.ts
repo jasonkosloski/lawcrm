@@ -25,6 +25,11 @@
 
 import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
+// The action resolves the actor's TZ (automation date math);
+// current-user-tz is server-only, so stub it (same as other suites).
+vi.mock("@/lib/current-user-tz", () => ({
+  getCurrentUserTimeZone: vi.fn(async () => "UTC"),
+}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 // convertLeadToMatter ends in redirect(); surface it as a sentinel
 // throw so tests can assert "reached the redirect" = success.
@@ -446,5 +451,58 @@ describe("convertLeadToMatter — intake time roll-forward", () => {
     expect(
       await prisma.timeEntry.count({ where: { matterId: existingMatter.id } })
     ).toBe(1);
+  });
+});
+
+describe("convertLeadToMatter — automatic defaults (ADR-019)", () => {
+  test("applies the area's defaults, owned by the converting attorney, and logs provenance", async () => {
+    const { areaId, stageId } = await seedArea({ hasSol: true, periodDays: 730 });
+    const { leadId } = await seedIntakeLead({
+      dateOfIncident: new Date("2026-03-10T00:00:00.000Z"),
+    });
+    const rule = await prisma.deadlineRule.create({
+      data: { title: "CGIA notice", anchor: "incident_date", offsetDays: 182 },
+    });
+    const list = await prisma.taskList.create({
+      data: {
+        name: "§1983 intake",
+        items: { create: [{ title: "Send engagement letter", assignTo: "lead" }] },
+      },
+    });
+    await prisma.autoApply.createMany({
+      data: [
+        { practiceAreaId: areaId, deadlineRuleId: rule.id },
+        { practiceAreaId: null, taskListId: list.id },
+      ],
+    });
+
+    await expect(
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+    ).rejects.toThrow(/^REDIRECT:\/matters\//);
+
+    const matter = await prisma.matter.findFirstOrThrow({ select: { id: true } });
+    const generated = await prisma.deadline.findFirstOrThrow({
+      where: { matterId: matter.id, deadlineRuleId: rule.id },
+    });
+    expect(generated.ownerId).toBe(userId);
+    expect(generated.dueDate.toISOString().slice(0, 10)).toBe("2026-09-08");
+    const task = await prisma.task.findFirstOrThrow({ where: { matterId: matter.id } });
+    expect(task).toMatchObject({ title: "Send engagement letter", ownerId: userId, taskListId: list.id });
+
+    const titles = (
+      await prisma.activityLog.findMany({ where: { matterId: matter.id }, orderBy: { timestamp: "asc" } })
+    ).map((l) => l.title);
+    expect(titles).toContain("Converted from lead: Priya Patel");
+    expect(titles).toContain("Automatic defaults applied: 1 deadline, 1 task (§1983 intake)");
+  });
+
+  test("no defaults → conversion still logs where the matter came from", async () => {
+    const { areaId, stageId } = await seedArea({});
+    const { leadId } = await seedIntakeLead();
+    await expect(
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+    ).rejects.toThrow(/^REDIRECT:/);
+    const titles = (await prisma.activityLog.findMany()).map((l) => l.title);
+    expect(titles).toEqual(["Converted from lead: Priya Patel"]);
   });
 });

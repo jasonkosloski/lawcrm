@@ -375,6 +375,64 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
     ],
   },
   {
+    id: "automations",
+    label: "Automations",
+    permissions: [
+      {
+        key: "automations.view",
+        label: "View automations",
+        description:
+          "See Settings → Automations: the firm's deadline rules, task lists, and which ones apply automatically to new matters. Applying a rule or list to a matter rides deadlines.create / tasks.create instead.",
+      },
+      {
+        key: "automations.deadline_rule.create",
+        label: "Create deadline rules",
+        description:
+          "Add a reusable deadline rule (\"N days after/before an anchor date\") to the firm library.",
+      },
+      {
+        key: "automations.deadline_rule.edit",
+        label: "Edit deadline rules",
+        description:
+          "Change a rule's title, anchor, offset, citation, or archive it. Affects future applications only — deadlines already generated keep their dates.",
+      },
+      {
+        key: "automations.deadline_rule.delete",
+        label: "Delete deadline rules",
+        description:
+          "Permanently remove a rule. Deadlines it generated stay on their matters; a rule other rules count from can't be deleted.",
+      },
+      {
+        key: "automations.task_list.create",
+        label: "Create task lists",
+        description: "Add a reusable task list (checklist) to the firm library.",
+      },
+      {
+        key: "automations.task_list.edit",
+        label: "Edit task lists",
+        description:
+          "Rename a task list, add/edit/reorder/remove its items, or archive it. Tasks already created from it are unaffected.",
+      },
+      {
+        key: "automations.task_list.delete",
+        label: "Delete task lists",
+        description:
+          "Permanently remove a task list. Tasks it created stay on their matters.",
+      },
+      {
+        key: "automations.defaults.create",
+        label: "Add automatic defaults",
+        description:
+          "Choose a deadline rule or task list to apply automatically whenever a matter is created (new-matter form or lead conversion), for one practice area or all.",
+      },
+      {
+        key: "automations.defaults.delete",
+        label: "Remove automatic defaults",
+        description: "Stop a rule or list from applying automatically to new matters.",
+      },
+    ],
+  },
+  {
     id: "notes",
     label: "Notes",
     permissions: [

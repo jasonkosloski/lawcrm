@@ -9,6 +9,9 @@ import { CheckSquare } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Card } from "@/components/ui/card";
 import { TaskComposer } from "@/components/matters/captures/task-composer";
+import { ApplyTaskListDialog } from "@/components/automations/apply-task-list-dialog";
+import { listTaskLists } from "@/lib/queries/automations";
+import { currentUserHasPermission } from "@/lib/permission-check";
 import {
   TaskRowMenu,
   TaskStatusToggle,
@@ -70,11 +73,15 @@ export default async function MatterTasksPage({
   const { id } = await params;
   // Assignees feed the composer + edit-dialog pickers; the current
   // user id is the composer's default selection (self-assign).
-  const [tasks, assignees, currentUserId] = await Promise.all([
+  const [tasks, assignees, currentUserId, canCreate] = await Promise.all([
     getMatterTasks(id),
     listAssigneeOptions(),
     getCurrentUserId(),
+    currentUserHasPermission("tasks.create"),
   ]);
+  // Firm task lists (Settings → Automations) — only for users who
+  // could apply one.
+  const taskLists = canCreate ? await listTaskLists({ activeOnly: true }) : [];
 
   // Group by status
   const byStatus = new Map<string, TaskRow[]>();
@@ -89,6 +96,18 @@ export default async function MatterTasksPage({
 
   return (
     <div className="p-5 flex flex-col gap-5">
+      {taskLists.length > 0 && (
+        <div className="flex justify-end -mb-2">
+          <ApplyTaskListDialog
+            matterId={id}
+            lists={taskLists.map((l) => ({
+              id: l.id,
+              name: l.name,
+              itemTitles: l.items.map((i) => i.title),
+            }))}
+          />
+        </div>
+      )}
       <TaskComposer
         matterId={id}
         assignees={assignees}

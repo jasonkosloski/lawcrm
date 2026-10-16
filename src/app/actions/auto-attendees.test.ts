@@ -19,6 +19,11 @@
 
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
+// matters.ts resolves the actor's TZ (automation date math);
+// current-user-tz is server-only, so stub it (same as other suites).
+vi.mock("@/lib/current-user-tz", () => ({
+  getCurrentUserTimeZone: vi.fn(async () => "UTC"),
+}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("@/lib/permission-check", () => ({

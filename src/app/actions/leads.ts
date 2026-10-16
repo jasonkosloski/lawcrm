@@ -36,6 +36,8 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { computeSolDate } from "@/lib/sol";
+import { applyAutoDefaults, describeDefaults } from "@/lib/automations/apply";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import type {
   ConvertLeadFormState,
   DeclineLeadFormState,
@@ -172,7 +174,10 @@ export async function convertLeadToMatter(
     };
   }
 
-  const userId = await getCurrentUserId();
+  const [userId, tz] = await Promise.all([
+    getCurrentUserId(),
+    getCurrentUserTimeZone(),
+  ]);
   const description = composeMatterDescription(lead);
 
   // SOL carry-over — same rules as the direct create path: persist
@@ -302,10 +307,39 @@ export async function convertLeadToMatter(
       },
     });
 
-    return { matterId: matter.id, carriedCount: carried.count };
+    // Firm-configured defaults (Settings → Automations) — the same
+    // matter_created trigger the New-matter form fires. After the
+    // team insert above so "assign to lead" tasks + deadline owners
+    // resolve to the converting attorney.
+    const defaults = await applyAutoDefaults(tx, {
+      matterId: matter.id,
+      practiceAreaId: area.id,
+      trigger: "matter_created",
+      tz,
+    });
+
+    return { matterId: matter.id, carriedCount: carried.count, defaults };
   });
 
-  const { matterId, carriedCount } = result;
+  const { matterId, carriedCount, defaults } = result;
+
+  // The matter's timeline starts with where it came from.
+  await logActivity({
+    matterId,
+    userId,
+    type: "automation",
+    title: `Converted from lead: ${lead.name}`,
+    detail: lead.source ? `Source: ${lead.source}` : null,
+  });
+  const defaultsLine = describeDefaults(defaults);
+  if (defaultsLine) {
+    await logActivity({
+      matterId,
+      userId,
+      type: "automation",
+      title: defaultsLine,
+    });
+  }
 
   // Audit trail for the roll-forward — the matter's timeline should
   // say where its pre-conversion hours came from. Outside the

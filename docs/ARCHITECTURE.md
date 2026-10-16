@@ -107,9 +107,12 @@ state (e.g. `useOptimistic`), not a client cache.
   (./uploads/, dev) or `vercel-blob` (prod; auto-selected by
   `BLOB_READ_WRITE_TOKEN`, `STORAGE_DRIVER` overrides). GB uploads go
   client-direct to Vercel Blob via a permission-gated token route; downloads
-  are session-gated, then streamed (local) or 302'd to the blob CDN. Blob URLs
-  are unguessable-but-public bearer URLs on an isolated origin — trade-offs in
-  ADR-015.
+  are session-gated, then streamed (local) or 302'd to a short-lived presigned
+  URL for that one file — the Blob store is private (ADR-015, ADR-018).
+- **Automations**: firm deadline rules + task lists (`src/lib/automations/` —
+  pure date planning in `deadline-plan.ts`, transactional apply in `apply.ts`),
+  applied on demand from a matter or automatically on `matter_created` via
+  AutoApply defaults (ADR-019).
 - **Audit log**: mutating actions record to the activity log (`src/lib/activity-log.ts`),
   surfaced at Settings → Activity.
 

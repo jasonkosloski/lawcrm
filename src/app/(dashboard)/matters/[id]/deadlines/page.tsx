@@ -31,6 +31,9 @@ import {
 // the day grid they were saved on.
 import { formatDate } from "@/lib/format-date";
 import { getMatterDeadlines } from "@/lib/queries/matter-detail";
+import { listDeadlineRules } from "@/lib/queries/automations";
+import { currentUserHasPermission } from "@/lib/permission-check";
+import { ApplyDeadlineRuleDialog } from "@/components/automations/apply-deadline-rule-dialog";
 
 // Label maps are centralized (src/lib/constants/deadline-status.ts).
 // Widened to string-indexable here because DB values arrive untyped.
@@ -75,10 +78,24 @@ export default async function MatterDeadlinesPage({
   params,
 }: PageProps<"/matters/[id]">) {
   const { id } = await params;
-  const deadlines = await getMatterDeadlines(id);
+  const [deadlines, canCreate] = await Promise.all([
+    getMatterDeadlines(id),
+    currentUserHasPermission("deadlines.create"),
+  ]);
+  // Firm deadline rules (Settings → Automations) — only fetched for
+  // users who could apply one.
+  const rules = canCreate ? await listDeadlineRules({ activeOnly: true }) : [];
 
   return (
     <div className="p-5 flex flex-col gap-4">
+      {rules.length > 0 && (
+        <div className="flex justify-end">
+          <ApplyDeadlineRuleDialog
+            matterId={id}
+            rules={rules.map((r) => ({ id: r.id, title: r.title, summary: r.summary }))}
+          />
+        </div>
+      )}
       <DeadlineComposer matterId={id} />
 
       {deadlines.length === 0 ? (
@@ -149,7 +166,9 @@ export default async function MatterDeadlinesPage({
                   <KindChip kind={d.kind} />
                 </TableCell>
                 <TableCell className="text-2xs font-mono text-ink-4">
-                  {d.sourceRef ?? d.sourceType ?? "—"}
+                  {d.sourceType === "deadline_rule"
+                    ? `Rule${d.sourceRef ? ` · ${d.sourceRef}` : ""}`
+                    : (d.sourceRef ?? d.sourceType ?? "—")}
                 </TableCell>
                 <TableCell>
                   {d.ownerInitials ? (
