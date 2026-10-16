@@ -107,10 +107,20 @@ function wireHappyMocks() {
     Promise.all(ops)) as any);
 }
 
-function makeRequest(fd: FormData): NextRequest {
+/**
+ * Serialize the FormData to bytes up front rather than passing it as
+ * the body directly. A FormData body is encoded lazily by undici's
+ * generator, which (Node 24) keeps enqueueing after the route cancels
+ * the stream on an aborted batch → an uncatchable "ReadableStream is
+ * already closed" rejection. A byte body matches what Next hands the
+ * route in production (the raw HTTP stream) and cancels cleanly.
+ */
+async function makeRequest(fd: FormData): Promise<NextRequest> {
+  const encoded = new Response(fd);
   return new NextRequest("http://test.local/api/documents/upload", {
     method: "POST",
-    body: fd,
+    headers: { "content-type": encoded.headers.get("content-type")! },
+    body: new Uint8Array(await encoded.arrayBuffer()),
   });
 }
 
@@ -135,7 +145,7 @@ describe("POST /api/documents/upload — gates", () => {
   test("401 without a session", async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockedAuth.mockResolvedValue(null as any);
-    const res = await POST(makeRequest(fdWith({ matterId: "m1" }, [])));
+    const res = await POST(await makeRequest(fdWith({ matterId: "m1" }, [])));
     expect(res.status).toBe(401);
   });
 
@@ -144,7 +154,7 @@ describe("POST /api/documents/upload — gates", () => {
     mockedAuth.mockResolvedValue({ user: { id: "u1" } } as any);
     mockedPerm.mockResolvedValue(false);
     const res = await POST(
-      makeRequest(fdWith({ matterId: "m1" }, [{ name: "a.pdf" }]))
+      await makeRequest(fdWith({ matterId: "m1" }, [{ name: "a.pdf" }]))
     );
     expect(res.status).toBe(403);
     expect(mockedPerm).toHaveBeenCalledWith("documents.upload");
@@ -170,7 +180,7 @@ describe("POST /api/documents/upload — happy path + contract", () => {
   test("multi-file upload creates rows in the folder and returns the contract shape", async () => {
     wireHappyMocks();
     const res = await POST(
-      makeRequest(
+      await makeRequest(
         fdWith({ matterId: "m1", folderId: "fold1" }, [
           { name: "production-01.pdf", content: "pdf-bytes" },
           { name: "bodycam.mp4", content: "video-bytes" },
@@ -210,7 +220,7 @@ describe("POST /api/documents/upload — happy path + contract", () => {
   test("server-derived MIME beats the client-declared part type", async () => {
     wireHappyMocks();
     const res = await POST(
-      makeRequest(
+      await makeRequest(
         fdWith({ matterId: "m1" }, [
           // Attacker declares text/html on a .pdf — extension wins.
           { name: "innocent.pdf", declaredType: "text/html" },
@@ -225,7 +235,7 @@ describe("POST /api/documents/upload — happy path + contract", () => {
 
   test("root uploads (no folderId) store folderId null", async () => {
     wireHappyMocks();
-    await POST(makeRequest(fdWith({ matterId: "m1" }, [{ name: "a.pdf" }])));
+    await POST(await makeRequest(fdWith({ matterId: "m1" }, [{ name: "a.pdf" }])));
     expect(mockedCreate.mock.calls[0]![0].data.folderId).toBeNull();
     expect(mockedFolder).not.toHaveBeenCalled();
   });
@@ -236,7 +246,7 @@ describe("POST /api/documents/upload — failure semantics", () => {
     wireHappyMocks();
     mockedMatter.mockResolvedValue(null);
     const res = await POST(
-      makeRequest(fdWith({ matterId: "ghost" }, [{ name: "a.pdf" }]))
+      await makeRequest(fdWith({ matterId: "ghost" }, [{ name: "a.pdf" }]))
     );
     expect(res.status).toBe(404);
     expect(mockedTxn).not.toHaveBeenCalled();
@@ -246,7 +256,7 @@ describe("POST /api/documents/upload — failure semantics", () => {
     wireHappyMocks();
     mockedFolder.mockResolvedValue(null);
     const res = await POST(
-      makeRequest(
+      await makeRequest(
         fdWith({ matterId: "m1", folderId: "other-matter-folder" }, [
           { name: "a.pdf" },
         ])
@@ -259,7 +269,7 @@ describe("POST /api/documents/upload — failure semantics", () => {
 
   test("400 when no files are attached", async () => {
     wireHappyMocks();
-    const res = await POST(makeRequest(fdWith({ matterId: "m1" }, [])));
+    const res = await POST(await makeRequest(fdWith({ matterId: "m1" }, [])));
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toMatch(
       /no files/i
@@ -279,7 +289,7 @@ describe("POST /api/documents/upload — failure semantics", () => {
         throw new FileTooLargeError(100);
       });
     const res = await POST(
-      makeRequest(
+      await makeRequest(
         fdWith({ matterId: "m1" }, [
           { name: "ok.pdf" },
           { name: "huge.mp4" },
