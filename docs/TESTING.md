@@ -299,9 +299,22 @@ vi.mock("next/navigation", () => ({
 | `npm run test:ui`        | Vitest UI dashboard at `http://localhost:51204/__vitest__/`.        |
 | `npm run typecheck`      | `tsc --noEmit` — catches type errors without an emit.               |
 | `npm run precommit`      | `typecheck` + `test`. The pre-commit hook runs this.                |
+| `npm run test:utc`       | Full suite with `TZ=UTC` — the production server's zone.            |
 
 The pre-commit hook lives in `.husky/pre-commit` and is wired
 via `npm run prepare` (auto-runs after `npm install`).
+
+**Run `test:utc` before shipping anything that touches dates.**
+Production runs in UTC while developers (and their browsers) sit
+west of it; a bug that mixes the two frames passes in one zone and
+fails in the other, so date work should be green in both.
+
+**Parallel suites.** Integration tests default to the `lawcrm_test`
+database on `localhost:5433`. Set `TEST_DATABASE_URL` to run a second
+suite at the same time against its own database in the same
+container (`docker exec lawcrm-test-postgres createdb -U lawcrm_test
+lawcrm_test_2`, then `TEST_DATABASE_URL=postgresql://lawcrm_test:lawcrm_test@localhost:5433/lawcrm_test_2`).
+Two suites sharing one database truncate each other's rows.
 
 ---
 

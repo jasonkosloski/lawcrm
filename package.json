@@ -9,6 +9,7 @@
     "postinstall": "prisma generate",
     "lint": "eslint",
     "test": "vitest run",
+    "test:utc": "TZ=UTC vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "typecheck": "next typegen && tsc --noEmit -p tsconfig.json",

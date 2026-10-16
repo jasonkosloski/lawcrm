@@ -16,6 +16,9 @@ const eslintConfig = defineConfig([
     // (in-browser Babel JSX, never built or imported by the app).
     "src/generated/**",
     "design_handoff_kosloski_law_crm/**",
+    // Agent git worktrees (.claude/worktrees/*) are full copies of
+    // the repo; linting them from the main checkout double-reports.
+    ".claude/**",
   ]),
 ]);
 

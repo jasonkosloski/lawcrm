@@ -21,7 +21,13 @@
 import { execSync } from "node:child_process";
 import { Client } from "pg";
 
+// TEST_DATABASE_URL lets two suites run at once on one machine (e.g.
+// parallel git worktrees), each against its own database in the same
+// container: `createdb -U lawcrm_test lawcrm_test_2` inside it, then
+// point this at .../lawcrm_test_2. Never aim it at a non-test DB —
+// setup() force-pushes the schema and every test truncates tables.
 const TEST_DB_URL =
+  process.env.TEST_DATABASE_URL ??
   "postgresql://lawcrm_test:lawcrm_test@localhost:5433/lawcrm_test";
 
 async function waitForDatabase(): Promise<void> {
