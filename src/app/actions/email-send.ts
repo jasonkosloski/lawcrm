@@ -74,20 +74,32 @@ export type ReplyToThreadInput = {
   bodyHtml: string;
   bodyText: string;
   replyAll?: boolean;
-  /** Recipient overrides from the reply composer's edit mode. When
-   *  omitted, recipients derive server-side from the thread's last
-   *  inbound message. */
+  /** The exact recipients the composer showed (or the user typed).
+   *  When omitted, recipients derive server-side from the thread's
+   *  last inbound message. */
   to?: string[];
   cc?: string[];
+  /** True when the user edited the recipients (send them as typed).
+   *  Otherwise `to`/`cc` are the render-time defaults and the send is
+   *  refused if the thread now derives different recipients. */
+  recipientsEdited?: boolean;
 };
 
 export type SendEmailResult =
   | { ok: true; threadId: string }
-  | { ok: false; error: string };
+  | {
+      ok: false;
+      error: string;
+      /** Machine-readable reason for failures the UI reacts to. */
+      code?: "recipients_changed";
+    };
 
 /** Account states we'll send from. "error"/"disconnected" mean the
  *  grant is gone — the user must reconnect first. */
 const SENDABLE_STATUSES = new Set(["connected", "syncing"]);
+
+/** Sanity cap on To / Cc list length for a posted recipient list. */
+const MAX_RECIPIENTS_PER_FIELD = 50;
 
 const NOT_CONNECTED_ERROR =
   "This mailbox isn't connected. Reconnect it from Settings → Integrations.";
@@ -219,19 +231,17 @@ export async function replyToThread(
     return { ok: false, error: "The reply body is empty." };
   }
 
-  // Recipients: composer overrides when provided (edit mode),
-  // otherwise derived from the last inbound message.
-  let to: MimeAddress[];
-  let cc: MimeAddress[];
-  if (input.to && input.to.length > 0) {
-    const toV = validateAddresses(input.to);
-    if (!toV.ok) return toV;
-    const ccV = validateAddresses(input.cc ?? [], { allowEmpty: true });
-    if (!ccV.ok) return ccV;
-    to = toV.addresses;
-    cc = ccV.addresses;
-  } else {
-    const derived = deriveReplyRecipients(
+  // Recipients. The composer posts the exact list the user was shown.
+  //   - edited (`recipientsEdited: true`): the user typed it, send it
+  //     (validated).
+  //   - not edited: the list is the render-time DEFAULT. The thread may
+  //     have changed since (a sync landed a newer inbound message), so
+  //     re-derive from the current rows and REFUSE if the result differs
+  //     from what the user saw - a privileged reply must never go to
+  //     someone other than the people on screen.
+  //   - no list at all: derive (legacy / programmatic callers).
+  const derive = () =>
+    deriveReplyRecipients(
       thread.messages.map((m) => ({
         fromName: m.fromName,
         fromEmail: m.fromEmail,
@@ -241,6 +251,42 @@ export async function replyToThread(
       thread.account.emailAddress,
       input.replyAll ?? false
     );
+  let to: MimeAddress[];
+  let cc: MimeAddress[];
+  if (input.to && input.to.length > 0) {
+    if (
+      input.to.length > MAX_RECIPIENTS_PER_FIELD ||
+      (input.cc?.length ?? 0) > MAX_RECIPIENTS_PER_FIELD
+    ) {
+      return { ok: false, error: "Too many recipients." };
+    }
+    const toV = validateAddresses(input.to);
+    if (!toV.ok) return toV;
+    const ccV = validateAddresses(input.cc ?? [], { allowEmpty: true });
+    if (!ccV.ok) return ccV;
+    if (input.recipientsEdited === true) {
+      to = toV.addresses;
+      cc = ccV.addresses;
+    } else {
+      const derived = derive();
+      if (
+        !sameAddressSet(derived.to, toV.addresses) ||
+        !sameAddressSet(derived.cc, ccV.addresses)
+      ) {
+        return {
+          ok: false,
+          code: "recipients_changed",
+          error:
+            "New messages arrived on this thread, so the recipients changed. Review the updated recipients and send again - your draft is untouched.",
+        };
+      }
+      // Same people the user saw - use the derived entries so display
+      // names survive.
+      to = derived.to;
+      cc = derived.cc;
+    }
+  } else {
+    const derived = derive();
     to = derived.to;
     cc = derived.cc;
   }
@@ -334,6 +380,16 @@ function validateAddresses(
     addresses.push({ email });
   }
   return { ok: true, addresses };
+}
+
+/** Order-insensitive, case-insensitive comparison of two recipient
+ *  lists by bare address. */
+function sameAddressSet(a: MimeAddress[], b: MimeAddress[]): boolean {
+  const left = new Set(a.map((x) => x.email.toLowerCase()));
+  const right = new Set(b.map((x) => x.email.toLowerCase()));
+  if (left.size !== right.size) return false;
+  for (const e of left) if (!right.has(e)) return false;
+  return true;
 }
 
 type GmailSendSuccess = { ok: true; id: string; threadId: string };

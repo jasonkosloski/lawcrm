@@ -13,6 +13,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { canViewEventDetails } from "@/lib/calendar-visibility";
 import { EXPENSE_ACTIVITY_TITLE_PREFIX } from "@/lib/expense-activity";
 import { REACTION_EMOJIS } from "@/lib/note-constants";
+import { sanitizeUserHtml } from "@/lib/sanitize-html";
 import type { EventNote, EventTimeEntry } from "@/lib/queries/calendar";
 
 // ── Event references from other tabs ─────────────────────────────────────
@@ -297,7 +298,7 @@ export async function getMatterDeadlines(
       }),
       attachedNotes: d.notes.map((n) => ({
         id: n.id,
-        content: n.content,
+        content: sanitizeUserHtml(n.content),
         type: n.type,
         authorName: n.author.name,
         authorInitials: n.author.initials,
@@ -426,7 +427,7 @@ export async function getMatterTasks(matterId: string): Promise<TaskRow[]> {
     }),
     attachedNotes: t.notes.map((n) => ({
       id: n.id,
-      content: n.content,
+      content: sanitizeUserHtml(n.content),
       type: n.type,
       authorName: n.author.name,
       authorInitials: n.author.initials,
@@ -758,7 +759,7 @@ export async function getMatterNotes(matterId: string): Promise<NoteRow[]> {
     return {
       id: n.id,
       type: n.type,
-      content: n.content,
+      content: sanitizeUserHtml(n.content),
       isPinned: n.isPinned,
       authorName: n.author.name,
       authorInitials: n.author.initials,
@@ -912,7 +913,7 @@ export async function getMatterTimeEntries(
     }),
     attachedNotes: e.notes.map((n) => ({
       id: n.id,
-      content: n.content,
+      content: sanitizeUserHtml(n.content),
       type: n.type,
       authorName: n.author.name,
       authorInitials: n.author.initials,
@@ -1074,7 +1075,7 @@ export async function getMatterEvents(
       notes: e.notes.map((n) => ({
         id: n.id,
         type: n.type,
-        content: n.content,
+        content: sanitizeUserHtml(n.content),
         isPinned: n.isPinned,
         authorName: n.author.name,
         authorInitials: n.author.initials,

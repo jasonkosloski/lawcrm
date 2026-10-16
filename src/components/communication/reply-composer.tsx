@@ -15,10 +15,14 @@
  * send, which then router.refresh()es so the locally-upserted sent
  * message appears in the thread.
  *
- * Recipient honesty: when the user does NOT edit, we send only
- * `replyAll` and let the action re-derive server-side (the displayed
- * defaults come from the same tested helper). Edited recipients go
- * up as explicit overrides.
+ * Recipient honesty: the send ALWAYS posts the exact To/Cc the user
+ * is looking at (typed when editing, else the displayed defaults, with
+ * `recipientsEdited` telling the server which). The server re-derives
+ * for an unedited send and refuses with `recipients_changed` if a sync
+ * moved the thread underneath the open composer - we then refresh so
+ * the new recipients are visible. The composer is keyed by thread id
+ * in ReplySection so switching threads never carries a draft (or its
+ * recipients) onto another conversation.
  */
 
 "use client";
@@ -93,8 +97,29 @@ export function ReplyComposer({
   const bodyText = htmlToText(body);
 
   const handleSend = (): void => {
-    let overrides: { to?: string[]; cc?: string[] } = {};
-    if (editing) {
+    // ALWAYS post the exact recipients the user is looking at: the
+    // typed list when editing, else the displayed defaults. The server
+    // refuses an unedited send if the thread now derives something
+    // different (a sync landed a newer inbound message) instead of
+    // silently re-deriving.
+    let overrides: {
+      to: string[];
+      cc: string[];
+      recipientsEdited: boolean;
+    };
+    if (!editing) {
+      const shownTo = defaults.to.map((r) => r.email);
+      if (shownTo.length === 0) {
+        setEditing(true);
+        setError("Add at least one recipient.");
+        return;
+      }
+      overrides = {
+        to: shownTo,
+        cc: defaults.cc.map((r) => r.email),
+        recipientsEdited: false,
+      };
+    } else {
       const toParsed = parseAddressList(toInput);
       if (toParsed.invalid.length > 0) {
         setError(`Invalid address: ${toParsed.invalid.join(", ")}`);
@@ -109,7 +134,11 @@ export function ReplyComposer({
         setError(`Invalid Cc address: ${ccParsed.invalid.join(", ")}`);
         return;
       }
-      overrides = { to: toParsed.addresses, cc: ccParsed.addresses };
+      overrides = {
+        to: toParsed.addresses,
+        cc: ccParsed.addresses,
+        recipientsEdited: true,
+      };
     }
     setError(null);
 
@@ -130,6 +159,9 @@ export function ReplyComposer({
       } else {
         // Draft (body + any edited recipients) stays put.
         setError(result.error);
+        // The thread changed under us - pull the fresh recipients
+        // into view so the user can review them before re-sending.
+        if (result.code === "recipients_changed") router.refresh();
       }
     });
   };

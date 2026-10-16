@@ -6,8 +6,10 @@
  * exception: server actions can't stream file responses). Mirrors
  * that route's discipline exactly: session gate, inline allowlist
  * (shared `src/lib/inline-safe-types.ts` — EmailAttachment
- * .contentType is SENDER-declared, i.e. attacker-controlled, so the
- * same stored-XSS reasoning applies verbatim), nosniff on every
+ * .contentType is SENDER-declared, i.e. attacker-controlled, so it is
+ * never used: the served type and the inline/attachment decision both
+ * come from the filename extension, exactly what storage was written
+ * with), nosniff on every
  * response, CSP sandbox on forced attachments, single-range 206
  * support, blob keys 302 to a short-lived presigned URL (ADR-018).
  *
@@ -40,6 +42,7 @@ import {
   statFile,
 } from "@/lib/file-storage";
 import { isInlineSafeType } from "@/lib/inline-safe-types";
+import { contentTypeForFilename } from "@/app/api/documents/upload/upload-config";
 import {
   AttachmentBytesError,
   ensureAttachmentBytes,
@@ -68,7 +71,7 @@ export async function GET(
       id,
       message: { thread: { account: { userId: session.user.id } } },
     },
-    select: { id: true, filename: true, contentType: true },
+    select: { id: true, filename: true },
   });
   if (!attachment) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -101,7 +104,14 @@ export async function GET(
     return NextResponse.json({ error: "File missing" }, { status: 410 });
   }
 
-  const contentType = attachment.contentType ?? "application/octet-stream";
+  // SERVER-derived type, never the sender-declared `contentType` (that
+  // column is attacker-controlled): ensureAttachmentBytes stored the
+  // bytes under `contentTypeForFilename(filename)`, so that is what a
+  // blob CDN will actually serve. Deciding inline-vs-attachment from the
+  // declared type let "invoice.html" declaring application/pdf be signed
+  // WITHOUT download=1 and render as text/html inline (F629/F707). Both
+  // storage drivers now use the same value.
+  const contentType = contentTypeForFilename(attachment.filename);
   const inlineSafe = isInlineSafeType(contentType);
 
   // Blob-cached attachment → 302 to a presigned URL (never

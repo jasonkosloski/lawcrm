@@ -104,9 +104,22 @@ export async function statFileBlob(
   }
 }
 
-/** Pathname of a stored blob URL (what signing is scoped to). */
+/** Pathname of a stored blob URL (what signing is scoped to). Tolerant
+ *  of a stored path that isn't valid percent-encoding (a literal `%`):
+ *  those fall back to the raw path instead of throwing a URIError. */
 export function blobPathname(url: string): string {
-  return decodeURIComponent(new URL(url).pathname.replace(/^\//, ""));
+  const raw = new URL(url).pathname.replace(/^\//, "");
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+/** Percent-encode each `/`-separated segment of a pathname so `#`, `?`,
+ *  `%`, spaces and unicode survive being placed in a URL path. */
+function encodePathname(pathname: string): string {
+  return pathname.split("/").map(encodeURIComponent).join("/");
 }
 
 /**
@@ -133,10 +146,25 @@ export async function signedBlobUrl(
     validUntil,
     access: BLOB_ACCESS,
   });
-  if (!opts.download) return presignedUrl;
-  const signed = new URL(presignedUrl);
-  signed.searchParams.set("download", "1");
-  return signed.toString();
+  // The SDK builds `https://<store>.private.blob.vercel-storage.com/
+  // ${pathname}` by bare concatenation (no encoding) and then parses it,
+  // so a `#` or `?` in the name truncates the path (rest lands in the
+  // fragment/query), a `%` makes a malformed escape, and the CDN is asked
+  // for the wrong blob. The SIGNATURE is over the decoded pathname (the
+  // canonical string the server verifies - kept exactly as signed above,
+  // ADR-018), but the URL we hand the browser is rebuilt here from the
+  // stored origin with every path segment encoded, carrying only the
+  // SDK's signature query params across.
+  const sdkUrl = new URL(presignedUrl);
+  const out = new URL(`${new URL(url).origin}/${encodePathname(pathname)}`);
+  for (const [key, value] of sdkUrl.searchParams) {
+    // Only the SDK's own `vercel-blob-*` params (delegation, signature,
+    // valid-until, ...). A `?` in the pathname leaks junk query keys into
+    // the SDK's URL; those must not be copied.
+    if (key.startsWith("vercel-blob-")) out.searchParams.set(key, value);
+  }
+  if (opts.download) out.searchParams.set("download", "1");
+  return out.toString();
 }
 
 /**

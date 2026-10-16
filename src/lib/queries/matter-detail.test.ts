@@ -32,9 +32,11 @@ import {
 import {
   getMatterActivity,
   getMatterActivityTypeCounts,
+  getMatterNotes,
   getMatterTimeEntries,
   getMatterTimeSummary,
 } from "@/lib/queries/matter-detail";
+import { getCurrentUserId } from "@/lib/current-user";
 import {
   resetDb,
   seedFirm,
@@ -233,5 +235,25 @@ describe("matter activity — settlement / expense amounts are permission-gated"
     });
     expect(await titles({})).toEqual([]);
     expect(await titles({ canViewExpense: true })).toHaveLength(3);
+  });
+});
+
+describe("getMatterNotes - render-time re-sanitization", () => {
+  test("a legacy note stored with class/script is cleaned on read", async () => {
+    // Simulates a row written before the sanitizer dropped `class`:
+    // the Tailwind-overlay payload must not reach the client.
+    vi.mocked(getCurrentUserId).mockResolvedValue(userId);
+    await prisma.note.create({
+      data: {
+        matterId,
+        authorId: userId,
+        type: "note",
+        content:
+          '<p class="fixed inset-0 z-50 bg-white">pwn</p><script>alert(1)</script>',
+      },
+    });
+    const notes = await getMatterNotes(matterId);
+    expect(notes).toHaveLength(1);
+    expect(notes[0].content).toBe("<p>pwn</p>");
   });
 });

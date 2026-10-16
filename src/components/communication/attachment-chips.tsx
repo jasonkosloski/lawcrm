@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { isInlineSafeType } from "@/lib/inline-safe-types";
+import { contentTypeForFilename } from "@/app/api/documents/upload/upload-config";
 import {
   fileAttachmentToMatter,
   listMatterFolders,
@@ -93,7 +94,11 @@ export function AttachmentChips({
   return (
     <div className="flex flex-wrap items-center gap-2 px-3 sm:px-4 py-3 border-t border-line bg-paper-2/40">
       {attachments.map((a) => {
-        const viewable = isInlineSafeType(a.contentType);
+        // Same server-derived type the download route serves under
+        // (filename extension), NOT the sender-declared contentType -
+        // otherwise an .html file declaring application/pdf would
+        // offer a View link the route will force to attachment.
+        const viewable = isInlineSafeType(contentTypeForFilename(a.filename));
         return (
           <div
             key={a.id}

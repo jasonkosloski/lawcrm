@@ -22,9 +22,25 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { render, waitFor } from "@testing-library/react";
 import { DocxPreviewRenderer } from "./docx-preview-renderer";
 
+// The component calls parseAsync + renderDocument (detached nodes), then
+// sanitizes before attaching. `renderAsyncMock(bytes, container, ...)`
+// is kept as the test seam: it writes the hostile DOM into a scratch
+// container, whose children renderDocument then returns as the node list.
 const renderAsyncMock = vi.hoisted(() => vi.fn());
+const attachedAtRender = vi.hoisted(() => ({ value: null as boolean | null }));
 
-vi.mock("docx-preview", () => ({ renderAsync: renderAsyncMock }));
+vi.mock("docx-preview", () => ({
+  parseAsync: async (bytes: unknown, options: unknown) => ({ bytes, options }),
+  renderDocument: async (
+    doc: { bytes: unknown; options: unknown },
+    options: unknown
+  ) => {
+    const scratch = document.createElement("div");
+    await renderAsyncMock(doc.bytes, scratch, undefined, options);
+    attachedAtRender.value = scratch.isConnected;
+    return Array.from(scratch.childNodes);
+  },
+}));
 
 const FALLBACK = <div data-testid="mammoth-fallback">fallback</div>;
 
@@ -47,16 +63,18 @@ function stubFetchOk() {
 describe("DocxPreviewRenderer — sanitation runs on whatever renderAsync emits", () => {
   test("hostile anchors, active elements, and remote images are neutralized post-render", async () => {
     stubFetchOk();
-    renderAsyncMock.mockImplementation(async (_bytes, container: HTMLElement) => {
-      container.innerHTML =
-        '<div class="docx-wrapper"><section class="docx">' +
-        '<p><a href="javascript:alert(1)">bad link</a></p>' +
-        '<p><a href="https://example.com/x">good link</a></p>' +
-        "<script>alert(2)</script>" +
-        '<iframe srcdoc="<script>alert(3)</script>"></iframe>' +
-        '<img src="https://evil.example/pixel.gif">' +
-        "</section></div>";
-    });
+    renderAsyncMock.mockImplementation(
+      async (_bytes, container: HTMLElement) => {
+        container.innerHTML =
+          '<div class="docx-wrapper"><section class="docx">' +
+          '<p><a href="javascript:alert(1)">bad link</a></p>' +
+          '<p><a href="https://example.com/x">good link</a></p>' +
+          "<script>alert(2)</script>" +
+          '<iframe srcdoc="<script>alert(3)</script>"></iframe>' +
+          '<img src="https://evil.example/pixel.gif">' +
+          "</section></div>";
+      }
+    );
 
     const { container } = render(
       <DocxPreviewRenderer src="/dl" name="wired.docx" fallback={FALLBACK} />
@@ -73,7 +91,7 @@ describe("DocxPreviewRenderer — sanitation runs on whatever renderAsync emits"
     expect(container.querySelector("img")!.hasAttribute("src")).toBe(false);
   });
 
-  test("renderAsync receives the security-critical options", async () => {
+  test("render options are security-critical", async () => {
     stubFetchOk();
     renderAsyncMock.mockImplementation(async (_b, container: HTMLElement) => {
       container.textContent = "ok";
@@ -93,7 +111,41 @@ describe("DocxPreviewRenderer — sanitation runs on whatever renderAsync emits"
     expect(options.ignoreHeight).toBe(false);
   });
 
-  test("renderAsync rejecting clears the partial render and mounts the fallback", async () => {
+  test("hostile <style> never reaches the live document before sanitation", async () => {
+    stubFetchOk();
+    const seenInLiveDom: string[] = [];
+    renderAsyncMock.mockImplementation(async (_b, scratch: HTMLElement) => {
+      scratch.innerHTML =
+        "<style>.docx_a{color:red}}body::after{content:url(http://attacker.example/x)}</style>" +
+        '<section class="docx"><p>text</p></section>';
+    });
+    // Record any attacker URL visible in the live document at any
+    // point while the component mounts the render.
+    const observer = new MutationObserver(() => {
+      if (document.documentElement.innerHTML.includes("attacker.example")) {
+        seenInLiveDom.push("leaked");
+      }
+    });
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+    const { container } = render(
+      <DocxPreviewRenderer src="/dl" name="style.docx" fallback={FALLBACK} />
+    );
+    await waitFor(() => expect(container.textContent).toContain("text"));
+    // Flush any queued mutation records.
+    observer.takeRecords();
+    observer.disconnect();
+    expect(attachedAtRender.value).toBe(false);
+    expect(seenInLiveDom).toEqual([]);
+    const style = container.querySelector("style")!;
+    expect(style.textContent).toContain(".docx_a");
+    expect(style.textContent).not.toContain("attacker.example");
+  });
+
+  test("render failure clears the partial render and mounts the fallback", async () => {
     stubFetchOk();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     renderAsyncMock.mockImplementation(async (_b, container: HTMLElement) => {

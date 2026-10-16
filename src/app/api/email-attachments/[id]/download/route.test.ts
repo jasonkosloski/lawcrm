@@ -283,9 +283,38 @@ describe("inline-allowlist parity with the documents route", () => {
     const attachmentId = await seedCachedAttachment({
       bytes: "x",
       contentType: "text/html; charset=utf-8",
+      filename: "page.html",
     });
     const res = await download(attachmentId);
     expect(res.headers.get("Content-Disposition")).toMatch(/^attachment;/);
+  });
+
+  // F629/F707: the sender-declared type is attacker-controlled and is
+  // IGNORED; the served type + inline decision come from the filename
+  // extension (what storage was written with).
+  test("declared application/pdf on an .html file is still attachment + sandbox, served as text/html", async () => {
+    const attachmentId = await seedCachedAttachment({
+      bytes: "<script>alert(1)</script>",
+      contentType: "application/pdf",
+      filename: "invoice.html",
+    });
+    const res = await download(attachmentId);
+    expect(res.headers.get("Content-Type")).toBe("text/html");
+    expect(res.headers.get("Content-Disposition")).toMatch(/^attachment;/);
+    expect(res.headers.get("Content-Security-Policy")).toBe("sandbox");
+    expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
+  });
+
+  test("declared text/html on a .pdf file follows the extension (inline pdf)", async () => {
+    const attachmentId = await seedCachedAttachment({
+      bytes: "%PDF-1.7",
+      contentType: "text/html",
+      filename: "brief.pdf",
+    });
+    const res = await download(attachmentId);
+    expect(res.headers.get("Content-Type")).toBe("application/pdf");
+    expect(res.headers.get("Content-Disposition")).toMatch(/^inline;/);
+    expect(res.headers.get("Content-Security-Policy")).toBeNull();
   });
 
   test("application/pdf previews inline, no sandbox, nosniff still set", async () => {

@@ -375,3 +375,97 @@ describe("sanitizeEmailHtml — other profiles are NOT loosened", () => {
     expect(out).not.toContain("evil.example");
   });
 });
+
+// ── class attribute / UI redress (F045 family) ──────────────────────────
+//
+// The app ships a global Tailwind stylesheet, so an attacker-supplied
+// class="fixed inset-0 z-50" would overlay the CRM. No profile may keep
+// a class, except the email blocked-image placeholder (exact name).
+
+const OVERLAY = "fixed inset-0 z-50 bg-white";
+
+describe("class attributes are stripped in every profile", () => {
+  test("email: Tailwind overlay classes on div/a/p/td/img/span are dropped", () => {
+    const out = sanitizeEmailHtml(
+      `<div class="${OVERLAY}"><p class="hidden">hid</p>` +
+        `<a class="${OVERLAY}" href="https://x.example/">l</a>` +
+        `<span class="sr-only">s</span>` +
+        `<table><tr><td class="fixed">c</td></tr></table>` +
+        `<img class="fixed" src="data:image/png;base64,AAAA"></div>`
+    );
+    expect(out).not.toContain("class=");
+    expect(out).not.toContain("fixed");
+    expect(out).not.toContain("inset-0");
+    expect(out).toContain("hid");
+    expect(out).toContain("https://x.example/");
+  });
+
+  test("email: only the exact blocked-image class survives on a span", () => {
+    const out = sanitizeEmailHtml(
+      `<span class="email-blocked-image ${OVERLAY}">x</span>`
+    );
+    expect(out).toBe('<span class="email-blocked-image">x</span>');
+    const blocked = sanitizeEmailHtml(
+      '<img class="fixed" src="https://t.example/p.gif">'
+    );
+    expect(blocked).toContain('class="email-blocked-image"');
+    expect(blocked).not.toContain("fixed");
+  });
+
+  test("email: blocked-image class is not allowed on other tags", () => {
+    const out = sanitizeEmailHtml('<div class="email-blocked-image">x</div>');
+    expect(out).toBe("<div>x</div>");
+  });
+
+  test("note profile strips class on every tag", () => {
+    const out = sanitizeUserHtml(
+      `<p class="${OVERLAY}">Session expired <a class="fixed" href="https://e.example/">in</a></p>`
+    );
+    expect(out).not.toContain("class=");
+    expect(out).toContain("Session expired");
+  });
+
+  test("document profile strips class on td/th/col/img/p", () => {
+    const out = sanitizeDocumentHtml(
+      `<p class="${OVERLAY}">a</p><table><colgroup class="x"><col class="y"></colgroup>` +
+        `<tr><th class="z">h</th><td class="fixed">d</td></tr></table>` +
+        `<img class="fixed" src="data:image/png;base64,AAAA">`
+    );
+    expect(out).not.toContain("class=");
+    expect(out).toContain("<table>");
+  });
+});
+
+describe("protocol-relative and obfuscated hrefs", () => {
+  test("note profile drops protocol-relative hrefs", () => {
+    const out = sanitizeUserHtml('<a href="//evil.example/x">x</a>');
+    expect(out).not.toContain("evil.example");
+    expect(out).not.toContain("href");
+    expect(out).toContain(">x</a>");
+  });
+
+  test("all profiles drop protocol-relative hrefs", () => {
+    for (const fn of [
+      sanitizeUserHtml,
+      sanitizeDocumentHtml,
+      sanitizeEmailHtml,
+    ]) {
+      expect(fn('<a href="//evil.example/x">x</a>')).not.toContain(
+        "evil.example"
+      );
+    }
+  });
+
+  test("mixed-case / tab-split javascript: hrefs are dropped everywhere", () => {
+    for (const fn of [
+      sanitizeUserHtml,
+      sanitizeDocumentHtml,
+      sanitizeEmailHtml,
+    ]) {
+      expect(fn('<a href="JaVaScRiPt:alert(1)">x</a>')).not.toContain("alert");
+      expect(fn('<a href="java&#9;script:alert(1)">x</a>')).not.toContain(
+        "alert"
+      );
+    }
+  });
+});

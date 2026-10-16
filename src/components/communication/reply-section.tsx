@@ -69,7 +69,11 @@ export async function ReplySection({ thread }: { thread: ThreadDetail }) {
   const replyAll = deriveReplyRecipients(source, row.account.emailAddress, true);
 
   return (
+    // key by thread: ?thread= switches are search-param navigations
+    // that keep client state, so without it a draft + edited
+    // recipients from thread A would survive onto thread B.
     <ReplyComposer
+      key={thread.id}
       threadId={thread.id}
       accountEmail={row.account.emailAddress}
       reply={reply}

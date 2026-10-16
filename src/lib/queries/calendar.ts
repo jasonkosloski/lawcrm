@@ -8,6 +8,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { sanitizeUserHtml } from "@/lib/sanitize-html";
 import { getCurrentUserId } from "@/lib/current-user";
 import { canViewEventDetails } from "@/lib/calendar-visibility";
 
@@ -416,7 +417,7 @@ export async function getEventNotes(eventId: string): Promise<EventNote[]> {
   return rows.map((n) => ({
     id: n.id,
     type: n.type,
-    content: n.content,
+    content: sanitizeUserHtml(n.content),
     isPinned: n.isPinned,
     authorName: n.author.name,
     authorInitials: n.author.initials,

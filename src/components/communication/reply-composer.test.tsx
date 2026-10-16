@@ -104,7 +104,7 @@ describe("ReplyComposer — collapsed state", () => {
 });
 
 describe("ReplyComposer — prefill + wiring", () => {
-  test("expanding Reply shows the derived recipient read-only, sends without overrides", async () => {
+  test("expanding Reply shows the derived recipient read-only, posts exactly what is shown", async () => {
     const user = setupUser();
     mockedReply.mockResolvedValue({ ok: true, threadId: "t1" });
     renderComposer();
@@ -123,6 +123,11 @@ describe("ReplyComposer — prefill + wiring", () => {
         // The stub editor emits its raw value as HTML.
         bodyHtml: "Thanks!",
         replyAll: false,
+        // F043/F064: the displayed defaults go up explicitly, flagged
+        // unedited so the server can refuse if the thread moved.
+        to: ["alice@example.com"],
+        cc: [],
+        recipientsEdited: false,
       })
     );
     await waitFor(() => expect(refresh).toHaveBeenCalled());
@@ -170,7 +175,10 @@ describe("ReplyComposer — prefill + wiring", () => {
       )
     );
     const payload = mockedReply.mock.calls[0][1];
-    expect(payload.to).toBeUndefined(); // unedited → server derives
+    // Unedited → the exact displayed reply-all list, flagged unedited.
+    expect(payload.to).toEqual(["alice@example.com", "bob@example.com"]);
+    expect(payload.cc).toEqual(["carol@example.com"]);
+    expect(payload.recipientsEdited).toBe(false);
   });
 
   test("Edit recipients sends explicit validated overrides", async () => {
@@ -194,6 +202,7 @@ describe("ReplyComposer — prefill + wiring", () => {
         expect.objectContaining({
           to: ["dave@example.com", "erin@example.com"],
           cc: [],
+          recipientsEdited: true,
         })
       )
     );
@@ -221,6 +230,58 @@ describe("ReplyComposer — prefill + wiring", () => {
     renderComposer({ reply: empty, replyAll: empty });
 
     await user.click(screen.getByRole("button", { name: /^reply$/i }));
+    expect(document.querySelector('[name="to"]')).not.toBeNull();
+  });
+});
+
+describe("ReplyComposer — recipient integrity (F043/F064)", () => {
+  test("recipients_changed refusal keeps the draft and refreshes the page", async () => {
+    const user = setupUser();
+    mockedReply.mockResolvedValue({
+      ok: false,
+      code: "recipients_changed",
+      error: "New messages arrived on this thread, so the recipients changed.",
+    });
+    renderComposer();
+
+    await user.click(screen.getByRole("button", { name: /^reply$/i }));
+    await user.type(bodyField(), "Privileged draft");
+    await user.click(screen.getByRole("button", { name: /^send$/i }));
+
+    expect(await screen.findByText(/recipients changed/i)).toBeInTheDocument();
+    expect(bodyField().value).toBe("Privileged draft");
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+  });
+
+  test("other failures do not refresh", async () => {
+    const user = setupUser();
+    mockedReply.mockResolvedValue({ ok: false, error: "Nope." });
+    renderComposer();
+    await user.click(screen.getByRole("button", { name: /^reply$/i }));
+    await user.type(bodyField(), "x");
+    await user.click(screen.getByRole("button", { name: /^send$/i }));
+    expect(await screen.findByText("Nope.")).toBeInTheDocument();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  test("defaults that become empty after refresh force edit mode instead of sending nothing", async () => {
+    const user = setupUser();
+    const { rerender } = renderComposer();
+    await user.click(screen.getByRole("button", { name: /^reply$/i }));
+    await user.type(bodyField(), "x");
+    rerender(
+      <ReplyComposer
+        threadId="t1"
+        accountEmail="me@firm.com"
+        reply={{ to: [], cc: [] }}
+        replyAll={{ to: [], cc: [] }}
+      />
+    );
+    await user.click(screen.getByRole("button", { name: /^send$/i }));
+    expect(
+      await screen.findByText(/add at least one recipient/i)
+    ).toBeInTheDocument();
+    expect(mockedReply).not.toHaveBeenCalled();
     expect(document.querySelector('[name="to"]')).not.toBeNull();
   });
 });

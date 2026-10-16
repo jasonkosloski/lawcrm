@@ -18,10 +18,12 @@
  * and converting lazily would need a new API route; revisit if docx
  * traffic ever makes the double render measurable.
  *
- * Security: the file is attacker-controlled. The rendered container
- * goes through `sanitizeRenderedDocx` before being revealed
- * (dangerous hrefs, remote fetches, active elements — see that
- * module's header). `renderAltChunks: false` is load-bearing: it is
+ * Security: the file is attacker-controlled. The render is built
+ * DETACHED (parseAsync + renderDocument, not renderAsync) and goes
+ * through `sanitizeRenderedDocx` BEFORE it is attached to the page,
+ * so a hostile <style> breakout or url() never reaches the live
+ * document where the browser could fetch it (dangerous hrefs,
+ * remote fetches, active elements — see that module's header). `renderAltChunks: false` is load-bearing: it is
  * the one docx-preview feature that injects raw embedded HTML
  * (iframe srcdoc). The fallback path needs none of this — mammoth
  * output is already server-sanitized.
@@ -116,12 +118,27 @@ export function DocxPreviewRenderer({
         const bytes = await res.arrayBuffer();
         // Dynamic import: docx-preview is a browser-only, docx-page-
         // only dependency — keep it out of the shared client bundle.
-        const { renderAsync } = await import("docx-preview");
+        const { parseAsync, renderDocument } = await import("docx-preview");
         const container = pagesRef.current;
         if (cancelled || !container) return;
-        await renderAsync(bytes, container, undefined, RENDER_OPTIONS);
+        // SECURITY — build the render DETACHED, sanitize it, and only
+        // then attach. `renderAsync` would append docx-preview's
+        // <style> text (built from unescaped document strings, so a
+        // `}body::after{content:url(http://attacker/x)}` breakout is
+        // possible) and inline style/src attributes into the live
+        // page BEFORE we could sanitize them, giving the browser a
+        // window to start the fetch. `renderDocument` returns the
+        // nodes unattached (renderAsync is just parse + render +
+        // append), so nothing applies or loads until it is clean.
+        // Tab-stop measurement is scheduled by the library 500ms after
+        // render and reads the live DOM, so it sees the attached nodes.
+        const doc = await parseAsync(bytes, RENDER_OPTIONS);
+        const nodes = await renderDocument(doc, RENDER_OPTIONS);
         if (cancelled) return;
-        sanitizeRenderedDocx(container);
+        const staging = document.createElement("div");
+        for (const node of nodes) staging.appendChild(node);
+        sanitizeRenderedDocx(staging);
+        container.replaceChildren(...Array.from(staging.childNodes));
         setPhase("rendered");
       } catch (error) {
         if (cancelled) return;

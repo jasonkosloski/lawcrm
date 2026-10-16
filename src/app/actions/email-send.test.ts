@@ -554,6 +554,7 @@ describe("replyToThread — recipient derivation on the wire", () => {
       ...BASE_REPLY,
       to: ["dave@example.com"],
       cc: ["erin@example.com"],
+      recipientsEdited: true,
     });
     const { mime } = sentPayload();
     expect(mime).toContain("To: dave@example.com");
@@ -563,8 +564,119 @@ describe("replyToThread — recipient derivation on the wire", () => {
     const bad = await replyToThread(threadId, {
       ...BASE_REPLY,
       to: ["not-valid"],
+      recipientsEdited: true,
     });
     expect(bad.ok).toBe(false);
+  });
+
+  test("unedited list matching the current derivation sends, keeping display names (F043/F064)", async () => {
+    const { threadId } = await seedConversation();
+    mockedGmailFetch.mockResolvedValue(gmailOk("gm-2", "gt-1"));
+
+    const result = await replyToThread(threadId, {
+      ...BASE_REPLY,
+      replyAll: true,
+      // order + case differ from the derived list on purpose
+      to: ["BOB@example.com", "alice@example.com"],
+      cc: ["carol@example.com"],
+      recipientsEdited: false,
+    });
+    expect(result.ok).toBe(true);
+    const { mime } = sentPayload();
+    const unfolded = mime
+      .slice(0, mime.indexOf("\r\n\r\n"))
+      .replace(/\r\n[ \t]/g, " ");
+    expect(unfolded).toMatch(/^To: Alice <alice@example\.com>, bob@example\.com$/m);
+    expect(unfolded).toMatch(/^Cc: carol@example\.com$/m);
+  });
+
+  test("unedited list is REFUSED when a newer inbound message changed who the reply goes to (F043/F064)", async () => {
+    const { threadId } = await seedConversation();
+    // The composer rendered "To: Alice"; then a sync stored opposing
+    // counsel's newer message on the same thread.
+    await seedMessage({
+      threadId,
+      fromEmail: "opposing@other.com",
+      fromName: "Opposing Counsel",
+      to: [{ email: "me@firm.com" }],
+      sentAt: new Date("2026-07-01T12:00:00Z"),
+    });
+
+    const result = await replyToThread(threadId, {
+      ...BASE_REPLY,
+      to: ["alice@example.com"],
+      cc: [],
+      recipientsEdited: false,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe("recipients_changed");
+      expect(result.error).toMatch(/recipients changed/i);
+    }
+    // Nothing went out and nothing was persisted.
+    expect(mockedGmailFetch).not.toHaveBeenCalled();
+    expect(await prisma.emailMessage.count({ where: { threadId } })).toBe(3);
+  });
+
+  test("a reply-all gaining a Cc between render and send is refused", async () => {
+    const { threadId } = await seedConversation();
+    await seedMessage({
+      threadId,
+      fromEmail: "alice@example.com",
+      to: [{ email: "me@firm.com" }],
+      cc: [{ email: "new-person@other.com" }],
+      sentAt: new Date("2026-07-01T12:00:00Z"),
+    });
+    const result = await replyToThread(threadId, {
+      ...BASE_REPLY,
+      replyAll: true,
+      to: ["alice@example.com", "bob@example.com"],
+      cc: ["carol@example.com"],
+      recipientsEdited: false,
+    });
+    expect(result.ok).toBe(false);
+    expect(mockedGmailFetch).not.toHaveBeenCalled();
+  });
+
+  test("an EDITED list is sent as typed even when it differs from the derivation", async () => {
+    const { threadId } = await seedConversation();
+    mockedGmailFetch.mockResolvedValue(gmailOk("gm-2", "gt-1"));
+    const result = await replyToThread(threadId, {
+      ...BASE_REPLY,
+      to: ["dave@example.com"],
+      recipientsEdited: true,
+    });
+    expect(result.ok).toBe(true);
+    expect(sentPayload().mime).toContain("To: dave@example.com");
+  });
+
+  test("a posted list without the edited flag is treated as unedited (secure default)", async () => {
+    const { threadId } = await seedConversation();
+    const result = await replyToThread(threadId, {
+      ...BASE_REPLY,
+      to: ["dave@example.com"],
+    });
+    expect(result.ok).toBe(false);
+    expect(mockedGmailFetch).not.toHaveBeenCalled();
+  });
+
+  test("implausible posted lists are rejected before the wire", async () => {
+    const { threadId } = await seedConversation();
+    const tooMany = Array.from({ length: 51 }, (_, i) => `u${i}@example.com`);
+    const many = await replyToThread(threadId, {
+      ...BASE_REPLY,
+      to: tooMany,
+      recipientsEdited: true,
+    });
+    expect(many.ok).toBe(false);
+    const bad = await replyToThread(threadId, {
+      ...BASE_REPLY,
+      to: ["alice@example.com"],
+      cc: ["x@y.com\r\nBcc: attacker@evil.com"],
+      recipientsEdited: false,
+    });
+    expect(bad.ok).toBe(false);
+    expect(mockedGmailFetch).not.toHaveBeenCalled();
   });
 
   test("thread with no derivable recipients returns an edit hint", async () => {

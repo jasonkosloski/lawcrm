@@ -27,6 +27,8 @@ import {
   onUploadCompleted,
 } from "./blob-upload";
 
+const GENERIC_UPLOAD_ERROR = "Upload handling failed.";
+
 // Never cache, always run per-request — this is a mutation.
 export const dynamic = "force-dynamic";
 
@@ -50,21 +52,23 @@ export async function POST(request: Request): Promise<Response> {
     });
     return NextResponse.json(jsonResponse);
   } catch (err) {
-    // UploadTokenError carries a real status (401/403/404/400); the
-    // @vercel/blob client surfaces the message to the uploader. A
-    // failed onUploadCompleted also lands here — non-2xx makes
-    // Vercel retry the callback.
-    const status = err instanceof UploadTokenError ? err.status : 400;
-    const message =
-      err instanceof Error ? err.message : "Upload handling failed.";
+    // UploadTokenError messages are written to be user-safe and carry
+    // a real status (401/403/404/400). ANY OTHER error (Prisma, SDK,
+    // zod, ...) is internal: its text is logged server-side but never
+    // echoed to the caller (browser or Vercel's callback), and it maps
+    // to 500 - a failed onUploadCompleted still lands here, and any
+    // non-2xx makes Vercel retry the callback.
+    const known = err instanceof UploadTokenError;
+    const status = known ? err.status : 500;
+    const message = known ? err.message : GENERIC_UPLOAD_ERROR;
     // The @vercel/blob client discards this body and shows only
     // "Failed to retrieve the client token", so the server log is
     // the one place the real reason surfaces. Event type + status +
-    // message only — never the payload (it carries file names).
+    // the REAL message only - never the payload (it carries file names).
     console.error("[blob-upload] request failed", {
       event: body?.type,
       status,
-      message,
+      message: err instanceof Error ? err.message : String(err),
     });
     return NextResponse.json({ error: message }, { status });
   }

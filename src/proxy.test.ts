@@ -77,6 +77,30 @@ describe("proxy auth gate", () => {
     }
   });
 
+  // F442: the public prefixes match on a path boundary, so a lookalike
+  // can't ride the /login or /api/auth exemptions.
+  it.each(["/loginfoo", "/login-help", "/api/authz/keys", "/api/auth-export"])(
+    "keeps prefix lookalike %s behind the gate",
+    (path) => {
+      const res = proxy(makeRequest(path));
+      expect(res.status).toBe(307);
+      expect(new URL(res.headers.get("location")!).pathname).toBe("/login");
+    }
+  );
+
+  it.each([
+    "/login",
+    "/login/",
+    "/login/reset",
+    "/api/auth",
+    "/api/auth/session",
+    "/api/auth/callback/google",
+  ])("still passes public route %s without a session", (path) => {
+    const res = proxy(makeRequest(path));
+    expect(res.status).toBe(200);
+    expect(res.headers.has("location")).toBe(false);
+  });
+
   it("passes authenticated requests through", () => {
     const res = proxy(makeRequest("/matters", { cookie: SESSION_COOKIE }));
     expect(res.status).toBe(200);

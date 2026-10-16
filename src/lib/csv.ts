@@ -7,21 +7,27 @@
  * embedded quotes doubled; rows join with CRLF (what Excel and
  * Numbers both expect from a .csv).
  *
- * Formula-injection guard: cells starting with `=` or `@` get a
- * leading apostrophe so a hostile contact name ("=HYPERLINK(...)")
- * can't execute when the export is opened in a spreadsheet. `+` and
- * `-` are deliberately NOT guarded — phone numbers ("+1 303…") and
- * negative amounts are legitimate leading characters, and a bare
- * +/− cell evaluates to a number, not code.
+ * Formula-injection guard (OWASP CSV injection): cells starting with
+ * `=`, `+`, `-`, `@`, TAB or CR get a leading apostrophe so a hostile
+ * contact name ("=HYPERLINK(...)", "+HYPERLINK(...)", "-2+3",
+ * "+cmd|' /C calc'!A0") can't execute when the export is opened in a
+ * spreadsheet - Excel and Sheets treat a leading `+` / `-` as the start
+ * of a formula just like `=`. The one exemption is a value made ONLY of
+ * an optional sign, digits and phone/number punctuation
+ * ("+1 (303) 555-0101", "-42", "1,234.50"): with no letters it cannot
+ * name a function, cell reference or DDE command, so it stays
+ * unmangled.
  */
 
 const NEEDS_QUOTING = /[",\r\n]/;
+const FORMULA_LEAD = /^[=+\-@\t\r]/;
+const PLAIN_NUMBER_OR_PHONE = /^[+-]?\d[\d\s().,-]*$/;
 
 /** Escape a single cell. null/undefined render as an empty cell. */
 export function csvEscape(value: string | null | undefined): string {
   if (value == null) return "";
   let v = value;
-  if (v.startsWith("=") || v.startsWith("@")) v = `'${v}`;
+  if (FORMULA_LEAD.test(v) && !PLAIN_NUMBER_OR_PHONE.test(v)) v = `'${v}`;
   if (NEEDS_QUOTING.test(v)) return `"${v.replaceAll('"', '""')}"`;
   return v;
 }

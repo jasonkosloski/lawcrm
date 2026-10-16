@@ -432,6 +432,15 @@ done. What's left is enumerated below.
   inbox-actions.ts, entity-escaping `textareaToHtml` in
   note-on-entity.ts. (Note: sanitizer is `sanitize-html`, not
   DOMPurify — swapped in 4a60f50.)
+  **Update 2026-10-16 (ADR-020):** sanitizer profiles allow NO
+  `class` (only `span.email-blocked-image` in the email profile),
+  and protocol-relative hrefs are rejected. Existing
+  `Note.content` / `EmailMessage.body` rows written before this
+  are re-sanitized at read time (note queries in
+  `matter-detail.ts` / `calendar.ts`, `thread-reader.tsx`), so no
+  data backfill is required; the stored legacy text is simply
+  never trusted. Open follow-up: server-side email validation on
+  contact / party / calendar-attendee schemas (F987).
 - [x] **`NoteRead` table will grow unbounded.** Done by schema,
   verified 2026-07-07: `deleteNote` is a hard `prisma.note.delete`
   (no soft-delete stranding rows, and no archive path exists), and

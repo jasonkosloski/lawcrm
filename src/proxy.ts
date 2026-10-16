@@ -53,6 +53,15 @@ const SELF_AUTHENTICATED_PATHS = new Set([
   "/api/documents/upload/blob",
 ]);
 
+/** Path-boundary-aware prefix match: `/login` and `/login/...` are
+ *  public, `/loginfoo` and a future `/api/authz/*` or `/api/auth-export`
+ *  are not (a bare `startsWith` would let them skip the cookie gate). */
+function isPublicPath(pathname: string): boolean {
+  return PUBLIC_PATH_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`)
+  );
+}
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -68,10 +77,7 @@ export function proxy(request: NextRequest) {
     NextResponse.next({ request: { headers: requestHeaders } });
 
   // Public routes always pass.
-  if (
-    PUBLIC_PATH_PREFIXES.some((p) => pathname.startsWith(p)) ||
-    SELF_AUTHENTICATED_PATHS.has(pathname)
-  ) {
+  if (isPublicPath(pathname) || SELF_AUTHENTICATED_PATHS.has(pathname)) {
     return passThrough();
   }
 

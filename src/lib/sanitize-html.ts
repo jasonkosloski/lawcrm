@@ -48,15 +48,17 @@ const ALLOWED_TAGS = [
   "span",
 ];
 
-/** Per-tag allowed attributes. `*` is sanitize-html's wildcard for
- *  "every tag" — we use it for the link-related attributes on `a`
- *  (only `a` will actually carry them, but listing them under `*`
- *  is simpler than maintaining a per-tag map). `class` is allowed
- *  on every tag because Tiptap uses it for things like task-list
- *  marker styling and we trust the markup we receive. */
+/** Per-tag allowed attributes. NO `class` anywhere: the app ships a
+ *  global Tailwind stylesheet, so an attacker-controlled
+ *  `class="fixed inset-0 z-50 bg-white"` could overlay the whole CRM
+ *  (UI redress / phishing) or hide text with `hidden` / `sr-only`.
+ *  The Tiptap StarterKit output we accept emits no classes and no
+ *  stylesheet rule targets a class on user HTML, so dropping the
+ *  attribute loses nothing. A renderer that genuinely needs a class
+ *  must allowlist the exact name via `allowedClasses` (the email
+ *  profile does so for `email-blocked-image`). */
 const ALLOWED_ATTRIBUTES: sanitizeHtml.IOptions["allowedAttributes"] = {
-  a: ["href", "target", "rel", "class"],
-  "*": ["class"],
+  a: ["href", "target", "rel"],
 };
 
 /** Force every <a> tag to carry `rel="noopener noreferrer"` and
@@ -86,6 +88,9 @@ const OPTIONS: sanitizeHtml.IOptions = {
   allowedTags: ALLOWED_TAGS,
   allowedAttributes: ALLOWED_ATTRIBUTES,
   allowedSchemes: ALLOWED_SCHEMES,
+  // `//evil.example/x` would inherit our scheme and dodge the scheme
+  // allowlist - reject protocol-relative URLs in every profile.
+  allowProtocolRelative: false,
   // Drop the contents of disallowed tags too — `<script>alert(1)</script>`
   // becomes "" instead of "alert(1)". The default is to keep text content.
   disallowedTagsMode: "discard",
@@ -148,11 +153,11 @@ const DOCUMENT_ALLOWED_TAGS = [
 const DOCUMENT_ALLOWED_ATTRIBUTES: sanitizeHtml.IOptions["allowedAttributes"] =
   {
     ...ALLOWED_ATTRIBUTES,
-    td: ["colspan", "rowspan", "class"],
-    th: ["colspan", "rowspan", "class"],
-    col: ["span", "class"],
-    colgroup: ["span", "class"],
-    img: ["src", "alt", "class"],
+    td: ["colspan", "rowspan"],
+    th: ["colspan", "rowspan"],
+    col: ["span"],
+    colgroup: ["span"],
+    img: ["src", "alt"],
   };
 
 const DOCUMENT_OPTIONS: sanitizeHtml.IOptions = {
@@ -214,8 +219,11 @@ const EMAIL_ALLOWED_TAGS = [...DOCUMENT_ALLOWED_TAGS, "div", "center", "small"];
 
 const EMAIL_ALLOWED_ATTRIBUTES: sanitizeHtml.IOptions["allowedAttributes"] = {
   ...DOCUMENT_ALLOWED_ATTRIBUTES,
-  "*": ["class", "style"],
-  img: ["src", "alt", "class", "width", "height"],
+  "*": ["style"],
+  img: ["src", "alt", "width", "height"],
+  // The only class that survives: the blocked-image placeholder span
+  // emitted by the img transform below (see `allowedClasses`).
+  span: ["class"],
 };
 
 /** Regex-validated inline-style subset. Deliberately excludes any
@@ -264,6 +272,8 @@ const EMAIL_OPTIONS: sanitizeHtml.IOptions = {
   allowedTags: EMAIL_ALLOWED_TAGS,
   allowedAttributes: EMAIL_ALLOWED_ATTRIBUTES,
   allowedStyles: EMAIL_ALLOWED_STYLES,
+  // Exact-name allowlist: any other class token is stripped.
+  allowedClasses: { span: ["email-blocked-image"] },
   allowedSchemes: ALLOWED_SCHEMES,
   // Belt + braces behind the img transform: only data: survives.
   allowedSchemesByTag: { img: ["data"] },

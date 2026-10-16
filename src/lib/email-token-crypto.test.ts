@@ -56,6 +56,47 @@ describe("encryptToken / decryptToken", () => {
     expect(() => decryptToken(parts.join(":"))).toThrow(/authentication failed/);
   });
 
+  it("rejects a truncated auth tag (F673) even when it is a valid prefix", () => {
+    const stored = encryptToken("secret");
+    const parts = stored.split(":");
+    const tag = Buffer.from(parts[2], "base64");
+    for (const len of [4, 8, 12, 15]) {
+      const copy = [...parts];
+      copy[2] = tag.subarray(0, len).toString("base64");
+      expect(() => decryptToken(copy.join(":"))).toThrow(
+        /authentication failed/
+      );
+    }
+    // sanity: the untouched value still decrypts
+    expect(decryptToken(stored)).toBe("secret");
+  });
+
+  it("rejects an over-long tag and an empty tag", () => {
+    const parts = encryptToken("secret").split(":");
+    parts[2] = Buffer.concat([
+      Buffer.from(parts[2], "base64"),
+      Buffer.alloc(4),
+    ]).toString("base64");
+    expect(() => decryptToken(parts.join(":"))).toThrow(/authentication failed/);
+    // An empty segment is rejected by the wire-format check before it
+    // ever reaches the cipher.
+    parts[2] = "";
+    expect(() => decryptToken(parts.join(":"))).toThrow(
+      /not in the v1 encrypted format/
+    );
+  });
+
+  it("rejects an IV that is not 12 bytes", () => {
+    const parts = encryptToken("secret").split(":");
+    for (const bytes of [1, 8, 16]) {
+      const copy = [...parts];
+      copy[1] = Buffer.alloc(bytes, 7).toString("base64");
+      expect(() => decryptToken(copy.join(":"))).toThrow(
+        /authentication failed/
+      );
+    }
+  });
+
   it("rejects decryption under a different key", () => {
     const stored = encryptToken("secret");
     process.env.EMAIL_TOKEN_KEY = KEY_B;

@@ -30,6 +30,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 const VERSION = "v1";
 const ALGORITHM = "aes-256-gcm";
 const IV_BYTES = 12; // GCM standard nonce size
+const TAG_BYTES = 16; // full-strength GCM auth tag
 const KEY_BYTES = 32;
 
 /** Matches the v1 wire format — used to tell ciphertext from
@@ -90,8 +91,22 @@ export function decryptToken(stored: string): string {
   }
   const [, ivB64, tagB64, ciphertextB64] = stored.split(":");
   const key = getKey();
-  const decipher = createDecipheriv(ALGORITHM, key, Buffer.from(ivB64, "base64"));
-  decipher.setAuthTag(Buffer.from(tagB64, "base64"));
+  const iv = Buffer.from(ivB64, "base64");
+  const tag = Buffer.from(tagB64, "base64");
+  // Enforce the exact shapes encryptToken writes. Node's GCM decipher
+  // otherwise accepts auth tags of 4-16 bytes (and any IV length), which
+  // would let a row with a truncated tag be forged with far less than
+  // 128-bit authentication strength.
+  if (iv.length !== IV_BYTES || tag.length !== TAG_BYTES) {
+    throw new Error(
+      "decryptToken: authentication failed — malformed IV or auth tag " +
+        "length (expected a 12-byte IV and a 16-byte tag)."
+    );
+  }
+  const decipher = createDecipheriv(ALGORITHM, key, iv, {
+    authTagLength: TAG_BYTES,
+  });
+  decipher.setAuthTag(tag);
   try {
     return Buffer.concat([
       decipher.update(Buffer.from(ciphertextB64, "base64")),

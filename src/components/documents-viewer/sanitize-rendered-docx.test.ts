@@ -14,6 +14,7 @@
 import { describe, expect, test } from "vitest";
 import {
   neutralizeExternalCssUrls,
+  sanitizeDocxStyleSheet,
   sanitizeRenderedDocx,
 } from "./sanitize-rendered-docx";
 
@@ -195,6 +196,220 @@ describe("neutralizeExternalCssUrls", () => {
   });
 });
 
+describe("neutralizeExternalCssUrls — obfuscated forms (F124)", () => {
+  test("escaped function name u\\rl( and hex-escaped url( are emptied", () => {
+    for (const css of [
+      "a { background: u\\rl(https://evil.example/a) }",
+      "a { background: \\75 rl(https://evil.example/a) }",
+      "a { background: \\000075\\72\\6c(https://evil.example/a) }",
+      "a { background: URL(https://evil.example/a) }",
+    ]) {
+      const out = neutralizeExternalCssUrls(css);
+      expect(out.css).not.toContain("evil.example");
+      expect(out.neutralized).toBe(1);
+    }
+  });
+
+  test("quoted targets containing ) or the other quote are emptied whole", () => {
+    const a = neutralizeExternalCssUrls(
+      'a { b: url("https://e.example/a)b") }'
+    );
+    expect(a.css).toBe("a { b: url() }");
+    const b = neutralizeExternalCssUrls(
+      `a { b: url("https://e.example/a'b") }`
+    );
+    expect(b.css).toBe("a { b: url() }");
+    const c = neutralizeExternalCssUrls(
+      "a { b: url( 'https://e.example/x' ) }"
+    );
+    expect(c.css).toBe("a { b: url() }");
+  });
+
+  test("prefixed names that merely end in url( are not url functions", () => {
+    const css = "a { b: foo-url(https://e.example/a) }";
+    expect(neutralizeExternalCssUrls(css)).toEqual({ css, neutralized: 0 });
+  });
+});
+
+describe("sanitizeDocxStyleSheet — page-wide CSS breakout (F124)", () => {
+  // What docx-preview 0.4.0 really emits for an hostile rFonts value.
+  const BREAKOUT =
+    'p.docx_evil span {\r\n  font-family: "x";}body::after{content:"INJECTED";' +
+    "background:u\\rl(https://evil.example/leak)}.y{z:1;\r\n}\r\n";
+
+  test("injected non-docx rules are dropped; the scoped rule stays", () => {
+    const out = sanitizeDocxStyleSheet(BREAKOUT);
+    expect(out.changed).toBe(true);
+    expect(out.css).toContain("p.docx_evil span");
+    expect(out.css).not.toContain("body::after");
+    expect(out.css).not.toContain("INJECTED");
+    expect(out.css).not.toContain("evil.example");
+    expect(out.css).not.toContain(".y");
+  });
+
+  test("end to end through sanitizeRenderedDocx", () => {
+    const root = document.createElement("div");
+    const style = document.createElement("style");
+    style.textContent = BREAKOUT;
+    root.appendChild(style);
+    const summary = sanitizeRenderedDocx(root);
+    expect(style.textContent).not.toContain("body::after");
+    expect(style.textContent).not.toContain("evil.example");
+    expect(summary.neutralizedCssUrls).toBeGreaterThan(0);
+  });
+
+  test("selectors must ALL be docx-scoped; sibling/attr/:not/:root are dropped", () => {
+    for (const sel of [
+      "body",
+      ".docx, body",
+      ".docx ~ div",
+      ".docx + div",
+      ".docx-wrapper ~ *",
+      "[data-x] .docx",
+      ":root",
+      "div:not(.docxfoo)",
+      "#app .docx",
+      ".notdocx p",
+      ".docxish p",
+    ]) {
+      const out = sanitizeDocxStyleSheet(`${sel} { color: red; }`);
+      expect(out.css, sel).toBe("");
+      expect(out.changed, sel).toBe(true);
+    }
+  });
+
+  test("docx-preview's own selector shapes are kept untouched", () => {
+    const css =
+      ".docx-wrapper { background: gray; padding: 30px; }\r\n" +
+      ".docx-wrapper>section.docx { background: white; }\r\n" +
+      "section.docx>article { margin-bottom: auto; z-index: 1; }\r\n" +
+      ".docx table td, .docx table th { vertical-align: top; }\r\n" +
+      "p.docx_heading1 span, p.docx_normal { font-size: 12pt; }\r\n" +
+      "p.docx-num-1-0:before { content: '1.'; counter-increment: docx-num-1-0; }\r\n" +
+      ".docx-wrapper { --docx-bullet: url(data:image/png;base64,AAAA) }\r\n";
+    const out = sanitizeDocxStyleSheet(css);
+    expect(out).toEqual({ css, neutralized: 0, changed: false });
+  });
+
+  test("docx-preview's table banding :not(.no-vband/.no-hband) selectors are kept", () => {
+    const css =
+      ".docx-wrapper table.docx_t td.odd-col:not(.no-vband) { background: #eee; }\n" +
+      ".docx-wrapper table.docx_t tr.odd-row:not(.no-hband) td { background: #ddd; }\n";
+    const out = sanitizeDocxStyleSheet(css);
+    expect(out).toEqual({ css, neutralized: 0, changed: false });
+    // Any other :not() / functional pseudo stays rejected.
+    for (const sel of [
+      ".docx p:not(.other)",
+      ".docx p:not(.no-vband):has(a)",
+      "body:not(.no-vband)",
+    ]) {
+      expect(sanitizeDocxStyleSheet(`${sel} { color: red; }`).css, sel).toBe(
+        ""
+      );
+    }
+  });
+
+  test("@font-face with data:/blob: src survives, other at-rules go", () => {
+    const font =
+      "@font-face { font-family: F; src: url(data:font/ttf;base64,AAAA); }";
+    const css =
+      font +
+      "@import url(https://evil.example/x.css);" +
+      "@media print { .docx p { color: red } }" +
+      "@font-face { font-family: G; src: url(https://evil.example/f.woff); }";
+    const out = sanitizeDocxStyleSheet(css);
+    expect(out.css).toContain("data:font/ttf;base64,AAAA");
+    expect(out.css).not.toContain("@import");
+    expect(out.css).not.toContain("@media");
+    expect(out.css).not.toContain("evil.example");
+  });
+
+  test("a url token containing ; { } does not desync the walker", () => {
+    // Browser reads url(...) as ONE token, so the real rule ends at the
+    // final }. A walker that split on ; or } inside would leak the body rule.
+    const css =
+      ".docx p { background: url(https://e.example/a;b}c); }\r\nbody { color: red }";
+    const out = sanitizeDocxStyleSheet(css);
+    expect(out.css).not.toContain("e.example");
+    expect(out.css).not.toContain("body");
+  });
+
+  test("a bad-url with a quote inside cannot swallow the next rule", () => {
+    const css = '.docx p { background: url(a"b); } body { color: red }';
+    const out = sanitizeDocxStyleSheet(css);
+    expect(out.css).not.toContain("body");
+  });
+
+  test("position:fixed/sticky, big z-index, image-set, expression are dropped", () => {
+    const out = sanitizeDocxStyleSheet(
+      ".docx p { position: fixed; z-index: 2147483647; color: red; " +
+        "background: image-set('https://evil.example/t' 1x); " +
+        "background: -webkit-image-set(url(https://evil.example/t) 1x); " +
+        "width: expression(alert(1)); position: sticky; " +
+        "list-style: src(https://evil.example/x); behavior: url(x) }"
+    );
+    expect(out.css).toContain("color: red");
+    for (const bad of [
+      "fixed",
+      "sticky",
+      "2147483647",
+      "image-set",
+      "expression",
+      "evil.example",
+      "behavior",
+    ]) {
+      expect(out.css, bad).not.toContain(bad);
+    }
+  });
+
+  test("unterminated constructs drop instead of leaking", () => {
+    expect(sanitizeDocxStyleSheet(".docx p { color: red").css).toBe("");
+    expect(sanitizeDocxStyleSheet('.docx p { content: "x }').css).toBe("");
+    expect(sanitizeDocxStyleSheet(".docx p { a: url(x }").css).toBe("");
+  });
+
+  test("comment tricks cannot hide an external url or fetch function", () => {
+    const out = sanitizeDocxStyleSheet(
+      ".docx p { background: /* x */ url(https://evil.example/a) /* y */; " +
+        "color: red; }"
+    );
+    expect(out.css).not.toContain("evil.example");
+    expect(out.css).toContain("color: red");
+  });
+});
+
+describe("sanitizeRenderedDocx — style attribute hardening (F124)", () => {
+  test("escaped url(, image-set() and overlay positioning are removed", () => {
+    const root = build(
+      "<svg style=\"position:fixed;inset:0;z-index:2147483647;background:image-set('https://evil.example/t' 1x)\"></svg>" +
+        '<p style="color: red; background: u\\rl(https://evil.example/a)">x</p>'
+    );
+    const summary = sanitizeRenderedDocx(root);
+    const svg = root.querySelector("svg")!.getAttribute("style") ?? "";
+    expect(svg).toContain("inset:0");
+    expect(svg).not.toContain("fixed");
+    expect(svg).not.toContain("2147483647");
+    expect(svg).not.toContain("image-set");
+    const p = root.querySelector("p")!.getAttribute("style")!;
+    expect(p).toContain("color: red");
+    expect(p).not.toContain("evil.example");
+    expect(summary.neutralizedCssUrls).toBeGreaterThanOrEqual(4);
+  });
+
+  test("svg <image>/<use> with remote href loses it; fragments and data: stay", () => {
+    const root = build(
+      '<svg><image href="https://evil.example/p.png"></image>' +
+        '<use href="#local"></use>' +
+        '<image href="data:image/png;base64,AAAA"></image></svg>'
+    );
+    sanitizeRenderedDocx(root);
+    const imgs = root.querySelectorAll("image");
+    expect(imgs[0].hasAttribute("href")).toBe(false);
+    expect(imgs[1].getAttribute("href")).toBe("data:image/png;base64,AAAA");
+    expect(root.querySelector("use")!.getAttribute("href")).toBe("#local");
+  });
+});
+
 describe("sanitizeRenderedDocx — benign render is left alone", () => {
   test("a docx-preview-shaped tree passes through structurally unchanged", () => {
     // Mimics what docx-preview actually emits: wrapper > section
@@ -203,7 +418,7 @@ describe("sanitizeRenderedDocx — benign render is left alone", () => {
     const html =
       "<style>.docx-wrapper { background: gray; }</style>" +
       '<div class="docx-wrapper"><section class="docx"><article>' +
-      "<p><span>IN THE CIRCUIT COURT</span><span style=\"text-decoration: underline; word-spacing: 120pt\">&nbsp;</span></p>" +
+      '<p><span>IN THE CIRCUIT COURT</span><span style="text-decoration: underline; word-spacing: 120pt">&nbsp;</span></p>' +
       '<table><tr><td style="vertical-align: bottom; text-align: center"><p>Plaintiff</p></td></tr></table>' +
       "</article></section></div>";
     const root = build(html);

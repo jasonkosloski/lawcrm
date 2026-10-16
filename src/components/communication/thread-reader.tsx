@@ -30,6 +30,7 @@ import { BackToListButton } from "./back-to-list-button";
 import { MarkThreadRead } from "./mark-thread-read";
 import { ReplySection } from "./reply-section";
 import { isHtmlEmailBody } from "@/lib/email-body";
+import { sanitizeEmailHtml } from "@/lib/sanitize-html";
 import type { FilingMatterOption } from "@/lib/queries/communication";
 
 const formatRecipients = (
@@ -67,9 +68,7 @@ export async function ThreadReader({
   // Read-side flag for the attachment chips' "File to matter…"
   // affordance (async server component — same self-fetching idiom
   // as ReplySection, so both hosts get it without new page props).
-  const canFileAttachments = await currentUserHasPermission(
-    "documents.upload"
-  );
+  const canFileAttachments = await currentUserHasPermission("documents.upload");
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-paper-email overflow-y-auto">
@@ -225,14 +224,16 @@ export async function ThreadReader({
                 Two body shapes coexist: Gmail-synced (and CRM-sent)
                 messages store sanitized HTML — nothing unsanitized ever
                 reaches EmailMessage.body (sanitizeEmailHtml at the sync/
-                send write boundary), so dangerouslySetInnerHTML is safe
-                here. Legacy/seeded bodies are plain text and keep the
+                send write boundary) AND re-sanitized here at render time
+                (idempotent, cheap) so rows stored before a sanitizer
+                tightening - e.g. legacy class attributes - never reach
+                the DOM. Legacy/seeded bodies are plain text and keep the
                 pre-wrap text path (rendering them as HTML would collapse
                 their newlines). */}
             {isHtmlEmailBody(m.body) ? (
               <div
                 className="email-body email-body-html px-3 sm:px-4 py-4 text-ink break-words"
-                dangerouslySetInnerHTML={{ __html: m.body }}
+                dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(m.body) }}
               />
             ) : (
               <div className="email-body px-3 sm:px-4 py-4 text-ink break-words">

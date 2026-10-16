@@ -165,6 +165,16 @@ describe("blobPathname", () => {
   test("recovers the (decoded) pathname from a stored URL", () => {
     expect(blobPathname(`${STORE}/k__brief%20v2.pdf`)).toBe("k__brief v2.pdf");
   });
+
+  test("decodes #, ? and % escapes", () => {
+    expect(blobPathname(`${STORE}/k__Exhibit%20%233%3F%2050%25.pdf`)).toBe(
+      "k__Exhibit #3? 50%.pdf"
+    );
+  });
+
+  test("an invalid escape falls back to the raw path instead of throwing", () => {
+    expect(blobPathname(`${STORE}/k__bad%zz.pdf`)).toBe("k__bad%zz.pdf");
+  });
 });
 
 describe("signedBlobUrl", () => {
