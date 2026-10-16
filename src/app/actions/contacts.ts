@@ -41,6 +41,12 @@ import {
   phoneDedupeKey,
   type ContactFormState,
 } from "@/lib/contact-form";
+import {
+  mergeConflictStatus,
+  mergeContactNotes,
+  mergePartyDetails,
+  PARTY_NOTES_MAX,
+} from "@/lib/contact-merge";
 
 const contactSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(200),
@@ -92,7 +98,7 @@ export async function createContact(
   _prev: ContactFormState,
   formData: FormData
 ): Promise<ContactFormState> {
-  await requirePermission("contacts.create");
+  const userId = await requirePermission("contacts.create");
 
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = contactSchema.safeParse(raw);
@@ -133,6 +139,14 @@ export async function createContact(
     return c;
   });
 
+  // Log before redirect() — it throws to unwind the action.
+  await logContactActivity({
+    userId,
+    type: "contact",
+    icon: "user",
+    title: `Contact created — ${parsed.data.name}`,
+  });
+
   revalidatePath("/contacts");
   redirect(`/contacts/${created.id}`);
 }
@@ -144,7 +158,7 @@ export async function updateContact(
   _prev: ContactFormState,
   formData: FormData
 ): Promise<ContactFormState> {
-  await requirePermission("contacts.edit");
+  const userId = await requirePermission("contacts.edit");
 
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = contactSchema.safeParse(raw);
@@ -157,7 +171,19 @@ export async function updateContact(
 
   const existing = await prisma.contact.findUnique({
     where: { id: contactId },
-    select: { id: true },
+    select: {
+      id: true,
+      name: true,
+      type: true,
+      email: true,
+      phone: true,
+      organization: true,
+      address: true,
+      city: true,
+      state: true,
+      zip: true,
+      notes: true,
+    },
   });
   if (!existing) {
     return {
@@ -243,6 +269,33 @@ export async function updateContact(
     }
   });
 
+  // Field NAMES only — the log must not become a second copy of PII.
+  const changed = (
+    [
+      ["name", existing.name, parsed.data.name],
+      ["type", existing.type, parsed.data.type],
+      ["email", existing.email, parsed.data.email || null],
+      ["phone", existing.phone, parsed.data.phone || null],
+      ["organization", existing.organization, parsed.data.organization || null],
+      ["address", existing.address, parsed.data.address || null],
+      ["city", existing.city, parsed.data.city || null],
+      ["state", existing.state, parsed.data.state || null],
+      ["zip", existing.zip, parsed.data.zip || null],
+      ["notes", existing.notes, parsed.data.notes || null],
+    ] as const
+  )
+    .filter(([, before, after]) => before !== after)
+    .map(([field]) => field);
+  if (changed.length > 0) {
+    await logContactActivity({
+      userId,
+      type: "contact",
+      icon: "user",
+      title: `Contact updated — ${parsed.data.name}`,
+      detail: `Changed: ${changed.join(", ")}`,
+    });
+  }
+
   revalidatePath("/contacts");
   revalidatePath(`/contacts/${contactId}`);
   return { status: "ok", contactId };
@@ -272,7 +325,7 @@ export async function updateContactPhones(
   contactId: string,
   phonesInput: unknown
 ): Promise<{ ok: boolean; error?: string }> {
-  await requirePermission("contacts.edit");
+  const userId = await requirePermission("contacts.edit");
 
   const parsed = phonesInputSchema.safeParse(phonesInput);
   if (!parsed.success) {
@@ -281,7 +334,7 @@ export async function updateContactPhones(
 
   const existing = await prisma.contact.findUnique({
     where: { id: contactId },
-    select: { id: true },
+    select: { id: true, name: true },
   });
   if (!existing) return { ok: false, error: "Contact not found" };
 
@@ -305,6 +358,14 @@ export async function updateContactPhones(
       where: { id: contactId },
       data: { phone: primary?.number ?? null },
     });
+  });
+
+  await logContactActivity({
+    userId,
+    type: "contact",
+    icon: "user",
+    title: `Phone numbers updated — ${existing.name}`,
+    detail: `${phones.length} number${phones.length === 1 ? "" : "s"} on file`,
   });
 
   revalidatePath("/contacts");
@@ -398,7 +459,9 @@ export async function setContactConflictStatus(
  *
  * Scalar gaps (null email/organization/address/city/state/zip on the
  * survivor) are backfilled from the loser. Non-null survivor fields
- * are never overwritten.
+ * are never overwritten. The loser's internal notes are appended to
+ * the survivor's, and the stricter conflict flag wins (flagged >
+ * override > clear) so a deliberate attorney flag is never lost.
  */
 export async function mergeContacts(
   loserId: string,
@@ -425,13 +488,58 @@ export async function mergeContacts(
     };
   }
 
+  // The retired contact's internal notes + conflict flag carry over
+  // (its detail page redirects to the survivor, so anything left on
+  // the loser would be unreachable). Refuse rather than truncate.
+  const mergedNotes = mergeContactNotes(survivor.notes, loser.notes, loser.name);
+  if (mergedNotes.tooLong) {
+    return {
+      ok: false,
+      error:
+        "The combined internal notes are too long to merge — shorten the notes on one contact first",
+    };
+  }
+  const mergedConflict = mergeConflictStatus(
+    survivor.conflictStatus,
+    loser.conflictStatus
+  );
+
+  // Same refusal for folded party-row notes: the party forms cap notes
+  // at PARTY_NOTES_MAX, so a longer merged value would make the row
+  // fail validation on its next edit until trimmed by hand.
+  const preLoserParties = await prisma.matterContact.findMany({
+    where: { contactId: loserId },
+  });
+  for (const row of preLoserParties) {
+    const dupe = await prisma.matterContact.findUnique({
+      where: {
+        matterId_contactId_category: {
+          matterId: row.matterId,
+          contactId: survivorId,
+          category: row.category,
+        },
+      },
+    });
+    if (
+      dupe &&
+      (mergePartyDetails(dupe, row, loser.name).notes?.length ?? 0) >
+        PARTY_NOTES_MAX
+    ) {
+      return {
+        ok: false,
+        error:
+          "The combined notes on a shared matter party are too long to merge — shorten the party notes on one contact first",
+      };
+    }
+  }
+
   await prisma.$transaction(async (tx) => {
     // MatterContact — per-row because of the (matterId, contactId,
     // category) unique: survivor already on the matter in the same
-    // category ⇒ drop the loser's duplicate row.
+    // category ⇒ fold the loser's row details (role, notes,
+    // representation) into the survivor's row, then drop the duplicate.
     const loserParties = await tx.matterContact.findMany({
       where: { contactId: loserId },
-      select: { id: true, matterId: true, category: true },
     });
     for (const row of loserParties) {
       const dupe = await tx.matterContact.findUnique({
@@ -442,9 +550,22 @@ export async function mergeContacts(
             category: row.category,
           },
         },
-        select: { id: true },
       });
       if (dupe) {
+        const merged = mergePartyDetails(dupe, row, loser.name);
+        await tx.matterContact.update({
+          where: { id: dupe.id },
+          data: {
+            role: merged.role,
+            notes: merged.notes,
+            isRepresented: merged.isRepresented,
+            representationContactId: merged.representationContactId,
+            representationName: merged.representationName,
+            representationFirm: merged.representationFirm,
+            representationEmail: merged.representationEmail,
+            representationPhone: merged.representationPhone,
+          },
+        });
         await tx.matterContact.delete({ where: { id: row.id } });
       } else {
         await tx.matterContact.update({
@@ -538,6 +659,8 @@ export async function mergeContacts(
         city: survivor.city ?? loser.city,
         state: survivor.state ?? loser.state,
         zip: survivor.zip ?? loser.zip,
+        notes: mergedNotes.notes,
+        conflictStatus: mergedConflict,
       },
     });
 
@@ -555,7 +678,13 @@ export async function mergeContacts(
     icon: "zap",
     title: `Merged contact "${loser.name}" into "${survivor.name}"`,
     detail:
-      "Matters, parties, leads, message threads, calendar invites, invoices, and phone numbers were re-pointed to the surviving record.",
+      "Matters, parties, leads, message threads, calendar invites, invoices, and phone numbers were re-pointed to the surviving record." +
+      (mergedConflict !== survivor.conflictStatus
+        ? ` Conflict flag is now "${mergedConflict}" (carried over from the merged contact).`
+        : "") +
+      (loser.notes?.trim()
+        ? " Internal notes were appended to the surviving record."
+        : ""),
   });
 
   revalidatePath("/contacts");
@@ -571,11 +700,11 @@ export async function mergeContacts(
 export async function deleteContact(
   contactId: string
 ): Promise<{ ok: boolean; error?: string }> {
-  await requirePermission("contacts.delete");
+  const userId = await requirePermission("contacts.delete");
 
   const c = await prisma.contact.findUnique({
     where: { id: contactId },
-    select: { id: true },
+    select: { id: true, name: true },
   });
   if (!c) return { ok: false, error: "Contact not found" };
 
@@ -588,6 +717,13 @@ export async function deleteContact(
   await prisma.contact.update({
     where: { id: contactId },
     data: { isActive: false },
+  });
+
+  await logContactActivity({
+    userId,
+    type: "contact",
+    icon: "user",
+    title: `Contact deactivated — ${c.name}`,
   });
 
   revalidatePath("/contacts");

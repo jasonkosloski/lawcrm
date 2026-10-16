@@ -255,7 +255,7 @@ without losing either in progress.
    provider — and everything in it — survives navigation within
    its subtree.
 2. `useCreateStack()` exposes `open(type)`, `close(id)`, `focus(id)`,
-   `setExpanded(id, bool)`, and `updateFormState(id, patch)`.
+   and `setExpanded(id, bool)`.
    Triggers (header Create dropdown, tab-bar contextual button,
    empty-state CTA, "+ New event" on calendar) call `open(type)` —
    URL params are not involved.
@@ -274,11 +274,15 @@ without losing either in progress.
    overlap the active panel's own controls. The "Also open" strip
    only renders when there are 2+ open panels; a single panel keeps
    the chrome quiet.
-4. **Form state lives in the provider** (`panel.formState`) keyed
-   by panel id, NOT in the panel's React component. This lets the
-   panel UI mount and unmount freely as focus shifts — the user's
-   in-progress work is safe regardless of which panel the UI is
-   currently rendering.
+4. **Every open panel's body stays mounted.** `CreateDock` renders
+   one `PanelBody` per open panel, keyed by panel id, inside a single
+   persistent shell; only the focused body is visible (the others
+   are `hidden`). Each body's own React state IS its draft, so it
+   survives expand/collapse and focus switches, and no two panels
+   ever share one form instance. The provider holds only panel
+   metadata (id, type, expanded) and the focus pointer, never form
+   values. Don't move a body into a conditional JSX branch or key it
+   by anything but panel id — that remounts it and drops the draft.
 
 **Focus semantics:**
 

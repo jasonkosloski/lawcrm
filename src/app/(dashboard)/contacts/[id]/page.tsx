@@ -192,6 +192,7 @@ export default async function ContactDetailPage({
           <ContactPhonesCard
             contactId={c.id}
             phones={c.phones}
+            legacyPhone={c.phone}
             canEdit={canEdit}
           />
 

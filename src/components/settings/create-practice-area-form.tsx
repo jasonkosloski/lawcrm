@@ -10,7 +10,7 @@
 
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { createPracticeArea } from "@/app/actions/practice-areas";
 import {
@@ -29,17 +29,34 @@ export function CreatePracticeAreaForm() {
   const vals = state.values ?? {};
   const errs = state.errors ?? {};
 
+  // React 19 resets a <form action={fn}> after every submission,
+  // including one that returns a validation error - which reverted the
+  // SOL checkbox (so a name collision then re-created the area without
+  // SOL tracking). Submit through onSubmit + startTransition instead
+  // (no automatic reset) with controlled fields. A successful create
+  // redirects away, so nothing needs resetting.
+  const [, startTransition] = useTransition();
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    startTransition(() => formAction(fd));
+  };
+
+  const [name, setName] = useState<string>(vals.name ?? "");
+  const [label, setLabel] = useState<string>(vals.label ?? "");
+  const [hasSol, setHasSol] = useState(false);
   const [color, setColor] = useState<string>(vals.color ?? DEFAULT_COLOR);
 
   return (
-    <form action={formAction} className="flex flex-col gap-2">
+    <form onSubmit={onSubmit} className="flex flex-col gap-2">
       <div className="grid grid-cols-[1fr_1fr_auto_auto] gap-2 items-start">
         <Field label="Name" error={errs.name}>
           <input
             id="name"
             name="name"
             type="text"
-            defaultValue={vals.name ?? ""}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
             required
             placeholder="§1983, Employment/CADA, Guardianships…"
             className={inputCls(!!errs.name)}
@@ -51,7 +68,8 @@ export function CreatePracticeAreaForm() {
             id="label"
             name="label"
             type="text"
-            defaultValue={vals.label ?? ""}
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
             placeholder="§1983 · Civil rights"
             className={inputCls(!!errs.label)}
           />
@@ -99,6 +117,8 @@ export function CreatePracticeAreaForm() {
         <input
           type="checkbox"
           name="hasStatuteOfLimitations"
+          checked={hasSol}
+          onChange={(e) => setHasSol(e.target.checked)}
           className="w-3.5 h-3.5 rounded border-line"
         />
         <span className="text-2xs text-ink-2">

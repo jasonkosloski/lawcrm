@@ -8,7 +8,7 @@
 
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { updatePracticeArea } from "@/app/actions/practice-areas";
 import { unpackStatuteDays } from "@/lib/sol";
@@ -43,20 +43,47 @@ export function EditPracticeAreaForm({
     FormData
   >(boundAction, practiceAreaInitialState);
 
-  const vals = state.values ?? {};
   const errs = state.errors ?? {};
 
-  const [color, setColor] = useState<string>(vals.color ?? area.color);
+  // React 19 resets a <form action={fn}> after every submission —
+  // including one that returns a validation error — which used to
+  // revert the SOL period, citation and checkbox to the stored row
+  // while the name kept the user's text (fixing the name and saving
+  // then persisted the OLD period). So the form submits through
+  // onSubmit + startTransition instead: no automatic form reset, and
+  // the fields (controlled below) keep exactly what the user typed
+  // until a successful save revalidates the page.
+  const [, startTransition] = useTransition();
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    startTransition(() => formAction(fd));
+  };
+  const period = unpackStatuteDays(area.statutePeriodDays);
+  const [name, setName] = useState(area.name);
+  const [label, setLabel] = useState(area.label ?? "");
+  const [color, setColor] = useState<string>(area.color);
+  const [hasSol, setHasSol] = useState(area.hasStatuteOfLimitations);
+  const [years, setYears] = useState(period.years ? String(period.years) : "");
+  const [months, setMonths] = useState(
+    period.months ? String(period.months) : ""
+  );
+  const [days, setDays] = useState(period.days ? String(period.days) : "");
+  const [citation, setCitation] = useState(area.statuteSourceCitation ?? "");
+  const [billingMode, setBillingMode] = useState<string>(
+    area.defaultBillingMode
+  );
 
   return (
-    <form action={formAction} className="flex flex-col gap-3">
+    <form onSubmit={onSubmit} className="flex flex-col gap-3">
       <div className="grid grid-cols-[1fr_1fr_auto] gap-3 items-start">
         <Field label="Name" error={errs.name}>
           <input
             id="name"
             name="name"
             type="text"
-            defaultValue={vals.name ?? area.name}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
             required
             className={inputCls(!!errs.name)}
           />
@@ -67,7 +94,8 @@ export function EditPracticeAreaForm({
             id="label"
             name="label"
             type="text"
-            defaultValue={vals.label ?? area.label ?? ""}
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
             className={inputCls(!!errs.label)}
           />
         </Field>
@@ -94,20 +122,12 @@ export function EditPracticeAreaForm({
         </Field>
       </div>
 
-      {/* Uncontrolled — the DOM owns the checkbox state so a stale
-          area prop or reset form-state from the action can't revert
-          what the user just clicked. `defaultChecked` re-seeds only
-          if the component remounts, which is the desired behavior
-          after revalidatePath. */}
       <label className="flex items-start gap-2 cursor-pointer select-none pt-1">
         <input
           type="checkbox"
           name="hasStatuteOfLimitations"
-          defaultChecked={
-            vals.hasStatuteOfLimitations === "on" ||
-            (vals.hasStatuteOfLimitations === undefined &&
-              area.hasStatuteOfLimitations)
-          }
+          checked={hasSol}
+          onChange={(e) => setHasSol(e.target.checked)}
           className="w-3.5 h-3.5 rounded border-line mt-0.5"
         />
         <div className="flex flex-col gap-0.5">
@@ -117,54 +137,56 @@ export function EditPracticeAreaForm({
           <span className="text-2xs text-ink-4 leading-relaxed">
             When on, matters in this area get an SOL date + satisfied
             flag on the matter forms and a prominent countdown card on
-            the Overview tab.
+            the Overview tab. Turning it off only stops new SOL dates
+            from being computed: existing matters keep their SOL dates
+            and SOL deadlines, and this area keeps its saved period and
+            citation in case you turn tracking back on.
           </span>
         </div>
       </label>
 
       {/* Statute period editor. Only relevant when the SOL toggle
-          above is on; we render unconditionally and let the action
-          ignore the values when the toggle is off. Pre-fills from
+          above is on; we render unconditionally and the action
+          ignores the values (keeping the stored ones) when the toggle
+          is off. Pre-fills from
           the area's stored total days, unpacked back into y/m/d so
           the lawyer sees the same shape they typed last time. */}
       <fieldset className="flex flex-col gap-2 px-3 py-2.5 rounded-md border border-line bg-paper-2/30">
         <legend className="px-1 text-2xs font-mono uppercase tracking-wider text-ink-4">
           Statute period (auto-computes Matter SOL date from incident)
         </legend>
-        {(() => {
-          const period = unpackStatuteDays(area.statutePeriodDays);
-          return (
-            <div className="grid grid-cols-3 gap-2">
-              <Field label="Years">
-                <input
-                  type="number"
-                  name="statuteYears"
-                  min={0}
-                  defaultValue={period.years || ""}
-                  className={inputCls(false)}
-                />
-              </Field>
-              <Field label="Months">
-                <input
-                  type="number"
-                  name="statuteMonths"
-                  min={0}
-                  defaultValue={period.months || ""}
-                  className={inputCls(false)}
-                />
-              </Field>
-              <Field label="Days">
-                <input
-                  type="number"
-                  name="statuteDays"
-                  min={0}
-                  defaultValue={period.days || ""}
-                  className={inputCls(false)}
-                />
-              </Field>
-            </div>
-          );
-        })()}
+        <div className="grid grid-cols-3 gap-2">
+          <Field label="Years">
+            <input
+              type="number"
+              name="statuteYears"
+              min={0}
+              value={years}
+              onChange={(e) => setYears(e.target.value)}
+              className={inputCls(false)}
+            />
+          </Field>
+          <Field label="Months">
+            <input
+              type="number"
+              name="statuteMonths"
+              min={0}
+              value={months}
+              onChange={(e) => setMonths(e.target.value)}
+              className={inputCls(false)}
+            />
+          </Field>
+          <Field label="Days">
+            <input
+              type="number"
+              name="statuteDays"
+              min={0}
+              value={days}
+              onChange={(e) => setDays(e.target.value)}
+              className={inputCls(false)}
+            />
+          </Field>
+        </div>
         <Field
           label="Source citation"
           hint="e.g. C.R.S. § 13-80-102 — surfaces on the SOL card so attorneys can verify against the statute"
@@ -172,7 +194,8 @@ export function EditPracticeAreaForm({
           <input
             name="statuteSourceCitation"
             type="text"
-            defaultValue={area.statuteSourceCitation ?? ""}
+            value={citation}
+            onChange={(e) => setCitation(e.target.value)}
             maxLength={120}
             className={inputCls(false)}
           />
@@ -190,16 +213,14 @@ export function EditPracticeAreaForm({
         label="Default billing mode"
         error={errs.defaultBillingMode}
         hint={
-          BILLING_MODE_DESCRIPTION[
-            (vals.defaultBillingMode as BillingMode) ??
-              (area.defaultBillingMode as BillingMode)
-          ]
+          BILLING_MODE_DESCRIPTION[billingMode as BillingMode]
         }
       >
         <select
           id="defaultBillingMode"
           name="defaultBillingMode"
-          defaultValue={vals.defaultBillingMode ?? area.defaultBillingMode}
+          value={billingMode}
+          onChange={(e) => setBillingMode(e.target.value)}
           className={cn(inputCls(!!errs.defaultBillingMode), "max-w-xs")}
         >
           {BILLING_MODES.map((m) => (

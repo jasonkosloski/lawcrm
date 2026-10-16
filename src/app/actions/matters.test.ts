@@ -869,3 +869,95 @@ describe("matter audit trail", () => {
     expect(await prisma.activityLog.count({ where: { matterId } })).toBe(0);
   });
 });
+
+// ── updateMatter: area stopped tracking SOL (F113) ──────────────────────
+
+describe("updateMatter when the area no longer tracks SOL", () => {
+  const seedSolMatter = async () => {
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    await prisma.matter.update({
+      where: { id: matterId },
+      data: {
+        incidentDate: new Date("2025-01-10"),
+        statuteOfLimitationsDate: new Date("2027-01-10"),
+        statuteOfLimitationsNotes: "check tolling",
+      },
+    });
+    await prisma.deadline.create({
+      data: {
+        matterId,
+        title: "Statute of limitations",
+        dueDate: new Date("2027-01-10"),
+        kind: "critical",
+        sourceType: SOL_SOURCE_TYPE,
+      },
+    });
+    return matterId;
+  };
+
+  test("an unrelated edit keeps the SOL date, notes and critical deadline", async () => {
+    const matterId = await seedSolMatter();
+    // Admin untracks SOL on the area afterwards.
+    await prisma.practiceArea.update({
+      where: { id: areaId },
+      data: { hasStatuteOfLimitations: false },
+    });
+
+    await expect(
+      updateMatter(
+        matterId,
+        updateMatterInitialState,
+        updateForm({ caseNumber: "24-CV-100" })
+      )
+    ).rejects.toThrow(/__REDIRECT__/);
+
+    const m = await prisma.matter.findUniqueOrThrow({
+      where: { id: matterId },
+    });
+    expect(m.caseNumber).toBe("24-CV-100");
+    expect(m.statuteOfLimitationsDate?.toISOString().slice(0, 10)).toBe(
+      "2027-01-10"
+    );
+    expect(m.incidentDate?.toISOString().slice(0, 10)).toBe("2025-01-10");
+    expect(m.statuteOfLimitationsNotes).toBe("check tolling");
+    expect(
+      await prisma.deadline.count({
+        where: { matterId, sourceType: SOL_SOURCE_TYPE },
+      })
+    ).toBe(1);
+  });
+
+  test("switching to a non-SOL area keeps the SOL data and deadline (never silently wiped)", async () => {
+    // F278/F313: losing a statute date because someone re-categorised a
+    // matter is the worse failure — the data stays until a person
+    // removes it deliberately.
+    const matterId = await seedSolMatter();
+    const other = await seedPracticeArea({ hasStatuteOfLimitations: false });
+
+    await expect(
+      updateMatter(
+        matterId,
+        updateMatterInitialState,
+        updateForm({ practiceAreaId: other.areaId, stageId: other.stageId })
+      )
+    ).rejects.toThrow(/__REDIRECT__/);
+
+    const m = await prisma.matter.findUniqueOrThrow({
+      where: { id: matterId },
+    });
+    expect(m.practiceAreaId).toBe(other.areaId);
+    expect(m.statuteOfLimitationsDate?.toISOString().slice(0, 10)).toBe(
+      "2027-01-10"
+    );
+    expect(m.statuteOfLimitationsNotes).toBe("check tolling");
+    expect(
+      await prisma.deadline.count({
+        where: { matterId, sourceType: SOL_SOURCE_TYPE },
+      })
+    ).toBe(1);
+  });
+});

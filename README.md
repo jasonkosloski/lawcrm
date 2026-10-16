@@ -21,6 +21,14 @@ npm run db:seed                  # demo firm + users (dev DB only!)
 npm run dev                      # http://localhost:3000
 ```
 
+**Seed guard:** `npm run db:seed` and `npm run db:reset` wipe data, so
+they refuse to run unless the database host is localhost / 127.0.0.1 /
+::1. To seed the hosted `lawcrm-dev` database (below) you must opt in
+explicitly: `ALLOW_SEED=1 npm run db:seed`. Production-looking
+environments are always refused. The seed sets every demo user's
+password from `SEED_ADMIN_PASSWORD`; if unset it generates a random
+one and prints it once at the end of the run.
+
 **Dev database:** a dedicated Prisma Postgres, `lawcrm-dev`, attached
 to the Vercel project's Development environment as
 `DEVDB_DATABASE_URL`. Put that value in `.env` as both

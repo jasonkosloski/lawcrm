@@ -13,7 +13,7 @@
 
 "use client";
 
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import {
   Calendar,
   Clock,
@@ -69,55 +69,62 @@ export function CreateDock() {
 
   if (panels.length === 0) return null;
 
-  const showDocked = !!focused && !focused.expanded;
-  const showExpanded = !!focused && focused.expanded;
+  const expanded = !!focused?.expanded;
+  const entryLabel = focused
+    ? (findMatterCreateEntry(focused.type)?.label ?? focused.type)
+    : "";
 
+  // ONE shell for both modes. Docked and expanded used to be two
+  // different JSX branches, so toggling expand unmounted the whole
+  // subtree — and every draft in it. Now the backdrop is a sibling in
+  // a fixed slot (`false` still occupies the slot) and the <aside>
+  // keeps its position/type; only its className and aria-label change.
   return (
     <>
-      {showDocked && focused && (
+      {expanded && focused ? (
+        <button
+          type="button"
+          aria-label="Collapse to sidebar"
+          onClick={() => setExpanded(focused.id, false)}
+          className="fixed inset-0 z-40 bg-black/25 backdrop-blur-sm cursor-default animate-in fade-in duration-100"
+        />
+      ) : null}
+      {focused && (
         <aside
-          aria-label={`Create panel (${findMatterCreateEntry(focused.type)?.label ?? focused.type})`}
-          className="w-96 shrink-0 border-l border-line flex flex-col min-h-0 bg-white"
+          key="create-panel-shell"
+          aria-label={`Create panel (${entryLabel}${expanded ? ", expanded" : ""})`}
+          className={
+            expanded
+              ? "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[min(92vw,800px)] h-[min(85vh,720px)] rounded-xl shadow-2xl ring-1 ring-black/5 border border-line bg-white flex flex-col min-h-0 animate-in zoom-in-95 fade-in duration-100"
+              : "w-96 shrink-0 border-l border-line flex flex-col min-h-0 bg-white"
+          }
         >
           <PanelChrome
             panel={focused}
             minimized={minimized}
-            matterId={context?.matterId ?? null}
+            expanded={expanded}
+            contextBadge={expanded ? context : null}
             onClose={() => close(focused.id)}
             onExpand={() => setExpanded(focused.id, true)}
             onCollapse={() => setExpanded(focused.id, false)}
             onChipFocus={focus}
             onChipClose={close}
-          />
-        </aside>
-      )}
-
-      {showExpanded && focused && (
-        <>
-          <button
-            type="button"
-            aria-label="Collapse to sidebar"
-            onClick={() => setExpanded(focused.id, false)}
-            className="fixed inset-0 z-40 bg-black/25 backdrop-blur-sm cursor-default animate-in fade-in duration-100"
-          />
-          <aside
-            aria-label={`Create panel (${findMatterCreateEntry(focused.type)?.label ?? focused.type}, expanded)`}
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[min(92vw,800px)] h-[min(85vh,720px)] rounded-xl shadow-2xl ring-1 ring-black/5 border border-line bg-white flex flex-col min-h-0 animate-in zoom-in-95 fade-in duration-100"
           >
-            <PanelChrome
-              panel={focused}
-              minimized={minimized}
-              expanded
-              contextBadge={context}
-              matterId={context?.matterId ?? null}
-              onClose={() => close(focused.id)}
-              onExpand={() => setExpanded(focused.id, true)}
-              onCollapse={() => setExpanded(focused.id, false)}
-              onChipFocus={focus}
-              onChipClose={close}
-            />
-          </aside>
-        </>
+            {/* Every open panel's body stays mounted (keyed by panel
+                id) so its draft survives expand/collapse and focus
+                switches, and no two panels ever share one form
+                instance. Only the focused body is visible. */}
+            {panels.map((p) => (
+              <PanelBody
+                key={p.id}
+                panel={p}
+                visible={p.id === focused.id}
+                matterId={context?.matterId ?? null}
+                close={close}
+              />
+            ))}
+          </PanelChrome>
+        </aside>
       )}
     </>
   );
@@ -130,12 +137,12 @@ function PanelChrome({
   minimized,
   expanded,
   contextBadge,
-  matterId,
   onClose,
   onExpand,
   onCollapse,
   onChipFocus,
   onChipClose,
+  children,
 }: {
   panel: CreatePanel;
   minimized: CreatePanel[];
@@ -145,27 +152,15 @@ function PanelChrome({
     label: string;
     sublabel: string | null;
   } | null;
-  matterId: string | null;
   onClose: () => void;
   onExpand: () => void;
   onCollapse: () => void;
   onChipFocus: (id: string) => void;
   onChipClose: (id: string) => void;
+  children: ReactNode;
 }) {
   const entry = findMatterCreateEntry(panel.type);
   if (!entry) return null;
-
-  // Types with a real form render it inline and carry their own
-  // footer (Save/Cancel). Everything else still falls through to the
-  // placeholder body + disabled-save footer.
-  const isNote = panel.type === "note" && matterId !== null;
-  // Standalone event composer: the calendar page mounts the
-  // create stack with no matter, so a "New event" panel there
-  // creates a matter-less event (effectively personal). The
-  // matter-detail page still routes through its own
-  // EventComposer (with captures + team auto-add) since it has
-  // matterId set.
-  const isStandaloneEvent = panel.type === "event" && matterId === null;
 
   return (
     <>
@@ -236,7 +231,57 @@ function PanelChrome({
         </div>
       )}
 
-      {/* Body */}
+      {/* Bodies (one per open panel; only the focused one is visible) */}
+      {children}
+    </>
+  );
+}
+
+// ── Panel body (one mounted instance per open panel) ─────────────────────
+
+function PanelBody({
+  panel,
+  visible,
+  matterId,
+  close,
+}: {
+  panel: CreatePanel;
+  visible: boolean;
+  matterId: string | null;
+  close: (id: string) => void;
+}) {
+  // `close` changes identity whenever the stack changes. Bodies fire
+  // their onClose from effects keyed on it (NewEventComposer closes on
+  // status "ok"), so hand them a per-panel callback that is stable for
+  // the panel's lifetime — otherwise a finished panel re-fires close
+  // on every stack change.
+  const closeRef = useRef(close);
+  useEffect(() => {
+    closeRef.current = close;
+  }, [close]);
+  const panelId = panel.id;
+  const onClose = useCallback(() => closeRef.current(panelId), [panelId]);
+
+  const entry = findMatterCreateEntry(panel.type);
+  if (!entry) return null;
+
+  // Types with a real form render it inline and carry their own
+  // footer (Save/Cancel). Everything else still falls through to the
+  // placeholder body + disabled-save footer.
+  const isNote = panel.type === "note" && matterId !== null;
+  // Standalone event composer: the calendar page mounts the
+  // create stack with no matter, so a "New event" panel there
+  // creates a matter-less event (effectively personal). The
+  // matter-detail page still routes through its own
+  // EventComposer (with captures + team auto-add) since it has
+  // matterId set.
+  const isStandaloneEvent = panel.type === "event" && matterId === null;
+
+  return (
+    <div
+      data-panel-id={panel.id}
+      className={visible ? "flex flex-1 min-h-0 flex-col" : "hidden"}
+    >
       {isNote && matterId ? (
         <NotePanelBody panelId={panel.id} matterId={matterId} />
       ) : isStandaloneEvent ? (
@@ -288,7 +333,7 @@ function PanelChrome({
           </footer>
         </>
       )}
-    </>
+    </div>
   );
 }
 

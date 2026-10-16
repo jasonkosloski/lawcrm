@@ -20,6 +20,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentFirm } from "@/lib/firm";
 import { requirePermission } from "@/lib/permission-check";
+import { logAuditEntry } from "@/lib/audit-entry";
 
 const firmSchema = z.object({
   autoAddTeamToNewEvents: z.literal("on").optional(),
@@ -30,7 +31,7 @@ export async function updateFirmCalendarDefaults(
   _prev: { status: "idle" | "ok" | "error"; error?: string },
   formData: FormData
 ): Promise<{ status: "idle" | "ok" | "error"; error?: string }> {
-  await requirePermission("firm.edit_info");
+  const userId = await requirePermission("firm.edit_info");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = firmSchema.safeParse(raw);
   if (!parsed.success) {
@@ -44,6 +45,18 @@ export async function updateFirmCalendarDefaults(
       autoAddTeamToUpcomingEvents:
         parsed.data.autoAddTeamToUpcomingEvents === "on",
     },
+  });
+  await logAuditEntry({
+    matterId: null,
+    userId,
+    type: "settings",
+    source: "Settings",
+    title: "Firm calendar defaults updated",
+    detail: `Auto-add team to new events: ${
+      parsed.data.autoAddTeamToNewEvents === "on" ? "on" : "off"
+    }; to upcoming events: ${
+      parsed.data.autoAddTeamToUpcomingEvents === "on" ? "on" : "off"
+    }`,
   });
   // Calendar defaults touch the matter edit pages + every event-
   // create + team-add. Layout revalidation is the cheapest sweep.
@@ -66,7 +79,7 @@ export async function updateMatterCalendarDefaults(
   _prev: { status: "idle" | "ok" | "error"; error?: string },
   formData: FormData
 ): Promise<{ status: "idle" | "ok" | "error"; error?: string }> {
-  await requirePermission("matters.edit");
+  const userId = await requirePermission("matters.edit");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = matterSchema.safeParse(raw);
   if (!parsed.success) {
@@ -80,6 +93,14 @@ export async function updateMatterCalendarDefaults(
         parsed.data.autoAddTeamToUpcomingEvents
       ),
     },
+  });
+  await logAuditEntry({
+    matterId,
+    userId,
+    type: "settings",
+    source: "Settings",
+    title: "Matter calendar defaults updated",
+    detail: `Auto-add team to new events: ${parsed.data.autoAddTeamToNewEvents}; to upcoming events: ${parsed.data.autoAddTeamToUpcomingEvents}`,
   });
   revalidatePath(`/matters/${matterId}`);
   revalidatePath(`/matters/${matterId}/edit`);

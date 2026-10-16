@@ -172,6 +172,16 @@ gets revisited.
   lead attorney from the matter edit form (`updateMatter` returns a
   field error otherwise; the form locks the field). `matters.edit`
   alone can edit everything else on the matter.
+### Cross-key gates worth knowing
+
+- **`parties.edit` + `contacts.edit`** — the Parties-tab edit form
+  (`updateMatterContact`) can also rewrite the firm-wide `Contact`
+  (name, email, organization, phones), which flows to every matter.
+  `parties.edit` alone only covers the per-matter row (role, notes,
+  representation). When a submit actually changes a contact field the
+  action additionally requires `contacts.edit`; otherwise it returns a
+  field error and writes nothing. The form renders those inputs
+  read-only for users without `contacts.edit`.
 
 ### The current catalog
 

@@ -191,6 +191,9 @@ export function PartyComposer({
   };
   const clearSelection = () => {
     setSelectedId(null);
+    // Also clear the picked name: leaving it in the query would make
+    // the next save create a duplicate Contact with the same name.
+    setQuery("");
     setSuggestionsOpen(false);
     inputRef.current?.focus();
   };
@@ -208,6 +211,7 @@ export function PartyComposer({
   };
   const clearRepSelection = () => {
     setRepSelectedId(null);
+    setRepQuery("");
     setRepSuggestionsOpen(false);
     setRepFirm("");
     setRepEmail("");

@@ -30,7 +30,6 @@ export type CreatePanel = {
   id: string;
   type: MatterCreateType;
   expanded: boolean;
-  formState: Record<string, unknown>;
 };
 
 /** Optional metadata shown in expanded-mode modal chrome so the user
@@ -57,7 +56,6 @@ type StackContextValue = {
   close: (id: string) => void;
   focus: (id: string) => void;
   setExpanded: (id: string, expanded: boolean) => void;
-  updateFormState: (id: string, patch: Record<string, unknown>) => void;
 };
 
 const Ctx = createContext<StackContextValue | null>(null);
@@ -80,7 +78,7 @@ export function CreateStackProvider({
     const id = nextId();
     setPanels((prev) => [
       ...prev,
-      { id, type, expanded: false, formState: {} },
+      { id, type, expanded: false },
     ]);
     setFocusedId(id);
   }, []);
@@ -139,17 +137,6 @@ export function CreateStackProvider({
     if (expanded) setFocusedId(id);
   }, []);
 
-  const updateFormState = useCallback(
-    (id: string, patch: Record<string, unknown>) => {
-      setPanels((prev) =>
-        prev.map((p) =>
-          p.id === id ? { ...p, formState: { ...p.formState, ...patch } } : p
-        )
-      );
-    },
-    []
-  );
-
   const value = useMemo<StackContextValue>(
     () => ({
       context,
@@ -159,7 +146,6 @@ export function CreateStackProvider({
       close,
       focus,
       setExpanded,
-      updateFormState,
     }),
     [
       context,
@@ -169,7 +155,6 @@ export function CreateStackProvider({
       close,
       focus,
       setExpanded,
-      updateFormState,
     ]
   );
 

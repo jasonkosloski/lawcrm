@@ -14,7 +14,7 @@
 
 "use client";
 
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useActionState, useState, useTransition } from "react";
 import {
   Archive,
   ArchiveRestore,
@@ -132,12 +132,24 @@ function StageRow({
     });
   };
 
-  const vals = state.values ?? {};
   const errs = state.errors ?? {};
+
+  // React 19 resets a <form action={fn}> after every submission,
+  // including one returning a validation error, which reverted the
+  // terminal checkbox (and the name) to the stored row. Submit via
+  // onSubmit + startTransition with controlled fields so a failed
+  // save keeps what the user typed.
+  const [name, setName] = useState(stage.name);
+  const [isTerminal, setIsTerminal] = useState(stage.isTerminal);
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    startTransition(() => formAction(fd));
+  };
 
   return (
     <form
-      action={formAction}
+      onSubmit={onSubmit}
       className={cn(
         "grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-2 px-2 py-1.5 border-b border-line last:border-b-0",
         !stage.isActive && "opacity-70"
@@ -172,7 +184,8 @@ function StageRow({
         <input
           name="name"
           type="text"
-          defaultValue={vals.name ?? stage.name}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
           required
           disabled={!stage.isActive}
           className={cn(
@@ -192,7 +205,8 @@ function StageRow({
         <input
           type="checkbox"
           name="isTerminal"
-          defaultChecked={stage.isTerminal}
+          checked={isTerminal}
+          onChange={(e) => setIsTerminal(e.target.checked)}
           disabled={!stage.isActive}
           className="w-3.5 h-3.5 rounded border-line"
         />
@@ -243,31 +257,44 @@ function AddStageForm({ practiceAreaId }: { practiceAreaId: string }) {
     FormData
   >(boundCreate, stageInitialState);
 
-  const vals = state.values ?? {};
   const errs = state.errors ?? {};
-  const [key, setKey] = useState(0);
+  const [, startTransition] = useTransition();
+  const [name, setName] = useState("");
+  const [isTerminal, setIsTerminal] = useState(false);
 
-  // Reset inputs after a successful add so the row is ready for
-  // another stage without stale values. The key bump remounts the
-  // form, re-seeding the inputs with empty defaults. Depends on the
-  // state object (not just status) so back-to-back successful adds
-  // each get a fresh form.
-  useEffect(() => {
-    if (state.status !== "ok") return;
-    setKey((k) => k + 1);
-  }, [state]);
+  // Submit via onSubmit + startTransition (no automatic React 19 form
+  // reset) so a validation error keeps the typed name and the terminal
+  // checkbox.
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    startTransition(() => formAction(fd));
+  };
+
+  // Clear the inputs after a successful add so the row is ready for
+  // another stage. Adjusting state while rendering (keyed on the state
+  // OBJECT, not the status string) so back-to-back successful adds
+  // each clear; the action returns a fresh object per call.
+  const [seenState, setSeenState] = useState(state);
+  if (state !== seenState) {
+    setSeenState(state);
+    if (state.status === "ok") {
+      setName("");
+      setIsTerminal(false);
+    }
+  }
 
   return (
     <form
-      key={key}
-      action={formAction}
+      onSubmit={onSubmit}
       className="grid grid-cols-[1fr_auto_auto] items-center gap-2 px-2 py-1.5 rounded-md border border-dashed border-line"
     >
       <div className="flex flex-col gap-0.5 min-w-0">
         <input
           name="name"
           type="text"
-          defaultValue={vals.name ?? ""}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
           required
           placeholder="New stage name (e.g. Mediation)"
           className={cn(
@@ -286,6 +313,8 @@ function AddStageForm({ practiceAreaId }: { practiceAreaId: string }) {
         <input
           type="checkbox"
           name="isTerminal"
+          checked={isTerminal}
+          onChange={(e) => setIsTerminal(e.target.checked)}
           className="w-3.5 h-3.5 rounded border-line"
         />
         terminal

@@ -29,6 +29,7 @@ import {
 } from "@/components/matters/parties/party-composer";
 import { PartyRowView } from "@/components/matters/parties/party-row-view";
 import { prisma } from "@/lib/prisma";
+import { currentUserHasPermission } from "@/lib/permission-check";
 import { getMatterParties, type PartyRow } from "@/lib/queries/matter-detail";
 import {
   PARTY_CATEGORIES,
@@ -41,7 +42,7 @@ export default async function MatterPartiesPage({
 }: PageProps<"/matters/[id]">) {
   const { id } = await params;
 
-  const [parties, contacts] = await Promise.all([
+  const [parties, contacts, canEditContact] = await Promise.all([
     getMatterParties(id),
     // All active contacts feed the composer's typeahead. Small
     // dataset for a firm so passing them all is fine; revisit with
@@ -59,6 +60,9 @@ export default async function MatterPartiesPage({
       },
       orderBy: { name: "asc" },
     }),
+    // The party edit form edits the firm-wide Contact too; that part
+    // needs contacts.edit on top of parties.edit.
+    currentUserHasPermission("contacts.edit"),
   ]);
 
   // Bucket by category; unknown buckets (shouldn't happen after the
@@ -83,6 +87,7 @@ export default async function MatterPartiesPage({
             rows={rows}
             matterId={id}
             contacts={contacts}
+            canEditContact={canEditContact}
           />
         );
       })}
@@ -95,11 +100,13 @@ function CategorySection({
   rows,
   matterId,
   contacts,
+  canEditContact,
 }: {
   category: PartyCategory;
   rows: PartyRow[];
   matterId: string;
   contacts: ContactOption[];
+  canEditContact: boolean;
 }) {
   const showsRepresentation = category !== "client";
   // Clients are typically individuals whose organization (if any)
@@ -146,6 +153,7 @@ function CategorySection({
                   showsRepresentation={showsRepresentation}
                   showsOrganization={showsOrganization}
                   contacts={contacts}
+                  canEditContact={canEditContact}
                   colSpan={
                     // name + subrole + contact + notes + actions = 5
                     5 +

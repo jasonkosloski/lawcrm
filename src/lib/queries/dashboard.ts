@@ -247,9 +247,11 @@ export async function getRecentActivity(
     ]);
   const entries = await prisma.activityLog.findMany({
     where: {
-      // Sign-in/password audit rows are governance, not work — they
-      // live on /settings/activity + /settings/security only.
-      type: { not: "auth" },
+      // Sign-in/password audit rows and firm-settings changes (practice
+      // area / stage / calendar-default edits, reorder clicks) are
+      // governance, not work — they live on /settings/activity (+
+      // /settings/security for auth) only.
+      type: { notIn: ["auth", "settings"] },
       AND: [
         // Settlement rows carry gross amounts + lienholders: same key
         // that gates the settlement UI.

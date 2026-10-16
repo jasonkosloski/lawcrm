@@ -41,18 +41,25 @@ type PhoneDraft = {
 const PICK_EXISTING = "__existing__";
 const CREATE_NEW = "__new__";
 const MAX_REP_SUGGESTIONS = 6;
+const CONTACT_LOCKED_HINT =
+  "Editing the shared contact (name, email, organization, phones) needs the contacts.edit permission.";
 
 export function PartyEditForm({
   party,
   category,
   contacts,
   onDone,
+  canEditContact = true,
 }: {
   party: PartyRow;
   category: PartyCategory;
   /** All active contacts — feeds the representation typeahead. */
   contacts: ContactOption[];
   onDone: () => void;
+  /** Viewer holds contacts.edit. The shared Contact fields (name,
+   *  email, organization, phones) are read-only without it: the server
+   *  refuses changes to them, so don't invite edits that will bounce. */
+  canEditContact?: boolean;
 }) {
   const action = updateMatterContact.bind(null, party.id);
   const [state, formAction, isPending] = useActionState<
@@ -70,9 +77,12 @@ export function PartyEditForm({
   const [role, setRole] = useState(party.role ?? "");
   const [notes, setNotes] = useState(party.notes ?? "");
 
-  // Phones — hydrate from the loaded contact.phones, fall back to a
-  // single empty row keyed "Primary" when the contact has none so
-  // there's always a slot the user can fill.
+  // Phones — hydrate from the loaded contact.phones. A contact that
+  // predates ContactPhone rows only has the denormalized legacy
+  // Contact.phone: seed the editor from it, otherwise the empty
+  // payload would null that number firm-wide on any save. With
+  // neither, fall back to a single empty row so there's always a
+  // slot the user can fill.
   const idPrefix = useId();
   let phoneCounter = 0;
   const nextPhoneId = () =>
@@ -90,7 +100,7 @@ export function PartyEditForm({
       {
         tempId: `phone-${idPrefix}-init`,
         label: "",
-        number: "",
+        number: party.phone ?? "",
         isPrimary: true,
       },
     ];
@@ -155,9 +165,23 @@ export function PartyEditForm({
   // historic data still hydrates the form. Picking an existing contact
   // overrides the typed query path; clearing it returns to create-new
   // mode with the original text fields intact.
-  const initialRepContact = party.representationContactId
-    ? contacts.find((c) => c.id === party.representationContactId) ?? null
+  // The linked rep may be missing from `contacts` (that list is
+  // active-only, and the rep Contact can have been deactivated). Build
+  // an option from the party's own representation fields so the chip
+  // and PICK_EXISTING mode survive — otherwise every save, even a
+  // notes-only one, would post create-new and mint a duplicate Contact.
+  const linkedRepContact: ContactOption | null = party.representationContactId
+    ? (contacts.find((c) => c.id === party.representationContactId) ?? {
+        id: party.representationContactId,
+        name: party.representationName ?? "Linked attorney",
+        organization: party.representationFirm,
+        email: party.representationEmail,
+        phone: party.representationPhone,
+        city: null,
+        type: "opposing_counsel",
+      })
     : null;
+  const initialRepContact = linkedRepContact;
   const [repSelectedId, setRepSelectedId] = useState<string | null>(
     party.representationContactId ?? null
   );
@@ -213,19 +237,34 @@ export function PartyEditForm({
   const clearRepSelection = () => {
     setRepSelectedId(null);
     setRepSuggestionsOpen(false);
-    // Restore the party's saved rep fields rather than blanking —
-    // an accidental pick + X + save must not overwrite existing
-    // representation data with empty strings. (The composer's
-    // identical helper wipes instead; it has no prior data.)
-    setRepQuery(party.representationName ?? "");
-    setRepFirm(party.representationFirm ?? "");
-    setRepEmail(party.representationEmail ?? "");
-    setRepPhone(party.representationPhone ?? "");
+    if (party.representationContactId) {
+      // FK-linked rep: the saved display fields belong to the linked
+      // Contact. Restoring them would put the form in create-new mode
+      // carrying that attorney's details, and Save would mint a
+      // duplicate Contact. Start from an empty create-new state
+      // instead — saving without choosing someone fails with
+      // "Attorney name is required".
+      setRepQuery("");
+      setRepFirm("");
+      setRepEmail("");
+      setRepPhone("");
+    } else {
+      // Legacy free-text rep: restore the party's saved fields rather
+      // than blanking — an accidental pick + X + save must not
+      // overwrite existing representation data with empty strings.
+      // (The composer's identical helper wipes instead; it has no
+      // prior data.)
+      setRepQuery(party.representationName ?? "");
+      setRepFirm(party.representationFirm ?? "");
+      setRepEmail(party.representationEmail ?? "");
+      setRepPhone(party.representationPhone ?? "");
+    }
     repInputRef.current?.focus();
   };
 
   const repSelected = repSelectedId
-    ? contacts.find((c) => c.id === repSelectedId)
+    ? (contacts.find((c) => c.id === repSelectedId) ??
+      (repSelectedId === linkedRepContact?.id ? linkedRepContact : null))
     : null;
   const repContactMode = repSelected ? PICK_EXISTING : CREATE_NEW;
 
@@ -248,6 +287,8 @@ export function PartyEditForm({
           name="contactName"
           value={contactName}
           onChange={(e) => setContactName(e.target.value)}
+          readOnly={!canEditContact}
+          title={canEditContact ? undefined : CONTACT_LOCKED_HINT}
           placeholder="Name"
           className={cn(
             "h-7 px-2 rounded-md border bg-white text-xs text-ink",
@@ -264,6 +305,8 @@ export function PartyEditForm({
           name="contactEmail"
           value={contactEmail}
           onChange={(e) => setContactEmail(e.target.value)}
+          readOnly={!canEditContact}
+          title={canEditContact ? undefined : CONTACT_LOCKED_HINT}
           placeholder="Email (optional)"
           className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
         />
@@ -272,6 +315,8 @@ export function PartyEditForm({
           name="contactOrganization"
           value={contactOrganization}
           onChange={(e) => setContactOrganization(e.target.value)}
+          readOnly={!canEditContact}
+          title={canEditContact ? undefined : CONTACT_LOCKED_HINT}
           placeholder="Organization (optional)"
           className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
         />
@@ -286,7 +331,8 @@ export function PartyEditForm({
             <button
               type="button"
               onClick={addPhone}
-              className="inline-flex items-center gap-1 text-2xs text-brand-700 hover:underline"
+              disabled={!canEditContact}
+              className="inline-flex items-center gap-1 text-2xs text-brand-700 hover:underline disabled:opacity-40 disabled:no-underline"
             >
               <Plus size={11} />
               Add phone
@@ -306,6 +352,7 @@ export function PartyEditForm({
                   <button
                     type="button"
                     onClick={() => setPrimary(p.tempId)}
+                    disabled={!canEditContact}
                     title={
                       p.isPrimary
                         ? "Primary phone"
@@ -333,6 +380,7 @@ export function PartyEditForm({
                     onChange={(e) =>
                       updatePhone(p.tempId, { label: e.target.value })
                     }
+                    readOnly={!canEditContact}
                     placeholder="Label (Mobile…)"
                     className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
                   />
@@ -342,12 +390,14 @@ export function PartyEditForm({
                     onChange={(e) =>
                       updatePhone(p.tempId, { number: e.target.value })
                     }
+                    readOnly={!canEditContact}
                     placeholder="(303) 555-0000"
                     className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4 font-mono"
                   />
                   <button
                     type="button"
                     onClick={() => removePhone(p.tempId)}
+                    disabled={!canEditContact}
                     title="Remove phone"
                     aria-label="Remove phone"
                     className="inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-4 hover:text-warn hover:bg-warn-soft transition-colors"
@@ -361,8 +411,9 @@ export function PartyEditForm({
         </div>
 
         <div className="text-[10px] text-ink-4 leading-relaxed pt-0.5">
-          Changes here update the contact across every matter they
-          appear on.
+          {canEditContact
+            ? "Changes here update the contact across every matter they appear on."
+            : CONTACT_LOCKED_HINT}
         </div>
       </div>
 

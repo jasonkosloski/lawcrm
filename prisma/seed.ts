@@ -10,19 +10,38 @@
  *   npm run db:seed           # re-seed without touching migrations
  *   npm run db:reset          # drop DB, re-run migrations, then seed
  *
+ * SAFETY: this deletes EVERY row in the target database. It refuses
+ * to run unless DATABASE_URL (and DIRECT_DATABASE_URL, when set) point
+ * at localhost / 127.0.0.1 / ::1 — set ALLOW_SEED=1 only for a hosted
+ * dev database you are certain is disposable. It never runs under
+ * NODE_ENV/VERCEL_ENV=production. The login password comes from
+ * SEED_ADMIN_PASSWORD, or is generated randomly and printed once at
+ * the end of the run; no password is stored in the repo.
+ *
  * All timestamps are anchored to `NOW` (2026-04-24) so relative labels
  * like "deadlines this week" and "hours today" match reality.
  */
 
 import "dotenv/config";
+import { randomBytes } from "node:crypto";
 import * as argon2 from "argon2";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
+import { checkDestructiveDbAllowed } from "../src/lib/seed-guard";
 
-/// Single dev password applied to every seed user. Surfaced in the
-/// seed log so dev knows what to type at /login. Production users
-/// would go through the (deferred) admin invite flow instead.
-const DEV_PASSWORD = "ChangeMe2026!";
+// Refuse BEFORE a client exists, let alone a single deleteMany runs.
+const guard = checkDestructiveDbAllowed(process.env);
+if (!guard.ok) {
+  console.error(`❌ Seed refused: ${guard.reason}`);
+  process.exit(1);
+}
+
+/// Single dev password applied to every seed user. Read from
+/// SEED_ADMIN_PASSWORD, else generated randomly for this run and
+/// printed once in the seed log. Nothing secret lives in the repo.
+const PASSWORD_FROM_ENV = !!process.env.SEED_ADMIN_PASSWORD;
+const DEV_PASSWORD =
+  process.env.SEED_ADMIN_PASSWORD || randomBytes(15).toString("base64url");
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -2647,7 +2666,11 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
 
   console.log("\n🔐 Dev login (every seed user uses the same password):");
   console.log(`   email:    jkosloski@kosloskilaw.com`);
-  console.log(`   password: ${DEV_PASSWORD}`);
+  console.log(
+    PASSWORD_FROM_ENV
+      ? "   password: (the value of SEED_ADMIN_PASSWORD)"
+      : `   password: ${DEV_PASSWORD}   <- generated for this run; shown once`
+  );
   console.log(`   (other emails: leo / rachel / marco / elena @kosloskilaw.com)`);
 }
 

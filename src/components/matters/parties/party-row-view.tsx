@@ -30,6 +30,7 @@ export function PartyRowView({
   showsOrganization,
   contacts,
   colSpan,
+  canEditContact = true,
 }: {
   party: PartyRow;
   category: PartyCategory;
@@ -40,6 +41,8 @@ export function PartyRowView({
   contacts: ContactOption[];
   /** Total number of columns this row spans when in edit mode. */
   colSpan: number;
+  /** Viewer holds contacts.edit (shared Contact fields editable). */
+  canEditContact?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
 
@@ -52,6 +55,7 @@ export function PartyRowView({
             category={category}
             contacts={contacts}
             onDone={() => setEditing(false)}
+            canEditContact={canEditContact}
           />
         </TableCell>
       </TableRow>

@@ -12,21 +12,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import {
-  ChevronDown,
-  ChevronUp,
-  Pencil,
-  Phone,
-  Plus,
-  X,
-} from "lucide-react";
+import { ChevronDown, ChevronUp, Pencil, Phone, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -55,10 +43,14 @@ const inputClass =
 export function ContactPhonesCard({
   contactId,
   phones,
+  legacyPhone,
   canEdit,
 }: {
   contactId: string;
   phones: ContactPhoneRow[];
+  /** Denormalized Contact.phone, used to seed the editor when the
+   *  contact predates ContactPhone rows. */
+  legacyPhone?: string | null;
   canEdit: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -111,6 +103,7 @@ export function ContactPhonesCard({
         <ManagePhonesDialog
           contactId={contactId}
           phones={phones}
+          legacyPhone={legacyPhone}
           open={open}
           onOpenChange={setOpen}
         />
@@ -119,39 +112,80 @@ export function ContactPhonesCard({
   );
 }
 
+/**
+ * Working copy for the manager dialog. Falls back to the denormalized
+ * legacy Contact.phone when the contact has no ContactPhone rows, so
+ * saving the dialog never silently drops a number the page displays.
+ */
+export function seedPhoneRows(
+  phones: ContactPhoneRow[],
+  legacyPhone?: string | null,
+): ContactPhoneEntry[] {
+  if (phones.length > 0) {
+    return phones.map((p) => ({
+      label: p.label ?? "",
+      number: p.number,
+      isPrimary: p.isPrimary,
+    }));
+  }
+  if (legacyPhone && legacyPhone.trim()) {
+    return [{ label: "", number: legacyPhone, isPrimary: true }];
+  }
+  return [];
+}
+
 function ManagePhonesDialog({
   contactId,
   phones,
+  legacyPhone,
   open,
   onOpenChange,
 }: {
   contactId: string;
   phones: ContactPhoneRow[];
+  legacyPhone?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const [rows, setRows] = useState<ContactPhoneEntry[]>([]);
+  // The body (and its working copy) lives INSIDE DialogContent, which
+  // Base UI mounts only while the dialog is open. Every open therefore
+  // starts from the current `phones`, no matter what opened it — the
+  // external "Manage" button flips `open` without ever calling
+  // onOpenChange, so seeding there (the old approach) never ran.
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <ManagePhonesBody
+          contactId={contactId}
+          phones={phones}
+          legacyPhone={legacyPhone}
+          onOpenChange={onOpenChange}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ManagePhonesBody({
+  contactId,
+  phones,
+  legacyPhone,
+  onOpenChange,
+}: {
+  contactId: string;
+  phones: ContactPhoneRow[];
+  legacyPhone?: string | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [rows, setRows] = useState<ContactPhoneEntry[]>(() =>
+    seedPhoneRows(phones, legacyPhone),
+  );
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  // Re-seed the working copy every time the dialog opens.
-  const handleOpenChange = (next: boolean) => {
-    if (next) {
-      setRows(
-        phones.map((p) => ({
-          label: p.label ?? "",
-          number: p.number,
-          isPrimary: p.isPrimary,
-        }))
-      );
-      setError(null);
-    }
-    onOpenChange(next);
-  };
-
   const patch = (i: number, changes: Partial<ContactPhoneEntry>) =>
     setRows((prev) =>
-      prev.map((r, idx) => (idx === i ? { ...r, ...changes } : r))
+      prev.map((r, idx) => (idx === i ? { ...r, ...changes } : r)),
     );
 
   const setPrimary = (i: number) =>
@@ -191,111 +225,109 @@ function ManagePhonesDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Manage phone numbers</DialogTitle>
-          <DialogDescription>
-            The primary number is what shows across the app (matters,
-            call logging, the directory).
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <DialogHeader>
+        <DialogTitle>Manage phone numbers</DialogTitle>
+        <DialogDescription>
+          The primary number is what shows across the app (matters, call
+          logging, the directory).
+        </DialogDescription>
+      </DialogHeader>
 
-        <div className="flex flex-col gap-2">
-          {rows.length === 0 && (
-            <div className="py-2 text-xs text-ink-4">
-              No phone numbers — add one below.
-            </div>
-          )}
-          {rows.map((r, i) => (
-            <div key={i} className="flex items-center gap-1.5">
-              <input
-                type="radio"
-                name="primary-phone"
-                checked={r.isPrimary}
-                onChange={() => setPrimary(i)}
-                title="Set as primary"
-                aria-label={`Set ${r.number || "this number"} as primary`}
-                className="accent-brand-500 shrink-0"
-              />
-              <input
-                type="text"
-                value={r.number}
-                onChange={(e) => patch(i, { number: e.target.value })}
-                placeholder="(555) 555-5555"
-                aria-label="Phone number"
-                className={cn(inputClass, "flex-1 font-mono")}
-              />
-              <input
-                type="text"
-                value={r.label}
-                onChange={(e) => patch(i, { label: e.target.value })}
-                placeholder="Label"
-                aria-label="Phone label"
-                className={cn(inputClass, "w-24")}
-              />
-              <div className="flex flex-col shrink-0">
-                <button
-                  type="button"
-                  onClick={() => move(i, -1)}
-                  disabled={i === 0}
-                  aria-label="Move up"
-                  className="p-0.5 rounded text-ink-3 hover:text-ink disabled:opacity-30"
-                >
-                  <ChevronUp size={12} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => move(i, 1)}
-                  disabled={i === rows.length - 1}
-                  aria-label="Move down"
-                  className="p-0.5 rounded text-ink-3 hover:text-ink disabled:opacity-30"
-                >
-                  <ChevronDown size={12} />
-                </button>
-              </div>
+      <div className="flex flex-col gap-2">
+        {rows.length === 0 && (
+          <div className="py-2 text-xs text-ink-4">
+            No phone numbers — add one below.
+          </div>
+        )}
+        {rows.map((r, i) => (
+          <div key={i} className="flex items-center gap-1.5">
+            <input
+              type="radio"
+              name="primary-phone"
+              checked={r.isPrimary}
+              onChange={() => setPrimary(i)}
+              title="Set as primary"
+              aria-label={`Set ${r.number || "this number"} as primary`}
+              className="accent-brand-500 shrink-0"
+            />
+            <input
+              type="text"
+              value={r.number}
+              onChange={(e) => patch(i, { number: e.target.value })}
+              placeholder="(555) 555-5555"
+              aria-label="Phone number"
+              className={cn(inputClass, "flex-1 font-mono")}
+            />
+            <input
+              type="text"
+              value={r.label}
+              onChange={(e) => patch(i, { label: e.target.value })}
+              placeholder="Label"
+              aria-label="Phone label"
+              className={cn(inputClass, "w-24")}
+            />
+            <div className="flex flex-col shrink-0">
               <button
                 type="button"
-                onClick={() => remove(i)}
-                aria-label="Remove phone"
-                className="p-1 rounded text-ink-3 hover:text-warn shrink-0"
+                onClick={() => move(i, -1)}
+                disabled={i === 0}
+                aria-label="Move up"
+                className="p-0.5 rounded text-ink-3 hover:text-ink disabled:opacity-30"
               >
-                <X size={13} />
+                <ChevronUp size={12} />
+              </button>
+              <button
+                type="button"
+                onClick={() => move(i, 1)}
+                disabled={i === rows.length - 1}
+                aria-label="Move down"
+                className="p-0.5 rounded text-ink-3 hover:text-ink disabled:opacity-30"
+              >
+                <ChevronDown size={12} />
               </button>
             </div>
-          ))}
+            <button
+              type="button"
+              onClick={() => remove(i)}
+              aria-label="Remove phone"
+              className="p-1 rounded text-ink-3 hover:text-warn shrink-0"
+            >
+              <X size={13} />
+            </button>
+          </div>
+        ))}
 
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="w-fit"
-            onClick={add}
-          >
-            <Plus />
-            Add phone
-          </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="w-fit"
+          onClick={add}
+        >
+          <Plus />
+          Add phone
+        </Button>
 
-          {error && (
-            <div className="text-xs text-warn px-3 py-2 rounded-md bg-warn-soft border border-warn-border">
-              {error}
-            </div>
-          )}
-        </div>
+        {error && (
+          <div className="text-xs text-warn px-3 py-2 rounded-md bg-warn-soft border border-warn-border">
+            {error}
+          </div>
+        )}
+      </div>
 
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
-          <Button type="button" onClick={save} disabled={pending}>
-            {pending ? "Saving…" : "Save phones"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      <DialogFooter>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => onOpenChange(false)}
+        >
+          Cancel
+        </Button>
+        <Button type="button" onClick={save} disabled={pending}>
+          {pending ? "Saving…" : "Save phones"}
+        </Button>
+      </DialogFooter>
+    </>
   );
 }

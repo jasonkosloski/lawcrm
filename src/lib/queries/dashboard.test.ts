@@ -234,4 +234,15 @@ describe("getRecentActivity — security audit rows stay off the dashboard", () 
     const items = await getRecentActivity(DENVER);
     expect(items.map((i) => i.title)).toEqual(["Added a note"]);
   });
+
+  test("firm-settings audit rows (e.g. reorder clicks) are excluded too", async () => {
+    await prisma.activityLog.createMany({
+      data: [
+        { userId, type: "settings", title: "Moved stage up", timestamp: new Date(NOW.getTime() - 1000) },
+        { userId, matterId, type: "note", title: "Added a note", timestamp: new Date(NOW.getTime() - 2000) },
+      ],
+    });
+    const items = await getRecentActivity(DENVER);
+    expect(items.map((i) => i.title)).toEqual(["Added a note"]);
+  });
 });

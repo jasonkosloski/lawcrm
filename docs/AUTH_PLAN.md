@@ -91,5 +91,6 @@ The current setup is single-firm but the seams are in place:
 ## Operational notes
 
 - **Rotating `AUTH_SECRET`**: generate a new value with `openssl rand -base64 32`, replace in `.env`, restart. Every existing session is invalidated (everyone gets logged out). Acceptable in dev; in prod we'd plan around it.
-- **Resetting a forgotten password in dev**: re-run `npm run db:seed` — every dev user is reset to `ChangeMe2026!`.
-- **Dev login**: `jkosloski@kosloskilaw.com` / `ChangeMe2026!`. Other seed users (`leo`, `rachel`, `marco`, `elena` `@kosloskilaw.com`) use the same password.
+- **Resetting a forgotten password in dev**: re-run `npm run db:seed` — every dev user is reset to the seed password. Set `SEED_ADMIN_PASSWORD` to choose it; otherwise the seed generates a random one and prints it once at the end of the run (read it from that output; no password is stored in the repo).
+- **Dev login**: `jkosloski@kosloskilaw.com` with the seed password above. Other seed users (`leo`, `rachel`, `marco`, `elena` `@kosloskilaw.com`) use the same password.
+- **The seed is destructive and guarded**: `prisma/seed.ts` (and `npm run db:reset`) refuse to run unless every configured database URL points at localhost / 127.0.0.1 / ::1, or you set `ALLOW_SEED=1` for a known dev database. Production-looking environments are always refused. See `src/lib/seed-guard.ts`.

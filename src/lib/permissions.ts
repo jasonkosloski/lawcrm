@@ -506,7 +506,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         key: "parties.edit",
         label: "Edit party records",
         description:
-          "Change a party's role on a matter, contact info, or supplemental fields.",
+          "Change a party's role, notes and representation on a matter. Changing the shared contact's name, email, organization or phones from the Parties tab also needs Edit contacts (contacts.edit).",
       },
       {
         key: "parties.delete",

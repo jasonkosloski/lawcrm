@@ -13,6 +13,11 @@
  * before mutating; non-admins without that permission are bounced
  * via redirect (no in-form error). Admin always has every
  * permission, so existing admin flows continue to work.
+ *
+ * Every mutation writes a firm-level audit entry (type "settings"):
+ * practice-area SOL period / citation drive auto-computed deadlines
+ * and stage `isTerminal` reclassifies matters as open or closed, so
+ * "who changed that and from what" must be answerable.
  */
 
 "use server";
@@ -23,7 +28,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permission-check";
 import { BILLING_MODES } from "@/lib/billing-mode-constants";
-import { packStatuteDays } from "@/lib/sol";
+import { packStatuteDays, formatStatutePeriod } from "@/lib/sol";
+import { logAuditEntry } from "@/lib/audit-entry";
 import type {
   PracticeAreaFormState,
   StageFormState,
@@ -44,6 +50,32 @@ const DEFAULT_STAGE_TEMPLATE: Array<{ name: string; isTerminal?: boolean }> = [
   { name: "Settled", isTerminal: true },
   { name: "Closed", isTerminal: true },
 ];
+
+function formatPeriodOrNone(days: number | null): string {
+  return days ? formatStatutePeriod(days) : "none";
+}
+
+/** Firm-level audit row for practice-area / stage settings changes.
+ *  `changes` entries that are null (nothing changed) are dropped; when
+ *  nothing changed at all, no row is written. */
+async function logSettingsChange(
+  userId: string,
+  title: string,
+  changes: Array<string | null>,
+  skipIfNoChanges = false
+): Promise<void> {
+  const list = changes.filter((c): c is string => c !== null);
+  if (list.length === 0 && skipIfNoChanges) return;
+  await logAuditEntry({
+    matterId: null,
+    userId,
+    type: "settings",
+    source: "Settings",
+    icon: "zap",
+    title,
+    detail: list.length > 0 ? list.join("; ") : null,
+  });
+}
 
 // ── Practice area ───────────────────────────────────────────────────────
 
@@ -112,7 +144,7 @@ export async function createPracticeArea(
   _prev: PracticeAreaFormState,
   formData: FormData
 ): Promise<PracticeAreaFormState> {
-  await requirePermission("firm.manage_practice_areas");
+  const userId = await requirePermission("firm.manage_practice_areas");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = practiceAreaSchema.safeParse(raw);
   if (!parsed.success) {
@@ -190,6 +222,10 @@ export async function createPracticeArea(
     select: { id: true },
   });
 
+  await logSettingsChange(userId, `Practice area created — ${data.name}`, [
+    data.hasStatuteOfLimitations === "on" ? "SOL tracking on" : null,
+  ]);
+
   revalidatePath("/", "layout");
   redirect(`/settings/practice-areas/${area.id}`);
 }
@@ -199,7 +235,7 @@ export async function updatePracticeArea(
   _prev: PracticeAreaFormState,
   formData: FormData
 ): Promise<PracticeAreaFormState> {
-  await requirePermission("firm.manage_practice_areas");
+  const userId = await requirePermission("firm.manage_practice_areas");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = practiceAreaSchema.safeParse(raw);
   if (!parsed.success) {
@@ -210,6 +246,26 @@ export async function updatePracticeArea(
     };
   }
   const data = parsed.data;
+
+  const before = await prisma.practiceArea.findUnique({
+    where: { id },
+    select: {
+      name: true,
+      label: true,
+      color: true,
+      hasStatuteOfLimitations: true,
+      statutePeriodDays: true,
+      statuteSourceCitation: true,
+      defaultBillingMode: true,
+    },
+  });
+  if (!before) {
+    return {
+      status: "error",
+      errors: { name: ["Practice area not found"] },
+      values: raw,
+    };
+  }
 
   const collision = await prisma.practiceArea.findFirst({
     where: { name: data.name, NOT: { id } },
@@ -230,18 +286,21 @@ export async function updatePracticeArea(
       label: data.label || null,
       color: data.color,
       hasStatuteOfLimitations: data.hasStatuteOfLimitations === "on",
-      statutePeriodDays:
-        data.hasStatuteOfLimitations === "on"
-          ? packStatuteDays({
-              years: data.statuteYears,
-              months: data.statuteMonths,
-              days: data.statuteDays,
-            }) || null
-          : null,
-      statuteSourceCitation:
-        data.hasStatuteOfLimitations === "on"
-          ? data.statuteSourceCitation || null
-          : null,
+      // Turning SOL tracking OFF only stops auto-computing for future
+      // use: the stored period + citation are kept (so re-enabling
+      // restores them) and no matter's SOL date / SOL deadline is
+      // touched. Only an enabled form overwrites them.
+      ...(data.hasStatuteOfLimitations === "on"
+        ? {
+            statutePeriodDays:
+              packStatuteDays({
+                years: data.statuteYears,
+                months: data.statuteMonths,
+                days: data.statuteDays,
+              }) || null,
+            statuteSourceCitation: data.statuteSourceCitation || null,
+          }
+        : {}),
       // Only write when the form actually posted a value — keeps
       // forward-compat with older forms that don't include the
       // select.
@@ -251,6 +310,37 @@ export async function updatePracticeArea(
     },
   });
 
+  const newPeriod =
+    data.hasStatuteOfLimitations === "on"
+      ? packStatuteDays({
+          years: data.statuteYears,
+          months: data.statuteMonths,
+          days: data.statuteDays,
+        }) || null
+      : before.statutePeriodDays;
+  const newCitation =
+    data.hasStatuteOfLimitations === "on"
+      ? data.statuteSourceCitation || null
+      : before.statuteSourceCitation;
+  await logSettingsChange(userId, `Practice area updated — ${data.name}`, [
+    before.name !== data.name ? `name "${before.name}" → "${data.name}"` : null,
+    (before.label ?? "") !== (data.label ?? "") ? "label" : null,
+    before.color !== data.color ? "color" : null,
+    before.hasStatuteOfLimitations !== (data.hasStatuteOfLimitations === "on")
+      ? `SOL tracking ${before.hasStatuteOfLimitations ? "on" : "off"} → ${
+          data.hasStatuteOfLimitations === "on" ? "on" : "off"
+        }`
+      : null,
+    before.statutePeriodDays !== newPeriod
+      ? `SOL period ${formatPeriodOrNone(before.statutePeriodDays)} → ${formatPeriodOrNone(newPeriod)}`
+      : null,
+    before.statuteSourceCitation !== newCitation ? "SOL citation" : null,
+    data.defaultBillingMode &&
+    before.defaultBillingMode !== data.defaultBillingMode
+      ? `billing mode ${before.defaultBillingMode} → ${data.defaultBillingMode}`
+      : null,
+  ], true);
+
   revalidatePath("/", "layout");
   return { status: "ok", values: raw };
 }
@@ -259,7 +349,7 @@ export async function setPracticeAreaActive(
   id: string,
   isActive: boolean
 ): Promise<{ ok: boolean; error?: string }> {
-  await requirePermission("firm.manage_practice_areas");
+  const userId = await requirePermission("firm.manage_practice_areas");
   if (!isActive) {
     // Block archive if the area still owns active (non-archived) matters.
     // Firms should move those first or explicitly archive the matters.
@@ -273,10 +363,16 @@ export async function setPracticeAreaActive(
       };
     }
   }
-  await prisma.practiceArea.update({
+  const area = await prisma.practiceArea.update({
     where: { id },
     data: { isActive },
+    select: { name: true },
   });
+  await logSettingsChange(
+    userId,
+    `Practice area ${isActive ? "restored" : "archived"} — ${area.name}`,
+    []
+  );
   revalidatePath("/", "layout");
   return { ok: true };
 }
@@ -287,10 +383,10 @@ export async function movePracticeArea(
   id: string,
   direction: "up" | "down"
 ): Promise<{ ok: boolean; error?: string }> {
-  await requirePermission("firm.manage_practice_areas");
+  const userId = await requirePermission("firm.manage_practice_areas");
   const all = await prisma.practiceArea.findMany({
     orderBy: { order: "asc" },
-    select: { id: true, order: true },
+    select: { id: true, order: true, name: true },
   });
   const idx = all.findIndex((a) => a.id === id);
   if (idx === -1) return { ok: false, error: "Not found" };
@@ -309,6 +405,12 @@ export async function movePracticeArea(
       data: { order: a.order },
     }),
   ]);
+
+  await logSettingsChange(
+    userId,
+    `Practice area moved ${direction} — ${a.name}`,
+    []
+  );
 
   revalidatePath("/", "layout");
   return { ok: true };
@@ -330,7 +432,7 @@ export async function createStage(
   _prev: StageFormState,
   formData: FormData
 ): Promise<StageFormState> {
-  await requirePermission("firm.manage_practice_areas");
+  const userId = await requirePermission("firm.manage_practice_areas");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = stageSchema.safeParse(raw);
   if (!parsed.success) {
@@ -371,6 +473,12 @@ export async function createStage(
     },
   });
 
+  await logSettingsChange(
+    userId,
+    `Stage created — ${parsed.data.name}`,
+    [parsed.data.isTerminal === "on" ? "terminal stage" : null]
+  );
+
   revalidatePath("/", "layout");
   return { status: "ok" };
 }
@@ -380,7 +488,7 @@ export async function updateStage(
   _prev: StageFormState,
   formData: FormData
 ): Promise<StageFormState> {
-  await requirePermission("firm.manage_practice_areas");
+  const userId = await requirePermission("firm.manage_practice_areas");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = stageSchema.safeParse(raw);
   if (!parsed.success) {
@@ -393,7 +501,7 @@ export async function updateStage(
 
   const stage = await prisma.matterStage.findUnique({
     where: { id: stageId },
-    select: { practiceAreaId: true },
+    select: { practiceAreaId: true, name: true, isTerminal: true },
   });
   if (!stage) {
     return {
@@ -429,6 +537,17 @@ export async function updateStage(
     },
   });
 
+  await logSettingsChange(userId, `Stage updated — ${parsed.data.name}`, [
+    stage.name !== parsed.data.name
+      ? `name "${stage.name}" → "${parsed.data.name}"`
+      : null,
+    stage.isTerminal !== (parsed.data.isTerminal === "on")
+      ? `terminal ${stage.isTerminal ? "yes" : "no"} → ${
+          parsed.data.isTerminal === "on" ? "yes" : "no"
+        } (reclassifies matters as open/closed)`
+      : null,
+  ], true);
+
   revalidatePath("/", "layout");
   return { status: "ok", values: raw };
 }
@@ -437,7 +556,7 @@ export async function setStageActive(
   stageId: string,
   isActive: boolean
 ): Promise<{ ok: boolean; error?: string }> {
-  await requirePermission("firm.manage_practice_areas");
+  const userId = await requirePermission("firm.manage_practice_areas");
   if (!isActive) {
     const matterCount = await prisma.matter.count({
       where: { stageId, isArchived: false },
@@ -449,10 +568,16 @@ export async function setStageActive(
       };
     }
   }
-  await prisma.matterStage.update({
+  const stage = await prisma.matterStage.update({
     where: { id: stageId },
     data: { isActive },
+    select: { name: true },
   });
+  await logSettingsChange(
+    userId,
+    `Stage ${isActive ? "restored" : "archived"} — ${stage.name}`,
+    []
+  );
   revalidatePath("/", "layout");
   return { ok: true };
 }
@@ -461,10 +586,10 @@ export async function moveStage(
   stageId: string,
   direction: "up" | "down"
 ): Promise<{ ok: boolean; error?: string }> {
-  await requirePermission("firm.manage_practice_areas");
+  const userId = await requirePermission("firm.manage_practice_areas");
   const stage = await prisma.matterStage.findUnique({
     where: { id: stageId },
-    select: { practiceAreaId: true, order: true },
+    select: { practiceAreaId: true, order: true, name: true },
   });
   if (!stage) return { ok: false, error: "Stage not found" };
 
@@ -489,6 +614,12 @@ export async function moveStage(
       data: { order: a.order },
     }),
   ]);
+
+  await logSettingsChange(
+    userId,
+    `Stage moved ${direction} — ${stage.name}`,
+    []
+  );
 
   revalidatePath("/", "layout");
   return { ok: true };

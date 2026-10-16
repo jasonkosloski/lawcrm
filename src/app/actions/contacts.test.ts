@@ -824,6 +824,45 @@ describe("mergeContacts", () => {
     expect(entry.title).toContain("Canonical");
   });
 
+  test("refuses (and writes nothing) when folded party notes would exceed the party notes limit", async () => {
+    const { areaId, stageId } = await seedPracticeArea();
+    const m1 = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+      name: "Matter One",
+    });
+    const { contactId: loserId } = await seedContact({ name: "Dup" });
+    const { contactId: survivorId } = await seedContact({ name: "Canonical" });
+    await prisma.matterContact.create({
+      data: {
+        matterId: m1.matterId,
+        contactId: survivorId,
+        category: "opposing",
+        notes: "s".repeat(3900),
+      },
+    });
+    await prisma.matterContact.create({
+      data: {
+        matterId: m1.matterId,
+        contactId: loserId,
+        category: "opposing",
+        notes: "l".repeat(300),
+      },
+    });
+
+    const res = await mergeContacts(loserId, survivorId);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/too long/i);
+    expect(
+      await prisma.matterContact.count({ where: { contactId: loserId } })
+    ).toBe(1);
+    const loser = await prisma.contact.findUniqueOrThrow({
+      where: { id: loserId },
+    });
+    expect(loser.mergedIntoId).toBeNull();
+  });
+
   test("guards: self-merge, missing contacts, re-merge, retired survivor", async () => {
     const { contactId } = await seedContact({ name: "Solo" });
     expect((await mergeContacts(contactId, contactId)).ok).toBe(false);
@@ -1074,5 +1113,183 @@ describe("exportContactsCsv", () => {
 
     const empty = await exportContactsCsv([]);
     expect(empty.ok).toBe(false);
+  });
+});
+
+// ── W7 data-loss fixes ──────────────────────────────────────────────────
+
+describe("mergeContacts keeps the retired contact's flag, notes and party details", () => {
+  test("a flagged loser flags the survivor and appends its notes", async () => {
+    const loser = await prisma.contact.create({
+      data: {
+        name: "J. Doe",
+        type: "opposing_party",
+        conflictStatus: "flagged",
+        notes: "Represented by City Attorney - do not contact directly",
+      },
+    });
+    const survivor = await prisma.contact.create({
+      data: {
+        name: "Jane Doe",
+        type: "opposing_party",
+        conflictStatus: "clear",
+        notes: "Prefers email",
+      },
+    });
+
+    expect(await mergeContacts(loser.id, survivor.id)).toEqual({ ok: true });
+
+    const after = await prisma.contact.findUniqueOrThrow({
+      where: { id: survivor.id },
+    });
+    expect(after.conflictStatus).toBe("flagged");
+    expect(after.notes).toContain("Prefers email");
+    expect(after.notes).toContain("do not contact directly");
+    expect(after.notes).toContain("Merged from J. Doe");
+  });
+
+  test("never downgrades a flagged survivor; override beats clear", async () => {
+    const a = await prisma.contact.create({
+      data: { name: "A", type: "other", conflictStatus: "override" },
+    });
+    const b = await prisma.contact.create({
+      data: { name: "B", type: "other", conflictStatus: "flagged" },
+    });
+    const c = await prisma.contact.create({
+      data: { name: "C", type: "other", conflictStatus: "clear" },
+    });
+    await mergeContacts(c.id, a.id); // override survives a clear loser
+    expect(
+      (await prisma.contact.findUniqueOrThrow({ where: { id: a.id } }))
+        .conflictStatus
+    ).toBe("override");
+    await mergeContacts(a.id, b.id); // flagged survivor stays flagged
+    expect(
+      (await prisma.contact.findUniqueOrThrow({ where: { id: b.id } }))
+        .conflictStatus
+    ).toBe("flagged");
+  });
+
+  test("refuses (rather than truncating) when combined notes exceed the limit", async () => {
+    const loser = await prisma.contact.create({
+      data: { name: "L", type: "other", notes: "x".repeat(3000) },
+    });
+    const survivor = await prisma.contact.create({
+      data: { name: "S", type: "other", notes: "y".repeat(3000) },
+    });
+    const res = await mergeContacts(loser.id, survivor.id);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/notes are too long/i);
+    // Nothing was merged.
+    expect(
+      (await prisma.contact.findUniqueOrThrow({ where: { id: loser.id } }))
+        .isActive
+    ).toBe(true);
+  });
+
+  test("duplicate party row: the loser's representation + notes fold into the survivor's row", async () => {
+    const { areaId, stageId } = await seedPracticeArea();
+    const m = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    const { contactId: attorneyId } = await seedContact({
+      name: "City Attorney",
+      type: "opposing_counsel",
+    });
+    const { contactId: loserId } = await seedContact({ name: "Ofc. J. Ruiz" });
+    const { contactId: survivorId } = await seedContact({ name: "Jose Ruiz" });
+    await prisma.matterContact.create({
+      data: {
+        matterId: m.matterId,
+        contactId: loserId,
+        category: "opposing",
+        role: "Defendant",
+        notes: "Served 3/1",
+        isRepresented: true,
+        representationContactId: attorneyId,
+        representationName: "City Attorney",
+      },
+    });
+    await prisma.matterContact.create({
+      data: {
+        matterId: m.matterId,
+        contactId: survivorId,
+        category: "opposing",
+      },
+    });
+
+    expect(await mergeContacts(loserId, survivorId)).toEqual({ ok: true });
+
+    const rows = await prisma.matterContact.findMany({
+      where: { matterId: m.matterId },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      contactId: survivorId,
+      role: "Defendant",
+      notes: "Served 3/1",
+      isRepresented: true,
+      representationContactId: attorneyId,
+      representationName: "City Attorney",
+    });
+  });
+});
+
+describe("single-contact audit entries", () => {
+  test("create, update, phone edit and delete each write an activity row", async () => {
+    await createContact(
+      contactFormInitialState,
+      contactForm({ name: "Audit Me" })
+    );
+    const c = await prisma.contact.findFirstOrThrow({
+      where: { name: "Audit Me" },
+    });
+    expect(
+      await prisma.activityLog.count({
+        where: { type: "contact", title: "Contact created — Audit Me" },
+      })
+    ).toBe(1);
+
+    await updateContact(
+      c.id,
+      contactFormInitialState,
+      contactForm({ name: "Audit Me", email: "new@example.com" })
+    );
+    const upd = await prisma.activityLog.findFirstOrThrow({
+      where: { title: "Contact updated — Audit Me" },
+    });
+    // Field names only — the new email value must not be copied in.
+    expect(upd.detail).toBe("Changed: email");
+    expect(upd.userId).toBe(userId);
+
+    await updateContactPhones(c.id, [
+      { label: "", number: "(303) 555-0111", isPrimary: true },
+    ]);
+    expect(
+      await prisma.activityLog.count({
+        where: { title: "Phone numbers updated — Audit Me" },
+      })
+    ).toBe(1);
+
+    await deleteContact(c.id);
+    expect(
+      await prisma.activityLog.count({
+        where: { title: "Contact deactivated — Audit Me" },
+      })
+    ).toBe(1);
+  });
+
+  test("an update that changes nothing writes no row", async () => {
+    const { contactId } = await seedContact({
+      name: "Dana Whitfield",
+      email: "dana@example.com",
+      type: "client",
+    });
+    await updateContact(contactId, contactFormInitialState, contactForm());
+    expect(
+      await prisma.activityLog.count({ where: { type: "contact" } })
+    ).toBe(0);
   });
 });
