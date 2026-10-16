@@ -24,12 +24,12 @@ import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("@/lib/google/gmail-writeback", () => ({
-  writebackGmailThread: vi.fn().mockResolvedValue(undefined),
+  writebackGmailMessages: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/current-user";
-import { writebackGmailThread } from "@/lib/google/gmail-writeback";
+import { writebackGmailMessages } from "@/lib/google/gmail-writeback";
 import { prisma } from "@/lib/prisma";
 import {
   markEmailThreadRead,
@@ -45,7 +45,7 @@ import {
 
 const mockedGetUser = vi.mocked(getCurrentUserId);
 const mockedRevalidate = vi.mocked(revalidatePath);
-const mockedWriteback = vi.mocked(writebackGmailThread);
+const mockedWriteback = vi.mocked(writebackGmailMessages);
 
 let userId: string;
 let otherUserId: string;
@@ -194,7 +194,21 @@ describe("markEmailThreadRead", () => {
     expect(mockedRevalidate).not.toHaveBeenCalled();
   });
 
-  test("Gmail-synced thread fires writeback removing UNREAD after the local flip", async () => {
+  test("Gmail-synced thread fires writeback removing UNREAD after the local flip — for the SYNCED message ids only", async () => {
+    // The CRM holds two messages; a third (newer) exists only at Gmail.
+    for (const externalId of ["gm-1", "gm-2", null]) {
+      await prisma.emailMessage.create({
+        data: {
+          threadId: gmailThreadId,
+          externalId,
+          fromName: "x",
+          fromEmail: "x@x.co",
+          toRecipients: "[]",
+          body: "b",
+          sentAt: new Date("2026-06-01T10:00:00Z"),
+        },
+      });
+    }
     const res = await markEmailThreadRead(gmailThreadId);
     expect(res).toEqual({ ok: true });
 
@@ -203,11 +217,11 @@ describe("markEmailThreadRead", () => {
       select: { isRead: true },
     });
     expect(thread.isRead).toBe(true);
-    expect(mockedWriteback).toHaveBeenCalledExactlyOnceWith(
-      myAccountId,
-      "gt-read-1",
-      { removeLabelIds: ["UNREAD"] }
-    );
+    expect(mockedWriteback).toHaveBeenCalledOnce();
+    const [accountId, ids, mods] = mockedWriteback.mock.calls[0];
+    expect(accountId).toBe(myAccountId);
+    expect([...ids].sort()).toEqual(["gm-1", "gm-2"]);
+    expect(mods).toEqual({ removeLabelIds: ["UNREAD"] });
   });
 
   test("no-op re-read fires NO writeback", async () => {

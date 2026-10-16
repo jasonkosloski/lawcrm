@@ -6,6 +6,7 @@ import {
   googleEventToCrmFields,
   hasCalendarScope,
   lawcrmIdOf,
+  stripZoomLine,
 } from "./calendar-shared";
 
 describe("hasCalendarScope", () => {
@@ -62,15 +63,53 @@ describe("eventToGoogleResource", () => {
     expect(g.end).toEqual({ date: "2026-08-11" });
   });
 
-  test("zoom URL folds into the description; empty description omitted", () => {
+  test("zoom URL folds into the description; empty description/location are sent as '' so a PATCH clears them", () => {
     const g = eventToGoogleResource({
       ...base,
       description: null,
       zoomUrl: "https://zoom.us/j/123",
     });
     expect(g.description).toBe("Zoom: https://zoom.us/j/123");
-    const g2 = eventToGoogleResource({ ...base, description: null });
-    expect(g2.description).toBeUndefined();
+    const g2 = eventToGoogleResource({
+      ...base,
+      description: null,
+      location: null,
+    });
+    expect(g2.description).toBe("");
+    expect(g2.location).toBe("");
+    // JSON.stringify keeps "" (it would drop undefined) — the PATCH
+    // body actually carries the clear.
+    const body = JSON.parse(JSON.stringify(g2));
+    expect(body.description).toBe("");
+    expect(body.location).toBe("");
+  });
+
+  test("zoom line is not appended twice to an already-polluted description", () => {
+    const g = eventToGoogleResource({
+      ...base,
+      description: "Bring exhibits\n\nZoom: https://zoom.us/j/1",
+      zoomUrl: "https://zoom.us/j/1",
+    });
+    expect(g.description).toBe("Bring exhibits\n\nZoom: https://zoom.us/j/1");
+  });
+
+  test("push -> pull round-trip leaves the CRM description unchanged", () => {
+    const crm = {
+      ...base,
+      description: "Bring exhibits",
+      zoomUrl: "https://zoom.us/j/1",
+    };
+    const echoed = googleEventToCrmFields({
+      ...eventToGoogleResource(crm),
+    })!;
+    expect(stripZoomLine(echoed.description, crm.zoomUrl)).toBe(
+      "Bring exhibits"
+    );
+    // Zoom-only description round-trips to null.
+    const zoomOnly = googleEventToCrmFields({
+      ...eventToGoogleResource({ ...crm, description: null }),
+    })!;
+    expect(stripZoomLine(zoomOnly.description, crm.zoomUrl)).toBeNull();
   });
 
   test("attendees never appear in the resource (invite-email hazard)", () => {
@@ -126,6 +165,36 @@ describe("googleEventToCrmFields", () => {
         end: { dateTime: "2026-08-10T16:00:00Z" },
       })
     ).toBeNull();
+  });
+});
+
+describe("stripZoomLine", () => {
+  const url = "https://zoom.us/j/9";
+  test("strips every stacked trailing copy and leaves other text alone", () => {
+    expect(stripZoomLine(`Notes\n\nZoom: ${url}\n\nZoom: ${url}`, url)).toBe(
+      "Notes"
+    );
+    expect(stripZoomLine("Notes", url)).toBe("Notes");
+    expect(stripZoomLine(`Zoom: ${url}`, url)).toBeNull();
+    expect(stripZoomLine(`Notes\n\nZoom: ${url}`, null)).toBe(
+      `Notes\n\nZoom: ${url}`
+    );
+    expect(stripZoomLine(null, url)).toBeNull();
+  });
+});
+
+describe("googleEventToCrmFields — hostile text", () => {
+  test("NUL bytes are stripped from title/description/location", () => {
+    const f = googleEventToCrmFields({
+      summary: "Hear\u0000ing",
+      description: "d\u0000esc",
+      location: "\u0000",
+      start: { dateTime: "2026-08-10T15:00:00Z" },
+      end: { dateTime: "2026-08-10T16:00:00Z" },
+    })!;
+    expect(f.title).toBe("Hearing");
+    expect(f.description).toBe("desc");
+    expect(f.location).toBeNull();
   });
 });
 

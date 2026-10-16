@@ -18,7 +18,8 @@
  *
  * Gmail writeback (Email v1.1): after the local flip, email threads
  * that came from Gmail (externalId set) push a `remove UNREAD` label
- * modify so the provider agrees — otherwise the next resync would
+ * batchModify over the messages the CRM has synced (never the whole
+ * Gmail thread) so the provider agrees — otherwise the next resync would
  * flip the thread back to unread (the double-inbox problem). The
  * writeback is failure-isolated (`writebackGmailThread` never
  * rejects; auth errors land on account.syncError, transients warn)
@@ -40,7 +41,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-import { writebackGmailThread } from "@/lib/google/gmail-writeback";
+import { writebackGmailMessages } from "@/lib/google/gmail-writeback";
 
 export async function markEmailThreadRead(
   threadId: string
@@ -60,13 +61,24 @@ export async function markEmailThreadRead(
 
   const thread = await prisma.emailThread.findUnique({
     where: { id: threadId },
-    select: { matterId: true, accountId: true, externalId: true },
+    select: {
+      matterId: true,
+      accountId: true,
+      externalId: true,
+      messages: { select: { externalId: true } },
+    },
   });
   // Provider writeback — only for threads that exist at Gmail
-  // (externalId). Awaiting is safe: the wrapper never rejects, and
+  // (externalId), and only for the MESSAGES THE CRM HAS SYNCED. A
+  // thread-level modify would also clear UNREAD on a message that
+  // reached Gmail after the last sync and that this reader never
+  // showed. Awaiting is safe: the wrapper never rejects, and
   // token-less (disconnected) accounts skip inside it.
   if (thread?.externalId) {
-    await writebackGmailThread(thread.accountId, thread.externalId, {
+    const syncedIds = thread.messages
+      .map((m) => m.externalId)
+      .filter((id): id is string => Boolean(id));
+    await writebackGmailMessages(thread.accountId, syncedIds, {
       removeLabelIds: ["UNREAD"],
     });
   }

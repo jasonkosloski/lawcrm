@@ -12,9 +12,9 @@
  *     matterless) + mapping row;
  *   - marked-event mapping upsert + last-write-wins (older Google
  *     `updated` never overwrites the CRM row);
- *   - the cancellation rule matrix (sole-mapping personal → event
- *     deleted; filed / other-attendee / multi-mapping → mapping-
- *     only delete, CRM event survives);
+ *   - the cancellation rule: unlink-only — every shape (personal,
+ *     filed, other-attendee, multi-mapping, typed) loses just its
+ *     mapping and the CRM event survives;
  *   - auth-error account marking vs transient note-and-rethrow,
  *     calendar-prefixed syncError hygiene;
  *   - echo safety: the pull module must never import the push
@@ -32,6 +32,7 @@ vi.mock("@/lib/google/gmail-client", async (importOriginal) => {
 });
 
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
 import { GmailAuthError, gmailFetch } from "@/lib/google/gmail-client";
 import {
   CALENDAR_EVENTS_SCOPE,
@@ -52,6 +53,7 @@ import {
   PULL_WINDOW_FUTURE_DAYS,
   PULL_WINDOW_PAST_DAYS,
   pullCalendarForAccount,
+  pullCalendarForAllAccounts,
   pullCalendarForUserAccounts,
 } from "./google-calendar-sync";
 
@@ -429,7 +431,7 @@ describe("cancellation rule", () => {
     return eventId;
   }
 
-  it("deletes a personal Google-born event (sole mapping, no matter, owner-only attendee)", async () => {
+  it("NEVER deletes the CRM event, even one shaped like a personal import (sole mapping, no matter, owner-only attendee) — only unlinks", async () => {
     const accountId = await seedAccount({ calendarSyncToken: "st-0" });
     const eventId = await seedMapped({
       accountId,
@@ -438,10 +440,10 @@ describe("cancellation rule", () => {
     mockedFetch.mockResolvedValueOnce(cancelled("g-x"));
 
     const res = await pullCalendarForAccount(accountId);
-    expect(res).toMatchObject({ deletedEvents: 1, unlinked: 0 });
+    expect(res).toMatchObject({ deletedEvents: 0, unlinked: 1 });
     expect(
       await prisma.calendarEvent.count({ where: { id: eventId } })
-    ).toBe(0);
+    ).toBe(1);
     expect(await prisma.calendarEventSync.count()).toBe(0);
   });
 
@@ -648,5 +650,364 @@ describe("echo safety", () => {
       expect(specifier).not.toContain("google-calendar-push");
       expect(specifier).not.toContain("actions/calendar-events");
     }
+  });
+});
+
+// ── W6a: echo guard, marker authz, typed-event cancel, isolation ─────────
+
+describe("echo guard (F072) — LWW against the mapping's googleUpdatedAt", () => {
+  it("ignores Google's echo of our own push even though it is newer than CalendarEvent.updatedAt", async () => {
+    const accountId = await seedAccount();
+    const { eventId } = await seedCalendarEvent({
+      createdById: userId,
+      title: "CRM title",
+    });
+    await prisma.calendarEvent.update({
+      where: { id: eventId },
+      data: { description: "Bring exhibits", zoomUrl: "https://zoom.us/j/1" },
+    });
+    // The push stored Google's own `updated` (T1) on the mapping.
+    const t1 = new Date(Date.now() + 120_000);
+    await prisma.calendarEventSync.create({
+      data: {
+        eventId,
+        accountId,
+        googleEventId: "g-pushed",
+        googleUpdatedAt: t1,
+      },
+    });
+    // Google echoes the write back: same stamp, lossy copy.
+    mockedFetch.mockResolvedValueOnce(
+      listResponse({
+        items: [
+          gEvent({
+            id: "g-pushed",
+            summary: "CRM title",
+            marker: eventId,
+            description: "Bring exhibits\n\nZoom: https://zoom.us/j/1",
+            updated: t1.toISOString(),
+          }),
+        ],
+        nextSyncToken: "st",
+      })
+    );
+
+    const res = await pullCalendarForAccount(accountId);
+    expect(res).toMatchObject({ imported: 0, updated: 0 });
+    const event = await prisma.calendarEvent.findUniqueOrThrow({
+      where: { id: eventId },
+    });
+    expect(event.description).toBe("Bring exhibits"); // not polluted
+    const mapping = await prisma.calendarEventSync.findFirstOrThrow({
+      where: { eventId },
+    });
+    expect(mapping.googleUpdatedAt?.getTime()).toBe(t1.getTime());
+  });
+
+  it("a genuinely newer Google edit still wins, with the Zoom fold stripped", async () => {
+    const accountId = await seedAccount();
+    const { eventId } = await seedCalendarEvent({
+      createdById: userId,
+      title: "CRM title",
+    });
+    await prisma.calendarEvent.update({
+      where: { id: eventId },
+      data: { zoomUrl: "https://zoom.us/j/1" },
+    });
+    const t1 = new Date(Date.now() + 60_000);
+    const t2 = new Date(Date.now() + 120_000);
+    await prisma.calendarEventSync.create({
+      data: { eventId, accountId, googleEventId: "g-pushed", googleUpdatedAt: t1 },
+    });
+    mockedFetch.mockResolvedValueOnce(
+      listResponse({
+        items: [
+          gEvent({
+            id: "g-pushed",
+            summary: "Moved in Google",
+            marker: eventId,
+            description: "New agenda\n\nZoom: https://zoom.us/j/1",
+            updated: t2.toISOString(),
+          }),
+        ],
+        nextSyncToken: "st",
+      })
+    );
+
+    const res = await pullCalendarForAccount(accountId);
+    expect(res).toMatchObject({ updated: 1 });
+    const event = await prisma.calendarEvent.findUniqueOrThrow({
+      where: { id: eventId },
+    });
+    expect(event.title).toBe("Moved in Google");
+    expect(event.description).toBe("New agenda");
+    const mapping = await prisma.calendarEventSync.findFirstOrThrow({
+      where: { eventId },
+    });
+    expect(mapping.googleUpdatedAt?.getTime()).toBe(t2.getTime());
+  });
+});
+
+describe("marker authorization (F073)", () => {
+  it("a foreign lawcrmEventId marker does NOT adopt or overwrite someone else's CRM event", async () => {
+    const accountId = await seedAccount();
+    const { userId: partnerId } = await seedUser({
+      firmId,
+      email: "partner@kosloskilaw.com",
+    });
+    const { eventId: hearingId } = await seedCalendarEvent({
+      createdById: partnerId,
+      title: "Hearing — motion to compel",
+      type: "hearing",
+    });
+
+    mockedFetch.mockResolvedValueOnce(
+      listResponse({
+        items: [
+          gEvent({
+            id: "g-forged",
+            summary: "Forged",
+            marker: hearingId,
+            updated: new Date(Date.now() + 60_000).toISOString(),
+          }),
+        ],
+        nextSyncToken: "st",
+      })
+    );
+
+    const res = await pullCalendarForAccount(accountId);
+    // The victim event is untouched and has no mapping on this account.
+    const hearing = await prisma.calendarEvent.findUniqueOrThrow({
+      where: { id: hearingId },
+    });
+    expect(hearing.title).toBe("Hearing — motion to compel");
+    expect(await prisma.calendarEventSync.count({ where: { eventId: hearingId } })).toBe(0);
+    // The item is just an ordinary personal import for the attacker.
+    expect(res).toMatchObject({ imported: 1, updated: 0 });
+    const imported = await prisma.calendarEvent.findFirstOrThrow({
+      where: { googleSyncs: { some: { googleEventId: "g-forged" } } },
+    });
+    expect(imported.id).not.toBe(hearingId);
+    expect(imported.createdById).toBe(userId);
+    expect(imported.type).toBe("meeting");
+  });
+
+  it("deleting the forged Google copy afterwards cannot delete the victim event", async () => {
+    const accountId = await seedAccount({ calendarSyncToken: "st-0" });
+    const { userId: partnerId } = await seedUser({
+      firmId,
+      email: "partner@kosloskilaw.com",
+    });
+    const { eventId } = await seedCalendarEvent({ createdById: partnerId });
+    mockedFetch.mockResolvedValueOnce(
+      listResponse({
+        items: [{ id: "g-forged", status: "cancelled" }],
+        nextSyncToken: "st",
+      })
+    );
+    await pullCalendarForAccount(accountId);
+    expect(await prisma.calendarEvent.count({ where: { id: eventId } })).toBe(1);
+  });
+
+  it("an account that already has a mapping for the CRM event may re-point it", async () => {
+    const accountId = await seedAccount();
+    const { userId: otherCreator } = await seedUser({
+      firmId,
+      email: "creator@kosloskilaw.com",
+    });
+    const { eventId } = await seedCalendarEvent({ createdById: otherCreator });
+    await prisma.calendarEventSync.create({
+      data: { eventId, accountId, googleEventId: "g-old" },
+    });
+    mockedFetch.mockResolvedValueOnce(
+      listResponse({
+        items: [gEvent({ id: "g-new", marker: eventId })],
+        nextSyncToken: "st",
+      })
+    );
+    await pullCalendarForAccount(accountId);
+    const mapping = await prisma.calendarEventSync.findFirstOrThrow({
+      where: { eventId, accountId },
+    });
+    expect(mapping.googleEventId).toBe("g-new");
+  });
+});
+
+describe("Google-side cancellation of CRM-born typed events (F260)", () => {
+  it("a matterless HEARING with the personal shape is only unlinked, never deleted", async () => {
+    const accountId = await seedAccount({ calendarSyncToken: "st-0" });
+    const { eventId } = await seedCalendarEvent({
+      createdById: userId,
+      type: "hearing",
+      attendees: [{ userId, name: "Me" }],
+    });
+    await prisma.calendarEventSync.create({
+      data: { eventId, accountId, googleEventId: "g-x" },
+    });
+    mockedFetch.mockResolvedValueOnce(
+      listResponse({
+        items: [{ id: "g-x", status: "cancelled" }],
+        nextSyncToken: "st",
+      })
+    );
+
+    const res = await pullCalendarForAccount(accountId);
+    expect(res).toMatchObject({ deletedEvents: 0, unlinked: 1 });
+    expect(await prisma.calendarEvent.count({ where: { id: eventId } })).toBe(1);
+    expect(await prisma.calendarEventSync.count()).toBe(0);
+  });
+});
+
+describe("per-item isolation (F069)", () => {
+  it("one item the database rejects is skipped; the rest import, the token is saved, the failure is surfaced", async () => {
+    const accountId = await seedAccount();
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockedFetch.mockResolvedValueOnce(
+      listResponse({
+        items: [
+          // NUL in the Google event id fails the mapping insert.
+          gEvent({ id: "bad\u0000id", summary: "Poison" }),
+          gEvent({ id: "g-ok", summary: "Fine" }),
+        ],
+        nextSyncToken: "st-saved",
+      })
+    );
+
+    const res = await pullCalendarForAccount(accountId);
+    expect(res).toMatchObject({ ok: true, imported: 1, failed: 1 });
+    const account = await prisma.emailAccount.findUniqueOrThrow({
+      where: { id: accountId },
+    });
+    expect(account.calendarSyncToken).toBe("st-saved");
+    expect(account.syncError).toContain(CALENDAR_SYNC_ERROR_PREFIX);
+    expect(account.syncError).toContain("1 event(s)");
+    expect(await prisma.calendarEvent.count({ where: { title: "Fine" } })).toBe(1);
+    expect(String(errSpy.mock.calls[0][0])).toContain(accountId);
+    errSpy.mockRestore();
+
+    // A clean pass clears the calendar note.
+    mockedFetch.mockResolvedValueOnce(
+      listResponse({ items: [], nextSyncToken: "st-2" })
+    );
+    await pullCalendarForAccount(accountId);
+    expect(
+      (await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } }))
+        .syncError
+    ).toBeNull();
+  });
+
+  it("a TRANSIENT database error aborts the pass: sync token NOT advanced, nothing skipped", async () => {
+    const accountId = await seedAccount({ calendarSyncToken: "st-old" });
+    mockedFetch.mockResolvedValueOnce(
+      listResponse({
+        items: [gEvent({ id: "g-1", summary: "One" })],
+        nextSyncToken: "st-new",
+      })
+    );
+    const spy = vi
+      .spyOn(prisma.calendarEventSync, "findUnique")
+      .mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError("deadlock", {
+          code: "P2034",
+          clientVersion: "test",
+        })
+      );
+    await expect(pullCalendarForAccount(accountId)).rejects.toThrow();
+    spy.mockRestore();
+    const account = await prisma.emailAccount.findUniqueOrThrow({
+      where: { id: accountId },
+    });
+    expect(account.calendarSyncToken).toBe("st-old");
+    expect(account.syncError).toContain(CALENDAR_SYNC_ERROR_PREFIX);
+  });
+
+  it("a pass where several items all fail aborts instead of saving the token", async () => {
+    const accountId = await seedAccount({ calendarSyncToken: "st-old" });
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockedFetch.mockResolvedValueOnce(
+      listResponse({
+        items: [
+          gEvent({ id: "bad\u0000a" }),
+          gEvent({ id: "bad\u0000b" }),
+          gEvent({ id: "bad\u0000c" }),
+        ],
+        nextSyncToken: "st-new",
+      })
+    );
+    await expect(pullCalendarForAccount(accountId)).rejects.toThrow(
+      /failed to import/
+    );
+    errSpy.mockRestore();
+    expect(
+      (await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } }))
+        .calendarSyncToken
+    ).toBe("st-old");
+  });
+
+  it("a failure note never overwrites an email-sync note in the shared column", async () => {
+    const accountId = await seedAccount({
+      syncError: "Last sync failed: mail thing",
+    });
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockedFetch.mockResolvedValueOnce(
+      listResponse({
+        items: [gEvent({ id: "bad\u0000id" })],
+        nextSyncToken: "st",
+      })
+    );
+    await pullCalendarForAccount(accountId);
+    expect(
+      (await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } }))
+        .syncError
+    ).toBe("Last sync failed: mail thing");
+    errSpy.mockRestore();
+  });
+
+  it("NUL bytes in title/description are stripped on import", async () => {
+    const accountId = await seedAccount();
+    mockedFetch.mockResolvedValueOnce(
+      listResponse({
+        items: [
+          gEvent({ id: "g-nul", summary: "Dep\u0000o", description: "a\u0000b" }),
+        ],
+        nextSyncToken: "st",
+      })
+    );
+    const res = await pullCalendarForAccount(accountId);
+    expect(res).toMatchObject({ imported: 1, failed: 0 });
+    const event = await prisma.calendarEvent.findFirstOrThrow({});
+    expect(event.title).toBe("Depo");
+    expect(event.description).toBe("ab");
+  });
+});
+
+describe("deactivated owners (F071/F348)", () => {
+  async function deactivate(): Promise<void> {
+    await prisma.user.update({ where: { id: userId }, data: { isActive: false } });
+  }
+
+  it("the cron and per-user wrappers skip a deactivated member's calendar", async () => {
+    await seedAccount();
+    await deactivate();
+    expect(await pullCalendarForAllAccounts()).toEqual([]);
+    expect(await pullCalendarForUserAccounts(userId)).toEqual([]);
+    expect(mockedFetch).not.toHaveBeenCalled();
+  });
+
+  it("a direct pull for an inactive owner's account makes no Google calls", async () => {
+    const accountId = await seedAccount();
+    await deactivate();
+    const res = await pullCalendarForAccount(accountId);
+    expect(res).toMatchObject({ ok: false, mode: "skipped" });
+    expect(mockedFetch).not.toHaveBeenCalled();
+  });
+
+  it("active members' calendars are still pulled by the cron wrapper", async () => {
+    const accountId = await seedAccount();
+    mockedFetch.mockResolvedValueOnce(
+      listResponse({ items: [], nextSyncToken: "st" })
+    );
+    const results = await pullCalendarForAllAccounts();
+    expect(results.map((r) => r.accountId)).toEqual([accountId]);
   });
 });

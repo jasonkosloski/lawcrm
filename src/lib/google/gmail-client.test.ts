@@ -293,6 +293,37 @@ describe("gmailFetch", () => {
     expect(gmailCalls).toEqual(["Bearer ya29.fresh", "Bearer ya29.after-401"]);
   });
 
+  it("sends the bearer to Google API hosts only (absolute URLs allowlisted)", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const accountId = await seedAccount({
+      accessToken: fresh(),
+      refreshToken: "1//rt",
+    });
+
+    // Calendar + upload ride www.googleapis.com — allowed.
+    await gmailFetch(
+      accountId,
+      "https://www.googleapis.com/calendar/v3/calendars/primary/events"
+    );
+    await gmailFetch(
+      accountId,
+      "https://gmail.googleapis.com/gmail/v1/users/me/profile"
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    // Anything else is refused before a token is even read.
+    for (const bad of [
+      "https://evil.example/steal",
+      "https://www.googleapis.com.evil.example/x",
+      "https://user:pw@www.googleapis.com/x",
+      "https://googleapis.com/x",
+    ]) {
+      await expect(gmailFetch(accountId, bad)).rejects.toThrow(/gmailFetch/);
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("returns non-401 responses as-is with no retry (rate limits are the caller's policy)", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 429 }));
     vi.stubGlobal("fetch", fetchMock);

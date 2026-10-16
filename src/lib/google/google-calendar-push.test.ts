@@ -185,6 +185,35 @@ describe("pushEventToGoogle — creator/account resolution", () => {
     expect(account.syncError).toBeNull();
   });
 
+  test("deactivated creator's Google calendar is never PATCHed/inserted into (F071)", async () => {
+    await seedGoogleAccount();
+    const eventId = await seedEvent();
+    await prisma.user.update({ where: { id: userId }, data: { isActive: false } });
+
+    await pushEventToGoogle(eventId);
+
+    expect(mockedFetch).not.toHaveBeenCalled();
+    expect(await prisma.calendarEventSync.count()).toBe(0);
+  });
+
+  test("cleared description/location are sent as '' so the PATCH actually clears them (F072)", async () => {
+    const accountId = await seedGoogleAccount();
+    const eventId = await seedEvent();
+    await prisma.calendarEvent.update({
+      where: { id: eventId },
+      data: { location: null, description: null },
+    });
+    await seedMapping({ eventId, accountId });
+    mockedFetch.mockResolvedValue(googleOk());
+
+    await pushEventToGoogle(eventId);
+
+    const [, , init] = mockedFetch.mock.calls[0];
+    const body = JSON.parse(String(init?.body));
+    expect(body.description).toBe("");
+    expect(body.location).toBe("");
+  });
+
   test("creator-less event (legacy row) is skipped silently", async () => {
     await seedGoogleAccount();
     const eventId = await seedEvent({ createdById: null });
@@ -405,6 +434,18 @@ describe("pushEventToGoogle — never-rejects contract", () => {
 });
 
 describe("deleteEventFromGoogle", () => {
+  test("a deactivated owner's Google copy is not touched (mapping still removed)", async () => {
+    const a1 = await seedGoogleAccount({ email: "a1@gmail.com" });
+    const eventId = await seedEvent();
+    await seedMapping({ eventId, accountId: a1, googleEventId: "g-a1" });
+    await prisma.user.update({ where: { id: userId }, data: { isActive: false } });
+
+    await deleteEventFromGoogle(eventId);
+
+    expect(mockedFetch).not.toHaveBeenCalled();
+    expect(await prisma.calendarEventSync.count({ where: { eventId } })).toBe(0);
+  });
+
   test("DELETEs every mapping's Google copy and removes the mappings", async () => {
     const a1 = await seedGoogleAccount({ email: "a1@gmail.com" });
     const a2 = await seedGoogleAccount({ email: "a2@gmail.com" });

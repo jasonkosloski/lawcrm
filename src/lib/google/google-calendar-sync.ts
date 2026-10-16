@@ -40,14 +40,26 @@
  *
  * Per-item rules
  * --------------
- * MARKED events (lawcrmIdOf set — a copy we pushed): upsert the
- * mapping row, then last-write-wins on fields: Google's `updated`
- * must be strictly newer than the CRM row's `updatedAt` for the
- * CRM row to be overwritten (via googleEventToCrmFields); otherwise
- * the CRM copy stands and only the mapping bookkeeping moves. A
- * marker pointing at a CRM event that no longer exists is skipped —
- * the CRM deleted it and the push engine owns propagating that;
- * re-importing would resurrect deleted firm events.
+ * MAPPED events (a copy we know): an item whose `updated` is no
+ * newer than the mapping's stored `googleUpdatedAt` is the ECHO of
+ * our own push and is ignored (only bookkeeping moves) — comparing
+ * against CalendarEvent.updatedAt instead would write Google's lossy
+ * copy back after every push. A genuinely newer Google edit then
+ * goes through last-write-wins on fields: its `updated` must be
+ * strictly newer than the CRM row's `updatedAt` for the CRM row to
+ * be overwritten (via googleEventToCrmFields, with the push-side
+ * Zoom fold stripped).
+ *
+ * MARKED + UNMAPPED events (lawcrmIdOf set, no mapping on this
+ * Google event): the marker is only honored for a CRM event this
+ * account legitimately owns — it already has a mapping on THIS
+ * account, or the account's user created it. A marker naming anyone
+ * else's CRM event (ids are visible to every calendar viewer, and
+ * anyone can write the property) is ignored and the item imports as
+ * an ordinary personal event. A marker pointing at a CRM event that
+ * no longer exists is skipped — the CRM deleted it and the push
+ * engine owns propagating that; re-importing would resurrect
+ * deleted firm events.
  *
  * UNMARKED events (Google-born): imported as a personal CRM event —
  * `createdById` = the connection owner, `visibility` "default",
@@ -57,23 +69,20 @@
  * CRM mirrors what sits on the user's calendar and lets them prune
  * there; a smarter skip heuristic can come later.
  *
- * CANCELLATION RULE (deliberately conservative): on a cancelled
- * item with a mapping, the CRM event is deleted ONLY when it is
- * clearly a personal Google-born event —
- *   (a) this mapping is the event's SOLE mapping, AND
- *   (b) the event has no matter, AND
- *   (c) it has no attendees beyond the account owner
- *       (zero attendees, or only attendee rows whose userId is the
- *       owner — a contact or plain-email attendee counts as
- *       "beyond").
- * Otherwise only the MAPPING is deleted and the CRM event survives:
- * the CRM stays authoritative for firm events, so a lawyer cleaning
- * out their personal Google calendar can never delete a firm
- * deposition — worst case the event just stops syncing to that one
- * Google calendar. (The schema offers no durable "Google-born"
- * discriminator, and cancelled items carry only id+status, so this
- * shape-based rule IS the discriminator; it errs toward keeping
- * firm data.)
+ * CANCELLATION RULE (unlink-only): a cancelled item with a mapping
+ * deletes ONLY the mapping (`CalendarEventSync` row); the CRM event
+ * is NEVER deleted by a Google-side cancel. The schema has no
+ * durable "Google-born" flag, and cancelled items carry only
+ * id+status, so there is no reliable way to tell a personal import
+ * from a CRM-born matterless "meeting" (a very common creation, with
+ * the creator as sole attendee) — any shape-based delete rule can
+ * hard-delete firm data (notes / time entries / tasks would lose
+ * their link) with no audit trail. Worst case here: an imported
+ * personal event that was deleted in Google lingers in the CRM until
+ * someone removes it there. If product wants Google-born cleanup it
+ * needs an origin flag on CalendarEvent (open item in
+ * docs/FEATURES.md); `deletedEvents` stays in the result shape (always
+ * 0) so the cron response is stable.
  *
  * Failure semantics per account (gmail-sync's discipline):
  *   - `GmailAuthError` (reconnect required) → account flipped to
@@ -88,11 +97,13 @@
 
 import { prisma } from "@/lib/prisma";
 import { GmailAuthError, gmailFetch } from "@/lib/google/gmail-client";
+import { isTransientInfraError } from "@/lib/google/transient-error";
 import {
   CALENDAR_API_BASE,
   googleEventToCrmFields,
   hasCalendarScope,
   lawcrmIdOf,
+  stripZoomLine,
   type GoogleEventResource,
 } from "@/lib/google/calendar-shared";
 
@@ -112,6 +123,10 @@ const PRIMARY_CALENDAR_ID = "primary";
 export const CALENDAR_SYNC_ERROR_PREFIX = "Last calendar sync failed: ";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** A pass where at least this many items failed and none succeeded is
+ *  treated as systemic and aborted (see runPullPass). */
+const ALL_FAILED_ABORT_MIN = 3;
 
 /** Transient calendar-sync failure (bad response, unexpected
  *  shape). The account is NOT flipped to error — next attempt
@@ -134,17 +149,23 @@ export type CalendarPullResult = {
   imported: number;
   /** CRM events overwritten by a newer Google edit (LWW). */
   updated: number;
-  /** Personal Google-born events deleted on cancellation. */
+  /** Always 0 — a Google-side cancel never deletes a CRM event
+   *  (kept so the cron response shape is stable). */
   deletedEvents: number;
-  /** Mappings removed (cancellation of a firm/shared event —
-   *  the CRM event itself survives). */
+  /** Mappings removed on a Google-side cancellation (the CRM event
+   *  itself always survives). */
   unlinked: number;
+  /** Items whose import threw and were skipped (poison-item
+   *  isolation); surfaced on the account's syncError too. */
+  failed?: number;
   error?: string;
 };
 
-type PullCounters = Pick<
-  CalendarPullResult,
-  "imported" | "updated" | "deletedEvents" | "unlinked"
+type PullCounters = Required<
+  Pick<
+    CalendarPullResult,
+    "imported" | "updated" | "deletedEvents" | "unlinked" | "failed"
+  >
 >;
 
 type EventsListResponse = {
@@ -173,10 +194,18 @@ export async function pullCalendarForAccount(
       emailAddress: true,
       grantedScopes: true,
       calendarSyncToken: true,
+      user: { select: { isActive: true } },
     },
   });
   if (!account) {
     throw new CalendarSyncError("Email account not found.");
+  }
+  // Deactivated owner — no calendar traffic, state untouched.
+  if (!account.user.isActive) {
+    return emptyResult(account, "skipped", {
+      ok: false,
+      error: "Account owner is deactivated.",
+    });
   }
 
   // Scope gate — pre-calendar connections skip cleanly with zero
@@ -212,15 +241,32 @@ export async function pullCalendarForAccount(
         calendarSyncToken: outcome.nextSyncToken ?? account.calendarSyncToken,
       },
     });
-    // Clear only OUR transient note; an email-sync failure note in
-    // the shared column must survive a calendar success.
-    await prisma.emailAccount.updateMany({
-      where: {
-        id: accountId,
-        syncError: { startsWith: CALENDAR_SYNC_ERROR_PREFIX },
-      },
-      data: { syncError: null },
-    });
+    if (outcome.counters.failed > 0) {
+      // Skipped items stay visible — but never overwrite an email-
+      // sync note in the shared column.
+      await prisma.emailAccount.updateMany({
+        where: {
+          id: accountId,
+          OR: [
+            { syncError: null },
+            { syncError: { startsWith: CALENDAR_SYNC_ERROR_PREFIX } },
+          ],
+        },
+        data: {
+          syncError: `${CALENDAR_SYNC_ERROR_PREFIX}${outcome.counters.failed} event(s) could not be imported and were skipped.`,
+        },
+      });
+    } else {
+      // Clear only OUR transient note; an email-sync failure note in
+      // the shared column must survive a calendar success.
+      await prisma.emailAccount.updateMany({
+        where: {
+          id: accountId,
+          syncError: { startsWith: CALENDAR_SYNC_ERROR_PREFIX },
+        },
+        data: { syncError: null },
+      });
+    }
 
     return {
       accountId,
@@ -265,6 +311,7 @@ function emptyResult(
     updated: 0,
     deletedEvents: 0,
     unlinked: 0,
+    failed: 0,
     ...rest,
   };
 }
@@ -288,9 +335,11 @@ async function runPullPass(
     updated: 0,
     deletedEvents: 0,
     unlinked: 0,
+    failed: 0,
   };
   let nextSyncToken: string | null = null;
   let pageToken: string | undefined;
+  let okItems = 0;
 
   do {
     const params = new URLSearchParams({
@@ -332,11 +381,41 @@ async function runPullPass(
     }
     const data = (await res.json()) as EventsListResponse;
     for (const item of data.items ?? []) {
-      await applyGoogleEvent(account, item, counters);
+      // One item the database rejects must not wedge the calendar:
+      // the pass would abort before the sync token is saved and
+      // replay the same item forever. Auth errors still stop the
+      // account; anything else is logged (ids only) and counted.
+      try {
+        await applyGoogleEvent(account, item, counters);
+        okItems++;
+      } catch (err) {
+        // Auth errors stop the account; TRANSIENT database errors
+        // (connection reset, pool timeout, deadlock) abort the pass
+        // too — skipping them would save the sync token past updates
+        // and cancellations that were never applied and never come
+        // back. Only deterministic data errors are skipped.
+        if (err instanceof GmailAuthError || isTransientInfraError(err)) {
+          throw err;
+        }
+        counters.failed++;
+        console.error(
+          `[gcal-sync] event import failed (account ${account.id}, event ${item.id ?? "?"}): ${
+            err instanceof Error ? err.name : "unknown error"
+          }`
+        );
+      }
     }
     if (data.nextSyncToken) nextSyncToken = data.nextSyncToken;
     pageToken = data.nextPageToken;
   } while (pageToken);
+
+  // Several items, none applied: systemic, not poison — abort so the
+  // sync token is not saved past them (a lone bad item still skips).
+  if (counters.failed >= ALL_FAILED_ABORT_MIN && okItems === 0) {
+    throw new CalendarSyncError(
+      `All ${counters.failed} calendar items failed to import; sync token not advanced.`
+    );
+  }
 
   return { nextSyncToken, counters };
 }
@@ -366,52 +445,99 @@ async function applyGoogleEvent(
         googleEventId: item.id,
       },
     },
-    select: { id: true, eventId: true },
+    select: { id: true, eventId: true, googleUpdatedAt: true },
   });
 
   if (mapping) {
-    // Known copy — last-write-wins against the CRM row.
-    const written = await lwwUpdateEvent(
-      mapping.eventId,
-      fields,
-      googleUpdatedAt
-    );
-    if (written) counters.updated++;
+    // Known copy. ECHO CHECK FIRST: every push stores Google's own
+    // `updated` stamp on the mapping, and the next incremental pull
+    // returns that same write back. An item no newer than the
+    // mapping's stamp is our own echo (or older) — applying it would
+    // clobber the CRM row with Google's lossy copy (Zoom line
+    // folded into the description, cleared fields restored). Only
+    // a genuinely newer Google edit proceeds to last-write-wins
+    // against the CRM row.
+    const isEcho =
+      mapping.googleUpdatedAt !== null &&
+      googleUpdatedAt !== null &&
+      googleUpdatedAt.getTime() <= mapping.googleUpdatedAt.getTime();
+    if (!isEcho) {
+      const written = await lwwUpdateEvent(
+        mapping.eventId,
+        fields,
+        googleUpdatedAt
+      );
+      if (written) counters.updated++;
+    }
     await prisma.calendarEventSync.update({
       where: { id: mapping.id },
-      data: { googleUpdatedAt, lastSyncedAt: new Date() },
+      data: {
+        googleUpdatedAt: isEcho
+          ? mapping.googleUpdatedAt
+          : (googleUpdatedAt ?? mapping.googleUpdatedAt),
+        lastSyncedAt: new Date(),
+      },
     });
     return;
   }
 
   const markedEventId = lawcrmIdOf(item);
   if (markedEventId) {
-    // A copy WE pushed but have no mapping for (mapping lost, or
-    // pushed by another device/account of the same CRM event).
+    // A copy carrying a CRM event id but with no mapping on this
+    // Google event. The marker is just a string anyone can put on an
+    // event in their own Google calendar, and CRM event ids are
+    // visible to every calendar viewer — so it is only honored for
+    // an event this account legitimately owns: the CRM event
+    // already has a mapping on THIS account (mapping re-pointed
+    // after a lost row / duplicate), or the account's user created
+    // it. Anything else is treated as an ordinary Google-born event
+    // (imported as a personal copy below) — it never adopts, edits,
+    // or later deletes someone else's CRM event.
     const event = await prisma.calendarEvent.findUnique({
       where: { id: markedEventId },
-      select: { id: true },
+      select: { id: true, createdById: true },
     });
     if (!event) return; // CRM deleted it — the push engine's problem
-    await prisma.calendarEventSync.upsert({
+    const ownMapping = await prisma.calendarEventSync.findUnique({
       where: {
         eventId_accountId: { eventId: event.id, accountId: account.id },
       },
-      create: {
-        eventId: event.id,
-        accountId: account.id,
-        googleEventId: item.id,
-        googleUpdatedAt,
-      },
-      update: {
-        googleEventId: item.id,
-        googleUpdatedAt,
-        lastSyncedAt: new Date(),
-      },
+      select: { googleUpdatedAt: true },
     });
-    const written = await lwwUpdateEvent(event.id, fields, googleUpdatedAt);
-    if (written) counters.updated++;
-    return;
+    if (ownMapping || event.createdById === account.userId) {
+      await prisma.calendarEventSync.upsert({
+        where: {
+          eventId_accountId: { eventId: event.id, accountId: account.id },
+        },
+        create: {
+          eventId: event.id,
+          accountId: account.id,
+          googleEventId: item.id,
+          googleUpdatedAt,
+        },
+        update: {
+          googleEventId: item.id,
+          googleUpdatedAt,
+          lastSyncedAt: new Date(),
+        },
+      });
+      // Same echo guard as the mapped branch, against the stamp the
+      // account's existing mapping held before this re-point.
+      const isEcho =
+        ownMapping?.googleUpdatedAt != null &&
+        googleUpdatedAt !== null &&
+        googleUpdatedAt.getTime() <= ownMapping.googleUpdatedAt.getTime();
+      if (!isEcho) {
+        const written = await lwwUpdateEvent(
+          event.id,
+          fields,
+          googleUpdatedAt
+        );
+        if (written) counters.updated++;
+      }
+      return;
+    }
+    // fall through: foreign marker → personal import
   }
 
   // Unmarked + unmapped = Google-born → import as a personal event.
@@ -454,7 +580,7 @@ async function lwwUpdateEvent(
   if (!googleUpdatedAt) return false;
   const event = await prisma.calendarEvent.findUnique({
     where: { id: eventId },
-    select: { updatedAt: true },
+    select: { updatedAt: true, zoomUrl: true },
   });
   if (!event || googleUpdatedAt.getTime() <= event.updatedAt.getTime()) {
     return false;
@@ -463,7 +589,10 @@ async function lwwUpdateEvent(
     where: { id: eventId },
     data: {
       title: fields.title,
-      description: fields.description,
+      // Undo the push-side "Zoom: <url>" fold so a genuine Google
+      // edit doesn't write it into the CRM description (the next
+      // push would stack another copy).
+      description: stripZoomLine(fields.description, event.zoomUrl),
       location: fields.location,
       startTime: fields.startTime,
       endTime: fields.endTime,
@@ -473,9 +602,7 @@ async function lwwUpdateEvent(
   return true;
 }
 
-/** The cancellation rule — see the module docstring. Cancelled
- *  items carry only id+status, so the decision reads entirely from
- *  the local shape of the mapped event. */
+/** The cancellation rule — see the module docstring: unlink only. */
 async function applyCancellation(
   account: AccountForPull,
   googleEventId: string,
@@ -485,37 +612,13 @@ async function applyCancellation(
     where: {
       accountId_googleEventId: { accountId: account.id, googleEventId },
     },
-    select: {
-      id: true,
-      event: {
-        select: {
-          id: true,
-          matterId: true,
-          attendees: { select: { userId: true } },
-          _count: { select: { googleSyncs: true } },
-        },
-      },
-    },
+    select: { id: true },
   });
   if (!mapping) return; // never imported (or already unlinked)
 
-  const event = mapping.event;
-  const soleMapping = event._count.googleSyncs === 1;
-  const personalToOwner =
-    event.matterId === null &&
-    event.attendees.every((a) => a.userId === account.userId);
-
-  if (soleMapping && personalToOwner) {
-    // Clearly a personal Google-born event — delete follows the
-    // user's Google-side cleanup. Cascade removes the mapping.
-    await prisma.calendarEvent.delete({ where: { id: event.id } });
-    counters.deletedEvents++;
-  } else {
-    // Filed / shared / multi-synced — the CRM stays authoritative.
-    // Drop only the mapping; the firm event survives.
-    await prisma.calendarEventSync.delete({ where: { id: mapping.id } });
-    counters.unlinked++;
-  }
+  // Unlink only — the CRM event survives (see the module docstring).
+  await prisma.calendarEventSync.delete({ where: { id: mapping.id } });
+  counters.unlinked++;
 }
 
 function parseGoogleUpdated(updated: string | undefined): Date | null {
@@ -581,7 +684,7 @@ export async function pullCalendarForUserAccounts(
   userId: string
 ): Promise<CalendarPullResult[]> {
   const accounts = await prisma.emailAccount.findMany({
-    where: { userId, refreshToken: { not: null } },
+    where: { userId, user: { isActive: true }, refreshToken: { not: null } },
     select: CONNECTED_ACCOUNT_SELECT,
     orderBy: { createdAt: "asc" },
   });
@@ -594,7 +697,8 @@ export async function pullCalendarForAllAccounts(): Promise<
   CalendarPullResult[]
 > {
   const accounts = await prisma.emailAccount.findMany({
-    where: { refreshToken: { not: null } },
+    // Deactivated members' calendars are not pulled.
+    where: { user: { isActive: true }, refreshToken: { not: null } },
     select: CONNECTED_ACCOUNT_SELECT,
     orderBy: { createdAt: "asc" },
   });

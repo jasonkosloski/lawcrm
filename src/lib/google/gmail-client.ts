@@ -58,6 +58,35 @@ import {
 
 export const GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1";
 
+/** Hosts `gmailFetch` will send the account's bearer token to: the
+ *  Gmail API, and the shared Google API host (Calendar, upload
+ *  endpoints). Anything else is refused BEFORE a token is minted —
+ *  a refresh-capable token must never ride to a caller-supplied
+ *  host. */
+const ALLOWED_FETCH_HOSTS = new Set([
+  "gmail.googleapis.com",
+  "www.googleapis.com",
+]);
+
+function assertGoogleApiUrl(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("gmailFetch: malformed URL.");
+  }
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.username !== "" ||
+    parsed.password !== "" ||
+    !ALLOWED_FETCH_HOSTS.has(parsed.hostname)
+  ) {
+    throw new Error(
+      `gmailFetch: refusing to send credentials to ${parsed.hostname || "an invalid host"}.`
+    );
+  }
+}
+
 /** Refresh this long before nominal expiry — covers clock skew and
  *  the lifetime of one long Gmail API call. */
 const EXPIRY_SKEW_MS = 120_000;
@@ -216,9 +245,10 @@ async function markReconnectRequired(accountId: string): Promise<void> {
  *
  * `path` is relative to `gmail/v1` (e.g. `/users/me/messages`,
  * `users/me/history?startHistoryId=123`); absolute `https://` URLs
- * pass through for the odd endpoint outside the base (e.g. the
- * upload host). The Authorization header is owned by this wrapper —
- * any caller-supplied one is overwritten.
+ * pass through for the odd endpoint outside the base (Calendar,
+ * upload) but ONLY on Google's API hosts — anything else throws
+ * before any token is read. The Authorization header is owned by
+ * this wrapper — any caller-supplied one is overwritten.
  *
  * One automatic retry after a forced refresh on 401. A second 401
  * is returned to the caller as-is (by then `getGmailAccessToken`
@@ -234,6 +264,7 @@ export async function gmailFetch(
   const url = path.startsWith("https://")
     ? path
     : `${GMAIL_API_BASE}${path.startsWith("/") ? "" : "/"}${path}`;
+  assertGoogleApiUrl(url);
 
   const call = async (token: string): Promise<Response> => {
     const headers = new Headers(init?.headers);

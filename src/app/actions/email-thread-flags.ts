@@ -10,7 +10,8 @@
  *     `getThreadById` filter), so another user's thread — or a bogus
  *     id — never resolves.
  *   - Local write first (local state is the user's intent), then a
- *     Gmail label writeback via `writebackGmailThread`, which NEVER
+ *     Gmail label writeback (archive: `writebackGmailMessages` over
+ *     the synced message ids only; star: `writebackGmailThread`), which NEVER
  *     rejects: auth failures record the reconnect signal on the
  *     account, transients warn and Gmail simply lags. Threads
  *     without an `externalId` (none today — every email thread is
@@ -31,7 +32,10 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-import { writebackGmailThread } from "@/lib/google/gmail-writeback";
+import {
+  writebackGmailMessages,
+  writebackGmailThread,
+} from "@/lib/google/gmail-writeback";
 
 /** The mailbox-scoped thread lookup both actions share. */
 async function findOwnThread(threadId: string) {
@@ -45,6 +49,7 @@ async function findOwnThread(threadId: string) {
       matterId: true,
       isStarred: true,
       isArchived: true,
+      messages: { select: { externalId: true } },
     },
   });
 }
@@ -89,9 +94,15 @@ export async function setEmailThreadArchived(
     data: { isArchived: archived },
   });
   if (thread.externalId) {
-    await writebackGmailThread(
+    // Only the messages the CRM has synced: a thread-level modify
+    // would also pull INBOX off a message that reached Gmail after the
+    // last sync and that the user has never seen here (F250).
+    const syncedIds = thread.messages
+      .map((m) => m.externalId)
+      .filter((id): id is string => Boolean(id));
+    await writebackGmailMessages(
       thread.accountId,
-      thread.externalId,
+      syncedIds,
       archived ? { removeLabelIds: ["INBOX"] } : { addLabelIds: ["INBOX"] }
     );
   }

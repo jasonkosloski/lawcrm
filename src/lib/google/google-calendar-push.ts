@@ -144,7 +144,13 @@ export async function pushEventToGoogle(eventId: string): Promise<void> {
     // Oldest-connected first — see the module docstring for why
     // exactly one account receives the copy.
     const accounts = await prisma.emailAccount.findMany({
-      where: { userId: event.createdById, refreshToken: { not: null } },
+      // A deactivated creator's Google calendar is left alone
+      // (colleague edits to their events must not PATCH it).
+      where: {
+        userId: event.createdById,
+        user: { isActive: true },
+        refreshToken: { not: null },
+      },
       orderBy: { createdAt: "asc" },
       select: { id: true, grantedScopes: true },
     });
@@ -268,16 +274,24 @@ export async function deleteEventFromGoogle(eventId: string): Promise<void> {
         accountId: true,
         googleEventId: true,
         googleCalendarId: true,
-        account: { select: { refreshToken: true, grantedScopes: true } },
+        account: {
+          select: {
+            refreshToken: true,
+            grantedScopes: true,
+            user: { select: { isActive: true } },
+          },
+        },
       },
     });
 
     for (const m of mappings) {
       try {
         // Token-less = disconnected; unscoped = reconnected without
-        // the calendar grant (the DELETE would 403). Skip silently
-        // either way — see the orphaned-copy note above.
+        // the calendar grant (the DELETE would 403); deactivated
+        // owner = their Google calendar is off-limits. Skip silently
+        // in every case — see the orphaned-copy note above.
         if (
+          !m.account.user.isActive ||
           !m.account.refreshToken ||
           !hasCalendarScope(m.account.grantedScopes)
         ) {

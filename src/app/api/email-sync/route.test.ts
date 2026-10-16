@@ -20,7 +20,7 @@ vi.mock("@/lib/google/google-calendar-sync", () => ({
 
 import { syncAllEmailAccounts } from "@/lib/google/gmail-sync";
 import { pullCalendarForAllAccounts } from "@/lib/google/google-calendar-sync";
-import { GET } from "./route";
+import { GET, maxDuration } from "./route";
 
 const mockedSync = vi.mocked(syncAllEmailAccounts);
 const mockedCalendarPull = vi.mocked(pullCalendarForAllAccounts);
@@ -70,10 +70,17 @@ describe("GET /api/email-sync", () => {
     expect(mockedSync).not.toHaveBeenCalled();
   });
 
+  it("exports a maxDuration so a long sweep isn't cut off at the platform default", () => {
+    expect(maxDuration).toBe(300);
+  });
+
   it("rejects a missing or wrong bearer", async () => {
     process.env.CRON_SECRET = "s3cret";
     expect((await GET(request())).status).toBe(401);
     expect((await GET(request("Bearer wrong"))).status).toBe(401);
+    // Same length, one byte off + longer/shorter (constant-time path).
+    expect((await GET(request("Bearer s3creX"))).status).toBe(401);
+    expect((await GET(request("Bearer s3cret-extra"))).status).toBe(401);
     expect(mockedSync).not.toHaveBeenCalled();
     expect(mockedCalendarPull).not.toHaveBeenCalled();
   });

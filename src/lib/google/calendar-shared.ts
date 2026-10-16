@@ -21,6 +21,8 @@
  *    (CalendarEventSync.googleUpdatedAt vs CalendarEvent.updatedAt).
  */
 
+import { stripNul } from "@/lib/google/strip-nul";
+
 export const CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3";
 
 /** OAuth scope required for two-way event sync. Connections made
@@ -90,19 +92,26 @@ function parseGoogleDate(key: string): Date {
 export function eventToGoogleResource(
   event: CrmEventFields & { id: string; zoomUrl?: string | null }
 ): GoogleEventResource {
+  const body = event.description?.trim() || null;
+  const zoomLine = event.zoomUrl ? `Zoom: ${event.zoomUrl}` : null;
   const descriptionParts = [
-    event.description?.trim() || null,
+    body,
     // Zoom URL folds into the description — Google's conferenceData
-    // needs a conference solution we don't own.
-    event.zoomUrl ? `Zoom: ${event.zoomUrl}` : null,
+    // needs a conference solution we don't own. Not appended twice:
+    // a description that already ends with the line (rows polluted
+    // before the pull learned to strip it) must not keep growing.
+    zoomLine && !body?.endsWith(zoomLine) ? zoomLine : null,
   ].filter(Boolean);
 
   return {
     summary: event.title,
-    description: descriptionParts.length
-      ? descriptionParts.join("\n\n")
-      : undefined,
-    location: event.location ?? undefined,
+    // EMPTY STRINGS, not undefined: JSON.stringify drops undefined
+    // keys, so a PATCH after the user cleared the field in the CRM
+    // would leave Google's old value in place (and the next pull
+    // would restore it). "" clears it on PATCH and is accepted on
+    // insert.
+    description: descriptionParts.join("\n\n"),
+    location: event.location ?? "",
     start: event.isAllDay
       ? { date: localDateKey(event.startTime) }
       : { dateTime: event.startTime.toISOString() },
@@ -146,13 +155,35 @@ export function googleEventToCrmFields(
 
   return {
     // Google allows summary-less events; the CRM requires a title.
-    title: g.summary?.trim() || "(no title)",
-    description: g.description?.trim() || null,
-    location: g.location?.trim() || null,
+    // NUL stripped — Postgres text rejects U+0000.
+    title: stripNul(g.summary ?? "").trim() || "(no title)",
+    description: stripNul(g.description ?? "").trim() || null,
+    location: stripNul(g.location ?? "").trim() || null,
     startTime,
     endTime,
     isAllDay,
   };
+}
+
+/**
+ * Undo the push-side Zoom fold on a description pulled back from
+ * Google. `eventToGoogleResource` appends `Zoom: <zoomUrl>` to the
+ * description; without stripping it on the way back, the pull would
+ * write it into the CRM description and the next push would add
+ * another. Strips every trailing copy (earlier builds stacked them).
+ * Returns null when nothing but the Zoom line remains.
+ */
+export function stripZoomLine(
+  description: string | null,
+  zoomUrl: string | null | undefined
+): string | null {
+  if (!description || !zoomUrl) return description;
+  const line = `Zoom: ${zoomUrl}`;
+  let d = description.trimEnd();
+  while (d.endsWith(line)) {
+    d = d.slice(0, d.length - line.length).trimEnd();
+  }
+  return d.trim() ? d : null;
 }
 
 /** CRM event id a pushed Google event carries, or null for events

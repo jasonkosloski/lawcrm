@@ -25,7 +25,9 @@ import { GmailAuthError, gmailFetch } from "@/lib/google/gmail-client";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 import {
   GmailWritebackError,
+  modifyGmailMessages,
   modifyGmailThread,
+  writebackGmailMessages,
   writebackGmailThread,
 } from "./gmail-writeback";
 
@@ -116,6 +118,107 @@ describe("modifyGmailThread", () => {
     await expect(
       modifyGmailThread(accountId, "t-123", { removeLabelIds: ["UNREAD"] })
     ).rejects.toThrow(GmailWritebackError);
+  });
+});
+
+describe("modifyGmailMessages / writebackGmailMessages (F250)", () => {
+  test("POSTs messages/batchModify for exactly the given ids (deduped) — never the thread endpoint", async () => {
+    const accountId = await seedAccount();
+    mockedFetch.mockResolvedValue(new Response(null, { status: 204 }));
+
+    await modifyGmailMessages(accountId, ["m1", "m2", "m1"], {
+      removeLabelIds: ["UNREAD"],
+    });
+
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    const [, path, init] = mockedFetch.mock.calls[0];
+    expect(path).toBe("/users/me/messages/batchModify");
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(String(init?.body))).toEqual({
+      ids: ["m1", "m2"],
+      removeLabelIds: ["UNREAD"],
+    });
+  });
+
+  test("chunks at 1000 ids; empty ids or empty mods never hit the network", async () => {
+    const accountId = await seedAccount();
+    mockedFetch.mockResolvedValue(new Response(null, { status: 204 }));
+    const ids = Array.from({ length: 1001 }, (_, i) => `m${i}`);
+
+    await modifyGmailMessages(accountId, ids, { removeLabelIds: ["INBOX"] });
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(String(mockedFetch.mock.calls[0][2]?.body)).ids).toHaveLength(1000);
+    expect(JSON.parse(String(mockedFetch.mock.calls[1][2]?.body)).ids).toEqual(["m1000"]);
+
+    mockedFetch.mockClear();
+    await modifyGmailMessages(accountId, [], { removeLabelIds: ["UNREAD"] });
+    await modifyGmailMessages(accountId, ["m1"], {});
+    expect(mockedFetch).not.toHaveBeenCalled();
+  });
+
+  test("a stale id that makes batchModify 400 falls back to per-message modify; the other ids are still modified, the 404 id is skipped", async () => {
+    const accountId = await seedAccount();
+    mockedFetch.mockImplementation(async (_id, path) => {
+      if (path === "/users/me/messages/batchModify") {
+        return new Response("{}", { status: 400 });
+      }
+      if (path === "/users/me/messages/m-gone/modify") {
+        return new Response("{}", { status: 404 });
+      }
+      return new Response("{}", { status: 200 });
+    });
+
+    await expect(
+      modifyGmailMessages(accountId, ["m1", "m-gone", "m2"], {
+        removeLabelIds: ["UNREAD"],
+      })
+    ).resolves.toBeUndefined();
+
+    const paths = mockedFetch.mock.calls.map(([, p]) => p);
+    expect(paths).toEqual([
+      "/users/me/messages/batchModify",
+      "/users/me/messages/m1/modify",
+      "/users/me/messages/m-gone/modify",
+      "/users/me/messages/m2/modify",
+    ]);
+    expect(JSON.parse(String(mockedFetch.mock.calls[1][2]?.body))).toEqual({
+      removeLabelIds: ["UNREAD"],
+    });
+  });
+
+  test("a non-404 failure during the per-message fallback still throws", async () => {
+    const accountId = await seedAccount();
+    mockedFetch.mockImplementation(async (_id, path) =>
+      path === "/users/me/messages/batchModify"
+        ? new Response("{}", { status: 404 })
+        : new Response("{}", { status: 500 })
+    );
+    await expect(
+      modifyGmailMessages(accountId, ["m1"], { removeLabelIds: ["UNREAD"] })
+    ).rejects.toThrow(GmailWritebackError);
+  });
+
+  test("throws on non-2xx; the safe wrapper swallows it with a warn and skips token-less accounts", async () => {
+    const accountId = await seedAccount();
+    mockedFetch.mockResolvedValue(new Response("{}", { status: 500 }));
+    await expect(
+      modifyGmailMessages(accountId, ["m1"], { removeLabelIds: ["UNREAD"] })
+    ).rejects.toThrow(GmailWritebackError);
+
+    await expect(
+      writebackGmailMessages(accountId, ["m1"], { removeLabelIds: ["UNREAD"] })
+    ).resolves.toBeUndefined();
+    expect(warnSpy).toHaveBeenCalled();
+
+    mockedFetch.mockClear();
+    const disconnected = await prisma.emailAccount.create({
+      data: { userId, emailAddress: "gone@gmail.com", refreshToken: null },
+      select: { id: true },
+    });
+    await writebackGmailMessages(disconnected.id, ["m1"], {
+      removeLabelIds: ["UNREAD"],
+    });
+    expect(mockedFetch).not.toHaveBeenCalled();
   });
 });
 

@@ -208,12 +208,12 @@ done. What's left is enumerated below.
   timestamp — Google's `updated` must be strictly newer than the
   CRM row's `updatedAt` to overwrite, and pull writes go through
   prisma directly (never the server actions) so a pull can never
-  trigger a push echo; (2) **conservative cancellation** — deleting
-  an event in Google deletes the CRM event ONLY when it's clearly a
-  personal Google-born one (sole mapping + no matter + no attendees
-  beyond the account owner); otherwise only the sync mapping drops
-  and the firm event survives — cleaning a personal Google calendar
-  can never delete a firm deposition; (3) **attendees never sync to
+  trigger a push echo; (2) **unlink-only cancellation** (W6a, ADR-020) —
+  deleting an event in Google drops only the sync mapping; the CRM
+  event always survives, so cleaning a personal Google calendar can
+  never delete a firm deposition or a CRM-born matterless meeting.
+  Cost: a Google-born import deleted in Google lingers in the CRM
+  until removed there; (3) **attendees never sync to
   Google** (Google auto-emails invites — a malpractice generator);
   (4) v1 imports every non-cancelled item incl. tentative/
   transparent. Triggers piggyback email sync: the "Sync now" button
@@ -222,6 +222,31 @@ done. What's left is enumerated below.
   the shared contract (resource mapping, echo marker, LWW policy)
   lives in `src/lib/google/calendar-shared.ts`; mappings in
   `CalendarEventSync` (one row per event × Google account).
+  - **Sync integrity and isolation (W6a, ADR-020).** Gmail: DRAFT
+    messages are never stored (local copies removed); NUL bytes are
+    stripped from persisted Google strings; a thread whose import
+    fails for a deterministic data reason is logged (ids only) and
+    skipped while connectivity/transient database errors abort the
+    pass with the cursor untouched; several threads all failing also
+    aborts. An expired-history fallback for an account that has
+    synced before is a catch-up since `lastSyncAt − 1d`; hitting its
+    per-pass cap does NOT advance the cursor or `lastSyncAt`
+    (noted in `syncError`), and threads already current locally are
+    skipped via a `format=minimal` check so repeat passes reach the
+    older part of the gap. Incremental sync never imports an unknown
+    thread older than the oldest local one (backfill anchor).
+    Deactivated users' accounts do not sync. Calendar: echo of our
+    own push is detected against the mapping's `googleUpdatedAt`; a
+    `lawcrmEventId` marker is adopted only for an event already
+    mapped to this account or created by its owner. Cron routes
+    authenticate with a constant-time bearer check. Read and archive
+    writeback modify only message ids the CRM has synced (per-message
+    fallback when Gmail rejects a stale id).
+    **Open items:** `EmailAccount.backfillBefore` (explicit backfill
+    anchor, instead of the oldest local thread) and a
+    `CalendarEvent.origin` flag (would allow safe Google-born
+    cleanup on cancel) both need a schema change; star writeback is
+    still thread-wide.
   - **Push half (CRM → Google) — landed.**
     `src/lib/google/google-calendar-push.ts`, hooked into the
     calendar-event server actions after each local commit

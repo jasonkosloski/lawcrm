@@ -19,11 +19,11 @@
  * dashboard's opportunistic hourly run is harmless.
  */
 
+import { isAuthorizedCron } from "@/lib/cron-auth";
 import { runDeadlineNotificationSweep } from "@/lib/notification-sweeps";
 
 export async function GET(request: Request): Promise<Response> {
-  const secret = process.env.CRON_SECRET;
-  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!isAuthorizedCron(request)) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -18,11 +18,15 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("@/lib/google/gmail-writeback", () => ({
   writebackGmailThread: vi.fn().mockResolvedValue(undefined),
+  writebackGmailMessages: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/current-user";
-import { writebackGmailThread } from "@/lib/google/gmail-writeback";
+import {
+  writebackGmailMessages,
+  writebackGmailThread,
+} from "@/lib/google/gmail-writeback";
 import { prisma } from "@/lib/prisma";
 import {
   setEmailThreadArchived,
@@ -39,6 +43,7 @@ import {
 const mockedGetUser = vi.mocked(getCurrentUserId);
 const mockedRevalidate = vi.mocked(revalidatePath);
 const mockedWriteback = vi.mocked(writebackGmailThread);
+const mockedMessageWriteback = vi.mocked(writebackGmailMessages);
 
 let userId: string;
 let matterId: string;
@@ -108,6 +113,20 @@ beforeEach(async () => {
     }),
   ]);
   threadId = t1.id;
+  // Two synced messages; a third may exist at Gmail but is NOT local.
+  for (const externalId of ["gm-1", "gm-2"]) {
+    await prisma.emailMessage.create({
+      data: {
+        threadId: t1.id,
+        externalId,
+        fromName: "x",
+        fromEmail: "x@x.co",
+        toRecipients: "[]",
+        body: "b",
+        sentAt: lastMessageAt,
+      },
+    });
+  }
   localOnlyThreadId = t2.id;
   otherUsersThreadId = t3.id;
 });
@@ -190,15 +209,21 @@ describe("setEmailThreadArchived", () => {
       select: { isArchived: true },
     });
     expect(thread.isArchived).toBe(true);
-    expect(mockedWriteback).toHaveBeenCalledWith(accountId, "gt-1", {
-      removeLabelIds: ["INBOX"],
-    });
+    // Message-scoped (synced ids only), never the thread-wide modify.
+    expect(mockedMessageWriteback).toHaveBeenCalledTimes(1);
+    const [calledAccount, calledIds, calledMods] =
+      mockedMessageWriteback.mock.calls[0];
+    expect(calledAccount).toBe(accountId);
+    expect([...calledIds].sort()).toEqual(["gm-1", "gm-2"]);
+    expect(calledMods).toEqual({ removeLabelIds: ["INBOX"] });
+    expect(mockedWriteback).not.toHaveBeenCalled();
     expect(mockedRevalidate).toHaveBeenCalledWith("/communication");
   });
 
   test("unarchive restores INBOX", async () => {
     await setEmailThreadArchived(threadId, true);
     mockedWriteback.mockClear();
+    mockedMessageWriteback.mockClear();
 
     const res = await setEmailThreadArchived(threadId, false);
     expect(res).toEqual({ ok: true });
@@ -208,15 +233,19 @@ describe("setEmailThreadArchived", () => {
       select: { isArchived: true },
     });
     expect(thread.isArchived).toBe(false);
-    expect(mockedWriteback).toHaveBeenCalledWith(accountId, "gt-1", {
-      addLabelIds: ["INBOX"],
-    });
+    expect(mockedMessageWriteback).toHaveBeenCalledWith(
+      accountId,
+      expect.arrayContaining(["gm-1", "gm-2"]),
+      { addLabelIds: ["INBOX"] }
+    );
+    expect(mockedWriteback).not.toHaveBeenCalled();
   });
 
   test("no-ops (no write / writeback / revalidation) when already in the requested state", async () => {
     const res = await setEmailThreadArchived(threadId, false);
     expect(res).toEqual({ ok: true });
     expect(mockedWriteback).not.toHaveBeenCalled();
+    expect(mockedMessageWriteback).not.toHaveBeenCalled();
     expect(mockedRevalidate).not.toHaveBeenCalled();
   });
 
@@ -224,6 +253,7 @@ describe("setEmailThreadArchived", () => {
     const res = await setEmailThreadArchived(localOnlyThreadId, true);
     expect(res).toEqual({ ok: true });
     expect(mockedWriteback).not.toHaveBeenCalled();
+    expect(mockedMessageWriteback).not.toHaveBeenCalled();
 
     const thread = await prisma.emailThread.findUniqueOrThrow({
       where: { id: localOnlyThreadId },
@@ -235,6 +265,7 @@ describe("setEmailThreadArchived", () => {
   test("cannot archive a thread in another user's mailbox", async () => {
     const res = await setEmailThreadArchived(otherUsersThreadId, true);
     expect(res).toEqual({ ok: false });
+    expect(mockedMessageWriteback).not.toHaveBeenCalled();
 
     const thread = await prisma.emailThread.findUniqueOrThrow({
       where: { id: otherUsersThreadId },

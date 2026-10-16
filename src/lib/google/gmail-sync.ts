@@ -37,6 +37,27 @@
  * benign cap is not an error). Older mail is fetched on demand via
  * `backfillEmailAccount` (below), one capped window per call.
  *
+ * Hardening (W6a):
+ *   - History-expired fallback for an account that has synced before
+ *     is an UNCAPPED catch-up (`q=after:<lastSyncAt - 1d>`, safety cap
+ *     `CATCHUP_MAX_THREADS`); only a first import is capped at 200/90d.
+ *   - A catch-up that hits the safety cap does NOT advance the cursor
+ *     or lastSyncAt (so the gap is re-listed next pass) and notes it in
+ *     syncError; catch-up threads already current locally are skipped
+ *     after a `format=minimal` check, so each pass reaches further.
+ *   - Per-thread failure isolation only covers DETERMINISTIC data
+ *     errors. Auth, transport and transient database errors (see
+ *     transient-error.ts) abort the pass with the cursor untouched, as
+ *     does a pass where several threads all failed.
+ *   - Incremental sync never imports an UNKNOWN thread whose last
+ *     message is older than the oldest local thread (the backfill
+ *     anchor) — label-only history records on ancient mail would drag
+ *     the anchor back and strand everything in between.
+ *   - DRAFT messages are never stored (local copies are removed); NUL
+ *     bytes are stripped from every persisted string; one thread whose
+ *     import throws is logged + skipped (surfaced via syncError) so it
+ *     can't wedge the mailbox. Deactivated owners' accounts don't sync.
+ *
  * Idempotency: threads upsert on the (accountId, externalId) unique,
  * messages on (threadId, externalId) — re-running any sync is safe.
  *
@@ -92,6 +113,8 @@
 import { prisma } from "@/lib/prisma";
 import { GmailAuthError, gmailFetch } from "@/lib/google/gmail-client";
 import { sanitizeEmailHtml } from "@/lib/sanitize-html";
+import { stripNul, stripNulOrNull } from "@/lib/google/strip-nul";
+import { isTransientInfraError } from "@/lib/google/transient-error";
 import {
   decodeHtmlEntities,
   decodeMimeWords,
@@ -114,6 +137,11 @@ export const FULL_SYNC_MAX_AGE_DAYS = 90;
 /** Backfill cap: at most this many threads imported per
  *  `backfillEmailAccount` call (one "Load older emails" click). */
 export const BACKFILL_MAX_THREADS = 200;
+/** History-expired catch-up cap (threads imported newer than the
+ *  last good sync). Far above the initial-import cap on purpose: the
+ *  catch-up must close the whole gap, since "Load older emails" only
+ *  walks BELOW the oldest local thread and can never reach it. */
+export const CATCHUP_MAX_THREADS = 1000;
 /** Gmail history.list page size (500 is the API max). */
 const HISTORY_PAGE_SIZE = 500;
 /** Gmail threads.list page size during a full sync. */
@@ -146,6 +174,34 @@ export type AccountSyncResult = {
 type SyncOutcome = {
   newHistoryId: string | null;
   threadsSynced: number;
+  /** Threads whose import threw (data the database rejected, a
+   *  malformed payload) and were skipped so the rest of the pass —
+   *  and the history cursor — could still move. */
+  failedThreads: number;
+  /** First few failed thread ids (ids only, never content) for the
+   *  operator-visible syncError note. */
+  failedThreadIds: string[];
+  /** Catch-up stopped at its safety cap with mail still unlisted:
+   *  the cursor and lastSyncAt must NOT advance (see runFullSync). */
+  truncated: boolean;
+};
+
+/** Per-pass context threaded into `syncOneThread`. */
+type ThreadPassContext = {
+  /** Gmail thread ids whose import threw this pass. */
+  failed: string[];
+  /** Threads whose import completed without throwing (written OR
+   *  legitimately skipped). Drives the "everything failed" guard. */
+  ok: number;
+  /** Catch-up only: check each thread with a cheap `format=minimal`
+   *  fetch first and skip the full fetch + upsert when the local copy
+   *  already matches (message count, last message time, flags). Makes
+   *  a re-run of an interrupted catch-up cheap and lets it progress
+   *  past what an earlier attempt already imported. */
+  skipUnchanged?: boolean;
+  /** Incremental only: skip UNKNOWN threads whose last message is
+   *  older than this (see `upsertThread`'s `skipUnknownBefore`). */
+  skipUnknownBefore?: Date | null;
 };
 
 // ── Gmail API response shapes (subset) ───────────────────────────────────
@@ -173,15 +229,60 @@ type ThreadListResponse = {
 
 // ── Single-account sync ──────────────────────────────────────────────────
 
+/** The operator-visible note for a pass that completed but did not do
+ *  everything: truncated catch-up and/or skipped (poisoned) threads.
+ *  Thread ids only — never content. Null = clean pass. */
+function syncNote(outcome: SyncOutcome): string | null {
+  const parts: string[] = [];
+  if (outcome.truncated) {
+    parts.push(
+      `Catch-up after expired Gmail history hit its per-pass thread safety cap; it will continue on the next sync.`
+    );
+  }
+  if (outcome.failedThreads > 0) {
+    const ids = outcome.failedThreadIds.join(", ");
+    parts.push(
+      `${outcome.failedThreads} thread(s) could not be imported and were skipped (${ids}${
+        outcome.failedThreads > outcome.failedThreadIds.length ? ", …" : ""
+      }).`
+    );
+  }
+  return parts.length > 0 ? parts.join(" ") : null;
+}
+
 export async function syncEmailAccount(
-  accountId: string
+  accountId: string,
+  opts?: {
+    /** Test seam: override the catch-up safety cap. */
+    catchUpMaxThreads?: number;
+  }
 ): Promise<AccountSyncResult> {
   const account = await prisma.emailAccount.findUnique({
     where: { id: accountId },
-    select: { id: true, emailAddress: true, historyId: true, syncStatus: true },
+    select: {
+      id: true,
+      emailAddress: true,
+      historyId: true,
+      lastSyncAt: true,
+      syncStatus: true,
+      user: { select: { isActive: true } },
+    },
   });
   if (!account) {
     throw new GmailSyncError("Email account not found.");
+  }
+  if (!account.user.isActive) {
+    // A deactivated member's mailbox stops syncing everywhere (cron
+    // AND on-demand) — no Google traffic, account state untouched so
+    // a reactivation resumes cleanly.
+    return {
+      accountId,
+      emailAddress: account.emailAddress,
+      ok: false,
+      mode: "skipped",
+      threadsSynced: 0,
+      error: "Account owner is deactivated.",
+    };
   }
   const priorStatus =
     account.syncStatus === "syncing" ? "connected" : account.syncStatus;
@@ -204,9 +305,18 @@ export async function syncEmailAccount(
         labelMap
       );
       if (incremental === "history-expired") {
-        // Cursor aged out at Google — transparent full resync.
+        // Cursor aged out at Google — transparent full resync. With a
+        // prior successful sync the pass is an UNCAPPED catch-up from
+        // that point (the 200-thread initial-import cap would leave a
+        // gap backfill can never reach); without one it's the normal
+        // capped first import.
         mode = "full";
-        outcome = await runFullSync(accountId, labelMap);
+        outcome = await runFullSync(
+          accountId,
+          labelMap,
+          account.lastSyncAt ?? undefined,
+          opts?.catchUpMaxThreads
+        );
       } else {
         outcome = incremental;
       }
@@ -221,9 +331,18 @@ export async function syncEmailAccount(
       where: { id: accountId },
       data: {
         syncStatus: "connected",
-        syncError: null,
-        lastSyncAt: new Date(),
-        historyId: outcome.newHistoryId ?? account.historyId,
+        // Skipped threads and a truncated catch-up stay visible
+        // (cleared by the next clean pass) — never silently dropped.
+        syncError: syncNote(outcome),
+        // A truncated catch-up leaves BOTH the (expired) cursor and
+        // lastSyncAt alone: the next pass must re-list the same
+        // window, not start from "now" and strand the unlisted part.
+        ...(outcome.truncated
+          ? {}
+          : {
+              lastSyncAt: new Date(),
+              historyId: outcome.newHistoryId ?? account.historyId,
+            }),
         threadsIndexed,
       },
     });
@@ -310,18 +429,49 @@ async function runIncrementalSync(
     pageToken = data.nextPageToken;
   } while (pageToken);
 
+  const frontier = await prisma.emailThread.aggregate({
+    where: { accountId },
+    _min: { lastMessageAt: true },
+  });
+  // Backfill anchors on the oldest local thread. A label-only history
+  // record on an OLD thread we never imported (read/star/trash a 2019
+  // email) must not pull that thread in and drag the anchor back
+  // years — everything between would be unreachable. Unknown threads
+  // older than the current frontier belong to backfill; known threads
+  // and anything newer sync normally.
+  const ctx: ThreadPassContext = {
+    failed: [],
+    ok: 0,
+    skipUnknownBefore: frontier._min.lastMessageAt,
+  };
   let threadsSynced = 0;
   for (const threadId of affected) {
-    if (await syncOneThread(accountId, threadId, labelMap)) threadsSynced++;
+    if (await syncOneThread(accountId, threadId, labelMap, ctx)) threadsSynced++;
   }
-  return { newHistoryId, threadsSynced };
+  assertNotAllFailed(ctx);
+  return {
+    newHistoryId,
+    threadsSynced,
+    failedThreads: ctx.failed.length,
+    failedThreadIds: ctx.failed.slice(0, 5),
+    truncated: false,
+  };
 }
 
 // ── Full path ────────────────────────────────────────────────────────────
 
+/**
+ * Full list walk. `catchUpSince` set = the history-expired fallback
+ * for an account that HAS synced before: list everything since a day
+ * before that point under the large `CATCHUP_MAX_THREADS` safety cap
+ * (a gap here is unrecoverable — backfill only walks below the
+ * oldest local thread). Unset = the capped initial import.
+ */
 async function runFullSync(
   accountId: string,
-  labelMap: Map<string, string>
+  labelMap: Map<string, string>,
+  catchUpSince?: Date,
+  catchUpMaxThreads?: number
 ): Promise<SyncOutcome> {
   // Cursor FIRST: anything that changes while we walk the list is
   // covered by the next incremental pass (at-least-once + idempotent
@@ -336,13 +486,49 @@ async function runFullSync(
   const newHistoryId =
     profile.historyId !== undefined ? String(profile.historyId) : null;
 
+  const cap = catchUpSince
+    ? (catchUpMaxThreads ?? CATCHUP_MAX_THREADS)
+    : FULL_SYNC_MAX_THREADS;
+  // Age half of the cap. Initial import: relative `newer_than`.
+  // Catch-up: absolute `after:<epoch s>`, a day of slack before the
+  // last good sync so clock skew / in-flight mail can't open a gap.
+  const q = catchUpSince
+    ? `after:${Math.max(0, Math.floor(catchUpSince.getTime() / 1000) - 86400)}`
+    : `newer_than:${FULL_SYNC_MAX_AGE_DAYS}d`;
+
+  const ctx: ThreadPassContext = {
+    failed: [],
+    ok: 0,
+    skipUnchanged: Boolean(catchUpSince),
+  };
+  const finish = (threadsSynced: number, truncated: boolean): SyncOutcome => {
+    assertNotAllFailed(ctx);
+    // Only a CATCH-UP truncation is a problem (the initial import is
+    // capped by design). The caller keeps the stale cursor and the old
+    // lastSyncAt so the next pass re-lists the same window; threads
+    // already imported are skipped cheaply (`skipUnchanged`), so each
+    // pass reaches further back until the gap is closed.
+    const catchUpTruncated = truncated && Boolean(catchUpSince);
+    if (catchUpTruncated) {
+      console.warn(
+        `[gmail-sync] catch-up for account ${accountId} stopped at the ${cap}-thread safety cap; will continue next sync`
+      );
+    }
+    return {
+      newHistoryId,
+      threadsSynced,
+      failedThreads: ctx.failed.length,
+      failedThreadIds: ctx.failed.slice(0, 5),
+      truncated: catchUpTruncated,
+    };
+  };
+
   let threadsSynced = 0;
   let pageToken: string | undefined;
   do {
     const params = new URLSearchParams({
       maxResults: String(THREAD_LIST_PAGE_SIZE),
-      // Age half of the initial-import cap (see module docstring).
-      q: `newer_than:${FULL_SYNC_MAX_AGE_DAYS}d`,
+      q,
     });
     if (pageToken) params.set("pageToken", pageToken);
     const res = await gmailFetch(accountId, `/users/me/threads?${params}`);
@@ -351,15 +537,15 @@ async function runFullSync(
     }
     const data = (await res.json()) as ThreadListResponse;
     for (const t of data.threads ?? []) {
-      // Count half of the initial-import cap: the list is
-      // newest-first, so stopping here keeps the newest N.
-      if (threadsSynced >= FULL_SYNC_MAX_THREADS) return { newHistoryId, threadsSynced };
-      if (await syncOneThread(accountId, t.id, labelMap)) threadsSynced++;
+      // Count half of the cap: the list is newest-first, so
+      // stopping here keeps the newest N.
+      if (threadsSynced >= cap) return finish(threadsSynced, true);
+      if (await syncOneThread(accountId, t.id, labelMap, ctx)) threadsSynced++;
     }
     pageToken = data.nextPageToken;
-  } while (pageToken && threadsSynced < FULL_SYNC_MAX_THREADS);
+  } while (pageToken && threadsSynced < cap);
 
-  return { newHistoryId, threadsSynced };
+  return finish(threadsSynced, Boolean(pageToken));
 }
 
 // ── Older-mail backfill ──────────────────────────────────────────────────
@@ -448,6 +634,7 @@ export async function backfillEmailAccount(
   try {
     const labelMap = await fetchLabelMap(accountId);
     let threadsSynced = 0;
+    const passCtx: ThreadPassContext = { failed: [], ok: 0 };
     let pageToken: string | undefined;
     do {
       const params = new URLSearchParams({
@@ -474,13 +661,19 @@ export async function backfillEmailAccount(
       for (const id of pageIds) {
         if (existing.has(id)) continue;
         if (threadsSynced >= cap) {
+          assertNotAllFailed(passCtx);
           return await finishBackfill(account, threadsSynced, before);
         }
-        if (await syncOneThread(accountId, id, labelMap)) threadsSynced++;
+        // A poisoned thread is skipped (and logged), not fatal: it
+        // isn't local, so the next window re-lists and retries it.
+        if (await syncOneThread(accountId, id, labelMap, passCtx)) {
+          threadsSynced++;
+        }
       }
       pageToken = data.nextPageToken;
     } while (pageToken && threadsSynced < cap);
 
+    assertNotAllFailed(passCtx);
     return await finishBackfill(account, threadsSynced, before);
   } catch (err) {
     if (err instanceof GmailAuthError) {
@@ -547,46 +740,183 @@ async function fetchLabelMap(
   );
 }
 
+/** Below this many failures a pass that imported nothing is treated
+ *  as "a poisoned thread", above it as "something systemic is wrong"
+ *  (see `assertNotAllFailed`). */
+const ALL_FAILED_ABORT_MIN = 3;
+
+/** Guard against skip-and-advance hiding a systemic failure: when
+ *  EVERY attempted thread in a pass threw (and there were several),
+ *  the cause is almost certainly not the data — abort so the cursor
+ *  stays put and the next run retries. One or two failures with no
+ *  success is still treated as isolated poison (a single-thread
+ *  incremental pass whose only thread is poisoned must not wedge). */
+function assertNotAllFailed(ctx: ThreadPassContext): void {
+  if (ctx.failed.length >= ALL_FAILED_ABORT_MIN && ctx.ok === 0) {
+    throw new GmailSyncError(
+      `All ${ctx.failed.length} thread imports failed; aborting without advancing the sync cursor.`
+    );
+  }
+}
+
+/** Does the local copy of `gthread` (a `format=minimal` response)
+ *  already match Gmail: same non-draft message count, same last
+ *  message time, same read/star/archive flags? */
+async function isThreadUnchanged(
+  accountId: string,
+  gthread: GmailThread
+): Promise<boolean> {
+  const messages = (gthread.messages ?? []).filter(
+    (m) => !(m.labelIds ?? []).includes("DRAFT")
+  );
+  if (messages.length === 0) return false;
+  const local = await prisma.emailThread.findUnique({
+    where: { accountId_externalId: { accountId, externalId: gthread.id } },
+    select: {
+      messageCount: true,
+      lastMessageAt: true,
+      isRead: true,
+      isStarred: true,
+      isArchived: true,
+    },
+  });
+  if (!local) return false;
+  const lastMs = Math.max(...messages.map((m) => Number(m.internalDate ?? 0)));
+  const flags = threadFlags(messages);
+  return (
+    local.messageCount === messages.length &&
+    local.lastMessageAt.getTime() === lastMs &&
+    local.isRead === flags.isRead &&
+    local.isStarred === flags.isStarred &&
+    local.isArchived === flags.isArchived
+  );
+}
+
 /** Fetch one thread `format=full` and upsert it. Returns false when
  *  the thread 404s (deleted upstream) — the LOCAL copy is kept:
  *  filed email is part of the firm's matter record, not a mirror of
- *  the provider's retention choices. */
+ *  the provider's retention choices — or when it was skipped (draft-
+ *  only, a frontier-skipped unknown thread, an already-current
+ *  catch-up thread, or a failed import).
+ *
+ *  Failure isolation: a DETERMINISTIC throw while PARSING/PERSISTING
+ *  one thread (data the database rejects, a malformed payload) must
+ *  not wedge the mailbox — the pass would abort before the history
+ *  cursor advances and replay the same poisoned thread forever. Such
+ *  threads are logged (account + thread id only, never content),
+ *  recorded on `ctx.failed`, and skipped. Everything else aborts the
+ *  pass so the cursor does NOT advance and the next run retries:
+ *  auth errors, transport / status failures (`GmailSyncError`,
+ *  thrown outside the try), and TRANSIENT database errors
+ *  (`isTransientInfraError` — connection reset, pool timeout,
+ *  deadlock). Skipping those would advance the cursor past mail that
+ *  was never stored and is never re-fetched. */
 async function syncOneThread(
   accountId: string,
   externalThreadId: string,
-  labelMap: Map<string, string>
+  labelMap: Map<string, string>,
+  ctx: ThreadPassContext
 ): Promise<boolean> {
-  const res = await gmailFetch(
-    accountId,
-    `/users/me/threads/${externalThreadId}?format=full`
-  );
+  const threadPath = `/users/me/threads/${encodeURIComponent(externalThreadId)}`;
+  if (ctx.skipUnchanged) {
+    const minimal = await gmailFetch(accountId, `${threadPath}?format=minimal`);
+    if (minimal.status === 404) return false;
+    if (!minimal.ok) {
+      throw new GmailSyncError(`Gmail thread fetch failed (${minimal.status}).`);
+    }
+    let unchanged = false;
+    try {
+      unchanged = await isThreadUnchanged(
+        accountId,
+        (await minimal.json()) as GmailThread
+      );
+    } catch {
+      // Cheap check only — any problem falls through to the full path,
+      // which has the real error handling.
+    }
+    if (unchanged) {
+      ctx.ok++;
+      return false;
+    }
+  }
+  const res = await gmailFetch(accountId, `${threadPath}?format=full`);
   if (res.status === 404) return false;
   if (!res.ok) {
     throw new GmailSyncError(`Gmail thread fetch failed (${res.status}).`);
   }
-  const gthread = (await res.json()) as GmailThread;
-  await upsertThread(accountId, gthread, labelMap);
-  return true;
+  try {
+    const gthread = (await res.json()) as GmailThread;
+    const written = await upsertThread(accountId, gthread, labelMap, {
+      skipUnknownBefore: ctx.skipUnknownBefore,
+    });
+    ctx.ok++;
+    return written;
+  } catch (err) {
+    if (err instanceof GmailAuthError || isTransientInfraError(err)) throw err;
+    ctx.failed.push(externalThreadId);
+    console.error(
+      `[gmail-sync] thread import failed (account ${accountId}, thread ${externalThreadId}): ${
+        err instanceof Error ? err.name : "unknown error"
+      }`
+    );
+    return false;
+  }
 }
 
-/** Persist one full Gmail thread. Exported for tests. */
+/** Persist one full Gmail thread. Exported for tests. Returns true
+ *  when the thread was written, false when skipped.
+ *
+ *  - DRAFT-labelled messages are never stored (each draft save mints
+ *    a new immutable message id, so they'd pile up as phantom
+ *    unsent "messages", and could surface privileged text that was
+ *    never sent). Any local copy of a message that now carries
+ *    DRAFT is removed. A thread with nothing but drafts is skipped.
+ *  - Every string from Google passes `stripNul` — Postgres text
+ *    rejects U+0000.
+ *  - `skipUnknownBefore`: skip a thread we have NO local copy of
+ *    whose last message predates this instant (incremental sync's
+ *    guard against dragging the backfill anchor backwards). */
 export async function upsertThread(
   accountId: string,
   gthread: GmailThread,
-  labelMap: Map<string, string>
-): Promise<void> {
-  const messages: GmailMessage[] = [...(gthread.messages ?? [])].sort(
-    (a, b) => Number(a.internalDate ?? 0) - Number(b.internalDate ?? 0)
-  );
-  if (messages.length === 0) return;
+  labelMap: Map<string, string>,
+  opts?: { skipUnknownBefore?: Date | null }
+): Promise<boolean> {
+  const isDraft = (m: GmailMessage): boolean =>
+    (m.labelIds ?? []).includes("DRAFT");
+  const allMessages = gthread.messages ?? [];
+  const draftIds = allMessages.filter(isDraft).map((m) => m.id);
+  if (draftIds.length > 0) {
+    await prisma.emailMessage.deleteMany({
+      where: {
+        externalId: { in: draftIds },
+        thread: { accountId, externalId: gthread.id },
+      },
+    });
+  }
+  const messages: GmailMessage[] = allMessages
+    .filter((m) => !isDraft(m))
+    .sort((a, b) => Number(a.internalDate ?? 0) - Number(b.internalDate ?? 0));
+  if (messages.length === 0) return false;
   const first = messages[0];
   const last = messages[messages.length - 1];
 
   const subject =
-    decodeMimeWords(headerValue(first.payload, "Subject") ?? "").trim() ||
+    stripNul(decodeMimeWords(headerValue(first.payload, "Subject") ?? "")).trim() ||
     "(no subject)";
-  const snippet = last.snippet ? decodeHtmlEntities(last.snippet) : null;
+  const snippet = last.snippet
+    ? stripNul(decodeHtmlEntities(last.snippet))
+    : null;
   const lastMessageAt = new Date(Number(last.internalDate ?? Date.now()));
+
+  if (opts?.skipUnknownBefore && lastMessageAt < opts.skipUnknownBefore) {
+    const known = await prisma.emailThread.findUnique({
+      where: { accountId_externalId: { accountId, externalId: gthread.id } },
+      select: { id: true },
+    });
+    if (!known) return false;
+  }
+
   const flags = threadFlags(messages);
   const parsed = messages.map(parseGmailMessage);
   const hasAttachments = parsed.some((p) => p.attachments.length > 0);
@@ -619,7 +949,7 @@ export async function upsertThread(
     for (const labelId of m.labelIds ?? []) {
       if (!isUserLabelId(labelId)) continue;
       const name = labelMap.get(labelId);
-      if (name) desired.add(gmailLabelSlug(name));
+      if (name) desired.add(stripNul(gmailLabelSlug(name)));
     }
   }
   await prisma.emailLabel.deleteMany({
@@ -637,12 +967,13 @@ export async function upsertThread(
 
   for (const p of parsed) {
     // SANITIZE AT WRITE TIME — the only path into EmailMessage.body.
-    const body = sanitizeEmailHtml(p.bodyHtmlRaw);
+    const body = stripNul(sanitizeEmailHtml(p.bodyHtmlRaw));
     const providerMessageFields = {
-      fromName: p.from.name || p.from.email,
-      fromEmail: p.from.email,
-      toRecipients: JSON.stringify(p.to),
-      ccRecipients: p.cc.length > 0 ? JSON.stringify(p.cc) : null,
+      fromName: stripNul(p.from.name || p.from.email),
+      fromEmail: stripNul(p.from.email),
+      toRecipients: stripNul(JSON.stringify(p.to)),
+      ccRecipients:
+        p.cc.length > 0 ? stripNul(JSON.stringify(p.cc)) : null,
       body,
       sentAt: p.sentAt,
     };
@@ -669,8 +1000,8 @@ export async function upsertThread(
           ...providerMessageFields,
           attachments: {
             create: p.attachments.map((a) => ({
-              filename: a.filename,
-              contentType: a.mimeType,
+              filename: stripNul(a.filename),
+              contentType: stripNulOrNull(a.mimeType),
               fileSize: a.size,
               // Gmail attachment id parked in fileUrl under a
               // recognizable scheme until the on-demand bytes fetch
@@ -682,6 +1013,7 @@ export async function upsertThread(
       });
     }
   }
+  return true;
 }
 
 // ── Multi-account wrappers ───────────────────────────────────────────────
@@ -743,7 +1075,7 @@ export async function syncEmailAccountsForUser(
   userId: string
 ): Promise<AccountSyncResult[]> {
   const accounts = await prisma.emailAccount.findMany({
-    where: { userId, refreshToken: { not: null } },
+    where: { userId, user: { isActive: true }, refreshToken: { not: null } },
     select: CONNECTED_ACCOUNT_SELECT,
     orderBy: { createdAt: "asc" },
   });
@@ -754,7 +1086,9 @@ export async function syncEmailAccountsForUser(
  *  path. No session involved; each account syncs for its own user. */
 export async function syncAllEmailAccounts(): Promise<AccountSyncResult[]> {
   const accounts = await prisma.emailAccount.findMany({
-    where: { refreshToken: { not: null } },
+    // Deactivated members' mailboxes are NOT synced — deactivation
+    // is the admin lever (see actions/email-accounts.ts).
+    where: { user: { isActive: true }, refreshToken: { not: null } },
     select: CONNECTED_ACCOUNT_SELECT,
     orderBy: { createdAt: "asc" },
   });

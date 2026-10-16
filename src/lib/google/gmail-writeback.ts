@@ -43,6 +43,12 @@
  * there is no cycle: user intent → local flag → Gmail label →
  * (resync) → same local flag. Converged.
  *
+ * Thread vs message scope: `modifyGmailThread` affects EVERY message
+ * of the Gmail thread, including ones the CRM hasn't synced yet.
+ * Read-state and archive writeback therefore use `writebackGmailMessages`
+ * (batchModify over the message ids the CRM actually holds) so a
+ * message that landed between syncs keeps its UNREAD label.
+ *
  * Label vocabulary used by the actions:
  *   read      → remove UNREAD
  *   star      → add/remove STARRED
@@ -101,6 +107,86 @@ export async function modifyGmailThread(
   }
 }
 
+/** `users/me/messages/batchModify` accepts at most 1000 ids. */
+const BATCH_MODIFY_MAX_IDS = 1000;
+
+/**
+ * Per-MESSAGE label modify: POST `users/me/messages/batchModify`
+ * for exactly the given Gmail message ids. This is what read-state
+ * writeback uses instead of the thread-level modify — a thread
+ * modify applies to EVERY message in the Gmail thread, including
+ * ones that arrived after the last sync and that the user has never
+ * seen in the CRM (marking those read / archived would hide a new
+ * message from opposing counsel). Empty id list or empty
+ * modification = no network call. A 400/404 from the batch (a stale
+ * id poisons the whole batch) falls back to per-message modify,
+ * skipping ids Gmail 404s. Throws on other failures.
+ */
+export async function modifyGmailMessages(
+  accountId: string,
+  gmailMessageIds: string[],
+  mods: GmailThreadModification
+): Promise<void> {
+  const labels: Record<string, string[]> = {};
+  if (mods.addLabelIds && mods.addLabelIds.length > 0) {
+    labels.addLabelIds = mods.addLabelIds;
+  }
+  if (mods.removeLabelIds && mods.removeLabelIds.length > 0) {
+    labels.removeLabelIds = mods.removeLabelIds;
+  }
+  const ids = [...new Set(gmailMessageIds)];
+  if (ids.length === 0 || Object.keys(labels).length === 0) return;
+
+  for (let i = 0; i < ids.length; i += BATCH_MODIFY_MAX_IDS) {
+    const chunk = ids.slice(i, i + BATCH_MODIFY_MAX_IDS);
+    const res = await gmailFetch(accountId, "/users/me/messages/batchModify", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ids: chunk, ...labels }),
+    });
+    if (res.ok) continue;
+    if (res.status === 400 || res.status === 404) {
+      // Gmail rejects the WHOLE batch when any one id is invalid. Local
+      // EmailMessage rows deliberately outlive Gmail-side deletion (and
+      // older builds stored draft versions whose ids no longer exist),
+      // so one stale id must not make read/archive writeback fail for
+      // the thread forever (the next sync would flip it back to
+      // unread). Retry message-by-message and skip ids Gmail no longer
+      // has.
+      await modifyMessagesOneByOne(accountId, chunk, labels);
+      continue;
+    }
+    throw new GmailWritebackError(
+      `Gmail message batchModify failed (${res.status}).`
+    );
+  }
+}
+
+/** Per-message fallback for `modifyGmailMessages`: POST
+ *  `users/me/messages/{id}/modify`. A 404 (message gone) is skipped
+ *  per id; any other failure throws. */
+async function modifyMessagesOneByOne(
+  accountId: string,
+  ids: string[],
+  labels: Record<string, string[]>
+): Promise<void> {
+  for (const id of ids) {
+    const res = await gmailFetch(
+      accountId,
+      `/users/me/messages/${encodeURIComponent(id)}/modify`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(labels),
+      }
+    );
+    if (res.ok || res.status === 404) continue;
+    throw new GmailWritebackError(
+      `Gmail message modify failed (${res.status}).`
+    );
+  }
+}
+
 /**
  * Fire-and-forget-safe writeback. NEVER rejects (safe to `await`
  * inline after the local write, or to `void` off). See the module
@@ -110,6 +196,28 @@ export async function writebackGmailThread(
   accountId: string,
   gmailThreadId: string,
   mods: GmailThreadModification
+): Promise<void> {
+  await safeWriteback(accountId, "thread modify", () =>
+    modifyGmailThread(accountId, gmailThreadId, mods)
+  );
+}
+
+/** Same never-rejects contract as `writebackGmailThread`, but
+ *  scoped to the given message ids (see `modifyGmailMessages`). */
+export async function writebackGmailMessages(
+  accountId: string,
+  gmailMessageIds: string[],
+  mods: GmailThreadModification
+): Promise<void> {
+  await safeWriteback(accountId, "message batchModify", () =>
+    modifyGmailMessages(accountId, gmailMessageIds, mods)
+  );
+}
+
+async function safeWriteback(
+  accountId: string,
+  what: string,
+  run: () => Promise<void>
 ): Promise<void> {
   try {
     const account = await prisma.emailAccount.findUnique({
@@ -121,7 +229,7 @@ export async function writebackGmailThread(
     // reconnect-required, which a flag toggle has no business doing.
     if (!account?.refreshToken) return;
 
-    await modifyGmailThread(accountId, gmailThreadId, mods);
+    await run();
   } catch (err) {
     if (err instanceof GmailAuthError) {
       // Reconnect required — surface it where the sync engine does
@@ -143,6 +251,6 @@ export async function writebackGmailThread(
     // Transient (network / 5xx / rate limit / DB hiccup) — the local
     // flag is already committed and is the user's intent; Gmail
     // converges on a later writeback or stays behind harmlessly.
-    console.warn("[gmail-writeback] thread modify failed", err);
+    console.warn(`[gmail-writeback] ${what} failed`, err);
   }
 }

@@ -19,15 +19,21 @@
  * failure never blocks the mail sweep or fails the request).
  */
 
+import { isAuthorizedCron } from "@/lib/cron-auth";
 import { syncAllEmailAccounts } from "@/lib/google/gmail-sync";
 import {
   pullCalendarForAllAccounts,
   type CalendarPullResult,
 } from "@/lib/google/google-calendar-sync";
 
+/** The sweep walks every mailbox + calendar sequentially; give it
+ *  the Fluid-compute ceiling instead of the default so a first full
+ *  sync isn't cut off mid-account (and then overlapped by the next
+ *  every-5-minutes invocation). */
+export const maxDuration = 300;
+
 export async function GET(request: Request): Promise<Response> {
-  const secret = process.env.CRON_SECRET;
-  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!isAuthorizedCron(request)) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 

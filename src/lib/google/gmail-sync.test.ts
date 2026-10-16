@@ -27,6 +27,7 @@ vi.mock("@/lib/google/gmail-client", async (importOriginal) => {
 });
 
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
 import { GmailAuthError, gmailFetch } from "@/lib/google/gmail-client";
 import {
   resetDb,
@@ -47,6 +48,7 @@ import {
   GmailSyncError,
   maybeKickEmailSync,
   resetEmailSyncKickThrottleForTests,
+  syncAllEmailAccounts,
   syncEmailAccount,
   syncEmailAccountsForUser,
 } from "./gmail-sync";
@@ -871,5 +873,531 @@ describe("maybeKickEmailSync — page-load throttle", () => {
     await seedAccount({ lastSyncAt: null });
     mockedFetch.mockRejectedValue(new Error("network down"));
     await expect(maybeKickEmailSync(userId)).resolves.toEqual({ ran: true });
+  });
+});
+
+// ── W6a: isolation, drafts, deactivated owners, catch-up, anchor ─────────
+
+describe("poison-message isolation (F069)", () => {
+  it("strips NUL bytes from subject, body, sender and filename instead of failing the insert", async () => {
+    const accountId = await seedAccount();
+    const thread: GmailThread = {
+      id: "t-nul",
+      messages: [
+        gmailMsg({
+          id: "m-nul",
+          threadId: "t-nul",
+          // =?UTF-8?B?AA==?= decodes to a single U+0000.
+          subject: "=?UTF-8?B?AA==?=Hello",
+          from: "Eve\u0000 <eve@x.co>",
+          text: "body\u0000with\u0000nuls",
+          snippet: "snip\u0000pet",
+          attachments: [{ filename: "a\u0000.pdf", attachmentId: "att-1" }],
+        }),
+      ],
+    };
+    installFakeGmail({ labels: [], threads: [thread] });
+
+    const result = await syncEmailAccount(accountId);
+    expect(result).toMatchObject({ ok: true, threadsSynced: 1 });
+
+    const stored = await prisma.emailThread.findFirstOrThrow({
+      where: { accountId },
+      include: { messages: { include: { attachments: true } } },
+    });
+    expect(stored.subject).toBe("Hello");
+    expect(stored.snippet).toBe("snippet");
+    expect(stored.messages[0].body).toContain("bodywithnuls");
+    expect(stored.messages[0].body).not.toContain("\u0000");
+    expect(stored.messages[0].fromName).not.toContain("\u0000");
+    expect(stored.messages[0].attachments[0].filename).toBe("a.pdf");
+  });
+
+  it("one poisoned thread is skipped and logged; the rest sync and the cursor still advances", async () => {
+    const accountId = await seedAccount({ historyId: "h100" });
+    const poisoned: GmailThread = {
+      id: "t-bad",
+      messages: [gmailMsg({ id: "mb", threadId: "t-bad", text: "x" })],
+    };
+    // An unparseable internalDate makes the insert throw.
+    poisoned.messages![0].internalDate = "not-a-number";
+    const good: GmailThread = {
+      id: "t-good",
+      messages: [gmailMsg({ id: "mg", threadId: "t-good", text: "fine" })],
+    };
+    installFakeGmail({
+      labels: [],
+      threads: [poisoned, good],
+      history: {
+        historyId: "h200",
+        records: [
+          { messagesAdded: [{ message: { id: "mb", threadId: "t-bad" } }] },
+          { messagesAdded: [{ message: { id: "mg", threadId: "t-good" } }] },
+        ],
+      },
+    });
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await syncEmailAccount(accountId);
+    expect(result).toMatchObject({ ok: true, mode: "incremental", threadsSynced: 1 });
+    expect(
+      await prisma.emailThread.count({ where: { accountId, externalId: "t-good" } })
+    ).toBe(1);
+    expect(
+      await prisma.emailThread.count({ where: { accountId, externalId: "t-bad" } })
+    ).toBe(0);
+
+    const account = await prisma.emailAccount.findUniqueOrThrow({
+      where: { id: accountId },
+    });
+    expect(account.historyId).toBe("h200"); // cursor NOT wedged
+    expect(account.syncStatus).toBe("connected");
+    expect(account.syncError).toContain("1 thread(s)");
+    // Logged with ids only — never message content.
+    const logged = String(errSpy.mock.calls[0][0]);
+    expect(logged).toContain(accountId);
+    expect(logged).toContain("t-bad");
+
+    // A later clean pass clears the note.
+    installFakeGmail({ labels: [], threads: [good] });
+    await syncEmailAccount(accountId);
+    expect(
+      (await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } }))
+        .syncError
+    ).toBeNull();
+    errSpy.mockRestore();
+  });
+
+  it("an auth error from a thread fetch still stops the account", async () => {
+    const accountId = await seedAccount({ historyId: "h100" });
+    installFakeGmail({
+      labels: [],
+      threads: [],
+      history: {
+        historyId: "h200",
+        records: [{ messagesAdded: [{ message: { id: "m", threadId: "t" } }] }],
+      },
+    });
+    const base = mockedFetch.getMockImplementation()!;
+    mockedFetch.mockImplementation(async (id, path, init) => {
+      if (path.includes("/users/me/threads/")) {
+        throw new GmailAuthError("Reconnect this mailbox.", accountId);
+      }
+      return base(id, path, init);
+    });
+    const result = await syncEmailAccount(accountId);
+    expect(result.ok).toBe(false);
+    const account = await prisma.emailAccount.findUniqueOrThrow({
+      where: { id: accountId },
+    });
+    expect(account.syncStatus).toBe("error");
+    expect(account.historyId).toBe("h100");
+  });
+});
+
+describe("transient failures abort the pass (review of F069)", () => {
+  function threadAndHistory(ids: string[]) {
+    const threads: GmailThread[] = ids.map((id) => ({
+      id,
+      messages: [gmailMsg({ id: `m-${id}`, threadId: id, text: "x" })],
+    }));
+    return {
+      labels: [],
+      threads,
+      history: {
+        historyId: "h200",
+        records: ids.map((id) => ({
+          messagesAdded: [{ message: { id: `m-${id}`, threadId: id } }],
+        })),
+      },
+    };
+  }
+
+  it("a connectivity-class database error is NOT skipped: the pass aborts and historyId stays put", async () => {
+    const accountId = await seedAccount({ historyId: "h100" });
+    installFakeGmail(threadAndHistory(["t-a", "t-b"]));
+    const spy = vi.spyOn(prisma.emailThread, "upsert").mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError("Can't reach database server", {
+        code: "P1001",
+        clientVersion: "test",
+      })
+    );
+    await expect(syncEmailAccount(accountId)).rejects.toThrow();
+    spy.mockRestore();
+
+    const account = await prisma.emailAccount.findUniqueOrThrow({
+      where: { id: accountId },
+    });
+    expect(account.historyId).toBe("h100");
+    expect(account.syncError).toContain("Last sync failed");
+
+    // The next run retries and imports both threads.
+    const retry = await syncEmailAccount(accountId);
+    expect(retry.threadsSynced).toBe(2);
+    expect(
+      (await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } }))
+        .historyId
+    ).toBe("h200");
+  });
+
+  it("a deadlock / serialization failure (P2034) also aborts", async () => {
+    const accountId = await seedAccount({ historyId: "h100" });
+    installFakeGmail(threadAndHistory(["t-a"]));
+    const spy = vi.spyOn(prisma.emailThread, "upsert").mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError("write conflict", {
+        code: "P2034",
+        clientVersion: "test",
+      })
+    );
+    await expect(syncEmailAccount(accountId)).rejects.toThrow();
+    spy.mockRestore();
+    expect(
+      (await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } }))
+        .historyId
+    ).toBe("h100");
+  });
+
+  it("when several threads ALL fail and none succeeds, the pass aborts instead of advancing the cursor", async () => {
+    const accountId = await seedAccount({ historyId: "h100" });
+    const fake = threadAndHistory(["t-1", "t-2", "t-3"]);
+    for (const t of fake.threads) t.messages![0].internalDate = "not-a-number";
+    installFakeGmail(fake);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    await expect(syncEmailAccount(accountId)).rejects.toThrow(/All 3 thread imports failed/);
+    errSpy.mockRestore();
+    expect(
+      (await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } }))
+        .historyId
+    ).toBe("h100");
+  });
+});
+
+describe("drafts (F070)", () => {
+  it("never stores DRAFT messages and removes local copies of ones that now carry DRAFT", async () => {
+    const accountId = await seedAccount();
+    const sent = gmailMsg({
+      id: "m-sent",
+      threadId: "t-d",
+      text: "real mail",
+      internalDate: 1_767_000_000_000,
+    });
+    const draft = gmailMsg({
+      id: "m-draft",
+      threadId: "t-d",
+      labelIds: ["DRAFT"],
+      subject: "Re: secret strategy",
+      text: "unsent privileged text",
+      snippet: "unsent",
+      internalDate: 1_767_000_900_000,
+    });
+    // Pre-existing local copy of the draft (imported by an older build).
+    const t = await prisma.emailThread.create({
+      data: {
+        accountId,
+        externalId: "t-d",
+        subject: "old",
+        lastMessageAt: new Date(1_767_000_900_000),
+      },
+    });
+    await prisma.emailMessage.create({
+      data: {
+        threadId: t.id,
+        externalId: "m-draft",
+        fromName: "me",
+        fromEmail: "me@x.co",
+        toRecipients: "[]",
+        body: "stale draft",
+        sentAt: new Date(),
+      },
+    });
+    installFakeGmail({
+      labels: [],
+      threads: [
+        { id: "t-d", messages: [sent, draft] },
+        // A brand-new compose draft is a draft-only thread.
+        {
+          id: "t-draft-only",
+          messages: [
+            gmailMsg({
+              id: "m-d2",
+              threadId: "t-draft-only",
+              labelIds: ["DRAFT"],
+              text: "wip",
+            }),
+          ],
+        },
+      ],
+    });
+
+    const result = await syncEmailAccount(accountId);
+    expect(result.threadsSynced).toBe(1);
+
+    const messages = await prisma.emailMessage.findMany({
+      where: { threadId: t.id },
+    });
+    expect(messages.map((m) => m.externalId)).toEqual(["m-sent"]);
+    const thread = await prisma.emailThread.findUniqueOrThrow({
+      where: { id: t.id },
+    });
+    // Subject / snippet / messageCount / lastMessageAt ignore the draft.
+    expect(thread.subject).toBe("Discovery schedule");
+    expect(thread.messageCount).toBe(1);
+    expect(thread.snippet).toBe("snippet");
+    expect(thread.lastMessageAt.getTime()).toBe(1_767_000_000_000);
+    expect(
+      await prisma.emailThread.count({
+        where: { accountId, externalId: "t-draft-only" },
+      })
+    ).toBe(0);
+  });
+});
+
+describe("deactivated owners (F071/F348)", () => {
+  async function deactivate(): Promise<void> {
+    await prisma.user.update({ where: { id: userId }, data: { isActive: false } });
+  }
+
+  it("the cron sweep and the per-user sweep skip a deactivated member's mailbox", async () => {
+    await seedAccount();
+    await deactivate();
+    installFakeGmail({ labels: [], threads: [basicThread()] });
+
+    expect(await syncAllEmailAccounts()).toEqual([]);
+    expect(await syncEmailAccountsForUser(userId)).toEqual([]);
+    expect(mockedFetch).not.toHaveBeenCalled();
+  });
+
+  it("direct on-demand sync of an inactive owner's account makes no Google calls and leaves state alone", async () => {
+    const accountId = await seedAccount();
+    await deactivate();
+    installFakeGmail({ labels: [], threads: [basicThread()] });
+
+    const result = await syncEmailAccount(accountId);
+    expect(result).toMatchObject({ ok: false, mode: "skipped" });
+    expect(mockedFetch).not.toHaveBeenCalled();
+    const account = await prisma.emailAccount.findUniqueOrThrow({
+      where: { id: accountId },
+    });
+    expect(account.syncStatus).toBe("connected");
+  });
+
+  it("active members' accounts still sync in the cron sweep", async () => {
+    const accountId = await seedAccount();
+    installFakeGmail({ labels: [], threads: [basicThread()] });
+    const results = await syncAllEmailAccounts();
+    expect(results.map((r) => r.accountId)).toEqual([accountId]);
+  });
+});
+
+describe("history-expired catch-up (F257)", () => {
+  function manyThreads(n: number): GmailThread[] {
+    return Array.from({ length: n }, (_, i) => ({
+      id: `t${i}`,
+      messages: [
+        gmailMsg({
+          id: `m${i}`,
+          threadId: `t${i}`,
+          text: `body ${i}`,
+          internalDate: 1_767_000_000_000 - i * 1000,
+        }),
+      ],
+    }));
+  }
+
+  it("an account that has synced before catches up UNCAPPED since lastSyncAt (minus a day)", async () => {
+    const lastSyncAt = new Date("2026-03-01T12:00:00Z");
+    const accountId = await seedAccount({ historyId: "h-stale", lastSyncAt });
+    installFakeGmail({
+      profileHistoryId: "h-new",
+      labels: [],
+      threads: manyThreads(FULL_SYNC_MAX_THREADS + 5),
+      history: { status: 404 },
+    });
+
+    const result = await syncEmailAccount(accountId);
+    expect(result.mode).toBe("full");
+    expect(result.threadsSynced).toBe(FULL_SYNC_MAX_THREADS + 5);
+
+    const listCall = requestedPaths().find((p) =>
+      p.startsWith("/users/me/threads?")
+    )!;
+    const q = new URLSearchParams(listCall.split("?")[1]).get("q");
+    expect(q).toBe(`after:${Math.floor(lastSyncAt.getTime() / 1000) - 86400}`);
+    expect(
+      (await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } }))
+        .historyId
+    ).toBe("h-new");
+  }, 30_000);
+
+  it("an account that never completed a sync keeps the capped initial import", async () => {
+    const accountId = await seedAccount({ historyId: "h-stale", lastSyncAt: null });
+    installFakeGmail({
+      profileHistoryId: "h-new",
+      labels: [],
+      threads: manyThreads(FULL_SYNC_MAX_THREADS + 5),
+      history: { status: 404 },
+    });
+    const result = await syncEmailAccount(accountId);
+    expect(result.threadsSynced).toBe(FULL_SYNC_MAX_THREADS);
+    const listCall = requestedPaths().find((p) =>
+      p.startsWith("/users/me/threads?")
+    )!;
+    expect(new URLSearchParams(listCall.split("?")[1]).get("q")).toBe(
+      `newer_than:${FULL_SYNC_MAX_AGE_DAYS}d`
+    );
+  }, 30_000);
+});
+
+describe("catch-up truncation (review of F257)", () => {
+  it("a catch-up that hits its cap leaves cursor + lastSyncAt alone, notes it, and later passes skip what is already local and reach the rest", async () => {
+    const lastSyncAt = new Date("2026-03-01T12:00:00Z");
+    const accountId = await seedAccount({ historyId: "h-stale", lastSyncAt });
+    const threads: GmailThread[] = Array.from({ length: 10 }, (_, i) => ({
+      id: `t${i}`,
+      messages: [
+        gmailMsg({
+          id: `m${i}`,
+          threadId: `t${i}`,
+          text: `body ${i}`,
+          internalDate: 1_767_000_000_000 - i * 1000,
+        }),
+      ],
+    }));
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fullFetches = () =>
+      requestedPaths().filter((p) => p.endsWith("format=full")).length;
+
+    // Pass 1: cap 4 of 10.
+    installFakeGmail({ profileHistoryId: "h-new", labels: [], threads, history: { status: 404 } });
+    const r1 = await syncEmailAccount(accountId, { catchUpMaxThreads: 4 });
+    expect(r1).toMatchObject({ ok: true, mode: "full", threadsSynced: 4 });
+    let account = await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } });
+    expect(account.historyId).toBe("h-stale"); // NOT advanced: gap still open
+    expect(account.lastSyncAt?.getTime()).toBe(lastSyncAt.getTime());
+    expect(account.syncError).toContain("safety cap");
+    expect(await prisma.emailThread.count({ where: { accountId } })).toBe(4);
+
+    // Pass 2: the 4 local threads are current → minimal check only.
+    mockedFetch.mockClear();
+    installFakeGmail({ profileHistoryId: "h-new", labels: [], threads, history: { status: 404 } });
+    const r2 = await syncEmailAccount(accountId, { catchUpMaxThreads: 4 });
+    expect(r2.threadsSynced).toBe(4);
+    expect(fullFetches()).toBe(4); // only the 4 NEW ones got a full fetch
+    expect(requestedPaths().filter((p) => p.endsWith("format=minimal")).length).toBeGreaterThanOrEqual(4);
+    account = await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } });
+    expect(account.historyId).toBe("h-stale");
+    expect(await prisma.emailThread.count({ where: { accountId } })).toBe(8);
+
+    // Pass 3: the last 2 fit under the cap → gap closed, cursor advances.
+    installFakeGmail({ profileHistoryId: "h-new", labels: [], threads, history: { status: 404 } });
+    const r3 = await syncEmailAccount(accountId, { catchUpMaxThreads: 4 });
+    expect(r3.threadsSynced).toBe(2);
+    account = await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } });
+    expect(account.historyId).toBe("h-new");
+    expect(account.syncError).toBeNull();
+    expect(account.lastSyncAt!.getTime()).toBeGreaterThan(lastSyncAt.getTime());
+    expect(await prisma.emailThread.count({ where: { accountId } })).toBe(10);
+    warnSpy.mockRestore();
+  }, 30_000);
+
+  it("a catch-up thread whose local copy is stale (new message) is refetched in full", async () => {
+    const lastSyncAt = new Date("2026-03-01T12:00:00Z");
+    const accountId = await seedAccount({ historyId: "h-stale", lastSyncAt });
+    const threads: GmailThread[] = [
+      {
+        id: "t0",
+        messages: [
+          gmailMsg({ id: "m0", threadId: "t0", text: "a", internalDate: 1_767_000_000_000 }),
+        ],
+      },
+    ];
+    installFakeGmail({ profileHistoryId: "h-new", labels: [], threads, history: { status: 404 } });
+    await syncEmailAccount(accountId);
+    // A reply lands at Gmail.
+    threads[0].messages!.push(
+      gmailMsg({ id: "m0b", threadId: "t0", text: "b", internalDate: 1_767_000_900_000 })
+    );
+    installFakeGmail({ profileHistoryId: "h-new2", labels: [], threads, history: { status: 404 } });
+    // Cursor was advanced to h-new by pass 1; force the expired path again.
+    await prisma.emailAccount.update({ where: { id: accountId }, data: { historyId: "h-stale" } });
+    await syncEmailAccount(accountId);
+    expect(
+      await prisma.emailMessage.count({ where: { thread: { accountId } } })
+    ).toBe(2);
+  });
+});
+
+describe("backfill anchor protection (F259)", () => {
+  it("incremental sync does not import an UNKNOWN thread older than the oldest local thread, but still refreshes known/newer ones", async () => {
+    const accountId = await seedAccount({ historyId: "h100" });
+    const frontier = new Date(1_766_000_000_000);
+    // Known old-ish thread = the current frontier.
+    await prisma.emailThread.create({
+      data: {
+        accountId,
+        externalId: "t-known",
+        subject: "known",
+        lastMessageAt: frontier,
+      },
+    });
+    const ancient: GmailThread = {
+      id: "t-2019",
+      messages: [
+        gmailMsg({
+          id: "ma",
+          threadId: "t-2019",
+          text: "old",
+          internalDate: 1_550_000_000_000,
+        }),
+      ],
+    };
+    const known: GmailThread = {
+      id: "t-known",
+      messages: [
+        gmailMsg({
+          id: "mk",
+          threadId: "t-known",
+          text: "k",
+          internalDate: frontier.getTime(),
+        }),
+      ],
+    };
+    const fresh: GmailThread = {
+      id: "t-new",
+      messages: [
+        gmailMsg({
+          id: "mn",
+          threadId: "t-new",
+          text: "n",
+          internalDate: 1_767_000_000_000,
+        }),
+      ],
+    };
+    installFakeGmail({
+      labels: [],
+      threads: [ancient, known, fresh],
+      history: {
+        historyId: "h200",
+        records: [
+          { labelsRemoved: [{ message: { id: "ma", threadId: "t-2019" } }] },
+          { labelsRemoved: [{ message: { id: "mk", threadId: "t-known" } }] },
+          { messagesAdded: [{ message: { id: "mn", threadId: "t-new" } }] },
+        ],
+      },
+    });
+
+    const result = await syncEmailAccount(accountId);
+    expect(result.threadsSynced).toBe(2);
+    const ids = (
+      await prisma.emailThread.findMany({ where: { accountId } })
+    ).map((t) => t.externalId);
+    expect(ids.sort()).toEqual(["t-known", "t-new"]);
+
+    // The backfill anchor did not move.
+    const oldest = await prisma.emailThread.findFirstOrThrow({
+      where: { accountId },
+      orderBy: { lastMessageAt: "asc" },
+    });
+    expect(oldest.lastMessageAt.getTime()).toBe(frontier.getTime());
   });
 });
