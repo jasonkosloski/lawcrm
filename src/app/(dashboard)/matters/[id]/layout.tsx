@@ -29,6 +29,7 @@ import { MatterCreateMenu } from "@/components/matters/matter-create-menu";
 import { CreateDock } from "@/components/create-stack/create-dock";
 import { CreateStackProvider } from "@/components/create-stack/create-stack-provider";
 import { getMatterById } from "@/lib/queries/matters";
+import { currentUserHasPermission } from "@/lib/permission-check";
 
 const FEE_LABEL: Record<string, string> = {
   contingent: "Contingent",
@@ -43,7 +44,11 @@ export default async function MatterDetailLayout({
   params,
 }: LayoutProps<"/matters/[id]">) {
   const { id } = await params;
-  const matter = await getMatterById(id);
+  const [matter, canEditMatter, canManageTeam] = await Promise.all([
+    getMatterById(id),
+    currentUserHasPermission("matters.edit"),
+    currentUserHasPermission("matters.manage_team"),
+  ]);
   if (!matter) notFound();
 
   // Active lead only — a former lead shouldn't drive the metadata
@@ -74,15 +79,18 @@ export default async function MatterDetailLayout({
         }
         actions={
           <>
-            {/* TODO (auth): gate Edit to users with permission once
-                sessions + RBAC land. Today every user sees it. */}
-            <Link
-              href={`/matters/${matter.id}/edit`}
-              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium bg-white text-ink-2 border border-line hover:border-brand-300 hover:text-brand-700 transition-colors"
-            >
-              <Pencil size={13} />
-              Edit
-            </Link>
+            {/* The edit page hosts the matter form (`matters.edit`)
+                and team management (`matters.manage_team`) — show the
+                link when either half is usable. */}
+            {(canEditMatter || canManageTeam) && (
+              <Link
+                href={`/matters/${matter.id}/edit`}
+                className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium bg-white text-ink-2 border border-line hover:border-brand-300 hover:text-brand-700 transition-colors"
+              >
+                <Pencil size={13} />
+                Edit
+              </Link>
+            )}
             <PinToggle
               matterId={matter.id}
               initialPinned={matter.isPinnedByCurrentUser}

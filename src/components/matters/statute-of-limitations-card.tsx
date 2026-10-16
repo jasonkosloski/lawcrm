@@ -41,6 +41,10 @@ export type StatuteOfLimitationsCardProps = {
    *  attorney sees how the date was derived. Cosmetic — the
    *  field doesn't change the underlying data. */
   incidentDate?: Date | null;
+  /** Server-resolved `matters.edit` (the key `setMatterSolSatisfied`
+   *  enforces). Without it the toggle isn't rendered — the heading
+   *  already reads "Satisfied" / the countdown either way. */
+  canEdit: boolean;
 };
 
 const ONE_DAY = 24 * 60 * 60 * 1000;
@@ -87,6 +91,7 @@ export function StatuteOfLimitationsCard({
   notes,
   citation,
   incidentDate,
+  canEdit,
 }: StatuteOfLimitationsCardProps) {
   const [optimisticSatisfied, setOptimisticSatisfied] =
     useOptimistic(satisfied);
@@ -185,26 +190,28 @@ export function StatuteOfLimitationsCard({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={toggle}
-            disabled={pending}
-            aria-pressed={optimisticSatisfied}
-            className={cn(
-              "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium border transition-colors shrink-0",
-              optimisticSatisfied
-                ? "bg-ok-soft text-ok border-line hover:border-ok"
-                : "bg-white text-ink-2 border-line hover:border-brand-300 hover:text-brand-700",
-              pending && "opacity-60 cursor-wait"
-            )}
-          >
-            {optimisticSatisfied ? (
-              <CheckCircle2 size={13} className="text-ok" />
-            ) : (
-              <Circle size={13} />
-            )}
-            {optimisticSatisfied ? "Satisfied" : "Mark satisfied"}
-          </button>
+          {canEdit ? (
+            <button
+              type="button"
+              onClick={toggle}
+              disabled={pending}
+              aria-pressed={optimisticSatisfied}
+              className={cn(
+                "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium border transition-colors shrink-0",
+                optimisticSatisfied
+                  ? "bg-ok-soft text-ok border-line hover:border-ok"
+                  : "bg-white text-ink-2 border-line hover:border-brand-300 hover:text-brand-700",
+                pending && "opacity-60 cursor-wait"
+              )}
+            >
+              {optimisticSatisfied ? (
+                <CheckCircle2 size={13} className="text-ok" />
+              ) : (
+                <Circle size={13} />
+              )}
+              {optimisticSatisfied ? "Satisfied" : "Mark satisfied"}
+            </button>
+          ) : null}
         </div>
 
         {optimisticSatisfied && satisfiedAt && (

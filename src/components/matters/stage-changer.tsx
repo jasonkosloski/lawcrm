@@ -24,9 +24,11 @@
  * instantly; `revalidatePath` in the action refreshes the rest of
  * the layout (TopBar subtitle chip, sidebar counts, matters list).
  *
- * TODO (auth): hide the "Change stage" button for users without
- * permission once RBAC lands. Firm administrators should be able to
- * configure which roles can move stage forward vs. backward.
+ * `canEdit` (server-resolved `matters.edit` — the key
+ * `updateMatterStage` enforces) hides the "Change stage" control for
+ * users who'd only get a refusal; the stepper stays visible to all.
+ * Possible refinement: separate keys for moving stage forward vs.
+ * backward, if the firm ever wants that split.
  */
 
 "use client";
@@ -52,10 +54,12 @@ export function StageChanger({
   matterId,
   stages,
   currentStageId,
+  canEdit,
 }: {
   matterId: string;
   stages: StageOption[];
   currentStageId: string;
+  canEdit: boolean;
 }) {
   const [optimisticStageId, setOptimisticStageId] =
     useOptimistic(currentStageId);
@@ -127,68 +131,70 @@ export function StageChanger({
           )}
         </div>
 
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger
-            disabled={pending}
-            className={cn(
-              "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium",
-              "bg-white text-ink-2 border border-line",
-              "hover:border-brand-300 hover:text-brand-700 transition-colors",
-              "disabled:opacity-60 disabled:cursor-wait"
-            )}
-          >
-            Change stage
-            <ChevronDown size={13} />
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-60 p-1.5">
-            <div className="px-2 pt-1 pb-2 text-2xs font-mono uppercase tracking-wider text-ink-4 border-b border-line mb-1">
-              Move matter to…
-            </div>
-            <ul className="flex flex-col">
-              {stages.map((stage, idx) => {
-                const isCurrent = stage.id === optimisticStageId;
-                const isPassed =
-                  currentIndex >= 0 && idx < currentIndex && !isCurrent;
+        {canEdit && (
+          <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger
+              disabled={pending}
+              className={cn(
+                "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium",
+                "bg-white text-ink-2 border border-line",
+                "hover:border-brand-300 hover:text-brand-700 transition-colors",
+                "disabled:opacity-60 disabled:cursor-wait"
+              )}
+            >
+              Change stage
+              <ChevronDown size={13} />
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-60 p-1.5">
+              <div className="px-2 pt-1 pb-2 text-2xs font-mono uppercase tracking-wider text-ink-4 border-b border-line mb-1">
+                Move matter to…
+              </div>
+              <ul className="flex flex-col">
+                {stages.map((stage, idx) => {
+                  const isCurrent = stage.id === optimisticStageId;
+                  const isPassed =
+                    currentIndex >= 0 && idx < currentIndex && !isCurrent;
 
-                return (
-                  <li key={stage.id}>
-                    <button
-                      type="button"
-                      disabled={isCurrent}
-                      onClick={() => transitionTo(stage.id)}
-                      className={cn(
-                        "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-left transition-colors",
-                        isCurrent
-                          ? "bg-brand-soft text-brand-700 cursor-default"
-                          : "text-ink hover:bg-paper-2"
-                      )}
-                    >
-                      <span
+                  return (
+                    <li key={stage.id}>
+                      <button
+                        type="button"
+                        disabled={isCurrent}
+                        onClick={() => transitionTo(stage.id)}
                         className={cn(
-                          "inline-flex items-center justify-center w-4 h-4 shrink-0",
-                          isPassed ? "text-ok" : "text-ink-4"
+                          "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-left transition-colors",
+                          isCurrent
+                            ? "bg-brand-soft text-brand-700 cursor-default"
+                            : "text-ink hover:bg-paper-2"
                         )}
                       >
-                        {isCurrent ? (
-                          <span className="w-2 h-2 rounded-full bg-brand-500" />
-                        ) : isPassed ? (
-                          <Check size={12} />
-                        ) : null}
-                      </span>
-                      <span className="flex-1">{stage.name}</span>
-                      {stage.isTerminal && !isCurrent && (
-                        <span className="text-2xs text-ink-4">terminal</span>
-                      )}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-            <div className="px-2 pt-2 pb-1 mt-1 border-t border-line text-2xs text-ink-4 leading-relaxed">
-              Pick any stage — forward or backward — to move the matter.
-            </div>
-          </PopoverContent>
-        </Popover>
+                        <span
+                          className={cn(
+                            "inline-flex items-center justify-center w-4 h-4 shrink-0",
+                            isPassed ? "text-ok" : "text-ink-4"
+                          )}
+                        >
+                          {isCurrent ? (
+                            <span className="w-2 h-2 rounded-full bg-brand-500" />
+                          ) : isPassed ? (
+                            <Check size={12} />
+                          ) : null}
+                        </span>
+                        <span className="flex-1">{stage.name}</span>
+                        {stage.isTerminal && !isCurrent && (
+                          <span className="text-2xs text-ink-4">terminal</span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="px-2 pt-2 pb-1 mt-1 border-t border-line text-2xs text-ink-4 leading-relaxed">
+                Pick any stage — forward or backward — to move the matter.
+              </div>
+            </PopoverContent>
+          </Popover>
+        )}
       </div>
 
       {/* ── Horizontal stepper ─────────────────────────────────────── */}

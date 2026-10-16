@@ -23,6 +23,7 @@ import { formatPhone } from "@/lib/format-phone";
 // (server-local midnight), so no TZ override.
 import { formatDate } from "@/lib/format-date";
 import { prisma } from "@/lib/prisma";
+import { currentUserHasPermission } from "@/lib/permission-check";
 import { getMatterById } from "@/lib/queries/matters";
 import {
   getMatterDeadlines,
@@ -47,7 +48,7 @@ export default async function MatterOverviewPage({
   const matter = await getMatterById(id);
   if (!matter) notFound();
 
-  const [deadlines, tasks, notes, stageOptions, clientRows] =
+  const [deadlines, tasks, notes, stageOptions, clientRows, canEditMatter] =
     await Promise.all([
       getMatterDeadlines(id),
       getMatterTasks(id),
@@ -82,6 +83,7 @@ export default async function MatterOverviewPage({
         },
         orderBy: { createdAt: "asc" },
       }),
+      currentUserHasPermission("matters.edit"),
     ]);
 
   // Pin the primary client (Matter.clientId) to the top of the list.
@@ -121,6 +123,7 @@ export default async function MatterOverviewPage({
                 matterId={matter.id}
                 stages={stageOptions}
                 currentStageId={matter.stageId}
+                canEdit={canEditMatter}
               />
             </CardContent>
           </Card>
@@ -138,6 +141,7 @@ export default async function MatterOverviewPage({
               notes={matter.statuteOfLimitationsNotes}
               citation={matter.practiceAreaStatuteSourceCitation}
               incidentDate={matter.incidentDate}
+              canEdit={canEditMatter}
             />
           )}
 

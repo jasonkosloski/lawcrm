@@ -41,6 +41,7 @@ const baseProps = {
   satisfied: false,
   satisfiedAt: null,
   notes: null,
+  canEdit: true,
 };
 
 describe("daysUntil — UTC-stored deadline vs local today", () => {
@@ -126,5 +127,37 @@ describe("StatuteOfLimitationsCard — rendered countdown", () => {
       />
     );
     expect(screen.getByText("Wed, Jul 1, 2026")).toBeInTheDocument();
+  });
+});
+
+describe("StatuteOfLimitationsCard — matters.edit gating", () => {
+  const date = new Date("2026-09-01T00:00:00Z");
+
+  test("editors get the Mark satisfied toggle", () => {
+    render(<StatuteOfLimitationsCard {...baseProps} date={date} />);
+    expect(
+      screen.getByRole("button", { name: /mark satisfied/i })
+    ).toBeInTheDocument();
+  });
+
+  test("non-editors get no toggle while unsatisfied", () => {
+    render(
+      <StatuteOfLimitationsCard {...baseProps} date={date} canEdit={false} />
+    );
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.queryByText(/mark satisfied/i)).not.toBeInTheDocument();
+  });
+
+  test("non-editors still see the satisfied status, without a toggle", () => {
+    render(
+      <StatuteOfLimitationsCard
+        {...baseProps}
+        date={date}
+        satisfied
+        canEdit={false}
+      />
+    );
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.getByText("Satisfied")).toBeInTheDocument();
   });
 });
