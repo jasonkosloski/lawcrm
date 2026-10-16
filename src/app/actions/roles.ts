@@ -28,7 +28,11 @@ import {
   getCurrentUserPermissions,
   requirePermission,
 } from "@/lib/permission-check";
-import { isKnownPermission, permissionLabel } from "@/lib/permissions";
+import {
+  ADMIN_ONLY_PERMISSIONS,
+  isKnownPermission,
+  permissionLabel,
+} from "@/lib/permissions";
 import {
   roleInitialState,
   type RoleFormState,
@@ -38,17 +42,16 @@ const RESERVED_NAMES = new Set(
   [ADMIN_ROLE_NAME, DEFAULT_ROLE_NAME].map((n) => n.toLowerCase())
 );
 
-// The "meta" permissions govern access to access itself. Only an
+// The "meta" permissions (ADMIN_ONLY_PERMISSIONS in
+// src/lib/permissions.ts: manage_permissions, manage_roles,
+// manage_team_directory) govern access to access itself. Only an
 // Admin may grant or revoke them — otherwise any manage_permissions
 // holder could mint admin-equivalent peers (grant a role
 // manage_permissions plus everything else) with no admin
 // involvement. manage_roles rides along because renaming/deleting
 // roles is how you'd dismantle the delegation structure an admin
-// set up.
-const ADMIN_ONLY_PERMISSIONS = new Set([
-  "firm.manage_permissions",
-  "firm.manage_roles",
-]);
+// set up; manage_team_directory because it assigns roles and resets
+// passwords (team.ts), i.e. self-promotion and account takeover.
 
 const roleSchema = z.object({
   name: z
@@ -71,7 +74,7 @@ export async function createRoleAction(
   _prev: RoleFormState,
   formData: FormData
 ): Promise<RoleFormState> {
-  await requirePermission("firm.manage_roles");
+  const actorId = await requirePermission("firm.manage_roles");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = roleSchema.safeParse(raw);
   if (!parsed.success) {
@@ -108,6 +111,14 @@ export async function createRoleAction(
     },
   });
 
+  await logActivity({
+    matterId: null,
+    userId: actorId,
+    type: "auth",
+    title: `Created role "${parsed.data.name}"`,
+    detail: parsed.data.description || null,
+  });
+
   revalidatePath("/settings/roles");
   revalidatePath("/settings/team");
   return { ...roleInitialState, status: "ok" };
@@ -120,7 +131,7 @@ export async function updateRoleAction(
   _prev: RoleFormState,
   formData: FormData
 ): Promise<RoleFormState> {
-  await requirePermission("firm.manage_roles");
+  const actorId = await requirePermission("firm.manage_roles");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = roleSchema.safeParse(raw);
   if (!parsed.success) {
@@ -134,7 +145,7 @@ export async function updateRoleAction(
   const firm = await getCurrentFirm();
   const target = await prisma.role.findFirst({
     where: { id: roleId, firmId: firm.id },
-    select: { id: true, isSystem: true, name: true },
+    select: { id: true, isSystem: true, name: true, description: true },
   });
   if (!target) {
     return {
@@ -168,13 +179,31 @@ export async function updateRoleAction(
     }
   }
 
+  const newDescription = parsed.data.description || null;
   await prisma.role.update({
     where: { id: target.id },
     data: {
       name: parsed.data.name,
-      description: parsed.data.description || null,
+      description: newDescription,
     },
   });
+
+  // Renames change the meaning of every past grant entry that names
+  // the role, so they must be traceable. Skip the log when nothing
+  // actually changed (the edit dialog re-saves unchanged values).
+  const renamed = parsed.data.name !== target.name;
+  const redescribed = newDescription !== (target.description ?? null);
+  if (renamed || redescribed) {
+    await logActivity({
+      matterId: null,
+      userId: actorId,
+      type: "auth",
+      title: renamed
+        ? `Renamed role "${target.name}" -> "${parsed.data.name}"`
+        : `Updated description of role "${target.name}"`,
+      detail: redescribed ? (newDescription ?? "(description cleared)") : null,
+    });
+  }
 
   revalidatePath("/settings/roles");
   revalidatePath("/settings/team");
@@ -186,7 +215,7 @@ export async function updateRoleAction(
 export async function deleteRoleAction(
   roleId: string
 ): Promise<RoleFormState> {
-  await requirePermission("firm.manage_roles");
+  const actorId = await requirePermission("firm.manage_roles");
   const firm = await getCurrentFirm();
   const target = await prisma.role.findFirst({
     where: { id: roleId, firmId: firm.id },
@@ -204,8 +233,31 @@ export async function deleteRoleAction(
       errors: { _form: ["System roles can't be deleted."] },
     };
   }
+  // Capture who is about to lose what BEFORE the delete: the
+  // cascade on UserRole strips the role's permissions from every
+  // holder silently, so the trail has to say who they were.
+  const [holders, permissionCount] = await Promise.all([
+    prisma.userRole.findMany({
+      where: { roleId: target.id },
+      select: { user: { select: { name: true } } },
+    }),
+    prisma.rolePermission.count({ where: { roleId: target.id } }),
+  ]);
   // Cascade on UserRole removes assignments automatically.
   await prisma.role.delete({ where: { id: target.id } });
+
+  const names = holders.map((h) => h.user.name).sort();
+  const shown = names.slice(0, 25).join(", ");
+  await logActivity({
+    matterId: null,
+    userId: actorId,
+    type: "auth",
+    title: `Deleted role "${target.name}"`,
+    detail:
+      `${names.length} member${names.length === 1 ? "" : "s"} lost it` +
+      (names.length ? `: ${shown}${names.length > 25 ? ", …" : ""}` : "") +
+      ` — it carried ${permissionCount} permission${permissionCount === 1 ? "" : "s"}`,
+  });
 
   revalidatePath("/settings/roles");
   revalidatePath("/settings/team");
@@ -301,7 +353,7 @@ export async function setRolePermissionAction(
     await logActivity({
       matterId: null,
       userId: actorId,
-      type: "filing",
+      type: "auth",
       title: granted
         ? `Granted "${permissionLabel(permission)}" to ${target.name}`
         : `Revoked "${permissionLabel(permission)}" from ${target.name}`,

@@ -335,7 +335,7 @@ The original decision stored date-only values at **server-local** midnight and d
 **Decision:**
 - The JWT carries `pwv`, a 16-hex-char SHA-256 digest of the user's argon2 hash (`src/lib/session-fingerprint.ts`). It's stamped at sign-in.
 - The `jwt` callback (`validateSessionToken`, `src/lib/session-token.ts`) already reads the user row on every request to reject deleted/deactivated users; it now also compares the fingerprint and strips the session on mismatch. No extra query.
-- `changePasswordAction` calls `unstable_update()` after writing the new hash — the callback runs with `trigger: "update"` and re-stamps the current session, so the user who changed the password stays signed in while every other session is dropped. An admin reset (`resetFirmMemberPassword`) signs the target out everywhere, as it should.
+- `changePasswordAction` calls `unstable_update({ pwv: passwordFingerprint(newHash) })` after writing the new hash. The callback runs with `trigger: "update"` and re-stamps the current session **only when the update payload's `pwv` equals the fingerprint freshly computed from the DB row**; otherwise it falls through to the normal mismatch check and the stale token is stripped. The payload check matters because `POST /api/auth/session` also reaches the callback with `trigger: "update"` for anyone holding a cookie plus a CSRF token (both obtainable by a cookie thief): a bare `unstable_update()` that re-stamped unconditionally would let a stolen, already-revoked cookie revive itself. Forging the payload needs the argon2 hash, which never leaves the server, and the `session` callback exposes only `user.id` — the fingerprint is never in the session object sent to the client. Pinned by `src/lib/session-token.test.ts` and `src/auth.test.ts`. An admin reset (`resetFirmMemberPassword`) signs the target out everywhere, as it should.
 - Tokens minted before this shipped have no `pwv` and are dropped: one forced re-login per user at deploy.
 
 **Trade-offs:**
@@ -384,3 +384,24 @@ The original decision stored date-only values at **server-local** midnight and d
 - (+) Dates can't drift by a day regardless of server/user TZ (pinned by tests in Denver)
 - (-) Dates are snapshotted at apply time — moving the trial date doesn't move "30 days before trial" (recalculate-dependents is a follow-up)
 - (-) The firm owns the legal periods; the app ships none, so correctness of each rule is a firm configuration responsibility
+
+## ADR-020: Sign-in lockout is a reserve/settle under a per-email advisory lock; per-account (not per-IP) lock is an accepted DoS risk
+
+**Date:** 2026-10-16
+**Status:** Accepted
+
+**Context:** The lockout (5 failures / 15 min, counted from `ActivityLog` auth rows) was check-then-act: N parallel guesses could all pass the count before any failure row existed, so the threshold did not bound guessing. Separately, a lock keyed on the account lets anyone who knows an email lock that account on purpose.
+
+**Decision:**
+- `reserveAttempt` (`src/lib/credentials-authorize.ts`) opens a short transaction, takes `pg_advisory_xact_lock(hashtext(<key>))` (key = normalised email for sign-in, user id for password change), counts failures including in-flight ones, and inserts the failure row **before** the password is verified. `settleAttempt` deletes the row on success or annotates it with the reason on failure. The lock is released before argon2 runs. A crash mid-verify leaves a counted failure (fail closed).
+- `changePasswordAction` reuses the same mechanism (`password_change_failed` rows) so a hijacked session can't brute-force the current password.
+- `AUTH_EVENT_TITLES` values are query keys; never rename them.
+- Unknown / inactive / passwordless / locked accounts burn one dummy argon2 verify so timing doesn't reveal account existence. Cost: those attempts now cost about a real attempt of CPU and ~64 MiB each — login spam is a resource amplifier, so edge rate limiting matters.
+- **Accepted risk (F129):** the lock is per account. Anyone who knows staff emails can hold every account — admins included — locked (5 failures per 15 minutes; the lock lifts on its own and blocked attempts do not extend it). An IP factor is spoofable/shared and no lock exposes the password, so we keep it. Mitigations: `unlockFirmMemberSignIn` and `resetFirmMemberPassword` write a `sign_in_unlocked` event (counts like a successful sign-in; written with a throwing write so a failure is reported, not swallowed); Admin-class targets can only be unlocked/reset by an Admin. **Both need a signed-in directory manager, so a firm with every admin locked has no in-app recovery.** Break-glass: wait out the window, or insert a `sign_in_unlocked` row by SQL (header of `src/lib/credentials-authorize.ts`). Recommended real fix: a per-IP rate-limit rule on the sign-in route at the edge (Vercel Firewall).
+- The unlock action exists server-side only; there is no button on the team page yet (follow-up: wire it in `member-row.tsx`).
+
+**Trade-offs:**
+- (+) The threshold actually bounds parallel guessing
+- (+) No schema change; same audit rows drive the lock and the history
+- (-) A deliberate lockout DoS against any known email remains possible until edge rate limiting is configured
+- (-) Each login attempt takes a short DB transaction (pool is capped at 1 connection per process, so concurrent attempts queue)

@@ -132,6 +132,12 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         description:
           "Mark a flagged or conflicted lead as cleared with a justification. Required for ethics compliance — the override is logged in the audit trail.",
       },
+      {
+        key: "intake.decline",
+        label: "Decline leads",
+        description:
+          "Decline a lead with an optional reason, removing it from the active intake queue. The decline is logged in the activity log.",
+      },
     ],
   },
   {
@@ -202,7 +208,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         key: "firm.manage_team_directory",
         label: "Invite / edit / deactivate firm members",
         description:
-          "Full access to the /settings/team roster — invite new members, edit roles, reset passwords, deactivate accounts.",
+          "Full access to the /settings/team roster — invite new members, edit roles, reset passwords, deactivate accounts. Only an Admin can grant or remove the Admin role (or roles carrying access-management permissions), or edit, deactivate, or reset the password of an Admin.",
       },
       {
         key: "firm.manage_roles",
@@ -623,6 +629,26 @@ export const PERMISSION_KEYS: string[] = PERMISSION_CATEGORIES.flatMap(
 );
 
 export const PERMISSION_KEYS_SET = new Set(PERMISSION_KEYS);
+
+/**
+ * Permissions that govern access to access itself. Only an Admin may
+ * grant or revoke them (setRolePermissionAction), and a non-Admin
+ * team-directory manager may not hand out — or take away — a role
+ * that carries one of them (team.ts), or reset the password of /
+ * deactivate a member who holds such a role. Otherwise a delegate
+ * could mint admin-equivalent peers (or become one) with no Admin
+ * involvement.
+ *
+ *   - manage_permissions: edits the permission matrix itself
+ *   - manage_roles: renaming/deleting roles dismantles delegation
+ *   - manage_team_directory: assigns roles + resets passwords, i.e.
+ *     account takeover and self-promotion if left to delegates
+ */
+export const ADMIN_ONLY_PERMISSIONS: ReadonlySet<string> = new Set([
+  "firm.manage_permissions",
+  "firm.manage_roles",
+  "firm.manage_team_directory",
+]);
 
 /// O(1) label lookup keyed by the dotted permission key. Built once
 /// at module load so callers (activity log titles, error messages,

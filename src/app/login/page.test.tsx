@@ -83,6 +83,16 @@ describe("LoginPage — authenticated redirect", () => {
     expect(mockedRedirect).toHaveBeenCalledWith("/matters/abc?tab=notes");
   });
 
+  test.each([
+    ["backslash", "/\\evil.example"],
+    ["tab", "/\t/evil.example"],
+    ["newline", "/\n/evil.example"],
+  ])("%s payload in ?next= falls back to /", async (_n, payload) => {
+    signedIn();
+    await expect(LoginPage(props(payload))).rejects.toThrow(REDIRECT_SENTINEL);
+    expect(mockedRedirect).toHaveBeenCalledWith("/");
+  });
+
   test("missing ?next= redirects to /", async () => {
     signedIn();
     await expect(LoginPage(props())).rejects.toThrow(REDIRECT_SENTINEL);
@@ -104,6 +114,12 @@ describe("LoginPage — unauthenticated form", () => {
     render(await LoginPage(props("https://evil.example")));
     expect(screen.getByTestId("login-form").dataset.next).toBe("/");
     expect(mockedRedirect).not.toHaveBeenCalled();
+  });
+
+  test("form receives sanitized next for a backslash payload", async () => {
+    signedOut();
+    render(await LoginPage(props("/\\evil.example")));
+    expect(screen.getByTestId("login-form").dataset.next).toBe("/");
   });
 
   test("form receives a valid relative next unchanged", async () => {

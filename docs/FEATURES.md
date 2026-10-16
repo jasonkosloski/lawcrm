@@ -570,6 +570,15 @@ done. What's left is enumerated below.
   pause that account's sign-in until the window passes, counted from
   the audit rows (`isLockedOut` in `src/lib/credentials-authorize.ts`);
   the login error text is identical either way (no enumeration).
+  **Lockout hardening (ADR-020):** check-and-record is atomic (a
+  per-email advisory lock reserves the failure row before the
+  password is verified), changing a password throttles wrong
+  current-password guesses the same way, unknown emails burn a dummy
+  argon2 verify, and an admin can clear a lock (`sign_in_unlocked`
+  event; also written by a password reset). Server action
+  `unlockFirmMemberSignIn` exists but the team-page button is not wired
+  yet; a per-account lock can be triggered on purpose by anyone who
+  knows an email (accepted, edge rate limit recommended).
 - [~] **Settings — Integrations.** Gmail is live: per-user connect /
   reconnect / disconnect card (address, sync-status chip, last sync,
   thread count, syncError surfaced, multi-account list), callback

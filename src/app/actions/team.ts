@@ -20,6 +20,19 @@
  *      for them.
  *   4. "Email is unique" — duplicate-on-invite returns a friendly
  *      error rather than a Prisma constraint violation.
+ *   5. "Only an Admin hands out Admin" — `firm.manage_team_directory`
+ *      is delegable (e.g. to an office manager) but must not be an
+ *      escalation path. A non-Admin caller may not grant or remove
+ *      the Admin role, or any role carrying an ADMIN_ONLY permission
+ *      (src/lib/permissions.ts), on anyone — themselves included;
+ *      may not deactivate/reactivate, or reset the password of, a
+ *      member who holds such a role (that would be account takeover);
+ *      may not unlock their sign-in (each unlock grants fresh
+ *      password guesses against the highest-value accounts); and may
+ *      not edit an Admin's profile at all (name / initials / bar
+ *      number changes are an impersonation and audit-confusion
+ *      vector). Enforced here, server-side — the UI hiding the checkbox is
+ *      convenience only.
  *
  * Role membership replaces the old `User.isAdmin` boolean. The
  * multi-select on the team forms posts repeated `roleId=…` entries;
@@ -44,12 +57,15 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { logActivity } from "@/lib/activity-log";
+import { recordAuthEvent } from "@/lib/auth-events";
 import {
   ADMIN_ROLE_NAME,
   DEFAULT_ROLE_NAME,
   getCurrentFirm,
+  isCurrentUserAdmin,
 } from "@/lib/firm";
 import { requirePermission } from "@/lib/permission-check";
+import { ADMIN_ONLY_PERMISSIONS } from "@/lib/permissions";
 import {
   teamInitialState,
   type TeamFormState,
@@ -110,6 +126,37 @@ async function getFirmRoleMap(firmId: string): Promise<{
   const defaultId =
     roles.find((r) => r.name === DEFAULT_ROLE_NAME)?.id ?? null;
   return { byId, adminId, defaultId };
+}
+
+/** Roles only an Admin may hand out or take away: Admin itself and
+ *  any role carrying an ADMIN_ONLY permission (manage_permissions /
+ *  manage_roles / manage_team_directory). */
+async function getPrivilegedRoleIds(firmId: string): Promise<Set<string>> {
+  const rows = await prisma.role.findMany({
+    where: {
+      firmId,
+      OR: [
+        { name: ADMIN_ROLE_NAME },
+        {
+          permissions: {
+            some: { permission: { in: [...ADMIN_ONLY_PERMISSIONS] } },
+          },
+        },
+      ],
+    },
+    select: { id: true },
+  });
+  return new Set(rows.map((r) => r.id));
+}
+
+const PRIVILEGED_ROLE_MESSAGE =
+  "Only an Admin can grant or remove the Admin role, or roles that carry access-management permissions.";
+
+const ADMIN_TARGET_MESSAGE =
+  "Only an Admin can edit or deactivate an Admin.";
+
+function sameSet(a: Set<string>, b: Set<string>): boolean {
+  return a.size === b.size && [...a].every((x) => b.has(x));
 }
 
 // ── Invite ──────────────────────────────────────────────────────────────
@@ -174,6 +221,19 @@ export async function inviteFirmMember(
   const validRoleIds = new Set<string>([roleMap.defaultId]);
   for (const id of requested) {
     if (roleMap.byId.has(id)) validRoleIds.add(id);
+  }
+
+  // Escalation guard: only an Admin may mint an Admin (or another
+  // access-management role holder).
+  if (!(await isCurrentUserAdmin())) {
+    const privileged = await getPrivilegedRoleIds(firm.id);
+    if ([...validRoleIds].some((id) => privileged.has(id))) {
+      return {
+        status: "error",
+        errors: { roleId: [PRIVILEGED_ROLE_MESSAGE] },
+        values: raw,
+      };
+    }
   }
 
   const tempPassword = generateTempPassword();
@@ -313,6 +373,44 @@ export async function updateFirmMember(
     if (roleMap.byId.has(id)) validRoleIds.add(id);
   }
 
+  // Escalation guard (see invariant 5 in the header). A non-Admin
+  // may not touch an Admin's record at all; for holders of other
+  // privileged roles (e.g. an access manager editing themselves) the
+  // privileged-role sets are compared, so any change in privileged
+  // membership (grant to self/anyone, or revoke) is refused.
+  if (!(await isCurrentUserAdmin())) {
+    if (target.userRoles.some((ur) => ur.role.name === ADMIN_ROLE_NAME)) {
+      return {
+        status: "error",
+        errors: { _form: [ADMIN_TARGET_MESSAGE] },
+        values: raw,
+      };
+    }
+    const privileged = await getPrivilegedRoleIds(firm.id);
+    const held = new Set(
+      target.userRoles.map((ur) => ur.roleId).filter((id) => privileged.has(id))
+    );
+    const wanted = new Set([...validRoleIds].filter((id) => privileged.has(id)));
+    if (!sameSet(held, wanted)) {
+      return {
+        status: "error",
+        errors: { roleId: [PRIVILEGED_ROLE_MESSAGE] },
+        values: raw,
+      };
+    }
+    if (held.size > 0 && newIsActive !== target.isActive) {
+      return {
+        status: "error",
+        errors: {
+          isActive: [
+            "Only an Admin can deactivate or reactivate an Admin (or another access-management role holder).",
+          ],
+        },
+        values: raw,
+      };
+    }
+  }
+
   const wasAdmin = target.userRoles.some(
     (ur) => ur.role.name === ADMIN_ROLE_NAME
   );
@@ -436,7 +534,7 @@ export async function resetFirmMemberPassword(
   const firm = await getCurrentFirm();
   const target = await prisma.user.findFirst({
     where: { id: userId, firmId: firm.id },
-    select: { id: true, name: true },
+    select: { id: true, name: true, userRoles: { select: { roleId: true } } },
   });
   if (!target) {
     return {
@@ -445,11 +543,44 @@ export async function resetFirmMemberPassword(
     };
   }
 
+  // Resetting a password hands the caller a working login for that
+  // account — for an Admin (or an access-management role holder)
+  // that is a full takeover, so it is Admin-only.
+  if (!(await isCurrentUserAdmin())) {
+    const privileged = await getPrivilegedRoleIds(firm.id);
+    if (target.userRoles.some((ur) => privileged.has(ur.roleId))) {
+      return {
+        status: "error",
+        errors: {
+          _form: [
+            "Only an Admin can reset the password of an Admin (or another access-management role holder).",
+          ],
+        },
+      };
+    }
+  }
+
   const tempPassword = generateTempPassword();
   const passwordHash = await hashPassword(tempPassword);
-  await prisma.user.update({
-    where: { id: target.id },
-    data: { passwordHash },
+  // A reset also lifts any sign-in lockout (src/lib/credentials-
+  // authorize.ts): otherwise an attacker who deliberately failed
+  // logins to lock the account would still have the user locked out
+  // of the brand-new password. The unlock row is written in the same
+  // transaction as the new hash, so a failed audit write can't leave
+  // a reset that reports ok while the account is still locked.
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: target.id },
+      data: { passwordHash },
+    });
+    await recordAuthEvent(
+      {
+        userId: target.id,
+        kind: "sign_in_unlocked",
+        reason: "password reset by an administrator",
+      },
+      tx
+    );
   });
 
   // Audit trail — this replaces someone else's credentials and hands
@@ -470,4 +601,75 @@ export async function resetFirmMemberPassword(
     status: "ok",
     resetPassword: tempPassword,
   };
+}
+
+// ── Unlock sign-in ──────────────────────────────────────────────────────
+
+/**
+ * Clear a member's sign-in lockout immediately (5 failed sign-ins in
+ * 15 minutes pause the account — and anyone who knows a staff email
+ * can trigger that on purpose). Writes a `sign_in_unlocked` auth
+ * event, which the lockout counter treats like a successful sign-in,
+ * plus an actor-attributed activity entry.
+ */
+export async function unlockFirmMemberSignIn(
+  userId: string
+): Promise<TeamFormState> {
+  await requirePermission("firm.manage_team_directory");
+  const firm = await getCurrentFirm();
+  const target = await prisma.user.findFirst({
+    where: { id: userId, firmId: firm.id },
+    select: { id: true, name: true, userRoles: { select: { roleId: true } } },
+  });
+  if (!target) {
+    return {
+      status: "error",
+      errors: { _form: ["User not found in this firm."] },
+    };
+  }
+
+  // Each unlock resets the failure count, i.e. grants fresh password
+  // guesses. A delegate must not be able to keep an Admin's throttle
+  // open on demand, so Admin-class targets are Admin-only (same rule
+  // as resetFirmMemberPassword).
+  if (!(await isCurrentUserAdmin())) {
+    const privileged = await getPrivilegedRoleIds(firm.id);
+    if (target.userRoles.some((ur) => privileged.has(ur.roleId))) {
+      return {
+        status: "error",
+        errors: {
+          _form: [
+            "Only an Admin can unlock sign-in for an Admin (or another access-management role holder).",
+          ],
+        },
+      };
+    }
+  }
+
+  // The unlock row IS the effect: write it with the throwing variant
+  // so a failed write surfaces as an error instead of a false "ok"
+  // on a still-locked account.
+  try {
+    await recordAuthEvent({
+      userId: target.id,
+      kind: "sign_in_unlocked",
+      reason: "unlocked from the team page",
+    });
+  } catch (err) {
+    console.error("[team] failed to record sign-in unlock", err);
+    return {
+      status: "error",
+      errors: { _form: ["Couldn't unlock sign-in — try again."] },
+    };
+  }
+  const actorId = await getCurrentUserId();
+  await logActivity({
+    matterId: null,
+    userId: actorId,
+    type: "auth",
+    title: `Unlocked sign-in for ${target.name}`,
+  });
+
+  revalidatePath("/settings/team");
+  return { ...teamInitialState, status: "ok" };
 }

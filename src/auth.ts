@@ -63,17 +63,23 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
     // see src/lib/session-token.ts. An invalid token loses its
     // userId; the session callback then returns no user.id, and
     // `getCurrentUserId` bounces to /login.
-    async jwt({ token, user, trigger }) {
+    async jwt({ token, user, trigger, session }) {
+      // `session` is the `unstable_update(data)` payload (or, for a
+      // forged POST /api/auth/session, whatever the caller sent) —
+      // untrusted; validateSessionToken only honours a `pwv` that
+      // matches the DB-derived fingerprint.
       return validateSessionToken(token, {
         signInUserId: user?.id,
         trigger,
+        updatePwv: (session as { pwv?: unknown } | undefined)?.pwv,
       });
     },
     // Expose the validated userId on session.user.id. When the JWT
     // has no userId (because validation in the jwt callback wiped
     // it), session.user.id stays undefined; downstream guards
     // (getCurrentUserId, dashboard layout) treat that as "logged
-    // out" and bounce.
+    // out" and bounce. Only `user.id` is added — the password
+    // fingerprint (`token.pwv`) must never reach the client.
     async session({ session, token }) {
       if (token.userId && session.user) {
         session.user.id = token.userId as string;

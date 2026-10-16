@@ -10,7 +10,11 @@ import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vi
 // next-auth doesn't load under Vitest (it imports next/server by a
 // path the test resolver can't follow); the action only needs the
 // AuthError class from it.
-vi.mock("next-auth", () => ({ AuthError: class AuthError extends Error {} }));
+vi.mock("next-auth", () => ({
+  AuthError: class AuthError extends Error {
+    type = "AuthError";
+  },
+}));
 vi.mock("@/auth", () => ({
   auth: vi.fn(),
   signIn: vi.fn(),
@@ -27,9 +31,13 @@ vi.mock("next/headers", () => ({
 
 import * as argon2 from "argon2";
 import { prisma } from "@/lib/prisma";
-import { auth, signOut, unstable_update } from "@/auth";
+import { AuthError } from "next-auth";
+import { auth, signIn, signOut, unstable_update } from "@/auth";
 import { getCurrentUserId } from "@/lib/current-user";
-import { changePasswordAction, logoutAction } from "@/app/actions/auth";
+import { changePasswordAction, loginAction, logoutAction } from "@/app/actions/auth";
+import { passwordFingerprint } from "@/lib/session-fingerprint";
+import { LOCKOUT_THRESHOLD } from "@/lib/credentials-authorize";
+import { loginInitialState } from "@/lib/auth-form";
 import { changePasswordInitialState } from "@/lib/security-form";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
@@ -86,7 +94,12 @@ describe("changePasswordAction", () => {
     const after = await storedHash();
     expect(after).not.toBe(before);
     expect(await argon2.verify(after, "a brand new passphrase")).toBe(true);
+    // The NEW fingerprint travels in the update payload (proof for
+    // the jwt callback) — not a bare `{}`.
     expect(vi.mocked(unstable_update)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(unstable_update)).toHaveBeenCalledWith({
+      pwv: passwordFingerprint(after),
+    });
 
     const [event] = await authEvents();
     expect(event.title).toBe("Changed password");
@@ -107,6 +120,42 @@ describe("changePasswordAction", () => {
     expect(await storedHash()).toBe(before);
     expect(vi.mocked(unstable_update)).not.toHaveBeenCalled();
     expect((await authEvents()).map((e) => e.title)).toEqual(["Failed password change"]);
+  });
+
+  test("throttles wrong current-password guesses after the lockout threshold", async () => {
+    const before = await storedHash();
+    for (let i = 0; i < LOCKOUT_THRESHOLD; i++) {
+      const res = await changePasswordAction(
+        changePasswordInitialState,
+        form({ current: `guess ${i}` })
+      );
+      expect(res.errors?.currentPassword).toEqual(["Current password is incorrect."]);
+    }
+    // Now even the CORRECT current password is refused, hash untouched.
+    const locked = await changePasswordAction(changePasswordInitialState, form({}));
+    expect(locked.status).toBe("error");
+    expect(locked.errors?.currentPassword?.[0]).toMatch(/Too many incorrect attempts/);
+    expect(await storedHash()).toBe(before);
+    expect(vi.mocked(unstable_update)).not.toHaveBeenCalled();
+  });
+
+  test("parallel wrong guesses are counted atomically", async () => {
+    await Promise.all(
+      Array.from({ length: 10 }, (_, i) =>
+        changePasswordAction(changePasswordInitialState, form({ current: `guess ${i}` }))
+      )
+    );
+    const failed = (await authEvents()).filter((e) => e.title === "Failed password change");
+    expect(failed).toHaveLength(LOCKOUT_THRESHOLD);
+  });
+
+  test("a correct current password leaves no failure row and resets nothing it shouldn't", async () => {
+    await changePasswordAction(changePasswordInitialState, form({ current: "bad" }));
+    await changePasswordAction(changePasswordInitialState, form({}));
+    expect((await authEvents()).map((e) => e.title)).toEqual([
+      "Failed password change",
+      "Changed password",
+    ]);
   });
 
   test("enforces the password policy", async () => {
@@ -148,5 +197,60 @@ describe("logoutAction", () => {
     await logoutAction();
     expect((await authEvents()).map((e) => e.title)).toEqual(["Signed out"]);
     expect(vi.mocked(signOut)).toHaveBeenCalledWith({ redirectTo: "/login" });
+  });
+});
+
+describe("loginAction", () => {
+  function loginForm(next?: string) {
+    const fd = new FormData();
+    fd.set("email", EMAIL);
+    fd.set("password", "whatever");
+    if (next !== undefined) fd.set("next", next);
+    return fd;
+  }
+
+  test.each([
+    ["backslash", "/\\evil.example"],
+    ["tab", "/\t/evil.example"],
+    ["newline", "/\n/evil.example"],
+    ["protocol-relative", "//evil.example"],
+    ["absolute", "https://evil.example"],
+  ])("sanitises a %s ?next= before handing it to signIn", async (_n, next) => {
+    await loginAction(loginInitialState, loginForm(next));
+    expect(vi.mocked(signIn)).toHaveBeenCalledWith(
+      "credentials",
+      expect.objectContaining({ redirectTo: "/" })
+    );
+  });
+
+  test("a safe ?next= passes through", async () => {
+    await loginAction(loginInitialState, loginForm("/matters/abc?tab=notes"));
+    expect(vi.mocked(signIn)).toHaveBeenCalledWith(
+      "credentials",
+      expect.objectContaining({ redirectTo: "/matters/abc?tab=notes" })
+    );
+  });
+
+  test("CredentialsSignin maps to the generic credential message", async () => {
+    const err = Object.assign(new AuthError("x"), { type: "CredentialsSignin" });
+    vi.mocked(signIn).mockRejectedValueOnce(err);
+    const res = await loginAction(loginInitialState, loginForm());
+    expect(res.error).toMatch(/Invalid email or password/);
+  });
+
+  test("other AuthErrors are logged and NOT reported as a bad password", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const err = Object.assign(new AuthError("db down"), { type: "CallbackRouteError" });
+    vi.mocked(signIn).mockRejectedValueOnce(err);
+    const res = await loginAction(loginInitialState, loginForm());
+    expect(res.error).toMatch(/temporarily unavailable/);
+    expect(res.error).not.toMatch(/Invalid email or password/);
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  test("non-auth errors (Next redirects) are re-thrown", async () => {
+    vi.mocked(signIn).mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
+    await expect(loginAction(loginInitialState, loginForm())).rejects.toThrow("NEXT_REDIRECT");
   });
 });

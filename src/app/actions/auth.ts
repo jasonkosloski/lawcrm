@@ -25,28 +25,21 @@ import {
 } from "@/lib/auth-form";
 import { logAuthEvent } from "@/lib/auth-events";
 import { getCurrentUserId } from "@/lib/current-user";
+import { reserveAttempt, settleAttempt } from "@/lib/credentials-authorize";
 import { passwordProblems } from "@/lib/password-policy";
 import { prisma } from "@/lib/prisma";
+import { safeRedirectPath } from "@/lib/safe-redirect";
+import { passwordFingerprint } from "@/lib/session-fingerprint";
 import type { ChangePasswordFormState } from "@/lib/security-form";
 
 const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email"),
   password: z.string().min(1, "Enter your password"),
   /** Where to land after a successful login. Defaults to the root.
-   *  Validated as a relative path so it can't be used as an open
-   *  redirect. */
+   *  Sanitised with the shared `safeRedirectPath` (src/lib/safe-redirect.ts)
+   *  so it can't be used as an open redirect. */
   next: z.string().optional().default("/"),
 });
-
-/** Reject anything that isn't a same-origin relative path (open
- *  redirect prevention). External URLs, protocol-relative URLs, and
- *  empty strings all fall back to "/". */
-function safeRedirectPath(raw: string | undefined | null): string {
-  if (!raw) return "/";
-  // Must start with a single "/" and not "//" (protocol-relative).
-  if (!raw.startsWith("/") || raw.startsWith("//")) return "/";
-  return raw;
-}
 
 export async function loginAction(
   _prev: LoginFormState,
@@ -77,15 +70,25 @@ export async function loginAction(
     });
   } catch (err) {
     // Auth.js uses thrown redirects internally — we MUST re-throw
-    // anything that isn't a CredentialsSignin so the redirect
-    // bubbles to Next.
+    // anything that isn't an AuthError so the redirect bubbles to
+    // Next.
     if (err instanceof AuthError) {
-      // Same text for every failure, lockout included — a distinct
-      // "locked" message would confirm the account exists.
+      if (err.type === "CredentialsSignin") {
+        // Same text for every failure, lockout included — a distinct
+        // "locked" message would confirm the account exists.
+        return {
+          status: "error",
+          error:
+            "Invalid email or password. After repeated failures, sign-in pauses for 15 minutes.",
+        };
+      }
+      // Anything else (a DB outage inside authorize, a config
+      // error…) is NOT a bad password — don't tell the user it is,
+      // and don't hide it from the server logs.
+      console.error("[auth] sign-in failed with a non-credentials error", err);
       return {
         status: "error",
-        error:
-          "Invalid email or password. After repeated failures, sign-in pauses for 15 minutes.",
+        error: "Sign-in is temporarily unavailable. Please try again shortly.",
       };
     }
     throw err;
@@ -118,7 +121,13 @@ const changePasswordSchema = z.object({
  * `passwordProblems`, and refuses a no-op change. On success the
  * password fingerprint in every OTHER session's JWT stops matching,
  * so they're signed out on their next request (ADR-017); this
- * session is re-stamped via `unstable_update()` and stays signed in.
+ * session is re-stamped via `unstable_update({ pwv })` — the new
+ * fingerprint travels in the payload and the jwt callback only
+ * honours it when it matches the DB — and stays signed in.
+ *
+ * Wrong current-password guesses are throttled with the same
+ * threshold/window as sign-in (`reserveAttempt`), so a hijacked
+ * session can't brute-force the password through this action.
  */
 export async function changePasswordAction(
   _prev: ChangePasswordFormState,
@@ -139,13 +148,30 @@ export async function changePasswordAction(
   });
   if (!user) return { status: "error", errors: { _form: ["Account not found."] } };
 
+  // Atomic check-and-record of the guess BEFORE verifying it.
+  const attempt = await reserveAttempt({
+    userId,
+    lockKey: `password_change:${userId}`,
+    failureKind: "password_change_failed",
+    resetKinds: ["password_changed", "sign_in_unlocked"],
+  });
+  if (attempt.locked) {
+    return {
+      status: "error",
+      errors: {
+        currentPassword: [
+          "Too many incorrect attempts. Try again in 15 minutes, or ask an administrator.",
+        ],
+      },
+    };
+  }
+
   const currentOk =
     !!user.passwordHash &&
     (await argon2.verify(user.passwordHash, currentPassword));
   if (!currentOk) {
-    await logAuthEvent({
-      userId,
-      kind: "password_change_failed",
+    await settleAttempt(attempt.reservationId, {
+      ok: false,
       reason: "wrong current password",
     });
     return {
@@ -153,6 +179,9 @@ export async function changePasswordAction(
       errors: { currentPassword: ["Current password is incorrect."] },
     };
   }
+
+  // Correct current password — the guess isn't a failure.
+  await settleAttempt(attempt.reservationId, { ok: true });
 
   const problems = passwordProblems(newPassword, { email: user.email });
   if (problems.length > 0) {
@@ -179,8 +208,13 @@ export async function changePasswordAction(
   await logAuthEvent({ userId, kind: "password_changed" });
 
   // Re-stamp THIS session's fingerprint so it survives the change;
-  // all other sessions fail the check on their next request.
-  await unstable_update({});
+  // all other sessions fail the check on their next request. The
+  // new fingerprint is the proof: the jwt callback only re-stamps
+  // when it matches the DB (src/lib/session-token.ts), so a forged
+  // POST /api/auth/session can't revive a stale token.
+  await unstable_update({
+    pwv: passwordFingerprint(passwordHash),
+  } as unknown as Parameters<typeof unstable_update>[0]);
 
   return { status: "ok" };
 }

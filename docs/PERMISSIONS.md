@@ -357,6 +357,25 @@ the server rejects, the local state reverts and an inline warning
 shows. The action calls `revalidatePath("/settings/roles")` on
 success so the next render reflects the canonical state.
 
+### Admin-only permissions and the escalation invariant
+
+`ADMIN_ONLY_PERMISSIONS` (`src/lib/permissions.ts`; the matrix UI and
+the server share it) lists permissions that govern access to access
+itself: `firm.manage_permissions`, `firm.manage_roles` and
+`firm.manage_team_directory`. Only an Admin may grant or revoke them
+(`setRolePermissionAction` refuses a non-Admin, and the matrix renders
+those cells locked).
+
+`firm.manage_team_directory` is delegable (e.g. to an office manager)
+but must not become an escalation path, so `src/app/actions/team.ts`
+enforces invariant 5 server-side with `isCurrentUserAdmin()`: a
+non-Admin caller may not grant or remove the Admin role, or any role
+carrying an ADMIN_ONLY permission, on anyone (themselves included);
+may not invite a user with such a role; may not edit, deactivate or
+reactivate an Admin, nor deactivate or reset the password of / unlock
+sign-in for any holder of such a role. Hiding the checkbox in the UI is
+convenience only.
+
 ### Audit trail
 
 Every non-no-op grant or revoke writes an `ActivityLog` entry with
@@ -542,3 +561,4 @@ boxes."
 | 2026-07-07 | Document file system keys wired: `documents.folder.create` / `documents.folder.edit` (rename) / `documents.folder.delete` (delete re-parents contents up a level — never deletes files) gate the folder tree's structure; `documents.organize` gates re-filing ("Move to…" on documents AND folders) as its own key because organizing is often delegated to staff who shouldn't hold upload/delete. Server actions in `src/app/actions/document-folders.ts`; read-side flags drive the browser affordances on the matter Documents tab. |
 | 2026-07-07 | Evidence review keys wired: `evidence.flag.create` gates "Flag this moment" on media in the document viewer; `evidence.flag.edit_any` / `evidence.flag.delete_any` cross ownership on other reviewers' flags — creators always edit/delete their OWN flags without any key (same ownership pattern as `notes.edit_any`/`notes.delete_any`). Server actions in `src/app/actions/flagged-moments.ts`; read-side flags drive the composer button + rail kebabs. |
 | 2026-10-16 | New `automations` category (ADR-019): `automations.view` (Settings → Automations), `automations.deadline_rule.{create,edit,delete}`, `automations.task_list.{create,edit,delete}` (edit covers items + archive), `automations.defaults.{create,delete}` (what applies automatically to new matters). Applying a rule/list to a matter rides `deadlines.create` / `tasks.create`. Grant to non-admin roles via /settings/roles. |
+| 2026-10-16 | `firm.manage_team_directory` joined `ADMIN_ONLY_PERMISSIONS` (now exported from `src/lib/permissions.ts`); team.ts refuses non-Admin escalation (grant/remove Admin, invite Admin, edit/deactivate an Admin, reset/unlock an Admin-class account). `intake.decline` added to the catalog. Role create/rename/delete and permission flips write `type: "auth"` activity entries. |

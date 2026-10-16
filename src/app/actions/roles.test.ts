@@ -30,7 +30,13 @@ vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 
 import { getCurrentUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
-import { setRolePermissionAction } from "@/app/actions/roles";
+import {
+  createRoleAction,
+  deleteRoleAction,
+  setRolePermissionAction,
+  updateRoleAction,
+} from "@/app/actions/roles";
+import { roleInitialState } from "@/lib/role-form";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
 const mockedGetUser = vi.mocked(getCurrentUserId);
@@ -167,5 +173,126 @@ describe("setRolePermissionAction — admin caller", () => {
     );
     expect(res.ok).toBe(false);
     expect(await grantedKeys(adminRoleId)).toEqual([]);
+  });
+});
+
+describe("setRolePermissionAction — firm.manage_team_directory is admin-only", () => {
+  test("a manage_permissions delegate cannot grant or revoke it", async () => {
+    mockedGetUser.mockResolvedValue(delegateUserId);
+    const grant = await setRolePermissionAction(
+      targetRoleId,
+      "firm.manage_team_directory",
+      true
+    );
+    expect(grant.ok).toBe(false);
+    expect(await grantedKeys(targetRoleId)).not.toContain(
+      "firm.manage_team_directory"
+    );
+
+    await prisma.rolePermission.create({
+      data: { roleId: targetRoleId, permission: "firm.manage_team_directory" },
+    });
+    const revoke = await setRolePermissionAction(
+      targetRoleId,
+      "firm.manage_team_directory",
+      false
+    );
+    expect(revoke.ok).toBe(false);
+    expect(await grantedKeys(targetRoleId)).toContain(
+      "firm.manage_team_directory"
+    );
+  });
+
+  test("an Admin can grant it", async () => {
+    mockedGetUser.mockResolvedValue(adminUserId);
+    const res = await setRolePermissionAction(
+      targetRoleId,
+      "firm.manage_team_directory",
+      true
+    );
+    expect(res.ok).toBe(true);
+    expect(await grantedKeys(targetRoleId)).toContain(
+      "firm.manage_team_directory"
+    );
+  });
+});
+
+describe("role CRUD — activity log", () => {
+  const form = (name: string, description = "") => {
+    const fd = new FormData();
+    fd.set("name", name);
+    fd.set("description", description);
+    return fd;
+  };
+  const logs = () =>
+    prisma.activityLog.findMany({
+      where: { userId: adminUserId },
+      orderBy: { timestamp: "asc" },
+    });
+
+  beforeEach(() => {
+    mockedGetUser.mockResolvedValue(adminUserId);
+  });
+
+  test("create logs the new role", async () => {
+    const res = await createRoleAction(
+      roleInitialState,
+      form("Billing manager", "Runs AR")
+    );
+    expect(res.status).toBe("ok");
+    const [log] = await logs();
+    expect(log.type).toBe("auth");
+    expect(log.matterId).toBeNull();
+    expect(log.title).toBe('Created role "Billing manager"');
+    expect(log.detail).toBe("Runs AR");
+  });
+
+  test("rename logs old and new names; an unchanged re-save logs nothing", async () => {
+    const same = await updateRoleAction(
+      targetRoleId,
+      roleInitialState,
+      form("Paralegal")
+    );
+    expect(same.status).toBe("ok");
+    expect(await logs()).toHaveLength(0);
+
+    const res = await updateRoleAction(
+      targetRoleId,
+      roleInitialState,
+      form("Legal assistant")
+    );
+    expect(res.status).toBe("ok");
+    const [log] = await logs();
+    expect(log.type).toBe("auth");
+    expect(log.title).toBe('Renamed role "Paralegal" -> "Legal assistant"');
+  });
+
+  test("delete logs the role, who lost it, and how many permissions it carried", async () => {
+    await seedUser({ firmId, name: "Holder One", roleIds: [targetRoleId] });
+    await prisma.rolePermission.createMany({
+      data: [
+        { roleId: targetRoleId, permission: "matters.create" },
+        { roleId: targetRoleId, permission: "tasks.create" },
+      ],
+    });
+    const res = await deleteRoleAction(targetRoleId);
+    expect(res.status).toBe("ok");
+    expect(
+      await prisma.role.findUnique({ where: { id: targetRoleId } })
+    ).toBeNull();
+    const [log] = await logs();
+    expect(log.type).toBe("auth");
+    expect(log.title).toBe('Deleted role "Paralegal"');
+    expect(log.detail).toContain("1 member lost it: Holder One");
+    expect(log.detail).toContain("2 permissions");
+  });
+
+  test("a permission grant is logged as a firm-scope auth entry", async () => {
+    await setRolePermissionAction(targetRoleId, "matters.create", true);
+    const [log] = await logs();
+    expect(log.type).toBe("auth");
+    expect(log.matterId).toBeNull();
+    expect(log.title).toMatch(/^Granted ".+" to Paralegal$/);
+    expect(log.detail).toBe("matters.create");
   });
 });

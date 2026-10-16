@@ -9,7 +9,13 @@ vi.mock("next/headers", () => ({
   headers: vi.fn(async () => new Headers({ "x-forwarded-for": "198.51.100.4" })),
 }));
 
+vi.mock("argon2", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("argon2")>();
+  return { ...actual, verify: vi.fn(actual.verify) };
+});
+
 import * as argon2 from "argon2";
+import { logAuthEvent } from "@/lib/auth-events";
 import { prisma } from "@/lib/prisma";
 import {
   LOCKOUT_THRESHOLD,
@@ -74,6 +80,30 @@ describe("authorizeCredentials", () => {
     expect(await events()).toHaveLength(0);
   });
 
+  test("unknown email still burns a dummy argon2 verify (no timing oracle)", async () => {
+    const verify = vi.mocked(argon2.verify);
+    verify.mockClear();
+    expect(
+      await authorizeCredentials({ email: "nobody@example.com", password: PASSWORD })
+    ).toBeNull();
+    expect(verify).toHaveBeenCalledTimes(1);
+    // …and it was NOT checked against a real account's hash.
+    const [hash] = verify.mock.calls[0];
+    const real = await prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { passwordHash: true },
+    });
+    expect(hash).not.toBe(real.passwordHash);
+  });
+
+  test("deactivated account also burns a dummy verify", async () => {
+    await prisma.user.update({ where: { id: userId }, data: { isActive: false } });
+    const verify = vi.mocked(argon2.verify);
+    verify.mockClear();
+    await authorizeCredentials({ email: EMAIL, password: PASSWORD });
+    expect(verify).toHaveBeenCalledTimes(1);
+  });
+
   test("malformed input returns null without touching the DB log", async () => {
     expect(await authorizeCredentials({ email: "not-an-email", password: "" })).toBeNull();
     expect(await events()).toHaveLength(0);
@@ -115,6 +145,44 @@ describe("authorizeCredentials — lockout", () => {
       where: { userId, title: "Failed sign-in" },
       data: { timestamp: new Date(Date.now() - LOCKOUT_WINDOW_MS - 1000) },
     });
+    expect(await authorizeCredentials({ email: EMAIL, password: PASSWORD })).not.toBeNull();
+  });
+
+  test("parallel guesses can't all pass the lockout check (atomic check-and-record)", async () => {
+    const results = await Promise.all(
+      Array.from({ length: 12 }, () =>
+        authorizeCredentials({ email: EMAIL, password: "wrong" })
+      )
+    );
+    expect(results.every((r) => r === null)).toBe(true);
+    const all = await events();
+    const failed = all.filter((e) => e.title === "Failed sign-in");
+    // Exactly the threshold's worth of guesses were evaluated.
+    expect(failed).toHaveLength(LOCKOUT_THRESHOLD);
+    // Every settled failure carries its real reason (no dangling reservations).
+    expect(failed.every((e) => e.detail?.includes("wrong password"))).toBe(true);
+    // And the right password is now refused.
+    expect(await authorizeCredentials({ email: EMAIL, password: PASSWORD })).toBeNull();
+  });
+
+  test("a successful sign-in leaves no reservation row behind", async () => {
+    await authorizeCredentials({ email: EMAIL, password: PASSWORD });
+    expect((await events()).map((e) => e.title)).toEqual(["Signed in"]);
+  });
+
+  test("blocked attempts are logged at most once a minute", async () => {
+    await failTimes(LOCKOUT_THRESHOLD);
+    for (let i = 0; i < 4; i++) {
+      await authorizeCredentials({ email: EMAIL, password: PASSWORD });
+    }
+    const blocked = (await events()).filter((e) => e.title.startsWith("Blocked sign-in"));
+    expect(blocked).toHaveLength(1);
+  });
+
+  test("an admin unlock event clears the lock immediately", async () => {
+    await failTimes(LOCKOUT_THRESHOLD);
+    expect(await authorizeCredentials({ email: EMAIL, password: PASSWORD })).toBeNull();
+    await logAuthEvent({ userId, kind: "sign_in_unlocked" });
     expect(await authorizeCredentials({ email: EMAIL, password: PASSWORD })).not.toBeNull();
   });
 

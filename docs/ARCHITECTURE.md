@@ -96,7 +96,10 @@ state (e.g. `useOptimistic`), not a client cache.
 ## Security
 
 - **Auth**: Auth.js v5 credentials provider with argon2id hashing (`src/auth.ts`);
-  `src/proxy.ts` gates all routes at the edge; JWT session validated per request.
+  `src/proxy.ts` gates all routes at the edge; JWT session validated per request
+  (password fingerprint, ADR-017). Sign-in lockout is a reserve/settle under a
+  per-email Postgres advisory lock (ADR-020); redirects after login go through the
+  strict `safeRedirectPath` (`src/lib/safe-redirect.ts`).
 - **Permissions**: granular keys in `src/lib/permissions.ts`, enforced in every
   server action via `requirePermission(...)` and in read paths via
   `currentUserHasPermission(...)`. Full model in [PERMISSIONS.md](./PERMISSIONS.md).

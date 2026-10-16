@@ -34,23 +34,13 @@ import { Lock, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { setRolePermissionAction } from "@/app/actions/roles";
 import { ADMIN_ROLE_NAME } from "@/lib/role-constants";
-import { PERMISSION_CATEGORIES } from "@/lib/permissions";
+import { ADMIN_ONLY_PERMISSIONS, PERMISSION_CATEGORIES } from "@/lib/permissions";
 
 type RoleColumn = {
   id: string;
   name: string;
   isSystem: boolean;
 };
-
-// Mirrors ADMIN_ONLY_PERMISSIONS in `src/app/actions/roles.ts` —
-// the meta keys govern access to access itself, and the server
-// action rejects grant/revoke from non-admin manage_permissions
-// holders. Kept as a local copy because the actions file is
-// "use server" and can only export async functions.
-const ADMIN_ONLY_PERMISSIONS = new Set([
-  "firm.manage_permissions",
-  "firm.manage_roles",
-]);
 
 const ADMIN_ONLY_TOOLTIP =
   "Only an Admin can change who holds this permission — it controls who can delegate access.";

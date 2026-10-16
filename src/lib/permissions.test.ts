@@ -10,8 +10,11 @@
  *      and falls through to the raw key for unknown ones.
  */
 
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
+  ADMIN_ONLY_PERMISSIONS,
   isKnownPermission,
   permissionLabel,
   PERMISSION_CATEGORIES,
@@ -112,6 +115,7 @@ describe("expected-key invariants", () => {
     "documents.delete_any",
     "intake.conflict_check.run",
     "intake.conflict_check.override",
+    "intake.decline",
     "matters.settlement.view",
     "matters.settlement.edit",
     "matters.settlement.manage_liens",
@@ -158,5 +162,60 @@ describe("expected-key invariants", () => {
     "evidence.flag.delete_any",
   ])("%s exists in the catalog", (key) => {
     expect(isKnownPermission(key)).toBe(true);
+  });
+});
+
+describe("ADMIN_ONLY_PERMISSIONS", () => {
+  test("covers the access-management keys and only real catalog keys", () => {
+    for (const key of [
+      "firm.manage_permissions",
+      "firm.manage_roles",
+      "firm.manage_team_directory",
+    ]) {
+      expect(ADMIN_ONLY_PERMISSIONS.has(key)).toBe(true);
+    }
+    for (const key of ADMIN_ONLY_PERMISSIONS) {
+      expect(isKnownPermission(key)).toBe(true);
+    }
+  });
+});
+
+describe("permission keys used in code", () => {
+  // A typo'd (or never-catalogued) key is fail-closed for non-admins
+  // — requirePermission redirects them forever and no role can be
+  // granted the key — and invisible to tests that mock the gate
+  // (that is how `intake.decline` shipped without a catalog entry).
+  // Scan production sources for literal keys and check the catalog.
+  function walk(dir: string, out: string[] = []): string[] {
+    for (const entry of readdirSync(dir)) {
+      const full = join(dir, entry);
+      if (statSync(full).isDirectory()) {
+        if (entry === "generated" || entry === "node_modules") continue;
+        walk(full, out);
+      } else if (/\.tsx?$/.test(entry) && !/\.test\.tsx?$/.test(entry)) {
+        out.push(full);
+      }
+    }
+    return out;
+  }
+
+  test("every literal key passed to a permission gate exists in the catalog", () => {
+    const srcRoot = join(process.cwd(), "src");
+    const single =
+      /(?:requirePermission|currentUserHasPermission)\(\s*["'`]([^"'`]+)["'`]/g;
+    const anyOf = /currentUserHasAnyPermission\(\s*\[([^\]]*)\]/g;
+    const found = new Map<string, string>();
+    for (const file of walk(srcRoot)) {
+      const text = readFileSync(file, "utf8");
+      for (const m of text.matchAll(single)) found.set(m[1], file);
+      for (const m of text.matchAll(anyOf)) {
+        for (const k of m[1].matchAll(/["'`]([^"'`]+)["'`]/g)) {
+          found.set(k[1], file);
+        }
+      }
+    }
+    expect(found.size).toBeGreaterThan(20); // the scan is actually finding calls
+    const unknown = [...found].filter(([k]) => !isKnownPermission(k));
+    expect(unknown).toEqual([]);
   });
 });

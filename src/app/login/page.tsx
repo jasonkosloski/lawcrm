@@ -18,20 +18,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { LoginForm } from "@/components/auth/login-form";
-
-/** Reject anything that isn't a same-origin relative path (open
- *  redirect prevention). External URLs, protocol-relative URLs, and
- *  empty strings all fall back to "/".
- *
- *  Mirrors `safeRedirectPath` in `src/app/actions/auth.ts` — that
- *  module is `"use server"` and may only export async functions, so
- *  the check is duplicated here rather than imported. Keep in sync. */
-function safeRedirectPath(raw: string | undefined | null): string {
-  if (!raw) return "/";
-  // Must start with a single "/" and not "//" (protocol-relative).
-  if (!raw.startsWith("/") || raw.startsWith("//")) return "/";
-  return raw;
-}
+import { safeRedirectPath } from "@/lib/safe-redirect";
 
 export default async function LoginPage({
   searchParams,

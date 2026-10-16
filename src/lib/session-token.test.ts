@@ -7,6 +7,7 @@
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import type { JWT } from "next-auth/jwt";
 import { prisma } from "@/lib/prisma";
+import { passwordFingerprint } from "@/lib/session-fingerprint";
 import { validateSessionToken } from "@/lib/session-token";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
@@ -52,14 +53,55 @@ describe("validateSessionToken", () => {
     expect(next.userId).toBeUndefined();
   });
 
-  test("trigger 'update' re-stamps the session that made the change", async () => {
+  test("trigger 'update' with the freshly computed fingerprint re-stamps the session", async () => {
     const token = await signIn();
     await setHash("$argon2id$changed");
-    const updated = await validateSessionToken({ ...token }, { trigger: "update" });
+    const updated = await validateSessionToken(
+      { ...token },
+      { trigger: "update", updatePwv: passwordFingerprint("$argon2id$changed") }
+    );
     expect(updated.userId).toBe(userId);
     // …and it stays valid on subsequent requests.
     const next = await validateSessionToken({ ...updated });
     expect(next.userId).toBe(userId);
+  });
+
+  test("trigger 'update' with no payload fingerprint strips a stale token (forged POST /api/auth/session)", async () => {
+    const token = await signIn();
+    await setHash("$argon2id$changed");
+    const forged = await validateSessionToken({ ...token }, { trigger: "update" });
+    expect(forged.userId).toBeUndefined();
+  });
+
+  test("trigger 'update' with a wrong or non-string fingerprint strips a stale token", async () => {
+    const token = await signIn();
+    await setHash("$argon2id$changed");
+    for (const updatePwv of [
+      token.pwv, // the OLD fingerprint
+      passwordFingerprint("$argon2id$guess"),
+      "",
+      12345,
+      { pwv: "x" },
+    ]) {
+      const res = await validateSessionToken({ ...token }, { trigger: "update", updatePwv });
+      expect(res.userId).toBeUndefined();
+    }
+  });
+
+  test("trigger 'update' on a still-current token with no payload keeps it", async () => {
+    const token = await signIn();
+    const res = await validateSessionToken({ ...token }, { trigger: "update" });
+    expect(res.userId).toBe(userId);
+  });
+
+  test("a correct fingerprint without trigger 'update' does not re-stamp", async () => {
+    const token = await signIn();
+    await setHash("$argon2id$changed");
+    const res = await validateSessionToken(
+      { ...token },
+      { updatePwv: passwordFingerprint("$argon2id$changed") }
+    );
+    expect(res.userId).toBeUndefined();
   });
 
   test("tokens minted before fingerprints existed are dropped", async () => {
