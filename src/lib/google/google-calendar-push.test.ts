@@ -215,6 +215,33 @@ describe("pushEventToGoogle — creator/account resolution", () => {
     expect(body.location).toBe("");
   });
 
+  test("a private CRM event is pushed as a Google-private event; un-privating resets it (ADR-037)", async () => {
+    const accountId = await seedGoogleAccount();
+    const eventId = await seedEvent();
+    await prisma.calendarEvent.update({
+      where: { id: eventId },
+      data: { visibility: "private" },
+    });
+    await seedMapping({ eventId, accountId });
+    mockedFetch.mockResolvedValue(googleOk());
+
+    await pushEventToGoogle(eventId);
+    expect(JSON.parse(String(mockedFetch.mock.calls[0][2]?.body)).visibility).toBe(
+      "private"
+    );
+
+    await prisma.calendarEvent.update({
+      where: { id: eventId },
+      data: { visibility: "default" },
+    });
+    mockedFetch.mockClear();
+    mockedFetch.mockResolvedValue(googleOk());
+    await pushEventToGoogle(eventId);
+    expect(JSON.parse(String(mockedFetch.mock.calls[0][2]?.body)).visibility).toBe(
+      "default"
+    );
+  });
+
   test("creator-less event (legacy row) is skipped silently", async () => {
     await seedGoogleAccount();
     const eventId = await seedEvent({ createdById: null });

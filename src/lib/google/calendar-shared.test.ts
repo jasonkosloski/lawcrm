@@ -52,6 +52,12 @@ describe("eventToGoogleResource", () => {
     expect(g.extendedProperties?.private?.[LAWCRM_MARKER_KEY]).toBe("evt1");
   });
 
+  test("visibility: private pushes as Google private, everything else as default", () => {
+    expect(eventToGoogleResource({ ...base, visibility: "private" }).visibility).toBe("private");
+    expect(eventToGoogleResource({ ...base, visibility: "show_details" }).visibility).toBe("default");
+    expect(eventToGoogleResource(base).visibility).toBe("default");
+  });
+
   test("all-day event uses date fields with EXCLUSIVE end (+1 day)", () => {
     const g = eventToGoogleResource({
       ...base,

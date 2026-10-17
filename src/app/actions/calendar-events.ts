@@ -57,7 +57,11 @@ import { prisma, type Tx } from "@/lib/prisma";
 import { getCurrentFirm } from "@/lib/firm";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
-import { canEditEvent } from "@/lib/calendar-visibility";
+import {
+  EVENT_VISIBILITIES,
+  auditEventTitle,
+  canEditEvent,
+} from "@/lib/calendar-visibility";
 import { getEffectiveCalendarDefaults } from "@/lib/calendar-defaults";
 import { logActivity } from "@/lib/activity-log";
 import {
@@ -220,7 +224,7 @@ const videoUrlField = z
     "Video link must be a web address (https://…)"
   );
 
-const visibilityEnum = z.enum(["default", "show_details"]);
+const visibilityEnum = z.enum(EVENT_VISIBILITIES);
 
 /** Fields common to create and update. */
 const eventBaseFields = {
@@ -551,6 +555,7 @@ export async function updateCalendarEvent(
       matterId: true,
       createdById: true,
       title: true,
+      visibility: true,
       startTime: true,
       endTime: true,
       isAllDay: true,
@@ -702,6 +707,7 @@ export async function updateCalendarEvent(
   await pushEventToGoogle(eventId);
 
   if (event.matterId) {
+    const newVisibility = parsed.data.visibility ?? event.visibility;
     const moved =
       event.isAllDay !== allDay ||
       event.startTime.getTime() !== startDate.getTime() ||
@@ -713,12 +719,12 @@ export async function updateCalendarEvent(
       title: moved ? "Event rescheduled" : "Event updated",
       detail: moved
         ? describeReschedule(
-            parsed.data.title,
+            auditEventTitle(newVisibility, parsed.data.title),
             { start: event.startTime, isAllDay: event.isAllDay },
             { start: startDate, isAllDay: allDay },
             tz
           )
-        : parsed.data.title,
+        : auditEventTitle(newVisibility, parsed.data.title),
     });
   }
 
@@ -739,6 +745,7 @@ export async function deleteCalendarEvent(
       matterId: true,
       createdById: true,
       title: true,
+      visibility: true,
       matter: {
         select: {
           teamMembers: {
@@ -800,7 +807,7 @@ export async function deleteCalendarEvent(
       userId: viewerId,
       type: "event",
       title: "Event deleted",
-      detail: event.title,
+      detail: auditEventTitle(event.visibility, event.title),
     });
   }
 
@@ -983,7 +990,7 @@ export async function createCalendarEvent(
       userId: createdById,
       type: "event",
       title: "Event scheduled",
-      detail: parsed.data.title,
+      detail: auditEventTitle(parsed.data.visibility, parsed.data.title),
     });
   }
 
@@ -1090,6 +1097,7 @@ export async function moveCalendarEvent(
       matterId: true,
       createdById: true,
       title: true,
+      visibility: true,
       isAllDay: true,
       startTime: true,
       endTime: true,
@@ -1165,7 +1173,7 @@ export async function moveCalendarEvent(
       type: "event",
       title: "Event rescheduled",
       detail: describeReschedule(
-        event.title,
+        auditEventTitle(event.visibility, event.title),
         { start: event.startTime, isAllDay: event.isAllDay },
         { start: newStart, isAllDay },
         tz

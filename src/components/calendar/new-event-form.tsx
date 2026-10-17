@@ -29,6 +29,7 @@
 
 "use client";
 
+import { EventPrivateToggle } from "@/components/calendar/event-private-toggle";
 import {
   useActionState,
   useEffect,
@@ -96,6 +97,7 @@ export function NewEventForm({
   const [matterId, setMatterId] = useState<string | null>(null);
   const [attendees, setAttendees] = useState<EditableAttendee[]>([]);
   const [showDetails, setShowDetails] = useState(false);
+  const [isPrivate, setIsPrivate] = useState(false);
 
   const toggleAllDay = (next: boolean) => {
     setIsAllDay(next);
@@ -286,13 +288,16 @@ export function NewEventForm({
         <input
           type="hidden"
           name="visibility"
-          value={showDetails ? "show_details" : "default"}
+          value={isPrivate ? "private" : showDetails ? "show_details" : "default"}
         />
         <label className="flex items-start gap-2 text-xs text-ink-3 select-none cursor-pointer">
           <input
             type="checkbox"
             checked={showDetails}
-            onChange={(e) => setShowDetails(e.target.checked)}
+            onChange={(e) => {
+              setShowDetails(e.target.checked);
+              if (e.target.checked) setIsPrivate(false);
+            }}
             className="mt-0.5 h-3.5 w-3.5 rounded border-line"
           />
           <span>
@@ -306,6 +311,13 @@ export function NewEventForm({
             </span>
           </span>
         </label>
+        <EventPrivateToggle
+          checked={isPrivate}
+          onChange={(next) => {
+            setIsPrivate(next);
+            if (next) setShowDetails(false);
+          }}
+        />
 
         <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
           <Link

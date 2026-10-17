@@ -50,6 +50,8 @@ export type GoogleEventResource = {
   start?: { date?: string; dateTime?: string; timeZone?: string };
   end?: { date?: string; dateTime?: string; timeZone?: string };
   updated?: string;
+  /** Google event visibility: "default" | "public" | "private" | "confidential". */
+  visibility?: string;
   extendedProperties?: { private?: Record<string, string> };
 };
 
@@ -102,7 +104,12 @@ export function googleEventIdFor(crmEventId: string): string {
  * read as the right UTC day.
  */
 export function eventToGoogleResource(
-  event: CrmEventFields & { id: string; zoomUrl?: string | null }
+  event: CrmEventFields & {
+    id: string;
+    zoomUrl?: string | null;
+    /** CRM visibility; "private" pushes as a Google private event. */
+    visibility?: string | null;
+  }
 ): GoogleEventResource {
   const body = event.description?.trim() || null;
   const zoomLine = event.zoomUrl ? `Zoom: ${event.zoomUrl}` : null;
@@ -130,6 +137,12 @@ export function eventToGoogleResource(
     end: event.isAllDay
       ? { date: addDaysToKey(dateOnlyKey(event.endTime), 1) }
       : { dateTime: event.endTime.toISOString() },
+    // A CRM-private event is pushed as a Google PRIVATE event, so
+    // anyone with only free/busy or "see all event details" access to
+    // the creator's calendar sees Busy, never the title. Everything
+    // else resets to the calendar default (also un-privates a copy
+    // when the CRM toggle is turned off).
+    visibility: event.visibility === "private" ? "private" : "default",
     extendedProperties: { private: { [LAWCRM_MARKER_KEY]: event.id } },
   };
 }

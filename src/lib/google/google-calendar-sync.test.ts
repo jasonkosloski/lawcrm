@@ -165,6 +165,24 @@ describe("scope gating", () => {
 // ── Full pull + import shape ─────────────────────────────────────────────
 
 describe("full windowed pull", () => {
+  it("imports a Google-private event as a CRM-private event (never leaks via a show-details profile)", async () => {
+    const accountId = await seedAccount();
+    mockedFetch.mockResolvedValueOnce(
+      listResponse({
+        items: [
+          { ...gEvent({ id: "g-priv", summary: "Therapy" }), visibility: "private" },
+          gEvent({ id: "g-pub", summary: "Lunch" }),
+        ],
+        nextSyncToken: "st-1",
+      })
+    );
+    await pullCalendarForAccount(accountId);
+    const priv = await prisma.calendarEvent.findFirstOrThrow({ where: { title: "Therapy" } });
+    const pub = await prisma.calendarEvent.findFirstOrThrow({ where: { title: "Lunch" } });
+    expect(priv.visibility).toBe("private");
+    expect(pub.visibility).toBe("default");
+  });
+
   it("imports an unmarked Google event as a personal CRM meeting + mapping, persists the sync token", async () => {
     const accountId = await seedAccount();
     mockedFetch.mockResolvedValueOnce(

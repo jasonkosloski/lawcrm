@@ -547,7 +547,9 @@ async function applyGoogleEvent(
     await prisma.calendarEvent.create({
       data: {
         createdById: account.userId,
-        visibility: "default",
+        // A Google-private event stays private in the CRM (it must not
+        // surface in full through the creator's show-details default).
+        visibility: item.visibility === "private" ? "private" : "default",
         type: "meeting",
         matterId: null,
         title: fields.title,

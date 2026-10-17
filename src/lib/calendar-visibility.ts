@@ -11,7 +11,14 @@
  * relationship (attendee / matter team) makes the viewer a
  * legitimate stakeholder.
  *
- * Five paths to "yes":
+ * One hard "no" comes first: an event whose per-event visibility is
+ * `private` shows details to its CREATOR ONLY (ADR-037). It beats the
+ * creator's show-details profile default, attendee status, matter
+ * team membership and any permission; everyone else, invitees and
+ * the matter team included, sees the time range as "Busy". Google
+ * sync pushes such events as Google-private.
+ *
+ * Otherwise, five paths to "yes":
  *
  *   1. Viewer is the event's creator. You can always see your
  *      own events.
@@ -56,7 +63,25 @@ export type VisibilityInput = {
   matterTeamUserIds: readonly string[];
 };
 
+/** Per-event visibility values stored on `CalendarEvent.visibility`. */
+export const EVENT_VISIBILITIES = ["default", "show_details", "private"] as const;
+export type EventVisibility = (typeof EVENT_VISIBILITIES)[number];
+
+/** Event title as it may appear in the matter activity log. A private
+ *  event's title must not reach the timeline, which every matter
+ *  viewer reads, so it is replaced by a generic label. */
+export function auditEventTitle(
+  visibility: string | null | undefined,
+  title: string
+): string {
+  return visibility === "private" ? "Private event" : title;
+}
+
 export function canViewEventDetails(input: VisibilityInput): boolean {
+  // Private: creator only, nobody else (not attendees, not the team).
+  if (input.eventVisibility === "private") {
+    return !!input.createdById && input.createdById === input.viewerId;
+  }
   // 1. Creator bypass.
   if (input.createdById && input.createdById === input.viewerId) return true;
   // 2. Attendee.
@@ -68,11 +93,9 @@ export function canViewEventDetails(input: VisibilityInput): boolean {
   // 4. Per-event override.
   if (input.eventVisibility === "show_details") return true;
   // 5. Per-user default. Only applies when the event itself is
-  // on `default` — explicit `show_details` already returned
-  // true; an explicit private setting (future) would need to
-  // win over the user-default. Today there's no `private`
-  // value so the order doesn't matter, but the shape is set up
-  // for it.
+  // on `default` - explicit `show_details` already returned true
+  // and `private` returned above, so the user-default can never
+  // override an explicit per-event choice.
   if (
     input.eventVisibility === "default" &&
     input.creatorDefaultEventVisibility === "show_details"

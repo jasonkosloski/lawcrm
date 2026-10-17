@@ -1437,13 +1437,31 @@ describe("createCalendarEvent", () => {
 
   test("visibility rejects unknown enum values (tampered form)", async () => {
     const fd = buildForm();
-    fd.set("visibility", "private"); // not a valid value
+    fd.set("visibility", "everyone"); // not a valid value
     const res = await createCalendarEvent(
       createCalendarEventInitialState,
       fd
     );
     expect(res.status).toBe("error");
     expect(res.errors?.visibility?.length).toBeGreaterThan(0);
+  });
+
+  test("visibility private is accepted, stored, and keeps the title out of the matter activity log (ADR-037)", async () => {
+    const fd = buildForm({ matterId });
+    fd.set("title", "Secret therapy intake");
+    fd.set("visibility", "private");
+    const res = await createCalendarEvent(
+      createCalendarEventInitialState,
+      fd
+    );
+    expect(res.status).toBe("ok");
+    const evt = await prisma.calendarEvent.findFirstOrThrow({
+      where: { title: "Secret therapy intake" },
+    });
+    expect(evt.visibility).toBe("private");
+    const logs = await prisma.activityLog.findMany({ where: { matterId, type: "event" } });
+    expect(logs.length).toBeGreaterThan(0);
+    expect(JSON.stringify(logs)).not.toContain("Secret therapy intake");
   });
 
   // ── Attendees at create time (full-page form) ─────────────────────────

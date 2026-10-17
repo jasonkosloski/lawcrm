@@ -28,6 +28,7 @@
 
 "use client";
 
+import { EventPrivateToggle } from "@/components/calendar/event-private-toggle";
 import {
   useCallback,
   useEffect,
@@ -563,10 +564,10 @@ function EventDetailModalInner({
               resolver decide: creator, attendees and the matter
               team always see details; everyone else sees Busy
               UNLESS the creator's profile shares event details
-              firm-wide (there is no per-event "private" value
-              yet, so off means "inherit", not "hidden").
-              Flipping to "Show details to everyone" makes this
-              specific event visible in full regardless. */}
+              firm-wide. "Show details to everyone" makes this
+              specific event visible in full regardless; "Private"
+              is the explicit hide (creator only, ADR-037) and
+              wins over both the profile default and show-details. */}
           {canEdit && (
             <Row icon={<Eye size={14} />}>
               <label className="inline-flex items-center gap-2 text-xs text-ink-2 select-none">
@@ -592,6 +593,14 @@ function EventDetailModalInner({
                   </span>
                 </span>
               </label>
+            <div className="mt-2">
+                <EventPrivateToggle
+                  checked={committed.visibility === "private"}
+                  onChange={(next) =>
+                    commit({ visibility: next ? "private" : "default" })
+                  }
+                />
+              </div>
             </Row>
           )}
 

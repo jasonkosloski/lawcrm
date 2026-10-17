@@ -20,6 +20,7 @@
 
 import { describe, expect, test } from "vitest";
 import {
+  auditEventTitle,
   canEditEvent,
   canViewEventDetails,
   type EditInput,
@@ -241,5 +242,50 @@ describe("canEditEvent", () => {
         perms: { hasEventsEdit: false, hasEventsEditNonMatter: true },
       })
     ).toBe(true);
+  });
+});
+
+describe("canViewEventDetails - private events (ADR-037)", () => {
+  const priv: VisibilityInput = { ...baseView, eventVisibility: "private" };
+
+  test("only the creator sees a private event", () => {
+    expect(canViewEventDetails({ ...priv, viewerId: "creator-1" })).toBe(true);
+    expect(canViewEventDetails(priv)).toBe(false);
+  });
+
+  test("attendees and the matter team do NOT unlock a private event", () => {
+    expect(
+      canViewEventDetails({ ...priv, attendeeUserIds: ["viewer-1"] })
+    ).toBe(false);
+    expect(
+      canViewEventDetails({
+        ...priv,
+        matterId: "m1",
+        matterTeamUserIds: ["viewer-1"],
+      })
+    ).toBe(false);
+  });
+
+  test("the creator's show-details profile default cannot leak a private event", () => {
+    expect(
+      canViewEventDetails({
+        ...priv,
+        creatorDefaultEventVisibility: "show_details",
+      })
+    ).toBe(false);
+  });
+
+  test("a legacy creator-less private event is visible to nobody", () => {
+    expect(
+      canViewEventDetails({ ...priv, createdById: null, viewerId: "x" })
+    ).toBe(false);
+  });
+});
+
+describe("auditEventTitle", () => {
+  test("private titles never reach the activity log", () => {
+    expect(auditEventTitle("private", "Secret")).toBe("Private event");
+    expect(auditEventTitle("default", "Lunch")).toBe("Lunch");
+    expect(auditEventTitle(undefined, "Lunch")).toBe("Lunch");
   });
 });

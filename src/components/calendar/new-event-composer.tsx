@@ -21,6 +21,7 @@
 
 "use client";
 
+import { EventPrivateToggle } from "@/components/calendar/event-private-toggle";
 import {
   useActionState,
   useEffect,
@@ -81,6 +82,7 @@ export function NewEventComposer({
   // ("show details to everyone in the firm" / not). Maps to the
   // server's "show_details" / "default" enum on submit.
   const [showDetails, setShowDetails] = useState(false);
+  const [isPrivate, setIsPrivate] = useState(false);
 
   useEffect(() => {
     // createCalendarEvent revalidates the calendar / dashboard /
@@ -238,13 +240,16 @@ export function NewEventComposer({
       <input
         type="hidden"
         name="visibility"
-        value={showDetails ? "show_details" : "default"}
+        value={isPrivate ? "private" : showDetails ? "show_details" : "default"}
       />
       <label className="flex items-start gap-2 text-xs text-ink-3 select-none cursor-pointer">
         <input
           type="checkbox"
           checked={showDetails}
-          onChange={(e) => setShowDetails(e.target.checked)}
+          onChange={(e) => {
+            setShowDetails(e.target.checked);
+            if (e.target.checked) setIsPrivate(false);
+          }}
           className="mt-0.5 h-3.5 w-3.5 rounded border-line"
         />
         <span>
@@ -255,6 +260,13 @@ export function NewEventComposer({
           </span>
         </span>
       </label>
+      <EventPrivateToggle
+        checked={isPrivate}
+        onChange={(next) => {
+          setIsPrivate(next);
+          if (next) setShowDetails(false);
+        }}
+      />
 
       <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
         <Button

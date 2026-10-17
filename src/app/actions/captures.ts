@@ -52,6 +52,7 @@ import {
   type CaptureFormState,
   type ValidCapture,
 } from "@/lib/capture-schemas";
+import { auditEventTitle } from "@/lib/calendar-visibility";
 import { logActivity } from "@/lib/activity-log";
 import { isAssignableUser, notifyTaskAssigned } from "@/lib/task-assignment";
 import { isKnownUtbmsCode } from "@/lib/time-entry-constants";
@@ -437,7 +438,7 @@ const eventSchema = z
      *  (matter team sees by definition); "show_details" exposes
      *  the event firm-wide. */
     visibility: z
-      .enum(["default", "show_details"])
+      .enum(["default", "show_details", "private"])
       .optional()
       .default("default"),
   })
@@ -530,7 +531,7 @@ export async function createEventWithCaptures(
     userId,
     type: "event",
     title: "Event scheduled",
-    detail: parsed.data.title,
+    detail: auditEventTitle(parsed.data.visibility, parsed.data.title),
   });
   return { status: "ok" };
 }

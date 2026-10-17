@@ -139,6 +139,7 @@ export async function pushEventToGoogle(eventId: string): Promise<void> {
         endTime: true,
         isAllDay: true,
         zoomUrl: true,
+        visibility: true,
         createdById: true,
       },
     });

@@ -182,7 +182,7 @@ export function ProfileEditForm({ profile }: { profile: EditableProfile }) {
           label="Default event visibility"
           name="defaultEventVisibility"
           error={errs.defaultEventVisibility?.[0]}
-          hint="How your events show up to firm-mates who aren't on the matter team or invited as attendees. This applies to ALL of your events, past and future. A per-event toggle can only add visibility; it can't hide an event once you show details to everyone."
+          hint="How your events show up to firm-mates who aren't on the matter team or invited as attendees. This applies to ALL of your events, past and future. A per-event &ldquo;Private event&rdquo; setting always wins, so you can still hide a single event."
           className="sm:col-span-2"
           group
         >

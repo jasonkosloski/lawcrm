@@ -9,6 +9,7 @@
 
 "use client";
 
+import { EventPrivateToggle } from "@/components/calendar/event-private-toggle";
 import { useState } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { createEventWithCaptures } from "@/app/actions/captures";
@@ -75,6 +76,7 @@ export function EventComposer({
   // NewEventComposer. Matter events are already team-visible by
   // definition; flipping this to true exposes details firm-wide.
   const [showDetails, setShowDetails] = useState(false);
+  const [isPrivate, setIsPrivate] = useState(false);
 
   const reset = () => {
     setTitle("");
@@ -188,13 +190,16 @@ export function EventComposer({
         <input
           type="hidden"
           name="visibility"
-          value={showDetails ? "show_details" : "default"}
+          value={isPrivate ? "private" : showDetails ? "show_details" : "default"}
         />
         <label className="flex items-start gap-2 text-xs text-ink-3 select-none cursor-pointer">
           <input
             type="checkbox"
             checked={showDetails}
-            onChange={(e) => setShowDetails(e.target.checked)}
+            onChange={(e) => {
+              setShowDetails(e.target.checked);
+              if (e.target.checked) setIsPrivate(false);
+            }}
             className="mt-0.5 h-3.5 w-3.5 rounded border-line"
           />
           <span>
@@ -204,6 +209,13 @@ export function EventComposer({
             </span>
           </span>
         </label>
+        <EventPrivateToggle
+          checked={isPrivate}
+          onChange={(next) => {
+            setIsPrivate(next);
+            if (next) setShowDetails(false);
+          }}
+        />
       </div>
     </CaptureComposerShell>
   );
