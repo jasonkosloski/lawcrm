@@ -31,16 +31,13 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-// Date-only input ("YYYY-MM-DD") must parse to LOCAL midnight —
-// `new Date(value)` reads it as UTC midnight, which drifts the entry
-// a day early for anyone west of UTC. See parseLocalDate docs.
-import { parseLocalDate } from "@/lib/format-date";
+// Date-only input ("YYYY-MM-DD") is stored as UTC midnight and read
+// in UTC on every surface (ADR-012) — never apply a time zone to it.
+import { parseDateOnly } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
-import {
-  isKnownUtbmsCode,
-  type TimeEntryFormState,
-} from "@/lib/time-entry-constants";
+import type { TimeEntryFormState } from "@/lib/time-entry-constants";
+import { timeEntryFields } from "@/lib/time-entry-schema";
 
 type TimerResult = {
   ok: boolean;
@@ -164,7 +161,10 @@ export async function updateTimer(input: {
   const matterError = await matterMissingError(parsed.data.matterId);
   if (matterError) return { ok: false, error: matterError };
 
-  await prisma.timerSession.update({
+  // updateMany, not update: a stop/discard in another tab can delete
+  // the row between the read above and this write, and `update` would
+  // throw P2025 to the error boundary instead of a friendly refusal.
+  const updated = await prisma.timerSession.updateMany({
     where: { userId },
     data: {
       ...(input.matterId !== undefined
@@ -175,6 +175,7 @@ export async function updateTimer(input: {
         : {}),
     },
   });
+  if (updated.count === 0) return { ok: false, error: "No running timer" };
 
   revalidateTimerWidget();
   return { ok: true };
@@ -205,27 +206,10 @@ const stopTimerSchema = z.object({
   // The stop composer REQUIRES a matter — the TimerSession's matter
   // is nullable, but a TimeEntry's is not.
   matterId: z.string().trim().min(1, "Matter is required"),
-  date: z.string().min(1, "Date is required"),
   // Hours arrive prefilled from the widget (elapsed rounded UP to
   // the billing increment) but stay user-editable — same bounds as
-  // every other create path.
-  hours: z
-    .string()
-    .min(1, "Hours required")
-    .refine((v) => {
-      const n = Number(v);
-      return Number.isFinite(n) && n > 0 && n <= 24;
-    }, "Hours must be > 0 and ≤ 24"),
-  activity: z.string().trim().min(1, "Activity is required").max(200),
-  narrative: z.string().max(4000).optional().or(z.literal("")),
-  utbmsCode: z
-    .string()
-    .trim()
-    .refine((v) => v === "" || isKnownUtbmsCode(v), "Unknown UTBMS code")
-    .optional(),
-  billable: z.literal("on").optional(),
-  noCharge: z.literal("on").optional(),
-  privileged: z.literal("on").optional(),
+  // every other create path (shared timeEntryFields).
+  ...timeEntryFields,
 });
 
 /**
@@ -277,7 +261,7 @@ export async function stopTimer(
     };
   }
 
-  const date = parseLocalDate(parsed.data.date);
+  const date = parseDateOnly(parsed.data.date);
   if (!date) {
     return {
       status: "error",
@@ -325,7 +309,8 @@ export async function stopTimer(
     userId,
     type: "time_entry",
     title: `Time logged from timer · ${parsed.data.hours}h`,
-    detail: parsed.data.activity,
+    // Privileged narratives never reach the firm-wide feed.
+    detail: parsed.data.privileged === "on" ? undefined : parsed.data.activity,
   });
   return { status: "ok" };
 }

@@ -2,41 +2,61 @@
  * Time Toolbar
  *
  * Prev / today / next navigation + the Week / Day view toggle for
- * the standalone /time page. Mirrors CalendarToolbar: async server
+ * the standalone /time page. Mirrors CalendarToolbar: server
  * component, all state in the URL, every control a `<Link>`. The
- * only data read is the viewer's time zone, so the "Today" link
- * targets the user's calendar day, not the server's.
+ * page passes the viewer's time zone, so the "Today" link targets
+ * the user's calendar day, not the server's.
  */
 
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { addDays, format, parseISO, startOfWeek, endOfWeek } from "date-fns";
+import { addDays, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { WEEK_STARTS_ON } from "@/lib/calendar-utils";
-import { dateKeyInTz } from "@/lib/format-date";
-import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
-import { buildTimeHref, type TimeView } from "./time-view-utils";
+import {
+  addDaysToKey,
+  dateKeyInTz,
+  formatDateOnly,
+  parseDateOnly,
+} from "@/lib/format-date";
+import {
+  buildTimeHref,
+  toTimeDateParam,
+  type TimeView,
+} from "./time-view-utils";
 
-function formatRangeLabel(view: TimeView, focal: Date): string {
+/** Range label for the focal day. The focal Date is a navigation
+ *  cursor (server-local midnight of a calendar day); the labels are
+ *  built from its `YYYY-MM-DD` key as date-only values, so they
+ *  never shift with the server's zone. */
+export function formatRangeLabel(view: TimeView, focal: Date): string {
+  const key = toTimeDateParam(focal);
+  const day = parseDateOnly(key);
+  if (!day) return key;
   if (view === "week") {
-    const start = startOfWeek(focal, { weekStartsOn: WEEK_STARTS_ON });
-    const end = endOfWeek(focal, { weekStartsOn: WEEK_STARTS_ON });
-    if (start.getMonth() === end.getMonth()) {
-      return `Week of ${format(start, "MMM d, yyyy")}`;
+    const offset = (day.getUTCDay() - WEEK_STARTS_ON + 7) % 7;
+    const startKey = addDaysToKey(key, -offset);
+    const endKey = addDaysToKey(startKey, 6);
+    const start = parseDateOnly(startKey)!;
+    const end = parseDateOnly(endKey)!;
+    if (start.getUTCMonth() === end.getUTCMonth()) {
+      return `Week of ${formatDateOnly(start, "medium")}`;
     }
-    return `${format(start, "MMM d")} – ${format(end, "MMM d, yyyy")}`;
+    return `${formatDateOnly(start, "short")} – ${formatDateOnly(end, "medium")}`;
   }
-  return format(focal, "EEEE, MMM d, yyyy");
+  return formatDateOnly(day, "full_long");
 }
 
-export async function TimeToolbar({
+export function TimeToolbar({
   view,
   focal,
+  userTz,
 }: {
   view: TimeView;
   focal: Date;
+  /** The viewer's profile zone - the page already resolved it. */
+  userTz: string;
 }) {
-  const userTz = await getCurrentUserTimeZone();
   // User-local "today" via the date-key round-trip (see
   // todayFocalInTz in calendar-toolbar.tsx for the full rationale).
   const today = parseISO(dateKeyInTz(new Date(), userTz));

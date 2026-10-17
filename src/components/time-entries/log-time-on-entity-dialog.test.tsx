@@ -13,10 +13,11 @@
  */
 
 import { useState } from "react";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { UserTimeZoneProvider } from "@/components/user-time-zone";
 import { LogTimeOnEntityDialog } from "./log-time-on-entity-dialog";
 import type { NoteAttachmentFormState } from "@/lib/note-attachment-form";
 
@@ -140,5 +141,95 @@ describe("LogTimeOnEntityDialog — close on success", () => {
       await screen.findByText("Hours must be a positive number.")
     ).toBeInTheDocument();
     expect(onOpenChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("LogTimeOnEntityDialog — reseed on open and user-zone 'today'", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test("the date defaults to today in the USER's zone, not the browser's", async () => {
+    // 2026-04-27T20:00Z is already Apr 28 in Auckland, but still Apr 27
+    // in Denver and in UTC - so the old browser-local default fails in
+    // both zones the suite runs in.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-04-27T20:00:00Z"));
+    render(
+      <UserTimeZoneProvider timeZone="Pacific/Auckland">
+        <LogTimeOnEntityDialog {...baseProps} open onOpenChange={vi.fn()} />
+      </UserTimeZoneProvider>
+    );
+
+    expect(await screen.findByLabelText("Date")).toHaveValue("2026-04-28");
+  });
+
+  test("typed values are cleared when the dialog is reopened", async () => {
+    function Harness() {
+      const [open, setOpen] = useState(true);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>
+            reopen dialog
+          </button>
+          <LogTimeOnEntityDialog
+            {...baseProps}
+            open={open}
+            onOpenChange={setOpen}
+          />
+        </>
+      );
+    }
+    const user = setupUser();
+    render(<Harness />);
+
+    await user.type(await screen.findByPlaceholderText("Hrs"), "0.5");
+    await user.type(screen.getByPlaceholderText("Activity"), "Abandoned");
+    await user.click(screen.getByRole("button", { name: /cancel/i }));
+    await waitFor(() =>
+      expect(screen.queryByPlaceholderText("Hrs")).not.toBeInTheDocument()
+    );
+
+    await user.click(screen.getByRole("button", { name: /reopen dialog/i }));
+
+    expect(await screen.findByPlaceholderText("Hrs")).toHaveValue("");
+    expect(screen.getByPlaceholderText("Activity")).toHaveValue("");
+  });
+
+  test("a cancelled attempt's error is gone on reopen", async () => {
+    action.mockImplementationOnce(async () => ({
+      status: "error" as const,
+      errors: { hours: ["Hours must be a positive number."] },
+    }));
+    function Harness() {
+      const [open, setOpen] = useState(true);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>
+            reopen dialog
+          </button>
+          <LogTimeOnEntityDialog
+            {...baseProps}
+            open={open}
+            onOpenChange={setOpen}
+          />
+        </>
+      );
+    }
+    const user = setupUser();
+    render(<Harness />);
+
+    await logTime(user);
+    await screen.findByText("Hours must be a positive number.");
+    await user.click(screen.getByRole("button", { name: /cancel/i }));
+    await waitFor(() =>
+      expect(screen.queryByPlaceholderText("Hrs")).not.toBeInTheDocument()
+    );
+    await user.click(screen.getByRole("button", { name: /reopen dialog/i }));
+
+    await screen.findByPlaceholderText("Hrs");
+    expect(
+      screen.queryByText("Hours must be a positive number.")
+    ).not.toBeInTheDocument();
   });
 });

@@ -166,11 +166,10 @@ describe("createTimeEntry — happy path", () => {
     expect(rows[0]!.userId).toBe(userId);
   });
 
-  test("date-only input lands on LOCAL midnight of that day (no UTC drift)", async () => {
-    // Reproducer for the west-of-UTC drift: `new Date("2026-04-01")`
-    // is UTC midnight, which local getters read back as March 31 in
-    // any zone west of UTC. parseLocalDate stores local midnight so
-    // the calendar day survives the round-trip.
+  test("date-only input is stored as UTC midnight of that day (ADR-012, no zone drift)", async () => {
+    // Date-only values are calendar dates stored at UTC midnight and
+    // read in UTC. Server-local midnight would sit on the previous
+    // UTC day anywhere east of UTC and break every UTC read.
     const res = await createTimeEntry(
       matterId,
       timeEntryInitialState,
@@ -181,10 +180,18 @@ describe("createTimeEntry — happy path", () => {
     const row = await prisma.timeEntry.findFirstOrThrow({
       where: { matterId },
     });
-    expect(row.date.getFullYear()).toBe(2026);
-    expect(row.date.getMonth()).toBe(3);
-    expect(row.date.getDate()).toBe(1);
-    expect(row.date.getHours()).toBe(0);
+    expect(row.date.toISOString()).toBe("2026-04-01T00:00:00.000Z");
+  });
+
+  test("an impossible calendar date (Feb 31) is a field error", async () => {
+    const res = await createTimeEntry(
+      matterId,
+      timeEntryInitialState,
+      buildCreateForm({ date: "2026-02-31" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.date).toBeTruthy();
+    expect(await prisma.timeEntry.count({ where: { matterId } })).toBe(0);
   });
 
   test("malformed date is a field error, not an Invalid Date 500", async () => {
@@ -995,5 +1002,145 @@ describe("lead-scoped entries — edit/status/delete revalidate the intake tab",
     expect(row.leadId).toBe(leadId);
     expect(row.matterId).toBeNull();
     expect(mockedRevalidate).toHaveBeenCalledWith(`/intake/${leadId}/time`);
+  });
+});
+
+// ── Date-only round trip (the Edit dialog posts dateOnlyKey back) ───────
+
+describe("updateTimeEntry - date-only values", () => {
+  test("saving the key the dialog prefilled leaves the stored day unchanged", async () => {
+    // The dialog prefills dateOnlyKey(entry.date) and posts it back on
+    // every save. With a UTC-midnight row the day must not move, no
+    // matter what zone the server or browser runs in.
+    const stored = new Date("2026-10-16T00:00:00.000Z");
+    const { timeEntryId } = await seedTimeEntry({ matterId, userId });
+    await prisma.timeEntry.update({
+      where: { id: timeEntryId },
+      data: { date: stored },
+    });
+
+    const res = await updateTimeEntry(
+      timeEntryId,
+      timeEntryInitialState,
+      buildUpdateForm({ date: "2026-10-16" })
+    );
+    expect(res.status).toBe("ok");
+    const row = await prisma.timeEntry.findUniqueOrThrow({
+      where: { id: timeEntryId },
+    });
+    expect(row.date.toISOString()).toBe("2026-10-16T00:00:00.000Z");
+  });
+
+  test("rejects an impossible date and leaves the row alone", async () => {
+    const { timeEntryId } = await seedTimeEntry({ matterId, userId });
+    const before = await prisma.timeEntry.findUniqueOrThrow({
+      where: { id: timeEntryId },
+    });
+    const res = await updateTimeEntry(
+      timeEntryId,
+      timeEntryInitialState,
+      buildUpdateForm({ date: "2026-13-01" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.date).toBeTruthy();
+    const after = await prisma.timeEntry.findUniqueOrThrow({
+      where: { id: timeEntryId },
+    });
+    expect(after.date.getTime()).toBe(before.date.getTime());
+  });
+
+  test("a date change is recorded old -> new in the activity log", async () => {
+    const { timeEntryId } = await seedTimeEntry({ matterId, userId });
+    await prisma.timeEntry.update({
+      where: { id: timeEntryId },
+      data: { date: new Date("2026-04-01T00:00:00.000Z") },
+    });
+    await updateTimeEntry(
+      timeEntryId,
+      timeEntryInitialState,
+      buildUpdateForm({ date: "2026-04-03" })
+    );
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { type: "time_entry", title: { startsWith: "Time entry edited" } },
+    });
+    expect(log.detail ?? "").toContain("date 2026-04-01 \u2192 2026-04-03");
+  });
+});
+
+// ── Conditional writes: invoice generation racing an edit ───────────────
+
+describe("billed-row races (read says unbilled, row was billed since)", () => {
+  // Simulate generateInvoiceFromWip committing between the action's
+  // read and its write: the DB row is billed, but the action's
+  // findUnique returns the pre-invoice snapshot.
+  const staleRead = (status: string) => {
+    const real = prisma.timeEntry.findUnique.bind(prisma.timeEntry) as (
+      args: unknown
+    ) => Promise<Record<string, unknown> | null>;
+    return vi
+      .spyOn(prisma.timeEntry, "findUnique")
+      .mockImplementationOnce((async (args: unknown) => {
+        const row = await real(args);
+        return row ? { ...row, status } : row;
+      }) as never);
+  };
+
+  test("updateTimeEntry does not overwrite a row that just got billed", async () => {
+    const { timeEntryId } = await seedTimeEntry({
+      matterId,
+      userId,
+      hours: 1,
+      status: "billed",
+    });
+    staleRead("draft");
+
+    const res = await updateTimeEntry(
+      timeEntryId,
+      timeEntryInitialState,
+      buildUpdateForm({ hours: "9", status: "draft" })
+    );
+
+    expect(res.status).toBe("error");
+    expect(res.errors?.activity?.[0]).toMatch(/billed/i);
+    const row = await prisma.timeEntry.findUniqueOrThrow({
+      where: { id: timeEntryId },
+    });
+    expect(row.hours).toBe(1);
+    expect(row.status).toBe("billed");
+  });
+
+  test("setTimeEntryStatus does not flip a row that changed under it", async () => {
+    const { timeEntryId } = await seedTimeEntry({
+      matterId,
+      userId,
+      status: "billed",
+    });
+    staleRead("draft");
+
+    const res = await setTimeEntryStatus(timeEntryId, "submitted");
+
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/changed/i);
+    const row = await prisma.timeEntry.findUniqueOrThrow({
+      where: { id: timeEntryId },
+    });
+    expect(row.status).toBe("billed");
+  });
+
+  test("deleteTimeEntry does not remove a row that just got billed", async () => {
+    const { timeEntryId } = await seedTimeEntry({
+      matterId,
+      userId,
+      status: "billed",
+    });
+    staleRead("draft");
+
+    const res = await deleteTimeEntry(timeEntryId);
+
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/billed/i);
+    expect(
+      await prisma.timeEntry.findUnique({ where: { id: timeEntryId } })
+    ).not.toBeNull();
   });
 });

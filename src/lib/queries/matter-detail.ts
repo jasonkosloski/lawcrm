@@ -870,6 +870,9 @@ export type TimeEntryRow = {
   privileged: boolean;
   source: string;
   status: string;
+  /** Author id - lets the Time tab hide edit/delete from users who
+   *  are neither the author nor hold the `_any` permission. */
+  userId: string;
   userName: string;
   userInitials: string;
   invoiceId: string | null;
@@ -964,6 +967,7 @@ export async function getMatterTimeEntries(
     privileged: e.privileged,
     source: e.source,
     status: e.status,
+    userId: e.userId,
     userName: e.user.name,
     userInitials: e.user.initials,
     invoiceId: e.invoiceId,

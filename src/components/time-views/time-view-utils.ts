@@ -14,8 +14,12 @@
  * not the server's.
  */
 
-import { format, parseISO, startOfDay } from "date-fns";
-import { dateKeyInTz } from "@/lib/format-date";
+import { format, isValid, parseISO, startOfDay } from "date-fns";
+import { dateKeyInTz, dateOnlyKey } from "@/lib/format-date";
+import {
+  TIME_ENTRY_SOURCE_LABEL,
+  timeEntrySourceLabel,
+} from "@/lib/time-entry-constants";
 
 export type TimeView = "week" | "day";
 export const DEFAULT_TIME_VIEW: TimeView = "week";
@@ -45,11 +49,11 @@ export function parseTimeParams(
   const rawDate = Array.isArray(sp.d) ? sp.d[0] : sp.d;
   let focal: Date;
   if (rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
-    try {
-      focal = startOfDay(parseISO(rawDate));
-    } catch {
-      focal = todayFocal();
-    }
+    // parseISO never throws - an impossible date (2026-02-31,
+    // 2026-13-01) comes back as an Invalid Date that would blow up
+    // `format()` later and 500 the page. Fall back to today instead.
+    const parsed = parseISO(rawDate);
+    focal = isValid(parsed) ? startOfDay(parsed) : todayFocal();
   } else {
     focal = todayFocal();
   }
@@ -75,22 +79,16 @@ export function buildTimeHref(
 
 /**
  * "YYYY-MM-DD" key for a day-noon-UTC Date (the shape
- * `calendarWeekInTz` returns for its 7 columns). Server-local
- * formatting is safe here because noon UTC is the same calendar
- * day in every zone from UTC-12 to UTC+11 — the same trick the
- * calendar's day columns rely on.
+ * `calendarWeekInTz` returns for its 7 columns). Read with UTC
+ * getters (`dateOnlyKey`): the column dates are built on UTC noon,
+ * so this is exact in every server zone.
  */
-export const dayKeyFromNoonUtc = (d: Date): string => format(d, "yyyy-MM-dd");
+export const dayKeyFromNoonUtc = (d: Date): string => dateOnlyKey(d);
 
-/** Human label for a TimeEntry.source value on the Captured lane. */
-export const TIME_SOURCE_LABEL: Record<string, string> = {
-  timer: "Timer",
-  email: "Email",
-  calendar: "Calendar",
-  document: "Document",
-  task: "Task",
-  evidence: "Evidence",
-};
+/** Human label for a TimeEntry.source value on the Captured lane
+ *  (one shared map - see TIME_ENTRY_SOURCE_LABEL). */
+export const TIME_SOURCE_LABEL: Record<string, string> =
+  TIME_ENTRY_SOURCE_LABEL;
 
 export const timeSourceLabel = (source: string): string =>
-  TIME_SOURCE_LABEL[source] ?? source;
+  timeEntrySourceLabel(source);

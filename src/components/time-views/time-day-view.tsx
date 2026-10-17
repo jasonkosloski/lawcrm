@@ -24,37 +24,26 @@ import Link from "next/link";
 import { Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/format-date";
+import { formatHours, timeEntryStatusBadge } from "@/lib/time-entry-constants";
 import type { DayTimeEntry, MyDayTime, RunningTimer } from "@/lib/queries/time";
 import { timeSourceLabel } from "./time-view-utils";
-
-/** Same status-chip vocabulary as the matter Time tab
- *  (matters/[id]/time/page.tsx) so an entry reads identically on
- *  both surfaces. */
-const STATUS_META: Record<string, { label: string; className: string }> = {
-  draft: { label: "Draft", className: "bg-paper-2 text-ink-4 border-line" },
-  submitted: {
-    label: "Submitted",
-    className: "bg-brand-soft text-brand-700 border-brand-200",
-  },
-  billable: {
-    label: "Billable",
-    className: "bg-brand-soft text-brand-700 border-brand-200",
-  },
-  billed: { label: "Billed", className: "bg-ok-soft text-ok border-line" },
-  written_off: {
-    label: "Written off",
-    className: "bg-paper-2 text-ink-3 border-line",
-  },
-};
 
 export function TimeDayView({
   day,
   timer,
+  showTimerLane,
+  asOf,
   userTz,
   dailyHoursGoal,
 }: {
   day: MyDayTime;
   timer: RunningTimer | null;
+  /** The live timer belongs to TODAY. On any other day the lane is
+   *  hidden - its elapsed time is not part of that day's total, so
+   *  showing it there misleads during reconciliation. */
+  showTimerLane: boolean;
+  /** The server's "now" at render, for the timer's elapsed snapshot. */
+  asOf: Date;
   userTz: string;
   /** Firm-level daily target (Firm.dailyHoursGoal) — the page
    *  resolves it via `getFirmGoals()`. */
@@ -68,7 +57,12 @@ export function TimeDayView({
         goal={dailyHoursGoal}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+      <div
+        className={cn(
+          "grid grid-cols-1 gap-4 items-start",
+          showTimerLane ? "lg:grid-cols-3" : "lg:grid-cols-2"
+        )}
+      >
         <Lane
           title="Logged"
           count={day.logged.length}
@@ -89,9 +83,13 @@ export function TimeDayView({
           ))}
         </Lane>
 
-        <Lane title="Timer" count={timer ? 1 : 0} empty="No timer running.">
-          {timer && <TimerCard timer={timer} userTz={userTz} />}
-        </Lane>
+        {showTimerLane && (
+          <Lane title="Timer" count={timer ? 1 : 0} empty="No timer running.">
+            {timer && (
+              <TimerCard timer={timer} userTz={userTz} asOf={asOf} />
+            )}
+          </Lane>
+        )}
       </div>
     </div>
   );
@@ -118,12 +116,12 @@ function TargetLine({
         </span>
         <span className="text-xs font-mono">
           <span className={met ? "text-ok" : "text-ink"}>
-            {totalHours.toFixed(1)}h
+            {formatHours(totalHours)}h
           </span>
           <span className="text-ink-4">
             {" "}
-            of {goal.toFixed(1)}h target ·{" "}
-            {billableHours.toFixed(1)}h billable
+            of {formatHours(goal)}h target ·{" "}
+            {formatHours(billableHours)}h billable
           </span>
         </span>
       </div>
@@ -176,7 +174,7 @@ function EntryCard({
   entry: DayTimeEntry;
   showSource?: boolean;
 }) {
-  const status = STATUS_META[entry.status] ?? STATUS_META.draft!;
+  const status = timeEntryStatusBadge(entry.status);
   return (
     <div className="rounded-md border border-line bg-card p-2.5 flex flex-col gap-1.5">
       <div className="flex items-start justify-between gap-2">
@@ -184,7 +182,7 @@ function EntryCard({
           {entry.activity}
         </span>
         <span className="text-xs font-mono text-ink shrink-0">
-          {entry.hours.toFixed(1)}h
+          {formatHours(entry.hours)}h
         </span>
       </div>
 
@@ -239,10 +237,18 @@ function EntryCard({
  *  render time (server), so it's the value as of page load — the
  *  ticking display + start/stop controls belong to the timer
  *  widget, not this page. */
-function TimerCard({ timer, userTz }: { timer: RunningTimer; userTz: string }) {
+function TimerCard({
+  timer,
+  userTz,
+  asOf,
+}: {
+  timer: RunningTimer;
+  userTz: string;
+  asOf: Date;
+}) {
   const elapsedHours = Math.max(
     0,
-    (Date.now() - timer.startedAt.getTime()) / (60 * 60 * 1000)
+    (asOf.getTime() - timer.startedAt.getTime()) / (60 * 60 * 1000)
   );
   return (
     <div className="rounded-md border border-brand-200 bg-brand-soft/40 p-2.5 flex flex-col gap-1.5">
@@ -252,7 +258,7 @@ function TimerCard({ timer, userTz }: { timer: RunningTimer; userTz: string }) {
           Running
         </span>
         <span className="text-xs font-mono text-ink shrink-0">
-          {elapsedHours.toFixed(1)}h
+          {formatHours(elapsedHours)}h
         </span>
       </div>
       <div className="text-2xs text-ink-3">

@@ -111,6 +111,7 @@ export function DurationFields({
   const modeButton = (m: DurationMode, label: string) => (
     <button
       type="button"
+      aria-pressed={m === mode}
       onClick={() => {
         if (m === mode) return;
         setMode(m);
@@ -139,6 +140,8 @@ export function DurationFields({
           <input
             name="hours"
             type="text"
+            inputMode="decimal"
+            aria-label="Hours"
             value={hours}
             onChange={(e) => onHoursChange(e.target.value)}
             placeholder="Hrs"

@@ -31,6 +31,9 @@ export type LeadTimeEntryRow = {
    *  timer / capture flows on leads. */
   source: string;
   status: string;
+  /** Author - the row menu offers edit/delete to the author or to
+   *  holders of the `_any` permission. */
+  userId: string;
   userName: string;
   userInitials: string;
 };
@@ -66,6 +69,7 @@ export async function getLeadTimeEntries(
     privileged: e.privileged,
     source: e.source,
     status: e.status,
+    userId: e.userId,
     userName: e.user.name,
     userInitials: e.user.initials,
   }));

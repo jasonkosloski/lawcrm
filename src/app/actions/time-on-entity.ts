@@ -17,11 +17,11 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-import { parseLocalDate } from "@/lib/format-date";
+import { parseDateOnly } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { visibleEmailMessageWhere } from "@/lib/email-visibility";
-import { isKnownUtbmsCode } from "@/lib/time-entry-constants";
+import { timeEntryFields } from "@/lib/time-entry-schema";
 import type { NoteAttachmentFormState } from "@/lib/note-attachment-form";
 
 /** Trim a string to N chars, appending "…" only when actually truncated. */
@@ -32,40 +32,18 @@ function snippet(s: string | null | undefined, max: number): string {
 }
 
 const timeSchema = z.object({
-  // Date-only "YYYY-MM-DD" from <input type="date"> → LOCAL midnight
-  // via parseLocalDate. `new Date(value)` would read it as UTC
-  // midnight, drifting the entry a day early for anyone west of UTC.
-  // Transform in the schema so all four actions below share the fix.
-  date: z
-    .string()
-    .min(1, "Date is required")
-    .transform((v, ctx) => {
-      const d = parseLocalDate(v);
-      if (!d) {
-        ctx.addIssue({ code: "custom", message: "Invalid date" });
-        return z.NEVER;
-      }
-      return d;
-    }),
-  hours: z
-    .string()
-    .min(1, "Hours required")
-    .refine((v) => {
-      const n = Number(v);
-      return Number.isFinite(n) && n > 0 && n <= 24;
-    }, "Hours must be > 0 and ≤ 24"),
-  activity: z.string().trim().min(1, "Activity is required").max(200),
-  narrative: z.string().max(4000).optional().or(z.literal("")),
-  // Catalog-validated so junk can't reach the column that later
-  // feeds LEDES/insurer exports. Empty = "no code".
-  utbmsCode: z
-    .string()
-    .trim()
-    .refine((v) => v === "" || isKnownUtbmsCode(v), "Unknown UTBMS code")
-    .optional(),
-  billable: z.literal("on").optional(),
-  noCharge: z.literal("on").optional(),
-  privileged: z.literal("on").optional(),
+  ...timeEntryFields,
+  // Date-only "YYYY-MM-DD" from <input type="date"> -> UTC midnight
+  // via parseDateOnly (ADR-012). Transform in the schema so all four
+  // actions below share it; an impossible date is a field error.
+  date: timeEntryFields.date.transform((v, ctx) => {
+    const d = parseDateOnly(v);
+    if (!d) {
+      ctx.addIssue({ code: "custom", message: "Invalid date" });
+      return z.NEVER;
+    }
+    return d;
+  }),
 });
 
 // ── Task ────────────────────────────────────────────────────────────────
@@ -120,7 +98,7 @@ export async function addTimeEntryToTask(
     userId,
     type: "time_entry",
     title: `Time logged on task · ${parsed.data.hours}h`,
-    detail: `${task.title}: ${parsed.data.activity}`,
+    detail: parsed.data.privileged === "on" ? undefined : `${task.title}: ${parsed.data.activity}`,
   });
   return { status: "ok" };
 }
@@ -174,7 +152,7 @@ export async function addTimeEntryToDeadline(
     userId,
     type: "time_entry",
     title: `Time logged on deadline · ${parsed.data.hours}h`,
-    detail: `${deadline.title}: ${parsed.data.activity}`,
+    detail: parsed.data.privileged === "on" ? undefined : `${deadline.title}: ${parsed.data.activity}`,
   });
   return { status: "ok" };
 }
@@ -239,7 +217,7 @@ export async function addTimeEntryToEmailMessage(
     userId,
     type: "time_entry",
     title: `Time logged on email · ${parsed.data.hours}h`,
-    detail: `${snippet(msg.thread.subject, 40)} (${msg.fromName}): ${parsed.data.activity}`,
+    detail: parsed.data.privileged === "on" ? undefined : `${snippet(msg.thread.subject, 40)} (${msg.fromName}): ${parsed.data.activity}`,
   });
   return { status: "ok" };
 }
@@ -320,7 +298,7 @@ export async function addTimeEntryToMessengerItem(
     userId,
     type: "time_entry",
     title: `Time logged on ${item.kind} · ${parsed.data.hours}h`,
-    detail: `${who}: ${parsed.data.activity}`,
+    detail: parsed.data.privileged === "on" ? undefined : `${who}: ${parsed.data.activity}`,
   });
   return { status: "ok" };
 }

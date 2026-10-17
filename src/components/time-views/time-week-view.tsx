@@ -15,8 +15,10 @@
  */
 
 import Link from "next/link";
-import { format, parseISO } from "date-fns";
+import { parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
+import { formatDateOnly, parseDateOnly } from "@/lib/format-date";
+import { formatHours } from "@/lib/time-entry-constants";
 import type { MyWeekTime, WeekDayTime } from "@/lib/queries/time";
 import { buildTimeHref } from "./time-view-utils";
 
@@ -89,10 +91,10 @@ export function TimeWeekView({
             Week total
           </span>
           <span className="text-xs font-mono text-ink">
-            {week.totalHours.toFixed(1)}h
+            {formatHours(week.totalHours)}h
             <span className="text-ink-4">
               {" · "}
-              {week.billableHours.toFixed(1)}h billable
+              {formatHours(week.billableHours)}h billable
             </span>
           </span>
         </div>
@@ -111,7 +113,7 @@ export function TimeWeekView({
                 style={{ background: m.matterColor }}
               />
               <span className="max-w-40 truncate">{m.matterName}</span>
-              <span className="font-mono text-ink-4">{m.hours.toFixed(1)}h</span>
+              <span className="font-mono text-ink-4">{formatHours(m.hours)}h</span>
             </Link>
           ))}
         </div>
@@ -134,7 +136,11 @@ function DayRow({
   scale: number;
   isToday: boolean;
 }) {
+  // The row's day is a date-only key: label it with the date-only
+  // formatter (never shifts with the server zone). `focal` is only
+  // the cursor handed to the day-view href builder.
   const focal = parseISO(day.dayKey);
+  const dayDate = parseDateOnly(day.dayKey);
   return (
     <div
       className={cn(
@@ -153,10 +159,10 @@ function DayRow({
             isToday ? "text-brand-700" : "text-ink-3"
           )}
         >
-          {format(focal, "EEE")}
+          {dayDate ? formatDateOnly(dayDate, "short_weekday").split(",")[0] : ""}
         </span>
         <span className="text-xs text-ink-4 font-mono">
-          {format(focal, "MMM d")}
+          {dayDate ? formatDateOnly(dayDate, "short") : day.dayKey}
         </span>
       </Link>
 
@@ -171,7 +177,7 @@ function DayRow({
               href={segmentTimeHref(seg)}
               className="h-full flex hover:opacity-80 transition-opacity"
               style={{ width: `${(seg.hours / scale) * 100}%` }}
-              title={`${seg.matterName} — ${seg.hours.toFixed(1)}h (${seg.billableHours.toFixed(1)}h billable)`}
+              title={`${seg.matterName} — ${formatHours(seg.hours)}h (${formatHours(seg.billableHours)}h billable)`}
             >
               {seg.billableHours > 0 && (
                 <span
@@ -197,10 +203,10 @@ function DayRow({
       <div className="w-28 shrink-0 text-right text-xs font-mono">
         {day.totalHours > 0 ? (
           <>
-            <span className="text-ink">{day.totalHours.toFixed(1)}h</span>
+            <span className="text-ink">{formatHours(day.totalHours)}h</span>
             <span className="text-2xs text-ink-4">
               {" · "}
-              {day.billableHours.toFixed(1)}h bill
+              {formatHours(day.billableHours)}h bill
             </span>
           </>
         ) : (

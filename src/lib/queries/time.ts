@@ -7,15 +7,14 @@
  * surfaces, not firm reports (see src/lib/queries/dashboard.ts
  * `getFirmPulse` for the firm-wide rollup).
  *
- * Date handling follows the committed convention for date-only
- * columns (see the header of src/lib/queries/dashboard.ts):
- * `TimeEntry.date` stores *server-local midnight* of its calendar
- * day (`parseLocalDate`), so day keys and range bounds here are
- * plain server-local date-part round-trips of "YYYY-MM-DD" keys.
- * The user's TZ is applied upstream, where the page resolves which
- * calendar days the viewer is looking at (`parseTimeParams` +
- * `calendarWeekInTz`); by the time a key reaches these queries it
- * is already the user's day.
+ * Date handling follows ADR-012: `TimeEntry.date` is a date-only
+ * value (a calendar date stored at UTC midnight, read in UTC), so
+ * day keys are `YYYY-MM-DD` strings, range bounds come from
+ * `dateOnlyRange`, and stored dates go back to keys via
+ * `dateOnlyKey` — no server time zone ever enters. The user's TZ is
+ * applied upstream, where the page resolves which calendar days the
+ * viewer is looking at (`parseTimeParams` + `calendarWeekInTz`); by
+ * the time a key reaches these queries it is already the user's day.
  *
  * Numeric safety: `hours` is Float by design (quarter-hour
  * increments, not money) — JS sums get rounded to 2 decimals to
@@ -25,40 +24,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-
-const DAY_KEY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
-
-/** Server-local midnight of a YYYY-MM-DD key — how date-only
- *  columns store their day (parseLocalDate convention). Throws on
- *  malformed keys: callers build keys from parsed dates, so a bad
- *  key is a programming error, not user input. */
-const startOfDayKey = (key: string): Date => {
-  const m = DAY_KEY_RE.exec(key);
-  if (!m) throw new Error(`Invalid day key: ${key}`);
-  const [, y, mo, d] = m;
-  return new Date(Number(y), Number(mo) - 1, Number(d), 0, 0, 0, 0);
-};
-
-/** Server-local 23:59:59.999 of a YYYY-MM-DD key. */
-const endOfDayKey = (key: string): Date => {
-  const start = startOfDayKey(key);
-  return new Date(
-    start.getFullYear(),
-    start.getMonth(),
-    start.getDate(),
-    23,
-    59,
-    59,
-    999
-  );
-};
-
-/** A stored entry date back to its YYYY-MM-DD key via server-local
- *  getters — the inverse of `startOfDayKey`. */
-const dayKeyOfEntryDate = (d: Date): string => {
-  const pad = (n: number): string => n.toString().padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-};
+import { dateOnlyKey, dateOnlyRange } from "@/lib/format-date";
+import { getCurrentTimerSession } from "@/lib/queries/timer";
 
 /** Shed float-accumulation noise from summed hours (0.1 + 0.2 …). */
 const round2 = (n: number): number => Math.round(n * 100) / 100;
@@ -122,10 +89,7 @@ export async function getMyWeekTime(dayKeys: string[]): Promise<MyWeekTime> {
   const entries = await prisma.timeEntry.findMany({
     where: {
       userId,
-      date: {
-        gte: startOfDayKey(dayKeys[0]!),
-        lte: endOfDayKey(dayKeys[dayKeys.length - 1]!),
-      },
+      date: dateOnlyRange(dayKeys[0]!, dayKeys[dayKeys.length - 1]!),
     },
     select: {
       date: true,
@@ -142,7 +106,7 @@ export async function getMyWeekTime(dayKeys: string[]): Promise<MyWeekTime> {
   for (const key of dayKeys) byDay.set(key, new Map());
 
   for (const e of entries) {
-    const day = byDay.get(dayKeyOfEntryDate(e.date));
+    const day = byDay.get(dateOnlyKey(e.date));
     // Entries between requested keys' bounds always map to one of
     // the keys when the keys are contiguous (a week). A sparse key
     // list would drop in-between days here by design.
@@ -247,7 +211,7 @@ export async function getMyDayTime(dayKey: string): Promise<MyDayTime> {
   const entries = await prisma.timeEntry.findMany({
     where: {
       userId,
-      date: { gte: startOfDayKey(dayKey), lte: endOfDayKey(dayKey) },
+      date: dateOnlyRange(dayKey, dayKey),
     },
     orderBy: { createdAt: "asc" },
     select: {
@@ -306,23 +270,19 @@ export type RunningTimer = {
 
 /** The current user's live TimerSession, if one is running. The
  *  /time page renders this read-only — starting/stopping belongs
- *  to the timer widget, which writes the TimeEntry on stop. */
+ *  to the timer widget, which writes the TimeEntry on stop.
+ *
+ *  Built from `getCurrentTimerSession`, which the app shell already
+ *  loaded (and React-cached) for this request — a second query here
+ *  would be a redundant round trip on the 1-connection pool. */
 export async function getMyRunningTimer(): Promise<RunningTimer | null> {
-  const userId = await getCurrentUserId();
-  const session = await prisma.timerSession.findUnique({
-    where: { userId },
-    select: {
-      startedAt: true,
-      activity: true,
-      matter: { select: { id: true, name: true, color: true } },
-    },
-  });
+  const session = await getCurrentTimerSession();
   if (!session) return null;
   return {
-    startedAt: session.startedAt,
+    startedAt: new Date(session.startedAt),
     activity: session.activity,
-    matterId: session.matter?.id ?? null,
-    matterName: session.matter?.name ?? null,
-    matterColor: session.matter?.color ?? null,
+    matterId: session.matterId,
+    matterName: session.matterName,
+    matterColor: session.matterColor ?? null,
   };
 }

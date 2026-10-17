@@ -207,6 +207,25 @@ describe("updateTimer", () => {
     expect(res.error).toMatch(/no running timer/i);
   });
 
+  test("a stop/discard in another tab between read and write is a friendly refusal, not a P2025 throw", async () => {
+    await startTimer({ activity: "Research" });
+    // Simulate the other tab: the action's findUnique sees the
+    // session, then the row is gone before the write.
+    const real = prisma.timerSession.findUnique.bind(prisma.timerSession);
+    vi.spyOn(prisma.timerSession, "findUnique").mockImplementationOnce(
+      (async (args: never) => {
+        const row = await real(args);
+        await prisma.timerSession.deleteMany({ where: { userId } });
+        return row;
+      }) as never
+    );
+
+    const res = await updateTimer({ activity: "Too late" });
+
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/no running timer/i);
+  });
+
   test("rejects a matter id that doesn't exist", async () => {
     await startTimer();
     const res = await updateTimer({ matterId: "nope" });
@@ -263,6 +282,55 @@ describe("stopTimer", () => {
 
     // Timer is a pre-entry: stop consumes it.
     expect(await getSession()).toBeNull();
+  });
+
+  test("a privileged stop never copies the activity into the feed", async () => {
+    const SECRET = "Strategy re: confidential settlement posture";
+    await startTimer({ matterId });
+    const res = await stopTimer(
+      timeEntryInitialState,
+      await buildStopForm({ activity: SECRET, privileged: "on" })
+    );
+    expect(res.status).toBe("ok");
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { type: "time_entry" },
+    });
+    expect(log.detail).toBeNull();
+    expect(JSON.stringify(await prisma.activityLog.findMany())).not.toContain(
+      SECRET
+    );
+
+    // Non-privileged stop still records it.
+    await startTimer({ matterId });
+    await stopTimer(
+      timeEntryInitialState,
+      await buildStopForm({ activity: "Routine call" })
+    );
+    expect(
+      await prisma.activityLog.count({ where: { detail: "Routine call" } })
+    ).toBe(1);
+  });
+
+  test("the entry date is stored as UTC midnight of the posted day (ADR-012)", async () => {
+    await startTimer({ matterId });
+    await stopTimer(
+      timeEntryInitialState,
+      await buildStopForm({ date: "2026-07-06" })
+    );
+    const entry = await prisma.timeEntry.findFirstOrThrow();
+    expect(entry.date.toISOString()).toBe("2026-07-06T00:00:00.000Z");
+  });
+
+  test("an impossible date is a field error and the timer keeps running", async () => {
+    await startTimer({ matterId });
+    const res = await stopTimer(
+      timeEntryInitialState,
+      await buildStopForm({ date: "2026-02-31" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.date).toBeTruthy();
+    expect(await prisma.timeEntry.count()).toBe(0);
+    expect(await getSession()).not.toBeNull();
   });
 
   test("gates on time_entries.create", async () => {

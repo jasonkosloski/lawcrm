@@ -12,8 +12,11 @@ import {
   UTBMS_LITIGATION_TASK_CODES,
   computeHoursFromTimeRange,
   formatElapsed,
+  formatHours,
   isKnownUtbmsCode,
   roundElapsedToBillingIncrement,
+  timeEntrySourceLabel,
+  timeEntryStatusBadge,
   utbmsCodeLabel,
 } from "./time-entry-constants";
 
@@ -109,5 +112,56 @@ describe("UTBMS catalog", () => {
   test("utbmsCodeLabel joins code + label, falls back to bare code", () => {
     expect(utbmsCodeLabel("A103")).toBe("A103 — Draft/revise");
     expect(utbmsCodeLabel("Z000")).toBe("Z000");
+  });
+});
+
+describe("formatHours", () => {
+  test("quarter hours keep their second decimal (0.25 is not 0.3)", () => {
+    expect(formatHours(0.25)).toBe("0.25");
+    expect(formatHours(0.75)).toBe("0.75");
+    expect(formatHours(1.25)).toBe("1.25");
+  });
+
+  test("tenths and whole hours drop only the redundant trailing zero", () => {
+    expect(formatHours(1.5)).toBe("1.5");
+    expect(formatHours(2)).toBe("2.0");
+    expect(formatHours(0)).toBe("0.0");
+    expect(formatHours(24)).toBe("24.0");
+  });
+
+  test("sheds float noise from summed hours", () => {
+    expect(formatHours(0.1 + 0.2)).toBe("0.3");
+    expect(formatHours(1.005 * 3)).toBe("3.01");
+  });
+
+  test("non-finite input renders as zero, never NaN", () => {
+    expect(formatHours(Number.NaN)).toBe("0.0");
+    expect(formatHours(Number.POSITIVE_INFINITY)).toBe("0.0");
+  });
+});
+
+describe("timeEntryStatusBadge", () => {
+  test("labels and classes for every known status", () => {
+    expect(timeEntryStatusBadge("draft").label).toBe("Draft");
+    expect(timeEntryStatusBadge("written_off").label).toBe("Written off");
+    expect(timeEntryStatusBadge("billed").className).toContain("bg-ok-soft");
+  });
+
+  test("unknown / prototype-key statuses fall back to the draft chip", () => {
+    expect(timeEntryStatusBadge("mystery")).toEqual(
+      timeEntryStatusBadge("draft")
+    );
+    expect(timeEntryStatusBadge("constructor")).toEqual(
+      timeEntryStatusBadge("draft")
+    );
+  });
+});
+
+describe("timeEntrySourceLabel", () => {
+  test("known sources get one shared label, unknown pass through", () => {
+    expect(timeEntrySourceLabel("manual")).toBe("Manual");
+    expect(timeEntrySourceLabel("calendar")).toBe("Calendar");
+    expect(timeEntrySourceLabel("carrier_pigeon")).toBe("carrier_pigeon");
+    expect(timeEntrySourceLabel("toString")).toBe("toString");
   });
 });

@@ -4,11 +4,18 @@
  * Modal form mirroring the TimeComposer fields plus a status picker.
  * Once an entry is on a sent invoice (`status: billed`), the server
  * action rejects edits — surface that as a form-level error.
+ *
+ * The date field is a date-only value (ADR-012): the entry's stored
+ * UTC-midnight Date is turned back into `YYYY-MM-DD` with
+ * `dateOnlyKey` (UTC getters), never browser-local getters — those
+ * read the previous day west of UTC and every save would then post
+ * that day back, walking the entry one day earlier per edit.
  */
 
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import {
   Dialog,
   DialogContent,
@@ -21,7 +28,6 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   DateField,
-  SelectField,
   TextField,
   TextareaField,
 } from "@/components/matters/captures/primary-fields";
@@ -31,16 +37,20 @@ import {
 } from "@/components/time-entries/time-entry-fields";
 import {
   TIME_ENTRY_STATUSES,
+  TIME_ENTRY_STATUS_LABEL as STATUS_LABEL,
   type TimeEntryStatus,
-} from "@/lib/note-constants";
+} from "@/lib/constants/time-entry-status";
 import { updateTimeEntry } from "@/app/actions/time-entries";
 import {
   timeEntryInitialState,
   type TimeEntryFormState,
 } from "@/lib/time-entry-constants";
+import { dateOnlyKey } from "@/lib/format-date";
+import { cn } from "@/lib/utils";
 
 export type EditableTimeEntry = {
   id: string;
+  /** Date-only value (UTC midnight) — read with `dateOnlyKey`. */
   date: Date;
   hours: number;
   activity: string;
@@ -52,21 +62,6 @@ export type EditableTimeEntry = {
   status: TimeEntryStatus;
 };
 
-const STATUS_LABEL: Record<TimeEntryStatus, string> = {
-  draft: "Draft",
-  submitted: "Submitted",
-  billable: "Billable",
-  billed: "Billed",
-  written_off: "Written off",
-};
-
-const toDateInput = (d: Date): string => {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-};
-
 export function EditTimeEntryDialog({
   open,
   onOpenChange,
@@ -76,26 +71,17 @@ export function EditTimeEntryDialog({
   onOpenChange: (open: boolean) => void;
   entry: EditableTimeEntry;
 }) {
-  // Close from inside the action, NOT from an effect keyed on the
-  // committed state. Two traps with the effect approach (the row menu
-  // keeps this dialog mounted across opens, so state persists):
-  //   1. `state.status` stays the string "ok" across saves, so an effect
-  //      keyed on it fires once and never again — the second save of the
-  //      same entry leaves the dialog stuck open.
-  //   2. React 19's useActionState can drop the post-action re-render
-  //      entirely when the reopen-reset effect below bails out (all
-  //      setStates are no-ops on an unchanged entry), so even keying on
-  //      the `state` object never sees the second "ok".
-  const [state, formAction, isPending] = useActionState<
+  // Wrapped useActionState: masks state left over from a previous
+  // open, so a cancelled attempt's field errors ("Hours required",
+  // "Entry is already billed") don't reappear when the row menu
+  // reopens this still-mounted dialog. See
+  // src/hooks/use-dialog-action-state.ts.
+  const [state, formAction, isPending] = useDialogActionState<
     TimeEntryFormState,
     FormData
-  >(async (prev, formData) => {
-    const next = await updateTimeEntry(entry.id, prev, formData);
-    if (next.status === "ok") onOpenChange(false);
-    return next;
-  }, timeEntryInitialState);
+  >(updateTimeEntry.bind(null, entry.id), timeEntryInitialState, open);
 
-  const [date, setDate] = useState(toDateInput(entry.date));
+  const [date, setDate] = useState(dateOnlyKey(entry.date));
   const [hours, setHours] = useState(entry.hours.toString());
   const [activity, setActivity] = useState(entry.activity);
   const [narrative, setNarrative] = useState(entry.narrative ?? "");
@@ -105,9 +91,14 @@ export function EditTimeEntryDialog({
   const [privileged, setPrivileged] = useState(entry.privileged);
   const [status, setStatus] = useState<TimeEntryStatus>(entry.status);
 
-  useEffect(() => {
+  // Seed the working copy from the entry every time the dialog
+  // OPENS (the row menu keeps it mounted). Done during render on the
+  // open flip - the stored-previous-prop pattern - not in an effect.
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
     if (open) {
-      setDate(toDateInput(entry.date));
+      setDate(dateOnlyKey(entry.date));
       setHours(entry.hours.toString());
       setActivity(entry.activity);
       setNarrative(entry.narrative ?? "");
@@ -117,7 +108,16 @@ export function EditTimeEntryDialog({
       setPrivileged(entry.privileged);
       setStatus(entry.status);
     }
-  }, [open, entry]);
+  }
+
+  // Close on success. Deps must be the state OBJECT, not
+  // state.status: the status string stays "ok" across saves, so a
+  // second save of the same entry would never re-fire. Each action
+  // invocation returns a fresh object, and the hook above only
+  // changes the exposed identity when a submission lands.
+  useEffect(() => {
+    if (state.status === "ok") onOpenChange(false);
+  }, [state, onOpenChange]);
 
   const errs = state.errors ?? {};
 
@@ -170,19 +170,30 @@ export function EditTimeEntryDialog({
             error={errs.utbmsCode?.[0]}
           />
 
-          <SelectField
-            name="status"
-            value={status}
-            onChange={(v) => setStatus(v as TimeEntryStatus)}
-            // "Billed" is set only by invoice generation; the server
-            // refuses it here, so don't offer it.
-            options={TIME_ENTRY_STATUSES.filter((s) => s !== "billed").map(
-              (s) => ({
-                value: s,
-                label: STATUS_LABEL[s],
-              })
+          <div className="flex flex-col gap-0.5">
+            <select
+              name="status"
+              value={status}
+              onChange={(e) => setStatus(e.target.value as TimeEntryStatus)}
+              aria-label="Status"
+              className={cn(
+                "h-8 px-2 rounded-md border bg-white text-xs text-ink capitalize",
+                "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
+                errs.status ? "border-warn" : "border-line"
+              )}
+            >
+              {/* "Billed" is set only by invoice generation; the
+                  server refuses it here, so don't offer it. */}
+              {TIME_ENTRY_STATUSES.filter((s) => s !== "billed").map((s) => (
+                <option key={s} value={s}>
+                  {STATUS_LABEL[s]}
+                </option>
+              ))}
+            </select>
+            {errs.status && (
+              <div className="text-2xs text-warn">{errs.status[0]}</div>
             )}
-          />
+          </div>
 
           <div className="flex flex-wrap items-center gap-4 text-xs">
             <label className="flex items-center gap-2 cursor-pointer">

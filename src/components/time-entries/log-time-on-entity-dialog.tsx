@@ -31,7 +31,8 @@ import {
   DurationFields,
   UtbmsCodeSelect,
 } from "@/components/time-entries/time-entry-fields";
-import { todayDateString } from "@/lib/note-constants";
+import { useUserTimeZone } from "@/components/user-time-zone";
+import { todayKey } from "@/lib/format-date";
 import {
   noteAttachmentInitialState,
   type NoteAttachmentFormState,
@@ -65,7 +66,10 @@ export function LogTimeOnEntityDialog({
     FormData
   >(action, noteAttachmentInitialState, open);
 
-  const [date, setDate] = useState(todayDateString());
+  // "Today" is the calendar day in the user's profile zone (the same
+  // zone the server renders in), not whatever the browser is set to.
+  const tz = useUserTimeZone();
+  const [date, setDate] = useState(() => todayKey(tz));
   const [hours, setHours] = useState("");
   const [activity, setActivity] = useState("");
   const [narrative, setNarrative] = useState("");
@@ -74,18 +78,22 @@ export function LogTimeOnEntityDialog({
   const [noCharge, setNoCharge] = useState(false);
   const [privileged, setPrivileged] = useState(false);
 
-  // Reset on open so each invocation starts fresh.
-  useEffect(() => {
-    if (!open) return;
-    setDate(todayDateString());
-    setHours("");
-    setActivity("");
-    setNarrative("");
-    setUtbmsCode("");
-    setBillable(true);
-    setNoCharge(false);
-    setPrivileged(false);
-  }, [open]);
+  // Reset on open so each invocation starts fresh - during render on
+  // the open flip (stored-previous-prop pattern), not in an effect.
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) {
+      setDate(todayKey(tz));
+      setHours("");
+      setActivity("");
+      setNarrative("");
+      setUtbmsCode("");
+      setBillable(true);
+      setNoCharge(false);
+      setPrivileged(false);
+    }
+  }
 
   // Auto-close on successful save. Deps must be the state OBJECT, not
   // `state.status`: useActionState keeps its state across submissions,

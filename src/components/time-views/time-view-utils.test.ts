@@ -9,7 +9,6 @@
  */
 
 import { describe, expect, test } from "vitest";
-import { format } from "date-fns";
 import {
   DEFAULT_TIME_VIEW,
   buildTimeHref,
@@ -50,6 +49,27 @@ describe("parseTimeParams — focal date", () => {
     expect(toTimeDateParam(focal)).toBe("2026-06-15");
   });
 
+  test.each(["2026-02-31", "2026-13-01", "2026-00-10", "2026-04-31"])(
+    "well-formed but impossible ?d=%s falls back to today (parseISO never throws)",
+    (d) => {
+      // The old try/catch was dead code: parseISO returns Invalid Date,
+      // and toTimeDateParam(Invalid Date) then threw RangeError and 500ed
+      // the page.
+      const { focal } = parseTimeParams({ d }, DENVER, NOW);
+      expect(Number.isNaN(focal.getTime())).toBe(false);
+      expect(toTimeDateParam(focal)).toBe("2026-06-15");
+    }
+  );
+
+  test("a leap day is accepted, a non-leap Feb 29 is not", () => {
+    expect(
+      toTimeDateParam(parseTimeParams({ d: "2028-02-29" }, DENVER, NOW).focal)
+    ).toBe("2028-02-29");
+    expect(
+      toTimeDateParam(parseTimeParams({ d: "2026-02-29" }, DENVER, NOW).focal)
+    ).toBe("2026-06-15");
+  });
+
   test("no ?d=: focal is today on the USER's calendar, not the server's", () => {
     const denver = parseTimeParams({}, DENVER, NOW);
     expect(toTimeDateParam(denver.focal)).toBe("2026-06-15");
@@ -82,12 +102,16 @@ describe("buildTimeHref", () => {
 
 describe("dayKeyFromNoonUtc", () => {
   test("noon-UTC day dates key to their own calendar day", () => {
-    // The noon-UTC trick: same calendar day in any server zone
-    // from UTC-12 to UTC+11, so a plain local format is safe.
+    // Read with UTC getters, so exact in every server zone.
     const noon = new Date(Date.UTC(2026, 5, 15, 12));
     expect(dayKeyFromNoonUtc(noon)).toBe("2026-06-15");
-    // Sanity: agrees with date-fns' own local format.
-    expect(dayKeyFromNoonUtc(noon)).toBe(format(noon, "yyyy-MM-dd"));
+    // Month/year boundaries hold too.
+    expect(dayKeyFromNoonUtc(new Date(Date.UTC(2026, 11, 31, 12)))).toBe(
+      "2026-12-31"
+    );
+    expect(dayKeyFromNoonUtc(new Date(Date.UTC(2027, 0, 1, 12)))).toBe(
+      "2027-01-01"
+    );
   });
 });
 
@@ -100,5 +124,10 @@ describe("source labels", () => {
     expect(timeSourceLabel("timer")).toBe("Timer");
     expect(timeSourceLabel("email")).toBe("Email");
     expect(timeSourceLabel("carrier_pigeon")).toBe("carrier_pigeon");
+    // One shared map: the intake tab and the day view agree on labels.
+    expect(timeSourceLabel("calendar")).toBe("Calendar");
+    expect(timeSourceLabel("manual")).toBe("Manual");
+    // Prototype keys are not labels.
+    expect(timeSourceLabel("constructor")).toBe("constructor");
   });
 });

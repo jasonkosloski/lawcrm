@@ -3,9 +3,9 @@
  *
  * `getCurrentTimerSession` feeds the floating timer widget mounted
  * in the AppShell — one findUnique per page render (TimerSession is
- * one-per-user via the userId unique). Null-safe on the session so
- * a stale/unauthenticated render never throws from inside the
- * layout tree.
+ * one-per-user via the userId unique). Resolves the user through the
+ * request-cached `getCurrentUserId`, so it adds no auth() round trip
+ * beyond the one the sidebar already pays.
  *
  * `getTimerMatterOptions` is the compact matter list for the
  * stop-timer composer's REQUIRED matter picker. Only fetched when a
@@ -14,13 +14,16 @@
  */
 
 import { cache } from "react";
-import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUserId } from "@/lib/current-user";
 
 export type ActiveTimerSession = {
   id: string;
   matterId: string | null;
   matterName: string | null;
+  /** Only the server query fills this (the /time day view's lane
+   *  dot); the widget's optimistic sessions omit it. */
+  matterColor?: string | null;
   activity: string | null;
   /** ISO string, not Date — crosses the RSC boundary into the client
    *  widget which computes elapsed from it on every tick. */
@@ -29,16 +32,19 @@ export type ActiveTimerSession = {
 
 export const getCurrentTimerSession = cache(
   async (): Promise<ActiveTimerSession | null> => {
-    const session = await getSession();
-    if (!session?.user?.id) return null;
+    // The cached resolver, not a bare auth(): every auth() runs the
+    // jwt callback's DB lookup, and the shell resolves the user for
+    // the sidebar in the same request. (It redirects to /login when
+    // signed out, exactly as the sidebar query beside it does.)
+    const userId = await getCurrentUserId();
     const t = await prisma.timerSession.findUnique({
-      where: { userId: session.user.id },
+      where: { userId },
       select: {
         id: true,
         matterId: true,
         activity: true,
         startedAt: true,
-        matter: { select: { name: true } },
+        matter: { select: { name: true, color: true } },
       },
     });
     if (!t) return null;
@@ -46,6 +52,7 @@ export const getCurrentTimerSession = cache(
       id: t.id,
       matterId: t.matterId,
       matterName: t.matter?.name ?? null,
+      matterColor: t.matter?.color ?? null,
       activity: t.activity,
       startedAt: t.startedAt.toISOString(),
     };

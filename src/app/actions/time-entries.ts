@@ -31,20 +31,17 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { roundMoney } from "@/lib/money";
 import { getCurrentUserId } from "@/lib/current-user";
-// Date-only input ("YYYY-MM-DD") must parse to LOCAL midnight —
-// `new Date(value)` reads it as UTC midnight, which drifts the entry
-// a day early for anyone west of UTC. See parseLocalDate docs.
-import { parseLocalDate } from "@/lib/format-date";
+// Date-only input ("YYYY-MM-DD") is stored as UTC midnight and read
+// in UTC on every surface (ADR-012) — never apply a time zone to it.
+import { dateOnlyKey, parseDateOnly } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import {
   TIME_ENTRY_STATUSES,
   type TimeEntryStatus,
 } from "@/lib/constants/time-entry-status";
-import {
-  isKnownUtbmsCode,
-  type TimeEntryFormState,
-} from "@/lib/time-entry-constants";
+import type { TimeEntryFormState } from "@/lib/time-entry-constants";
+import { timeEntryFields } from "@/lib/time-entry-schema";
 import { assertTimeEntryScope } from "@/lib/time-entry-scope";
 import type { LeadStage } from "@/lib/constants/lead-stage";
 
@@ -78,30 +75,8 @@ function revalidateEntryScope(entry: {
 const BILLED_BY_INVOICE_ERROR =
   "Entries are marked billed by invoice generation. Add this entry to an invoice instead.";
 
-// Only catalog codes persist — the column feeds LEDES/insurer
-// exports later, so junk from a hand-crafted POST is worse than a
-// rejected form. Empty string / absent = "no code".
-const utbmsCodeField = z
-  .string()
-  .trim()
-  .refine((v) => v === "" || isKnownUtbmsCode(v), "Unknown UTBMS code")
-  .optional();
-
 const timeEntrySchema = z.object({
-  date: z.string().min(1, "Date is required"),
-  hours: z
-    .string()
-    .min(1, "Hours required")
-    .refine((v) => {
-      const n = Number(v);
-      return Number.isFinite(n) && n > 0 && n <= 24;
-    }, "Hours must be > 0 and ≤ 24"),
-  activity: z.string().trim().min(1, "Activity is required").max(200),
-  narrative: z.string().max(4000).optional().or(z.literal("")),
-  utbmsCode: utbmsCodeField,
-  billable: z.literal("on").optional(),
-  noCharge: z.literal("on").optional(),
-  privileged: z.literal("on").optional(),
+  ...timeEntryFields,
   calendarEventId: z.string().trim().optional().or(z.literal("")),
 });
 
@@ -134,7 +109,7 @@ export async function createTimeEntry(
     };
   }
 
-  const date = parseLocalDate(parsed.data.date);
+  const date = parseDateOnly(parsed.data.date);
   if (!date) {
     return {
       status: "error",
@@ -256,7 +231,7 @@ export async function createLeadTimeEntry(
     };
   }
 
-  const date = parseLocalDate(parsed.data.date);
+  const date = parseDateOnly(parsed.data.date);
   if (!date) {
     return {
       status: "error",
@@ -299,25 +274,35 @@ export async function createLeadTimeEntry(
 // ── Update ──────────────────────────────────────────────────────────────
 
 const updateTimeEntrySchema = z.object({
-  date: z.string().min(1, "Date is required"),
-  hours: z
-    .string()
-    .min(1, "Hours required")
-    .refine((v) => {
-      const n = Number(v);
-      return Number.isFinite(n) && n > 0 && n <= 24;
-    }, "Hours must be > 0 and ≤ 24"),
-  activity: z.string().trim().min(1, "Activity is required").max(200),
-  narrative: z.string().max(4000).optional().or(z.literal("")),
-  utbmsCode: utbmsCodeField,
-  billable: z.literal("on").optional(),
-  noCharge: z.literal("on").optional(),
-  privileged: z.literal("on").optional(),
+  ...timeEntryFields,
   // Optional with NO default: a form that omits the field must leave
   // the stored status alone (a default would silently reset a
   // billable/submitted entry to draft).
   status: z.enum(TIME_ENTRY_STATUSES).optional(),
 });
+
+/** The conditional update matched nothing: either the entry was
+ *  billed between our read and write, or it was deleted. Say which. */
+async function writeRefusedState(
+  timeEntryId: string,
+  raw: Record<string, string>
+): Promise<TimeEntryFormState> {
+  const now = await prisma.timeEntry.findUnique({
+    where: { id: timeEntryId },
+    select: { status: true },
+  });
+  return {
+    status: "error",
+    errors: {
+      activity: [
+        now
+          ? "Entry is already billed. Unbill it before editing."
+          : "Time entry no longer exists",
+      ],
+    },
+    values: raw,
+  };
+}
 
 export async function updateTimeEntry(
   timeEntryId: string,
@@ -344,6 +329,9 @@ export async function updateTimeEntry(
       status: true,
       rate: true,
       hours: true,
+      date: true,
+      billable: true,
+      noCharge: true,
       privileged: true,
     },
   });
@@ -393,7 +381,7 @@ export async function updateTimeEntry(
     };
   }
 
-  const date = parseLocalDate(parsed.data.date);
+  const date = parseDateOnly(parsed.data.date);
   if (!date) {
     return {
       status: "error",
@@ -404,8 +392,13 @@ export async function updateTimeEntry(
 
   const newHours = Number(parsed.data.hours);
 
-  await prisma.timeEntry.update({
-    where: { id: timeEntryId },
+  // Conditional write: invoice generation commits `billed` +
+  // invoiceId in its own transaction, and can land between the read
+  // above and this write. Filtering on the status in the WHERE makes
+  // the check and the write one statement, so an edit can never
+  // overwrite a row that just joined an invoice.
+  const written = await prisma.timeEntry.updateMany({
+    where: { id: timeEntryId, status: { not: "billed" } },
     data: {
       date,
       hours: newHours,
@@ -417,10 +410,10 @@ export async function updateTimeEntry(
       privileged: parsed.data.privileged === "on",
       // Only write status when the form actually posted one.
       ...(parsed.data.status ? { status: parsed.data.status } : {}),
-      // Schema contract: `amount` is hours × rate, and "the action
+      // Schema contract: `amount` is hours x rate, and "the action
       // that sets it is responsible for keeping it in sync". An
       // entry picks up a rate via `updateInvoiceLineItem` and keeps
-      // it if the invoice is later voided — so changing hours here
+      // it if the invoice is later voided - so changing hours here
       // must recompute amount or the next generateInvoiceFromWip
       // sums a stale Decimal. Null rate (contingent matters) means
       // there's no amount to sync.
@@ -429,10 +422,22 @@ export async function updateTimeEntry(
         : {}),
     },
   });
+  if (written.count === 0) return writeRefusedState(timeEntryId, raw);
 
   revalidateEntryScope(entry);
   const changes: string[] = [];
   if (entry.hours !== newHours) changes.push(`${entry.hours}h → ${newHours}h`);
+  if (dateOnlyKey(entry.date) !== dateOnlyKey(date)) {
+    changes.push(`date ${dateOnlyKey(entry.date)} → ${dateOnlyKey(date)}`);
+  }
+  const nextBillable = parsed.data.billable === "on";
+  const nextNoCharge = parsed.data.noCharge === "on";
+  if (entry.billable !== nextBillable) {
+    changes.push(nextBillable ? "marked billable" : "marked non-billable");
+  }
+  if (entry.noCharge !== nextNoCharge) {
+    changes.push(nextNoCharge ? "marked no-charge" : "no-charge cleared");
+  }
   if (parsed.data.status && parsed.data.status !== entry.status) {
     changes.push(`status ${entry.status} → ${parsed.data.status}`);
   }
@@ -499,10 +504,20 @@ export async function setTimeEntryStatus(
     };
   }
 
-  await prisma.timeEntry.update({
-    where: { id: timeEntryId },
+  // Optimistic write: only flip the status we read. A concurrent
+  // invoice run (to billed) or another edit makes this match nothing,
+  // and we say so instead of overwriting the newer state.
+  const written = await prisma.timeEntry.updateMany({
+    where: { id: timeEntryId, status: entry.status },
     data: { status },
   });
+  if (written.count === 0) {
+    return {
+      ok: false,
+      error:
+        "This entry changed while you were editing it. Reload and try again.",
+    };
+  }
 
   revalidateEntryScope(entry);
   await logActivity({
@@ -547,7 +562,18 @@ export async function deleteTimeEntry(
     };
   }
 
-  await prisma.timeEntry.delete({ where: { id: timeEntryId } });
+  // Conditional delete, same race as updateTimeEntry: never remove a
+  // row that invoice generation just attached to an invoice.
+  const removed = await prisma.timeEntry.deleteMany({
+    where: { id: timeEntryId, status: { not: "billed" } },
+  });
+  if (removed.count === 0) {
+    return {
+      ok: false,
+      error:
+        "Entry is already billed or no longer exists. Reload to see its current state.",
+    };
+  }
 
   revalidateEntryScope(entry);
   await logActivity({

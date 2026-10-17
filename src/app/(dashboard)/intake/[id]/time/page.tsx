@@ -19,10 +19,9 @@
 import Link from "next/link";
 import { Briefcase } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-// Entry dates are date-only values (server-local midnight) — the
-// centralized "medium" variant with no TZ override keeps them on
-// the day grid they were saved on.
-import { formatDate } from "@/lib/format-date";
+// Entry dates are date-only values (ADR-012): formatDateOnly reads
+// them in UTC, so they never shift with any zone.
+import { formatDateOnly } from "@/lib/format-date";
 import { Card } from "@/components/ui/card";
 import {
   Table,
@@ -34,8 +33,14 @@ import {
 } from "@/components/ui/table";
 import { LeadTimeComposer } from "@/components/intake/lead-time-composer";
 import { TimeEntryRowMenu } from "@/components/time-entries/time-entry-row-actions";
-import { utbmsCodeLabel } from "@/lib/time-entry-constants";
-import { type TimeEntryStatus } from "@/lib/note-constants";
+import {
+  formatHours,
+  timeEntrySourceLabel,
+  timeEntryStatusBadge,
+  utbmsCodeLabel,
+} from "@/lib/time-entry-constants";
+import { type TimeEntryStatus } from "@/lib/constants/time-entry-status";
+import { currentUserHasPermission } from "@/lib/permission-check";
 import {
   getLeadTimeEntries,
   summarizeLeadTime,
@@ -43,47 +48,18 @@ import {
 } from "@/lib/queries/lead-time";
 import { requireUser } from "@/lib/current-user";
 
-const STATUS_META: Record<string, { label: string; className: string }> = {
-  draft: {
-    label: "Draft",
-    className: "bg-paper-2 text-ink-4 border-line",
-  },
-  submitted: {
-    label: "Submitted",
-    className: "bg-brand-soft text-brand-700 border-brand-200",
-  },
-  billable: {
-    label: "Billable",
-    className: "bg-brand-soft text-brand-700 border-brand-200",
-  },
-  billed: {
-    label: "Billed",
-    className: "bg-ok-soft text-ok border-line",
-  },
-  written_off: {
-    label: "Written off",
-    className: "bg-paper-2 text-ink-3 border-line",
-  },
-};
-
-/** TimeEntry.source → short human label ("manual" stays implicit
- *  as the common case). */
-const SOURCE_LABEL: Record<string, string> = {
-  manual: "Manual",
-  timer: "Timer",
-  email: "Email",
-  calendar: "Event",
-  document: "Document",
-  task: "Task",
-  evidence: "Evidence",
-};
-
 export default async function LeadTimePage({
   params,
 }: PageProps<"/intake/[id]/time">) {
-  await requireUser();
+  const currentUserId = await requireUser();
   const { id } = await params;
-  const [lead, entries] = await Promise.all([
+  const [
+    lead,
+    entries,
+    canCreateTime,
+    canEditAnyTime,
+    canDeleteAnyTime,
+  ] = await Promise.all([
     // Stage decides whether the composer renders: converted leads
     // are read-only here (their intake time already rolled forward
     // to the matter; createLeadTimeEntry refuses them server-side).
@@ -92,6 +68,11 @@ export default async function LeadTimePage({
       select: { stage: true, convertedMatterId: true },
     }),
     getLeadTimeEntries(id),
+    // Hide what the server would refuse (it bounces to '/', losing
+    // typed input). The actions stay the real gate.
+    currentUserHasPermission("time_entries.create"),
+    currentUserHasPermission("time_entries.edit_any"),
+    currentUserHasPermission("time_entries.delete_any"),
   ]);
   // The layout notFound()s missing leads; render nothing if the row
   // vanished between the layout's fetch and ours.
@@ -119,14 +100,16 @@ export default async function LeadTimePage({
           )}
         </div>
       ) : (
-        <LeadTimeComposer leadId={id} />
+        canCreateTime && <LeadTimeComposer leadId={id} />
       )}
 
       {entries.length === 0 ? (
         <div className="text-xs text-ink-4 text-center py-6">
           {isConverted
             ? "No intake time remains on this lead."
-            : "No intake time logged yet — add an entry above. Entries carry forward to the matter if the lead converts."}
+            : canCreateTime
+              ? "No intake time logged yet — add an entry above. Entries carry forward to the matter if the lead converts."
+              : "No intake time logged yet."}
         </div>
       ) : (
         <>
@@ -136,13 +119,13 @@ export default async function LeadTimePage({
           <div className="grid grid-cols-3 gap-4">
             <SummaryCard
               label="Total hours"
-              value={summary.totalHours.toFixed(1)}
+              value={formatHours(summary.totalHours)}
               sub="all intake entries"
             />
             <SummaryCard
               label="Billable hours"
-              value={summary.billableHours.toFixed(1)}
-              sub={`of ${summary.totalHours.toFixed(1)} total`}
+              value={formatHours(summary.billableHours)}
+              sub={`of ${formatHours(summary.totalHours)} total`}
             />
             <SummaryCard
               label="Entries"
@@ -176,7 +159,12 @@ export default async function LeadTimePage({
                 </TableHeader>
                 <TableBody>
                   {entries.map((e) => (
-                    <EntryRow key={e.id} entry={e} />
+                    <EntryRow
+                      key={e.id}
+                      entry={e}
+                      canEdit={canEditAnyTime || e.userId === currentUserId}
+                      canDelete={canDeleteAnyTime || e.userId === currentUserId}
+                    />
                   ))}
                 </TableBody>
               </Table>
@@ -210,12 +198,22 @@ function SummaryCard({
   );
 }
 
-function EntryRow({ entry }: { entry: LeadTimeEntryRow }) {
-  const status = STATUS_META[entry.status] ?? STATUS_META.draft;
+function EntryRow({
+  entry,
+  canEdit,
+  canDelete,
+}: {
+  entry: LeadTimeEntryRow;
+  /** Author, or holds time_entries.edit_any. */
+  canEdit: boolean;
+  /** Author, or holds time_entries.delete_any. */
+  canDelete: boolean;
+}) {
+  const status = timeEntryStatusBadge(entry.status);
   return (
     <TableRow>
       <TableCell className="pl-4 text-xs text-ink-3 whitespace-nowrap">
-        {formatDate(entry.date, "medium")}
+        {formatDateOnly(entry.date, "medium")}
       </TableCell>
       <TableCell>
         <span
@@ -261,10 +259,10 @@ function EntryRow({ entry }: { entry: LeadTimeEntryRow }) {
         )}
       </TableCell>
       <TableCell className="text-right font-mono text-xs text-ink">
-        {entry.hours.toFixed(1)}
+        {formatHours(entry.hours)}
       </TableCell>
       <TableCell className="text-2xs text-ink-4">
-        {SOURCE_LABEL[entry.source] ?? entry.source}
+        {timeEntrySourceLabel(entry.source)}
       </TableCell>
       <TableCell>
         <span
@@ -275,6 +273,8 @@ function EntryRow({ entry }: { entry: LeadTimeEntryRow }) {
       </TableCell>
       <TableCell className="pr-4">
         <TimeEntryRowMenu
+          canEdit={canEdit}
+          canDelete={canDelete}
           entry={{
             id: entry.id,
             date: entry.date,

@@ -38,7 +38,8 @@ import {
   DurationFields,
   UtbmsCodeSelect,
 } from "@/components/time-entries/time-entry-fields";
-import { todayDateString } from "@/lib/note-constants";
+import { useUserTimeZone } from "@/components/user-time-zone";
+import { todayKey } from "@/lib/format-date";
 import { stopTimer } from "@/app/actions/timer";
 import { timeEntryInitialState } from "@/lib/time-entry-constants";
 import type { TimerMatterOption } from "@/lib/queries/timer";
@@ -80,7 +81,10 @@ export function StopTimerDialog({
   );
 
   const [matterId, setMatterId] = useState(initialMatterId ?? "");
-  const [date, setDate] = useState(todayDateString());
+  // "Today" is the calendar day in the user's profile zone (the same
+  // zone the server renders in), not whatever the browser is set to.
+  const tz = useUserTimeZone();
+  const [date, setDate] = useState(() => todayKey(tz));
   const [hours, setHours] = useState(String(initialHours));
   const [activity, setActivity] = useState(initialActivity ?? "");
   const [narrative, setNarrative] = useState("");
@@ -89,20 +93,25 @@ export function StopTimerDialog({
   const [noCharge, setNoCharge] = useState(false);
   const [privileged, setPrivileged] = useState(false);
 
-  // Re-prefill on every open — elapsed keeps growing between opens,
-  // so the hours snapshot from mount time would go stale.
-  useEffect(() => {
-    if (!open) return;
-    setMatterId(initialMatterId ?? "");
-    setDate(todayDateString());
-    setHours(String(initialHours));
-    setActivity(initialActivity ?? "");
-    setNarrative("");
-    setUtbmsCode("");
-    setBillable(true);
-    setNoCharge(false);
-    setPrivileged(false);
-  }, [open, initialMatterId, initialActivity, initialHours]);
+  // Re-prefill on every open - elapsed keeps growing between opens,
+  // so the hours snapshot from mount time would go stale. Done during
+  // render on the open flip (stored-previous-prop pattern), not in an
+  // effect, so props changing mid-edit can't clobber typed values.
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) {
+      setMatterId(initialMatterId ?? "");
+      setDate(todayKey(tz));
+      setHours(String(initialHours));
+      setActivity(initialActivity ?? "");
+      setNarrative("");
+      setUtbmsCode("");
+      setBillable(true);
+      setNoCharge(false);
+      setPrivileged(false);
+    }
+  }
 
   // Close on success — keyed on the state OBJECT, not state.status
   // (useActionState keeps state across submissions; see the identical

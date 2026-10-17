@@ -1,11 +1,10 @@
 /**
  * Integration tests for the /time page queries.
  *
- * Conventions under test (matching the committed date-only column
- * story — see src/lib/queries/dashboard.ts header):
- *   - TimeEntry.date is stored at server-local midnight of its
- *     calendar day; the queries take/emit YYYY-MM-DD day keys and
- *     round-trip them through server-local date parts.
+ * Conventions under test (ADR-012, date-only columns):
+ *   - TimeEntry.date is a calendar date stored at UTC midnight and
+ *     read in UTC; the queries take/emit YYYY-MM-DD day keys and map
+ *     them with dateOnlyRange / dateOnlyKey - no server zone involved.
  *   - Everything is scoped to the CURRENT user — other users'
  *     entries on the same days must never leak in.
  *   - hours is Float: sums are rounded to 2 decimals so float
@@ -20,6 +19,7 @@ vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { parseDateOnly } from "@/lib/format-date";
 import { getMyDayTime, getMyRunningTimer, getMyWeekTime } from "@/lib/queries/time";
 import {
   resetDb,
@@ -46,7 +46,7 @@ let otherUserId: string;
 let matterAId: string; // red
 let matterBId: string; // default blue
 
-/** Entry factory — server-local midnight date, controllable source
+/** Entry factory — date-only (UTC midnight) date, controllable source
  *  / flags. (seedTimeEntry pins date to `new Date()`, which these
  *  tests must control.) Scope with matterId OR leadId (intake
  *  time) — exactly one, per the TimeEntry invariant. */
@@ -115,7 +115,7 @@ beforeEach(async () => {
 
 describe("getMyWeekTime", () => {
   test("groups per day per matter, splits billable, sorts segments desc", async () => {
-    const monday = new Date(2026, 5, 15);
+    const monday = parseDateOnly("2026-06-15")!;
     // Matter A on Monday: 1.5h billable + 0.5h non-billable = 2.0h.
     await createEntry({ userId, matterId: matterAId, date: monday, hours: 1.5 });
     await createEntry({
@@ -149,7 +149,7 @@ describe("getMyWeekTime", () => {
     await createEntry({
       userId,
       matterId: matterAId,
-      date: new Date(2026, 5, 16),
+      date: parseDateOnly("2026-06-16")!,
       hours: 1,
       billable: true,
       noCharge: true,
@@ -172,21 +172,21 @@ describe("getMyWeekTime", () => {
     await createEntry({
       userId,
       matterId: matterAId,
-      date: new Date(2026, 5, 15),
+      date: parseDateOnly("2026-06-15")!,
       hours: 2,
     });
     // Other user, same day — must not leak in.
     await createEntry({
       userId: otherUserId,
       matterId: matterAId,
-      date: new Date(2026, 5, 15),
+      date: parseDateOnly("2026-06-15")!,
       hours: 8,
     });
     // Current user, the Saturday BEFORE the week — outside bounds.
     await createEntry({
       userId,
       matterId: matterAId,
-      date: new Date(2026, 5, 13),
+      date: parseDateOnly("2026-06-13")!,
       hours: 8,
     });
 
@@ -196,7 +196,7 @@ describe("getMyWeekTime", () => {
   });
 
   test("float-noise sums are rounded (0.1 × 3 = 0.3, not 0.30000000004)", async () => {
-    const date = new Date(2026, 5, 17);
+    const date = parseDateOnly("2026-06-17")!;
     for (let i = 0; i < 3; i++) {
       await createEntry({ userId, matterId: matterAId, date, hours: 0.1 });
     }
@@ -208,7 +208,7 @@ describe("getMyWeekTime", () => {
 
 describe("getMyDayTime — reconciliation lanes", () => {
   test("splits lanes by source; totals span both lanes", async () => {
-    const date = new Date(2026, 5, 15);
+    const date = parseDateOnly("2026-06-15")!;
     await createEntry({
       userId,
       matterId: matterAId,
@@ -256,13 +256,13 @@ describe("getMyDayTime — reconciliation lanes", () => {
     await createEntry({
       userId: otherUserId,
       matterId: matterAId,
-      date: new Date(2026, 5, 15),
+      date: parseDateOnly("2026-06-15")!,
       hours: 3,
     });
     await createEntry({
       userId,
       matterId: matterAId,
-      date: new Date(2026, 5, 16),
+      date: parseDateOnly("2026-06-16")!,
       hours: 3,
     });
 
@@ -270,6 +270,71 @@ describe("getMyDayTime — reconciliation lanes", () => {
     expect(day.logged).toHaveLength(0);
     expect(day.captured).toHaveLength(0);
     expect(day.totalHours).toBe(0);
+  });
+});
+
+describe("date-only bucketing (UTC midnight rows, any server zone)", () => {
+  test("a week's first and last day land on their own keys, not the neighbours'", async () => {
+    // Sunday 06-14 00:00Z is the week's first instant; Saturday 06-20
+    // 00:00Z its last day. Local getters in a western zone would read
+    // them as 06-13 / 06-19 and drop the Sunday row out of the week.
+    await createEntry({
+      userId,
+      matterId: matterAId,
+      date: parseDateOnly("2026-06-14")!,
+      hours: 1,
+    });
+    await createEntry({
+      userId,
+      matterId: matterAId,
+      date: parseDateOnly("2026-06-20")!,
+      hours: 2,
+    });
+    // Just outside the week on both sides.
+    await createEntry({
+      userId,
+      matterId: matterAId,
+      date: parseDateOnly("2026-06-13")!,
+      hours: 4,
+    });
+    await createEntry({
+      userId,
+      matterId: matterAId,
+      date: parseDateOnly("2026-06-21")!,
+      hours: 8,
+    });
+
+    const week = await getMyWeekTime(WEEK_KEYS);
+
+    expect(week.days[0]).toMatchObject({ dayKey: "2026-06-14", totalHours: 1 });
+    expect(week.days[6]).toMatchObject({ dayKey: "2026-06-20", totalHours: 2 });
+    expect(week.totalHours).toBe(3);
+  });
+
+  test("legacy rows stored at a western server's local midnight still land on their day", async () => {
+    // Pre-ADR-012 rows written by parseLocalDate on a Denver laptop sit
+    // at 06:00/07:00Z - still inside the right UTC day.
+    await createEntry({
+      userId,
+      matterId: matterAId,
+      date: new Date("2026-06-15T06:00:00Z"),
+      hours: 1,
+    });
+    const day = await getMyDayTime("2026-06-15");
+    expect(day.totalHours).toBe(1);
+    expect((await getMyDayTime("2026-06-14")).totalHours).toBe(0);
+    expect((await getMyDayTime("2026-06-16")).totalHours).toBe(0);
+  });
+
+  test("getMyDayTime is half-open: the next day's midnight is excluded", async () => {
+    await createEntry({
+      userId,
+      matterId: matterAId,
+      date: parseDateOnly("2026-06-16")!,
+      hours: 3,
+    });
+    expect((await getMyDayTime("2026-06-15")).totalHours).toBe(0);
+    expect((await getMyDayTime("2026-06-16")).totalHours).toBe(3);
   });
 });
 
@@ -311,7 +376,7 @@ describe("getMyRunningTimer", () => {
 // ── Lead-scoped (intake) entries in the /time views ─────────────────────
 
 describe("lead-scoped entries — intake context instead of a matter", () => {
-  const monday = new Date(2026, 5, 15);
+  const monday = parseDateOnly("2026-06-15")!;
 
   test("getMyWeekTime: intake segment carries the lead's name + leadId, neutral color", async () => {
     const { leadId } = await seedLead({ name: "Priya Patel" });

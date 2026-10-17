@@ -11,6 +11,11 @@
  *     litigation task set) that feeds the composer pickers
  */
 
+import {
+  TIME_ENTRY_STATUS_LABEL,
+  type TimeEntryStatus,
+} from "@/lib/constants/time-entry-status";
+
 export type TimeEntryFormState = {
   status: "idle" | "ok" | "error";
   errors?: Record<string, string[]>;
@@ -67,6 +72,61 @@ export function formatElapsed(elapsedMs: number): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${h}:${pad(m)}:${pad(s)}`;
 }
+
+// ── Display helpers ─────────────────────────────────────────────────────
+
+/**
+ * Hours for display: two decimals, with a trailing zero dropped
+ * ("0.25", "1.5", "2.0"). `toFixed(1)` misstates the firm's
+ * quarter-hour entries (0.25 reads 0.3, 0.75 reads 0.8) and then
+ * disagrees with the invoice views, which print two decimals.
+ * Non-finite input renders as "0.0".
+ */
+export function formatHours(hours: number): string {
+  const fixed = (Number.isFinite(hours) ? hours : 0).toFixed(2);
+  return fixed.endsWith("0") ? fixed.slice(0, -1) : fixed;
+}
+
+/** Status chip vocabulary shared by every surface that lists time
+ *  entries (matter Time tab, intake Time tab, /time day view). */
+const STATUS_BADGE_CLASS: Record<TimeEntryStatus, string> = {
+  draft: "bg-paper-2 text-ink-4 border-line",
+  submitted: "bg-brand-soft text-brand-700 border-brand-200",
+  billable: "bg-brand-soft text-brand-700 border-brand-200",
+  billed: "bg-ok-soft text-ok border-line",
+  written_off: "bg-paper-2 text-ink-3 border-line",
+};
+
+/** Label + chip classes for a stored status; unknown values fall
+ *  back to the draft chip (never throws on legacy data). */
+export function timeEntryStatusBadge(status: string): {
+  label: string;
+  className: string;
+} {
+  const key = (
+    Object.hasOwn(STATUS_BADGE_CLASS, status) ? status : "draft"
+  ) as TimeEntryStatus;
+  return {
+    label: TIME_ENTRY_STATUS_LABEL[key],
+    className: STATUS_BADGE_CLASS[key],
+  };
+}
+
+/** Human label for a TimeEntry.source value. */
+export const TIME_ENTRY_SOURCE_LABEL: Record<string, string> = {
+  manual: "Manual",
+  timer: "Timer",
+  email: "Email",
+  calendar: "Calendar",
+  document: "Document",
+  task: "Task",
+  evidence: "Evidence",
+};
+
+export const timeEntrySourceLabel = (source: string): string =>
+  Object.hasOwn(TIME_ENTRY_SOURCE_LABEL, source)
+    ? TIME_ENTRY_SOURCE_LABEL[source]!
+    : source;
 
 // ── Start–end duration mode ─────────────────────────────────────────────
 

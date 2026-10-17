@@ -20,6 +20,9 @@
  * is a deliberate future extension — it needs its own permission
  * key before anyone else's hours become visible here.
  *
+ * The live timer shows on TODAY's day view only (it is not part of
+ * any other day's total).
+ *
  * TZ: the focal date defaults to "today" on the USER's calendar
  * (getCurrentUserTimeZone + the date-key round-trip), and the week
  * is built in the user's zone via calendarWeekInTz. TimeEntry.date
@@ -39,6 +42,7 @@ import {
 import { calendarWeekInTz, dateKeyInTz } from "@/lib/format-date";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { getFirmGoals } from "@/lib/firm";
+import { formatHours } from "@/lib/time-entry-constants";
 import {
   getMyDayTime,
   getMyRunningTimer,
@@ -54,9 +58,12 @@ export default async function TimePage({ searchParams }: PageProps<"/time">) {
 
   if (view === "day") {
     const dayKey = toTimeDateParam(focal);
+    // The live timer is today's: on any other day it isn't part of
+    // that day's total, so skip the fetch and hide the lane.
+    const isToday = dayKey === dateKeyInTz(new Date(), userTz);
     const [day, timer, goals] = await Promise.all([
       getMyDayTime(dayKey),
-      getMyRunningTimer(),
+      isToday ? getMyRunningTimer() : Promise.resolve(null),
       // Daily target for the goal line — firm setting, editable on
       // /settings/firm (was a hardcoded constant).
       getFirmGoals(),
@@ -65,13 +72,15 @@ export default async function TimePage({ searchParams }: PageProps<"/time">) {
       <>
         <TopBar
           title="Time"
-          crumbs={`${day.totalHours.toFixed(1)}h logged · ${day.billableHours.toFixed(1)}h billable`}
+          crumbs={`${formatHours(day.totalHours)}h logged · ${formatHours(day.billableHours)}h billable`}
         />
         <div className="flex-1 flex flex-col min-h-0 animate-page-enter">
-          <TimeToolbar view={view} focal={focal} />
+          <TimeToolbar view={view} focal={focal} userTz={userTz} />
           <TimeDayView
             day={day}
             timer={timer}
+            showTimerLane={isToday}
+            asOf={new Date()}
             userTz={userTz}
             dailyHoursGoal={goals.dailyHoursGoal}
           />
@@ -91,10 +100,10 @@ export default async function TimePage({ searchParams }: PageProps<"/time">) {
     <>
       <TopBar
         title="Time"
-        crumbs={`${weekTime.totalHours.toFixed(1)}h this week · ${weekTime.billableHours.toFixed(1)}h billable`}
+        crumbs={`${formatHours(weekTime.totalHours)}h this week · ${formatHours(weekTime.billableHours)}h billable`}
       />
       <div className="flex-1 flex flex-col min-h-0 animate-page-enter">
-        <TimeToolbar view={view} focal={focal} />
+        <TimeToolbar view={view} focal={focal} userTz={userTz} />
         <TimeWeekView week={weekTime} todayKey={todayKey} />
       </div>
     </>

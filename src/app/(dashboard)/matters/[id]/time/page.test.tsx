@@ -1,6 +1,6 @@
 /**
- * /matters/[id]/time — matters.expense.view gate on the expense
- * section.
+ * /matters/[id]/time — permission gates on the expense section and
+ * the time-entry UI.
  *
  * This page is the enforcement point for `matters.expense.view`:
  * getMatterExpenses does no permission check of its own, so if the
@@ -34,7 +34,10 @@ vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn(),
 }));
 vi.mock("@/lib/prisma", () => ({
-  prisma: { document: { findMany: vi.fn() } },
+  prisma: {
+    document: { findMany: vi.fn() },
+    timeEntry: { count: vi.fn() },
+  },
 }));
 
 // Leaf components — the tests only care whether the expense section
@@ -43,7 +46,21 @@ vi.mock("@/components/matters/captures/time-composer", () => ({
   TimeComposer: () => <div data-testid="time-composer" />,
 }));
 vi.mock("@/components/time-entries/time-entry-row-actions", () => ({
-  TimeEntryRowMenu: () => <div data-testid="time-entry-menu" />,
+  // Surface the capability props so tests can assert what the page
+  // computed for each row.
+  TimeEntryRowMenu: ({
+    canEdit,
+    canDelete,
+  }: {
+    canEdit?: boolean;
+    canDelete?: boolean;
+  }) => (
+    <div
+      data-testid="time-entry-menu"
+      data-can-edit={String(canEdit)}
+      data-can-delete={String(canDelete)}
+    />
+  ),
 }));
 vi.mock("@/components/matters/entity-source-chip", () => ({
   EntitySourceChip: () => <div data-testid="source-chip" />,
@@ -72,6 +89,7 @@ const mockedTimeEntries = vi.mocked(getMatterTimeEntries);
 const mockedTimeSummary = vi.mocked(getMatterTimeSummary);
 const mockedHasPermission = vi.mocked(currentUserHasPermission);
 const mockedFindDocuments = vi.mocked(prisma.document.findMany);
+const mockedCount = vi.mocked(prisma.timeEntry.count);
 
 const props = (id = "matter_1") =>
   ({ params: Promise.resolve({ id }) }) as Parameters<
@@ -107,6 +125,7 @@ const timeEntry = (): TimeEntryRow => ({
   privileged: false,
   source: "manual",
   status: "draft",
+  userId: "user_1",
   userName: "Jason Kosloski",
   userInitials: "JK",
   invoiceId: null,
@@ -121,8 +140,13 @@ const grantAllExcept = (...denied: string[]) => {
   );
 };
 
-const arrange = ({ entries = [] as TimeEntryRow[] } = {}) => {
+const arrange = (
+  opts: { entries?: TimeEntryRow[]; total?: number } = {}
+) => {
+  const entries = opts.entries ?? [];
+  const total = opts.total ?? entries.length;
   mockedTimeEntries.mockResolvedValue(entries);
+  mockedCount.mockResolvedValue(total);
   mockedTimeSummary.mockResolvedValue(emptySummary);
   mockedExpenses.mockResolvedValue(emptyExpenses);
   mockedFindDocuments.mockResolvedValue([]);
@@ -175,5 +199,132 @@ describe("MatterTimePage — matters.expense.view gate", () => {
 
     expect(screen.getByText("Expenses")).toBeInTheDocument();
     expect(screen.queryByTestId("expense-composer")).toBeNull();
+  });
+});
+
+describe("MatterTimePage — receipt picker documents", () => {
+  test("documents are not fetched for a viewer who cannot create expenses", async () => {
+    arrange();
+    grantAllExcept("matters.expense.create");
+
+    render(await MatterTimePage(props()));
+
+    expect(mockedExpenses).toHaveBeenCalled();
+    expect(mockedFindDocuments).not.toHaveBeenCalled();
+  });
+
+  test("the picker query is capped", async () => {
+    arrange();
+    grantAllExcept();
+
+    render(await MatterTimePage(props()));
+
+    expect(mockedFindDocuments).toHaveBeenCalledWith(
+      expect.objectContaining({ take: 200 })
+    );
+  });
+});
+
+describe("MatterTimePage — time_entries.* gates", () => {
+  test("composer is hidden without time_entries.create (typed input would be lost to a redirect)", async () => {
+    arrange({ entries: [timeEntry()] });
+    grantAllExcept("time_entries.create");
+
+    render(await MatterTimePage(props()));
+
+    expect(screen.queryByTestId("time-composer")).toBeNull();
+  });
+
+  test("composer renders with time_entries.create, on the empty branch too", async () => {
+    arrange();
+    grantAllExcept();
+
+    render(await MatterTimePage(props()));
+
+    expect(screen.getByTestId("time-composer")).toBeInTheDocument();
+  });
+
+  test("a non-author without the _any keys gets no edit/delete on someone else's entry", async () => {
+    arrange({ entries: [{ ...timeEntry(), userId: "someone_else" }] });
+    grantAllExcept("time_entries.edit_any", "time_entries.delete_any");
+
+    render(await MatterTimePage(props()));
+
+    const menu = screen.getByTestId("time-entry-menu");
+    expect(menu).toHaveAttribute("data-can-edit", "false");
+    expect(menu).toHaveAttribute("data-can-delete", "false");
+  });
+
+  test("the author keeps edit/delete on their own entry without the _any keys", async () => {
+    arrange({ entries: [timeEntry()] });
+    grantAllExcept("time_entries.edit_any", "time_entries.delete_any");
+
+    render(await MatterTimePage(props()));
+
+    const menu = screen.getByTestId("time-entry-menu");
+    expect(menu).toHaveAttribute("data-can-edit", "true");
+    expect(menu).toHaveAttribute("data-can-delete", "true");
+  });
+
+  test("edit_any alone lets a non-author edit but not delete", async () => {
+    arrange({ entries: [{ ...timeEntry(), userId: "someone_else" }] });
+    grantAllExcept("time_entries.delete_any");
+
+    render(await MatterTimePage(props()));
+
+    const menu = screen.getByTestId("time-entry-menu");
+    expect(menu).toHaveAttribute("data-can-edit", "true");
+    expect(menu).toHaveAttribute("data-can-delete", "false");
+  });
+});
+
+describe("MatterTimePage — list cap and hours format", () => {
+  test("header says 'latest N of M' when the list is capped", async () => {
+    arrange({ entries: [timeEntry()], total: 450 });
+    grantAllExcept();
+
+    render(await MatterTimePage(props()));
+
+    expect(screen.getByText("latest 1 of 450")).toBeInTheDocument();
+  });
+
+  test("header is the plain count when nothing is cut off", async () => {
+    arrange({ entries: [timeEntry()], total: 1 });
+    grantAllExcept();
+
+    render(await MatterTimePage(props()));
+
+    expect(screen.queryByText(/latest/)).toBeNull();
+  });
+
+  test("quarter-hour entries show two decimals (0.25 is not 0.3)", async () => {
+    arrange({ entries: [{ ...timeEntry(), hours: 0.25 }] });
+    mockedTimeSummary.mockResolvedValue({
+      ...emptySummary,
+      totalHours: 0.75,
+      billableHours: 0.25,
+    });
+    grantAllExcept();
+
+    render(await MatterTimePage(props()));
+
+    // Row cell + summary cards.
+    expect(screen.getAllByText("0.25").length).toBeGreaterThan(0);
+    expect(screen.getByText("0.75")).toBeInTheDocument();
+    expect(screen.queryByText("0.3")).toBeNull();
+    expect(screen.queryByText("0.8")).toBeNull();
+  });
+
+  test("entry dates render as the stored calendar day in any zone", async () => {
+    // Stored UTC midnight of Jul 1 reads Jun 30 with local getters
+    // west of UTC (the suite also runs under America/Denver).
+    arrange({
+      entries: [{ ...timeEntry(), date: new Date("2026-07-01T00:00:00Z") }],
+    });
+    grantAllExcept();
+
+    render(await MatterTimePage(props()));
+
+    expect(screen.getByText("Jul 1, 2026")).toBeInTheDocument();
   });
 });

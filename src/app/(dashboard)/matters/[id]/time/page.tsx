@@ -17,10 +17,9 @@
  */
 
 import Link from "next/link";
-// Entry/expense dates are date-only values (server-local midnight) —
-// the centralized "medium" variant with no TZ override keeps them on
-// the day grid they were saved on.
-import { formatDate } from "@/lib/format-date";
+// Entry/expense dates are date-only values (ADR-012): formatDateOnly
+// reads them in UTC, so they never shift with any zone.
+import { formatDateOnly } from "@/lib/format-date";
 import { Card } from "@/components/ui/card";
 import {
   Table,
@@ -44,8 +43,12 @@ import {
   EXPENSE_CATEGORY_LABEL,
   type ExpenseCategory,
 } from "@/lib/expense-constants";
-import { type TimeEntryStatus } from "@/lib/note-constants";
-import { utbmsCodeLabel } from "@/lib/time-entry-constants";
+import { type TimeEntryStatus } from "@/lib/constants/time-entry-status";
+import {
+  formatHours,
+  timeEntryStatusBadge,
+  utbmsCodeLabel,
+} from "@/lib/time-entry-constants";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import {
   getMatterExpenses,
@@ -56,31 +59,12 @@ import {
 } from "@/lib/queries/matter-detail";
 import { requireUser } from "@/lib/current-user";
 
-const STATUS_META: Record<
-  string,
-  { label: string; className: string }
-> = {
-  draft: {
-    label: "Draft",
-    className: "bg-paper-2 text-ink-4 border-line",
-  },
-  submitted: {
-    label: "Submitted",
-    className: "bg-brand-soft text-brand-700 border-brand-200",
-  },
-  billable: {
-    label: "Billable",
-    className: "bg-brand-soft text-brand-700 border-brand-200",
-  },
-  billed: {
-    label: "Billed",
-    className: "bg-ok-soft text-ok border-line",
-  },
-  written_off: {
-    label: "Written off",
-    className: "bg-paper-2 text-ink-3 border-line",
-  },
-};
+/// The expense composer's receipt picker is a native <select>; an
+/// unbounded document list (thousands of discovery files) would ship
+/// every file name in the RSC payload. Newest first - receipts are
+/// attached right after upload. Existing receipts keep their label
+/// via the expense row itself, so the cap never hides one.
+const RECEIPT_PICKER_LIMIT = 200;
 
 const formatMoney = (n: number | null): string => {
   if (n === null) return "—";
@@ -93,36 +77,49 @@ const formatMoney = (n: number | null): string => {
 export default async function MatterTimePage({
   params,
 }: PageProps<"/matters/[id]/time">) {
-  await requireUser();
+  const currentUserId = await requireUser();
   const { id } = await params;
   const [
     entries,
     summary,
+    totalEntries,
     canViewExpenses,
     canCreateExpense,
     canDeleteExpense,
+    canCreateTime,
+    canEditAnyTime,
+    canDeleteAnyTime,
   ] = await Promise.all([
     getMatterTimeEntries(id),
     getMatterTimeSummary(id),
+    // The list is capped; the header says "N of M" when it is.
+    prisma.timeEntry.count({ where: { matterId: id } }),
     currentUserHasPermission("matters.expense.view"),
     currentUserHasPermission("matters.expense.create"),
     currentUserHasPermission("matters.expense.delete"),
+    // Hide what the server would refuse (and bounce to '/', losing
+    // the typed input). The actions stay the real gate.
+    currentUserHasPermission("time_entries.create"),
+    currentUserHasPermission("time_entries.edit_any"),
+    currentUserHasPermission("time_entries.delete_any"),
   ]);
   // Expense data waits on the view gate: getMatterExpenses does no
   // permission check itself, so amounts/receipts must not be fetched
   // (never mind rendered) for viewers without matters.expense.view.
-  // The document list rides along — it only feeds the expense
-  // composer's receipt picker, which lives inside the gated section.
+  // The document list only feeds the expense composer's receipt
+  // picker, so it loads only for viewers who can create expenses.
   const [expenses, matterDocuments] = canViewExpenses
     ? await Promise.all([
         getMatterExpenses(id),
-        // Compact projection — name + id only — to keep the receipt
-        // picker payload small.
-        prisma.document.findMany({
-          where: { matterId: id },
-          orderBy: { createdAt: "desc" },
-          select: { id: true, name: true },
-        }),
+        canCreateExpense
+          ? // Compact, capped projection - name + id only.
+            prisma.document.findMany({
+              where: { matterId: id },
+              orderBy: { createdAt: "desc" },
+              take: RECEIPT_PICKER_LIMIT,
+              select: { id: true, name: true },
+            })
+          : Promise.resolve([]),
       ])
     : [null, []];
   const expenseDocumentOptions: ExpenseDocumentOption[] = matterDocuments;
@@ -130,9 +127,11 @@ export default async function MatterTimePage({
   if (entries.length === 0) {
     return (
       <div className="p-5 flex flex-col gap-5">
-        <TimeComposer matterId={id} />
+        {canCreateTime && <TimeComposer matterId={id} />}
         <div className="text-xs text-ink-4 text-center py-6">
-          No time logged yet — add an entry above.
+          {canCreateTime
+            ? "No time logged yet — add an entry above."
+            : "No time logged yet."}
         </div>
         {expenses && (
           <ExpensesSection
@@ -149,19 +148,19 @@ export default async function MatterTimePage({
 
   return (
     <div className="p-5 flex flex-col gap-5">
-      <TimeComposer matterId={id} />
+      {canCreateTime && <TimeComposer matterId={id} />}
 
       {/* Summary cards */}
       <div className="grid grid-cols-4 gap-4">
         <SummaryCard
           label="Total hours"
-          value={summary.totalHours.toFixed(1)}
+          value={formatHours(summary.totalHours)}
           sub="all entries"
         />
         <SummaryCard
           label="Billable hours"
-          value={summary.billableHours.toFixed(1)}
-          sub={`of ${summary.totalHours.toFixed(1)} total`}
+          value={formatHours(summary.billableHours)}
+          sub={`of ${formatHours(summary.totalHours)} total`}
         />
         <SummaryCard
           label="Unbilled"
@@ -182,7 +181,9 @@ export default async function MatterTimePage({
             Time entries
           </h2>
           <span className="text-2xs font-mono text-ink-4">
-            {entries.length}
+            {entries.length < totalEntries
+              ? `latest ${entries.length} of ${totalEntries}`
+              : entries.length}
           </span>
         </div>
         <Card className="p-0 overflow-hidden">
@@ -201,7 +202,13 @@ export default async function MatterTimePage({
             </TableHeader>
             <TableBody>
               {entries.map((e) => (
-                <EntryRow key={e.id} entry={e} matterId={id} />
+                <EntryRow
+                  key={e.id}
+                  entry={e}
+                  matterId={id}
+                  canEdit={canEditAnyTime || e.userId === currentUserId}
+                  canDelete={canDeleteAnyTime || e.userId === currentUserId}
+                />
               ))}
             </TableBody>
           </Table>
@@ -246,15 +253,21 @@ function SummaryCard({
 function EntryRow({
   entry,
   matterId,
+  canEdit,
+  canDelete,
 }: {
   entry: TimeEntryRow;
   matterId: string;
+  /** Author, or holds time_entries.edit_any. */
+  canEdit: boolean;
+  /** Author, or holds time_entries.delete_any. */
+  canDelete: boolean;
 }) {
-  const status = STATUS_META[entry.status] ?? STATUS_META.draft;
+  const status = timeEntryStatusBadge(entry.status);
   return (
     <TableRow>
       <TableCell className="pl-4 text-xs text-ink-3 whitespace-nowrap">
-        {formatDate(entry.date, "medium")}
+        {formatDateOnly(entry.date, "medium")}
       </TableCell>
       <TableCell>
         <span
@@ -322,7 +335,7 @@ function EntryRow({
         )}
       </TableCell>
       <TableCell className="text-right font-mono text-xs text-ink">
-        {entry.hours.toFixed(1)}
+        {formatHours(entry.hours)}
       </TableCell>
       <TableCell className="text-right font-mono text-xs text-ink">
         {entry.billable && !entry.noCharge
@@ -338,6 +351,8 @@ function EntryRow({
       </TableCell>
       <TableCell className="pr-4">
         <TimeEntryRowMenu
+          canEdit={canEdit}
+          canDelete={canDelete}
           entry={{
             id: entry.id,
             date: entry.date,
@@ -442,7 +457,7 @@ function ExpenseTableRow({
   return (
     <TableRow>
       <TableCell className="pl-4 text-xs text-ink-3 whitespace-nowrap">
-        {formatDate(expense.date, "medium")}
+        {formatDateOnly(expense.date, "medium")}
       </TableCell>
       <TableCell className="text-xs text-ink">
         {expense.description}
