@@ -86,7 +86,7 @@ async function seedThread(opts: {
   ownerId: string;
   subject: string;
   followUpAt?: Date | null;
-  urgent?: boolean;
+  starred?: boolean;
 }): Promise<string> {
   const account = await prisma.emailAccount.create({
     data: {
@@ -102,7 +102,9 @@ async function seedThread(opts: {
       isRead: false,
       lastMessageAt: NOW,
       followUpAt: opts.followUpAt ?? null,
-      ...(opts.urgent ? { labels: { create: { label: "urgent" } } } : {}),
+      // "Flagged" on the dashboard = starred + unread (no code path ever
+      // wrote the old "urgent" EmailLabel, F601).
+      isStarred: opts.starred ?? false,
     },
     select: { id: true },
   });
@@ -112,8 +114,8 @@ async function seedThread(opts: {
 describe("email counts + follow-ups are scoped to the viewer's own mailbox", () => {
   test("unread / flagged counts ignore other users' threads", async () => {
     const other = await seedOtherUser();
-    await seedThread({ ownerId: userId, subject: "mine", urgent: true });
-    await seedThread({ ownerId: other, subject: "theirs 1", urgent: true });
+    await seedThread({ ownerId: userId, subject: "mine", starred: true });
+    await seedThread({ ownerId: other, subject: "theirs 1", starred: true });
     await seedThread({ ownerId: other, subject: "theirs 2" });
 
     const mine = await getDashboardKpis(DENVER);

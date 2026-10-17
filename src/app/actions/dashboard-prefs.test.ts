@@ -97,6 +97,26 @@ describe("setDashboardCardVisible", () => {
     expect(blob.visible?.kpis).toBe(false);
   });
 
+  test("rejects a non-boolean value and writes nothing", async () => {
+    await expect(
+      // Hostile client: an object smuggled into the Json column.
+      setDashboardCardVisible("kpis", { big: "x".repeat(1000) } as never)
+    ).rejects.toThrow(/boolean/);
+    await expect(
+      setDashboardCardVisible("kpis", "false" as never)
+    ).rejects.toThrow(/boolean/);
+
+    expect(await storedPrefs()).toEqual({});
+    expect(mockedRevalidate).not.toHaveBeenCalled();
+  });
+
+  test("authenticates before validating the value", async () => {
+    mockedGetUser.mockRejectedValueOnce(new Error("Unauthenticated"));
+    await expect(
+      setDashboardCardVisible("kpis", "nope" as never)
+    ).rejects.toThrow(/Unauthenticated/);
+  });
+
   test("rejects an unknown card key", async () => {
     await expect(
       // Simulate a stale/hostile client bypassing the TS type.
@@ -137,6 +157,17 @@ describe("setDashboardCardOrder", () => {
 
     const blob = await storedPrefs();
     expect(blob.visible?.deadlines).toBe(false);
+  });
+
+  test("rejects non-array input and writes nothing", async () => {
+    await expect(
+      setDashboardCardOrder({ 0: "kpis" } as never)
+    ).rejects.toThrow(/array/);
+    await expect(setDashboardCardOrder("kpis" as never)).rejects.toThrow(
+      /array/
+    );
+    expect(await storedPrefs()).toEqual({});
+    expect(mockedRevalidate).not.toHaveBeenCalled();
   });
 
   test("works for a user with no prior prefs blob", async () => {

@@ -36,7 +36,17 @@ export async function setDashboardCardVisible(
     throw new Error(`Unknown dashboard card key: ${cardKey}`);
   }
 
+  // Authenticate first so an anonymous caller gets an auth error, not
+  // a validation one.
   const userId = await getCurrentUserId();
+
+  // A server action's arguments are untrusted at runtime: only a real
+  // boolean may reach the Json column (an object here would be stored
+  // and re-read on every dashboard render).
+  if (typeof visible !== "boolean") {
+    throw new Error("visible must be a boolean");
+  }
+
   const current = await getDashboardPrefs(userId);
   const next: DashboardVisibility = { ...current.visible, [cardKey]: visible };
 
@@ -60,6 +70,10 @@ export async function setDashboardCardOrder(
   order: string[]
 ): Promise<DashboardCardKey[]> {
   const userId = await getCurrentUserId();
+  // Untrusted at runtime: anything but an array is a malformed call.
+  if (!Array.isArray(order)) {
+    throw new Error("order must be an array");
+  }
   const current = await getDashboardPrefs(userId);
   const next = mergeOrder({ order });
 

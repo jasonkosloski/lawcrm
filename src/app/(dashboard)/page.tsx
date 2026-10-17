@@ -12,6 +12,7 @@
 
 import { Fragment, type ReactNode } from "react";
 import Link from "next/link";
+import { after } from "next/server";
 import { TopBar } from "@/components/layout/topbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DashboardCustomizeButton } from "@/components/dashboard/customize-button";
@@ -19,24 +20,11 @@ import { DashboardTaskRow } from "@/components/tasks/dashboard-task-row";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { maybeRunDeadlineNotificationSweep } from "@/lib/notification-sweeps";
-import { formatDate } from "@/lib/format-date";
+import { formatDateOnly } from "@/lib/format-date";
+import { activityIcon } from "@/lib/activity-icons";
 import { cardsInColumn, type DashboardCardKey } from "@/lib/dashboard-prefs";
 import { getDashboardPrefs } from "@/lib/queries/dashboard-prefs";
-import {
-  Briefcase,
-  Check,
-  Circle,
-  Clock,
-  DollarSign,
-  FileText,
-  Gavel,
-  Mail,
-  Phone,
-  StickyNote,
-  Video,
-  Zap,
-  type LucideIcon,
-} from "lucide-react";
+import { Briefcase, Clock, DollarSign, Mail } from "lucide-react";
 import {
   getDashboardKpis,
   getFirmPulse,
@@ -47,66 +35,64 @@ import {
   getUpcomingDeadlines,
   type FollowUpItem,
   type MyTaskItem,
+  type DeadlinesCard,
+  type MyTasksGrouped,
 } from "@/lib/queries/dashboard";
 
 /** Format a dollar amount with comma separators, no cents. */
 const formatMoney = (n: number): string =>
   `$${Math.round(n).toLocaleString("en-US")}`;
 
-/** Map activity-log icon names (stored as strings in DB) to lucide
- *  icons. Keep this in sync with `defaultIconFor()` in
- *  `src/lib/activity-log.ts`. */
-const ACTIVITY_ICONS: Record<string, LucideIcon> = {
-  gavel: Gavel,
-  mail: Mail,
-  phone: Phone,
-  video: Video,
-  check: Check,
-  zap: Zap,
-  note: StickyNote,
-  document: FileText,
-  clock: Clock,
-};
-
 export default async function DashboardPage() {
-  // Authenticate before anything else — including the fire-and-forget
+  // Authenticate before anything else - including the post-response
   // sweep below, which touches the DB and must not run for an
   // unauthenticated request.
   const userId = await getCurrentUserId();
 
-  // Opportunistic deadline sweep — fire-and-forget (never blocks the
-  // render, never throws) and self-throttled to once/hour per
-  // instance. The dashboard is the highest-traffic page, so it
-  // doubles as the poor-man's cron until a platform cron drives
-  // /api/notification-sweep.
-  void maybeRunDeadlineNotificationSweep();
+  // Deadline-notification sweep as post-response work (after() keeps
+  // it from competing with the render for the single pooled
+  // connection and lets the platform finish it). The hourly
+  // /api/notification-sweep cron is the primary driver; this is a
+  // self-throttled fallback (once/hour per instance) for environments
+  // without cron, e.g. local dev. It never throws.
+  after(() => maybeRunDeadlineNotificationSweep());
 
-  // "Today" everywhere below means the USER's calendar day — resolve
+  // "Today" everywhere below means the USER's calendar day - resolve
   // the viewer's zone once and thread it through every query (same
-  // pattern as /calendar). Sequential await before the fan-out: the
-  // queries all need it.
+  // pattern as /calendar).
   const tz = await getCurrentUserTimeZone();
-  const [
-    kpis,
-    agenda,
-    activity,
-    deadlines,
-    pulse,
-    myTasks,
-    followUps,
-    prefs,
-  ] = await Promise.all([
-    getDashboardKpis(tz),
-    getTodayAgenda(tz),
-    getRecentActivity(tz, 5),
-    getUpcomingDeadlines(tz, 7),
-    getFirmPulse(tz),
-    getMyOpenTasks(tz),
-    getFollowUpsDueToday(tz),
-    getDashboardPrefs(userId),
-  ]);
 
-  const kpiTiles = [
+  // Prefs first: a hidden card's loader is skipped entirely, so
+  // hiding "Firm pulse" also skips its invoice aggregates.
+  const prefs = await getDashboardPrefs(userId);
+  const show = prefs.visible;
+  const emptyTasks: MyTasksGrouped = {
+    overdue: [],
+    today: [],
+    thisWeek: [],
+    later: [],
+    noDueDate: [],
+    total: 0,
+    overdueCount: 0,
+    hidden: 0,
+  };
+  const emptyDeadlines: DeadlinesCard = { items: [], overdueHidden: 0 };
+  const [kpis, agenda, activity, deadlines, pulse, myTasks, followUps] =
+    await Promise.all([
+      show.kpis ? getDashboardKpis(tz) : Promise.resolve(null),
+      show.agenda ? getTodayAgenda(tz) : Promise.resolve([]),
+      show.activity ? getRecentActivity(tz, 5) : Promise.resolve([]),
+      show.deadlines
+        ? getUpcomingDeadlines(tz, 7)
+        : Promise.resolve(emptyDeadlines),
+      show.pulse ? getFirmPulse(tz) : Promise.resolve(null),
+      show.tasks ? getMyOpenTasks(tz) : Promise.resolve(emptyTasks),
+      show.followUps ? getFollowUpsDueToday(tz) : Promise.resolve([]),
+    ]);
+
+  const kpiTiles = !kpis
+    ? []
+    : [
     {
       label: "Open matters",
       value: kpis.openMatters.toString(),
@@ -117,7 +103,7 @@ export default async function DashboardPage() {
     {
       label: "Unread email",
       value: kpis.unreadEmail.toString(),
-      change: kpis.flaggedEmail > 0 ? `${kpis.flaggedEmail} flagged` : "none flagged",
+      change: kpis.flaggedEmail > 0 ? `${kpis.flaggedEmail} starred unread` : "none starred",
       icon: Mail,
       variant: kpis.flaggedEmail > 0 ? ("critical" as const) : ("accent" as const),
     },
@@ -246,9 +232,9 @@ export default async function DashboardPage() {
                   <span className="text-2xs font-mono font-normal text-ink-4">
                     {myTasks.total}
                   </span>
-                  {myTasks.overdue.length > 0 && (
+                  {myTasks.overdueCount > 0 && (
                     <span className="ml-auto text-2xs font-mono font-medium px-2 py-0.5 rounded-full bg-warn-soft text-warn border border-warn-border">
-                      {myTasks.overdue.length} overdue
+                      {myTasks.overdueCount} overdue
                     </span>
                   )}
                 </CardTitle>
@@ -265,6 +251,11 @@ export default async function DashboardPage() {
                     <TaskGroup label="This week" tone="muted" tasks={myTasks.thisWeek} />
                     <TaskGroup label="Later" tone="muted" tasks={myTasks.later} />
                     <TaskGroup label="No due date" tone="muted" tasks={myTasks.noDueDate} />
+                    {myTasks.hidden > 0 && (
+                      <div className="text-2xs text-ink-4">
+                        +{myTasks.hidden} more not shown
+                      </div>
+                    )}
                   </div>
                 )}
               </CardContent>
@@ -321,7 +312,7 @@ export default async function DashboardPage() {
                 ) : (
                   <div className="flex flex-col">
                     {activity.map((item) => {
-                      const Icon = ACTIVITY_ICONS[item.iconName] ?? Circle;
+                      const Icon = activityIcon(item.iconName);
                       return (
                         <div
                           key={item.id}
@@ -364,35 +355,44 @@ export default async function DashboardPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-4">
-                {deadlines.length === 0 ? (
+                {deadlines.items.length === 0 ? (
                   <div className="py-3 text-xs text-ink-4">
-                    No deadlines in the next 7 days.
+                    No open deadlines due in the next 7 days.
                   </div>
                 ) : (
                   <div className="flex flex-col gap-1">
-                    {deadlines.map((d) => (
-                      <div
+                    {deadlines.items.map((d) => (
+                      <Link
                         key={d.id}
-                        className="flex items-center gap-3 py-2 border-b border-line last:border-b-0"
+                        href={`/matters/${d.matterId}/deadlines`}
+                        className="flex items-center gap-3 py-2 border-b border-line last:border-b-0 hover:bg-paper-2 -mx-2 px-2 rounded-sm transition-colors"
                       >
                         <div className="flex-1 min-w-0">
                           <div className="text-xs text-ink truncate">
                             {d.title}
                           </div>
+                          <div className="text-3xs font-mono uppercase tracking-wider text-ink-4 truncate">
+                            {d.matterName}
+                          </div>
                         </div>
                         <span
                           className={`text-2xs font-mono font-medium px-2 py-0.5 rounded-full border ${
-                            d.kind === "critical"
+                            d.days < 0 || d.kind === "critical"
                               ? "bg-warn-soft text-warn border-warn-border"
                               : d.kind === "auto_rule"
                                 ? "bg-brand-soft text-brand-700 border-brand-200"
                                 : "bg-paper-2 text-ink-3 border-line"
                           }`}
                         >
-                          {d.days}d
+                          {d.days < 0 ? `${Math.abs(d.days)}d late` : `${d.days}d`}
                         </span>
-                      </div>
+                      </Link>
                     ))}
+                    {deadlines.overdueHidden > 0 && (
+                      <div className="pt-2 text-2xs font-mono text-ink-4">
+                        +{deadlines.overdueHidden} more overdue
+                      </div>
+                    )}
                   </div>
                 )}
               </CardContent>
@@ -496,9 +496,8 @@ const formatTaskDue = (task: MyTaskItem): string => {
   if (task.daysUntilDue === 0) return "today";
   if (task.daysUntilDue === 1) return "tomorrow";
   if (task.daysUntilDue <= 7) return `${task.daysUntilDue}d`;
-  // Date-only value (stored at server-local midnight) — format in
-  // server TZ, no user-TZ override, or the day could shift.
-  return formatDate(task.dueDate, "short");
+  // Date-only value (ADR-012): read in UTC, never shifted by a zone.
+  return formatDateOnly(task.dueDate, "short");
 };
 
 /**

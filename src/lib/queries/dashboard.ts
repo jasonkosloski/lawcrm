@@ -8,17 +8,16 @@
  * "Today" is the USER's calendar day, not the server's: every query
  * takes the viewer's IANA `tz`. On a UTC production box a Denver user
  * loading the dashboard at 7pm local (1am UTC) would otherwise see
- * tomorrow's agenda and misbucket tasks — the same bug class the
- * calendar fixed via `parseCalendarParams`. Two boundary flavors:
+ * tomorrow's agenda and misbucket tasks. Two value kinds (ADR-012):
  *
- *  - Date-only columns (TimeEntry.date, Task/Deadline.dueDate,
- *    followUpAt's end-of-day) are stored at *server-local* midnight
- *    of their calendar day (see `parseLocalDate`). Bounds for those
- *    = server-local midnight of the user's current calendar DATE —
- *    the date-key round-trip `parseCalendarParams` uses.
+ *  - Date-only columns (TimeEntry.date, Task/Deadline.dueDate, all-day
+ *    event bounds, followUpAt's day) are UTC-midnight calendar dates.
+ *    The viewer's day key (`todayKey(tz)`) is matched with
+ *    `dateOnlyRange` / `dateOnlyKey` / `daysUntilDateOnly` - no zone is
+ *    ever applied to the stored value.
  *
- *  - Real instants (CalendarEvent.startTime) get true UTC bounds of
- *    the user's local day via `instantInTz`.
+ *  - Real instants (timed CalendarEvent.startTime) get true UTC bounds
+ *    of the user's local day via `instantInTz`.
  */
 
 import { Prisma } from "@/generated/prisma/client";
@@ -27,34 +26,30 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { getFirmGoals } from "@/lib/firm";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { canViewEventDetails } from "@/lib/calendar-visibility";
-import { dateKeyInTz, formatRelative, instantInTz } from "@/lib/format-date";
+import { visibleEmailThreadWhere } from "@/lib/email-visibility";
+import { TASK_CLOSED_STATUSES } from "@/lib/constants/task-status";
+import { TASK_PRIORITIES } from "@/lib/constants/priority";
+import {
+  addDaysToKey,
+  dateOnlyKey,
+  dateOnlyRange,
+  daysUntilDateOnly,
+  formatRelative,
+  instantInTz,
+  parseDateOnly,
+  todayKey,
+} from "@/lib/format-date";
 
-/** The viewer's current calendar date as [year, month, day] in their zone. */
-const todayYmdInTz = (tz: string): [number, number, number] =>
-  dateKeyInTz(new Date(), tz).split("-").map(Number) as [
-    number,
-    number,
-    number,
-  ];
+/** Split a `YYYY-MM-DD` day key into [year, month, day]. */
+const keyParts = (key: string): [number, number, number] =>
+  key.split("-").map(Number) as [number, number, number];
 
-/** Server-local midnight of the user's current calendar date — the
- *  lower bound for date-only columns (which store server-local
- *  midnight of their day). */
-const startOfTodayInTz = (tz: string): Date => {
-  const [y, m, d] = todayYmdInTz(tz);
-  return new Date(y, m - 1, d, 0, 0, 0, 0);
-};
-
-/** Server-local 23:59:59.999 of the user's current calendar date. */
-const endOfTodayInTz = (tz: string): Date => {
-  const [y, m, d] = todayYmdInTz(tz);
-  return new Date(y, m - 1, d, 23, 59, 59, 999);
-};
-
-/** Server-local midnight of the 1st of the user's current month. */
-const startOfMonthInTz = (tz: string): Date => {
-  const [y, m] = todayYmdInTz(tz);
-  return new Date(y, m - 1, 1, 0, 0, 0, 0);
+/** First day of the viewer's current month, as a date-only value. */
+const startOfMonthDateOnly = (tz: string): Date => {
+  const [y, m] = keyParts(todayKey(tz));
+  return parseDateOnly(
+    `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-01`
+  )!;
 };
 
 /** Shape consumed by the KPI tile grid. */
@@ -62,12 +57,14 @@ export type DashboardKpis = {
   openMatters: number;
   openMattersChange: string;
   unreadEmail: number;
+  /** Starred AND unread threads in the viewer's own mailbox. */
   flaggedEmail: number;
+  /** The VIEWER's own logged hours for their calendar day. */
   hoursToday: number;
   hoursGoal: number;
   /** Firm-wide trust total. `null` when the viewer lacks `reports.view`
    *  (firm-wide financials are "gated separately from the personal
-   *  dashboard") — the page omits the tile. */
+   *  dashboard") - the page omits the tile. */
   trustBalance: number | null;
   trustMatterCount: number | null;
 };
@@ -75,6 +72,7 @@ export type DashboardKpis = {
 export async function getDashboardKpis(tz: string): Promise<DashboardKpis> {
   const userId = await getCurrentUserId();
   const canViewFinancials = await currentUserHasPermission("reports.view");
+  const today = todayKey(tz);
   const [openMatters, mattersThisWeek, unreadEmail, flaggedEmail, hoursAgg, trustAgg, goals] =
     await Promise.all([
       prisma.matter.count({
@@ -87,17 +85,34 @@ export async function getDashboardKpis(tz: string): Promise<DashboardKpis> {
         },
       }),
       // Email is per-mailbox: count only threads in the VIEWER's own
-      // accounts (EmailThread -> EmailAccount.userId), matching the
-      // Communication tab's counts. Another user's unread/urgent mail
-      // must not move this viewer's tile.
+      // accounts (visibleEmailThreadWhere), matching the Communication
+      // tab and the sidebar badge. Archived threads are not "unread in
+      // my inbox".
       prisma.emailThread.count({
-        where: { isRead: false, account: { userId } },
+        where: {
+          ...visibleEmailThreadWhere(userId),
+          isRead: false,
+          isArchived: false,
+        },
       }),
-      prisma.emailLabel.count({
-        where: { label: "urgent", thread: { account: { userId } } },
+      // "Flagged" = starred + unread in the same scope. (The old
+      // EmailLabel "urgent" count read a label no code path writes.)
+      prisma.emailThread.count({
+        where: {
+          ...visibleEmailThreadWhere(userId),
+          isStarred: true,
+          isRead: false,
+          isArchived: false,
+        },
       }),
+      // The VIEWER's own hours for their calendar day: dailyHoursGoal
+      // is a per-person target, and the sidebar badge and /time day
+      // view are per-user too. TimeEntry.date is date-only (ADR-012).
+      // Uses the viewer's day key; the sidebar badge (sidebar.ts) still
+      // uses the server-local day until its owner migrates it, so the
+      // two can differ on a UTC host in the evening.
       prisma.timeEntry.aggregate({
-        where: { date: { gte: startOfTodayInTz(tz), lte: endOfTodayInTz(tz) } },
+        where: { userId, date: dateOnlyRange(today, today) },
         _sum: { hours: true },
       }),
       // Firm-wide trust total: skipped entirely without reports.view.
@@ -108,7 +123,7 @@ export async function getDashboardKpis(tz: string): Promise<DashboardKpis> {
             _count: true,
           })
         : Promise.resolve(null),
-      // Firm-settable target (settings → Firm info); was a
+      // Firm-settable target (settings -> Firm info); was a
       // hardcoded 6.0 before Firm.dailyHoursGoal existed.
       getFirmGoals(),
     ]);
@@ -121,7 +136,7 @@ export async function getDashboardKpis(tz: string): Promise<DashboardKpis> {
     flaggedEmail,
     hoursToday: hoursAgg._sum.hours ?? 0,
     hoursGoal: goals.dailyHoursGoal,
-    // Decimal → number at the API boundary. Display + KPI math
+    // Decimal -> number at the API boundary. Display + KPI math
     // tolerates the precision floor; the Decimal stays canonical
     // in the DB. Same pattern below for invoice totals.
     trustBalance: trustAgg ? (trustAgg._sum.trustBalance?.toNumber() ?? 0) : null,
@@ -131,13 +146,14 @@ export async function getDashboardKpis(tz: string): Promise<DashboardKpis> {
 
 export type AgendaItem = {
   id: string;
+  /** "9:00a" for timed events, "All day" for all-day ones. */
   time: string;
   title: string;
   area: string;
   color: string;
 };
 
-/** Compact "9:00a" / "3:30p" label, anchored to the user's zone —
+/** Compact "9:00a" / "3:30p" label, anchored to the user's zone -
  *  `getHours()` would read the server's wall clock (UTC in prod)
  *  and label a 9am Denver hearing "3:00p". */
 const formatTime = (d: Date, tz: string): string => {
@@ -158,16 +174,31 @@ const formatTime = (d: Date, tz: string): string => {
 
 export async function getTodayAgenda(tz: string): Promise<AgendaItem[]> {
   const viewerId = await getCurrentUserId();
-  // Real instants — bound by the true UTC extent of the user's
-  // local day (not the date-key round-trip used for date-only
-  // columns above).
-  const [y, m, d] = todayYmdInTz(tz);
+  const key = todayKey(tz);
+  // Timed events are real instants - bound by the true UTC extent of
+  // the user's local day [00:00, next 00:00).
+  const [y, m, d] = keyParts(key);
+  const [ny, nm, nd] = keyParts(addDaysToKey(key, 1));
   const dayStart = instantInTz(y, m, d, 0, 0, tz);
-  const dayEnd = instantInTz(y, m, d, 23, 59, tz);
+  const nextDayStart = instantInTz(ny, nm, nd, 0, 0, tz);
+  // All-day events are date-only (ADR-012): they cover the calendar
+  // dates startTime..endTime (inclusive), whatever the viewer's zone.
+  // Applying the instant window to them shows tomorrow's all-day
+  // event (stored 00:00Z) at "6:00p" and drops today's.
+  const allDayDay = dateOnlyRange(key, key);
   // Same inputs queries/calendar.ts feeds the visibility resolver:
   // creator + creator default, attendee user ids, active matter team.
   const events = await prisma.calendarEvent.findMany({
-    where: { startTime: { gte: dayStart, lte: dayEnd } },
+    where: {
+      OR: [
+        { isAllDay: false, startTime: { gte: dayStart, lt: nextDayStart } },
+        {
+          isAllDay: true,
+          startTime: { lt: allDayDay.lt },
+          endTime: { gte: allDayDay.gte },
+        },
+      ],
+    },
     orderBy: { startTime: "asc" },
     include: {
       matter: {
@@ -185,7 +216,14 @@ export async function getTodayAgenda(tz: string): Promise<AgendaItem[]> {
     },
   });
 
-  return events.map((e) => {
+  // All-day rows lead the agenda, then timed events in start order
+  // (Array.sort is stable, so the DB's startTime order is kept).
+  const ordered = [...events].sort(
+    (a, b) => Number(b.isAllDay) - Number(a.isAllDay)
+  );
+
+  return ordered.map((e) => {
+    const time = e.isAllDay ? "All day" : formatTime(e.startTime, tz);
     const canSee = canViewEventDetails({
       viewerId,
       createdById: e.createdById,
@@ -199,12 +237,12 @@ export async function getTodayAgenda(tz: string): Promise<AgendaItem[]> {
       matterTeamUserIds: e.matter?.teamMembers.map((t) => t.userId) ?? [],
     });
 
-    // Busy scrub — identical to the calendar's: the time block stays,
+    // Busy scrub - identical to the calendar's: the time block stays,
     // title / practice area / color are replaced server-side.
     if (!canSee) {
       return {
         id: e.id,
-        time: formatTime(e.startTime, tz),
+        time,
         title: "Busy",
         area: "Firm",
         color: "var(--color-ink-3)",
@@ -214,7 +252,7 @@ export async function getTodayAgenda(tz: string): Promise<AgendaItem[]> {
     const pa = e.matter?.practiceArea;
     return {
       id: e.id,
-      time: formatTime(e.startTime, tz),
+      time,
       title: e.title,
       area: pa?.name ?? "Firm",
       color: pa?.color ?? "var(--color-ink-3)",
@@ -249,14 +287,14 @@ export async function getRecentActivity(
     where: {
       // Sign-in/password audit rows and firm-settings changes (practice
       // area / stage / calendar-default edits, reorder clicks) are
-      // governance, not work — they live on /settings/activity (+
+      // governance, not work - they live on /settings/activity (+
       // /settings/security for auth) only.
       type: { notIn: ["auth", "settings"] },
       AND: [
         // Settlement rows carry gross amounts + lienholders: same key
         // that gates the settlement UI.
         ...(canViewSettlements ? [] : [{ type: { not: "settlement" } }]),
-        // Expense rows (type "filing", "Expense logged · $X · desc")
+        // Expense rows (type "filing", "Expense logged . $X . desc")
         // carry amounts + descriptions: gated by matters.expense.view.
         ...(canViewExpenses
           ? []
@@ -303,16 +341,23 @@ export type FollowUpItem = {
 };
 
 export async function getFollowUpsDueToday(tz: string): Promise<FollowUpItem[]> {
-  const end = endOfTodayInTz(tz);
   const userId = await getCurrentUserId();
+  // `followUpAt` stores the END of its calendar day (the snooze actions
+  // write 23:59:59.999 of the picked date), so the day it belongs to
+  // is its date key. Due = day key <= the viewer's today, i.e. before
+  // the start of tomorrow; overdue = day key strictly before today.
+  // Comparing the raw instant to `Date.now()` would flag a follow-up
+  // "overdue" in the evening of its own day for a viewer west of UTC.
+  const today = todayKey(tz);
+  const dueBefore = dateOnlyRange(today, today).lt;
   const [emails, messages] = await Promise.all([
     prisma.emailThread.findMany({
       // Viewer's own mailbox only (EmailThread -> EmailAccount.userId),
       // in the where so `take` can't be eaten by other users' threads.
       where: {
-        followUpAt: { lte: end },
+        followUpAt: { lt: dueBefore },
         isArchived: false,
-        account: { userId },
+        ...visibleEmailThreadWhere(userId),
       },
       orderBy: { followUpAt: "asc" },
       take: 50,
@@ -321,7 +366,7 @@ export async function getFollowUpsDueToday(tz: string): Promise<FollowUpItem[]> 
       },
     }),
     prisma.messengerThread.findMany({
-      where: { followUpAt: { lte: end }, isArchived: false },
+      where: { followUpAt: { lt: dueBefore }, isArchived: false },
       orderBy: { followUpAt: "asc" },
       take: 50,
       include: {
@@ -331,14 +376,14 @@ export async function getFollowUpsDueToday(tz: string): Promise<FollowUpItem[]> 
     }),
   ]);
 
-  const now = Date.now();
+  const isOverdue = (at: Date): boolean => dateOnlyKey(at) < today;
   const items: FollowUpItem[] = [
     ...emails.map((t) => ({
       id: t.id,
       kind: "email" as const,
       label: t.subject,
       followUpAt: t.followUpAt!,
-      isOverdue: t.followUpAt!.getTime() < now,
+      isOverdue: isOverdue(t.followUpAt!),
       matterName: t.matter?.name ?? null,
       matterColor: t.matter?.color ?? null,
     })),
@@ -350,7 +395,7 @@ export async function getFollowUpsDueToday(tz: string): Promise<FollowUpItem[]> 
         prettyPhoneForFollowUp(t.contactPhone) ??
         "Unknown number",
       followUpAt: t.followUpAt!,
-      isOverdue: t.followUpAt!.getTime() < now,
+      isOverdue: isOverdue(t.followUpAt!),
       matterName: t.defaultMatter?.name ?? null,
       matterColor: t.defaultMatter?.color ?? null,
     })),
@@ -377,37 +422,85 @@ function prettyPhoneForFollowUp(p: string): string {
 export type DeadlineItem = {
   id: string;
   title: string;
+  /** Whole days from the viewer's today: 0 = today, NEGATIVE = overdue. */
   days: number;
   kind: "critical" | "auto_rule" | "manual";
+  matterId: string;
+  matterName: string;
 };
 
+/** Rows loaded for the upcoming window, and for the overdue backlog. */
+const DEADLINES_UPCOMING_LIMIT = 20;
+const DEADLINES_OVERDUE_LIMIT = 10;
+
+export type DeadlinesCard = {
+  /** Overdue rows first (most overdue first), then the upcoming window. */
+  items: DeadlineItem[];
+  /** Open overdue deadlines not shown because of the overdue cap. */
+  overdueHidden: number;
+};
+
+/**
+ * Open deadlines for the "Deadlines this week" card. The upcoming
+ * window (today .. today + withinDays) and the overdue backlog are
+ * queried SEPARATELY so a pile of stale open deadlines can never push
+ * the ones due this week off the card: the window always gets its own
+ * budget, and overdue rows are capped (the most recent lapses show;
+ * the rest are reported in `overdueHidden`).
+ */
 export async function getUpcomingDeadlines(
   tz: string,
   withinDays = 7
-): Promise<DeadlineItem[]> {
-  // Due dates are date-only (server-local midnight), so the window
-  // end is server-local 23:59 of (user's today + withinDays) — the
-  // Date constructor rolls the day overflow into the right month.
-  const [y, m, d] = todayYmdInTz(tz);
-  const end = new Date(y, m - 1, d + withinDays, 23, 59, 59, 999);
+): Promise<DeadlinesCard> {
+  // Due dates are date-only (UTC midnight, ADR-012): the window starts
+  // at the viewer's today and ends at the end of (today + withinDays);
+  // the countdown is calendar days against the viewer's today key.
+  // Archived matters are skipped (the notification sweep skips them too).
+  const today = todayKey(tz);
+  const lastKey = addDaysToKey(today, withinDays);
+  const windowBounds = dateOnlyRange(today, lastKey);
+  const base = { status: "open", matter: { isArchived: false } };
+  const select = {
+    id: true,
+    title: true,
+    dueDate: true,
+    kind: true,
+    matterId: true,
+    matter: { select: { name: true } },
+  } as const;
 
-  const deadlines = await prisma.deadline.findMany({
-    where: { status: "open", dueDate: { lte: end } },
-    orderBy: { dueDate: "asc" },
+  const [upcoming, overdueRecent, overdueTotal] = await Promise.all([
+    prisma.deadline.findMany({
+      where: { ...base, dueDate: windowBounds },
+      orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
+      take: DEADLINES_UPCOMING_LIMIT,
+      select,
+    }),
+    prisma.deadline.findMany({
+      where: { ...base, dueDate: { lt: windowBounds.gte } },
+      orderBy: [{ dueDate: "desc" }, { createdAt: "asc" }],
+      take: DEADLINES_OVERDUE_LIMIT,
+      select,
+    }),
+    prisma.deadline.count({
+      where: { ...base, dueDate: { lt: windowBounds.gte } },
+    }),
+  ]);
+
+  const toItem = (dl: (typeof upcoming)[number]): DeadlineItem => ({
+    id: dl.id,
+    title: dl.title,
+    days: daysUntilDateOnly(dl.dueDate, tz),
+    kind: (dl.kind as DeadlineItem["kind"]) ?? "manual",
+    matterId: dl.matterId,
+    matterName: dl.matter.name,
   });
 
-  // Whole-day countdown against the user's today. Round (not
-  // ceil/floor) so a DST-shortened or -lengthened day still lands
-  // on the integer, and legacy rows stored at UTC midnight (before
-  // the parseLocalDate fix) don't off-by-one.
-  const todayMs = startOfTodayInTz(tz).getTime();
-  const dayMs = 24 * 60 * 60 * 1000;
-  return deadlines.map((d) => ({
-    id: d.id,
-    title: d.title,
-    days: Math.max(0, Math.round((d.dueDate.getTime() - todayMs) / dayMs)),
-    kind: (d.kind as DeadlineItem["kind"]) ?? "manual",
-  }));
+  return {
+    // overdueRecent is newest-first; flip so the most overdue leads.
+    items: [...overdueRecent.reverse(), ...upcoming].map(toItem),
+    overdueHidden: Math.max(0, overdueTotal - overdueRecent.length),
+  };
 }
 
 /** A single open task assigned to the current user, shaped for the dashboard. */
@@ -429,35 +522,73 @@ export type MyTasksGrouped = {
   thisWeek: MyTaskItem[];
   later: MyTaskItem[];
   noDueDate: MyTaskItem[];
+  /** Every open task the user owns (accurate even when capped below). */
   total: number;
+  /** Exact count of open tasks due before the viewer's today (the
+   *  list above is capped per bucket; this is not). */
+  overdueCount: number;
+  /** Open tasks not rendered because of the row caps. */
+  hidden: number;
+};
+
+/** Rows loaded for the tasks card, and rows rendered per bucket. */
+const MY_TASKS_FETCH_LIMIT = 200;
+export const MY_TASKS_BUCKET_LIMIT = 25;
+
+/** Rank for sorting: higher = more urgent. Unknown values rank as "normal". */
+const priorityRank = (priority: string): number => {
+  const idx = (TASK_PRIORITIES as readonly string[]).indexOf(priority);
+  return idx === -1 ? TASK_PRIORITIES.indexOf("normal") : idx;
 };
 
 /**
- * Outstanding (non-done, non-cancelled) tasks owned by the current user,
- * grouped by due-date bucket. Sorted within each bucket by due date asc,
- * then priority. Used by the "Your tasks" dashboard card.
+ * Outstanding (non-closed) tasks owned by the current user, grouped by
+ * due-date bucket. Sorted within each bucket by due date asc, then
+ * priority (urgent first), then creation order. Used by the "Your
+ * tasks" dashboard card.
  */
 export async function getMyOpenTasks(tz: string): Promise<MyTasksGrouped> {
   const userId = await getCurrentUserId();
+  const where = {
+    ownerId: userId,
+    status: { notIn: [...TASK_CLOSED_STATUSES] },
+  };
 
-  const tasks = await prisma.task.findMany({
-    where: {
-      ownerId: userId,
-      status: { notIn: ["done", "cancelled"] },
-    },
-    orderBy: [{ dueDate: "asc" }, { priority: "desc" }, { createdAt: "asc" }],
-    select: {
-      id: true,
-      title: true,
-      priority: true,
-      dueDate: true,
-      matterId: true,
-      matter: { select: { name: true } },
-    },
+  const [tasks, total, overdueCount] = await Promise.all([
+    prisma.task.findMany({
+      where,
+      // Priority is a string column (alphabetical order would put
+      // "high" below "low"), so it is ranked in JS below.
+      orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
+      take: MY_TASKS_FETCH_LIMIT,
+      select: {
+        id: true,
+        title: true,
+        priority: true,
+        dueDate: true,
+        createdAt: true,
+        matterId: true,
+        matter: { select: { name: true } },
+      },
+    }),
+    prisma.task.count({ where }),
+    prisma.task.count({
+      where: {
+        ...where,
+        dueDate: { lt: dateOnlyRange(todayKey(tz), todayKey(tz)).gte },
+      },
+    }),
+  ]);
+
+  // dueDate asc (nulls last), then most urgent first, then oldest.
+  const sorted = [...tasks].sort((a, b) => {
+    const ad = a.dueDate ? a.dueDate.getTime() : Infinity;
+    const bd = b.dueDate ? b.dueDate.getTime() : Infinity;
+    if (ad !== bd) return ad < bd ? -1 : 1;
+    const pr = priorityRank(b.priority) - priorityRank(a.priority);
+    if (pr !== 0) return pr;
+    return a.createdAt.getTime() - b.createdAt.getTime();
   });
-
-  const todayMs = startOfTodayInTz(tz).getTime();
-  const dayMs = 24 * 60 * 60 * 1000;
 
   const grouped: MyTasksGrouped = {
     overdue: [],
@@ -465,34 +596,43 @@ export async function getMyOpenTasks(tz: string): Promise<MyTasksGrouped> {
     thisWeek: [],
     later: [],
     noDueDate: [],
-    total: tasks.length,
+    total,
+    overdueCount,
+    hidden: 0,
   };
 
-  for (const t of tasks) {
+  for (const t of sorted) {
     const item: MyTaskItem = {
       id: t.id,
       title: t.title,
       priority: t.priority,
       dueDate: t.dueDate,
-      // Round (not floor): both ends sit at server-local midnight so
-      // the diff is a whole number of days except across a DST jump
-      // (23h/25h day), where floor would misbucket "tomorrow" as
-      // "today". setHours normalizes legacy UTC-midnight rows.
-      daysUntilDue: t.dueDate
-        ? Math.round(
-            (new Date(t.dueDate).setHours(0, 0, 0, 0) - todayMs) / dayMs
-          )
-        : null,
+      // Calendar days from the viewer's today to the date-only due date.
+      daysUntilDue: t.dueDate ? daysUntilDateOnly(t.dueDate, tz) : null,
       matterId: t.matterId,
       matterName: t.matter?.name ?? null,
     };
 
-    if (item.daysUntilDue === null) grouped.noDueDate.push(item);
-    else if (item.daysUntilDue < 0) grouped.overdue.push(item);
-    else if (item.daysUntilDue === 0) grouped.today.push(item);
-    else if (item.daysUntilDue <= 7) grouped.thisWeek.push(item);
-    else grouped.later.push(item);
+    const bucket =
+      item.daysUntilDue === null
+        ? grouped.noDueDate
+        : item.daysUntilDue < 0
+          ? grouped.overdue
+          : item.daysUntilDue === 0
+            ? grouped.today
+            : item.daysUntilDue <= 7
+              ? grouped.thisWeek
+              : grouped.later;
+    if (bucket.length < MY_TASKS_BUCKET_LIMIT) bucket.push(item);
   }
+
+  const shown =
+    grouped.overdue.length +
+    grouped.today.length +
+    grouped.thisWeek.length +
+    grouped.later.length +
+    grouped.noDueDate.length;
+  grouped.hidden = Math.max(0, total - shown);
 
   return grouped;
 }
@@ -520,7 +660,7 @@ export async function getFirmPulse(tz: string): Promise<FirmPulse | null> {
 
   const [mtdAgg, openInvoices, billedAgg, goals] = await Promise.all([
     prisma.timeEntry.aggregate({
-      where: { date: { gte: startOfMonthInTz(tz) }, billable: true },
+      where: { date: { gte: startOfMonthDateOnly(tz) }, billable: true },
       _sum: { hours: true },
     }),
     prisma.invoice.findMany({
@@ -531,7 +671,7 @@ export async function getFirmPulse(tz: string): Promise<FirmPulse | null> {
       where: { kind: "client", status: { in: BILLED_STATUSES } },
       _sum: { totalAmount: true, paidAmount: true },
     }),
-    // Firm-settable target — was a hardcoded 200.
+    // Firm-settable target - was a hardcoded 200.
     getFirmGoals(),
   ]);
 
