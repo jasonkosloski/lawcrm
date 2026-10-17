@@ -5,31 +5,38 @@
  *   1. The shared Contact record — name, email, organization, and
  *      the multi-phone list. Contacts are firm-wide, so edits here
  *      ripple to every matter the contact appears on (the form
- *      warns the user under the phone editor).
+ *      warns the user under the phone editor). The form posts the
+ *      values it was loaded with (`orig*`) so the server only writes
+ *      what this user changed and can detect a concurrent edit.
  *   2. The MatterContact join row — subrole, notes, and (when not
  *      a client) representation info. Scoped to this matter only.
+ *
+ * The action is dispatched from the submit handler (not the form's
+ * `action`) so a validation error never resets what the user typed.
  */
 
 "use client";
 
-import {
-  useActionState,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { Plus, Star, UserCheck, UserPlus, X } from "lucide-react";
+import { useId, useRef, useState, useTransition } from "react";
+import { Plus, Star, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { updateMatterContact } from "@/app/actions/parties";
 import {
+  CREATE_NEW,
+  PICK_EXISTING,
   partyInitialState,
+  type ContactOption,
   type PartyCategory,
   type PartyFormState,
+  type RepresentationChoice,
 } from "@/lib/party-constants";
 import type { PartyRow } from "@/lib/queries/matter-detail";
-import type { ContactOption } from "./party-composer";
+import {
+  ContactTypeahead,
+  RepresentationToggle,
+  SelectedContactChip,
+  collectOtherErrors,
+} from "./party-pickers";
 
 type PhoneDraft = {
   tempId: string;
@@ -38,11 +45,50 @@ type PhoneDraft = {
   isPrimary: boolean;
 };
 
-const PICK_EXISTING = "__existing__";
-const CREATE_NEW = "__new__";
-const MAX_REP_SUGGESTIONS = 6;
 const CONTACT_LOCKED_HINT =
   "Editing the shared contact (name, email, organization, phones) needs the contacts.edit permission.";
+
+const INPUT_CLASS =
+  "h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4";
+
+/** Phones — hydrate from the loaded contact.phones. A contact that
+ *  predates ContactPhone rows only has the denormalized legacy
+ *  Contact.phone: seed the editor from it, otherwise the empty
+ *  payload would null that number firm-wide on any save. With
+ *  neither, fall back to a single empty row so there's always a
+ *  slot the user can fill. */
+function initialPhoneDrafts(party: PartyRow, idPrefix: string): PhoneDraft[] {
+  if (party.phones.length > 0) {
+    return party.phones.map((p) => ({
+      tempId: p.id,
+      label: p.label ?? "",
+      number: p.number,
+      isPrimary: p.isPrimary,
+    }));
+  }
+  return [
+    {
+      tempId: `phone-${idPrefix}-init`,
+      label: "",
+      number: party.phone ?? "",
+      isPrimary: true,
+    },
+  ];
+}
+
+/** Only phones that have a number are posted - empty drafts are
+ *  ignored (the server drops them as well). */
+function serializePhones(phones: PhoneDraft[]): string {
+  return JSON.stringify(
+    phones
+      .filter((p) => p.number.trim().length > 0)
+      .map((p) => ({
+        label: p.label.trim(),
+        number: p.number.trim(),
+        isPrimary: p.isPrimary,
+      }))
+  );
+}
 
 export function PartyEditForm({
   party,
@@ -61,11 +107,8 @@ export function PartyEditForm({
    *  refuses changes to them, so don't invite edits that will bounce. */
   canEditContact?: boolean;
 }) {
-  const action = updateMatterContact.bind(null, party.id);
-  const [state, formAction, isPending] = useActionState<
-    PartyFormState,
-    FormData
-  >(action, partyInitialState);
+  const [state, setState] = useState<PartyFormState>(partyInitialState);
+  const [isPending, startTransition] = useTransition();
 
   const showsRepresentation = category !== "client";
 
@@ -77,40 +120,27 @@ export function PartyEditForm({
   const [role, setRole] = useState(party.role ?? "");
   const [notes, setNotes] = useState(party.notes ?? "");
 
-  // Phones — hydrate from the loaded contact.phones. A contact that
-  // predates ContactPhone rows only has the denormalized legacy
-  // Contact.phone: seed the editor from it, otherwise the empty
-  // payload would null that number firm-wide on any save. With
-  // neither, fall back to a single empty row so there's always a
-  // slot the user can fill.
   const idPrefix = useId();
-  let phoneCounter = 0;
-  const nextPhoneId = () =>
-    `phone-${idPrefix}-${++phoneCounter}-${Date.now()}`;
-  const [phones, setPhones] = useState<PhoneDraft[]>(() => {
-    if (party.phones.length > 0) {
-      return party.phones.map((p) => ({
-        tempId: p.id,
-        label: p.label ?? "",
-        number: p.number,
-        isPrimary: p.isPrimary,
-      }));
-    }
-    return [
-      {
-        tempId: `phone-${idPrefix}-init`,
-        label: "",
-        number: party.phone ?? "",
-        isPrimary: true,
-      },
-    ];
-  });
+  const phoneSeq = useRef(0);
+  const [phones, setPhones] = useState<PhoneDraft[]>(() =>
+    initialPhoneDrafts(party, idPrefix)
+  );
+  // The list as loaded, posted back so the server can tell what this
+  // user changed from what someone else changed in the meantime.
+  const [orig] = useState(() => ({
+    name: party.name,
+    email: party.email ?? "",
+    organization: party.organization ?? "",
+  }));
+  const [origPhonesJson] = useState(() =>
+    serializePhones(initialPhoneDrafts(party, idPrefix))
+  );
 
   const addPhone = () => {
     setPhones((prev) => [
       ...prev,
       {
-        tempId: nextPhoneId(),
+        tempId: `phone-${idPrefix}-${++phoneSeq.current}`,
         label: "",
         number: "",
         // New phones default to non-primary; user can promote one.
@@ -140,20 +170,8 @@ export function PartyEditForm({
     );
   };
 
-  // Only submit phones that have a number — empty drafts are ignored
-  // server-side anyway (min(1) on number).
-  const phonesJson = JSON.stringify(
-    phones
-      .filter((p) => p.number.trim().length > 0)
-      .map((p) => ({
-        label: p.label.trim(),
-        number: p.number.trim(),
-        isPrimary: p.isPrimary,
-      }))
-  );
-  const [representation, setRepresentation] = useState<
-    "unknown" | "yes" | "no"
-  >(
+  const phonesJson = serializePhones(phones);
+  const [representation, setRepresentation] = useState<RepresentationChoice>(
     party.isRepresented === true
       ? "yes"
       : party.isRepresented === false
@@ -181,62 +199,28 @@ export function PartyEditForm({
         type: "opposing_counsel",
       })
     : null;
-  const initialRepContact = linkedRepContact;
   const [repSelectedId, setRepSelectedId] = useState<string | null>(
     party.representationContactId ?? null
   );
   const [repQuery, setRepQuery] = useState(
-    initialRepContact?.name ?? party.representationName ?? ""
+    linkedRepContact?.name ?? party.representationName ?? ""
   );
-  const [repSuggestionsOpen, setRepSuggestionsOpen] = useState(false);
   const [repFirm, setRepFirm] = useState(party.representationFirm ?? "");
   const [repEmail, setRepEmail] = useState(party.representationEmail ?? "");
   const [repPhone, setRepPhone] = useState(party.representationPhone ?? "");
-  const repInputRef = useRef<HTMLInputElement>(null);
-  const repSuggestionsRef = useRef<HTMLDivElement>(null);
-
-  const repSuggestions = useMemo(() => {
-    const q = repQuery.trim().toLowerCase();
-    if (!q) return [];
-    const matches = contacts.filter((c) => {
-      const inName = c.name.toLowerCase().includes(q);
-      const inOrg = c.organization?.toLowerCase().includes(q) ?? false;
-      const inEmail = c.email?.toLowerCase().includes(q) ?? false;
-      return inName || inOrg || inEmail;
-    });
-    const isAttorneyish = (c: ContactOption) =>
-      c.type === "opposing_counsel" || c.type === "other";
-    matches.sort((a, b) => Number(isAttorneyish(b)) - Number(isAttorneyish(a)));
-    return matches.slice(0, MAX_REP_SUGGESTIONS);
-  }, [repQuery, contacts]);
-
-  useEffect(() => {
-    if (!repSuggestionsOpen) return;
-    const handler = (e: MouseEvent) => {
-      const el = e.target as Node;
-      if (
-        repInputRef.current?.contains(el) ||
-        repSuggestionsRef.current?.contains(el)
-      ) {
-        return;
-      }
-      setRepSuggestionsOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [repSuggestionsOpen]);
+  // After an unlink the chip's button disappears; focus the input that
+  // replaces it so keyboard users aren't dropped on <body>.
+  const [refocusRep, setRefocusRep] = useState(false);
 
   const pickRepExisting = (c: ContactOption) => {
     setRepSelectedId(c.id);
     setRepQuery(c.name);
-    setRepSuggestionsOpen(false);
     setRepFirm(c.organization ?? "");
     setRepEmail(c.email ?? "");
     setRepPhone(c.phone ?? "");
   };
   const clearRepSelection = () => {
     setRepSelectedId(null);
-    setRepSuggestionsOpen(false);
     if (party.representationContactId) {
       // FK-linked rep: the saved display fields belong to the linked
       // Contact. Restoring them would put the form in create-new mode
@@ -252,14 +236,12 @@ export function PartyEditForm({
       // Legacy free-text rep: restore the party's saved fields rather
       // than blanking — an accidental pick + X + save must not
       // overwrite existing representation data with empty strings.
-      // (The composer's identical helper wipes instead; it has no
-      // prior data.)
       setRepQuery(party.representationName ?? "");
       setRepFirm(party.representationFirm ?? "");
       setRepEmail(party.representationEmail ?? "");
       setRepPhone(party.representationPhone ?? "");
     }
-    repInputRef.current?.focus();
+    setRefocusRep(true);
   };
 
   const repSelected = repSelectedId
@@ -268,14 +250,42 @@ export function PartyEditForm({
     : null;
   const repContactMode = repSelected ? PICK_EXISTING : CREATE_NEW;
 
-  useEffect(() => {
-    if (state.status === "ok") onDone();
-  }, [state.status, onDone]);
-
   const errs = state.errors ?? {};
+  const otherErrors = collectOtherErrors(state.errors, [
+    "contactName",
+    "phones",
+    ...(representation === "yes" && !repSelected
+      ? ["newRepresentationName", "representationContactId"]
+      : []),
+  ]);
+
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    startTransition(async () => {
+      const res = await updateMatterContact(
+        party.id,
+        partyInitialState,
+        fd
+      );
+      if (res.status === "ok") onDone();
+      else setState(res);
+    });
+  };
 
   return (
-    <form action={formAction} className="flex flex-col gap-2">
+    <form onSubmit={onSubmit} className="flex flex-col gap-2">
+      {/* Contact values as loaded - lets the server write only what
+          this user changed and spot a concurrent edit. */}
+      <input type="hidden" name="origContactName" value={orig.name} />
+      <input type="hidden" name="origContactEmail" value={orig.email} />
+      <input
+        type="hidden"
+        name="origContactOrganization"
+        value={orig.organization}
+      />
+      <input type="hidden" name="origPhones" value={origPhonesJson} />
+
       {/* Contact core — edits flow back to the global Contact record
           and affect every matter this contact appears on. */}
       <div className="flex flex-col gap-1.5">
@@ -285,17 +295,14 @@ export function PartyEditForm({
         <input
           type="text"
           name="contactName"
+          aria-label="Contact name"
+          maxLength={200}
           value={contactName}
           onChange={(e) => setContactName(e.target.value)}
           readOnly={!canEditContact}
           title={canEditContact ? undefined : CONTACT_LOCKED_HINT}
           placeholder="Name"
-          className={cn(
-            "h-7 px-2 rounded-md border bg-white text-xs text-ink",
-            "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-            "placeholder:text-ink-4",
-            errs.contactName ? "border-warn" : "border-line"
-          )}
+          className={cn(INPUT_CLASS, errs.contactName && "border-warn")}
         />
         {errs.contactName && (
           <div className="text-2xs text-warn">{errs.contactName[0]}</div>
@@ -303,22 +310,26 @@ export function PartyEditForm({
         <input
           type="email"
           name="contactEmail"
+          aria-label="Contact email"
+          maxLength={200}
           value={contactEmail}
           onChange={(e) => setContactEmail(e.target.value)}
           readOnly={!canEditContact}
           title={canEditContact ? undefined : CONTACT_LOCKED_HINT}
           placeholder="Email (optional)"
-          className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+          className={cn(INPUT_CLASS, errs.contactEmail && "border-warn")}
         />
         <input
           type="text"
           name="contactOrganization"
+          aria-label="Contact organization"
+          maxLength={200}
           value={contactOrganization}
           onChange={(e) => setContactOrganization(e.target.value)}
           readOnly={!canEditContact}
           title={canEditContact ? undefined : CONTACT_LOCKED_HINT}
           placeholder="Organization (optional)"
-          className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+          className={INPUT_CLASS}
         />
 
         {/* Phones — multi-entry editor. Star marks the primary. */}
@@ -340,7 +351,7 @@ export function PartyEditForm({
           </div>
           {phones.length === 0 ? (
             <div className="text-2xs text-ink-4 italic py-1">
-              No phones — click "Add phone" to create one.
+              No phones — click &quot;Add phone&quot; to create one.
             </div>
           ) : (
             <div className="flex flex-col gap-1.5">
@@ -376,23 +387,27 @@ export function PartyEditForm({
                   </button>
                   <input
                     type="text"
+                    aria-label="Phone label"
+                    maxLength={40}
                     value={p.label}
                     onChange={(e) =>
                       updatePhone(p.tempId, { label: e.target.value })
                     }
                     readOnly={!canEditContact}
                     placeholder="Label (Mobile…)"
-                    className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+                    className={INPUT_CLASS}
                   />
                   <input
                     type="tel"
+                    aria-label="Phone number"
+                    maxLength={80}
                     value={p.number}
                     onChange={(e) =>
                       updatePhone(p.tempId, { number: e.target.value })
                     }
                     readOnly={!canEditContact}
                     placeholder="(303) 555-0000"
-                    className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4 font-mono"
+                    className={cn(INPUT_CLASS, "font-mono")}
                   />
                   <button
                     type="button"
@@ -407,6 +422,9 @@ export function PartyEditForm({
                 </div>
               ))}
             </div>
+          )}
+          {errs.phones && (
+            <div className="text-2xs text-warn">{errs.phones[0]}</div>
           )}
         </div>
 
@@ -426,18 +444,22 @@ export function PartyEditForm({
           <input
             type="text"
             name="role"
+            aria-label="Subrole"
+            maxLength={80}
             value={role}
             onChange={(e) => setRole(e.target.value)}
             placeholder="Subrole (optional)"
-            className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+            className={cn(INPUT_CLASS, errs.role && "border-warn")}
           />
           <input
             type="text"
             name="notes"
+            aria-label="Notes"
+            maxLength={4000}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Notes about this party"
-            className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+            className={cn(INPUT_CLASS, errs.notes && "border-warn")}
           />
         </div>
       </div>
@@ -484,119 +506,35 @@ export function PartyEditForm({
               )}
             </>
           )}
-          <div className="flex items-center gap-2">
-            <span className="text-2xs font-mono uppercase tracking-wider text-ink-4">
-              Represented
-            </span>
-            <div className="inline-flex items-center gap-0.5 rounded-md border border-line bg-white p-0.5">
-              {(["unknown", "yes", "no"] as const).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setRepresentation(v)}
-                  className={cn(
-                    "text-2xs font-medium px-2 py-0.5 rounded transition-colors",
-                    representation === v
-                      ? "bg-brand-500 text-white"
-                      : "text-ink-3 hover:text-brand-700"
-                  )}
-                >
-                  {v === "unknown"
-                    ? "Unknown"
-                    : v === "yes"
-                      ? "Yes"
-                      : "Pro se"}
-                </button>
-              ))}
-            </div>
-          </div>
+          <RepresentationToggle
+            value={representation}
+            onChange={setRepresentation}
+          />
           {representation === "yes" && (
             <div className="flex flex-col gap-2">
               {repSelected ? (
-                <div className="flex items-center gap-2 h-8 px-2.5 rounded-md border border-brand-200 bg-brand-soft/40 text-xs text-ink-2">
-                  <UserCheck size={13} className="text-brand-700 shrink-0" />
-                  <span className="font-medium truncate flex-1">
-                    {repSelected.name}
-                  </span>
-                  {repSelected.organization && (
-                    <span className="text-2xs font-mono text-ink-4 truncate">
-                      {repSelected.organization}
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={clearRepSelection}
-                    aria-label="Unlink representing contact"
-                    className="p-0.5 rounded text-ink-3 hover:text-ink-2"
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
+                <SelectedContactChip
+                  contact={repSelected}
+                  unlinkLabel="Unlink representing contact"
+                  onUnlink={clearRepSelection}
+                />
               ) : (
-                <div className="relative">
-                  <input
-                    ref={repInputRef}
-                    type="text"
-                    autoComplete="off"
-                    value={repQuery}
-                    onChange={(e) => {
-                      setRepQuery(e.target.value);
-                      setRepSuggestionsOpen(e.target.value.trim().length > 0);
-                    }}
-                    onFocus={() => {
-                      if (repQuery.trim().length > 0) setRepSuggestionsOpen(true);
-                    }}
+                <div>
+                  <ContactTypeahead
+                    contacts={contacts}
+                    query={repQuery}
+                    onQueryChange={setRepQuery}
+                    onPick={pickRepExisting}
                     placeholder="Attorney name — type to search or create"
-                    className={cn(
-                      "h-7 px-2 rounded-md border bg-white text-xs text-ink w-full",
-                      "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-                      "placeholder:text-ink-4",
-                      errs.newRepresentationName || errs.representationContactId
-                        ? "border-warn"
-                        : "border-line"
+                    ariaLabel="Attorney name"
+                    variant="attorney"
+                    compact
+                    invalid={Boolean(
+                      errs.newRepresentationName ||
+                        errs.representationContactId
                     )}
+                    autoFocus={refocusRep}
                   />
-                  {repSuggestionsOpen && repSuggestions.length > 0 && (
-                    <div
-                      ref={repSuggestionsRef}
-                      role="listbox"
-                      className="absolute left-0 right-0 top-[calc(100%+2px)] z-20 rounded-md border border-line bg-white shadow-md py-1"
-                    >
-                      <div className="px-2.5 py-1 text-2xs font-mono uppercase tracking-wider text-ink-4">
-                        Matching contacts
-                      </div>
-                      {repSuggestions.map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => pickRepExisting(c)}
-                          className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-brand-tint"
-                        >
-                          <UserCheck size={12} className="text-ink-4 shrink-0" />
-                          <span className="font-medium text-ink">{c.name}</span>
-                          {c.organization && (
-                            <span className="text-2xs font-mono text-ink-4 truncate">
-                              · {c.organization}
-                            </span>
-                          )}
-                          <span className="text-2xs font-mono text-ink-4 ml-auto shrink-0 capitalize">
-                            {c.type.replace(/_/g, " ")}
-                          </span>
-                        </button>
-                      ))}
-                      <div className="border-t border-line mt-1 pt-1 px-2.5 pb-0.5 text-2xs text-ink-4 flex items-center gap-1">
-                        <UserPlus size={11} />
-                        Or keep typing to create
-                        {repQuery.trim() && (
-                          <span className="text-ink-3 font-medium truncate">
-                            {" “"}
-                            {repQuery.trim()}
-                            {"”"}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )}
                   {(errs.newRepresentationName ||
                     errs.representationContactId) && (
                     <div className="text-2xs text-warn mt-0.5">
@@ -611,24 +549,33 @@ export function PartyEditForm({
                 <div className="grid grid-cols-2 gap-2">
                   <input
                     type="text"
+                    aria-label="Attorney firm"
+                    maxLength={200}
                     value={repFirm}
                     onChange={(e) => setRepFirm(e.target.value)}
                     placeholder="Firm (optional)"
-                    className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+                    className={INPUT_CLASS}
                   />
                   <input
                     type="email"
+                    aria-label="Attorney email"
+                    maxLength={200}
                     value={repEmail}
                     onChange={(e) => setRepEmail(e.target.value)}
                     placeholder="Email (optional)"
-                    className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+                    className={cn(
+                      INPUT_CLASS,
+                      errs.newRepresentationEmail && "border-warn"
+                    )}
                   />
                   <input
                     type="tel"
+                    aria-label="Attorney phone"
+                    maxLength={80}
                     value={repPhone}
                     onChange={(e) => setRepPhone(e.target.value)}
                     placeholder="Phone (optional)"
-                    className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4 col-span-2"
+                    className={cn(INPUT_CLASS, "col-span-2")}
                   />
                 </div>
               )}
@@ -637,9 +584,9 @@ export function PartyEditForm({
         </>
       )}
 
-      {(errs.role || errs.notes) && (
-        <div className="text-2xs text-warn">
-          {errs.role?.[0] ?? errs.notes?.[0]}
+      {otherErrors.length > 0 && (
+        <div role="alert" className="text-2xs text-warn">
+          {otherErrors.join(" ")}
         </div>
       )}
 

@@ -38,7 +38,7 @@ const legacyRepParty: PartyRow = {
   email: null,
   phone: null,
   phones: [],
-  contactType: "opposing_party",
+  contactType: "other",
   isPrimaryClient: false,
   category: "opposing",
   role: "Defendant",
@@ -101,7 +101,7 @@ describe("PartyEditForm — representation picker undo", () => {
     const repInput = screen.getByPlaceholderText(/attorney name/i);
     await user.clear(repInput);
     await user.type(repInput, "Steele");
-    await user.click(screen.getByRole("button", { name: /sonia steele/i }));
+    await user.click(screen.getByRole("option", { name: /sonia steele/i }));
 
     expect(hiddenValue(container, "representationContactMode")).toBe(
       "__existing__"
@@ -124,7 +124,7 @@ describe("PartyEditForm — representation picker undo", () => {
     const repInput = screen.getByPlaceholderText(/attorney name/i);
     await user.clear(repInput);
     await user.type(repInput, "Steele");
-    await user.click(screen.getByRole("button", { name: /sonia steele/i }));
+    await user.click(screen.getByRole("option", { name: /sonia steele/i }));
     await user.click(
       screen.getByRole("button", { name: /unlink representing contact/i })
     );

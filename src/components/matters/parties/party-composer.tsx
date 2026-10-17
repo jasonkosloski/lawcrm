@@ -5,42 +5,43 @@
  * category section on the Parties tab. Expands into a typeahead
  * picker backed by the firm's existing contacts; when nothing
  * matches, the same field becomes the new-contact name and an
- * optional email/phone/organization block appears. A dedicated
- * "Switch to existing" / "Create new" toggle lets the user flip
- * modes explicitly.
+ * optional email/phone/organization block appears. Picking a match
+ * turns the field into a chip; the chip's X unlinks it and returns to
+ * create-new mode.
  *
  * Submit either reuses the picked Contact id or creates a new
  * Contact inline (both paths go through the same server action).
+ * The action is dispatched from the submit handler (not the form's
+ * `action`) so a validation error never resets what the user typed.
  */
 
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useDialogActionState } from "@/hooks/use-dialog-action-state";
-import { Plus, UserCheck, UserPlus, X } from "lucide-react";
+import { useState, useTransition } from "react";
+import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createMatterContact } from "@/app/actions/parties";
 import {
+  CREATE_NEW,
   PARTY_CATEGORY_ADD_LABEL,
+  PICK_EXISTING,
   partyInitialState,
+  type ContactOption,
   type PartyCategory,
   type PartyFormState,
+  type RepresentationChoice,
 } from "@/lib/party-constants";
+import {
+  ContactTypeahead,
+  RepresentationToggle,
+  SelectedContactChip,
+  collectOtherErrors,
+} from "./party-pickers";
 
-const PICK_EXISTING = "__existing__";
-const CREATE_NEW = "__new__";
+export type { ContactOption };
 
-export type ContactOption = {
-  id: string;
-  name: string;
-  organization: string | null;
-  email: string | null;
-  phone: string | null;
-  city: string | null;
-  type: string;
-};
-
-const MAX_SUGGESTIONS = 6;
+const INPUT_CLASS =
+  "h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4";
 
 export function PartyComposer({
   matterId,
@@ -52,47 +53,39 @@ export function PartyComposer({
   contacts: ContactOption[];
 }) {
   const [expanded, setExpanded] = useState(false);
-  const action = createMatterContact.bind(null, matterId);
-  // Wrapped useActionState: masks state left over from a previous
-  // expand, so a failed attempt's errors don't reappear when the
-  // composer is re-expanded. See src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    PartyFormState,
-    FormData
-  >(action, partyInitialState, expanded);
+  const [state, setState] = useState<PartyFormState>(partyInitialState);
+  const [isPending, startTransition] = useTransition();
 
   const showsRepresentation = category !== "client";
 
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [role, setRole] = useState("");
   const [notes, setNotes] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [organization, setOrganization] = useState("");
-  const [representation, setRepresentation] = useState<
-    "unknown" | "yes" | "no"
-  >("unknown");
+  const [representation, setRepresentation] =
+    useState<RepresentationChoice>("unknown");
   // Representation picker — mirrors the main party picker pattern:
   // either select an existing Contact (repSelectedId) or type a name
   // to create a new one inline. The typed query doubles as the new
   // contact's name when nothing is picked.
   const [repQuery, setRepQuery] = useState("");
   const [repSelectedId, setRepSelectedId] = useState<string | null>(null);
-  const [repSuggestionsOpen, setRepSuggestionsOpen] = useState(false);
   const [repFirm, setRepFirm] = useState("");
   const [repEmail, setRepEmail] = useState("");
   const [repPhone, setRepPhone] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
-  const suggestionsRef = useRef<HTMLDivElement>(null);
-  const repInputRef = useRef<HTMLInputElement>(null);
-  const repSuggestionsRef = useRef<HTMLDivElement>(null);
+  // After an unlink the chip (and its button) disappears; the input
+  // that replaces it takes focus so keyboard users aren't dropped on
+  // <body>.
+  const [refocusName, setRefocusName] = useState(false);
+  const [refocusRep, setRefocusRep] = useState(false);
 
   const reset = () => {
+    setState(partyInitialState);
     setQuery("");
     setSelectedId(null);
-    setSuggestionsOpen(false);
     setRole("");
     setNotes("");
     setEmail("");
@@ -101,107 +94,28 @@ export function PartyComposer({
     setRepresentation("unknown");
     setRepQuery("");
     setRepSelectedId(null);
-    setRepSuggestionsOpen(false);
     setRepFirm("");
     setRepEmail("");
     setRepPhone("");
+    setRefocusName(false);
+    setRefocusRep(false);
   };
-
-  // Reset + collapse on success. Deps key on the state OBJECT, not
-  // state.status — identity is the reliable "a submission just
-  // finished" signal (see TimeComposer for the full rationale).
-  useEffect(() => {
-    if (state.status === "ok") {
-      reset();
-      setExpanded(false);
-    }
-  }, [state]);
-
-  const suggestions = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return [];
-    return contacts
-      .filter((c) => {
-        const inName = c.name.toLowerCase().includes(q);
-        const inOrg = c.organization?.toLowerCase().includes(q) ?? false;
-        const inEmail = c.email?.toLowerCase().includes(q) ?? false;
-        return inName || inOrg || inEmail;
-      })
-      .slice(0, MAX_SUGGESTIONS);
-  }, [query, contacts]);
-
-  // Representation typeahead — bias toward attorney-shaped contacts
-  // (opposing_counsel and other) so picking the right rep is fast,
-  // but fall back to all contacts when the query is specific enough
-  // that the user obviously knows who they want.
-  const repSuggestions = useMemo(() => {
-    const q = repQuery.trim().toLowerCase();
-    if (!q) return [];
-    const matches = contacts.filter((c) => {
-      const inName = c.name.toLowerCase().includes(q);
-      const inOrg = c.organization?.toLowerCase().includes(q) ?? false;
-      const inEmail = c.email?.toLowerCase().includes(q) ?? false;
-      return inName || inOrg || inEmail;
-    });
-    // Prefer attorney-shaped contacts at the top.
-    const isAttorneyish = (c: ContactOption) =>
-      c.type === "opposing_counsel" || c.type === "other";
-    matches.sort((a, b) => Number(isAttorneyish(b)) - Number(isAttorneyish(a)));
-    return matches.slice(0, MAX_SUGGESTIONS);
-  }, [repQuery, contacts]);
-
-  // Close the suggestions popover on outside click.
-  useEffect(() => {
-    if (!suggestionsOpen) return;
-    const handler = (e: MouseEvent) => {
-      const el = e.target as Node;
-      if (
-        inputRef.current?.contains(el) ||
-        suggestionsRef.current?.contains(el)
-      ) {
-        return;
-      }
-      setSuggestionsOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [suggestionsOpen]);
-
-  // Same outside-click behavior for the rep picker.
-  useEffect(() => {
-    if (!repSuggestionsOpen) return;
-    const handler = (e: MouseEvent) => {
-      const el = e.target as Node;
-      if (
-        repInputRef.current?.contains(el) ||
-        repSuggestionsRef.current?.contains(el)
-      ) {
-        return;
-      }
-      setRepSuggestionsOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [repSuggestionsOpen]);
 
   const pickExisting = (c: ContactOption) => {
     setSelectedId(c.id);
     setQuery(c.name);
-    setSuggestionsOpen(false);
   };
   const clearSelection = () => {
     setSelectedId(null);
     // Also clear the picked name: leaving it in the query would make
     // the next save create a duplicate Contact with the same name.
     setQuery("");
-    setSuggestionsOpen(false);
-    inputRef.current?.focus();
+    setRefocusName(true);
   };
 
   const pickRepExisting = (c: ContactOption) => {
     setRepSelectedId(c.id);
     setRepQuery(c.name);
-    setRepSuggestionsOpen(false);
     // Pre-fill the optional fields from the picked contact so the
     // user can see what they're getting; on submit these are ignored
     // when mode === PICK_EXISTING.
@@ -212,11 +126,10 @@ export function PartyComposer({
   const clearRepSelection = () => {
     setRepSelectedId(null);
     setRepQuery("");
-    setRepSuggestionsOpen(false);
     setRepFirm("");
     setRepEmail("");
     setRepPhone("");
-    repInputRef.current?.focus();
+    setRefocusRep(true);
   };
 
   const errs = state.errors ?? {};
@@ -229,6 +142,31 @@ export function PartyComposer({
     ? contacts.find((c) => c.id === repSelectedId)
     : null;
   const repContactMode = repSelected ? PICK_EXISTING : CREATE_NEW;
+
+  // Errors with no inline slot (subrole, notes, phone, org, email,
+  // a picked contact's contactId, form-level) get one summary line so
+  // a rejected submit never looks like it did nothing.
+  const inlineKeys = [
+    ...(selected ? [] : ["newContactName", "contactId"]),
+    ...(representation === "yes" && !repSelected
+      ? ["newRepresentationName", "representationContactId"]
+      : []),
+  ];
+  const otherErrors = collectOtherErrors(state.errors, inlineKeys);
+
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    startTransition(async () => {
+      const res = await createMatterContact(matterId, partyInitialState, fd);
+      if (res.status === "ok") {
+        reset();
+        setExpanded(false);
+      } else {
+        setState(res);
+      }
+    });
+  };
 
   if (!expanded) {
     return (
@@ -248,7 +186,7 @@ export function PartyComposer({
   }
 
   return (
-    <form action={formAction} className="flex flex-col gap-2">
+    <form onSubmit={onSubmit} className="flex flex-col gap-2">
       <input type="hidden" name="category" value={category} />
       <input type="hidden" name="contactMode" value={contactMode} />
       {selected && (
@@ -260,90 +198,24 @@ export function PartyComposer({
 
       {/* Name / typeahead — or chip when an existing contact is picked. */}
       {selected ? (
-        <div className="flex items-center gap-2 h-8 px-2.5 rounded-md border border-brand-200 bg-brand-soft/40 text-xs text-ink-2">
-          <UserCheck size={13} className="text-brand-700 shrink-0" />
-          <span className="font-medium truncate flex-1">
-            {selected.name}
-          </span>
-          {selected.organization && (
-            <span className="text-2xs font-mono text-ink-4 truncate">
-              {selected.organization}
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={clearSelection}
-            aria-label="Unlink selected contact"
-            className="p-0.5 rounded text-ink-3 hover:text-ink-2"
-          >
-            <X size={12} />
-          </button>
-        </div>
+        <SelectedContactChip
+          contact={selected}
+          unlinkLabel="Unlink selected contact"
+          onUnlink={clearSelection}
+        />
       ) : (
-        <div className="relative">
-          <input
-            ref={inputRef}
-            type="text"
-            autoComplete="off"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setSuggestionsOpen(e.target.value.trim().length > 0);
-            }}
-            onFocus={() => {
-              if (query.trim().length > 0) setSuggestionsOpen(true);
-            }}
+        <div>
+          <ContactTypeahead
+            contacts={contacts}
+            query={query}
+            onQueryChange={setQuery}
+            onPick={pickExisting}
             placeholder="Name — type to search or create"
-            className={cn(
-              "h-8 px-2.5 rounded-md border bg-white text-xs text-ink w-full",
-              "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-              "placeholder:text-ink-4",
-              errs.newContactName || errs.contactId ? "border-warn" : "border-line"
-            )}
+            ariaLabel="Party name"
+            variant="party"
+            invalid={Boolean(errs.newContactName || errs.contactId)}
+            autoFocus={refocusName}
           />
-          {suggestionsOpen && suggestions.length > 0 && (
-            <div
-              ref={suggestionsRef}
-              role="listbox"
-              className="absolute left-0 right-0 top-[calc(100%+2px)] z-20 rounded-md border border-line bg-white shadow-md py-1"
-            >
-              <div className="px-2.5 py-1 text-2xs font-mono uppercase tracking-wider text-ink-4">
-                Matching contacts
-              </div>
-              {suggestions.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => pickExisting(c)}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-brand-tint"
-                >
-                  <UserCheck size={12} className="text-ink-4 shrink-0" />
-                  <span className="font-medium text-ink">{c.name}</span>
-                  {c.organization && (
-                    <span className="text-2xs font-mono text-ink-4 truncate">
-                      · {c.organization}
-                    </span>
-                  )}
-                  {c.city && (
-                    <span className="text-2xs font-mono text-ink-4 ml-auto shrink-0">
-                      {c.city}
-                    </span>
-                  )}
-                </button>
-              ))}
-              <div className="border-t border-line mt-1 pt-1 px-2.5 pb-0.5 text-2xs text-ink-4 flex items-center gap-1">
-                <UserPlus size={11} />
-                Or keep typing to create
-                {query.trim() && (
-                  <span className="text-ink-3 font-medium truncate">
-                    {" “"}
-                    {query.trim()}
-                    {"”"}
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
           {errs.newContactName && (
             <div className="text-2xs text-warn mt-0.5">
               {errs.newContactName[0]}
@@ -363,31 +235,39 @@ export function PartyComposer({
           <input
             type="email"
             name="newContactEmail"
+            aria-label="Email"
+            maxLength={200}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Email (optional)"
             className={cn(
-              "h-7 px-2 rounded-md border bg-white text-xs text-ink",
-              "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-              "placeholder:text-ink-4",
-              errs.newContactEmail ? "border-warn" : "border-line"
+              INPUT_CLASS,
+              errs.newContactEmail && "border-warn"
             )}
           />
           <input
             type="tel"
             name="newContactPhone"
+            aria-label="Phone"
+            maxLength={80}
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="Phone (optional)"
-            className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+            className={cn(INPUT_CLASS, errs.newContactPhone && "border-warn")}
           />
           <input
             type="text"
             name="newContactOrganization"
+            aria-label="Organization"
+            maxLength={200}
             value={organization}
             onChange={(e) => setOrganization(e.target.value)}
             placeholder="Organization (optional)"
-            className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4 col-span-2"
+            className={cn(
+              INPUT_CLASS,
+              "col-span-2",
+              errs.newContactOrganization && "border-warn"
+            )}
           />
         </div>
       )}
@@ -397,18 +277,22 @@ export function PartyComposer({
         <input
           type="text"
           name="role"
+          aria-label="Subrole"
+          maxLength={80}
           value={role}
           onChange={(e) => setRole(e.target.value)}
           placeholder={rolePlaceholder(category)}
-          className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+          className={cn(INPUT_CLASS, errs.role && "border-warn")}
         />
         <input
           type="text"
           name="notes"
+          aria-label="Notes"
+          maxLength={4000}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Notes about this party's role in the matter (optional)"
-          className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+          className={cn(INPUT_CLASS, errs.notes && "border-warn")}
         />
       </div>
 
@@ -459,115 +343,37 @@ export function PartyComposer({
               )}
             </>
           )}
-          <div className="flex items-center gap-2 pt-1">
-            <span className="text-2xs font-mono uppercase tracking-wider text-ink-4">
-              Represented
-            </span>
-            <div className="inline-flex items-center gap-0.5 rounded-md border border-line bg-white p-0.5">
-              {(["unknown", "yes", "no"] as const).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setRepresentation(v)}
-                  className={cn(
-                    "text-2xs font-medium px-2 py-0.5 rounded transition-colors capitalize",
-                    representation === v
-                      ? "bg-brand-500 text-white"
-                      : "text-ink-3 hover:text-brand-700"
-                  )}
-                >
-                  {v === "unknown" ? "Unknown" : v === "yes" ? "Yes" : "Pro se"}
-                </button>
-              ))}
-            </div>
+          <div className="pt-1">
+            <RepresentationToggle
+              value={representation}
+              onChange={setRepresentation}
+            />
           </div>
           {representation === "yes" && (
             <div className="flex flex-col gap-2">
               {repSelected ? (
-                <div className="flex items-center gap-2 h-8 px-2.5 rounded-md border border-brand-200 bg-brand-soft/40 text-xs text-ink-2">
-                  <UserCheck size={13} className="text-brand-700 shrink-0" />
-                  <span className="font-medium truncate flex-1">
-                    {repSelected.name}
-                  </span>
-                  {repSelected.organization && (
-                    <span className="text-2xs font-mono text-ink-4 truncate">
-                      {repSelected.organization}
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={clearRepSelection}
-                    aria-label="Unlink representing contact"
-                    className="p-0.5 rounded text-ink-3 hover:text-ink-2"
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
+                <SelectedContactChip
+                  contact={repSelected}
+                  unlinkLabel="Unlink representing contact"
+                  onUnlink={clearRepSelection}
+                />
               ) : (
-                <div className="relative">
-                  <input
-                    ref={repInputRef}
-                    type="text"
-                    autoComplete="off"
-                    value={repQuery}
-                    onChange={(e) => {
-                      setRepQuery(e.target.value);
-                      setRepSuggestionsOpen(e.target.value.trim().length > 0);
-                    }}
-                    onFocus={() => {
-                      if (repQuery.trim().length > 0) setRepSuggestionsOpen(true);
-                    }}
+                <div>
+                  <ContactTypeahead
+                    contacts={contacts}
+                    query={repQuery}
+                    onQueryChange={setRepQuery}
+                    onPick={pickRepExisting}
                     placeholder="Attorney name — type to search or create"
-                    className={cn(
-                      "h-7 px-2 rounded-md border bg-white text-xs text-ink w-full",
-                      "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-                      "placeholder:text-ink-4",
-                      errs.newRepresentationName || errs.representationContactId
-                        ? "border-warn"
-                        : "border-line"
+                    ariaLabel="Attorney name"
+                    variant="attorney"
+                    compact
+                    invalid={Boolean(
+                      errs.newRepresentationName ||
+                        errs.representationContactId
                     )}
+                    autoFocus={refocusRep}
                   />
-                  {repSuggestionsOpen && repSuggestions.length > 0 && (
-                    <div
-                      ref={repSuggestionsRef}
-                      role="listbox"
-                      className="absolute left-0 right-0 top-[calc(100%+2px)] z-20 rounded-md border border-line bg-white shadow-md py-1"
-                    >
-                      <div className="px-2.5 py-1 text-2xs font-mono uppercase tracking-wider text-ink-4">
-                        Matching contacts
-                      </div>
-                      {repSuggestions.map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => pickRepExisting(c)}
-                          className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-brand-tint"
-                        >
-                          <UserCheck size={12} className="text-ink-4 shrink-0" />
-                          <span className="font-medium text-ink">{c.name}</span>
-                          {c.organization && (
-                            <span className="text-2xs font-mono text-ink-4 truncate">
-                              · {c.organization}
-                            </span>
-                          )}
-                          <span className="text-2xs font-mono text-ink-4 ml-auto shrink-0 capitalize">
-                            {c.type.replace(/_/g, " ")}
-                          </span>
-                        </button>
-                      ))}
-                      <div className="border-t border-line mt-1 pt-1 px-2.5 pb-0.5 text-2xs text-ink-4 flex items-center gap-1">
-                        <UserPlus size={11} />
-                        Or keep typing to create
-                        {repQuery.trim() && (
-                          <span className="text-ink-3 font-medium truncate">
-                            {" “"}
-                            {repQuery.trim()}
-                            {"”"}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )}
                   {(errs.newRepresentationName ||
                     errs.representationContactId) && (
                     <div className="text-2xs text-warn mt-0.5">
@@ -585,35 +391,45 @@ export function PartyComposer({
                 <div className="grid grid-cols-2 gap-2">
                   <input
                     type="text"
+                    aria-label="Attorney firm"
+                    maxLength={200}
                     value={repFirm}
                     onChange={(e) => setRepFirm(e.target.value)}
                     placeholder="Firm (optional)"
-                    className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+                    className={INPUT_CLASS}
                   />
                   <input
                     type="email"
+                    aria-label="Attorney email"
+                    maxLength={200}
                     value={repEmail}
                     onChange={(e) => setRepEmail(e.target.value)}
                     placeholder="Email (optional)"
                     className={cn(
-                      "h-7 px-2 rounded-md border bg-white text-xs text-ink",
-                      "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-                      "placeholder:text-ink-4",
-                      errs.newRepresentationEmail ? "border-warn" : "border-line"
+                      INPUT_CLASS,
+                      errs.newRepresentationEmail && "border-warn"
                     )}
                   />
                   <input
                     type="tel"
+                    aria-label="Attorney phone"
+                    maxLength={80}
                     value={repPhone}
                     onChange={(e) => setRepPhone(e.target.value)}
                     placeholder="Phone (optional)"
-                    className="h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4 col-span-2"
+                    className={cn(INPUT_CLASS, "col-span-2")}
                   />
                 </div>
               )}
             </div>
           )}
         </>
+      )}
+
+      {otherErrors.length > 0 && (
+        <div role="alert" className="text-2xs text-warn">
+          {otherErrors.join(" ")}
+        </div>
       )}
 
       <div className="flex items-center justify-end gap-2">

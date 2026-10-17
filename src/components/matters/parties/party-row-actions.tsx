@@ -34,7 +34,7 @@ export function PartyRowActions({
       onClick={onDelete}
       disabled={pending}
       title="Remove from matter"
-      aria-label="Remove party"
+      aria-label={`Remove ${name}`}
       className={cn(
         "inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-3 hover:text-warn hover:bg-warn-soft transition-colors",
         pending && "opacity-60 cursor-wait"

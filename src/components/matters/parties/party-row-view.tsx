@@ -4,8 +4,9 @@
  *
  * In display mode it renders the standard cells; in edit mode it
  * collapses into a single colSpan cell with the PartyEditForm. Edit
- * is available on every party (client, opposing, witnesses, other).
- * Delete is hidden on the primary client row — see PartyRowActions.
+ * is available on every party (client, opposing, witnesses, other)
+ * for viewers holding parties.edit; delete needs parties.delete and is
+ * hidden on the primary client row — see PartyRowActions.
  */
 
 "use client";
@@ -31,6 +32,8 @@ export function PartyRowView({
   contacts,
   colSpan,
   canEditContact = true,
+  canEdit = true,
+  canDelete = true,
 }: {
   party: PartyRow;
   category: PartyCategory;
@@ -43,10 +46,15 @@ export function PartyRowView({
   colSpan: number;
   /** Viewer holds contacts.edit (shared Contact fields editable). */
   canEditContact?: boolean;
+  /** Viewer holds parties.edit - shows the Edit pencil. The server
+   *  gate stays authoritative; this just hides dead controls. */
+  canEdit?: boolean;
+  /** Viewer holds parties.delete - shows the Remove button. */
+  canDelete?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
 
-  if (editing) {
+  if (editing && canEdit) {
     return (
       <TableRow>
         <TableCell colSpan={colSpan} className="p-3 bg-paper-2/30">
@@ -66,7 +74,13 @@ export function PartyRowView({
     <TableRow>
       <TableCell className="pl-4 font-medium text-ink">
         <div className="flex items-center gap-2">
-          <span>{party.name}</span>
+          <Link
+            href={`/contacts/${party.contactId}`}
+            className="hover:text-brand-700 hover:underline"
+            title={`Open ${party.name} in contacts`}
+          >
+            {party.name}
+          </Link>
           {party.isPrimaryClient && (
             <span
               className="text-2xs font-medium px-1.5 py-0.5 rounded-full bg-brand-soft text-brand-700 border border-brand-200"
@@ -133,19 +147,21 @@ export function PartyRowView({
       </TableCell>
       <TableCell className="pr-4">
         <div className="inline-flex items-center gap-0.5">
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            title="Edit party"
-            aria-label="Edit party"
-            className={cn(
-              "inline-flex items-center justify-center w-7 h-7 rounded-md",
-              "text-ink-3 hover:text-brand-700 hover:bg-brand-soft transition-colors"
-            )}
-          >
-            <Pencil size={12} />
-          </button>
-          {!party.isPrimaryClient && (
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              title="Edit party"
+              aria-label={`Edit ${party.name}`}
+              className={cn(
+                "inline-flex items-center justify-center w-7 h-7 rounded-md",
+                "text-ink-3 hover:text-brand-700 hover:bg-brand-soft transition-colors"
+              )}
+            >
+              <Pencil size={12} />
+            </button>
+          )}
+          {canDelete && !party.isPrimaryClient && (
             <PartyRowActions
               matterContactId={party.id}
               name={party.name}

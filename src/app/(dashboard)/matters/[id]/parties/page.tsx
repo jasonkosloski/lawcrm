@@ -44,11 +44,14 @@ export default async function MatterPartiesPage({
   await requireUser();
   const { id } = await params;
 
-  const [parties, contacts, canEditContact] = await Promise.all([
+  const [parties, contacts, canEditContact, canCreate, canEdit, canDelete] =
+    await Promise.all([
     getMatterParties(id),
     // All active contacts feed the composer's typeahead. Small
     // dataset for a firm so passing them all is fine; revisit with
-    // server search when the contact list grows past a few hundred.
+    // server search when the contact list grows past a few hundred
+    // (deferred: needs a debounced search action plus a by-id fetch
+    // for the selected chips; the pickers' props and tests change).
     prisma.contact.findMany({
       where: { isActive: true },
       select: {
@@ -65,6 +68,11 @@ export default async function MatterPartiesPage({
     // The party edit form edits the firm-wide Contact too; that part
     // needs contacts.edit on top of parties.edit.
     currentUserHasPermission("contacts.edit"),
+    // Hide controls the viewer can't use: the server gates redirect
+    // to "/" on denial, which would throw away what they typed.
+    currentUserHasPermission("parties.create"),
+    currentUserHasPermission("parties.edit"),
+    currentUserHasPermission("parties.delete"),
   ]);
 
   // Bucket by category; unknown buckets (shouldn't happen after the
@@ -90,6 +98,9 @@ export default async function MatterPartiesPage({
             matterId={id}
             contacts={contacts}
             canEditContact={canEditContact}
+            canCreate={canCreate}
+            canEdit={canEdit}
+            canDelete={canDelete}
           />
         );
       })}
@@ -103,12 +114,18 @@ function CategorySection({
   matterId,
   contacts,
   canEditContact,
+  canCreate,
+  canEdit,
+  canDelete,
 }: {
   category: PartyCategory;
   rows: PartyRow[];
   matterId: string;
   contacts: ContactOption[];
   canEditContact: boolean;
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
 }) {
   const showsRepresentation = category !== "client";
   // Clients are typically individuals whose organization (if any)
@@ -156,6 +173,8 @@ function CategorySection({
                   showsOrganization={showsOrganization}
                   contacts={contacts}
                   canEditContact={canEditContact}
+                  canEdit={canEdit}
+                  canDelete={canDelete}
                   colSpan={
                     // name + subrole + contact + notes + actions = 5
                     5 +
@@ -167,13 +186,15 @@ function CategorySection({
             </TableBody>
           </Table>
         )}
-        <CardContent className="px-4 py-3 border-t border-line">
-          <PartyComposer
-            matterId={matterId}
-            category={category}
-            contacts={contacts}
-          />
-        </CardContent>
+        {canCreate && (
+          <CardContent className="px-4 py-3 border-t border-line">
+            <PartyComposer
+              matterId={matterId}
+              category={category}
+              contacts={contacts}
+            />
+          </CardContent>
+        )}
       </Card>
     </section>
   );
