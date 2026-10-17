@@ -7,7 +7,10 @@
  * warning whenever the rendered element isn't a real <button>.
  * We frequently swap in <Link> via the `render` prop (so that
  * "New matter" etc. behaves like a real <a> for cmd-click and
- * accessibility). To suppress the warning without losing native
+ * accessibility). Base UI also stamps role="button" on every
+ * non-native button, which would turn those links into "buttons"
+ * for assistive tech, so the wrapper strips it for <a href>/<Link>
+ * renders. To suppress the warning without losing native
  * button semantics elsewhere, the wrapper:
  *
  *   - defaults `nativeButton` to `false` when `render` is provided
@@ -20,6 +23,7 @@
 
 import { describe, expect, test } from "vitest";
 import { render, screen } from "@testing-library/react";
+import Link from "next/link";
 import { Button } from "./button";
 
 describe("Button — render passthrough + nativeButton inference", () => {
@@ -34,9 +38,30 @@ describe("Button — render passthrough + nativeButton inference", () => {
     render(
       <Button render={<a href="/somewhere" />}>Go</Button>
     );
-    const el = screen.getByText(/go/i);
+    const el = screen.getByRole("link", { name: /go/i });
     expect(el.tagName).toBe("A");
     expect(el).toHaveAttribute("href", "/somewhere");
+  });
+
+  test("a link render is a link to assistive tech, not role=button (F984)", () => {
+    render(
+      <>
+        <Button render={<a href="/plain" />}>Plain</Button>
+        <Button render={<Link href="/next" />}>Next link</Button>
+      </>
+    );
+    expect(screen.getByRole("link", { name: "Plain" })).not.toHaveAttribute(
+      "role"
+    );
+    expect(screen.getByRole("link", { name: "Next link" })).not.toHaveAttribute(
+      "role"
+    );
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  test("a non-link render override keeps the button role", () => {
+    render(<Button render={<span />}>Custom</Button>);
+    expect(screen.getByRole("button", { name: "Custom" })).toBeInTheDocument();
   });
 
   test("applies the variant className regardless of render override", () => {

@@ -19,8 +19,10 @@ export const LEAD_STAGES = [
 
 export type LeadStage = (typeof LEAD_STAGES)[number];
 
-/** Ordering for stages — new leads surface first, converted/declined
- *  drop to the bottom (they're done). */
+/** Canonical display ordering for stages — new leads first,
+ *  converted/declined last (they're done). Not applied by any query
+ *  yet (queries/leads.ts only re-exports it); sort with it where an
+ *  active-first order is wanted. */
 export const LEAD_STAGE_ORDER = [
   "new",
   "contacted",
@@ -38,9 +40,8 @@ export const LEAD_CLOSED_STAGES = [
   "declined",
 ] as const satisfies readonly LeadStage[];
 
-/// Open-pipeline stages, in funnel order. The reports funnel and the
-/// intake queue both iterate this so a new stage shows up everywhere
-/// at once.
+/// Open-pipeline stages, in funnel order. The reports funnel iterates
+/// this so a new stage shows up there automatically.
 export const LEAD_OPEN_STAGES = [
   "new",
   "contacted",

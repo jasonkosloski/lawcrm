@@ -24,7 +24,7 @@ import { NewEventButton } from "./new-event-button";
 describe("NewEventButton", () => {
   test("offers the full-page and quick-composer entry points", () => {
     render(<NewEventButton />);
-    expect(screen.getByRole("button", { name: /new event/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /new event/i })).toHaveAttribute(
       "href",
       "/calendar/events/new"
     );

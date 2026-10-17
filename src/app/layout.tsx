@@ -6,8 +6,9 @@
  * - JetBrains Mono: Timestamps, metadata, code, monospace elements
  * - Fraunces: Display headings and email body text (personality font)
  *
- * Wraps the app in the Providers component (tooltips). Page titles use
- * the `%s · Kosloski Law CRM` template, so a page that exports
+ * Wraps the app in the Providers component (the slot for app-wide client
+ * context; currently a passthrough). Page titles use the
+ * `%s · Kosloski Law CRM` template, so a page that exports
  * `metadata.title` / `generateMetadata` gets a distinguishable tab.
  */
 

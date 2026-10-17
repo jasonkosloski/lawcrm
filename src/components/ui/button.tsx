@@ -1,3 +1,4 @@
+import * as React from "react"
 import { Button as ButtonPrimitive } from "@base-ui/react/button"
 import { cva, type VariantProps } from "class-variance-authority"
 
@@ -55,12 +56,23 @@ function Button({
   // otherwise. (Callers who really do render a <button> can pass
   // `nativeButton` explicitly.)
   const resolvedNativeButton = nativeButton ?? render === undefined;
+  // Base UI adds role="button" to every non-native button. On an
+  // <a href> / <Link> that makes screen readers announce a button, drops
+  // the link from the links rotor, and promises Space-to-activate that
+  // an anchor doesn't deliver. Links keep their native role: dropping it
+  // here (before the caller's own props, so an explicit `role` still
+  // wins) leaves a plain <a href>.
+  const rendersLink =
+    !resolvedNativeButton &&
+    React.isValidElement<{ href?: unknown }>(render) &&
+    render.props.href !== undefined
   return (
     <ButtonPrimitive
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
       render={render}
       nativeButton={resolvedNativeButton}
+      {...(rendersLink ? { role: undefined } : null)}
       {...props}
     />
   )

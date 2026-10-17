@@ -1,7 +1,7 @@
 /**
  * Tests for the slug-label formatter. Contract: raw snake_case
  * slugs never reach the screen — everything comes out title-cased
- * with prefixes/suffixes stripped, and clean input passes through.
+ * with the namespace prefix stripped, and clean input passes through.
  */
 
 import { describe, expect, test } from "vitest";
@@ -25,16 +25,19 @@ describe("formatEmailLabel", () => {
     expect(formatEmailLabel("follow_up")).toBe("Follow Up");
   });
 
-  test("redundant _label suffix strips", () => {
-    expect(formatEmailLabel("privileged_label")).toBe("Privileged");
-    expect(formatEmailLabel("opposing_counsel_label")).toBe(
-      "Opposing Counsel"
+  test("a trailing _label is part of the name (real Gmail user labels), not noise", () => {
+    expect(formatEmailLabel("privileged_label")).toBe("Privileged Label");
+    expect(formatEmailLabel("custom:shipping_label")).toBe("Shipping Label");
+    expect(formatEmailLabel("custom:white-label")).toBe("White Label");
+    // "Privileged" and "Privileged Label" stay distinguishable.
+    expect(formatEmailLabel("privileged")).not.toBe(
+      formatEmailLabel("custom:privileged_label")
     );
   });
 
   test("custom: namespace prefix strips", () => {
     expect(formatEmailLabel("custom:fee_dispute")).toBe("Fee Dispute");
-    expect(formatEmailLabel("custom:privileged_label")).toBe("Privileged");
+    expect(formatEmailLabel("custom:fee_dispute_2")).toBe("Fee Dispute 2");
   });
 
   test("hyphens and screaming-case normalize too", () => {

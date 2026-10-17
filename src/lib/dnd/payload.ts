@@ -68,15 +68,16 @@ export function setDragPayload<K extends string, D>(
  */
 export function hasKind(e: React.DragEvent, kind: string): boolean {
   const types = Array.from(e.dataTransfer.types);
-  // `getData` for non-text MIMEs is restricted during dragover in
-  // Safari — fall back to a presence check + `kind` MIME being
-  // present at all. We can't read the kind value here on Safari,
-  // so the safest thing is "if our custom MIME is present, treat
-  // it as ours and let onDrop confirm." The kind argument is
-  // therefore advisory at this stage; readPayload below is the
-  // authoritative check.
+  // During dragenter/dragover/dragleave EVERY browser keeps the
+  // DataTransfer in "protected mode": `types` is readable but
+  // `getData` returns "" (the data only becomes readable on drop).
+  // So the empty string is the NORMAL case mid-drag, not an edge case:
+  // "our custom MIME is present" is the only signal we have, and we
+  // treat it as ours and let onDrop confirm. A non-empty value (some
+  // engines / synthetic events expose it) is compared exactly. The kind
+  // argument is therefore advisory at this stage; readPayload below is
+  // the authoritative check.
   if (types.includes(KIND_MIME)) {
-    // Best-effort exact-kind read (works in Chromium / Firefox).
     const k = e.dataTransfer.getData(KIND_MIME);
     return k === "" || k === kind;
   }

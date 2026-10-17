@@ -1,25 +1,17 @@
 /**
  * Application Providers
  *
- * Wraps the app with the context providers every route needs:
- * - TooltipProvider for shadcn tooltips
- *
- * (TanStack Query used to live here; nothing ever consumed it —
- * reads happen in server components and mutations are server
- * actions — so the provider and devtools were removed.)
- *
- * Rendered as a client component so providers that need React
- * context work correctly in the Next.js App Router.
+ * Root slot for app-wide client context providers. There are none right
+ * now: the TanStack React Query client and the shadcn TooltipProvider that
+ * used to live here had no consumers (no useQuery/useMutation, no Tooltip)
+ * but shipped in every route's client bundle, so they were removed. Add a
+ * provider here only together with its first consumer.
  */
-
-"use client";
-
-import { TooltipProvider } from "@/components/ui/tooltip";
 
 interface ProvidersProps {
   children: React.ReactNode;
 }
 
 export function Providers({ children }: ProvidersProps) {
-  return <TooltipProvider>{children}</TooltipProvider>;
+  return <>{children}</>;
 }

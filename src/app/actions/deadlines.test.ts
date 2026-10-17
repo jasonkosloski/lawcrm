@@ -532,7 +532,11 @@ describe("updateDeadline - stale form guard (F521)", () => {
     // Paralegal B moves the due date after a scheduling order.
     await prisma.deadline.update({
       where: { id },
-      data: { dueDate: new Date(Date.UTC(2026, 10, 3)) },
+      // Explicit bump: seed and update can land in the same ms.
+      data: {
+        dueDate: new Date(Date.UTC(2026, 10, 3)),
+        updatedAt: new Date(seeded.updatedAt.getTime() + 1000),
+      },
     });
 
     const res = await updateDeadline(

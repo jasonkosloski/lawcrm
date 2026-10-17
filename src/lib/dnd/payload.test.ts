@@ -94,6 +94,23 @@ describe("hasKind", () => {
     expect(hasKind(e, "calendar-event")).toBe(true);
   });
 
+  test("accepts a drag in browser protected mode (types listed, getData returns '')", () => {
+    // Real browsers hide the data during dragenter/over/leave, so this
+    // empty-string branch is the one production actually takes.
+    const protectedEvent = {
+      dataTransfer: {
+        types: ["application/json", "application/x-lawcrm-dnd-kind"],
+        getData: () => "",
+      },
+    } as unknown as React.DragEvent;
+    expect(hasKind(protectedEvent, "calendar-event")).toBe(true);
+    // ...but a drag without our kind MIME is still rejected.
+    const foreign = {
+      dataTransfer: { types: ["text/plain"], getData: () => "" },
+    } as unknown as React.DragEvent;
+    expect(hasKind(foreign, "calendar-event")).toBe(false);
+  });
+
   test("rejects an unrelated drag (no kind MIME at all)", () => {
     const e = makeFakeEvent();
     e.dataTransfer.setData("text/plain", "hello");
