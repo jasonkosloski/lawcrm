@@ -141,9 +141,13 @@ Tab content fills remaining height with overflow-y-auto
 ```
 
 Implementation: `src/components/matters/matter-tabs.tsx` — client component
-reading `usePathname()` to pick the active tab. 8 tabs: Overview, Timeline,
-Documents, Parties, Deadlines, Tasks, Notes, Billing. Overview is the base
-route (`/matters/[id]`); other tabs are nested routes.
+reading `usePathname()` to pick the active tab. The tab list is the `TABS`
+constant in that file (Overview, Timeline, Events, Communication, Documents,
+Evidence, Parties, Deadlines, Tasks, Notes, Time & expenses, Billing). Overview
+is the base route (`/matters/[id]`); other tabs are nested routes. The tab bar
+has no contextual Add button; creation lives in the header Create menu and each
+tab's own composer. Loading skeletons nested under a layout that renders its own
+header use `<PageSkeleton withTopBar={false} />`.
 
 ### In-Tab Channel Toggle (Communication tabs)
 ```
@@ -181,6 +185,10 @@ Active desc: down arrow, text-brand-700
 URL contract: `?sort=<field>&dir=asc|desc`. Absent means default ordering.
 Use `useTransition` for the router update so the table dims slightly while
 re-rendering. See `src/components/matters/sortable-header.tsx`.
+
+URL-state controls (sort, filters, view toggles) write query params through
+`useUrlParams` (`src/hooks/use-url-params.ts`) so rapid successive changes
+compose instead of overwriting each other.
 
 ### Filter Popover (Linear-style)
 
@@ -239,8 +247,14 @@ context.
 
 ### Layout-Persistent Panel Stack (provider-owned)
 
-Pattern used by the matter-detail **Create** flow (Log time / Add
-note / Add task / etc.) and the **calendar** New event flow.
+Pattern used by the matter-detail header **Create** menu and the
+**calendar** New event flow. Only "Add note" (matter) and "New event"
+(calendar) open real composers in the dock; the other matter Create
+entries navigate to their matter tab, where the working composer lives
+(`MATTER_CREATE_TAB` in `matter-create-menu.tsx`). The menu still lists all
+entry types regardless of the viewer's create permissions (`allowedTypes`
+exists but the layout does not pass it yet); each destination gates its own
+composer.
 Multiple concurrent panels are supported — common use case: taking
 notes during a hearing while adding a newly-announced court date,
 without losing either in progress.
@@ -256,8 +270,8 @@ without losing either in progress.
    its subtree.
 2. `useCreateStack()` exposes `open(type)`, `close(id)`, `focus(id)`,
    and `setExpanded(id, bool)`.
-   Triggers (header Create dropdown, tab-bar contextual button,
-   empty-state CTA, "+ New event" on calendar) call `open(type)` —
+   Triggers (header Create dropdown, empty-state CTA, "+ New event" on
+   calendar) call `open(type)` —
    URL params are not involved.
 3. The provider takes an optional `context` prop (color + label +
    sublabel) that drives the expanded-mode context strip inside the
@@ -265,7 +279,7 @@ without losing either in progress.
    calendar passes nothing (no per-matter context since an event
    might be firm-wide). This is how one generic stack serves both
    contexts.
-3. `MatterCreateDock` renders the current focused panel (docked
+4. `CreateDock` (`src/components/create-stack/create-dock.tsx`) renders the current focused panel (docked
    right-rail or expanded modal). Non-focused open panels render as
    compact chips **inside the focused panel's chrome, right below
    its header** (under an "Also open" label). Keeping chips adjacent
@@ -274,7 +288,7 @@ without losing either in progress.
    overlap the active panel's own controls. The "Also open" strip
    only renders when there are 2+ open panels; a single panel keeps
    the chrome quiet.
-4. **Every open panel's body stays mounted.** `CreateDock` renders
+5. **Every open panel's body stays mounted.** `CreateDock` renders
    one `PanelBody` per open panel, keyed by panel id, inside a single
    persistent shell; only the focused body is visible (the others
    are `hidden`). Each body's own React state IS its draft, so it
@@ -297,8 +311,11 @@ without losing either in progress.
   opened remaining panel, or to nothing if the stack is empty.
   Same expansion-preservation rule applies: if the closed panel was
   expanded, the next focused panel inherits the expansion.
-- `Escape` collapses expanded → docked, or closes the focused panel
-  if already docked.
+- `Escape` is handled on the panel itself, not on `window`. It collapses
+  expanded → docked. Docked, it closes the panel only when nothing has been
+  typed in it (a DOM check of textarea/input/contenteditable); the X button is
+  the explicit discard. The expanded modal is a real dialog (role, aria-modal,
+  Tab trap).
 
 **The panel is single-type by design:** clicking "Add note" means
 the user intends to create a note — letting them flip mid-edit to
@@ -357,15 +374,10 @@ what's blocking it.
 
 ## Color Coding
 
-### Practice Areas (consistent across sidebar, chips, dots, calendar)
-| Area | Color | Var |
-|---|---|---|
-| §1983 / Civil rights | `#2563a8` | `--color-area-1983` |
-| Housing / FHA | `#2d8a5f` | `--color-area-housing` |
-| Employment / CADA | `#b6623d` | `--color-area-employment` |
-| Criminal | `#6b4e7d` | `--color-area-criminal` |
-| Class actions | `#8a6a2d` | `--color-area-class` |
-| ADA | `#3a8a7a` | `--color-area-ada` |
+### Practice areas and matters
+Area and matter colours are data, not design tokens: `PracticeArea.color` and
+`Matter.color` (validated hex, see `src/lib/queries/sidebar.ts`). The old
+`--color-area-*` tokens and `.text-display` class no longer exist.
 
 ### Semantic
 | Meaning | Color | Var |
@@ -374,3 +386,111 @@ what's blocking it.
 | Warning / unfiled | `#b6623d` | `--color-warn` |
 | Danger / opposing | `#c13c3c` | `--color-danger` |
 | Highlight / amber | `#fff1bd` | `--color-highlight` |
+
+---
+
+## Forms, dialogs and server actions (React 19)
+
+### Keep input after a server error: dispatch manually
+
+React 19 resets every `<form action={fn}>` form after the action settles,
+error or not. That wipes typed text and snaps controlled/uncontrolled
+`<select>`s back to their first option when the server returns a validation or
+business-rule error. A controlled checkbox alone does not survive the reset.
+Forms that must keep their input dispatch from `onSubmit`:
+
+```tsx
+const [, startSubmit] = useTransition();
+const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  e.preventDefault();
+  const fd = new FormData(e.currentTarget); // pass e.nativeEvent.submitter too when a submit button's name/value matters
+  startSubmit(() => formAction(fd));
+};
+```
+
+Native `required` validation still runs before `onSubmit`. Reference
+implementation: `src/components/matters/billing/trust-transaction-form.tsx`;
+also used by the profile/security/login forms, NoteComposer, ReplyComposer,
+parties forms, the document composer (fetch/upload instead of `useActionState`)
+and the settings forms. Forms that call the action directly inside
+`startTransition` and read its result (no `useActionState`) are the same idea.
+Many older forms still use `<form action>`; migrate them when touched,
+especially any with a `<select>`.
+
+### `useDialogActionState` for always-mounted dialogs
+
+`useActionState` keeps its last state forever. Row menus and tab surfaces mount
+their dialog or collapsible composer unconditionally (only the content
+unmounts on close), so a failed attempt's banner would reappear on the next
+open. `useDialogActionState(action, initialState, open)`
+(`src/hooks/use-dialog-action-state.ts`) masks state from before the last
+open/close flip and exposes `initialState` until a NEW state object arrives.
+Rules: `initialState` must be a stable module constant; close-on-success
+effects key on the state OBJECT, not `state.status`; tests must return a fresh
+object per call (a mock that returns one shared object defeats identity checks).
+
+Dialog structure that works with it: an outer component (the hook plus the
+close-on-success effect) and a form body inside `DialogContent` that remounts
+per open, seeding its working copies without a reset effect (see
+`RecordPaymentDialog`). Use the manual dispatch above, because a controlled
+`<select>` is otherwise reset by the post-action form reset.
+
+### Reset or reseed without `set-state-in-effect`
+
+The lint config forbids effect-driven resets. Alternatives in use:
+- close/reset on success inside a wrapped action, after the awaited server call;
+- reseed in the open handler, or via a keyed per-open form body;
+- "stored previous prop" (compare to the last prop during render and adjust
+  state) for controlled selects and dialogs that must follow prop changes
+  (EditMatterForm lead/client, edit/log-time/stop-timer dialogs, the evidence
+  composer on a new anchor object);
+- "adjust state when the action state object changes" during render in place of
+  a success effect (settlement composers).
+
+### Dates in client components (ADR-012)
+
+Client components render on the UTC host first and hydrate in the browser, so
+never use browser-local `Date` getters or zone-less `formatDate`. Use:
+
+| Value | Examples | Helper |
+|---|---|---|
+| Date-only (a calendar day) | `TimeEntry.date`, deadline/task due dates, SOL, all-day events, `Firm.establishedAt` | Send/receive as `dateOnlyKey` strings; display with `formatDateOnly`; never convert to a `Date` in the browser. Parse server-side with `parseDateOnly` (UTC midnight). "Today" is `todayKey(useUserTimeZone())`. |
+| Instant | `createdAt`, email dates, event start/end | `useUserTimeZone()` + `formatDate(value, format, tz)` |
+| `datetime-local` input | event, call log, composer times | Seed with `toWallClockInput(date, tz)`, read on the server with `parseWallClock(value, tz)` (profile zone) |
+
+All in `src/lib/format-date.ts`; the zone comes from the profile
+(`getCurrentUserTimeZone()` on the server, `useUserTimeZone()` in
+`src/components/user-time-zone.tsx` on the client). Calendar clients take timed
+values as the profile-zone wall clock and all-day values as date-only keys
+(`src/lib/event-schedule.ts`, `components/calendar/grid-time.ts`,
+`bucket-items.ts`); bucket multi-day events with `eventDayKeys`.
+
+### Other conventions
+
+- Client-visible redirect targets go through `safeRedirectPath`
+  (`src/lib/safe-redirect.ts`).
+- Hide controls from server-computed booleans (e.g. `getNoteAccess()`, the
+  `canCreate`/`canEdit` props); the server action re-checks regardless.
+  `EventAttachmentsProvider` (`components/calendar/event-attachments-context.tsx`)
+  passes the viewer's pin/delete permissions to shared event notes/time sections.
+- Idempotent per-user toggles take the wanted state (`setMatterPin(id, wanted)`,
+  `setEmailThreadStarred`), not a blind flip.
+- `ReplyComposer` must be keyed by thread id wherever it is mounted.
+  `EmailLink` renders non-single-address values as plain text; use `mailtoHref`
+  for other mailto links.
+- Command palette: cmdk `value` is row identity, so every row needs a unique uid
+  (`paletteValue(kind, text, uid)`); recents are per user in localStorage.
+- Shared form helpers: `components/matters/form-primitives.tsx` `Field` wires
+  `aria-invalid`/`aria-describedby` to its control; settings forms use the shared
+  settings `Field` and `FormErrorBanner`; the client typeahead is an ARIA
+  combobox (`parties/party-pickers.tsx`).
+- Event modal: focus moves in on open, Tab is trapped, focus is restored, Escape
+  layers via a document-level handler that stops propagation; remounts per event
+  id; `[data-modal-composer]` blurs first.
+- `Button` with `render={<Link/>}` or an `<a href>` keeps native link semantics
+  (no `role="button"`). `DialogContent` is viewport-capped with internal scroll.
+- Primitives present in `src/components/ui/` are the ones in use; unused shadcn
+  primitives (calendar, label, scroll-area, select, separator, sheet, tabs,
+  tooltip) were deleted: re-add with `shadcn add` when needed (a re-added base-ui `Select` needs `items` on `<Select>` or the trigger shows the raw value).
+- Reorderable dialog lists use stable row keys, not indexes.
+- Multi-connection-pool lock tests: see TESTING.md.

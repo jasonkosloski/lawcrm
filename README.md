@@ -22,12 +22,18 @@ npm run dev                      # http://localhost:3000
 ```
 
 **Seed guard:** `npm run db:seed` and `npm run db:reset` wipe data, so
-they refuse to run unless the database host is localhost / 127.0.0.1 /
-::1. To seed the hosted `lawcrm-dev` database (below) you must opt in
-explicitly: `ALLOW_SEED=1 npm run db:seed`. Production-looking
-environments are always refused. The seed sets every demo user's
-password from `SEED_ADMIN_PASSWORD`; if unset it generates a random
-one and prints it once at the end of the run.
+they refuse to run unless every configured database host is localhost /
+127.0.0.1 / ::1. `prisma.config.ts` applies the same guard to
+`prisma migrate reset` and `prisma db seed` (including `--force-reset`),
+not just the seed script. To seed the hosted `lawcrm-dev` database
+(below) you must opt in explicitly: `ALLOW_SEED=1 npm run db:seed`.
+Production-looking environments (`NODE_ENV` / `VERCEL_ENV` =
+production) are always refused, even with `ALLOW_SEED=1`. The seed sets
+every demo user's password from `SEED_ADMIN_PASSWORD`; if unset it
+generates a random one and prints it once at the end of the run.
+`SEED_NOW=YYYY-MM-DD` pins the date the demo data is anchored to
+(default: today in America/Denver), so figures change with the day
+unless you pin it.
 
 **Dev database:** a dedicated Prisma Postgres, `lawcrm-dev`, attached
 to the Vercel project's Development environment as
@@ -38,19 +44,50 @@ overwrites data and resets every user's password. Watch out for
 `vercel env pull` / `vercel link`: they write Development variables
 into `.env.local`, which Next.js loads *over* `.env`. Schema changes ship as migrations
 (`npx prisma migrate dev --name <change>`) — see ADR-016 in
-`docs/DECISIONS.md`. Auth is email + password; create a user via the seed
-or sign-up flow, then log in at `/login`.
+`docs/DECISIONS.md`. Auth is email + password; there is no self-service sign-up. Seed
+the demo users (or have an admin invite one), then log in at `/login`.
+
+## Environment
+
+Copy `.env.example` and read the comments there; it is the reference.
+Notable variables:
+
+- `DATABASE_URL` / `DIRECT_DATABASE_URL` - Postgres. `DATABASE_POOL_MAX`
+  is optional.
+- `AUTH_SECRET` - required in every environment. `AUTH_URL` is optional
+  (only behind a proxy/CDN).
+- `CRON_SECRET` - **required in production.** Vercel Cron sends it as a
+  bearer token to `/api/email-sync` and `/api/notification-sweep`;
+  unset means both return 401 and background syncs silently stop.
+- `EMAIL_TOKEN_KEY` - encrypts stored Google OAuth tokens; required
+  before connecting a Gmail account.
+- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` - Gmail + Google Calendar
+  integration. The Google Cloud project needs **both the Gmail API and
+  the Google Calendar API** enabled (calendar sync fails with
+  `accessNotConfigured` otherwise).
+- `BLOB_READ_WRITE_TOKEN` / `STORAGE_DRIVER` - document storage
+  (local disk in dev, private Vercel Blob in production).
+- `SEED_ADMIN_PASSWORD`, `SEED_NOW`, `ALLOW_SEED` - seed only (above).
+- `TEST_DATABASE_URL` - tests only (below).
 
 ## Tests
 
 ```bash
-docker compose -f docker-compose.test.yml up -d   # test Postgres (once)
+docker compose -f docker-compose.test.yml up -d   # test Postgres on :5433 (once)
 npm test                                          # full suite
+npm run test:utc                                  # same suite with TZ=UTC
 npm run test:watch                                # while developing
 ```
 
-The pre-commit hook runs `typecheck + test` on every commit. Testing
-discipline lives in [`docs/TESTING.md`](./docs/TESTING.md).
+Integration tests run against the Docker test database
+(`localhost:5433/lawcrm_test`), never your dev DB. To run two suites at
+once (worktrees, parallel sessions) give each its own database in the
+container and set `TEST_DATABASE_URL` (must be a local database named
+`lawcrm_test*`). Run `npm run test:utc` too when you touch date logic.
+
+The pre-commit hook runs `typecheck + lint + test` on every commit
+(plus a migration-drift check when the schema or migrations are
+staged). Testing discipline lives in [`docs/TESTING.md`](./docs/TESTING.md).
 
 ## Working on this repo
 

@@ -1,6 +1,6 @@
 # Architecture
 
-_Last reviewed: 2026-07-06. If the folder tree or data-flow section stops matching the code, fix it here — this doc has drifted before._
+_Last reviewed: 2026-10-17. If the folder tree or data-flow section stops matching the code, fix it here — this doc has drifted before._
 
 ## Tech Stack
 
@@ -17,24 +17,27 @@ _Last reviewed: 2026-07-06. If the folder tree or data-flow section stops matchi
 | Testing | Vitest + happy-dom | See [TESTING.md](./TESTING.md) |
 | Fonts | Inter / JetBrains Mono / Fraunces | Per design handoff — UI / metadata / display |
 
-> TanStack React Query is installed and wired in `src/components/providers.tsx`, but nothing currently consumes it — there are no `useQuery`/`useMutation` calls in the codebase. It's reserved for future highly-interactive views. Don't reach for it for mutations; use a server action.
+> `@tanstack/react-query` (and its devtools) and `react-day-picker` are still listed in `package.json` but nothing imports them: the React Query provider and the calendar primitive were deleted, and `src/components/providers.tsx` is a passthrough. They can be uninstalled (lockfile regeneration pending). Don't reach for React Query; reads are server components and mutations are server actions.
 
 ## Folder Structure
 
 ```
 src/
 ├── auth.ts                   # Auth.js v5 config (credentials + argon2id, JWT sessions)
-├── proxy.ts                  # Edge middleware — auth gate for all app routes
+├── proxy.ts                  # Optimistic cookie-presence redirect for app routes (UX only;
+│                             #   pages authenticate themselves — see Security)
 ├── app/
 │   ├── (dashboard)/          # Route group — all pages inside the app shell
-│   │   ├── layout.tsx        # Wraps pages in AppShell (sidebar + topbar); calls auth()
+│   │   ├── layout.tsx        # Wraps pages in AppShell (sidebar, timer, notification bell
+│   │   │                     #   provider); a UX gate only. The TopBar is rendered per page.
 │   │   ├── page.tsx          # Today/Dashboard
 │   │   ├── matters/          # List, new, and [id] detail with tab sub-routes:
 │   │   │                     #   billing, communication, deadlines, documents, edit,
 │   │   │                     #   events, notes, parties, tasks, time, timeline
 │   │   ├── intake/           # Lead intake queue + [id] detail (communication, time)
 │   │   ├── contacts/         # Contact directory + [id] detail
-│   │   ├── calendar/         # Calendar views + events/[eventId]
+│   │   ├── calendar/         # Calendar views + events/new (events are edited in the
+│   │   │                     #   modal; there is no standalone edit route)
 │   │   ├── communication/    # Unified inbox (email + messenger)
 │   │   └── settings/         # firm, team, roles, practice-areas, billing,
 │   │                         #   integrations, notifications, activity, security, profile
@@ -44,7 +47,10 @@ src/
 │   │                         #   document download (streams local / 302s blob),
 │   │                         #   streaming upload (local driver), blob upload
 │   │                         #   token+callback, Google OAuth redirect legs
-│   │                         #   (integrations/google/connect+callback).
+│   │                         #   (integrations/google/connect+callback), cron
+│   │                         #   endpoints (email-sync, notification-sweep),
+│   │                         #   email-attachments, and the session-checked GET
+│   │                         #   notifications/bell read (see Interactivity).
 │   │                         #   Data mutations do NOT go here.
 │   ├── login/                # Public login page
 │   ├── print/                # Print-friendly renderings (outside app shell)
@@ -93,16 +99,57 @@ Client components receive data as props from their server-component parent and
 call server actions directly. Optimistic UI, where needed, is local component
 state (e.g. `useOptimistic`), not a client cache.
 
+Polled reads go through a GET route handler, not a server action: Server
+Actions are dispatched one at a time per client, so a poll would queue a user's
+mutation behind it. The notification bell polls `/api/notifications/bell`
+(session-checked); its state lives in the `NotificationBellProvider` in the app
+shell, mutations stay server actions, and notification writers no longer
+revalidate the layout. Forms and dialogs that must keep input after a server
+error follow the React 19 patterns in [UI_PATTERNS.md](./UI_PATTERNS.md).
+
+### Request-scoped helpers
+- `getSession()` (`src/lib/session.ts`) is the single request-cached `auth()`
+  read; `requireUser()` / `getCurrentUserId()` (`src/lib/current-user.ts`) sit
+  on it. Sidebar display data comes from `getSidebarData()`.
+- `getCurrentFirm` / `getFirmGoals` are React-cached per request; use the
+  uncached `loadCurrentFirm` / `loadFirmGoals` only inside actions that mutate
+  those rows and whose page re-renders in the same request.
+- `src/lib/prisma.ts` sizes the pg pool at 5 per instance (override with
+  `DATABASE_POOL_MAX`); tests run a smaller pool (see TESTING.md).
+- `UserFacingError` / `toUserMessage` (`src/lib/user-facing-error.ts`): actions
+  throw `UserFacingError` for messages meant for users; anything else is logged
+  server-side and the client sees a generic message.
+- Money: computed currency amounts round to cents HALF_UP via `roundMoney`
+  (`src/lib/money.ts`, ADR-024). Invoice generation locks the matter row
+  (`FOR UPDATE`) and links only unbilled rows with a count check; status
+  transitions use status/paidAmount predicates or an invoice row lock.
+- Dates: ADR-012. Formatting rules for client components are in UI_PATTERNS.md.
+
 ## Security
 
 - **Auth**: Auth.js v5 credentials provider with argon2id hashing (`src/auth.ts`);
-  `src/proxy.ts` gates all routes at the edge; JWT session validated per request
+  `src/proxy.ts` only checks for a session cookie (optimistic redirect; its matcher
+  excludes `/api/documents/upload` so streaming uploads aren't body-buffered); JWT
+  session validated per request
   (password fingerprint, ADR-017). Sign-in lockout is a reserve/settle under a
   per-email Postgres advisory lock (ADR-020); redirects after login go through the
   strict `safeRedirectPath` (`src/lib/safe-redirect.ts`).
 - **Page guards**: layouts are not auth gates (not re-run on partial navigations);
   every `page.tsx`/`layout.tsx` calls `requireUser()` (or a stronger guard) as its
   first `await`, enforced by `src/app/page-guards.test.ts` (ADR-028).
+- **Cron endpoints** (`/api/email-sync`, `/api/notification-sweep`) authenticate
+  with `isAuthorizedCron` (`src/lib/cron-auth.ts`, constant-time compare, fails
+  closed; `CRON_SECRET` is required in production) and are listed in the proxy's
+  self-authenticated paths (pinned by `src/vercel-config.test.ts`). Response
+  security headers are set in `next.config.ts`.
+- **Matter visibility**: there is none beyond sign-in. Every signed-in user can
+  read every matter and its notes, documents, invoices and time;
+  `MatterTeamMember` drives assignment, notifications, calendar detail unlocks and
+  default attendees, not read access. Email is the exception: threads are visible
+  only to their mailbox owner (`visibleEmailThreadWhere`,
+  `src/lib/email-visibility.ts`), and all email-derived queries/actions use it.
+  Matter-team access is a planned phase, not built — see
+  [PERMISSIONS.md](./PERMISSIONS.md).
 - **Permissions**: granular keys in `src/lib/permissions.ts`, enforced in every
   server action via `requirePermission(...)` and in read paths via
   `currentUserHasPermission(...)`. Full model in [PERMISSIONS.md](./PERMISSIONS.md).
@@ -126,8 +173,44 @@ state (e.g. `useOptimistic`), not a client cache.
   `src/lib/calendar-default-attendees.ts` (default attendees, min-firm-attendee
   invariant) with the calendar create path and are pushed to Google Calendar
   after commit.
-- **Audit log**: mutating actions record to the activity log (`src/lib/activity-log.ts`),
-  surfaced at Settings → Activity.
+- **Audit log**: `logActivity` (best-effort) and `logActivityTx(tx, …)` (inside the
+  caller's transaction, for governance and money events) in
+  `src/lib/activity-log.ts`; `logAuditEntry` (`src/lib/audit-entry.ts`) records
+  field-names-only entries for settings-style edits. Surfaced at Settings →
+  Activity. Coverage is not yet universal (invoice/expense/permission writers
+  still log under type `filing`), so don't treat "every mutation is audited" as
+  an invariant.
+
+## Notable shared modules
+
+Pointers only; read the file headers for behavior.
+
+- Captures/notes: `capture-permissions.ts`, `capture-access.ts`, `note-captures.ts`,
+  `note-threads.ts`, `note-access.ts`, `calendar-default-attendees.ts`
+  (`addDefaultEventAttendees`, `resolveAutoAddTeam`; Google push happens after
+  commit by collecting event ids inside the transaction).
+- Calendar: `event-schedule.ts` (profile-zone wall clock vs date-only keys),
+  `components/calendar/grid-time.ts` (zone-aware grid math), `bucket-items.ts`,
+  `queries/calendar-edit-flags.ts` (`getEditableEventIds`, same resolver as the
+  actions).
+- Time/billing/settlements: `time-entry-schema.ts`, `time-entry-constants.ts`,
+  `queries/billing-expenses.ts` (predicate must match the `expense.findMany` in
+  `generateInvoiceFromWip` / `bundleAsInternalRecord`), `settlement-waterfall.ts`.
+- Matters: `matter-name.ts`, `fee-structure-constants.ts`, `hooks/use-url-params.ts`.
+- Search: client-safe constants in `lib/constants/search.ts`; palette rows need a
+  unique uid (`paletteValue`).
+- Uploads never go through server actions (1 MB body cap): the composer and
+  multi-file uploader use the busboy route (local driver) or client-direct Blob,
+  chosen by the `storageDriver` prop.
+- Google: `gmailFetch` has a 60 s per-request timeout (OAuth 30 s) and a host
+  allowlist; `isTransientInfraError` classifies retryable failures; sync is
+  claimed per account via compare-and-set on `EmailAccount.syncStatus`/`updatedAt`.
+- Dashboard: `lib/activity-icons.ts` is the single activity icon map; the deadline
+  sweep runs via `after()` with the hourly `/api/notification-sweep` cron as the
+  primary driver.
+- Safety: `safe-redirect.ts` (all user-supplied redirect targets), `seed-guard.ts`
+  (seed/reset refuse non-local databases), `sanitize-html.ts` (`sanitizeUserHtml`,
+  `sanitizeEmailHtml`).
 
 ## Key Conventions
 

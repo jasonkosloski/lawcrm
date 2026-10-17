@@ -1,6 +1,34 @@
 # Architectural Decision Records
 
-Each decision is numbered and immutable once written. If we reverse a decision, we add a new ADR that supersedes it.
+Each decision is numbered and immutable once written. If we reverse a decision, we add a new ADR that supersedes it. (Immutable means the decision itself; addenda that keep an ADR true to the code are appended in place and dated.)
+
+| ADR | Decision |
+|---|---|
+| 001-011 | Foundations: SQLite-to-Postgres, route groups, design tokens, fonts, schema iteration, matter URLs, URL filters, Prisma adapter, sort cycle, matter pins, token encryption |
+| 012 | Date-only values are UTC-midnight calendar dates; instants display in the profile zone |
+| 013 | Timer sessions are pre-entries |
+| 014 | Global search is ILIKE v1 |
+| 015 | Driver-based document storage (public-access parts superseded by 018) |
+| 016 | Postgres migration baseline |
+| 017 | Password fingerprint in the JWT |
+| 018 | Private Blob store + presigned URLs |
+| 019 | Deadline rules + task lists as firm libraries |
+| 020 | Sign-in lockout (reserve/settle, per-account) |
+| 021 | Matter tabs honour calendar visibility and money-view permissions |
+| 022 | Security-header baseline, no CSP yet |
+| 023 | Google sync failure isolation, catch-up, cancel = unlink |
+| 024 | Invoice line items draft-only; money rounding |
+| 025 | Captures clear every record kind's own create key |
+| 026 | Conflict matcher scope |
+| 027 | Matter owns the SOL; Deadline is a mirror |
+| 028 | Layouts are not auth gates |
+| 029 | Matter visibility today: every signed-in user sees every matter (Proposed: matter-team access) |
+| 030 | Settlement status follows the approval chain |
+| 031 | Google sync coordination: claim CAS, deterministic event ids, junk mail |
+| 032 | Database pool sizing |
+| 033 | Error boundaries use retry(); the bell reads via GET |
+| 034 | Document bytes never travel through server actions |
+| - | Open product decisions (not ADRs) at the end of the file |
 
 ---
 
@@ -223,14 +251,20 @@ Clicking a different column resets to that column's first-click (ascending).
 The original decision stored date-only values at **server-local** midnight and displayed them on the server's day grid. That frame only exists on the server: production runs in UTC, developers' laptops in Denver, and browsers wherever the user is. The 2026-10-16 review found it at the root of a whole class of production bugs — client components read the UTC-midnight values with browser-local getters (edit dialogs prefilled the day before, so every save moved deadlines, tasks, time entries and invoice lines a day earlier), calendar and dashboard views bucketed due dates as instants, "overdue" fired on the due date, and `datetime-local` values were parsed in the server's zone, storing events and calls 6–7 hours off. The suite passed in every zone because tests never separate the server's frame from the browser's.
 
 **Decision:**
-- **Date-only values** (Task/Deadline `dueDate`; TimeEntry / Expense / TrustTransaction / InvoicePayment `date`; Firm `establishedAt`; Matter `incidentDate` / `statuteOfLimitationsDate`; all-day event bounds) are calendar dates, **stored at UTC midnight** and **always read in UTC**. No time zone — the viewer's, the browser's or the server's — is ever applied to them. Helpers in `src/lib/format-date.ts`:
+- **Date-only values** (Task/Deadline `dueDate`; TimeEntry / Expense / TrustTransaction / InvoicePayment `date`; Firm `establishedAt`; Matter `incidentDate` / `statuteOfLimitationsDate`; all-day event bounds; automation-generated `dueDate`s) are calendar dates, **stored at UTC midnight** and **always read in UTC**. No time zone — the viewer's, the browser's or the server's — is ever applied to them. Helpers in `src/lib/format-date.ts`:
   - write: `parseDateOnly("YYYY-MM-DD")` (null on malformed or impossible dates → field error, never an Invalid Date 500)
-  - read: `dateOnlyKey(d)` → `"YYYY-MM-DD"`; display: `formatDateOnly(d, variant)` — identical on server and client
+  - read: `dateOnlyKey(d)` → `"YYYY-MM-DD"`; display: `formatDateOnly(d, variant)` — identical on server and client; never the zone-less `formatDate`
   - "today"/overdue: `daysUntilDateOnly(d, tz)` against `todayKey(tz)`; never compare a date-only value to `new Date()`
   - queries: `{ dueDate: dateOnlyRange(firstKey, lastKey) }` (half-open UTC midnights)
-- **Instants** (event start/end, call times, timestamps) are real UTC moments, displayed in the user's **profile** zone: server code passes `getCurrentUserTimeZone()` to `formatDate(d, variant, tz)`; client components get the same zone from `useUserTimeZone()` (provided by the dashboard layout), not the browser's, so server render and hydration agree.
-- **Wall-clock input** (`<input type="datetime-local">`): parse on the server with `parseWallClock(value, await getCurrentUserTimeZone())`; prefill with `toWallClockInput(instant, tz)`. Never `new Date(naiveString)`.
-- `parseLocalDate` / `parseLocalDateOrDateTime` are deprecated and removed as callers migrate.
+  - **Client components never convert a date-only value to a `Date` in the browser.** Servers hand dialogs `dateOnlyKey` strings; date inputs are seeded from those keys and "today" from `todayKey(useUserTimeZone())`.
+- **Instants** (event start/end, call `occurredAt`, timestamps) are real UTC moments, displayed in the user's **profile** zone: server code passes `getCurrentUserTimeZone()` to `formatDate(d, variant, tz)`; client components get the same zone from `useUserTimeZone()` (provided by the dashboard layout). Client components must NOT use browser-local getters (`getDate`, `getHours`, `toLocaleString` without a zone) for either kind: they server-render on the UTC host, so a browser-zone read disagrees with the server render and hydrates differently. (An earlier wording of this ADR allowed "browser-local after hydration"; that is withdrawn.)
+- **Wall-clock input** (`<input type="datetime-local">`): parse on the server with `parseWallClock(value, await getCurrentUserTimeZone())`; prefill with `toWallClockInput(instant, tz)`. Never `new Date(naiveString)`. This covers calendar event forms, event captures from notes, and manual call logging (`parseCallOccurredAt`). Calendar clients take timed schedule values as the profile-zone wall clock and all-day values as date-only keys (`src/lib/event-schedule.ts`; grid math is zone-aware in `src/components/calendar/grid-time.ts`).
+- **All-day events** are date-only (`parseDateOnly`, UTC midnight, including all-day events pulled from Google and pushed back with day-key math). Calendar queries match deadlines and all-day events by day keys and timed events by overlap; `eventDayKeys` buckets multi-day events.
+- **Follow-ups** (`followUpAt` on email and messenger threads) are stored as day-end values and treated as calendar days: read with `dateOnlyKey` and compared as day keys, not instants. The inbox filter and the dashboard must agree on that rule.
+- **Firm** `establishedAt` is date-only (`parseDateOnly` / `dateOnlyKey` / `formatDateOnly`).
+- `parseLocalDate`, `parseLocalDateOrDateTime` and `parseLocalEstablishedAt` **have been removed**; no caller remains. Use the helpers above.
+
+**Known unrepaired data:** rows saved before the fix — timed events and call times stored hours off for non-UTC users, all-day events stored at server-local midnight — are not auto-corrected. Call `occurredAt` rows logged before the change are stored shifted for non-UTC users.
 
 **Compatibility:** No data migration. Production rows were written by `parseLocalDate` on a UTC host, i.e. already at UTC midnight. Rows written on a dev laptop sit at Denver midnight (06:00/07:00Z) — still inside the right UTC day, so UTC reads and half-open UTC day ranges place them correctly.
 
@@ -257,6 +291,9 @@ The original decision stored date-only values at **server-local** midnight and d
 - Stop is transactional: TimeEntry create + TimerSession delete in one `$transaction`, so a crash can't both log the time and leave the clock running (double billing on retry). A stop from a stale dialog (session already discarded/stopped in another tab) errors instead of silently double-logging.
 - **Rounding convention:** timer-elapsed prefill rounds **UP** to `TIME_ENTRY_INCREMENT_HOURS = 0.25` (quarter-hour — the increment the schema already documents on `TimeEntry.hours`), minimum one increment. The value is a prefill, editable before save; the server re-validates only the normal 0–24h bounds.
 - Elapsed is **never stored** — computed from `startedAt` at read time (widget ticks client-side; no polling).
+- `startTimer` never silently replaces a running session: it returns `code: "already_running"` unless called with `replace: true`.
+
+**Addendum (2026-10-17):** the "denying `time_entries.create` closes ALL time-logging entry points" claim is now true for the capture paths too. `captures.ts` and `createNote` compute the keys for every sibling kind with `requiredCapturePermissions` and enforce them with `requirePermissions` before any write (ADR-025). Error vs redirect: the primary composers and the bulk-attach action redirect to `/` on denial (`requirePermissions`, like `requirePermission`); the note surfaces pre-check with `missingPermissions` and return a form error so the typed note is kept, with `requirePermissions` as the enforcing backstop. `deleteNote` lets the author delete their own note, but the delete cascades to replies, so when anyone other than the actor replied (any depth) it needs `notes.delete_any` and returns a form error otherwise.
 
 **Trade-offs:**
 - (+) One permission key governs all time-entry creation; no new keys to administer
@@ -273,8 +310,12 @@ The original decision stored date-only values at **server-local** midnight and d
 **Decision:**
 - **ILIKE v1** — one parallel `Promise.all` batch in `src/lib/queries/search.ts`, per-type `take` + total counts. Zero infrastructure, correct semantics, fine at this firm's data scale. The `SearchHit` shape (type/id/title/snippet/href/context) is engine-agnostic so the FTS swap is invisible to the page.
 - **Upgrade path when data outgrows it:** generated `tsvector` columns (or a materialized search view) + GIN indexes, `websearch_to_tsquery` + `ts_rank` ranking, `ts_headline` snippets. Not an external engine — one more moving part to host/sync for a single-firm app.
-- **No new permission keys.** Search inherits each entity's existing read model: calendar events run through the same `canViewEventDetails` resolver as the calendar (scrubbed BEFORE snippets are built), privileged time-entry narratives match only for their author, merged/inactive contacts are excluded. A search surface must never widen visibility.
-- **Documented approximations:** per-type totals for events (JS-resolver visibility, 200-row candidate window) and notes (markup-only matches dropped post-fetch) are upper bounds, noted in code.
+- **No new permission keys.** Search inherits each entity's existing read model: calendar events run through the same `canViewEventDetails` resolver as the calendar (scrubbed BEFORE snippets are built), merged/inactive contacts are excluded. A search surface must never widen visibility.
+- **Email is mailbox-personal.** Threads and messages are visible only to the owner of the `EmailAccount` they were synced into; filing a thread to a matter does not widen that. `src/lib/email-visibility.ts` (`visibleEmailThreadWhere` / `visibleEmailMessageWhere`) is the single email read model for search, the sidebar unread badge and every email-derived action (file to matter, create task or note from an email, log time on an email); use it for any new email query.
+- **LIKE metacharacters are escaped** (`escapeLike` in `src/lib/queries/search.ts`: `%`, `_`, `\`), so a query for `50%` or `a_b` matches literally.
+- **`SearchHit.href` may be null** (firm-wide tasks with no matter render unlinked); consumers must handle it.
+- **Documented approximations:** note and email totals are the SQL count minus the markup-only rows scanned, so they are upper bounds, not "exactly what the viewer can read"; event totals are lower bounds (visible rows inside a 200-row candidate window). The single-connection-era note about serialising the ~21 statements is obsolete since ADR-032.
+- **Privileged time narratives (open, see Open decisions):** search hides a `privileged` time entry's narrative from everyone but its author, but the matter and `/time` Time tabs show narratives to every viewer. The claim "search inherits each entity's read model" is therefore inaccurate for this one field until the policy is decided; the stricter behavior is only in search.
 
 **Trade-offs:**
 - (+) Shipped with zero infra; authz posture is provably no-wider-than-existing surfaces
@@ -318,6 +359,8 @@ The original decision stored date-only values at **server-local** midnight and d
   2. `prisma migrate resolve --applied 0_init`
   3. Later migrations then apply with `prisma migrate deploy`.
 - The test harness keeps using `db push --accept-data-loss` against the throwaway tmpfs container — speed over history is right there.
+- **Drift is enforced.** `npm run check:migrations` (`scripts/check-migrations.mjs`) fails when the migration history does not reproduce `schema.prisma`; the pre-commit hook runs it whenever `prisma/` is staged. A schema edit without its migration cannot be committed.
+- **`npm run db:reset` is guarded.** `prisma.config.ts` runs the seed guard (`src/lib/seed-guard.ts`) before `migrate reset`, `db seed` and `--force-reset`: localhost / 127.0.0.1 / ::1 only, `ALLOW_SEED=1` required for the hosted dev database, refused under a production environment. A mistyped `DATABASE_URL` can no longer wipe a hosted database before the seed's own guard runs.
 
 **Trade-offs:**
 - (+) Schema history is real again; production changes become reviewable, repeatable SQL instead of whatever `db push` decides on the day
@@ -337,6 +380,7 @@ The original decision stored date-only values at **server-local** midnight and d
 - The `jwt` callback (`validateSessionToken`, `src/lib/session-token.ts`) already reads the user row on every request to reject deleted/deactivated users; it now also compares the fingerprint and strips the session on mismatch. No extra query.
 - `changePasswordAction` calls `unstable_update({ pwv: passwordFingerprint(newHash) })` after writing the new hash. The callback runs with `trigger: "update"` and re-stamps the current session **only when the update payload's `pwv` equals the fingerprint freshly computed from the DB row**; otherwise it falls through to the normal mismatch check and the stale token is stripped. The payload check matters because `POST /api/auth/session` also reaches the callback with `trigger: "update"` for anyone holding a cookie plus a CSRF token (both obtainable by a cookie thief): a bare `unstable_update()` that re-stamped unconditionally would let a stolen, already-revoked cookie revive itself. Forging the payload needs the argon2 hash, which never leaves the server, and the `session` callback exposes only `user.id` — the fingerprint is never in the session object sent to the client. Pinned by `src/lib/session-token.test.ts` and `src/auth.test.ts`. An admin reset (`resetFirmMemberPassword`) signs the target out everywhere, as it should.
 - Tokens minted before this shipped have no `pwv` and are dropped: one forced re-login per user at deploy.
+- `getSession()` (`src/lib/session.ts`, a React-`cache()`d `auth()`) is the single per-request session read, so the `jwt` callback's user lookup runs once per request however many guards call it.
 
 **Trade-offs:**
 - (+) Real "sign out everywhere" on password change/reset with zero schema change
@@ -355,6 +399,9 @@ The original decision stored date-only values at **server-local** midnight and d
 - One **private** store. Every write (`put`, client-direct `upload`) uses `access: "private"`; the stored key is still the full blob URL (`*.private.blob.vercel-storage.com/{key}`), so key-shape dispatch is unchanged.
 - **Serving:** `/api/documents/[id]/download` and `/api/email-attachments/[id]/download` keep their session/scope checks, then 302 to a presigned GET URL from `signedBlobUrl` (`issueSignedToken` scoped to the one pathname, `get` only, then `presignUrl`). Lifetime: 15 minutes, or 6 hours for audio/video — a media element re-uses the redirect target for every Range request while seeking, so a short URL would break playback partway through a long recording. `download=1` (attachment disposition) is appended outside the signed payload. The redirect itself is `no-store`.
 - **Server reads:** `readStoredFile` → `readBlobBytes`, an authenticated `get()` with a Range header for capped reads.
+- **Rebuilt URL (addendum).** `signedBlobUrl` signs over the *decoded* pathname but returns a URL rebuilt from the stored origin with every path segment encoded, carrying across only the SDK's `vercel-blob-*` params. The SDK concatenates the pathname without encoding, so a `#`, `?` or `%` in a file name truncated or corrupted the URL.
+- **Callback idempotency (addendum).** Vercel retries `onUploadCompleted` on non-2xx, so the handler (`src/app/api/documents/upload/blob/blob-upload.ts`) looks the Document up by `fileUrl` before creating it. There is no unique index on `Document.fileUrl` yet (Batch 4 candidate in `SCHEMA_NOTES.md`), so a true race can still double-insert.
+- **Media lifetime.** The code's 6-hour media TTL (`SIGNED_MEDIA_URL_TTL_MS`) is the source of truth; any note quoting 12 hours is wrong.
 - Verified live against a private store before shipping: bare URL → 403; signed → 200; `download=1` → attachment with the signature intact; Range → 206; CORS allows the client-side docx renderer's fetch; a signature replayed against another pathname → 403.
 
 **Trade-offs:**
@@ -374,7 +421,9 @@ The original decision stored date-only values at **server-local** midnight and d
 **Decision:**
 - **Two firm libraries**, decoupled from any trigger: `DeadlineRule` (title, kind, anchor, signed `offsetDays` + the `offsetUnit` it was entered in, citation, notes) and `TaskList` + ordered `TaskListItem`s (priority, assign to lead/unassigned, optional due offset from the apply date). Managed on Settings → Automations under granular `automations.*` keys.
 - **Anchors**: `incident_date`, `matter_opened`, `prompt` (asked at apply time), `rule` (another rule's deadline on the same matter). Rule-to-rule links are refused if they'd loop; `anchorRuleId` is ON DELETE RESTRICT, and the delete action explains which rules depend on it.
-- **Date math in calendar-day keys** (`src/lib/automations/deadline-plan.ts`, pure): each anchor is read with the getters matching how it's stored (UTC-midnight incident dates per ADR-012's SOL exception; local-midnight deadline dates; the actor's TZ for "matter opened"), the offset is added in UTC arithmetic, and the result is stored like every other date-only deadline. Months/years convert at 30/365 days — the SOL convention — and the UI always shows the day count beside them.
+- **Date math in calendar-day keys** (`src/lib/automations/deadline-plan.ts`, pure): every anchor is a day key — incident dates and deadline dates are UTC-midnight date-only values read with `dateOnlyKey` (ADR-012), "matter opened" is the day in the actor's profile zone — the offset is added in UTC day arithmetic, and the result is written with `parseDateOnly` like every other date-only deadline or task `dueDate`. Due dates are plain calendar days: **no weekend, holiday or court-day adjustment**. Months/years convert at 30/365 days (`UNIT_DAYS`, the SOL convention, with the same approximation caveat as ADR-027) and the UI always shows the day count beside them. Offsets are capped at `MAX_OFFSET_DAYS` = 36,500; an overflowing stored offset is reported as unplanned with reason `out_of_range`. (An earlier version of this ADR described server-local midnight dates; that is superseded.)
+- **`incident_date` rules resolve only on matters whose practice area tracks a statute of limitations**, because `Matter.incidentDate` is only persisted then. Otherwise a manual apply asks for a date and an automatic apply creates a "Set date: ..." task for the lead.
+- **Locking and numbering:** a manual apply takes a per-matter advisory lock (`automation-apply:<matterId>`), and applied task-list items are numbered after the matter's existing tasks.
 - **Applying is a separate concern** (`src/lib/automations/apply.ts`, takes a transaction client): manual applies report duplicates (confirm to re-apply) and unresolvable anchors (ask for a date); automatic applies skip duplicates and turn an undatable rule into a "Set date: …" task for the lead — never silently dropped. Generated rows carry provenance (`Deadline.deadlineRuleId`, `Task.taskListId`, both SetNull). Manual apply is gated on the capability exercised (`deadlines.create` / `tasks.create`), not the library keys.
 - **Wiring layer**: `AutoApply` rows (`trigger`, nullable `practiceAreaId` = all areas, exactly one of rule/list). The only trigger today is `matter_created`, fired from both creation paths through one `applyAutoDefaults` call inside the creating transaction. New triggers add a value, not a table.
 - The pre-existing `Automation` model (JSON steps, never used) is left untouched and unrelated.
@@ -397,14 +446,14 @@ The original decision stored date-only values at **server-local** midnight and d
 - `changePasswordAction` reuses the same mechanism (`password_change_failed` rows) so a hijacked session can't brute-force the current password.
 - `AUTH_EVENT_TITLES` values are query keys; never rename them.
 - Unknown / inactive / passwordless / locked accounts burn one dummy argon2 verify so timing doesn't reveal account existence. Cost: those attempts now cost about a real attempt of CPU and ~64 MiB each — login spam is a resource amplifier, so edge rate limiting matters.
-- **Accepted risk (F129):** the lock is per account. Anyone who knows staff emails can hold every account — admins included — locked (5 failures per 15 minutes; the lock lifts on its own and blocked attempts do not extend it). An IP factor is spoofable/shared and no lock exposes the password, so we keep it. Mitigations: `unlockFirmMemberSignIn` and `resetFirmMemberPassword` write a `sign_in_unlocked` event (counts like a successful sign-in; written with a throwing write so a failure is reported, not swallowed); Admin-class targets can only be unlocked/reset by an Admin. **Both need a signed-in directory manager, so a firm with every admin locked has no in-app recovery.** Break-glass: wait out the window, or insert a `sign_in_unlocked` row by SQL (header of `src/lib/credentials-authorize.ts`). Recommended real fix: a per-IP rate-limit rule on the sign-in route at the edge (Vercel Firewall).
+- **Accepted risk (F129):** the lock is per account. Anyone who knows staff emails can hold every account — admins included — locked (5 failures per 15 minutes; the lock lifts on its own, blocked attempts do not extend it, and blocked-attempt audit rows are throttled to one per account per minute). An IP factor is spoofable/shared and no lock exposes the password, so we keep it. Mitigations: `unlockFirmMemberSignIn` and `resetFirmMemberPassword` write a `sign_in_unlocked` event (counts like a successful sign-in; written with a throwing write so a failure is reported, not swallowed); Admin-class targets can only be unlocked/reset by an Admin. **Both need a signed-in directory manager, so a firm with every admin locked has no in-app recovery.** Break-glass: wait out the window, or insert a `sign_in_unlocked` row by SQL (header of `src/lib/credentials-authorize.ts`). Recommended real fix: a per-IP rate-limit rule on the sign-in route at the edge (Vercel Firewall).
 - The unlock action exists server-side only; there is no button on the team page yet (follow-up: wire it in `member-row.tsx`).
 
 **Trade-offs:**
 - (+) The threshold actually bounds parallel guessing
 - (+) No schema change; same audit rows drive the lock and the history
 - (-) A deliberate lockout DoS against any known email remains possible until edge rate limiting is configured
-- (-) Each login attempt takes a short DB transaction (pool is capped at 1 connection per process, so concurrent attempts queue)
+- (-) Each login attempt takes a short DB transaction (pool size per ADR-032; the advisory lock is held only for the count + insert, never across argon2)
 
 
 ## ADR-021: Matter tabs honour calendar visibility and money-view permissions
@@ -422,8 +471,9 @@ The original decision stored date-only values at **server-local** midnight and d
 
 **Known gaps (follow-ups):**
 - Event-attached content on the Notes and Time tabs (a note or time entry whose parent is a hidden event) is matter-wide: the label is scrubbed, the note body / time narrative is not. Matter-level access, not event visibility, governs those tabs today.
-- Trust-application `deposit` rows ("Trust applied to invoice … $amount") still show to every viewer on the Financial pill and under All; deciding whether they need a billing-view gate is left to the billing permissions work.
-- The Parties, Evidence and Deadlines pages and the dashboard/firm activity feeds (`getTodayAgenda`, `getRecentActivity`, `getFirmActivity`) have no own session guard / money filter yet; `activityMoneyFilters` is exported for them.
+- Trust-application `deposit` rows ("Trust applied to invoice … $amount") still show to every viewer on the Financial pill and under All. Whether they need a billing-view gate is an **open product decision** (see Open decisions).
+- Expense activity rows are identified by the title prefix `Expense ` on type `filing` (`src/lib/expense-activity.ts`, shared with the writer in `expenses.ts`, pinned by `matter-detail.test.ts`). A dedicated ActivityLog type plus a backfill is the cleaner follow-up. The Overview WIP figure is computed live; `Matter.wipAmount` is no longer read.
+- Session guards now exist on every page (ADR-028), and the dashboard agenda and recent-activity feed apply the Busy scrub and the same money filters (settlement rows need `matters.settlement.view`, `Expense ` rows `matters.expense.view`, `matterId = null` firm-scope rows `firm.view_activity`). Contact and automation edits log with `matterId = null`, so they no longer appear in the dashboard feed for non-privileged users. The query helpers (`listLeads`, `getMatterParties`, `getMatterFlaggedMoments`, `getMatterActivity`, `getDocumentForViewer`, ...) still carry no auth of their own; the page-level guard is the boundary.
 
 **Trade-offs:**
 - (+) One privacy rule across calendar, Events tab and event chips
@@ -441,6 +491,8 @@ The original decision stored date-only values at **server-local** midnight and d
 - **Headers** (`next.config.ts`, pinned by `src/next-config.test.ts`): `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, a minimal `Permissions-Policy`. The two same-origin routes the document viewer iframes (`/api/documents/:id/download`, `/api/email-attachments/:id/download`) get `SAMEORIGIN` instead. The rules are non-overlapping (the catch-all negative-matches those routes) so behavior never depends on how Next/Vercel merge repeated keys.
 - **No CSP yet.** A script-src/style-src policy needs per-request nonces in `proxy.ts` and has to be proven against Next's inline bootstrap scripts, Tiptap and Tailwind inline styles, docx-preview, the PDF iframe and presigned Blob downloads; that cannot be verified without a browser pass and a wrong CSP breaks the app. The download routes already send their own `Content-Security-Policy: sandbox`. Rollout plan: ship `Content-Security-Policy-Report-Only` first, watch reports, then enforce.
 - **Sanitizer contract:** no profile allows `class`, except the exact token `email-blocked-image` on `span` in the email profile. A renderer that needs a class must allowlist the exact name. Because stored rows predate this, `EmailMessage.body` and `Note.content` are **re-sanitized at read time** (idempotent, cheap): in `thread-reader.tsx` and in the note queries in `matter-detail.ts` / `calendar.ts` that feed every note renderer. Protocol-relative hrefs are rejected in every profile.
+- **`poweredByHeader` is off** (`next.config.ts`).
+- **Reply recipient integrity:** the reply composer posts the recipients it displayed plus a `recipientsEdited` flag; `email-send.ts` re-derives the unedited recipients server-side and refuses with `recipients_changed` if they moved since the composer rendered, so a reply can't silently go to a different set than the user saw.
 - **Proxy:** public-prefix matching is path-boundary aware (`/login` and `/login/x`, not `/loginfoo`); `SELF_AUTHENTICATED_PATHS` stays an exact-match set.
 - **docx-preview:** the render is built detached (`parseAsync` + `renderDocument`), sanitized by `sanitizeRenderedDocx` (rule-by-rule `<style>` rebuild, `url()`/fetch-function neutralizing), and only then attached, so nothing a hostile document injects applies or fetches before it is clean. A sandboxed iframe was the alternative; detaching was chosen because it keeps text selection and TreeWalker quote relocation (evidence review) working on the same DOM.
 
@@ -461,8 +513,9 @@ The original decision stored date-only values at **server-local** midnight and d
 
 **Decision:**
 - **Per-item isolation is limited to deterministic data errors.** `isTransientInfraError` (`src/lib/google/transient-error.ts`: Prisma P1001/P1002/P1008/P1017/P2024/P2034, initialization / rust-panic errors, driver socket + SQLSTATE codes) aborts the pass so the history cursor / calendar sync token stays put and the next run retries. A pass in which three or more items all failed and none succeeded also aborts (systemic, not poison); one or two failures with no success still count as isolated poison so a single-thread pass cannot wedge.
-- **Catch-up never closes over a gap it did not fill.** Expired history for an account that has synced before triggers a catch-up since `lastSyncAt − 1d` under a safety cap. If the cap truncates it, neither `historyId` nor `lastSyncAt` advances and `syncError` says so; each re-run skips threads already current locally (`format=minimal` compare of message count, last message time, flags) so the cap is spent on new threads and the gap shrinks every pass. No schema change; progress is implicit in the local threads.
+- **Catch-up never closes over a gap it did not fill.** Expired history for an account that has synced before triggers a catch-up since `lastSyncAt − 1d` under a safety cap (`CATCHUP_MAX_THREADS` = 1000; only a first import is capped at 200 threads / 90 days). If the cap truncates it, neither `historyId` nor `lastSyncAt` advances and `syncError` says so; each re-run skips threads already current locally (`format=minimal` compare of message count, last message time, flags) so the cap is spent on new threads and the gap shrinks every pass. No schema change; progress is implicit in the local threads.
 - **Incremental sync skips unknown threads older than the oldest local thread** (the backfill frontier), so label-only history records on ancient mail cannot drag the anchor back and strand the middle.
+- **Junk mail is never imported.** A thread whose every message is SPAM or TRASH is not imported (history.list reports changes on every label, so this keeps the junk folder out); a local thread that later becomes junk-only is kept, marked read and archived. Drafts are never stored.
 - **A Google-side cancellation only unlinks** (deletes the `CalendarEventSync` row). With no origin flag on `CalendarEvent` there is no reliable "Google-born" discriminator, and deleting loses notes/time/tasks links with no audit entry.
 
 **Trade-offs:**
@@ -484,6 +537,8 @@ The original decision stored date-only values at **server-local** midnight and d
 - Approved invoices are not editable in place: line items (hours / rate) can be changed only while the invoice is `draft`, under `billing.generate_invoice` (plus author-or-`time_entries.edit_any`), with the status re-checked under a row lock and an activity-log row written. To change an approved or sent invoice, void it and regenerate from WIP.
 - Paying from trust (`recordInvoicePayment` source `trust`) needs `billing.apply_trust`, the same key as the dedicated apply-trust path.
 - Every persisted computed amount goes through `roundMoney` (`src/lib/money.ts`): `ROUND_HALF_UP` to 2 dp, applied per line before summing, so the invoice total is the sum of displayed line amounts. Hours are validated to 2 dp on new input.
+- Balances are computed from rounded totals, so legacy rows carrying sub-cent values stay payable. Approve and send refuse a $0 client invoice. Outstanding A/R means client invoices in `sent` or `partial` (same as the A/R aging report). `issueDate` and `dueDate` are reset at send with the payment terms preserved. Invoice numbers take their year from the user's profile zone, and the number of a deleted never-sent draft is reused on purpose (gap-free numbering).
+- Money-view and generation permissions gate the matching controls in the Billing tab; hiding a button never replaces the server check.
 - Status transitions use a status predicate (`updateMany where id and status = expected`); 0 rows is a conflict error. WIP generation links only still-unbilled entries and aborts on a count mismatch.
 
 **Trade-offs:**
@@ -509,7 +564,7 @@ The original decision stored date-only values at **server-local** midnight and d
 **Trade-offs:**
 - (+) One key per capability holds regardless of which composer carried it
 - (+) Denial happens before any write, so there is no partial thread to clean up
-- (-) A denial redirects to `/`, so a user whose draft carries an attachment they may not create loses the draft; the capture stack still offers every kind (follow-up: pass allowed kinds + `canPin` into `CaptureStack`)
+- (-) On the primary composers and bulk attach a denial redirects to `/`, so a draft carrying an attachment the user may not create is lost. The note surfaces (`createNote`) pre-check with `missingPermissions` and return a form error instead, keeping the draft. `getCaptureAccess` / `getNoteAccess` now hide capture kinds and Pin per viewer on the Notes tab; the create dock's note panel still defaults `canPin` to true (follow-up: pass `allowedKinds` and `canPin`).
 - (-) Keys are plain strings (no `PermissionKey` union exists); `capture-permissions.test.ts` asserts every mapped key is known to `isKnownPermission`
 
 
@@ -523,7 +578,8 @@ The original decision stored date-only values at **server-local** midnight and d
 **Decision:**
 - The candidate's own Contact (`ownContactId`, from `Lead.contactId`) is skipped by the soft "already in the directory" warnings. The hard tier still considers it: if the person is also an opposing-side party on an active matter, that is a real conflict.
 - Contacts that are deactivated but still parties on non-archived matters stay in the hard tier. Only contacts merged away (`mergedIntoId` set; their rows moved to the survivor) are excluded. The soft warn still applies to active contacts only.
-- Conflict-check audit entries identify the lead: the title carries the name, the detail begins `lead {id}:`.
+- Conflict-check audit entries identify the lead: the title carries the name, the detail begins `lead {id}:` (older rows keep the nameless title).
+- **`Contact.conflictStatus` is a manual flag only.** `setContactConflictStatus` writes it and merge carries it over, but the matcher never reads it. Whether it should feed the matcher is an open product decision (see Open decisions).
 
 **Trade-offs:**
 - (+) A genuinely clean lead can be cleared; a deactivated adverse party can't hide a conflict
@@ -542,6 +598,7 @@ The original decision stored date-only values at **server-local** midnight and d
 - **Auto vs manual is inferred, not stored** (no schema change): a stored SOL equal to `computeSolDate(stored incident, stored area period)` (or null) is auto-derived and is recomputed from the posted incident date + the possibly-new area on edit (`resolveEditedSolDate` / `isAutoDerivedSol` in `src/lib/sol.ts`); anything else is a manual override and is kept. The edit form shows the auto value as a live preview and leaves the override input empty unless a real override exists. Clearing the incident date, or switching to an area with no period, keeps the stored date rather than dropping it.
 - **Switching to an area without SOL tracking never wipes** the incident date, SOL date/notes or the SOL deadline.
 - **Audit:** `createMatter`, `updateMatter` (incl. SOL old -> new) and `setMatterSolSatisfied` write `ActivityLog`; every deadline create/edit/status/delete does too.
+- **Audit conventions:** matter mutations log type `filing`, deadline mutations type `deadline`; `logAuditEntry` (`src/lib/audit-entry.ts`, free-string type, field names only in the detail) serves parties, practice-area and calendar-default edits.
 - **Lead attorney changes** on the edit form require `matters.manage_team` (same key as `addMatterTeamMember`); the field is locked without it, and the edit page always includes the matter's current client and lead in the option lists even if inactive so a save never detaches them.
 
 **Trade-offs:**
@@ -562,11 +619,139 @@ The original decision stored date-only values at **server-local** midnight and d
 **Decision:**
 - Every `page.tsx` and `layout.tsx` under `src/app/(dashboard)` and `src/app/print` calls a session guard as the **first `await`** of its default export, before any data read: `requireUser()` (`src/lib/current-user.ts`; redirects to `/login`, never wrap in try/catch), or a stronger `requirePermission(key)` / `requireAdmin()` / `getCurrentUserId()`. All are React-`cache()`d, so repeat calls in a request are free.
 - `currentUserHasPermission` is a read-side flag and does not count as a guard.
-- `src/app/page-guards.test.ts` statically enforces the rule (first `await` is a guard; no `prisma.` before it). It carries a commented allowlist for pages whose owning work package has not yet added a guard; entries are removed as guards land.
-- The (dashboard) layout and the proxy remain a UX convenience (redirect early, render the shell for signed-in users), not the security boundary.
+- `src/app/page-guards.test.ts` statically enforces the rule (first `await` is a guard; no `prisma.` before it). The page allowlist (`PAGE_ALLOWLIST`) is now empty; only `(dashboard)/layout.tsx` (the UX gate itself) and `print/layout.tsx` (no data reads) are exempt layouts.
+- The (dashboard) layout and the proxy remain a UX convenience (redirect early, render the shell for signed-in users), not the security boundary. `src/proxy.ts` is an optimistic cookie-presence check only; its matcher excludes `/api/documents/upload` exactly (not `/upload/blob`) because proxy body buffering (`proxyClientMaxBodySize`, 10 MB) would truncate the streaming multipart upload, and that route authenticates itself (401 without a session, 403 without `documents.upload`). `SELF_AUTHENTICATED_PATHS` (cron + blob callback) stays pinned by `src/vercel-config.test.ts`. Cron endpoints authenticate with `isAuthorizedCron` (`src/lib/cron-auth.ts`, constant-time compare, fail closed).
 - Where no billing read permission key exists (matter Billing tab, invoice print route), only the session guard was added; no key was invented because that would change who can see billing. Introducing one is a separate decision.
 
 **Trade-offs:**
 - (+) Authentication no longer depends on which layouts happen to run
 - (+) A new page that forgets the guard fails CI instead of shipping
 - (-) One extra line per page; a static scan cannot see guards hidden behind conditionals or helpers, so reviewers still read the first lines of each page
+
+
+## ADR-029: Matter visibility today is firm-wide; matter-team access is planned, not built
+
+**Date:** 2026-10-17
+**Status:** Accepted (current behavior) / Proposed (matter-team access phase)
+
+**Context:** Older docs implied `MatterTeamMember` restricts who can see a matter. It does not, and the sweep confirmed it on every read path. The firm decided on 2026-10-16 how the restriction should work; the design is in `out/sweep/MATTER_ACCESS_DESIGN.md`. This ADR records the truth so nobody builds on the wrong assumption.
+
+**Decision (current, built):**
+- Every signed-in user can list, open, search, download and export every matter and everything attached to it — notes (including strategy memos), documents, invoices, trust ledger, time narratives — subject only to the granular permission keys and the calendar Busy scrub (ADR-021). Even the zero-permission default role reads matter detail, the Billing tab and `/print/invoices/[id]`; no billing view key exists.
+- `MatterTeamMember` drives assignment, notifications, auto-attendees (`src/lib/calendar-default-attendees.ts`), calendar detail unlocks and the lead filter. It is **not** an access-control list. Ethical walls are unsupported.
+- The document download route and the upload, blob-upload and document-template routes have no firm or matter-team scoping. Scoping them needs the matter-access phase and, for true multi-tenancy, a `Matter.firmId`.
+- Email is the exception: it is mailbox-personal (ADR-014).
+
+**Decision (planned, NOT built — Proposed):**
+- A user can see a matter when they are an active team member, hold the grantable `matters.view_all` key (Admins implicitly), or the firm's matter-visibility switch is still at "everyone". Hidden matters 404 (never 403). Every matter-scoped write also requires access.
+- A firm-level switch (Settings → Firm) starts at "everyone"; the admin flips it to "team only" after fixing rosters with a "thin teams" list. Turning it on is logged.
+- Events on inaccessible matters show as Busy through the existing scrub.
+- Mechanism: `src/lib/matter-access.ts` (`matterAccessWhere`, `canAccessMatter`, `assertMatterAccess`), enforced by a static scan like `page-guards.test.ts` plus two-user integration tests. The firm-switch column and `matters.view_all` ship in the Batch 4 migration (see `SCHEMA_NOTES.md`; not applied).
+
+**Trade-offs:**
+- (+) Docs now state what the code does; the planned phase has an agreed rollout that cannot lock anyone out on day one
+- (-) Until the phase ships, any staff account can read any client file; permissions narrow actions, not reads
+
+---
+
+## ADR-030: Settlement status follows the approval chain; amounts and steps serialize under a per-matter lock
+
+**Date:** 2026-10-17
+**Status:** Accepted
+
+**Context:** `matters.settlement.edit` could set `status` directly, so an editor could mark a settlement approved or disbursed without the approval chain, and amount edits raced with approver clicks.
+
+**Decision** (`src/app/actions/settlements.ts`):
+- New settlements are always `pending`. Only the approval chain (`setApprovalStepStatus` promotes `pending` to `approved` when every step is approved and demotes `approved` to `pending` when a step is rejected or reset) or `matters.settlement.approve` moves status. `edit` alone can no longer change status; `approve` also covers reopen and stage transitions through `upsertSettlement`. Step notifications go only to `matters.settlement.view` holders.
+- `disbursed` and `closed` lock amounts. Changing amounts on a fully approved settlement resets the approvals and therefore requires `matters.settlement.approve`.
+- Amount edits, step changes and creation all take `pg_advisory_xact_lock(hashtext('settlement:' + matterId))`, so two approvers or an approver and an editor serialize. This substitutes for a unique index on `settlements(matterId)`, which is a pending Batch 4 migration (`SCHEMA_NOTES.md`).
+- Client net is signed and never clamped (a negative net is shown, in warn tone). Fee math is Decimal HALF_UP to cents via `src/lib/settlement-waterfall.ts` (same rounding rule as ADR-024); `Settlement.clientNet` is derived on read, not stored.
+
+**Trade-offs:**
+- (+) The recorded status always matches the recorded sign-offs
+- (-) The lock is app-level; a second row for the same matter is still possible through a path that skips it until the unique index ships
+
+---
+
+## ADR-031: Google sync coordination — claim CAS, deterministic event ids, frontier skip
+
+**Date:** 2026-10-17
+**Status:** Accepted (complements ADR-023)
+
+**Context:** The cron, "Sync now" and the opportunistic page kick can all start a sync for the same mailbox, and Calendar pushes can race or retry. A new claim column was avoided to keep the schema untouched.
+
+**Decision:**
+- **Sync claim by compare-and-set** on `EmailAccount.syncStatus` (`gmail-sync.ts`): `updateMany` flips the row to `syncing` only if it is not already `syncing` or its `updatedAt` is older than `SYNC_CLAIM_STALE_MS` (10 minutes, a crashed run). Zero rows claimed means another pass has it and this one returns `skipped`. The claim also requires a refresh token and a non-`disconnected` status so a concurrent disconnect is not stomped. **`EmailAccount.updatedAt` is therefore the heartbeat** — any update to the account refreshes it. The sweep order is `lastSyncAt` ascending, nulls first; the email-sync route sets `maxDuration = 300` (confirm against the Vercel plan limit).
+- **Deterministic Google event ids:** the CRM event id is base32hex-encoded (`googleEventIdFor`, `calendar-shared.ts`) and sent as the Google event id on insert. A 409 means that id already exists (lost mapping write, racing first push, or a copy cancelled at Google) and the push PATCHes it with `status: confirmed` instead of creating a duplicate.
+- **Backfill anchor without a schema column:** incremental sync skips unknown threads older than the oldest local thread (ADR-023). A durable `EmailAccount.backfillBefore` is deferred.
+- **Junk:** SPAM/TRASH-only threads are never imported; local ones are kept, read and archived (ADR-023).
+- **Host allowlist:** `gmailFetch` only calls `gmail.googleapis.com` and `www.googleapis.com`, with a 60 s per-request timeout (caller signal wins; OAuth endpoints 30 s). OAuth connect refuses a grant missing `gmail.modify` / `gmail.send`; connect and disconnect are audited as `auth` rows. Read-state writeback is per message (`messages/batchModify` over synced ids), and after a failed writeback the local flag stands until Gmail next reports that thread, then Gmail's labels win.
+
+**Trade-offs:**
+- (+) Concurrent passes are safe and crashed runs recover without a lock table
+- (-) Reusing `updatedAt` as the heartbeat means unrelated account writes extend a stale claim; a dedicated `syncStartedAt` column would be cleaner
+- (-) A Google-born event deleted in Google lingers until `CalendarEvent.origin` exists (ADR-023)
+
+---
+
+## ADR-032: Database pool sizing
+
+**Date:** 2026-10-17
+**Status:** Accepted
+
+**Context:** The pool was capped at one connection per process. With the advisory-lock transactions of ADRs 020, 030 and 031, a single slow transaction queued every other request in that instance, and the concurrency tests could not exercise real lock contention.
+
+**Decision:** `src/lib/prisma.ts` sizes the `pg` pool from `DATABASE_POOL_MAX` (a positive integer), default **5** per instance. Vercel Fluid compute shares one instance across concurrent requests, so a handful of connections per instance is the right unit; total connections are instances times this value, which must stay under the database's limit (use a pooler for large fan-out). The test suite runs with `DATABASE_POOL_MAX=4`, and lock-contention tests use a multi-connection pool on purpose.
+
+**Trade-offs:**
+- (+) Concurrent requests no longer serialize behind one connection; row- and advisory-lock behavior is testable
+- (-) More connections per instance; revisit if the database connection limit is approached
+
+---
+
+## ADR-033: Error boundaries use retry(); the notification bell reads over GET
+
+**Date:** 2026-10-17
+**Status:** Accepted
+
+**Context:** In Next 16 an error boundary's `reset()` only re-renders the client tree and does not refetch the server component that threw, so "Try again" re-showed the same error. Separately, a polled Server Action is dispatched one at a time per client, so the bell's poll queued ahead of the user's real mutations (Save waited behind a fetch).
+
+**Decision:**
+- Error boundaries call `retry()` (re-fetches and re-renders the segment). `src/app/error.tsx` is the layout-level backstop for errors thrown above any route-level boundary.
+- Notification bell state lives in a provider inside `AppShell`. The poll reads through `GET /api/notifications/bell` (`src/app/api/notifications/bell/route.ts`, session-checked, scoped to the session user, never cached); mutations (mark read, mark all read) stay Server Actions. Notification writers and mark-read actions no longer revalidate the layout; the bell and feed are client state.
+- Rule of thumb: polled or background **reads** use a GET route handler that authenticates itself (the proxy only checks cookie presence, ADR-028); **mutations** use Server Actions (`docs/ARCHITECTURE.md`).
+
+**Trade-offs:**
+- (+) Retry actually recovers from transient failures; saves are not blocked by the poll
+- (-) One more route handler to keep guarded and tested
+
+---
+
+## ADR-034: Document bytes never travel through server actions
+
+**Date:** 2026-10-17
+**Status:** Accepted
+
+**Context:** Server Actions cap the request body (about 1 MB) and run on a serverless function; the single-file composer originally posted its file through `uploadDocument` and silently failed for ordinary files. ADR-015 already moved bulk uploads off the serverless path.
+
+**Decision:** Any code path that carries file bytes uses an upload transport, never a server action: the streaming busboy route `POST /api/documents/upload` under the local driver, or the client-direct Blob upload (`/api/documents/upload/blob`) under the Vercel Blob driver. The uploader and the single-file composer pick the transport from the `storageDriver` prop supplied by the server component. The route accepts optional `name` (single-file only) and `category` fields; the blob `clientPayload` accepts `category`. The `uploadDocument` server action is no longer referenced by the UI (it still enforces `documents.upload` for programmatic callers; removal is a dead-code decision). The composer uses a manual submit handler, so the typed form survives errors. There is no edit-metadata action (rename or re-categorize); adding one needs a `documents.edit` key and is an open product decision.
+
+**Trade-offs:**
+- (+) Large files work in production; the 1 MB action cap can't truncate an upload
+- (-) Two transports to keep behaviorally identical (name/category round-trip, permission checks, audit rows)
+
+---
+
+## Open product decisions
+
+These are not ADRs: each needs a human call, and when it is made it becomes an ADR (or amends one).
+
+1. **Trust `deposit` activity rows.** "Trust applied to invoice ... $amount" rows show to every viewer on the matter Timeline. Should they require a billing-view key? No such key exists (ADR-021, ADR-029).
+2. **Does `Contact.conflictStatus` feed the conflict matcher?** It is a manual flag the matcher never reads (ADR-026).
+3. **`documents.template.delete` versus `.edit` for archive/restore.** The catalog text for `documents.template.delete` says "Archive or permanently remove", but `document-templates.ts` gates archive and restore on `documents.template.edit` (the action docstring calls this deliberate). Align the catalog text or the code.
+4. **Privileged time narratives.** Search hides them from non-authors; the Time tabs show them to everyone (ADR-014). Decide the policy and apply it everywhere.
+5. **A per-event `private` calendar visibility value.** The default `show_details` setting is retroactive across all of a creator's events and cannot be overridden per event.
+6. **Reads that need a key before they can be gated:** `exportContactsCsv`, the command-palette data, `searchAttendeesAction`, `previewDocumentFromTemplate`, and the billing read surface (ADR-028 added only session guards).
+7. **Matter-team access phase** (ADR-029): approve building it, including `matters.view_all`, the firm switch and the thin-teams list.
+8. **Document metadata edit** (rename, re-categorize) needs a `documents.edit` key (ADR-034); the receipt picker is capped at 200 documents.
+9. **Google-born event cleanup and an explicit backfill anchor** need `CalendarEvent.origin` and `EmailAccount.backfillBefore` (ADR-023, ADR-031).

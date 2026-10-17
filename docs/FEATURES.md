@@ -17,6 +17,30 @@ Authentication is real (Auth.js + argon2id). Production deploy is
 on Prisma Postgres (via the Vercel integration) with the build wired to regenerate the
 Prisma client.
 
+**Honest caveats (post-sweep, 2026-10-17).** The two-batch
+code-quality sweep fixed a large number of correctness and security
+defects, but some things are still PARTIAL or unbuilt:
+
+- **No matter-level read restriction.** Every signed-in user can see
+  every matter (and its notes, documents, invoices, trust, time).
+  `MatterTeamMember` is NOT an access list today: it drives calendar
+  detail unlocks, notifications, auto-attendees and lead filters
+  only. Matter-team access ("ethical walls") is PLANNED, not built;
+  the design is in `out/sweep/MATTER_ACCESS_DESIGN.md` (a
+  `matters.view_all` key plus a firm-level "Everyone / Team only"
+  switch). Do not treat `matters.manage_team` as a read gate.
+- **Some page/data-layer session guards are PARTIAL** (F084, F026,
+  F085, F145): the dashboard agenda/activity halves are done, but the
+  parties, evidence and deadlines pages and a few dashboard readers
+  still lack their own session guard (rule: ADR-028 in
+  `docs/DECISIONS.md`).
+- **Invoice email delivery is logged-only** (audit titles say "not
+  emailed"); nothing is actually sent to the client.
+- **`/intake/new` is a placeholder** (no intake add form and no
+  intake add permission key yet). `updateExpense` exists server-side
+  with no UI. Note edit UI (`updateNote`) and "Add note" on a
+  deadline (`addNoteToDeadline`) have no UI caller.
+
 The remaining work clusters around three buckets:
 
 1. **External integrations** — Gmail send/OAuth, Google Calendar
@@ -80,7 +104,8 @@ done. What's left is enumerated below.
   delete of manual logs shipped (kebab on manual call items in the
   thread reader + matter phone log; provider-synced items stay
   immutable), as did the lead-page "Log call" entry point (contact
-  pre-selected, files matterless) and the contact-page entry point
+  pre-selected, no matter chosen; a thread default matter, if one
+  exists, can still route it) and the contact-page entry point
   (contact fixed via `fixedContact`). Still left: SMS send
   (Quo / Twilio), voicemail transcription — both need providers.
 - [x] **Document templates / template library.** Shipped 2026-07-07:
@@ -108,8 +133,8 @@ done. What's left is enumerated below.
   leads, notes (HTML matched, tag-stripped snippets), documents,
   tasks, deadlines, calendar events (run through the same
   `canViewEventDetails` scrub as the calendar — private events never
-  match or leak), email threads/messages, messenger items, and time
-  entries (privileged narratives match only for their author). No
+  match or leak), email threads/messages, messenger items, and time entries (privileged narratives match only for their author).
+Email results are scoped to the viewer's OWN mailbox. No
   new permission keys — search inherits each entity's read model.
   `/search?q=` results page grouped by type with highlighted
   snippets, counts, and per-group `?type=` expansion; ⌘K palette
@@ -139,7 +164,14 @@ done. What's left is enumerated below.
   `notifyTaskAssigned` (src/lib/task-assignment.ts) with the
   actor-exclusion rule, so assigning someone else pings them even
   at create time (sibling task captures still self-assign —
-  silent by construction).
+  silent by construction). The triggers are `updateTask` and
+  `createTaskWithCaptures`; `setTaskOwner` still exists but has no UI
+  caller. The deadline sweep also sends a "Deadline due today" notice
+  and calls a deadline overdue only after its due day ENDS, both in
+  the recipient's profile zone; its link format is
+  `...?deadline=<id>&due=<7d|1d|today|overdue>&on=<YYYY-MM-DD>`, it
+  runs under a Postgres advisory lock, and the rollout produced one
+  duplicate notice per in-window bucket.
 - [x] **Calendar event create — v2.** Shipped 2026-07-07: standalone
   `/calendar/events/new` full-page form (`NewEventForm`) — title /
   type / start–end / all-day (same reseed-on-toggle as the edit
@@ -152,7 +184,14 @@ done. What's left is enumerated below.
   `createCalendarEvent` (still gated `events.create`), which now
   accepts an optional `attendees` JSON at create time — same wire
   format + resolution/dup-email rules as the update path, creator
-  auto-added as a firm attendee unless already in the list. Toolbar
+  auto-added as a firm attendee unless already in the list, and the
+  effective `autoAddTeamToNewEvents` setting pulls the matter team in
+  (same rule as the matter Events tab). Matter events write
+  ActivityLog rows on create/update/reschedule/delete (personal events
+  are deliberately unlogged); the video link must be http(s);
+  Google-imported attendee-less events adopt the editor as attendee on
+  first edit. Create entry points (toolbar button, quick composer) hide
+  without `events.create`. Toolbar
   "New event" now navigates to the page; a secondary zap button
   keeps the docked quick composer as the fast inline path. On
   success the form lands on `/calendar?event=<id>` with the detail
@@ -209,8 +248,8 @@ done. What's left is enumerated below.
   CRM row's `updatedAt` to overwrite, and pull writes go through
   prisma directly (never the server actions) so a pull can never
   trigger a push echo; (2) **unlink-only cancellation** (W6a, ADR-023) —
-  deleting an event in Google drops only the sync mapping; the CRM
-  event always survives, so cleaning a personal Google calendar can
+  deleting an event in Google drops only the sync mapping, for every
+  event type; the CRM event always survives, so cleaning a personal Google calendar can
   never delete a firm deposition or a CRM-born matterless meeting.
   Cost: a Google-born import deleted in Google lingers in the CRM
   until removed there; (3) **attendees never sync to
@@ -218,8 +257,8 @@ done. What's left is enumerated below.
   (4) v1 imports every non-cancelled item incl. tentative/
   transparent. Triggers piggyback email sync: the "Sync now" button
   and the /api/email-sync cron cover calendar with zero new UI;
-  per-account isolation means a broken calendar never blocks mail. In progress —
-  the shared contract (resource mapping, echo marker, LWW policy)
+  per-account isolation means a broken calendar never blocks mail. The
+  shared contract (resource mapping, echo marker, LWW policy)
   lives in `src/lib/google/calendar-shared.ts`; mappings in
   `CalendarEventSync` (one row per event × Google account).
   - **Sync integrity and isolation (W6a, ADR-023).** Gmail: DRAFT
@@ -229,28 +268,41 @@ done. What's left is enumerated below.
     skipped while connectivity/transient database errors abort the
     pass with the cursor untouched; several threads all failing also
     aborts. An expired-history fallback for an account that has
-    synced before is a catch-up since `lastSyncAt − 1d`; hitting its
-    per-pass cap does NOT advance the cursor or `lastSyncAt`
+    synced before is an uncapped catch-up since `lastSyncAt − 1d`
+    (safety cap `CATCHUP_MAX_THREADS` = 1000; only a FIRST import is
+    capped at 200 threads / 90 days); hitting the safety cap does NOT advance the cursor or `lastSyncAt`
     (noted in `syncError`), and threads already current locally are
     skipped via a `format=minimal` check so repeat passes reach the
     older part of the gap. Incremental sync never imports an unknown
     thread older than the oldest local one (backfill anchor).
-    Deactivated users' accounts do not sync. Calendar: echo of our
+    Deactivated users' accounts do not sync or push (reactivation
+    resumes; tokens are untouched). SPAM/TRASH-only threads are not
+    imported (local copies are kept, read + archived); non-UTF-8 bodies
+    are decoded by the part's charset; a per-account sync claim makes
+    concurrent Sync now / cron / page-kick runs skip (claim goes stale
+    after 10 minutes); skipped poison threads/events surface in
+    `syncError` ("N thread(s)/event(s) could not be imported"). OAuth
+    connect refuses grants missing `gmail.modify`/`gmail.send`, and
+    connect/disconnect are audited as `auth` rows. CRM-side cleared
+    description/location now clear at Google too. Calendar: echo of our
     own push is detected against the mapping's `googleUpdatedAt`; a
     `lawcrmEventId` marker is adopted only for an event already
     mapped to this account or created by its owner. Cron routes
     authenticate with a constant-time bearer check. Read and archive
-    writeback modify only message ids the CRM has synced (per-message
-    fallback when Gmail rejects a stale id).
+    writeback modify only message ids the CRM has synced
+    (`messages/batchModify`, per message, with a per-message fallback
+    when Gmail rejects a stale id).
     **Open items:** `EmailAccount.backfillBefore` (explicit backfill
-    anchor, instead of the oldest local thread) and a
+    anchor, instead of the oldest local thread), a
     `CalendarEvent.origin` flag (would allow safe Google-born
-    cleanup on cancel) both need a schema change; star writeback is
-    still thread-wide.
+    cleanup on cancel) and acknowledgement of skipped threads all need
+    follow-up work (the first two need a schema change); star writeback
+    is still thread-wide.
   - **Push half (CRM → Google) — landed.**
     `src/lib/google/google-calendar-push.ts`, hooked into the
     calendar-event server actions after each local commit
-    (create both paths / update / move → push; delete → Google
+    (create both paths / update / move → push, including matter
+    Events-tab events and sibling event captures; delete → Google
     sweep BEFORE the CRM row deletes, since the mappings cascade
     away with it). Policy: creator-only (attendee fan-out is a
     follow-up), exactly ONE calendar per creator — the oldest
@@ -285,7 +337,10 @@ done. What's left is enumerated below.
   computed client-side into the same `hours` field) and
   `UtbmsCodeSelect` (A100 activity + L100 litigation task catalogs in
   `src/lib/time-entry-constants.ts`, server-validated everywhere the
-  column is written). Narrative + billable/no-charge/privileged were
+  column is written). The edit dialog no longer offers the Billed
+  status; time-entry create/edit/status/delete are activity-logged
+  (edits log date/billable/no-charge changes), and the Time tab
+  header shows "latest N of M" when capped at 200. Narrative + billable/no-charge/privileged were
   already in; the Time-tab rows render the UTBMS chip (label on
   hover) and a "Timer" provenance marker.
 - [x] **Timer widget.** Shipped 2026-07-07: floating bottom-right
@@ -298,7 +353,10 @@ done. What's left is enumerated below.
   REQUIRED; `source: "timer"`). Actions in `src/app/actions/timer.ts`
   — start/update/discard need no permission key (a timer is a
   pre-entry, not a billing record); `stopTimer` gates on
-  `time_entries.create`. Follow-ups: auto-capture from activity,
+  `time_entries.create`. `startTimer` no longer silently replaces a
+  running session: it returns `code: "already_running"` unless
+  `replace: true` (so a palette "Start timer" row could now be added
+  safely by surfacing that refusal). Follow-ups: auto-capture from activity,
   idle-detection prompts.
 - [x] **Time reconciliation.** Shipped 2026-07-07: `/time?view=day`
   — Logged lane (manual entries), Captured lane (source != manual,
@@ -306,7 +364,8 @@ done. What's left is enumerated below.
   snapshot; the widget owns interaction), and a day-total progress
   bar against the firm's daily goal (`Firm.dailyHoursGoal` via
   `getFirmGoals()` — editable on /settings/firm since 2026-07-07).
-  Read-only v1 — entries link to the matter Time tab.
+  The Timer lane shows only on today's day view. Read-only v1 —
+  entries link to the matter Time tab.
 - [x] **Standalone Contact UI v2.** Shipped 2026-07-07: granular
   `contacts.*` permission gates, multi-phone management UI
   (add/remove/relabel/reorder/set-primary with server-enforced
@@ -324,13 +383,21 @@ done. What's left is enumerated below.
   path, confirm() first), and Export CSV (read-only, session-gated
   only — name / type / organization / email / primary phone /
   folded address / active, built via `src/lib/csv.ts` with
-  RFC 4180 escaping + a formula-injection guard). Batches are
+  RFC 4180 escaping + a formula-injection guard: cells starting with
+  `=`, `+`, `-`, `@`, TAB or CR get a leading apostrophe, except plain
+  number/phone values). Batches are
   deduped, all-or-nothing on validation, and capped at
   `BULK_CONTACT_LIMIT` (100) client- AND server-side; each bulk op
   writes ONE summary activity-log row (exports included — "who
   pulled the contact list" is audit-worthy). Merged/inactive rows
   never render in the list, so they're unselectable; the actions
-  still re-validate ids server-side.
+  still re-validate ids server-side. Also: inactive contacts can be
+  brought back with `reactivateContact` (never a merged-away one);
+  merge asks for confirmation when the two contacts sit on opposite
+  sides of a matter; the merge-target search runs server-side
+  (`searchMergeCandidates`, so it no longer stops at the first 500
+  directory rows); a merge keeps the loser's conflict flag, notes and
+  duplicate party-row details.
 
 ### P2 — polish + tech debt
 
@@ -339,13 +406,15 @@ done. What's left is enumerated below.
   without it). Four server-rendered snapshot cards, CSS bars only
   (no charting lib): Pipeline (intake funnel by lead stage, open
   matters by practice area × stage, leads converted this quarter —
-  updatedAt proxy), Utilization (per-active-user billable vs total
+  dated by the converted matter's `createdAt`; includes retired
+  practice areas that still hold open matters), Utilization (per-active-user billable vs total
   this month with a capacity tick from `Firm.dailyHoursGoal` ×
   business days, firm MTD vs `monthlyBillableGoal` — both read
   fresh off the Firm row), AR aging (client invoices sent/partial
   in 0–30/31–60/61–90/90+ buckets, Decimal-safe sums, top-5 oldest
   with matter links), Realization (trailing 3 months worked →
-  billed → collected, cash-basis). Queries in
+  billed → collected, cash-basis; "billed" = client invoices
+  sent/partial/paid). Queries in
   `src/lib/queries/reports.ts` (+integration tests), viewer-tz
   month/quarter windows. Follow-ups: date-range picker, CSV
   export, per-user drill-down.
@@ -353,13 +422,15 @@ done. What's left is enumerated below.
   app (communication/intake surfaces included): every display
   callsite funnels through `formatDate`/`formatRelative` variants;
   dashboard queries take the viewer's TZ; date-only inputs parse
-  via `parseLocalDate`/`parseLocalDateOrDateTime` (see ADR-012 for
-  the two date conventions; matters.ts SOL/incident dates are the
-  documented UTC-midnight exception). `ui/calendar.tsx` (vendored
-  react-day-picker) left alone.
+  via `parseDateOnly` (UTC-midnight calendar date) and `parseWallClock`
+  (a wall-clock instant in the user's zone) — see ADR-012. The old
+  `parseLocalDate`/`parseLocalDateOrDateTime` helpers no longer exist.
+  The vendored react-day-picker `ui/calendar.tsx` primitive was
+  deleted (the `react-day-picker` package dependency is still listed
+  in package.json; removal pending).
 - [x] **Timezone awareness in date inputs.** Covered by the same
-  sweep: date-only strings parse to local midnight server-side and
-  render without TZ override, so "March 15" stays March 15
+  sweep: date-only strings parse to UTC-midnight calendar dates
+  (ADR-012) and render without TZ override, so "March 15" stays March 15
   regardless of viewer/server zones.
 - [x] **Hardcoded magic numbers in dashboard.** Shipped 2026-07-07:
   `Firm.dailyHoursGoal` (default 6.0) + `Firm.monthlyBillableGoal`
@@ -430,9 +501,10 @@ done. What's left is enumerated below.
   "1 matters") and converted the thread-list/thread-reader count
   labels; existing correct ternaries elsewhere migrate
   opportunistically.
-- [ ] **PracticeArea color vs Matter color drift.** Matter snapshots
-  area color on create; if the area color changes, matters keep the
-  old color. Document the decision in DECISIONS.md (or fix).
+- [x] **PracticeArea color vs Matter color drift.** Fixed in the
+  sweep: a matter still snapshots the area color on create, but
+  recoloring an area now recolors the matters still on the OLD color;
+  per-matter overrides are preserved (`updatePracticeArea`).
 - [x] **Email labels render as raw `privileged_label` instead of
   "Privileged".** Shipped 2026-07-07: `formatEmailLabel` in
   `src/lib/format-label.ts` (strips `custom:` prefixes and
@@ -494,8 +566,9 @@ done. What's left is enumerated below.
   at `#page=N` (keyed remount so repeat clicks re-navigate).
   **docx/text/CSV** — selecting text raises a floating "Flag
   selection" affordance (trimmed selection → quote anchor, ≤500);
-  clicking a flag relocates the first case-insensitive match
-  (`src/lib/quote-locate.ts`), scrolls + temporarily highlights it
+  clicking a flag relocates the first case- and
+  whitespace-insensitive match (`src/lib/quote-locate.ts`; an
+  occurrence index is deferred), scrolls + temporarily highlights it
   (CSS Custom Highlight API, selection fallback), and shows a
   visible "quote not found in current render" notice when the text
   changed. Works unchanged on the docx-preview renderer (real text
@@ -517,7 +590,10 @@ done. What's left is enumerated below.
   anchor server-side and seeks / opens the page / highlights the
   quote; media's older `?t={seconds}` links still work). Permission
   keys `evidence.flag.create` / `.edit_any` / `.delete_any` —
-  creators always edit/delete their own (notes ownership pattern).
+  creators always edit/delete their own (notes ownership pattern);
+  flag edits are activity-logged. Deleting a document is refused while
+  other reviewers' flags exist unless the user holds
+  `evidence.flag.delete_any`.
   Queued follow-ups: transcripts for audio/video, OCR + text
   extraction feeding search, `EvidenceSync` multi-track alignment
   (bodycam + dashcam side-by-side), and the `Evidence`-model
@@ -543,16 +619,19 @@ done. What's left is enumerated below.
   (`#matter`, `@person` — includes leads, `>action`) parsed by
   `src/components/command-palette/prefix.ts` and enforced in the
   cmdk filter via per-item kind tags; "Create" group ("New matter",
-  "New contact" — re-homed from Navigation, "New event", "New
-  intake / lead") — pure navigation, target pages enforce their own
-  permission gates since PaletteData carries no permission flags;
+  "New contact" — re-homed from Navigation, "New event") — pure
+  navigation, target pages enforce their own permission gates since
+  PaletteData carries no permission flags (`/matters/new` now does).
+  The "New intake / lead" and "Billing" rows were removed until those
+  pages exist; the Reports row is permission-gated; the palette is
+  lazy-loaded;
   "Search everywhere" carries `#`/`@` into `/search?type=matter|contact`
   and hides under `>`. REMAINING: fuzzy-match highlight inside
   results; "New task" (no standalone create page yet); "Log a call"
   (CallLogDialog needs contact-picker data + a URL affordance to
-  auto-open); "Start timer" (startTimer() silently replaces a
-  running session — needs the active-session flag in PaletteData to
-  be safe from the palette).
+  auto-open); "Start timer" (`startTimer()` now refuses with
+  `already_running` instead of replacing a running session, so the row
+  could be added by surfacing that refusal).
 - [ ] **Role-based & customizable sidebar.** Different sidebar
   content per role with per-user overrides. Generic "pinned items"
   concept spanning matters, reports, leads, contacts, saved-filter
@@ -577,7 +656,8 @@ done. What's left is enumerated below.
   `Task.taskListId`), and every application is activity-logged.
   Keys: `automations.view`, `automations.deadline_rule.*`,
   `automations.task_list.*`, `automations.defaults.{create,delete}`.
-  Follow-ups: recalculate dependent deadlines when an anchor date
+  Sweep fixes added locking and duplicate-force handling; status
+  unchanged. Follow-ups: recalculate dependent deadlines when an anchor date
   moves (v1 snapshots dates at apply time); task due dates relative to
   a deadline; more triggers (stage change); assignment notifications
   for auto-created tasks.
@@ -609,9 +689,10 @@ done. What's left is enumerated below.
   password is verified), changing a password throttles wrong
   current-password guesses the same way, unknown emails burn a dummy
   argon2 verify, and an admin can clear a lock (`sign_in_unlocked`
-  event; also written by a password reset). Server action
-  `unlockFirmMemberSignIn` exists but the team-page button is not wired
-  yet; a per-account lock can be triggered on purpose by anyone who
+  event; also written by a password reset). The Team page's per-member
+  menu has an "Unlock sign-in" item (`unlockFirmMemberSignIn`); the
+  login action distinguishes bad credentials from infrastructure
+  errors ("Sign-in is temporarily unavailable"); a per-account lock can be triggered on purpose by anyone who
   knows an email (accepted, edge rate limit recommended).
 - [~] **Settings — Integrations.** Gmail is live: per-user connect /
   reconnect / disconnect card (address, sync-status chip, last sync,
@@ -620,8 +701,9 @@ done. What's left is enumerated below.
   same card (per-account "Calendar sync on" vs "Reconnect to enable
   calendar sync" scope line). Page is self-service (no permission
   key — connecting YOUR mailbox is identity-scoped like
-  notifications). Remaining: Westlaw, e-sign, IOLTA bank feed,
-  PACER — each lights up when its underlying feature phase lands.
+  notifications). `CRON_SECRET` is required in production, and the Google Cloud
+  project needs BOTH the Gmail and Calendar APIs enabled. Remaining:
+  Westlaw, e-sign, IOLTA bank feed, PACER — each lights up when its underlying feature phase lands.
 - [ ] **Settings — Billing & rates.** Default hourly rate, UTBMS
   code library, invoice templates, payment terms.
 - [x] **Lead → matter conversion — v2 automations.** Shipped
@@ -664,11 +746,11 @@ end-to-end" milestone — schema, action, query, UI all wired.
 - [x] **Project scaffold** — Next.js, shadcn, Prisma, TanStack Query
 - [x] **Design tokens** — Brand colors, fonts, spacing from design handoff
 - [x] **App shell** — Sidebar nav, topbar, layout wrapper
-- [x] **Dashboard page** — KPI tiles, agenda, your tasks, activity feed, deadlines, firm pulse (live Prisma queries)
+- [x] **Dashboard page** — KPI tiles, agenda, your tasks, activity feed, deadlines, firm pulse (live Prisma queries). Definitions: "Hours today" is the viewer's OWN hours; email KPIs and follow-ups are per-mailbox, and the "flagged" sub-KPI means starred + unread in your own mailbox; A/R = client invoices sent/partial outstanding; collection rate = collected / billed over client sent/partial/paid; Today's agenda uses the calendar Busy scrub and lists all-day events first as "All day"; the Deadlines card lists overdue rows ("Nd late") across all non-archived matters (max 20) with matter links; Your tasks shows at most 25 per bucket plus "+N more", and its row menu has only Log time / Add note (not the full matter-tab task menu).
 - [x] **Dashboard — customizable layout (v1: show/hide)** — "Customize" popover in the dashboard topbar with one checkbox per card. Persisted as JSON on `User.dashboardPrefs` (`{ visible: Record<cardKey, boolean> }`). Defaults to all visible — new cards auto-appear without backfill. Optimistic UI flip + server action + revalidation.
 - [x] **Seed data** — Realistic mock data from the prototype
-- [x] **Command palette (⌘K)** — Global ⌘K opens the palette from anywhere. Unified search across matters (name/case number/client/area/stage), contacts, leads, users, and navigation destinations. Contextual "Pin/Unpin this matter" action on matter detail pages. Recents persisted in localStorage; empty state shows recents + pinned matters + suggestions. Token-AND filter so multi-word queries match across fields. v2: scoping prefixes (`#` matters, `@` people incl. leads, `>` actions) + a "Create" action group (New matter / contact / event / intake-lead — pure navigation, pages enforce their own permissions); prefixes carry into the "Search everywhere" row as `/search?type=`.
-- [x] **Sidebar — data-driven** — All sidebar content is live: per-user pinned matters (cuid hrefs), practice-area counts, main nav badges (open matters, unread email, active leads, hours today), current user profile.
+- [x] **Command palette (⌘K)** — Global ⌘K opens the palette from anywhere. Unified search across matters (name/case number/client/area/stage), contacts, leads, users, and navigation destinations. Contextual "Pin/Unpin this matter" action on matter detail pages. Recents persisted in localStorage; empty state shows recents + pinned matters + suggestions. Token-AND filter so multi-word queries match across fields. v2: scoping prefixes (`#` matters, `@` people incl. leads, `>` actions) + a "Create" action group (New matter / contact / event — pure navigation, pages enforce their own permissions); prefixes carry into the "Search everywhere" row as `/search?type=`.
+- [x] **Sidebar — data-driven** — All sidebar content is live: per-user pinned matters (cuid hrefs), practice-area counts, main nav badges (open matters, unread email -- own mailbox, unarchived only, active leads, hours today). There is no firm-level Billing item (no such page); Automations lives under Settings, current user profile.
 - [x] **Loading states** — `loading.tsx` per high-traffic segment (dashboard, matters list, matter detail, intake, calendar, communication, contacts) backed by a shared `<PageSkeleton variant="tiles|table|detail|grid">`.
 - [x] **Error boundaries** — Dashboard-segment `error.tsx` + `not-found.tsx` for missing matters/leads/contacts + root `global-error.tsx` as last-resort fallback.
 
@@ -684,26 +766,27 @@ end-to-end" milestone — schema, action, query, UI all wired.
 > generation, conflict checks) belong to their own dedicated phases.
 
 - [x] **Matters list — route + basic table** — Route, table, real data, click-through to detail.
-- [x] **Matters list — sort & filter** — URL-backed state, 8 filter dimensions, sortable column headers.
-- [x] **Matters list — view toggle (Table / Kanban)** — Segmented control, URL-backed (`?view=kanban`), kanban shows all 10 lifecycle stages; matter cards show area/fee/lead/trust/next-deadline.
+- [x] **Matters list — sort & filter** — URL-backed state, 8 filter dimensions, sortable column headers. Search and sort apply before the 200-row cap; pinned matters sort first; deadline windows are based on the viewer's calendar day.
+- [x] **Matters list — view toggle (Table / Kanban)** — Segmented control, URL-backed (`?view=kanban`), kanban shows one column per stage present in the filtered result (empty stages have no column); matter cards show area/fee/lead/trust/next-deadline.
 - [x] **Matter detail — pin toggle** — Per-user pin/unpin, server action + revalidation, sidebar updates live.
 - [x] **Matter detail — Overview tab** — Case facts + team roster (active in brand color; former dimmed with "(former)" suffix), preview cards for upcoming deadlines, open tasks, all pinned notes rendered as rich-text HTML, Clients card with contact info.
-- [x] **Matter team management** — Admin-gated section on matter edit page: add/remove lead/co-counsel/paralegal/investigator/of-counsel. Promoting a lead auto-demotes existing one to co-counsel. Removal soft (`MatterTeamMember.removedAt`); former members render dimmed. At-least-one-lead invariant. ActivityLog on every add/remove. Permission key: `matters.manage_team`.
-- [x] **Matter detail — Timeline tab** — Real chronological activity feed reading from `ActivityLog`. Day-grouped (Today/Yesterday/absolute date) with per-row icon, source chip, author, timestamp. URL-driven filter pills (All/Filings/Communications/Deadlines/Tasks/Notes/Time/Financial/Events) with live counts. 200-row cap. Settlement and expense rows are omitted unless the viewer holds `matters.settlement.view` / `matters.expense.view` (ADR-021).
-- [x] **Matter detail — Documents tab** — Per-matter document **file system** (replaced the flat category-grouped list on 2026-07-07). Left-rail collapsible folder tree (`DocumentFolder`, nesting capped at 8 levels; "All documents" = matter root) with per-folder direct-count badges; URL-driven selection (`?folder=<id>` — back button + shareable links work, unknown ids fall back to root); breadcrumbs above the list. The browser shows the selected folder's subfolders + files (name/category/status/size/uploader/date); file names link to the document viewer route. Write affordances behind granular flags: **New folder** (`documents.folder.create`), folder **rename** (`documents.folder.edit`) / **delete** (`documents.folder.delete` — contents re-parent up a level with " (2)"-style collision suffixes, files are NEVER deleted with a folder), **Move to…** on both files and folders (`documents.organize`, shared picker dialog with cycle-proof disabled targets). **Multi-file uploader** into the current folder — XHR (upload-progress events) against the streaming `POST /api/documents/upload` route, per-batch progress bar + cancel, client-side pre-flight of the server's size caps (100 MiB standard / ~2 GiB media), all-or-nothing batches. Single-file composer (display-name override + category dropdown) + per-row download + delete (admin or original uploader) + Generate-from-template kept. Storage is driver-based (ADR-015, shipped 2026-07-07 — this was the deploy blocker): `local` (./uploads/) in dev, Vercel Blob in prod (auto-selected by `BLOB_READ_WRITE_TOKEN`); under the blob driver the uploader goes client-direct via `@vercel/blob/client` (bytes never transit our functions — clears the ~4.5MB serverless body cap). Downloads gated end-to-end via `/api/documents/[id]/download` (streams local files; 302s to the blob CDN otherwise). Tree math (build/flatten/depth/cycles/breadcrumbs/collision-suffix) is a pure tested module: `src/lib/folder-tree.ts`.
-- [x] **Document viewer (v1)** — Full-page inline viewing of discovery files at `/matters/[id]/documents/[documentId]`. Renders inline: **PDF** (iframe on the auth-gated download route, open/download fallback links), **images** png/jpg/gif/webp (click-to-zoom 1:1), **video** mp4/webm/mov (`preload="metadata"` + Range streaming — GB-scale bodycam seeks without full download), **audio** mp3/m4a/wav/ogg (wide-timeline card with 1×/1.25×/1.5×/2× playback-rate control for long 911/bodycam recordings), **Word .docx** (fidelity upgraded 2026-07-07: client-side **docx-preview** render — computes tab stops (`experimental` option; signature lines with underlined tabs now draw), honors table-cell vertical alignment + widths (pleading captions sit bottom-center where Word put them), real page-shaped sections with headers/footers/footnotes — fetched from the download route and passed through a post-render sanitation walker (`sanitize-rendered-docx.ts`: javascript:/data:/vbscript: hrefs stripped, http(s) links forced `_blank noopener`, script/iframe/object/embed removed, remote img/CSS-url fetch canaries neutralized, `renderAltChunks` off because altChunks are raw embedded HTML); the previous **server-side mammoth → `sanitizeDocumentHtml`** pipeline is now the FALLBACK, precomputed on every docx view so the swap on a docx-preview parse failure is instant — honest cost: the mammoth HTML rides the RSC payload even when unused, same server work as before the upgrade. Known remaining fidelity gaps, honestly: embedded font matching is approximate (docx-preview loads embedded fonts but substitute metrics differ), floating objects/text boxes/drawing-canvas shapes render poorly or not at all (library limitation), realtime page breaking is layout-driven only where Word saved `lastRenderedPageBreak` markers, TOC fields don't resolve), **text/CSV** (1 MB-capped read; CSV becomes a table when it parses cleanly, raw escaped `<pre>` otherwise). Everything else (xlsx, zip, legacy .doc, unknown) gets a download card; every conversion/read failure degrades to an error card, never a 500. Chrome: breadcrumb back to the Documents tab preserving `?folder=`, category/status chips, size + uploader + date, Download, prev/next through the same folder ordered by name (server-resolved). Renderer choice is a pure tested function (`resolveDocumentRenderer` — contentType first, extension fallback for typeless scans). Follow-ups queued: transcripts for audio/video, OCR + text extraction feeding global search, legacy .doc conversion, xlsx preview, browser-real visual regression check of the docx-preview layout math (tab-stop widths/cell alignment compute against live layout, which happy-dom can't measure — unit suites cover parsing, sanitation, and fallback wiring). (Flagged moments on the player SHIPPED 2026-07-07 — see the Evidence review entry.)
-- [x] **Matter detail — Parties tab** — Grouped by role (Plaintiff / Defendant / Witness / Expert / Opposing counsel / etc.). Every party is a first-class `Contact` (link to `/contacts/[id]`); representing attorneys also via `MatterContact.representationContactId`.
+- [x] **Matter team management** — Admin-gated section on matter edit page: add/remove lead/co-counsel/paralegal/investigator/of-counsel. Promoting a lead auto-demotes existing one to co-counsel. Removal soft (`MatterTeamMember.removedAt`) and also detaches the member from upcoming matter events; former members render dimmed. At-least-one-lead invariant. ActivityLog on every add/remove. Permission key: `matters.manage_team`. NOTE: team membership does not restrict who can read the matter (matter-team access is planned, not built; see Where we are).
+- [x] **Matter detail — Timeline tab** — Real chronological activity feed reading from `ActivityLog`. Day-grouped (Today/Yesterday/absolute date) with per-row icon, source chip, author, timestamp. URL-driven filter pills (All/Filings/Communications/Deadlines/Tasks/Notes/Time/Financial/Events) with live counts. 200-row cap. Settlement and expense rows are omitted (not redacted) unless the viewer holds `matters.settlement.view` / `matters.expense.view` (ADR-021).
+- [x] **Matter detail — Documents tab** — Per-matter document **file system** (replaced the flat category-grouped list on 2026-07-07). Left-rail collapsible folder tree (`DocumentFolder`, nesting capped at 8 levels; "All documents" = matter root) with per-folder direct-count badges; URL-driven selection (`?folder=<id>` — back button + shareable links work, unknown ids fall back to root); breadcrumbs above the list. The browser shows the selected folder's subfolders + files (name/category/status/size/uploader/date); file names link to the document viewer route. Write affordances behind granular flags: **New folder** (`documents.folder.create`), folder **rename** (`documents.folder.edit`) / **delete** (`documents.folder.delete` — contents re-parent up a level with " (2)"-style collision suffixes, files are NEVER deleted with a folder), **Move to…** on both files and folders (`documents.organize`, shared picker dialog with cycle-proof disabled targets). **Multi-file uploader** into the current folder — XHR (upload-progress events) against the streaming `POST /api/documents/upload` route, per-batch progress bar + cancel, client-side pre-flight of the server's size caps (100 MiB standard / ~2 GiB media), all-or-nothing batches. Single-file composer (display-name override + category dropdown, both round-trip) uses the SAME transport as the multi-file uploader (no 1 MB limit) + per-row download (`?download=1` forces attachment disposition) + delete (the original uploader, or `documents.delete_any`; refused while other reviewers' evidence flags exist unless the user holds `evidence.flag.delete_any`) + Generate-from-template kept. There is NO edit-metadata action (no rename or re-categorize after upload). Storage is driver-based (ADR-015, shipped 2026-07-07 — this was the deploy blocker): `local` (./uploads/) in dev, Vercel Blob in prod (auto-selected by `BLOB_READ_WRITE_TOKEN`); under the blob driver every upload (single or multi-file) goes client-direct via `@vercel/blob/client` (bytes never transit our functions — clears the ~4.5MB serverless body cap). Downloads gated end-to-end via `/api/documents/[id]/download` (streams local files; 302s to the blob CDN otherwise). Tree math (build/flatten/depth/cycles/breadcrumbs/collision-suffix) is a pure tested module: `src/lib/folder-tree.ts`.
+- [x] **Document viewer (v1)** — Full-page inline viewing of discovery files at `/matters/[id]/documents/[documentId]`. Renders inline: **PDF** (iframe on the auth-gated download route, open/download fallback links), **images** png/jpg/gif/webp (click-to-zoom 1:1), **video** mp4/webm/mov (`preload="metadata"` + Range streaming — GB-scale bodycam seeks without full download), **audio** mp3/m4a/wav/ogg (wide-timeline card with 1×/1.25×/1.5×/2× playback-rate control for long 911/bodycam recordings), **Word .docx** (fidelity upgraded 2026-07-07: client-side **docx-preview** render — computes tab stops (`experimental` option; signature lines with underlined tabs now draw), honors table-cell vertical alignment + widths (pleading captions sit bottom-center where Word put them), real page-shaped sections with headers/footers/footnotes — fetched from the download route and passed through a post-render sanitation walker (`sanitize-rendered-docx.ts`: javascript:/data:/vbscript: hrefs stripped, http(s) links forced `_blank noopener`, script/iframe/object/embed removed, remote img fetch canaries neutralized and external CSS fetches neutralized by a rule-scoped `<style>` rebuild (not just a url() regex), `renderAltChunks` off because altChunks are raw embedded HTML); the previous **server-side mammoth → `sanitizeDocumentHtml`** pipeline (capped at 5 MB, `DOCX_MAX_BYTES`) is now the FALLBACK, precomputed on every docx view so the swap on a docx-preview parse failure is instant — honest cost: the mammoth HTML rides the RSC payload even when unused, same server work as before the upgrade. Known remaining fidelity gaps, honestly: embedded font matching is approximate (docx-preview loads embedded fonts but substitute metrics differ), floating objects/text boxes/drawing-canvas shapes render poorly or not at all (library limitation), realtime page breaking is layout-driven only where Word saved `lastRenderedPageBreak` markers, TOC fields don't resolve), **text/CSV** (1 MB-capped read; CSV becomes a table when it parses cleanly, raw escaped `<pre>` otherwise). Everything else (xlsx, zip, legacy .doc, unknown) gets a download card; every conversion/read failure degrades to an error card, never a 500. Chrome: breadcrumb back to the Documents tab preserving `?folder=`, category/status chips, size + uploader + date, Download, prev/next through the same folder ordered by name (server-resolved). Renderer choice is a pure tested function (`resolveDocumentRenderer` — contentType first, extension fallback for typeless scans). Follow-ups queued: transcripts for audio/video, OCR + text extraction feeding global search, legacy .doc conversion, xlsx preview, browser-real visual regression check of the docx-preview layout math (tab-stop widths/cell alignment compute against live layout, which happy-dom can't measure — unit suites cover parsing, sanitation, and fallback wiring). (Flagged moments on the player SHIPPED 2026-07-07 — see the Evidence review entry.)
+- [x] **Matter detail — Parties tab** — Five fixed categories (Clients / Opposing / Lay witnesses / Expert witnesses / Others) with inline add / edit / remove and an attorney picker; the party name links to `/contacts/[id]`; controls are hidden without `parties.create` / `.edit` / `.delete`. Every party is a first-class `Contact`; representing attorneys also via `MatterContact.representationContactId`. Re-adding a party already in the same category is refused rather than overwriting it.
 - [x] **Matter detail — Deadlines tab** — Table with due date, days remaining, kind, source, owner, status. Overdue flagged in warn color. Per-row kebab: Edit dialog + Set status (open/completed/waived) + Delete. Stage transition guard (terminal → non-terminal reopens, backward jumps > 1 stage) requires confirmation.
-- [x] **Statute of limitations integrity (ADR-027)** — Matter SOL fields are the source of truth; the SOL deadline is a mirror that refuses date moves / deletes (status changes still allowed). Edit form auto-recomputes an auto-derived SOL from incident date + area (live preview, override input only for real manual dates), never wipes SOL data when switching to an area without SOL tracking, and keeps the stored date if the incident date is cleared. Lead-attorney change on the edit form requires `matters.manage_team`; current client/lead always stay in the option lists. Matter create/update/satisfied and all deadline mutations write the activity log.
-- [x] **Matter detail — Tasks tab** — Grouped by status (Open / In progress / In review / Done / Cancelled) with priority chip, due date, owner. Inline status toggle, per-row kebab (Edit + Log time + Add note + Convert to deadline + Set status + Delete). Same affordances on dashboard "Your tasks" card.
-- [x] **Matter detail — Notes tab** — Card list with type chip (Note/Strategy/Chatter/Memo), author avatar, timestamp; pinned notes float to top. Tiptap rich-text editor (`@tiptap/react`); HTML output sanitized server-side via DOMPurify on insert.
-- [x] **Captures and notes — per-kind permissions** (2026-10-16, ADR-025) — Every record kind created through a note or primary capture needs its own create key (`tasks.create`, `events.create`, `deadlines.create`, `time_entries.create`, `notes.create`; `notes.pin` for pinned notes), checked before any write via `src/lib/capture-permissions.ts`. Deleting a note others replied to needs `notes.delete_any`. Note edit / pin / delete write activity entries. Sibling and Events-tab events get `createdById`, default attendees (`src/lib/calendar-default-attendees.ts`) and a Google Calendar push. `NoteComposer` hides the Pin toggle without `notes.pin` (`canPin` prop, fails closed). Follow-up: `CaptureStack` still shows every kind and the sibling Pin toggle to users who cannot use them (denial redirects and loses the draft).
-- [x] **Matter detail — Events tab** — Calendar events linked to this matter, split into Upcoming / Past with time, type chip, location, attendee count. Clicking opens the EventDetailModal (same as the calendar page) via `?event=<id>`. Honours calendar visibility: events the viewer can't see render as "Busy" with no details (ADR-021).
-- [x] **Matter detail — Communication tab** — Email threads filed via `EmailThread.matterId`; embedded thread list links through to the main inbox.
-- [x] **Matter detail — Billing tab (v1)** — Three-card KPI strip (WIP, Trust, Outstanding AR) + invoices table + WIP entries + trust ledger + matter-level Received-payments ledger. **Generate invoice from WIP** (auto YYYY-NNN numbering, 30-day terms). **Bundle as internal record** for contingency / pro-bono closes (kind="internal_record", born paid, excluded from AR). **Client invoice state machine** (draft → approved → sent → partial → paid; void only with no payments; drafts deletable). **Send invoice** dialog with channel + recipient + optional trust application. **Apply trust** shortcut for outstanding-balance + trust-funded matters. **Record payment** (check/ACH/cash/card/other/trust) with default-checked "Send updated invoice to client". Trust composer with overdraw prevention. Letterhead-style preview pane. **PDF export** via chrome-free `/print/invoices/[id]?autoprint=1`. **Line-item editing** (Pencil icon on Services rows; draft invoices only, so approved/sent invoices are void-and-regenerate; needs `billing.generate_invoice` plus author-or-`time_entries.edit_any`; amounts rounded to cents; writes an activity-log row). Recording a payment with the **Trust** method needs `billing.apply_trust`.
-- [x] **Settlement waterfall (v1)** — Settlement card on the Billing tab. Composer captures gross / firm fee % / advanced costs / status (pending → approved → disbursed → closed). Lien composer with negotiated/effective amounts (strikethrough on original when negotiated). 4-step approval chain (Client release / Liens / Partner sign-off / Trust reconciliation). Auto-promote to approved when all steps approved. Granular permissions: `matters.settlement.{view,edit,manage_liens,approve}`.
-- [x] **Matter expenses (v1)** — First-class `Expense` model. Composer + table on the Time & Expenses tab. Granular permissions (`matters.expense.{view,create,edit,delete}`). Edit/delete refused once billed. **Invoice integration** — `generateInvoiceFromWip` and `bundleAsInternalRecord` sweep both buckets (time + billable expenses) into the subtotal. **Receipt attachment** — composer surfaces a receipt picker linked via `Expense.receiptDocumentId`; cross-matter isolation enforced server-side.
+- [x] **Statute of limitations integrity (ADR-027)** — Matter SOL fields are the source of truth; the SOL deadline is a ONE-WAY mirror (matter to deadline) that refuses date moves / deletes (status changes still allowed; the deadline row only edits status, and matter saves keep its status and owner). Edit form auto-recomputes an auto-derived SOL from incident date + area (live preview, override input only for real manual dates), never wipes SOL data when switching to an area without SOL tracking, and keeps the stored date if the incident date is cleared; an auto-derived SOL follows incident/area edits while a manual override is kept. Lead-attorney change on the edit form requires `matters.manage_team`; current client/lead always stay in the option lists. Matter create/update/satisfied and all deadline mutations write the activity log.
+- [x] **Matter detail — Tasks tab** — Grouped by status (Open / In progress / In review / Done / Cancelled) with priority chip, due date, owner. Inline status toggle, per-row kebab (Edit + Log time + Add note + Convert to deadline + Set status + Delete). The dashboard "Your tasks" card offers only Log time / Add note.
+- [x] **Matter detail — Notes tab** — Card list with type chip (Note/Strategy/Chatter/Memo), author avatar, timestamp; pinned notes float to top. Tiptap rich-text editor (`@tiptap/react`); HTML output sanitized server-side via `sanitizeUserHtml` (the `sanitize-html` package, not DOMPurify) on insert. Delete, pin and edit are activity-logged. There is no Note edit UI yet (`updateNote` has no caller) and no "Add note" on deadline rows (`addNoteToDeadline` has no caller).
+- [x] **Captures and notes — per-kind permissions** (2026-10-16, ADR-025) — Every record kind created through a note or primary capture needs its own create key (`tasks.create`, `events.create`, `deadlines.create`, `time_entries.create`, `notes.create`; `notes.pin` for pinned notes), checked before any write via `src/lib/capture-permissions.ts`. Deleting a note others replied to needs `notes.delete_any`. Note edit / pin / delete write activity entries. Sibling and Events-tab events get `createdById`, default attendees (`src/lib/calendar-default-attendees.ts`) and a Google Calendar push after commit. `NoteComposer` hides the Pin toggle without `notes.pin` (`canPin` prop, fails closed). Follow-up: `CaptureStack` still shows every kind and the sibling Pin toggle to users who cannot use them (denial redirects and loses the draft).
+- [x] **Matter detail — Events tab** — Calendar events linked to this matter, split into Upcoming / Past with time, type chip, location, attendee count. Clicking opens the EventDetailModal (same as the calendar page) via `?event=<id>`. Honours calendar visibility: events the viewer can't see render as non-expandable "Busy" shells (no full-view link) using the same `canViewEventDetails` rule as the calendar (ADR-021); visible rows expand inline.
+- [x] **Matter detail — Communication tab** — Email threads filed via `EmailThread.matterId`; embeds the thread reader and has an Email | Phone channel toggle.
+- [x] **Matter detail — Billing tab (v1)** — Three-card KPI strip (WIP, Trust, Outstanding AR) + invoices table + WIP entries + trust ledger + matter-level Received-payments ledger. **Generate invoice from WIP** (auto YYYY-NNN numbering, 30-day terms). **Bundle as internal record** for contingency / pro-bono closes (kind="internal_record", born paid, excluded from AR). **Client invoice state machine** (draft → approved → sent → partial → paid; void only with no payments; drafts deletable). **Send invoice** dialog with channel + recipient + optional trust application. **Apply trust** shortcut for outstanding-balance + trust-funded matters. **Record payment** (check/ACH/cash/card/other/trust) with default-checked "Send updated invoice to client". Trust composer with overdraw prevention. Letterhead-style preview pane. The invoice `notes` field is client-facing (printed on the invoice and PDF) and labelled so. WIP includes billable expenses (generate and bundle CTAs). **PDF export** via chrome-free `/print/invoices/[id]?autoprint=1` (titled "Invoice <number>", waits for fonts). **Invoice email delivery is still logged-only** ("Send invoice" records the intent; audit titles say "not emailed"). **Line-item editing** (Pencil icon on Services rows; DRAFT invoices only, ADR-024, so approved/sent invoices are void-and-regenerate; needs `billing.generate_invoice` plus author-or-`time_entries.edit_any`; amounts rounded to cents; writes an activity-log row). Recording a payment with the **Trust** method needs `billing.apply_trust`.
+- [x] **Settlement waterfall (v1)** — Settlement card on the Billing tab. Composer captures gross / firm fee % / advanced costs / status (pending → approved → disbursed → closed). Lien composer with negotiated/effective amounts (strikethrough on original when negotiated); lien negotiate / edit / delete are shipped (`SettlementLienList`). 4-step approval chain (Client release / Liens / Partner sign-off / Trust reconciliation). Auto-promote to approved when all steps approved. Granular permissions: `matters.settlement.{view,edit,manage_liens,approve}`.
+- [x] **Matter expenses (v1)** — First-class `Expense` model. Composer + table on the Time & Expenses tab. Granular permissions (`matters.expense.{view,create,edit,delete}`). Edit/delete refused once billed. `updateExpense` exists server-side but has NO UI yet (the edit dialog is not built). **Invoice integration** — `generateInvoiceFromWip` and `bundleAsInternalRecord` sweep both buckets (time + billable expenses) into the subtotal. **Receipt attachment** — composer surfaces a receipt picker linked via `Expense.receiptDocumentId`; cross-matter isolation enforced server-side.
 - [~] **New matter form — v1** — Working `/matters/new` with full intake fields, typeahead client picker (defaults to inline new Contact), auto-populated matter name (`Last, First - Case Number - Location`) with dirty-tracking + "Reset to auto" restore. Single-write Matter + MatterTeamMember + optional UserMatterPin + optional new Contact. **v2 follow-ups in remaining-work.**
+- [~] **Matter header "Create" menu** — Menu filtered per entry by the viewer's permissions (`allowedTypes`). Only Note (matter pages) and Event (calendar, matterless) open a real quick form in the create dock; Log time / Task / Deadline / Party / Document / Invoice link to the matter tab that hosts the working composer ("no quick form for this yet"). The dock keeps each panel's draft.
 - [x] **Stage transition guard** — Server returns `requiresConfirmation` for terminal → non-terminal reopens and backward jumps > 1 stage; UI surfaces the warning + retries with `force: true` on confirm. Distinctive ActivityLog title for reopens.
 - [x] **Statute-of-limitations tracking** — `Matter.incidentDate` + `PracticeArea.statutePeriodDays` + `statuteSourceCitation`. Practice-area edit form takes years/months/days inputs (packed into total days, 365/30/d). Matter create + update auto-populate `statuteOfLimitationsDate` from `incidentDate + area.statutePeriodDays` (explicit SOL date wins). Mirrors into a `kind="critical"` Deadline row via `syncMatterSolDeadline`; create/update/satisfied-flip keep both sides synced.
 
@@ -712,15 +795,16 @@ end-to-end" milestone — schema, action, query, UI all wired.
 > **Scope note:** Like the matter-detail tabs, each intake feature
 > is a substantial area. Iterative depth per feature is expected.
 
-- [x] **Intake queue — v1 list** — Sortable table; active leads first by score desc.
+- [x] **Intake queue — v1 list** — Sortable table; active leads first by score desc. Lists every open lead (closed history capped at 200); the statute column is a live countdown; Decline / Convert buttons depend on role.
+- [ ] **New intake form (`/intake/new`)** — Placeholder page only ("Intake form coming"). Needs contact fields, case summary, source, initial stage, conflict check and lead scoring, plus an intake add permission key.
 - [x] **Lead detail — v1 page** — Case summary, assessment bars (liability + damages), contact card, intake meta, conflict-check card, converted-matter link.
 - [x] **Lead detail — tab structure + Communication tab** — Overview + Communication. Communication tab is contact-scoped (joined `Lead.contact`) and surfaces email threads + SMS/call/voicemail threads. Picks up Contact edits automatically.
 - [x] **Lead → Contact integration** — Every lead hangs off a first-class Contact via `Lead.contactId`. Conversion reuses the existing Contact instead of creating fresh.
 - [x] **Conflict check automation (v1)** — Pure matcher in `src/lib/conflict-check.ts`. Email match → conflict if contact appears as opposing-side; else warn. Severity: clear/warn/conflict. `runLeadConflictCheck` persists status + timestamp; `overrideLeadConflictCheck` flips warn/conflict to "override" with required 5+ char justification. Permissions: `intake.conflict_check.{run,override}`. Audit-logged.
 - [x] **Decline lead** — Topbar action with optional internal reason; flips `Lead.stage` to "declined" and bounces the lead from the active queue.
-- [x] **Convert lead to matter — v1** — Topbar action with practice area + initial stage + matter name + fee structure. Single-transaction creates Matter + Contact (or reuses one matching the lead's email) + MatterTeamMember + UserMatterPin. Lead summary/location/incident date/injuries/source flow into Matter.description.
+- [x] **Convert lead to matter — v1** — Topbar action with practice area + initial stage + matter name + fee structure. Single-transaction creates the Matter (reusing the lead's own Contact via `lead.contactId`, not an email match) + MatterTeamMember + UserMatterPin. Lead summary/location/incident date/injuries/source flow into Matter.description.
 
-- [x] **Lead conversion + conflict-check integrity (W8b)** — `convertLeadToMatter` claims the lead with a conditional `updateMany` (id + the stage it read) inside the transaction: a double submit, or a stale tab after a concurrent convert/decline, matches 0 rows, rolls back, and returns a clear form error (already converted / declined / gone) instead of a second matter. It also creates the client `MatterContact` row like `createMatter` (Parties tab shows the client) and clears any stale `declineReason`. `declineLead` is likewise conditional (`stage notIn converted, declined`): a second decline changes nothing and writes no second audit row. Conflict matcher: the lead's own Contact never matches itself, and *deactivated* contacts that are still parties on active matters stay in the hard (opposing-side) tier. Audit titles now name the lead (`Conflict check run on lead {name} — {severity}`, `Lead declined: {name}`) with `lead {id}: …` in the detail. **Deploy step:** run the client party-row backfill (`docs/DEPLOY_BACKFILLS.md`) once per environment.
+- [x] **Lead conversion + conflict-check integrity (W8b)** — `convertLeadToMatter` claims the lead with a conditional `updateMany` (id + the stage it read) inside the transaction: a double submit, or a stale tab after a concurrent convert/decline, matches 0 rows, rolls back, and returns a clear form error (already converted / declined / gone) instead of a second matter. It also creates the client `MatterContact` row like `createMatter` (Parties tab shows the client) and clears any stale `declineReason`. `declineLead` is likewise conditional (`stage notIn converted, declined`): a second decline changes nothing and writes no second audit row. Conflict matcher: the lead's own Contact never matches itself, and *deactivated* contacts that are still parties on active matters stay in the hard (opposing-side) tier (merged-away contacts are excluded). Audit titles now name the lead (`Conflict check run on lead {name} — {severity}`, `Lead declined: {name}`) with `lead {id}: …` in the detail. **Deploy step:** run the client party-row backfill (`docs/DEPLOY_BACKFILLS.md`) once per environment.
   - [ ] Open: gate conversion on a clear/overridden conflict check (today conversion does not require one).
   - [ ] Open: warn when deactivating a contact who is still a party on an active matter (the matcher now covers it, but the deactivation UI is silent).
 
@@ -730,7 +814,12 @@ The unified inbox lives at `/communication` (route reserved so SMS
 plugs in without a rename). Real Gmail mail syncs in (sync-engine
 entry below) and goes out (send/reply entry below) — rich-text
 sends as of Email v1.1; attachments-on-send + per-user signatures
-are queued follow-ups.
+are queued follow-ups. Email reads and mutations are owner-scoped:
+the inbox shows only the viewer's own mailbox, and filing a thread to
+a matter (`setEmailThreadMatter`), create-from-email and
+log-time-on-email are owner-only. The Unread filter, rail count and
+tab badge exclude archived threads; the pinned-matter drilldown lists
+archived threads (default filter all).
 
 - [x] **Gmail OAuth connect flow (integration phase 1)** — Per-user
   Google OAuth: any firm member connects THEIR OWN mailbox(es) from
@@ -779,10 +868,10 @@ are queued follow-ups.
   METADATA-ONLY rows (Gmail attachmentId parked as
   `fileUrl: "gmail:<id>"`); on-demand byte download shipped in
   Email v1.1 (entry below).
-  Read/star/archive flags stay provider-derived on resync — correct
-  (not a limitation) since Email v1.1: in-app flag changes write
-  back to Gmail's labels, so the label-derived flags converge
-  instead of reverting (see the writeback entry below). Triggers:
+  Read/star/archive flags stay provider-derived on resync. Since
+  Email v1.1 in-app flag changes write back to Gmail's labels, so they
+  normally persist; after a FAILED writeback Gmail's labels win on the
+  next report of that thread (see the writeback entry below). Triggers:
   `syncMyEmailAccounts()` server action
   (session-only, identity-scoped like `disconnectEmailAccount`) +
   "Sync now" button in the Communication topbar; a throttled
@@ -823,8 +912,14 @@ are queued follow-ups.
   next sync pass converges on the same rows; filed threads
   activity-log "Email sent"/"Email reply sent". Every failure path
   (auth revoked → reconnect message, transient Google, HTTP errors,
-  validation) returns `{ok:false,error}` and the composers PRESERVE
-  the draft. Rich text shipped as Email v1.1 (next entry);
+  validation, a rejected action) returns `{ok:false,error}` and the
+  composers PRESERVE the draft (a rejected action keeps it with a
+  "check Sent" message). One exception: once Gmail has ACCEPTED the
+  send, a failed local save returns `ok:true` with a warning, the
+  draft is cleared and the message appears after the next sync.
+  Cancel/Esc are blocked mid-send and Enter in single-line fields no
+  longer sends. Send limits: 50 recipients per field, 100 total,
+  subject 998 characters, body 1,000,000 characters. Rich text shipped as Email v1.1 (next entry);
   attachments-on-send is a documented follow-up.
 - [x] **Rich-text compose (Email v1.1)** — Compose + reply bodies
   are the shared Tiptap editor (`src/components/shared/
@@ -888,7 +983,7 @@ are queued follow-ups.
   attachment FK on Document for exact dedupe/provenance chips;
   bulk "file all attachments"; attachment chips in the thread
   LIST; send-side attachments (tracked above).
-- [x] **Manual call logging — v1** — "Log call" button on the
+- [x] **Manual call logging — v1** — The datetime is read in the user's profile zone; a number already on another contact is blocked. "Log call" button on the
   Messages view (thread-list header). Composer: contact typeahead
   (auto-fills phone, editable / required when none on file),
   direction, outcome (answered/missed/no answer), date-time,
@@ -936,9 +1031,10 @@ are queued follow-ups.
   backfill** — Shipped 2026-07-07. **Writeback**
   (`src/lib/google/gmail-writeback.ts`): in-app flag changes push
   label modifies to Gmail (`threads/{id}/modify` — mark-read removes
-  UNREAD, star adds/removes STARRED, archive removes/adds INBOX), so
-  the provider reflects CRM intent instead of reverting it on the
-  next resync (the double-inbox fix). Local write ALWAYS commits
+  UNREAD, star adds/removes STARRED, archive removes/adds INBOX), so the provider reflects CRM intent instead of reverting it on the
+  next resync (the double-inbox fix). If a writeback fails, the local
+  flag is kept only until Gmail next reports that thread, then
+  Gmail's labels win (F663). Local write ALWAYS commits
   first; `writebackGmailThread` never rejects — disconnected
   (token-less) accounts skip silently, `GmailAuthError` records the
   reconnect signal on `account.syncError`, transients console.warn.
@@ -947,7 +1043,9 @@ are queued follow-ups.
   writeback → resync converges (no loop). Actions: mark-read
   writeback rides `markEmailThreadRead` (no-op stays
   writeback-free); new `src/app/actions/email-thread-flags.ts`
-  (`toggleEmailThreadStar` / `setEmailThreadArchived`) — session-
+  (`setEmailThreadStarred(threadId, starred)` is the explicit-state
+  star action; `toggleEmailThreadStar` is a legacy wrapper;
+  `setEmailThreadArchived`) — session-
   gated + mailbox-scoped like read-state, archive no-ops on
   same-state. UI: hover/keyboard-reveal star + archive cluster on
   inbox thread-list rows AND the embedded matter/lead lists
@@ -980,23 +1078,23 @@ are queued follow-ups.
 - [x] **Calendar — Week view** — 7 day columns with hour grid 6am–9pm; events positioned by start/end; deadlines as thin bars; "now" line in today's column; events colored by matter.
 - [x] **Calendar — Month view** — 6-row grid; events as compact pills with time + title; deadlines styled by kind; +N more overflow indicator; today highlighted.
 - [x] **Calendar — navigation** — Prev/Today/Next (week or month units); URL-driven (`?view=week|month&d=YYYY-MM-DD`).
-- [x] **Calendar event — full create + edit + delete + drag-and-drop** — Real edit form at `/calendar/events/[eventId]/edit` (title/type/start/end/location/Zoom/description/matter assignment/delete). All-day toggle (datetime ↔ date inputs). Attendee picker (typed: users + contacts + new). Drag-and-drop reschedule (week-view chips drag to time slots; preserves duration when timed; default 2h when promoting from all-day). Generic DnD utilities at `src/lib/dnd/` so the same primitives feed the future kanban. Action `moveCalendarEvent` gated on `events.edit`. Standalone `NewEventComposer` for the calendar's "+ New event" button creates matterless / personal events.
-- [x] **Calendar event — visibility model** — Per-event + per-user visibility resolver. Default-deny with five unlock paths (creator, attendee, matter team, per-event override, creator's user-default). Server-side strip (`getCalendarItems` + `getCalendarEventById` scrub title/location/description/zoomUrl/matter/attendees and use neutral color when locked). New permission `events.edit_non_matter` gates editing other users' personal events. Min-firm-attendee invariant (every event keeps ≥1 firm-user attendee; creator auto-added as fallback). UI: per-user "Default event visibility" radio on `/settings/profile`; per-event toggle on edit modal + standalone NewEventComposer + matter-detail EventComposer.
+- [x] **Calendar event — full create + edit + delete + drag-and-drop** — Create at `/calendar/events/new` (`NewEventForm`) or the docked quick composer; edit and delete happen INLINE in the event detail modal (title/type/start/end/location/video link/description; delete from the modal footer with a confirm, failures surface in the modal). The old `/calendar/events/[eventId]/edit` full-page route was removed; matter reassignment of an existing event is not supported anywhere. All-day toggle (datetime ↔ date inputs). Attendee picker (typed: users + contacts + new). Drag-and-drop reschedule (week-view chips drag to time slots; preserves duration when timed; default 2h when promoting from all-day). Busy chips are non-draggable. Generic DnD utilities at `src/lib/dnd/` so the same primitives feed the future kanban. Action `moveCalendarEvent` gated on `events.edit`. The docked `NewEventComposer` creates matterless / personal events.
+- [x] **Calendar event — visibility model** — Per-event + per-user visibility resolver. Default-deny with five unlock paths (creator, attendee, matter team, per-event override, creator's user-default). Server-side strip (`getCalendarItems` + `getCalendarEventById` scrub title/location/description/zoomUrl/matter/attendees and use neutral color when locked). New permission `events.edit_non_matter` gates editing other users' personal events. Min-firm-attendee invariant (every event keeps ≥1 firm-user attendee; creator auto-added as fallback). The per-user "Default event visibility" `show_details` value is retroactive for ALL of the creator's events and cannot be overridden per event (a per-event "private" value is still open). UI: per-user radio on `/settings/profile`; per-event toggle on edit modal + standalone NewEventComposer + matter-detail EventComposer.
 - [x] **Calendar — auto-attendee defaults** — `Firm.autoAddTeamToNewEvents` + per-matter override. New events on a matter optionally pull in the matter team as accepted attendees automatically. Adding a new team member optionally fans them out across upcoming matter events (past untouched).
 
 ### Phase 7 — Contacts & Documents
 
-- [x] **Contact directory** — `/contacts` with URL-driven search + per-type filter pills (Client/Opposing counsel/Witness/Expert/etc.). Detail page (profile + linked matters split into "as client" + "as party"). Full create + edit + soft-delete (isActive=false to preserve historical matter rows). `Contact.phone` stays in sync with the primary `ContactPhone` row. Wired into sidebar primary nav + command palette.
+- [x] **Contact directory** — `/contacts` with URL-driven search + per-type filter pills (Client/Opposing counsel/Witness/Expert/etc.). Detail page (profile + linked matters split into "as client" + "as party"). Full create + edit + soft-delete (isActive=false to preserve historical matter rows) + reactivate. The directory shows a notice when the list is capped. `Contact.phone` stays in sync with the primary `ContactPhone` row. Wired into sidebar primary nav + command palette.
 
 ### Phase 8 — Firm & Admin
 
-- [x] **Settings — route framework** — `/settings` layout with left-rail section nav (Account: Profile/Security/Notifications; Firm: Team/Firm info/Integrations/Billing & rates).
+- [x] **Settings — route framework** — `/settings` layout with left-rail section nav (Account: Profile/Security/Notifications; Firm: Team/Roles/Firm info/Practice areas/Automations/Activity log/Document templates/Integrations/Billing & rates).
 - [x] **Settings — Profile** — Self-edit form (name/initials/phone/bar number/avatar URL/time zone/default event visibility). Right rail surfaces identity + governance read-only (email, role, admin badge, active status, member-since, firm) with a chip pointing to /settings/team.
-- [x] **Settings — Team** — Firm-scoped roster (admins float to top, then active alphabetically). Admins get per-row kebab (Edit / Reset password) + "Invite member" composer. At-least-one-Admin invariant. Can't-deactivate-yourself. Unique-email-on-invite. Reset-password and invite generate a one-time temp password the admin delivers out-of-band (replaced by magic-link when delivery lands — see `docs/AUTH_PLAN.md` Phase 2).
-- [x] **Settings — Activity log** — Cross-matter audit page at `/settings/activity` reading from `ActivityLog`. URL-driven filter pills + user dropdown + from/to date inputs. Gated on `firm.view_activity`. 200-row cap.
+- [x] **Settings — Team** — Firm-scoped roster (admins float to top, then active alphabetically). Admins get per-row kebab (Edit / Reset password / Unlock sign-in) + "Invite member" composer; Admin and privileged-role controls are locked for non-Admin holders of `firm.manage_team_directory`. At-least-one-Admin invariant. Can't-deactivate-yourself. Unique-email-on-invite. Reset-password and invite generate a one-time temp password the admin delivers out-of-band (replaced by magic-link when delivery lands — see `docs/AUTH_PLAN.md` Phase 2).
+- [x] **Settings — Activity log** — Cross-matter audit page at `/settings/activity` reading from `ActivityLog`. URL-driven filter pills (including Communications = email + call, Documents, Evidence; invoice/expense/permission writers still log as "filing") + user dropdown + from/to date inputs. Gated on `firm.view_activity`. 200-row cap.
 - [x] **Settings — Roles** — First-class permission roles (`Admin` short-circuits everything; `default` auto-assigned). Custom roles get whatever the matrix grants. **Permissions matrix** lets users with `firm.manage_permissions` toggle which permissions each role grants — Y-axis is every permission key (grouped by category), X-axis is every role, intersection is a checkbox. Admin column rendered checked + locked. Runtime checks in `src/lib/permission-check.ts`. Full reference at `docs/PERMISSIONS.md`.
-- [x] **Settings — Firm info** — First-class `Firm` model (name/short name/EIN/website/phone/email/address/country/established date/logo URL). Users with `firm.edit_info` get an inline edit form; everyone else read-only. Right rail shows team count + admin list.
-- [x] **Settings routes gated end-to-end on permission keys** — `/settings/practice-areas` (+ `[id]`) gates on `firm.manage_practice_areas`; `/settings/integrations` + `/settings/billing` use `firm.edit_info` as a placeholder; `/settings/activity` gates on `firm.view_activity`. Settings nav hides any entry the user can't see.
+- [x] **Settings — Firm info** — First-class `Firm` model (name/short name/EIN/website/phone/email/address/country/established date/logo URL). Users with `firm.edit_info` get an inline edit form (edits write an audit entry naming the changed fields only); everyone else read-only. Right rail shows team count + admin list.
+- [x] **Settings routes gated end-to-end on permission keys** — `/settings/practice-areas` (+ `[id]`) gates on `firm.manage_practice_areas`; `/settings/billing` (placeholder page) uses `firm.edit_info`; `/settings/integrations` is self-service (identity-scoped, no permission key); `/settings/activity` gates on `firm.view_activity`. Settings nav hides any entry the user can't see.
 - [x] **Practice area + stage editing** — `/settings/practice-areas/[id]` has full stage CRUD: create stage, rename, mark/unmark terminal, reorder up/down, archive (refused if any active matters still sit in the stage). All gated on `firm.manage_practice_areas`. Practice-area / stage / calendar-default mutations write `settings` audit rows (excluded from the dashboard activity feed). Turning SOL tracking off only stops auto-computing: existing SOL dates and SOL deadlines are kept. The create/edit practice-area and stage forms keep user input after a server validation error.
 - [x] **Data-loss hardening (W7)** — Contact merge keeps the retired contact's conflict flag, notes and duplicate party-row details (refusing rather than truncating over-long notes); re-adding a party already on the matter in the same category is refused instead of wiping role/notes/representation; the phone manager dialog reseeds from current phones on every open; the create dock keeps each panel's draft; the Parties-tab edit form no longer nulls a legacy `Contact.phone` or duplicates a linked attorney, and changing the shared Contact there needs `contacts.edit`; `prisma/seed.ts` refuses non-local databases (`ALLOW_SEED=1` to override) and no longer ships a fixed password; contact, party and practice-area/stage mutations are audit-logged.
 - [x] **Notifications — v1 (in-app)** — `Notification` model (per-user, per-event row, `readAt` for unread state, optional matter scope). Writer helpers `createNotification` / `createNotifications` (fan-out + dedup) in `src/lib/notifications.ts` mirror the `logActivity` fire-and-forget contract. Topbar `NotificationBell` self-fetches every 60s + on dropdown open. Mark-one-read on row click; mark-all-read on header link. Per-user scoping in the action so a guessed id can't flip another user's row. Triggers wired today: matter team add (notifies the new member), invoice payment recorded (fans out to matter team minus actor). See "remaining work" for the rest.
@@ -1017,7 +1115,7 @@ are queued follow-ups.
   (`v1:<iv>:<tag>:<ciphertext>`) for future rotation. The Gmail
   OAuth prerequisite. See ADR-011 + `src/lib/email-token-crypto.ts`
   / `src/lib/email-token-encryption.ts`.
-- [~] **Authentication — Phase 1 (email + password, JWT sessions)** — Auth.js v5 + Prisma adapter + argon2id. `/login` page with generic error messages (no email enumeration), `?next=` round-trip via `src/proxy.ts`, sign-out from the sidebar profile strip. `Account` + `VerificationToken` tables provisioned for OAuth/password-reset later. **Phase 2** (MFA, OAuth, password reset, session revocation) deferred — see `docs/AUTH_PLAN.md`.
+- [~] **Authentication — Phase 1 (email + password, JWT sessions)** — Auth.js v5 + Prisma adapter + argon2id. `/login` page with generic error messages (no email enumeration), `?next=` round-trip via `src/proxy.ts`, sign-out from the sidebar profile strip. `Account` + `VerificationToken` tables provisioned for OAuth/password-reset later. Since then: change-password, password-fingerprint session revocation, login lockout and the auth audit trail shipped (see Settings — Security). Still deferred: MFA, OAuth sign-in, password reset by email -- see `docs/AUTH_PLAN.md`. There is no self sign-up flow.
 - [x] **Document storage — production Vercel Blob (ADR-015)** — `src/lib/file-storage.ts` is a facade over `local` (./uploads/, dev default, unchanged) and `vercel-blob` drivers (`src/lib/storage/`); `BLOB_READ_WRITE_TOKEN` selects blob, `STORAGE_DRIVER` overrides. One key scheme (`{rand16}__{name}`) everywhere — blob rows store the full blob URL in `Document.fileUrl`, and reads/deletes dispatch on key shape so driver switches never strand old rows. Prod uploads are client-direct (`/api/documents/upload/blob`: `handleUpload` token route — session + `documents.upload` + matter/folder scoping + extension-derived allowedContentTypes/size caps; Vercel's signed callback creates the Document row). The busboy streaming route stays for local dev (blob's completion callback can't reach localhost) and 501s under the blob driver. Downloads 302 to the blob CDN (Range = CDN's job; non-inline-safe types get `?download=1`); blob URLs are unguessable-but-public bearer URLs on an isolated origin — honest trade-offs in ADR-015. Landed 2026-07-07. **Private store since 2026-10-16 (ADR-018):** documents and cached email attachments live in a PRIVATE Blob store; a stored URL fetches nothing on its own (403), and the download routes 302 to a presigned GET URL scoped to that one file (15 min; 6 h for audio/video so long recordings keep seeking). Server-side reads (docx/text/CSV previews, filing an attachment to a matter) go through an authenticated `get()` via `readStoredFile` — which also fixed docx/text/CSV previews under the blob driver (they used the local-only reader).
 - [x] **Database — production Postgres** — `prisma/schema.prisma` provider is `postgresql`; production runs on Prisma Postgres via the Vercel Marketplace integration (injects `DATABASE_URL`); local dev uses a separate Prisma Postgres, `lawcrm-dev` (`DEVDB_DATABASE_URL` on the Development env — see README). Schema changes ship as migrations since 2026-10-16 (ADR-016). Build wired (`prisma generate && next build` + `postinstall: prisma generate`). Tests run against a local Docker container (`docker-compose.test.yml`); integration setup waits for the DB, pushes the schema, runs each test against a fresh state via `resetDb()` in `beforeEach`.
 
@@ -1027,8 +1125,8 @@ are queued follow-ups.
 
 - Phases are roughly ordered by dependency and value delivery, but
   we adjust based on priorities. The current shape is heavy on
-  Phases 1–3 + 5 + 7 + 8 (most done), light on Phase 4 (read-only
-  inbox until Gmail lands) and Phase 6 (financial reports).
+  Phases 1–3 + 5 + 7 + 8 (most done), light on Phase 6 (financial reports). Phase 4 now has live Gmail
+  sync and send; SMS and voicemail are still unbuilt.
 - Each feature should be built end-to-end (schema → API → UI) before
   moving to the next.
 - Schema evolves — see `SCHEMA_NOTES.md` for data model decisions

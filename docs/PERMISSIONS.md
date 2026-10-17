@@ -16,9 +16,17 @@ The catalog of permission keys is **app-defined** (a static list in
 `src/lib/permissions.ts`). The grants are **firm-defined** — admins
 toggle them in the matrix on `/settings/roles`.
 
-Every server action and page guard funnels through one of two helpers:
-`requirePermission(key)` (throws a redirect on fail) or
-`currentUserHasPermission(key)` (returns boolean). Admin always passes.
+Every server action and page guard funnels through the helpers in
+`src/lib/permission-check.ts`: `requirePermission(key)` (throws a
+redirect on fail), `requirePermissionResult(key)` (returns the denial
+as a value), `requirePermissions(keys)` (multi-key) or
+`currentUserHasPermission(key)` (returns boolean). Admin always
+passes.
+
+**Permissions are capability keys, not data scopes.** A key says what
+a user may *do*; it does not say which matters they may see. See
+[Matter visibility](#matter-visibility-today-and-planned) below, which
+states plainly what is and is not restricted today.
 
 ---
 
@@ -36,11 +44,67 @@ any data:
 - `requirePermission(key)` / `requireAdmin()` - session plus a key / the Admin role.
 - `getCurrentUserId()` - also redirects, but prefer `requireUser()` for readability.
 
+`/matters/new` is a stronger-guard example: it calls
+`requirePermission("matters.create")` first.
+
 `currentUserHasPermission` is a read-side flag, not a guard. Guards
 redirect by throwing, so never wrap them in try/catch.
 `src/app/page-guards.test.ts` enforces this by source scan, with a
 commented allowlist for pages owned by packages that have not landed
 their guard yet. See ADR-028 in [DECISIONS.md](./DECISIONS.md).
+
+---
+
+## Matter visibility (today and planned)
+
+**Today there is no matter-level read restriction.** Every signed-in,
+active user, including one whose only role is the zero-permission
+`default` role, can list, open, search, download and export every
+matter and everything attached to it: notes (including strategy
+memos), documents, invoices, the trust ledger and time narratives. The
+matter detail layout, its tabs, the Billing tab and
+`/print/invoices/[id]` all guard with `requireUser()` only (there is no
+billing "view" key and no team-membership filter on reads). Permission
+keys gate *actions* and a few sensitive read-side slices (below), not
+which matters a user can open.
+
+`MatterTeamMember` does **not** restrict reads. It drives assignment
+pickers, notifications, calendar-detail unlocks (`canViewEventDetails`),
+auto-attendees on events, and the lead filter. Do not describe team
+membership as a visibility gate anywhere.
+
+Two things *are* scoped per user today, but neither is team-based:
+
+- **Email** is mailbox-personal. A thread belongs to the
+  `EmailAccount` that synced it and is visible only to that account's
+  owner, even after it is filed to a matter and even to Admins. Every
+  email query and email-derived action (file/unfile, spawn
+  task/deadline/note, log time, search, badges, attachment download)
+  must use `visibleEmailThreadWhere` / `visibleEmailMessageWhere` from
+  `src/lib/email-visibility.ts` rather than re-deriving the scope.
+- **Calendar event detail** is shown or replaced by "Busy" per event via
+  `canViewEventDetails`; labels that reference an event elsewhere (e.g.
+  the matter Events tab) use the same scrub (ADR-021).
+
+### Planned (NOT built): matter-team access / ethical walls
+
+Design draft: `out/sweep/MATTER_ACCESS_DESIGN.md` (a working note, not
+shipped). No code implements any of this yet: there is no
+`src/lib/matter-access.ts`, no firm-level visibility setting, and
+`matters.view_all` is **not** in the permission catalog. The planned
+rule, decided 2026-10-16:
+
+- A user sees a matter, and everything attached, if they are an active
+  team member, hold a grantable `matters.view_all` key (Admins
+  implicitly), or the firm-level switch is still on "Everyone".
+- The switch lives in Settings, Firm and starts at "Everyone"; an admin
+  flips it to "Team only" after fixing rosters (a "thin teams" list
+  helps). Hidden matters read as missing (404, not 403). Writes require
+  the same access on top of their existing key.
+- Events on inaccessible matters show as "Busy" (the existing scrub).
+
+Until that lands, treat every matter as readable by every staff
+member. See docs/DECISIONS.md for the recorded decision.
 
 ---
 
@@ -146,6 +210,7 @@ export type PermissionEntry = {
   key: string;          // "matters.manage_team"
   label: string;        // "Manage team members"
   description: string;  // shown in the matrix tooltip
+  unwired?: boolean;    // catalogued but not enforced anywhere yet
 };
 
 export type PermissionCategory = {
@@ -188,12 +253,41 @@ The v1 catalog has some coarse `manage_*` keys (`matters.manage_team`,
 capability up front. Existing coarse keys get refined as each feature
 gets revisited.
 
+### Unwired keys
+
+`PermissionEntry.unwired` marks keys that are catalogued (so they can
+be granted ahead of time) but not enforced by any action or page yet.
+The matrix shows "Not enforced yet" on them. Today that is
+`matters.archive` and `matters.delete` (reserved for the Matter
+Actions menu). Remove the flag in the same change that wires the gate.
+
 ### Keys that gate more than one surface
 
 - `matters.manage_team` gates `addMatterTeamMember` **and** changing the
   lead attorney from the matter edit form (`updateMatter` returns a
-  field error otherwise; the form locks the field). `matters.edit`
-  alone can edit everything else on the matter.
+  field error otherwise; the form locks the field). A save that leaves
+  the lead unchanged or omits it needs only `matters.edit`.
+- `billing.apply_trust` gates sendInvoice's apply-trust leg **and**
+  `recordInvoicePayment` with `source=trust`. A role with only
+  `billing.record_payment` is refused trust payments until granted
+  `apply_trust`.
+- `billing.generate_invoice` gates generating/bundling invoices **and**
+  `updateInvoiceLineItem` (line-item pricing/edits).
+- `documents.template.edit` also governs archiving and restoring a
+  template (deliberate, per the action docstring);
+  `documents.template.delete` is permanent removal only.
+- `matters.settlement.approve` covers every settlement status change
+  (approve, disburse, close, reopen) and stage transitions through
+  `upsertSettlement`, plus changing amounts on a fully approved
+  settlement (which also resets its sign-offs).
+  `matters.settlement.edit` alone cannot change status. Settlement
+  step notifications go only to `matters.settlement.view` holders.
+  `matters.settlement.manage_liens` has per-row edit/delete UI on the
+  billing Settlement card (hidden once disbursed or closed).
+- `intake.decline` gates declining a lead (`leads.ts`); converting a
+  lead needs `matters.create`. The Decline/Convert buttons are hidden
+  without the key. Existing roles do not have `intake.decline` until an
+  admin ticks it in `/settings/roles` (no backfill was done).
 
 ### Cross-key gates worth knowing
 
@@ -204,7 +298,11 @@ gets revisited.
   representation). When a submit actually changes a contact field the
   action additionally requires `contacts.edit`; otherwise it returns a
   field error and writes nothing. The form renders those inputs
-  read-only for users without `contacts.edit`.
+  read-only for users without `contacts.edit`. The Parties tab
+  controls themselves follow `parties.create` / `.edit` / `.delete`.
+- **Contacts** - `contacts.merge` gates merge and the merge-candidate
+  search; `contacts.delete` gates deactivate and reactivate. Merge
+  appends the loser's `Contact.notes` and carries the conflict flag.
 
 ### The current catalog
 
@@ -281,7 +379,7 @@ on the next.
 
 ## API: how you actually call it
 
-All four helpers are in `src/lib/permission-check.ts` (server-only).
+All helpers are in `src/lib/permission-check.ts` (server-only).
 
 ### Read-side check (component / page)
 
@@ -338,6 +436,21 @@ Throws a `redirect("/")` when the check fails — same UX as
 `requireAdmin()` had for non-admins. Returns the userId for chaining
 into the action body.
 
+### Inline-form guard (`requirePermissionResult`)
+
+```ts
+const gate = await requirePermissionResult("firm.edit_info");
+if (!gate.ok) return { error: gate.error };
+```
+
+The non-redirecting twin of `requirePermission`. Use it for actions
+called from an inline form, toggle or menu item that can render a
+message: denial returns `{ ok: false, error }` instead of navigating to
+`/`, so the user sees why nothing happened. It still redirects to
+`/login` with no session. Use `requirePermission` for page-level gates
+and actions that rely on the redirect. The team, roles, firm and
+matrix-toggle actions use `requirePermissionResult`.
+
 ### Multi-key guard (`requirePermissions`)
 
 ```ts
@@ -375,6 +488,30 @@ bulk-attach action (`note-attachments.ts`, which ignores `note_sibling`).
 Pinning at create time needs `notes.pin` exactly like toggling a pin
 later; the Pin toggle in `NoteComposer` is hidden without it (`canPin`).
 
+### Read-side flags that hide controls
+
+Hidden affordances must mirror the action gate, driven by
+`currentUserHasPermission` flags resolved on the server:
+
+- Notes tab and composers: `getNoteAccess()` (`src/lib/note-access.ts`)
+  maps `notes.create`, `notes.pin`, `notes.delete_any`, `tasks.create`,
+  `tasks.delete`, `deadlines.create`, `deadlines.delete`,
+  `time_entries.create`, `time_entries.delete_any` and `events.create`
+  to booleans passed to client components.
+- Matter Create menu, Notes/Events composers: per-entity create keys
+  (`MATTER_CREATE_PERMISSION` in `src/lib/matter-create-types.ts`),
+  `notes.create`, `events.create`; the New matter button needs
+  `matters.create`.
+- Communication readers: Save as note, Create task, Create deadline,
+  Log time and File to matter need `notes.create`, `tasks.create`,
+  `deadlines.create`, `time_entries.create` and
+  `communication.file_email` (`comm-action-permissions.ts`).
+- Billing tab: `generate_invoice` (generate, bundle, line-item edit),
+  `approve_invoice` (Approve, Mark recorded), `send_invoice`,
+  `record_payment`, `apply_trust` (Apply trust, together with
+  `record_payment`), `void_invoice`, `delete_draft`, and
+  `trust.record_transaction` for the trust ledger form.
+
 ### Deleting a note that has replies
 
 `deleteNote` cascades to every reply (any depth). The author-may-delete
@@ -408,8 +545,11 @@ let every member create roles — usually not what you want.
 
 The `User.isAdmin` boolean is gone. Admin-ness is membership in the
 Admin role: `userRoles: { some: { role: { name: "Admin" } } }`.
-**At least one active admin** is enforced by `countActiveAdmins()` —
-any write that would leave the firm with zero is rejected.
+**At least one active admin** is enforced in `updateFirmMember`
+(`src/app/actions/team.ts`): a Serializable in-transaction recount
+throws `LastActiveAdminError` when a write would leave the firm with
+zero, and a serialization failure (P2034) from a concurrent team edit
+is mapped to a retry message.
 
 ---
 
@@ -547,6 +687,13 @@ The opinionated default playbook for any new feature:
 5. **Hide nav items entirely** for users who can't do *anything* in
    the feature. Use `currentUserHasAnyPermission([...])` if there
    are multiple capabilities the nav item could light up for.
+6. **Guard the page.** Every new `page.tsx` / `layout.tsx` calls
+   `requireUser()` (or a stronger `requirePermission` / `requireAdmin`)
+   as its first `await`; a layout does not protect its pages.
+   `src/app/page-guards.test.ts` fails the build otherwise (see Page
+   and layout guards).
+7. **Mirror the gate in the UI.** Hide the control behind the same
+   key the action enforces, and cover the denial with a test.
 
 Worked example — adding an expense-tracking feature:
 
@@ -588,8 +735,8 @@ boxes."
   what the UI showed.
 - **Last-admin invariant.** Removing the Admin role from a user, or
   deactivating an admin, is rejected when it would leave the firm
-  with zero active admins. Enforced by `countActiveAdmins()` in
-  `src/lib/queries/team.ts`.
+  with zero active admins. Enforced by the in-transaction recount in
+  `updateFirmMember` (`src/app/actions/team.ts`).
 - **Multi-tenant, future.** Roles + RolePermissions are firm-scoped
   via `Role.firmId`. The session callback in `src/auth.ts` already
   threads `firmId` through; when we go multi-tenant the
@@ -601,11 +748,10 @@ boxes."
 
 - **Per-user permissions.** Roles only. If a single user needs an
   unusual capability, give them a role for it.
-- **Per-matter / per-resource permissions.** "User X can see Matter Y
-  but not Matter Z" is governed by `MatterTeamMember` membership
-  today, not by the permission system. Resource-scoped permissions
-  could layer on later (probably as `MatterPermission` rows or as
-  permission-keys-with-resource-arguments) but we don't need them yet.
+- **Per-matter / per-resource visibility.** "User X can see Matter Y
+  but not Matter Z" is not supported today: all matters are readable
+  by all staff (see Matter visibility above). Team-based access
+  (ethical walls) is a planned phase, not built.
 - **Time-bound grants.** No expiry on `RolePermission`. If we ever
   need "until end of quarter" grants, add `expiresAt` and filter at
   read time.
@@ -621,15 +767,29 @@ boxes."
 | `prisma/schema.prisma`                                            | `Role`, `UserRole`, `RolePermission` definitions                |
 | `src/lib/permissions.ts`                                          | Static catalog + helpers (`PERMISSION_KEYS`, `isKnownPermission`)|
 | `src/lib/permission-check.ts`                                     | Runtime helpers (`currentUserHasPermission`, `requirePermission`, `requirePermissions`, etc.) |
+| `src/lib/email-visibility.ts`                                     | `visibleEmailThreadWhere` / `visibleEmailMessageWhere` (mailbox-personal scope) |
+| `src/lib/note-access.ts`                                          | `getNoteAccess` (Notes-surface control flags)                   |
 | `src/lib/capture-permissions.ts`                                  | Kind to create-key map + `requiredCapturePermissions` for captures/notes |
 | `src/lib/current-user.ts`                                         | `getCurrentUserId` / `requireUser` (session guards for pages)   |
 | `src/lib/firm.ts`                                                 | `requireAdmin` / `isCurrentUserAdmin` (admin-as-concept)        |
 | `src/lib/role-constants.ts`                                       | `ADMIN_ROLE_NAME` / `DEFAULT_ROLE_NAME`                         |
 | `src/app/actions/roles.ts`                                        | Role CRUD + `setRolePermissionAction`                           |
-| `src/lib/queries/team.ts`                                         | `listFirmRoles`, `listRolePermissionGrants`, `countActiveAdmins`|
+| `src/lib/queries/team.ts`                                         | `listFirmRoles`, `listRolePermissionGrants`, `getPrivilegedRoleIds`|
 | `src/app/(dashboard)/settings/roles/page.tsx`                     | Matrix page                                                     |
 | `src/components/settings/permissions-matrix.tsx`                  | Matrix UI                                                       |
 | `src/components/settings/role-row.tsx`                            | Role list row (rename / delete kebab)                           |
+
+---
+
+## Read-side gates on matter tabs
+
+Beyond page-level keys, some matter data is filtered per viewer inside the query (see ADR-021 in `DECISIONS.md`):
+
+- **Events tab / event labels** — calendar event visibility (`canViewEventDetails`), not a permission key: events the viewer can't see are "Busy".
+- **Timeline** — settlement rows need `matters.settlement.view`, expense rows need `matters.expense.view`; without them the rows are omitted, not redacted (`activityMoneyFilters` in `src/lib/queries/matter-detail.ts`).
+- **Dashboard** — Firm pulse and the Trust balance KPI need `reports.view`. Recent activity omits settlement rows without `matters.settlement.view`, `Expense ...` rows without `matters.expense.view`, and firm-scope (`matterId` null) rows without `firm.view_activity`. Pinned by `src/lib/queries/dashboard-privacy.test.ts`.
+- **Email** — mailbox-personal; see Matter visibility.
+- **Evidence flags** — `edit_any` rewrites of another reviewer's flag are audited.
 
 ---
 
@@ -648,15 +808,6 @@ boxes."
 | 2026-07-07 | Evidence review keys wired: `evidence.flag.create` gates "Flag this moment" on media in the document viewer; `evidence.flag.edit_any` / `evidence.flag.delete_any` cross ownership on other reviewers' flags — creators always edit/delete their OWN flags without any key (same ownership pattern as `notes.edit_any`/`notes.delete_any`). Server actions in `src/app/actions/flagged-moments.ts`; read-side flags drive the composer button + rail kebabs. |
 | 2026-10-16 | New `automations` category (ADR-019): `automations.view` (Settings → Automations), `automations.deadline_rule.{create,edit,delete}`, `automations.task_list.{create,edit,delete}` (edit covers items + archive), `automations.defaults.{create,delete}` (what applies automatically to new matters). Applying a rule/list to a matter rides `deadlines.create` / `tasks.create`. Grant to non-admin roles via /settings/roles. |
 | 2026-10-16 | `firm.manage_team_directory` joined `ADMIN_ONLY_PERMISSIONS` (now exported from `src/lib/permissions.ts`); team.ts refuses non-Admin escalation (grant/remove Admin, invite Admin, edit/deactivate an Admin, reset/unlock an Admin-class account). `intake.decline` added to the catalog. Role create/rename/delete and permission flips write `type: "auth"` activity entries. |
-
-
-## Read-side gates on matter tabs
-
-Beyond page-level keys, some matter data is filtered per viewer inside the query (see ADR-021 in `DECISIONS.md`):
-
-- **Events tab / event labels** — calendar event visibility (`canViewEventDetails`), not a permission key: events the viewer can't see are "Busy".
-- **Timeline** — settlement rows need `matters.settlement.view`, expense rows need `matters.expense.view`; without them the rows are omitted (`activityMoneyFilters` in `src/lib/queries/matter-detail.ts`).
-
 | 2026-10-16 | Captures and notes enforce per-kind create gates (siblings no longer inherit the primary's gate, ADR-025): `requirePermissions` + `requiredCapturePermissions`; pinning at create needs `notes.pin`; deleting a note others replied to needs `notes.delete_any`; note edit/pin/delete write activity entries. No new keys. |
-
 | 2026-10-16 | Added `requireUser()` and the "Page and layout guards" rule (ADR-028): every page/layout self-authenticates; `/matters/new` now requires `matters.create`. No new permission keys. |
+| 2026-10-17 | Doc sweep to match the code: matter-visibility truth (no read restriction; `MatterTeamMember` is not a gate; ethical walls planned, not built), `requirePermissionResult`, `PermissionEntry.unwired`, last-admin invariant now an in-transaction recount, cross-key gates (`apply_trust`, `generate_invoice`, settlement approve, `contacts.edit` with `parties.edit`, `matters.manage_team` for lead change, `intake.decline`), read-side control flags, dashboard/timeline money-row gating. No new keys. |

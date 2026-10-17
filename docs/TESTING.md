@@ -11,10 +11,13 @@ disagrees with what's here, the doc is right — fix the code.
 - **Tests live alongside source.** `src/lib/sol.ts` →
   `src/lib/sol.test.ts`, no separate `__tests__` folder.
 - **Every new feature ships with at least one test.** The
-  pre-commit hook runs the full suite and the typecheck on every
+  pre-commit hook runs typecheck, lint and the full suite on every
   commit; failures block.
 - **Tests run on every git commit.** Husky pre-commit hook in
   `.husky/pre-commit`.
+- **The suite needs the Docker test database** (every `vitest` run,
+  even a pure-unit one, goes through the DB `globalSetup`) and takes
+  about a minute and a half.
 
 ---
 
@@ -24,7 +27,7 @@ disagrees with what's here, the doc is right — fix the code.
 
 When you add or change behavior, you also add or update a test.
 The bar isn't 100% coverage — the bar is "this thing is exercised
-by code that runs in CI before the diff lands." Concretely:
+by code that runs in the pre-commit hook before the diff lands." Concretely:
 
 | Change                                  | Test posture                                                             |
 |-----------------------------------------|--------------------------------------------------------------------------|
@@ -45,16 +48,30 @@ real Gmail OAuth — covered by the manual-test plan in
 
 `.husky/pre-commit` runs `npm run precommit` which is:
 
-1. `tsc --noEmit` — full typecheck
-2. `vitest run` — full unit suite
+1. `npm run typecheck` — `next typegen && tsc --noEmit`
+2. `npm run lint` — ESLint with `--max-warnings 0`
+3. `npm test` — the full `vitest run` suite (unit, component and
+   Postgres-backed integration tests)
 
-The suite is currently <1s, so this is essentially free. We'll
-switch to `vitest related ...` once it grows past 5s, but for now
-running everything is the simplest correct thing.
+and, only when `prisma/schema.prisma` or `prisma/migrations/` is
+staged, `npm run check:migrations` (applies every migration to a
+scratch database and diffs it against `schema.prisma`, ADR-016).
+
+The full suite takes about 1.5 minutes, so don't discover failures at
+commit time. For a fast local loop use `npx vitest related <changed
+files> --run` (runs only the tests that import them; it still needs the
+test DB up), `npm run test:watch`, or a single file with
+`npx vitest run path/to/file.test.ts`, and run the whole suite before
+committing. There is no CI workflow in the repo; the hook is the gate.
 
 **Bypass** (`git commit --no-verify`) is allowed only for
 work-in-progress branches that you'll clean up before merging.
 Never for `main`.
+
+The test DB's schema-push step refuses to run without consent text in
+`PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION` when an AI agent drives
+Prisma (the container is local and disposable, but Prisma can't tell);
+agent sessions export it for the hook.
 
 ---
 
@@ -79,7 +96,7 @@ What's already covered:
   permissionLabel, expected-key smoke list
 - `lib/conflict-check.ts` — `normalize` + `summarizeMatchSeverity`
 - `lib/calendar-utils.ts` — weekday math, param parse / round-trip,
-  hour labels, event positioning, now-line offset
+  hour labels, overlap layout, `eventDayKeys`
 - `lib/matters-filters.ts` — URL parse + build round-trip, default
   fallthroughs, sort + view modes, multi-value array handling
 - `lib/dashboard-prefs.ts` — `mergeVisibility` + `mergeOrder`
@@ -104,7 +121,7 @@ configured) + `@testing-library/react` + `@testing-library/user-event`.
 Setup file at `src/test/setup.ts` wires the jest-dom matchers
 and runs `cleanup()` after every test.
 
-What's already covered (49 tests across 4 components):
+What's covered (representative; `ls src/components/**/*.test.tsx` for the rest):
 
 - `PermissionsMatrix` — read-only mode, locked Admin column,
   toggle calls action with right args, optimistic flip,
@@ -124,6 +141,12 @@ What's already covered (49 tests across 4 components):
   rejects <5 char justifications + posts FormData with notes,
   saved override rationale read-only when status=override,
   matches list deep-links to contact + matter targets.
+
+Async server components (reply-section, compose-email-launcher) are
+tested by awaiting the component function and rendering its result.
+Billing/capture/note component tests that mock `@/lib/permission-check`
+must also mock `requirePermissions` (delegating per key to the
+`requirePermission` mock) because capture and note actions call it.
 
 **Mocking pattern:** stub the imported server action at module
 level via `vi.mock("@/app/actions/foo", () => ({ ... }))`. The
@@ -152,13 +175,34 @@ use selectively for the highest-leverage workflows.
   `docker compose -f docker-compose.test.yml up -d`. The
   container outlives test runs (restart it to wipe state); your
   dev `DATABASE_URL` is never touched.
+- `TEST_DATABASE_URL` overrides the target database (default
+  `.../lawcrm_test` on :5433). The name must start with `lawcrm_test`
+  and the host must be local: `src/test/test-db-guard.ts` refuses
+  anything else, in both `globalSetup` and `resetDb()`, because setup
+  force-pushes the schema and every test deletes all rows.
 - `src/test/integration-setup.ts` — Vitest `globalSetup` that
   runs ONCE before any test loads. Points `DATABASE_URL` /
-  `DIRECT_DATABASE_URL` at the test container, waits up to 30s
-  for it to accept connections, then pushes the current schema
-  via `npx prisma db push --accept-data-loss`.
-- `src/test/integration-helpers.ts` — `resetDb()` truncates
-  every table in FK-safe order; fixture builders (`seedFirm`,
+  `DIRECT_DATABASE_URL` at the test container, sets
+  `DATABASE_POOL_MAX=4` (so lock-contention tests really overlap),
+  waits up to 30s for the DB, takes a **per-database advisory run
+  lock**, then pushes the current schema via
+  `npx prisma db push --accept-data-loss`.
+- **Run lock.** A second one-shot `vitest` run against the SAME
+  database (a commit hook plus a manual `npm test`, two agent
+  sessions) queues behind the first instead of truncating its rows,
+  and fails with a clear error after `TEST_DB_LOCK_TIMEOUT_MS`
+  (default 10 min). Watch and `--ui` sessions don't hold the lock.
+  Run suites in parallel only on separate databases (see
+  "Parallel suites" below). This replaces the old "two vitest
+  processes race" limitation.
+- `src/test/setup.ts` makes tests hermetic: it deletes
+  `BLOB_READ_WRITE_TOKEN`, `STORAGE_DRIVER`, `CRON_SECRET`, Google and
+  `AUTH_URL` variables from the environment, sets a deterministic
+  `EMAIL_TOKEN_KEY`, and blocks `fetch` to any non-loopback host
+  (mock fetch in the test).
+- `src/test/integration-helpers.ts` — `resetDb()` deletes
+  every table in FK-safe order (new tables must be added to its
+  explicit list); fixture builders (`seedFirm`,
   `seedUser`, `seedPracticeArea`, `seedMatter`, `seedTimeEntry`,
   `seedExpense`, `seedContact`, `seedMatterContact`, `seedLead`)
   return the row id for chaining.
@@ -189,63 +233,64 @@ vi.mock("next/navigation", () => ({
 }));
 ```
 
-**What's covered today** (145 integration tests across 10 files):
+**Representative coverage** (the counts that used to be kept here
+drifted; read the files):
 
-- `src/app/actions/billing.test.ts` (7) —
+- `src/app/actions/billing.test.ts` —
   `generateInvoiceFromWip` rolls billable time + expenses into
   one invoice with the right subtotal; flips entries to
   `status="billed"` + stamps `invoiceId`; ignores already-invoiced
   rows; ignores non-billable; refuses when nothing is bundleable.
   `setInvoiceStatus("void")` unlinks both buckets back to
   billable.
-- `src/app/actions/settlements.test.ts` (10) —
+- `src/app/actions/settlements.test.ts` —
   `upsertSettlement` seeds the 4-step approval chain on create,
   doesn't re-seed on update, computes firm fee from percent.
   `setApprovalStepStatus` auto-promotes to "approved" only when
   every step approves; snapshots approverId + clears on
   reject/reset; refuses on disbursed/closed. `addSettlementLien`
   refuses on disbursed settlements.
-- `src/lib/conflict-check.integration.test.ts` (13) — the
+- `src/lib/conflict-check.integration.test.ts` — the
   matcher against the real DB: email + opposing-side
   MatterContact → conflict, email + non-opposing → warn, exact
   name match against `Matter.opposingParty` /
   `.opposingFirm` → conflict, organization match → warn,
   archived matters skipped, severity rolls up correctly.
-- `src/lib/permission-check.integration.test.ts` (12) — Admin
+- `src/lib/permission-check.integration.test.ts` — Admin
   short-circuits to all-granted; non-admin grants flow through
   `RolePermission` rows; multi-role union; inactive user gets
   nothing (even with Admin); `requirePermission(...)` throws
   redirect on miss; `currentUserHasAnyPermission([...])` matches
   the doc.
-- `src/lib/firm.integration.test.ts` (9) — `getCurrentFirm`
+- `src/lib/firm.integration.test.ts` — `getCurrentFirm`
   returns the user's firm profile, throws on stale-session /
   data-integrity bug; `isCurrentUserAdmin` returns true only for
   active users with the Admin role; `requireAdmin` returns userId
   for admins, throws redirect for non-admins or inactive admins.
-- `src/lib/activity-log.test.ts` (32) — `logActivity` writes the
+- `src/lib/activity-log.test.ts` — `logActivity` writes the
   row + revalidates the dashboard; default icon + source mapping
   per ActivityType (with explicit overrides honored); fire-and-
   forget contract — DB failures (FK violations) are swallowed
   with a `console.warn` so the user's underlying action stays
   the source of truth.
-- `src/app/actions/tasks.test.ts` (21) — `setTaskStatus`
+- `src/app/actions/tasks.test.ts` — `setTaskStatus`
   completedAt mirroring (set on enter, clear on leave, preserved
   across done↔cancelled), unknown-status / missing-task guards;
   activity log fans out only on completed-state transitions
   ("Task completed" / "Task cancelled" / "Task reopened").
   `deleteTask` removes + 404s. `updateTask` zod validation,
   dueDate parsing, completedAt mirroring on status change.
-- `src/app/actions/deadlines.test.ts` (15) —
+- `src/app/actions/deadlines.test.ts` —
   `setDeadlineStatus` only completed stamps completedAt; waived
   / open / overdue clear it; re-completing preserves the
   original timestamp; missing-deadline + unknown-status guards.
   `deleteDeadline` + `updateDeadline` (validation, dueDate parse,
   null-coercion of optional sourceRef + description).
-- `src/app/actions/matter-pins.test.ts` (4) — `toggleMatterPin`
+- `src/app/actions/matter-pins.test.ts` — `toggleMatterPin`
   pins → unpins → re-pins idempotently and revalidates the
   layout tree; pins are scoped per (user, matter) so two users
   can pin the same matter without interfering.
-- `src/app/actions/time-entries.test.ts` (22) —
+- `src/app/actions/time-entries.test.ts` —
   `createTimeEntry` validation (hours > 0, ≤ 24, non-empty
   activity) + matter existence guard + source field write
   (manual vs calendar). `updateTimeEntry` billed-row guard +
@@ -254,6 +299,31 @@ vi.mock("next/navigation", () => ({
   create hits `time_entries.create`; edit + delete + status
   bypass on author and gate on `time_entries.{edit,delete}_any`
   for non-author actors.
+
+Billing action tests live in `src/app/actions/billing*.test.ts`;
+`billing.concurrency.test.ts` mocks `@/lib/prisma` with a multi-connection
+pool (`max > 1`) and waits on `pg_stat_activity` to prove real lock
+contention. Time-entry writes are conditional single-statement updates
+(they race with invoice generation), tested with a
+`vi.spyOn(prisma.x, "findUnique")` stale-read pattern. Other specialised
+suites: `src/lib/capture-access.test.ts`, `src/lib/capture-defaults.test.ts`,
+`src/lib/text-to-html.test.ts`.
+
+### Static guard tests
+
+- **`src/app/page-guards.test.ts`** scans every `page.tsx` and
+  `layout.tsx` under `src/app/(dashboard)` and `src/app/print` and fails
+  unless the default export's FIRST `await` is a session guard
+  (`requireUser`, `requirePermission`, `requireAdmin` or
+  `getCurrentUserId`) with no `prisma.` access before it (ADR-028).
+  `PAGE_ALLOWLIST` (keep it empty) and `LAYOUT_ALLOWLIST` (the
+  dashboard and print layouts) are the only exemptions; any new entry
+  needs a justifying comment.
+- `src/lib/permissions.test.ts` scans production sources and fails if a
+  literal key passed to `requirePermission`, `requirePermissionResult` or
+  `currentUserHasPermission` is not in the catalog.
+- `src/vercel-config.test.ts` pins the proxy's self-authenticated paths
+  (cron endpoints, blob callback).
 
 ---
 
@@ -294,12 +364,16 @@ vi.mock("next/navigation", () => ({
 
 | Command                  | What                                                                |
 |--------------------------|---------------------------------------------------------------------|
-| `npm test`               | One-shot: full suite, exit 1 on failure. CI default.                |
+| `npm test`               | One-shot: full suite, exit 1 on failure. Needs the Docker test DB.  |
 | `npm run test:watch`     | Watch mode — re-runs on save. TDD default.                          |
+| `npx vitest related <files> --run` | Only tests that import the given source files. Fast local loop; still needs the test DB. |
 | `npm run test:ui`        | Vitest UI dashboard at `http://localhost:51204/__vitest__/`.        |
-| `npm run typecheck`      | `tsc --noEmit` — catches type errors without an emit.               |
-| `npm run precommit`      | `typecheck` + `test`. The pre-commit hook runs this.                |
 | `npm run test:utc`       | Full suite with `TZ=UTC` — the production server's zone.            |
+| `npm run test:coverage`  | `vitest run --coverage`; the only place coverage thresholds apply.  |
+| `npm run typecheck`      | `next typegen && tsc --noEmit`.                                      |
+| `npm run lint`           | ESLint, `--max-warnings 0`.                                          |
+| `npm run check:migrations` | Migrations vs `schema.prisma` drift check (hook runs it when `prisma/` is staged). |
+| `npm run precommit`      | `typecheck` + `lint` + `test`. The pre-commit hook runs this.        |
 
 The pre-commit hook lives in `.husky/pre-commit` and is wired
 via `npm run prepare` (auto-runs after `npm install`).
@@ -309,28 +383,28 @@ Production runs in UTC while developers (and their browsers) sit
 west of it; a bug that mixes the two frames passes in one zone and
 fails in the other, so date work should be green in both.
 
-**Parallel suites.** Integration tests default to the `lawcrm_test`
+**Parallel suites.** Each database is single-tenant and guarded by a run
+lock (see Layer 3). Integration tests default to the `lawcrm_test`
 database on `localhost:5433`. Set `TEST_DATABASE_URL` to run a second
 suite at the same time against its own database in the same
 container (`docker exec lawcrm-test-postgres createdb -U lawcrm_test
 lawcrm_test_2`, then `TEST_DATABASE_URL=postgresql://lawcrm_test:lawcrm_test@localhost:5433/lawcrm_test_2`).
-Two suites sharing one database truncate each other's rows.
+A second run against the same database waits for the first to finish.
 
 ---
 
 ## Coverage
 
-`npm test -- --coverage` produces a v8 coverage report. The
+`npm run test:coverage` produces a v8 coverage report. The
 config (in `vitest.config.ts`) scopes coverage to `src/lib/**` and
 `src/app/actions/**` — the rest is UI / wiring whose value is
 better measured by component + integration tests.
 
 **The floor lives in the `coverage.thresholds` block of
 `vitest.config.ts` — that's the source of truth, not this doc**
-(a snapshot table here drifted stale within weeks; don't
-reintroduce one). As of 2026-07-06 the floor is lines 24 /
-statements 24 / functions 23 / branches 22. Run
-`npm test -- --coverage` for current numbers.
+(a snapshot here drifted stale within weeks; don't reintroduce one).
+Thresholds are enforced only under `--coverage`; the commit hook runs
+the plain suite.
 
 The target is "every public function in `src/lib/` has a test."
 We're not there yet — a lot of the gap is `src/app/actions/**`
@@ -341,7 +415,7 @@ We're not there yet — a lot of the gap is `src/app/actions/**`
 materially, edit the `coverage.thresholds` block in
 `vitest.config.ts` upward in the same PR. Don't ratchet it past
 the current value — leave a few points of headroom so refactors
-that legitimately move uncovered lines don't trip CI.
+that legitimately move uncovered lines don't trip the check.
 
 **Lowering the floor is not allowed.** If a change would lower
 coverage, fix the tests first.
@@ -355,9 +429,10 @@ coverage, fix the tests first.
 3. Add a `describe` block for the new behavior.
 4. Add at least one positive case + at least one negative case
    (null / wrong type / out-of-range input / unauthorized).
-5. Run `npm run test:watch` and iterate until green.
-6. Commit. The pre-commit hook re-runs everything before the
-   diff lands.
+5. Run `npm run test:watch` (or `npx vitest related <file> --run`) and iterate until green.
+6. Run `npm run test:utc` too if the code touches dates (ADR-012).
+7. Commit. The pre-commit hook re-runs typecheck, lint and the whole suite
+   before the diff lands.
 
 For features that span multiple files (a server action with a
 client form), put the unit-level tests on the pure helpers and
@@ -382,6 +457,7 @@ end-to-end flow.
 | 2026-07-07 | Dashboard customizable layout v2 (reorder). Layer-1 `lib/dashboard-prefs.test.ts` grew to 34 (was 12) — `mergeOrder` mirrors `mergeVisibility`'s defensive-merge suite (fallthroughs, unknown/non-string/dupe entries, post-save keys appended, permutation invariant), plus `mergePrefs`, `cardsInColumn`, and `moveCardInColumn` (swap within column, null at edges, cross-column isolation, no input mutation). New layer-3 `actions/dashboard-prefs.test.ts` (7 — the two actions never clobber each other's half of the blob, server-side order sanitization, unknown-key guard, no-prior-prefs path). New layer-2 `dashboard/customize-button.test.tsx` (7 — rows grouped by column in pref order, hidden rows stay orderable, edge-disabled arrows, optimistic reorder + full-order payload, rollback on failure, v1 checkbox regression). |
 | 2026-07-07 | Contact bulk operations. New layer-1 `lib/csv.test.ts` (10 — RFC 4180 escaping/quote doubling, null → empty cell, formula-injection guard for `=`/`@` with `+`/`-` deliberately exempt, CRLF document shape). `actions/contacts.test.ts` grew a bulk suite: gates (`bulkSetContactType` → contacts.edit, `bulkDeactivateContacts` → contacts.delete, `exportContactsCsv` session-only — pinned to NOT call requirePermission), all-or-nothing id validation + the 100-row `BULK_CONTACT_LIMIT`, id dedupe, inactive/merged rejection on re-type, ONE-summary-audit-row contract per bulk op, CSV escaping + address folding + active column. New layer-2 `contacts/contacts-table.test.tsx` (9 — selection bar count / select-all / Clear, set-type wiring + alert-and-keep-selection on failure, confirm()-gated deactivate, export blob download, canEdit/canDelete hiding, over-cap trim note). happy-dom trap documented in-file: `window.alert`/`confirm` don't exist — `vi.stubGlobal`, not `vi.spyOn`. |
 | 2026-07-07 | Timer widget + time entry v2. New layer-1 `lib/time-entry-constants.test.ts` (17 — rounding UP to the quarter-hour increment with a one-increment floor, elapsed formatting, start–end hour math incl. no-overnight rule, UTBMS catalog shape + `isKnownUtbmsCode` guard); new layer-3 `actions/timer.test.ts` (15 — start replaces via the userId unique, update preserves the clock + partial-field semantics, discard idempotent, stop writes `source:"timer"` + deletes the session in one transaction, matter-required + stale-dialog double-log guards, permission posture: start/update/discard hit NO key, `stopTimer` gates on `time_entries.create`); `actions/time-entries.test.ts` +4 (utbmsCode persist/clear/reject on create + update); new layer-2 `captures/time-composer.test.tsx` (4 — UTBMS posts as `utbmsCode`, start–end mode computes and posts plain `hours`, incomplete range keeps Save gated). `timer_sessions` added to `resetDb()`'s delete order. Suite: **1334 tests across 125 files in ~60s**. |
-| 2026-07-07 | Gmail sync engine (integration phase 2). New layer-1 `lib/google/gmail-message-parse.test.ts` (27 — RFC 5322 address-list subset incl. quoted-comma names + RFC 2047 B/Q encoded words, base64url, MIME walk against multipart/alternative + nested multipart/mixed fixtures, attachment-part exclusion from body extraction, label→flag mapping + the Label_*-only user-label filter, snippet entity decoding). `lib/sanitize-html.test.ts` +12 for the new EMAIL profile — a hostile-mail fixture pins the write-time boundary (script payload gone, handlers/javascript: stripped, iframe/form/style discarded, safe inline-style subset kept while position/url() drop, remote + cid: images → "[image blocked]" placeholder with alt preserved, data: images render) plus not-loosened checks on the note/document profiles. New layer-3 `lib/google/gmail-sync.test.ts` (14 — `gmailFetch` mocked as a URL-dispatching fake Gmail, DB real: history-vs-full path selection, historyId-404 → full fallback, provider-404 keeps the local thread, idempotent re-upsert on the externalId uniques, app-owned preservation across resync (matterId/followUpAt/isPrivileged/app labels/downloaded attachment fileUrl) while provider columns update, custom:* label reconciliation, hostile-body sanitization end-to-end, 200-thread initial-import cap + newer_than:90d query, GmailAuthError marks `error` vs transient restore-and-rethrow + syncError clear on next success, per-user account scoping, `maybeKickEmailSync` throttle/staleness/never-throws). New `actions/email-sync.test.ts` (3 — identity scoping, empty-account no-op without revalidation, per-account failure surfacing) and `api/email-sync/route.test.ts` (4 — CRON_SECRET fail-closed idiom, no email addresses in cron output, 500-without-leak). NOTE: layer-3 files assume exclusive use of the :5433 test DB — two `vitest run` processes at once race on `resetDb()`. |
+| 2026-07-07 | Gmail sync engine (integration phase 2). New layer-1 `lib/google/gmail-message-parse.test.ts` (27 — RFC 5322 address-list subset incl. quoted-comma names + RFC 2047 B/Q encoded words, base64url, MIME walk against multipart/alternative + nested multipart/mixed fixtures, attachment-part exclusion from body extraction, label→flag mapping + the Label_*-only user-label filter, snippet entity decoding). `lib/sanitize-html.test.ts` +12 for the new EMAIL profile — a hostile-mail fixture pins the write-time boundary (script payload gone, handlers/javascript: stripped, iframe/form/style discarded, safe inline-style subset kept while position/url() drop, remote + cid: images → "[image blocked]" placeholder with alt preserved, data: images render) plus not-loosened checks on the note/document profiles. New layer-3 `lib/google/gmail-sync.test.ts` (14 — `gmailFetch` mocked as a URL-dispatching fake Gmail, DB real: history-vs-full path selection, historyId-404 → full fallback, provider-404 keeps the local thread, idempotent re-upsert on the externalId uniques, app-owned preservation across resync (matterId/followUpAt/isPrivileged/app labels/downloaded attachment fileUrl) while provider columns update, custom:* label reconciliation, hostile-body sanitization end-to-end, 200-thread initial-import cap + newer_than:90d query, GmailAuthError marks `error` vs transient restore-and-rethrow + syncError clear on next success, per-user account scoping, `maybeKickEmailSync` throttle/staleness/never-throws). New `actions/email-sync.test.ts` (3 — identity scoping, empty-account no-op without revalidation, per-account failure surfacing) and `api/email-sync/route.test.ts` (4 — CRON_SECRET fail-closed idiom, no email addresses in cron output, 500-without-leak). (Superseded: a per-database run lock now queues concurrent runs; see Layer 3.) |
 | 2026-07-07 | Gmail send/reply (integration phase 3). New layer-1 `lib/google/mime.test.ts` (53 — address validation matrix + comma/semicolon list parsing with case-insensitive dedupe, RFC 2047 subject/display-name encoding incl. multi-word chunking that reassembles + header-injection stripping (no smuggled header LINE), RFC 2822 date, multipart/alternative shape with 76-col base64 part bodies that decode to the exact composer content, Message-ID omission, In-Reply-To/References angle-bracketing, boundary non-collision, unwrapped base64url `raw` round-trip via Buffer decode, plainTextToHtml escaping/paragraphs, Re:-no-stacking, deriveReplyRecipients matrix: last-inbound anchor, reply-all From+To+Cc minus own address case-insensitively, To-wins-over-Cc dedupe, all-outbound fallback). New layer-3 `actions/email-send.test.ts` (24 — `gmailFetch` stubbed with real error classes via importOriginal, DB real: `communication.send_email` gate on both actions, ownership scoping (foreign accountId/thread → not-found, no network call), disconnected-account refusal, recipient/body validation before the wire, MIME payload decoded off the wire (From/To/Cc/Subject/threadId pin), local upsert convergence on the sync engine's (accountId|threadId, externalId) uniques incl. pre-existing-row reuse + idempotent repeat + null-externalId linking, filed-thread activity log, GmailAuthError/GoogleOAuthError/HTTP-429 all return `{ok:false}` with zero local rows). New layer-2 `compose-email.test.tsx` (8) + `reply-composer.test.tsx` (10) — no-account Connect-Gmail link, single vs multi account picker, invalid-address inline block, error-preserves-draft contract, success reset+refresh, reply prefill read-only until Edit, unedited sends carry NO overrides (server re-derives), reply-all wiring, empty-derivation opens edit mode. happy-dom trap documented in-file: Base UI render-prop anchors don't expose an accessible name to getByRole — query by text + closest("a"). |
 | 2026-07-08 | Google Calendar pull sync + scope plumbing. New layer-3 `lib/google/google-calendar-sync.test.ts` (19 — `gmailFetch` mocked as a fake Google Calendar, DB real: scope gating with zero traffic for unscoped/null-grant accounts, full windowed pull param pins (timeMin/timeMax ≈ now−30d/now+400d, `singleEvents=true`), unmarked import shape (createdById = connection owner / visibility default / type meeting / matterless + mapping row), pagination-then-nextSyncToken persistence, incremental syncToken flow + 410 GONE → full re-pull, marked-event mapping upsert + last-write-wins both directions (older Google `updated` never overwrites; marker to a deleted CRM event never resurrects), the full cancellation-rule matrix (sole-mapping personal → event deleted; filed / other-attendee / multi-mapping → mapping-only), GmailAuthError account flip vs transient note-and-rethrow + calendar-prefixed syncError hygiene (a calendar success never clears an email failure note), per-user wrapper isolation, and an import-statement scan pinning echo safety — the pull module must never import `google-calendar-push` or the calendar-events actions). Extended: callback `route.test.ts` (+1 and hardened — `grantedScopes` persisted on connect AND reconnect, absent `scope` keeps the prior grant), connect `route.test.ts` (calendar scope in the consent URL), `actions/email-sync.test.ts` (+3 — Sync-now piggyback imports events, unscoped accounts skip without /calendar revalidation, calendar failure never flips the mail verdict), cron `route.test.ts` (+1 — calendar summary by account id only; wholesale pull failure never fails the sweep), `gmail-integration-card.test.tsx` (+3 — "Calendar sync on" vs reconnect-link scope line, hidden on disconnected rows). `calendar_event_syncs` added to `resetDb()`'s delete order; new `seedCalendarEvent` fixture builder. |
+| 2026-10-17 | Quality-sweep catch-up: pre-commit now runs lint; documented `TEST_DATABASE_URL`, the run lock and DB-name guard, `DATABASE_POOL_MAX=4`, the hermetic env scrub and network block, `test:utc`, `vitest related`, the page-guards static test. Hand-kept per-file test counts removed (read the files). |

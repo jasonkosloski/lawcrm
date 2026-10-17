@@ -13,11 +13,11 @@ This file tracks decisions, trade-offs, and evolution of the Prisma schema as we
 | Model | Status | Notes |
 |---|---|---|
 | User | Draft | Minimal — needs auth fields when we add login |
-| Matter | Draft | Core entity, most relationships stem from here |
+| Matter | Draft | Core entity, most relationships stem from here. `wipAmount` is no longer read (Overview WIP is computed live); drop candidate |
 | MatterTeamMember | Draft | Join table for users → matters with role |
-| Contact | Draft | Polymorphic type field — may split later if types diverge significantly |
+| Contact | Draft | Polymorphic type field — may split later if types diverge significantly. `firmId` is stamped only by some create paths (see changelog 2026-10-17) |
 | MatterContact | Draft | Join table with role per matter |
-| Lead | Draft | Separate from Contact — converts to Matter + Contact on intake |
+| Lead | Draft | Separate from Contact — converts to Matter + Contact on intake. `statuteWindow` is a days-remaining snapshot as of `createdAt` (see changelog 2026-10-17) |
 | Document | Draft | Generic file reference — may need versioning later |
 | Evidence | Draft | Specialized for civil rights multimedia — may be overkill for simple cases |
 | FlaggedMoment | Active | Review flags on any viewable Document — time / page / quote / anchorless anchors (see 2026-07-07 changelog rows) |
@@ -26,19 +26,19 @@ This file tracks decisions, trade-offs, and evolution of the Prisma schema as we
 | CalendarEvent | Active | Google Calendar sync landed 2026-07-08 via the `CalendarEventSync` mapping model (no columns added here — sync state lives on the mapping + `EmailAccount`) |
 | CalendarAttendee | Draft | Simple for now — may need response tracking |
 | TimeEntry | Draft | Core billing unit — UTBMS codes may need their own reference table |
-| Invoice | Draft | Needs line items beyond just time entries (expenses, flat fees) |
+| Invoice | Draft | Links time entries (`lineItems`) AND expenses (`expenseLineItems`); flat-fee/adjustment/tax lines still absent |
 | TrustTransaction | Draft | Simple ledger — real IOLTA compliance may need more fields |
-| Settlement | Draft | Specialized for contingency fee cases |
+| Settlement | Draft | Specialized for contingency fee cases. `clientNet` is derived on read and never written; `firmFee` stored rounded half-up to cents |
 | SettlementLien | Draft | Negotiation workflow fields |
 | SettlementApproval | Draft | 4-step approval chain |
-| EmailAccount | Draft | OAuth tokens should be encrypted — placeholder for now |
+| EmailAccount | Active | OAuth tokens encrypted at rest (ADR-011). `updatedAt` doubles as the sync-claim heartbeat (ADR-031) |
 | EmailThread | Draft | Gmail thread model — will need adjustment when we integrate |
 | EmailMessage | Draft | Recipients stored as JSON string — consider normalizing if we need to query by recipient |
 | EmailAttachment | Draft | Basic file reference |
 | EmailLabel | Draft | Thread-level labels |
 | Task | Draft | Simple to-do — may need subtasks, comments, or checklist items |
 | Note | Draft | Rich text — storage format (HTML vs Markdown) TBD |
-| ActivityLog | Draft | Append-only audit trail |
+| ActivityLog | Active | Append-only audit trail. Also the lockout query surface: auth rows are counted by title (`AUTH_EVENT_TITLES`, ADR-020); role/permission/team/connection audit entries are type `auth` |
 | Automation | Draft | Steps stored as JSON — will need proper step model if we build an automation engine |
 
 ### Added since the initial snapshot
@@ -52,7 +52,7 @@ This file tracks decisions, trade-offs, and evolution of the Prisma schema as we
 | NoteRead | 2026-04-24 | Per-user read tracking on notes — drives default collapse state; composite PK (userId, noteId) |
 | NoteReaction | 2026-04-24 | Emoji reactions on notes; composite PK (userId, noteId, emoji) |
 | MessengerAccount | 2026-04-24 | Quo (OpenPhone) line — provider ids, E.164 number, OAuth tokens (encrypted at rest since 2026-06-10) |
-| MessengerThread | 2026-04-24 | One per (account, external number); resolved `contactId`, `defaultMatterId` routing, denormalized unread/lastItemAt |
+| MessengerThread | 2026-04-24 | One per (account, external number); resolved `contactId`, `defaultMatterId` routing (no longer written by manual call logging), denormalized unread/lastItemAt |
 | MessengerItem | 2026-04-24 | SMS / call / voicemail item; idempotent on `providerEventId`; per-item `matterId` filing override |
 | Account | 2026-04-25 | Auth.js OAuth account table — empty until Google OAuth lands (see AUTH_PLAN.md) |
 | VerificationToken | 2026-04-25 | Auth.js token table — reserved for password-reset / email-verify flows |
@@ -89,7 +89,7 @@ These are places where the schema will likely change as we build:
 
 - **Contact type polymorphism:** The `type` string field on Contact works for now but if client contacts need very different fields from opposing counsel contacts, we may split into separate models or use a discriminated union pattern.
 - **Email integration:** When we wire up Gmail OAuth, the EmailThread/EmailMessage models will need to align with Google's API response shapes. May need `historyId`, `labelIds[]`, `internalDate`, etc.
-- **Invoice line items:** Currently invoices only link to time entries. Real invoices need expense line items, flat fee items, adjustments, and tax calculations. This will need a proper `InvoiceLineItem` model.
+- **Invoice line items:** Invoices link time entries (`Invoice.lineItems`) and expenses (`Invoice.expenseLineItems`). Real invoices still need flat fee items, adjustments, and tax calculations, which will need a proper `InvoiceLineItem` model.
 - **Multi-tenancy:** Currently single-firm. If this ever needs to support multiple firms, every model needs a `firmId` field. Not doing this now — YAGNI.
 - **File storage:** Documents and evidence reference `fileUrl` but we haven't decided on storage (S3, local, Vercel Blob, etc.). The URL field is storage-agnostic by design.
 
@@ -112,7 +112,7 @@ These are places where the schema will likely change as we build:
 | 2026-04-25 | Added `Invoice.kind` (`"client"` \| `"internal_record"`) | Differentiates real client invoices from internal record-of-work bundles used to close out WIP on contingency / pro-bono cases that resolve without a fee petition (settled, abandoned, fee already collected via a separate channel). Internal records are excluded from Outstanding-AR aggregates, render with a flipped letterhead ("Internal Record" / "For matter file"), and follow a smaller state machine (draft → paid (= "Recorded") → void). The kind-aware status label + transition helpers live in `src/lib/billing-form.ts` (`invoiceStatusLabel`, `invoiceStatusTransitions`). |
 | 2026-04-25 | Added `TrustTransaction.invoiceId` FK + `Invoice.trustPayments` reverse relation | Lets the "Pay from trust" flow record an atomic three-leg op (ledger row + trust balance decrement + invoice paidAmount increment) and surface the cross-link in both directions: trust ledger rows show "Payment to invoice X" as a deep-link, and the invoice preview can later list "paid via trust on date Y". SetNull on the FK so deleting an invoice doesn't lose the trust record — the disbursement actually happened, regardless of whether the doc lives on. |
 | 2026-04-25 | Added `InvoicePayment` model (+ `Invoice.payments` and `TrustTransaction.invoicePayment` relations) | First-class per-invoice payment record. Every channel — trust, check, ACH, cash, card, other — lands here, so the invoice preview reads from one source. Trust payments double-write: `TrustTransaction` is still the trust ledger's source of truth, and `InvoicePayment.trustTxnId` (unique FK, SetNull) links them. Source kept as a free string so adding new channels (Stripe webhook, lockbox import) is config-only, not a migration. **Long-term direction:** this becomes the inbound side of a firm-wide operating-account ledger; pairing it with a future `FirmAccount` model (multiple trust + operating accounts per firm) lets every payment row know which account it landed in. The matter Billing tab's "Received payments" card is the matter-scoped slice of that future ledger. |
-| 2026-04-27 | Added `Matter.incidentDate` + `PracticeArea.statutePeriodDays` + `statuteSourceCitation` (SOL automation) | Per-area statute period config drives auto-compute of `Matter.statuteOfLimitationsDate` on create/update. Stored as a single `Int` of total days (years × 365 + months × 30 + days) — legal SOL periods are virtually always defined in calendar days under that convention, and the runtime auto-compute becomes one Date arithmetic op. Practice-area edit form round-trips through `unpackStatuteDays` so the y/m/d shape the lawyer typed is preserved. Explicit SOL date on the matter form always wins, so manual override stays the primary control; auto-compute is a "didn't bother to enter the SOL date but did enter incident + the area is configured" convenience. |
+| 2026-04-27 | Added `Matter.incidentDate` + `PracticeArea.statutePeriodDays` + `statuteSourceCitation` (SOL automation) | Per-area statute period config drives auto-compute of `Matter.statuteOfLimitationsDate` on create/update. Stored as a single `Int` of total days (years × 365 + months × 30 + days) — legal SOL periods are virtually always defined in calendar days under that convention, and the runtime auto-compute becomes one Date arithmetic op. Practice-area edit form round-trips through `unpackStatuteDays` so the y/m/d shape the lawyer typed is preserved. **Superseded 2026-10-17 (ADR-027):** the original "explicit date always wins" rule was replaced by inferred auto-vs-manual on edit (see the 2026-10-17 row); the 365/30 arithmetic below is a known approximation. |
 | 2026-04-27 | Added `Expense` model + reverse relations on `Matter`, `Invoice`, `Document` | First-class out-of-pocket cost tracking. Distinct from `TimeEntry` (firm labor) — Expense is real money paid externally. Two independent flags: `billable` (passes through to a client invoice) and `clientAdvanced` (client paid up-front; when false the firm advanced and expects reimbursement, drives the contingency settlement waterfall). `invoiceId` SetNull so the expense survives invoice purges; `receiptDocumentId` SetNull so deleting the receipt doesn't lose the expense. Free-string `category` (filing_fee / expert / travel / deposition / medical_record / postage / records / research / other) so adding categories is data, not a migration. Permission catalog gets four new keys: `matters.expense.view` / `.create` / `.edit` / `.delete`. |
 | 2026-04-27 | Added `RolePermission` model | First-class join table for "this role grants this permission key." The catalog of permission keys lives in `src/lib/permissions.ts` (app-defined, not data the firm owns) — adding a new permission is a code change, not a migration. Composite PK on (roleId, permission); unknown keys are tolerated on read so removing a permission from the catalog doesn't break existing rows. Admin role intentionally has no rows materialized — runtime check (`hasPermission`) treats Admin as "all granted" by name. The /settings/roles matrix UI drives this table; the runtime checks themselves still go through `requireAdmin()` for now and will swap to `hasPermission(...)` as features mature. |
 | 2026-04-27 | Added `MatterTeamMember.removedAt` + `removedBy` (soft-delete) | Removing someone from a matter team needs to preserve historical attribution — "who was on the case when the deposition happened?" only stays answerable if the row sticks around. Soft-delete via `removedAt` + `removedBy`; null = active. The (matterId, userId) unique stays in place: re-adding a former member upserts the row (clears removedAt + sets new role) rather than creating a duplicate. Index on (matterId, removedAt) so the active-roster query stays cheap. UI labels former members "[role] (former)" and dims them; queries that find the lead now scope to `removedAt: null` so a removed lead doesn't confuse attribution. |
@@ -137,6 +137,52 @@ These are places where the schema will likely change as we build:
 | 2026-10-16 | Added `DeadlineRule`, `TaskList`, `TaskListItem`, `AutoApply` + provenance FKs `Deadline.deadlineRuleId` / `Task.taskListId` (both nullable, SetNull) — migration `20261016190000_deadline_rules_task_lists` | Firm automation libraries (ADR-019). Purely additive. `deadline_rules.anchorRuleId` is RESTRICT so a rule others count from can't vanish (the delete action names the dependents); generated deadlines/tasks survive their rule/list being deleted. `offsetUnit` stores the unit the offset was entered in so it displays as written. AutoApply's one-of (rule XOR list) and dedupe are app-enforced (a DB unique can't cover the nullable practice area). |
 | 2026-10-16 | Replaced the 30 SQLite-era migrations with a Postgres baseline `0_init` (no model changes) | The old migrations were SQLite SQL and never ran on Postgres; every Postgres DB was built by `db push`. `0_init` is generated from the schema and verified drift-free. Existing DBs get `prisma migrate resolve --applied 0_init` after a drift check; new schema changes ship as migrations. See ADR-016. |
 | 2026-04-25 | Refactored `Invoice.status` state machine: added `approved` + `partial` | New client-invoice flow is draft → approved → sent → partial → paid (void only when paidAmount=0). Previously the bare "Mark sent" / "Mark paid" buttons skipped any approval gate and silently flipped paidAmount; the new flow forces explicit Approve + Send dialogs and routes every payment through `recordInvoicePayment` (which writes an `InvoicePayment` row and chooses paid vs. partial based on coverage). Internal records keep their simpler draft → paid (= "Recorded") → void machine. Backfill: existing `sent` rows with paidAmount > 0 will display as "Sent · partial" via a UI drift chip and refuse void; the next payment recorded against them flips them to `partial` cleanly. No DB migration required — `status` is a string column. |
+| 2026-10-17 | Code-quality sweep (Batches 1-2): **no schema or migration change**. Documentation corrections only | The sweep changed behavior around the schema; the notes below record what a reader of `schema.prisma` needs to know. |
+| 2026-10-17 | Auth audit vocabulary (no schema change) | New `AUTH_EVENT_TITLES` value `Sign-in unlocked by an administrator` (kind `sign_in_unlocked`; counts like a successful sign-in for the lockout); existing titles unchanged and must never be renamed (they are the lockout's query key). Role create/rename/delete and permission grant/revoke audit entries are type `auth` (grants moved from `filing`); integration connect/disconnect and firm/team edits are `auth` too. Invoice/expense writers still log as `filing`. |
+| 2026-10-17 | `Settlement.clientNet` is derived, never written (no schema change) | Net to client is computed on read from gross, fee and costs (`src/lib/settlement-waterfall.ts`, signed, never clamped). The column still exists with default 0 and is a drop candidate. `firmFee` is stored rounded half-up to cents; legacy rows may hold unrounded fees, and reads recompute. |
+| 2026-10-17 | `Matter.wipAmount` is no longer read (no schema change) | The column was never maintained. Overview WIP is aggregated live from unbilled time entries and billable expenses; the matter queries explicitly omit the column. Drop candidate. |
+| 2026-10-17 | `Lead.statuteWindow` semantics (no schema change) | It is a days-remaining snapshot as of `createdAt`; the UI derives the live figure as snapshot minus days since intake. It is not an absolute date and will not follow practice-area changes. A candidate to replace with an absolute SOL date or a practice-area-derived value. |
+| 2026-10-17 | SOL auto-vs-manual is inferred, not stored (no schema change) | On matter edit, a stored `statuteOfLimitationsDate` equal to `computeSolDate(stored incident date, stored area period)` (or null) is auto-derived and recomputed; anything else is a manual override and is kept (`src/lib/sol.ts`, ADR-027). Caveats: a manual date that happens to equal the computed one follows later edits, and changing an area's period makes legacy dates look manual (the safe direction). The period itself (`PracticeArea.statutePeriodDays`) uses a 365-day year and 30-day month, so calendar-month periods can land up to about 2 days late; this is a known approximation until year/month/day columns exist (pending list below). |
+| 2026-10-17 | `MessengerThread.defaultMatterId` no longer written by manual call logging (no schema change) | Only seed/provider traffic sets it; a manually logged call carries the filing on `MessengerItem.matterId`. "Unfiled" therefore means no thread default AND no item-level matter. |
+| 2026-10-17 | `EmailAccount.updatedAt` is the sync-claim heartbeat (no schema change) | The per-account sync claim (ADR-031) is a compare-and-set on `syncStatus` with a 10-minute stale window judged by `updatedAt`, instead of a new column. Any account update refreshes it. |
+| 2026-10-17 | `CalendarEventSync.googleUpdatedAt` comment is now true (no schema change) | The pull engine skips rows whose Google `updated` stamp matches; the "freshness anchor for last-write-wins" comment describes real behavior. |
+| 2026-10-17 | `Contact.firmId` stamping (no schema change) | `createContact`, `createMatter`'s inline client and calendar attendee creation stamp `firmId`; the other create paths (party creation in `parties.ts` for a new party or attorney, the legacy no-`contactId` branch of lead conversion, the seed) still leave it null. The column stays nullable and is not a scoping handle yet. |
+| 2026-10-17 | Invariant: `Matter.clientId` set implies a `MatterContact` with `category = client` | Now also holds for lead conversion (`convertLeadToMatter` creates the client row). Lead conversion claims the lead with a stage-predicate `updateMany` inside the transaction, so a double submit converts once. |
+| 2026-10-17 | `Contact.notes` and `conflictStatus` carry over on merge (no schema change) | `conflictStatus` is a manual flag; the intake matcher does not read it (ADR-026, open decision). |
+
+---
+
+## Pending Batch 4 migration candidates (NOT applied)
+
+None of these exist in `prisma/schema.prisma` or `prisma/migrations/` today (the only migrations are `0_init` and `20261016190000_deadline_rules_task_lists`). Each ships as a reviewed migration, run by the user via `prisma migrate deploy`; ask before pushing any migration.
+
+| Candidate | Why | Pre-work |
+|---|---|---|
+| Unique `settlements(matterId)` | Replaces the per-matter advisory lock as the one-settlement-per-matter guarantee (ADR-030) | De-duplicate existing rows first |
+| Unique `Document.fileUrl` (nullable) | Makes the Blob completion callback idempotent in the database (ADR-018) | Check for duplicate URLs |
+| `ActivityLog @@index([userId, type, timestamp])` | Lockout counting and per-user history scan by user + type + time | None |
+| `Deadline @@index([status, dueDate])` | Dashboard deadlines card and sweeps | None |
+| `FlaggedMoment.quoteOccurrence Int?` | Quote anchors relocate to the first occurrence today; an occurrence index disambiguates repeats. Optionally `updatedById` / `updatedAt` for flag edits | None |
+| Optional `Document @@index([matterId, folderId, name])` | Large folders | Only if a big production folder appears |
+| SOL `years` / `months` / `days` columns on `PracticeArea` | Replace the 365/30-day `statutePeriodDays` approximation with calendar-aware math; also lets `Lead.statuteWindow` give way to an absolute date | Backfill from `statutePeriodDays` |
+| `DECIMAL(14,2)` money columns | Columns are still unconstrained `Decimal`, so rounding lives in code (`roundMoney`, ADR-024) | Audit sub-cent legacy rows |
+| Firm matter-visibility column + `matters.view_all` permission key | The matter-team access phase (ADR-029, Proposed); `view_all` is a code-side key in `src/lib/permissions.ts`, the column is the migration | Product go-ahead |
+| Drop `Matter.wipAmount` and `Settlement.clientNet` | Dead columns | Confirm no consumer |
+| `CalendarEvent.origin`, `EmailAccount.backfillBefore` | Google-born cleanup and explicit backfill anchor (ADR-023, ADR-031) | Deferred |
+| Dedicated ActivityLog type for expense rows | Replaces the `Expense ` title-prefix convention (ADR-021) | Backfill |
+
+### Stale schema comments (need a comment-only edit by the schema owner)
+
+Found during the 2026-10-17 doc pass; `schema.prisma` was not touched here.
+
+- `User.createdCalendarEvents` ("once permission-based visibility lands this is the ... branch") and the `CalendarEvent` header ("Visibility today is permissive ... the resolver and UI ship later"): the `canViewEventDetails` resolver and per-event `visibility` exist and are enforced (ADR-021).
+- `User.dashboardPrefs`: the shape is `{ visible, order }`, not just `{ visible }`.
+- `Lead.statuteWindow`: should say it is a days-remaining snapshot as of `createdAt`.
+- `Matter.wipAmount`: should say it is never written or read.
+- `Settlement.clientNet`: should say it is derived on read and never written.
+- `PracticeArea.statutePeriodDays` and `Matter.statuteOfLimitationsDate` / `incidentDate`: "nearly always defined this way" and "the user can always override" are wrong. Describe the 365/30 approximation and the inferred auto-vs-manual rule (ADR-027).
+- `MessengerThread.defaultMatterId` routing comment and `MessengerItem.matterId` ("Falls back to thread.defaultMatterId"): manual call logging no longer sets the thread default.
+- `Firm.contacts` comment: mention which create paths stamp `Contact.firmId` today.
 
 ---
 
