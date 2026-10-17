@@ -30,7 +30,9 @@ vi.mock("./reply-composer", () => ({
   ReplyComposer: () => null,
 }));
 
+import { render, screen } from "@testing-library/react";
 import type { ThreadDetail } from "@/lib/queries/communication";
+import { prisma } from "@/lib/prisma";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { ReplyComposer } from "./reply-composer";
 import { ReplySection } from "./reply-section";
@@ -76,6 +78,36 @@ describe("ReplySection", () => {
     expect(b.key).toBe("thread-b");
     expect(a.key).not.toBe(b.key);
     expect(a.props.threadId).toBe("thread-a");
+  });
+
+  test("a syncing mailbox can still reply (composer rendered)", async () => {
+    vi.mocked(prisma.emailThread.findFirst).mockResolvedValueOnce({
+      account: { emailAddress: "me@firm.com", syncStatus: "syncing" },
+    } as never);
+    const el = (await ReplySection({ thread: thread("thread-a") })) as {
+      type: unknown;
+    };
+    expect(el.type).toBe(ReplyComposer);
+  });
+
+  test.each(["error", "disconnected"])(
+    "a %s mailbox shows the reconnect note instead of the composer",
+    async (syncStatus) => {
+      vi.mocked(prisma.emailThread.findFirst).mockResolvedValueOnce({
+        account: { emailAddress: "me@firm.com", syncStatus },
+      } as never);
+      const el = (await ReplySection({ thread: thread("thread-a") })) as {
+        type: unknown;
+      };
+      expect(el.type).not.toBe(ReplyComposer);
+      render(<>{el}</>);
+      expect(screen.getByText("Reconnect Gmail")).toBeInTheDocument();
+    }
+  );
+
+  test("renders nothing when the thread isn't in the caller's mailbox", async () => {
+    vi.mocked(prisma.emailThread.findFirst).mockResolvedValueOnce(null);
+    expect(await ReplySection({ thread: thread("thread-a") })).toBeNull();
   });
 
   test("renders nothing without communication.send_email", async () => {

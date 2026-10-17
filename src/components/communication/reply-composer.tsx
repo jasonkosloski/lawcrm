@@ -37,6 +37,12 @@ import { parseAddressList } from "@/lib/google/mime";
 import { htmlToText } from "@/lib/html-to-text";
 import { getEmailSignature } from "@/lib/email-signature";
 import { replyToThread } from "@/app/actions/email-send";
+import { blockEnterSubmit, LabeledField } from "./labeled-field";
+
+/** Shown when the action call itself rejects - the send may or may
+ *  not have gone out, so don't invite a blind retry. */
+const SEND_UNCONFIRMED =
+  "Couldn't confirm the send — check your Sent folder before retrying. Your draft is kept.";
 
 export type ReplyRecipient = { name?: string; email: string };
 export type ReplyDefaults = { to: ReplyRecipient[]; cc: ReplyRecipient[] };
@@ -143,25 +149,32 @@ export function ReplyComposer({
     setError(null);
 
     startTransition(async () => {
-      const result = await replyToThread(threadId, {
-        // Editor HTML goes up as-is — the action sanitizes it
-        // (note profile) before it reaches the MIME builder.
-        bodyText,
-        bodyHtml: body,
-        replyAll: mode === "replyAll",
-        ...overrides,
-      });
-      if (result.ok) {
-        setBody(getEmailSignature() ?? "");
-        setMode(null);
-        setEditing(false);
-        router.refresh();
-      } else {
-        // Draft (body + any edited recipients) stays put.
-        setError(result.error);
-        // The thread changed under us - pull the fresh recipients
-        // into view so the user can review them before re-sending.
-        if (result.code === "recipients_changed") router.refresh();
+      try {
+        const result = await replyToThread(threadId, {
+          // Editor HTML goes up as-is — the action sanitizes it
+          // (note profile) before it reaches the MIME builder.
+          bodyText,
+          bodyHtml: body,
+          replyAll: mode === "replyAll",
+          ...overrides,
+        });
+        if (result.ok) {
+          setBody(getEmailSignature() ?? "");
+          setMode(null);
+          setEditing(false);
+          router.refresh();
+        } else {
+          // Draft (body + any edited recipients) stays put.
+          setError(result.error);
+          // The thread changed under us - pull the fresh recipients
+          // into view so the user can review them before re-sending.
+          if (result.code === "recipients_changed") router.refresh();
+        }
+      } catch {
+        // A rejected action must not reach the error boundary (it
+        // would discard the draft, and the email may already have
+        // gone out - a blind retry would duplicate it).
+        setError(SEND_UNCONFIRMED);
       }
     });
   };
@@ -205,6 +218,7 @@ export function ReplyComposer({
           e.preventDefault();
           handleSend();
         }}
+        onKeyDown={blockEnterSubmit}
       >
         <div className="px-3 sm:px-4 py-3 border-b border-line flex flex-col gap-2">
           <div className="flex items-center gap-2">
@@ -235,18 +249,24 @@ export function ReplyComposer({
 
           {editing ? (
             <div className="flex flex-col gap-2">
-              <TextField
-                name="to"
-                value={toInput}
-                onChange={setToInput}
-                placeholder="To — comma-separated addresses"
-              />
-              <TextField
-                name="cc"
-                value={ccInput}
-                onChange={setCcInput}
-                placeholder="Cc (optional)"
-              />
+              <LabeledField label="To">
+                <TextField
+                  name="to"
+                  value={toInput}
+                  onChange={setToInput}
+                  placeholder="To — comma-separated addresses"
+                  ariaLabel="To"
+                />
+              </LabeledField>
+              <LabeledField label="Cc">
+                <TextField
+                  name="cc"
+                  value={ccInput}
+                  onChange={setCcInput}
+                  placeholder="Cc (optional)"
+                  ariaLabel="Cc"
+                />
+              </LabeledField>
             </div>
           ) : (
             <div className="text-2xs text-ink-4 flex flex-col gap-0.5">
@@ -279,6 +299,9 @@ export function ReplyComposer({
             <Button
               type="button"
               variant="ghost"
+              // Collapsing mid-send would hide a failure (the error
+              // only renders expanded and openMode clears it).
+              disabled={isPending}
               onClick={() => setMode(null)}
             >
               Cancel

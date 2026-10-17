@@ -43,6 +43,12 @@ import { parseAddressList } from "@/lib/google/mime";
 import { htmlToText } from "@/lib/html-to-text";
 import { getEmailSignature } from "@/lib/email-signature";
 import { sendEmail } from "@/app/actions/email-send";
+import { blockEnterSubmit, LabeledField } from "./labeled-field";
+
+/** Shown when the action call itself rejects - the send may or may
+ *  not have gone out, so don't invite a blind retry. */
+const SEND_UNCONFIRMED =
+  "Couldn't confirm the send — check your Sent folder before retrying. Your draft is kept.";
 
 export type SendableEmailAccount = {
   id: string;
@@ -70,6 +76,13 @@ export function ComposeEmailButton({
   const [body, setBody] = useState(() => getEmailSignature() ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // The From account can disappear from `accounts` while this stays
+  // mounted (its grant flipped to error and the launcher re-filtered):
+  // never post a stale id - fall back to the first live account.
+  const effectiveAccountId = accounts.some((a) => a.id === accountId)
+    ? accountId
+    : (accounts[0]?.id ?? "");
 
   if (accounts.length === 0) {
     return (
@@ -116,23 +129,31 @@ export function ComposeEmailButton({
     setError(null);
 
     startTransition(async () => {
-      const result = await sendEmail(accountId, {
-        to: toParsed.addresses,
-        cc: ccParsed.addresses,
-        subject: subject.trim(),
-        // Editor HTML goes up as-is — the action sanitizes it
-        // (note profile) before it reaches the MIME builder.
-        bodyText,
-        bodyHtml: body,
-      });
-      if (result.ok) {
-        resetDraft();
-        setOpen(false);
-        // Surface the locally-upserted sent thread in the list.
-        router.refresh();
-      } else {
-        // Draft preserved — only the error line changes.
-        setError(result.error);
+      try {
+        const result = await sendEmail(effectiveAccountId, {
+          to: toParsed.addresses,
+          cc: ccParsed.addresses,
+          subject: subject.trim(),
+          // Editor HTML goes up as-is — the action sanitizes it
+          // (note profile) before it reaches the MIME builder.
+          bodyText,
+          bodyHtml: body,
+        });
+        if (result.ok) {
+          resetDraft();
+          setOpen(false);
+          // Surface the locally-upserted sent thread in the list.
+          router.refresh();
+        } else {
+          // Draft preserved — only the error line changes.
+          setError(result.error);
+        }
+      } catch {
+        // A rejected action (network drop, or a persistence failure
+        // AFTER Gmail accepted the message) must not reach the error
+        // boundary: that would discard the draft and invite a
+        // duplicate send. Keep the draft and tell the user to check.
+        setError(SEND_UNCONFIRMED);
       }
     });
   };
@@ -155,7 +176,16 @@ export function ComposeEmailButton({
         <span className="hidden sm:inline">Compose</span>
       </Button>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      {/* Dismissal is ignored mid-send: a failure would otherwise
+          land in a closed dialog and the user would believe the
+          email went out. */}
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          if (!o && isPending) return;
+          setOpen(o);
+        }}
+      >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>New email</DialogTitle>
@@ -176,6 +206,7 @@ export function ComposeEmailButton({
               e.preventDefault();
               handleSend();
             }}
+            onKeyDown={blockEnterSubmit}
             className="flex flex-col gap-3"
           >
             {accounts.length > 1 && (
@@ -188,7 +219,7 @@ export function ComposeEmailButton({
                     name="accountId"
                     ariaLabel="Send from account"
                     capitalize={false}
-                    value={accountId}
+                    value={effectiveAccountId}
                     onChange={setAccountId}
                     options={fromOptions}
                   />
@@ -196,25 +227,34 @@ export function ComposeEmailButton({
               </div>
             )}
 
-            <TextField
-              name="to"
-              value={to}
-              onChange={setTo}
-              placeholder="To — comma-separated addresses"
-              autoFocus
-            />
-            <TextField
-              name="cc"
-              value={cc}
-              onChange={setCc}
-              placeholder="Cc (optional)"
-            />
-            <TextField
-              name="subject"
-              value={subject}
-              onChange={setSubject}
-              placeholder="Subject"
-            />
+            <LabeledField label="To">
+              <TextField
+                name="to"
+                value={to}
+                onChange={setTo}
+                placeholder="To — comma-separated addresses"
+                ariaLabel="To"
+                autoFocus
+              />
+            </LabeledField>
+            <LabeledField label="Cc">
+              <TextField
+                name="cc"
+                value={cc}
+                onChange={setCc}
+                placeholder="Cc (optional)"
+                ariaLabel="Cc"
+              />
+            </LabeledField>
+            <LabeledField label="Subj">
+              <TextField
+                name="subject"
+                value={subject}
+                onChange={setSubject}
+                placeholder="Subject"
+                ariaLabel="Subject"
+              />
+            </LabeledField>
             <RichTextEditor
               initialHTML={body}
               onChange={setBody}
@@ -227,6 +267,7 @@ export function ComposeEmailButton({
               <Button
                 type="button"
                 variant="ghost"
+                disabled={isPending}
                 onClick={() => setOpen(false)}
               >
                 Cancel

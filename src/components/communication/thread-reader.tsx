@@ -29,8 +29,8 @@ import { BackToListButton } from "./back-to-list-button";
 import { MarkThreadRead } from "./mark-thread-read";
 import { ReplySection } from "./reply-section";
 import { isHtmlEmailBody } from "@/lib/email-body";
-import { htmlToText } from "@/lib/html-to-text";
 import { getCommActionPermissions } from "./comm-action-permissions";
+import { noteSnippet } from "./note-snippet";
 import { sanitizeEmailHtml } from "@/lib/sanitize-html";
 import type { FilingMatterOption } from "@/lib/queries/communication";
 
@@ -73,22 +73,6 @@ export async function ThreadReader({
   // Action affordances the viewer can't use are hidden - their server
   // actions redirect to the dashboard on denial.
   const perms = await getCommActionPermissions();
-
-  // The first message quoted into "Save as note". Gmail-synced and
-  // CRM-sent bodies are sanitized HTML: convert to text BEFORE
-  // truncating, or the note shows raw markup cut mid-tag.
-  const firstBody = thread.messages[0]?.body ?? "";
-  const noteSnippet = (
-    isHtmlEmailBody(firstBody) ? htmlToText(firstBody) : firstBody
-  )
-    // Collapse runs of spaces/tabs but keep line structure: the note
-    // textarea turns blank lines back into paragraphs (textareaToHtml).
-    .replace(/\r\n?/g, "\n")
-    .replace(/[ \t]+/g, " ")
-    .replace(/ ?\n ?/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim()
-    .slice(0, 400);
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-paper-email overflow-y-auto">
@@ -158,11 +142,11 @@ export async function ThreadReader({
                 kind: "email",
                 id: thread.id,
                 subject: thread.subject,
-                // Quote the first message in the prefilled note body —
+                // Quote the first message (as plain text - the body
+                // is sanitized HTML) in the prefilled note body —
                 // gives the user a starting block of context to edit
-                // down. 400 chars keeps the dialog from being a wall of
-                // text on long emails.
-                snippet: noteSnippet,
+                // down, capped so the dialog isn't a wall of text.
+                snippet: noteSnippet(thread.messages[0]?.body),
               }}
             />
           </div>

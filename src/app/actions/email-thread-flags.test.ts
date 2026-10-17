@@ -30,6 +30,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import {
   setEmailThreadArchived,
+  setEmailThreadStarred,
   toggleEmailThreadStar,
 } from "@/app/actions/email-thread-flags";
 import {
@@ -272,6 +273,65 @@ describe("setEmailThreadArchived", () => {
       select: { isArchived: true },
     });
     expect(thread.isArchived).toBe(false);
+    expect(mockedWriteback).not.toHaveBeenCalled();
+  });
+});
+
+describe("setEmailThreadStarred (idempotent)", () => {
+  test("sets the requested state and writes back `add STARRED`", async () => {
+    const res = await setEmailThreadStarred(threadId, true);
+    expect(res).toEqual({ ok: true, isStarred: true });
+    const thread = await prisma.emailThread.findUniqueOrThrow({
+      where: { id: threadId },
+      select: { isStarred: true },
+    });
+    expect(thread.isStarred).toBe(true);
+    expect(mockedWriteback).toHaveBeenCalledWith(accountId, "gt-1", {
+      addLabelIds: ["STARRED"],
+    });
+    expect(mockedRevalidate).toHaveBeenCalledWith("/communication");
+  });
+
+  test("already in the requested state: no write, writeback or revalidation (a stale row cannot invert intent)", async () => {
+    // Sync starred it after the list rendered with an unstarred row;
+    // the user clicks Star on that stale row.
+    await prisma.emailThread.update({
+      where: { id: threadId },
+      data: { isStarred: true },
+    });
+    const res = await setEmailThreadStarred(threadId, true);
+    expect(res).toEqual({ ok: true, isStarred: true });
+    const thread = await prisma.emailThread.findUniqueOrThrow({
+      where: { id: threadId },
+      select: { isStarred: true },
+    });
+    expect(thread.isStarred).toBe(true); // a toggle would have unstarred it
+    expect(mockedWriteback).not.toHaveBeenCalled();
+    expect(mockedRevalidate).not.toHaveBeenCalled();
+  });
+
+  test("unstar removes STARRED; another user's thread refuses without writing", async () => {
+    await prisma.emailThread.update({
+      where: { id: threadId },
+      data: { isStarred: true },
+    });
+    expect(await setEmailThreadStarred(threadId, false)).toEqual({
+      ok: true,
+      isStarred: false,
+    });
+    expect(mockedWriteback).toHaveBeenCalledWith(accountId, "gt-1", {
+      removeLabelIds: ["STARRED"],
+    });
+
+    mockedWriteback.mockClear();
+    expect(await setEmailThreadStarred(otherUsersThreadId, true)).toEqual({
+      ok: false,
+    });
+    const theirs = await prisma.emailThread.findUniqueOrThrow({
+      where: { id: otherUsersThreadId },
+      select: { isStarred: true },
+    });
+    expect(theirs.isStarred).toBe(false);
     expect(mockedWriteback).not.toHaveBeenCalled();
   });
 });

@@ -47,6 +47,7 @@ import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
 import { requirePermission } from "@/lib/permission-check";
 import { sanitizeUserHtml } from "@/lib/sanitize-html";
+import { isSendableStatus } from "@/lib/email-send-status";
 import { GmailAuthError, gmailFetch } from "@/lib/google/gmail-client";
 import { GoogleOAuthError } from "@/lib/google/oauth";
 import {
@@ -94,9 +95,8 @@ export type SendEmailResult =
       code?: "recipients_changed";
     };
 
-/** Account states we'll send from. "error"/"disconnected" mean the
- *  grant is gone — the user must reconnect first. */
-const SENDABLE_STATUSES = new Set(["connected", "syncing"]);
+// Account states we'll send from live in @/lib/email-send-status
+// (shared with the UI gates so they can't drift).
 
 /** Sanity cap on To / Cc list length for a posted recipient list. */
 const MAX_RECIPIENTS_PER_FIELD = 50;
@@ -126,7 +126,7 @@ export async function sendEmail(
     },
   });
   if (!account) return { ok: false, error: "Email account not found." };
-  if (!SENDABLE_STATUSES.has(account.syncStatus)) {
+  if (!isSendableStatus(account.syncStatus)) {
     return { ok: false, error: NOT_CONNECTED_ERROR };
   }
 
@@ -224,7 +224,7 @@ export async function replyToThread(
     },
   });
   if (!thread) return { ok: false, error: "Thread not found." };
-  if (!SENDABLE_STATUSES.has(thread.account.syncStatus)) {
+  if (!isSendableStatus(thread.account.syncStatus)) {
     return { ok: false, error: NOT_CONNECTED_ERROR };
   }
   if (!input.bodyText.trim()) {

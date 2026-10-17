@@ -334,4 +334,69 @@ describe("ReplyComposer — draft preservation", () => {
     await user.click(screen.getByRole("button", { name: /^reply$/i }));
     expect(bodyField().value).toBe("");
   });
+
+  test("a REJECTED send keeps the draft, shows a check-Sent message, and does not throw", async () => {
+    const user = setupUser();
+    mockedReply.mockRejectedValue(new Error("Failed to persist sent thread"));
+    renderComposer();
+
+    await user.click(screen.getByRole("button", { name: /^reply$/i }));
+    await user.type(bodyField(), "Careful reply");
+    await user.click(screen.getByRole("button", { name: /^send$/i }));
+
+    expect(
+      await screen.findByText(/couldn't confirm the send/i)
+    ).toBeInTheDocument();
+    expect(bodyField().value).toBe("Careful reply");
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  test("Cancel is disabled while sending, so a failure can't be hidden", async () => {
+    const user = setupUser();
+    let settle!: (v: { ok: true; threadId: string }) => void;
+    mockedReply.mockReturnValue(
+      new Promise((resolve) => {
+        settle = resolve;
+      })
+    );
+    renderComposer();
+
+    await user.click(screen.getByRole("button", { name: /^reply$/i }));
+    await user.type(bodyField(), "Sending");
+    await user.click(screen.getByRole("button", { name: /^send$/i }));
+
+    expect(await screen.findByRole("button", { name: /sending/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /cancel/i })).toBeDisabled();
+    settle({ ok: true, threadId: "t1" });
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+  });
+});
+
+describe("ReplyComposer — recipient fields", () => {
+  test("Enter in a recipient field does NOT send the email", async () => {
+    const user = setupUser();
+    mockedReply.mockResolvedValue({ ok: true, threadId: "t1" });
+    renderComposer();
+
+    await user.click(screen.getByRole("button", { name: /^reply$/i }));
+    await user.type(bodyField(), "Body is ready");
+    await user.click(screen.getByRole("button", { name: /edit recipients/i }));
+    const cc = screen.getByLabelText("Cc");
+    await user.type(cc, "carol@example.com{Enter}");
+
+    expect(mockedReply).not.toHaveBeenCalled();
+  });
+
+  test("To and Cc keep persistent labels once filled", async () => {
+    const user = setupUser();
+    renderComposer();
+
+    await user.click(screen.getByRole("button", { name: /^reply$/i }));
+    await user.click(screen.getByRole("button", { name: /edit recipients/i }));
+    expect(screen.getByLabelText("To")).toHaveValue("alice@example.com");
+    await user.type(screen.getByLabelText("Cc"), "carol@example.com");
+    expect(screen.getByLabelText("Cc")).toHaveValue("carol@example.com");
+    // Visible labels, not only placeholders.
+    expect(screen.getAllByText("To").length).toBeGreaterThan(0);
+  });
 });

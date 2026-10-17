@@ -18,7 +18,6 @@
  */
 
 import { after } from "next/server";
-
 import { TopBar } from "@/components/layout/topbar";
 import { CommunicationTabs } from "@/components/communication/communication-tabs";
 import { MailboxRail } from "@/components/communication/mailbox-rail";

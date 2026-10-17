@@ -177,6 +177,28 @@ describe("ComposeEmailButton — account states", () => {
   });
 });
 
+describe("ComposeEmailButton — stale From account", () => {
+  test("when the chosen account drops out of `accounts`, Send uses a live one", async () => {
+    const user = setupUser();
+    mockedSendEmail.mockResolvedValue({ ok: true, threadId: "t1" });
+    const { rerender } = render(<ComposeEmailButton accounts={TWO_ACCOUNTS} />);
+    await user.click(screen.getByRole("button", { name: /compose/i }));
+    await screen.findByText("New email");
+    // Default is acc-1; its grant then fails and the launcher
+    // re-filters it out while this component stays mounted.
+    rerender(
+      <ComposeEmailButton accounts={[{ id: "acc-2", emailAddress: "litigation@firm.com" }]} />
+    );
+    await user.type(field("to"), "alice@example.com");
+    await user.type(field("body"), "Hi");
+    await user.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() =>
+      expect(mockedSendEmail).toHaveBeenCalledWith("acc-2", expect.anything())
+    );
+  });
+});
+
 describe("ComposeEmailButton — validation + draft preservation", () => {
   test("invalid To address blocks the send with an inline error", async () => {
     const user = setupUser();
@@ -228,6 +250,70 @@ describe("ComposeEmailButton — validation + draft preservation", () => {
     await screen.findByText("New email");
     expect(field("to").value).toBe("");
     expect(field("body").value).toBe("");
+  });
+
+  test("a REJECTED send keeps the draft and shows a check-Sent message (no throw)", async () => {
+    const user = setupUser();
+    mockedSendEmail.mockRejectedValue(new Error("Failed to persist sent thread"));
+    render(<ComposeEmailButton accounts={ONE_ACCOUNT} />);
+
+    await openAndFill(user);
+    await user.click(screen.getByRole("button", { name: /^send$/i }));
+
+    expect(
+      await screen.findByText(/couldn't confirm the send/i)
+    ).toBeInTheDocument();
+    expect(field("to").value).toBe("alice@example.com");
+    expect(field("body").value).toBe("Hi Alice");
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  test("Enter in To / Cc / Subject does NOT send the email", async () => {
+    const user = setupUser();
+    mockedSendEmail.mockResolvedValue({ ok: true, threadId: "t1" });
+    render(<ComposeEmailButton accounts={ONE_ACCOUNT} />);
+
+    await openAndFill(user);
+    await user.type(screen.getByLabelText("Cc"), "bob@example.com{Enter}");
+    await user.type(screen.getByLabelText("Subject"), " v2{Enter}");
+    await user.type(screen.getByLabelText("To"), "{Enter}");
+
+    expect(mockedSendEmail).not.toHaveBeenCalled();
+    // The explicit Send button still sends.
+    await user.click(screen.getByRole("button", { name: /^send$/i }));
+    await waitFor(() => expect(mockedSendEmail).toHaveBeenCalledTimes(1));
+  });
+
+  test("Cancel is disabled and Esc is ignored while sending", async () => {
+    const user = setupUser();
+    let settle!: (v: { ok: false; error: string }) => void;
+    mockedSendEmail.mockReturnValue(
+      new Promise((resolve) => {
+        settle = resolve;
+      })
+    );
+    render(<ComposeEmailButton accounts={ONE_ACCOUNT} />);
+
+    await openAndFill(user);
+    await user.click(screen.getByRole("button", { name: /^send$/i }));
+    expect(await screen.findByRole("button", { name: /sending/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /cancel/i })).toBeDisabled();
+
+    await user.keyboard("{Escape}");
+    expect(screen.getByText("New email")).toBeInTheDocument();
+
+    // The failure is visible because the dialog is still open.
+    settle({ ok: false, error: "Gmail rejected the send (HTTP 429)." });
+    expect(await screen.findByText(/HTTP 429/)).toBeInTheDocument();
+  });
+
+  test("To, Cc and Subject carry persistent accessible labels", async () => {
+    const user = setupUser();
+    render(<ComposeEmailButton accounts={ONE_ACCOUNT} />);
+    await openAndFill(user);
+    expect(screen.getByLabelText("To")).toHaveValue("alice@example.com");
+    expect(screen.getByLabelText("Cc")).toHaveValue("");
+    expect(screen.getByLabelText("Subject")).toHaveValue("Retainer");
   });
 
   test("Send stays disabled without a recipient or body", async () => {

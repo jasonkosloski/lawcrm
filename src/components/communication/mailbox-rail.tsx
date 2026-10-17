@@ -14,6 +14,7 @@
  */
 
 import Link from "next/link";
+import { DEFAULT_COMMUNICATION_FILTER } from "@/lib/communication-filter-default";
 import {
   Archive,
   Briefcase,
@@ -63,7 +64,7 @@ function hrefFor(
   const params = new URLSearchParams();
   // Inbox is the default — only emit ?filter= when picking
   // something else, so the canonical URL stays clean.
-  if (filter && filter !== "inbox") params.set("filter", filter);
+  if (filter && filter !== DEFAULT_COMMUNICATION_FILTER) params.set("filter", filter);
   if (matterId) params.set("matter", matterId);
   if (threadId) params.set("thread", threadId);
   const qs = params.toString();

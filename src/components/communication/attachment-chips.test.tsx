@@ -98,6 +98,15 @@ function renderChips(opts?: { canFile?: boolean }) {
   );
 }
 
+/** The submit button is disabled while the folder list loads. */
+const foldersLoaded = () =>
+  waitFor(() =>
+    expect(
+      (screen.getByText("File to matter").closest("button") as HTMLButtonElement)
+        .disabled
+    ).toBe(false)
+  );
+
 describe("chip row", () => {
   test("renders a chip per attachment with name + formatted size", () => {
     renderChips();
@@ -164,6 +173,7 @@ describe("filing dialog", () => {
     // Re-pick the other matter, then submit.
     fireEvent.click(screen.getByText("Estate of Doe"));
     await waitFor(() => expect(mockedFolders).toHaveBeenCalledWith("m2"));
+    await foldersLoaded();
     fireEvent.click(screen.getByText("File to matter"));
     await waitFor(() =>
       expect(mockedFile).toHaveBeenCalledWith("a-pdf", "m2", null)
@@ -175,6 +185,7 @@ describe("filing dialog", () => {
     mockedFile.mockResolvedValue({ ok: true, alreadyFiled: true });
     renderChips();
     fireEvent.click(screen.getByLabelText("File brief.pdf to matter"));
+    await foldersLoaded();
     fireEvent.click(screen.getByText("File to matter"));
     expect(
       await screen.findByText(/Already filed to this matter/)
@@ -186,9 +197,108 @@ describe("filing dialog", () => {
     mockedFile.mockResolvedValue({ ok: false, error: "Folder not found in this matter." });
     renderChips();
     fireEvent.click(screen.getByLabelText("File brief.pdf to matter"));
+    await foldersLoaded();
     fireEvent.click(screen.getByText("File to matter"));
     expect(
       await screen.findByText("Folder not found in this matter.")
     ).toBeDefined();
+  });
+
+  test("a rejected filing action shows an error instead of throwing to the error boundary", async () => {
+    mockedFile.mockRejectedValue(new Error("network down"));
+    renderChips();
+    fireEvent.click(screen.getByLabelText("File brief.pdf to matter"));
+    await foldersLoaded();
+    fireEvent.click(screen.getByText("File to matter"));
+    expect(
+      await screen.findByText(/Couldn't file the attachment/)
+    ).toBeDefined();
+    expect(screen.getByTestId("dialog")).toBeDefined();
+  });
+});
+
+describe("filing dialog - matter visibility", () => {
+  test("shows which matter will be filed into and exposes picks via aria-pressed", async () => {
+    renderChips();
+    fireEvent.click(screen.getByLabelText("File brief.pdf to matter"));
+    await foldersLoaded();
+    expect(screen.getByText("Filing to: Smith v. Jones")).toBeDefined();
+    const row = screen.getByText("Smith v. Jones").closest("button")!;
+    expect(row.getAttribute("aria-pressed")).toBe("true");
+    expect(
+      screen.getByText("Estate of Doe").closest("button")!.getAttribute(
+        "aria-pressed"
+      )
+    ).toBe("false");
+  });
+
+  test("a default matter missing from the open-matter list (closed) is still named", async () => {
+    render(
+      <AttachmentChips
+        attachments={attachments}
+        canFile
+        defaultMatter={{ id: "m-closed", name: "Old Case" }}
+        matterOptions={matterOptions}
+      />
+    );
+    fireEvent.click(screen.getByLabelText("File brief.pdf to matter"));
+    expect(screen.getByText("Filing to: Old Case (closed)")).toBeDefined();
+  });
+});
+
+describe("filing dialog - folder loading", () => {
+  test("submit is disabled and the select says Loading until folders arrive", async () => {
+    let resolveFolders!: (rows: []) => void;
+    mockedFolders.mockReturnValue(
+      new Promise((resolve) => {
+        resolveFolders = resolve;
+      })
+    );
+    renderChips();
+    fireEvent.click(screen.getByLabelText("File brief.pdf to matter"));
+    expect(screen.getByText("Loading folders…")).toBeDefined();
+    expect(
+      screen.getByText("File to matter").closest("button")!.disabled
+    ).toBe(true);
+
+    resolveFolders([]);
+    await foldersLoaded();
+    expect(screen.getByText("All documents (matter root)")).toBeDefined();
+  });
+
+  test("a failed folder load is surfaced with a retry (not silently the root)", async () => {
+    mockedFolders.mockRejectedValueOnce(new Error("boom"));
+    renderChips();
+    fireEvent.click(screen.getByLabelText("File brief.pdf to matter"));
+    expect(
+      await screen.findByText(/Couldn't load folders/)
+    ).toBeDefined();
+
+    mockedFolders.mockResolvedValue([]);
+    fireEvent.click(screen.getByText("Retry"));
+    await waitFor(() =>
+      expect(screen.queryByText(/Couldn't load folders/)).toBeNull()
+    );
+    expect(mockedFolders).toHaveBeenCalledTimes(2);
+  });
+
+  test("re-clicking the already-picked matter keeps the folder list usable (no stuck Loading)", async () => {
+    mockedFolders.mockResolvedValue([
+      { id: "f1", name: "Pleadings", depth: 1, parentId: null },
+    ]);
+    renderChips();
+    fireEvent.click(screen.getByLabelText("File brief.pdf to matter"));
+    await foldersLoaded();
+    expect(screen.getByText("Pleadings")).toBeDefined();
+
+    // m1 is the default (already picked).
+    fireEvent.click(screen.getByRole("button", { name: /Smith v\. Jones/ }));
+
+    expect(screen.queryByText("Loading folders…")).toBeNull();
+    expect(screen.getByText("Pleadings")).toBeDefined();
+    expect(
+      screen.getByText("File to matter").closest("button")!.disabled
+    ).toBe(false);
+    expect(mockedFolders).toHaveBeenCalledTimes(1);
   });
 });

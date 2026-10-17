@@ -11,9 +11,11 @@
  * buttons stay tabbable), on a solid chip so it reads over any row
  * background.
  *
- * Star is optimistic (flips instantly, reverts on failure); archive
- * relies on the action's revalidation to move the row between the
- * Inbox and Archived mailboxes. Both server actions are mailbox-
+ * Star is optimistic (flips instantly, reverts on failure) and sets
+ * an explicit state rather than toggling, so a stale row can't invert
+ * the click; archive relies on the action's revalidation (plus a
+ * router.refresh for the stale-row no-op) to move the row between the
+ * Inbox and Archived mailboxes. Failures show a short inline message. Both server actions are mailbox-
  * scoped and push a Gmail label writeback that never breaks the
  * local change (see actions/email-thread-flags.ts).
  */
@@ -21,11 +23,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Archive, ArchiveRestore, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   setEmailThreadArchived,
-  toggleEmailThreadStar,
+  setEmailThreadStarred,
 } from "@/app/actions/email-thread-flags";
 
 export function ThreadRowActions({
@@ -37,7 +40,9 @@ export function ThreadRowActions({
   isStarred: boolean;
   isArchived: boolean;
 }) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   // Optimistic star with prop re-sync: after the action revalidates,
   // the server prop becomes the source of truth again.
@@ -51,15 +56,44 @@ export function ThreadRowActions({
   const onToggleStar = () => {
     const next = !starred;
     setStarred(next);
+    setError(null);
     startTransition(async () => {
-      const res = await toggleEmailThreadStar(threadId);
-      if (!res.ok) setStarred(!next); // revert — thread not ours / gone
+      try {
+        // Idempotent set (not a server-side toggle): the row may be
+        // stale (sync changed the flag after render), and a toggle
+        // would then invert what the user asked for.
+        const res = await setEmailThreadStarred(threadId, next);
+        if (res.ok) {
+          setStarred(res.isStarred ?? next);
+        } else {
+          setStarred(!next); // revert — thread not ours / gone
+          setError("Couldn't update the star.");
+        }
+      } catch {
+        // Rejected action: revert, and keep it out of the error
+        // boundary (which would blank the whole communication page).
+        setStarred(!next);
+        setError("Couldn't update the star.");
+      }
     });
   };
 
   const onToggleArchive = () => {
+    setError(null);
     startTransition(async () => {
-      await setEmailThreadArchived(threadId, !isArchived);
+      try {
+        const res = await setEmailThreadArchived(threadId, !isArchived);
+        if (res.ok) {
+          // The action no-ops WITHOUT revalidating when the DB already
+          // holds the requested state (sync archived it in Gmail after
+          // this row rendered) - refresh so a stale row corrects itself.
+          router.refresh();
+        } else {
+          setError("Couldn't update this thread.");
+        }
+      } catch {
+        setError("Couldn't update this thread.");
+      }
     });
   };
 
@@ -72,9 +106,17 @@ export function ThreadRowActions({
         // buttons in the tab order for keyboard users.
         "opacity-0 pointer-events-none transition-opacity",
         "group-hover:opacity-100 group-hover:pointer-events-auto",
-        "focus-within:opacity-100 focus-within:pointer-events-auto"
+        "focus-within:opacity-100 focus-within:pointer-events-auto",
+        // A failed star/archive must stay visible after the pointer
+        // leaves, or the user never learns why the star reverted.
+        error && "opacity-100 pointer-events-auto"
       )}
     >
+      {error && (
+        <span role="alert" className="px-1 text-3xs text-warn whitespace-nowrap">
+          {error}
+        </span>
+      )}
       <button
         type="button"
         onClick={onToggleStar}

@@ -18,11 +18,8 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
+import { SENDABLE_EMAIL_STATUSES } from "@/lib/email-send-status";
 import { ComposeEmailButton } from "./compose-email";
-
-/** Send requires a live grant: "connected" (idle) or "syncing".
- *  "error"/"disconnected" mean reconnect first. */
-const SENDABLE_STATUSES = ["connected", "syncing"];
 
 export async function ComposeEmailLauncher() {
   const canSend = await currentUserHasPermission("communication.send_email");
@@ -33,7 +30,7 @@ export async function ComposeEmailLauncher() {
     where: {
       userId,
       provider: "gmail", // send path is Gmail-only today
-      syncStatus: { in: SENDABLE_STATUSES },
+      syncStatus: { in: [...SENDABLE_EMAIL_STATUSES] },
     },
     orderBy: { createdAt: "asc" },
     select: { id: true, emailAddress: true },

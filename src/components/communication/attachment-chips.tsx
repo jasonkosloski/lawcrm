@@ -179,6 +179,13 @@ function FileAttachmentDialog({
   const [matterId, setMatterId] = useState<string | null>(null);
   const [folderId, setFolderId] = useState<string | null>(null);
   const [folders, setFolders] = useState<FlatFolder[]>([]);
+  // Folder fetch state: while loading (or after a failure) the select
+  // would offer only the matter root, and a quick click filed the
+  // document there without the user knowing folders exist.
+  const [foldersLoading, setFoldersLoading] = useState(false);
+  const [foldersError, setFoldersError] = useState(false);
+  // Bumped by "Retry" to re-run the fetch effect.
+  const [folderAttempt, setFolderAttempt] = useState(0);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -196,6 +203,8 @@ function FileAttachmentDialog({
       setMatterId(defaultMatter?.id ?? null);
       setFolderId(null);
       setFolders([]);
+      setFoldersLoading(defaultMatter !== null);
+      setFoldersError(false);
       setQuery("");
       setError(null);
       setNotice(null);
@@ -204,22 +213,46 @@ function FileAttachmentDialog({
 
   // Folder list follows the chosen matter (the pick handler + the
   // per-open reset clear the stale list synchronously; this effect
-  // only syncs with the server). Stale responses (user re-picks
-  // before the fetch lands) are dropped via the cleanup flag.
+  // only syncs with the server; they also set `foldersLoading`).
+  // Stale responses (user re-picks before the fetch lands) are
+  // dropped via the cleanup flag.
   useEffect(() => {
     if (!open || !matterId) return;
     let cancelled = false;
     listMatterFolders(matterId)
       .then((rows) => {
-        if (!cancelled) setFolders(rows);
+        if (cancelled) return;
+        setFolders(rows);
+        setFoldersLoading(false);
       })
       .catch(() => {
-        if (!cancelled) setFolders([]);
+        if (cancelled) return;
+        setFolders([]);
+        setFoldersError(true);
+        setFoldersLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [open, matterId]);
+  }, [open, matterId, folderAttempt]);
+
+  const retryFolders = () => {
+    setFoldersError(false);
+    setFoldersLoading(true);
+    setFolderAttempt((n) => n + 1);
+  };
+
+  // The matter the submit will actually file into. The default
+  // (thread) matter may be absent from `matterOptions` - closed or
+  // archived, or filtered out by the search box - and would otherwise
+  // be selected but invisible.
+  const pickedOption = matterOptions.find((m) => m.id === matterId);
+  const pickedName =
+    pickedOption?.name ??
+    (matterId !== null && matterId === defaultMatter?.id
+      ? defaultMatter.name
+      : null);
+  const pickedIsClosed = matterId !== null && !pickedOption;
 
   const q = query.trim().toLowerCase();
   const filtered = q
@@ -234,19 +267,25 @@ function FileAttachmentDialog({
     setError(null);
     setNotice(null);
     startTransition(async () => {
-      const res = await fileAttachmentToMatter(
-        attachment.id,
-        matterId,
-        folderId
-      );
-      if (!res.ok) {
-        setError(res.error ?? "Couldn't file the attachment — try again.");
-      } else if (res.alreadyFiled) {
-        setNotice(
-          "Already filed to this matter — nothing was duplicated."
+      try {
+        const res = await fileAttachmentToMatter(
+          attachment.id,
+          matterId,
+          folderId
         );
-      } else {
-        onClose();
+        if (!res.ok) {
+          setError(res.error ?? "Couldn't file the attachment — try again.");
+        } else if (res.alreadyFiled) {
+          setNotice(
+            "Already filed to this matter — nothing was duplicated."
+          );
+        } else {
+          onClose();
+        }
+      } catch {
+        // Rejected action (network, storage) - keep it out of the
+        // error boundary so the dialog stays usable.
+        setError("Couldn't file the attachment — try again.");
       }
     });
   };
@@ -265,6 +304,14 @@ function FileAttachmentDialog({
 
         {/* Matter picker */}
         <div className="flex flex-col gap-1.5">
+          {/* The matter the file will go into, always visible - the
+              default may not appear in the (open-matters-only,
+              search-narrowed) list below. */}
+          <div className="text-2xs text-ink-3">
+            {pickedName
+              ? `Filing to: ${pickedName}${pickedIsClosed ? " (closed)" : ""}`
+              : "Pick a matter to file into."}
+          </div>
           <div className="flex items-center gap-2 h-8 px-2 rounded-md border border-line bg-white">
             <Search size={12} className="text-ink-4 shrink-0" />
             <input
@@ -287,10 +334,17 @@ function FileAttachmentDialog({
                   key={m.id}
                   type="button"
                   disabled={pending}
+                  aria-pressed={picked}
                   onClick={() => {
+                    // Re-clicking the picked matter changes nothing, so
+                    // the fetch effect would not re-run and clearing
+                    // the folders would leave "Loading folders…" stuck.
+                    if (m.id === matterId) return;
                     setMatterId(m.id);
                     setFolderId(null);
                     setFolders([]);
+                    setFoldersLoading(true);
+                    setFoldersError(false);
                     setNotice(null);
                   }}
                   className={cn(
@@ -327,11 +381,15 @@ function FileAttachmentDialog({
             </span>
             <select
               value={folderId ?? ""}
-              disabled={pending}
+              disabled={pending || foldersLoading}
               onChange={(e) => setFolderId(e.target.value || null)}
               className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink-2 outline-none"
             >
-              <option value="">All documents (matter root)</option>
+              <option value="">
+                {foldersLoading
+                  ? "Loading folders…"
+                  : "All documents (matter root)"}
+              </option>
               {folders.map((f) => (
                 <option key={f.id} value={f.id}>
                   {/* NBSP indent — plain spaces collapse inside <option>. */}
@@ -339,6 +397,19 @@ function FileAttachmentDialog({
                 </option>
               ))}
             </select>
+            {foldersError && (
+              <span className="flex items-center gap-2 text-warn">
+                Couldn&apos;t load folders - this would file to the matter
+                root.
+                <button
+                  type="button"
+                  onClick={retryFolders}
+                  className="underline hover:text-ink-2"
+                >
+                  Retry
+                </button>
+              </span>
+            )}
           </label>
         )}
 
@@ -366,7 +437,7 @@ function FileAttachmentDialog({
           <button
             type="button"
             onClick={submit}
-            disabled={pending || !matterId}
+            disabled={pending || !matterId || foldersLoading}
             className={cn(
               "inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium",
               "bg-brand-500 text-white hover:bg-brand-600 transition-colors",

@@ -20,6 +20,7 @@ export function TextField({
   autoFocus,
   className,
   maxLength,
+  ariaLabel,
 }: {
   name: string;
   value: string;
@@ -30,12 +31,17 @@ export function TextField({
   className?: string;
   /** Cheap client-side guard matching the server schema's cap. */
   maxLength?: number;
+  /** Persistent accessible name - a placeholder vanishes once the
+   *  field is filled, so fields that must stay identifiable (To / Cc
+   *  / Subject) pass one. */
+  ariaLabel?: string;
 }) {
   return (
     <div className={cn("flex flex-col gap-0.5 min-w-0", className)}>
       <input
         name={name}
         type="text"
+        aria-label={ariaLabel}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}

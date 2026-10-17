@@ -78,6 +78,37 @@ export async function toggleEmailThreadStar(
   return { ok: true, isStarred };
 }
 
+/**
+ * Idempotent star: sets the thread to the state the user SAW and
+ * chose, instead of toggling whatever the DB holds now. A toggle
+ * inverts the user's intent when sync changed the flag after the
+ * list rendered (starred in Gmail on a phone -> the click would
+ * unstar it, in the CRM and in Gmail). Already in the requested
+ * state -> no write, no writeback, no revalidation.
+ */
+export async function setEmailThreadStarred(
+  threadId: string,
+  starred: boolean
+): Promise<{ ok: boolean; isStarred?: boolean }> {
+  const thread = await findOwnThread(threadId);
+  if (!thread) return { ok: false };
+  if (thread.isStarred === starred) return { ok: true, isStarred: starred };
+
+  await prisma.emailThread.update({
+    where: { id: thread.id },
+    data: { isStarred: starred },
+  });
+  if (thread.externalId) {
+    await writebackGmailThread(
+      thread.accountId,
+      thread.externalId,
+      starred ? { addLabelIds: ["STARRED"] } : { removeLabelIds: ["STARRED"] }
+    );
+  }
+  revalidateThreadSurfaces(thread.matterId);
+  return { ok: true, isStarred: starred };
+}
+
 export async function setEmailThreadArchived(
   threadId: string,
   archived: boolean

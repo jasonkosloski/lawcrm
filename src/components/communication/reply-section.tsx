@@ -22,9 +22,8 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { deriveReplyRecipients } from "@/lib/google/mime";
 import type { ThreadDetail } from "@/lib/queries/communication";
+import { isSendableStatus } from "@/lib/email-send-status";
 import { ReplyComposer } from "./reply-composer";
-
-const SENDABLE_STATUSES = new Set(["connected", "syncing"]);
 
 export async function ReplySection({ thread }: { thread: ThreadDetail }) {
   const canSend = await currentUserHasPermission("communication.send_email");
@@ -39,7 +38,7 @@ export async function ReplySection({ thread }: { thread: ThreadDetail }) {
   });
   if (!row) return null;
 
-  if (!SENDABLE_STATUSES.has(row.account.syncStatus)) {
+  if (!isSendableStatus(row.account.syncStatus)) {
     return (
       <div className="bg-white rounded-lg border border-dashed border-line px-3 sm:px-4 py-3 flex items-center gap-2 text-xs text-ink-3">
         <TriangleAlert size={13} className="text-warn shrink-0" />

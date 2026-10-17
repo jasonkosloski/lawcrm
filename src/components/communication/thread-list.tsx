@@ -10,27 +10,43 @@ import Link from "next/link";
 import { BellRing, Inbox, Paperclip, Star } from "lucide-react";
 import { cn, plural } from "@/lib/utils";
 import { EmptyState } from "@/components/shared/empty-state";
-// Centralized date formatting. `lastMessageAt` is a recency label
-// (formatRelative is TZ-independent until its >30d calendar-date
-// fallback, which uses the viewer's zone); `followUpAt` is a
-// date-only value (server-local end-of-day, see actions/follow-ups),
-// so it renders on the server-local day grid with no TZ override.
-import { formatDate, formatRelative } from "@/lib/format-date";
+// Centralized date formatting (ADR-012). `lastMessageAt` is a recency
+// label (formatRelative is TZ-independent until its >30d calendar-date
+// fallback, which uses the viewer's zone); `followUpAt` is a calendar
+// day (the action stores end-of-day of the picked date), so it is
+// read as a date-only value and compared by day against the viewer's
+// today - never as an instant against Date.now().
+import {
+  daysUntilDateOnly,
+  formatDateOnly,
+  formatRelative,
+} from "@/lib/format-date";
 import type {
   CommunicationFilter,
   ThreadListRow,
 } from "@/lib/queries/communication";
+import { DEFAULT_COMMUNICATION_FILTER } from "@/lib/communication-filter-default";
 import { MailboxDrawerTrigger } from "./mailbox-drawer";
 import { ComposeEmailLauncher } from "./compose-email-launcher";
 import { ThreadRowActions } from "./thread-row-actions";
 
-function rowHref(
+/** listThreads' hard cap (`take: 500` in queries/communication.ts).
+ *  A list this long is truncated, so the header says "500+". */
+export const THREAD_LIST_CAP = 500;
+
+/** The filter the page falls back to when `?filter=` is absent
+ *  (parseEmailFilter in communication/page.tsx; the rail's hrefFor
+ *  omits only this one). Rows must emit `?filter=` for EVERY other
+ *  filter - including "all" - or opening a thread resets the list. */
+const DEFAULT_FILTER: CommunicationFilter = DEFAULT_COMMUNICATION_FILTER;
+
+export function rowHref(
   threadId: string,
   filter: CommunicationFilter,
   matterId: string | null
 ): string {
   const params = new URLSearchParams();
-  if (filter !== "all") params.set("filter", filter);
+  if (filter !== DEFAULT_FILTER) params.set("filter", filter);
   if (matterId) params.set("matter", matterId);
   params.set("thread", threadId);
   return `/communication?${params.toString()}`;
@@ -46,6 +62,30 @@ const FILTER_LABEL: Record<CommunicationFilter, string> = {
   filed: "On a matter",
   untimed: "Untimed (mine)",
 };
+
+/** Follow-up chip: warn once the due day has passed, "Late" once it
+ *  is more than a day behind (day arithmetic in the viewer's zone). */
+function FollowUpChip({
+  followUpAt,
+  tz,
+}: {
+  followUpAt: Date;
+  tz: string | null;
+}) {
+  const daysLeft = daysUntilDateOnly(followUpAt, tz ?? "UTC");
+  return (
+    <span
+      title={`Follow up by ${formatDateOnly(followUpAt, "short")}`}
+      className={cn(
+        "inline-flex items-center gap-0.5 text-3xs font-mono px-1 rounded",
+        daysLeft < 0 ? "text-warn" : "text-brand-700"
+      )}
+    >
+      <BellRing size={9} />
+      {daysLeft < -1 ? "Late" : formatDateOnly(followUpAt, "short")}
+    </span>
+  );
+}
 
 export function ThreadList({
   threads,
@@ -91,7 +131,9 @@ export function ThreadList({
             {matterLabel ?? FILTER_LABEL[filter]}
           </div>
           <div className="text-sm font-display font-medium text-ink">
-            {plural(threads.length, "thread")}
+            {threads.length >= THREAD_LIST_CAP
+              ? `${THREAD_LIST_CAP}+ threads`
+              : plural(threads.length, "thread")}
           </div>
         </div>
         {/* Compose — async server island: gates itself on
@@ -173,20 +215,7 @@ export function ThreadList({
                   )}
                   <span className="ml-auto flex items-center gap-1.5">
                     {t.followUpAt && (
-                      <span
-                        title={`Follow up by ${formatDate(t.followUpAt, "short")}`}
-                        className={cn(
-                          "inline-flex items-center gap-0.5 text-3xs font-mono px-1 rounded",
-                          t.followUpAt.getTime() < Date.now()
-                            ? "text-warn"
-                            : "text-brand-700"
-                        )}
-                      >
-                        <BellRing size={9} />
-                        {t.followUpAt.getTime() < Date.now() - 24 * 60 * 60 * 1000
-                          ? "Late"
-                          : formatDate(t.followUpAt, "short")}
-                      </span>
+                      <FollowUpChip followUpAt={t.followUpAt} tz={tz} />
                     )}
                     {t.hasAttachments && (
                       <Paperclip
