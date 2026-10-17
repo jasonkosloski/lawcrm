@@ -85,6 +85,11 @@ export async function updateMatterCalendarDefaults(
   if (!parsed.success) {
     return { status: "error", error: "Invalid input." };
   }
+  const exists = await prisma.matter.findUnique({
+    where: { id: matterId },
+    select: { id: true },
+  });
+  if (!exists) return { status: "error", error: "Matter not found." };
   await prisma.matter.update({
     where: { id: matterId },
     data: {

@@ -187,6 +187,7 @@ function StageRow({
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
+          aria-label={`Stage name (${stage.name})`}
           disabled={!stage.isActive}
           className={cn(
             "h-7 px-2 rounded-md border bg-white text-xs text-ink w-full",
@@ -207,6 +208,7 @@ function StageRow({
           name="isTerminal"
           checked={isTerminal}
           onChange={(e) => setIsTerminal(e.target.checked)}
+          aria-label={`${stage.name} is terminal`}
           disabled={!stage.isActive}
           className="w-3.5 h-3.5 rounded border-line"
         />
@@ -296,6 +298,7 @@ function AddStageForm({ practiceAreaId }: { practiceAreaId: string }) {
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
+          aria-label="New stage name"
           placeholder="New stage name (e.g. Mediation)"
           className={cn(
             "h-7 px-2 rounded-md border bg-white text-xs text-ink w-full",

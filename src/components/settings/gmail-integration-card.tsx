@@ -30,7 +30,7 @@
 
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarDays, History, Mail, Plus } from "lucide-react";
 import {
@@ -46,6 +46,8 @@ import { disconnectEmailAccount } from "@/app/actions/email-accounts";
 import { backfillMyEmailAccount } from "@/app/actions/email-sync";
 
 const CONNECT_URL = "/api/integrations/google/connect";
+const INTEGRATIONS_URL = "/settings/integrations";
+const GENERIC_ERROR = "Something went wrong connecting Gmail. Try again.";
 
 /** Callback machine codes → human copy. Unknown codes get the
  *  generic line — never render a raw code to the user. */
@@ -98,6 +100,30 @@ export function GmailIntegrationCard({
   errorCode: string | null;
 }) {
   const hasAccounts = accounts.length > 0;
+  const router = useRouter();
+
+  // The OAuth callback banners are ONE-SHOT: hold them in state seeded
+  // from the URL, then strip the params so a later router.refresh()
+  // (disconnect, backfill) or a page reload does not keep announcing
+  // "Gmail connected" over an account that has since been disconnected.
+  const [banner, setBanner] = useState({ justConnected, errorCode });
+  const [seen, setSeen] = useState({ justConnected, errorCode });
+  if (seen.justConnected !== justConnected || seen.errorCode !== errorCode) {
+    setSeen({ justConnected, errorCode });
+    // A new callback result replaces the old banner; the params being
+    // stripped (props going back to empty) must NOT clear it.
+    if (justConnected || errorCode) setBanner({ justConnected, errorCode });
+  }
+  // Once the user acts on an account (disconnect / backfill) the callback
+  // banner is stale: router.refresh() preserves this client state, so clear
+  // it explicitly or "Gmail connected" would sit over a Disconnected chip.
+  const clearBanner = () =>
+    setBanner({ justConnected: false, errorCode: null });
+  useEffect(() => {
+    if (justConnected || errorCode) {
+      router.replace(INTEGRATIONS_URL, { scroll: false });
+    }
+  }, [justConnected, errorCode, router]);
 
   return (
     <Card>
@@ -113,15 +139,18 @@ export function GmailIntegrationCard({
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
-        {justConnected && (
+        {banner.justConnected && (
           <div className="rounded-md bg-ok-soft px-3 py-2 text-xs text-ok">
             Gmail connected. Email sync will begin shortly.
           </div>
         )}
-        {errorCode && (
+        {banner.errorCode && (
           <div className="rounded-md bg-warn-soft px-3 py-2 text-xs text-danger">
-            {ERROR_COPY[errorCode] ??
-              "Something went wrong connecting Gmail. Try again."}
+            {/* hasOwn: the code comes straight from the URL, and a plain
+                lookup of __proto__ / constructor would hit Object.prototype. */}
+            {Object.hasOwn(ERROR_COPY, banner.errorCode)
+              ? ERROR_COPY[banner.errorCode]
+              : GENERIC_ERROR}
           </div>
         )}
 
@@ -142,7 +171,11 @@ export function GmailIntegrationCard({
             {hasAccounts && (
               <ul className="divide-y divide-border rounded-md border border-border">
                 {accounts.map((account) => (
-                  <GmailAccountRow key={account.id} account={account} />
+                  <GmailAccountRow
+                    key={account.id}
+                    account={account}
+                    onAction={clearBanner}
+                  />
                 ))}
               </ul>
             )}
@@ -179,7 +212,13 @@ const STATUS_CHIP: Record<
   error: { label: "Needs attention", variant: "destructive" },
 };
 
-function GmailAccountRow({ account }: { account: GmailAccountView }) {
+function GmailAccountRow({
+  account,
+  onAction,
+}: {
+  account: GmailAccountView;
+  onAction: () => void;
+}) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -190,6 +229,7 @@ function GmailAccountRow({ account }: { account: GmailAccountView }) {
   const [backfillFailed, setBackfillFailed] = useState(false);
 
   const loadOlder = () => {
+    onAction();
     startBackfill(async () => {
       const res = await backfillMyEmailAccount(account.id);
       if (res.ok) {
@@ -218,6 +258,7 @@ function GmailAccountRow({ account }: { account: GmailAccountView }) {
   const isDisconnected = account.syncStatus === "disconnected";
 
   const disconnect = () => {
+    onAction();
     startTransition(async () => {
       const res = await disconnectEmailAccount(account.id);
       if (!res.ok) {

@@ -88,4 +88,25 @@ describe("EditPracticeAreaForm after a server validation error", () => {
       screen.getByText(/existing matters keep their sol dates/i)
     ).toBeTruthy();
   });
+
+  test("every control has an accessible name", () => {
+    render(<EditPracticeAreaForm area={area} />);
+    for (const name of [
+      "Name",
+      "Label",
+      "Color",
+      "Years",
+      "Months",
+      "Days",
+      "Source citation",
+      "Default billing mode",
+    ]) {
+      expect(screen.getByLabelText(name)).toBeTruthy();
+    }
+  });
+
+  test("months are documented as approximate", () => {
+    render(<EditPracticeAreaForm area={area} />);
+    expect(screen.getByText(/months are therefore approximate/i)).toBeTruthy();
+  });
 });

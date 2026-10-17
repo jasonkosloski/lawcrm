@@ -3,13 +3,13 @@
  *
  * Two behaviors worth pinning:
  *
- * 1. AddStageForm's post-success reset runs in an effect, not in the
- *    render body. The old code mutated the useActionState object
- *    (`state.values = {}`) and queued a setState during render — this
- *    suite pins that the action's returned state survives untouched
- *    and that the inputs still clear after a successful add (and
- *    clear AGAIN on a second success, which requires the effect to
- *    depend on the state object, not the status string).
+ * 1. AddStageForm's inputs are controlled (the form submits through
+ *    onSubmit + startTransition, so React 19's automatic form reset
+ *    never runs) and are cleared explicitly after a successful add —
+ *    keyed on the state OBJECT so a second consecutive success clears
+ *    again — while a validation error keeps what was typed. There is
+ *    no remount, so focus stays in the name field. The action's
+ *    returned state must survive untouched.
  *
  * 2. The row-level IconButtons (move / archive) live INSIDE the
  *    StageRow rename <form>. They must be type="button" — a submit
@@ -85,6 +85,18 @@ describe("AddStageForm — reset after successful add", () => {
     expect(mockedCreate.mock.calls[0][0]).toBe("pa_1");
     // Controlled inputs were cleared after the ok state.
     await waitFor(() => expect(nameInput().value).toBe(""));
+  });
+
+  test("keeps the same input element (no remount) so Enter-to-add keeps focus", async () => {
+    const user = userEvent.setup();
+    render(<StageManager practiceAreaId="pa_1" stages={[stage()]} />);
+
+    const before = nameInput();
+    await user.type(before, "Mediation{Enter}");
+    await waitFor(() => expect(mockedCreate).toHaveBeenCalledOnce());
+    await waitFor(() => expect(nameInput().value).toBe(""));
+    expect(nameInput()).toBe(before);
+    expect(document.activeElement).toBe(before);
   });
 
   test("resets again on a second consecutive success", async () => {
@@ -181,6 +193,22 @@ describe("StageRow — icon buttons must not submit the rename form", () => {
   });
 });
 
+describe("accessible names", () => {
+  test("row name input, row terminal checkbox and add-form input are labelled", () => {
+    render(
+      <StageManager
+        practiceAreaId="pa_1"
+        stages={[stage({ isTerminal: true })]}
+      />
+    );
+    expect(screen.getByLabelText("Stage name (Intake)")).toBeTruthy();
+    expect(
+      (screen.getByLabelText("Intake is terminal") as HTMLInputElement).checked
+    ).toBe(true);
+    expect(screen.getByLabelText("New stage name")).toBeTruthy();
+  });
+});
+
 describe("stage forms after a server validation error", () => {
   test("StageRow keeps the edited name and terminal checkbox", async () => {
     mockedUpdate.mockImplementation(async () => ({
@@ -219,7 +247,7 @@ describe("stage forms after a server validation error", () => {
     render(<StageManager practiceAreaId="pa_1" stages={[stage()]} />);
 
     await user.type(nameInput(), "Mediation");
-    await user.click(screen.getByLabelText(/terminal/i, { selector: "input[name='isTerminal'][type='checkbox']:not([disabled])" }));
+    await user.click(screen.getByLabelText("terminal"));
     await user.click(screen.getByRole("button", { name: /add stage/i }));
 
     await waitFor(() =>

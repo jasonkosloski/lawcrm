@@ -14,6 +14,10 @@ import { useActionState, useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { createPracticeArea } from "@/app/actions/practice-areas";
 import {
+  Field,
+  inputCls,
+} from "@/components/settings/practice-area-form-parts";
+import {
   practiceAreaInitialState,
   type PracticeAreaFormState,
 } from "@/lib/practice-area-constants";
@@ -50,7 +54,7 @@ export function CreatePracticeAreaForm() {
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-2">
       <div className="grid grid-cols-[1fr_1fr_auto_auto] gap-2 items-start">
-        <Field label="Name" error={errs.name}>
+        <Field label="Name" htmlFor="name" error={errs.name}>
           <input
             id="name"
             name="name"
@@ -63,7 +67,7 @@ export function CreatePracticeAreaForm() {
           />
         </Field>
 
-        <Field label="Label" error={errs.label} hint="Optional — longer label for sidebar">
+        <Field label="Label" htmlFor="label" error={errs.label} hint="Optional — longer label for sidebar">
           <input
             id="label"
             name="label"
@@ -75,7 +79,7 @@ export function CreatePracticeAreaForm() {
           />
         </Field>
 
-        <Field label="Color" error={errs.color}>
+        <Field label="Color" htmlFor="color" error={errs.color}>
           <div className="flex items-center gap-1.5 h-8">
             <input
               type="color"
@@ -133,36 +137,3 @@ export function CreatePracticeAreaForm() {
     </form>
   );
 }
-
-function Field({
-  label,
-  error,
-  hint,
-  children,
-}: {
-  label: string;
-  error?: string[];
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-ink-2">{label}</span>
-      {children}
-      {error && error.length > 0 && (
-        <div className="text-2xs text-warn">{error[0]}</div>
-      )}
-      {hint && !error?.length && (
-        <div className="text-2xs text-ink-4">{hint}</div>
-      )}
-    </div>
-  );
-}
-
-const inputCls = (hasError: boolean): string =>
-  cn(
-    "h-8 px-2.5 rounded-md border bg-white text-xs text-ink",
-    "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-    "placeholder:text-ink-4",
-    hasError ? "border-warn" : "border-line"
-  );

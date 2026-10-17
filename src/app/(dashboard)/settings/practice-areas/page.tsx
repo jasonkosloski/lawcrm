@@ -28,7 +28,8 @@ import { PracticeAreaRowActions } from "@/components/settings/practice-area-row-
 export default async function PracticeAreasSettingsPage() {
   await requirePermission("firm.manage_practice_areas");
   const areas = await prisma.practiceArea.findMany({
-    orderBy: [{ isActive: "desc" }, { order: "asc" }, { name: "asc" }],
+    // (order, id) matches the tiebreaker movePracticeArea swaps by.
+    orderBy: [{ isActive: "desc" }, { order: "asc" }, { id: "asc" }],
     select: {
       id: true,
       name: true,
@@ -86,8 +87,13 @@ export default async function PracticeAreasSettingsPage() {
           </Card>
         ) : (
           <div className="flex flex-col gap-1.5">
-            {active.map((a) => (
-              <AreaRow key={a.id} area={a} />
+            {active.map((a, idx) => (
+              <AreaRow
+                key={a.id}
+                area={a}
+                canMoveUp={idx > 0}
+                canMoveDown={idx < active.length - 1}
+              />
             ))}
           </div>
         )}
@@ -118,7 +124,17 @@ type AreaRowData = {
   _count: { stages: number; matters: number };
 };
 
-function AreaRow({ area, muted }: { area: AreaRowData; muted?: boolean }) {
+function AreaRow({
+  area,
+  muted,
+  canMoveUp,
+  canMoveDown,
+}: {
+  area: AreaRowData;
+  muted?: boolean;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+}) {
   return (
     <div
       className={
@@ -156,6 +172,8 @@ function AreaRow({ area, muted }: { area: AreaRowData; muted?: boolean }) {
         areaId={area.id}
         isActive={area.isActive}
         activeMatterCount={area._count.matters}
+        canMoveUp={canMoveUp}
+        canMoveDown={canMoveDown}
       />
 
       <Link

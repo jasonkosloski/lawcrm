@@ -63,4 +63,11 @@ describe("CreatePracticeAreaForm after a server validation error", () => {
         .value
     ).toBe("§1983");
   });
+
+  test("name, label and colour inputs have accessible names", () => {
+    render(<CreatePracticeAreaForm />);
+    expect(screen.getByLabelText("Name")).toBeTruthy();
+    expect(screen.getByLabelText("Label")).toBeTruthy();
+    expect(screen.getByLabelText("Color")).toBeTruthy();
+  });
 });

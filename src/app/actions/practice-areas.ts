@@ -30,9 +30,11 @@ import { requirePermission } from "@/lib/permission-check";
 import { BILLING_MODES } from "@/lib/billing-mode-constants";
 import { packStatuteDays, formatStatutePeriod } from "@/lib/sol";
 import { logAuditEntry } from "@/lib/audit-entry";
-import type {
-  PracticeAreaFormState,
-  StageFormState,
+import {
+  areaArchiveBlockedMessage,
+  planReorder,
+  type PracticeAreaFormState,
+  type StageFormState,
 } from "@/lib/practice-area-constants";
 
 /** Default lifecycle applied to a newly-created practice area so it's
@@ -279,7 +281,9 @@ export async function updatePracticeArea(
     };
   }
 
-  await prisma.practiceArea.update({
+  const colorChanged =
+    before.color.toLowerCase() !== data.color.toLowerCase();
+  const updateArea = prisma.practiceArea.update({
     where: { id },
     data: {
       name: data.name,
@@ -309,6 +313,27 @@ export async function updatePracticeArea(
         : {}),
     },
   });
+  // Matter.color is a snapshot of the area colour taken on create/edit.
+  // Re-colour the matters still carrying the area's OLD colour so a
+  // recolour reaches existing matters now rather than whenever each is
+  // next edited; a matter whose colour differs (a per-matter override)
+  // is left alone. Same transaction as the area write.
+  let recoloredMatters = 0;
+  if (colorChanged) {
+    const [, recolored] = await prisma.$transaction([
+      updateArea,
+      prisma.matter.updateMany({
+        where: {
+          practiceAreaId: id,
+          color: { equals: before.color, mode: "insensitive" },
+        },
+        data: { color: data.color },
+      }),
+    ]);
+    recoloredMatters = recolored.count;
+  } else {
+    await updateArea;
+  }
 
   const newPeriod =
     data.hasStatuteOfLimitations === "on"
@@ -325,7 +350,9 @@ export async function updatePracticeArea(
   await logSettingsChange(userId, `Practice area updated — ${data.name}`, [
     before.name !== data.name ? `name "${before.name}" → "${data.name}"` : null,
     (before.label ?? "") !== (data.label ?? "") ? "label" : null,
-    before.color !== data.color ? "color" : null,
+    colorChanged
+      ? `color ${before.color} → ${data.color} (${recoloredMatters} matter${recoloredMatters === 1 ? "" : "s"} recoloured)`
+      : null,
     before.hasStatuteOfLimitations !== (data.hasStatuteOfLimitations === "on")
       ? `SOL tracking ${before.hasStatuteOfLimitations ? "on" : "off"} → ${
           data.hasStatuteOfLimitations === "on" ? "on" : "off"
@@ -351,15 +378,17 @@ export async function setPracticeAreaActive(
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("firm.manage_practice_areas");
   if (!isActive) {
-    // Block archive if the area still owns active (non-archived) matters.
-    // Firms should move those first or explicitly archive the matters.
+    // Block archive while the area still owns any non-archived matter
+    // (settled/closed ones included: the matter edit path rejects an
+    // archived area, so they must be moved first). There is no
+    // matter-archive control, so the message says "move", not "archive".
     const activeMatterCount = await prisma.matter.count({
       where: { practiceAreaId: id, isArchived: false },
     });
     if (activeMatterCount > 0) {
       return {
         ok: false,
-        error: `Cannot archive — ${activeMatterCount} active matter${activeMatterCount === 1 ? "" : "s"} still use this area. Reassign or archive the matters first.`,
+        error: areaArchiveBlockedMessage(activeMatterCount),
       };
     }
   }
@@ -383,34 +412,39 @@ export async function movePracticeArea(
   id: string,
   direction: "up" | "down"
 ): Promise<{ ok: boolean; error?: string }> {
-  const userId = await requirePermission("firm.manage_practice_areas");
+  await requirePermission("firm.manage_practice_areas");
+  const row = await prisma.practiceArea.findUnique({
+    where: { id },
+    select: { isActive: true },
+  });
+  if (!row) return { ok: false, error: "Not found" };
+  // Archived rows are hidden in the UI and have no reorder controls.
+  if (!row.isActive) return { ok: true };
+
+  // Swap only among the VISIBLE (active) areas: swapping with a hidden
+  // archived neighbour would leave the visible order unchanged and the
+  // click would look broken. (order, id) keeps ties deterministic.
   const all = await prisma.practiceArea.findMany({
-    orderBy: { order: "asc" },
-    select: { id: true, order: true, name: true },
+    where: { isActive: true },
+    orderBy: [{ order: "asc" }, { id: "asc" }],
+    select: { id: true, order: true },
   });
   const idx = all.findIndex((a) => a.id === id);
   if (idx === -1) return { ok: false, error: "Not found" };
   const targetIdx = direction === "up" ? idx - 1 : idx + 1;
   if (targetIdx < 0 || targetIdx >= all.length) return { ok: true };
 
-  const a = all[idx];
-  const b = all[targetIdx];
-  await prisma.$transaction([
-    prisma.practiceArea.update({
-      where: { id: a.id },
-      data: { order: b.order },
-    }),
-    prisma.practiceArea.update({
-      where: { id: b.id },
-      data: { order: a.order },
-    }),
-  ]);
-
-  await logSettingsChange(
-    userId,
-    `Practice area moved ${direction} — ${a.name}`,
-    []
+  await prisma.$transaction(
+    planReorder(all, idx, targetIdx).map((u) =>
+      prisma.practiceArea.update({
+        where: { id: u.id },
+        data: { order: u.order },
+      })
+    )
   );
+
+  // Pure reorders are deliberately NOT audited: every click would write a
+  // "settings" row that floods the dashboard Recent activity feed.
 
   revalidatePath("/", "layout");
   return { ok: true };
@@ -586,40 +620,40 @@ export async function moveStage(
   stageId: string,
   direction: "up" | "down"
 ): Promise<{ ok: boolean; error?: string }> {
-  const userId = await requirePermission("firm.manage_practice_areas");
+  await requirePermission("firm.manage_practice_areas");
   const stage = await prisma.matterStage.findUnique({
     where: { id: stageId },
-    select: { practiceAreaId: true, order: true, name: true },
+    select: {
+      practiceAreaId: true,
+      order: true,
+      name: true,
+      isActive: true,
+    },
   });
   if (!stage) return { ok: false, error: "Stage not found" };
+  if (!stage.isActive) return { ok: true };
 
+  // Visible (active) siblings only — see movePracticeArea.
   const siblings = await prisma.matterStage.findMany({
-    where: { practiceAreaId: stage.practiceAreaId },
-    orderBy: { order: "asc" },
+    where: { practiceAreaId: stage.practiceAreaId, isActive: true },
+    orderBy: [{ order: "asc" }, { id: "asc" }],
     select: { id: true, order: true },
   });
   const idx = siblings.findIndex((s) => s.id === stageId);
+  if (idx === -1) return { ok: false, error: "Stage not found" };
   const targetIdx = direction === "up" ? idx - 1 : idx + 1;
   if (targetIdx < 0 || targetIdx >= siblings.length) return { ok: true };
 
-  const a = siblings[idx];
-  const b = siblings[targetIdx];
-  await prisma.$transaction([
-    prisma.matterStage.update({
-      where: { id: a.id },
-      data: { order: b.order },
-    }),
-    prisma.matterStage.update({
-      where: { id: b.id },
-      data: { order: a.order },
-    }),
-  ]);
-
-  await logSettingsChange(
-    userId,
-    `Stage moved ${direction} — ${stage.name}`,
-    []
+  await prisma.$transaction(
+    planReorder(siblings, idx, targetIdx).map((u) =>
+      prisma.matterStage.update({
+        where: { id: u.id },
+        data: { order: u.order },
+      })
+    )
   );
+
+  // Not audited — see movePracticeArea.
 
   revalidatePath("/", "layout");
   return { ok: true };

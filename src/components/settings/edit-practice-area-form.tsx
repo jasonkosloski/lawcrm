@@ -11,6 +11,10 @@
 import { useActionState, useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { updatePracticeArea } from "@/app/actions/practice-areas";
+import {
+  Field,
+  inputCls,
+} from "@/components/settings/practice-area-form-parts";
 import { unpackStatuteDays } from "@/lib/sol";
 import {
   practiceAreaInitialState,
@@ -77,7 +81,7 @@ export function EditPracticeAreaForm({
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-3">
       <div className="grid grid-cols-[1fr_1fr_auto] gap-3 items-start">
-        <Field label="Name" error={errs.name}>
+        <Field label="Name" htmlFor="name" error={errs.name}>
           <input
             id="name"
             name="name"
@@ -89,7 +93,7 @@ export function EditPracticeAreaForm({
           />
         </Field>
 
-        <Field label="Label" error={errs.label} hint="Sidebar/reports label">
+        <Field label="Label" htmlFor="label" error={errs.label} hint="Sidebar/reports label">
           <input
             id="label"
             name="label"
@@ -100,7 +104,7 @@ export function EditPracticeAreaForm({
           />
         </Field>
 
-        <Field label="Color" error={errs.color}>
+        <Field label="Color" htmlFor="color" error={errs.color}>
           <div className="flex items-center gap-1.5 h-8">
             <input
               type="color"
@@ -156,8 +160,9 @@ export function EditPracticeAreaForm({
           Statute period (auto-computes Matter SOL date from incident)
         </legend>
         <div className="grid grid-cols-3 gap-2">
-          <Field label="Years">
+          <Field label="Years" htmlFor="statuteYears">
             <input
+              id="statuteYears"
               type="number"
               name="statuteYears"
               min={0}
@@ -166,8 +171,9 @@ export function EditPracticeAreaForm({
               className={inputCls(false)}
             />
           </Field>
-          <Field label="Months">
+          <Field label="Months" htmlFor="statuteMonths">
             <input
+              id="statuteMonths"
               type="number"
               name="statuteMonths"
               min={0}
@@ -176,8 +182,9 @@ export function EditPracticeAreaForm({
               className={inputCls(false)}
             />
           </Field>
-          <Field label="Days">
+          <Field label="Days" htmlFor="statuteDays">
             <input
+              id="statuteDays"
               type="number"
               name="statuteDays"
               min={0}
@@ -189,9 +196,11 @@ export function EditPracticeAreaForm({
         </div>
         <Field
           label="Source citation"
+          htmlFor="statuteSourceCitation"
           hint="e.g. C.R.S. § 13-80-102 — surfaces on the SOL card so attorneys can verify against the statute"
         >
           <input
+            id="statuteSourceCitation"
             name="statuteSourceCitation"
             type="text"
             value={citation}
@@ -201,8 +210,12 @@ export function EditPracticeAreaForm({
           />
         </Field>
         <p className="text-2xs text-ink-4 leading-relaxed">
-          Total days = years × 365 + months × 30 + days. Legal SOL
-          periods are virtually always specified that way.
+          The period is stored as total days = years × 365 + months × 30
+          + days. Months are therefore approximate: a statute written in
+          calendar months (e.g. &ldquo;3 months&rdquo;) can end one or
+          two days earlier than the computed date. For month-based
+          periods, verify the computed SOL date against the statute and
+          override it on the matter when it differs.
         </p>
       </fieldset>
 
@@ -211,6 +224,7 @@ export function EditPracticeAreaForm({
           form, so changing this here only affects future matters. */}
       <Field
         label="Default billing mode"
+        htmlFor="defaultBillingMode"
         error={errs.defaultBillingMode}
         hint={
           BILLING_MODE_DESCRIPTION[billingMode as BillingMode]
@@ -249,36 +263,3 @@ export function EditPracticeAreaForm({
     </form>
   );
 }
-
-function Field({
-  label,
-  error,
-  hint,
-  children,
-}: {
-  label: string;
-  error?: string[];
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-ink-2">{label}</span>
-      {children}
-      {error && error.length > 0 && (
-        <div className="text-2xs text-warn">{error[0]}</div>
-      )}
-      {hint && !error?.length && (
-        <div className="text-2xs text-ink-4">{hint}</div>
-      )}
-    </div>
-  );
-}
-
-const inputCls = (hasError: boolean): string =>
-  cn(
-    "h-8 px-2.5 rounded-md border bg-white text-xs text-ink",
-    "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-    "placeholder:text-ink-4",
-    hasError ? "border-warn" : "border-line"
-  );

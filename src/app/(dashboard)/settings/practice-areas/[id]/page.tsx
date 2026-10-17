@@ -31,7 +31,7 @@ export default async function PracticeAreaDetailPage({
     where: { id },
     include: {
       stages: {
-        orderBy: [{ isActive: "desc" }, { order: "asc" }],
+        orderBy: [{ isActive: "desc" }, { order: "asc" }, { id: "asc" }],
         select: {
           id: true,
           name: true,

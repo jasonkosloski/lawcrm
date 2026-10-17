@@ -15,23 +15,29 @@ import {
   movePracticeArea,
   setPracticeAreaActive,
 } from "@/app/actions/practice-areas";
+import { areaArchiveBlockedMessage } from "@/lib/practice-area-constants";
 
 export function PracticeAreaRowActions({
   areaId,
   isActive,
   activeMatterCount,
+  canMoveUp = true,
+  canMoveDown = true,
 }: {
   areaId: string;
   isActive: boolean;
   activeMatterCount: number;
+  /** False at the top / bottom of the ACTIVE list (computed by the
+   *  page) so a boundary click can't silently swap with a hidden
+   *  archived neighbour. */
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
 
   const toggleActive = () => {
     if (isActive && activeMatterCount > 0) {
-      alert(
-        `Cannot archive — ${activeMatterCount} active matter${activeMatterCount === 1 ? "" : "s"} still use this area. Reassign or archive the matters first.`
-      );
+      alert(areaArchiveBlockedMessage(activeMatterCount));
       return;
     }
     startTransition(async () => {
@@ -52,14 +58,14 @@ export function PracticeAreaRowActions({
         <>
           <IconButton
             onClick={() => move("up")}
-            disabled={pending}
+            disabled={pending || !canMoveUp}
             label="Move up"
           >
             <ArrowUp size={13} />
           </IconButton>
           <IconButton
             onClick={() => move("down")}
-            disabled={pending}
+            disabled={pending || !canMoveDown}
             label="Move down"
           >
             <ArrowDown size={13} />

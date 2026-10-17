@@ -15,7 +15,7 @@
  */
 
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // Mock the server actions + router BEFORE importing the component.
@@ -25,8 +25,9 @@ vi.mock("@/app/actions/email-accounts", () => ({
 vi.mock("@/app/actions/email-sync", () => ({
   backfillMyEmailAccount: vi.fn(async () => ({ ok: true, threadsSynced: 0 })),
 }));
+const router = vi.hoisted(() => ({ refresh: vi.fn(), replace: vi.fn() }));
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh: vi.fn() }),
+  useRouter: () => router,
 }));
 
 import { disconnectEmailAccount } from "@/app/actions/email-accounts";
@@ -45,6 +46,8 @@ beforeEach(() => {
   // inverse).
   mockedDisconnect.mockClear();
   mockedBackfill.mockClear();
+  router.refresh.mockClear();
+  router.replace.mockClear();
   mockedBackfill.mockResolvedValue({ ok: true, threadsSynced: 0 });
 });
 
@@ -136,6 +139,75 @@ describe("GmailIntegrationCard", () => {
       screen.getByText(/Something went wrong connecting Gmail/)
     ).toBeInTheDocument();
     expect(screen.queryByText(/some_future_code/)).not.toBeInTheDocument();
+  });
+
+  test("prototype-key error codes render the generic line instead of crashing", () => {
+    for (const code of ["__proto__", "constructor", "toString"]) {
+      const { unmount } = renderCard({ errorCode: code });
+      expect(
+        screen.getByText(/Something went wrong connecting Gmail/)
+      ).toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  test("callback banners are one-shot: params are stripped and the banner survives a refresh", () => {
+    const { rerender } = renderCard({
+      justConnected: true,
+      accounts: [CONNECTED_ACCOUNT],
+    });
+    expect(screen.getByText(/Gmail connected/)).toBeInTheDocument();
+    expect(router.replace).toHaveBeenCalledWith("/settings/integrations", {
+      scroll: false,
+    });
+
+    // The URL is stripped: the page re-renders with empty params. The
+    // banner already shown stays until the page is left.
+    rerender(
+      <GmailIntegrationCard
+        configured
+        accounts={[CONNECTED_ACCOUNT]}
+        justConnected={false}
+        errorCode={null}
+      />
+    );
+    expect(screen.getByText(/Gmail connected/)).toBeInTheDocument();
+
+    // A fresh mount (reload after the strip) has no params -> no banner.
+    cleanup();
+    renderCard({ accounts: [CONNECTED_ACCOUNT] });
+    expect(screen.queryByText(/Gmail connected/)).not.toBeInTheDocument();
+    expect(router.replace).toHaveBeenCalledTimes(1);
+  });
+
+  test("the connected banner clears once the user disconnects or backfills an account", async () => {
+    const user = userEvent.setup();
+    renderCard({
+      justConnected: true,
+      accounts: [{ ...CONNECTED_ACCOUNT, oldestThreadLabel: "Jan 2, 2026" }],
+    });
+    expect(screen.getByText(/Gmail connected/)).toBeInTheDocument();
+    await user.click(screen.getByText("Disconnect"));
+    await user.click(screen.getByText("Confirm"));
+    await waitFor(() =>
+      expect(screen.queryByText(/Gmail connected/)).not.toBeInTheDocument()
+    );
+    cleanup();
+
+    renderCard({
+      justConnected: true,
+      accounts: [{ ...CONNECTED_ACCOUNT, oldestThreadLabel: "Jan 2, 2026" }],
+    });
+    expect(screen.getByText(/Gmail connected/)).toBeInTheDocument();
+    await user.click(screen.getByText("Load older emails"));
+    await waitFor(() =>
+      expect(screen.queryByText(/Gmail connected/)).not.toBeInTheDocument()
+    );
+  });
+
+  test("no params: nothing to strip", () => {
+    renderCard();
+    expect(router.replace).not.toHaveBeenCalled();
   });
 
   test("disconnect is two-step and calls the action with the account id", async () => {
