@@ -28,7 +28,7 @@ This file tracks decisions, trade-offs, and evolution of the Prisma schema as we
 | TimeEntry | Draft | Core billing unit — UTBMS codes may need their own reference table |
 | Invoice | Draft | Links time entries (`lineItems`) AND expenses (`expenseLineItems`); flat-fee/adjustment/tax lines still absent |
 | TrustTransaction | Draft | Simple ledger — real IOLTA compliance may need more fields |
-| Settlement | Draft | Specialized for contingency fee cases. `clientNet` is derived on read and never written; `firmFee` stored rounded half-up to cents |
+| Settlement | Draft | Specialized for contingency fee cases. One per matter (`matterId` unique, ADR-036). `clientNet` is derived on read and never written; `firmFee` stored rounded half-up to cents |
 | SettlementLien | Draft | Negotiation workflow fields |
 | SettlementApproval | Draft | 4-step approval chain |
 | EmailAccount | Active | OAuth tokens encrypted at rest (ADR-011). `updatedAt` doubles as the sync-claim heartbeat (ADR-031) |
@@ -46,7 +46,7 @@ This file tracks decisions, trade-offs, and evolution of the Prisma schema as we
 | Model | Added | Notes |
 |---|---|---|
 | UserMatterPin | 2026-04-24 | Per-user matter pins (replaced `Matter.isPinned`) — see ADR-010 |
-| PracticeArea | 2026-04-24 | Firm-configurable practice areas: color/order, SOL config (`statutePeriodDays`), `defaultBillingMode` |
+| PracticeArea | 2026-04-24 | Firm-configurable practice areas: color/order, SOL config (`statutePeriodAmount` + `statutePeriodUnit`, ADR-035; `statutePeriodDays` deprecated), `defaultBillingMode` |
 | MatterStage | 2026-04-24 | Per-practice-area lifecycle stages (name, order, `isTerminal`); unique on (practiceAreaId, name) |
 | ContactPhone | 2026-04-24 | Multi-phone per contact with free-text label, `isPrimary`, and ordering |
 | NoteRead | 2026-04-24 | Per-user read tracking on notes — drives default collapse state; composite PK (userId, noteId) |
@@ -56,7 +56,7 @@ This file tracks decisions, trade-offs, and evolution of the Prisma schema as we
 | MessengerItem | 2026-04-24 | SMS / call / voicemail item; idempotent on `providerEventId`; per-item `matterId` filing override |
 | Account | 2026-04-25 | Auth.js OAuth account table — empty until Google OAuth lands (see AUTH_PLAN.md) |
 | VerificationToken | 2026-04-25 | Auth.js token table — reserved for password-reset / email-verify flows |
-| Firm | 2026-04-25 | Firm profile; single-tenant today, `firmId` is the future multi-tenant scoping handle |
+| Firm | 2026-04-25 | Firm profile; single-tenant today, `firmId` is the future multi-tenant scoping handle. `matterVisibility` (FIRM \| TEAM, default FIRM) is the Phase 5 matter-access switch; not enforced yet |
 | Role / UserRole | 2026-04-25 | First-class roles; Admin/default seeded as locked system roles |
 | InvoicePayment | 2026-04-25 | Per-invoice payment record across all channels; trust payments double-write to TrustTransaction |
 | Expense | 2026-04-27 | Out-of-pocket costs, distinct from TimeEntry; `billable` + `clientAdvanced` flags |
@@ -142,34 +142,33 @@ These are places where the schema will likely change as we build:
 | 2026-10-17 | `Settlement.clientNet` is derived, never written (no schema change) | Net to client is computed on read from gross, fee and costs (`src/lib/settlement-waterfall.ts`, signed, never clamped). The column still exists with default 0 and is a drop candidate. `firmFee` is stored rounded half-up to cents; legacy rows may hold unrounded fees, and reads recompute. |
 | 2026-10-17 | `Matter.wipAmount` is no longer read (no schema change) | The column was never maintained. Overview WIP is aggregated live from unbilled time entries and billable expenses; the matter queries explicitly omit the column. Drop candidate. |
 | 2026-10-17 | `Lead.statuteWindow` semantics (no schema change) | It is a days-remaining snapshot as of `createdAt`; the UI derives the live figure as snapshot minus days since intake. It is not an absolute date and will not follow practice-area changes. A candidate to replace with an absolute SOL date or a practice-area-derived value. |
-| 2026-10-17 | SOL auto-vs-manual is inferred, not stored (no schema change) | On matter edit, a stored `statuteOfLimitationsDate` equal to `computeSolDate(stored incident date, stored area period)` (or null) is auto-derived and recomputed; anything else is a manual override and is kept (`src/lib/sol.ts`, ADR-027). Caveats: a manual date that happens to equal the computed one follows later edits, and changing an area's period makes legacy dates look manual (the safe direction). The period itself (`PracticeArea.statutePeriodDays`) uses a 365-day year and 30-day month, so calendar-month periods can land up to about 2 days late; this is a known approximation until year/month/day columns exist (pending list below). |
+| 2026-10-17 | SOL auto-vs-manual is inferred, not stored (no schema change) | On matter edit, a stored `statuteOfLimitationsDate` equal to `computeSolDate(stored incident date, stored area period)` (or null) is auto-derived and recomputed; anything else is a manual override and is kept (`src/lib/sol.ts`, ADR-027). Caveats: a manual date that happens to equal the computed one follows later edits, and changing an area's period makes legacy dates look manual (the safe direction). The period itself was a 365-day year / 30-day month total (`PracticeArea.statutePeriodDays`); that approximation is gone as of 2026-10-17 (ADR-035, calendar amount + unit). |
 | 2026-10-17 | `MessengerThread.defaultMatterId` no longer written by manual call logging (no schema change) | Only seed/provider traffic sets it; a manually logged call carries the filing on `MessengerItem.matterId`. "Unfiled" therefore means no thread default AND no item-level matter. |
 | 2026-10-17 | `EmailAccount.updatedAt` is the sync-claim heartbeat (no schema change) | The per-account sync claim (ADR-031) is a compare-and-set on `syncStatus` with a 10-minute stale window judged by `updatedAt`, instead of a new column. Any account update refreshes it. |
 | 2026-10-17 | `CalendarEventSync.googleUpdatedAt` comment is now true (no schema change) | The pull engine skips rows whose Google `updated` stamp matches; the "freshness anchor for last-write-wins" comment describes real behavior. |
 | 2026-10-17 | `Contact.firmId` stamping (no schema change) | `createContact`, `createMatter`'s inline client and calendar attendee creation stamp `firmId`; the other create paths (party creation in `parties.ts` for a new party or attorney, the legacy no-`contactId` branch of lead conversion, the seed) still leave it null. The column stays nullable and is not a scoping handle yet. |
 | 2026-10-17 | Invariant: `Matter.clientId` set implies a `MatterContact` with `category = client` | Now also holds for lead conversion (`convertLeadToMatter` creates the client row). Lead conversion claims the lead with a stage-predicate `updateMany` inside the transaction, so a double submit converts once. |
 | 2026-10-17 | `Contact.notes` and `conflictStatus` carry over on merge (no schema change) | `conflictStatus` is a manual flag; the intake matcher does not read it (ADR-026, open decision). |
+| 2026-10-17 | **Batch 4 migration** `20261017120000_quality_sweep` (ADR-035 to ADR-038) | One expand-only migration. (1) Money columns -> `DECIMAL(14,2)`, `Settlement.firmFeePercent` -> `DECIMAL(7,4)` (existing values are rounded to the new scale in place). `TimeEntry.hours` stays `Float` (not money). (2) `PracticeArea.statutePeriodAmount Int?` + `statutePeriodUnit SolPeriodUnit?` (enum `DAYS|MONTHS|YEARS`), backfilled from `statutePeriodDays` (multiples of 365 -> YEARS, else DAYS); `statutePeriodDays` kept but deprecated and unread (drop in a later migration). (3) Indexes: `time_entries(invoiceId)`, `email_attachments(messageId)`, `matter_contacts(contactId)`, `settlement_liens(settlementId)`, `settlement_approvals(settlementId)`, `deadlines(status, dueDate)`, `activity_logs(matterId, timestamp)` and `(userId, type, timestamp)`, `matter_team_members(userId, removedAt)`. (4) `UNIQUE settlements(matterId)` (replaces the plain index) behind a guard that aborts the deploy, deleting nothing, if any matter has 2+ settlements. (5) `Firm.matterVisibility` (enum `MatterVisibility` FIRM\|TEAM, default FIRM), column only. (6) Data: `billing.view` granted to every role holding any `billing.*` or `trust.*` key (Admin is a wildcard). (7) `CalendarEvent.visibility` text gains the value `private` (no DDL). Deploy steps: `docs/DEPLOY_BACKFILLS.md`. |
 
 ---
 
-## Pending Batch 4 migration candidates (NOT applied)
+## Pending migration candidates (NOT applied)
 
-None of these exist in `prisma/schema.prisma` or `prisma/migrations/` today (the only migrations are `0_init` and `20261016190000_deadline_rules_task_lists`). Each ships as a reviewed migration, run by the user via `prisma migrate deploy`; ask before pushing any migration.
+Batch 4 shipped as `20261017120000_quality_sweep` (see the changelog). What is still open; each ships as a reviewed migration, run by the user via `prisma migrate deploy`; ask before pushing any migration.
 
 | Candidate | Why | Pre-work |
 |---|---|---|
-| Unique `settlements(matterId)` | Replaces the per-matter advisory lock as the one-settlement-per-matter guarantee (ADR-030) | De-duplicate existing rows first |
 | Unique `Document.fileUrl` (nullable) | Makes the Blob completion callback idempotent in the database (ADR-018) | Check for duplicate URLs |
-| `ActivityLog @@index([userId, type, timestamp])` | Lockout counting and per-user history scan by user + type + time | None |
-| `Deadline @@index([status, dueDate])` | Dashboard deadlines card and sweeps | None |
 | `FlaggedMoment.quoteOccurrence Int?` | Quote anchors relocate to the first occurrence today; an occurrence index disambiguates repeats. Optionally `updatedById` / `updatedAt` for flag edits | None |
 | Optional `Document @@index([matterId, folderId, name])` | Large folders | Only if a big production folder appears |
-| SOL `years` / `months` / `days` columns on `PracticeArea` | Replace the 365/30-day `statutePeriodDays` approximation with calendar-aware math; also lets `Lead.statuteWindow` give way to an absolute date | Backfill from `statutePeriodDays` |
-| `DECIMAL(14,2)` money columns | Columns are still unconstrained `Decimal`, so rounding lives in code (`roundMoney`, ADR-024) | Audit sub-cent legacy rows |
-| Firm matter-visibility column + `matters.view_all` permission key | The matter-team access phase (ADR-029, Proposed); `view_all` is a code-side key in `src/lib/permissions.ts`, the column is the migration | Product go-ahead |
+| Drop `PracticeArea.statutePeriodDays` | Deprecated by ADR-035; no code reads or writes it | One release after the quality sweep ships and areas are verified |
+| Replace `Lead.statuteWindow` with an absolute SOL date | The snapshot is days-remaining as of `createdAt` | Product decision |
+| `matters.view_all` permission key + enforcement of `Firm.matterVisibility` | The matter-team access phase (ADR-029, Proposed); the column already exists, `view_all` is a code-side key | Product go-ahead |
 | Drop `Matter.wipAmount` and `Settlement.clientNet` | Dead columns | Confirm no consumer |
 | `CalendarEvent.origin`, `EmailAccount.backfillBefore` | Google-born cleanup and explicit backfill anchor (ADR-023, ADR-031) | Deferred |
 | Dedicated ActivityLog type for expense rows | Replaces the `Expense ` title-prefix convention (ADR-021) | Backfill |
+| Convert `TimeEntry.hours` from `Float` to `Decimal(6,2)` | Hours are validated to 2 dp but stored as double precision | Wide code change; no correctness gain today |
 
 ### Stale schema comments (need a comment-only edit by the schema owner)
 
@@ -180,7 +179,7 @@ Found during the 2026-10-17 doc pass; `schema.prisma` was not touched here.
 - `Lead.statuteWindow`: should say it is a days-remaining snapshot as of `createdAt`.
 - `Matter.wipAmount`: should say it is never written or read.
 - `Settlement.clientNet`: should say it is derived on read and never written.
-- `PracticeArea.statutePeriodDays` and `Matter.statuteOfLimitationsDate` / `incidentDate`: "nearly always defined this way" and "the user can always override" are wrong. Describe the 365/30 approximation and the inferred auto-vs-manual rule (ADR-027).
+- `Matter.statuteOfLimitationsDate` / `incidentDate`: "the user can always override" is wrong; describe the inferred auto-vs-manual rule (ADR-027). (`PracticeArea` SOL comments were rewritten for ADR-035.)
 - `MessengerThread.defaultMatterId` routing comment and `MessengerItem.matterId` ("Falls back to thread.defaultMatterId"): manual call logging no longer sets the thread default.
 - `Firm.contacts` comment: mention which create paths stamp `Contact.firmId` today.
 

@@ -421,7 +421,7 @@ The original decision stored date-only values at **server-local** midnight and d
 **Decision:**
 - **Two firm libraries**, decoupled from any trigger: `DeadlineRule` (title, kind, anchor, signed `offsetDays` + the `offsetUnit` it was entered in, citation, notes) and `TaskList` + ordered `TaskListItem`s (priority, assign to lead/unassigned, optional due offset from the apply date). Managed on Settings → Automations under granular `automations.*` keys.
 - **Anchors**: `incident_date`, `matter_opened`, `prompt` (asked at apply time), `rule` (another rule's deadline on the same matter). Rule-to-rule links are refused if they'd loop; `anchorRuleId` is ON DELETE RESTRICT, and the delete action explains which rules depend on it.
-- **Date math in calendar-day keys** (`src/lib/automations/deadline-plan.ts`, pure): every anchor is a day key — incident dates and deadline dates are UTC-midnight date-only values read with `dateOnlyKey` (ADR-012), "matter opened" is the day in the actor's profile zone — the offset is added in UTC day arithmetic, and the result is written with `parseDateOnly` like every other date-only deadline or task `dueDate`. Due dates are plain calendar days: **no weekend, holiday or court-day adjustment**. Months/years convert at 30/365 days (`UNIT_DAYS`, the SOL convention, with the same approximation caveat as ADR-027) and the UI always shows the day count beside them. Offsets are capped at `MAX_OFFSET_DAYS` = 36,500; an overflowing stored offset is reported as unplanned with reason `out_of_range`. (An earlier version of this ADR described server-local midnight dates; that is superseded.)
+- **Date math in calendar-day keys** (`src/lib/automations/deadline-plan.ts`, pure): every anchor is a day key — incident dates and deadline dates are UTC-midnight date-only values read with `dateOnlyKey` (ADR-012), "matter opened" is the day in the actor's profile zone — the offset is added in UTC day arithmetic, and the result is written with `parseDateOnly` like every other date-only deadline or task `dueDate`. Due dates are plain calendar days: **no weekend, holiday or court-day adjustment**. Months/years are stored as a signed 365/30 day total (`UNIT_DAYS`, only to keep one integer column) but **applied as calendar months** (`applyOffsetToKey`, ADR-035): "2 years after" is the same calendar date two years on, clamped at month end. The UI shows the amount in the unit it was entered. Offsets are capped at `MAX_OFFSET_DAYS` = 36,500; an overflowing stored offset is reported as unplanned with reason `out_of_range`. (An earlier version of this ADR described server-local midnight dates; that is superseded.)
 - **`incident_date` rules resolve only on matters whose practice area tracks a statute of limitations**, because `Matter.incidentDate` is only persisted then. Otherwise a manual apply asks for a date and an automatic apply creates a "Set date: ..." task for the lead.
 - **Locking and numbering:** a manual apply takes a per-matter advisory lock (`automation-apply:<matterId>`), and applied task-list items are numbered after the matter's existing tasks.
 - **Applying is a separate concern** (`src/lib/automations/apply.ts`, takes a transaction client): manual applies report duplicates (confirm to re-apply) and unresolvable anchors (ask for a date); automatic applies skip duplicates and turn an undatable rule into a "Set date: …" task for the lead — never silently dropped. Generated rows carry provenance (`Deadline.deadlineRuleId`, `Task.taskListId`, both SetNull). Manual apply is gated on the capability exercised (`deadlines.create` / `tasks.create`), not the library keys.
@@ -471,7 +471,7 @@ The original decision stored date-only values at **server-local** midnight and d
 
 **Known gaps (follow-ups):**
 - Event-attached content on the Notes and Time tabs (a note or time entry whose parent is a hidden event) is matter-wide: the label is scrubbed, the note body / time narrative is not. Matter-level access, not event visibility, governs those tabs today.
-- Trust-application `deposit` rows ("Trust applied to invoice … $amount") still show to every viewer on the Financial pill and under All. Whether they need a billing-view gate is an **open product decision** (see Open decisions).
+- Trust `deposit` rows ("Trust applied to invoice … $amount") are now omitted without `billing.view` (ADR-038).
 - Expense activity rows are identified by the title prefix `Expense ` on type `filing` (`src/lib/expense-activity.ts`, shared with the writer in `expenses.ts`, pinned by `matter-detail.test.ts`). A dedicated ActivityLog type plus a backfill is the cleaner follow-up. The Overview WIP figure is computed live; `Matter.wipAmount` is no longer read.
 - Session guards now exist on every page (ADR-028), and the dashboard agenda and recent-activity feed apply the Busy scrub and the same money filters (settlement rows need `matters.settlement.view`, `Expense ` rows `matters.expense.view`, `matterId = null` firm-scope rows `firm.view_activity`). Contact and automation edits log with `matterId = null`, so they no longer appear in the dashboard feed for non-privileged users. The query helpers (`listLeads`, `getMatterParties`, `getMatterFlaggedMoments`, `getMatterActivity`, `getDocumentForViewer`, ...) still carry no auth of their own; the page-level guard is the boundary.
 
@@ -545,7 +545,7 @@ The original decision stored date-only values at **server-local** midnight and d
 - (+) What the approver sees is what is billed; totals reconcile to the cent
 - (+) Concurrent approve/send/void/edit can't silently overwrite each other
 - (-) Fixing a typo on an approved invoice costs a void and regenerate
-- (-) Columns are still wider than 2 dp until the planned DECIMAL(14,2) migration
+- ~~Columns are still wider than 2 dp~~ Money columns are now DECIMAL(14,2) (ADR-036)
 
 
 ## ADR-025: Captures do not inherit the primary's permission gate - every record kind clears its own create key
@@ -604,7 +604,7 @@ The original decision stored date-only values at **server-local** midnight and d
 **Trade-offs:**
 - (+) One place to change the statute; no silent divergence between matter and deadline
 - (-) Auto-vs-manual is inferred: a manual date that happens to equal the computed one is treated as auto and will follow later incident/area edits
-- (-) The 365/30-day period arithmetic is unchanged; real calendar-aware periods need a schema change (scheduled separately)
+- (-) ~~The 365/30-day period arithmetic is unchanged~~ Superseded by ADR-035: periods are now calendar amount + unit and computed with calendar arithmetic
 
 
 ---
@@ -637,7 +637,7 @@ The original decision stored date-only values at **server-local** midnight and d
 **Context:** Older docs implied `MatterTeamMember` restricts who can see a matter. It does not, and the sweep confirmed it on every read path. The firm decided on 2026-10-16 how the restriction should work; the design is in `out/sweep/MATTER_ACCESS_DESIGN.md`. This ADR records the truth so nobody builds on the wrong assumption.
 
 **Decision (current, built):**
-- Every signed-in user can list, open, search, download and export every matter and everything attached to it — notes (including strategy memos), documents, invoices, trust ledger, time narratives — subject only to the granular permission keys and the calendar Busy scrub (ADR-021). Even the zero-permission default role reads matter detail, the Billing tab and `/print/invoices/[id]`; no billing view key exists.
+- Every signed-in user can list, open, search, download and export every matter and everything attached to it — notes (including strategy memos), documents, invoices, trust ledger, time narratives — subject only to the granular permission keys and the calendar Busy scrub (ADR-021). Even the zero-permission default role reads matter detail; the Billing tab and `/print/invoices/[id]` now need `billing.view` (ADR-038).
 - `MatterTeamMember` drives assignment, notifications, auto-attendees (`src/lib/calendar-default-attendees.ts`), calendar detail unlocks and the lead filter. It is **not** an access-control list. Ethical walls are unsupported.
 - The document download route and the upload, blob-upload and document-template routes have no firm or matter-team scoping. Scoping them needs the matter-access phase and, for true multi-tenancy, a `Matter.firmId`.
 - Email is the exception: it is mailbox-personal (ADR-014).
@@ -664,12 +664,12 @@ The original decision stored date-only values at **server-local** midnight and d
 **Decision** (`src/app/actions/settlements.ts`):
 - New settlements are always `pending`. Only the approval chain (`setApprovalStepStatus` promotes `pending` to `approved` when every step is approved and demotes `approved` to `pending` when a step is rejected or reset) or `matters.settlement.approve` moves status. `edit` alone can no longer change status; `approve` also covers reopen and stage transitions through `upsertSettlement`. Step notifications go only to `matters.settlement.view` holders.
 - `disbursed` and `closed` lock amounts. Changing amounts on a fully approved settlement resets the approvals and therefore requires `matters.settlement.approve`.
-- Amount edits, step changes and creation all take `pg_advisory_xact_lock(hashtext('settlement:' + matterId))`, so two approvers or an approver and an editor serialize. This substitutes for a unique index on `settlements(matterId)`, which is a pending Batch 4 migration (`SCHEMA_NOTES.md`).
+- Amount edits, step changes and creation all take `pg_advisory_xact_lock(hashtext('settlement:' + matterId))`, so two approvers or an approver and an editor serialize. The unique index on `settlements(matterId)` now backs the one-settlement-per-matter guarantee in the database (ADR-036); the lock stays because it also serializes status transitions and amount edits.
 - Client net is signed and never clamped (a negative net is shown, in warn tone). Fee math is Decimal HALF_UP to cents via `src/lib/settlement-waterfall.ts` (same rounding rule as ADR-024); `Settlement.clientNet` is derived on read, not stored.
 
 **Trade-offs:**
 - (+) The recorded status always matches the recorded sign-offs
-- (-) The lock is app-level; a second row for the same matter is still possible through a path that skips it until the unique index ships
+- (-) The lock is app-level, but a second row for the same matter is no longer possible: the unique index (ADR-036) refuses it
 
 ---
 
@@ -750,8 +750,89 @@ These are not ADRs: each needs a human call, and when it is made it becomes an A
 2. **Does `Contact.conflictStatus` feed the conflict matcher?** It is a manual flag the matcher never reads (ADR-026).
 3. **`documents.template.delete` versus `.edit` for archive/restore.** The catalog text for `documents.template.delete` says "Archive or permanently remove", but `document-templates.ts` gates archive and restore on `documents.template.edit` (the action docstring calls this deliberate). Align the catalog text or the code.
 4. **Privileged time narratives.** Search hides them from non-authors; the Time tabs show them to everyone (ADR-014). Decide the policy and apply it everywhere.
-5. **A per-event `private` calendar visibility value.** The default `show_details` setting is retroactive across all of a creator's events and cannot be overridden per event.
+5. ~~A per-event `private` calendar visibility value.~~ Decided and shipped: ADR-037.
 6. **Reads that need a key before they can be gated:** `exportContactsCsv`, the command-palette data, `searchAttendeesAction`, `previewDocumentFromTemplate`, and the billing read surface (ADR-028 added only session guards).
 7. **Matter-team access phase** (ADR-029): approve building it, including `matters.view_all`, the firm switch and the thin-teams list.
 8. **Document metadata edit** (rename, re-categorize) needs a `documents.edit` key (ADR-034); the receipt picker is capped at 200 documents.
 9. **Google-born event cleanup and an explicit backfill anchor** need `CalendarEvent.origin` and `EmailAccount.backfillBefore` (ADR-023, ADR-031).
+
+---
+
+## ADR-035: Statute periods are calendar amount + unit, computed with calendar arithmetic
+
+**Date:** 2026-10-17
+**Status:** Accepted (supersedes the 365/30 convention in ADR-027 and ADR-019)
+
+**Context:** `PracticeArea.statutePeriodDays` stored "years x 365 + months x 30 + days". Statutes say "two years" or "six months", which run to the same calendar date, so the computed SOL date could be a day early across a leap year or a day or two off for months. Missing an SOL is malpractice, so the stored period must say what the statute says.
+
+**Decision:**
+- `PracticeArea.statutePeriodAmount Int?` + `statutePeriodUnit SolPeriodUnit?` (`DAYS | MONTHS | YEARS`), set together or not at all. The settings form is an amount input plus a unit select. The migration backfills from the old column: days divisible by 365 become `YEARS` (730 -> 2 YEARS), anything else stays `DAYS` (180 -> 180 DAYS; an "18 months" area stored as 540 comes back as 540 DAYS and should be re-entered).
+- `statutePeriodDays` stays in the schema (expand/contract) but nothing reads or writes it; a later migration drops it. Rolling the app back one release still works for existing areas.
+- `computeSolDate` (`src/lib/sol.ts`) works on the incident's UTC date-only value (ADR-012). DAYS adds N days; MONTHS/YEARS add N (12N) calendar months keeping the day of month. **Month-end rule:** when the target month is shorter, the result clamps to its last day (2024-02-29 + 1 year = 2025-02-28; 2024-02-29 + 4 years = 2028-02-29; 2026-01-31 + 1 month = 2026-02-28). No time zone ever enters the math.
+- Callers (`createMatter`, `updateMatter` via `resolveEditedSolDate`, lead conversion, the edit/new matter form previews and the SOL card) take a `SolPeriod = { amount, unit }` built by `toSolPeriod`.
+- Automation deadline rules (ADR-019) keep their single signed `offsetDays` integer plus `offsetUnit`; the amount is recovered with `unpackOffset` and months/years are then applied as calendar months on the day key (`applyOffsetToKey`). "Days" rules are unchanged.
+- Auto-vs-manual inference (ADR-027) is unchanged but now compares against the calendar result; a matter whose stored auto date was computed under the old 365-day rule can look manual after the migration (the safe direction: it is kept).
+
+**Trade-offs:**
+- (+) The date matches the statute's wording; leap years and month ends are explicit and tested
+- (-) A date computed under the old rule can differ by a day or two from the new one for existing matters; they keep their stored dates (treated as manual) until edited
+- (-) A mixed period ("1 year 6 months") is entered as 18 months
+
+---
+
+## ADR-036: Money is DECIMAL(14,2); one settlement per matter; hot-path indexes
+
+**Date:** 2026-10-17
+**Status:** Accepted (completes ADR-024)
+
+**Context:** ADR-024 rounds every persisted amount in code (`roundMoney`), but the columns were unconstrained `Decimal(65,30)`, so a path that skipped the helper could still store sub-cent values. The one-settlement-per-matter rule rested on an advisory lock (ADR-030). The perf audit listed missing indexes.
+
+**Decision:**
+- Every money column (`Matter.trustBalance/wipAmount`, `TimeEntry.rate/amount`, `Expense.amount`, `Invoice.subtotal/taxAmount/totalAmount/paidAmount`, `InvoicePayment.amount`, `TrustTransaction.amount`, `Settlement.grossAmount/firmFee/advancedCosts/clientNet`, `SettlementLien.originalAmount/negotiatedAmount`) is `DECIMAL(14,2)` (up to 999,999,999,999.99). `Settlement.firmFeePercent` is `DECIMAL(7,4)`. `ALTER ... TYPE` rounds existing values to the new scale in place (half away from zero); the code-side `roundMoney` stays as the first line of defence and for intermediate math.
+- Not changed: `TimeEntry.hours` is `Float` (hours are validated to 2 dp on input and are not money; amounts are derived and rounded). Converting it to Decimal needs a wide code change for no correctness gain today.
+- `Settlement.matterId` is unique. The migration starts with a guard that **raises an exception naming the offending matters** if any matter has 2+ settlements, so a deploy fails before changing anything and nothing is ever deleted. The per-matter advisory lock stays (it serializes status transitions and amount edits); reads and the upsert use the unique key.
+- New indexes: `TimeEntry(invoiceId)`, `EmailAttachment(messageId)`, `MatterContact(contactId)`, `SettlementLien(settlementId)`, `SettlementApproval(settlementId)`, `Deadline(status, dueDate)`, `ActivityLog(matterId, timestamp)` and `(userId, type, timestamp)`, `MatterTeamMember(userId, removedAt)`. The old `settlements(matterId)` index is dropped as redundant with the unique one.
+
+**Trade-offs:**
+- (+) The database refuses sub-cent or oversized amounts and a second settlement
+- (-) The rounding step is irreversible; deploy notes tell the operator to expect it
+- (-) Extra indexes add small write cost on hot tables
+
+---
+
+## ADR-037: Private calendar events show to their creator only
+
+**Date:** 2026-10-17
+**Status:** Accepted (completes ADR-021's calendar model)
+
+**Context:** A per-event `show_details` toggle could only add visibility, and the creator's `defaultEventVisibility = show_details` profile setting exposed every event they create, past and future, with no per-event way to hide one.
+
+**Decision:**
+- `CalendarEvent.visibility` (a text column) gains `private`. `canViewEventDetails` returns true for a private event **only to its creator**. Attendees, the matter team, anyone with `events.edit`, and a show-details profile default all see "Busy" with the time range. Private beats every other rule; there is no Admin bypass.
+- It works on every read surface because they all use the one resolver: calendar grid and modal, dashboard agenda, matter Events tab and event chips, and global search (a private event never matches or leaks a snippet).
+- The matter activity log never records a private event's title (`auditEventTitle` writes "Private event"), since the Timeline is read by every matter viewer.
+- Google sync: a private CRM event is pushed with `visibility: "private"`; every other pushed event is sent as `default` (so un-privating resets the Google copy). A Google event marked private is imported as a CRM-private event.
+- UI: a "Private event" checkbox on the quick composer, full-page form, matter event capture and the detail modal; mutually exclusive with "Show details to everyone".
+
+**Trade-offs:**
+- (+) Gives creators a reliable per-event hide that no profile default can undo
+- (-) Invitees see Busy for a private event they were invited to (the creator chose private); use a normal event for invitees
+- (-) A colleague with `events.edit` can still move or delete a private event they see as Busy (the edit gate is unchanged)
+
+---
+
+## ADR-038: `billing.view` gates the billing read surface
+
+**Date:** 2026-10-17
+**Status:** Accepted
+
+**Context:** Billing had action keys (`billing.*`, `trust.record_transaction`) but no read key: every signed-in user could open any matter's Billing tab, print any invoice by id, and see the firm trust total and trust deposit rows (ADR-021 listed this as open).
+
+**Decision:**
+- New key `billing.view` ("View billing, trust ledger and invoices"). It gates the matter Billing page (`requirePermission`, redirect to `/` like other denied pages), the Billing tab link (hidden without it), the invoice print route and its metadata, the Overview "Trust balance" and "WIP" facts, the dashboard Trust balance KPI (needs `reports.view` too), and trust `deposit` activity rows on the matter Timeline and the dashboard feed (omitted, as with settlement/expense rows).
+- The migration grants `billing.view` to every role that already holds any `billing.*` or `trust.*` key, so nobody who could act on billing loses the tab. Admin is a wildcard in code and needs no row. Other roles gain nothing until an admin ticks the key.
+- Known remaining surface: the matters list/kanban "Trust" column and sort/filter still read `Matter.trustBalance` for every viewer; gating them with the key is a follow-up (they are list views, not the ledger).
+
+**Trade-offs:**
+- (+) Billing data has an explicit read gate separate from the action keys
+- (-) Roles that could view billing only because everyone could (no `billing.*` key) lose the tab until granted

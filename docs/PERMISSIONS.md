@@ -273,6 +273,9 @@ Actions menu). Remove the flag in the same change that wires the gate.
   `apply_trust`.
 - `billing.generate_invoice` gates generating/bundling invoices **and**
   `updateInvoiceLineItem` (line-item pricing/edits).
+- `billing.view` is a pure read gate (Billing tab, invoice print, trust
+  KPI and deposit rows). Every billing action keeps its own key; the
+  action keys do not imply view, so grant both.
 - `documents.template.edit` also governs archiving and restoring a
   template (deliberate, per the action docstring);
   `documents.template.delete` is permanent removal only.
@@ -786,8 +789,9 @@ boxes."
 Beyond page-level keys, some matter data is filtered per viewer inside the query (see ADR-021 in `DECISIONS.md`):
 
 - **Events tab / event labels** — calendar event visibility (`canViewEventDetails`), not a permission key: events the viewer can't see are "Busy".
-- **Timeline** — settlement rows need `matters.settlement.view`, expense rows need `matters.expense.view`; without them the rows are omitted, not redacted (`activityMoneyFilters` in `src/lib/queries/matter-detail.ts`).
-- **Dashboard** — Firm pulse and the Trust balance KPI need `reports.view`. Recent activity omits settlement rows without `matters.settlement.view`, `Expense ...` rows without `matters.expense.view`, and firm-scope (`matterId` null) rows without `firm.view_activity`. Pinned by `src/lib/queries/dashboard-privacy.test.ts`.
+- **Timeline** — settlement rows need `matters.settlement.view`, expense rows need `matters.expense.view`, trust `deposit` rows need `billing.view`; without them the rows are omitted, not redacted (`activityMoneyFilters` in `src/lib/queries/matter-detail.ts`).
+- **Billing** — `billing.view` gates the matter Billing tab (page guard, redirect to `/`; the tab link is hidden), the `/print/invoices/[id]` route and its metadata, and the Overview Trust balance / WIP facts (ADR-038). Granted by the migration to every role already holding a `billing.*` or `trust.*` key; Admin is a wildcard. Still open: the matters list/kanban Trust column.
+- **Dashboard** — Firm pulse needs `reports.view`; the Trust balance KPI needs `reports.view` AND `billing.view`. Recent activity omits settlement rows without `matters.settlement.view`, trust deposit rows without `billing.view`, `Expense ...` rows without `matters.expense.view`, and firm-scope (`matterId` null) rows without `firm.view_activity`. Pinned by `src/lib/queries/dashboard-privacy.test.ts`.
 - **Email** — mailbox-personal; see Matter visibility.
 - **Evidence flags** — `edit_any` rewrites of another reviewer's flag are audited.
 
@@ -810,4 +814,5 @@ Beyond page-level keys, some matter data is filtered per viewer inside the query
 | 2026-10-16 | `firm.manage_team_directory` joined `ADMIN_ONLY_PERMISSIONS` (now exported from `src/lib/permissions.ts`); team.ts refuses non-Admin escalation (grant/remove Admin, invite Admin, edit/deactivate an Admin, reset/unlock an Admin-class account). `intake.decline` added to the catalog. Role create/rename/delete and permission flips write `type: "auth"` activity entries. |
 | 2026-10-16 | Captures and notes enforce per-kind create gates (siblings no longer inherit the primary's gate, ADR-025): `requirePermissions` + `requiredCapturePermissions`; pinning at create needs `notes.pin`; deleting a note others replied to needs `notes.delete_any`; note edit/pin/delete write activity entries. No new keys. |
 | 2026-10-16 | Added `requireUser()` and the "Page and layout guards" rule (ADR-028): every page/layout self-authenticates; `/matters/new` now requires `matters.create`. No new permission keys. |
+| 2026-10-17 | New key `billing.view` (billing category, ADR-038): read gate for the matter Billing tab, invoice print route, Overview trust/WIP facts, dashboard trust KPI and trust deposit activity rows. The Batch 4 migration grants it to every role that holds a `billing.*` or `trust.*` key. |
 | 2026-10-17 | Doc sweep to match the code: matter-visibility truth (no read restriction; `MatterTeamMember` is not a gate; ethical walls planned, not built), `requirePermissionResult`, `PermissionEntry.unwired`, last-admin invariant now an in-transaction recount, cross-key gates (`apply_trust`, `generate_invoice`, settlement approve, `contacts.edit` with `parties.edit`, `matters.manage_team` for lead change, `intake.decline`), read-side control flags, dashboard/timeline money-row gating. No new keys. |
