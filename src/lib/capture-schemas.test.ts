@@ -188,7 +188,7 @@ describe("deadlineCaptureSchema", () => {
     expect(r.success).toBe(false);
   });
 
-  test("rejects non-YYYY-MM-DD dueDate (actions parseLocalDate rely on it)", () => {
+  test("rejects non-YYYY-MM-DD dueDate (actions parseDateOnly rely on it)", () => {
     const r = deadlineCaptureSchema.safeParse({
       kind: "deadline",
       tempId: "d1",
@@ -306,5 +306,72 @@ describe("captureSchema (discriminated union)", () => {
     });
     // Wrong-order times should still fail through the union.
     expect(r.success).toBe(false);
+  });
+});
+
+describe("impossible calendar dates (parseDateOnly)", () => {
+  // The actions store these with parseDateOnly(...)!, so the schema
+  // must reject what it would return null for - a shape-only regex
+  // let 2026-02-31 through to a null deref.
+  test("deadline and time captures reject impossible dates", () => {
+    expect(
+      deadlineCaptureSchema.safeParse({
+        kind: "deadline",
+        tempId: "d1",
+        title: "ok",
+        dueDate: "2026-02-31",
+      }).success
+    ).toBe(false);
+    expect(
+      timeCaptureSchema.safeParse({
+        kind: "time",
+        tempId: "t1",
+        date: "2026-13-01",
+        hours: "1",
+        activity: "x",
+      }).success
+    ).toBe(false);
+  });
+
+  test("task capture rejects an impossible dueDate", () => {
+    expect(
+      taskCaptureSchema.safeParse({
+        kind: "task",
+        tempId: "t1",
+        title: "ok",
+        dueDate: "2026-04-31",
+      }).success
+    ).toBe(false);
+  });
+});
+
+describe("eventCaptureSchema - datetime-local shape", () => {
+  const base = { kind: "event" as const, tempId: "e1", title: "Hearing" };
+
+  test("accepts seconds and explicit-offset instants", () => {
+    expect(
+      eventCaptureSchema.safeParse({
+        ...base,
+        startTime: "2026-04-25T10:00:30",
+        endTime: "2026-04-25T11:00",
+      }).success
+    ).toBe(true);
+    expect(
+      eventCaptureSchema.safeParse({
+        ...base,
+        startTime: "2026-04-25T10:00:00Z",
+        endTime: "2026-04-25T11:00:00Z",
+      }).success
+    ).toBe(true);
+  });
+
+  test("rejects a date-only start", () => {
+    expect(
+      eventCaptureSchema.safeParse({
+        ...base,
+        startTime: "2026-04-25",
+        endTime: "2026-04-25T11:00",
+      }).success
+    ).toBe(false);
   });
 });

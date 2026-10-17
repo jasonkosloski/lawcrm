@@ -186,6 +186,8 @@ export function ComposeEmailButton({
                 <div className="flex-1">
                   <SelectField
                     name="accountId"
+                    ariaLabel="Send from account"
+                    capitalize={false}
                     value={accountId}
                     onChange={setAccountId}
                     options={fromOptions}

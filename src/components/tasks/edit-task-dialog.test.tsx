@@ -49,7 +49,8 @@ const baseTask: EditableTask = {
   priority: "normal",
   status: "open",
   ownerId: null,
-  dueDate: null,
+  dueDateKey: "",
+  updatedAt: "2026-07-01T10:00:00.000Z",
 };
 
 const assignees = [
@@ -229,5 +230,188 @@ describe("EditTaskDialog — assignee picker", () => {
     await waitFor(() => expect(mockedAction).toHaveBeenCalledOnce());
     const fd = mockedAction.mock.calls[0][2] as FormData;
     expect(fd.get("ownerId")).toBe("u1");
+  });
+});
+
+describe("EditTaskDialog - date-only due date (ADR-012)", () => {
+  test("prefills the stored calendar day exactly and posts it back unchanged", async () => {
+    // Regression: the dialog used browser-local getters on a Date, so a
+    // UTC-midnight 2026-10-16 prefilled as Oct 15 in a Denver browser and
+    // every save of an unrelated field moved the due date a day earlier.
+    const user = setupUser();
+    render(
+      <EditTaskDialog
+        open
+        onOpenChange={vi.fn()}
+        task={{ ...baseTask, dueDateKey: "2026-10-16" }}
+        assignees={assignees}
+      />
+    );
+    const input = screen.getByLabelText("Due date") as HTMLInputElement;
+    expect(input.value).toBe("2026-10-16");
+
+    await user.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(mockedAction).toHaveBeenCalledOnce());
+    const fd = mockedAction.mock.calls[0][2] as FormData;
+    expect(fd.get("dueDate")).toBe("2026-10-16");
+  });
+
+  test("a task with no due date posts an empty dueDate", async () => {
+    const user = setupUser();
+    render(
+      <EditTaskDialog
+        open
+        onOpenChange={vi.fn()}
+        task={baseTask}
+        assignees={assignees}
+      />
+    );
+    await user.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(mockedAction).toHaveBeenCalledOnce());
+    expect((mockedAction.mock.calls[0][2] as FormData).get("dueDate")).toBe("");
+  });
+});
+
+describe("EditTaskDialog - owner who has since been deactivated", () => {
+  const inactiveOwnerTask: EditableTask = {
+    ...baseTask,
+    ownerId: "gone",
+    ownerName: "Pat Paralegal",
+    ownerInitials: "PP",
+  };
+
+  test("keeps the owner selected and re-posts their id (does not silently unassign)", async () => {
+    const user = setupUser();
+    render(
+      <EditTaskDialog
+        open
+        onOpenChange={vi.fn()}
+        task={inactiveOwnerTask}
+        assignees={assignees}
+      />
+    );
+    const select = screen.getByRole("combobox", {
+      name: /assignee/i,
+    }) as HTMLSelectElement;
+    expect(select.value).toBe("gone");
+    expect(
+      [...select.options].map((o) => o.textContent)
+    ).toContain("Pat Paralegal (inactive)");
+
+    await user.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(mockedAction).toHaveBeenCalledOnce());
+    expect((mockedAction.mock.calls[0][2] as FormData).get("ownerId")).toBe(
+      "gone"
+    );
+  });
+
+  test("an active owner is not duplicated as inactive", () => {
+    render(
+      <EditTaskDialog
+        open
+        onOpenChange={vi.fn()}
+        task={{ ...baseTask, ownerId: "u1", ownerName: "Ada Lovelace", ownerInitials: "AL" }}
+        assignees={assignees}
+      />
+    );
+    const select = screen.getByRole("combobox", {
+      name: /assignee/i,
+    }) as HTMLSelectElement;
+    expect([...select.options].map((o) => o.textContent)).toEqual([
+      "Unassigned",
+      "Ada Lovelace",
+      "Grace Hopper",
+    ]);
+  });
+});
+
+describe("EditTaskDialog - keeps what the user typed", () => {
+  test("posts the row version it was seeded from", async () => {
+    const user = setupUser();
+    render(
+      <EditTaskDialog
+        open
+        onOpenChange={vi.fn()}
+        task={baseTask}
+        assignees={assignees}
+      />
+    );
+    await user.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(mockedAction).toHaveBeenCalledOnce());
+    expect(
+      (mockedAction.mock.calls[0][2] as FormData).get("expectedUpdatedAt")
+    ).toBe(baseTask.updatedAt);
+  });
+
+  test("a validation error does not wipe the fields", async () => {
+    mockedAction.mockImplementation(async () => ({
+      status: "error" as const,
+      errors: { dueDate: ["Invalid due date"] },
+    }));
+    const user = setupUser();
+    render(
+      <EditTaskDialog
+        open
+        onOpenChange={vi.fn()}
+        task={baseTask}
+        assignees={assignees}
+      />
+    );
+    const title = screen.getByPlaceholderText("Task title");
+    await user.clear(title);
+    await user.type(title, "Edited title");
+    await user.click(screen.getByRole("button", { name: /save/i }));
+
+    expect(await screen.findByText("Invalid due date")).toBeInTheDocument();
+    expect(
+      (screen.getByPlaceholderText("Task title") as HTMLInputElement).value
+    ).toBe("Edited title");
+  });
+
+  test("a prop refresh while open does not reseed the form", async () => {
+    const user = setupUser();
+    const { rerender } = render(
+      <EditTaskDialog
+        open
+        onOpenChange={vi.fn()}
+        task={baseTask}
+        assignees={assignees}
+      />
+    );
+    const title = screen.getByPlaceholderText("Task title");
+    await user.clear(title);
+    await user.type(title, "Half-typed");
+
+    rerender(
+      <EditTaskDialog
+        open
+        onOpenChange={vi.fn()}
+        task={{ ...baseTask }}
+        assignees={assignees}
+      />
+    );
+    expect(
+      (screen.getByPlaceholderText("Task title") as HTMLInputElement).value
+    ).toBe("Half-typed");
+  });
+
+  test("shows a stale-version error from the server", async () => {
+    mockedAction.mockImplementation(async () => ({
+      status: "error" as const,
+      errors: { _form: ["This task was changed by someone else."] },
+    }));
+    const user = setupUser();
+    render(
+      <EditTaskDialog
+        open
+        onOpenChange={vi.fn()}
+        task={baseTask}
+        assignees={assignees}
+      />
+    );
+    await user.click(screen.getByRole("button", { name: /save/i }));
+    expect(
+      await screen.findByText(/changed by someone else/i)
+    ).toBeInTheDocument();
   });
 });

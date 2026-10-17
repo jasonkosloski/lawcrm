@@ -9,12 +9,9 @@
  *   - updateDeadline zod validation + dueDate parsing + sourceRef
  *     / description normalization to null
  *
- * `overdue` is computed at read time, not written by the action,
- * so we don't expose it as a settable state — but it DOES live
- * in DEADLINE_STATUSES (for filtering on the read side), and the
- * action accepts it as a valid status value. We assert that
- * setting "overdue" works (it's allowed) but doesn't stamp
- * completedAt — same as "open" or "waived".
+ * "overdue" is not a stored status (DEADLINE_STATUSES is
+ * open / completed / waived); it is computed at read time from the
+ * due date, so the actions reject it as an unknown status.
  */
 
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
@@ -25,6 +22,7 @@ vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
 }));
 
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permission-check";
 import {
@@ -33,6 +31,7 @@ import {
   updateDeadline,
 } from "@/app/actions/deadlines";
 import { updateDeadlineInitialState } from "@/lib/deadline-form";
+import { dateOnlyKey } from "@/lib/format-date";
 import {
   resetDb,
   seedFirm,
@@ -220,8 +219,8 @@ describe("updateDeadline — happy path", () => {
     expect(row!.kind).toBe("critical");
     expect(row!.sourceRef).toBe("CRS §24-10-109");
     expect(row!.description).toBe("Notice of claim");
-    // Local midnight, not UTC — see the dueDate regression tests below.
-    expect(row!.dueDate.getTime()).toBe(new Date(2026, 8, 15).getTime());
+    // Date-only (ADR-012): UTC midnight — see the regression tests below.
+    expect(row!.dueDate.toISOString()).toBe("2026-09-15T00:00:00.000Z");
   });
 
   test("normalizes empty sourceRef + description to null", async () => {
@@ -240,14 +239,11 @@ describe("updateDeadline — happy path", () => {
     expect(row!.description).toBeNull();
   });
 
-  test("dueDate parses as LOCAL midnight, not UTC (no day drift west of UTC)", async () => {
-    // Regression: `new Date("2026-09-15")` parses as UTC midnight,
-    // which is the previous local day for any user west of UTC. The
-    // edit dialog reads dueDate back with local getters, so under the
-    // old parsing each save-reopen-save cycle drifted the deadline a
-    // day earlier. Pinning local midnight makes the round-trip stable
-    // in every timezone (the assertion is TZ-agnostic by comparing
-    // against a locally-constructed Date).
+  test("dueDate is stored as UTC midnight and round-trips through dateOnlyKey in any zone", async () => {
+    // ADR-012: a date-only value is a calendar date at UTC midnight and
+    // is read back in UTC (dateOnlyKey / formatDateOnly) everywhere -
+    // server and browser alike. Local-midnight storage lands on
+    // 06:00/07:00Z on a Denver machine and fails the exact-instant check.
     const id = await seedDeadline();
     const fd = new FormData();
     fd.set("title", "ok");
@@ -258,16 +254,8 @@ describe("updateDeadline — happy path", () => {
     expect(res.status).toBe("ok");
 
     const row = await prisma.deadline.findUnique({ where: { id } });
-    expect(row!.dueDate.getTime()).toBe(new Date(2026, 8, 15).getTime());
-    // Round-trip through local getters (what toDateInput does in the
-    // edit dialog) must reproduce the posted string — no drift.
-    const d = row!.dueDate;
-    const roundTripped = [
-      d.getFullYear(),
-      String(d.getMonth() + 1).padStart(2, "0"),
-      String(d.getDate()).padStart(2, "0"),
-    ].join("-");
-    expect(roundTripped).toBe("2026-09-15");
+    expect(row!.dueDate.getTime()).toBe(Date.UTC(2026, 8, 15));
+    expect(dateOnlyKey(row!.dueDate)).toBe("2026-09-15");
   });
 
   test("rejects a malformed dueDate that isn't YYYY-MM-DD", async () => {
@@ -406,20 +394,23 @@ describe("auto-managed SOL deadline (F090/F096/F040/F022/F279)", () => {
     expect(row.dueDate.toISOString()).toBe("2027-06-01T00:00:00.000Z");
   });
 
-  test("a browser west of UTC posts the previous day: still status-only success", async () => {
+  test("the previous day (what the old browser-local read-back posted) is now refused as a move", async () => {
+    // The edit dialog now prefills the stored UTC day exactly, so any
+    // other day is a real attempt to move the mirror row.
     const id = await seedSolDeadline();
     const res = await updateDeadline(
       id,
       updateDeadlineInitialState,
       editForm({ dueDate: "2027-05-31", status: "waived" })
     );
-    expect(res.status).toBe("ok");
+    expect(res.status).toBe("error");
+    expect(res.errors?.dueDate?.[0]).toMatch(/managed on the matter/i);
     const row = await prisma.deadline.findUniqueOrThrow({ where: { id } });
-    expect(row.status).toBe("waived");
+    expect(row.status).toBe("open");
     expect(row.dueDate.toISOString()).toBe("2027-06-01T00:00:00.000Z");
   });
 
-  test("a date two or more days off is still refused as a move", async () => {
+  test("a date further off is refused as a move", async () => {
     const id = await seedSolDeadline();
     const res = await updateDeadline(
       id,
@@ -482,7 +473,7 @@ describe("deadline audit trail (F189/F220/F142)", () => {
   test("a due-date edit is logged as rescheduled with both dates", async () => {
     const id = await seedDeadline({
       title: "Discovery cutoff",
-      dueDate: new Date(2026, 10, 3), // local Nov 3, 2026
+      dueDate: new Date(Date.UTC(2026, 10, 3)), // Nov 3, 2026
     });
     const fd = new FormData();
     fd.set("title", "Discovery cutoff");
@@ -499,7 +490,7 @@ describe("deadline audit trail (F189/F220/F142)", () => {
   test("an edit that changes nothing writes no row", async () => {
     const id = await seedDeadline({
       title: "Same",
-      dueDate: new Date(2026, 11, 1),
+      dueDate: new Date(Date.UTC(2026, 11, 1)),
     });
     const fd = new FormData();
     fd.set("title", "Same");
@@ -513,7 +504,7 @@ describe("deadline audit trail (F189/F220/F142)", () => {
   test("a delete is logged with the title captured before the row went away", async () => {
     const id = await seedDeadline({
       title: "CGIA notice due",
-      dueDate: new Date(2026, 5, 10),
+      dueDate: new Date(Date.UTC(2026, 5, 10)),
     });
     await deleteDeadline(id);
     const rows = await logs();
@@ -521,5 +512,90 @@ describe("deadline audit trail (F189/F220/F142)", () => {
     expect(rows[0].title).toBe("Deadline deleted");
     expect(rows[0].detail).toContain("CGIA notice due");
     expect(rows[0].detail).toContain("2026-06-10");
+  });
+});
+
+describe("updateDeadline - stale form guard (F521)", () => {
+  const form = (over: Record<string, string> = {}) => {
+    const fd = new FormData();
+    fd.set("title", "Edited by A");
+    fd.set("dueDate", "2026-12-01");
+    fd.set("kind", "manual");
+    fd.set("status", "open");
+    for (const [k, v] of Object.entries(over)) fd.set(k, v);
+    return fd;
+  };
+
+  test("a form seeded before someone else rescheduled it is refused and writes nothing", async () => {
+    const id = await seedDeadline({ title: "Original" });
+    const seeded = await prisma.deadline.findUniqueOrThrow({ where: { id } });
+    // Paralegal B moves the due date after a scheduling order.
+    await prisma.deadline.update({
+      where: { id },
+      data: { dueDate: new Date(Date.UTC(2026, 10, 3)) },
+    });
+
+    const res = await updateDeadline(
+      id,
+      updateDeadlineInitialState,
+      form({ expectedUpdatedAt: seeded.updatedAt.toISOString() })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?._form?.[0]).toMatch(/changed by someone else/i);
+    const row = await prisma.deadline.findUniqueOrThrow({ where: { id } });
+    expect(row.title).toBe("Original");
+    expect(dateOnlyKey(row.dueDate)).toBe("2026-11-03");
+  });
+
+  test("a stale refusal revalidates the matter's deadline surfaces so the reopened dialog gets fresh props", async () => {
+    const id = await seedDeadline({ title: "Original" });
+    const seeded = await prisma.deadline.findUniqueOrThrow({ where: { id } });
+    await prisma.deadline.update({
+      where: { id },
+      // Explicit bump: seed and update can land in the same ms.
+      data: { title: "Edited by B", updatedAt: new Date(seeded.updatedAt.getTime() + 1000) },
+    });
+    vi.mocked(revalidatePath).mockClear();
+
+    const res = await updateDeadline(
+      id,
+      updateDeadlineInitialState,
+      form({ expectedUpdatedAt: seeded.updatedAt.toISOString() })
+    );
+    expect(res.status).toBe("error");
+    expect(revalidatePath).toHaveBeenCalledWith(`/matters/${matterId}/deadlines`);
+    expect(revalidatePath).toHaveBeenCalledWith("/calendar");
+  });
+
+  test("a form seeded from the current row saves", async () => {
+    const id = await seedDeadline({ title: "Original" });
+    const seeded = await prisma.deadline.findUniqueOrThrow({ where: { id } });
+    const res = await updateDeadline(
+      id,
+      updateDeadlineInitialState,
+      form({ expectedUpdatedAt: seeded.updatedAt.toISOString() })
+    );
+    expect(res.status).toBe("ok");
+  });
+
+  test("no expectedUpdatedAt field = no check", async () => {
+    const id = await seedDeadline({ title: "Original" });
+    expect((await updateDeadline(id, updateDeadlineInitialState, form())).status).toBe("ok");
+  });
+
+  test("source and description edits are in the audit row", async () => {
+    const id = await seedDeadline({ title: "Original" });
+    await updateDeadline(
+      id,
+      updateDeadlineInitialState,
+      form({ title: "Original", sourceRef: "CRS 13-80-101", description: "why" })
+    );
+    const rows = await prisma.activityLog.findMany({
+      where: { matterId, type: "deadline" },
+      select: { detail: true },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].detail).toContain('source "" → "CRS 13-80-101"');
+    expect(rows[0].detail).toContain("description edited");
   });
 });

@@ -46,7 +46,8 @@ const deadline: EditableDeadline = {
   description: null,
   kind: "critical",
   sourceRef: "CRCP 12(a)",
-  dueDate: new Date(2026, 6, 20),
+  dueDateKey: "2026-07-20",
+  updatedAt: "2026-07-01T10:00:00.000Z",
   status: "open",
 };
 
@@ -174,5 +175,102 @@ describe("EditDeadlineDialog — auto-managed SOL row", () => {
     expect(screen.queryByPlaceholderText("Due date")).toBeNull();
     expect(screen.queryByPlaceholderText(/why this deadline applies/i)).toBeNull();
     expect(screen.getByRole("button", { name: /^save$/i })).toBeInTheDocument();
+  });
+});
+
+describe("EditDeadlineDialog - date-only due date (ADR-012)", () => {
+  test("prefills the stored calendar day exactly and posts it back unchanged", async () => {
+    // Regression: the dialog used browser-local getters on a Date, so a
+    // UTC-midnight 2026-10-16 prefilled as Oct 15 in a Denver browser and
+    // every save of an unrelated field moved the deadline a day earlier.
+    // The server now hands over the YYYY-MM-DD key; no zone is applied.
+    const user = setupUser();
+    render(
+      <EditDeadlineDialog
+        open
+        onOpenChange={vi.fn()}
+        deadline={{ ...deadline, dueDateKey: "2026-10-16" }}
+      />
+    );
+    const input = screen.getByLabelText("Due date") as HTMLInputElement;
+    expect(input.value).toBe("2026-10-16");
+
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+    await waitFor(() => expect(mockedAction).toHaveBeenCalledOnce());
+    const fd = mockedAction.mock.calls[0][2] as FormData;
+    expect(fd.get("dueDate")).toBe("2026-10-16");
+  });
+
+  test("posts the row version it was seeded from", async () => {
+    const user = setupUser();
+    render(
+      <EditDeadlineDialog open onOpenChange={vi.fn()} deadline={deadline} />
+    );
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+    await waitFor(() => expect(mockedAction).toHaveBeenCalledOnce());
+    const fd = mockedAction.mock.calls[0][2] as FormData;
+    expect(fd.get("expectedUpdatedAt")).toBe(deadline.updatedAt);
+  });
+});
+
+describe("EditDeadlineDialog - keeps what the user typed", () => {
+  test("a validation error does not wipe the fields", async () => {
+    // React 19 resets a <form action> form after the action settles;
+    // the manual dispatch keeps the user's edits so they can correct.
+    mockedAction.mockImplementation(async () => ({
+      status: "error" as const,
+      errors: { dueDate: ["Invalid due date"] },
+    }));
+    const user = setupUser();
+    render(
+      <EditDeadlineDialog open onOpenChange={vi.fn()} deadline={deadline} />
+    );
+    const title = screen.getByPlaceholderText("Deadline title");
+    await user.clear(title);
+    await user.type(title, "Edited title");
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+
+    expect(await screen.findByText("Invalid due date")).toBeInTheDocument();
+    expect(
+      (screen.getByPlaceholderText("Deadline title") as HTMLInputElement).value
+    ).toBe("Edited title");
+  });
+
+  test("a prop refresh while open does not reseed the form", async () => {
+    // A revalidate delivers a fresh deadline object; the old
+    // [open, deadline] effect reset the working copy mid-edit.
+    const user = setupUser();
+    const { rerender } = render(
+      <EditDeadlineDialog open onOpenChange={vi.fn()} deadline={deadline} />
+    );
+    const title = screen.getByPlaceholderText("Deadline title");
+    await user.clear(title);
+    await user.type(title, "Half-typed");
+
+    rerender(
+      <EditDeadlineDialog
+        open
+        onOpenChange={vi.fn()}
+        deadline={{ ...deadline }}
+      />
+    );
+    expect(
+      (screen.getByPlaceholderText("Deadline title") as HTMLInputElement).value
+    ).toBe("Half-typed");
+  });
+
+  test("shows a stale-version error from the server", async () => {
+    mockedAction.mockImplementation(async () => ({
+      status: "error" as const,
+      errors: { _form: ["This deadline was changed by someone else."] },
+    }));
+    const user = setupUser();
+    render(
+      <EditDeadlineDialog open onOpenChange={vi.fn()} deadline={deadline} />
+    );
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+    expect(
+      await screen.findByText(/changed by someone else/i)
+    ).toBeInTheDocument();
   });
 });

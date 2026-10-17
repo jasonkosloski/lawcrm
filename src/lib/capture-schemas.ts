@@ -16,13 +16,47 @@ import { NOTE_TYPES } from "@/lib/note-constants";
 import { DEADLINE_KINDS } from "@/lib/constants/deadline-status";
 import { EVENT_TYPES } from "@/lib/constants/calendar-event-type";
 import { TASK_PRIORITIES } from "@/lib/constants/priority";
+import { parseDateOnly, parseWallClock } from "@/lib/format-date";
 
 /** Date-only capture fields travel as "YYYY-MM-DD" (the wire format
- *  of <input type="date">). Enforcing the shape here lets the server
- *  actions parse them with `parseLocalDate` (local midnight — never
- *  `new Date(...)`, which reads date-only strings as UTC midnight
- *  and drifts the day for anyone west of UTC) without re-validating. */
-const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+ *  of <input type="date">). Validating with `parseDateOnly` here
+ *  (shape AND real calendar date) lets the server actions store them
+ *  with `parseDateOnly` (UTC midnight, ADR-012) without re-checking. */
+const isDateOnly = (v: string): boolean => parseDateOnly(v) !== null;
+
+/** Event start/end travel as zone-less datetime-local values. The
+ *  schema only checks them (zone-independent: the order of two
+ *  wall-clock values doesn't depend on the zone they're read in);
+ *  the action converts them to instants in the USER's zone with
+ *  `parseWallClock(value, await getCurrentUserTimeZone())`. */
+export function checkEventTimes(
+  data: { startTime: string; endTime: string },
+  ctx: z.RefinementCtx
+): void {
+  const start = parseWallClock(data.startTime, "UTC");
+  const end = parseWallClock(data.endTime, "UTC");
+  if (!start) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["startTime"],
+      message: "Invalid start time",
+    });
+  }
+  if (!end) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["endTime"],
+      message: "Invalid end time",
+    });
+  }
+  if (start && end && end.getTime() < start.getTime()) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["endTime"],
+      message: "End must be after start",
+    });
+  }
+}
 
 export const taskCaptureSchema = z.object({
   kind: z.literal("task"),
@@ -32,7 +66,7 @@ export const taskCaptureSchema = z.object({
     .string()
     .optional()
     .default("")
-    .refine((v) => v === "" || DATE_ONLY_RE.test(v), "Enter a valid date"),
+    .refine((v) => v === "" || isDateOnly(v), "Enter a valid date"),
   priority: z.enum(TASK_PRIORITIES).default("normal"),
 });
 
@@ -46,35 +80,7 @@ export const eventCaptureSchema = z
     type: z.enum(EVENT_TYPES).default("meeting"),
     location: z.string().max(200).optional().default(""),
   })
-  .superRefine((data, ctx) => {
-    const start = new Date(data.startTime);
-    const end = new Date(data.endTime);
-    if (Number.isNaN(start.getTime())) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["startTime"],
-        message: "Invalid start time",
-      });
-    }
-    if (Number.isNaN(end.getTime())) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["endTime"],
-        message: "Invalid end time",
-      });
-    }
-    if (
-      !Number.isNaN(start.getTime()) &&
-      !Number.isNaN(end.getTime()) &&
-      end.getTime() < start.getTime()
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["endTime"],
-        message: "End must be after start",
-      });
-    }
-  });
+  .superRefine(checkEventTimes);
 
 export const deadlineCaptureSchema = z.object({
   kind: z.literal("deadline"),
@@ -83,7 +89,7 @@ export const deadlineCaptureSchema = z.object({
   dueDate: z
     .string()
     .min(1, "Due date is required")
-    .refine((v) => DATE_ONLY_RE.test(v), "Enter a valid date"),
+    .refine((v) => isDateOnly(v), "Enter a valid date"),
   kind_: z.enum(DEADLINE_KINDS).default("manual"),
   description: z.string().max(4000).optional().default(""),
 });
@@ -94,7 +100,7 @@ export const timeCaptureSchema = z.object({
   date: z
     .string()
     .min(1, "Date is required")
-    .refine((v) => DATE_ONLY_RE.test(v), "Enter a valid date"),
+    .refine((v) => isDateOnly(v), "Enter a valid date"),
   hours: z
     .string()
     .min(1, "Hours required")

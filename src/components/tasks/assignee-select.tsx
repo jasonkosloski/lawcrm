@@ -10,6 +10,14 @@
  * Controlled: `value` is `""` for unassigned or a user id. The
  * `name`d value posts with the surrounding form (`ownerId` — the
  * tri-state the task actions expect: present-but-empty = clear).
+ *
+ * Inactive owners: `assignees` lists ACTIVE users only (inactive users
+ * keep their historical assignments but can't receive new ones). When
+ * editing a task whose owner has since been deactivated, pass them as
+ * `currentOwner`: they are shown as "<name> (inactive)" and stay
+ * selected, so saving an unrelated edit re-posts the same owner
+ * instead of silently unassigning the task (a controlled <select>
+ * whose value has no matching option falls back to the first option).
  */
 
 "use client";
@@ -24,6 +32,7 @@ export function AssigneeSelect({
   value,
   onChange,
   assignees,
+  currentOwner = null,
   error,
 }: {
   name?: string;
@@ -31,9 +40,18 @@ export function AssigneeSelect({
   value: string;
   onChange: (v: string) => void;
   assignees: AssigneeOption[];
+  /** The task's existing owner, when editing. Only used if that user
+   *  is not among the active `assignees`. */
+  currentOwner?: AssigneeOption | null;
   error?: string;
 }) {
-  const selected = assignees.find((a) => a.id === value) ?? null;
+  const inactiveOwner =
+    currentOwner && !assignees.some((a) => a.id === currentOwner.id)
+      ? currentOwner
+      : null;
+  const selected =
+    assignees.find((a) => a.id === value) ??
+    (inactiveOwner && inactiveOwner.id === value ? inactiveOwner : null);
   return (
     <div className="flex flex-col gap-0.5 min-w-0">
       <div className="flex items-center gap-2">
@@ -61,6 +79,11 @@ export function AssigneeSelect({
           )}
         >
           <option value="">Unassigned</option>
+          {inactiveOwner && (
+            <option value={inactiveOwner.id}>
+              {inactiveOwner.name} (inactive)
+            </option>
+          )}
           {assignees.map((a) => (
             <option key={a.id} value={a.id}>
               {a.name}

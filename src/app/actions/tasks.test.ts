@@ -15,9 +15,10 @@
  *     (fires for the new owner, skipped on self-assign / no-op)
  *
  * Auth + permission gates are stubbed; we already cover the gate
- * itself in `permission-check.integration.test.ts`. (No
- * permission-check usage in this action file today, but the
- * `getCurrentUserId` stub is needed for the activity-log writer.)
+ * itself in `permission-check.integration.test.ts`. The gate keys
+ * each action demands are asserted in the "tasks action gate" block
+ * at the bottom (the stub is a spy), and the `getCurrentUserId` stub
+ * supplies the actor for the activity-log writer.
  */
 
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
@@ -26,14 +27,15 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("@/lib/permission-check", () => ({
   // Action-logic tests assume the user passes the gate. Gate
-  // behavior itself is covered in `permission-check.integration.test.ts`
-  // and in this file's "RBAC gate" describe block at the bottom,
-  // which restores the real implementation.
+  // behavior itself is covered in `permission-check.integration.test.ts`;
+  // this file's "tasks action gate" block at the bottom only asserts
+  // which key each action demands (the stub is a spy).
   requirePermission: vi.fn().mockResolvedValue("test-user"),
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
 }));
 
 import { getCurrentUserId } from "@/lib/current-user";
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import {
   deleteTask,
@@ -356,18 +358,15 @@ describe("updateTask — happy path", () => {
     expect(row!.description).toBe("More detail");
     expect(row!.priority).toBe("high");
     expect(row!.status).toBe("in_progress");
-    // Assert via local getters — the edit dialog reads dueDate back
-    // the same way, so this is the round-trip that must hold.
-    expect(row!.dueDate!.getFullYear()).toBe(2026);
-    expect(row!.dueDate!.getMonth()).toBe(7); // August (0-based)
-    expect(row!.dueDate!.getDate()).toBe(1);
+    // Date-only (ADR-012): the calendar date is stored as UTC midnight.
+    expect(row!.dueDate!.toISOString()).toBe("2026-08-01T00:00:00.000Z");
   });
 
-  test("dueDate is stored as LOCAL midnight, not UTC (regression)", async () => {
-    // `new Date("YYYY-MM-DD")` parses date-only ISO as UTC midnight;
-    // local-time getters then read the previous day anywhere west of
-    // UTC, and each unmodified save drifted the due date a day
-    // earlier. Pins the parseDueDate fix.
+  test("dueDate is stored as UTC midnight in any server zone (regression)", async () => {
+    // ADR-012: a date-only value is a calendar date at UTC midnight,
+    // read back in UTC by every consumer. Local-midnight storage
+    // (the old parseLocalDate frame) lands on 06:00/07:00Z on a Denver
+    // machine, which this exact-instant assertion catches there.
     const id = await seedTask();
     const fd = new FormData();
     fd.set("title", "ok");
@@ -376,21 +375,33 @@ describe("updateTask — happy path", () => {
     fd.set("status", "open");
     await updateTask(id, updateTaskInitialState, fd);
     const row = await prisma.task.findUnique({ where: { id } });
-    expect(row!.dueDate!.getTime()).toBe(new Date(2026, 7, 1).getTime());
-    expect(row!.dueDate!.getHours()).toBe(0);
+    expect(row!.dueDate!.getTime()).toBe(Date.UTC(2026, 7, 1));
   });
 
-  test("malformed dueDate string is stored as null, not Invalid Date", async () => {
-    const id = await seedTask();
-    const fd = new FormData();
-    fd.set("title", "ok");
-    fd.set("dueDate", "08/01/2026"); // not YYYY-MM-DD
-    fd.set("priority", "normal");
-    fd.set("status", "open");
-    const res = await updateTask(id, updateTaskInitialState, fd);
-    expect(res.status).toBe("ok");
+  test("malformed dueDate is a field error and leaves the existing date alone", async () => {
+    const id = await prisma.task
+      .create({
+        data: {
+          matterId,
+          title: "Keep my date",
+          dueDate: new Date(Date.UTC(2026, 9, 16)),
+        },
+        select: { id: true },
+      })
+      .then((t) => t.id);
+    for (const bad of ["08/01/2026", "2026-02-31", "2026-13-40"]) {
+      const fd = new FormData();
+      fd.set("title", "ok");
+      fd.set("dueDate", bad);
+      fd.set("priority", "normal");
+      fd.set("status", "open");
+      const res = await updateTask(id, updateTaskInitialState, fd);
+      expect(res.status).toBe("error");
+      expect(res.errors?.dueDate?.[0]).toMatch(/invalid due date/i);
+    }
     const row = await prisma.task.findUnique({ where: { id } });
-    expect(row!.dueDate).toBeNull();
+    expect(row!.dueDate!.toISOString()).toBe("2026-10-16T00:00:00.000Z");
+    expect(row!.title).toBe("Keep my date");
   });
 
   test("normalizes empty dueDate / description to null", async () => {
@@ -579,5 +590,144 @@ describe("tasks action gate", () => {
     const id = await seedTask();
     await setTaskOwner(id, null);
     expect(mockedRequirePermission).toHaveBeenCalledWith("tasks.edit");
+  });
+});
+
+// ── Audit trail + stale-form guard ─────────────────────────────────────
+
+describe("task audit trail (F189)", () => {
+  const logs = () =>
+    prisma.activityLog.findMany({
+      where: { matterId, type: { in: ["task", "task_complete"] } },
+      orderBy: { timestamp: "asc" },
+      select: { title: true, detail: true, userId: true },
+    });
+
+  test("an edit logs only what changed, old -> new", async () => {
+    const id = await prisma.task
+      .create({
+        data: {
+          matterId,
+          title: "Draft motion",
+          dueDate: new Date(Date.UTC(2026, 10, 3)),
+          priority: "normal",
+        },
+        select: { id: true },
+      })
+      .then((t) => t.id);
+    const fd = new FormData();
+    fd.set("title", "Draft motion");
+    fd.set("dueDate", "2026-12-15");
+    fd.set("priority", "high");
+    fd.set("status", "open");
+    await updateTask(id, updateTaskInitialState, fd);
+    const rows = await logs();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].title).toBe("Task updated");
+    expect(rows[0].detail).toContain("due 2026-11-03 → 2026-12-15");
+    expect(rows[0].detail).toContain("priority normal → high");
+    expect(rows[0].detail).not.toContain("title");
+    expect(rows[0].userId).toBe(userId);
+  });
+
+  test("an edit that changes nothing writes no row", async () => {
+    const id = await seedTask({ title: "Same" });
+    const fd = new FormData();
+    fd.set("title", "Same");
+    fd.set("priority", "normal");
+    fd.set("status", "open");
+    await updateTask(id, updateTaskInitialState, fd);
+    expect(await logs()).toHaveLength(0);
+  });
+
+  test("completing through the dialog logs a completion", async () => {
+    const id = await seedTask({ title: "File it" });
+    const fd = new FormData();
+    fd.set("title", "File it");
+    fd.set("priority", "normal");
+    fd.set("status", "done");
+    await updateTask(id, updateTaskInitialState, fd);
+    const rows = await logs();
+    expect(rows.map((r) => r.title)).toEqual(["Task completed"]);
+  });
+
+  test("deleting logs the title captured before the row went away", async () => {
+    const id = await seedTask({ title: "Serve the subpoena" });
+    await deleteTask(id);
+    const rows = await logs();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].title).toBe("Task deleted");
+    expect(rows[0].detail).toContain("Serve the subpoena");
+  });
+});
+
+describe("updateTask - stale form guard (F521)", () => {
+  const form = (over: Record<string, string> = {}) => {
+    const fd = new FormData();
+    fd.set("title", "Edited by A");
+    fd.set("priority", "normal");
+    fd.set("status", "open");
+    for (const [k, v] of Object.entries(over)) fd.set(k, v);
+    return fd;
+  };
+
+  test("a form seeded before someone else's save is refused and writes nothing", async () => {
+    const id = await seedTask({ title: "Original" });
+    const seeded = await prisma.task.findUniqueOrThrow({ where: { id } });
+    // Someone else saves in between.
+    await prisma.task.update({
+      where: { id },
+      data: { title: "Edited by B" },
+    });
+
+    const res = await updateTask(
+      id,
+      updateTaskInitialState,
+      form({ expectedUpdatedAt: seeded.updatedAt.toISOString() })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?._form?.[0]).toMatch(/changed by someone else/i);
+    const row = await prisma.task.findUniqueOrThrow({ where: { id } });
+    expect(row.title).toBe("Edited by B");
+  });
+
+  test("a stale refusal revalidates the matter's task surfaces so the reopened dialog gets fresh props", async () => {
+    const id = await seedTask({ title: "Original" });
+    const seeded = await prisma.task.findUniqueOrThrow({ where: { id } });
+    await prisma.task.update({
+      where: { id },
+      // Explicit bump: seed and update can land in the same ms.
+      data: { title: "Edited by B", updatedAt: new Date(seeded.updatedAt.getTime() + 1000) },
+    });
+    vi.mocked(revalidatePath).mockClear();
+
+    const res = await updateTask(
+      id,
+      updateTaskInitialState,
+      form({ expectedUpdatedAt: seeded.updatedAt.toISOString() })
+    );
+    expect(res.status).toBe("error");
+    expect(revalidatePath).toHaveBeenCalledWith(`/matters/${matterId}/tasks`);
+    expect(revalidatePath).toHaveBeenCalledWith("/");
+  });
+
+  test("a form seeded from the current row saves", async () => {
+    const id = await seedTask({ title: "Original" });
+    const seeded = await prisma.task.findUniqueOrThrow({ where: { id } });
+    const res = await updateTask(
+      id,
+      updateTaskInitialState,
+      form({ expectedUpdatedAt: seeded.updatedAt.toISOString() })
+    );
+    expect(res.status).toBe("ok");
+    expect(
+      (await prisma.task.findUniqueOrThrow({ where: { id } })).title
+    ).toBe("Edited by A");
+  });
+
+  test("no expectedUpdatedAt field = no check (legacy callers)", async () => {
+    const id = await seedTask({ title: "Original" });
+    const res = await updateTask(id, updateTaskInitialState, form());
+    expect(res.status).toBe("ok");
   });
 });

@@ -26,11 +26,13 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma, type Tx } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-// Date-only inputs ("YYYY-MM-DD") must parse to LOCAL midnight —
-// `new Date(value)` reads them as UTC midnight, drifting the day
-// for anyone west of UTC. Datetime-local values (event start/end)
-// still go through `new Date(...)`, which parses them as local.
-import { parseLocalDate } from "@/lib/format-date";
+// ADR-012: date-only inputs ("YYYY-MM-DD") are stored at UTC midnight
+// via `parseDateOnly`; datetime-local values (event start/end) are
+// wall-clock time in the USER's profile zone via `parseWallClock` —
+// never `new Date(value)`, which would read them in the server's zone
+// (UTC in production) and store a 9:00 AM hearing as 3:00 AM.
+import { parseDateOnly, parseWallClock } from "@/lib/format-date";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import {
   requirePermission,
   requirePermissions,
@@ -46,6 +48,7 @@ import { EVENT_TYPES } from "@/lib/constants/calendar-event-type";
 import { TASK_PRIORITIES } from "@/lib/constants/priority";
 import {
   captureSchema,
+  checkEventTimes,
   type CaptureFormState,
   type ValidCapture,
 } from "@/lib/capture-schemas";
@@ -53,7 +56,7 @@ import { logActivity } from "@/lib/activity-log";
 import { isAssignableUser, notifyTaskAssigned } from "@/lib/task-assignment";
 import { isKnownUtbmsCode } from "@/lib/time-entry-constants";
 import { getEffectiveCalendarDefaults } from "@/lib/calendar-defaults";
-import { sanitizeUserHtml as sanitize } from "@/lib/sanitize-html";
+import { textareaToHtml } from "@/lib/text-to-html";
 
 // ── Shared helpers ──────────────────────────────────────────────────────
 
@@ -70,9 +73,17 @@ type PrimaryRef =
 
 /** Per-request context for sibling creation. `autoAddTeam` is the
  *  effective calendar default, resolved BEFORE the transaction;
- *  `createdEventIds` collects sibling events so the caller can push
- *  them to Google Calendar AFTER the commit (never inside the tx). */
-type CaptureCtx = { autoAddTeam: boolean; createdEventIds: string[] };
+ *  `tz` is the creator's profile zone (datetime-local values are
+ *  wall-clock time in it), resolved BEFORE the transaction and only
+ *  when an event sibling is attached (otherwise "UTC", never read);
+ *  `createdEventIds` collects sibling events
+ *  so the caller can push them to Google Calendar AFTER the commit
+ *  (never inside the tx). */
+type CaptureCtx = {
+  autoAddTeam: boolean;
+  tz: string;
+  createdEventIds: string[];
+};
 
 async function buildCaptureCtx(
   matterId: string,
@@ -80,9 +91,28 @@ async function buildCaptureCtx(
 ): Promise<CaptureCtx> {
   return {
     autoAddTeam: await resolveAutoAddTeam(matterId, captures),
+    tz: captures.some((c) => c.kind === "event")
+      ? await getCurrentUserTimeZone()
+      : "UTC",
     createdEventIds: [],
   };
 }
+
+/** A stale tab (or a tampered id) can post a matter that no longer
+ *  exists; without this the create dies in a P2003 FK error and the
+ *  form is replaced by the error boundary. Reported under the
+ *  form-level `_form` key (rendered by CaptureComposerShell). */
+async function matterMissing(matterId: string): Promise<boolean> {
+  const m = await prisma.matter.findUnique({
+    where: { id: matterId },
+    select: { id: true },
+  });
+  return !m;
+}
+
+const MATTER_NOT_FOUND: Record<string, string[]> = {
+  _form: ["This matter no longer exists. Reload the page."],
+};
 
 /** Push sibling/primary events to the creator's Google Calendar
  *  after the local commit. `pushEventToGoogle` never rejects. */
@@ -104,9 +134,9 @@ async function createCaptureRecord(
         matterId,
         title: cap.title,
         priority: cap.priority,
-        // Capture date fields are schema-validated as YYYY-MM-DD
-        // (see capture-schemas.ts), so parseLocalDate can't miss.
-        dueDate: cap.dueDate ? parseLocalDate(cap.dueDate) : null,
+        // Capture date fields are schema-validated as real YYYY-MM-DD
+        // dates (see capture-schemas.ts), so parseDateOnly can't miss.
+        dueDate: cap.dueDate ? parseDateOnly(cap.dueDate) : null,
         // Sibling task captures have no assignee picker — they
         // self-assign, which the actor-exclusion rule in
         // notifyTaskAssigned makes notification-silent by
@@ -132,8 +162,9 @@ async function createCaptureRecord(
         createdById: userId,
         title: cap.title,
         type: cap.type,
-        startTime: new Date(cap.startTime),
-        endTime: new Date(cap.endTime),
+        // Schema-validated, so parseWallClock can't miss.
+        startTime: parseWallClock(cap.startTime, ctx.tz)!,
+        endTime: parseWallClock(cap.endTime, ctx.tz)!,
         location: cap.location || null,
       },
       select: { id: true },
@@ -150,7 +181,7 @@ async function createCaptureRecord(
       data: {
         matterId,
         title: cap.title,
-        dueDate: parseLocalDate(cap.dueDate)!,
+        dueDate: parseDateOnly(cap.dueDate)!,
         kind: cap.kind_,
         description: cap.description || null,
         ownerId: userId,
@@ -164,7 +195,7 @@ async function createCaptureRecord(
       data: {
         matterId,
         userId,
-        date: parseLocalDate(cap.date)!,
+        date: parseDateOnly(cap.date)!,
         hours: Number(cap.hours),
         activity: cap.activity,
         narrative: cap.narrative || null,
@@ -172,7 +203,18 @@ async function createCaptureRecord(
         // link it so the event can surface the entry later.
         calendarEventId:
           linkToPrimary?.kind === "event" ? linkToPrimary.id : null,
-        source: linkToPrimary?.kind === "event" ? "calendar" : "manual",
+        // Same link-backs as "Log time on this task/deadline"
+        // (time-on-entity.ts), so the entry carries its "From task" /
+        // "From deadline" chip and counts as time on that record.
+        taskId: linkToPrimary?.kind === "task" ? linkToPrimary.id : null,
+        deadlineId:
+          linkToPrimary?.kind === "deadline" ? linkToPrimary.id : null,
+        source:
+          linkToPrimary?.kind === "event"
+            ? "calendar"
+            : linkToPrimary?.kind === "task"
+              ? "task"
+              : "manual",
       },
     });
   } else if (cap.kind === "note_sibling") {
@@ -180,7 +222,9 @@ async function createCaptureRecord(
       data: {
         matterId,
         authorId: userId,
-        content: sanitize(cap.content),
+        // Plain <textarea> text: escape + <br>, NOT the HTML sanitizer
+        // (which collapses line breaks and eats "<bracketed>" text).
+        content: textareaToHtml(cap.content),
         type: cap.type,
         isPinned: cap.isPinned,
         taskId: linkToPrimary?.kind === "task" ? linkToPrimary.id : null,
@@ -297,7 +341,7 @@ export async function createTaskWithCaptures(
   }
 
   const dueDate = parsed.data.dueDate
-    ? parseLocalDate(parsed.data.dueDate)
+    ? parseDateOnly(parsed.data.dueDate)
     : null;
   if (parsed.data.dueDate && !dueDate) {
     return {
@@ -310,6 +354,9 @@ export async function createTaskWithCaptures(
   // Every sibling kind must clear its own create gate BEFORE any
   // write (the primary's key was checked above).
   await requirePermissions(requiredCapturePermissions(attach.captures));
+  if (await matterMissing(matterId)) {
+    return { status: "error", errors: MATTER_NOT_FOUND, values: raw };
+  }
   const userId = await getCurrentUserId();
   const ctx = await buildCaptureCtx(matterId, attach.captures);
 
@@ -394,35 +441,7 @@ const eventSchema = z
       .optional()
       .default("default"),
   })
-  .superRefine((data, ctx) => {
-    const start = new Date(data.startTime);
-    const end = new Date(data.endTime);
-    if (Number.isNaN(start.getTime())) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["startTime"],
-        message: "Invalid start time",
-      });
-    }
-    if (Number.isNaN(end.getTime())) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["endTime"],
-        message: "Invalid end time",
-      });
-    }
-    if (
-      !Number.isNaN(start.getTime()) &&
-      !Number.isNaN(end.getTime()) &&
-      end.getTime() < start.getTime()
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["endTime"],
-        message: "End must be after start",
-      });
-    }
-  });
+  .superRefine(checkEventTimes);
 
 export async function createEventWithCaptures(
   matterId: string,
@@ -451,7 +470,11 @@ export async function createEventWithCaptures(
   }
 
   await requirePermissions(requiredCapturePermissions(attach.captures));
+  if (await matterMissing(matterId)) {
+    return { status: "error", errors: MATTER_NOT_FOUND, values: raw };
+  }
   const userId = await getCurrentUserId();
+  const tz = await getCurrentUserTimeZone();
 
   // Resolve calendar defaults BEFORE the transaction so we can
   // skip the team query entirely when auto-add is off. The
@@ -460,6 +483,7 @@ export async function createEventWithCaptures(
   const defaults = await getEffectiveCalendarDefaults(matterId);
   const ctx: CaptureCtx = {
     autoAddTeam: defaults.autoAddTeamToNewEvents,
+    tz,
     createdEventIds: [],
   };
 
@@ -470,8 +494,9 @@ export async function createEventWithCaptures(
         createdById: userId,
         title: parsed.data.title,
         type: parsed.data.type,
-        startTime: new Date(parsed.data.startTime),
-        endTime: new Date(parsed.data.endTime),
+        // Wall-clock time in the creator's zone (schema-validated).
+        startTime: parseWallClock(parsed.data.startTime, tz)!,
+        endTime: parseWallClock(parsed.data.endTime, tz)!,
         location: parsed.data.location || null,
         description: parsed.data.description || null,
         visibility: parsed.data.visibility,
@@ -547,7 +572,7 @@ export async function createDeadlineWithCaptures(
     };
   }
 
-  const dueDate = parseLocalDate(parsed.data.dueDate);
+  const dueDate = parseDateOnly(parsed.data.dueDate);
   if (!dueDate) {
     return {
       status: "error",
@@ -557,6 +582,9 @@ export async function createDeadlineWithCaptures(
   }
 
   await requirePermissions(requiredCapturePermissions(attach.captures));
+  if (await matterMissing(matterId)) {
+    return { status: "error", errors: MATTER_NOT_FOUND, values: raw };
+  }
   const userId = await getCurrentUserId();
   const ctx = await buildCaptureCtx(matterId, attach.captures);
 
@@ -645,7 +673,7 @@ export async function createTimeEntryWithCaptures(
     };
   }
 
-  const date = parseLocalDate(parsed.data.date);
+  const date = parseDateOnly(parsed.data.date);
   if (!date) {
     return {
       status: "error",
@@ -655,6 +683,9 @@ export async function createTimeEntryWithCaptures(
   }
 
   await requirePermissions(requiredCapturePermissions(attach.captures));
+  if (await matterMissing(matterId)) {
+    return { status: "error", errors: MATTER_NOT_FOUND, values: raw };
+  }
   const userId = await getCurrentUserId();
   const ctx = await buildCaptureCtx(matterId, attach.captures);
 

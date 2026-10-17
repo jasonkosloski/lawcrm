@@ -5,7 +5,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { createDeadlineWithCaptures } from "@/app/actions/captures";
 import {
@@ -14,8 +14,10 @@ import {
 } from "@/lib/capture-schemas";
 import {
   DEADLINE_KINDS,
+  type CaptureKind,
   type NoteCapture,
 } from "@/lib/note-constants";
+import { DEADLINE_KIND_LABEL } from "@/lib/constants/deadline-status";
 import { CaptureComposerShell } from "./capture-composer-shell";
 import {
   DateField,
@@ -24,7 +26,20 @@ import {
   TextareaField,
 } from "./primary-fields";
 
-export function DeadlineComposer({ matterId }: { matterId: string }) {
+const SIBLING_KINDS: CaptureKind[] = ["task", "event", "time", "note_sibling"];
+
+export function DeadlineComposer({
+  matterId,
+  siblingKinds,
+  canPin,
+}: {
+  matterId: string;
+  /** Sibling kinds the viewer may add (page-resolved from their
+   *  create permissions); omitted = all. */
+  siblingKinds?: CaptureKind[];
+  /** Whether the viewer may pin a sibling note (`notes.pin`). */
+  canPin?: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
   const action = createDeadlineWithCaptures.bind(null, matterId);
   // Wrapped useActionState: masks state left over from a previous
@@ -53,15 +68,17 @@ export function DeadlineComposer({ matterId }: { matterId: string }) {
     setCaptures([]);
   };
 
-  // Reset + collapse on success. Deps key on the state OBJECT, not
-  // state.status — identity is the reliable "a submission just
-  // finished" signal (see TimeComposer for the full rationale).
-  useEffect(() => {
+  // Reset + collapse on success, derived during render (see
+  // TaskComposer for the rationale: identity of the action-state
+  // object is the "a submission just finished" signal).
+  const [handledState, setHandledState] = useState(state);
+  if (state !== handledState) {
+    setHandledState(state);
     if (state.status === "ok") {
       reset();
       setExpanded(false);
     }
-  }, [state]);
+  }
 
   const errs = state.errors ?? {};
 
@@ -81,7 +98,11 @@ export function DeadlineComposer({ matterId }: { matterId: string }) {
       captures={captures}
       onCapturesChange={setCaptures}
       attachmentErrors={state.attachmentErrors}
-      allowedKinds={["task", "event", "time", "note_sibling"]}
+      allowedKinds={SIBLING_KINDS.filter(
+        (k) => !siblingKinds || siblingKinds.includes(k)
+      )}
+      canPin={canPin}
+      formError={errs._form?.[0]}
     >
       <div className="flex flex-col gap-2">
         <TextField
@@ -107,9 +128,10 @@ export function DeadlineComposer({ matterId }: { matterId: string }) {
             onChange={(v) =>
               setKind(v as (typeof DEADLINE_KINDS)[number])
             }
+            ariaLabel="Deadline kind"
             options={DEADLINE_KINDS.map((k) => ({
               value: k,
-              label: k.replace("_", " "),
+              label: DEADLINE_KIND_LABEL[k],
             }))}
           />
           <TextField
@@ -117,6 +139,8 @@ export function DeadlineComposer({ matterId }: { matterId: string }) {
             value={sourceRef}
             onChange={setSourceRef}
             placeholder="Source ref (CRS §…, FRCP …)"
+            error={errs.sourceRef?.[0]}
+            maxLength={200}
           />
         </div>
 
@@ -127,6 +151,7 @@ export function DeadlineComposer({ matterId }: { matterId: string }) {
           placeholder="Why this deadline applies (optional)"
           rows={2}
           error={errs.description?.[0]}
+          maxLength={4000}
         />
       </div>
     </CaptureComposerShell>

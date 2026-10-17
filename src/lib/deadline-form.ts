@@ -8,7 +8,7 @@ export type UpdateDeadlineFormState = {
   status: "idle" | "ok" | "error";
   errors?: Partial<
     Record<
-      "title" | "dueDate" | "kind" | "sourceRef" | "description" | "status",
+      "title" | "dueDate" | "kind" | "sourceRef" | "description" | "status" | "_form",
       string[]
     >
   >;

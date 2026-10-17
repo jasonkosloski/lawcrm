@@ -10,7 +10,7 @@ export type UpdateTaskFormState = {
   status: "idle" | "ok" | "error";
   errors?: Partial<
     Record<
-      "title" | "description" | "dueDate" | "priority" | "status" | "ownerId",
+      "title" | "description" | "dueDate" | "priority" | "status" | "ownerId" | "_form",
       string[]
     >
   >;

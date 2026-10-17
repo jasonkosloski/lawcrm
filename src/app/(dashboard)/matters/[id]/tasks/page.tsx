@@ -3,6 +3,11 @@
  *
  * Task checklist grouped by status (Open / In progress / In review /
  * Done). Each task shows priority, due date, and owner.
+ *
+ * Due dates are date-only values (ADR-012): displayed with
+ * `formatDateOnly`, and "days left" is counted from the VIEWER's today
+ * with `daysUntilDateOnly` — a task due today is "Today", never late.
+ * Write controls follow the viewer's permissions.
  */
 
 import { CheckSquare } from "lucide-react";
@@ -12,6 +17,7 @@ import { TaskComposer } from "@/components/matters/captures/task-composer";
 import { ApplyTaskListDialog } from "@/components/automations/apply-task-list-dialog";
 import { listTaskLists } from "@/lib/queries/automations";
 import { currentUserHasPermission } from "@/lib/permission-check";
+import { getCaptureAccess } from "@/lib/capture-access";
 import {
   TaskRowMenu,
   TaskStatusToggle,
@@ -32,7 +38,13 @@ import {
   type AssigneeOption,
 } from "@/lib/queries/team";
 import { getCurrentUserId, requireUser } from "@/lib/current-user";
-import { formatDate as formatDateVariant } from "@/lib/format-date";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
+import {
+  dateOnlyKey,
+  daysUntilDateOnly,
+  formatDateOnly,
+} from "@/lib/format-date";
+import { prisma } from "@/lib/prisma";
 
 // Ordering follows the canonical status list; labels are centralized
 // (src/lib/constants/task-status.ts). Widened to string-indexable
@@ -62,10 +74,14 @@ const PRIORITY_META: Record<
   },
 };
 
-// Due dates are date-only values (server-local midnight) — the
-// centralized "short" variant with no TZ override keeps them on the
-// day grid they were saved on.
-const formatDate = (d: Date | null): string => formatDateVariant(d, "short");
+/** What the viewer may do with the rows (resolved once by the page). */
+type RowPerms = {
+  canEdit: boolean;
+  canDelete: boolean;
+  canLogTime: boolean;
+  canAddNote: boolean;
+  canConvert: boolean;
+};
 
 export default async function MatterTasksPage({
   params,
@@ -74,15 +90,53 @@ export default async function MatterTasksPage({
   const { id } = await params;
   // Assignees feed the composer + edit-dialog pickers; the current
   // user id is the composer's default selection (self-assign).
-  const [tasks, assignees, currentUserId, canCreate] = await Promise.all([
+  // The task-list library does not depend on the matter or the
+  // permission result, so it runs in the same batch; it is discarded
+  // below for viewers who couldn't apply a list.
+  const [
+    tasks,
+    versions,
+    assignees,
+    currentUserId,
+    allTaskLists,
+    tz,
+    canCreate,
+    canEdit,
+    canDelete,
+    canLogTime,
+    canAddNote,
+    canConvert,
+    captureAccess,
+  ] = await Promise.all([
     getMatterTasks(id),
+    // Row versions for the edit dialog's stale-form guard.
+    prisma.task.findMany({
+      where: { matterId: id },
+      select: { id: true, updatedAt: true },
+    }),
     listAssigneeOptions(),
     getCurrentUserId(),
+    listTaskLists({ activeOnly: true }),
+    getCurrentUserTimeZone(),
     currentUserHasPermission("tasks.create"),
+    currentUserHasPermission("tasks.edit"),
+    currentUserHasPermission("tasks.delete"),
+    currentUserHasPermission("time_entries.create"),
+    currentUserHasPermission("notes.create"),
+    currentUserHasPermission("deadlines.create"),
+    getCaptureAccess(),
   ]);
-  // Firm task lists (Settings → Automations) — only for users who
-  // could apply one.
-  const taskLists = canCreate ? await listTaskLists({ activeOnly: true }) : [];
+  const taskLists = canCreate ? allTaskLists : [];
+  const updatedAtById = new Map(
+    versions.map((v) => [v.id, v.updatedAt.toISOString()])
+  );
+  const perms: RowPerms = {
+    canEdit,
+    canDelete,
+    canLogTime,
+    canAddNote,
+    canConvert,
+  };
 
   // Group by status
   const byStatus = new Map<string, TaskRow[]>();
@@ -109,17 +163,21 @@ export default async function MatterTasksPage({
           />
         </div>
       )}
-      <TaskComposer
-        matterId={id}
-        assignees={assignees}
-        currentUserId={currentUserId}
-      />
+      {canCreate && (
+        <TaskComposer
+          matterId={id}
+          assignees={assignees}
+          currentUserId={currentUserId}
+          siblingKinds={captureAccess.kinds}
+          canPin={captureAccess.canPin}
+        />
+      )}
 
       {tasks.length === 0 ? (
         <EmptyState
           icon={CheckSquare}
           title="No tasks yet"
-          description="Add the first one above."
+          description={canCreate ? "Add the first one above." : undefined}
           className="py-6"
         />
       ) : null}
@@ -144,6 +202,9 @@ export default async function MatterTasksPage({
                     task={t}
                     matterId={id}
                     assignees={assignees}
+                    tz={tz}
+                    updatedAt={updatedAtById.get(t.id) ?? ""}
+                    perms={perms}
                   />
                 ))}
               </ul>
@@ -159,16 +220,28 @@ function TaskItem({
   task,
   matterId,
   assignees,
+  tz,
+  updatedAt,
+  perms,
 }: {
   task: TaskRow;
   matterId: string;
   assignees: AssigneeOption[];
+  tz: string;
+  updatedAt: string;
+  perms: RowPerms;
 }) {
   const priority = PRIORITY_META[task.priority] ?? PRIORITY_META.normal;
   const done = task.status === "done" || task.status === "cancelled";
+  // Whole days from the viewer's today (0 = due today, <0 = late).
+  const daysLeft = task.dueDate ? daysUntilDateOnly(task.dueDate, tz) : null;
   return (
     <li className="flex items-center gap-3 px-4 py-2.5 group">
-      <TaskStatusToggle taskId={task.id} status={task.status as TaskStatus} />
+      <TaskStatusToggle
+        taskId={task.id}
+        status={task.status as TaskStatus}
+        canEdit={perms.canEdit}
+      />
       <div className="flex-1 min-w-0">
         <div
           className={
@@ -199,12 +272,14 @@ function TaskItem({
         {priority.label}
       </span>
       <span className="text-2xs font-mono text-ink-4 w-16 text-right shrink-0">
-        {task.dueDate
-          ? task.daysUntilDue !== null && task.daysUntilDue <= 7 && !done
-            ? task.daysUntilDue < 0
-              ? `${Math.abs(task.daysUntilDue)}d late`
-              : `${task.daysUntilDue}d`
-            : formatDate(task.dueDate)
+        {task.dueDate && daysLeft !== null
+          ? daysLeft <= 7 && !done
+            ? daysLeft < 0
+              ? `${Math.abs(daysLeft)}d late`
+              : daysLeft === 0
+                ? "Today"
+                : `${daysLeft}d`
+            : formatDateOnly(task.dueDate, "short")
           : "—"}
       </span>
       <span className="w-6 shrink-0 text-right">
@@ -227,9 +302,13 @@ function TaskItem({
           priority: task.priority,
           status: task.status as TaskStatus,
           ownerId: task.ownerId,
-          dueDate: task.dueDate,
+          ownerName: task.ownerName,
+          ownerInitials: task.ownerInitials,
+          dueDateKey: task.dueDate ? dateOnlyKey(task.dueDate) : "",
+          updatedAt,
         }}
         assignees={assignees}
+        {...perms}
       />
     </li>
   );

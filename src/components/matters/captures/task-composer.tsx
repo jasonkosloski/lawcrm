@@ -14,7 +14,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { createTaskWithCaptures } from "@/app/actions/captures";
 import {
@@ -23,8 +23,10 @@ import {
 } from "@/lib/capture-schemas";
 import {
   TASK_PRIORITIES,
+  type CaptureKind,
   type NoteCapture,
 } from "@/lib/note-constants";
+import { TASK_PRIORITY_LABEL } from "@/lib/constants/priority";
 import {
   AssigneeSelect,
   type AssigneeOption,
@@ -37,16 +39,30 @@ import {
   TextareaField,
 } from "./primary-fields";
 
+const SIBLING_KINDS: CaptureKind[] = [
+  "event",
+  "deadline",
+  "time",
+  "note_sibling",
+];
+
 export function TaskComposer({
   matterId,
   assignees,
   currentUserId,
+  siblingKinds,
+  canPin,
 }: {
   matterId: string;
   /** Active firm users for the assignee picker. */
   assignees: AssigneeOption[];
   /** The viewer — the picker's default selection (self-assign). */
   currentUserId: string;
+  /** Sibling kinds the viewer may add (page-resolved from their
+   *  create permissions); omitted = all. */
+  siblingKinds?: CaptureKind[];
+  /** Whether the viewer may pin a sibling note (`notes.pin`). */
+  canPin?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const action = createTaskWithCaptures.bind(null, matterId);
@@ -76,15 +92,19 @@ export function TaskComposer({
     setCaptures([]);
   };
 
-  // Reset + collapse on success. Deps key on the state OBJECT, not
-  // state.status — identity is the reliable "a submission just
-  // finished" signal (see TimeComposer for the full rationale).
-  useEffect(() => {
+  // Reset + collapse on success, derived during render (React's "reset
+  // state when a value changes" pattern) rather than in an effect. The
+  // action state is a fresh object per submission, so object identity
+  // is the reliable "a submission just finished" signal — keying on
+  // `state.status` would skip the second success (status stays "ok").
+  const [handledState, setHandledState] = useState(state);
+  if (state !== handledState) {
+    setHandledState(state);
     if (state.status === "ok") {
       reset();
       setExpanded(false);
     }
-  }, [state]);
+  }
 
   const errs = state.errors ?? {};
 
@@ -104,7 +124,11 @@ export function TaskComposer({
       captures={captures}
       onCapturesChange={setCaptures}
       attachmentErrors={state.attachmentErrors}
-      allowedKinds={["event", "deadline", "time", "note_sibling"]}
+      allowedKinds={SIBLING_KINDS.filter(
+        (k) => !siblingKinds || siblingKinds.includes(k)
+      )}
+      canPin={canPin}
+      formError={errs._form?.[0]}
     >
       <div className="flex flex-col gap-2">
         <TextField
@@ -130,7 +154,11 @@ export function TaskComposer({
             onChange={(v) =>
               setPriority(v as (typeof TASK_PRIORITIES)[number])
             }
-            options={TASK_PRIORITIES.map((p) => ({ value: p, label: p }))}
+            ariaLabel="Priority"
+            options={TASK_PRIORITIES.map((p) => ({
+              value: p,
+              label: TASK_PRIORITY_LABEL[p],
+            }))}
           />
         </div>
 
@@ -148,6 +176,7 @@ export function TaskComposer({
           placeholder="Details (optional)"
           rows={2}
           error={errs.description?.[0]}
+          maxLength={4000}
         />
       </div>
     </CaptureComposerShell>

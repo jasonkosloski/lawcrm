@@ -19,6 +19,7 @@ export function TextField({
   error,
   autoFocus,
   className,
+  maxLength,
 }: {
   name: string;
   value: string;
@@ -27,6 +28,8 @@ export function TextField({
   error?: string;
   autoFocus?: boolean;
   className?: string;
+  /** Cheap client-side guard matching the server schema's cap. */
+  maxLength?: number;
 }) {
   return (
     <div className={cn("flex flex-col gap-0.5 min-w-0", className)}>
@@ -37,6 +40,7 @@ export function TextField({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         autoFocus={autoFocus}
+        maxLength={maxLength}
         className={cn(
           "h-8 px-2.5 rounded-md border bg-white text-xs text-ink",
           "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
@@ -119,19 +123,29 @@ export function SelectField({
   value,
   onChange,
   options,
+  ariaLabel,
+  capitalize = true,
 }: {
   name: string;
   value: string;
   onChange: (v: string) => void;
   options: Array<{ value: string; label: string }>;
+  /** Accessible name ("Priority", "Deadline kind", …). Pass it from
+   *  every caller: a bare <select> reads as just "combo box". */
+  ariaLabel?: string;
+  /** Capitalize option text (right for enum labels like "high");
+   *  turn off for free-form text such as email addresses. */
+  capitalize?: boolean;
 }) {
   return (
     <select
       name={name}
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      aria-label={ariaLabel}
       className={cn(
-        "h-8 px-2 rounded-md border border-line bg-white text-xs text-ink capitalize",
+        "h-8 px-2 rounded-md border border-line bg-white text-xs text-ink",
+        capitalize && "capitalize",
         "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
       )}
     >
@@ -151,6 +165,7 @@ export function TextareaField({
   placeholder,
   rows = 3,
   error,
+  maxLength,
 }: {
   name: string;
   value: string;
@@ -158,6 +173,7 @@ export function TextareaField({
   placeholder?: string;
   rows?: number;
   error?: string;
+  maxLength?: number;
 }) {
   return (
     <div className="flex flex-col gap-0.5">
@@ -167,6 +183,7 @@ export function TextareaField({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         rows={rows}
+        maxLength={maxLength}
         className={cn(
           "px-2.5 py-1.5 rounded-md border bg-white text-xs text-ink leading-relaxed",
           "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",

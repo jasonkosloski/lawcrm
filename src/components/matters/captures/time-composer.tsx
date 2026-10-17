@@ -11,17 +11,16 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { createTimeEntryWithCaptures } from "@/app/actions/captures";
 import {
   captureInitialState,
   type CaptureFormState,
 } from "@/lib/capture-schemas";
-import {
-  todayDateString,
-  type NoteCapture,
-} from "@/lib/note-constants";
+import type { CaptureKind, NoteCapture } from "@/lib/note-constants";
+import { useUserTimeZone } from "@/components/user-time-zone";
+import { todayInput } from "@/lib/capture-defaults";
 import { CaptureComposerShell } from "./capture-composer-shell";
 import {
   DateField,
@@ -33,7 +32,23 @@ import {
   UtbmsCodeSelect,
 } from "@/components/time-entries/time-entry-fields";
 
-export function TimeComposer({ matterId }: { matterId: string }) {
+const SIBLING_KINDS: CaptureKind[] = ["task", "event", "deadline", "note_sibling"];
+
+export function TimeComposer({
+  matterId,
+  siblingKinds,
+  canPin,
+}: {
+  matterId: string;
+  /** Sibling kinds the viewer may add (page-resolved from their
+   *  create permissions); omitted = all. */
+  siblingKinds?: CaptureKind[];
+  /** Whether the viewer may pin a sibling note (`notes.pin`). */
+  canPin?: boolean;
+}) {
+  // "Today" is the date in the user's PROFILE zone (ADR-012), not the
+  // browser's.
+  const tz = useUserTimeZone();
   const [expanded, setExpanded] = useState(false);
   const action = createTimeEntryWithCaptures.bind(null, matterId);
   // Wrapped useActionState: masks state left over from a previous
@@ -46,7 +61,7 @@ export function TimeComposer({ matterId }: { matterId: string }) {
   >(action, captureInitialState, expanded);
 
   const [captures, setCaptures] = useState<NoteCapture[]>([]);
-  const [date, setDate] = useState(todayDateString());
+  const [date, setDate] = useState(() => todayInput(tz));
   const [hours, setHours] = useState("");
   const [activity, setActivity] = useState("");
   const [narrative, setNarrative] = useState("");
@@ -56,7 +71,7 @@ export function TimeComposer({ matterId }: { matterId: string }) {
   const [privileged, setPrivileged] = useState(false);
 
   const reset = () => {
-    setDate(todayDateString());
+    setDate(todayInput(tz));
     setHours("");
     setActivity("");
     setNarrative("");
@@ -67,19 +82,20 @@ export function TimeComposer({ matterId }: { matterId: string }) {
     setCaptures([]);
   };
 
-  // Reset + collapse on success. Deps key on the state OBJECT, not
-  // state.status: useActionState keeps its state across
-  // submissions, so after the first success the status string is
-  // "ok" forever and a second success would skip the effect,
-  // leaving the form expanded with stale values. Each action
-  // invocation returns a fresh object, so identity is the reliable
-  // signal.
-  useEffect(() => {
+  // Reset + collapse on success, derived during render (React's "reset
+  // state when a value changes" pattern) rather than in an effect.
+  // useActionState keeps its state across submissions, so after the
+  // first success the status string is "ok" forever; each action
+  // invocation returns a fresh object, so object identity is the
+  // reliable "a submission just finished" signal.
+  const [handledState, setHandledState] = useState(state);
+  if (state !== handledState) {
+    setHandledState(state);
     if (state.status === "ok") {
       reset();
       setExpanded(false);
     }
-  }, [state]);
+  }
 
   const errs = state.errors ?? {};
 
@@ -101,7 +117,11 @@ export function TimeComposer({ matterId }: { matterId: string }) {
       captures={captures}
       onCapturesChange={setCaptures}
       attachmentErrors={state.attachmentErrors}
-      allowedKinds={["task", "event", "deadline", "note_sibling"]}
+      allowedKinds={SIBLING_KINDS.filter(
+        (k) => !siblingKinds || siblingKinds.includes(k)
+      )}
+      canPin={canPin}
+      formError={errs._form?.[0]}
     >
       <div className="flex flex-col gap-2">
         <div className="grid grid-cols-[auto_auto_1fr] gap-2 items-start">
@@ -133,6 +153,7 @@ export function TimeComposer({ matterId }: { matterId: string }) {
           placeholder="Narrative (optional, client-facing)"
           rows={2}
           error={errs.narrative?.[0]}
+          maxLength={4000}
         />
 
         <div className="flex flex-wrap items-center gap-3 text-2xs text-ink-2">

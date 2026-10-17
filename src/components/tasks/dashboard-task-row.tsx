@@ -11,6 +11,12 @@
  * to drop the outer-link pattern (interactive-inside-interactive is
  * invalid) — instead the row is a `<div>` and the title region wraps
  * a small `<Link>` so navigation still works on the obvious target.
+ *
+ * `canLogTime` (time_entries.create) and `canAddNote` (notes.create)
+ * hide the menu items the viewer can't use; a denied server action
+ * redirects to `/` and loses what was typed. Both default to true so
+ * callers that haven't resolved the flags keep today's behaviour (the
+ * server stays the authority either way).
  */
 
 "use client";
@@ -45,6 +51,8 @@ export function DashboardTaskRow({
   matterName,
   daysUntilDue,
   dueLabel,
+  canLogTime = true,
+  canAddNote = true,
 }: {
   id: string;
   title: string;
@@ -56,6 +64,8 @@ export function DashboardTaskRow({
    *  parent server component. Keeps formatting logic (today's date
    *  reasoning) in one place. */
   dueLabel: string;
+  canLogTime?: boolean;
+  canAddNote?: boolean;
 }) {
   const [logTimeOpen, setLogTimeOpen] = useState(false);
   const [addNoteOpen, setAddNoteOpen] = useState(false);
@@ -103,28 +113,32 @@ export function DashboardTaskRow({
         </span>
         {/* Kebab — only meaningful when the task lives on a matter
             (log time + add note both need a matter context). */}
-        {matterId ? (
+        {matterId && (canLogTime || canAddNote) ? (
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
                 <button
                   type="button"
                   aria-label="Task actions"
-                  className="inline-flex items-center justify-center w-6 h-6 rounded-md text-ink-4 opacity-0 group-hover:opacity-100 hover:bg-paper-2 hover:text-ink shrink-0 transition-opacity"
+                  className="inline-flex items-center justify-center w-6 h-6 rounded-md text-ink-4 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 data-popup-open:opacity-100 hover:bg-paper-2 hover:text-ink shrink-0 transition-opacity"
                 >
                   <MoreHorizontal size={14} />
                 </button>
               }
             />
             <DropdownMenuContent align="end" className="min-w-44">
-              <DropdownMenuItem onClick={() => setLogTimeOpen(true)}>
-                <Clock />
-                Log time on this task
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setAddNoteOpen(true)}>
-                <MessageSquarePlus />
-                Add note on this task
-              </DropdownMenuItem>
+              {canLogTime && (
+                <DropdownMenuItem onClick={() => setLogTimeOpen(true)}>
+                  <Clock />
+                  Log time on this task
+                </DropdownMenuItem>
+              )}
+              {canAddNote && (
+                <DropdownMenuItem onClick={() => setAddNoteOpen(true)}>
+                  <MessageSquarePlus />
+                  Add note on this task
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         ) : (

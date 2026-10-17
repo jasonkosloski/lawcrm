@@ -16,7 +16,7 @@
 
 "use client";
 
-import { useId } from "react";
+import { useId, useRef } from "react";
 import {
   Calendar,
   CircleAlert,
@@ -40,10 +40,14 @@ import {
   type EventCapture,
   type NoteCapture,
   type NoteSiblingCapture,
-  type NoteType,
   type TaskCapture,
   type TimeCapture,
 } from "@/lib/note-constants";
+import { DEADLINE_KIND_LABEL } from "@/lib/constants/deadline-status";
+import { EVENT_TYPE_LABEL } from "@/lib/constants/calendar-event-type";
+import { TASK_PRIORITY_LABEL } from "@/lib/constants/priority";
+import { useUserTimeZone } from "@/components/user-time-zone";
+import { nextHourInput, todayInput } from "@/lib/capture-defaults";
 
 const KIND_ICON: Record<CaptureKind, typeof ListTodo> = {
   task: ListTodo,
@@ -58,6 +62,7 @@ export function CaptureStack({
   onChange,
   errors,
   allowedKinds = ["task", "event", "deadline", "time"],
+  canPin = true,
 }: {
   captures: NoteCapture[];
   onChange: (next: NoteCapture[]) => void;
@@ -67,13 +72,30 @@ export function CaptureStack({
    *  should omit its own kind. Defaults to the four non-note siblings
    *  (the original Notes-tab behavior). */
   allowedKinds?: CaptureKind[];
+  /** Whether the viewer holds `notes.pin`. The sibling-note Pin toggle
+   *  is hidden without it (the server refuses a pinned note and the
+   *  redirect would discard the draft). Defaults to true so callers
+   *  that haven't resolved the flag keep today's behaviour. */
+  canPin?: boolean;
 }) {
   const idPrefix = useId();
-  let localCounter = 0;
-  const nextId = () => `cap-${idPrefix}-${++localCounter}-${Date.now()}`;
+  // Monotonic per mounted stack: ids stay unique across re-renders and
+  // after removals (a per-render counter restarted at 0 every render).
+  const counter = useRef(0);
+  // Defaults are computed in the viewer's PROFILE zone, the same zone
+  // the server reads datetime-local values in (ADR-012).
+  const tz = useUserTimeZone();
 
   const add = (kind: CaptureKind) => {
-    onChange([...captures, newCapture(kind, nextId())]);
+    counter.current += 1;
+    const created = newCapture(kind, `cap-${idPrefix}-${counter.current}`);
+    if (created.kind === "event") {
+      created.startTime = nextHourInput(tz);
+      created.endTime = nextHourInput(tz, 1);
+    } else if (created.kind === "time") {
+      created.date = todayInput(tz);
+    }
+    onChange([...captures, created]);
   };
   const remove = (tempId: string) => {
     onChange(captures.filter((c) => c.tempId !== tempId));
@@ -119,6 +141,7 @@ export function CaptureStack({
               key={cap.tempId}
               capture={cap}
               errors={errors?.[cap.tempId]}
+              canPin={canPin}
               onUpdate={(patch) => update(cap.tempId, patch)}
               onRemove={() => remove(cap.tempId)}
             />
@@ -134,11 +157,13 @@ export function CaptureStack({
 function CaptureCard({
   capture,
   errors,
+  canPin,
   onUpdate,
   onRemove,
 }: {
   capture: NoteCapture;
   errors?: Record<string, string[]>;
+  canPin: boolean;
   onUpdate: (patch: Partial<NoteCapture>) => void;
   onRemove: () => void;
 }) {
@@ -192,6 +217,7 @@ function CaptureCard({
         <NoteSiblingFields
           capture={capture}
           errors={errors}
+          canPin={canPin}
           onUpdate={(patch) => onUpdate(patch as Partial<NoteSiblingCapture>)}
         />
       )}
@@ -228,7 +254,11 @@ function TaskFields({
         <Select
           value={capture.priority}
           onChange={(v) => onUpdate({ priority: v as TaskCapture["priority"] })}
-          options={TASK_PRIORITIES.map((p) => ({ value: p, label: p }))}
+          ariaLabel="Priority"
+          options={TASK_PRIORITIES.map((p) => ({
+            value: p,
+            label: TASK_PRIORITY_LABEL[p],
+          }))}
         />
       </div>
     </div>
@@ -270,12 +300,18 @@ function EventFields({
         <Select
           value={capture.type}
           onChange={(v) => onUpdate({ type: v as EventCapture["type"] })}
-          options={EVENT_TYPES.map((t) => ({ value: t, label: t.replace("_", " ") }))}
+          ariaLabel="Event type"
+          options={EVENT_TYPES.map((t) => ({
+            value: t,
+            label: EVENT_TYPE_LABEL[t],
+          }))}
         />
         <TextInput
           placeholder="Location (optional)"
           value={capture.location}
           onChange={(v) => onUpdate({ location: v })}
+          error={errors?.location?.[0]}
+          maxLength={200}
         />
       </div>
     </div>
@@ -309,9 +345,10 @@ function DeadlineFields({
         <Select
           value={capture.kind_}
           onChange={(v) => onUpdate({ kind_: v as DeadlineCapture["kind_"] })}
+          ariaLabel="Deadline kind"
           options={DEADLINE_KINDS.map((k) => ({
             value: k,
-            label: k.replace("_", " "),
+            label: DEADLINE_KIND_LABEL[k],
           }))}
         />
       </div>
@@ -319,6 +356,8 @@ function DeadlineFields({
         placeholder="Why this deadline applies (optional)"
         value={capture.description}
         onChange={(v) => onUpdate({ description: v })}
+        error={errors?.description?.[0]}
+        maxLength={4000}
       />
     </div>
   );
@@ -360,6 +399,8 @@ function TimeFields({
         placeholder="Narrative (optional, client-facing)"
         value={capture.narrative}
         onChange={(v) => onUpdate({ narrative: v })}
+        error={errors?.narrative?.[0]}
+        maxLength={4000}
       />
     </div>
   );
@@ -368,10 +409,12 @@ function TimeFields({
 function NoteSiblingFields({
   capture,
   errors,
+  canPin,
   onUpdate,
 }: {
   capture: NoteSiblingCapture;
   errors?: Record<string, string[]>;
+  canPin: boolean;
   onUpdate: (patch: Partial<NoteSiblingCapture>) => void;
 }) {
   return (
@@ -409,15 +452,17 @@ function NoteSiblingFields({
             </button>
           ))}
         </div>
-        <label className="flex items-center gap-1 text-2xs text-ink-2 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={capture.isPinned}
-            onChange={(e) => onUpdate({ isPinned: e.target.checked })}
-            className="w-3 h-3 rounded border-line"
-          />
-          Pin
-        </label>
+        {canPin && (
+          <label className="flex items-center gap-1 text-2xs text-ink-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={capture.isPinned}
+              onChange={(e) => onUpdate({ isPinned: e.target.checked })}
+              className="w-3 h-3 rounded border-line"
+            />
+            Pin
+          </label>
+        )}
       </div>
     </div>
   );
@@ -432,6 +477,7 @@ function TextInput({
   error,
   className,
   inputMode,
+  maxLength,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -439,6 +485,7 @@ function TextInput({
   error?: string;
   className?: string;
   inputMode?: React.InputHTMLAttributes<HTMLInputElement>["inputMode"];
+  maxLength?: number;
 }) {
   return (
     <div className="flex flex-col gap-0.5 min-w-0">
@@ -448,6 +495,7 @@ function TextInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         inputMode={inputMode}
+        maxLength={maxLength}
         className={cn(
           "h-7 px-2 rounded-md border bg-white text-xs text-ink w-full",
           "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
@@ -523,18 +571,22 @@ function Select({
   value,
   onChange,
   options,
+  ariaLabel,
 }: {
   value: string;
   onChange: (v: string) => void;
   options: Array<{ value: string; label: string }>;
+  /** Accessible name — a bare <select> reads as just "combo box". */
+  ariaLabel: string;
 }) {
   return (
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      aria-label={ariaLabel}
       className={cn(
         "h-7 px-2 rounded-md border border-line bg-white text-xs text-ink",
-        "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 capitalize"
+        "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
       )}
     >
       {options.map((o) => (

@@ -31,17 +31,17 @@ import type { UpdateDeadlineFormState } from "@/lib/deadline-form";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { SOL_SOURCE_TYPE } from "@/lib/sol";
+import { dateOnlyKey, parseDateOnly } from "@/lib/format-date";
 
 const SOL_MANAGED_MESSAGE =
   "The statute of limitations is managed on the matter. Change or clear it from the matter's Edit page.";
 
-/** `YYYY-MM-DD` in the server's local zone — the frame
- *  `parseLocalDueDate` parses deadline due dates in. Used only for
- *  audit-log wording. */
-function dayLabel(d: Date): string {
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
+/** Due dates are date-only values (ADR-012): UTC midnight, read in
+ *  UTC. `dayLabel` is the audit-log wording of one. */
+const dayLabel = dateOnlyKey;
+
+const STALE_MESSAGE =
+  "This deadline was changed by someone else since you opened it. Close this dialog and reopen it to see the latest, then re-apply your edit.";
 
 const STATUS_LOG_TITLE: Record<string, string> = {
   completed: "Deadline completed",
@@ -140,41 +140,6 @@ export async function deleteDeadline(
 
 // ── Update ──────────────────────────────────────────────────────────────
 
-/** Parse the form's dueDate field (`YYYY-MM-DD` from `<input type="date">`)
- *  into local midnight of that day.
- *
- *  We don't use `new Date(value)` directly because that parses ISO
- *  date-only strings as UTC midnight, which shifts the day for any
- *  user west of UTC — and since the edit dialog reads the value back
- *  with local getters, each save would drift the deadline a day
- *  earlier. Mirrors parseEventBoundary (calendar-events.ts) and
- *  parseEndOfDay (follow-ups.ts).
- *
- *  Returns null when the value can't be parsed (caller surfaces
- *  the field error). */
-function parseLocalDueDate(value: string): Date | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!m) return null;
-  const [, y, mo, d] = m;
-  const date = new Date(Number(y), Number(mo) - 1, Number(d), 0, 0, 0, 0);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-/** True when `posted` (YYYY-MM-DD) is the stored UTC-midnight day or one
- *  day either side of it — the spread a browser's local-time read-back
- *  can introduce. */
-function isSolDayUnchanged(posted: string, stored: Date): boolean {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(posted);
-  if (!m) return false;
-  const postedMs = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  const storedMs = Date.UTC(
-    stored.getUTCFullYear(),
-    stored.getUTCMonth(),
-    stored.getUTCDate()
-  );
-  return Math.abs(postedMs - storedMs) <= 24 * 60 * 60 * 1000;
-}
-
 const updateDeadlineSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(200),
   dueDate: z.string().min(1, "Due date is required"),
@@ -182,6 +147,11 @@ const updateDeadlineSchema = z.object({
   sourceRef: z.string().max(200).optional().or(z.literal("")),
   description: z.string().max(4000).optional().or(z.literal("")),
   status: z.enum(DEADLINE_STATUSES).default("open"),
+  /** `updatedAt` (ISO) of the row the dialog was seeded from. When
+   *  present, the write only lands if the row is unchanged since —
+   *  otherwise a stale form silently reverts someone else's edit
+   *  (e.g. a rescheduled due date). Absent = no check. */
+  expectedUpdatedAt: z.string().optional().or(z.literal("")),
 });
 
 export async function updateDeadline(
@@ -208,6 +178,9 @@ export async function updateDeadline(
       dueDate: true,
       kind: true,
       sourceType: true,
+      sourceRef: true,
+      description: true,
+      updatedAt: true,
     },
   });
   if (!deadline) {
@@ -216,6 +189,25 @@ export async function updateDeadline(
       errors: { title: ["Deadline no longer exists"] },
     };
   }
+
+  // Optimistic-concurrency guard: the dialog posts the updatedAt it
+  // was seeded with. Checked here for a clear message and re-checked
+  // in the write's WHERE so a race between this read and the write
+  // can't slip through.
+  const expected = parsed.data.expectedUpdatedAt
+    ? new Date(parsed.data.expectedUpdatedAt)
+    : null;
+  if (expected && Number.isNaN(expected.getTime())) {
+    revalidateForDeadline(deadline.matterId);
+    return { status: "error", errors: { _form: [STALE_MESSAGE] } };
+  }
+  if (expected && expected.getTime() !== deadline.updatedAt.getTime()) {
+    revalidateForDeadline(deadline.matterId);
+    return { status: "error", errors: { _form: [STALE_MESSAGE] } };
+  }
+  const where = expected
+    ? { id: deadlineId, updatedAt: expected }
+    : { id: deadlineId };
 
   const newStatus = parsed.data.status;
   const isComplete = newStatus === "completed";
@@ -227,21 +219,22 @@ export async function updateDeadline(
     // The SOL row mirrors the matter's SOL fields, so only the status
     // is editable here; the matter owns the rest and would overwrite
     // it on its next save. The dialog renders the date read-only but
-    // still posts it, read back with BROWSER-local getters from the
-    // UTC-midnight storage, so a browser west of UTC posts the
-    // previous day. Accept the stored UTC day +/- 1 (covers every
-    // real UTC offset, independent of the server's TZ) as "unchanged";
-    // refuse anything further away as an attempted move.
-    if (!isSolDayUnchanged(parsed.data.dueDate, deadline.dueDate)) {
+    // still posts it (the stored UTC day, ADR-012); any other day is
+    // an attempted move.
+    if (parsed.data.dueDate !== dateOnlyKey(deadline.dueDate)) {
       return {
         status: "error",
         errors: { dueDate: [SOL_MANAGED_MESSAGE] },
       };
     }
-    await prisma.deadline.update({
-      where: { id: deadlineId },
+    const solWrite = await prisma.deadline.updateMany({
+      where,
       data: { status: newStatus, completedAt },
     });
+    if (solWrite.count === 0) {
+      revalidateForDeadline(deadline.matterId);
+      return { status: "error", errors: { _form: [STALE_MESSAGE] } };
+    }
     if (deadline.status !== newStatus) {
       await logActivity({
         matterId: deadline.matterId,
@@ -255,7 +248,7 @@ export async function updateDeadline(
     return { status: "ok" };
   }
 
-  const dueDate = parseLocalDueDate(parsed.data.dueDate);
+  const dueDate = parseDateOnly(parsed.data.dueDate);
   if (!dueDate) {
     return {
       status: "error",
@@ -263,8 +256,8 @@ export async function updateDeadline(
     };
   }
 
-  await prisma.deadline.update({
-    where: { id: deadlineId },
+  const write = await prisma.deadline.updateMany({
+    where,
     data: {
       title: parsed.data.title,
       dueDate,
@@ -275,6 +268,10 @@ export async function updateDeadline(
       completedAt,
     },
   });
+  if (write.count === 0) {
+    revalidateForDeadline(deadline.matterId);
+    return { status: "error", errors: { _form: [STALE_MESSAGE] } };
+  }
 
   // Audit: only what actually changed, with old -> new.
   const oldDay = dayLabel(deadline.dueDate);
@@ -289,6 +286,14 @@ export async function updateDeadline(
   }
   if (newStatus !== deadline.status) {
     changes.push(`status ${deadline.status} → ${newStatus}`);
+  }
+  if ((parsed.data.sourceRef || null) !== deadline.sourceRef) {
+    changes.push(
+      `source "${deadline.sourceRef ?? ""}" → "${parsed.data.sourceRef ?? ""}"`
+    );
+  }
+  if ((parsed.data.description || null) !== deadline.description) {
+    changes.push("description edited");
   }
   if (changes.length > 0) {
     await logActivity({

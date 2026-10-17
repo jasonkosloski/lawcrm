@@ -4,6 +4,11 @@
  * Statute-driven, rule-driven, and manual deadlines for this matter.
  * Open deadlines surface first, then completed/waived, each sorted by
  * due date.
+ *
+ * Due dates are date-only values (ADR-012): displayed with
+ * `formatDateOnly`, and "days left" is counted from the VIEWER's today
+ * with `daysUntilDateOnly` — a deadline due today is "Today", never
+ * late. Write controls follow the viewer's permissions.
  */
 
 import { CalendarClock } from "lucide-react";
@@ -26,13 +31,17 @@ import {
   DEADLINE_STATUS_LABEL,
   type DeadlineStatus,
 } from "@/lib/constants/deadline-status";
-// Due dates are date-only values (server-local midnight) — the
-// centralized default ("medium") with no TZ override keeps them on
-// the day grid they were saved on.
-import { formatDate } from "@/lib/format-date";
+import {
+  dateOnlyKey,
+  daysUntilDateOnly,
+  formatDateOnly,
+} from "@/lib/format-date";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
+import { prisma } from "@/lib/prisma";
 import { getMatterDeadlines } from "@/lib/queries/matter-detail";
 import { listDeadlineRules } from "@/lib/queries/automations";
 import { currentUserHasPermission } from "@/lib/permission-check";
+import { getCaptureAccess } from "@/lib/capture-access";
 import { ApplyDeadlineRuleDialog } from "@/components/automations/apply-deadline-rule-dialog";
 import { requireUser } from "@/lib/current-user";
 
@@ -80,13 +89,51 @@ export default async function MatterDeadlinesPage({
 }: PageProps<"/matters/[id]">) {
   await requireUser();
   const { id } = await params;
-  const [deadlines, canCreate] = await Promise.all([
+  // The rule library does not depend on the matter or the permission
+  // result, so it runs in the same batch; it is discarded below for
+  // viewers who couldn't apply a rule.
+  const [
+    rows,
+    versions,
+    allRules,
+    tz,
+    canCreate,
+    canEdit,
+    canDelete,
+    canLogTime,
+    captureAccess,
+  ] = await Promise.all([
     getMatterDeadlines(id),
+    // Row versions for the edit dialog's stale-form guard.
+    prisma.deadline.findMany({
+      where: { matterId: id },
+      select: { id: true, updatedAt: true },
+    }),
+    listDeadlineRules({ activeOnly: true }),
+    getCurrentUserTimeZone(),
     currentUserHasPermission("deadlines.create"),
+    currentUserHasPermission("deadlines.edit"),
+    currentUserHasPermission("deadlines.delete"),
+    currentUserHasPermission("time_entries.create"),
+    getCaptureAccess(),
   ]);
-  // Firm deadline rules (Settings → Automations) — only fetched for
-  // users who could apply one.
-  const rules = canCreate ? await listDeadlineRules({ activeOnly: true }) : [];
+  const rules = canCreate ? allRules : [];
+  const updatedAtById = new Map(
+    versions.map((v) => [v.id, v.updatedAt.toISOString()])
+  );
+
+  // Open deadlines first, then completed/waived (the query's
+  // alphabetical status order put "completed" above "open"); each
+  // group stays in due-date order (Array.sort is stable).
+  const deadlines = rows
+    .map((d) => ({ ...d, daysLeft: daysUntilDateOnly(d.dueDate, tz) }))
+    .sort((a, b) => {
+      const rank = (x: { status: string }) => (x.status === "open" ? 0 : 1);
+      return (
+        rank(a) - rank(b) ||
+        a.dueDate.getTime() - b.dueDate.getTime()
+      );
+    });
 
   return (
     <div className="p-5 flex flex-col gap-4">
@@ -98,13 +145,19 @@ export default async function MatterDeadlinesPage({
           />
         </div>
       )}
-      <DeadlineComposer matterId={id} />
+      {canCreate && (
+        <DeadlineComposer
+          matterId={id}
+          siblingKinds={captureAccess.kinds}
+          canPin={captureAccess.canPin}
+        />
+      )}
 
       {deadlines.length === 0 ? (
         <EmptyState
           icon={CalendarClock}
           title="No deadlines yet"
-          description="Add one above."
+          description={canCreate ? "Add one above." : undefined}
           className="py-6"
         />
       ) : (
@@ -149,19 +202,21 @@ export default async function MatterDeadlinesPage({
                   </div>
                 </TableCell>
                 <TableCell className="text-xs text-ink-3">
-                  {formatDate(d.dueDate)}
+                  {formatDateOnly(d.dueDate)}
                 </TableCell>
                 <TableCell className="text-right font-mono text-2xs">
                   {d.status !== "open" ? (
                     <span className="text-ink-4">—</span>
-                  ) : d.isOverdue ? (
+                  ) : d.daysLeft < 0 ? (
                     <span className="text-warn font-medium">
-                      {Math.abs(d.daysUntil)}d late
+                      {Math.abs(d.daysLeft)}d late
                     </span>
-                  ) : d.daysUntil <= 7 ? (
-                    <span className="text-warn font-medium">{d.daysUntil}d</span>
+                  ) : d.daysLeft === 0 ? (
+                    <span className="text-warn font-medium">Today</span>
+                  ) : d.daysLeft <= 7 ? (
+                    <span className="text-warn font-medium">{d.daysLeft}d</span>
                   ) : (
-                    <span className="text-ink-3">{d.daysUntil}d</span>
+                    <span className="text-ink-3">{d.daysLeft}d</span>
                   )}
                 </TableCell>
                 <TableCell>
@@ -189,13 +244,17 @@ export default async function MatterDeadlinesPage({
                 </TableCell>
                 <TableCell className="pr-4">
                   <DeadlineRowMenu
+                    canEdit={canEdit}
+                    canDelete={canDelete}
+                    canLogTime={canLogTime}
                     deadline={{
                       id: d.id,
                       title: d.title,
                       description: d.description,
                       kind: d.kind,
                       sourceRef: d.sourceRef,
-                      dueDate: d.dueDate,
+                      dueDateKey: dateOnlyKey(d.dueDate),
+                      updatedAt: updatedAtById.get(d.id) ?? "",
                       sourceType: d.sourceType,
                       // `overdue` is computed; persisted statuses are open/completed/waived.
                       // Coerce overdue → open so the menu radio shows the underlying state.

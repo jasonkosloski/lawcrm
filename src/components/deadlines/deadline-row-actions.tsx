@@ -4,6 +4,11 @@
  * Kebab menu at the right edge of a deadline row. Edit | Set status >
  * | Delete. Status submenu only exposes user-driven states; `overdue`
  * is computed from dueDate at read time and isn't directly settable.
+ *
+ * Each item is shown only when the viewer holds the matching key
+ * (`canEdit` = deadlines.edit, `canDelete` = deadlines.delete,
+ * `canLogTime` = time_entries.create), resolved by the page — a denied
+ * server action redirects to `/` and throws away what was typed.
  */
 
 "use client";
@@ -37,8 +42,14 @@ import { LogTimeOnEntityDialog } from "@/components/time-entries/log-time-on-ent
 
 export function DeadlineRowMenu({
   deadline,
+  canEdit,
+  canDelete,
+  canLogTime,
 }: {
   deadline: EditableDeadline;
+  canEdit: boolean;
+  canDelete: boolean;
+  canLogTime: boolean;
 }) {
   const [editOpen, setEditOpen] = useState(false);
   const [logTimeOpen, setLogTimeOpen] = useState(false);
@@ -46,6 +57,7 @@ export function DeadlineRowMenu({
   const [error, setError] = useState<string | null>(null);
   // The auto-managed SOL row can't be deleted or moved from here.
   const isSol = deadline.sourceType === SOL_SOURCE_TYPE;
+  const showDelete = canDelete && !isSol;
 
   const onSelectStatus = (next: string) => {
     if (next === deadline.status) return;
@@ -71,6 +83,9 @@ export function DeadlineRowMenu({
     });
   };
 
+  // Nothing this viewer may do -> no empty kebab.
+  if (!canEdit && !showDelete && !canLogTime) return null;
+
   return (
     <>
       {error && (
@@ -92,29 +107,37 @@ export function DeadlineRowMenu({
           }
         />
         <DropdownMenuContent align="end" className="min-w-44">
-          <DropdownMenuItem onClick={() => setEditOpen(true)}>
-            <Pencil />
-            Edit
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setLogTimeOpen(true)}>
-            <Clock />
-            Log time on this deadline
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>Set status</DropdownMenuLabel>
-            <DropdownMenuRadioGroup
-              value={deadline.status}
-              onValueChange={onSelectStatus}
-            >
-              {DEADLINE_STATUSES.map((s) => (
-                <DropdownMenuRadioItem key={s} value={s}>
-                  {STATUS_LABEL[s]}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuGroup>
-          {!isSol && (
+          {canEdit && (
+            <DropdownMenuItem onClick={() => setEditOpen(true)}>
+              <Pencil />
+              Edit
+            </DropdownMenuItem>
+          )}
+          {canLogTime && (
+            <DropdownMenuItem onClick={() => setLogTimeOpen(true)}>
+              <Clock />
+              Log time on this deadline
+            </DropdownMenuItem>
+          )}
+          {canEdit && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Set status</DropdownMenuLabel>
+                <DropdownMenuRadioGroup
+                  value={deadline.status}
+                  onValueChange={onSelectStatus}
+                >
+                  {DEADLINE_STATUSES.map((s) => (
+                    <DropdownMenuRadioItem key={s} value={s}>
+                      {STATUS_LABEL[s]}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuGroup>
+            </>
+          )}
+          {showDelete && (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onClick={onDelete}>

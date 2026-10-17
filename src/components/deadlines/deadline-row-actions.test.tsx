@@ -2,8 +2,10 @@
  * Tests for DeadlineRowMenu.
  *
  * Pins: a refused action (e.g. delete / status on the auto-managed SOL
- * row) surfaces the server's error instead of failing silently, and
- * the SOL row has no Delete item at all.
+ * row) surfaces the server's error instead of failing silently, the
+ * SOL row has no Delete item at all, and each item is hidden from a
+ * viewer who lacks its permission (a denied action would redirect to
+ * `/` and discard their input).
  */
 
 import { beforeEach, describe, expect, test, vi } from "vitest";
@@ -29,9 +31,12 @@ const base: EditableDeadline = {
   description: null,
   kind: "manual",
   sourceRef: null,
-  dueDate: new Date(2026, 6, 20),
+  dueDateKey: "2026-07-20",
+  updatedAt: "2026-07-01T00:00:00.000Z",
   status: "open",
 };
+
+const all = { canEdit: true, canDelete: true, canLogTime: true };
 
 const setupUser = () => userEvent.setup({ pointerEventsCheck: 0 });
 
@@ -48,7 +53,7 @@ describe("DeadlineRowMenu", () => {
       error: "Deadline not found",
     });
     const user = setupUser();
-    render(<DeadlineRowMenu deadline={base} />);
+    render(<DeadlineRowMenu deadline={base} {...all} />);
     await user.click(screen.getByRole("button", { name: /deadline actions/i }));
     await user.click(await screen.findByText("Delete"));
     await waitFor(() =>
@@ -62,7 +67,7 @@ describe("DeadlineRowMenu", () => {
       error: "Nope",
     });
     const user = setupUser();
-    render(<DeadlineRowMenu deadline={base} />);
+    render(<DeadlineRowMenu deadline={base} {...all} />);
     await user.click(screen.getByRole("button", { name: /deadline actions/i }));
     await user.click(await screen.findByText("Completed"));
     await waitFor(() =>
@@ -75,10 +80,64 @@ describe("DeadlineRowMenu", () => {
     render(
       <DeadlineRowMenu
         deadline={{ ...base, sourceType: "statute_of_limitations" }}
+        {...all}
       />
     );
     await user.click(screen.getByRole("button", { name: /deadline actions/i }));
     await screen.findByText("Edit");
     expect(screen.queryByText("Delete")).toBeNull();
+  });
+});
+
+describe("DeadlineRowMenu - permission-gated items", () => {
+  const open = async (user: ReturnType<typeof setupUser>) => {
+    await user.click(screen.getByRole("button", { name: /deadline actions/i }));
+  };
+
+  test("a viewer with only deadlines.edit sees Edit and statuses, not Delete or Log time", async () => {
+    const user = setupUser();
+    render(
+      <DeadlineRowMenu
+        deadline={base}
+        canEdit
+        canDelete={false}
+        canLogTime={false}
+      />
+    );
+    await open(user);
+    await screen.findByText("Edit");
+    expect(screen.getByText("Completed")).toBeInTheDocument();
+    expect(screen.queryByText("Delete")).toBeNull();
+    expect(screen.queryByText(/log time/i)).toBeNull();
+  });
+
+  test("a viewer with only deadlines.delete sees Delete and nothing editable", async () => {
+    const user = setupUser();
+    render(
+      <DeadlineRowMenu
+        deadline={base}
+        canEdit={false}
+        canDelete
+        canLogTime={false}
+      />
+    );
+    await open(user);
+    await screen.findByText("Delete");
+    expect(screen.queryByText("Edit")).toBeNull();
+    expect(screen.queryByText("Set status")).toBeNull();
+  });
+
+  test("a viewer with no deadline permission gets no kebab at all", () => {
+    render(
+      <DeadlineRowMenu
+        deadline={base}
+        canEdit={false}
+        canDelete={false}
+        canLogTime={false}
+      />
+    );
+    expect(
+      screen.queryByRole("button", { name: /deadline actions/i })
+    ).toBeNull();
   });
 });
