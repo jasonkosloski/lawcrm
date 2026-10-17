@@ -7,7 +7,7 @@
  *     lead as converted, redirect to the new matter. When the target
  *     area tracks a statute of limitations, the lead's dateOfIncident
  *     becomes the matter's incidentDate, the SOL date is auto-computed
- *     from the area's statutePeriodDays, and the auto-managed critical
+ *     from the area's statute period, and the auto-managed critical
  *     SOL Deadline is created — same malpractice guard as the direct
  *     create path in matters.ts. Intake time entries logged on the
  *     lead (TimeEntry.leadId) are re-homed onto the new matter inside
@@ -35,7 +35,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
-import { computeSolDate, SOL_SOURCE_TYPE } from "@/lib/sol";
+import { computeSolDate, SOL_SOURCE_TYPE, toSolPeriod } from "@/lib/sol";
 import { dateOnlyKey } from "@/lib/format-date";
 import { applyAutoDefaults, describeDefaults } from "@/lib/automations/apply";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
@@ -155,7 +155,8 @@ export async function convertLeadToMatter(
         isActive: true,
         defaultBillingMode: true,
         hasStatuteOfLimitations: true,
-        statutePeriodDays: true,
+        statutePeriodAmount: true,
+        statutePeriodUnit: true,
       },
     }),
     prisma.matterStage.findUnique({
@@ -197,7 +198,10 @@ export async function convertLeadToMatter(
   const incidentDate = area.hasStatuteOfLimitations
     ? lead.dateOfIncident
     : null;
-  const solDate = computeSolDate(incidentDate, area.statutePeriodDays);
+  const solDate = computeSolDate(
+    incidentDate,
+    toSolPeriod(area.statutePeriodAmount, area.statutePeriodUnit)
+  );
 
   // Single transaction so a half-converted lead can't exist.
   const result = await prisma.$transaction(async (tx) => {

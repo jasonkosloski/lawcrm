@@ -126,37 +126,42 @@ describe("createPracticeArea", () => {
     ]);
   });
 
-  test("SOL on: 2y 0m 0d stores 730 days and the citation", async () => {
+  test("SOL on: 2 years stores amount + unit (not days) and the citation", async () => {
     await create({
       hasStatuteOfLimitations: "on",
-      statuteYears: "2",
+      statutePeriodAmount: "2",
+      statutePeriodUnit: "YEARS",
       statuteSourceCitation: " 42 U.S.C. § 1983 ",
     });
     const area = await prisma.practiceArea.findUniqueOrThrow({
       where: { name: "Employment" },
     });
     expect(area.hasStatuteOfLimitations).toBe(true);
-    expect(area.statutePeriodDays).toBe(730);
+    expect(area.statutePeriodAmount).toBe(2);
+    expect(area.statutePeriodUnit).toBe("YEARS");
+    expect(area.statutePeriodDays).toBeNull();
     expect(area.statuteSourceCitation).toBe("42 U.S.C. § 1983");
   });
 
-  test("SOL on with 0/0/0 stores null; SOL off ignores a posted period", async () => {
+  test("SOL on with a blank period stores null; SOL off ignores a posted period", async () => {
     await create({ hasStatuteOfLimitations: "on" });
     expect(
       (await prisma.practiceArea.findUniqueOrThrow({ where: { name: "Employment" } }))
-        .statutePeriodDays
+        .statutePeriodAmount
     ).toBeNull();
 
     await create({
       name: "Housing",
-      statuteYears: "3",
+      statutePeriodAmount: "3",
+      statutePeriodUnit: "YEARS",
       statuteSourceCitation: "x",
     });
     const off = await prisma.practiceArea.findUniqueOrThrow({
       where: { name: "Housing" },
     });
     expect(off.hasStatuteOfLimitations).toBe(false);
-    expect(off.statutePeriodDays).toBeNull();
+    expect(off.statutePeriodAmount).toBeNull();
+    expect(off.statutePeriodUnit).toBeNull();
     expect(off.statuteSourceCitation).toBeNull();
   });
 
@@ -185,6 +190,42 @@ describe("createPracticeArea", () => {
     expect(await prisma.practiceArea.count()).toBe(1);
   });
 
+  test("SOL period: months and days store as typed; a bad amount or missing unit is a field error", async () => {
+    await create({
+      hasStatuteOfLimitations: "on",
+      statutePeriodAmount: "18",
+      statutePeriodUnit: "MONTHS",
+    });
+    const a = await prisma.practiceArea.findUniqueOrThrow({
+      where: { name: "Employment" },
+    });
+    expect([a.statutePeriodAmount, a.statutePeriodUnit]).toEqual([18, "MONTHS"]);
+
+    for (const bad of ["0", "-3", "1.5", "abc"]) {
+      const res = await createPracticeArea(
+        practiceAreaInitialState,
+        areaForm({
+          name: `Bad ${bad}`,
+          hasStatuteOfLimitations: "on",
+          statutePeriodAmount: bad,
+          statutePeriodUnit: "DAYS",
+        })
+      );
+      expect(res.status).toBe("error");
+      expect(res.errors?.statutePeriodAmount).toBeTruthy();
+    }
+    const noUnit = await createPracticeArea(
+      practiceAreaInitialState,
+      areaForm({
+        name: "No unit",
+        hasStatuteOfLimitations: "on",
+        statutePeriodAmount: "2",
+      })
+    );
+    expect(noUnit.errors?.statutePeriodUnit).toBeTruthy();
+    expect(await prisma.practiceArea.count()).toBe(1);
+  });
+
   test("validates name + colour", async () => {
     const res = await createPracticeArea(
       practiceAreaInitialState,
@@ -198,19 +239,25 @@ describe("createPracticeArea", () => {
 
 describe("updatePracticeArea", () => {
   test("rewrites the SOL period when on, keeps it when unchecked, and audits old -> new", async () => {
-    await create({ hasStatuteOfLimitations: "on", statuteYears: "2" });
+    await create({
+      hasStatuteOfLimitations: "on",
+      statutePeriodAmount: "2",
+      statutePeriodUnit: "YEARS",
+    });
     const id = await areaIdByName("Employment");
 
     const fd = areaForm({
       hasStatuteOfLimitations: "on",
-      statuteYears: "3",
+      statutePeriodAmount: "3",
+      statutePeriodUnit: "YEARS",
       statuteSourceCitation: "C.R.S. § 13-80-101",
     });
     expect((await updatePracticeArea(id, practiceAreaInitialState, fd)).status).toBe(
       "ok"
     );
     let area = await prisma.practiceArea.findUniqueOrThrow({ where: { id } });
-    expect(area.statutePeriodDays).toBe(1095);
+    expect(area.statutePeriodAmount).toBe(3);
+    expect(area.statutePeriodUnit).toBe("YEARS");
     const log = await prisma.activityLog.findFirstOrThrow({
       where: { title: "Practice area updated — Employment" },
     });
@@ -220,7 +267,8 @@ describe("updatePracticeArea", () => {
     await updatePracticeArea(id, practiceAreaInitialState, areaForm());
     area = await prisma.practiceArea.findUniqueOrThrow({ where: { id } });
     expect(area.hasStatuteOfLimitations).toBe(false);
-    expect(area.statutePeriodDays).toBe(1095);
+    expect(area.statutePeriodAmount).toBe(3);
+    expect(area.statutePeriodUnit).toBe("YEARS");
     expect(area.statuteSourceCitation).toBe("C.R.S. § 13-80-101");
   });
 

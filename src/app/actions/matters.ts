@@ -27,6 +27,8 @@ import {
   SOL_SOURCE_TYPE,
   computeSolDate,
   resolveEditedSolDate,
+  toSolPeriod,
+  type SolPeriod,
 } from "@/lib/sol";
 import { dateOnlyKey, parseDateOnly } from "@/lib/format-date";
 import { getCurrentFirm } from "@/lib/firm";
@@ -74,7 +76,7 @@ const createMatterSchema = z
     description: z.string().trim().max(4000).optional().or(z.literal("")),
     /** SOL fields — ignored unless the selected practice area has
      *  hasStatuteOfLimitations=true. Form shows them conditionally.
-     *  When the area has a configured statutePeriodDays AND
+     *  When the area has a configured statutePeriodAmount/Unit AND
      *  incidentDate is filled in, the SOL date is auto-computed
      *  on submit; the explicit `statuteOfLimitationsDate` value
      *  (if any) wins so the lawyer can override. */
@@ -237,9 +239,9 @@ async function resolveAreaAndStage(
       areaName: string;
       color: string;
       hasStatuteOfLimitations: boolean;
-      /** Total-days statute period configured by the firm. Drives
-       *  auto-compute of the matter's SOL date from incidentDate. */
-      statutePeriodDays: number | null;
+      /** Calendar statute period configured by the firm (ADR-035).
+       *  Drives auto-compute of the matter's SOL date from incidentDate. */
+      statutePeriod: SolPeriod | null;
       /** Snapshotted onto the new Matter so per-area changes don't
        *  rewrite history. Per-matter override happens via the matter
        *  edit form. */
@@ -255,7 +257,8 @@ async function resolveAreaAndStage(
       color: true,
       isActive: true,
       hasStatuteOfLimitations: true,
-      statutePeriodDays: true,
+      statutePeriodAmount: true,
+      statutePeriodUnit: true,
       defaultBillingMode: true,
       stages: {
         where: { isActive: true },
@@ -279,7 +282,7 @@ async function resolveAreaAndStage(
     areaName: area.name,
     color: area.color,
     hasStatuteOfLimitations: area.hasStatuteOfLimitations,
-    statutePeriodDays: area.statutePeriodDays,
+    statutePeriod: toSolPeriod(area.statutePeriodAmount, area.statutePeriodUnit),
     defaultBillingMode: area.defaultBillingMode,
   };
 }
@@ -342,11 +345,11 @@ export async function createMatter(
   }
   const incidentDate = parsedDates.incident;
   // Manual override wins; otherwise auto-compute from
-  // incidentDate + the area's statutePeriodDays.
+  // incidentDate + the area's statute period.
   const solDate =
     resolved.hasStatuteOfLimitations
       ? (parsedDates.sol ??
-        computeSolDate(incidentDate, resolved.statutePeriodDays))
+        computeSolDate(incidentDate, resolved.statutePeriod))
       : null;
   const solNotes =
     resolved.hasStatuteOfLimitations
@@ -709,7 +712,9 @@ export async function updateMatter(
         statuteOfLimitationsNotes: true,
         statuteOfLimitationsSatisfied: true,
         statuteOfLimitationsSatisfiedAt: true,
-        practiceArea: { select: { statutePeriodDays: true } },
+        practiceArea: {
+          select: { statutePeriodAmount: true, statutePeriodUnit: true },
+        },
       },
     });
 
@@ -724,9 +729,12 @@ export async function updateMatter(
         posted: parsedDates.sol,
         stored: cur.statuteOfLimitationsDate,
         storedIncident: cur.incidentDate,
-        storedPeriodDays: cur.practiceArea.statutePeriodDays,
+        storedPeriod: toSolPeriod(
+          cur.practiceArea.statutePeriodAmount,
+          cur.practiceArea.statutePeriodUnit
+        ),
         incident: parsedDates.incident,
-        periodDays: resolved.statutePeriodDays,
+        period: resolved.statutePeriod,
       });
       solNotes = data.statuteOfLimitationsNotes || null;
     }

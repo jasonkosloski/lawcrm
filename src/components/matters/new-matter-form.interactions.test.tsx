@@ -29,7 +29,7 @@ const options: NewMatterFormOptions = {
       id: "area1",
       name: "Civil Rights",
       hasStatuteOfLimitations: false,
-      statutePeriodDays: null,
+      statutePeriod: null,
       statuteSourceCitation: null,
       stages: [{ id: "stage1", name: "Intake", order: 0, isTerminal: false }],
     },
@@ -37,7 +37,7 @@ const options: NewMatterFormOptions = {
       id: "area2",
       name: "Employment",
       hasStatuteOfLimitations: true,
-      statutePeriodDays: 365,
+      statutePeriod: { amount: 1, unit: "YEARS" as const },
       statuteSourceCitation: null,
       stages: [
         { id: "stage2a", name: "Screening", order: 0, isTerminal: false },

@@ -18,7 +18,11 @@ import Link from "next/link";
 import { useActionState, useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { updateMatter } from "@/app/actions/matters";
-import { computeSolDate, formatStatutePeriod } from "@/lib/sol";
+import {
+  computeSolDate,
+  formatStatutePeriod,
+  type SolPeriod,
+} from "@/lib/sol";
 import {
   dateOnlyKey,
   formatDateOnly,
@@ -66,7 +70,7 @@ export type EditAreaOption = {
   hasStatuteOfLimitations: boolean;
   /** Total-days statute period; drives the auto-computed hint shown
    *  under the Deadline date input. */
-  statutePeriodDays: number | null;
+  statutePeriod: SolPeriod | null;
   statuteSourceCitation: string | null;
   stages: Array<{
     id: string;
@@ -148,7 +152,7 @@ export function EditMatterForm({
   const storedArea = options.areas.find((a) => a.id === matter.practiceAreaId);
   const storedAuto = computeSolDate(
     matter.incidentDate,
-    storedArea?.statutePeriodDays
+    storedArea?.statutePeriod
   );
   const storedIsAuto =
     !matter.statuteOfLimitationsDate ||
@@ -227,7 +231,7 @@ export function EditMatterForm({
     : null;
   const autoPreview = computeSolDate(
     parsedIncident,
-    selectedArea?.statutePeriodDays
+    selectedArea?.statutePeriod
   );
   const previewLabel = autoPreview ? formatDateOnly(autoPreview) : null;
   const stageOptions = selectedArea?.stages ?? [];
@@ -494,8 +498,8 @@ export function EditMatterForm({
               name="incidentDate"
               error={errs.incidentDate}
               hint={
-                selectedArea.statutePeriodDays
-                  ? `Period: ${formatStatutePeriod(selectedArea.statutePeriodDays)}${selectedArea.statuteSourceCitation ? ` · ${selectedArea.statuteSourceCitation}` : ""}. Leave Deadline date blank to auto-compute.`
+                selectedArea.statutePeriod
+                  ? `Period: ${formatStatutePeriod(selectedArea.statutePeriod)}${selectedArea.statuteSourceCitation ? ` · ${selectedArea.statuteSourceCitation}` : ""}. Leave Deadline date blank to auto-compute.`
                   : "When known, drives the SOL deadline once the firm configures a statute period for this area."
               }
             >

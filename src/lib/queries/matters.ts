@@ -15,6 +15,7 @@
 
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
+import { toSolPeriod } from "@/lib/sol";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { TIME_ENTRY_WIP_STATUSES } from "@/lib/constants/time-entry-status";
@@ -398,7 +399,8 @@ export const getMatterById = cache(async (id: string) => {
           name: true,
           color: true,
           hasStatuteOfLimitations: true,
-          statutePeriodDays: true,
+          statutePeriodAmount: true,
+          statutePeriodUnit: true,
           statuteSourceCitation: true,
         },
       },
@@ -451,7 +453,10 @@ export const getMatterById = cache(async (id: string) => {
     practiceAreaId: practiceArea.id,
     practiceAreaColor: practiceArea.color,
     practiceAreaHasStatuteOfLimitations: practiceArea.hasStatuteOfLimitations,
-    practiceAreaStatutePeriodDays: practiceArea.statutePeriodDays,
+    practiceAreaStatutePeriod: toSolPeriod(
+      practiceArea.statutePeriodAmount,
+      practiceArea.statutePeriodUnit
+    ),
     practiceAreaStatuteSourceCitation: practiceArea.statuteSourceCitation,
     stageId: stage.id,
     stageOrder: stage.order,

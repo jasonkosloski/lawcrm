@@ -773,7 +773,7 @@ describe("upsertSettlement — amount locks", () => {
   });
 });
 
-describe("upsertSettlement — concurrent create + deterministic lookup (F364)", () => {
+describe("upsertSettlement — concurrent create + single settlement per matter", () => {
   test("two simultaneous 'Open settlement' submits create exactly one settlement", async () => {
     const results = await Promise.all([
       upsertSettlement(
@@ -796,26 +796,21 @@ describe("upsertSettlement — concurrent create + deterministic lookup (F364)",
     expect(rows[0]!.approvals).toHaveLength(4);
   });
 
-  test("with pre-existing duplicates, edits always target the OLDEST row", async () => {
-    const mk = (createdAt: Date, gross: number) =>
-      prisma.settlement.create({
-        data: { matterId, grossAmount: gross, createdAt },
-        select: { id: true },
-      });
-    const older = await mk(new Date("2026-01-01T00:00:00Z"), 1000);
-    const newer = await mk(new Date("2026-02-01T00:00:00Z"), 2000);
+  test("an edit updates the matter's single settlement in place", async () => {
+    const existing = await prisma.settlement.create({
+      data: { matterId, grossAmount: 1000 },
+      select: { id: true },
+    });
     const res = await upsertSettlement(
       matterId,
       settlementInitialState,
       buildUpsertForm({ gross: "5000", feePct: "" })
     );
     expect(res.status).toBe("ok");
-    const [o, n] = await Promise.all([
-      prisma.settlement.findUniqueOrThrow({ where: { id: older.id } }),
-      prisma.settlement.findUniqueOrThrow({ where: { id: newer.id } }),
-    ]);
-    expect(o.grossAmount.toNumber()).toBe(5000);
-    expect(n.grossAmount.toNumber()).toBe(2000);
+    const rows = await prisma.settlement.findMany({ where: { matterId } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.id).toBe(existing.id);
+    expect(rows[0]!.grossAmount.toNumber()).toBe(5000);
   });
 });
 

@@ -40,7 +40,7 @@ const options: EditMatterFormOptions = {
       id: "civil",
       name: "Civil Rights",
       hasStatuteOfLimitations: true,
-      statutePeriodDays: 730,
+      statutePeriod: { amount: 2, unit: "YEARS" as const },
       statuteSourceCitation: null,
       stages: [{ id: "s1", name: "Intake", order: 0, isTerminal: false }],
     },

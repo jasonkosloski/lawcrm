@@ -560,7 +560,10 @@ describe("updateMatter SOL recompute", () => {
   const setPeriod = (days: number | null, id = areaId) =>
     prisma.practiceArea.update({
       where: { id },
-      data: { statutePeriodDays: days },
+      data: {
+        statutePeriodAmount: days,
+        statutePeriodUnit: days ? "DAYS" : null,
+      },
     });
   const readSol = async (matterId: string) => {
     const m = await prisma.matter.findUniqueOrThrow({

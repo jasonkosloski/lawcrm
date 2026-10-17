@@ -61,7 +61,7 @@ const options: NewMatterFormOptions = {
       id: "area1",
       name: "Civil Rights",
       hasStatuteOfLimitations: false,
-      statutePeriodDays: null,
+      statutePeriod: null,
       statuteSourceCitation: null,
       stages: [
         { id: "stage1", name: "Intake", order: 0, isTerminal: false },

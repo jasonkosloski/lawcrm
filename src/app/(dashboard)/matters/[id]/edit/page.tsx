@@ -27,6 +27,7 @@ import {
   type TeamMemberRow,
 } from "@/components/matters/matter-team-management";
 import { MatterCalendarDefaultsCard } from "@/components/settings/calendar-defaults-card";
+import { toSolPeriod } from "@/lib/sol";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 
@@ -66,7 +67,7 @@ export default async function EditMatterPage({
   );
 
   const [
-    areas,
+    areaRows,
     clientRows,
     userRows,
     canManageTeam,
@@ -80,7 +81,8 @@ export default async function EditMatterPage({
         id: true,
         name: true,
         hasStatuteOfLimitations: true,
-        statutePeriodDays: true,
+        statutePeriodAmount: true,
+        statutePeriodUnit: true,
         statuteSourceCitation: true,
         stages: {
           where: { isActive: true },
@@ -121,6 +123,14 @@ export default async function EditMatterPage({
       },
     }),
   ]);
+
+  // Calendar period (ADR-035) as one serializable value for the forms.
+  const areas = areaRows.map(
+    ({ statutePeriodAmount, statutePeriodUnit, ...a }) => ({
+      ...a,
+      statutePeriod: toSolPeriod(statutePeriodAmount, statutePeriodUnit),
+    })
+  );
 
   const clients = clientRows.map((c) => ({
     id: c.id,

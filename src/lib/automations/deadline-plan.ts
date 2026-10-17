@@ -26,6 +26,7 @@ import {
   dateOnlyKey,
   parseDateOnly,
 } from "@/lib/format-date";
+import { addUtcMonths } from "@/lib/sol";
 
 export const DEADLINE_RULE_ANCHORS = [
   "incident_date",
@@ -57,6 +58,11 @@ export type PlannableRule = {
   anchorRuleId: string | null;
   anchorLabel: string | null;
   offsetDays: number;
+  /** "days" | "months" | "years" - how the offset was entered. Months
+   *  and years are applied as calendar months (ADR-035); `offsetDays`
+   *  stays the signed 365/30 total used to recover the amount. Absent
+   *  or unknown = plain days. */
+  offsetUnit?: string;
 };
 
 // ── Calendar-day keys ──────────────────────────────────────────────
@@ -78,6 +84,18 @@ export function addDaysToKey(key: string, days: number): string {
   return shiftDayKey(key, days);
 }
 
+/** Add calendar months to a day key (UTC; day of month clamps to the
+ *  target month's length - Jan 31 + 1 month = Feb 28/29). */
+export function addMonthsToKey(key: string, months: number): string {
+  const d = parseDateOnly(key);
+  if (d === null) throw new Error(`Not a day key: ${key}`);
+  const out = addUtcMonths(d, months);
+  // An absurd offset overflows the Date range; hand back a non-key so
+  // the caller reports "out of range" instead of throwing.
+  if (Number.isNaN(out.getTime())) return "out-of-range";
+  return dateOnlyKey(out);
+}
+
 /** Day key → the stored Deadline.dueDate value. */
 export function deadlineDateFromKey(key: string): Date {
   const d = parseDateOnly(key);
@@ -90,7 +108,10 @@ export function deadlineDateFromKey(key: string): Date {
 export const OFFSET_UNITS = ["days", "months", "years"] as const;
 export type OffsetUnit = (typeof OFFSET_UNITS)[number];
 
-/** Days per unit — the same 365/30 convention as the SOL period. */
+/** Days per unit - the 365/30 convention used ONLY to store the offset
+ *  in one signed integer (`offsetDays`) and to recover the entered
+ *  amount. Due dates do not use it: months/years are applied as
+ *  calendar months (`applyOffsetToKey`). */
 const UNIT_DAYS: Record<OffsetUnit, number> = { days: 1, months: 30, years: 365 };
 
 /** Largest total offset (in days) a rule may carry — about 100 years. */
@@ -121,9 +142,24 @@ export function unpackOffset(
   return { amount: abs / UNIT_DAYS[u], unit: u, direction };
 }
 
+/** The due-date key for an anchor key + a rule's stored offset.
+ *  "2 years after" is the same calendar date two years on (Feb 29
+ *  clamps to Feb 28), not 730 days; a "before" offset moves back the
+ *  same way. A stored value that isn't a whole number of its unit
+ *  falls back to plain days. */
+export function applyOffsetToKey(
+  anchorKey: string,
+  offsetDays: number,
+  unit: string | undefined
+): string {
+  const { amount, unit: u, direction } = unpackOffset(offsetDays, unit ?? "days");
+  if (u === "days") return addDaysToKey(anchorKey, offsetDays);
+  const months = (u === "years" ? amount * 12 : amount) * (direction === "before" ? -1 : 1);
+  return addMonthsToKey(anchorKey, months);
+}
+
 /** Human description in the unit it was entered, e.g.
- *  "182 days after Incident date", "2 years (730 days) after Incident
- *  date", "30 days before Trial", "On Matter opened". */
+ *  "182 days after Incident date", "2 years after Incident date", "30 days before Trial", "On Matter opened". */
 export function describeOffset(
   offsetDays: number,
   unit: string,
@@ -132,10 +168,7 @@ export function describeOffset(
   if (offsetDays === 0) return `On ${anchorText}`;
   const { amount, unit: u, direction } = unpackOffset(offsetDays, unit);
   const label = amount === 1 ? u.slice(0, -1) : u;
-  const span =
-    u === "days"
-      ? `${amount} ${label}`
-      : `${amount} ${label} (${Math.abs(offsetDays)} days)`;
+  const span = `${amount} ${label}`;
   return `${span} ${direction} ${anchorText}`;
 }
 
@@ -285,7 +318,7 @@ export function planDeadlineRules(
     }
     const anchor = anchorKeyFor(rule);
     if (isDayKey(anchor)) {
-      const dueKey = addDaysToKey(anchor, rule.offsetDays);
+      const dueKey = applyOffsetToKey(anchor, rule.offsetDays, rule.offsetUnit);
       if (!isDayKey(dueKey)) {
         // An absurd stored offset (e.g. thousands of years) overflows
         // the 4-digit year — report it instead of throwing later.

@@ -123,6 +123,7 @@ export async function applyDeadlineRules(
     anchorRuleId: r.anchorRuleId,
     anchorLabel: r.anchorLabel,
     offsetDays: r.offsetDays,
+    offsetUnit: r.offsetUnit,
   }));
   const plan = planDeadlineRules(plannable, {
     incidentDate: matter.incidentDate,

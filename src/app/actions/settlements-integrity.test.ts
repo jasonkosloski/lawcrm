@@ -411,14 +411,16 @@ describe("lien audit + validation", () => {
   });
 });
 
-describe("getMatterSettlement — read path matches the row edits target (F797)", () => {
-  test("with duplicates, the read resolves to the OLDEST row", async () => {
+describe("getMatterSettlement - one settlement per matter (ADR-036)", () => {
+  test("the read resolves to the matter's only row and a duplicate insert is refused", async () => {
     await open({ gross: "1000" });
-    const oldest = await prisma.settlement.findFirstOrThrow({ where: { matterId } });
-    await prisma.settlement.create({
-      data: { matterId, grossAmount: "9999", status: "pending" },
-    });
+    const only = await prisma.settlement.findFirstOrThrow({ where: { matterId } });
+    await expect(
+      prisma.settlement.create({
+        data: { matterId, grossAmount: "9999", status: "pending" },
+      })
+    ).rejects.toMatchObject({ code: "P2002" });
     const dto = await getMatterSettlement(matterId);
-    expect(dto!.id).toBe(oldest.id);
+    expect(dto!.id).toBe(only.id);
   });
 });

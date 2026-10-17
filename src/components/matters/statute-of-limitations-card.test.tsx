@@ -193,7 +193,7 @@ describe("StatuteOfLimitationsCard — provenance line (F013)", () => {
         {...baseProps}
         date={new Date("2026-07-01T00:00:00Z")}
         incidentDate={new Date("2024-07-01T00:00:00Z")}
-        statutePeriodDays={730}
+        statutePeriod={{ amount: 730, unit: "DAYS" }}
       />
     );
     expect(screen.getByText(/from incident/i)).toBeInTheDocument();
@@ -207,7 +207,7 @@ describe("StatuteOfLimitationsCard — provenance line (F013)", () => {
         {...baseProps}
         date={new Date("2027-01-15T00:00:00Z")}
         incidentDate={new Date("2024-07-01T00:00:00Z")}
-        statutePeriodDays={730}
+        statutePeriod={{ amount: 730, unit: "DAYS" }}
       />
     );
     expect(screen.getByText(/manual date/i)).toBeInTheDocument();

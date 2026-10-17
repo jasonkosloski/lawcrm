@@ -13,6 +13,7 @@ import { TopBar } from "@/components/layout/topbar";
 import { Card, CardContent } from "@/components/ui/card";
 import { NewMatterForm } from "@/components/matters/new-matter-form";
 import { prisma } from "@/lib/prisma";
+import { toSolPeriod } from "@/lib/sol";
 import { requirePermission } from "@/lib/permission-check";
 
 export default async function NewMatterPage() {
@@ -23,7 +24,7 @@ export default async function NewMatterPage() {
   // the user id.
   const currentUserId = await requirePermission("matters.create");
 
-  const [areas, clients, users] = await Promise.all([
+  const [areaRows, clients, users] = await Promise.all([
     prisma.practiceArea.findMany({
       where: { isActive: true },
       orderBy: [{ order: "asc" }, { name: "asc" }],
@@ -31,7 +32,8 @@ export default async function NewMatterPage() {
         id: true,
         name: true,
         hasStatuteOfLimitations: true,
-        statutePeriodDays: true,
+        statutePeriodAmount: true,
+        statutePeriodUnit: true,
         statuteSourceCitation: true,
         stages: {
           where: { isActive: true },
@@ -56,6 +58,14 @@ export default async function NewMatterPage() {
       orderBy: { name: "asc" },
     }),
   ]);
+
+  // Calendar period (ADR-035) as one serializable value for the forms.
+  const areas = areaRows.map(
+    ({ statutePeriodAmount, statutePeriodUnit, ...a }) => ({
+      ...a,
+      statutePeriod: toSolPeriod(statutePeriodAmount, statutePeriodUnit),
+    })
+  );
 
   return (
     <>

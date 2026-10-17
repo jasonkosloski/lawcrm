@@ -29,7 +29,8 @@ const area = {
   label: null,
   color: "#2563a8",
   hasStatuteOfLimitations: true,
-  statutePeriodDays: 3 * 365,
+  statutePeriodAmount: 3,
+  statutePeriodUnit: "YEARS" as const,
   statuteSourceCitation: "C.R.S. § 13-80-101",
   defaultBillingMode: "client",
 };
@@ -50,12 +51,16 @@ describe("EditPracticeAreaForm after a server validation error", () => {
     const field = (name: string) =>
       container.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
 
-    const years = field("statuteYears");
-    const days = field("statuteDays");
-    expect(years.value).toBe("3");
+    const amount = field("statutePeriodAmount");
+    const unit = container.querySelector<HTMLSelectElement>(
+      'select[name="statutePeriodUnit"]'
+    )!;
+    expect(amount.value).toBe("3");
+    expect(unit.value).toBe("YEARS");
 
-    await user.clear(years);
-    await user.type(days, "300");
+    await user.clear(amount);
+    await user.type(amount, "300");
+    await user.selectOptions(unit, "DAYS");
     const citation = field("statuteSourceCitation");
     await user.clear(citation);
     await user.type(citation, "C.R.S. § 13-80-102");
@@ -70,8 +75,12 @@ describe("EditPracticeAreaForm after a server validation error", () => {
       ).toBeTruthy()
     );
 
-    expect(field("statuteYears").value).toBe("");
-    expect(field("statuteDays").value).toBe("300");
+    expect(field("statutePeriodAmount").value).toBe("300");
+    expect(
+      container.querySelector<HTMLSelectElement>(
+        'select[name="statutePeriodUnit"]'
+      )!.value
+    ).toBe("DAYS");
     expect(field("statuteSourceCitation").value).toBe("C.R.S. § 13-80-102");
     expect(
       (
@@ -95,9 +104,8 @@ describe("EditPracticeAreaForm after a server validation error", () => {
       "Name",
       "Label",
       "Color",
-      "Years",
-      "Months",
-      "Days",
+      "Amount",
+      "Unit",
       "Source citation",
       "Default billing mode",
     ]) {
@@ -105,8 +113,26 @@ describe("EditPracticeAreaForm after a server validation error", () => {
     }
   });
 
-  test("months are documented as approximate", () => {
+  test("explains calendar arithmetic and the month-end rule", () => {
     render(<EditPracticeAreaForm area={area} />);
-    expect(screen.getByText(/months are therefore approximate/i)).toBeTruthy();
+    expect(screen.getByText(/last day/i)).toBeTruthy();
+  });
+
+  test("an unconfigured area defaults the unit to years with a blank amount", () => {
+    const { container } = render(
+      <EditPracticeAreaForm
+        area={{ ...area, statutePeriodAmount: null, statutePeriodUnit: null }}
+      />
+    );
+    expect(
+      container.querySelector<HTMLInputElement>(
+        'input[name="statutePeriodAmount"]'
+      )!.value
+    ).toBe("");
+    expect(
+      container.querySelector<HTMLSelectElement>(
+        'select[name="statutePeriodUnit"]'
+      )!.value
+    ).toBe("YEARS");
   });
 });

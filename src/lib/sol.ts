@@ -1,102 +1,110 @@
 import { dateOnlyKey, parseDateOnly } from "@/lib/format-date";
 
 /**
- * Statute-of-limitations utilities.
+ * Statute-of-limitations utilities (ADR-035).
  *
- * The firm-wide convention: statute periods are entered in human
- * units (years / months / days) and stored as a single `Int` of
- * total days on `PracticeArea.statutePeriodDays`, using a 365-day
- * year + 30-day month.
+ * A practice area's statute period is a calendar amount + unit
+ * (`PracticeArea.statutePeriodAmount` / `statutePeriodUnit`): "2 years",
+ * "18 months", "180 days". The SOL date is computed with calendar
+ * arithmetic on the incident's UTC date-only value (ADR-012: UTC
+ * midnight, read in UTC, never shifted by any time zone):
  *
- * KNOWN LIMITATION (F093/F731/F945, deferred to the schema batch):
- * that is a day-count convention, NOT calendar arithmetic. Statutes
- * written as "two years" or "six months" run to the same calendar
- * date, so the auto-computed date can be early by a day or more
- * across a leap year, and a month-based period can land a day or two
- * early or late. The computed date is a convenience: the lawyer must
- * verify it, and an explicit date typed on the matter always wins.
- * The proper fix stores {years, months, days} on PracticeArea and
- * computes with UTC calendar arithmetic (needs a migration).
+ *   - DAYS   : add N days.
+ *   - MONTHS : move N calendar months forward, keeping the day of month.
+ *   - YEARS  : move N calendar years forward (= 12N months).
  *
- * Both directions live here so the practice-area form can
- * round-trip the user's input through the schema. The total-days
- * value always round-trips exactly; the year/month/day breakdown
- * only survives when the input already matches the greedy
- * decomposition (months/days small enough not to roll into the
- * next unit under the 365/30 convention — e.g. "18 months" packs
- * to 540 days and unpacks as "1 year 5 months 25 days").
+ * Month-end rule: when the target month is shorter than the incident's
+ * day of month, the result CLAMPS to the last day of the target month.
+ * So 2024-02-29 + 1 year = 2025-02-28 (non-leap target), 2024-02-29 +
+ * 4 years = 2028-02-29, and 2026-01-31 + 1 month = 2026-02-28. This is
+ * the usual reading of "two years from" for statutes; the lawyer still
+ * verifies the date and an explicit date typed on the matter wins.
  *
- * Matter incident / SOL dates are date-only values (ADR-012): UTC
- * midnight, read in UTC, never shifted by any time zone.
+ * The legacy 365-day-year / 30-day-month `statutePeriodDays` column is
+ * deprecated and no longer read (the migration backfilled amount/unit).
  */
 
-export type StatutePeriod = {
-  years: number;
-  months: number;
-  days: number;
+export const SOL_PERIOD_UNITS = ["DAYS", "MONTHS", "YEARS"] as const;
+export type SolPeriodUnit = (typeof SOL_PERIOD_UNITS)[number];
+
+export type SolPeriod = {
+  amount: number;
+  unit: SolPeriodUnit;
 };
 
-const DAYS_PER_YEAR = 365;
-const DAYS_PER_MONTH = 30;
-
-/** Pack a year/month/day triple into total days. Negative or
- *  fractional inputs are coerced toward zero — the form layer
- *  validates ranges before calling. */
-export function packStatuteDays(period: StatutePeriod): number {
-  const y = Math.max(0, Math.floor(period.years || 0));
-  const m = Math.max(0, Math.floor(period.months || 0));
-  const d = Math.max(0, Math.floor(period.days || 0));
-  return y * DAYS_PER_YEAR + m * DAYS_PER_MONTH + d;
+export function isSolPeriodUnit(v: unknown): v is SolPeriodUnit {
+  return (
+    typeof v === "string" && (SOL_PERIOD_UNITS as readonly string[]).includes(v)
+  );
 }
 
-/** Reverse `packStatuteDays`. Greedy from largest unit down so
- *  "730 days" displays as "2 years" rather than "24 months 10
- *  days." Round-trips when the input was entered in clean units. */
-export function unpackStatuteDays(totalDays: number | null): StatutePeriod {
-  if (!totalDays || totalDays <= 0) return { years: 0, months: 0, days: 0 };
-  const years = Math.floor(totalDays / DAYS_PER_YEAR);
-  let rem = totalDays - years * DAYS_PER_YEAR;
-  const months = Math.floor(rem / DAYS_PER_MONTH);
-  rem -= months * DAYS_PER_MONTH;
-  return { years, months, days: rem };
+/** Build a period from the two nullable DB columns. Null unless BOTH
+ *  are present and the amount is a positive integer. */
+export function toSolPeriod(
+  amount: number | null | undefined,
+  unit: string | null | undefined
+): SolPeriod | null {
+  if (
+    typeof amount !== "number" ||
+    !Number.isInteger(amount) ||
+    amount <= 0 ||
+    !isSolPeriodUnit(unit)
+  ) {
+    return null;
+  }
+  return { amount, unit };
+}
+
+function daysInUtcMonth(year: number, monthIndex: number): number {
+  return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
+}
+
+/** Add `months` calendar months to a UTC date-only value, clamping the
+ *  day of month to the target month's length (see header rule). */
+export function addUtcMonths(date: Date, months: number): Date {
+  const total = date.getUTCFullYear() * 12 + date.getUTCMonth() + months;
+  const year = Math.floor(total / 12);
+  const monthIndex = total - year * 12;
+  const day = Math.min(date.getUTCDate(), daysInUtcMonth(year, monthIndex));
+  const out = new Date(date);
+  // setUTCFullYear with all three parts avoids the intermediate
+  // overflow (e.g. Jan 31 -> setUTCMonth(1) -> Mar 3).
+  out.setUTCFullYear(year, monthIndex, day);
+  return out;
 }
 
 /** Compute the SOL date from an incident date + statute period.
  *  Returns null when either input is missing. The action layer
  *  (createMatter / updateMatter / lead conversion) uses this to
- *  auto-populate `Matter.statuteOfLimitationsDate`; no form
- *  previews it, so the result is only visible after saving.
- *  Pure day arithmetic — see the KNOWN LIMITATION in the header. */
+ *  auto-populate `Matter.statuteOfLimitationsDate`. UTC calendar
+ *  arithmetic throughout - local-time setters would shift the result
+ *  across a DST boundary in the server's zone. */
 export function computeSolDate(
   incidentDate: Date | null | undefined,
-  statutePeriodDays: number | null | undefined
+  period: SolPeriod | null | undefined
 ): Date | null {
-  if (!incidentDate || !statutePeriodDays || statutePeriodDays <= 0) {
-    return null;
+  if (!incidentDate || !period || !(period.amount > 0)) return null;
+  switch (period.unit) {
+    case "DAYS": {
+      const result = new Date(incidentDate);
+      result.setUTCDate(result.getUTCDate() + period.amount);
+      return result;
+    }
+    case "MONTHS":
+      return addUtcMonths(incidentDate, period.amount);
+    case "YEARS":
+      return addUtcMonths(incidentDate, period.amount * 12);
+    default:
+      return null;
   }
-  // Incident dates are stored as UTC-midnight calendar dates (the
-  // <input type="date"> string parses to 00:00Z), and every display
-  // path reads them back via getUTC* — so the day arithmetic must be
-  // UTC too. Local-time setDate() would shift the result by an hour
-  // when the statute period crosses a DST boundary in the server's
-  // zone, landing at 23:00Z the previous day: a silent one-day-early
-  // SOL date.
-  const result = new Date(incidentDate);
-  result.setUTCDate(result.getUTCDate() + statutePeriodDays);
-  return result;
 }
 
-/** Human-readable rendering of a statute period. Used on the SOL
- *  card subtitle ("auto-computed from N days after incident") and
- *  on the practice-area edit form preview. */
-export function formatStatutePeriod(totalDays: number | null): string {
-  if (!totalDays || totalDays <= 0) return "Not configured";
-  const { years, months, days } = unpackStatuteDays(totalDays);
-  const parts: string[] = [];
-  if (years > 0) parts.push(`${years} year${years === 1 ? "" : "s"}`);
-  if (months > 0) parts.push(`${months} month${months === 1 ? "" : "s"}`);
-  if (days > 0) parts.push(`${days} day${days === 1 ? "" : "s"}`);
-  return parts.join(" ");
+/** Human-readable rendering of a statute period ("2 years"). Used on
+ *  the SOL card subtitle and the new/edit matter forms. */
+export function formatStatutePeriod(period: SolPeriod | null): string {
+  if (!period || !(period.amount > 0)) return "Not configured";
+  const noun = period.unit.toLowerCase().slice(0, -1);
+  return `${period.amount} ${noun}${period.amount === 1 ? "" : "s"}`;
 }
 
 /** `sourceType` that marks the one auto-managed "Statute of
@@ -126,10 +134,10 @@ export const parseSolDateInput = parseDateOnly;
 export function isAutoDerivedSol(input: {
   storedSol: Date | null;
   storedIncident: Date | null;
-  storedPeriodDays: number | null;
+  storedPeriod: SolPeriod | null;
 }): boolean {
   if (!input.storedSol) return true;
-  const computed = computeSolDate(input.storedIncident, input.storedPeriodDays);
+  const computed = computeSolDate(input.storedIncident, input.storedPeriod);
   return !!computed && solDayKey(computed) === solDayKey(input.storedSol);
 }
 
@@ -151,14 +159,14 @@ export function resolveEditedSolDate(input: {
   posted: Date | null;
   stored: Date | null;
   storedIncident: Date | null;
-  storedPeriodDays: number | null;
+  storedPeriod: SolPeriod | null;
   incident: Date | null;
-  periodDays: number | null;
+  period: SolPeriod | null;
 }): Date | null {
   const { posted, stored } = input;
   const auto = () => {
-    const computed = computeSolDate(input.incident, input.periodDays);
-    if (!computed && stored && input.incident && !input.periodDays) {
+    const computed = computeSolDate(input.incident, input.period);
+    if (!computed && stored && input.incident && !input.period) {
       return stored;
     }
     // Clearing the incident date (a mis-click) must not silently drop
@@ -172,7 +180,7 @@ export function resolveEditedSolDate(input: {
       isAutoDerivedSol({
         storedSol: stored,
         storedIncident: input.storedIncident,
-        storedPeriodDays: input.storedPeriodDays,
+        storedPeriod: input.storedPeriod,
       })
     ) {
       return stored;
@@ -184,7 +192,7 @@ export function resolveEditedSolDate(input: {
       return isAutoDerivedSol({
         storedSol: stored,
         storedIncident: input.storedIncident,
-        storedPeriodDays: input.storedPeriodDays,
+        storedPeriod: input.storedPeriod,
       })
         ? auto()
         : stored;

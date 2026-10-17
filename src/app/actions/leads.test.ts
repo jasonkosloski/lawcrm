@@ -9,7 +9,7 @@
  *   - convertLeadToMatter rejects inactive practice areas and
  *     inactive stages, mirroring the direct create path.
  *   - conversion carries the lead's dateOfIncident onto the matter,
- *     auto-computes the SOL date from the area's statutePeriodDays,
+ *     auto-computes the SOL date from the area's statute period,
  *     and creates the auto-managed critical SOL Deadline — and does
  *     none of that for areas that don't track SOL.
  *   - conversion rolls intake time forward: every lead-scoped
@@ -73,7 +73,9 @@ async function seedArea(opts: {
       name: `Area ${Math.random().toString(36).slice(2, 8)}`,
       isActive: opts.areaActive ?? true,
       hasStatuteOfLimitations: opts.hasSol ?? false,
-      statutePeriodDays: opts.periodDays ?? null,
+      // opts.periodDays is a plain day count (ADR-035: DAYS unit).
+      statutePeriodAmount: opts.periodDays ?? null,
+      statutePeriodUnit: opts.periodDays ? "DAYS" : null,
     },
     select: { id: true },
   });

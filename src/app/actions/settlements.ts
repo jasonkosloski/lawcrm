@@ -152,20 +152,17 @@ export async function upsertSettlement(
     "matters.settlement.approve"
   );
 
-  // Serialize per matter: lookup + create (or the guarded update)
-  // run under a transaction-scoped advisory lock keyed on the
-  // matter, so two tabs/users racing "Open settlement" cannot both
-  // see "no row" and create two settlements with two approval
-  // chains. (A unique constraint on matterId comes later in a
-  // migration; this closes the race until then.) The lookup is
-  // ordered so duplicates already in the table resolve to the same
-  // row every time.
+  // One settlement per matter is a database guarantee
+  // (`Settlement.matterId` is unique, ADR-036), so two racing "Open
+  // settlement" clicks can never create two. The transaction-scoped
+  // advisory lock stays because it also serializes the guarded status
+  // transitions here and in the approval actions: lookup + create (or
+  // update) are one critical section per matter.
   const outcome = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`settlement:${matterId}`}))`;
 
-    const existing = await tx.settlement.findFirst({
+    const existing = await tx.settlement.findUnique({
       where: { matterId },
-      orderBy: { createdAt: "asc" },
       select: {
         id: true,
         status: true,

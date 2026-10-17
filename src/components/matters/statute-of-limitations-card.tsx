@@ -27,7 +27,7 @@ import {
   formatDate,
   formatDateOnly,
 } from "@/lib/format-date";
-import { computeSolDate } from "@/lib/sol";
+import { computeSolDate, type SolPeriod } from "@/lib/sol";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import { Card, CardContent } from "@/components/ui/card";
 import { setMatterSolSatisfied } from "@/app/actions/matters";
@@ -48,11 +48,11 @@ export type StatuteOfLimitationsCardProps = {
    *  attorney sees how the date was derived. Cosmetic — the
    *  field doesn't change the underlying data. */
   incidentDate?: Date | null;
-  /** The practice area's statute period (total days). When provided,
+  /** The practice area's statute period (amount + unit, ADR-035). When provided,
    *  the "from incident" provenance is shown only if the date really
    *  is incident + period; otherwise the date is a manual override and
    *  the line says so instead of implying it was derived. */
-  statutePeriodDays?: number | null;
+  statutePeriod?: SolPeriod | null;
   /** Server-resolved `matters.edit` (the key `setMatterSolSatisfied`
    *  enforces). Without it the toggle isn't rendered — the heading
    *  already reads "Satisfied" / the countdown either way. */
@@ -74,7 +74,7 @@ export function StatuteOfLimitationsCard({
   notes,
   citation,
   incidentDate,
-  statutePeriodDays,
+  statutePeriod,
   canEdit,
 }: StatuteOfLimitationsCardProps) {
   const [optimisticSatisfied, setOptimisticSatisfied] =
@@ -97,7 +97,7 @@ export function StatuteOfLimitationsCard({
   // (needs the period; without it we can't tell, so keep the old copy).
   const computedFromIncident = computeSolDate(
     incidentDate,
-    statutePeriodDays
+    statutePeriod
   );
   const isManualDate =
     !!date &&

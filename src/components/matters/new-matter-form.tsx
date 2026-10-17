@@ -39,7 +39,7 @@ import {
 import { Sparkles, UserCheck, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createMatter } from "@/app/actions/matters";
-import { formatStatutePeriod } from "@/lib/sol";
+import { formatStatutePeriod, type SolPeriod } from "@/lib/sol";
 import { FEE_OPTIONS } from "@/lib/fee-structure-constants";
 import { autoMatterName } from "@/lib/matter-name";
 import {
@@ -68,7 +68,7 @@ export type AreaOption = {
   hasStatuteOfLimitations: boolean;
   /** Total-days statute period; drives the auto-compute hint
    *  shown below the incident-date input on the SOL section. */
-  statutePeriodDays: number | null;
+  statutePeriod: SolPeriod | null;
   statuteSourceCitation: string | null;
   stages: Array<{
     id: string;
@@ -734,8 +734,8 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
               name="incidentDate"
               error={errs.incidentDate}
               hint={
-                selectedArea.statutePeriodDays
-                  ? `Period: ${formatStatutePeriod(selectedArea.statutePeriodDays)}${selectedArea.statuteSourceCitation ? ` · ${selectedArea.statuteSourceCitation}` : ""}. Leave Deadline blank to auto-compute.`
+                selectedArea.statutePeriod
+                  ? `Period: ${formatStatutePeriod(selectedArea.statutePeriod)}${selectedArea.statuteSourceCitation ? ` · ${selectedArea.statuteSourceCitation}` : ""}. Leave Deadline blank to auto-compute.`
                   : "When known, drives the SOL deadline once the firm configures a statute period for this area."
               }
             >

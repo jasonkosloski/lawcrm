@@ -28,7 +28,12 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permission-check";
 import { BILLING_MODES } from "@/lib/billing-mode-constants";
-import { packStatuteDays, formatStatutePeriod } from "@/lib/sol";
+import {
+  SOL_PERIOD_UNITS,
+  formatStatutePeriod,
+  toSolPeriod,
+  type SolPeriod,
+} from "@/lib/sol";
 import { logAuditEntry } from "@/lib/audit-entry";
 import {
   areaArchiveBlockedMessage,
@@ -53,8 +58,8 @@ const DEFAULT_STAGE_TEMPLATE: Array<{ name: string; isTerminal?: boolean }> = [
   { name: "Closed", isTerminal: true },
 ];
 
-function formatPeriodOrNone(days: number | null): string {
-  return days ? formatStatutePeriod(days) : "none";
+function formatPeriodOrNone(period: SolPeriod | null): string {
+  return period ? formatStatutePeriod(period) : "none";
 }
 
 /** Firm-level audit row for practice-area / stage settings changes.
@@ -96,34 +101,17 @@ const practiceAreaSchema = z.object({
    *  card on the Overview tab and expose SOL fields on the new/edit
    *  forms. */
   hasStatuteOfLimitations: z.literal("on").optional(),
-  /** Statute period — entered as years/months/days, packed into
-   *  total days at write time. All optional; default to 0 when
-   *  blank. The action skips the SOL fields entirely when
-   *  hasStatuteOfLimitations isn't set. */
-  statuteYears: z
+  /** Statute period (ADR-035): an amount + a unit, stored as-is and
+   *  applied with calendar arithmetic. Both blank = "not configured".
+   *  A positive whole number is required when the amount is present, and
+   *  the unit must then be one of DAYS | MONTHS | YEARS. The action
+   *  ignores both when hasStatuteOfLimitations isn't set. */
+  statutePeriodAmount: z
     .string()
+    .trim()
     .optional()
-    .or(z.literal(""))
-    .transform((v) => {
-      const n = parseInt(v ?? "", 10);
-      return Number.isFinite(n) && n >= 0 ? n : 0;
-    }),
-  statuteMonths: z
-    .string()
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => {
-      const n = parseInt(v ?? "", 10);
-      return Number.isFinite(n) && n >= 0 ? n : 0;
-    }),
-  statuteDays: z
-    .string()
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => {
-      const n = parseInt(v ?? "", 10);
-      return Number.isFinite(n) && n >= 0 ? n : 0;
-    }),
+    .or(z.literal("")),
+  statutePeriodUnit: z.enum(SOL_PERIOD_UNITS).optional().or(z.literal("")),
   /** Citation for the statute period — "C.R.S. § 13-80-102" etc.
    *  Surfaced on the SOL card so the lawyer can verify the firm's
    *  configuration against the actual statute. */
@@ -138,7 +126,43 @@ const practiceAreaSchema = z.object({
    *  about and fall back to "client" for stale forms posting an
    *  unknown value. */
   defaultBillingMode: z.enum(BILLING_MODES).optional(),
+}).superRefine((v, ctx) => {
+  if (v.hasStatuteOfLimitations !== "on") return;
+  const raw = v.statutePeriodAmount ?? "";
+  if (raw === "") return;
+  if (!/^\d{1,4}$/.test(raw) || parseInt(raw, 10) < 1) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["statutePeriodAmount"],
+      message: "Enter a whole number of 1 or more",
+    });
+    return;
+  }
+  if (!v.statutePeriodUnit) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["statutePeriodUnit"],
+      message: "Choose days, months or years",
+    });
+  }
 });
+
+/** Column pair for a period (both null when unconfigured). */
+function periodColumns(period: SolPeriod | null) {
+  return {
+    statutePeriodAmount: period?.amount ?? null,
+    statutePeriodUnit: period?.unit ?? null,
+  };
+}
+
+/** The configured period from a parsed form, or null when blank. */
+function periodFromForm(data: {
+  statutePeriodAmount?: string;
+  statutePeriodUnit?: string;
+}): SolPeriod | null {
+  const amount = parseInt(data.statutePeriodAmount ?? "", 10);
+  return toSolPeriod(Number.isFinite(amount) ? amount : null, data.statutePeriodUnit);
+}
 
 /** Create a new practice area + auto-seed the default 10-stage
  *  lifecycle. Redirects to the detail page on success. */
@@ -193,16 +217,11 @@ export async function createPracticeArea(
       order: nextOrder,
       hasStatuteOfLimitations: data.hasStatuteOfLimitations === "on",
       // SOL configuration — only stored when the area actually
-      // tracks SOL. Pack years/months/days into total days here so
-      // the runtime auto-compute does one Date arithmetic op.
-      statutePeriodDays:
-        data.hasStatuteOfLimitations === "on"
-          ? packStatuteDays({
-              years: data.statuteYears,
-              months: data.statuteMonths,
-              days: data.statuteDays,
-            }) || null
-          : null,
+      // tracks SOL. Stored as amount + unit (ADR-035); the legacy
+      // statutePeriodDays column is no longer written.
+      ...(data.hasStatuteOfLimitations === "on"
+        ? periodColumns(periodFromForm(data))
+        : periodColumns(null)),
       statuteSourceCitation:
         data.hasStatuteOfLimitations === "on"
           ? data.statuteSourceCitation || null
@@ -256,7 +275,8 @@ export async function updatePracticeArea(
       label: true,
       color: true,
       hasStatuteOfLimitations: true,
-      statutePeriodDays: true,
+      statutePeriodAmount: true,
+      statutePeriodUnit: true,
       statuteSourceCitation: true,
       defaultBillingMode: true,
     },
@@ -296,12 +316,7 @@ export async function updatePracticeArea(
       // touched. Only an enabled form overwrites them.
       ...(data.hasStatuteOfLimitations === "on"
         ? {
-            statutePeriodDays:
-              packStatuteDays({
-                years: data.statuteYears,
-                months: data.statuteMonths,
-                days: data.statuteDays,
-              }) || null,
+            ...periodColumns(periodFromForm(data)),
             statuteSourceCitation: data.statuteSourceCitation || null,
           }
         : {}),
@@ -335,14 +350,14 @@ export async function updatePracticeArea(
     await updateArea;
   }
 
+  const beforePeriod = toSolPeriod(
+    before.statutePeriodAmount,
+    before.statutePeriodUnit
+  );
   const newPeriod =
     data.hasStatuteOfLimitations === "on"
-      ? packStatuteDays({
-          years: data.statuteYears,
-          months: data.statuteMonths,
-          days: data.statuteDays,
-        }) || null
-      : before.statutePeriodDays;
+      ? periodFromForm(data)
+      : beforePeriod;
   const newCitation =
     data.hasStatuteOfLimitations === "on"
       ? data.statuteSourceCitation || null
@@ -358,8 +373,8 @@ export async function updatePracticeArea(
           data.hasStatuteOfLimitations === "on" ? "on" : "off"
         }`
       : null,
-    before.statutePeriodDays !== newPeriod
-      ? `SOL period ${formatPeriodOrNone(before.statutePeriodDays)} → ${formatPeriodOrNone(newPeriod)}`
+    formatPeriodOrNone(beforePeriod) !== formatPeriodOrNone(newPeriod)
+      ? `SOL period ${formatPeriodOrNone(beforePeriod)} → ${formatPeriodOrNone(newPeriod)}`
       : null,
     before.statuteSourceCitation !== newCitation ? "SOL citation" : null,
     data.defaultBillingMode &&

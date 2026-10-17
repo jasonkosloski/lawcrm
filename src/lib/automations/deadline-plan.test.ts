@@ -88,10 +88,50 @@ describe("offsets", () => {
   test("describe keeps the entered unit (182 days never becomes '6 months 2 days')", () => {
     expect(describeOffset(182, "days", "Incident date")).toBe("182 days after Incident date");
     expect(describeOffset(-30, "days", "Trial")).toBe("30 days before Trial");
-    expect(describeOffset(730, "years", "Incident date")).toBe("2 years (730 days) after Incident date");
-    expect(describeOffset(30, "months", "Service")).toBe("1 month (30 days) after Service");
+    expect(describeOffset(730, "years", "Incident date")).toBe("2 years after Incident date");
+    expect(describeOffset(30, "months", "Service")).toBe("1 month after Service");
     expect(describeOffset(1, "days", "Service")).toBe("1 day after Service");
     expect(describeOffset(0, "days", "Matter opened")).toBe("On Matter opened");
+  });
+});
+
+describe("calendar offsets (ADR-035)", () => {
+  const at = (incident: string, offsetDays: number, offsetUnit: string) =>
+    planDeadlineRules(
+      [rule({ id: "r", offsetDays, offsetUnit })],
+      ctx({ incidentDate: new Date(`${incident}T00:00:00Z`) })
+    );
+
+  test("N years/months land on the same calendar date, not N*365/30 days", () => {
+    expect(at("2027-03-10", 730, "years").planned[0].dueKey).toBe("2029-03-10");
+    expect(at("2026-01-15", 540, "months").planned[0].dueKey).toBe("2027-07-15");
+  });
+
+  test("Feb 29 and month-end clamp to the last day of the target month", () => {
+    expect(at("2024-02-29", 365, "years").planned[0].dueKey).toBe("2025-02-28");
+    expect(at("2024-02-29", 1460, "years").planned[0].dueKey).toBe("2028-02-29");
+    expect(at("2026-08-31", 180, "months").planned[0].dueKey).toBe("2027-02-28");
+  });
+
+  test("'before' offsets move back by calendar months/years", () => {
+    expect(at("2026-03-31", -30, "months").planned[0].dueKey).toBe("2026-02-28");
+    expect(at("2028-02-29", -365, "years").planned[0].dueKey).toBe("2027-02-28");
+  });
+
+  test("days and a missing unit stay plain day arithmetic", () => {
+    expect(at("2026-01-15", 180, "days").planned[0].dueKey).toBe("2026-07-14");
+    expect(
+      planDeadlineRules(
+        [rule({ id: "r", offsetDays: 180 })],
+        ctx({ incidentDate: new Date("2026-01-15T00:00:00Z") })
+      ).planned[0].dueKey
+    ).toBe("2026-07-14");
+  });
+
+  test("an absurd years offset is reported out_of_range, not thrown", () => {
+    const { planned, unplanned } = at("2026-01-15", 36500 * 365, "years");
+    expect(planned).toHaveLength(0);
+    expect(unplanned[0].reason).toBe("out_of_range");
   });
 });
 

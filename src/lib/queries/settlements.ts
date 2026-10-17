@@ -1,11 +1,10 @@
 /**
  * Settlement queries — server-only.
  *
- * Today the convention is "at most one settlement per matter" (the
- * schema allows many but in practice contingency matters resolve
- * once). We expose a `getMatterSettlement(matterId)` that returns
- * the settlement on a matter (the OLDEST row, the same one
- * upsertSettlement locks and updates) or null, plus the full
+ * "At most one settlement per matter" is enforced by a unique index
+ * on `Settlement.matterId` (ADR-036). We expose a
+ * `getMatterSettlement(matterId)` that returns the settlement on a
+ * matter or null, plus the full
  * waterfall computation (gross → firm fee → advanced costs →
  * liens → client net) so the page renders plain numbers.
  */
@@ -68,11 +67,9 @@ export type MatterSettlement = {
 export async function getMatterSettlement(
   matterId: string
 ): Promise<MatterSettlement | null> {
-  const row = await prisma.settlement.findFirst({
+  // `matterId` is unique (one settlement per matter, ADR-036).
+  const row = await prisma.settlement.findUnique({
     where: { matterId },
-    // Oldest first: upsertSettlement locks and updates the oldest row,
-    // so reads must resolve to the same row (F364).
-    orderBy: { createdAt: "asc" },
     include: {
       liens: { orderBy: { id: "asc" } },
       approvals: {

@@ -170,7 +170,7 @@ export default async function MatterOverviewPage({
               notes={matter.statuteOfLimitationsNotes}
               citation={matter.practiceAreaStatuteSourceCitation}
               incidentDate={matter.incidentDate}
-              statutePeriodDays={matter.practiceAreaStatutePeriodDays}
+              statutePeriod={matter.practiceAreaStatutePeriod}
               canEdit={canEditMatter}
             />
           )}

@@ -29,6 +29,22 @@ datasource db {
 // =============================================================================
 
 /// Firm team member — attorneys, paralegals, investigators, admin staff.
+/// Unit of a PracticeArea statute period (ADR-035).
+enum SolPeriodUnit {
+  DAYS
+  MONTHS
+  YEARS
+}
+
+/// Firm-wide matter visibility switch (Phase 5, matter-team access).
+/// FIRM = every signed-in user sees every matter (today's behavior);
+/// TEAM = only team members and matters.view_all holders. NOT enforced
+/// yet - the column ships first so the rollout is a settings flip.
+enum MatterVisibility {
+  FIRM
+  TEAM
+}
+
 model User {
   id                     String    @id @default(cuid())
   email                  String    @unique
@@ -150,7 +166,7 @@ model User {
 /// scheme. Deferred bits (logo upload, IOLTA bank info, e-sign
 /// branding) get added as their features land; don't preempt.
 model Firm {
-  id                          String    @id @default(cuid())
+  id                          String           @id @default(cuid())
   /// Display name — appears on letterhead, invoices, the topbar
   /// (eventually). Required.
   name                        String
@@ -176,7 +192,9 @@ model Firm {
   city                        String?
   state                       String?
   zip                         String?
-  country                     String    @default("US")
+  country                     String           @default("US")
+  /// Matter visibility switch (see enum MatterVisibility). Not enforced until Phase 5.
+  matterVisibility            MatterVisibility @default(FIRM)
   /// Date the firm was founded — surfaces on the about/marketing
   /// material a firm pulls from this profile. Nullable.
   establishedAt               DateTime?
@@ -187,19 +205,19 @@ model Firm {
   /// Default for "auto-add matter team to new calendar events".
   /// Per-matter override lives on Matter.autoAddTeamToNewEvents
   /// (null on the matter inherits this firm value).
-  autoAddTeamToNewEvents      Boolean   @default(true)
+  autoAddTeamToNewEvents      Boolean          @default(true)
   /// Default for "auto-add new team members to upcoming events
   /// on the matter". Same per-matter override pattern as above.
-  autoAddTeamToUpcomingEvents Boolean   @default(true)
+  autoAddTeamToUpcomingEvents Boolean          @default(true)
   /// Daily billable-hours target per person — drives the dashboard
   /// KPI ring and the /time day-view progress bar. Was hardcoded
   /// at 6.0 in queries/dashboard.ts before it became firm data.
-  dailyHoursGoal              Float     @default(6.0)
+  dailyHoursGoal              Float            @default(6.0)
   /// Monthly firm-wide billable-hours target — drives the firm
   /// pulse card. Was hardcoded at 200.
-  monthlyBillableGoal         Float     @default(200)
-  createdAt                   DateTime  @default(now())
-  updatedAt                   DateTime  @updatedAt
+  monthlyBillableGoal         Float            @default(200)
+  createdAt                   DateTime         @default(now())
+  updatedAt                   DateTime         @updatedAt
 
   users    User[]
   /// Permission roles defined for this firm. Always includes the
@@ -349,32 +367,30 @@ model VerificationToken {
 /// Soft-delete only (`isActive = false`) so historical matters keep
 /// working even after an area is retired.
 model PracticeArea {
-  id                      String   @id @default(cuid())
-  name                    String   @unique /// Display name, e.g. "§1983" or "Housing/FHA"
+  id                      String         @id @default(cuid())
+  name                    String         @unique /// Display name, e.g. "§1983" or "Housing/FHA"
   label                   String? /// Optional longer label shown in sidebar/reports, e.g. "§1983 · Civil rights"
-  color                   String   @default("#2563a8") /// Hex color — used for matter dots, sidebar, kanban
-  order                   Int      @default(0) /// Sort order in pickers and settings UI
-  isActive                Boolean  @default(true)
+  color                   String         @default("#2563a8") /// Hex color — used for matter dots, sidebar, kanban
+  order                   Int            @default(0) /// Sort order in pickers and settings UI
+  isActive                Boolean        @default(true)
   /// Firms can flag practice areas that have a statute-of-limitations
   /// deadline the lawyers need to track. When true, matters in this
   /// area surface an SOL card on the overview + show SOL fields on
   /// the new/edit forms. False for areas like "Guardianships" where
   /// SOL isn't meaningful.
-  hasStatuteOfLimitations Boolean  @default(false)
-  /// Statute period in days, computed from years + months + days
-  /// the firm enters in settings. When set + a Matter in this
-  /// area has an `incidentDate`, the create / update flow auto-
-  /// populates `Matter.statuteOfLimitationsDate` (the user can
-  /// override on the form). Null means "this area tracks SOL but
-  /// the firm hasn't configured the period yet" — the SOL card
-  /// stays manual until configured.
-  ///
-  /// We use total days rather than triple {years, months, days}
-  /// so the runtime math is one Date arithmetic op instead of
-  /// multiple. Firms enter human units in the form; the action
-  /// converts to days using a 365-day year + 30-day month
-  /// convention (legal statute periods are nearly always defined
-  /// this way — "two years" = 730 days, not "two solar years").
+  hasStatuteOfLimitations Boolean        @default(false)
+  /// Statute period as a calendar amount + unit (ADR-035): "2 YEARS",
+  /// "18 MONTHS", "180 DAYS". The SOL date is computed with calendar
+  /// arithmetic on the incident's UTC date-only value (src/lib/sol.ts),
+  /// not a 365/30-day approximation. Both null = "this area tracks SOL
+  /// but the firm hasn't configured the period yet" (the card stays
+  /// manual). Set together or not at all.
+  statutePeriodAmount     Int?
+  statutePeriodUnit       SolPeriodUnit?
+  /// DEPRECATED (expand/contract): the old 365-day-year / 30-day-month
+  /// total. No code reads it any more; the migration backfilled
+  /// statutePeriodAmount/Unit from it. Kept one release for rollback,
+  /// then dropped in a later migration.
   statutePeriodDays       Int?
   /// Source citation for the SOL period — "C.R.S. § 13-80-102"
   /// etc. Surfaced on the SOL card so the lawyer can verify the
@@ -385,9 +401,9 @@ model PracticeArea {
   /// + the full enum of values. iteration 1: schema only — every
   /// mode currently routes through the traditional UX with a
   /// "flow not implemented" hint.
-  defaultBillingMode      String   @default("client")
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  defaultBillingMode      String         @default("client")
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
 
   stages      MatterStage[]
   matters     Matter[]
@@ -444,9 +460,9 @@ model Matter {
   /// IOLTA trust balance for this matter. Decimal (not Float) for
   /// regulatory-grade precision — a $0.01 drift on real client trust
   /// money is a compliance violation.
-  trustBalance   Decimal      @default(0) /// Current IOLTA trust balance for this matter
+  trustBalance   Decimal      @default(0) @db.Decimal(14, 2) /// Current IOLTA trust balance for this matter
   /// Work-in-progress total — same precision rationale as trustBalance.
-  wipAmount      Decimal      @default(0) /// Work-in-progress (unbilled hours value)
+  wipAmount      Decimal      @default(0) @db.Decimal(14, 2) /// Work-in-progress (unbilled hours value)
   description    String? /// Brief case summary
   color          String       @default("#2563a8") /// Color dot for UI display — snapshot from practiceArea.color on create
   isArchived     Boolean      @default(false)
@@ -564,6 +580,7 @@ model MatterTeamMember {
 
   @@unique([matterId, userId])
   @@index([matterId, removedAt])
+  @@index([userId, removedAt])
   @@map("matter_team_members")
 }
 
@@ -702,6 +719,7 @@ model MatterContact {
   @@unique([matterId, contactId, category])
   @@index([category])
   @@index([representationContactId])
+  @@index([contactId])
   @@map("matter_contacts")
 }
 
@@ -952,6 +970,7 @@ model Deadline {
   @@index([matterId])
   @@index([dueDate])
   @@index([status])
+  @@index([status, dueDate])
   @@index([noteId])
   @@index([emailThreadId])
   @@index([messengerItemId])
@@ -1029,7 +1048,7 @@ model CalendarEvent {
   /// wants this specific event to surface (e.g. "Firm
   /// happy hour", "All-hands"). Defaults to default for
   /// privacy by default.
-  visibility  String   @default("default") /// default | show_details
+  visibility  String   @default("default") /// default | show_details | private
   title       String
   type        String   @default("meeting") /// meeting | deposition | hearing | intake | block_time | deadline | mediation | trial
   startTime   DateTime
@@ -1118,11 +1137,11 @@ model TimeEntry {
   utbmsCode  String? /// UTBMS activity code, e.g. "A101"
   /// Billing rate per hour. Decimal for money-precision. Null on
   /// contingent matters where there's no hourly rate.
-  rate       Decimal? /// Billing rate per hour (null for contingent)
+  rate       Decimal? @db.Decimal(14, 2) /// Billing rate per hour (null for contingent)
   /// Computed billable amount (hours × rate). Stored Decimal so we
   /// don't recompute on every read; the action that sets it is
   /// responsible for keeping it in sync.
-  amount     Decimal? /// Computed billable amount (hours × rate)
+  amount     Decimal? @db.Decimal(14, 2) /// Computed billable amount (hours × rate)
   billable   Boolean  @default(true)
   noCharge   Boolean  @default(false) /// Write-off flag
   privileged Boolean  @default(false) /// Attorney-client privilege flag
@@ -1181,6 +1200,7 @@ model TimeEntry {
   @@index([deadlineId])
   @@index([emailMessageId])
   @@index([messengerItemId])
+  @@index([invoiceId])
   @@map("time_entries")
 }
 
@@ -1240,7 +1260,7 @@ model Expense {
   /// records | research | other. String not enum so adding
   /// categories is data, not a migration.
   category          String   @default("other")
-  amount            Decimal /// Always positive — sign is implied by `clientAdvanced`
+  amount            Decimal  @db.Decimal(14, 2) /// Always positive — sign is implied by `clientAdvanced`
   billable          Boolean  @default(true)
   clientAdvanced    Boolean  @default(false)
   /// Set when this expense is included on an invoice. SetNull on
@@ -1273,10 +1293,10 @@ model Invoice {
   kind          String   @default("client") /// client | internal_record
   issueDate     DateTime
   dueDate       DateTime
-  subtotal      Decimal  @default(0)
-  taxAmount     Decimal  @default(0)
-  totalAmount   Decimal  @default(0)
-  paidAmount    Decimal  @default(0)
+  subtotal      Decimal  @default(0) @db.Decimal(14, 2)
+  taxAmount     Decimal  @default(0) @db.Decimal(14, 2)
+  totalAmount   Decimal  @default(0) @db.Decimal(14, 2)
+  paidAmount    Decimal  @default(0) @db.Decimal(14, 2)
   status        String   @default("draft") /// draft | sent | open | overdue | paid | void
   notes         String?
   createdAt     DateTime @default(now())
@@ -1324,7 +1344,7 @@ model InvoicePayment {
   /// new channels (Stripe webhook, lockbox import) is config-only,
   /// not a migration. UI maps known sources to display labels.
   source      String /// trust | check | ach | cash | card | other
-  amount      Decimal /// Always positive — payments add to paidAmount
+  amount      Decimal           @db.Decimal(14, 2) /// Always positive — payments add to paidAmount
   date        DateTime
   /// Free text — "Paid in full per email 4/12", "Partial — balance
   /// to follow", etc. Captured into the trust txn's description
@@ -1359,7 +1379,7 @@ model TrustTransaction {
   id          String   @id @default(cuid())
   matterId    String
   type        String /// deposit | disbursement | transfer | refund | interest
-  amount      Decimal /// Positive for deposits, negative for disbursements
+  amount      Decimal  @db.Decimal(14, 2) /// Positive for deposits, negative for disbursements
   description String
   reference   String? /// Check number, wire confirmation, etc.
   date        DateTime
@@ -1395,11 +1415,11 @@ model TrustTransaction {
 model Settlement {
   id             String   @id @default(cuid())
   matterId       String
-  grossAmount    Decimal /// Total settlement amount
-  firmFee        Decimal  @default(0) /// Attorney fee
-  firmFeePercent Decimal? /// Fee percentage (e.g. 33.33)
-  advancedCosts  Decimal  @default(0) /// Costs advanced by firm
-  clientNet      Decimal  @default(0) /// Net amount to client
+  grossAmount    Decimal  @db.Decimal(14, 2) /// Total settlement amount
+  firmFee        Decimal  @default(0) @db.Decimal(14, 2) /// Attorney fee
+  firmFeePercent Decimal? @db.Decimal(7, 4) /// Fee percentage (e.g. 33.33)
+  advancedCosts  Decimal  @default(0) @db.Decimal(14, 2) /// Costs advanced by firm
+  clientNet      Decimal  @default(0) @db.Decimal(14, 2) /// Net amount to client
   status         String   @default("pending") /// pending | approved | disbursed | closed
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -1408,7 +1428,7 @@ model Settlement {
   liens     SettlementLien[]
   approvals SettlementApproval[]
 
-  @@index([matterId])
+  @@unique([matterId])
   @@map("settlements")
 }
 
@@ -1418,12 +1438,13 @@ model SettlementLien {
   settlementId     String
   lienholder       String /// Name of lienholder
   lienholderType   String? /// hospital | physician | insurance | government | other
-  originalAmount   Decimal
-  negotiatedAmount Decimal? /// Reduced amount after negotiation
+  originalAmount   Decimal  @db.Decimal(14, 2)
+  negotiatedAmount Decimal? @db.Decimal(14, 2) /// Reduced amount after negotiation
   status           String   @default("pending") /// pending | negotiating | signed | verified | paid
 
   settlement Settlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
 
+  @@index([settlementId])
   @@map("settlement_liens")
 }
 
@@ -1441,6 +1462,7 @@ model SettlementApproval {
   settlement Settlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
   approver   User?      @relation(fields: [approverId], references: [id])
 
+  @@index([settlementId])
   @@map("settlement_approvals")
 }
 
@@ -1564,6 +1586,7 @@ model EmailAttachment {
 
   message EmailMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
+  @@index([messageId])
   @@map("email_attachments")
 }
 
@@ -1891,6 +1914,8 @@ model ActivityLog {
 
   @@index([matterId])
   @@index([timestamp])
+  @@index([matterId, timestamp])
+  @@index([userId, type, timestamp])
   @@map("activity_logs")
 }
 

@@ -15,7 +15,7 @@ import {
   Field,
   inputCls,
 } from "@/components/settings/practice-area-form-parts";
-import { unpackStatuteDays } from "@/lib/sol";
+import { SOL_PERIOD_UNITS, type SolPeriodUnit } from "@/lib/sol";
 import {
   practiceAreaInitialState,
   type PracticeAreaFormState,
@@ -36,7 +36,9 @@ export function EditPracticeAreaForm({
     label: string | null;
     color: string;
     hasStatuteOfLimitations: boolean;
-    statutePeriodDays: number | null;
+    /** Calendar period (ADR-035); both null when not configured. */
+    statutePeriodAmount: number | null;
+    statutePeriodUnit: SolPeriodUnit | null;
     statuteSourceCitation: string | null;
     defaultBillingMode: string;
   };
@@ -63,16 +65,14 @@ export function EditPracticeAreaForm({
     const fd = new FormData(e.currentTarget);
     startTransition(() => formAction(fd));
   };
-  const period = unpackStatuteDays(area.statutePeriodDays);
   const [name, setName] = useState(area.name);
   const [label, setLabel] = useState(area.label ?? "");
   const [color, setColor] = useState<string>(area.color);
   const [hasSol, setHasSol] = useState(area.hasStatuteOfLimitations);
-  const [years, setYears] = useState(period.years ? String(period.years) : "");
-  const [months, setMonths] = useState(
-    period.months ? String(period.months) : ""
+  const [amount, setAmount] = useState(
+    area.statutePeriodAmount ? String(area.statutePeriodAmount) : ""
   );
-  const [days, setDays] = useState(period.days ? String(period.days) : "");
+  const [unit, setUnit] = useState<string>(area.statutePeriodUnit ?? "YEARS");
   const [citation, setCitation] = useState(area.statuteSourceCitation ?? "");
   const [billingMode, setBillingMode] = useState<string>(
     area.defaultBillingMode
@@ -152,46 +152,46 @@ export function EditPracticeAreaForm({
       {/* Statute period editor. Only relevant when the SOL toggle
           above is on; we render unconditionally and the action
           ignores the values (keeping the stored ones) when the toggle
-          is off. Pre-fills from
-          the area's stored total days, unpacked back into y/m/d so
-          the lawyer sees the same shape they typed last time. */}
+          is off. Pre-fills from the stored amount + unit. */}
       <fieldset className="flex flex-col gap-2 px-3 py-2.5 rounded-md border border-line bg-paper-2/30">
         <legend className="px-1 text-2xs font-mono uppercase tracking-wider text-ink-4">
           Statute period (auto-computes Matter SOL date from incident)
         </legend>
-        <div className="grid grid-cols-3 gap-2">
-          <Field label="Years" htmlFor="statuteYears">
+        <div className="grid grid-cols-2 gap-2">
+          <Field
+            label="Amount"
+            htmlFor="statutePeriodAmount"
+            error={errs.statutePeriodAmount}
+          >
             <input
-              id="statuteYears"
+              id="statutePeriodAmount"
               type="number"
-              name="statuteYears"
-              min={0}
-              value={years}
-              onChange={(e) => setYears(e.target.value)}
-              className={inputCls(false)}
+              name="statutePeriodAmount"
+              min={1}
+              step={1}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className={inputCls(!!errs.statutePeriodAmount)}
             />
           </Field>
-          <Field label="Months" htmlFor="statuteMonths">
-            <input
-              id="statuteMonths"
-              type="number"
-              name="statuteMonths"
-              min={0}
-              value={months}
-              onChange={(e) => setMonths(e.target.value)}
-              className={inputCls(false)}
-            />
-          </Field>
-          <Field label="Days" htmlFor="statuteDays">
-            <input
-              id="statuteDays"
-              type="number"
-              name="statuteDays"
-              min={0}
-              value={days}
-              onChange={(e) => setDays(e.target.value)}
-              className={inputCls(false)}
-            />
+          <Field
+            label="Unit"
+            htmlFor="statutePeriodUnit"
+            error={errs.statutePeriodUnit}
+          >
+            <select
+              id="statutePeriodUnit"
+              name="statutePeriodUnit"
+              value={unit}
+              onChange={(e) => setUnit(e.target.value)}
+              className={inputCls(!!errs.statutePeriodUnit)}
+            >
+              {SOL_PERIOD_UNITS.map((u) => (
+                <option key={u} value={u}>
+                  {u.charAt(0) + u.slice(1).toLowerCase()}
+                </option>
+              ))}
+            </select>
           </Field>
         </div>
         <Field
@@ -210,12 +210,12 @@ export function EditPracticeAreaForm({
           />
         </Field>
         <p className="text-2xs text-ink-4 leading-relaxed">
-          The period is stored as total days = years × 365 + months × 30
-          + days. Months are therefore approximate: a statute written in
-          calendar months (e.g. &ldquo;3 months&rdquo;) can end one or
-          two days earlier than the computed date. For month-based
-          periods, verify the computed SOL date against the statute and
-          override it on the matter when it differs.
+          The SOL date is the incident date plus this period on the
+          calendar (&ldquo;2 years&rdquo; from March 3 is March 3 two
+          years later). When the target month is shorter, the date
+          lands on its last day (Feb 29 plus 1 year is Feb 28). Verify
+          the computed date against the statute and override it on the
+          matter when it differs.
         </p>
       </fieldset>
 

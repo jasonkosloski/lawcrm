@@ -1,9 +1,8 @@
 /**
  * getMatterSettlement:
- *   - must resolve to the same row upsertSettlement mutates: the
- *     OLDEST settlement on the matter (F364). Otherwise, with
- *     pre-existing duplicates, the composer shows one row and Save
- *     edits another.
+ *   - one settlement per matter is a database guarantee
+ *     (`Settlement.matterId` unique, ADR-036), so the read and the
+ *     upsert always target the same row.
  *   - the waterfall DTO the billing page renders. The pure math is
  *     in settlement-waterfall.test.ts; this pins the row -> DTO
  *     wiring against the real schema (percent vs explicit fee,
@@ -39,25 +38,13 @@ beforeEach(async () => {
   }));
 });
 
-describe("getMatterSettlement — deterministic row", () => {
-  test("returns the oldest settlement when duplicates exist", async () => {
-    const older = await prisma.settlement.create({
-      data: {
-        matterId,
-        grossAmount: 1000,
-        createdAt: new Date("2026-01-01T00:00:00Z"),
-      },
-      select: { id: true },
-    });
-    await prisma.settlement.create({
-      data: {
-        matterId,
-        grossAmount: 2000,
-        createdAt: new Date("2026-02-01T00:00:00Z"),
-      },
-    });
+describe("getMatterSettlement — one row per matter", () => {
+  test("the database refuses a second settlement for the same matter (ADR-036)", async () => {
+    await prisma.settlement.create({ data: { matterId, grossAmount: 1000 } });
+    await expect(
+      prisma.settlement.create({ data: { matterId, grossAmount: 2000 } })
+    ).rejects.toMatchObject({ code: "P2002" });
     const result = await getMatterSettlement(matterId);
-    expect(result?.id).toBe(older.id);
     expect(result?.grossAmount).toBe(1000);
   });
 
