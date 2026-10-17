@@ -16,6 +16,14 @@
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
+import { TIME_ENTRY_WIP_STATUSES } from "@/lib/constants/time-entry-status";
+import {
+  addDaysToKey,
+  daysUntilDateOnly,
+  dateOnlyRange,
+  todayKey,
+} from "@/lib/format-date";
 import {
   EMPTY_FILTER,
   type MattersFilter,
@@ -37,6 +45,9 @@ export type MatterListRow = {
   color: string;
   leadInitials: string | null;
   leadName: string | null;
+  /** Whole calendar days from the viewer's today to the earliest OPEN
+   *  deadline: 0 = due today, negative = overdue (-12 = 12 days late).
+   *  Null when the matter has no open deadline. */
   nextDeadlineDays: number | null;
   /** True if pinned by the current user (not a global property of the matter). */
   isPinned: boolean;
@@ -44,11 +55,25 @@ export type MatterListRow = {
   createdAt: Date;
 };
 
-/** Prisma `where` built from the filter. Some filters (text search, sort
- *  on derived fields) are applied in memory after fetch — those are
- *  handled in `listMatters` below. */
-function buildWhere(filter: MattersFilter, currentUserId: string) {
+/** Prisma `where` built from the filter — every filter, including the
+ *  text search, is evaluated in the database so it can never be
+ *  truncated by a row cap. `tz` is the viewer's zone: deadline
+ *  windows are calendar days in the viewer's today (ADR-012), never
+ *  the server's clock. */
+function buildWhere(filter: MattersFilter, currentUserId: string, tz: string) {
   const where: Record<string, unknown> = {};
+
+  if (filter.q) {
+    // Case-insensitive match on name or case number (Postgres
+    // `mode: "insensitive"`). Prisma does NOT escape LIKE wildcards in
+    // `contains`, so a literal "%" / "_" typed in the search box is
+    // escaped here to keep matching literally.
+    const needle = filter.q.replace(/[\\%_]/g, "\\$&");
+    where.OR = [
+      { name: { contains: needle, mode: "insensitive" } },
+      { caseNumber: { contains: needle, mode: "insensitive" } },
+    ];
+  }
 
   if (!filter.includeArchived) where.isArchived = false;
   if (filter.pinnedOnly) where.pins = { some: { userId: currentUserId } };
@@ -94,27 +119,33 @@ function buildWhere(filter: MattersFilter, currentUserId: string) {
     // "any" — no constraint
   }
 
-  const now = new Date();
-  const inDays = (n: number) => {
-    const d = new Date(now);
-    d.setDate(d.getDate() + n);
-    d.setHours(23, 59, 59, 999);
-    return d;
-  };
+  // Date-only deadlines are compared as calendar days against the
+  // viewer's today: due-today is NOT overdue, overdue is strictly
+  // before today. The within-N windows are open at the low end:
+  // everything due before the start of day N+1, overdue included, so
+  // a missed deadline never drops out of the "needs attention" view.
+  const today = todayKey(tz);
+  const startOfToday = dateOnlyRange(today, today).gte;
   switch (filter.deadline) {
     case "within-7d":
       where.deadlines = {
-        some: { status: "open", dueDate: { lte: inDays(7) } },
+        some: {
+          status: "open",
+          dueDate: { lt: dateOnlyRange(today, addDaysToKey(today, 7)).lt },
+        },
       };
       break;
     case "within-30d":
       where.deadlines = {
-        some: { status: "open", dueDate: { lte: inDays(30) } },
+        some: {
+          status: "open",
+          dueDate: { lt: dateOnlyRange(today, addDaysToKey(today, 30)).lt },
+        },
       };
       break;
     case "overdue":
       where.deadlines = {
-        some: { status: "open", dueDate: { lt: now } },
+        some: { status: "open", dueDate: { lt: startOfToday } },
       };
       break;
     case "none":
@@ -126,7 +157,9 @@ function buildWhere(filter: MattersFilter, currentUserId: string) {
   return where;
 }
 
-/** Comparator for in-memory sort. Pinned always wins as a tiebreaker. */
+/** Comparator for the in-memory sort. Pinned matters ALWAYS sort first,
+ *  ahead of the chosen field (like the sidebar); the chosen field then
+ *  orders each group. */
 function makeComparator(sort: MattersSort) {
   const mul = sort.dir === "asc" ? 1 : -1;
 
@@ -167,29 +200,37 @@ function makeComparator(sort: MattersSort) {
   };
 }
 
-/**
- * All matters matching `filter`, sorted by `sort` (pinned always first).
- * Text search (`filter.q`) is applied in memory after the DB round-trip —
- * SQLite doesn't support `mode: 'insensitive'` and this dataset is small.
- */
-/// Hard cap on listMatters — covers a small/mid firm without a real
-/// pagination UI. When a firm hits this, build "Load more" / page
-/// controls; until then, an unbounded query is the bigger risk.
+/// Maximum rows listMatters returns — covers a small/mid firm without a
+/// real pagination UI. The cap is applied AFTER search, filters and
+/// sort, so it can only truncate the tail of the user's own result
+/// (the page shows "N of M" from countMatters). When a firm hits it,
+/// build "Load more" / page controls.
 const LIST_MATTERS_CAP = 200;
 
+/// Safety bound on how many matching rows are pulled to sort in
+/// memory (the sorts mirror localeCompare and derived fields the DB
+/// can't order by). Rows are narrow; the newest are kept past it.
+const LIST_MATTERS_SCAN_LIMIT = 5000;
+
+/**
+ * Matters matching `filter`, sorted by `sort` (pinned always first),
+ * at most LIST_MATTERS_CAP rows. Text search and every filter run in
+ * the database; only the ordering is applied in memory, over all
+ * matching rows, before the cap.
+ */
 export async function listMatters(
   filter: MattersFilter = EMPTY_FILTER,
   sort: MattersSort = { field: "created", dir: "desc" },
-  currentUserId?: string
+  currentUserId?: string,
+  tz?: string
 ): Promise<MatterListRow[]> {
   const userId = currentUserId ?? (await getCurrentUserId());
-  const where = buildWhere(filter, userId);
+  const zone = tz ?? (await getCurrentUserTimeZone());
+  const where = buildWhere(filter, userId, zone);
   const matters = await prisma.matter.findMany({
     where,
-    take: LIST_MATTERS_CAP,
-    // Order by createdAt desc as a stable cap — the in-memory sort
-    // below resorts. Without this, the cap would silently drop a
-    // semi-random subset on the way to JS.
+    take: LIST_MATTERS_SCAN_LIMIT,
+    // Newest first so the safety bound (if ever hit) drops the oldest.
     orderBy: { createdAt: "desc" },
     include: {
       practiceArea: { select: { name: true } },
@@ -215,7 +256,12 @@ export async function listMatters(
     },
   });
 
-  const now = Date.now();
+  if (matters.length >= LIST_MATTERS_SCAN_LIMIT) {
+    console.warn(
+      `listMatters: scan limit ${LIST_MATTERS_SCAN_LIMIT} reached; the oldest matches are not sorted or shown`
+    );
+  }
+
   const rows: MatterListRow[] = matters.map((m) => ({
     id: m.id,
     name: m.name,
@@ -233,45 +279,30 @@ export async function listMatters(
     leadInitials: m.teamMembers[0]?.user.initials ?? null,
     leadName: m.teamMembers[0]?.user.name ?? null,
     nextDeadlineDays: m.deadlines[0]
-      ? Math.max(
-          0,
-          Math.ceil(
-            (m.deadlines[0].dueDate.getTime() - now) / (24 * 60 * 60 * 1000)
-          )
-        )
+      ? daysUntilDateOnly(m.deadlines[0].dueDate, zone)
       : null,
     isPinned: m.pins.length > 0,
     isArchived: m.isArchived,
     createdAt: m.createdAt,
   }));
 
-  // In-memory text search (case-insensitive, matches name + case number).
-  const filtered = filter.q
-    ? rows.filter((r) => {
-        const needle = filter.q.toLowerCase();
-        return (
-          r.name.toLowerCase().includes(needle) ||
-          (r.caseNumber ?? "").toLowerCase().includes(needle)
-        );
-      })
-    : rows;
-
-  return filtered.sort(makeComparator(sort));
+  return rows.sort(makeComparator(sort)).slice(0, LIST_MATTERS_CAP);
 }
 
 /**
  * Count of matters matching `filter`, evaluated entirely in the DB —
- * not subject to LIST_MATTERS_CAP. Reuses `buildWhere`, which ignores
- * `filter.q` (text search is applied in memory by `listMatters`), so
- * this is the "every filter except search" denominator the list page's
- * "showing N of M" needs.
+ * not subject to LIST_MATTERS_CAP. Uses the same `buildWhere` as
+ * `listMatters` (text search included), so it is the exact "showing N
+ * of M" denominator for what the list can return.
  */
 export async function countMatters(
   filter: MattersFilter = EMPTY_FILTER,
-  currentUserId?: string
+  currentUserId?: string,
+  tz?: string
 ): Promise<number> {
   const userId = currentUserId ?? (await getCurrentUserId());
-  return prisma.matter.count({ where: buildWhere(filter, userId) });
+  const zone = tz ?? (await getCurrentUserTimeZone());
+  return prisma.matter.count({ where: buildWhere(filter, userId, zone) });
 }
 
 /** Filter options surfaced in the toolbar popovers. */
@@ -285,7 +316,8 @@ export type MattersFilterOptions = {
 /**
  * Returns the active practice areas + the union of their stage names
  * (de-duplicated, sorted by the canonical order they appear across
- * areas). Fee structures + lead options are derived from matters.
+ * areas). Fee structures are the distinct values in use; lead options
+ * are the ACTIVE leads of active users (what the lead filter matches).
  */
 export async function getMattersFilterOptions(): Promise<MattersFilterOptions> {
   const [areas, stages, matters, leadAssignments] = await Promise.all([
@@ -299,9 +331,15 @@ export async function getMattersFilterOptions(): Promise<MattersFilterOptions> {
       select: { name: true, order: true },
       orderBy: [{ order: "asc" }, { name: "asc" }],
     }),
-    prisma.matter.findMany({ select: { feeStructure: true } }),
+    prisma.matter.findMany({
+      distinct: ["feeStructure"],
+      select: { feeStructure: true },
+    }),
     prisma.matterTeamMember.findMany({
-      where: { role: "lead" },
+      // Same predicate as buildWhere's lead filter (active lead rows).
+      // Deactivated users are intentionally hidden from the filter
+      // options, even though they can remain lead on existing matters.
+      where: { role: "lead", removedAt: null, user: { isActive: true } },
       distinct: ["userId"],
       include: { user: { select: { id: true, name: true, initials: true } } },
       orderBy: { user: { name: "asc" } },
@@ -351,6 +389,8 @@ export const getMatterById = cache(async (id: string) => {
   const userId = await getCurrentUserId();
   const matter = await prisma.matter.findUnique({
     where: { id },
+    // The stored wipAmount column is stale (never maintained) — omit it.
+    omit: { wipAmount: true },
     include: {
       practiceArea: {
         select: {
@@ -372,10 +412,13 @@ export const getMatterById = cache(async (id: string) => {
             select: { id: true, name: true, initials: true, jobTitle: true },
           },
         },
-        // Active first (removedAt null sorts before non-null in
-        // ASC), then alphabetic by role within each bucket so the
-        // overview's roster always reads the same way.
-        orderBy: [{ removedAt: "asc" }, { role: "asc" }],
+        // Active first, then alphabetic by role within each bucket so
+        // the overview's roster always reads the same way. Postgres
+        // sorts NULLs LAST on ASC, so ask for them first explicitly.
+        orderBy: [
+          { removedAt: { sort: "asc", nulls: "first" } },
+          { role: "asc" },
+        ],
       },
       pins: {
         where: { userId },
@@ -385,8 +428,20 @@ export const getMatterById = cache(async (id: string) => {
     },
   });
   if (!matter) return null;
-  const { pins, practiceArea, stage, trustBalance, wipAmount, ...rest } =
-    matter;
+  // WIP is computed live with the Billing tab's predicate (billable,
+  // not no-charge, not on an invoice, WIP-eligible status). The stored
+  // Matter.wipAmount column is never maintained, so it is dropped.
+  const wipAgg = await prisma.timeEntry.aggregate({
+    where: {
+      matterId: id,
+      billable: true,
+      noCharge: false,
+      invoiceId: null,
+      status: { in: [...TIME_ENTRY_WIP_STATUSES] },
+    },
+    _sum: { amount: true },
+  });
+  const { pins, practiceArea, stage, trustBalance, ...rest } = matter;
   return {
     ...rest,
     // Flattened for display. Components that already used `matter.area`
@@ -405,7 +460,7 @@ export const getMatterById = cache(async (id: string) => {
     // Decimal → number at the API boundary so consumers stay
     // primitive-typed. The DB keeps Decimal precision.
     trustBalance: trustBalance.toNumber(),
-    wipAmount: wipAmount.toNumber(),
+    wipAmount: wipAgg._sum.amount?.toNumber() ?? 0,
   };
 });
 

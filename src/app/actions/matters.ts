@@ -26,10 +26,10 @@ import { BILLING_MODES } from "@/lib/billing-mode-constants";
 import {
   SOL_SOURCE_TYPE,
   computeSolDate,
-  parseSolDateInput,
   resolveEditedSolDate,
-  solDayKey,
 } from "@/lib/sol";
+import { dateOnlyKey, parseDateOnly } from "@/lib/format-date";
+import { getCurrentFirm } from "@/lib/firm";
 import { applyAutoDefaults, describeDefaults } from "@/lib/automations/apply";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import {
@@ -213,9 +213,9 @@ function parseSolDates(
   | { ok: false; errors: Record<string, string[]> } {
   if (!tracks) return { ok: true, incident: null, sol: null };
   const errors: Record<string, string[]> = {};
-  const incident = incidentRaw ? parseSolDateInput(incidentRaw) : null;
+  const incident = incidentRaw ? parseDateOnly(incidentRaw) : null;
   if (incidentRaw && !incident) errors.incidentDate = ["Enter a valid date"];
-  const sol = solRaw ? parseSolDateInput(solRaw) : null;
+  const sol = solRaw ? parseDateOnly(solRaw) : null;
   if (solRaw && !sol) errors.statuteOfLimitationsDate = ["Enter a valid date"];
   if (Object.keys(errors).length > 0) return { ok: false, errors };
   return { ok: true, incident, sol };
@@ -315,6 +315,10 @@ export async function createMatter(
     getCurrentUserId(),
     getCurrentUserTimeZone(),
   ]);
+  // Contact.firmId is stamped by the action layer on every new write
+  // (schema comment); only an inline new client needs it here.
+  const firmId =
+    data.clientId === NEW_CLIENT_SENTINEL ? (await getCurrentFirm()).id : null;
 
   // Verify the selected lead is a real, active user; fall through to
   // the current user if the posted value is stale or the user has
@@ -366,6 +370,7 @@ export async function createMatter(
           phone: data.newClientPhone || null,
           organization: data.newClientOrganization || null,
           type: "client",
+          firmId,
         },
         select: { id: true },
       });
@@ -470,7 +475,7 @@ export async function createMatter(
     title: "Matter created",
     detail: [
       `${data.name} — ${resolved.areaName}`,
-      solDate ? `Statute of limitations ${solDayKey(solDate)}` : null,
+      solDate ? `Statute of limitations ${dateOnlyKey(solDate)}` : null,
     ]
       .filter(Boolean)
       .join("; "),
@@ -863,7 +868,7 @@ export async function updateMatter(
   // ── Audit trail (after commit; a log failure never rolls back) ───────
   // Field names, ids and dates only — never the matter's privileged
   // free text.
-  const dayOrNone = (d: Date | null) => (d ? solDayKey(d) : "none");
+  const dayOrNone = (d: Date | null) => (d ? dateOnlyKey(d) : "none");
   const changed: string[] = [];
   const diff = (label: string, a: unknown, b: unknown) => {
     if ((a ?? "") !== (b ?? "")) changed.push(label);
@@ -1150,7 +1155,7 @@ export async function setMatterSolSatisfied(
         ? "Statute of limitations marked satisfied"
         : "Statute of limitations reopened",
       detail: matter.statuteOfLimitationsDate
-        ? `SOL date ${solDayKey(matter.statuteOfLimitationsDate)}`
+        ? `SOL date ${dateOnlyKey(matter.statuteOfLimitationsDate)}`
         : null,
     });
   }
@@ -1220,7 +1225,22 @@ export async function addMatterTeamMember(
   // the team; they keep their seat at the new role co_counsel
   // (closest-to-equivalent default). Admin can change it after
   // if they want.
-  await prisma.$transaction(async (tx) => {
+  const outcome = await prisma.$transaction(async (tx) => {
+    // Read the target's current seat inside the transaction. An
+    // already-active member at the same role is a no-op (no duplicate
+    // log/notification); the active lead can't be re-added at another
+    // role, which would demote the only lead and break the
+    // at-least-one-lead invariant (removeMatterTeamMember enforces the
+    // same rule). Promote someone else to lead first.
+    const current = await tx.matterTeamMember.findUnique({
+      where: { matterId_userId: { matterId, userId } },
+      select: { role: true, removedAt: true },
+    });
+    if (current && !current.removedAt) {
+      if (current.role === role) return "unchanged" as const;
+      if (current.role === "lead") return "is_lead" as const;
+    }
+
     if (role === "lead") {
       await tx.matterTeamMember.updateMany({
         where: {
@@ -1242,7 +1262,16 @@ export async function addMatterTeamMember(
       create: { matterId, userId, role },
       update: { role, removedAt: null, removedBy: null },
     });
+    return "saved" as const;
   });
+
+  if (outcome === "is_lead") {
+    return {
+      ok: false,
+      error: `${user.name} is the lead attorney. Promote another team member to lead first.`,
+    };
+  }
+  if (outcome === "unchanged") return { ok: true };
 
   await logActivity({
     matterId,
@@ -1331,6 +1360,7 @@ export async function removeMatterTeamMember(
       matterId: true,
       role: true,
       removedAt: true,
+      userId: true,
       user: { select: { name: true } },
     },
   });
@@ -1352,9 +1382,33 @@ export async function removeMatterTeamMember(
     };
   }
 
-  await prisma.matterTeamMember.update({
-    where: { id: member.id },
-    data: { removedAt: new Date(), removedBy: actorId },
+  // Removing someone from the team also takes them off the upcoming
+  // events addMatterTeamMember auto-attached them to: attendance is
+  // itself a calendar-detail unlock path, so leaving the rows would let
+  // a former member keep seeing the full details. Only future events on
+  // THIS matter, only the auto-add status ("accepted"), and never the
+  // events they created themselves.
+  const { detached } = await prisma.$transaction(async (tx) => {
+    await tx.matterTeamMember.update({
+      where: { id: member.id },
+      data: { removedAt: new Date(), removedBy: actorId },
+    });
+    const gone = await tx.calendarAttendee.deleteMany({
+      where: {
+        userId: member.userId,
+        status: "accepted",
+        event: {
+          matterId,
+          startTime: { gt: new Date() },
+          // SQL `<>` skips NULL creators (legacy rows), so spell it out.
+          OR: [
+            { createdById: null },
+            { createdById: { not: member.userId } },
+          ],
+        },
+      },
+    });
+    return { detached: gone.count };
   });
 
   await logActivity({
@@ -1362,9 +1416,14 @@ export async function removeMatterTeamMember(
     userId: actorId,
     type: "filing",
     title: `${member.user.name} removed from team (${matterTeamRoleLabel(member.role)})`,
+    detail:
+      detached > 0
+        ? `Removed from ${detached} upcoming event${detached === 1 ? "" : "s"}`
+        : null,
   });
 
   revalidatePath(`/matters/${matterId}`);
+  revalidatePath("/calendar");
   revalidatePath(`/matters/${matterId}/edit`);
   revalidatePath("/", "layout");
   return { ok: true };

@@ -77,8 +77,17 @@ export const FEE_LABELS: Record<string, string> = {
 };
 
 /** Default sort — applied when the user hasn't clicked a sortable header.
- *  Server also applies pinned-first as a tiebreaker on top of this. */
+ *  The server always sorts PINNED matters first, ahead of the chosen
+ *  field (not merely as a tiebreaker), then applies this sort within
+ *  the pinned and unpinned groups. */
 export const DEFAULT_SORT: MattersSort = { field: "created", dir: "desc" };
+
+/** "5d" for a deadline 5 days out, "0d" for today, "12d late" for one
+ *  that passed 12 days ago. `days` is MatterListRow.nextDeadlineDays
+ *  (negative = overdue). */
+export function formatDeadlineDays(days: number): string {
+  return days < 0 ? `${-days}d late` : `${days}d`;
+}
 
 /** Normalizes a searchParams-ish shape to a single value or array. */
 const getOne = (

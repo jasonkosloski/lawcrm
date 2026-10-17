@@ -9,6 +9,10 @@
  *     the SOL sync: clearing the SOL date resets the flag, so a
  *     re-added date starts back at "open" instead of diverging from a
  *     stale satisfied flag; a plain date edit preserves the flag.
+ *   - Team changes keep the one-lead invariant (re-adding the active
+ *     lead at another role is refused; same-role re-adds are no-ops);
+ *     stage changes gate unusual moves behind a confirmation and are
+ *     audited; an inline new client is stamped with the firm.
  *   - Deactivated users can't be assigned as lead attorney — create
  *     falls back to the current user, update returns a field error
  *     (never silently swaps the lead), matching addMatterTeamMember's
@@ -44,9 +48,12 @@ import {
   requirePermission,
 } from "@/lib/permission-check";
 import {
+  addMatterTeamMember,
   createMatter,
+  removeMatterTeamMember,
   setMatterSolSatisfied,
   updateMatter,
+  updateMatterStage,
 } from "@/app/actions/matters";
 import {
   NEW_CLIENT_SENTINEL,
@@ -959,5 +966,273 @@ describe("updateMatter when the area no longer tracks SOL", () => {
         where: { matterId, sourceType: SOL_SOURCE_TYPE },
       })
     ).toBe(1);
+  });
+});
+
+// ── Inline client firm stamping (F756) ──────────────────────────────────
+
+describe("createMatter inline client", () => {
+  test("the new Contact is stamped with the creator's firmId", async () => {
+    await expect(
+      createMatter(
+        createMatterInitialState,
+        createForm({
+          clientId: NEW_CLIENT_SENTINEL,
+          newClientName: "Jane Doe",
+          newClientEmail: "jane@example.com",
+        })
+      )
+    ).rejects.toThrow(/__REDIRECT__/);
+    const contact = await prisma.contact.findFirstOrThrow({
+      where: { name: "Jane Doe" },
+      select: { firmId: true, type: true },
+    });
+    expect(contact).toEqual({ firmId, type: "client" });
+  });
+});
+
+// ── Team membership (F758) ──────────────────────────────────────────────
+
+describe("addMatterTeamMember / removeMatterTeamMember", () => {
+  let matterId: string;
+  let other: string;
+
+  const teamForm = (userIdValue: string, role: string) => {
+    const fd = new FormData();
+    fd.set("userId", userIdValue);
+    fd.set("role", role);
+    return fd;
+  };
+
+  const activeLeads = () =>
+    prisma.matterTeamMember.findMany({
+      where: { matterId, role: "lead", removedAt: null },
+      select: { userId: true },
+    });
+
+  beforeEach(async () => {
+    ({ matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    }));
+    ({ userId: other } = await seedUser({ firmId, name: "Dana Other" }));
+  });
+
+  test("re-adding the ACTIVE lead at another role is refused: the matter keeps its lead", async () => {
+    const res = await addMatterTeamMember(
+      matterId,
+      teamForm(userId, "paralegal")
+    );
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/lead attorney/i);
+    expect(await activeLeads()).toEqual([{ userId }]);
+    expect(
+      await prisma.activityLog.count({ where: { title: { contains: "added to team" } } })
+    ).toBe(0);
+  });
+
+  test("adding someone already on the team at the same role is a no-op (no log, no notification)", async () => {
+    const first = await addMatterTeamMember(matterId, teamForm(other, "paralegal"));
+    expect(first.ok).toBe(true);
+    const logs = () =>
+      prisma.activityLog.count({ where: { title: { contains: "added to team" } } });
+    const notes = () => prisma.notification.count({ where: { userId: other } });
+    expect(await logs()).toBe(1);
+    expect(await notes()).toBe(1);
+
+    const again = await addMatterTeamMember(matterId, teamForm(other, "paralegal"));
+    expect(again.ok).toBe(true);
+    expect(await logs()).toBe(1);
+    expect(await notes()).toBe(1);
+  });
+
+  test("an active non-lead can be moved to another role, and promoted to lead (old lead -> co_counsel)", async () => {
+    await addMatterTeamMember(matterId, teamForm(other, "paralegal"));
+    const moved = await addMatterTeamMember(matterId, teamForm(other, "co_counsel"));
+    expect(moved.ok).toBe(true);
+
+    const promoted = await addMatterTeamMember(matterId, teamForm(other, "lead"));
+    expect(promoted.ok).toBe(true);
+    expect(await activeLeads()).toEqual([{ userId: other }]);
+    const old = await prisma.matterTeamMember.findUniqueOrThrow({
+      where: { matterId_userId: { matterId, userId } },
+    });
+    expect(old.role).toBe("co_counsel");
+  });
+
+  test("a removed member can be restored at a new role", async () => {
+    await addMatterTeamMember(matterId, teamForm(other, "paralegal"));
+    const row = await prisma.matterTeamMember.findUniqueOrThrow({
+      where: { matterId_userId: { matterId, userId: other } },
+    });
+    expect((await removeMatterTeamMember(matterId, row.id)).ok).toBe(true);
+
+    const back = await addMatterTeamMember(matterId, teamForm(other, "co_counsel"));
+    expect(back.ok).toBe(true);
+    const restored = await prisma.matterTeamMember.findUniqueOrThrow({
+      where: { id: row.id },
+    });
+    expect(restored.removedAt).toBeNull();
+    expect(restored.role).toBe("co_counsel");
+  });
+
+  test("removing a member detaches them from upcoming auto-added events only (F746)", async () => {
+    await addMatterTeamMember(matterId, teamForm(other, "paralegal"));
+    const row = await prisma.matterTeamMember.findUniqueOrThrow({
+      where: { matterId_userId: { matterId, userId: other } },
+    });
+    const day = 24 * 60 * 60 * 1000;
+    const mk = (title: string, offset: number, extra: object = {}) =>
+      prisma.calendarEvent.create({
+        data: {
+          matterId,
+          title,
+          startTime: new Date(Date.now() + offset),
+          endTime: new Date(Date.now() + offset + 3600_000),
+          ...extra,
+        },
+      });
+    const future = await mk("Future", 5 * day);
+    const past = await mk("Past", -5 * day);
+    const theirs = await mk("Theirs", 6 * day, { createdById: other });
+    const otherMatter = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    const elsewhere = await prisma.calendarEvent.create({
+      data: {
+        matterId: otherMatter.matterId,
+        title: "Elsewhere",
+        startTime: new Date(Date.now() + 7 * day),
+        endTime: new Date(Date.now() + 7 * day + 3600_000),
+      },
+    });
+    for (const e of [future, past, theirs, elsewhere]) {
+      await prisma.calendarAttendee.create({
+        data: {
+          eventId: e.id,
+          userId: other,
+          name: "Dana Other",
+          status: "accepted",
+        },
+      });
+    }
+
+    expect((await removeMatterTeamMember(matterId, row.id)).ok).toBe(true);
+
+    const left = await prisma.calendarAttendee.findMany({
+      where: { userId: other },
+      select: { eventId: true },
+    });
+    expect(left.map((a) => a.eventId).sort()).toEqual(
+      [past.id, theirs.id, elsewhere.id].sort()
+    );
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { title: { contains: "removed from team" } },
+    });
+    expect(log.detail).toBe("Removed from 1 upcoming event");
+  });
+
+  test("removeMatterTeamMember refuses to remove the lead", async () => {
+    const lead = await prisma.matterTeamMember.findFirstOrThrow({
+      where: { matterId, role: "lead" },
+    });
+    const res = await removeMatterTeamMember(matterId, lead.id);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/lead attorney/i);
+    expect(await activeLeads()).toEqual([{ userId }]);
+  });
+
+  test("a deactivated user can't be added", async () => {
+    const { userId: gone } = await seedUser({ firmId, isActive: false });
+    const res = await addMatterTeamMember(matterId, teamForm(gone, "paralegal"));
+    expect(res.ok).toBe(false);
+  });
+
+  test("both are gated on matters.manage_team", async () => {
+    await addMatterTeamMember(matterId, teamForm(other, "paralegal"));
+    expect(requirePermission).toHaveBeenCalledWith("matters.manage_team");
+  });
+});
+
+// ── Stage changes ───────────────────────────────────────────────────────
+
+describe("updateMatterStage", () => {
+  let matterId: string;
+  let s1: string;
+  let s2: string;
+  let closed: string;
+
+  beforeEach(async () => {
+    ({ matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    }));
+    s1 = stageId;
+    s2 = (
+      await prisma.matterStage.create({
+        data: { practiceAreaId: areaId, name: "Discovery", order: 1 },
+      })
+    ).id;
+    closed = (
+      await prisma.matterStage.create({
+        data: {
+          practiceAreaId: areaId,
+          name: "Closed",
+          order: 9,
+          isTerminal: true,
+        },
+      })
+    ).id;
+  });
+
+  const stageOf = async () =>
+    (await prisma.matter.findUniqueOrThrow({ where: { id: matterId } })).stageId;
+
+  test("moves forward and writes a 'Stage moved' audit row", async () => {
+    expect(await updateMatterStage(matterId, s2)).toEqual({ ok: true });
+    expect(await stageOf()).toBe(s2);
+    const log = await prisma.activityLog.findFirstOrThrow({ where: { matterId } });
+    expect(log.title).toBe("Stage moved: Intake → Discovery");
+  });
+
+  test("same-stage is a quiet no-op", async () => {
+    expect(await updateMatterStage(matterId, s1)).toEqual({ ok: true });
+    expect(await prisma.activityLog.count()).toBe(0);
+  });
+
+  test("reopening a closed matter needs confirmation; force reopens and logs it", async () => {
+    await updateMatterStage(matterId, closed);
+    const asked = await updateMatterStage(matterId, s1);
+    expect(asked.ok).toBe(false);
+    expect(asked.requiresConfirmation).toBe(true);
+    expect(await stageOf()).toBe(closed);
+
+    expect(await updateMatterStage(matterId, s1, { force: true })).toEqual({
+      ok: true,
+    });
+    expect(await stageOf()).toBe(s1);
+    const titles = (
+      await prisma.activityLog.findMany({ where: { matterId } })
+    ).map((l) => l.title);
+    expect(titles).toContain("Reopened from Closed → Intake");
+  });
+
+  test("a stage from another practice area is refused", async () => {
+    const other = await seedPracticeArea({ name: "Other area" });
+    const res = await updateMatterStage(matterId, other.stageId);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/practice area/);
+    expect(await stageOf()).toBe(s1);
+  });
+
+  test("unknown matter / inactive stage are refused; gated on matters.edit", async () => {
+    expect((await updateMatterStage("nope", s2)).ok).toBe(false);
+    await prisma.matterStage.update({ where: { id: s2 }, data: { isActive: false } });
+    expect((await updateMatterStage(matterId, s2)).ok).toBe(false);
+    expect(requirePermission).toHaveBeenCalledWith("matters.edit");
   });
 });

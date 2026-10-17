@@ -1,12 +1,22 @@
+import { dateOnlyKey, parseDateOnly } from "@/lib/format-date";
+
 /**
  * Statute-of-limitations utilities.
  *
  * The firm-wide convention: statute periods are entered in human
  * units (years / months / days) and stored as a single `Int` of
- * total days on `PracticeArea.statutePeriodDays`. We use a
- * 365-day year + 30-day month convention because legal SOL
- * periods are virtually always specified in calendar days under
- * those conventions, not "two solar years."
+ * total days on `PracticeArea.statutePeriodDays`, using a 365-day
+ * year + 30-day month.
+ *
+ * KNOWN LIMITATION (F093/F731/F945, deferred to the schema batch):
+ * that is a day-count convention, NOT calendar arithmetic. Statutes
+ * written as "two years" or "six months" run to the same calendar
+ * date, so the auto-computed date can be early by a day or more
+ * across a leap year, and a month-based period can land a day or two
+ * early or late. The computed date is a convenience: the lawyer must
+ * verify it, and an explicit date typed on the matter always wins.
+ * The proper fix stores {years, months, days} on PracticeArea and
+ * computes with UTC calendar arithmetic (needs a migration).
  *
  * Both directions live here so the practice-area form can
  * round-trip the user's input through the schema. The total-days
@@ -15,6 +25,9 @@
  * decomposition (months/days small enough not to roll into the
  * next unit under the 365/30 convention — e.g. "18 months" packs
  * to 540 days and unpacks as "1 year 5 months 25 days").
+ *
+ * Matter incident / SOL dates are date-only values (ADR-012): UTC
+ * midnight, read in UTC, never shifted by any time zone.
  */
 
 export type StatutePeriod = {
@@ -50,9 +63,10 @@ export function unpackStatuteDays(totalDays: number | null): StatutePeriod {
 
 /** Compute the SOL date from an incident date + statute period.
  *  Returns null when either input is missing. The action layer
- *  uses this to auto-populate `Matter.statuteOfLimitationsDate`
- *  on create / update; the form preview uses it to show the
- *  lawyer what the auto-computed value will be before they save. */
+ *  (createMatter / updateMatter / lead conversion) uses this to
+ *  auto-populate `Matter.statuteOfLimitationsDate`; no form
+ *  previews it, so the result is only visible after saving.
+ *  Pure day arithmetic — see the KNOWN LIMITATION in the header. */
 export function computeSolDate(
   incidentDate: Date | null | undefined,
   statutePeriodDays: number | null | undefined
@@ -92,31 +106,16 @@ export function formatStatutePeriod(totalDays: number | null): string {
  *  matter and deadline actions. */
 export const SOL_SOURCE_TYPE = "statute_of_limitations";
 
-/** `YYYY-MM-DD` of a date-only value stored as UTC midnight (the SOL /
- *  incident convention — see computeSolDate). */
-export function solDayKey(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
+/** `YYYY-MM-DD` of a date-only value (ADR-012). Alias of `dateOnlyKey`,
+ *  kept for the existing importers. */
+export const solDayKey = dateOnlyKey;
 
 /** Strictly parse an `<input type="date">` string (`YYYY-MM-DD`) into
- *  UTC midnight — the same instant `new Date("YYYY-MM-DD")` yields —
- *  but returns null for anything malformed or a non-existent calendar
- *  day (2026-02-31), so a tampered post becomes a field error instead
- *  of an Invalid Date reaching Prisma. */
-export function parseSolDateInput(value: string): Date | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!m) return null;
-  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  const date = new Date(Date.UTC(y, mo - 1, d));
-  if (
-    date.getUTCFullYear() !== y ||
-    date.getUTCMonth() !== mo - 1 ||
-    date.getUTCDate() !== d
-  ) {
-    return null;
-  }
-  return date;
-}
+ *  UTC midnight, or null for anything malformed or a non-existent
+ *  calendar day (2026-02-31), so a tampered post becomes a field
+ *  error instead of an Invalid Date reaching Prisma. Alias of
+ *  `parseDateOnly` (ADR-012), kept for the existing importers. */
+export const parseSolDateInput = parseDateOnly;
 
 /** Was the stored SOL date derived automatically (as opposed to typed
  *  in as a manual override)? Nothing records provenance, so infer it:

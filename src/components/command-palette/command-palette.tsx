@@ -77,7 +77,7 @@ import {
   readRecents,
   type RecentRef,
 } from "@/lib/command-palette/recents";
-import { toggleMatterPin } from "@/app/actions/matter-pins";
+import { setMatterPin } from "@/app/actions/matter-pins";
 import {
   parsePaletteQuery,
   paletteValue,
@@ -158,11 +158,20 @@ export function CommandPalette({
   const [query, setQuery] = useState("");
   const [recents, setRecents] = useState<RecentRef[]>([]);
 
-  // Fetch fresh data + load recents each time the palette opens.
+  // Reset the query and reload recents each time the palette opens
+  // (stored-previous-prop pattern: derived during render, no effect).
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) {
+      setQuery("");
+      setRecents(readRecents());
+    }
+  }
+
+  // Fetch fresh data each time the palette opens.
   useEffect(() => {
     if (!open) return;
-    setQuery("");
-    setRecents(readRecents());
     let cancelled = false;
     getPaletteData()
       .then((d) => {
@@ -229,9 +238,10 @@ export function CommandPalette({
   const toggleCurrentPin = () => {
     if (!currentMatter) return;
     const matterId = currentMatter.id;
+    const nextPinned = !currentMatter.isPinned;
     close();
     startTransition(async () => {
-      await toggleMatterPin(matterId);
+      await setMatterPin(matterId, nextPinned);
     });
   };
 

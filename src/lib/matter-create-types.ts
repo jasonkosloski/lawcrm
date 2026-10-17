@@ -5,10 +5,13 @@
  * specific matter — logged time, notes, tasks, deadlines, parties,
  * documents, calendar events, invoices. Used by:
  *   - `MatterCreateMenu` (the dropdown in the matter detail header)
- *   - `/matters/[id]/new/[type]/page.tsx` (shared placeholder page)
+ *   - the matter tab bar's "+ Add …" buttons (matter-tabs.tsx)
+ *   - `CreateDock` (create-stack), which opens the panel for a type
  *
- * When a real create form ships, the placeholder page for that type
- * can be replaced with the form — or a dedicated route can take over.
+ * Only `note` (with a matter) and `event` (without one) have a real
+ * form in the dock today; the other types still open the dock's
+ * placeholder panel built from `description` / `expected` below. When a
+ * real form ships for a type, mount it in CreateDock's PanelBody.
  */
 
 export type MatterCreateType =

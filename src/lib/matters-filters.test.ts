@@ -11,6 +11,7 @@ import {
   DEFAULT_SORT,
   DEFAULT_VIEW,
   EMPTY_FILTER,
+  formatDeadlineDays,
   isFilterActive,
   parseMattersParams,
   type MattersFilter,
@@ -213,5 +214,14 @@ describe("buildMattersSearchParams — round-trip", () => {
     expect(reparsed.filter.trust).toBe(original.filter.trust);
     expect(reparsed.filter.pinnedOnly).toBe(true);
     expect(reparsed.sort).toEqual(original.sort);
+  });
+});
+
+describe("formatDeadlineDays", () => {
+  test("future / today read as Nd; overdue reads as 'Nd late', never a negative or 0d", () => {
+    expect(formatDeadlineDays(8)).toBe("8d");
+    expect(formatDeadlineDays(0)).toBe("0d");
+    expect(formatDeadlineDays(-12)).toBe("12d late");
+    expect(formatDeadlineDays(-1)).toBe("1d late");
   });
 });

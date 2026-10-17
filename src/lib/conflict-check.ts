@@ -124,20 +124,57 @@ export async function runConflictMatcher(
         organization: true,
       },
     });
+    // Opposing-side use is counted in two batched queries (not one
+    // count per hit): the contact as a non-client party, and the
+    // contact as someone's attorney (MatterContact.representationContactId
+    // — opposing counsel is stored there, with no party row of their own).
+    const hitIds = emailHits.map((c) => c.id);
+    const [asParty, asCounsel] =
+      hitIds.length === 0
+        ? [[], []]
+        : await Promise.all([
+            prisma.matterContact.groupBy({
+              by: ["contactId"],
+              where: {
+                contactId: { in: hitIds },
+                NOT: { category: "client" },
+                matter: { isArchived: false },
+              },
+              _count: { _all: true },
+            }),
+            prisma.matterContact.groupBy({
+              by: ["representationContactId"],
+              where: {
+                representationContactId: { in: hitIds },
+                NOT: { category: "client" },
+                matter: { isArchived: false },
+              },
+              _count: { _all: true },
+            }),
+          ]);
+    const useCounts = new Map<string, number>();
+    for (const g of asParty) {
+      useCounts.set(
+        g.contactId,
+        (useCounts.get(g.contactId) ?? 0) + g._count._all
+      );
+    }
+    for (const g of asCounsel) {
+      if (!g.representationContactId) continue;
+      useCounts.set(
+        g.representationContactId,
+        (useCounts.get(g.representationContactId) ?? 0) + g._count._all
+      );
+    }
     for (const c of emailHits) {
       // Hard tier requires the opposing-side use to be on an
       // ACTIVE matter (see header) — archived files only warn.
-      const opposingSideUse = await prisma.matterContact.count({
-        where: {
-          contactId: c.id,
-          NOT: { category: "client" },
-          matter: { isArchived: false },
-        },
-      });
+      const opposingSideUse = useCounts.get(c.id) ?? 0;
       seenContactIds.add(c.id);
-      // The soft "already in the directory" warn applies to active
-      // contacts only, and never to the candidate's own Contact.
-      if (opposingSideUse === 0 && (!c.isActive || c.id === ownContactId)) {
+      // The soft "already in the directory" warn never applies to the
+      // candidate's own Contact. Deactivated contacts still warn,
+      // labelled "(inactive)": a former client matters under Rule 1.9.
+      if (opposingSideUse === 0 && c.id === ownContactId) {
         continue;
       }
       matches.push({
@@ -147,8 +184,32 @@ export async function runConflictMatcher(
         description:
           opposingSideUse > 0
             ? `${c.name} — same email; appears on opposing side of ${opposingSideUse} active matter${opposingSideUse === 1 ? "" : "s"}`
-            : `${c.name} — same email already in the firm's contact directory`,
+            : `${c.name}${c.isActive ? "" : " (inactive)"} — same email already in the firm's contact directory`,
         contactId: c.id,
+      });
+    }
+
+    // Legacy free-text representation email (no Contact row): the same
+    // person typed in as opposing counsel on a party.
+    const legacyCounselByEmail = await prisma.matterContact.findMany({
+      where: {
+        NOT: { category: "client" },
+        matter: { isArchived: false },
+        representationEmail: { equals: emailKey, mode: "insensitive" },
+      },
+      select: {
+        category: true,
+        matter: { select: { id: true, name: true } },
+        representationName: true,
+      },
+    });
+    for (const mc of legacyCounselByEmail) {
+      matches.push({
+        kind: "contact_email",
+        severity: "conflict",
+        matchedField: "email",
+        description: `${mc.representationName ?? "Opposing counsel"} — same email; opposing counsel for ${mc.category} on matter "${mc.matter.name}"`,
+        matterId: mc.matter.id,
       });
     }
   }
@@ -225,14 +286,64 @@ export async function runConflictMatcher(
       seenContactIds.add(mc.contact.id);
     }
 
+    // Opposing counsel: the candidate may be the ATTORNEY on a party
+    // row — linked as a Contact via representationContactId, or only
+    // typed into the legacy representationName text.
+    // Contacts already reported by the email / party paths are not
+    // reported a second time as counsel (snapshot before this loop so
+    // one contact on several matters still lists each matter).
+    const reportedBeforeCounsel = new Set(seenContactIds);
+    const counselCandidates = await prisma.matterContact.findMany({
+      where: {
+        NOT: { category: "client" },
+        matter: { isArchived: false },
+        OR: [
+          {
+            representationContact: {
+              mergedIntoId: null,
+              name: { equals: nameKey, mode: "insensitive" },
+            },
+          },
+          { representationName: { equals: nameKey, mode: "insensitive" } },
+        ],
+      },
+      select: {
+        category: true,
+        matter: { select: { id: true, name: true } },
+        representationContact: { select: { id: true, name: true } },
+        representationName: true,
+      },
+    });
+    for (const mc of counselCandidates) {
+      if (
+        mc.representationContact &&
+        reportedBeforeCounsel.has(mc.representationContact.id)
+      ) {
+        continue;
+      }
+      const counselName =
+        mc.representationContact?.name ?? mc.representationName ?? nameKey;
+      matches.push({
+        kind: "matter_opposing_party",
+        severity: "conflict",
+        matchedField: "name",
+        description: `${counselName} — opposing counsel for ${mc.category} on matter "${mc.matter.name}"`,
+        matterId: mc.matter.id,
+        contactId: mc.representationContact?.id,
+      });
+      if (mc.representationContact) {
+        seenContactIds.add(mc.representationContact.id);
+      }
+    }
+
     // Soft signal: same name appears as any contact. Skip when
     // we already counted the contact via a higher-severity path.
     const nameCandidates = await prisma.contact.findMany({
       where: {
-        isActive: true,
+        mergedIntoId: null,
         name: { equals: nameKey, mode: "insensitive" },
       },
-      select: { id: true, name: true, type: true },
+      select: { id: true, name: true, type: true, isActive: true },
     });
     for (const c of nameCandidates) {
       if (seenContactIds.has(c.id) || c.id === ownContactId) continue;
@@ -240,7 +351,7 @@ export async function runConflictMatcher(
         kind: "contact_name",
         severity: "warn",
         matchedField: "name",
-        description: `${c.name} — same name in the firm's contact directory (${c.type})`,
+        description: `${c.name}${c.isActive ? "" : " (inactive)"} — same name in the firm's contact directory (${c.type})`,
         contactId: c.id,
       });
       seenContactIds.add(c.id);
@@ -251,10 +362,16 @@ export async function runConflictMatcher(
   if (orgKey) {
     const orgCandidates = await prisma.contact.findMany({
       where: {
-        isActive: true,
+        mergedIntoId: null,
         organization: { equals: orgKey, mode: "insensitive" },
       },
-      select: { id: true, name: true, organization: true, type: true },
+      select: {
+        id: true,
+        name: true,
+        organization: true,
+        type: true,
+        isActive: true,
+      },
     });
     for (const c of orgCandidates) {
       if (seenContactIds.has(c.id) || c.id === ownContactId) continue;
@@ -262,7 +379,7 @@ export async function runConflictMatcher(
         kind: "contact_name",
         severity: "warn",
         matchedField: "organization",
-        description: `${c.name} (${c.organization}) — same organization`,
+        description: `${c.name}${c.isActive ? "" : " (inactive)"} (${c.organization}) — same organization`,
         contactId: c.id,
       });
       seenContactIds.add(c.id);

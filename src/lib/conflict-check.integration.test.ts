@@ -4,9 +4,10 @@
  * are covered in `conflict-check.test.ts`; this file exercises
  * the DB-driven match paths end-to-end.
  *
- * The matcher uses bounded find-many queries + JS-side normalize
- * (SQLite doesn't support insensitive Prisma filters), so case +
- * whitespace differences should match.
+ * The matcher compares in Postgres with `mode: "insensitive"`
+ * equality over every row (no cap, no JS-side re-filter) against
+ * candidate values normalized by `normalize()`, so case + whitespace
+ * differences on the candidate side still match.
  */
 
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
@@ -437,7 +438,7 @@ describe("runConflictMatcher — deactivated contacts still on matters", () => {
     expect(result.matches[0]!.kind).toBe("contact_email");
   });
 
-  test("deactivated contact with NO matter involvement stays out of the soft warn tiers", async () => {
+  test("deactivated contact with NO matter involvement still warns, labelled inactive (former client, Rule 1.9)", async () => {
     await seedContact({
       name: "Retired Contact",
       email: "retired@example.com",
@@ -449,7 +450,12 @@ describe("runConflictMatcher — deactivated contacts still on matters", () => {
       email: "retired@example.com",
       organization: "Retired Org",
     });
-    expect(result.severity).toBe("clear");
+    expect(result.severity).toBe("warn");
+    expect(result.matches.length).toBeGreaterThan(0);
+    for (const m of result.matches) {
+      expect(m.severity).toBe("warn");
+      expect(m.description).toContain("(inactive)");
+    }
   });
 
   test("a contact merged away is not matched (the survivor carries the rows)", async () => {
@@ -475,5 +481,168 @@ describe("runConflictMatcher — deactivated contacts still on matters", () => {
       organization: null,
     });
     expect(result.severity).toBe("clear");
+  });
+});
+
+describe("runConflictMatcher — opposing counsel (representation)", () => {
+  /** A party row on the shared matter, with representation fields. */
+  async function seedRepresentedParty(
+    rep: {
+      representationContactId?: string | null;
+      representationName?: string | null;
+      representationEmail?: string | null;
+    },
+    onMatterId: string = matterId
+  ) {
+    const { prisma } = await import("@/lib/prisma");
+    const party = await seedContact({ name: "Defendant Dan", type: "opposing" });
+    await prisma.matterContact.create({
+      data: {
+        matterId: onMatterId,
+        contactId: party.contactId,
+        category: "opposing",
+        isRepresented: true,
+        ...rep,
+      },
+    });
+  }
+
+  test("attorney linked only via representationContactId, matched by email → conflict", async () => {
+    const atty = await seedContact({
+      name: "Pat Smith",
+      email: "pat@defense.com",
+      type: "opposing_counsel",
+    });
+    await seedRepresentedParty({ representationContactId: atty.contactId });
+
+    const result = await runConflictMatcher({
+      name: null,
+      email: "pat@defense.com",
+      organization: null,
+    });
+    expect(result.severity).toBe("conflict");
+    expect(result.matches[0]).toMatchObject({
+      kind: "contact_email",
+      severity: "conflict",
+      contactId: atty.contactId,
+    });
+    expect(result.matches[0]!.description).toContain(
+      "appears on opposing side of 1 active matter"
+    );
+  });
+
+  test("counsel matched by BOTH email and name is reported once, not twice", async () => {
+    const atty = await seedContact({
+      name: "Pat Smith",
+      email: "pat@defense.com",
+      type: "opposing_counsel",
+    });
+    await seedRepresentedParty({ representationContactId: atty.contactId });
+
+    const result = await runConflictMatcher({
+      name: "Pat Smith",
+      email: "pat@defense.com",
+      organization: null,
+    });
+    expect(result.severity).toBe("conflict");
+    expect(
+      result.matches.filter((m) => m.contactId === atty.contactId)
+    ).toHaveLength(1);
+  });
+
+  test("attorney linked via representationContactId, matched by name → conflict", async () => {
+    const atty = await seedContact({
+      name: "Pat Smith",
+      type: "opposing_counsel",
+    });
+    await seedRepresentedParty({ representationContactId: atty.contactId });
+
+    const result = await runConflictMatcher({
+      name: "pat smith",
+      email: null,
+      organization: null,
+    });
+    expect(result.severity).toBe("conflict");
+    expect(result.matches).toHaveLength(1); // not double-counted as a soft name warn
+    expect(result.matches[0]).toMatchObject({
+      kind: "matter_opposing_party",
+      contactId: atty.contactId,
+      matterId,
+    });
+    expect(result.matches[0]!.description).toContain("opposing counsel");
+  });
+
+  test("legacy representationName / representationEmail text (no Contact) → conflict", async () => {
+    await seedRepresentedParty({
+      representationName: "Legacy Lawyer",
+      representationEmail: "legacy@firm.com",
+    });
+
+    const byName = await runConflictMatcher({
+      name: "Legacy Lawyer",
+      email: null,
+      organization: null,
+    });
+    expect(byName.severity).toBe("conflict");
+
+    const byEmail = await runConflictMatcher({
+      name: null,
+      email: "LEGACY@firm.com",
+      organization: null,
+    });
+    expect(byEmail.severity).toBe("conflict");
+    expect(byEmail.matches[0]!.kind).toBe("contact_email");
+  });
+
+  test("counsel on an ARCHIVED matter only warns by email (directory), never conflicts", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    await prisma.matter.update({
+      where: { id: matterId },
+      data: { isArchived: true },
+    });
+    const atty = await seedContact({
+      name: "Pat Smith",
+      email: "pat@defense.com",
+      type: "opposing_counsel",
+    });
+    await seedRepresentedParty({ representationContactId: atty.contactId });
+
+    const result = await runConflictMatcher({
+      name: "Pat Smith",
+      email: "pat@defense.com",
+      organization: null,
+    });
+    expect(result.severity).toBe("warn");
+  });
+
+  test("several email hits are each counted correctly (batched counts)", async () => {
+    // Two directory contacts share an email: one is opposing on 2 matters,
+    // the other is unused.
+    const { prisma } = await import("@/lib/prisma");
+    const used = await seedContact({ name: "Used", email: "shared@x.com" });
+    await seedContact({ name: "Unused", email: "SHARED@x.com" });
+    const area = await seedPracticeArea();
+    const m2 = await seedMatter({
+      practiceAreaId: area.areaId,
+      stageId: area.stageId,
+      leadUserId: userId,
+      name: "Second",
+    });
+    for (const id of [matterId, m2.matterId]) {
+      await prisma.matterContact.create({
+        data: { matterId: id, contactId: used.contactId, category: "opposing" },
+      });
+    }
+    const result = await runConflictMatcher({
+      name: null,
+      email: "shared@x.com",
+      organization: null,
+    });
+    const usedMatch = result.matches.find((m) => m.contactId === used.contactId);
+    expect(usedMatch?.severity).toBe("conflict");
+    expect(usedMatch?.description).toContain("2 active matters");
+    const other = result.matches.find((m) => m.contactId !== used.contactId);
+    expect(other?.severity).toBe("warn");
+    expect(result.severity).toBe("conflict");
   });
 });

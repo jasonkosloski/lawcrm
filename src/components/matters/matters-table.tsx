@@ -18,7 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SortableHeader } from "@/components/matters/sortable-header";
-import { FEE_LABELS } from "@/lib/matters-filters";
+import { FEE_LABELS, formatDeadlineDays } from "@/lib/matters-filters";
 import type { MatterListRow } from "@/lib/queries/matters";
 
 const formatMoney = (n: number): string =>
@@ -138,10 +138,12 @@ export function MattersTable({ matters }: { matters: MatterListRow[] }) {
                     <span className="text-ink-4">—</span>
                   ) : m.nextDeadlineDays <= 7 ? (
                     <span className="text-warn font-medium">
-                      {m.nextDeadlineDays}d
+                      {formatDeadlineDays(m.nextDeadlineDays)}
                     </span>
                   ) : (
-                    <span className="text-ink-3">{m.nextDeadlineDays}d</span>
+                    <span className="text-ink-3">
+                      {formatDeadlineDays(m.nextDeadlineDays)}
+                    </span>
                   )}
                 </TableCell>
               </TableRow>
@@ -203,7 +205,7 @@ function MatterCard({ m }: { m: MatterListRow }) {
                     : "text-ink-3")
                 }
               >
-                {m.nextDeadlineDays}d
+                {formatDeadlineDays(m.nextDeadlineDays)}
               </span>
             )}
           </div>

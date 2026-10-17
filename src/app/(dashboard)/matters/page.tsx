@@ -43,11 +43,9 @@ export default async function MattersListPage({
   ] = await Promise.all([
       listMatters(filter, sort),
       getMattersFilterOptions(),
-      // Denominator for "showing N of M" — a DB-side count honoring
-      // every non-search filter (area, stage, fee, lead, archived
-      // default). Text search is applied in memory by listMatters, and
-      // countMatters ignores `q` by construction, so no filter copy is
-      // needed here. Also immune to LIST_MATTERS_CAP truncation.
+      // Denominator for "showing N of M" — a DB-side count with the
+      // exact same filters as listMatters, text search included (both
+      // go through one buildWhere). Immune to LIST_MATTERS_CAP.
       countMatters(filter),
       // Firm-wide counts for the crumb — independent of the user's
       // current filter so the header keeps its reference point even

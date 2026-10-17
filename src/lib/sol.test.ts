@@ -203,6 +203,18 @@ describe("computeSolDate", () => {
     expect(sol!.toISOString().slice(0, 10)).toBe("2026-04-15");
   });
 
+  test("pins the documented 365/30 day-count convention across a leap year (F093/F945)", () => {
+    // KNOWN LIMITATION: "2 years" is 730 days, so a window spanning
+    // Feb 29 lands one day BEFORE the calendar anniversary
+    // (2029-03-10). Changing this needs the {years, months, days}
+    // schema change (Batch 4) — update this test with it.
+    const sol = computeSolDate(new Date("2027-03-10T00:00:00Z"), 730);
+    expect(sol!.toISOString().slice(0, 10)).toBe("2029-03-09");
+    // "1 month" = 30 days: Feb 1 + 30 = Mar 3 (calendar: Mar 1).
+    const month = computeSolDate(new Date("2026-02-01T00:00:00Z"), 30);
+    expect(month!.toISOString().slice(0, 10)).toBe("2026-03-03");
+  });
+
   test("UTC-midnight incident crossing a DST boundary stays on the calendar day", () => {
     // Incident dates arrive as UTC-midnight timestamps. Local-time
     // setDate() in a DST-observing server zone used to land the

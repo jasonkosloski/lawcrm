@@ -32,7 +32,7 @@ vi.mock("@/lib/queries/command-palette", () => ({
 }));
 
 vi.mock("@/app/actions/matter-pins", () => ({
-  toggleMatterPin: vi.fn(),
+  setMatterPin: vi.fn(),
 }));
 
 import {

@@ -1,5 +1,6 @@
 /**
- * Integration tests for `toggleMatterPin`.
+ * Integration tests for `setMatterPin` (the idempotent primitive the UI
+ * uses) and its `toggleMatterPin` wrapper.
  *
  * The action is small but the contract matters — pins drive the
  * sidebar's "Pinned matters" list, so a regression here would
@@ -21,7 +22,7 @@ vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
-import { toggleMatterPin } from "@/app/actions/matter-pins";
+import { setMatterPin, toggleMatterPin } from "@/app/actions/matter-pins";
 import {
   resetDb,
   seedFirm,
@@ -118,5 +119,50 @@ describe("toggleMatterPin", () => {
     });
     expect(aPin).not.toBeNull();
     expect(bPin).not.toBeNull();
+  });
+});
+
+describe("setMatterPin", () => {
+  test("states the wanted value: pin twice stays pinned, unpin twice stays unpinned", async () => {
+    expect(await setMatterPin(matterId, true)).toEqual({ ok: true, pinned: true });
+    // A stale tab sending "pin" again must NOT flip it off.
+    expect(await setMatterPin(matterId, true)).toEqual({ ok: true, pinned: true });
+    expect(await prisma.userMatterPin.count({ where: { userId, matterId } })).toBe(1);
+
+    expect(await setMatterPin(matterId, false)).toEqual({ ok: true, pinned: false });
+    expect(await setMatterPin(matterId, false)).toEqual({ ok: true, pinned: false });
+    expect(await prisma.userMatterPin.count({ where: { userId, matterId } })).toBe(0);
+    expect(mockedRevalidate).toHaveBeenCalledWith("/", "layout");
+  });
+
+  test("concurrent pin calls don't throw a unique violation", async () => {
+    const results = await Promise.all([
+      setMatterPin(matterId, true),
+      setMatterPin(matterId, true),
+      setMatterPin(matterId, true),
+    ]);
+    expect(results.every((r) => r.ok && r.pinned)).toBe(true);
+    expect(await prisma.userMatterPin.count({ where: { userId, matterId } })).toBe(1);
+  });
+
+  test("pinning an unknown matter is an error result, not an FK 500", async () => {
+    const res = await setMatterPin("no-such-matter", true);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/not found/i);
+    expect(await prisma.userMatterPin.count()).toBe(0);
+  });
+
+  test("unpinning something never pinned (or unknown) is a harmless no-op", async () => {
+    expect((await setMatterPin("no-such-matter", false)).ok).toBe(true);
+    expect((await setMatterPin(matterId, false)).ok).toBe(true);
+  });
+
+  test("scoped to the caller: unpinning for A leaves B's pin", async () => {
+    await setMatterPin(matterId, true);
+    mockedGetUser.mockResolvedValue(otherUserId);
+    await setMatterPin(matterId, true);
+    await setMatterPin(matterId, false);
+    expect(await prisma.userMatterPin.count({ where: { userId } })).toBe(1);
+    expect(await prisma.userMatterPin.count({ where: { userId: otherUserId } })).toBe(0);
   });
 });

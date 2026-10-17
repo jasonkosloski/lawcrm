@@ -1,33 +1,56 @@
 /**
- * Integration tests for countMatters.
+ * Integration tests for the matters list / detail queries.
  *
  * countMatters is the DB-side denominator behind the list page's
  * "showing N of M". Pins the contract the page relies on:
  *
- *   1. `filter.q` is ignored — text search is an in-memory concern of
- *      listMatters, so the count is "every filter except search".
+ *   1. `filter.q` is part of the shared where, so the count matches
+ *      what a search can return.
  *   2. Non-search filters (practice area, archived default, terminal
  *      stages hidden unless showClosed) constrain the count exactly
  *      like they constrain the list.
  *   3. The count is NOT subject to LIST_MATTERS_CAP — with more
  *      matters than the cap, listMatters truncates but countMatters
  *      reports the true total.
+ *
+ * listMatters: search and sort run over EVERY matching matter before
+ * the cap; deadline windows are calendar days in the viewer's zone
+ * (due-today is not overdue; overdue is negative, not clamped to 0).
  */
 
-import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+} from "vitest";
 
 // matters.ts imports getCurrentUserId (for pin lookups); stub it so the
 // auth chain (next-auth → next/server) doesn't have to load. Tests pass
 // an explicit userId, so the stub is never exercised.
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
+vi.mock("@/lib/current-user-tz", () => ({
+  getCurrentUserTimeZone: vi.fn(async () => "America/Denver"),
+}));
 
 import { prisma } from "@/lib/prisma";
-import { countMatters, listMatters } from "@/lib/queries/matters";
+import {
+  countMatters,
+  getMatterById,
+  getMattersFilterOptions,
+  listMatters,
+} from "@/lib/queries/matters";
 import { EMPTY_FILTER } from "@/lib/matters-filters";
+import { getCurrentUserId } from "@/lib/current-user";
 import {
   resetDb,
   seedFirm,
+  seedMatter,
   seedPracticeArea,
+  seedTimeEntry,
   seedUser,
 } from "@/test/integration-helpers";
 
@@ -69,14 +92,22 @@ beforeEach(async () => {
 });
 
 describe("countMatters", () => {
-  test("ignores filter.q — search is in-memory in listMatters", async () => {
+  test("honors filter.q — the denominator matches what search can return", async () => {
     await seedMatters(3);
+    await prisma.matter.updateMany({
+      where: { name: "Matter 1" },
+      data: { caseNumber: "2026CV-777" },
+    });
 
-    const count = await countMatters(
-      { ...EMPTY_FILTER, q: "matches-nothing-zzz" },
-      userId
+    expect(
+      await countMatters({ ...EMPTY_FILTER, q: "matches-nothing-zzz" }, userId)
+    ).toBe(0);
+    expect(await countMatters({ ...EMPTY_FILTER, q: "matter 1" }, userId)).toBe(
+      1
     );
-    expect(count).toBe(3);
+    expect(
+      await countMatters({ ...EMPTY_FILTER, q: "2026cv-777" }, userId)
+    ).toBe(1);
   });
 
   test("honors non-search filters: area + archived default", async () => {
@@ -129,5 +160,330 @@ describe("countMatters", () => {
     ]);
     expect(rows).toHaveLength(200); // list is capped…
     expect(count).toBe(205); // …the denominator is not
+  });
+});
+
+// ── listMatters ─────────────────────────────────────────────────────────
+
+const byCreated = { field: "created", dir: "desc" } as const;
+
+describe("listMatters search + sort run before the row cap (F289/F305/F322/F344)", () => {
+  test("a matter older than the newest 200 is still found by name and case number", async () => {
+    // The old one is created FIRST, so 205 newer matters push it out of
+    // the 200 newest.
+    await prisma.matter.create({
+      data: {
+        name: "Alvarez v. City",
+        caseNumber: "2019CV-001",
+        practiceAreaId: areaId,
+        stageId,
+        feeStructure: "hourly",
+        createdAt: new Date("2019-01-01T00:00:00Z"),
+      },
+    });
+    await seedMatters(205);
+
+    const byName = await listMatters(
+      { ...EMPTY_FILTER, q: "alvarez" },
+      byCreated,
+      userId,
+      "UTC"
+    );
+    expect(byName.map((r) => r.name)).toEqual(["Alvarez v. City"]);
+
+    const byCase = await listMatters(
+      { ...EMPTY_FILTER, q: "2019cv" },
+      byCreated,
+      userId,
+      "UTC"
+    );
+    expect(byCase.map((r) => r.name)).toEqual(["Alvarez v. City"]);
+    // …and the denominator agrees with the list.
+    expect(await countMatters({ ...EMPTY_FILTER, q: "alvarez" }, userId)).toBe(1);
+  });
+
+  test("sort by name orders ALL matching matters, then caps", async () => {
+    await prisma.matter.create({
+      data: {
+        name: "AAA first alphabetically",
+        practiceAreaId: areaId,
+        stageId,
+        feeStructure: "hourly",
+        createdAt: new Date("2019-01-01T00:00:00Z"),
+      },
+    });
+    await seedMatters(205);
+
+    const rows = await listMatters(
+      EMPTY_FILTER,
+      { field: "name", dir: "asc" },
+      userId,
+      "UTC"
+    );
+    expect(rows).toHaveLength(200);
+    expect(rows[0]!.name).toBe("AAA first alphabetically");
+  });
+
+  test("search treats LIKE wildcards literally", async () => {
+    for (const name of ["50% off", "50x off", "a_b", "axb"]) {
+      await prisma.matter.create({
+        data: { name, practiceAreaId: areaId, stageId, feeStructure: "hourly" },
+      });
+    }
+    const find = async (q: string) =>
+      (await listMatters({ ...EMPTY_FILTER, q }, byCreated, userId, "UTC"))
+        .map((r) => r.name)
+        .sort();
+
+    expect(await find("50%")).toEqual(["50% off"]);
+    expect(await find("%")).toEqual(["50% off"]);
+    expect(await find("a_b")).toEqual(["a_b"]);
+    expect(await find("_")).toEqual(["a_b"]);
+  });
+
+  test("pinned matters sort first, ahead of the chosen field", async () => {
+    await prisma.matter.create({
+      data: { name: "A", practiceAreaId: areaId, stageId, feeStructure: "hourly" },
+    });
+    await prisma.matter.create({
+      data: { name: "B", practiceAreaId: areaId, stageId, feeStructure: "hourly" },
+    });
+    const z = await prisma.matter.create({
+      data: { name: "Z", practiceAreaId: areaId, stageId, feeStructure: "hourly" },
+    });
+    await prisma.userMatterPin.create({ data: { userId, matterId: z.id } });
+
+    const asc = await listMatters(
+      EMPTY_FILTER,
+      { field: "name", dir: "asc" },
+      userId,
+      "UTC"
+    );
+    expect(asc.map((r) => r.name)).toEqual(["Z", "A", "B"]);
+    expect(asc[0]!.isPinned).toBe(true);
+  });
+});
+
+describe("listMatters deadline math is calendar-day, in the viewer's zone (F304/F321)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A matter with one open deadline due on `dueKey` (UTC midnight). */
+  async function matterDue(name: string, dueKey: string) {
+    const m = await prisma.matter.create({
+      data: { name, practiceAreaId: areaId, stageId, feeStructure: "hourly" },
+    });
+    await prisma.deadline.create({
+      data: {
+        matterId: m.id,
+        title: "Due",
+        dueDate: new Date(`${dueKey}T00:00:00Z`),
+      },
+    });
+    return m.id;
+  }
+
+  const names = (rows: Array<{ name: string }>) => rows.map((r) => r.name).sort();
+
+  test("evening in Denver: due-today is not overdue; overdue keeps its sign", async () => {
+    // 2026-04-28T02:00Z = Apr 27, 8 PM MDT.
+    vi.useFakeTimers({ now: new Date("2026-04-28T02:00:00Z"), toFake: ["Date"] });
+    await matterDue("due today", "2026-04-27");
+    await matterDue("due tomorrow", "2026-04-28");
+    await matterDue("late 12", "2026-04-15");
+    await matterDue("in 8 days", "2026-05-05");
+    await matterDue("in 20 days", "2026-05-17");
+
+    const all = await listMatters(
+      EMPTY_FILTER,
+      { field: "deadline", dir: "asc" },
+      userId,
+      "America/Denver"
+    );
+    const days = Object.fromEntries(all.map((r) => [r.name, r.nextDeadlineDays]));
+    expect(days).toEqual({
+      "late 12": -12,
+      "due today": 0,
+      "due tomorrow": 1,
+      "in 8 days": 8,
+      "in 20 days": 20,
+    });
+    // Ascending deadline sort puts the most overdue first.
+    expect(all.map((r) => r.name)).toEqual([
+      "late 12",
+      "due today",
+      "due tomorrow",
+      "in 8 days",
+      "in 20 days",
+    ]);
+
+    const overdue = await listMatters(
+      { ...EMPTY_FILTER, deadline: "overdue" },
+      byCreated,
+      userId,
+      "America/Denver"
+    );
+    expect(names(overdue)).toEqual(["late 12"]);
+
+    const w7 = await listMatters(
+      { ...EMPTY_FILTER, deadline: "within-7d" },
+      byCreated,
+      userId,
+      "America/Denver"
+    );
+    // Open at the low end: the overdue matter stays in the window.
+    expect(names(w7)).toEqual(["due today", "due tomorrow", "late 12"]);
+
+    const w30 = await listMatters(
+      { ...EMPTY_FILTER, deadline: "within-30d" },
+      byCreated,
+      userId,
+      "America/Denver"
+    );
+    expect(names(w30)).toEqual([
+      "due today",
+      "due tomorrow",
+      "in 20 days",
+      "in 8 days",
+      "late 12",
+    ]);
+  });
+
+  test("the day rolls over in the viewer's zone, not the server's", async () => {
+    // 2026-04-28T02:00Z is still Apr 27 in Denver but already Apr 28 in UTC.
+    vi.useFakeTimers({ now: new Date("2026-04-28T02:00:00Z"), toFake: ["Date"] });
+    await matterDue("apr 27", "2026-04-27");
+
+    const denver = await listMatters(
+      { ...EMPTY_FILTER, deadline: "overdue" },
+      byCreated,
+      userId,
+      "America/Denver"
+    );
+    expect(denver).toHaveLength(0);
+
+    const utc = await listMatters(
+      { ...EMPTY_FILTER, deadline: "overdue" },
+      byCreated,
+      userId,
+      "UTC"
+    );
+    expect(utc.map((r) => r.name)).toEqual(["apr 27"]);
+  });
+
+  test("a completed deadline is not a next deadline; none filter still works", async () => {
+    vi.useFakeTimers({ now: new Date("2026-04-28T18:00:00Z"), toFake: ["Date"] });
+    const id = await matterDue("done", "2026-04-20");
+    await prisma.deadline.updateMany({
+      where: { matterId: id },
+      data: { status: "completed" },
+    });
+    const rows = await listMatters(
+      { ...EMPTY_FILTER, deadline: "none" },
+      byCreated,
+      userId,
+      "UTC"
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.nextDeadlineDays).toBeNull();
+  });
+});
+
+describe("getMattersFilterOptions (F762/F788/F849)", () => {
+  test("fee structures are the distinct values in use, sorted", async () => {
+    for (const fee of ["hourly", "contingent", "hourly", "hourly"]) {
+      await prisma.matter.create({
+        data: { name: "m", practiceAreaId: areaId, stageId, feeStructure: fee },
+      });
+    }
+    const opts = await getMattersFilterOptions();
+    expect(opts.feeStructures).toEqual(["contingent", "hourly"]);
+  });
+
+  test("leads: only active leads of active users", async () => {
+    const { firmId } = await seedFirm({ name: "Other Firm" });
+    const active = await seedUser({ firmId, name: "Active Lead", initials: "AL" });
+    const gone = await seedUser({
+      firmId,
+      name: "Gone User",
+      initials: "GU",
+      isActive: false,
+    });
+    const former = await seedUser({ firmId, name: "Former Lead", initials: "FL" });
+    const mk = (leadUserId: string) =>
+      seedMatter({ practiceAreaId: areaId, stageId, leadUserId });
+    await mk(active.userId);
+    await mk(gone.userId);
+    const { matterId } = await mk(former.userId);
+    await prisma.matterTeamMember.updateMany({
+      where: { matterId, userId: former.userId },
+      data: { removedAt: new Date() },
+    });
+
+    const opts = await getMattersFilterOptions();
+    expect(opts.leads.map((l) => l.name)).toEqual(["Active Lead"]);
+  });
+});
+
+describe("getMatterById (F307/F745/F763)", () => {
+  test("team roster lists active members before former ones", async () => {
+    vi.mocked(getCurrentUserId).mockResolvedValue(userId);
+    const { firmId } = await seedFirm({ name: "Roster Firm" });
+    const paralegal = await seedUser({ firmId, name: "Paula Paralegal" });
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    await prisma.matterTeamMember.create({
+      data: {
+        matterId,
+        userId: paralegal.userId,
+        role: "paralegal",
+        removedAt: new Date(),
+      },
+    });
+
+    const matter = await getMatterById(matterId);
+    expect(matter!.teamMembers.map((t) => [t.role, t.removedAt === null])).toEqual(
+      [
+        ["lead", true],
+        ["paralegal", false],
+      ]
+    );
+  });
+
+  test("WIP is computed live from unbilled billable time, not the stale column", async () => {
+    vi.mocked(getCurrentUserId).mockResolvedValue(userId);
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    // Stale stored value that nothing maintains.
+    await prisma.matter.update({
+      where: { id: matterId },
+      data: { wipAmount: 28400 },
+    });
+    await seedTimeEntry({ matterId, userId, hours: 2, rate: 250, amount: 500 });
+    await seedTimeEntry({ matterId, userId, hours: 1, rate: 250, amount: 250 });
+    // Excluded: non-billable, written off.
+    await seedTimeEntry({ matterId, userId, amount: 999, billable: false });
+    await seedTimeEntry({ matterId, userId, amount: 777, status: "written_off" });
+
+    const matter = await getMatterById(matterId);
+    expect(matter!.wipAmount).toBe(750);
+  });
+
+  test("a matter with no billable time shows WIP 0; unknown id → null", async () => {
+    vi.mocked(getCurrentUserId).mockResolvedValue(userId);
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    expect((await getMatterById(matterId))!.wipAmount).toBe(0);
+    expect(await getMatterById("nope")).toBeNull();
   });
 });

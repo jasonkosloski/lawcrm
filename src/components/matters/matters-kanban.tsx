@@ -16,7 +16,7 @@
  */
 
 import Link from "next/link";
-import { FEE_LABELS } from "@/lib/matters-filters";
+import { FEE_LABELS, formatDeadlineDays } from "@/lib/matters-filters";
 import type { MatterListRow } from "@/lib/queries/matters";
 
 const formatMoney = (n: number): string =>
@@ -131,10 +131,12 @@ function KanbanCard({ matter }: { matter: MatterListRow }) {
             <span className="text-ink-4">—</span>
           ) : matter.nextDeadlineDays <= 7 ? (
             <span className="text-warn font-medium">
-              {matter.nextDeadlineDays}d
+              {formatDeadlineDays(matter.nextDeadlineDays)}
             </span>
           ) : (
-            <span className="text-ink-3">{matter.nextDeadlineDays}d</span>
+            <span className="text-ink-3">
+              {formatDeadlineDays(matter.nextDeadlineDays)}
+            </span>
           )}
         </span>
       </div>

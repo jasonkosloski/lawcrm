@@ -10,8 +10,10 @@
  *     status with a required justification (ethics audit trail).
  *     Permission: intake.conflict_check.override.
  *
- * Both actions write to ActivityLog so the matter-level audit
- * captures who-did-what for compliance review.
+ * Both actions write firm-scope ActivityLog rows (matterId null —
+ * a lead may have no matter yet) that name the lead in the title and
+ * carry its id in the detail, so compliance review can tell who
+ * cleared or ran the check on which lead.
  *
  * The matcher itself (`runConflictMatcher`) is pure and lives in
  * `src/lib/conflict-check.ts` so the lead detail page can render

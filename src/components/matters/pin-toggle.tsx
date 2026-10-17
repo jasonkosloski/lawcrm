@@ -2,7 +2,7 @@
  * Pin Toggle
  *
  * A pin/unpin button for the matter detail header. Optimistically flips
- * the icon state on click, then calls the `toggleMatterPin` server
+ * the icon state on click, then calls the `setMatterPin` server
  * action which updates the DB and revalidates the sidebar + list.
  */
 
@@ -10,7 +10,7 @@
 
 import { Pin, PinOff } from "lucide-react";
 import { useOptimistic, useTransition } from "react";
-import { toggleMatterPin } from "@/app/actions/matter-pins";
+import { setMatterPin } from "@/app/actions/matter-pins";
 import { cn } from "@/lib/utils";
 
 export function PinToggle({
@@ -25,8 +25,11 @@ export function PinToggle({
 
   const onClick = () => {
     startTransition(async () => {
-      setOptimisticPinned(!optimisticPinned);
-      await toggleMatterPin(matterId);
+      const next = !optimisticPinned;
+      setOptimisticPinned(next);
+      // State the wanted value, not a blind flip: a stale tab can't
+      // unpin a matter the user just pinned elsewhere.
+      await setMatterPin(matterId, next);
     });
   };
 
