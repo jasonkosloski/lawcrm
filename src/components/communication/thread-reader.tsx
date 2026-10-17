@@ -9,7 +9,6 @@
  * body typography in UI_PATTERNS).
  */
 
-import Link from "next/link";
 import { MailOpen, ShieldCheck } from "lucide-react";
 // sentAt is a real instant — server-rendered, so display threads the
 // viewer's IANA zone (ADR-012). "datetime_medium" is the centralized
@@ -30,6 +29,8 @@ import { BackToListButton } from "./back-to-list-button";
 import { MarkThreadRead } from "./mark-thread-read";
 import { ReplySection } from "./reply-section";
 import { isHtmlEmailBody } from "@/lib/email-body";
+import { htmlToText } from "@/lib/html-to-text";
+import { getCommActionPermissions } from "./comm-action-permissions";
 import { sanitizeEmailHtml } from "@/lib/sanitize-html";
 import type { FilingMatterOption } from "@/lib/queries/communication";
 
@@ -69,6 +70,25 @@ export async function ThreadReader({
   // affordance (async server component — same self-fetching idiom
   // as ReplySection, so both hosts get it without new page props).
   const canFileAttachments = await currentUserHasPermission("documents.upload");
+  // Action affordances the viewer can't use are hidden - their server
+  // actions redirect to the dashboard on denial.
+  const perms = await getCommActionPermissions();
+
+  // The first message quoted into "Save as note". Gmail-synced and
+  // CRM-sent bodies are sanitized HTML: convert to text BEFORE
+  // truncating, or the note shows raw markup cut mid-tag.
+  const firstBody = thread.messages[0]?.body ?? "";
+  const noteSnippet = (
+    isHtmlEmailBody(firstBody) ? htmlToText(firstBody) : firstBody
+  )
+    // Collapse runs of spaces/tabs but keep line structure: the note
+    // textarea turns blank lines back into paragraphs (textareaToHtml).
+    .replace(/\r\n?/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/ ?\n ?/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, 400);
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-paper-email overflow-y-auto">
@@ -98,6 +118,7 @@ export async function ThreadReader({
               threadId={thread.id}
               currentMatter={thread.matter}
               options={filingOptions}
+              canFile={perms.canFileEmail}
             />
             <span className="text-ink-4">·</span>
             <span className="font-mono text-ink-4">
@@ -130,6 +151,9 @@ export async function ThreadReader({
                 unfiled — actions need a matter to attach the new entity to. */}
             <InboxActionButtons
               isFiled={thread.matter !== null}
+              canCreateNote={perms.canCreateNote}
+              canCreateTask={perms.canCreateTask}
+              canCreateDeadline={perms.canCreateDeadline}
               source={{
                 kind: "email",
                 id: thread.id,
@@ -138,7 +162,7 @@ export async function ThreadReader({
                 // gives the user a starting block of context to edit
                 // down. 400 chars keeps the dialog from being a wall of
                 // text on long emails.
-                snippet: thread.messages[0]?.body?.slice(0, 400) ?? "",
+                snippet: noteSnippet,
               }}
             />
           </div>
@@ -206,14 +230,16 @@ export async function ThreadReader({
                     entries={m.timeEntries}
                     align="right"
                   />
-                  <LogTimeOnCommButton
-                    isFiled={thread.matter !== null}
-                    source={{
-                      kind: "email",
-                      messageId: m.id,
-                      label: `${m.fromName}: ${thread.subject}`,
-                    }}
-                  />
+                  {perms.canLogTime && (
+                    <LogTimeOnCommButton
+                      isFiled={thread.matter !== null}
+                      source={{
+                        kind: "email",
+                        messageId: m.id,
+                        label: `${m.fromName}: ${thread.subject}`,
+                      }}
+                    />
+                  )}
                 </div>
               </div>
             </header>

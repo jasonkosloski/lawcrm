@@ -19,11 +19,11 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight, Clock, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
-// Client component — TimeEntry.date is a date-only value (server-
-// local midnight); the centralized variant renders it with no TZ
-// override (browser-local after hydration), matching the
-// pre-migration output.
-import { formatDate } from "@/lib/format-date";
+// TimeEntry.date is a date-only value (a calendar date at UTC
+// midnight): format it with formatDateOnly, which reads it in UTC on
+// the server and the client alike. A zone-less formatDate here ran in
+// the browser's zone and showed the entry a day early west of UTC.
+import { formatDateOnly } from "@/lib/format-date";
 
 export type CommTimeEntryView = {
   id: string;
@@ -34,6 +34,15 @@ export type CommTimeEntryView = {
   userInitials: string;
   billable: boolean;
 };
+
+/** Hours for display. The firm bills in quarter-hour increments, so
+ *  one decimal ("0.3h" for 0.25h) misstates entries and the parts stop
+ *  summing to the total; show up to two decimals, keeping at least one
+ *  ("1.0h", "0.5h", "0.25h", "0.75h"). */
+export function formatHours(hours: number): string {
+  const s = hours.toFixed(2);
+  return s.endsWith("0") ? s.slice(0, -1) : s;
+}
 
 export function CommTimeLoggedIndicator({
   entries,
@@ -61,7 +70,7 @@ export function CommTimeLoggedIndicator({
   const userBreakdown =
     byUser.length > 1
       ? byUser
-          .map((u) => `${u.initials} ${u.hours.toFixed(1)}h`)
+          .map((u) => `${u.initials} ${formatHours(u.hours)}h`)
           .join(" · ")
       : null;
 
@@ -73,8 +82,8 @@ export function CommTimeLoggedIndicator({
         aria-expanded={expanded}
         title={
           billableHours !== totalHours
-            ? `${totalHours.toFixed(1)}h total · ${billableHours.toFixed(1)}h billable`
-            : `${totalHours.toFixed(1)}h logged`
+            ? `${formatHours(totalHours)}h total · ${formatHours(billableHours)}h billable`
+            : `${formatHours(totalHours)}h logged`
         }
         className={cn(
           "inline-flex items-center gap-1 rounded-md border transition-colors",
@@ -90,7 +99,7 @@ export function CommTimeLoggedIndicator({
         )}
         <Clock size={compact ? 9 : 10} className="shrink-0 text-ink-4" />
         <span className="font-mono">
-          {totalHours.toFixed(1)}h
+          {formatHours(totalHours)}h
         </span>
         {userBreakdown ? (
           <span className="text-ink-4 font-mono">· {userBreakdown}</span>
@@ -123,10 +132,10 @@ export function CommTimeLoggedIndicator({
                 {e.activity}
               </span>
               <span className="font-mono text-ink-4 shrink-0">
-                {formatDate(e.date, "short")}
+                {formatDateOnly(e.date, "short")}
               </span>
               <span className="font-mono text-ink shrink-0">
-                {e.hours.toFixed(1)}h
+                {formatHours(e.hours)}h
               </span>
               {!e.billable && (
                 <span
@@ -142,7 +151,7 @@ export function CommTimeLoggedIndicator({
             <li className="border-t border-line pt-1 mt-1 flex items-center gap-2 text-3xs font-mono text-ink-4">
               <Lock size={8} className="opacity-0" /> {/* spacer */}
               <span className="flex-1">Total</span>
-              <span>{totalHours.toFixed(1)}h</span>
+              <span>{formatHours(totalHours)}h</span>
             </li>
           )}
         </ul>
@@ -151,19 +160,25 @@ export function CommTimeLoggedIndicator({
   );
 }
 
-function aggregateByUser(
+/** Group by person. User.initials is not unique ("JK" can be two
+ *  people), so the key is name + initials like the sibling helper in
+ *  note-attachments-section; the NUL separator can't appear in
+ *  either. Exported for tests. */
+export function aggregateByUser(
   entries: CommTimeEntryView[]
-): Array<{ initials: string; name: string; hours: number }> {
+): Array<{ key: string; initials: string; name: string; hours: number }> {
   const byUser = new Map<
     string,
-    { initials: string; name: string; hours: number }
+    { key: string; initials: string; name: string; hours: number }
   >();
   for (const e of entries) {
-    const existing = byUser.get(e.userInitials);
+    const key = `${e.userName}\u0000${e.userInitials}`;
+    const existing = byUser.get(key);
     if (existing) {
       existing.hours += e.hours;
     } else {
-      byUser.set(e.userInitials, {
+      byUser.set(key, {
+        key,
         initials: e.userInitials,
         name: e.userName,
         hours: e.hours,

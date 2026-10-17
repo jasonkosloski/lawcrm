@@ -8,8 +8,15 @@
  * Clicking a thread sets `?thread=<id>` on the current URL (via the
  * `basePath` prop) so navigation never leaves the matter/intake. The
  * container is capped in height and each pane scrolls independently.
+ *
+ * Responsive: at lg+ both panes sit side by side. Below lg it drills
+ * down like the main inbox - the list fills the width until a thread
+ * is selected, then the reader takes over (its BackToListButton strips
+ * `?thread=` to return to the list). A fixed-width list beside a
+ * reader leaves the reader zero width on a phone.
  */
 
+import { cn } from "@/lib/utils";
 import { EmbeddedThreadList } from "./embedded-thread-list";
 import { ThreadReader } from "./thread-reader";
 import type {
@@ -47,8 +54,13 @@ export function EmbeddedInbox({
 
   return (
     <div className="flex gap-4 flex-1 min-h-0">
-      {/* Left pane: thread list */}
-      <div className="w-88 shrink-0 flex flex-col min-h-0 overflow-y-auto">
+      {/* Left pane: thread list (hidden below lg while reading) */}
+      <div
+        className={cn(
+          selectedThread ? "hidden lg:flex" : "flex w-full",
+          "lg:w-88 lg:shrink-0 flex-col min-h-0 overflow-y-auto"
+        )}
+      >
         <EmbeddedThreadList
           threads={threads}
           emptyLabel={emptyLabel}
@@ -60,9 +72,14 @@ export function EmbeddedInbox({
         />
       </div>
 
-      {/* Right pane: reader */}
+      {/* Right pane: reader (below lg only once a thread is selected) */}
       {threads.length > 0 && (
-        <div className="flex-1 min-w-0 flex flex-col min-h-0 rounded-lg border border-line overflow-hidden bg-paper-email">
+        <div
+          className={cn(
+            selectedThread ? "flex" : "hidden lg:flex",
+            "flex-1 min-w-0 flex-col min-h-0 rounded-lg border border-line overflow-hidden bg-paper-email"
+          )}
+        >
           <ThreadReader
             thread={selectedThread}
             filingOptions={filingOptions}

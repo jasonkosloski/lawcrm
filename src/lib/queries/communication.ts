@@ -77,13 +77,7 @@ export async function listThreads(
   }
   if (filter === "inbox") {
     // Working inbox: not archived AND not snoozed for later.
-    // followUpAt = null → never snoozed; followUpAt <= now → snooze
-    // has expired and the thread should reappear.
-    where.isArchived = false;
-    where.OR = [
-      { followUpAt: null },
-      { followUpAt: { lte: new Date() } },
-    ];
+    Object.assign(where, inboxVisibilityWhere());
   }
   // Per-pinned-matter override — wins over any matter-related filter.
   if (matterId) where.matterId = matterId;
@@ -477,10 +471,26 @@ export async function getFilingMatterOptions(): Promise<FilingMatterOption[]> {
     });
 }
 
-/** Pinned matter + thread count for the communication rail's per-
- *  matter drilldown section. Only matters that actually have at
- *  least one thread on the user's account are returned — keeps the
- *  rail tight. */
+/**
+ * The Inbox filter's visibility predicate: not archived AND not
+ * snoozed for later. followUpAt = null → never snoozed; followUpAt <=
+ * now → the snooze has expired and the thread reappears. Shared by
+ * the Inbox list and the pinned-matter rail badges so a badge count
+ * always equals the rows the (default Inbox) link opens.
+ */
+function inboxVisibilityWhere(now: Date = new Date()) {
+  return {
+    isArchived: false,
+    OR: [{ followUpAt: null }, { followUpAt: { lte: now } }],
+  };
+}
+
+/** Pinned matter + inbox-thread count for the communication rail's
+ *  per-matter drilldown section. Every non-archived pin is returned,
+ *  including ones with zero threads (the page resolves its matter
+ *  label from this list). The count is the visible Inbox rows
+ *  (archived and snoozed threads excluded) because the rail link
+ *  opens the matter under the default Inbox filter. */
 export type CommPinnedMatter = {
   id: string;
   name: string;
@@ -512,7 +522,11 @@ export async function getCommunicationPinnedMatters(): Promise<
   const matterIds = pins.map((p) => p.matter.id);
   const counts = await prisma.emailThread.groupBy({
     by: ["matterId"],
-    where: { account: { userId }, matterId: { in: matterIds } },
+    where: {
+      account: { userId },
+      matterId: { in: matterIds },
+      ...inboxVisibilityWhere(),
+    },
     _count: true,
   });
   const countMap = new Map(counts.map((c) => [c.matterId, c._count]));

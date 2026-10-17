@@ -11,10 +11,10 @@
  * file-to-matter picker will mount as client islands inside.
  */
 
+import { Fragment } from "react";
 import Link from "next/link";
 import {
   MessageSquare,
-  Phone,
   PhoneIncoming,
   PhoneOutgoing,
   PhoneMissed,
@@ -26,12 +26,14 @@ import { cn } from "@/lib/utils";
 // threads the viewer's IANA zone (ADR-012); formatRelative for the
 // missed-call recency label is TZ-independent until its >30d
 // calendar-date fallback.
-import { formatDate, formatRelative } from "@/lib/format-date";
+import { dateKeyInTz, formatDate, formatRelative } from "@/lib/format-date";
+import { formatPhone } from "@/lib/format-phone";
 import { BackToListButton } from "./back-to-list-button";
 import { MarkThreadRead } from "./mark-thread-read";
-import type {
-  MessengerItemRow,
-  MessengerThreadDetail,
+import {
+  isMissedCall,
+  type MessengerItemRow,
+  type MessengerThreadDetail,
 } from "@/lib/queries/messenger";
 import { InboxActionButtons } from "./inbox-action-buttons";
 import { FollowUpButton } from "./follow-up-button";
@@ -40,21 +42,22 @@ import { LogTimeOnCommButton } from "./log-time-on-comm-button";
 import { CommTimeLoggedIndicator } from "./comm-time-logged-indicator";
 import { ManualCallActions } from "./manual-call-actions";
 import type { CallMatterOption } from "./log-call-button";
-import { asCallOutcome, type EditableCallLog } from "@/lib/call-log-form";
+import {
+  asCallOutcome,
+  formatCallDuration,
+  type EditableCallLog,
+} from "@/lib/call-log-form";
+import {
+  getCommActionPermissions,
+  type CommActionPermissions,
+} from "./comm-action-permissions";
+import { contactInitials } from "./contact-initials";
 
-function prettyPhone(p: string): string {
-  const digits = p.replace(/\D/g, "");
-  if (digits.length === 11 && digits.startsWith("1")) {
-    return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
-  }
-  if (digits.length === 10) {
-    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-  }
-  return p;
-}
-
-function formatDuration(sec: number | null): string {
-  if (!sec || sec <= 0) return "0s";
+/** Voicemail length, second precision ("1m 2s"). Only called for a
+ *  known positive duration. Calls use formatCallDuration (minutes,
+ *  hidden when unknown) so a manual log with no minutes doesn't read
+ *  as a zero-length call. */
+function formatDuration(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   if (m === 0) return `${s}s`;
@@ -70,7 +73,7 @@ type CallLogAbility = {
   matters: CallMatterOption[];
 };
 
-export function MessengerThreadReader({
+export async function MessengerThreadReader({
   thread,
   canEditCall = false,
   canDeleteCall = false,
@@ -107,18 +110,27 @@ export function MessengerThreadReader({
           </div>
           <div className="text-2xs text-ink-3 leading-relaxed">
             Pick a thread from the left to read its messages, calls, and
-            voicemails. Threads land here automatically when texts and
-            calls arrive on the firm Quo line.
+            voicemails. Inbound texts and calls from the firm number will
+            appear here once Quo is connected; use Log call to record
+            calls today.
           </div>
         </div>
       </div>
     );
   }
 
+  // Hide the task / deadline / note / log-time affordances the
+  // viewer can't use (their actions redirect to the dashboard on
+  // denial, dropping whatever was typed).
+  const perms = await getCommActionPermissions();
+  // Day dividers bucket by the viewer's calendar days; tests and
+  // callers without a profile zone fall back to the runtime's.
+  const zone = tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+
   const headline =
-    thread.contact?.name ?? prettyPhone(thread.contactPhone);
+    thread.contact?.name ?? (formatPhone(thread.contactPhone) || thread.contactPhone);
   const subhead = thread.contact
-    ? prettyPhone(thread.contactPhone)
+    ? formatPhone(thread.contactPhone) || thread.contactPhone
     : "Unknown number";
 
   return (
@@ -134,12 +146,7 @@ export function MessengerThreadReader({
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <BackToListButton />
           <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-brand-50 text-brand-700 border border-brand-100 flex items-center justify-center text-2xs font-mono font-medium shrink-0">
-            {(thread.contact?.name ?? "?")
-              .split(/\s+/)
-              .filter(Boolean)
-              .slice(0, 2)
-              .map((s) => s[0]?.toUpperCase() ?? "")
-              .join("") || "?"}
+            {contactInitials(thread.contact?.name)}
           </div>
           <div className="flex flex-col min-w-0">
             <span className="text-sm font-semibold text-ink truncate">
@@ -188,21 +195,40 @@ export function MessengerThreadReader({
             No messages in this thread yet.
           </div>
         ) : (
-          thread.items.map((it) => (
-            <Item
-              key={it.id}
-              item={it}
-              contactLabel={headline}
-              isFiled={
-                // An item is actionable if it has its own matterId or
-                // the thread defaults to one — matches the same logic
-                // resolveMessengerMatter uses on the server.
-                it.matterId !== null || thread.defaultMatter !== null
-              }
-              callAbility={callAbility}
-              tz={tz}
-            />
-          ))
+          thread.items.map((it, i) => {
+            // Day divider whenever the viewer's calendar day changes
+            // (and before the first item) - every item otherwise
+            // shows only a time of day.
+            const dayKey = dateKeyInTz(it.occurredAt, zone);
+            const prev = thread.items[i - 1];
+            const showDivider =
+              !prev || dateKeyInTz(prev.occurredAt, zone) !== dayKey;
+            return (
+              <Fragment key={it.id}>
+                {showDivider && (
+                  <div
+                    role="separator"
+                    className="self-center text-3xs font-mono uppercase tracking-wider text-ink-4 py-0.5"
+                  >
+                    {formatDate(it.occurredAt, "full_short", zone)}
+                  </div>
+                )}
+                <Item
+                  item={it}
+                  contactLabel={headline}
+                  isFiled={
+                    // An item is actionable if it has its own matterId or
+                    // the thread defaults to one — matches the same logic
+                    // resolveMessengerMatter uses on the server.
+                    it.matterId !== null || thread.defaultMatter !== null
+                  }
+                  callAbility={callAbility}
+                  perms={perms}
+                  tz={tz}
+                />
+              </Fragment>
+            );
+          })
         )}
       </div>
 
@@ -222,12 +248,14 @@ function Item({
   contactLabel,
   isFiled,
   callAbility,
+  perms,
   tz,
 }: {
   item: MessengerItemRow;
   contactLabel: string;
   isFiled: boolean;
   callAbility: CallLogAbility;
+  perms: CommActionPermissions;
   tz: string | null;
 }) {
   if (item.kind === "call")
@@ -237,6 +265,7 @@ function Item({
         contactLabel={contactLabel}
         isFiled={isFiled}
         callAbility={callAbility}
+        perms={perms}
         tz={tz}
       />
     );
@@ -246,6 +275,7 @@ function Item({
         item={item}
         contactLabel={contactLabel}
         isFiled={isFiled}
+        perms={perms}
         tz={tz}
       />
     );
@@ -254,8 +284,36 @@ function Item({
       item={item}
       contactLabel={contactLabel}
       isFiled={isFiled}
+      perms={perms}
       tz={tz}
     />
+  );
+}
+
+/** The unanswered-outbound case: the firm placed the call and nobody
+ *  picked up. NOT a "missed call" (that is inbound only). */
+function isUnansweredOutbound(item: MessengerItemRow): boolean {
+  return (
+    item.direction === "outbound" &&
+    (item.callStatus === "missed" || item.callStatus === "no_answer")
+  );
+}
+
+/** Row timestamp: time of day (the day divider carries the date),
+ *  with the full date + time on hover. */
+function Stamp({
+  at,
+  tz,
+  className,
+}: {
+  at: Date;
+  tz: string | null;
+  className: string;
+}) {
+  return (
+    <span className={className} title={formatDate(at, "datetime_long", tz)}>
+      {formatDate(at, "time", tz)}
+    </span>
   );
 }
 
@@ -270,8 +328,7 @@ function commLabel(
     return `Voicemail from ${contactLabel}`;
   if (item.kind === "call") {
     const dir = item.direction === "inbound" ? "Inbound" : "Outbound";
-    const missed =
-      item.callStatus === "missed" || item.callStatus === "no_answer";
+    const missed = isMissedCall(item.direction, item.callStatus);
     return `${missed ? "Missed call" : `${dir} call`} · ${contactLabel}`;
   }
   // SMS — quote the body if present so context stands.
@@ -287,11 +344,13 @@ function SmsBubble({
   item,
   contactLabel,
   isFiled,
+  perms,
   tz,
 }: {
   item: MessengerItemRow;
   contactLabel: string;
   isFiled: boolean;
+  perms: CommActionPermissions;
   tz: string | null;
 }) {
   const outbound = item.direction === "outbound";
@@ -333,9 +392,11 @@ function SmsBubble({
         )}
       </div>
       <div className="flex flex-col gap-1 pb-1">
-        <span className="text-3xs font-mono text-ink-4">
-          {formatDate(item.occurredAt, "time", tz)}
-        </span>
+        <Stamp
+          at={item.occurredAt}
+          tz={tz}
+          className="text-3xs font-mono text-ink-4"
+        />
         {/* Time-logged indicator — always visible when there's time,
             so the bubble shows a hint of "0.4h logged" without hover. */}
         {item.timeEntries.length > 0 && (
@@ -350,17 +411,19 @@ function SmsBubble({
           at rest. The hide-at-rest rule is gated to hover-capable
           devices (hover:hover); touch has no hover to reveal it, so
           there the button stays visible. */}
-      <div className="[@media(hover:hover)]:opacity-0 group-hover/msg:opacity-100 transition-opacity pb-1">
-        <LogTimeOnCommButton
-          isFiled={isFiled}
-          variant="compact"
-          source={{
-            kind: "messenger",
-            itemId: item.id,
-            label: commLabel(contactLabel, item),
-          }}
-        />
-      </div>
+      {perms.canLogTime && (
+        <div className="[@media(hover:hover)]:opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100 transition-opacity pb-1">
+          <LogTimeOnCommButton
+            isFiled={isFiled}
+            variant="compact"
+            source={{
+              kind: "messenger",
+              itemId: item.id,
+              label: commLabel(contactLabel, item),
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -370,12 +433,14 @@ function CallEvent({
   contactLabel,
   isFiled,
   callAbility,
+  perms,
   tz,
 }: {
   item: MessengerItemRow;
   contactLabel: string;
   isFiled: boolean;
   callAbility: CallLogAbility;
+  perms: CommActionPermissions;
   tz: string | null;
 }) {
   // Edit/delete only on manual logs — provider items are immutable.
@@ -392,15 +457,22 @@ function CallEvent({
     matterName: item.matterName,
     summary: item.body,
   };
-  const missed = item.callStatus === "missed" || item.callStatus === "no_answer";
+  // Same predicate as the thread list and the matter Phone log:
+  // inbound + missed/no_answer/declined. An outbound no-answer is the
+  // firm's own unanswered call - labelled as such, not "Missed".
+  const missed = isMissedCall(item.direction, item.callStatus);
   const Icon = missed
     ? PhoneMissed
     : item.direction === "inbound"
       ? PhoneIncoming
       : PhoneOutgoing;
+  const dirLabel = item.direction === "inbound" ? "Inbound" : "Outbound";
+  const duration = formatCallDuration(item.callDurationSec);
   const label = missed
     ? `Missed call · ${formatRelative(item.occurredAt, tz)}`
-    : `${item.direction === "inbound" ? "Inbound" : "Outbound"} call · ${formatDuration(item.callDurationSec)}`;
+    : isUnansweredOutbound(item)
+      ? `${dirLabel} call, no answer`
+      : `${dirLabel} call${duration ? ` · ${duration}` : ""}`;
   return (
     <div className="self-center flex flex-col items-center gap-1 max-w-[26rem]">
       <div className="group/call flex items-center gap-2">
@@ -409,9 +481,11 @@ function CallEvent({
           <span className={missed ? "text-warn font-medium" : "text-ink-3"}>
             {label}
           </span>
-          <span className="font-mono text-ink-4">
-            {formatDate(item.occurredAt, "time", tz)}
-          </span>
+          <Stamp
+            at={item.occurredAt}
+            tz={tz}
+            className="font-mono text-ink-4"
+          />
         </div>
         {/* Time-logged indicator stays visible (without hover) once
             time exists — matches voicemail / SMS behavior. */}
@@ -420,21 +494,23 @@ function CallEvent({
         )}
         {/* Same hover-reveal treatment as SMS bubbles — hidden at
             rest only where hover exists; always visible on touch. */}
-        <div className="[@media(hover:hover)]:opacity-0 group-hover/call:opacity-100 transition-opacity">
-          <LogTimeOnCommButton
-            isFiled={isFiled}
-            variant="compact"
-            source={{
-              kind: "messenger",
-              itemId: item.id,
-              label: commLabel(contactLabel, item),
-            }}
-          />
-        </div>
+        {perms.canLogTime && (
+          <div className="[@media(hover:hover)]:opacity-0 group-hover/call:opacity-100 focus-within:opacity-100 transition-opacity">
+            <LogTimeOnCommButton
+              isFiled={isFiled}
+              variant="compact"
+              source={{
+                kind: "messenger",
+                itemId: item.id,
+                label: commLabel(contactLabel, item),
+              }}
+            />
+          </div>
+        )}
         {/* Manual logs only: edit / delete kebab — same hover-reveal
             treatment as the log-time button. */}
         {showCallActions && (
-          <div className="[@media(hover:hover)]:opacity-0 group-hover/call:opacity-100 transition-opacity">
+          <div className="[@media(hover:hover)]:opacity-0 group-hover/call:opacity-100 focus-within:opacity-100 transition-opacity">
             <ManualCallActions
               item={editable}
               canEdit={callAbility.canEdit}
@@ -459,11 +535,13 @@ function VoicemailCard({
   item,
   contactLabel,
   isFiled,
+  perms,
   tz,
 }: {
   item: MessengerItemRow;
   contactLabel: string;
   isFiled: boolean;
+  perms: CommActionPermissions;
   tz: string | null;
 }) {
   // Voicemails are the highest-leverage source for inbox actions —
@@ -484,9 +562,11 @@ function VoicemailCard({
             {formatDuration(item.callDurationSec)}
           </span>
         )}
-        <span className="ml-auto text-3xs font-mono text-ink-4">
-          {formatDate(item.occurredAt, "time", tz)}
-        </span>
+        <Stamp
+          at={item.occurredAt}
+          tz={tz}
+          className="ml-auto text-3xs font-mono text-ink-4"
+        />
       </div>
       {item.transcript && (
         <p className="text-xs text-ink leading-relaxed whitespace-pre-wrap">
@@ -504,6 +584,9 @@ function VoicemailCard({
       <div className="pt-1.5 border-t border-line/60 flex items-center gap-1.5 flex-wrap">
         <InboxActionButtons
           isFiled={isFiled}
+          canCreateNote={perms.canCreateNote}
+          canCreateTask={perms.canCreateTask}
+          canCreateDeadline={perms.canCreateDeadline}
           source={{
             kind: "messenger",
             id: item.id,
@@ -511,14 +594,16 @@ function VoicemailCard({
             preview: item.transcript ?? "Voicemail (no transcript)",
           }}
         />
-        <LogTimeOnCommButton
-          isFiled={isFiled}
-          source={{
-            kind: "messenger",
-            itemId: item.id,
-            label: commLabel(contactLabel, item),
-          }}
-        />
+        {perms.canLogTime && (
+          <LogTimeOnCommButton
+            isFiled={isFiled}
+            source={{
+              kind: "messenger",
+              itemId: item.id,
+              label: commLabel(contactLabel, item),
+            }}
+          />
+        )}
         {item.timeEntries.length > 0 && (
           <CommTimeLoggedIndicator entries={item.timeEntries} />
         )}

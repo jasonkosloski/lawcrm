@@ -199,23 +199,39 @@ export async function listContactPickerOptions(opts?: {
    *  picker opens in matter context. */
   priorityMatterId?: string;
 }): Promise<ContactPickerOption[]> {
+  const select = {
+    id: true,
+    name: true,
+    type: true,
+    organization: true,
+    phone: true,
+    phones: {
+      where: { isPrimary: true },
+      select: { number: true },
+      take: 1,
+    },
+  } as const;
+  const toOption = (c: {
+    id: string;
+    name: string;
+    type: string;
+    organization: string | null;
+    phone: string | null;
+    phones: { number: string }[];
+  }): ContactPickerOption => ({
+    id: c.id,
+    name: c.name,
+    type: c.type,
+    organization: c.organization,
+    phone: c.phones[0]?.number ?? c.phone,
+  });
+
   const [contacts, priorityIds] = await Promise.all([
     prisma.contact.findMany({
       where: { isActive: true },
       take: 500, // same safety-net cap as listContacts
       orderBy: [{ name: "asc" }],
-      select: {
-        id: true,
-        name: true,
-        type: true,
-        organization: true,
-        phone: true,
-        phones: {
-          where: { isPrimary: true },
-          select: { number: true },
-          take: 1,
-        },
-      },
+      select,
     }),
     opts?.priorityMatterId
       ? Promise.all([
@@ -238,19 +254,31 @@ export async function listContactPickerOptions(opts?: {
       : Promise.resolve(new Set<string>()),
   ]);
 
-  const rows = contacts.map((c) => ({
-    id: c.id,
-    name: c.name,
-    type: c.type,
-    organization: c.organization,
-    phone: c.phones[0]?.number ?? c.phone,
-  }));
+  const rows = contacts.map(toOption);
   if (priorityIds.size === 0) return rows;
-  // Stable partition — matter people first, both halves still A→Z.
-  return [
-    ...rows.filter((c) => priorityIds.has(c.id)),
-    ...rows.filter((c) => !priorityIds.has(c.id)),
-  ];
+
+  // The matter's own people must be selectable even when they sort
+  // past the 500-row alphabetical cap above (a firm with more than
+  // 500 active contacts, leads included): fetch any the capped list
+  // missed by id and merge them in.
+  const have = new Set(rows.map((c) => c.id));
+  const missing = [...priorityIds].filter((id) => !have.has(id));
+  if (missing.length > 0) {
+    const extra = await prisma.contact.findMany({
+      where: { id: { in: missing }, isActive: true },
+      orderBy: [{ name: "asc" }],
+      select,
+    });
+    rows.push(...extra.map(toOption));
+  }
+
+  // Stable partition — matter people first, both halves still A→Z
+  // (merged-in extras are re-sorted within the priority half).
+  const byName = (a: ContactPickerOption, b: ContactPickerOption) =>
+    a.name.localeCompare(b.name);
+  const priority = rows.filter((c) => priorityIds.has(c.id));
+  if (missing.length > 0) priority.sort(byName);
+  return [...priority, ...rows.filter((c) => !priorityIds.has(c.id))];
 }
 
 /**

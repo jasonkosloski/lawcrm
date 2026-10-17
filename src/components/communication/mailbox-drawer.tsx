@@ -90,10 +90,15 @@ export function MailboxDrawerProvider({ children }: { children: ReactNode }) {
 
   // Close on route change OR query change (filter pick =
   // ?filter=X). Watching both ensures the drawer dismisses when
-  // the user picks a folder, which doesn't change the path.
-  useEffect(() => {
+  // the user picks a folder, which doesn't change the path. Done
+  // during render against the previous location (React's "adjust
+  // state when a prop changes" pattern) rather than in an effect.
+  const navKey = `${pathname}?${searchParams.toString()}`;
+  const [prevNavKey, setPrevNavKey] = useState(navKey);
+  if (navKey !== prevNavKey) {
+    setPrevNavKey(navKey);
     setOpen(false);
-  }, [pathname, searchParams]);
+  }
 
   // Esc closes; lock body scroll while open. Same hygiene as
   // the main sidebar drawer.
@@ -126,13 +131,14 @@ export function MailboxDrawerProvider({ children }: { children: ReactNode }) {
  *  in the thread-list header so it sits next to the active
  *  filter's label. */
 export function MailboxDrawerTrigger({ label }: { label: string }) {
-  const { toggle } = useMailboxDrawer();
+  const { open, toggle } = useMailboxDrawer();
   return (
     <button
       type="button"
       onClick={toggle}
       title={`Switch folder (current: ${label})`}
       aria-label="Open folder list"
+      aria-expanded={open}
       className="lg:hidden inline-flex items-center justify-center w-8 h-8 -ml-1 rounded-md text-ink-3 hover:bg-paper-2 hover:text-ink shrink-0"
     >
       <Menu size={16} />

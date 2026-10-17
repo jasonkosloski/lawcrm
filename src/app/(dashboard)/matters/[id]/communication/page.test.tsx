@@ -66,7 +66,9 @@ vi.mock("@/components/communication/embedded-inbox", () => ({
   ),
 }));
 vi.mock("@/components/communication/matter-phone-log", () => ({
-  MatterPhoneLog: () => <div data-testid="phone-log" />,
+  MatterPhoneLog: (props: { tz?: string | null }) => (
+    <div data-testid="phone-log" data-tz={props.tz ?? ""} />
+  ),
 }));
 vi.mock("@/components/communication/log-call-button", () => ({
   LogCallButton: () => <div data-testid="log-call-button" />,
@@ -182,6 +184,12 @@ describe("per-channel fetch plumbing", () => {
     render(await MatterCommunicationPage(props({ channel: "phone", thread: "t1" })));
 
     expect(screen.getByTestId("phone-log")).toBeInTheDocument();
+    // Call / SMS / voicemail times are instants: the log must format
+    // them in the viewer's profile zone, not the server's.
+    expect(screen.getByTestId("phone-log")).toHaveAttribute(
+      "data-tz",
+      "America/Denver"
+    );
     expect(mockedPhoneItems).toHaveBeenCalledWith("matter_1");
     expect(mockedThreads).not.toHaveBeenCalled();
     // Even a pasted ?thread= id fetches nothing on the phone channel.

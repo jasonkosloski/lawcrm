@@ -52,10 +52,15 @@ export function ManualCallActions({
       return;
     }
     startTransition(async () => {
-      const result = await deleteCallLog(item.id);
-      if (!result.ok && result.error) {
-        // Server refuses (e.g. provider-synced item) — surface why.
-        alert(result.error);
+      try {
+        const result = await deleteCallLog(item.id);
+        if (!result.ok && result.error) {
+          // Server refuses (e.g. provider-synced item) — surface why.
+          alert(result.error);
+        }
+      } catch {
+        // A thrown action must not swap the page for the error boundary.
+        alert("Couldn't delete the call log - try again.");
       }
     });
   };

@@ -14,11 +14,10 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-// Stable instances — the provider closes the drawer whenever
-// pathname/searchParams *change identity*, so a mock returning a
-// fresh URLSearchParams each render would re-close it after every
-// render and mask the open state.
-const searchParams = new URLSearchParams();
+// Mutable so a test can "navigate". The provider closes the drawer
+// when the location (path + query string) changes, so re-renders with
+// the same location must not re-close it.
+let searchParams = new URLSearchParams();
 vi.mock("next/navigation", () => ({
   usePathname: () => "/communication",
   useSearchParams: () => searchParams,
@@ -51,6 +50,7 @@ function mockViewport(desktop: boolean) {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  searchParams = new URLSearchParams();
 });
 
 function renderDrawer() {
@@ -93,5 +93,52 @@ describe("MailboxDrawer — closed drawer is inert on mobile only", () => {
     // `open` is false by default, but at lg+ the element is the
     // always-visible rail — inert here would make it unclickable.
     expect(container).not.toHaveAttribute("inert");
+  });
+});
+
+describe("MailboxDrawer - trigger state + auto-close", () => {
+  function renderWithRerender() {
+    const ui = () => (
+      <MailboxDrawerProvider>
+        <MailboxDrawerTrigger label="Inbox" />
+        <MailboxDrawer>
+          <a href="/communication?filter=sent">Sent folder</a>
+        </MailboxDrawer>
+      </MailboxDrawerProvider>
+    );
+    const view = render(ui());
+    return { rerender: () => view.rerender(ui()) };
+  }
+
+  test("the trigger exposes aria-expanded", async () => {
+    mockViewport(false);
+    const user = userEvent.setup();
+    renderWithRerender();
+    const trigger = screen.getByRole("button", { name: "Open folder list" });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+  });
+
+  test("picking a folder (query change) closes the drawer; a same-location re-render does not", async () => {
+    mockViewport(false);
+    const user = userEvent.setup();
+    const { rerender } = renderWithRerender();
+    const container = screen.getByRole("button", { name: "Close folder list" })
+      .parentElement!;
+
+    await user.click(screen.getByRole("button", { name: "Open folder list" }));
+    expect(container).not.toHaveAttribute("inert");
+
+    // Fresh URLSearchParams object, identical query: still the same
+    // location, so the drawer stays open.
+    searchParams = new URLSearchParams();
+    rerender();
+    expect(container).not.toHaveAttribute("inert");
+
+    // A different query string is a navigation: close.
+    searchParams = new URLSearchParams("filter=sent");
+    rerender();
+    expect(container).toHaveAttribute("inert");
   });
 });

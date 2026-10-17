@@ -108,3 +108,58 @@ describe("kebab gating", () => {
     ).toBe("Smith v. Jones");
   });
 });
+
+describe("times render in the viewer's zone", () => {
+  test("a provider voicemail at 01:15Z shows the previous evening in Denver, with the year", () => {
+    render(
+      <MatterPhoneLog
+        items={[
+          makeItem({
+            kind: "voicemail",
+            direction: "inbound",
+            callStatus: null,
+            // 7:15 PM MDT on Jun 10 - Jun 11 01:15 in UTC.
+            occurredAt: new Date("2026-06-11T01:15:00Z"),
+          }),
+        ]}
+        tz="America/Denver"
+      />
+    );
+    expect(screen.getByText("Jun 10, 2026, 7:15 PM")).toBeInTheDocument();
+  });
+});
+
+describe("missed-call labelling matches the shared predicate", () => {
+  test("an outbound no-answer call is not labelled 'Missed call'", () => {
+    render(
+      <MatterPhoneLog
+        items={[makeItem({ direction: "outbound", callStatus: "no_answer" })]}
+      />
+    );
+    expect(screen.queryByText(/Missed call/)).toBeNull();
+    expect(
+      screen.getByText("Outbound call, no answer · Dana Client")
+    ).toBeInTheDocument();
+  });
+
+  test("an inbound no-answer or declined call is 'Missed call'", () => {
+    render(
+      <MatterPhoneLog
+        items={[
+          makeItem({ id: "i1", direction: "inbound", callStatus: "no_answer" }),
+          makeItem({ id: "i2", direction: "inbound", callStatus: "declined" }),
+        ]}
+      />
+    );
+    expect(screen.getAllByText("Missed call · Dana Client")).toHaveLength(2);
+  });
+
+  test("an inbound answered call stays neutral", () => {
+    render(
+      <MatterPhoneLog
+        items={[makeItem({ direction: "inbound", callStatus: "answered" })]}
+      />
+    );
+    expect(screen.getByText("Inbound call · Dana Client")).toBeInTheDocument();
+  });
+});

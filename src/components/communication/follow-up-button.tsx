@@ -13,14 +13,22 @@
 
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { BellPlus, BellRing, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-// Client component — followUpAt is a date-only value (server-local
-// end-of-day, see actions/follow-ups.ts); the centralized variants
-// render it with no TZ override (browser-local after hydration),
-// matching the pre-migration output.
-import { formatDate } from "@/lib/format-date";
+// followUpAt is stored as an instant (end of the chosen day). Which
+// calendar day it denotes - and whether that day is today, tomorrow
+// or past - is judged in the viewer's PROFILE zone (ADR-012), the
+// same zone the server rendered with, so SSR and hydration agree and
+// the chip never flips "Today"/"Tomorrow" on the client.
+import {
+  addDaysToKey,
+  daysBetweenKeys,
+  dateKeyInTz,
+  formatDate,
+  todayKey,
+} from "@/lib/format-date";
+import { useUserTimeZone } from "@/components/user-time-zone";
 import {
   Popover,
   PopoverContent,
@@ -41,30 +49,47 @@ export function FollowUpButton({
   followUpAt: Date | null;
   action: FollowUpAction;
 }) {
+  const tz = useUserTimeZone();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
-  const [picked, setPicked] = useState(toDateInput(followUpAt));
+  const followKey = followUpAt ? dateKeyInTz(followUpAt, tz) : "";
+  const [picked, setPicked] = useState(followKey);
 
-  // Re-sync the date input on every open — `followUpAt` changes under
+  // Re-sync the date input on every open - `followUpAt` changes under
   // us after a save (server revalidation), and the mount-time value
   // would otherwise show a stale date that Save could silently
-  // reapply over the newer follow-up.
-  useEffect(() => {
-    if (open) setPicked(toDateInput(followUpAt));
-  }, [open, followUpAt]);
+  // reapply over the newer follow-up. Done during render (stored
+  // previous token) rather than in an effect: the token is null while
+  // closed, so every open - and every new follow-up date while open -
+  // is a change.
+  const syncToken = open ? followKey : null;
+  const [syncedToken, setSyncedToken] = useState<string | null>(null);
+  if (syncToken !== syncedToken) {
+    setSyncedToken(syncToken);
+    if (open) setPicked(followKey);
+  }
 
-  const isOverdue = followUpAt !== null && followUpAt.getTime() < Date.now();
-  const isToday = followUpAt !== null && isSameDay(followUpAt, new Date());
+  const today = todayKey(tz);
+  // Whole days from today to the follow-up day (negative = past).
+  const daysAway = followUpAt ? daysBetweenKeys(today, followKey) : 0;
+  const isOverdue = followUpAt !== null && daysAway < 0;
+  const isToday = followUpAt !== null && daysAway === 0;
 
   const save = (dateString: string | null) => {
-    // Presets and Clear bypass the input — keep `picked` consistent
+    // Presets and Clear bypass the input - keep `picked` consistent
     // with what was just submitted; the on-open resync above takes
     // over once the server revalidates `followUpAt`.
     setPicked(dateString ?? "");
     setOpen(false);
     startTransition(async () => {
-      const res = await action(threadId, dateString);
-      if (!res.ok && res.error) alert(res.error);
+      try {
+        const res = await action(threadId, dateString);
+        if (!res.ok && res.error) alert(res.error);
+      } catch {
+        // A thrown action (DB blip, dropped connection) must not
+        // swap the whole page for the error boundary.
+        alert("Couldn't save the follow-up - try again.");
+      }
     });
   };
 
@@ -77,7 +102,7 @@ export function FollowUpButton({
             disabled={pending}
             title={
               followUpAt
-                ? `Follow up by ${formatDate(followUpAt, "short_weekday")}`
+                ? `Follow up by ${formatDate(followUpAt, "short_weekday", tz)}`
                 : "Set follow-up reminder"
             }
             className={cn(
@@ -95,7 +120,7 @@ export function FollowUpButton({
             {followUpAt ? (
               <>
                 <BellRing size={11} />
-                {labelFor(followUpAt)}
+                {labelFor(followUpAt, daysAway, tz)}
               </>
             ) : (
               <>
@@ -114,16 +139,14 @@ export function FollowUpButton({
 
           {/* Presets */}
           <div className="flex flex-wrap gap-1.5">
-            <PresetPill onClick={() => save(toDateInput(addDays(0)))}>
-              Today
-            </PresetPill>
-            <PresetPill onClick={() => save(toDateInput(addDays(1)))}>
+            <PresetPill onClick={() => save(today)}>Today</PresetPill>
+            <PresetPill onClick={() => save(addDaysToKey(today, 1))}>
               Tomorrow
             </PresetPill>
-            <PresetPill onClick={() => save(toDateInput(nextMonday()))}>
+            <PresetPill onClick={() => save(nextMondayKey(today))}>
               Next Mon
             </PresetPill>
-            <PresetPill onClick={() => save(toDateInput(addDays(7)))}>
+            <PresetPill onClick={() => save(addDaysToKey(today, 7))}>
               In a week
             </PresetPill>
           </div>
@@ -132,7 +155,7 @@ export function FollowUpButton({
           <input
             type="date"
             value={picked}
-            min={toDateInput(new Date())}
+            min={today}
             onChange={(e) => setPicked(e.target.value)}
             className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
           />
@@ -183,47 +206,24 @@ function PresetPill({
 
 // ── Date helpers ──────────────────────────────────────────────────────
 
-function toDateInput(d: Date | null): string {
-  if (!d) return "";
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+/** The next Monday strictly after the day `key` (a Monday jumps a
+ *  full week), as a day key. */
+function nextMondayKey(key: string): string {
+  // Noon UTC of the key's calendar day - the weekday is zone-independent.
+  const dow = new Date(`${key}T12:00:00Z`).getUTCDay(); // 0 = Sun, 1 = Mon
+  const diff = (8 - dow) % 7 || 7;
+  return addDaysToKey(key, diff);
 }
 
-function addDays(n: number): Date {
-  const d = new Date();
-  d.setDate(d.getDate() + n);
-  return d;
-}
-
-function nextMonday(): Date {
-  const d = new Date();
-  const day = d.getDay(); // 0 = Sun, 1 = Mon
-  const diff = (8 - day) % 7 || 7;
-  d.setDate(d.getDate() + diff);
-  return d;
-}
-
-function isSameDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
-/** Compact label for the chip — "Today" / "Tomorrow" / "Mar 12" /
- *  "Late: Mar 8" — surfaces what matters at a glance. */
-function labelFor(d: Date): string {
-  const now = new Date();
-  if (d.getTime() < now.getTime() - 24 * 60 * 60 * 1000) {
+/** Compact label for the chip - "Today" / "Tomorrow" / "Mar 12" /
+ *  "Late: Mar 8" - surfaces what matters at a glance. `daysAway` is
+ *  whole calendar days from the viewer's today (negative = past). */
+function labelFor(d: Date, daysAway: number, tz: string): string {
+  if (daysAway < -1) {
     // More than a day overdue
-    return `Late: ${formatDate(d, "short")}`;
+    return `Late: ${formatDate(d, "short", tz)}`;
   }
-  if (isSameDay(d, now)) return "Today";
-  const tomorrow = new Date(now);
-  tomorrow.setDate(now.getDate() + 1);
-  if (isSameDay(d, tomorrow)) return "Tomorrow";
-  return formatDate(d, "short_weekday");
+  if (daysAway === 0) return "Today";
+  if (daysAway === 1) return "Tomorrow";
+  return formatDate(d, "short_weekday", tz);
 }

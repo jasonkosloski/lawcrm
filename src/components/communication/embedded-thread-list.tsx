@@ -2,10 +2,10 @@
  * Embedded Thread List
  *
  * Compact thread list for use inside matter or lead detail tabs.
- * `threadHref` lets the caller decide how clicking a row navigates —
- * matter/intake Communication tabs point it at their own URL with
- * `?thread=<id>` so the reader updates in place (mini-inbox pattern);
- * the main inbox path is the default.
+ * `threadHref` is required: the caller decides how clicking a row
+ * navigates - matter/intake Communication tabs point it at their own
+ * URL with `?thread=<id>` so the reader updates in place (mini-inbox
+ * pattern).
  */
 
 import Link from "next/link";
@@ -18,15 +18,12 @@ import { Card } from "@/components/ui/card";
 import type { ThreadListRow } from "@/lib/queries/communication";
 import { ThreadRowActions } from "./thread-row-actions";
 
-const defaultThreadHref = (id: string): string =>
-  `/communication?thread=${id}`;
-
 export function EmbeddedThreadList({
   threads,
   emptyLabel,
   emptyHint,
   showMatterChip = true,
-  threadHref = defaultThreadHref,
+  threadHref,
   selectedThreadId = null,
   tz = null,
 }: {
@@ -36,9 +33,8 @@ export function EmbeddedThreadList({
   /** When inside a matter tab, every thread is for that matter —
    *  suppress the matter chip for visual cleanliness. */
   showMatterChip?: boolean;
-  /** Override destination for clicks. Default navigates to the main
-   *  inbox with the thread preselected. */
-  threadHref?: (id: string) => string;
+  /** Destination for a row click. */
+  threadHref: (id: string) => string;
   /** Currently-selected thread id; highlighted in the list. */
   selectedThreadId?: string | null;
   /** Viewer's IANA zone — anchors formatRelative's calendar-date

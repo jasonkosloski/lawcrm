@@ -143,13 +143,16 @@ export default async function CommunicationPage({
             <MessengerMailboxRail
               counts={messengerCounts}
               activeFilter={filter}
-              selectedThreadId={threadId}
+              selectedThreadId={selectedThread?.id ?? null}
             />
           </MailboxDrawer>
           <MessengerThreadList
             threads={threads}
             filter={filter}
-            selectedThreadId={threadId}
+            // The thread that actually exists, not the raw URL param: a
+            // stale / deleted ?thread= id would otherwise hide the list
+            // on mobile while the reader renders nothing (dead end).
+            selectedThreadId={selectedThread?.id ?? null}
             tz={tz}
             action={
               canLogCall ? (
@@ -218,7 +221,7 @@ export default async function CommunicationPage({
             pinnedMatters={pinnedMatters}
             activeFilter={filter}
             activeMatterId={matterIdParam}
-            selectedThreadId={threadId}
+            selectedThreadId={selectedThread?.id ?? null}
           />
         </MailboxDrawer>
         <ThreadList
@@ -230,7 +233,7 @@ export default async function CommunicationPage({
               ? (pinnedMatters.find((m) => m.id === matterIdParam)?.name ?? null)
               : null
           }
-          selectedThreadId={threadId}
+          selectedThreadId={selectedThread?.id ?? null}
           tz={tz}
         />
         <ThreadReader

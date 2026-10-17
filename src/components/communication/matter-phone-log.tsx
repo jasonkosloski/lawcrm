@@ -25,16 +25,34 @@ import {
   formatCallDuration,
   type EditableCallLog,
 } from "@/lib/call-log-form";
-import type { MatterMessengerItemRow } from "@/lib/queries/messenger";
+import {
+  isMissedCall,
+  type MatterMessengerItemRow,
+} from "@/lib/queries/messenger";
 import { ManualCallActions } from "./manual-call-actions";
 import type { CallMatterOption } from "./log-call-button";
+
+/** An inbound call the firm never answered - the shared predicate
+ *  (queries/messenger.ts) so this list, the thread list and the
+ *  reader always agree. An OUTBOUND no-answer is not "missed": the
+ *  firm placed the call. */
+function isMissedItem(item: MatterMessengerItemRow): boolean {
+  return item.kind === "call" && isMissedCall(item.direction, item.callStatus);
+}
+
+/** The firm called out and nobody picked up. */
+function isUnansweredOutbound(item: MatterMessengerItemRow): boolean {
+  return (
+    item.kind === "call" &&
+    item.direction === "outbound" &&
+    (item.callStatus === "missed" || item.callStatus === "no_answer")
+  );
+}
 
 function itemIcon(item: MatterMessengerItemRow) {
   if (item.kind === "voicemail") return Voicemail;
   if (item.kind === "sms") return MessageSquare;
-  const missed =
-    item.callStatus === "missed" || item.callStatus === "no_answer";
-  if (missed) return PhoneMissed;
+  if (isMissedItem(item)) return PhoneMissed;
   return item.direction === "inbound" ? PhoneIncoming : PhoneOutgoing;
 }
 
@@ -43,8 +61,8 @@ function itemLabel(item: MatterMessengerItemRow): string {
   if (item.kind === "voicemail") return `Voicemail from ${who}`;
   if (item.kind === "sms")
     return item.direction === "inbound" ? `Text from ${who}` : `Text to ${who}`;
-  if (item.callStatus === "missed" || item.callStatus === "no_answer")
-    return `Missed call · ${who}`;
+  if (isMissedItem(item)) return `Missed call · ${who}`;
+  if (isUnansweredOutbound(item)) return `Outbound call, no answer · ${who}`;
   return item.direction === "inbound"
     ? `Inbound call · ${who}`
     : `Outbound call · ${who}`;
@@ -56,6 +74,7 @@ export function MatterPhoneLog({
   canDeleteCall = false,
   matterName,
   editMatters = [],
+  tz = null,
 }: {
   items: MatterMessengerItemRow[];
   /** `communication.edit_call` / `.delete_call` — resolved by the
@@ -68,6 +87,10 @@ export function MatterPhoneLog({
   matterName?: string;
   /** Open-matter options for the edit dialog's re-file select. */
   editMatters?: CallMatterOption[];
+  /** Viewer's IANA zone - call / SMS / voicemail times are real
+   *  instants; this server component would otherwise format them in
+   *  the server's zone (UTC in production). */
+  tz?: string | null;
 }) {
   if (items.length === 0) {
     return (
@@ -87,9 +110,7 @@ export function MatterPhoneLog({
       <ul className="divide-y divide-line">
         {items.map((item) => {
           const Icon = itemIcon(item);
-          const missed =
-            item.kind === "call" &&
-            (item.callStatus === "missed" || item.callStatus === "no_answer");
+          const missed = isMissedItem(item);
           const duration =
             item.kind === "call"
               ? formatCallDuration(item.callDurationSec)
@@ -151,7 +172,7 @@ export function MatterPhoneLog({
                   )}
                 </div>
                 <span className="text-2xs font-mono text-ink-4 shrink-0">
-                  {formatDate(item.occurredAt, "datetime")}
+                  {formatDate(item.occurredAt, "datetime_medium", tz)}
                 </span>
               </Link>
               {editable && (

@@ -12,6 +12,11 @@
  *
  * If the source isn't filed to a matter, all three buttons render
  * disabled with a tooltip telling the user to file the source first.
+ *
+ * Each button is also hidden when the viewer lacks the matching
+ * create permission (the server actions would otherwise redirect the
+ * whole page to the dashboard mid-dialog) - the parent reader
+ * resolves the flags server-side and passes them down.
  */
 
 "use client";
@@ -40,7 +45,7 @@ import {
   inboxActionInitialState,
   type InboxActionFormState,
 } from "@/lib/inbox-action-form";
-import { todayDateString } from "@/lib/note-constants";
+import { NOTE_TYPES, NOTE_TYPE_LABEL } from "@/lib/note-constants";
 import {
   DEADLINE_KINDS,
   DEADLINE_KIND_LABEL,
@@ -61,61 +66,65 @@ type Affordance = "task" | "deadline" | "note" | null;
 export function InboxActionButtons({
   source,
   isFiled,
-  /** Compact mode renders icon-only buttons (for the cramped voicemail
-   *  card footer). Default is the labelled chip style for the email
-   *  thread header. */
-  compact = false,
+  canCreateNote = true,
+  canCreateTask = true,
+  canCreateDeadline = true,
 }: {
   source: InboxSource;
   isFiled: boolean;
-  compact?: boolean;
+  /** `notes.create` - hides "Save as note" when false. */
+  canCreateNote?: boolean;
+  /** `tasks.create` - hides "Create task" when false. */
+  canCreateTask?: boolean;
+  /** `deadlines.create` - hides "Create deadline" when false. */
+  canCreateDeadline?: boolean;
 }) {
   const [open, setOpen] = useState<Affordance>(null);
 
+  if (!canCreateNote && !canCreateTask && !canCreateDeadline) return null;
+
   return (
     <>
-      <div
-        className={cn(
-          "flex items-center gap-1.5",
-          compact && "flex-wrap"
+      <div className="flex items-center gap-1.5">
+        {canCreateNote && (
+          <Btn
+            icon={<StickyNote size={11} />}
+            label="Save as note"
+            disabled={!isFiled}
+            tooltip={
+              isFiled
+                ? "Save this as a note on the matter"
+                : sourceUnfiledMsg(source)
+            }
+            onClick={() => setOpen("note")}
+          />
         )}
-      >
-        <Btn
-          icon={<StickyNote size={11} />}
-          label="Save as note"
-          compact={compact}
-          disabled={!isFiled}
-          tooltip={
-            isFiled
-              ? "Save this as a note on the matter"
-              : sourceUnfiledMsg(source)
-          }
-          onClick={() => setOpen("note")}
-        />
-        <Btn
-          icon={<ListTodo size={11} />}
-          label="Create task"
-          compact={compact}
-          disabled={!isFiled}
-          tooltip={
-            isFiled
-              ? "Create a task with this as context"
-              : sourceUnfiledMsg(source)
-          }
-          onClick={() => setOpen("task")}
-        />
-        <Btn
-          icon={<CircleAlert size={11} />}
-          label="Create deadline"
-          compact={compact}
-          disabled={!isFiled}
-          tooltip={
-            isFiled
-              ? "Create a deadline tied to this"
-              : sourceUnfiledMsg(source)
-          }
-          onClick={() => setOpen("deadline")}
-        />
+        {canCreateTask && (
+          <Btn
+            icon={<ListTodo size={11} />}
+            label="Create task"
+            disabled={!isFiled}
+            tooltip={
+              isFiled
+                ? "Create a task with this as context"
+                : sourceUnfiledMsg(source)
+            }
+            onClick={() => setOpen("task")}
+          />
+        )}
+        {canCreateDeadline && (
+          <Btn
+            icon={<CircleAlert size={11} />}
+            label="Create deadline"
+            disabled={!isFiled}
+            tooltip={
+              isFiled
+                ? "Create a deadline tied to this"
+                : sourceUnfiledMsg(source)
+            }
+            onClick={() => setOpen("deadline")}
+          />
+        )}
       </div>
 
       {open === "task" && (
@@ -140,14 +149,12 @@ function sourceUnfiledMsg(source: InboxSource): string {
 function Btn({
   icon,
   label,
-  compact,
   disabled,
   tooltip,
   onClick,
 }: {
   icon: React.ReactNode;
   label: string;
-  compact: boolean;
   disabled: boolean;
   tooltip: string;
   onClick: () => void;
@@ -167,19 +174,25 @@ function Btn({
       )}
     >
       {icon}
-      {!compact && <span>{label}</span>}
+      <span>{label}</span>
     </button>
   );
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
-/** Build the default title for a task/deadline created from a source. */
-function defaultTitleFromSource(source: InboxSource): string {
+/** Build the default title for a task/deadline created from a source.
+ *  Exported for tests only - not part of the component's API. */
+export function defaultTitleFromSource(source: InboxSource): string {
   if (source.kind === "email") {
-    // Strip common reply/forward prefixes so the task title isn't
-    // "Re: Re: Fwd: Discovery cutoff…"
-    return source.subject.replace(/^(re:|fwd:|re :|fwd :)\s*/gi, "").trim();
+    // Strip every leading reply/forward prefix (Re:, Fwd:, Fw:,
+    // "Re :", repeated or mixed) so the task title isn't
+    // "Re: Re: Fwd: Discovery cutoff…". A subject that is ONLY a
+    // prefix keeps its original text rather than going blank.
+    const stripped = source.subject
+      .replace(/^(?:\s*(?:re|fwd?|fw)\s*:\s*)+/i, "")
+      .trim();
+    return stripped || source.subject.trim();
   }
   return `Re: ${source.contactLabel}`;
 }
@@ -265,18 +278,23 @@ function CreateTaskDialog({
           </div>
 
           <div className="grid grid-cols-[1fr_auto] gap-2">
-            <input
-              type="date"
-              name="dueDate"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              aria-label="Due date"
-              className={cn(
-                "h-8 px-2.5 rounded-md border bg-white text-xs text-ink",
-                "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-                errs.dueDate ? "border-warn" : "border-line"
+            <div className="flex flex-col gap-0.5">
+              <input
+                type="date"
+                name="dueDate"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                aria-label="Due date"
+                className={cn(
+                  "h-8 px-2.5 rounded-md border bg-white text-xs text-ink",
+                  "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
+                  errs.dueDate ? "border-warn" : "border-line"
+                )}
+              />
+              {errs.dueDate && (
+                <div className="text-2xs text-warn">{errs.dueDate[0]}</div>
               )}
-            />
+            </div>
             <select
               name="priority"
               value={priority}
@@ -299,6 +317,9 @@ function CreateTaskDialog({
             rows={3}
             className="px-2.5 py-1.5 rounded-md border border-line bg-white text-xs text-ink leading-relaxed focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4 resize-y font-sans"
           />
+          {errs.description && (
+            <div className="text-2xs text-warn">{errs.description[0]}</div>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onClose}>
@@ -373,18 +394,24 @@ function CreateDeadlineDialog({
           </div>
 
           <div className="grid grid-cols-[1fr_auto] gap-2">
-            <input
-              type="date"
-              name="dueDate"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              aria-label="Due date"
-              className={cn(
-                "h-8 px-2.5 rounded-md border bg-white text-xs text-ink",
-                "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-                errs.dueDate ? "border-warn" : "border-line"
+            <div className="flex flex-col gap-0.5">
+              <input
+                type="date"
+                name="dueDate"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                aria-label="Due date"
+                required
+                className={cn(
+                  "h-8 px-2.5 rounded-md border bg-white text-xs text-ink",
+                  "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
+                  errs.dueDate ? "border-warn" : "border-line"
+                )}
+              />
+              {errs.dueDate && (
+                <div className="text-2xs text-warn">{errs.dueDate[0]}</div>
               )}
-            />
+            </div>
             <select
               name="kind"
               value={kind}
@@ -409,6 +436,12 @@ function CreateDeadlineDialog({
             rows={3}
             className="px-2.5 py-1.5 rounded-md border border-line bg-white text-xs text-ink leading-relaxed focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4 resize-y font-sans"
           />
+          {errs.description && (
+            <div className="text-2xs text-warn">{errs.description[0]}</div>
+          )}
+          {errs.kind && (
+            <div className="text-2xs text-warn">{errs.kind[0]}</div>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onClose}>
@@ -479,10 +512,11 @@ function CreateNoteDialog({
             onChange={(e) => setType(e.target.value)}
             className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink capitalize focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 self-start"
           >
-            <option value="note">Note</option>
-            <option value="strategy">Strategy</option>
-            <option value="memo">Memo</option>
-            <option value="chatter">Chatter</option>
+            {NOTE_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {NOTE_TYPE_LABEL[t]}
+              </option>
+            ))}
           </select>
 
           <textarea
@@ -519,6 +553,8 @@ function CreateNoteDialog({
 export function stripHtmlForTextarea(html: string): string {
   return html
     .replace(/<\/p>\s*<p>/g, "\n\n")
+    // "From email: ..." header, then a blank line, then the quote.
+    .replace(/<\/p>\s*<blockquote>/g, "\n\n> ")
     .replace(/<blockquote>/g, "> ")
     .replace(/<\/blockquote>/g, "")
     .replace(/<em>(.*?)<\/em>/g, "$1")

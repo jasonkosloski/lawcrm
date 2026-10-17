@@ -118,6 +118,7 @@ export default async function MatterCommunicationPage({
               id: m.id,
               name: m.name,
             }))}
+            tz={tz}
           />
         </div>
       </div>

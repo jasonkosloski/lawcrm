@@ -22,12 +22,14 @@ import { cn } from "@/lib/utils";
 // Centralized recency label — TZ-independent until the >30d
 // calendar-date fallback, which uses the viewer's zone.
 import { formatRelative } from "@/lib/format-date";
+import { formatPhone } from "@/lib/format-phone";
 import {
   isMissedCall,
   type MessengerThreadRow,
 } from "@/lib/queries/messenger";
 import type { MessengerFilter } from "./messenger-mailbox-rail";
 import { MailboxDrawerTrigger } from "./mailbox-drawer";
+import { contactInitials } from "./contact-initials";
 
 const MESSENGER_FILTER_LABEL: Record<MessengerFilter, string> = {
   all: "All",
@@ -42,18 +44,6 @@ function hrefFor(threadId: string, filter: MessengerFilter): string {
   if (filter !== "all") params.set("filter", filter);
   params.set("thread", threadId);
   return `/communication?${params.toString()}`;
-}
-
-/** Format a phone number lightly: +13035551234 → (303) 555-1234. */
-function prettyPhone(p: string): string {
-  const digits = p.replace(/\D/g, "");
-  if (digits.length === 11 && digits.startsWith("1")) {
-    return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
-  }
-  if (digits.length === 10) {
-    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-  }
-  return p;
 }
 
 /** Pick an icon for the last-item preview. Calls get directional
@@ -153,12 +143,7 @@ export function MessengerThreadList({
                       color: t.defaultMatterColor ?? "var(--color-ink-3)",
                     }}
                   >
-                    {(t.contactName ?? "?")
-                      .split(/\s+/)
-                      .filter(Boolean)
-                      .slice(0, 2)
-                      .map((s) => s[0]?.toUpperCase() ?? "")
-                      .join("") || "?"}
+                    {contactInitials(t.contactName)}
                   </div>
 
                   <div className="flex-1 min-w-0">
@@ -174,7 +159,7 @@ export function MessengerThreadList({
                             : "font-medium text-ink"
                         )}
                       >
-                        {t.contactName ?? prettyPhone(t.contactPhone)}
+                        {t.contactName ?? (formatPhone(t.contactPhone) || t.contactPhone)}
                       </span>
                       <span className="ml-auto text-2xs font-mono text-ink-4 shrink-0">
                         {formatRelative(t.lastAt, tz)}

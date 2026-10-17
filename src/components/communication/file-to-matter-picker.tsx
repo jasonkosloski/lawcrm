@@ -13,6 +13,10 @@
  * Pinned matters bubble to the top of the list. Server-side search
  * isn't needed today — open-matter sets are small enough to filter
  * client-side.
+ *
+ * Without `communication.file_email` (`canFile` false) the picker is
+ * read-only: the action would redirect the viewer to the dashboard, so
+ * they get the plain matter pill / "Unfiled" label instead.
  */
 
 "use client";
@@ -33,10 +37,13 @@ export function FileToMatterPicker({
   threadId,
   currentMatter,
   options,
+  canFile = true,
 }: {
   threadId: string;
   currentMatter: { id: string; name: string; color: string; area: string } | null;
   options: FilingMatterOption[];
+  /** `communication.file_email` - false renders the read-only pill. */
+  canFile?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -55,10 +62,32 @@ export function FileToMatterPicker({
     setOpen(false);
     setQuery("");
     startTransition(async () => {
-      const res = await setEmailThreadMatter(threadId, matterId);
-      if (!res.ok && res.error) alert(res.error);
+      try {
+        const res = await setEmailThreadMatter(threadId, matterId);
+        if (!res.ok && res.error) alert(res.error);
+      } catch {
+        // A thrown action must not swap the page for the error boundary.
+        alert("Couldn't update the filing - try again.");
+      }
     });
   };
+
+  if (!canFile) {
+    return currentMatter ? (
+      <Link
+        href={`/matters/${currentMatter.id}`}
+        className="inline-flex items-center gap-1.5 text-2xs font-mono text-ink-3 hover:text-brand-700"
+      >
+        <span
+          className="w-1.5 h-1.5 rounded-full"
+          style={{ background: currentMatter.color }}
+        />
+        {currentMatter.name} · {currentMatter.area}
+      </Link>
+    ) : (
+      <span className="text-2xs font-medium text-warn">Unfiled</span>
+    );
+  }
 
   const trigger = currentMatter ? (
     // Filed — existing matter pill is still a Link to the matter
