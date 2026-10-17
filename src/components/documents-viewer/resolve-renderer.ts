@@ -17,7 +17,10 @@
  * (`src/app/api/documents/[id]/download/route.ts`) — keep the two
  * lists in the same universe. text / csv / docx don't: those are
  * read + converted server-side by the page, so the route's
- * disposition never comes into play.
+ * disposition never comes into play. The one inline renderer that
+ * DOES depend on that disposition is pdf (an iframe — an attachment
+ * response downloads instead of rendering), so pdf resolves from the
+ * stored type only, never from the extension.
  */
 
 export type DocumentRenderer =
@@ -55,9 +58,18 @@ const TYPE_MAP: Record<string, DocumentRenderer> = {
   "application/msword": "doc_legacy",
 };
 
-/** Lowercased extension (no dot) → renderer, for typeless uploads. */
+/** Lowercased extension (no dot) → renderer, for typeless uploads.
+ *
+ *  NO `pdf` entry on purpose: the PDF renderer iframes the download
+ *  route, which decides inline vs attachment from the STORED content
+ *  type (`isInlineSafeType`). A typeless / octet-stream / x-pdf row
+ *  is served as an attachment, so an extension-based "pdf" verdict
+ *  would make the iframe trigger a file download (again on every
+ *  page-flag jump) instead of previewing. Those rows get the
+ *  download card until their stored type is corrected. Media and
+ *  image elements ignore Content-Disposition, so their extension
+ *  fallbacks stay. */
 const EXTENSION_MAP: Record<string, DocumentRenderer> = {
-  pdf: "pdf",
   png: "image",
   jpg: "image",
   jpeg: "image",

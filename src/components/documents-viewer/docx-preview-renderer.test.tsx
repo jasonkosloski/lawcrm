@@ -233,6 +233,46 @@ describe("DocxPreviewRenderer — fallback chain", () => {
     );
   });
 
+  test("a response declaring more than the 25 MB cap is never buffered (F998)", async () => {
+    const arrayBuffer = vi.fn(async () => new ArrayBuffer(8));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: new Headers({
+          "content-length": String(25 * 1024 * 1024 + 1),
+        }),
+        arrayBuffer,
+      }))
+    );
+    render(
+      <DocxPreviewRenderer src="/dl" name="huge.docx" fallback={FALLBACK} />
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("mammoth-fallback")).toBeInTheDocument()
+    );
+    expect(arrayBuffer).not.toHaveBeenCalled();
+  });
+
+  test("a chunked response that turns out oversized falls back after the read (F998)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        arrayBuffer: async () => new ArrayBuffer(25 * 1024 * 1024 + 1),
+      }))
+    );
+    render(
+      <DocxPreviewRenderer src="/dl" name="huge.docx" fallback={FALLBACK} />
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("mammoth-fallback")).toBeInTheDocument()
+    );
+  });
+
   test("loading skeleton shows while the fetch is in flight", async () => {
     let resolveFetch!: (v: unknown) => void;
     vi.stubGlobal(

@@ -21,9 +21,11 @@
 
 import { formatMediaSpan } from "@/lib/media-time";
 
-/** Hard page ceiling shared with the server action — no court file
- *  runs longer, and it bounds obvious typos ("page 20026"). */
-export const MAX_PDF_PAGE = 5000;
+/** Hard page ceiling shared with the server action. Consolidated
+ *  discovery productions and medical-record compilations can run
+ *  past 5,000 pages in one PDF, so the cap is generous; it only
+ *  bounds obvious typos ("page 200026"). */
+export const MAX_PDF_PAGE = 20000;
 
 /** Quote anchors cap at the description length — a "quote" longer
  *  than this is a selection mistake, not an anchor. */
@@ -31,6 +33,11 @@ export const MAX_QUOTE_CHARS = 500;
 
 /** Label snippet length for quote anchors. */
 const QUOTE_SNIPPET_CHARS = 40;
+
+/** Error string the flag actions return for a vanished flag. Clients
+ *  match on it to router.refresh() (nothing was revalidated when the
+ *  row was already gone before the lookup). */
+export const FLAG_NOT_FOUND = "Flag not found";
 
 export type FlagAnchorKind = "time" | "page" | "quote" | "document";
 

@@ -65,7 +65,6 @@ describe("resolveDocumentRenderer — by content type", () => {
 
 describe("resolveDocumentRenderer — extension fallback", () => {
   const cases: Array<[string, string]> = [
-    ["scan.pdf", "pdf"],
     ["photo.JPG", "image"],
     ["photo.jpeg", "image"],
     ["frame.png", "image"],
@@ -92,16 +91,34 @@ describe("resolveDocumentRenderer — extension fallback", () => {
 
   test("generic octet-stream defers to the extension", () => {
     expect(
-      resolveDocumentRenderer("application/octet-stream", "scan.pdf")
-    ).toBe("pdf");
+      resolveDocumentRenderer("application/octet-stream", "dispatch.mp3")
+    ).toBe("audio");
+    expect(
+      resolveDocumentRenderer("application/octet-stream", "scene.jpg")
+    ).toBe("image");
   });
 
   test("unrecognized type falls through to the extension", () => {
     // Uploaders sometimes declare vendor-specific types; the
     // extension is the better signal then.
-    expect(resolveDocumentRenderer("application/x-pdf", "scan.pdf")).toBe(
-      "pdf"
+    expect(resolveDocumentRenderer("application/x-wav", "call.wav")).toBe(
+      "audio"
     );
+  });
+
+  test("PDFs resolve from the stored type only (F999): the iframe would download otherwise", () => {
+    // The download route serves a null / octet-stream / x-pdf row as
+    // an attachment, so previewing it in an iframe downloads the
+    // file. These get the download card instead.
+    expect(resolveDocumentRenderer(null, "scan.pdf")).toBe("unsupported");
+    expect(
+      resolveDocumentRenderer("application/octet-stream", "scan.pdf")
+    ).toBe("unsupported");
+    expect(resolveDocumentRenderer("application/x-pdf", "scan.pdf")).toBe(
+      "unsupported"
+    );
+    // The correctly typed row still previews.
+    expect(resolveDocumentRenderer("application/pdf", "scan.pdf")).toBe("pdf");
   });
 
   test("known content type wins over a contradicting extension", () => {

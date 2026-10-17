@@ -7,7 +7,7 @@
  *  - uploader display fields resolve from the bare uploadedBy id
  */
 
-import { beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
 import {
   resetDb,
@@ -127,6 +127,44 @@ describe("getDocumentForViewer — prev/next within the folder", () => {
     const result = await getDocumentForViewer(matterId, r1);
     expect(result!.prevId).toBeNull();
     expect(result!.nextId).toBe(r2);
+  });
+
+  test("duplicate names are walked in id order (tiebreak)", async () => {
+    const ids = [
+      await seedDoc({ name: "scan.pdf" }),
+      await seedDoc({ name: "scan.pdf" }),
+      await seedDoc({ name: "scan.pdf" }),
+    ].sort();
+    const mid = await getDocumentForViewer(matterId, ids[1]);
+    expect(mid!.prevId).toBe(ids[0]);
+    expect(mid!.nextId).toBe(ids[2]);
+    expect((await getDocumentForViewer(matterId, ids[0]))!.prevId).toBeNull();
+    expect((await getDocumentForViewer(matterId, ids[2]))!.nextId).toBeNull();
+  });
+
+  test("the keyset walk agrees with the database ORDER BY for mixed-case and punctuated names (F848/F1008)", async () => {
+    for (const name of ["B.pdf", "a.pdf", "Ab.pdf", "a-1.pdf", "a_1.pdf", "Z.pdf", "10.pdf", "2.pdf"]) {
+      await seedDoc({ name });
+    }
+    const ordered = await prisma.document.findMany({
+      where: { matterId, folderId: null },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+      select: { id: true },
+    });
+    for (let i = 0; i < ordered.length; i++) {
+      const v = await getDocumentForViewer(matterId, ordered[i].id);
+      expect(v!.prevId).toBe(i > 0 ? ordered[i - 1].id : null);
+      expect(v!.nextId).toBe(i < ordered.length - 1 ? ordered[i + 1].id : null);
+    }
+  });
+
+  test("neighbors come from bounded queries, not a full sibling list", async () => {
+    const a = await seedDoc({ name: "a.pdf" });
+    await seedDoc({ name: "b.pdf" });
+    const spy = vi.spyOn(prisma.document, "findMany");
+    await getDocumentForViewer(matterId, a);
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
   });
 
   test("folder fields come back for the breadcrumb ?folder= link", async () => {

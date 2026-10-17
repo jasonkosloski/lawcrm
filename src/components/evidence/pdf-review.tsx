@@ -12,8 +12,15 @@
  * clicks to the same page would do nothing. State carries a
  * monotonically increasing token that keys the viewer, forcing a
  * remount (and thus a fresh `#page=N` load) on every click.
- * Trade-off: the plugin reloads the document per jump — acceptable
- * for a review-jump, and the bytes come Range-cached.
+ * Trade-off: the plugin reloads the document per jump. The bytes are
+ * NOT HTTP-cached: `src` is the auth-gated download route, which
+ * answers `Cache-Control: no-store` (local driver) or 302s to a
+ * freshly signed blob URL per request (blob driver), so each jump
+ * re-fetches (PDFium's range loading only trims that for linearized
+ * files). Acceptable for a review-jump; sharing one signed URL per
+ * view, or pdf.js with in-app page navigation, would fix it but
+ * needs a design pass on URL expiry and the no-store posture
+ * (ADR-015/018).
  */
 
 "use client";

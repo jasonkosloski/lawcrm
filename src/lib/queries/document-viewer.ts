@@ -65,28 +65,48 @@ export async function getDocumentForViewer(
   });
   if (!doc) return null;
 
-  const [uploader, siblings] = await Promise.all([
+  // Same-folder walk order (name asc, id tiebreak) resolved as a
+  // keyset step in each direction — two LIMIT 1 queries instead of
+  // pulling every sibling id (a discovery production dumped in one
+  // folder can run to thousands of files, and this runs on every
+  // viewer render and flag-mutation revalidation). Both the
+  // comparison and the ORDER BY run in Postgres under the same
+  // collation, so they agree. `folderId: null` matches the matter
+  // root (Prisma turns the null into IS NULL).
+  const folderScope = { matterId, folderId: doc.folderId };
+  const [uploader, prev, next] = await Promise.all([
     doc.uploadedBy
       ? prisma.user.findUnique({
           where: { id: doc.uploadedBy },
           select: { name: true, initials: true },
         })
       : Promise.resolve(null),
-    // Same-folder walk order. Folder sizes are human-curated (a
-    // production subfolder, not the whole matter), so pulling the
-    // id+name list to find neighbors is cheap and keeps the
-    // ordering logic in exactly one place.
-    prisma.document.findMany({
-      where: { matterId, folderId: doc.folderId },
+    prisma.document.findFirst({
+      where: {
+        ...folderScope,
+        OR: [
+          { name: { lt: doc.name } },
+          { name: doc.name, id: { lt: doc.id } },
+        ],
+      },
+      orderBy: [{ name: "desc" }, { id: "desc" }],
+      select: { id: true },
+    }),
+    prisma.document.findFirst({
+      where: {
+        ...folderScope,
+        OR: [
+          { name: { gt: doc.name } },
+          { name: doc.name, id: { gt: doc.id } },
+        ],
+      },
       orderBy: [{ name: "asc" }, { id: "asc" }],
       select: { id: true },
     }),
   ]);
 
-  const idx = siblings.findIndex((s) => s.id === doc.id);
-  const prevId = idx > 0 ? siblings[idx - 1].id : null;
-  const nextId =
-    idx >= 0 && idx < siblings.length - 1 ? siblings[idx + 1].id : null;
+  const prevId = prev?.id ?? null;
+  const nextId = next?.id ?? null;
 
   return {
     id: doc.id,

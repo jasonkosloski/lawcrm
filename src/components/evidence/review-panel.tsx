@@ -18,8 +18,8 @@
  *       scroll-to-highlight); omit it and rows render non-clickable.
  *
  * Flags arrive server-fetched from the page — this shell never
- * fetches; after a mutation the composer/rail call router.refresh()
- * and the page re-feeds the list.
+ * fetches; the mutation actions revalidatePath the viewer, and the
+ * action response re-feeds the list (no client router.refresh()).
  */
 
 "use client";

@@ -11,8 +11,8 @@
  * ReviewPanel) for anchorless whole-document flags.
  *
  * Navigate: clicking a quote-anchored flag walks the container's
- * text nodes, relocates the first case-insensitive match
- * (`locateQuote` — pure, tested), scrolls it into view, and
+ * text nodes, relocates the first case- and whitespace-insensitive
+ * match (`locateQuote` — pure, tested), scrolls it into view, and
  * highlights it for a few seconds — CSS Custom Highlight API where
  * available, programmatic selection as the fallback (guarded so our
  * own selection doesn't re-raise the capture affordance). When the
@@ -21,9 +21,14 @@
  * notice appears instead of failing silently.
  *
  * Selection.toString() inserts separators between blocks that no
- * text node contains, so quotes captured across paragraph/cell
- * boundaries may save fine but fail to relocate — that lands on the
- * same not-found notice (see quote-locate.ts).
+ * text node contains; matching ignores whitespace on both sides so
+ * quotes captured across paragraph/cell boundaries still relocate
+ * (see quote-locate.ts). At capture the composer is warned when the
+ * selection can't be relocated, or when the text occurs more than
+ * once (the anchor stores only the text, so a repeated passage
+ * always relocates to its FIRST occurrence — an occurrence index
+ * needs a schema change). A new "Flag selection" while the composer
+ * is open re-seeds its quote (see FlagComposer).
  *
  * Async bodies: the docx-preview renderer fetches + renders AFTER
  * mount, so its text isn't walkable at hydration. With
@@ -40,7 +45,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Flag, SearchX } from "lucide-react";
 import { MAX_QUOTE_CHARS } from "@/lib/flag-anchor";
-import { locateQuote } from "@/lib/quote-locate";
+import { countQuoteOccurrences, locateQuote } from "@/lib/quote-locate";
 import { VIEWER_CONTENT_READY_EVENT } from "@/components/documents-viewer/content-ready-event";
 import { ReviewPanel } from "./review-panel";
 import type { ComposerAnchor } from "./flag-composer";
@@ -137,30 +142,64 @@ export function TextReview({
     noticeTimer.current = setTimeout(() => setNotice(null), 5000);
   }, []);
 
+  /** Text nodes of the rendered body, in document order. */
+  const walkTextNodes = useCallback((): Text[] => {
+    const container = containerRef.current;
+    if (!container) return [];
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    const nodes: Text[] = [];
+    let node: Node | null;
+    while ((node = walker.nextNode())) nodes.push(node as Text);
+    return nodes;
+  }, []);
+
+  /** Capture-time heads-up for the composer: a quote that can't be
+   *  relocated, or that repeats (relocation always lands on the
+   *  FIRST occurrence — the anchor stores no occurrence index). */
+  const captureHint = (quote: string): string | undefined => {
+    const chunks = walkTextNodes().map((n) => n.data);
+    if (locateQuote(chunks, quote) === null) {
+      return "Heads up: this selection can't be found in the rendered text, so the flag may not jump back to it. Try selecting within a single paragraph.";
+    }
+    const count = countQuoteOccurrences(chunks, quote);
+    if (count > 1) {
+      return `Heads up: this text appears ${count} times — clicking the flag will jump to the first one. Select a longer, more specific passage to avoid that.`;
+    }
+    return undefined;
+  };
+
   // ── Navigate: quote → scroll + temporary highlight ─────────────────
   const navigateToQuote = useCallback(
     (quote: string) => {
       const container = containerRef.current;
       if (!container) return;
-      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
-      const nodes: Text[] = [];
-      let node: Node | null;
-      while ((node = walker.nextNode())) nodes.push(node as Text);
+      const nodes = walkTextNodes();
 
+      const notFound = () =>
+        showNotice(
+          "Quote not found in the current render — the document text may have changed since it was flagged."
+        );
       const loc = locateQuote(
         nodes.map((n) => n.data),
         quote
       );
       if (!loc) {
-        showNotice(
-          "Quote not found in the current render — the document text may have changed since it was flagged."
-        );
+        notFound();
         return;
       }
 
       const range = document.createRange();
-      range.setStart(nodes[loc.startChunk], loc.startOffset);
-      range.setEnd(nodes[loc.endChunk], loc.endOffset);
+      try {
+        range.setStart(nodes[loc.startChunk], loc.startOffset);
+        range.setEnd(nodes[loc.endChunk], loc.endOffset);
+      } catch (err) {
+        // Offsets are derived from the same text nodes, so this is
+        // not expected — but a throw from a click/rAF handler would
+        // be silent. Say "not found" instead.
+        console.warn("Quote range could not be built", err);
+        notFound();
+        return;
+      }
       nodes[loc.startChunk].parentElement?.scrollIntoView({
         block: "center",
         behavior: "smooth",
@@ -188,7 +227,7 @@ export function TextReview({
         }, 400);
       }
     },
-    [showNotice]
+    [showNotice, walkTextNodes]
   );
 
   // ?flag= deep link — relocate + highlight on mount (the body is
@@ -233,7 +272,11 @@ export function TextReview({
 
   const flagSelection = () => {
     if (!selection) return;
-    setComposerAnchor({ kind: "quote", quote: selection.quote });
+    setComposerAnchor({
+      kind: "quote",
+      quote: selection.quote,
+      hint: captureHint(selection.quote),
+    });
     setSelection(null);
     window.getSelection()?.removeAllRanges();
   };
@@ -258,7 +301,10 @@ export function TextReview({
       <style>{`::highlight(${HIGHLIGHT_NAME}) { background-color: rgba(250, 204, 21, 0.5); }`}</style>
 
       {notice && (
-        <div className="flex items-center gap-1.5 rounded-md border border-warn-border bg-warn-soft px-3 py-2 text-xs text-warn">
+        <div
+          role="status"
+          className="flex items-center gap-1.5 rounded-md border border-warn-border bg-warn-soft px-3 py-2 text-xs text-warn"
+        >
           <SearchX className="h-3.5 w-3.5 shrink-0" aria-hidden />
           {notice}
         </div>

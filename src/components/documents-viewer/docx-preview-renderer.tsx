@@ -85,6 +85,12 @@ const WRAPPER_RESTYLE = [
   "sm:[&_.docx-wrapper]:p-8",
 ].join(" ");
 
+/** Client-side preview ceiling — mirrors `DOCX_MAX_BYTES` in
+ *  `src/lib/document-preview.ts` (25 MB; that module imports mammoth
+ *  and the storage adapter, so it can't be pulled into a client
+ *  bundle for one number). */
+const DOCX_CLIENT_MAX_BYTES = 25 * 1024 * 1024;
+
 type Phase = "loading" | "rendered" | "fallback";
 
 export function DocxPreviewRenderer({
@@ -115,7 +121,22 @@ export function DocxPreviewRenderer({
       try {
         const res = await fetch(src, { signal: controller.signal });
         if (!res.ok) throw new Error(`download responded ${res.status}`);
+        // Same ceiling the server's mammoth pipeline enforces. A file
+        // over it is declined BEFORE the body is buffered when the
+        // response declares its length, and again after for chunked
+        // responses; the fallback node (the server's "too large —
+        // download it" card) takes over instead of freezing the tab
+        // in parseAsync.
+        const declared = Number(res.headers?.get("content-length"));
+        if (Number.isFinite(declared) && declared > DOCX_CLIENT_MAX_BYTES) {
+          throw new Error(`docx is ${declared} bytes — over the preview cap`);
+        }
         const bytes = await res.arrayBuffer();
+        if (bytes.byteLength > DOCX_CLIENT_MAX_BYTES) {
+          throw new Error(
+            `docx is ${bytes.byteLength} bytes — over the preview cap`
+          );
+        }
         // Dynamic import: docx-preview is a browser-only, docx-page-
         // only dependency — keep it out of the shared client bundle.
         const { parseAsync, renderDocument } = await import("docx-preview");

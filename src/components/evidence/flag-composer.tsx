@@ -16,14 +16,28 @@
  * (`createAnchor`); edit mode derives the kind from the flag row
  * itself (`flagAnchorKind`) — the server rejects kind switches, so
  * the form never offers one. Submit goes straight to the server
- * action; on success the parent refreshes the route so the
- * server-fetched rail re-renders.
+ * action, which revalidates the viewer and Evidence paths: the
+ * action response already carries the re-rendered route, so the
+ * composer does NOT also router.refresh() (that would render the
+ * viewer — and re-read/convert the document — a second time).
+ *
+ * A fresh `createAnchor` object while the composer stays open (the
+ * reviewer re-selects a different passage and hits "Flag selection"
+ * again, or switches from "Flag document" to a selection) re-seeds
+ * the anchor fields from the new capture; the note and category the
+ * reviewer already typed are kept.
+ *
+ * Failures never reach the error boundary: validation and "flag
+ * not found" come back as results, and a rejected action (network,
+ * post-deploy "Failed to find Server Action") becomes an inline
+ * message so the typed note survives. Next's own redirect/not-found
+ * signals are re-thrown untouched.
  */
 
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useId, useState, useTransition } from "react";
+import { unstable_rethrow, useRouter } from "next/navigation";
 import { Clock } from "lucide-react";
 import {
   createFlaggedMoment,
@@ -35,13 +49,14 @@ import {
   FLAG_CATEGORY_LABEL,
   type FlagCategory,
 } from "@/lib/constants/flag-category";
-import { formatMediaTime, parseMediaTime } from "@/lib/media-time";
+import { FLAG_NOT_FOUND } from "@/lib/flag-anchor";
+import { formatMediaTime } from "@/lib/media-time";
 import {
-  MAX_PDF_PAGE,
   MAX_QUOTE_CHARS,
   flagAnchorKind,
   type FlagAnchorKind,
 } from "@/lib/flag-anchor";
+import { buildFlagAnchor, type FlagAnchorText } from "./build-flag-anchor";
 
 export type ComposerFlag = {
   id: string;
@@ -57,8 +72,45 @@ export type ComposerFlag = {
 export type ComposerAnchor =
   | { kind: "time"; timeSeconds: number }
   | { kind: "page"; pageNumber: number | null }
-  | { kind: "quote"; quote: string }
+  | {
+      kind: "quote";
+      quote: string;
+      /** Optional heads-up shown under the quote (e.g. "this text
+       *  appears 3 times — the flag will jump to the first"). */
+      hint?: string;
+    }
   | { kind: "document" };
+
+/** Initial anchor-field text for an edit (from the row) or a create
+ *  (from the adapter's capture). */
+function seedAnchorText(
+  editing: ComposerFlag | null,
+  createAnchor: ComposerAnchor | null,
+): FlagAnchorText {
+  const kind: FlagAnchorKind = editing
+    ? flagAnchorKind(editing)
+    : (createAnchor?.kind ?? "document");
+  const timeText =
+    kind !== "time"
+      ? ""
+      : formatMediaTime(
+          editing
+            ? (editing.timeSeconds ?? 0)
+            : createAnchor?.kind === "time"
+              ? createAnchor.timeSeconds
+              : 0,
+        );
+  const endText =
+    editing?.endSeconds != null ? formatMediaTime(editing.endSeconds) : "";
+  let pageText = "";
+  if (editing?.pageNumber != null) pageText = String(editing.pageNumber);
+  else if (!editing && createAnchor?.kind === "page" && createAnchor.pageNumber)
+    pageText = String(createAnchor.pageNumber);
+  const quoteText =
+    editing?.quote ??
+    (createAnchor?.kind === "quote" ? createAnchor.quote : "");
+  return { timeText, endText, pageText, quoteText };
+}
 
 export function FlagComposer({
   documentId,
@@ -76,165 +128,128 @@ export function FlagComposer({
   getCurrentTime?: () => number | null;
   onClose: () => void;
 }) {
-  const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
+  // Per-instance ids: a create composer (ReviewPanel) and an inline
+  // edit composer (MomentsRail) can be open at once on one document.
+  const uid = useId();
 
   const kind: FlagAnchorKind = editing
     ? flagAnchorKind(editing)
     : (createAnchor?.kind ?? "document");
 
-  const [timeText, setTimeText] = useState(() =>
-    kind !== "time"
-      ? ""
-      : formatMediaTime(
-          editing
-            ? (editing.timeSeconds ?? 0)
-            : createAnchor?.kind === "time"
-              ? createAnchor.timeSeconds
-              : 0
-        )
-  );
-  const [endText, setEndText] = useState(
-    editing?.endSeconds != null ? formatMediaTime(editing.endSeconds) : ""
-  );
-  const [pageText, setPageText] = useState(() => {
-    if (editing?.pageNumber != null) return String(editing.pageNumber);
-    if (!editing && createAnchor?.kind === "page" && createAnchor.pageNumber)
-      return String(createAnchor.pageNumber);
-    return "";
-  });
-  const [quoteText, setQuoteText] = useState(
-    editing?.quote ??
-      (createAnchor?.kind === "quote" ? createAnchor.quote : "")
+  const [fields, setFields] = useState<FlagAnchorText>(() =>
+    seedAnchorText(editing, createAnchor),
   );
   const [category, setCategory] = useState<FlagCategory>(
     editing && (FLAG_CATEGORIES as readonly string[]).includes(editing.category)
       ? (editing.category as FlagCategory)
-      : "emphasis"
+      : "emphasis",
   );
   const [description, setDescription] = useState(editing?.description ?? "");
   const [error, setError] = useState<string | null>(null);
 
-  const syncToPlayer = (setter: (v: string) => void) => {
-    const t = getCurrentTime?.();
-    if (t !== null && t !== undefined) setter(formatMediaTime(t));
-  };
+  // A new capture while the composer is open re-seeds the anchor
+  // fields (stored-previous-prop pattern — adjusting state during
+  // render, not in an effect). Keyed on the capture object's
+  // identity: adapters create a fresh object per capture.
+  const [seenAnchor, setSeenAnchor] = useState(createAnchor);
+  if (!editing && createAnchor !== seenAnchor) {
+    setSeenAnchor(createAnchor);
+    setFields(seedAnchorText(null, createAnchor));
+    setError(null);
+  }
 
-  /** Anchor fields for the submit, or null after setting an error. */
-  const buildAnchor = (): Partial<FlagInput> | null => {
-    switch (kind) {
-      case "time": {
-        const timeSeconds = parseMediaTime(timeText);
-        if (timeSeconds === null) {
-          setError("Start time must be a clock time like 1:15");
-          return null;
-        }
-        if (endText.trim() === "") return { timeSeconds };
-        const endSeconds = parseMediaTime(endText);
-        if (endSeconds === null) {
-          setError("Span end must be a clock time like 2:30 (or blank)");
-          return null;
-        }
-        if (endSeconds <= timeSeconds) {
-          setError("Span end must be after the start time");
-          return null;
-        }
-        return { timeSeconds, endSeconds };
-      }
-      case "page": {
-        const trimmed = pageText.trim();
-        if (trimmed === "") {
-          // Create: blank page = flag the whole document. Edit: the
-          // kind is locked server-side, so require a page.
-          if (!editing) return {};
-          setError("This flag anchors to a page — enter a page number");
-          return null;
-        }
-        if (!/^\d+$/.test(trimmed)) {
-          setError("Page must be a whole number");
-          return null;
-        }
-        const pageNumber = Number(trimmed);
-        if (pageNumber < 1 || pageNumber > MAX_PDF_PAGE) {
-          setError(`Page must be between 1 and ${MAX_PDF_PAGE}`);
-          return null;
-        }
-        return { pageNumber };
-      }
-      case "quote": {
-        const quote = quoteText.trim();
-        if (quote === "") {
-          setError("The quoted text can't be empty");
-          return null;
-        }
-        return { quote: quote.slice(0, MAX_QUOTE_CHARS) };
-      }
-      case "document":
-        return {};
-    }
+  const setField = (key: keyof FlagAnchorText, value: string) =>
+    setFields((f) => ({ ...f, [key]: value }));
+
+  const syncToPlayer = (key: "timeText" | "endText") => {
+    const t = getCurrentTime?.();
+    if (t !== null && t !== undefined) setField(key, formatMediaTime(t));
   };
 
   const submit = () => {
-    const anchor = buildAnchor();
-    if (anchor === null) return;
+    const built = buildFlagAnchor(kind, fields, editing !== null);
+    if (!built.ok) {
+      setError(built.error);
+      return;
+    }
     if (description.trim() === "") {
       setError("Add a short note about the moment");
       return;
     }
     setError(null);
     const input: FlagInput = {
-      ...anchor,
+      ...built.anchor,
       category,
       description: description.trim(),
     };
     startTransition(async () => {
-      const res = editing
-        ? await updateFlaggedMoment(editing.id, input)
-        : await createFlaggedMoment(documentId, input);
-      if (!res.ok) {
-        setError(res.error ?? "Something went wrong — try again.");
+      let res: Awaited<ReturnType<typeof createFlaggedMoment>>;
+      try {
+        res = editing
+          ? await updateFlaggedMoment(editing.id, input)
+          : await createFlaggedMoment(documentId, input);
+      } catch (err) {
+        unstable_rethrow(err); // redirects / not-found are not failures
+        console.error("Flag save failed", err);
+        setError(
+          "Couldn't save the flag — check your connection and try again.",
+        );
         return;
       }
-      router.refresh();
+      if (!res.ok) {
+        setError(res.error ?? "Something went wrong — try again.");
+        // The flag is already gone: the action had nothing to
+        // revalidate, so re-read the route to drop the stale row.
+        if (res.error === FLAG_NOT_FOUND) router.refresh();
+        return;
+      }
       onClose();
     });
   };
 
   const timeField = (
+    key: "timeText" | "endText",
     label: string,
-    value: string,
-    setValue: (v: string) => void,
-    placeholder: string
-  ) => (
-    <div className="flex flex-col gap-1">
-      <label className="text-2xs uppercase tracking-wider text-ink-4">
-        {label}
-      </label>
-      <div className="flex items-center gap-1">
-        <input
-          type="text"
-          inputMode="numeric"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder={placeholder}
-          className="h-7 w-20 rounded-md border border-line bg-white px-2 font-mono text-xs text-ink focus:border-brand-300 focus:outline-none"
-        />
-        {getCurrentTime && (
-          <button
-            type="button"
-            onClick={() => syncToPlayer(setValue)}
-            title="Set to current player time"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-line bg-white text-ink-3 transition-colors hover:border-brand-300 hover:text-brand-700"
-          >
-            <Clock className="h-3.5 w-3.5" aria-hidden />
-            <span className="sr-only">
-              Set {label.toLowerCase()} to current player time
-            </span>
-          </button>
-        )}
+    placeholder: string,
+  ) => {
+    const id = `${uid}-${key}`;
+    return (
+      <div className="flex flex-col gap-1">
+        <label
+          htmlFor={id}
+          className="text-2xs uppercase tracking-wider text-ink-4"
+        >
+          {label}
+        </label>
+        <div className="flex items-center gap-1">
+          <input
+            id={id}
+            type="text"
+            inputMode="numeric"
+            value={fields[key]}
+            onChange={(e) => setField(key, e.target.value)}
+            placeholder={placeholder}
+            className="h-7 w-20 rounded-md border border-line bg-white px-2 font-mono text-xs text-ink focus:border-brand-300 focus:outline-none"
+          />
+          {getCurrentTime && (
+            <button
+              type="button"
+              onClick={() => syncToPlayer(key)}
+              title="Set to current player time"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-line bg-white text-ink-3 transition-colors hover:border-brand-300 hover:text-brand-700"
+            >
+              <Clock className="h-3.5 w-3.5" aria-hidden />
+              <span className="sr-only">
+                Set {label.toLowerCase()} to current player time
+              </span>
+            </button>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const HEADING: Record<FlagAnchorKind, string> = {
     time: "Flag this moment",
@@ -242,6 +257,9 @@ export function FlagComposer({
     quote: "Flag selection",
     document: "Flag this document",
   };
+
+  const quoteHint =
+    !editing && createAnchor?.kind === "quote" ? createAnchor.hint : undefined;
 
   return (
     <div className="rounded-lg border border-line bg-paper-2 p-3">
@@ -252,43 +270,48 @@ export function FlagComposer({
       {kind === "quote" && (
         <div className="mb-2 flex flex-col gap-1">
           <label
-            htmlFor={`flag-quote-${documentId}`}
+            htmlFor={`${uid}-quote`}
             className="text-2xs uppercase tracking-wider text-ink-4"
           >
             Quoted text
           </label>
           <textarea
-            id={`flag-quote-${documentId}`}
-            value={quoteText}
-            onChange={(e) => setQuoteText(e.target.value)}
+            id={`${uid}-quote`}
+            value={fields.quoteText}
+            onChange={(e) => setField("quoteText", e.target.value)}
             maxLength={MAX_QUOTE_CHARS}
             rows={2}
             className="w-full resize-y rounded-md border border-line bg-white p-2 text-xs italic text-ink-2 focus:border-brand-300 focus:outline-none"
           />
+          {quoteHint && (
+            <div role="status" className="text-2xs text-warn">
+              {quoteHint}
+            </div>
+          )}
         </div>
       )}
 
       <div className="flex flex-wrap items-end gap-3">
         {kind === "time" && (
           <>
-            {timeField("Time", timeText, setTimeText, "0:00")}
-            {timeField("Span end (optional)", endText, setEndText, "—")}
+            {timeField("timeText", "Time", "0:00")}
+            {timeField("endText", "Span end (optional)", "—")}
           </>
         )}
         {kind === "page" && (
           <div className="flex flex-col gap-1">
             <label
-              htmlFor={`flag-page-${documentId}`}
+              htmlFor={`${uid}-page`}
               className="text-2xs uppercase tracking-wider text-ink-4"
             >
               {editing ? "Page" : "Page (blank = whole document)"}
             </label>
             <input
-              id={`flag-page-${documentId}`}
+              id={`${uid}-page`}
               type="text"
               inputMode="numeric"
-              value={pageText}
-              onChange={(e) => setPageText(e.target.value)}
+              value={fields.pageText}
+              onChange={(e) => setField("pageText", e.target.value)}
               placeholder="—"
               className="h-7 w-20 rounded-md border border-line bg-white px-2 font-mono text-xs text-ink focus:border-brand-300 focus:outline-none"
             />
@@ -296,13 +319,13 @@ export function FlagComposer({
         )}
         <div className="flex flex-col gap-1">
           <label
-            htmlFor={`flag-category-${documentId}`}
+            htmlFor={`${uid}-category`}
             className="text-2xs uppercase tracking-wider text-ink-4"
           >
             Category
           </label>
           <select
-            id={`flag-category-${documentId}`}
+            id={`${uid}-category`}
             value={category}
             onChange={(e) => setCategory(e.target.value as FlagCategory)}
             className="h-7 rounded-md border border-line bg-white px-2 text-xs text-ink focus:border-brand-300 focus:outline-none"
@@ -321,6 +344,7 @@ export function FlagComposer({
         onChange={(e) => setDescription(e.target.value)}
         maxLength={500}
         rows={2}
+        aria-label="Note"
         placeholder={
           kind === "document"
             ? "Why does this document matter?"
@@ -328,7 +352,11 @@ export function FlagComposer({
         }
         className="mt-2 w-full resize-y rounded-md border border-line bg-white p-2 text-xs text-ink placeholder:text-ink-4 focus:border-brand-300 focus:outline-none"
       />
-      {error && <div className="mt-1 text-2xs text-warn">{error}</div>}
+      {error && (
+        <div role="alert" className="mt-1 text-2xs text-warn">
+          {error}
+        </div>
+      )}
       <div className="mt-2 flex items-center gap-2">
         <button
           type="button"

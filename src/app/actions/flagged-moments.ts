@@ -32,9 +32,16 @@
  *     for crossing ownership
  *   - deleteFlaggedMoment: creator bypass + `evidence.flag.delete_any`
  *
- * Activity log: create + delete write `type: "evidence"` entries so
- * the matter Timeline reflects review work. Edits are not logged —
- * same posture as note edits.
+ * Activity log: create, edit and delete write `type: "evidence"`
+ * entries so the matter Timeline reflects review work. The edit
+ * entry matters most when an `edit_any` holder rewrites someone
+ * else's flag: the row keeps the original flagger, so the log is the
+ * only record of who changed the wording.
+ *
+ * Concurrency: update/delete use updateMany/deleteMany keyed on the
+ * id and treat count 0 as "Flag not found" — a flag deleted between
+ * the lookup and the write (a colleague, or a double click) is a
+ * soft form error, never a thrown P2025.
  */
 
 "use server";
@@ -52,6 +59,7 @@ import {
   MAX_QUOTE_CHARS,
   flagAnchorKind,
   flagAnchorLabel,
+  FLAG_NOT_FOUND,
   type FlagAnchorKind,
 } from "@/lib/flag-anchor";
 import {
@@ -294,12 +302,15 @@ export async function updateFlaggedMoment(
       id: true,
       flaggedById: true,
       timeSeconds: true,
+      endSeconds: true,
       pageNumber: true,
       quote: true,
-      document: { select: { id: true, matterId: true } },
+      description: true,
+      category: true,
+      document: { select: { id: true, matterId: true, name: true } },
     },
   });
-  if (!flag) return { ok: false, error: "Flag not found" };
+  if (!flag) return { ok: false, error: FLAG_NOT_FOUND };
 
   // Creator can always edit their own; otherwise gate.
   if (flag.flaggedById !== actorId) {
@@ -323,7 +334,7 @@ export async function updateFlaggedMoment(
     };
   }
 
-  await prisma.flaggedMoment.update({
+  const { count } = await prisma.flaggedMoment.updateMany({
     where: { id: flagId },
     data: {
       ...anchorData(parsed.data),
@@ -331,8 +342,38 @@ export async function updateFlaggedMoment(
       description: parsed.data.description,
     },
   });
+  // Deleted between the lookup and the write. Revalidate anyway so
+  // the viewer's rail drops the stale row (the client no longer
+  // router.refresh()es after every mutation).
+  if (count === 0) {
+    if (flag.document) {
+      revalidateFlagSurfaces(flag.document.matterId, flag.document.id);
+    }
+    return { ok: false, error: FLAG_NOT_FOUND };
+  }
 
-  if (flag.document) revalidateFlagSurfaces(flag.document.matterId, flag.document.id);
+  if (flag.document) {
+    revalidateFlagSurfaces(flag.document.matterId, flag.document.id);
+    const crossOwner = flag.flaggedById !== actorId;
+    // Old → new note text, bounded like the create entry. The
+    // original flagger stays on the row, so for another reviewer's
+    // flag this entry (userId = the editor) is the audit trail.
+    await logActivity({
+      matterId: flag.document.matterId,
+      userId: actorId,
+      type: "evidence",
+      title:
+        (existingKind === "time"
+          ? `Flag edited at ${flagAnchorLabel(flag)}`
+          : existingKind === "document"
+            ? "Flag edited"
+            : `Flag edited (${flagAnchorLabel(flag)})`) +
+        (crossOwner ? " — another reviewer's flag" : ""),
+      detail: editDetail(flag, parsed.data, anchorData(parsed.data)),
+      icon: existingKind === "time" ? "video" : "document",
+      source: "Evidence",
+    });
+  }
   return { ok: true };
 }
 
@@ -356,14 +397,24 @@ export async function deleteFlaggedMoment(
       document: { select: { id: true, matterId: true, name: true } },
     },
   });
-  if (!flag) return { ok: false, error: "Flag not found" };
+  if (!flag) return { ok: false, error: FLAG_NOT_FOUND };
 
   // Creator can always delete their own; otherwise gate.
   if (flag.flaggedById !== actorId) {
     await requirePermission("evidence.flag.delete_any");
   }
 
-  await prisma.flaggedMoment.delete({ where: { id: flagId } });
+  const { count } = await prisma.flaggedMoment.deleteMany({
+    where: { id: flagId },
+  });
+  // Already deleted by someone else — nothing to remove or log, but
+  // revalidate so the stale row leaves this user's rail.
+  if (count === 0) {
+    if (flag.document) {
+      revalidateFlagSurfaces(flag.document.matterId, flag.document.id);
+    }
+    return { ok: false, error: FLAG_NOT_FOUND };
+  }
 
   if (flag.document) {
     revalidateFlagSurfaces(flag.document.matterId, flag.document.id);
@@ -384,6 +435,37 @@ export async function deleteFlaggedMoment(
     });
   }
   return { ok: true };
+}
+
+/** Audit detail for an edit: note old → new, plus the anchor and
+ *  category when they changed (an edit_any holder can retime,
+ *  re-quote or recategorise another reviewer's flag). */
+function editDetail(
+  was: {
+    timeSeconds: number | null;
+    endSeconds: number | null;
+    pageNumber: number | null;
+    quote: string | null;
+    description: string;
+    category: string;
+    document: { name: string } | null;
+  },
+  now: { category: string; description: string },
+  nextAnchor: {
+    timeSeconds: number | null;
+    endSeconds: number | null;
+    pageNumber: number | null;
+    quote: string | null;
+  }
+): string {
+  let detail = `${was.document?.name ?? ""} — was: ${was.description.slice(0, 60)} → now: ${now.description.slice(0, 60)}`;
+  const before = flagAnchorLabel(was);
+  const after = flagAnchorLabel(nextAnchor);
+  if (before !== after) detail += ` — anchor: ${before} → ${after}`;
+  if (was.category !== now.category) {
+    detail += ` — category: ${was.category} → ${now.category}`;
+  }
+  return detail;
 }
 
 // ── Shared revalidation ─────────────────────────────────────────────────

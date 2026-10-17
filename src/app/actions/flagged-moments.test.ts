@@ -7,7 +7,7 @@
  *     docx/text/csv→quote) plus anchorless; everything else is a
  *     form error that writes nothing. At most one kind per flag.
  *   - Validation: negative time, >24h cap, endSeconds ≤ timeSeconds,
- *     orphan endSeconds, page bounds (1..5000, integer), quote
+ *     orphan endSeconds, page bounds (1..20000, integer), quote
  *     bounds (trimmed 1..500), unknown category, empty / >500-char
  *     description.
  *   - Persistence: each anchor kind lands with the right shape and
@@ -42,6 +42,7 @@ vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
 }));
 
+import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
@@ -308,7 +309,7 @@ describe("createFlaggedMoment — validation", () => {
     [{ pageNumber: 0 }, /start at 1/i],
     [{ pageNumber: -3 }, /start at 1/i],
     [{ pageNumber: 2.5 }, /whole number/i],
-    [{ pageNumber: 5001 }, /5000/],
+    [{ pageNumber: 20001 }, /20000/],
   ])("rejects page anchor %o", async (patch, msg) => {
     const res = await createFlaggedMoment(pdfDocId, { ...noteOnly, ...patch });
     expect(res.ok).toBe(false);
@@ -548,5 +549,193 @@ describe("update/delete — authenticate before touching the DB", () => {
     mockedGetUser.mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
     await expect(deleteFlaggedMoment(flagId)).rejects.toThrow();
     expect(await prisma.flaggedMoment.count()).toBe(1);
+  });
+});
+
+describe("updateFlaggedMoment — point ↔ span (F1000)", () => {
+  test("a point flag can be edited into a span", async () => {
+    const { flagId } = await seedFlaggedMoment({
+      documentId: videoDocId,
+      flaggedById: userId,
+      timeSeconds: 10,
+    });
+    const res = await updateFlaggedMoment(flagId, {
+      ...validInput,
+      timeSeconds: 10,
+      endSeconds: 25,
+    });
+    expect(res.ok).toBe(true);
+    const row = await prisma.flaggedMoment.findUnique({
+      where: { id: flagId },
+    });
+    expect(row).toMatchObject({ timeSeconds: 10, endSeconds: 25 });
+  });
+});
+
+describe("update/delete — flag vanished (F1001)", () => {
+  test("updating a flag that no longer exists is a soft error", async () => {
+    const res = await updateFlaggedMoment("ghost-flag", validInput);
+    expect(res).toEqual({ ok: false, error: "Flag not found" });
+  });
+
+  test("a flag deleted between lookup and update is a soft error, not a thrown P2025", async () => {
+    const { flagId } = await seedFlaggedMoment({
+      documentId: videoDocId,
+      flaggedById: userId,
+    });
+    const stale = await prisma.flaggedMoment.findUnique({
+      where: { id: flagId },
+      select: {
+        id: true,
+        flaggedById: true,
+        timeSeconds: true,
+        endSeconds: true,
+        pageNumber: true,
+        quote: true,
+        description: true,
+        document: { select: { id: true, matterId: true, name: true } },
+      },
+    });
+    await prisma.flaggedMoment.delete({ where: { id: flagId } });
+    const spy = vi
+      .spyOn(prisma.flaggedMoment, "findUnique")
+      .mockResolvedValueOnce(stale as never);
+    const res = await updateFlaggedMoment(flagId, validInput);
+    spy.mockRestore();
+    expect(res).toEqual({ ok: false, error: "Flag not found" });
+    // The stale row must leave other viewers' rails.
+    expect(revalidatePath).toHaveBeenCalledWith(
+      `/matters/${matterId}/documents/${videoDocId}`
+    );
+    expect(revalidatePath).toHaveBeenCalledWith(`/matters/${matterId}/evidence`);
+    // No "Flag edited" entry for a write that never happened.
+    expect(
+      await prisma.activityLog.count({
+        where: { matterId, title: { startsWith: "Flag edited" } },
+      })
+    ).toBe(0);
+  });
+
+  test("a flag deleted between lookup and delete is a soft error and logs nothing", async () => {
+    const { flagId } = await seedFlaggedMoment({
+      documentId: videoDocId,
+      flaggedById: userId,
+    });
+    const stale = await prisma.flaggedMoment.findUnique({
+      where: { id: flagId },
+      select: {
+        id: true,
+        timeSeconds: true,
+        endSeconds: true,
+        pageNumber: true,
+        quote: true,
+        flaggedById: true,
+        document: { select: { id: true, matterId: true, name: true } },
+      },
+    });
+    await prisma.flaggedMoment.delete({ where: { id: flagId } });
+    const spy = vi
+      .spyOn(prisma.flaggedMoment, "findUnique")
+      .mockResolvedValueOnce(stale as never);
+    const res = await deleteFlaggedMoment(flagId);
+    spy.mockRestore();
+    expect(res).toEqual({ ok: false, error: "Flag not found" });
+    expect(revalidatePath).toHaveBeenCalledWith(
+      `/matters/${matterId}/documents/${videoDocId}`
+    );
+    expect(
+      await prisma.activityLog.count({
+        where: { matterId, title: { startsWith: "Flag removed" } },
+      })
+    ).toBe(0);
+  });
+});
+
+describe("updateFlaggedMoment — audit trail (F997)", () => {
+  test("an edit writes an evidence activity entry with old → new note", async () => {
+    const { flagId } = await seedFlaggedMoment({
+      documentId: videoDocId,
+      flaggedById: userId,
+      timeSeconds: 75,
+      description: "Original wording",
+    });
+    await updateFlaggedMoment(flagId, {
+      ...validInput,
+      description: "Revised wording",
+    });
+    const log = await prisma.activityLog.findFirst({
+      where: {
+        matterId,
+        type: "evidence",
+        title: { startsWith: "Flag edited" },
+      },
+    });
+    expect(log).not.toBeNull();
+    expect(log!.userId).toBe(userId);
+    expect(log!.title).toBe("Flag edited at 1:15");
+    expect(log!.detail).toContain("Original wording");
+    expect(log!.detail).toContain("Revised wording");
+  });
+
+  test("rewriting another reviewer's flag is attributed to the editor and says so", async () => {
+    const { flagId } = await seedFlaggedMoment({
+      documentId: videoDocId,
+      flaggedById: otherUserId,
+      timeSeconds: 75,
+      description: "Attorney's note",
+    });
+    await updateFlaggedMoment(flagId, {
+      ...validInput,
+      description: "Rewritten by staff",
+    });
+    const log = await prisma.activityLog.findFirst({
+      where: {
+        matterId,
+        type: "evidence",
+        title: { startsWith: "Flag edited" },
+      },
+    });
+    expect(log!.userId).toBe(userId); // the editor, not the flagger
+    expect(log!.title).toMatch(/another reviewer/i);
+    // The row still shows the original flagger.
+    const row = await prisma.flaggedMoment.findUnique({
+      where: { id: flagId },
+    });
+    expect(row?.flaggedById).toBe(otherUserId);
+  });
+
+  test("a retime and recategorise record the new anchor and category", async () => {
+    const { flagId } = await seedFlaggedMoment({
+      documentId: videoDocId,
+      flaggedById: userId,
+      timeSeconds: 75,
+      description: "Same note",
+    });
+    await updateFlaggedMoment(flagId, {
+      ...validInput,
+      timeSeconds: 120,
+      description: "Same note",
+      category: "contradiction",
+    });
+    const log = await prisma.activityLog.findFirst({
+      where: { matterId, title: { startsWith: "Flag edited" } },
+    });
+    expect(log!.detail).toContain("anchor: 1:15 → 2:00");
+    expect(log!.detail).toMatch(/category: \w+ → contradiction/);
+  });
+
+  test("a denied or invalid edit writes no entry", async () => {
+    const { flagId } = await seedFlaggedMoment({
+      documentId: videoDocId,
+      flaggedById: otherUserId,
+    });
+    mockedRequire.mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
+    await expect(updateFlaggedMoment(flagId, validInput)).rejects.toThrow();
+    await updateFlaggedMoment(flagId, { ...validInput, description: "" });
+    expect(
+      await prisma.activityLog.count({
+        where: { matterId, title: { startsWith: "Flag edited" } },
+      })
+    ).toBe(0);
   });
 });

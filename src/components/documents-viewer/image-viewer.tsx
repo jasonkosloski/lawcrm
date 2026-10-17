@@ -21,18 +21,32 @@ export function ImageViewer({ src, name }: { src: string; name: string }) {
       {/* Storage bytes, not a Next-optimizable asset — the download
           route is auth-gated per request, so next/image's optimizer
           (a separate unauthenticated fetch) can't be used here. */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={src}
-        alt={name}
-        onClick={() => setZoomed((z) => !z)}
+      {/* The zoom toggle is a real button so keyboard and screen
+          reader users can use it (a click handler on a bare <img>
+          is neither focusable nor announced). */}
+      <button
+        type="button"
+        aria-pressed={zoomed}
+        aria-label={zoomed ? `Fit ${name} to window` : `Zoom ${name} to full size`}
         title={zoomed ? "Click to fit" : "Click to zoom"}
+        onClick={() => setZoomed((z) => !z)}
         className={
           zoomed
-            ? "max-w-none cursor-zoom-out"
-            : "max-h-full max-w-full cursor-zoom-in object-contain"
+            ? "cursor-zoom-out"
+            : "flex max-h-full max-w-full cursor-zoom-in items-center justify-center"
         }
-      />
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt={name}
+          className={
+            zoomed
+              ? "max-w-none"
+              : "max-h-full max-w-full object-contain"
+          }
+        />
+      </button>
     </div>
   );
 }
