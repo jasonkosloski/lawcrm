@@ -50,20 +50,27 @@ export function ApplyDeadlineRuleDialog({
   const [ruleId, setRuleId] = useState("");
   const [anchorDate, setAnchorDate] = useState("");
   const [result, setResult] = useState<ApplyRuleResult | null>(null);
+  // Once the user confirmed "Apply again", every later submit for this
+  // rule stays forced. A rule can be BOTH a duplicate and in need of a
+  // date; without this the force flag was dropped when the date step
+  // appeared and the server answered "duplicate" forever.
+  const [forced, setForced] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const reset = () => {
     setRuleId(rules[0]?.id ?? "");
     setAnchorDate("");
     setResult(null);
+    setForced(false);
   };
 
   const submit = (opts: { force?: boolean } = {}) => {
+    const force = forced || opts.force;
+    if (opts.force) setForced(true);
     startTransition(async () => {
       const res = await applyDeadlineRuleToMatter(matterId, ruleId, {
-        force: opts.force,
-        anchorDate:
-          result?.status === "needs_date" && anchorDate ? anchorDate : undefined,
+        force: force || undefined,
+        anchorDate: anchorDate || undefined,
       });
       if (res.status === "ok") {
         setOpen(false);
@@ -111,6 +118,7 @@ export function ApplyDeadlineRuleDialog({
                   setRuleId(e.target.value);
                   setResult(null);
                   setAnchorDate("");
+                  setForced(false);
                 }}
                 className={selectCls}
               >

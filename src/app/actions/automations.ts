@@ -17,13 +17,14 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
+import { prisma, type Tx } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import {
   DEADLINE_RULE_ANCHORS,
   DEADLINE_RULE_KINDS,
+  MAX_OFFSET_DAYS,
   OFFSET_UNITS,
   isDayKey,
   packOffset,
@@ -43,6 +44,25 @@ import { TASK_PRIORITIES } from "@/lib/constants/priority";
 
 const SETTINGS_PATH = "/settings/automations";
 
+/** Prisma "record not found" (P2025) — the row vanished under us. */
+function isNotFound(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as { code?: unknown }).code === "P2025";
+}
+
+/** Prisma foreign-key violation (P2003) — a dependent appeared under us. */
+function isForeignKeyViolation(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as { code?: unknown }).code === "P2003";
+}
+
+/** Serialize manual applies per matter so a double submit (or two
+ *  users) can't both pass the duplicate check and both create. */
+async function lockMatterForApply(
+  tx: Pick<Tx, "$executeRaw">,
+  matterId: string
+) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`automation-apply:${matterId}`}))`;
+}
+
 function fail(field: string, message: string): AutomationFormState {
   return { status: "error", errors: { [field]: [message] } };
 }
@@ -60,13 +80,18 @@ const ruleSchema = z
       .number({ message: "Enter a number" })
       .int("Whole numbers only")
       .min(0, "Can't be negative")
-      .max(36500, "That's over 100 years"),
+      .max(MAX_OFFSET_DAYS, "That's over 100 years"),
     unit: z.enum(OFFSET_UNITS),
     direction: z.enum(["after", "before"]),
     sourceRef: z.string().trim().max(200).optional().or(z.literal("")),
     description: z.string().trim().max(4000).optional().or(z.literal("")),
   })
   .superRefine((v, ctx) => {
+    // The cap above is on the amount; 36,500 years would still pack to
+    // millions of days and overflow the calendar when applied.
+    if (Math.abs(packOffset(v)) > MAX_OFFSET_DAYS) {
+      ctx.addIssue({ code: "custom", path: ["amount"], message: "That's over 100 years" });
+    }
     if (v.anchor === "rule" && !v.anchorRuleId) {
       ctx.addIssue({ code: "custom", path: ["anchorRuleId"], message: "Pick the rule this one counts from" });
     }
@@ -147,10 +172,16 @@ export async function updateDeadlineRule(
   const bad = await checkAnchorRule(ruleId, parsed.data);
   if (bad) return bad;
 
-  const rule = await prisma.deadlineRule.update({
-    where: { id: ruleId },
-    data: ruleData(parsed.data),
-  });
+  let rule;
+  try {
+    rule = await prisma.deadlineRule.update({
+      where: { id: ruleId },
+      data: ruleData(parsed.data),
+    });
+  } catch (err) {
+    if (isNotFound(err)) return fail("_form", "Rule not found");
+    throw err;
+  }
   await logActivity({
     matterId: null,
     userId,
@@ -167,11 +198,17 @@ export async function setDeadlineRuleActive(
   isActive: boolean
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("automations.deadline_rule.edit");
-  const rule = await prisma.deadlineRule.update({
-    where: { id: ruleId },
-    data: { isActive },
-    select: { title: true },
-  });
+  let rule;
+  try {
+    rule = await prisma.deadlineRule.update({
+      where: { id: ruleId },
+      data: { isActive },
+      select: { title: true },
+    });
+  } catch (err) {
+    if (isNotFound(err)) return { ok: false, error: "Rule not found." };
+    throw err;
+  }
   await logActivity({
     matterId: null,
     userId,
@@ -201,7 +238,18 @@ export async function deleteDeadlineRule(
   }
   // Generated deadlines keep their rows (FK SetNull); AutoApply rows
   // pointing at the rule cascade away with it.
-  await prisma.deadlineRule.delete({ where: { id: ruleId } });
+  try {
+    await prisma.deadlineRule.delete({ where: { id: ruleId } });
+  } catch (err) {
+    if (isNotFound(err)) return { ok: false, error: "Rule not found." };
+    if (isForeignKeyViolation(err)) {
+      return {
+        ok: false,
+        error: "Another rule now counts from this one. Change or delete it first, or archive this rule instead.",
+      };
+    }
+    throw err;
+  }
   await logActivity({
     matterId: null,
     userId,
@@ -303,17 +351,23 @@ export async function updateTaskList(
   const existing = await prisma.taskList.findUnique({ where: { id: taskListId }, select: { id: true } });
   if (!existing) return fail("_form", "Task list not found");
 
-  await prisma.$transaction([
-    prisma.taskListItem.deleteMany({ where: { taskListId } }),
-    prisma.taskList.update({
-      where: { id: taskListId },
-      data: {
-        name: parsed.data.name,
-        description: parsed.data.description || null,
-        items: { create: itemRows(parsed.data.items) },
-      },
-    }),
-  ]);
+  try {
+    await prisma.$transaction([
+      prisma.taskListItem.deleteMany({ where: { taskListId } }),
+      prisma.taskList.update({
+        where: { id: taskListId },
+        data: {
+          name: parsed.data.name,
+          description: parsed.data.description || null,
+          items: { create: itemRows(parsed.data.items) },
+        },
+      }),
+    ]);
+  } catch (err) {
+    // Deleted between the check and the write; the transaction rolled back.
+    if (isNotFound(err)) return fail("_form", "Task list not found");
+    throw err;
+  }
   await logActivity({
     matterId: null,
     userId,
@@ -329,11 +383,17 @@ export async function setTaskListActive(
   isActive: boolean
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("automations.task_list.edit");
-  const list = await prisma.taskList.update({
-    where: { id: taskListId },
-    data: { isActive },
-    select: { name: true },
-  });
+  let list;
+  try {
+    list = await prisma.taskList.update({
+      where: { id: taskListId },
+      data: { isActive },
+      select: { name: true },
+    });
+  } catch (err) {
+    if (isNotFound(err)) return { ok: false, error: "Task list not found." };
+    throw err;
+  }
   await logActivity({
     matterId: null,
     userId,
@@ -351,7 +411,12 @@ export async function deleteTaskList(
   const list = await prisma.taskList.findUnique({ where: { id: taskListId }, select: { name: true } });
   if (!list) return { ok: false, error: "Task list not found." };
   // Items + AutoApply rows cascade; created tasks keep their rows.
-  await prisma.taskList.delete({ where: { id: taskListId } });
+  try {
+    await prisma.taskList.delete({ where: { id: taskListId } });
+  } catch (err) {
+    if (isNotFound(err)) return { ok: false, error: "Task list not found." };
+    throw err;
+  }
   await logActivity({
     matterId: null,
     userId,
@@ -413,7 +478,15 @@ export async function addAutoApply(
   });
   if (dupe) return fail("target", "That's already a default for this practice area");
 
-  await prisma.autoApply.create({ data: { trigger, practiceAreaId, ...target } });
+  try {
+    await prisma.autoApply.create({ data: { trigger, practiceAreaId, ...target } });
+  } catch (err) {
+    // Target (or practice area) deleted after the existence checks above.
+    if (isForeignKeyViolation(err)) {
+      return fail("target", "That rule, task list or practice area no longer exists");
+    }
+    throw err;
+  }
   await logActivity({
     matterId: null,
     userId,
@@ -437,7 +510,13 @@ export async function removeAutoApply(
     },
   });
   if (!row) return { ok: false, error: "Default not found." };
-  await prisma.autoApply.delete({ where: { id: autoApplyId } });
+  try {
+    await prisma.autoApply.delete({ where: { id: autoApplyId } });
+  } catch (err) {
+    // Another admin (or a double click) removed it first.
+    if (isNotFound(err)) return { ok: false, error: "Default not found." };
+    throw err;
+  }
   const what = row.deadlineRule
     ? `deadline rule "${row.deadlineRule.title}"`
     : `task list "${row.taskList?.name}"`;
@@ -476,31 +555,40 @@ export async function applyDeadlineRuleToMatter(
   }
   const [matter, rule, tz] = await Promise.all([
     prisma.matter.findUnique({ where: { id: matterId }, select: { id: true } }),
-    prisma.deadlineRule.findFirst({ where: { id: ruleId, isActive: true }, select: { title: true, anchorLabel: true } }),
+    prisma.deadlineRule.findFirst({ where: { id: ruleId, isActive: true }, select: { title: true, anchorLabel: true, anchor: true } }),
     getCurrentUserTimeZone(),
   ]);
   if (!matter) return { status: "error", error: "Matter not found." };
   if (!rule) return { status: "error", error: "That rule isn't available." };
 
-  const res = await prisma.$transaction((tx) =>
-    applyDeadlineRules(tx, {
+  const res = await prisma.$transaction(async (tx) => {
+    await lockMatterForApply(tx, matterId);
+    return applyDeadlineRules(tx, {
       matterId,
       ruleIds: [ruleId],
       tz,
       anchorDates: opts.anchorDate ? { [ruleId]: opts.anchorDate } : undefined,
       onDuplicate: opts.force ? "create" : "report",
       onUnplanned: "report",
-    })
-  );
+    });
+  });
   if (res.duplicates.length > 0 && res.created.length === 0 && !opts.force) {
     return { status: "duplicate", title: rule.title };
   }
   if (res.unplanned.length > 0) {
+    if (res.unplanned[0].code === "out_of_range") {
+      // No date the user could type fixes this: the rule's offset is the problem.
+      return {
+        status: "error",
+        error: `"${rule.title}" can't be applied: ${res.unplanned[0].reason}.`,
+      };
+    }
     return {
       status: "needs_date",
       title: rule.title,
       reason: res.unplanned[0].reason,
-      label: rule.anchorLabel || "Anchor date",
+      label:
+        rule.anchorLabel || (rule.anchor === "incident_date" ? "Incident date" : "Anchor date"),
     };
   }
   const created = res.created[0];
@@ -530,14 +618,15 @@ export async function applyTaskListToMatter(
   ]);
   if (!matter) return { status: "error", error: "Matter not found." };
 
-  const res = await prisma.$transaction((tx) =>
-    applyTaskList(tx, {
+  const res = await prisma.$transaction(async (tx) => {
+    await lockMatterForApply(tx, matterId);
+    return applyTaskList(tx, {
       matterId,
       taskListId,
       tz,
       onDuplicate: opts.force ? "create" : "report",
-    })
-  );
+    });
+  });
   if (!res.listName) return { status: "error", error: "That task list isn't available." };
   if (res.createdTaskIds.length === 0 && res.duplicate) {
     return { status: "duplicate", name: res.listName };

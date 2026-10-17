@@ -20,7 +20,7 @@
  */
 
 import type { Tx } from "@/lib/prisma";
-import { dateKeyInTz, parseLocalDate } from "@/lib/format-date";
+import { parseDateOnly, todayKey as todayKeyInTz } from "@/lib/format-date";
 import {
   addDaysToKey,
   deadlineDateFromKey,
@@ -31,6 +31,7 @@ import {
   unplannedReasonText,
   type DeadlineRuleAnchor,
   type PlannableRule,
+  type UnplannedRule,
 } from "./deadline-plan";
 
 export const AUTOMATION_SOURCE_TYPE = "deadline_rule";
@@ -54,7 +55,14 @@ export type ApplyDeadlineRulesResult = {
   /** Rules that already have a deadline on this matter. */
   duplicates: { ruleId: string; title: string }[];
   /** Rules that couldn't be dated (reported, or turned into tasks). */
-  unplanned: { ruleId: string; title: string; reason: string; taskId?: string }[];
+  unplanned: {
+    ruleId: string;
+    title: string;
+    reason: string;
+    /** Machine-readable reason (see `UnplannedRule`). */
+    code: UnplannedRule["reason"];
+    taskId?: string;
+  }[];
 };
 
 export async function applyDeadlineRules(
@@ -165,11 +173,16 @@ export async function applyDeadlineRules(
       const task = await tx.task.create({
         data: {
           matterId: input.matterId,
-          title: `Set date: ${r.title}`,
+          title: u.reason === "out_of_range" ? `Fix rule: ${r.title}` : `Set date: ${r.title}`,
           description:
-            `The "${r.title}" deadline rule couldn't be applied automatically because ${reason}. ` +
-            `Once the date is known, use "Apply deadline rule" on the Deadlines tab ` +
-            `(${describeOffset(r.offsetDays, r.offsetUnit, "the anchor date")}).`,
+            u.reason === "out_of_range"
+              ? // No date the user could type fixes this; the rule's offset is the problem.
+                `The "${r.title}" deadline rule couldn't be applied automatically because ${reason}. ` +
+                `Fix the rule's offset in Settings > Automations, then apply it manually from the Deadlines tab ` +
+                `(${describeOffset(r.offsetDays, r.offsetUnit, "the anchor date")}).`
+              : `The "${r.title}" deadline rule couldn't be applied automatically because ${reason}. ` +
+                `Once the date is known, use "Apply deadline rule" on the Deadlines tab ` +
+                `(${describeOffset(r.offsetDays, r.offsetUnit, "the anchor date")}).`,
           priority: r.kind === "critical" ? "urgent" : "high",
           ownerId: leadId,
           status: "open",
@@ -178,7 +191,7 @@ export async function applyDeadlineRules(
       });
       taskId = task.id;
     }
-    result.unplanned.push({ ruleId: r.id, title: r.title, reason, taskId });
+    result.unplanned.push({ ruleId: r.id, title: r.title, reason, code: u.reason, taskId });
   }
 
   return result;
@@ -218,28 +231,36 @@ export async function applyTaskList(
   }
 
   const leadId = await matterLeadId(tx, input.matterId);
-  const todayKey = dateKeyInTz(input.now ?? new Date(), input.tz);
-  const createdTaskIds: string[] = [];
-  for (const [i, item] of list.items.entries()) {
-    const task = await tx.task.create({
-      data: {
-        matterId: input.matterId,
-        title: item.title,
-        description: item.description,
-        priority: item.priority,
-        status: "open",
-        ownerId: item.assignTo === "lead" ? leadId : null,
-        dueDate:
-          item.dueOffsetDays === null
-            ? null
-            : parseLocalDate(addDaysToKey(todayKey, item.dueOffsetDays)),
-        sortOrder: i,
-        taskListId: list.id,
-      },
-      select: { id: true },
-    });
-    createdTaskIds.push(task.id);
-  }
+  const todayKey = todayKeyInTz(input.tz, input.now);
+  // Append after whatever the matter already has: hand-made tasks sit
+  // at sortOrder 0, so numbering from 0 would interleave the list with
+  // them (and with an earlier application of the same list).
+  const { _max } = await tx.task.aggregate({
+    where: { matterId: input.matterId },
+    _max: { sortOrder: true },
+  });
+  const baseOrder = (_max.sortOrder ?? -1) + 1;
+  // One round trip for the whole list (this runs inside the
+  // matter-creating transaction in auto mode). createManyAndReturn
+  // returns rows in insertion order, which `createdTaskIds` relies on.
+  const created = await tx.task.createManyAndReturn({
+    data: list.items.map((item, i) => ({
+      matterId: input.matterId,
+      title: item.title,
+      description: item.description,
+      priority: item.priority,
+      status: "open",
+      ownerId: item.assignTo === "lead" ? leadId : null,
+      dueDate:
+        item.dueOffsetDays === null
+          ? null
+          : parseDateOnly(addDaysToKey(todayKey, item.dueOffsetDays)),
+      sortOrder: baseOrder + i,
+      taskListId: list.id,
+    })),
+    select: { id: true },
+  });
+  const createdTaskIds = created.map((t) => t.id);
   return { listName: list.name, createdTaskIds, duplicate: alreadyApplied };
 }
 

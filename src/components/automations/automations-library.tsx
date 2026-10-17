@@ -8,7 +8,7 @@
 
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import {
   Archive,
   ArchiveRestore,
@@ -90,6 +90,15 @@ export function AutomationsLibrary({
       if (!res.ok) setError(res.error ?? "That didn't work.");
     });
 
+  // Deleting a rule/list cascades away every automatic default that
+  // points at it — say so before the admin confirms.
+  const defaultsNote = (kind: "rule" | "list", id: string) => {
+    const n = defaults.filter((d) => d.targetKind === kind && d.targetId === id).length;
+    return n === 0
+      ? ""
+      : ` This also removes ${n} automatic default${n === 1 ? "" : "s"} (new matters will stop getting it).`;
+  };
+
   const confirmThen = (message: string, fn: () => Promise<{ ok: boolean; error?: string }>) => {
     if (window.confirm(message)) run(fn);
   };
@@ -132,7 +141,7 @@ export function AutomationsLibrary({
                     onEdit={can.ruleEdit ? () => setRuleDialog({ open: true, rule: r }) : undefined}
                     archived={!r.isActive}
                     onToggleArchive={can.ruleEdit ? () => run(() => setDeadlineRuleActive(r.id, !r.isActive)) : undefined}
-                    onDelete={can.ruleDelete ? () => confirmThen(`Delete the rule "${r.title}"? Deadlines it already created stay on their matters.`, () => deleteDeadlineRule(r.id)) : undefined}
+                    onDelete={can.ruleDelete ? () => confirmThen(`Delete the rule "${r.title}"? Deadlines it already created stay on their matters.${defaultsNote("rule", r.id)}`, () => deleteDeadlineRule(r.id)) : undefined}
                   />
                 }
               />
@@ -171,7 +180,7 @@ export function AutomationsLibrary({
                     onEdit={can.listEdit ? () => setListDialog({ open: true, list: l }) : undefined}
                     archived={!l.isActive}
                     onToggleArchive={can.listEdit ? () => run(() => setTaskListActive(l.id, !l.isActive)) : undefined}
-                    onDelete={can.listDelete ? () => confirmThen(`Delete the task list "${l.name}"? Tasks it already created stay on their matters.`, () => deleteTaskList(l.id)) : undefined}
+                    onDelete={can.listDelete ? () => confirmThen(`Delete the task list "${l.name}"? Tasks it already created stay on their matters.${defaultsNote("list", l.id)}`, () => deleteTaskList(l.id)) : undefined}
                   />
                 }
               />
@@ -250,12 +259,28 @@ function AddDefaultForm({
     automationInitialState,
     true
   );
+  // Dispatch manually instead of <form action>: React 19 resets the
+  // form after the action settles even on a validation error, which
+  // would snap both selects back. Reset by hand only on success.
+  const formRef = useRef<HTMLFormElement>(null);
+  const [, startSubmit] = useTransition();
+  useEffect(() => {
+    if (state.status === "ok") formRef.current?.reset();
+  }, [state]);
   const selectCls =
     "h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30";
   const err = state.errors?.target?.[0] ?? state.errors?.practiceAreaId?.[0];
   if (rules.length === 0 && lists.length === 0) return null;
   return (
-    <form action={formAction} className="flex flex-wrap items-center gap-2">
+    <form
+      ref={formRef}
+      onSubmit={(e) => {
+        e.preventDefault();
+        const data = new FormData(e.currentTarget);
+        startSubmit(() => formAction(data));
+      }}
+      className="flex flex-wrap items-center gap-2"
+    >
       <input type="hidden" name="trigger" value="matter_created" />
       <select name="target" required defaultValue="" aria-label="Rule or task list" className={selectCls}>
         <option value="" disabled>Choose a rule or task list…</option>

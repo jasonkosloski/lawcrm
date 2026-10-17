@@ -7,18 +7,25 @@
  * writes the result.
  *
  * Dates are handled as YYYY-MM-DD calendar-day keys end to end, so
- * no anchor can shift a due date by a day:
- *   - incident_date: `Matter.incidentDate` is stored at UTC midnight
- *     (the documented SOL exception, ADR-012) → read via UTC getters
+ * no anchor can shift a due date by a day (ADR-012 date-only values):
+ *   - incident_date: `Matter.incidentDate` is a date-only value
+ *     (UTC midnight) → `dateOnlyKey`
  *   - matter_opened: an instant → the day it was in the caller's TZ
- *   - rule: an existing Deadline.dueDate (date-only, server-local
- *     midnight) → read via local getters
+ *   - rule: an existing Deadline.dueDate (date-only) → `dateOnlyKey`
  *   - prompt: a key the user typed
- * The result is stored the way every date-only deadline is
- * (`parseLocalDate`, server-local midnight).
+ * The result is stored like every other date-only deadline
+ * (`parseDateOnly`, UTC midnight).
+ *
+ * Due dates are plain calendar-day arithmetic: no weekend, holiday or
+ * court-day adjustment is applied.
  */
 
-import { dateKeyInTz, parseLocalDate } from "@/lib/format-date";
+import {
+  addDaysToKey as shiftDayKey,
+  dateKeyInTz,
+  dateOnlyKey,
+  parseDateOnly,
+} from "@/lib/format-date";
 
 export const DEADLINE_RULE_ANCHORS = [
   "incident_date",
@@ -54,41 +61,26 @@ export type PlannableRule = {
 
 // ── Calendar-day keys ──────────────────────────────────────────────
 
-const KEY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
-
+/** A real calendar day with a 4-digit year (rejects 2026-02-30, year
+ *  38501 and negative years that day arithmetic can overflow into). */
 export function isDayKey(value: string): boolean {
-  const m = KEY_RE.exec(value);
-  if (!m) return false;
-  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
-  return d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3];
+  return parseDateOnly(value) !== null;
 }
 
-function pad(n: number): string {
-  return String(n).padStart(2, "0");
-}
+/** Date-only value (Matter.incidentDate, Deadline.dueDate) → its day key. */
+export const dayKeyFromUtcDate = dateOnlyKey;
 
-/** UTC-midnight-stored date (Matter.incidentDate) → its day key. */
-export function dayKeyFromUtcDate(d: Date): string {
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
-}
-
-/** Server-local-midnight date (Deadline.dueDate) → its day key. */
-export function dayKeyFromLocalDate(d: Date): string {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-/** Add whole days to a day key (UTC arithmetic — no DST drift). */
+/** Add whole days to a day key (UTC arithmetic — no DST drift). The
+ *  result can fall outside the 4-digit-year range for absurd offsets;
+ *  check it with `isDayKey` before storing. */
 export function addDaysToKey(key: string, days: number): string {
-  const m = KEY_RE.exec(key);
-  if (!m) throw new Error(`Not a day key: ${key}`);
-  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
-  d.setUTCDate(d.getUTCDate() + days);
-  return dayKeyFromUtcDate(d);
+  if (parseDateOnly(key) === null) throw new Error(`Not a day key: ${key}`);
+  return shiftDayKey(key, days);
 }
 
 /** Day key → the stored Deadline.dueDate value. */
 export function deadlineDateFromKey(key: string): Date {
-  const d = parseLocalDate(key);
+  const d = parseDateOnly(key);
   if (!d) throw new Error(`Not a day key: ${key}`);
   return d;
 }
@@ -100,6 +92,9 @@ export type OffsetUnit = (typeof OFFSET_UNITS)[number];
 
 /** Days per unit — the same 365/30 convention as the SOL period. */
 const UNIT_DAYS: Record<OffsetUnit, number> = { days: 1, months: 30, years: 365 };
+
+/** Largest total offset (in days) a rule may carry — about 100 years. */
+export const MAX_OFFSET_DAYS = 36500;
 
 /** Signed total days from the form's amount + unit + direction. */
 export function packOffset(input: {
@@ -226,7 +221,8 @@ export type UnplannedRule = {
     | "no_incident_date"
     | "needs_date"
     | "anchor_rule_missing"
-    | "cycle";
+    | "cycle"
+    | "out_of_range";
 };
 
 /**
@@ -264,7 +260,7 @@ export function planDeadlineRules(
         const fromBatch = plannedKeyByRule.get(rule.anchorRuleId);
         if (fromBatch) return fromBatch;
         const existing = ctx.existingRuleDeadlines.get(rule.anchorRuleId);
-        if (existing) return dayKeyFromLocalDate(existing);
+        if (existing) return dayKeyFromUtcDate(existing);
         return "anchor_rule_missing";
       }
     }
@@ -290,8 +286,14 @@ export function planDeadlineRules(
     const anchor = anchorKeyFor(rule);
     if (isDayKey(anchor)) {
       const dueKey = addDaysToKey(anchor, rule.offsetDays);
-      plannedKeyByRule.set(rule.id, dueKey);
-      planned.push({ rule, anchorKey: anchor, dueKey });
+      if (!isDayKey(dueKey)) {
+        // An absurd stored offset (e.g. thousands of years) overflows
+        // the 4-digit year — report it instead of throwing later.
+        unplanned.push({ rule, reason: "out_of_range" });
+      } else {
+        plannedKeyByRule.set(rule.id, dueKey);
+        planned.push({ rule, anchorKey: anchor, dueKey });
+      }
     } else {
       unplanned.push({ rule, reason: anchor as UnplannedRule["reason"] });
     }
@@ -316,5 +318,7 @@ export function unplannedReasonText(
       return `it counts from "${anchorRuleTitle ?? "another rule"}", which isn't on this matter yet`;
     case "cycle":
       return "its anchor rules form a loop";
+    case "out_of_range":
+      return "the calculated date is out of range — check the rule's offset";
   }
 }

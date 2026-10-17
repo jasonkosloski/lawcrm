@@ -1,19 +1,20 @@
 /**
- * Pure planner tests. Pinned to America/Denver so the UTC-midnight
- * incident date vs local-midnight deadline conventions would show a
- * one-day shift if either were read with the wrong getters.
+ * Pure planner tests. Pinned to America/Denver so a date-only value
+ * read with local getters (or stored at local midnight) would show a
+ * one-day shift (ADR-012).
  */
 
 process.env.TZ = "America/Denver";
 
 import { describe, expect, test } from "vitest";
+import { dateOnlyKey } from "@/lib/format-date";
 import {
   addDaysToKey,
-  dayKeyFromLocalDate,
   dayKeyFromUtcDate,
   deadlineDateFromKey,
   describeOffset,
   isDayKey,
+  MAX_OFFSET_DAYS,
   packOffset,
   unpackOffset,
   planDeadlineRules,
@@ -46,10 +47,11 @@ describe("day keys", () => {
     expect(dayKeyFromUtcDate(new Date("2026-03-10T00:00:00Z"))).toBe("2026-03-10");
   });
 
-  test("local-midnight deadline dates round-trip", () => {
+  test("stored deadline dates are UTC midnight and round-trip in any zone", () => {
     const d = deadlineDateFromKey("2026-11-02");
-    expect(dayKeyFromLocalDate(d)).toBe("2026-11-02");
-    expect(d.getHours()).toBe(0);
+    expect(dateOnlyKey(d)).toBe("2026-11-02");
+    // Old code stored local midnight (07:00Z in Denver) - ADR-012 says UTC midnight.
+    expect(d.toISOString()).toBe("2026-11-02T00:00:00.000Z");
   });
 
   test("adding days crosses DST and leap days without drift", () => {
@@ -58,7 +60,10 @@ describe("day keys", () => {
     expect(addDaysToKey("2026-01-15", -30)).toBe("2025-12-16");
   });
 
-  test("isDayKey rejects impossible dates", () => {
+  test("isDayKey rejects keys the calendar math can overflow into", () => {
+    expect(isDayKey("38501-10-08")).toBe(false);
+    expect(isDayKey("-001-10-08")).toBe(false);
+    expect(isDayKey("0050-01-01")).toBe(false); // Date.UTC maps years 0-99 to 19xx
     expect(isDayKey("2026-02-30")).toBe(false);
     expect(isDayKey("2026-2-3")).toBe(false);
     expect(isDayKey("2026-02-28")).toBe(true);
@@ -131,6 +136,32 @@ describe("planDeadlineRules — anchors", () => {
       ctx({ incidentDate: null, anchorDates: new Map([["cgia", "2026-05-01"]]) })
     );
     expect(planned[0].dueKey).toBe("2026-05-11");
+  });
+});
+
+describe("planDeadlineRules — absurd offsets", () => {
+  test("an offset that overflows the calendar is reported, not thrown or stored", () => {
+    // 36,500 years packed to days: the shape a bad stored rule has.
+    const huge = packOffset({ amount: 36500, unit: "years", direction: "after" });
+    expect(huge).toBeGreaterThan(MAX_OFFSET_DAYS);
+    const { planned, unplanned } = planDeadlineRules([rule({ id: "typo", offsetDays: huge })], ctx());
+    expect(planned).toHaveLength(0);
+    expect(unplanned.map((u) => [u.rule.id, u.reason])).toEqual([["typo", "out_of_range"]]);
+    const before = planDeadlineRules([rule({ id: "typo", offsetDays: -huge })], ctx());
+    expect(before.unplanned[0].reason).toBe("out_of_range");
+  });
+
+  test("a rule counting from an out-of-range rule is unplanned too", () => {
+    const huge = rule({ id: "huge", offsetDays: packOffset({ amount: 20000, unit: "years", direction: "after" }) });
+    const dep = rule({ id: "dep", anchor: "rule", anchorRuleId: "huge", offsetDays: 1 });
+    const { planned, unplanned } = planDeadlineRules([huge, dep], ctx());
+    expect(planned).toHaveLength(0);
+    expect(unplanned.map((u) => u.reason)).toEqual(["out_of_range", "anchor_rule_missing"]);
+  });
+
+  test("the largest allowed offset still plans", () => {
+    const { planned } = planDeadlineRules([rule({ id: "max", offsetDays: MAX_OFFSET_DAYS })], ctx());
+    expect(planned[0].dueKey).toBe("2126-02-14");
   });
 });
 

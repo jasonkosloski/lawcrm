@@ -44,6 +44,8 @@ export type AutoApplyRow = {
   practiceAreaId: string | null;
   practiceAreaName: string | null;
   targetKind: "rule" | "list";
+  /** DeadlineRule or TaskList id (per targetKind). */
+  targetId: string;
   targetName: string;
   targetActive: boolean;
 };
@@ -110,6 +112,7 @@ export async function listAutoApplies(): Promise<AutoApplyRow[]> {
     practiceAreaId: r.practiceAreaId,
     practiceAreaName: r.practiceArea?.name ?? null,
     targetKind: r.deadlineRule ? "rule" : "list",
+    targetId: r.deadlineRuleId ?? r.taskListId ?? "",
     targetName: r.deadlineRule?.title ?? r.taskList?.name ?? "—",
     targetActive: r.deadlineRule?.isActive ?? r.taskList?.isActive ?? false,
   }));

@@ -98,7 +98,12 @@ export function DeadlineRuleDialog({
   }, [state, onOpenChange]);
 
   const errs = state.errors ?? {};
-  const candidates = allRules.filter((r) => r.id !== rule?.id && r.isActive);
+  // Keep the rule's current anchor selectable even when it's archived
+  // (the server accepts archived anchors); otherwise the required
+  // select would go blank and force the admin to re-point the rule.
+  const candidates = allRules.filter(
+    (r) => r.id !== rule?.id && (r.isActive || r.id === rule?.anchorRuleId)
+  );
   const n = Number.parseInt(amount, 10);
   const preview =
     Number.isFinite(n) && n >= 0
@@ -118,7 +123,8 @@ export function DeadlineRuleDialog({
           <DialogTitle>{rule ? "Edit deadline rule" : "New deadline rule"}</DialogTitle>
           <DialogDescription>
             Changes affect future applications only. Deadlines already on
-            matters keep their dates.
+            matters keep their dates. Due dates are plain calendar days: no
+            weekend, holiday or court-day adjustment.
           </DialogDescription>
         </DialogHeader>
 
@@ -145,12 +151,20 @@ export function DeadlineRuleDialog({
             </Field>
           </div>
 
+          {anchor === "incident_date" && (
+            <p className="text-[10px] text-ink-4 -mt-1.5">
+              Only resolves on matters in practice areas that track a statute
+              of limitations (that&apos;s where the incident date is recorded).
+              Otherwise the rule asks for a date, or becomes a &ldquo;Set
+              date&rdquo; task when applied automatically.
+            </p>
+          )}
           {anchor === "rule" && (
             <Field label="Which rule's deadline" error={errs.anchorRuleId?.[0]}>
               <select name="anchorRuleId" value={anchorRuleId} onChange={(e) => setAnchorRuleId(e.target.value)} required className={inputCls}>
                 <option value="">Choose a rule…</option>
                 {candidates.map((r) => (
-                  <option key={r.id} value={r.id}>{r.title}</option>
+                  <option key={r.id} value={r.id}>{r.isActive ? r.title : `${r.title} (archived)`}</option>
                 ))}
               </select>
             </Field>

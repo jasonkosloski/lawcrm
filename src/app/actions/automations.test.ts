@@ -2,7 +2,6 @@
  * automations actions — real DB; auth + TZ mocked.
  */
 
-process.env.TZ = "UTC";
 
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -14,6 +13,7 @@ vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
 }));
 
+import { Client } from "pg";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
@@ -24,12 +24,15 @@ import {
   createDeadlineRule,
   createTaskList,
   deleteDeadlineRule,
+  deleteTaskList,
   removeAutoApply,
+  setDeadlineRuleActive,
+  setTaskListActive,
   updateDeadlineRule,
   updateTaskList,
 } from "@/app/actions/automations";
 import { automationInitialState } from "@/lib/automation-form";
-import { dayKeyFromLocalDate } from "@/lib/automations/deadline-plan";
+import { dateOnlyKey } from "@/lib/format-date";
 import {
   resetDb,
   seedFirm,
@@ -109,6 +112,44 @@ describe("deadline rules", () => {
     expect(await prisma.deadlineRule.count()).toBe(0);
   });
 
+  test("a huge amount-times-unit is refused (it would overflow the calendar and block matter creation)", async () => {
+    // Each field is within its own cap, but 36,500 years is ~13M days.
+    const years = await createDeadlineRule(automationInitialState, ruleForm({ amount: "36500", unit: "years" }));
+    expect(years.errors?.amount?.[0]).toMatch(/over 100 years/);
+    const months = await createDeadlineRule(automationInitialState, ruleForm({ amount: "9999", unit: "months", direction: "before" }));
+    expect(months.errors?.amount?.[0]).toMatch(/over 100 years/);
+    expect(await prisma.deadlineRule.count()).toBe(0);
+    // 100 years of days is the edge that still saves.
+    expect((await createDeadlineRule(automationInitialState, ruleForm({ amount: "36500", unit: "days" }))).status).toBe("ok");
+  });
+
+  test("archive / restore: gated on edit, audited, a missing id is an error result not a throw", async () => {
+    await createDeadlineRule(automationInitialState, ruleForm());
+    const rule = await prisma.deadlineRule.findFirstOrThrow();
+    vi.mocked(requirePermission).mockClear();
+    expect(await setDeadlineRuleActive(rule.id, false)).toEqual({ ok: true });
+    expect(gate()).toEqual(["automations.deadline_rule.edit"]);
+    expect((await prisma.deadlineRule.findUniqueOrThrow({ where: { id: rule.id } })).isActive).toBe(false);
+    expect(await setDeadlineRuleActive(rule.id, true)).toEqual({ ok: true });
+    const titles = (await prisma.activityLog.findMany({ where: { type: "automation" } })).map((l) => l.title);
+    expect(titles).toContain("Archived deadline rule: CGIA notice");
+    expect(titles).toContain("Restored deadline rule: CGIA notice");
+
+    const missing = await setDeadlineRuleActive("does-not-exist", false);
+    expect(missing).toEqual({ ok: false, error: "Rule not found." });
+  });
+
+  test("a denied user changes nothing", async () => {
+    await createDeadlineRule(automationInitialState, ruleForm());
+    const rule = await prisma.deadlineRule.findFirstOrThrow();
+    vi.mocked(requirePermission).mockRejectedValue(new Error("Forbidden"));
+    await expect(setDeadlineRuleActive(rule.id, false)).rejects.toThrow("Forbidden");
+    await expect(deleteDeadlineRule(rule.id)).rejects.toThrow("Forbidden");
+    await expect(createDeadlineRule(automationInitialState, ruleForm({ title: "Nope" }))).rejects.toThrow("Forbidden");
+    expect(await prisma.deadlineRule.count()).toBe(1);
+    expect((await prisma.deadlineRule.findUniqueOrThrow({ where: { id: rule.id } })).isActive).toBe(true);
+  });
+
   test("update refuses a loop between rules", async () => {
     await createDeadlineRule(automationInitialState, ruleForm({ title: "A" }));
     const a = await prisma.deadlineRule.findFirstOrThrow({ where: { title: "A" } });
@@ -159,6 +200,44 @@ describe("task lists", () => {
     expect(await prisma.taskList.count()).toBe(0);
   });
 
+  test("archive / restore / delete: gated per key, audited, missing ids are error results", async () => {
+    await createTaskList(automationInitialState, fd({ name: "Intake", items }));
+    const list = await prisma.taskList.findFirstOrThrow();
+    vi.mocked(requirePermission).mockClear();
+    expect(await setTaskListActive(list.id, false)).toEqual({ ok: true });
+    expect((await prisma.taskList.findUniqueOrThrow({ where: { id: list.id } })).isActive).toBe(false);
+    expect(await setTaskListActive("does-not-exist", true)).toEqual({ ok: false, error: "Task list not found." });
+    expect(gate()).toEqual(["automations.task_list.edit", "automations.task_list.edit"]);
+
+    vi.mocked(requirePermission).mockClear();
+    expect(await deleteTaskList(list.id)).toEqual({ ok: true });
+    expect(gate()).toEqual(["automations.task_list.delete"]);
+    expect(await deleteTaskList(list.id)).toEqual({ ok: false, error: "Task list not found." });
+    expect(await prisma.taskList.count()).toBe(0);
+    const titles = (await prisma.activityLog.findMany({ where: { type: "automation" } })).map((l) => l.title);
+    expect(titles).toContain("Archived task list: Intake");
+    expect(titles).toContain("Deleted task list: Intake");
+  });
+
+  test("a denied user cannot archive or delete a list", async () => {
+    await createTaskList(automationInitialState, fd({ name: "Intake", items }));
+    const list = await prisma.taskList.findFirstOrThrow();
+    vi.mocked(requirePermission).mockRejectedValue(new Error("Forbidden"));
+    await expect(setTaskListActive(list.id, false)).rejects.toThrow("Forbidden");
+    await expect(deleteTaskList(list.id)).rejects.toThrow("Forbidden");
+    expect(await prisma.taskList.count()).toBe(1);
+    expect((await prisma.taskList.findUniqueOrThrow({ where: { id: list.id } })).isActive).toBe(true);
+  });
+
+  test("updating a list deleted after the existence check is a form error, not a thrown P2025", async () => {
+    const spy = vi.spyOn(prisma.taskList, "findUnique").mockResolvedValueOnce({ id: "ghost" } as never);
+    const res = await updateTaskList("ghost", automationInitialState, fd({ name: "X", items: '[{"title":"A"}]' }));
+    spy.mockRestore();
+    expect(res.status).toBe("error");
+    expect(res.errors?._form?.[0]).toMatch(/not found/i);
+    expect(await prisma.taskList.count()).toBe(0);
+  });
+
   test("update replaces items wholesale and leaves already-created tasks alone", async () => {
     await createTaskList(automationInitialState, fd({ name: "Intake", items }));
     const list = await prisma.taskList.findFirstOrThrow();
@@ -186,6 +265,38 @@ describe("defaults", () => {
     const titles = (await prisma.activityLog.findMany({ orderBy: { timestamp: "asc" } })).map((l) => l.title);
     expect(titles.some((t) => /will get deadline rule "CGIA notice"/.test(t))).toBe(true);
     expect(titles.some((t) => /no longer get deadline rule "CGIA notice"/.test(t))).toBe(true);
+  });
+
+  test("removing the same default twice is an error result, not a thrown P2025", async () => {
+    await createDeadlineRule(automationInitialState, ruleForm());
+    const rule = await prisma.deadlineRule.findFirstOrThrow();
+    await addAutoApply(automationInitialState, fd({ practiceAreaId: areaId, target: `rule:${rule.id}` }));
+    const row = await prisma.autoApply.findFirstOrThrow();
+    expect((await removeAutoApply(row.id)).ok).toBe(true);
+    expect(await removeAutoApply(row.id)).toEqual({ ok: false, error: "Default not found." });
+    // The race itself: the row passes the existence check, then vanishes before the delete.
+    const gone = await prisma.autoApply.create({ data: { trigger: "matter_created", practiceAreaId: areaId, deadlineRuleId: rule.id } });
+    const stale = await prisma.autoApply.findUniqueOrThrow({
+      where: { id: gone.id },
+      include: {
+        practiceArea: { select: { name: true } },
+        deadlineRule: { select: { title: true } },
+        taskList: { select: { name: true } },
+      },
+    });
+    await prisma.autoApply.delete({ where: { id: gone.id } });
+    const spy = vi.spyOn(prisma.autoApply, "findUnique").mockResolvedValueOnce(stale as never);
+    expect(await removeAutoApply(gone.id)).toEqual({ ok: false, error: "Default not found." });
+    spy.mockRestore();
+  });
+
+  test("adding a default whose target is deleted after the existence check is a field error", async () => {
+    const spy = vi.spyOn(prisma.deadlineRule, "findUnique").mockResolvedValueOnce({ title: "Ghost" } as never);
+    const res = await addAutoApply(automationInitialState, fd({ practiceAreaId: areaId, target: "rule:ghost-id" }));
+    spy.mockRestore();
+    expect(res.status).toBe("error");
+    expect(res.errors?.target?.[0]).toMatch(/no longer exists/);
+    expect(await prisma.autoApply.count()).toBe(0);
   });
 
   test("empty practice area means all areas", async () => {
@@ -221,7 +332,92 @@ describe("manual apply", () => {
     const done = await applyDeadlineRuleToMatter(matterId, rule.id, { anchorDate: "2026-11-01" });
     expect(done).toMatchObject({ status: "ok", dueKey: "2026-11-22" });
     const d = await prisma.deadline.findFirstOrThrow();
-    expect(dayKeyFromLocalDate(d.dueDate)).toBe("2026-11-22");
+    expect(dateOnlyKey(d.dueDate)).toBe("2026-11-22");
+    expect(d.dueDate.toISOString()).toBe("2026-11-22T00:00:00.000Z");
+  });
+
+  test("rule: a duplicate that also needs a date works when resent with force AND the date", async () => {
+    await createDeadlineRule(automationInitialState, ruleForm({ title: "Answer due", anchor: "prompt", anchorLabel: "Date of service", amount: "21" }));
+    const rule = await prisma.deadlineRule.findFirstOrThrow();
+    await applyDeadlineRuleToMatter(matterId, rule.id, { anchorDate: "2026-11-01" });
+    // Plain re-apply: duplicate (before any date is asked for).
+    expect(await applyDeadlineRuleToMatter(matterId, rule.id)).toEqual({ status: "duplicate", title: "Answer due" });
+    // Forced without a date: now the date is needed.
+    expect(await applyDeadlineRuleToMatter(matterId, rule.id, { force: true })).toMatchObject({ status: "needs_date" });
+    // Forced WITH the date: the second deadline is created.
+    expect(await applyDeadlineRuleToMatter(matterId, rule.id, { force: true, anchorDate: "2026-12-01" })).toMatchObject({
+      status: "ok",
+      dueKey: "2026-12-22",
+    });
+    expect(await prisma.deadline.count({ where: { matterId } })).toBe(2);
+  });
+
+  test("rule: incident_date rules without an incident date ask for the 'Incident date'", async () => {
+    await prisma.matter.update({ where: { id: matterId }, data: { incidentDate: null } });
+    await createDeadlineRule(automationInitialState, ruleForm());
+    const rule = await prisma.deadlineRule.findFirstOrThrow();
+    expect(await applyDeadlineRuleToMatter(matterId, rule.id)).toMatchObject({
+      status: "needs_date",
+      label: "Incident date",
+    });
+  });
+
+  test("rule: a stored absurd offset is an error result, not a thrown 500", async () => {
+    const typo = await prisma.deadlineRule.create({
+      data: { title: "Typo", anchor: "incident_date", offsetDays: 36500 * 365, offsetUnit: "years" },
+    });
+    const res = await applyDeadlineRuleToMatter(matterId, typo.id);
+    expect(res.status).toBe("error");
+    expect(await prisma.deadline.count({ where: { matterId } })).toBe(0);
+  });
+
+  test("rule: two simultaneous applies create one deadline (the other sees the duplicate)", async () => {
+    await createDeadlineRule(automationInitialState, ruleForm());
+    const rule = await prisma.deadlineRule.findFirstOrThrow();
+    const results = await Promise.all([
+      applyDeadlineRuleToMatter(matterId, rule.id),
+      applyDeadlineRuleToMatter(matterId, rule.id),
+    ]);
+    expect(results.map((r) => r.status).sort()).toEqual(["duplicate", "ok"]);
+    expect(await prisma.deadline.count({ where: { matterId } })).toBe(1);
+  });
+
+  test("task list: two simultaneous applies create one copy", async () => {
+    await createTaskList(automationInitialState, fd({ name: "Intake", items: '[{"title":"A"},{"title":"B"}]' }));
+    const list = await prisma.taskList.findFirstOrThrow();
+    const results = await Promise.all([
+      applyTaskListToMatter(matterId, list.id),
+      applyTaskListToMatter(matterId, list.id),
+    ]);
+    expect(results.map((r) => r.status).sort()).toEqual(["duplicate", "ok"]);
+    expect(await prisma.task.count({ where: { matterId } })).toBe(2);
+  });
+
+  test("apply waits on the per-matter advisory lock (proves the lock is taken)", async () => {
+    // The app client's pool is capped at 1 connection, so the two "simultaneous"
+    // tests above are serialized by the pool and don't prove the lock. Hold the
+    // lock from a separate raw connection instead and assert the apply blocks.
+    await createDeadlineRule(automationInitialState, ruleForm());
+    const rule = await prisma.deadlineRule.findFirstOrThrow();
+    const holder = new Client({ connectionString: process.env.DATABASE_URL });
+    await holder.connect();
+    try {
+      await holder.query("BEGIN");
+      await holder.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`automation-apply:${matterId}`]);
+      let settled = false;
+      const apply = applyDeadlineRuleToMatter(matterId, rule.id).then((r) => {
+        settled = true;
+        return r;
+      });
+      await new Promise((r) => setTimeout(r, 500));
+      expect(settled).toBe(false);
+      await holder.query("COMMIT"); // releases the xact lock
+      expect((await apply).status).toBe("ok");
+      expect(await prisma.deadline.count({ where: { matterId } })).toBe(1);
+    } finally {
+      await holder.query("ROLLBACK").catch(() => {});
+      await holder.end();
+    }
   });
 
   test("rule: a malformed date is refused before anything runs", async () => {
