@@ -33,15 +33,13 @@ import {
   expenseEditedTitle,
   expenseLoggedTitle,
 } from "@/lib/expense-activity";
-// Date-only input ("YYYY-MM-DD") must parse to LOCAL midnight —
-// `new Date(value)` reads it as UTC midnight, which drifts the
-// expense a day early for anyone west of UTC. See parseLocalDate.
-import { parseLocalDate } from "@/lib/format-date";
+// Expense.date is a date-only value (ADR-012): "YYYY-MM-DD" parses to
+// UTC midnight and is read back in UTC — no time zone is ever applied.
+import { parseDateOnly } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
 import {
   EXPENSE_CATEGORIES,
   EXPENSE_CATEGORY_LABEL,
-  expenseInitialState as _expenseInitialState,
   type ExpenseFormState,
 } from "@/lib/expense-constants";
 
@@ -99,6 +97,25 @@ async function resolveReceiptDocumentId(
   return doc.id;
 }
 
+const BILLED_EDIT_ERROR =
+  "This expense has been billed on an invoice — void or edit the invoice first.";
+const BILLED_DELETE_ERROR =
+  "This expense has been billed on an invoice — void the invoice first if you need to remove the cost.";
+
+/** A guarded write (`invoiceId: null`) matched nothing: work out
+ *  whether the row was billed in the meantime or is simply gone. */
+async function whyExpenseWriteFailed(
+  expenseId: string,
+  op: "edit" | "delete"
+): Promise<string> {
+  const row = await prisma.expense.findUnique({
+    where: { id: expenseId },
+    select: { invoiceId: true },
+  });
+  if (!row) return "Expense not found.";
+  return op === "edit" ? BILLED_EDIT_ERROR : BILLED_DELETE_ERROR;
+}
+
 // ── Create ──────────────────────────────────────────────────────────────
 
 export async function createExpense(
@@ -133,7 +150,7 @@ export async function createExpense(
     data.receiptDocumentId
   );
 
-  const date = parseLocalDate(data.date);
+  const date = parseDateOnly(data.date);
   if (!date) {
     return { status: "error", errors: { date: ["Invalid date"] } };
   }
@@ -193,7 +210,13 @@ export async function updateExpense(
 
   const existing = await prisma.expense.findUnique({
     where: { id: expenseId },
-    select: { id: true, matterId: true, invoiceId: true },
+    select: {
+      id: true,
+      matterId: true,
+      invoiceId: true,
+      amount: true,
+      description: true,
+    },
   });
   if (!existing) {
     return { status: "error", error: "Expense not found." };
@@ -202,11 +225,7 @@ export async function updateExpense(
   // invoice's amounts would silently drift. Void/edit the invoice
   // first if a correction is needed.
   if (existing.invoiceId) {
-    return {
-      status: "error",
-      error:
-        "This expense has been billed on an invoice — void or edit the invoice first.",
-    };
+    return { status: "error", error: BILLED_EDIT_ERROR };
   }
 
   const receiptDocumentId = await resolveReceiptDocumentId(
@@ -214,18 +233,22 @@ export async function updateExpense(
     data.receiptDocumentId
   );
 
-  const date = parseLocalDate(data.date);
+  const date = parseDateOnly(data.date);
   if (!date) {
     return { status: "error", errors: { date: ["Invalid date"] } };
   }
 
-  await prisma.expense.update({
-    where: { id: expenseId },
+  // The `invoiceId: null` guard is part of the write itself: invoice
+  // generation links expenses by id, and a check-then-write by id
+  // alone would let an edit land on a row an invoice just claimed.
+  const newAmount = new Prisma.Decimal(data.amount);
+  const { count } = await prisma.expense.updateMany({
+    where: { id: expenseId, invoiceId: null },
     data: {
       date,
       description: data.description,
       category: data.category,
-      amount: new Prisma.Decimal(data.amount),
+      amount: newAmount,
       utbmsCode: data.utbmsCode || null,
       billable: data.billable === "on",
       clientAdvanced: data.clientAdvanced === "on",
@@ -233,12 +256,18 @@ export async function updateExpense(
       receiptDocumentId,
     },
   });
+  if (count === 0) {
+    return { status: "error", error: await whyExpenseWriteFailed(expenseId, "edit") };
+  }
 
   await logActivity({
     matterId: existing.matterId,
     userId: actorId,
     type: "filing",
     title: expenseEditedTitle(data.description),
+    detail: existing.amount.equals(newAmount)
+      ? undefined
+      : `Amount: $${existing.amount.toFixed(2)} → $${newAmount.toFixed(2)}`,
   });
 
   revalidatePath(`/matters/${existing.matterId}/time`);
@@ -267,14 +296,17 @@ export async function deleteExpense(
   });
   if (!existing) return { ok: false, error: "Expense not found." };
   if (existing.invoiceId) {
-    return {
-      ok: false,
-      error:
-        "This expense has been billed on an invoice — void the invoice first if you need to remove the cost.",
-    };
+    return { ok: false, error: BILLED_DELETE_ERROR };
   }
 
-  await prisma.expense.delete({ where: { id: existing.id } });
+  // Guarded delete (see updateExpense): count 0 means an invoice
+  // claimed the row — or someone else deleted it — since the read.
+  const { count } = await prisma.expense.deleteMany({
+    where: { id: existing.id, invoiceId: null },
+  });
+  if (count === 0) {
+    return { ok: false, error: await whyExpenseWriteFailed(existing.id, "delete") };
+  }
 
   await logActivity({
     matterId: existing.matterId,

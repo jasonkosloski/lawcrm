@@ -63,6 +63,7 @@ import { TrustTransactionForm } from "@/components/matters/billing/trust-transac
 import { SettlementApprovals } from "@/components/matters/settlement/settlement-approvals";
 import { SettlementComposer } from "@/components/matters/settlement/settlement-composer";
 import { SettlementLienForm } from "@/components/matters/settlement/settlement-lien-form";
+import { SettlementLienList } from "@/components/matters/settlement/settlement-lien-list";
 import {
   getMatterBilling,
   getInvoiceById,
@@ -924,6 +925,13 @@ function SettlementCard({
 }) {
   const settlementLocked =
     settlement?.status === "disbursed" || settlement?.status === "closed";
+  // Liens move the client net, so they lock with the sign-offs
+  // (approved) and the money (disbursed/closed). The server enforces
+  // the same rule.
+  const liensLocked =
+    settlement?.status === "approved" ||
+    settlement?.status === "disbursed" ||
+    settlement?.status === "closed";
   return (
     <Card className="p-0 overflow-hidden">
       <CardHeader className="pb-2 pt-4 px-4">
@@ -1012,54 +1020,42 @@ function SettlementCard({
               <dt className="text-ink font-semibold pt-1.5 border-t border-line mt-1">
                 Client net
               </dt>
-              <dd className="font-mono font-semibold text-ok pt-1.5 border-t border-line mt-1">
-                {formatMoney(settlement.clientNet)}
+              <dd
+                className={cn(
+                  "font-mono font-semibold pt-1.5 border-t border-line mt-1",
+                  settlement.clientNet < 0 ? "text-warn" : "text-ok"
+                )}
+              >
+                {settlement.clientNet < 0
+                  ? `−${formatMoney(-settlement.clientNet)}`
+                  : formatMoney(settlement.clientNet)}
               </dd>
             </dl>
+
+            {/* The net is signed, never clamped: deductions larger
+                than the gross are a shortfall the firm would be
+                paying out of pocket, not a clean $0.00. */}
+            {settlement.clientNet < 0 && (
+              <div
+                role="alert"
+                className="px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn"
+              >
+                Shortfall: the fee, costs and liens exceed the settlement
+                by {formatMoney(-settlement.clientNet)}. Resolve before
+                disbursing.
+              </div>
+            )}
 
             {/* Liens list (read-only chips by default; the form
                 below adds new ones when the user has the
                 permission). */}
-            {settlement.liens.length > 0 && (
-              <div className="flex flex-col gap-1.5">
-                <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
-                  Liens
-                </div>
-                <ul className="border border-line rounded-md overflow-hidden divide-y divide-line">
-                  {settlement.liens.map((l) => (
-                    <li
-                      key={l.id}
-                      className="flex items-center justify-between gap-3 px-3 py-2 text-2xs"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="text-ink truncate">
-                          {l.lienholder}
-                        </div>
-                        <div className="text-ink-4 mt-0.5">
-                          {l.lienholderType ?? "—"} · {l.status}
-                        </div>
-                      </div>
-                      <div className="text-right font-mono">
-                        <div className="text-ink">
-                          {formatMoney(l.effectiveAmount)}
-                        </div>
-                        {l.negotiatedAmount !== null &&
-                          l.negotiatedAmount < l.originalAmount && (
-                            <div className="text-2xs text-ink-4 line-through">
-                              {formatMoney(l.originalAmount)}
-                            </div>
-                          )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <SettlementLienList
+              liens={settlement.liens}
+              canManage={canManageLiens}
+              locked={liensLocked}
+            />
 
-            {/* Liens are frozen once the settlement is disbursed /
-                closed (addSettlementLien refuses) — don't offer a
-                form that can only fail on submit. */}
-            {canManageLiens && !settlementLocked && (
+            {canManageLiens && !liensLocked && (
               <SettlementLienForm settlementId={settlement.id} />
             )}
 

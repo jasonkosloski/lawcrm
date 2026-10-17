@@ -13,8 +13,9 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { UserTimeZoneProvider } from "@/components/user-time-zone";
 
 vi.mock("@/app/actions/settlements", () => ({
   setApprovalStepStatus: vi.fn(),
@@ -280,5 +281,28 @@ describe("SettlementApprovals — error surface", () => {
   });
 });
 
-// Suppress unused-import warning when only some helpers are used.
-void within;
+describe("SettlementApprovals — approval time uses the profile zone", () => {
+  // 2026-04-25T12:00:00Z is 6 AM in Denver (MDT) and noon in UTC. The
+  // text must follow the PROVIDER zone, not the runtime zone, so the
+  // server render and the hydrated render agree.
+  const at = (tz: string) =>
+    render(
+      <UserTimeZoneProvider timeZone={tz}>
+        <SettlementApprovals
+          approvals={SAMPLE_APPROVALS}
+          canApprove={false}
+          settlementLocked={false}
+        />
+      </UserTimeZoneProvider>
+    );
+
+  test("Denver profile zone shows 6:00 AM", () => {
+    at("America/Denver");
+    expect(screen.getByText(/Approved by Jason Kosloski.*6:00\s?AM/)).toBeInTheDocument();
+  });
+
+  test("UTC profile zone shows 12:00 PM", () => {
+    at("UTC");
+    expect(screen.getByText(/Approved by Jason Kosloski.*12:00\s?PM/)).toBeInTheDocument();
+  });
+});

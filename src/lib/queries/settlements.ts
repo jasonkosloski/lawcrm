@@ -4,12 +4,14 @@
  * Today the convention is "at most one settlement per matter" (the
  * schema allows many but in practice contingency matters resolve
  * once). We expose a `getMatterSettlement(matterId)` that returns
- * the latest settlement on a matter or null, plus the full
+ * the settlement on a matter (the OLDEST row, the same one
+ * upsertSettlement locks and updates) or null, plus the full
  * waterfall computation (gross → firm fee → advanced costs →
  * liens → client net) so the page renders plain numbers.
  */
 
 import { prisma } from "@/lib/prisma";
+import { computeSettlementWaterfall } from "@/lib/settlement-waterfall";
 
 export type SettlementLienRow = {
   id: string;
@@ -39,8 +41,9 @@ export type MatterSettlement = {
   status: string;
   /** Gross is what the carrier / opposing side agreed to pay. */
   grossAmount: number;
-  /** Attorney fee — `grossAmount * firmFeePercent` when percent
-   *  is set, otherwise the explicit `firmFee` column. */
+  /** Attorney fee — `grossAmount * firmFeePercent` (rounded to
+   *  cents half-up) when percent is set — including 0% — otherwise
+   *  the explicit `firmFee` column. */
   firmFee: number;
   firmFeePercent: number | null;
   /** Costs the firm advanced on the matter and is being repaid
@@ -51,10 +54,10 @@ export type MatterSettlement = {
    *  pulled out of the gross before the client's net. */
   lienTotal: number;
   /** What the client actually walks away with: gross − fee −
-   *  advanced costs − lien total. We compute this fresh on read
-   *  rather than trusting `clientNet` because the latter can
-   *  drift if a lien gets negotiated and `clientNet` isn't
-   *  rewritten. */
+   *  advanced costs − lien total. Computed fresh on read — the
+   *  `Settlement.clientNet` column is never written and is not
+   *  used. SIGNED: a negative value is a shortfall (the deductions
+   *  exceed the gross) and must be surfaced, never clamped to 0. */
   clientNet: number;
   liens: SettlementLienRow[];
   approvals: SettlementApprovalRow[];
@@ -82,46 +85,40 @@ export async function getMatterSettlement(
   });
   if (!row) return null;
 
-  const grossAmount = row.grossAmount.toNumber();
-  // Compute firmFee from percent when present, else trust the
-  // stored fee. firmFeePercent is the source of truth on most
-  // contingency matters; the explicit fee column is here for
-  // hourly/flat-fee settlements where a percentage doesn't apply.
-  const firmFee = row.firmFeePercent
-    ? Math.round(grossAmount * row.firmFeePercent.toNumber()) / 100
-    : row.firmFee.toNumber();
-  const advancedCosts = row.advancedCosts.toNumber();
-
-  const liens: SettlementLienRow[] = row.liens.map((l) => {
-    const original = l.originalAmount.toNumber();
-    const negotiated = l.negotiatedAmount?.toNumber() ?? null;
-    const effective = negotiated ?? original;
-    return {
-      id: l.id,
-      lienholder: l.lienholder,
-      lienholderType: l.lienholderType,
-      originalAmount: original,
-      negotiatedAmount: negotiated,
-      effectiveAmount: effective,
-      status: l.status,
-    };
+  // Exact Decimal math (half-up cents) shared with the action that
+  // stores the fee — see src/lib/settlement-waterfall.ts. The
+  // percent is the source of truth on most contingency matters; the
+  // explicit fee column covers hourly/flat-fee settlements.
+  const waterfall = computeSettlementWaterfall({
+    grossAmount: row.grossAmount,
+    firmFeePercent: row.firmFeePercent,
+    firmFee: row.firmFee,
+    advancedCosts: row.advancedCosts,
+    liens: row.liens.map((l) => ({
+      originalAmount: l.originalAmount,
+      negotiatedAmount: l.negotiatedAmount,
+    })),
   });
-  const lienTotal = liens.reduce((sum, l) => sum + l.effectiveAmount, 0);
 
-  const clientNet = Math.max(
-    0,
-    grossAmount - firmFee - advancedCosts - lienTotal
-  );
+  const liens: SettlementLienRow[] = row.liens.map((l, i) => ({
+    id: l.id,
+    lienholder: l.lienholder,
+    lienholderType: l.lienholderType,
+    originalAmount: l.originalAmount.toNumber(),
+    negotiatedAmount: l.negotiatedAmount?.toNumber() ?? null,
+    effectiveAmount: waterfall.lienAmounts[i].toNumber(),
+    status: l.status,
+  }));
 
   return {
     id: row.id,
     status: row.status,
-    grossAmount,
-    firmFee,
+    grossAmount: row.grossAmount.toNumber(),
+    firmFee: waterfall.firmFee.toNumber(),
     firmFeePercent: row.firmFeePercent?.toNumber() ?? null,
-    advancedCosts,
-    lienTotal,
-    clientNet,
+    advancedCosts: row.advancedCosts.toNumber(),
+    lienTotal: waterfall.lienTotal.toNumber(),
+    clientNet: waterfall.clientNet.toNumber(),
     liens,
     approvals: row.approvals.map((a) => ({
       id: a.id,

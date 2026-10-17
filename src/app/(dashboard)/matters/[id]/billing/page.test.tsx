@@ -85,6 +85,21 @@ vi.mock("@/components/matters/settlement/settlement-approvals", () => ({
 vi.mock("@/components/matters/settlement/settlement-composer", () => ({
   SettlementComposer: () => <div data-testid="settlement-composer" />,
 }));
+vi.mock("@/components/matters/settlement/settlement-lien-list", () => ({
+  SettlementLienList: ({
+    liens,
+    canManage,
+  }: {
+    liens: unknown[];
+    canManage: boolean;
+  }) => (
+    <div
+      data-testid="settlement-lien-list"
+      data-count={liens.length}
+      data-can-manage={String(canManage)}
+    />
+  ),
+}));
 vi.mock("@/components/matters/settlement/settlement-lien-form", () => ({
   SettlementLienForm: () => <div data-testid="settlement-lien-form" />,
 }));
@@ -219,6 +234,44 @@ describe("MatterBillingPage — matters.settlement.view gate", () => {
     // Read-only holder: no composer, no lien form.
     expect(screen.queryByTestId("settlement-composer")).toBeNull();
     expect(screen.queryByTestId("settlement-lien-form")).toBeNull();
+  });
+
+  test("negative client net renders as a shortfall, not a clean $0.00", async () => {
+    grant("matters.settlement.view");
+    await renderPage({
+      settlement: { ...settlement, lienTotal: 15_000, clientNet: -4_000 },
+    });
+    expect(screen.getByRole("alert").textContent).toMatch(/\$4,000\.00/);
+    expect(screen.getByText("−$4,000.00")).toBeTruthy();
+  });
+
+  test("a non-negative net shows no shortfall alert", async () => {
+    grant("matters.settlement.view");
+    await renderPage({ settlement });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  test("liens list gets canManage from matters.settlement.manage_liens", async () => {
+    grant("matters.settlement.view", "matters.settlement.manage_liens");
+    await renderPage({
+      settlement: {
+        ...settlement,
+        liens: [
+          {
+            id: "l1",
+            lienholder: "Denver Health",
+            lienholderType: "hospital",
+            originalAmount: 5000,
+            negotiatedAmount: null,
+            effectiveAmount: 5000,
+            status: "pending",
+          },
+        ],
+      },
+    });
+    expect(
+      screen.getByTestId("settlement-lien-list").getAttribute("data-can-manage")
+    ).toBe("true");
   });
 
   test("view + edit with no settlement yet — empty-state composer shows", async () => {

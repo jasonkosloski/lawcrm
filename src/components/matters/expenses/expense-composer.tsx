@@ -14,23 +14,20 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useId, useState } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { createExpense } from "@/app/actions/expenses";
+import { useUserTimeZone } from "@/components/user-time-zone";
+import { todayKey } from "@/lib/format-date";
 import {
   expenseInitialState,
   EXPENSE_CATEGORIES,
   EXPENSE_CATEGORY_LABEL,
   type ExpenseFormState,
 } from "@/lib/expense-constants";
-
-const todayIso = (): string => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
 
 export type ExpenseDocumentOption = {
   id: string;
@@ -56,7 +53,12 @@ export function ExpenseComposer({
     FormData
   >(action, expenseInitialState, expanded);
 
-  const [date, setDate] = useState(todayIso());
+  const uid = useId();
+  // Default date = today in the viewer's profile zone. Expense.date is
+  // a date-only value (ADR-012), so this is a calendar-day key, not an
+  // instant. Lazy initializer: the clock is read once, not per render.
+  const tz = useUserTimeZone();
+  const [date, setDate] = useState(() => todayKey(tz));
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] =
@@ -67,10 +69,18 @@ export function ExpenseComposer({
   const [notes, setNotes] = useState("");
   const [receiptDocumentId, setReceiptDocumentId] = useState("");
 
-  useEffect(() => {
+  // Reset + collapse when a submission succeeds. The action already
+  // revalidated the page, so the new row shows in the table below.
+  // Adjusts state during render (React's "you might not need an
+  // effect" pattern), keyed on the state OBJECT, not state.status:
+  // useActionState keeps its state across submissions, so after the
+  // first success the status string is "ok" forever and a second
+  // success would be missed. Each action invocation returns a fresh
+  // object, so identity is the reliable signal.
+  const [handledState, setHandledState] = useState(state);
+  if (state !== handledState) {
+    setHandledState(state);
     if (state.status === "ok") {
-      // Reset the form to collapsed state. The action revalidated
-      // the page so the new row already shows in the table below.
       setExpanded(false);
       setAmount("");
       setDescription("");
@@ -79,16 +89,10 @@ export function ExpenseComposer({
       setReceiptDocumentId("");
       setBillable(true);
       setClientAdvanced(false);
-      setDate(todayIso());
+      setDate(todayKey(tz));
       setCategory("filing_fee");
     }
-    // Deps key on the state OBJECT, not state.status: useActionState
-    // keeps its state across submissions, so after the first success
-    // the status string is "ok" forever and a second success would
-    // skip the effect, leaving stale values in the form. Each action
-    // invocation returns a fresh object, so identity is the reliable
-    // signal.
-  }, [state]);
+  }
 
   const errs = state.errors ?? {};
 
@@ -123,8 +127,9 @@ export function ExpenseComposer({
       </div>
 
       <div className="grid grid-cols-3 gap-3">
-        <Field label="Date" required>
+        <Field label="Date" htmlFor={`${uid}-date`} required>
           <input
+            id={`${uid}-date`}
             name="date"
             type="date"
             required
@@ -134,8 +139,9 @@ export function ExpenseComposer({
           />
           {errs.date && <FieldError>{errs.date[0]}</FieldError>}
         </Field>
-        <Field label="Amount" required>
+        <Field label="Amount" htmlFor={`${uid}-amount`} required>
           <input
+            id={`${uid}-amount`}
             name="amount"
             type="text"
             inputMode="decimal"
@@ -151,8 +157,9 @@ export function ExpenseComposer({
           />
           {errs.amount && <FieldError>{errs.amount[0]}</FieldError>}
         </Field>
-        <Field label="Category">
+        <Field label="Category" htmlFor={`${uid}-category`}>
           <select
+            id={`${uid}-category`}
             name="category"
             value={category}
             onChange={(e) =>
@@ -171,8 +178,9 @@ export function ExpenseComposer({
         </Field>
       </div>
 
-      <Field label="Description" required>
+      <Field label="Description" htmlFor={`${uid}-description`} required>
         <input
+          id={`${uid}-description`}
           name="description"
           type="text"
           required
@@ -186,8 +194,9 @@ export function ExpenseComposer({
       </Field>
 
       <div className="grid grid-cols-3 gap-3">
-        <Field label="UTBMS code">
+        <Field label="UTBMS code" htmlFor={`${uid}-utbms`}>
           <input
+            id={`${uid}-utbms`}
             name="utbmsCode"
             type="text"
             maxLength={20}
@@ -217,8 +226,9 @@ export function ExpenseComposer({
         </label>
       </div>
 
-      <Field label="Notes">
+      <Field label="Notes" htmlFor={`${uid}-notes`}>
         <textarea
+          id={`${uid}-notes`}
           name="notes"
           rows={2}
           maxLength={1000}
@@ -233,8 +243,9 @@ export function ExpenseComposer({
           has documents to pick from. Upload a receipt via the
           Documents tab first, then attach it here. */}
       {documentOptions.length > 0 && (
-        <Field label="Receipt">
+        <Field label="Receipt" htmlFor={`${uid}-receipt`}>
           <select
+            id={`${uid}-receipt`}
             name="receiptDocumentId"
             value={receiptDocumentId}
             onChange={(e) => setReceiptDocumentId(e.target.value)}
@@ -275,16 +286,22 @@ const inputClass =
 
 function Field({
   label,
+  htmlFor,
   required,
   children,
 }: {
   label: string;
+  /** id of the control this label names. */
+  htmlFor: string;
   required?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+      <label
+        htmlFor={htmlFor}
+        className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+      >
         {label} {required && <span className="text-warn">*</span>}
       </label>
       {children}

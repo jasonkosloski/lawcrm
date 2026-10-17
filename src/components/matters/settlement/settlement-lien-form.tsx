@@ -1,18 +1,20 @@
 /**
  * Settlement Lien composer — append-only form for adding a lien
- * row to an existing settlement. Edit / negotiate / delete on
- * existing rows is wired separately via per-row actions.
+ * row to an existing settlement. Editing / negotiating / deleting an
+ * existing row lives in settlement-lien-list.tsx (per-row actions).
  */
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useId, useState } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { addSettlementLien } from "@/app/actions/settlements";
 import {
+  LIENHOLDER_TYPES,
+  LIENHOLDER_TYPE_LABEL,
   settlementInitialState,
   type SettlementFormState,
 } from "@/lib/settlement-constants";
@@ -22,6 +24,7 @@ export function SettlementLienForm({
 }: {
   settlementId: string;
 }) {
+  const uid = useId();
   const [expanded, setExpanded] = useState(false);
   const action = addSettlementLien.bind(null, settlementId);
   // Wrapped useActionState: masks state left over from a previous
@@ -36,20 +39,22 @@ export function SettlementLienForm({
   const [lienholderType, setLienholderType] = useState("");
   const [originalAmount, setOriginalAmount] = useState("");
 
-  useEffect(() => {
+  // Reset + collapse once an add succeeds. Adjusts state during
+  // render, keyed on the state OBJECT, not state.status:
+  // useActionState keeps its state across submissions, so after the
+  // first success the status string is "ok" forever and a second
+  // success would be missed. Each action invocation returns a fresh
+  // object, so identity is the reliable signal.
+  const [handledState, setHandledState] = useState(state);
+  if (state !== handledState) {
+    setHandledState(state);
     if (state.status === "ok") {
       setExpanded(false);
       setLienholder("");
       setLienholderType("");
       setOriginalAmount("");
     }
-    // Deps key on the state OBJECT, not state.status: useActionState
-    // keeps its state across submissions, so after the first success
-    // the status string is "ok" forever and a second success would
-    // skip the effect, leaving stale values in the form. Each action
-    // invocation returns a fresh object, so identity is the reliable
-    // signal.
-  }, [state]);
+  }
 
   if (!expanded) {
     return (
@@ -85,10 +90,14 @@ export function SettlementLienForm({
 
       <div className="grid grid-cols-2 gap-2">
         <div className="flex flex-col gap-1">
-          <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+          <label
+            htmlFor={`${uid}-lienholder`}
+            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+          >
             Lienholder <span className="text-warn">*</span>
           </label>
           <input
+            id={`${uid}-lienholder`}
             name="lienholder"
             type="text"
             required
@@ -97,33 +106,42 @@ export function SettlementLienForm({
             onChange={(e) => setLienholder(e.target.value)}
             className={cn(inputClass, errs.lienholder && "border-warn")}
           />
+          {errs.lienholder && <FieldError>{errs.lienholder[0]}</FieldError>}
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+          <label
+            htmlFor={`${uid}-type`}
+            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+          >
             Type
           </label>
           <select
+            id={`${uid}-type`}
             name="lienholderType"
             value={lienholderType}
             onChange={(e) => setLienholderType(e.target.value)}
             className={inputClass}
           >
             <option value="">—</option>
-            <option value="hospital">Hospital</option>
-            <option value="physician">Physician</option>
-            <option value="insurance">Insurance / subrogation</option>
-            <option value="government">Government (Medicare/Medicaid)</option>
-            <option value="other">Other</option>
+            {LIENHOLDER_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {LIENHOLDER_TYPE_LABEL[t]}
+              </option>
+            ))}
           </select>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
         <div className="flex flex-col gap-1">
-          <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+          <label
+            htmlFor={`${uid}-amount`}
+            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+          >
             Original amount <span className="text-warn">*</span>
           </label>
           <input
+            id={`${uid}-amount`}
             name="originalAmount"
             type="text"
             inputMode="decimal"
@@ -133,6 +151,9 @@ export function SettlementLienForm({
             onChange={(e) => setOriginalAmount(e.target.value)}
             className={cn(inputClass, "font-mono", errs.originalAmount && "border-warn")}
           />
+          {errs.originalAmount && (
+            <FieldError>{errs.originalAmount[0]}</FieldError>
+          )}
         </div>
       </div>
 
@@ -149,3 +170,7 @@ export function SettlementLienForm({
 
 const inputClass =
   "h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4";
+
+function FieldError({ children }: { children: React.ReactNode }) {
+  return <span className="text-2xs text-warn">{children}</span>;
+}

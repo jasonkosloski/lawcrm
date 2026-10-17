@@ -14,13 +14,14 @@
  */
 
 import { describe, expect, test, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("@/app/actions/settlements", () => ({
   upsertSettlement: vi.fn(),
 }));
 
+import { upsertSettlement } from "@/app/actions/settlements";
 import { SettlementComposer } from "./settlement-composer";
 
 const EXPLICIT_FEE_INITIAL = {
@@ -147,6 +148,10 @@ describe("SettlementComposer — status rules + re-seed (F115 / F116)", () => {
     expect(
       container.querySelector<HTMLInputElement>('input[name="status"]')?.value
     ).toBe("approved");
+    // The read-only value is not a labelable control, so its label is
+    // plain text and not a <label for> pointing at nothing.
+    expect(container.querySelector('label[for$="-status"]')).toBeNull();
+    expect(screen.getByText(/^status/i)).toBeInTheDocument();
   });
 
   test("re-seeds from the server copy when it changes (auto-promotion must not be posted back as 'pending')", async () => {
@@ -174,5 +179,49 @@ describe("SettlementComposer — status rules + re-seed (F115 / F116)", () => {
       container.querySelector<HTMLInputElement>('input[name="advancedCosts"]')
         ?.value
     ).toBe("2500.00");
+  });
+});
+
+describe("SettlementComposer — labels, errors, save (F889 / F891)", () => {
+  test("fields are reachable by label", async () => {
+    render(<SettlementComposer matterId="m1" initial={PERCENT_INITIAL} canEdit />);
+    await expandForm();
+    for (const label of [/^gross amount/i, /^firm fee %/i, /^advanced costs/i, /^status/i]) {
+      expect(screen.getByLabelText(label)).toBeInTheDocument();
+    }
+  });
+
+  test("an advanced-costs error is shown as text, not just a red border", async () => {
+    vi.mocked(upsertSettlement).mockResolvedValueOnce({
+      status: "error",
+      errors: { advancedCosts: ["Enter a valid amount"] },
+    });
+    render(<SettlementComposer matterId="m1" initial={PERCENT_INITIAL} canEdit />);
+    await expandForm();
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    expect(await screen.findByText("Enter a valid amount")).toBeInTheDocument();
+  });
+
+  test("a successful save of an existing settlement collapses the form, and so does a second one", async () => {
+    vi.mocked(upsertSettlement).mockImplementation(async () => ({ status: "ok" as const }));
+    render(<SettlementComposer matterId="m1" initial={PERCENT_INITIAL} canEdit />);
+    for (let i = 0; i < 2; i++) {
+      await expandForm();
+      await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+      expect(
+        await screen.findByRole("button", {
+          name: /edit gross \/ fee \/ costs \/ status/i,
+        })
+      ).toBeInTheDocument();
+    }
+  });
+
+  test("a new settlement stays expanded after creating", async () => {
+    vi.mocked(upsertSettlement).mockImplementation(async () => ({ status: "ok" as const }));
+    render(<SettlementComposer matterId="m1" initial={null} canEdit />);
+    await userEvent.type(screen.getByLabelText(/^gross amount/i), "1000");
+    await userEvent.click(screen.getByRole("button", { name: /open settlement/i }));
+    await waitFor(() => expect(upsertSettlement).toHaveBeenCalled());
+    expect(screen.getByLabelText(/^gross amount/i)).toBeInTheDocument();
   });
 });

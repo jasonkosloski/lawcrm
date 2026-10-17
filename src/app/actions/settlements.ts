@@ -36,7 +36,12 @@ import {
   requirePermission,
 } from "@/lib/permission-check";
 import { filterUsersWithPermission } from "@/lib/permission-holders";
-import type { SettlementFormState } from "@/lib/settlement-constants";
+import { roundMoney } from "@/lib/money";
+import { firmFeeFromPercent } from "@/lib/settlement-waterfall";
+import {
+  LIENHOLDER_TYPES,
+  type SettlementFormState,
+} from "@/lib/settlement-constants";
 import {
   SETTLEMENT_APPROVAL_STATUSES,
   SETTLEMENT_STATUSES,
@@ -91,7 +96,7 @@ const upsertSchema = z.object({
         (/^\d+(\.\d{1,2})?$/.test(v) &&
           parseFloat(v) >= 0 &&
           parseFloat(v) <= 100),
-      "Percent must be 0–100"
+      "Enter a percent from 0 to 100 with up to 2 decimals"
     ),
   /** Explicit fee column. Only used when percent is blank. */
   firmFee: moneyField(false),
@@ -128,10 +133,11 @@ export async function upsertSettlement(
     ? new Prisma.Decimal(data.firmFeePercent)
     : null;
   // When percent is set, recompute firmFee on the way in so the
-  // stored column matches. The query layer also recomputes on
-  // read, so this is belt-and-suspenders.
+  // stored column matches. Rounded to cents HALF_UP by the same
+  // helper the read side uses, so the stored and displayed fee can't
+  // differ by a cent. (A Decimal 0 percent is a real 0%, not "unset".)
   const firmFee = firmFeePercent
-    ? grossAmount.mul(firmFeePercent).div(100)
+    ? firmFeeFromPercent(grossAmount, firmFeePercent)
     : data.firmFee
       ? new Prisma.Decimal(data.firmFee)
       : new Prisma.Decimal(0);
@@ -243,9 +249,12 @@ export async function upsertSettlement(
     // Compare Decimals with .equals (never numbers). The composer
     // round-trips the stored values, so an unchanged save is not a
     // change.
+    // (A legacy row may hold an unrounded percent-derived fee such as
+    // 5000.525; compare it at cent precision so an unchanged save of
+    // such a row isn't read as an amount change.)
     const amountsChanged =
       !existing.grossAmount.equals(grossAmount) ||
-      !existing.firmFee.equals(firmFee) ||
+      !roundMoney(existing.firmFee).equals(firmFee) ||
       !existing.advancedCosts.equals(advancedCosts) ||
       (existing.firmFeePercent === null) !== (firmFeePercent === null) ||
       (existing.firmFeePercent !== null &&
@@ -337,12 +346,24 @@ export async function upsertSettlement(
 
 // ── Liens ─────────────────────────────────────────────────────────────
 
+/** Why a lien change is refused for a settlement in this status, or
+ *  null when it's allowed. Liens move the client net, so once the
+ *  settlement is approved the sign-offs vouch for the current lien
+ *  numbers (like gross/fee/costs); after disbursement the money has
+ *  moved. Reopening (status pending) needs the approve permission. */
+function lienLockReason(status: string, verb: string): string | null {
+  if (status === "disbursed" || status === "closed") {
+    return `Can't ${verb} liens on a disbursed/closed settlement — reopen it first.`;
+  }
+  if (status === "approved") {
+    return "Reopen the settlement (status pending) before changing liens.";
+  }
+  return null;
+}
+
 const lienAddSchema = z.object({
   lienholder: z.string().trim().min(1, "Lienholder is required").max(200),
-  lienholderType: z
-    .enum(["hospital", "physician", "insurance", "government", "other"])
-    .optional()
-    .or(z.literal("")),
+  lienholderType: z.enum(LIENHOLDER_TYPES).optional().or(z.literal("")),
   originalAmount: moneyField(true).refine(
     (v) => parseFloat(v) > 0,
     "Amount must be greater than 0"
@@ -367,28 +388,38 @@ export async function addSettlementLien(
   }
   const data = parsed.data;
 
-  const settlement = await prisma.settlement.findUnique({
+  const found = await prisma.settlement.findUnique({
     where: { id: settlementId },
-    select: { id: true, matterId: true, status: true },
+    select: { matterId: true },
   });
-  if (!settlement) return { status: "error", error: "Settlement not found." };
-  if (settlement.status === "disbursed" || settlement.status === "closed") {
-    return {
-      status: "error",
-      error:
-        "Can't add liens to a disbursed/closed settlement — reopen it first.",
-    };
-  }
+  if (!found) return { status: "error", error: "Settlement not found." };
 
-  const lien = await prisma.settlementLien.create({
-    data: {
-      settlementId: settlement.id,
-      lienholder: data.lienholder,
-      lienholderType: data.lienholderType || null,
-      originalAmount: new Prisma.Decimal(data.originalAmount),
-    },
-    select: { id: true, lienholder: true, originalAmount: true },
+  // Status check + insert under the per-matter advisory lock that
+  // upsertSettlement / setApprovalStepStatus take, so a concurrent
+  // approval or disbursement can't interleave with the write.
+  const outcome = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`settlement:${found.matterId}`}))`;
+    const settlement = await tx.settlement.findUnique({
+      where: { id: settlementId },
+      select: { id: true, matterId: true, status: true },
+    });
+    if (!settlement) return { kind: "error" as const, error: "Settlement not found." };
+    const locked = lienLockReason(settlement.status, "add");
+    if (locked) return { kind: "error" as const, error: locked };
+    const lien = await tx.settlementLien.create({
+      data: {
+        settlementId: settlement.id,
+        lienholder: data.lienholder,
+        lienholderType: data.lienholderType || null,
+        originalAmount: new Prisma.Decimal(data.originalAmount),
+      },
+      select: { id: true, lienholder: true, originalAmount: true },
+    });
+    return { kind: "ok" as const, lien, matterId: settlement.matterId };
   });
+  if (outcome.kind === "error") return { status: "error", error: outcome.error };
+  const { lien } = outcome;
+  const settlement = { matterId: outcome.matterId };
 
   await logActivity({
     matterId: settlement.matterId,
@@ -427,47 +458,55 @@ export async function updateSettlementLien(
   }
   const data = parsed.data;
 
-  const lien = await prisma.settlementLien.findUnique({
+  const found = await prisma.settlementLien.findUnique({
     where: { id: lienId },
-    select: {
-      id: true,
-      lienholder: true,
-      settlement: { select: { matterId: true, status: true } },
-    },
+    select: { settlement: { select: { matterId: true } } },
   });
-  if (!lien) return { status: "error", error: "Lien not found." };
-  // Same post-disbursement lock as add/delete: the waterfall is
-  // recomputed on read, so editing a negotiated amount after the
-  // money moved would silently change firmFee/lienTotal/clientNet.
-  if (
-    lien.settlement.status === "disbursed" ||
-    lien.settlement.status === "closed"
-  ) {
-    return {
-      status: "error",
-      error:
-        "Settlement is disbursed/closed — liens are locked. Reopen it first.",
-    };
-  }
+  if (!found) return { status: "error", error: "Lien not found." };
 
-  await prisma.settlementLien.update({
-    where: { id: lien.id },
-    data: {
-      negotiatedAmount: data.negotiatedAmount
-        ? new Prisma.Decimal(data.negotiatedAmount)
-        : null,
-      status: data.status,
-    },
+  const negotiatedAmount = data.negotiatedAmount
+    ? new Prisma.Decimal(data.negotiatedAmount)
+    : null;
+
+  // Lock check + write are one unit under the per-matter advisory
+  // lock (same as upsertSettlement), so the status can't change to
+  // approved/disbursed between the check and the write. The waterfall
+  // is recomputed on read, so an edit after sign-off or disbursement
+  // would silently change what the approvers vouched for.
+  const outcome = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`settlement:${found.settlement.matterId}`}))`;
+    const lien = await tx.settlementLien.findUnique({
+      where: { id: lienId },
+      select: {
+        id: true,
+        lienholder: true,
+        status: true,
+        originalAmount: true,
+        negotiatedAmount: true,
+        settlement: { select: { matterId: true, status: true } },
+      },
+    });
+    if (!lien) return { kind: "error" as const, error: "Lien not found." };
+    const locked = lienLockReason(lien.settlement.status, "change");
+    if (locked) return { kind: "error" as const, error: locked };
+    await tx.settlementLien.update({
+      where: { id: lien.id },
+      data: { negotiatedAmount, status: data.status },
+    });
+    return { kind: "ok" as const, lien };
   });
+  if (outcome.kind === "error") return { status: "error", error: outcome.error };
+  const { lien } = outcome;
 
+  // Money change: record old → new (blank negotiated = "use original").
+  const money = (d: Prisma.Decimal | null) =>
+    d ? `$${d.toFixed(2)}` : `none (original $${lien.originalAmount.toFixed(2)})`;
   await logActivity({
     matterId: lien.settlement.matterId,
     userId: actorId,
     type: "settlement",
     title: `Lien updated · ${lien.lienholder} → ${data.status}`,
-    detail: data.negotiatedAmount
-      ? `Negotiated: $${data.negotiatedAmount}`
-      : undefined,
+    detail: `Negotiated: ${money(lien.negotiatedAmount)} → ${money(negotiatedAmount)} · Status: ${lien.status} → ${data.status}`,
   });
 
   revalidatePath(`/matters/${lien.settlement.matterId}/billing`);
@@ -481,26 +520,30 @@ export async function deleteSettlementLien(
   await requirePermission("matters.settlement.manage_liens");
   const actorId = await getCurrentUserId();
 
-  const lien = await prisma.settlementLien.findUnique({
+  const found = await prisma.settlementLien.findUnique({
     where: { id: lienId },
-    select: {
-      id: true,
-      lienholder: true,
-      settlement: { select: { matterId: true, status: true } },
-    },
+    select: { settlement: { select: { matterId: true } } },
   });
-  if (!lien) return { ok: false, error: "Lien not found." };
-  if (
-    lien.settlement.status === "disbursed" ||
-    lien.settlement.status === "closed"
-  ) {
-    return {
-      ok: false,
-      error: "Settlement is closed — can't remove liens after disbursement.",
-    };
-  }
+  if (!found) return { ok: false, error: "Lien not found." };
 
-  await prisma.settlementLien.delete({ where: { id: lien.id } });
+  const outcome = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`settlement:${found.settlement.matterId}`}))`;
+    const lien = await tx.settlementLien.findUnique({
+      where: { id: lienId },
+      select: {
+        id: true,
+        lienholder: true,
+        settlement: { select: { matterId: true, status: true } },
+      },
+    });
+    if (!lien) return { kind: "error" as const, error: "Lien not found." };
+    const locked = lienLockReason(lien.settlement.status, "remove");
+    if (locked) return { kind: "error" as const, error: locked };
+    await tx.settlementLien.delete({ where: { id: lien.id } });
+    return { kind: "ok" as const, lien };
+  });
+  if (outcome.kind === "error") return { ok: false, error: outcome.error };
+  const { lien } = outcome;
 
   await logActivity({
     matterId: lien.settlement.matterId,
@@ -546,65 +589,108 @@ export async function setApprovalStepStatus(
   const { approvalId, status } = parsedArgs.data;
   const notes = parsedArgs.data.notes;
 
-  const approval = await prisma.settlementApproval.findUnique({
-    where: { id: approvalId },
-    select: {
-      id: true,
-      step: true,
-      label: true,
-      status: true,
-      settlement: { select: { id: true, matterId: true, status: true } },
-    },
-  });
-  if (!approval) return { ok: false, error: "Approval step not found." };
-  if (
-    approval.settlement.status === "disbursed" ||
-    approval.settlement.status === "closed"
-  ) {
-    return {
-      ok: false,
-      error:
-        "Settlement is already disbursed or closed — approvals are locked.",
-    };
-  }
-
-  await prisma.settlementApproval.update({
-    where: { id: approval.id },
-    data: {
-      status,
-      approverId: status === "approved" ? actorId : null,
-      approvedAt: status === "approved" ? new Date() : null,
-      notes: notes && notes.trim().length > 0 ? notes.trim() : null,
-    },
-  });
-
-  // Auto-promote the settlement to "approved" status when every
-  // step is approved. We don't auto-disburse — that's a separate
-  // money-moving action that needs explicit confirmation.
-  const allSteps = await prisma.settlementApproval.findMany({
-    where: { settlementId: approval.settlement.id },
-    select: { status: true },
-  });
-  const allApproved =
-    allSteps.length > 0 && allSteps.every((s) => s.status === "approved");
-  if (
-    allApproved &&
-    approval.settlement.status !== "approved" &&
-    approval.settlement.status !== "disbursed" &&
-    approval.settlement.status !== "closed"
-  ) {
-    await prisma.settlement.update({
-      where: { id: approval.settlement.id },
-      data: { status: "approved" },
+  // The step write, the "is the chain complete?" re-read and the
+  // settlement status flip are one unit under the same per-matter
+  // advisory lock upsertSettlement takes — so two approvers clicking
+  // the last two steps at once can't both read "one still pending"
+  // (leaving the settlement un-promoted), and a step change can't
+  // interleave with an amount edit's approval reset.
+  const outcome = await prisma.$transaction(async (tx) => {
+    const found = await tx.settlementApproval.findUnique({
+      where: { id: approvalId },
+      select: { settlement: { select: { matterId: true } } },
     });
-  }
+    if (!found) return { kind: "error" as const, error: "Approval step not found." };
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`settlement:${found.settlement.matterId}`}))`;
+
+    // Re-read under the lock: the lock check and the previous status
+    // must reflect committed state, not a pre-lock snapshot.
+    const approval = await tx.settlementApproval.findUnique({
+      where: { id: approvalId },
+      select: {
+        id: true,
+        step: true,
+        label: true,
+        status: true,
+        settlement: { select: { id: true, matterId: true, status: true } },
+      },
+    });
+    if (!approval) return { kind: "error" as const, error: "Approval step not found." };
+    if (
+      approval.settlement.status === "disbursed" ||
+      approval.settlement.status === "closed"
+    ) {
+      return {
+        kind: "error" as const,
+        error:
+          "Settlement is already disbursed or closed — approvals are locked.",
+      };
+    }
+
+    await tx.settlementApproval.update({
+      where: { id: approval.id },
+      data: {
+        status,
+        approverId: status === "approved" ? actorId : null,
+        approvedAt: status === "approved" ? new Date() : null,
+        // A supplied note always replaces the stored one. Without one:
+        // a Reset or a Reject keeps the stored note (the reason a step
+        // was rejected must survive a Reset — it's where the next
+        // approver looks), but an Approve clears it, so an approved
+        // row never shows a stale rejection reason beneath it.
+        ...(notes && notes.length > 0
+          ? { notes }
+          : status === "approved"
+            ? { notes: null }
+            : {}),
+      },
+    });
+
+    // Keep the settlement status in step with the chain. Promote to
+    // "approved" when every step is approved (never auto-disburse —
+    // that's a separate money-moving action needing explicit
+    // confirmation); DEMOTE an "approved" settlement back to
+    // "pending" when a step is later rejected or reset, so the status
+    // never claims a sign-off the chain no longer has.
+    const allSteps = await tx.settlementApproval.findMany({
+      where: { settlementId: approval.settlement.id },
+      select: { status: true },
+    });
+    const allApproved =
+      allSteps.length > 0 && allSteps.every((s) => s.status === "approved");
+    let settlementChange: "promoted" | "demoted" | null = null;
+    if (allApproved && approval.settlement.status === "pending") {
+      await tx.settlement.update({
+        where: { id: approval.settlement.id },
+        data: { status: "approved" },
+      });
+      settlementChange = "promoted";
+    } else if (!allApproved && approval.settlement.status === "approved") {
+      await tx.settlement.update({
+        where: { id: approval.settlement.id },
+        data: { status: "pending" },
+      });
+      settlementChange = "demoted";
+    }
+    return { kind: "ok" as const, approval, settlementChange };
+  });
+  if (outcome.kind === "error") return { ok: false, error: outcome.error };
+  const { approval, settlementChange } = outcome;
 
   await logActivity({
     matterId: approval.settlement.matterId,
     userId: actorId,
     type: "settlement",
     title: `Settlement step ${approval.step} (${approval.label}) → ${status}`,
-    detail: notes || undefined,
+    detail:
+      [
+        notes || null,
+        settlementChange === "demoted"
+          ? "Settlement moved back to pending — approval chain no longer complete"
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · ") || undefined,
   });
 
   // ── Notification fan-out ──────────────────────────────────────────

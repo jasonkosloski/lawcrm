@@ -16,7 +16,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useId, useState } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { Pencil, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -26,6 +26,10 @@ import {
   settlementInitialState,
   type SettlementFormState,
 } from "@/lib/settlement-constants";
+import {
+  SETTLEMENT_STATUS_LABEL,
+  type SettlementStatus,
+} from "@/lib/constants/settlement-status";
 
 type SettlementInitial = {
   grossAmount: number;
@@ -56,12 +60,8 @@ function statusOptions(current: string): string[] {
     : [current, "pending", ...forward];
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  pending: "Pending",
-  approved: "Approved",
-  disbursed: "Disbursed",
-  closed: "Closed",
-};
+const statusLabel = (s: string): string =>
+  SETTLEMENT_STATUS_LABEL[s as SettlementStatus] ?? s;
 
 export function SettlementComposer({
   matterId,
@@ -82,6 +82,7 @@ export function SettlementComposer({
   // expands the full form.
   const [expanded, setExpanded] = useState(initial === null);
 
+  const uid = useId();
   const action = upsertSettlement.bind(null, matterId);
   // Wrapped useActionState: masks state left over from a previous
   // expand, so a failed attempt's errors don't reappear when the
@@ -124,20 +125,19 @@ export function SettlementComposer({
     reseed(initial);
   }
 
-  useEffect(() => {
-    if (state.status === "ok" && initial !== null) {
-      // Editing an existing settlement — collapse back to the
-      // compact view. New-settlement creates leave the form
-      // expanded so the user can keep tweaking.
-      setExpanded(false);
-    }
-    // Deps key on the state OBJECT, not state.status: useActionState
-    // keeps its state across submissions, so after the first success
-    // the status string is "ok" forever and a second successful edit
-    // would skip the effect, leaving the form expanded. Each action
-    // invocation returns a fresh object, so identity is the reliable
-    // signal.
-  }, [state, initial]);
+  // Editing an existing settlement: collapse back to the compact
+  // view once a save lands. New-settlement creates leave the form
+  // expanded so the user can keep tweaking. Adjusts state during
+  // render, keyed on the state OBJECT, not state.status:
+  // useActionState keeps its state across submissions, so after the
+  // first success the status string is "ok" forever and a second
+  // successful edit would be missed. Each action invocation returns
+  // a fresh object, so identity is the reliable signal.
+  const [handledState, setHandledState] = useState(state);
+  if (state !== handledState) {
+    setHandledState(state);
+    if (state.status === "ok" && initial !== null) setExpanded(false);
+  }
 
   if (!canEdit && !initial) {
     return (
@@ -194,8 +194,9 @@ export function SettlementComposer({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Field label="Gross amount" required>
+        <Field label="Gross amount" htmlFor={`${uid}-gross`} required>
           <input
+            id={`${uid}-gross`}
             name="grossAmount"
             type="text"
             inputMode="decimal"
@@ -207,8 +208,9 @@ export function SettlementComposer({
           />
           {errs.grossAmount && <FieldError>{errs.grossAmount[0]}</FieldError>}
         </Field>
-        <Field label="Firm fee %">
+        <Field label="Firm fee %" htmlFor={`${uid}-pct`}>
           <input
+            id={`${uid}-pct`}
             name="firmFeePercent"
             type="text"
             inputMode="decimal"
@@ -224,8 +226,9 @@ export function SettlementComposer({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Field label="Advanced costs">
+        <Field label="Advanced costs" htmlFor={`${uid}-costs`}>
           <input
+            id={`${uid}-costs`}
             name="advancedCosts"
             type="text"
             inputMode="decimal"
@@ -234,20 +237,29 @@ export function SettlementComposer({
             onChange={(e) => setAdvancedCosts(e.target.value)}
             className={cn(inputClass, "font-mono", errs.advancedCosts && "border-warn")}
           />
+          {errs.advancedCosts && (
+            <FieldError>{errs.advancedCosts[0]}</FieldError>
+          )}
         </Field>
-        <Field label="Status">
+        <Field
+          label="Status"
+          htmlFor={initial === null || !canApprove ? undefined : `${uid}-status`}
+        >
           {initial === null || !canApprove ? (
             // New settlements always start pending; without the
             // approve permission the status can't change. Either
             // way, post the current value unchanged.
             <>
               <input type="hidden" name="status" value={status} />
-              <div className="h-8 px-2.5 flex items-center rounded-md border border-line bg-paper text-xs text-ink-3">
-                {STATUS_LABEL[status] ?? status}
+              <div
+                className="h-8 px-2.5 flex items-center rounded-md border border-line bg-paper text-xs text-ink-3"
+              >
+                {statusLabel(status)}
               </div>
             </>
           ) : (
             <select
+              id={`${uid}-status`}
               name="status"
               value={status}
               onChange={(e) => setStatus(e.target.value)}
@@ -255,7 +267,7 @@ export function SettlementComposer({
             >
               {statusOptions(initial.status).map((s) => (
                 <option key={s} value={s}>
-                  {STATUS_LABEL[s] ?? s}
+                  {statusLabel(s)}
                 </option>
               ))}
             </select>
@@ -304,20 +316,32 @@ export function SettlementComposer({
 const inputClass =
   "h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4";
 
+const labelClass = "text-2xs font-mono uppercase tracking-wider text-ink-4";
+
 function Field({
   label,
+  htmlFor,
   required,
   children,
 }: {
   label: string;
+  /** id of the control this label names. Omit for a read-only value
+   *  (a div isn't labelable): the label then renders as plain text. */
+  htmlFor?: string;
   required?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
-        {label} {required && <span className="text-warn">*</span>}
-      </label>
+      {htmlFor ? (
+        <label htmlFor={htmlFor} className={labelClass}>
+          {label} {required && <span className="text-warn">*</span>}
+        </label>
+      ) : (
+        <span className={labelClass}>
+          {label} {required && <span className="text-warn">*</span>}
+        </span>
+      )}
       {children}
     </div>
   );

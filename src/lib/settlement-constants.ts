@@ -5,6 +5,27 @@
  * async functions.
  */
 
+/** Lienholder kinds offered by the lien form and accepted by
+ *  addSettlementLien — one list so the form and the server can't
+ *  drift apart. */
+export const LIENHOLDER_TYPES = [
+  "hospital",
+  "physician",
+  "insurance",
+  "government",
+  "other",
+] as const;
+
+export type LienholderType = (typeof LIENHOLDER_TYPES)[number];
+
+export const LIENHOLDER_TYPE_LABEL: Record<LienholderType, string> = {
+  hospital: "Hospital",
+  physician: "Physician",
+  insurance: "Insurance / subrogation",
+  government: "Government (Medicare/Medicaid)",
+  other: "Other",
+};
+
 export type SettlementFormState = {
   status: "idle" | "ok" | "error";
   /** Mirrors `zod.flatten().fieldErrors` — value may be undefined

@@ -27,10 +27,11 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-// approvedAt is a real timestamp; client component with no user-TZ
-// prop yet, so "datetime_medium" falls back to the runtime zone
-// (browser-local after hydration). See format-date.ts header.
-import { formatDate as formatDateVariant } from "@/lib/format-date";
+// approvedAt is a real timestamp (an instant): shown in the user's
+// PROFILE zone via useUserTimeZone() so the server render and the
+// hydrated render agree (the runtime zone differs between them).
+import { formatDate } from "@/lib/format-date";
+import { useUserTimeZone } from "@/components/user-time-zone";
 import { Button } from "@/components/ui/button";
 import { setApprovalStepStatus } from "@/app/actions/settlements";
 
@@ -44,9 +45,6 @@ type ApprovalRow = {
   notes: string | null;
 };
 
-const formatDate = (d: Date | null): string =>
-  d ? formatDateVariant(d, "datetime_medium") : "";
-
 export function SettlementApprovals({
   approvals,
   canApprove,
@@ -58,6 +56,7 @@ export function SettlementApprovals({
    *  step is read-only at that point. */
   settlementLocked: boolean;
 }) {
+  const tz = useUserTimeZone();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [notesByApproval, setNotesByApproval] = useState<
@@ -136,7 +135,8 @@ export function SettlementApprovals({
                   {isApproved && a.approverName && (
                     <div className="text-2xs text-ink-4 mt-0.5">
                       Approved by {a.approverName}
-                      {a.approvedAt && ` · ${formatDate(a.approvedAt)}`}
+                      {a.approvedAt &&
+                        ` · ${formatDate(a.approvedAt, "datetime_medium", tz)}`}
                     </div>
                   )}
                   {isRejected && (

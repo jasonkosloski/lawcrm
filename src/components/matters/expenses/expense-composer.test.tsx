@@ -12,6 +12,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { UserTimeZoneProvider } from "@/components/user-time-zone";
 
 vi.mock("@/app/actions/expenses", () => ({
   createExpense: vi.fn(),
@@ -25,7 +26,7 @@ const mockedAction = vi.mocked(createExpense);
 beforeEach(() => {
   mockedAction.mockReset();
   // Default success that fires whatever the form posts back.
-  mockedAction.mockResolvedValue({ status: "ok" });
+  mockedAction.mockImplementation(async () => ({ status: "ok" as const }));
 });
 
 afterEach(() => {
@@ -155,7 +156,82 @@ describe("ExpenseComposer — validation surface", () => {
   });
 });
 
+describe("ExpenseComposer — labels (F889)", () => {
+  test("every field is reachable by its label", async () => {
+    const user = userEvent.setup();
+    render(
+      <ExpenseComposer
+        matterId="m1"
+        documentOptions={[{ id: "d1", name: "Receipt.pdf" }]}
+      />
+    );
+    await user.click(screen.getByRole("button", { name: /log expense/i }));
+    for (const label of [
+      /^date/i,
+      /^amount/i,
+      /^category/i,
+      /^description/i,
+      /^utbms code/i,
+      /^notes/i,
+      /^receipt/i,
+    ]) {
+      expect(screen.getByLabelText(label)).toBeInTheDocument();
+    }
+  });
+});
+
+describe("ExpenseComposer — default date is today in the profile zone (ADR-012)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test("at 8 PM Apr 27 in Denver (02:00Z Apr 28) the date defaults to Apr 27", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-04-28T02:00:00Z"));
+    const user = userEvent.setup();
+    render(
+      <UserTimeZoneProvider timeZone="America/Denver">
+        <ExpenseComposer matterId="m1" />
+      </UserTimeZoneProvider>
+    );
+    await user.click(screen.getByRole("button", { name: /log expense/i }));
+    expect((screen.getByLabelText(/^date/i) as HTMLInputElement).value).toBe(
+      "2026-04-27"
+    );
+  });
+
+  test("the same instant is Apr 28 for a UTC profile", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-04-28T02:00:00Z"));
+    const user = userEvent.setup();
+    render(
+      <UserTimeZoneProvider timeZone="UTC">
+        <ExpenseComposer matterId="m1" />
+      </UserTimeZoneProvider>
+    );
+    await user.click(screen.getByRole("button", { name: /log expense/i }));
+    expect((screen.getByLabelText(/^date/i) as HTMLInputElement).value).toBe(
+      "2026-04-28"
+    );
+  });
+});
+
 describe("ExpenseComposer — success path", () => {
+  test("a second successful submit also collapses and resets (state-object identity)", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<ExpenseComposer matterId="m1" />);
+    for (const desc of ["First", "Second"]) {
+      await user.click(screen.getByRole("button", { name: /log expense/i }));
+      await user.type(container.querySelector('[name="description"]')!, desc);
+      await user.type(container.querySelector('[name="amount"]')!, "10");
+      await user.click(screen.getByRole("button", { name: /^log expense$/i }));
+      await waitFor(() =>
+        expect(container.querySelector('[name="amount"]')).toBeNull()
+      );
+    }
+    expect(mockedAction).toHaveBeenCalledTimes(2);
+  });
+
   test("on status:ok, the form collapses + resets", async () => {
     mockedAction.mockResolvedValueOnce({ status: "ok" });
     const user = userEvent.setup();
@@ -179,5 +255,15 @@ describe("ExpenseComposer — success path", () => {
     await waitFor(() =>
       expect(container.querySelector('[name="amount"]')).toBeNull()
     );
+
+    // Reset: reopening shows an empty form, not the last entry.
+    await user.click(screen.getByRole("button", { name: /log expense/i }));
+    expect(
+      (container.querySelector('[name="description"]') as HTMLInputElement)
+        .value
+    ).toBe("");
+    expect(
+      (container.querySelector('[name="amount"]') as HTMLInputElement).value
+    ).toBe("");
   });
 });

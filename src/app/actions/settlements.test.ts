@@ -171,17 +171,18 @@ describe("upsertSettlement — seeding", () => {
     expect(settlementAfter!.status).toBe("pending");
   });
 
-  test("computes firm fee from percent on read (33.33% of 100k = 33330)", async () => {
+  test("stores the percent-derived firm fee (33.33% of 100k = 33330)", async () => {
     await upsertSettlement(
       matterId,
       settlementInitialState,
       buildUpsertForm({ gross: "100000", feePct: "33.33" })
     );
     const s = await prisma.settlement.findFirst({ where: { matterId } });
-    // Action stores the precomputed fee as a sanity-double-write;
-    // 100000 * 33.33 / 100 = 33330 exactly.
     expect(s!.firmFee.toNumber()).toBe(33330);
   });
+
+  // Half-cent rounding, 0% and the percent message: see
+  // settlements-integrity.test.ts.
 });
 
 describe("setApprovalStepStatus — chain transitions", () => {
