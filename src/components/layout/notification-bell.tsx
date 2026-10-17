@@ -2,21 +2,28 @@
  * Notification Bell — topbar widget rendering the unread count
  * badge + a popover dropdown of recent rows.
  *
- * Data flow: self-fetches on mount via the `fetchBellState` server
- * action and polls every 60s. Re-fetches on dropdown open so the
- * popover view is always fresh when the user looks at it. Mark-
- * read calls update local state optimistically + server action in
- * the background.
+ * Data flow: state lives in the shell-level NotificationBellProvider
+ * (see notification-bell-provider.tsx) so it survives navigation —
+ * each page renders its own TopBar, and this component remounts with
+ * it. The provider polls (visible tabs only) via a GET route handler;
+ * this component re-fetches on dropdown open so the popover is always
+ * fresh when the user looks at it. Mark-read updates optimistically
+ * and the provider reconciles with the server.
  *
  * Visual: bell icon with a small red pip when unreadCount > 0.
  * Click opens a popover anchored to the icon (right-aligned, max
  * 22rem wide). Each row shows the type icon, title, optional
  * matter chip, body, and a relative timestamp.
+ *
+ * A11y: the popover is a labelled dialog (not a `menu` — it holds
+ * rows and links, not menuitems); the trigger exposes aria-expanded;
+ * unread rows say "Unread" to screen readers, and linkless unread
+ * rows are real buttons.
  */
 
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { Bell, BellDot } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -24,47 +31,16 @@ import { formatRelative } from "@/lib/format-date";
 // Icon + tone per type live in the shared meta so the /notifications
 // feed page renders rows identically to the dropdown.
 import { notificationTypeMeta } from "@/lib/notification-type-meta";
-import {
-  fetchBellState,
-  markAllNotificationsRead,
-  markNotificationRead,
-} from "@/app/actions/notifications";
-import type {
-  NotificationRow,
-  NotificationsBell,
-} from "@/lib/queries/notifications";
-
-const POLL_MS = 60_000;
+import { useUserTimeZone } from "@/components/user-time-zone";
+import type { NotificationRow } from "@/lib/queries/notifications";
+import { useNotificationBell } from "./notification-bell-provider";
 
 export function NotificationBell() {
-  const [state, setState] = useState<NotificationsBell | null>(null);
+  const { state, error, refresh, markOne, markAll } = useNotificationBell();
   const [open, setOpen] = useState(false);
-  const [, startTransition] = useTransition();
   const popRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-
-  // Initial fetch + interval poll. The `cancelled` guard prevents a
-  // late response from a previous interval tick from clobbering a
-  // newer state when the user navigates / unmounts mid-flight.
-  useEffect(() => {
-    let cancelled = false;
-    const tick = async () => {
-      try {
-        const next = await fetchBellState();
-        if (!cancelled) setState(next);
-      } catch (err) {
-        // Bell fetch failures are non-blocking — swallow; the
-        // user's primary work doesn't depend on it.
-        console.warn("[notification-bell] poll failed", err);
-      }
-    };
-    tick();
-    const id = setInterval(tick, POLL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, []);
+  const popId = useId();
 
   // Close on outside click + Escape.
   useEffect(() => {
@@ -76,7 +52,10 @@ export function NotificationBell() {
       setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      // A nested popup that already handled this Escape wins.
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      setOpen(false);
+      triggerRef.current?.focus();
     };
     document.addEventListener("mousedown", onClick);
     document.addEventListener("keydown", onKey);
@@ -88,50 +67,11 @@ export function NotificationBell() {
 
   const handleOpen = () => {
     // Re-fetch on open so the dropdown view is fresh — the 60s poll
-    // could be up to a minute stale. Fired OUTSIDE the setOpen
-    // updater: updaters run during render and must stay pure —
-    // startTransition inside one throws "Cannot call startTransition
-    // while rendering" and React's updater re-invocation can loop.
-    if (!open) {
-      startTransition(async () => {
-        const fresh = await fetchBellState();
-        setState(fresh);
-      });
-    }
+    // could be up to a minute stale. Fired from the handler, never
+    // inside the setOpen updater (updaters run during render and
+    // must stay pure).
+    if (!open) void refresh();
     setOpen((prev) => !prev);
-  };
-
-  const handleMarkOne = (row: NotificationRow) => {
-    if (row.isRead) return;
-    // Optimistic — flip the row locally + decrement badge before
-    // the server confirms.
-    setState((prev) =>
-      prev
-        ? {
-            unreadCount: Math.max(0, prev.unreadCount - 1),
-            recent: prev.recent.map((r) =>
-              r.id === row.id ? { ...r, isRead: true } : r
-            ),
-          }
-        : prev
-    );
-    startTransition(async () => {
-      await markNotificationRead(row.id);
-    });
-  };
-
-  const handleMarkAll = () => {
-    setState((prev) =>
-      prev
-        ? {
-            unreadCount: 0,
-            recent: prev.recent.map((r) => ({ ...r, isRead: true })),
-          }
-        : prev
-    );
-    startTransition(async () => {
-      await markAllNotificationsRead();
-    });
   };
 
   const unread = state?.unreadCount ?? 0;
@@ -143,6 +83,9 @@ export function NotificationBell() {
       <button
         ref={triggerRef}
         onClick={handleOpen}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        aria-controls={open ? popId : undefined}
         aria-label={
           hasUnread ? `Notifications (${unread} unread)` : "Notifications"
         }
@@ -168,7 +111,9 @@ export function NotificationBell() {
       {open && (
         <div
           ref={popRef}
-          role="menu"
+          id={popId}
+          role="dialog"
+          aria-label="Notifications"
           className={cn(
             "absolute right-0 top-9 z-50 w-[22rem] max-h-[28rem] overflow-y-auto",
             "rounded-md border border-line bg-white shadow-md"
@@ -184,13 +129,22 @@ export function NotificationBell() {
             {hasUnread && (
               <button
                 type="button"
-                onClick={handleMarkAll}
+                onClick={markAll}
                 className="text-2xs text-ink-3 hover:text-ink underline-offset-2 hover:underline"
               >
                 Mark all read
               </button>
             )}
           </div>
+
+          {error && (
+            <div
+              role="alert"
+              className="px-3 py-2 text-2xs text-warn bg-warn-soft border-b border-line"
+            >
+              {error}
+            </div>
+          )}
 
           {rows.length === 0 ? (
             <div className="px-3 py-8 text-center">
@@ -210,7 +164,7 @@ export function NotificationBell() {
                 <NotificationRowItem
                   key={r.id}
                   row={r}
-                  onMarkRead={() => handleMarkOne(r)}
+                  onMarkRead={() => markOne(r)}
                   onClose={() => setOpen(false)}
                 />
               ))}
@@ -244,6 +198,8 @@ function NotificationRowItem({
   onClose: () => void;
 }) {
   const { icon: Icon, tone } = notificationTypeMeta(row.type);
+  // Older rows fall back to a calendar date — in the profile zone.
+  const tz = useUserTimeZone();
 
   const inner = (
     <div className="flex items-start gap-2.5 py-2 px-3">
@@ -268,15 +224,18 @@ function NotificationRowItem({
               {row.matterName}
             </span>
           )}
-          <span>{formatRelative(row.createdAt)}</span>
+          <span>{formatRelative(row.createdAt, tz)}</span>
         </div>
       </div>
       {!row.isRead && (
-        <span
-          aria-hidden="true"
-          className="shrink-0 mt-1 w-1.5 h-1.5 rounded-full bg-brand-500"
-          title="Unread"
-        />
+        <>
+          <span
+            aria-hidden="true"
+            className="shrink-0 mt-1 w-1.5 h-1.5 rounded-full bg-brand-500"
+            title="Unread"
+          />
+          <span className="sr-only">Unread</span>
+        </>
       )}
     </div>
   );
@@ -289,10 +248,9 @@ function NotificationRowItem({
   return (
     <li
       className={cn(
-        "border-b border-line/60 last:border-b-0 hover:bg-paper-2 transition-colors cursor-pointer",
+        "border-b border-line/60 last:border-b-0 hover:bg-paper-2 transition-colors",
         !row.isRead && "bg-brand-tint/30"
       )}
-      onClick={handleClick}
     >
       {row.link ? (
         // next/link, not a raw <a>: a full-page navigation would
@@ -300,11 +258,21 @@ function NotificationRowItem({
         // server action fired in handleClick, leaving the row unread
         // server-side after the optimistic badge decrement. Client
         // navigation keeps the transition alive.
-        <Link href={row.link} className="block">
+        <Link href={row.link} className="block" onClick={handleClick}>
           {inner}
         </Link>
-      ) : (
+      ) : row.isRead ? (
         <div>{inner}</div>
+      ) : (
+        // Linkless unread rows are real buttons so keyboard users can
+        // mark them read too (a clickable <li> isn't focusable).
+        <button
+          type="button"
+          onClick={handleClick}
+          className="block w-full text-left cursor-pointer"
+        >
+          {inner}
+        </button>
       )}
     </li>
   );

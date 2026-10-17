@@ -9,11 +9,25 @@
  * Generic — doesn't know whether it's inside a matter detail or the
  * calendar. The `context` on the provider drives the expanded-mode
  * context strip.
+ *
+ * Keyboard: Escape / Tab are handled on the panel itself (not on
+ * window), so only keystrokes made inside it count. Focus moves into
+ * the panel when it opens, switches or expands; the expanded modal is
+ * a real dialog (role, aria-modal, Tab trap). Docked, Escape closes a
+ * panel only when nothing has been typed in it.
  */
 
 "use client";
 
-import { useCallback, useEffect, useRef, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
+import dynamic from "next/dynamic";
+import Link from "next/link";
 import {
   Calendar,
   Clock,
@@ -33,9 +47,31 @@ import {
   findMatterCreateEntry,
   type MatterCreateEntry,
 } from "@/lib/matter-create-types";
-import { NotePanelBody } from "@/components/matters/notes/note-panel-body";
-import { NewEventComposer } from "@/components/calendar/new-event-composer";
 import { useCreateStack, type CreatePanel } from "./create-stack-provider";
+
+// The two real panel bodies pull in Tiptap/ProseMirror + server
+// actions. The dock is mounted on every matter tab and the calendar but
+// renders nothing until a panel opens, so load them on demand instead
+// of shipping the editor stack in every page's initial JS.
+const PanelLoading = () => (
+  <div className="flex-1 p-4 text-xs text-ink-4" role="status">
+    Loading…
+  </div>
+);
+const NotePanelBody = dynamic(
+  () =>
+    import("@/components/matters/notes/note-panel-body").then(
+      (m) => m.NotePanelBody
+    ),
+  { loading: PanelLoading }
+);
+const NewEventComposer = dynamic(
+  () =>
+    import("@/components/calendar/new-event-composer").then(
+      (m) => m.NewEventComposer
+    ),
+  { loading: PanelLoading }
+);
 
 const ICON_MAP: Record<MatterCreateEntry["icon"], LucideIcon> = {
   clock: Clock,
@@ -48,24 +84,110 @@ const ICON_MAP: Record<MatterCreateEntry["icon"], LucideIcon> = {
   invoice: Receipt,
 };
 
+/** Matter tab (route slug + label) that already hosts a working inline
+ *  form for each create type. Types with no real dock form send the
+ *  user there instead of showing a dead form with a disabled Save. */
+const TAB_FOR_TYPE: Record<
+  MatterCreateEntry["type"],
+  { slug: string; label: string }
+> = {
+  time: { slug: "time", label: "Time & expenses" },
+  note: { slug: "notes", label: "Notes" },
+  task: { slug: "tasks", label: "Tasks" },
+  deadline: { slug: "deadlines", label: "Deadlines" },
+  party: { slug: "parties", label: "Parties" },
+  document: { slug: "documents", label: "Documents" },
+  event: { slug: "events", label: "Events" },
+  invoice: { slug: "billing", label: "Billing" },
+};
+
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])';
+
+/** True when the panel body holds text the user typed — Escape must
+ *  not throw that away. DOM-based on purpose: the dock is generic and
+ *  each body owns its own form state. */
+function bodyHasDraft(body: Element | null): boolean {
+  if (!body) return false;
+  const fields = body.querySelectorAll<HTMLElement>(
+    "textarea, input, [contenteditable='true']"
+  );
+  for (const el of fields) {
+    if (el instanceof HTMLInputElement) {
+      if (["checkbox", "radio", "hidden", "button", "submit"].includes(el.type))
+        continue;
+      if (el.value.trim()) return true;
+    } else if (el instanceof HTMLTextAreaElement) {
+      if (el.value.trim()) return true;
+    } else if (el.textContent?.trim()) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function CreateDock() {
   const { panels, focusedId, context, close, focus, setExpanded } =
     useCreateStack();
 
   const focused = panels.find((p) => p.id === focusedId) ?? null;
   const minimized = panels.filter((p) => p.id !== focusedId);
+  const asideRef = useRef<HTMLElement>(null);
 
+  // Move keyboard focus into the panel when one opens, switches or
+  // expands (unless a body already autofocused something inside), so
+  // Escape / Tab are relative to the panel and the expanded modal
+  // isn't operated from behind its backdrop.
+  const shownId = focused?.id ?? null;
+  const shownExpanded = !!focused?.expanded;
   useEffect(() => {
+    const aside = asideRef.current;
+    if (!aside || !shownId) return;
+    if (!aside.contains(document.activeElement)) aside.focus();
+  }, [shownId, shownExpanded]);
+
+  // Keys are handled on the panel, not on window: a window listener
+  // also saw Escapes meant for the notification dropdown, the nav
+  // drawer or an IME composition, and closed the panel — discarding
+  // the draft.
+  const onPanelKeyDown = (e: ReactKeyboardEvent<HTMLElement>) => {
     if (!focused) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      if (focused.expanded) setExpanded(focused.id, false);
-      else close(focused.id);
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [focused, setExpanded, close]);
+
+    if (e.key === "Tab" && focused.expanded) {
+      // Trap focus inside the expanded modal.
+      const items = Array.from(
+        e.currentTarget.querySelectorAll<HTMLElement>(FOCUSABLE)
+      ).filter((el) => el.closest(".hidden") === null);
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || active === e.currentTarget)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+      return;
+    }
+
+    if (e.key !== "Escape") return;
+    // A popup inside the panel (select, popover) or an IME composition
+    // already owns this Escape.
+    if (e.defaultPrevented || e.nativeEvent.isComposing) return;
+    e.preventDefault();
+    if (focused.expanded) {
+      setExpanded(focused.id, false);
+      return;
+    }
+    // Docked: close only a panel with nothing typed in it. A draft is
+    // closed deliberately (the X), never by a stray Escape.
+    const body = e.currentTarget.querySelector(
+      `[data-panel-id="${focused.id}"]`
+    );
+    if (!bodyHasDraft(body)) close(focused.id);
+  };
 
   if (panels.length === 0) return null;
 
@@ -85,18 +207,32 @@ export function CreateDock() {
         <button
           type="button"
           aria-label="Collapse to sidebar"
+          // Out of the tab order: the panel's own collapse button is
+          // the keyboard path, and the trap must stay inside the panel.
+          tabIndex={-1}
           onClick={() => setExpanded(focused.id, false)}
           className="fixed inset-0 z-40 bg-black/25 backdrop-blur-sm cursor-default animate-in fade-in duration-100"
         />
       ) : null}
       {focused && (
         <aside
+          ref={asideRef}
           key="create-panel-shell"
+          tabIndex={-1}
+          // Dialog semantics only in the expanded modal; the docked
+          // rail stays a complementary landmark. Same element either
+          // way, so toggling never remounts the drafts inside.
+          role={expanded ? "dialog" : undefined}
+          aria-modal={expanded ? true : undefined}
           aria-label={`Create panel (${entryLabel}${expanded ? ", expanded" : ""})`}
+          onKeyDown={onPanelKeyDown}
           className={
             expanded
-              ? "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[min(92vw,800px)] h-[min(85vh,720px)] rounded-xl shadow-2xl ring-1 ring-black/5 border border-line bg-white flex flex-col min-h-0 animate-in zoom-in-95 fade-in duration-100"
-              : "w-96 shrink-0 border-l border-line flex flex-col min-h-0 bg-white"
+              ? "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[min(92vw,800px)] h-[min(85vh,720px)] rounded-xl shadow-2xl ring-1 ring-black/5 border border-line bg-white flex flex-col min-h-0 outline-none animate-in zoom-in-95 fade-in duration-100"
+              : // Below sm the 384px rail would overflow <main> and
+                // clip the close/Save controls, so it becomes a
+                // full-screen overlay there.
+                "w-full sm:w-96 sm:shrink-0 max-sm:fixed max-sm:inset-0 max-sm:z-40 border-l border-line flex flex-col min-h-0 bg-white outline-none"
           }
         >
           <PanelChrome
@@ -266,8 +402,8 @@ function PanelBody({
   if (!entry) return null;
 
   // Types with a real form render it inline and carry their own
-  // footer (Save/Cancel). Everything else still falls through to the
-  // placeholder body + disabled-save footer.
+  // footer (Save/Cancel). Everything else points at the matter tab
+  // that hosts the working form (no dead Save button).
   const isNote = panel.type === "note" && matterId !== null;
   // Standalone event composer: the calendar page mounts the
   // create stack with no matter, so a "New event" panel there
@@ -276,6 +412,7 @@ function PanelBody({
   // EventComposer (with captures + team auto-add) since it has
   // matterId set.
   const isStandaloneEvent = panel.type === "event" && matterId === null;
+  const tab = TAB_FOR_TYPE[entry.type];
 
   return (
     <div
@@ -295,22 +432,11 @@ function PanelBody({
               <p className="text-xs text-ink-3 leading-relaxed">
                 {entry.description}
               </p>
-              <div className="rounded-md border border-line bg-paper-2/30 p-3">
-                <div className="text-2xs font-semibold uppercase tracking-wider text-ink-4 mb-2">
-                  Form fields
-                </div>
-                <ul className="flex flex-col gap-1.5 text-xs text-ink-2 list-disc pl-4">
-                  {entry.expected.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-              <div className="text-2xs text-ink-4 leading-relaxed">
-                The real form for this type is a follow-up. Open multiple
-                panels at once if you need to capture several things in
-                parallel — each one stays in the stack until you save or
-                close it.
-              </div>
+              <p className="text-xs text-ink-2 leading-relaxed">
+                {matterId
+                  ? `There is no quick form for this yet — the ${tab.label} tab has the full form.`
+                  : `There is no quick form for this yet — open a matter and use its ${tab.label} tab.`}
+              </p>
             </div>
           </div>
 
@@ -322,14 +448,15 @@ function PanelBody({
             >
               Cancel
             </button>
-            <button
-              type="button"
-              disabled
-              title="Form not implemented yet"
-              className="text-xs px-2.5 h-7 rounded-md bg-brand-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Save
-            </button>
+            {matterId && (
+              <Link
+                href={`/matters/${matterId}/${tab.slug}`}
+                onClick={onClose}
+                className="inline-flex items-center text-xs px-2.5 h-7 rounded-md bg-brand-500 text-white hover:bg-brand-600 transition-colors"
+              >
+                Go to {tab.label}
+              </Link>
+            )}
           </footer>
         </>
       )}

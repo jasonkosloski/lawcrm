@@ -184,3 +184,95 @@ describe("SidebarNav — closed drawer is inert on mobile only", () => {
     expect(aside).not.toHaveAttribute("inert");
   });
 });
+
+describe("SidebarNav — no dead links", () => {
+  test("never links to /billing or /automations (neither route exists)", () => {
+    mockViewport(true);
+    const { container } = render(
+      <MobileNavProvider>
+        <SidebarNav data={emptyData} canViewAutomations />
+      </MobileNavProvider>
+    );
+    expect(container.querySelector('a[href="/billing"]')).toBeNull();
+    expect(container.querySelector('a[href="/automations"]')).toBeNull();
+  });
+
+  test("Automations points at /settings/automations and only for viewers with automations.view", () => {
+    mockViewport(true);
+    const { container, rerender } = render(
+      <MobileNavProvider>
+        <SidebarNav data={emptyData} />
+      </MobileNavProvider>
+    );
+    expect(
+      container.querySelector('a[href="/settings/automations"]')
+    ).toBeNull();
+
+    rerender(
+      <MobileNavProvider>
+        <SidebarNav data={emptyData} canViewAutomations />
+      </MobileNavProvider>
+    );
+    const link = container.querySelector('a[href="/settings/automations"]');
+    expect(link).not.toBeNull();
+    expect(link!.textContent).toBe("Automations");
+  });
+});
+
+describe("SidebarNav — user strip", () => {
+  const withUser = (jobTitle: string): SidebarData => ({
+    ...emptyData,
+    currentUser: { id: "u1", name: "Pat Lee", initials: "PL", jobTitle },
+  });
+
+  test("shows the job title as-is, with no hard-coded suffix", () => {
+    mockViewport(true);
+    render(
+      <MobileNavProvider>
+        <SidebarNav data={withUser("Paralegal")} />
+      </MobileNavProvider>
+    );
+    expect(screen.getByText("Paralegal")).toBeInTheDocument();
+    expect(screen.queryByText(/partner/i)).toBeNull();
+  });
+
+  test("an empty job title falls back to a dash", () => {
+    mockViewport(true);
+    render(
+      <MobileNavProvider>
+        <SidebarNav data={withUser("")} />
+      </MobileNavProvider>
+    );
+    expect(screen.getByText("—")).toBeInTheDocument();
+  });
+});
+
+describe("SidebarNav — drawer closes on a nav tap", () => {
+  test("tapping a link that does not change the pathname (practice area) dismisses the drawer", async () => {
+    mockViewport(false);
+    const user = userEvent.setup();
+    const { container } = render(
+      <MobileNavProvider>
+        <OpenNavButton />
+        <SidebarNav
+          data={{
+            ...emptyData,
+            areaCounts: [
+              { area: "1983", count: 3, label: "§1983", color: "#2563a8" },
+            ],
+          }}
+        />
+      </MobileNavProvider>
+    );
+    const aside = container.querySelector("aside")!;
+
+    await user.click(screen.getByRole("button", { name: "Open navigation" }));
+    expect(aside).not.toHaveAttribute("inert");
+
+    // /matters?area=1983 shares the mocked pathname (/matters), so the
+    // pathname effect never fires — only the Link onClick can close it.
+    const link = aside.querySelector('a[href="/matters?area=1983"]')!;
+    await user.click(link);
+    expect(aside).toHaveAttribute("inert");
+  });
+});

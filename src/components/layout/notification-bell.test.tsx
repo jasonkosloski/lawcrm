@@ -1,30 +1,27 @@
 /**
- * Tests for NotificationBell.
+ * Tests for NotificationBell + NotificationBellProvider.
  *
- * The regression worth pinning: linked notification rows used to
- * render a raw `<a href>`, so clicking one triggered a full-document
- * navigation. The unload could abort the in-flight
- * `markNotificationRead` server action fired by the same click —
- * the badge decremented optimistically, then the row came back
- * unread after the reload. Linked rows must render through
- * `next/link` so navigation stays client-side and the mark-read
- * transition survives the route change.
+ * Regressions pinned:
+ *   - linked rows render through `next/link` (a raw `<a>` caused a
+ *     full-document navigation that could abort the in-flight
+ *     `markNotificationRead` action)
+ *   - opening the dropdown re-fetches, outside the setOpen updater
+ *   - a mark-read that races an in-flight fetch isn't overwritten by
+ *     the stale (pre-mark) response
+ *   - a rejected / `{ ok: false }` mark-read shows an inline error and
+ *     never throws into an error boundary
+ *   - the bell state lives in the provider, so remounting the bell (a
+ *     navigation to a page with its own TopBar) doesn't refetch
+ *   - hidden tabs don't poll; becoming visible fetches immediately
+ *   - a11y: labelled dialog (not `menu`), aria-expanded, linkless
+ *     unread rows are focusable buttons, unread is announced
  *
- * The next/link mock below tags its anchor with `data-nextjs-link`;
- * asserting on that marker is what distinguishes "went through
- * next/link" from "reverted to a raw <a>".
- *
- * Also pinned: opening the dropdown re-fetches bell state. The old
- * handleOpen fired that startTransition INSIDE the setOpen updater —
- * updaters run during render and must stay pure, so React threw
- * "Cannot call startTransition while rendering" and its updater
- * re-invocation could loop. The refetch now runs in the event
- * handler proper; every test here that opens the dropdown would
- * hang under the old code.
+ * Reads go through `fetch("/api/notifications/bell")` (stubbed), not a
+ * Server Action; mutations are the mocked server actions.
  */
 
-import { beforeEach, describe, expect, test, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // Anchor stand-in tagged so tests can tell it apart from a raw <a>.
@@ -55,25 +52,36 @@ vi.mock("next/link", () => ({
 // Mock the server actions BEFORE importing the component so its
 // imports resolve to the mocks.
 vi.mock("@/app/actions/notifications", () => ({
-  fetchBellState: vi.fn(),
   markAllNotificationsRead: vi.fn(),
   markNotificationRead: vi.fn(),
 }));
 
 import {
-  fetchBellState,
+  markAllNotificationsRead,
   markNotificationRead,
 } from "@/app/actions/notifications";
 import { NotificationBell } from "./notification-bell";
-import type {
-  NotificationRow,
-  NotificationsBell,
-} from "@/lib/queries/notifications";
+import {
+  BELL_MUTATION_ERROR,
+  NotificationBellProvider,
+} from "./notification-bell-provider";
 
-const mockedFetch = vi.mocked(fetchBellState);
 const mockedMarkOne = vi.mocked(markNotificationRead);
+const mockedMarkAll = vi.mocked(markAllNotificationsRead);
 
-const row = (over: Partial<NotificationRow> = {}): NotificationRow => ({
+type WireRow = {
+  id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  matterId: string | null;
+  matterName: string | null;
+  isRead: boolean;
+  createdAt: string;
+};
+
+const row = (over: Partial<WireRow> = {}): WireRow => ({
   id: "n_1",
   type: "task_assigned",
   title: "You were assigned a task",
@@ -82,42 +90,69 @@ const row = (over: Partial<NotificationRow> = {}): NotificationRow => ({
   matterId: "m_1",
   matterName: "Smith v. Jones",
   isRead: false,
-  createdAt: new Date(),
+  createdAt: new Date().toISOString(),
   ...over,
 });
 
-const bell = (recent: NotificationRow[]): NotificationsBell => ({
+const bellJson = (recent: WireRow[]) => ({
   unreadCount: recent.filter((r) => !r.isRead).length,
   recent,
 });
 
+const defaultRows = () => [
+  row(),
+  row({ id: "n_2", type: "generic", title: "Linkless heads-up", link: null }),
+];
+
+const jsonResponse = (body: unknown, status = 200) =>
+  ({
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  }) as Response;
+
+const fetchMock = vi.fn();
+
+function setVisibility(state: "visible" | "hidden") {
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    get: () => state,
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
-  // Fresh object per call — mirrors real server actions, whose
-  // return value is deserialized over the wire and never
-  // reference-equal across calls.
-  mockedFetch.mockImplementation(async () =>
-    bell([
-      row(),
-      row({
-        id: "n_2",
-        type: "generic",
-        title: "Linkless heads-up",
-        link: null,
-      }),
-    ])
+  setVisibility("visible");
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  fetchMock.mockReset();
+  // Fresh object per call, like a real network response.
+  fetchMock.mockImplementation(async () =>
+    jsonResponse(bellJson(defaultRows()))
   );
+  vi.stubGlobal("fetch", fetchMock);
   mockedMarkOne.mockResolvedValue({ ok: true });
+  mockedMarkAll.mockResolvedValue({ ok: true });
 });
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+const renderBell = () =>
+  render(
+    <NotificationBellProvider>
+      <NotificationBell />
+    </NotificationBellProvider>
+  );
 
 /** Render, wait for the initial fetch, and open the dropdown. */
 async function openBell(user: ReturnType<typeof userEvent.setup>) {
-  render(<NotificationBell />);
+  renderBell();
   const trigger = await screen.findByRole("button", {
     name: /notifications \(2 unread\)/i,
   });
   await user.click(trigger);
-  // Rows are in once the open-refetch lands.
   await screen.findByText("You were assigned a task");
 }
 
@@ -126,33 +161,41 @@ describe("NotificationBell — linked rows navigate client-side", () => {
     const user = userEvent.setup();
     await openBell(user);
 
-    const link = screen
-      .getByText("You were assigned a task")
-      .closest("a");
+    const link = screen.getByText("You were assigned a task").closest("a");
     expect(link).toBeTruthy();
     expect(link).toHaveAttribute("href", "/matters/m_1?tab=tasks");
-    // The marker only exists on the next/link mock — a raw <a>
-    // (full-page navigation, aborts the mark-read action) fails here.
     expect(link).toHaveAttribute("data-nextjs-link");
   });
 
-  test("a row without a link renders no anchor at all", async () => {
+  test("a read, linkless row renders no anchor and no button", async () => {
+    fetchMock.mockImplementation(async () =>
+      jsonResponse(
+        bellJson([
+          row({ id: "n_1", isRead: false }),
+          row({
+            id: "n_3",
+            title: "Old news",
+            link: null,
+            isRead: true,
+          }),
+        ])
+      )
+    );
     const user = userEvent.setup();
-    await openBell(user);
-
-    expect(
-      screen.getByText("Linkless heads-up").closest("a")
-    ).toBeNull();
+    renderBell();
+    await user.click(
+      await screen.findByRole("button", { name: /notifications \(1 unread\)/i })
+    );
+    const old = await screen.findByText("Old news");
+    expect(old.closest("a")).toBeNull();
+    expect(old.closest("button")).toBeNull();
   });
 
   test("opening the dropdown re-fetches bell state (outside the setOpen updater)", async () => {
     const user = userEvent.setup();
     await openBell(user);
-
-    // Once on mount + once on open. Under the old
-    // startTransition-inside-updater code this point is never
-    // reached — openBell hangs in React's updater re-invocation.
-    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    // Once on mount + once on open.
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
   });
 
   test("clicking a linked row fires mark-read and closes the popover", async () => {
@@ -161,12 +204,8 @@ describe("NotificationBell — linked rows navigate client-side", () => {
 
     await user.click(screen.getByText("You were assigned a task"));
 
-    // The mark-read server action must have been dispatched — with
-    // client navigation it survives; the whole point of the Link fix.
     await waitFor(() => expect(mockedMarkOne).toHaveBeenCalledWith("n_1"));
-    // Linked rows close the dropdown so it isn't left floating over
-    // the destination page.
-    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
 
@@ -178,22 +217,212 @@ describe("NotificationBell — feed page footer", () => {
     const viewAll = screen.getByText(/view all notifications/i);
     const anchor = viewAll.closest("a");
     expect(anchor).toHaveAttribute("href", "/notifications");
-    // Same full-page-navigation trap as notification rows: the feed
-    // link must go through next/link.
     expect(anchor).toHaveAttribute("data-nextjs-link");
 
     await user.click(viewAll);
-    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   test("footer renders even when the feed is empty (it's the discovery path)", async () => {
-    mockedFetch.mockResolvedValue(bell([]));
+    fetchMock.mockImplementation(async () => jsonResponse(bellJson([])));
     const user = userEvent.setup();
-    render(<NotificationBell />);
+    renderBell();
     await user.click(
       await screen.findByRole("button", { name: /^notifications$/i })
     );
     await screen.findByText(/no notifications yet/i);
     expect(screen.getByText(/view all notifications/i)).toBeInTheDocument();
+  });
+});
+
+describe("NotificationBell — accessibility", () => {
+  test("popover is a labelled dialog, not a menu; trigger reports expanded", async () => {
+    const user = userEvent.setup();
+    renderBell();
+    const trigger = await screen.findByRole("button", {
+      name: /notifications \(2 unread\)/i,
+    });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(trigger);
+    await screen.findByText("You were assigned a task");
+
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(screen.queryByRole("menu")).toBeNull();
+    const dialog = screen.getByRole("dialog", { name: "Notifications" });
+    expect(trigger).toHaveAttribute("aria-controls", dialog.id);
+  });
+
+  test("a linkless unread row is a focusable button that marks it read, and unread is announced", async () => {
+    const user = userEvent.setup();
+    await openBell(user);
+
+    const button = screen.getByText("Linkless heads-up").closest("button");
+    expect(button).not.toBeNull();
+    expect(screen.getAllByText("Unread").length).toBeGreaterThan(0);
+
+    await user.click(button!);
+    await waitFor(() => expect(mockedMarkOne).toHaveBeenCalledWith("n_2"));
+  });
+
+  test("Escape closes the popover and returns focus to the trigger", async () => {
+    const user = userEvent.setup();
+    await openBell(user);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /notifications/i })
+    ).toHaveFocus();
+  });
+});
+
+describe("NotificationBellProvider — fetch races and failures", () => {
+  test("Mark all read isn't overwritten by a fetch that was already in flight", async () => {
+    // First fetch (mount) resolves normally; the open-refetch is held
+    // open so we can click Mark all while it is pending, then let it
+    // resolve with the STALE pre-mark data.
+    let releaseStale: (r: Response) => void = () => {};
+    fetchMock
+      .mockImplementationOnce(async () =>
+        jsonResponse(bellJson(defaultRows()))
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            releaseStale = resolve;
+          })
+      )
+      // The post-mutation reconcile fetch sees the server truth.
+      .mockImplementation(async () =>
+        jsonResponse(
+          bellJson(defaultRows().map((r) => ({ ...r, isRead: true })))
+        )
+      );
+
+    const user = userEvent.setup();
+    renderBell();
+    const trigger = await screen.findByRole("button", {
+      name: /notifications \(2 unread\)/i,
+    });
+    await user.click(trigger); // starts the held refetch
+    await user.click(await screen.findByText("Mark all read"));
+
+    // Stale response lands AFTER the optimistic clear.
+    await act(async () => {
+      releaseStale(jsonResponse(bellJson(defaultRows())));
+    });
+
+    await waitFor(() => expect(mockedMarkAll).toHaveBeenCalledTimes(1));
+    expect(
+      screen.queryByRole("button", { name: /\(2 unread\)/i })
+    ).toBeNull();
+    expect(screen.queryByText(/2 unread/)).toBeNull();
+  });
+
+  test("a rejected mark-read shows an inline error instead of throwing, then reconciles", async () => {
+    mockedMarkOne.mockRejectedValue(new Error("Server Action not found"));
+    const user = userEvent.setup();
+    await openBell(user);
+
+    await user.click(screen.getByText("You were assigned a task"));
+
+    // Linked row closed the popover; reopen to see the error.
+    const trigger = await screen.findByRole("button", {
+      name: /notifications/i,
+    });
+    await user.click(trigger);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      BELL_MUTATION_ERROR
+    );
+    // Reconcile refetch rolled the optimistic decrement back.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /notifications \(2 unread\)/i })
+      ).toBeInTheDocument()
+    );
+  });
+
+  test("an { ok: false } result is treated as a failure too", async () => {
+    mockedMarkAll.mockResolvedValue({ ok: false });
+    const user = userEvent.setup();
+    await openBell(user);
+    await user.click(screen.getByText("Mark all read"));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      BELL_MUTATION_ERROR
+    );
+  });
+
+  test("a failed poll is swallowed (non-blocking)", async () => {
+    fetchMock.mockRejectedValue(new Error("offline"));
+    renderBell();
+    expect(
+      await screen.findByRole("button", { name: /^notifications$/i })
+    ).toBeInTheDocument();
+  });
+});
+
+describe("NotificationBellProvider — lives above the page", () => {
+  test("remounting the bell (page navigation) neither refetches nor blinks the badge", async () => {
+    function Harness({ page }: { page: number }) {
+      // Each page renders its own TopBar -> its own bell instance.
+      return (
+        <NotificationBellProvider>
+          <div key={page}>
+            <NotificationBell />
+          </div>
+        </NotificationBellProvider>
+      );
+    }
+    const { rerender } = render(<Harness page={1} />);
+    await screen.findByRole("button", { name: /notifications \(2 unread\)/i });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    rerender(<Harness page={2} />);
+    // Badge is there immediately (no null-state flash) and no new fetch.
+    expect(
+      screen.getByRole("button", { name: /notifications \(2 unread\)/i })
+    ).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("a hidden tab doesn't fetch on mount; becoming visible fetches immediately", async () => {
+    setVisibility("hidden");
+    renderBell();
+    await act(async () => {});
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    setVisibility("visible");
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(
+      await screen.findByRole("button", { name: /notifications \(2 unread\)/i })
+    ).toBeInTheDocument();
+  });
+
+  test("the poll skips ticks while hidden", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      renderBell();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      setVisibility("hidden");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(180_000);
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      setVisibility("visible");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000);
+      });
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

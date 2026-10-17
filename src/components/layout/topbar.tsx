@@ -96,8 +96,10 @@ export function TopBar({ title, crumbs, actions, below, subtitle }: TopBarProps)
           </button>
 
           {/* Bell sits between Search and per-page actions so it's
-              always available without each page passing it. Self-
-              fetches its data; falls back to no-badge while loading. */}
+              always available without each page passing it. Its state
+              comes from the shell-level NotificationBellProvider, so
+              it survives navigation (no refetch / badge flicker per
+              page); no badge until the first fetch lands. */}
           <NotificationBell />
 
           {actions}

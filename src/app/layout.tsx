@@ -6,7 +6,9 @@
  * - JetBrains Mono: Timestamps, metadata, code, monospace elements
  * - Fraunces: Display headings and email body text (personality font)
  *
- * Wraps the app in the Providers component for TanStack Query and tooltips.
+ * Wraps the app in the Providers component (tooltips). Page titles use
+ * the `%s · Kosloski Law CRM` template, so a page that exports
+ * `metadata.title` / `generateMetadata` gets a distinguishable tab.
  */
 
 import type { Metadata } from "next";
@@ -33,7 +35,10 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "Kosloski Law CRM",
+  title: {
+    default: "Kosloski Law CRM",
+    template: "%s · Kosloski Law CRM",
+  },
   description:
     "Practice management, case tracking, and client communication for Kosloski Law.",
 };

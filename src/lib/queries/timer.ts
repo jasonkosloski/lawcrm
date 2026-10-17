@@ -14,7 +14,7 @@
  */
 
 import { cache } from "react";
-import { auth } from "@/auth";
+import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 
 export type ActiveTimerSession = {
@@ -29,7 +29,7 @@ export type ActiveTimerSession = {
 
 export const getCurrentTimerSession = cache(
   async (): Promise<ActiveTimerSession | null> => {
-    const session = await auth();
+    const session = await getSession();
     if (!session?.user?.id) return null;
     const t = await prisma.timerSession.findUnique({
       where: { userId: session.user.id },

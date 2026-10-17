@@ -1,22 +1,24 @@
 /**
  * Dashboard Layout
  *
- * Authoritative auth gate for everything under (dashboard) — every
- * page in this group renders inside the AppShell with the sidebar.
- * The layout itself calls `auth()` and bounces to /login when the
- * session is missing or stale (JWT signed for a user that no longer
- * exists / is deactivated — caught by the `jwt` callback in
- * src/auth.ts setting `session.user.id` to undefined).
+ * UX gate / redirect convenience for everything under (dashboard) —
+ * every page in this group renders inside the AppShell with the
+ * sidebar. The layout reads the session and bounces to /login (with
+ * ?next=) when it is missing or stale (JWT signed for a user that no
+ * longer exists / is deactivated — the `jwt` callback in src/auth.ts
+ * sets `session.user.id` to undefined).
  *
- * The proxy (src/proxy.ts) is intentionally OPTIMISTIC — it only
- * checks cookie presence so it stays fast and runs Edge-style. This
- * layer is where we actually verify the session is good. Pair both
- * for defense in depth.
+ * It is NOT the authorization boundary: Next does not re-run a
+ * layout on partial (RSC) navigations, so every page.tsx and every
+ * server action authenticates itself (`requireUser()` /
+ * `requirePermission()`, enforced by src/app/page-guards.test.ts).
+ * The proxy (src/proxy.ts) is only an optimistic cookie-presence
+ * check. All three layers are needed.
  */
 
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
-import { auth } from "@/auth";
+import { getSession } from "@/lib/session";
 import { AppShell } from "@/components/layout/app-shell";
 import { UserTimeZoneProvider } from "@/components/user-time-zone";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
@@ -26,7 +28,8 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await auth();
+  // Request-cached: the sidebar and timer queries reuse this read.
+  const session = await getSession();
   if (!session?.user?.id) {
     // Stale JWT, no session, or deactivated user. The jwt callback
     // in src/auth.ts wipes `userId` from the token in those cases.

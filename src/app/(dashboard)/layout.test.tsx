@@ -1,8 +1,9 @@
 /**
  * (dashboard) layout — auth gate + ?next= preservation.
  *
- * The layout is the authoritative auth check (the proxy is only a
- * cookie-presence sniff). These tests pin two things:
+ * The layout is a UX gate / redirect convenience (pages and actions
+ * authenticate themselves; the proxy is only a cookie-presence
+ * sniff). These tests pin two things:
  *   1. A missing/stale session redirects to /login, carrying the
  *      original destination via ?next= — sourced from the
  *      `x-pathname` header that src/proxy.ts injects (pathname +

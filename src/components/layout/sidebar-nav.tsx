@@ -27,7 +27,6 @@ import {
   Mail,
   Calendar,
   Clock,
-  DollarSign,
   BarChart3,
   LogOut,
   Zap,
@@ -115,18 +114,27 @@ function useIsDesktop(): boolean {
   );
 }
 
-export function SidebarNav({ data }: { data: SidebarData }) {
+export function SidebarNav({
+  data,
+  canViewAutomations = false,
+}: {
+  data: SidebarData;
+  /** Viewer holds `automations.view` (resolved server-side in AppShell). */
+  canViewAutomations?: boolean;
+}) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { openPalette } = useCommandPalette();
   const { open, close } = useMobileNav();
   const isDesktop = useIsDesktop();
 
-  // Auto-close the mobile drawer when the user navigates. Without
-  // this the drawer would stay open after a Link tap, hiding the
-  // page they just opened. Watch the pathname (not the full URL)
-  // because query-only changes (e.g. ?event=<id> for the modal)
-  // shouldn't dismiss the drawer.
+  // Auto-close the mobile drawer when the route changes by any other
+  // means (back/forward, programmatic navigation). Watch the pathname
+  // (not the full URL) because query-only changes (e.g. ?event=<id>
+  // for the modal) shouldn't dismiss the drawer. Taps on the nav links
+  // themselves close it directly via onClick below — the pathname
+  // effect can't see practice-area links (`/matters?area=…`) or a tap
+  // on the page you're already on, since neither changes the pathname.
   useEffect(() => {
     close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -166,7 +174,6 @@ export function SidebarNav({ data }: { data: SidebarData }) {
           icon: Clock,
           badge: data.hoursToday > 0 ? `${data.hoursToday.toFixed(1)}h` : undefined,
         },
-        { id: "billing", label: "Billing", href: "/billing", icon: DollarSign },
       ],
     },
     {
@@ -203,7 +210,18 @@ export function SidebarNav({ data }: { data: SidebarData }) {
         ...(data.canViewReports
           ? [{ id: "reports", label: "Reports", href: "/reports", icon: BarChart3 }]
           : []),
-        { id: "automations", label: "Automations", href: "/automations", icon: Zap },
+        // Automations lives under Settings (ADR-019) and is gated by
+        // `automations.view`; the page re-checks, so hiding is UX.
+        ...(canViewAutomations
+          ? [
+              {
+                id: "automations",
+                label: "Automations",
+                href: "/settings/automations",
+                icon: Zap,
+              },
+            ]
+          : []),
         { id: "settings", label: "Settings", href: "/settings", icon: Settings },
       ],
     },
@@ -302,6 +320,7 @@ export function SidebarNav({ data }: { data: SidebarData }) {
                   <Link
                     key={item.id}
                     href={item.href}
+                    onClick={close}
                     className={cn(
                       "flex items-center gap-2 px-2.5 py-[5px] rounded-md text-xs transition-all duration-100 cursor-pointer",
                       active
@@ -366,7 +385,7 @@ export function SidebarNav({ data }: { data: SidebarData }) {
               {user?.name ?? "Not signed in"}
             </span>
             <span className="text-2xs text-ink-4">
-              {user?.jobTitle ? `${user.jobTitle} · partner` : "—"}
+              {user?.jobTitle || "—"}
             </span>
           </div>
           <SignOutButton />

@@ -21,7 +21,12 @@
 
 "use client";
 
-import { useEditor, EditorContent, type Editor } from "@tiptap/react";
+import {
+  useEditor,
+  useEditorState,
+  EditorContent,
+  type Editor,
+} from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import {
   Bold,
@@ -34,6 +39,25 @@ import {
   Strikethrough,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+/**
+ * The editor's extension set. Exported so a test can feed everything
+ * it can emit through the sanitizer (`sanitizeUserHtml`) — the two
+ * must stay in lockstep or user content silently disappears on save.
+ *
+ * `horizontalRule` is OFF: StarterKit would turn a typed `---` into
+ * `<hr>`, which the note-profile sanitizer strips on save (the rule
+ * showed in the editor, then vanished). A pasted `<hr>` is dropped by
+ * ProseMirror's schema instead.
+ */
+export function createEditorExtensions() {
+  return [
+    StarterKit.configure({
+      heading: { levels: [2, 3] },
+      horizontalRule: false,
+    }),
+  ];
+}
 
 export function RichTextEditor({
   initialHTML,
@@ -49,11 +73,7 @@ export function RichTextEditor({
   autoFocus?: boolean;
 }) {
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        heading: { levels: [2, 3] },
-      }),
-    ],
+    extensions: createEditorExtensions(),
     content: initialHTML ?? "",
     autofocus: autoFocus,
     editorProps: {
@@ -71,7 +91,7 @@ export function RichTextEditor({
           "[&_code]:bg-paper-2 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[11px] [&_code]:font-mono",
           "[&_pre]:bg-paper-2 [&_pre]:p-2 [&_pre]:rounded [&_pre]:text-[11px]"
         ),
-        "data-placeholder": placeholder ?? "",
+        ...(placeholder ? { "aria-placeholder": placeholder } : {}),
       },
     },
     onUpdate({ editor }) {
@@ -105,17 +125,62 @@ export function RichTextEditor({
       )}
     >
       <EditorToolbar editor={editor} />
-      <EditorContent editor={editor} />
+      <div className="relative">
+        <EditorPlaceholder editor={editor} text={placeholder} />
+        <EditorContent editor={editor} />
+      </div>
+    </div>
+  );
+}
+
+/** Hint text shown while the document is empty. Tiptap's Placeholder
+ *  extension lives in @tiptap/extensions (not a direct dependency), so
+ *  this is a plain overlay driven by the editor's empty state. */
+function EditorPlaceholder({
+  editor,
+  text,
+}: {
+  editor: Editor;
+  text?: string;
+}) {
+  const isEmpty = useEditorState({
+    editor,
+    selector: ({ editor }) => editor.isEmpty,
+  });
+  if (!text || !isEmpty) return null;
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute left-3 top-3 text-xs text-ink-4"
+    >
+      {text}
     </div>
   );
 }
 
 function EditorToolbar({ editor }: { editor: Editor }) {
+  // Tiptap 3 does not re-render on transactions by default, so reading
+  // editor.isActive() during render leaves the buttons (and
+  // aria-pressed) stale after a selection change or a stored-mark
+  // toggle. Subscribe to just the booleans the toolbar shows.
+  const active = useEditorState({
+    editor,
+    selector: ({ editor }) => ({
+      heading: editor.isActive("heading", { level: 2 }),
+      bold: editor.isActive("bold"),
+      italic: editor.isActive("italic"),
+      strike: editor.isActive("strike"),
+      code: editor.isActive("code"),
+      bulletList: editor.isActive("bulletList"),
+      orderedList: editor.isActive("orderedList"),
+      blockquote: editor.isActive("blockquote"),
+    }),
+  });
   return (
     <div className="flex items-center gap-0.5 px-1.5 py-1 border-b border-line bg-paper-2/40">
       <ToolbarButton
         label="Heading"
-        active={editor.isActive("heading", { level: 2 })}
+        active={active.heading}
         onClick={() =>
           editor.chain().focus().toggleHeading({ level: 2 }).run()
         }
@@ -125,28 +190,28 @@ function EditorToolbar({ editor }: { editor: Editor }) {
       <Divider />
       <ToolbarButton
         label="Bold"
-        active={editor.isActive("bold")}
+        active={active.bold}
         onClick={() => editor.chain().focus().toggleBold().run()}
       >
         <Bold size={13} />
       </ToolbarButton>
       <ToolbarButton
         label="Italic"
-        active={editor.isActive("italic")}
+        active={active.italic}
         onClick={() => editor.chain().focus().toggleItalic().run()}
       >
         <Italic size={13} />
       </ToolbarButton>
       <ToolbarButton
         label="Strikethrough"
-        active={editor.isActive("strike")}
+        active={active.strike}
         onClick={() => editor.chain().focus().toggleStrike().run()}
       >
         <Strikethrough size={13} />
       </ToolbarButton>
       <ToolbarButton
         label="Inline code"
-        active={editor.isActive("code")}
+        active={active.code}
         onClick={() => editor.chain().focus().toggleCode().run()}
       >
         <Code size={13} />
@@ -154,21 +219,21 @@ function EditorToolbar({ editor }: { editor: Editor }) {
       <Divider />
       <ToolbarButton
         label="Bullet list"
-        active={editor.isActive("bulletList")}
+        active={active.bulletList}
         onClick={() => editor.chain().focus().toggleBulletList().run()}
       >
         <List size={13} />
       </ToolbarButton>
       <ToolbarButton
         label="Numbered list"
-        active={editor.isActive("orderedList")}
+        active={active.orderedList}
         onClick={() => editor.chain().focus().toggleOrderedList().run()}
       >
         <ListOrdered size={13} />
       </ToolbarButton>
       <ToolbarButton
         label="Quote"
-        active={editor.isActive("blockquote")}
+        active={active.blockquote}
         onClick={() => editor.chain().focus().toggleBlockquote().run()}
       >
         <Quote size={13} />

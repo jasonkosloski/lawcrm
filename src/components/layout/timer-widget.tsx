@@ -17,9 +17,24 @@
  *
  * The server-loaded session arrives as a prop; the widget layers an
  * optimistic local copy over it so start/discard feel instant while
- * the layout revalidation catches up. Stopping goes through the
- * dialog → `stopTimer`, which writes the TimeEntry (source "timer")
- * and deletes the session.
+ * the layout revalidation catches up. The local copy is re-synced
+ * only when the server session's CONTENT changes (not on every RSC
+ * payload — the layout re-renders for unrelated revalidations), and
+ * the activity text being typed lives in its own draft so a payload
+ * landing mid-keystroke can't overwrite it.
+ *
+ * Every server-action call is wrapped: a thrown action (deploy skew,
+ * DB error) or an `{ ok: false }` result rolls the optimistic state
+ * back, re-reads the server, and shows an inline error. Unhandled, a
+ * rejection inside a transition is rethrown into the nearest error
+ * boundary — and this widget lives in the layout, so that would
+ * replace the whole app.
+ *
+ * Stopping goes through the dialog → `stopTimer`, which writes the
+ * TimeEntry (source "timer") and deletes the session. `canLogTime`
+ * (time_entries.create, resolved server-side) disables Stop for users
+ * who can only discard — stopTimer would otherwise bounce them to "/"
+ * with the dialog still open.
  */
 
 "use client";
@@ -46,21 +61,64 @@ import { StopTimerDialog } from "@/components/time-entries/stop-timer-dialog";
 
 const OPTIMISTIC_SESSION_ID = "optimistic";
 
+export const TIMER_NETWORK_ERROR =
+  "Couldn't reach the server. Your timer wasn't changed — please try again.";
+
+/** Content fingerprint of a server session: the local copy re-syncs
+ *  when this changes, not on object identity (every layout render
+ *  delivers a fresh object). */
+function sessionKey(s: ActiveTimerSession | null): string | null {
+  return s
+    ? [s.id, s.startedAt, s.matterId, s.matterName, s.activity].join("|")
+    : null;
+}
+
+/** Ticking elapsed readout. Mounted only while a timer runs, so its
+ *  "now" is fresh at mount (lazy initializer) and updates only from
+ *  the interval callback. The server render and first client render
+ *  can differ by seconds — hence suppressHydrationWarning. */
+function ElapsedClock({ startedAt }: { startedAt: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <span
+      className="font-mono text-xs tabular-nums"
+      suppressHydrationWarning
+    >
+      {formatElapsed(Math.max(0, now - Date.parse(startedAt)))}
+    </span>
+  );
+}
+
 export function TimerWidget({
   session: serverSession,
   matterOptions,
+  canLogTime = true,
 }: {
   session: ActiveTimerSession | null;
   matterOptions: TimerMatterOption[];
+  /** Viewer holds `time_entries.create`. When false, Stop is disabled
+   *  (Discard stays). The server action still enforces it. */
+  canLogTime?: boolean;
 }) {
-  // Optimistic overlay: local session state wins until the next
-  // server value arrives (start/discard flip it immediately; the
-  // action's layout revalidation then confirms).
+  // Optimistic overlay: local session state wins until the server
+  // session's content changes (start/discard flip it immediately; the
+  // action's layout revalidation then confirms). Synced during render
+  // by comparing against the previous server key — no effect needed.
   const router = useRouter();
   const [session, setSession] = useState(serverSession);
-  useEffect(() => setSession(serverSession), [serverSession]);
+  const [prevServerKey, setPrevServerKey] = useState(sessionKey(serverSession));
+  const serverKey = sessionKey(serverSession);
+  if (serverKey !== prevServerKey) {
+    setPrevServerKey(serverKey);
+    setSession(serverSession);
+  }
 
   const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
   const [stopOpen, setStopOpen] = useState(false);
   // Elapsed-hours snapshot FROZEN at the moment Stop is clicked —
   // passing a live ticking value as the dialog's prefill would
@@ -69,17 +127,10 @@ export function TimerWidget({
   const [stopHours, setStopHours] = useState(TIME_ENTRY_INCREMENT_HOURS);
   const [panelOpen, setPanelOpen] = useState(false);
   const [discardArmed, setDiscardArmed] = useState(false);
-
-  // 1s tick while running. `now === null` until mounted — elapsed is
-  // wall-clock-derived, so rendering it on the server would guarantee
-  // a hydration mismatch; the pill shows a placeholder for one frame.
-  const [now, setNow] = useState<number | null>(null);
-  useEffect(() => {
-    if (!session) return;
-    setNow(Date.now());
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [session]);
+  // Activity text while the input is being edited; null = show the
+  // session's value. Kept apart from `session` so a server payload
+  // can't overwrite what the user is typing.
+  const [activityDraft, setActivityDraft] = useState<string | null>(null);
 
   // Disarm the discard confirm a few seconds after arming.
   const disarmRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -94,6 +145,40 @@ export function TimerWidget({
     };
   }, []);
 
+  /** Roll back to `restore`, re-read the server, and tell the user. */
+  const failWith = (restore: ActiveTimerSession | null, message: string) => {
+    setSession(restore);
+    setError(message);
+    router.refresh();
+  };
+
+  /** Run one timer action inside a transition without ever letting a
+   *  rejection escape into an error boundary. */
+  const run = (
+    action: () => Promise<{ ok: boolean; error?: string; code?: string }>,
+    restore: ActiveTimerSession | null
+  ) => {
+    setError(null);
+    startTransition(async () => {
+      try {
+        const res = await action();
+        if (!res.ok) {
+          if (res.code === "already_running") {
+            // Stale idle pill: a clock is already running elsewhere.
+            // Drop the optimistic copy and adopt the real one.
+            setSession(restore);
+            router.refresh();
+            return;
+          }
+          failWith(restore, res.error ?? "The timer couldn't be updated.");
+        }
+      } catch (err) {
+        console.warn("[timer-widget] action failed", err);
+        failWith(restore, TIMER_NETWORK_ERROR);
+      }
+    });
+  };
+
   const onStart = () => {
     // Optimistic: show the running pill immediately.
     setSession({
@@ -103,32 +188,32 @@ export function TimerWidget({
       activity: null,
       startedAt: new Date().toISOString(),
     });
-    startTransition(async () => {
-      const res = await startTimer();
-      if (!res.ok) {
-        // Refused (a timer is already running elsewhere — this tab's
-        // idle pill was stale) or failed: drop the optimistic copy
-        // and re-read the server state so the real running clock is
-        // adopted instead of being silently replaced.
-        setSession(serverSession);
-        router.refresh();
-      }
-    });
+    run(() => startTimer(), serverSession);
   };
 
   const onDiscard = () => {
+    const previous = session;
     setSession(null);
+    setActivityDraft(null);
     setPanelOpen(false);
     setDiscardArmed(false);
-    startTransition(async () => {
-      await discardTimer();
-    });
+    run(() => discardTimer(), previous);
   };
+
+  const errorBanner = error ? (
+    <div
+      role="alert"
+      className="max-w-64 rounded-md border border-warn-border bg-warn-soft px-2.5 py-1.5 text-2xs text-warn shadow-md"
+    >
+      {error}
+    </div>
+  ) : null;
 
   // ── Idle ──────────────────────────────────────────────────────────
   if (!session) {
     return (
-      <div className="fixed bottom-4 right-4 z-40">
+      <div className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-2">
+        {errorBanner}
         <button
           type="button"
           onClick={onStart}
@@ -149,10 +234,9 @@ export function TimerWidget({
   }
 
   // ── Running ───────────────────────────────────────────────────────
-  const elapsedMs = now === null ? null : now - Date.parse(session.startedAt);
-
   return (
     <div className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-2">
+      {errorBanner}
       {panelOpen && (
         <div className="w-64 p-3 rounded-lg bg-white border border-line shadow-lg flex flex-col gap-2">
           <div className="text-2xs font-semibold uppercase tracking-wider text-ink-3">
@@ -164,10 +248,9 @@ export function TimerWidget({
               const matterId = e.target.value || null;
               const matterName =
                 matterOptions.find((m) => m.id === matterId)?.name ?? null;
+              const previous = session;
               setSession({ ...session, matterId, matterName });
-              startTransition(async () => {
-                await updateTimer({ matterId });
-              });
+              run(() => updateTimer({ matterId }), previous);
             }}
             aria-label="Timer matter"
             className={cn(
@@ -185,17 +268,18 @@ export function TimerWidget({
           </select>
           <input
             type="text"
-            value={session.activity ?? ""}
+            value={activityDraft ?? session.activity ?? ""}
             onChange={(e) =>
               // Local echo while typing; persisted on blur so we
               // don't fire a server action per keystroke.
-              setSession({ ...session, activity: e.target.value })
+              setActivityDraft(e.target.value)
             }
             onBlur={(e) => {
               const activity = e.target.value.trim() || null;
-              startTransition(async () => {
-                await updateTimer({ activity });
-              });
+              const previous = session;
+              setSession({ ...session, activity });
+              setActivityDraft(null);
+              run(() => updateTimer({ activity }), previous);
             }}
             placeholder="What are you working on?"
             aria-label="Timer activity"
@@ -217,9 +301,7 @@ export function TimerWidget({
         >
           {/* Pulsing recording dot */}
           <span className="w-1.5 h-1.5 rounded-full bg-warn animate-pulse" />
-          <span className="font-mono text-xs tabular-nums" suppressHydrationWarning>
-            {elapsedMs === null ? "–:––:––" : formatElapsed(elapsedMs)}
-          </span>
+          <ElapsedClock startedAt={session.startedAt} />
           {session.matterName && (
             <span className="text-2xs text-white/70 max-w-36 truncate">
               {session.matterName}
@@ -241,10 +323,15 @@ export function TimerWidget({
           }}
           // The optimistic placeholder has no real session id yet —
           // stopTimer consumes a specific session id, so wait for the
-          // server copy.
-          disabled={session.id === OPTIMISTIC_SESSION_ID}
+          // server copy. Users without time_entries.create can only
+          // discard (ADR-013), so don't offer a dead-end composer.
+          disabled={session.id === OPTIMISTIC_SESSION_ID || !canLogTime}
           className="flex items-center justify-center w-6 h-6 rounded-full bg-white/15 hover:bg-white/25 transition-colors ml-1 disabled:opacity-50"
-          title="Stop timer and log time"
+          title={
+            canLogTime
+              ? "Stop timer and log time"
+              : "You do not have permission to log time"
+          }
           aria-label="Stop timer"
         >
           <Square size={10} fill="currentColor" />

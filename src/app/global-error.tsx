@@ -2,25 +2,30 @@
  * Global Error Boundary
  *
  * Last-resort catch for errors thrown inside the root layout itself
- * (the dashboard error boundary handles errors inside the app shell).
- * Must render its own <html> + <body> because the root layout has
- * crashed.
+ * (`src/app/error.tsx` handles everything below it, and
+ * `(dashboard)/error.tsx` handles pages). Must render its own <html>
+ * + <body> because the root layout has crashed. "Try again" calls
+ * Next 16's `retry()` (re-fetch + re-render); `reset()` would re-render
+ * the same cached payload and re-throw.
  */
 
 "use client";
 
 import { useEffect } from "react";
+import { errorDetails } from "@/lib/error-details";
 
 export default function GlobalError({
   error,
-  reset,
+  retry,
 }: {
-  error: Error & { digest?: string };
-  reset: () => void;
+  error: unknown;
+  retry: () => void;
 }) {
   useEffect(() => {
     console.error("Root error boundary caught:", error);
   }, [error]);
+
+  const { message, digest } = errorDetails(error);
 
   return (
     <html lang="en">
@@ -40,7 +45,7 @@ export default function GlobalError({
           The app failed to start. Try reloading; if the problem persists,
           this is the message to share with support:
         </p>
-        {error.message && (
+        {(message || digest) && (
           <pre
             style={{
               fontFamily: "ui-monospace, monospace",
@@ -53,13 +58,13 @@ export default function GlobalError({
               marginBottom: 16,
             }}
           >
-            {error.message}
-            {error.digest ? `\n\ndigest: ${error.digest}` : ""}
+            {message}
+            {digest ? `${message ? "\n\n" : ""}digest: ${digest}` : ""}
           </pre>
         )}
         <button
           type="button"
-          onClick={reset}
+          onClick={() => retry()}
           style={{
             background: "#2563a8",
             color: "white",

@@ -12,6 +12,11 @@
  *   - "table" → header bar + rows (matters list, intake list, time)
  *   - "detail" → header card + content card (matter detail, lead detail)
  *   - "grid"   → calendar-week-style 7-column grid
+ *
+ * `withTopBar` (default true) draws the TopBar placeholder. Routes
+ * whose layout already renders the real TopBar (matter detail tabs)
+ * pass false so a tab switch doesn't show a second fake header under
+ * the real one.
  */
 
 import { Card } from "@/components/ui/card";
@@ -40,16 +45,21 @@ export function PageSkeleton({
   return (
     <>
       {/* TopBar skeleton */}
-      <div className="flex flex-col shrink-0 bg-card border-b border-line">
-        <div className="brand-gradient-line" />
-        <div className="flex items-center justify-between px-4 py-2.5">
-          <div className="flex flex-col gap-1.5">
-            <Skeleton className="h-2.5 w-24" />
-            <Skeleton className="h-6 w-44" />
+      {withTopBar && (
+        <div
+          data-testid="skeleton-topbar"
+          className="flex flex-col shrink-0 bg-card border-b border-line"
+        >
+          <div className="brand-gradient-line" />
+          <div className="flex items-center justify-between px-4 py-2.5">
+            <div className="flex flex-col gap-1.5">
+              <Skeleton className="h-2.5 w-24" />
+              <Skeleton className="h-6 w-44" />
+            </div>
+            <Skeleton className="h-7 w-28" />
           </div>
-          <Skeleton className="h-7 w-28" />
         </div>
-      </div>
+      )}
 
       <div className="flex-1 overflow-y-auto p-5">{body}</div>
     </>

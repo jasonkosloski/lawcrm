@@ -78,6 +78,13 @@ export function useDialogActionState<State, Payload = FormData>(
   // paint for one frame before clearing; render-phase setState
   // interferes with the action transition and re-triggers the
   // dropped-commit bug above).
+  //
+  // react-hooks/refs forbids exactly this, but the alternatives are
+  // the two things that were tried and rejected above. The write is
+  // idempotent for a given (open, state) pair, so Strict Mode's
+  // double render is harmless; the React Compiler is not enabled
+  // (revisit this block if it ever is). Scoped to this block only.
+  /* eslint-disable react-hooks/refs -- documented deliberate render-phase baseline; see comment above */
   const baselineRef = useRef({ open, state });
   if (open !== baselineRef.current.open) {
     baselineRef.current = { open, state };
@@ -85,9 +92,7 @@ export function useDialogActionState<State, Payload = FormData>(
 
   // Anything identical to the baseline predates this open session —
   // expose the initial state instead.
-  return [
-    state === baselineRef.current.state ? initialState : state,
-    formAction,
-    isPending,
-  ];
+  const exposed = state === baselineRef.current.state ? initialState : state;
+  /* eslint-enable react-hooks/refs */
+  return [exposed, formAction, isPending];
 }

@@ -103,14 +103,8 @@
   --color-warn-border: #e2c0ad;
   --color-danger: #c13c3c;
 
-  /* ── Practice area colors ───────────────────────────────────────────────── */
-  --color-area-1983: #2563a8;
-  --color-area-housing: #2d8a5f;
-  --color-area-employment: #b6623d;
-  --color-area-criminal: #6b4e7d;
-  --color-area-class: #8a6a2d;
-  --color-area-ada: #3a8a7a;
-  --color-area-education: #3a8a7a;
+  /* Practice-area / matter colors are DATA (PracticeArea.color,
+     Matter.color — validated hex in the DB), not theme tokens. */
 }
 
 /* ── Root CSS variables (shadcn-compatible, mapped to brand) ────────────────── */
@@ -171,13 +165,6 @@
 .brand-gradient-line {
   height: 3px;
   background: linear-gradient(90deg, var(--color-brand-500), var(--color-brand-300) 40%, #e5e4de 80%);
-}
-
-/* ── Display typography helper ──────────────────────────────────────────────── */
-.text-display {
-  font-family: var(--font-display);
-  font-weight: 500;
-  letter-spacing: -0.01em;
 }
 
 /* ── Email reader body typography ───────────────────────────────────────────── */

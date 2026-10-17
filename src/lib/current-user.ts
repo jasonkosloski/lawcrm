@@ -18,20 +18,11 @@
 
 import { cache } from "react";
 import { redirect } from "next/navigation";
-import { auth } from "@/auth";
+import { getSession } from "@/lib/session";
 
-/**
- * The request's Auth.js session, decoded ONCE per request.
- *
- * Every `auth()` call runs the full session action: JWE decrypt, the
- * jwt callback's `user.findUnique` (isActive + password fingerprint,
- * ADR-017) and a re-encrypt whose cookie is discarded. `auth()` itself
- * is not memoised, and React `cache()` only dedupes per wrapper, so
- * every server-side reader (layouts, queries, `getCurrentUserId`)
- * should go through this one wrapper. With the pg pool capped at 1
- * connection, redundant round-trips serialize, so deduping matters.
- */
-export const getSession = cache(() => auth());
+// Re-exported so existing importers of `getSession` from here keep working;
+// the per-request memoised reader lives in `@/lib/session`.
+export { getSession };
 
 /**
  * Cached per-request (via `getSession`): this function is called

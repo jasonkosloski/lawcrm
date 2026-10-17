@@ -10,9 +10,17 @@
  * server actions (their return value is deserialized over the wire
  * and is never reference-equal across submissions). Reusing one
  * object would mask the very identity semantics the hook relies on.
+ *
+ * Submissions are dispatched inside `startTransition`, exactly like
+ * `<form action>` does. Calling a useActionState dispatch outside a
+ * transition logs "An async function with useActionState was called
+ * outside of a transition" and leaves isPending false, so the
+ * transition path (and the hook's `anchor` companion update) would
+ * go untested. console.error is spied on and asserted clean.
  */
 
-import { describe, expect, test } from "vitest";
+import { startTransition } from "react";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { useDialogActionState } from "./use-dialog-action-state";
 
@@ -36,12 +44,27 @@ const setup = (open = true) =>
     { initialProps: { open } }
   );
 
-const submit = async (
-  result: { current: ReturnType<typeof useDialogActionState<TestState, TestState>> },
-  payload: TestState
-) => {
+let errorSpy: ReturnType<typeof vi.spyOn>;
+
+beforeEach(() => {
+  errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+});
+
+afterEach(() => {
+  // No "called outside of a transition" (or any other React) errors.
+  expect(errorSpy).not.toHaveBeenCalled();
+  errorSpy.mockRestore();
+});
+
+type HookResult = {
+  current: ReturnType<typeof useDialogActionState<TestState, TestState>>;
+};
+
+const submit = async (result: HookResult, payload: TestState) => {
   await act(async () => {
-    result.current[1](payload);
+    startTransition(() => {
+      result.current[1](payload);
+    });
   });
 };
 
@@ -117,5 +140,32 @@ describe("useDialogActionState", () => {
     rerender({ open: false });
     rerender({ open: true });
     expect(result.current[0]).toBe(initial);
+  });
+
+  test("isPending is true while the action is unresolved and false after it settles", async () => {
+    let settle: (v: TestState) => void = () => {};
+    const slow = () =>
+      new Promise<TestState>((resolve) => {
+        settle = resolve;
+      });
+    const { result } = renderHook(() =>
+      useDialogActionState<TestState, TestState>(slow, initial, true)
+    );
+    expect(result.current[2]).toBe(false);
+
+    await act(async () => {
+      startTransition(() => {
+        result.current[1]({ status: "ok" });
+      });
+    });
+    expect(result.current[2]).toBe(true);
+    // Still masked to initial while pending — nothing has landed.
+    expect(result.current[0]).toBe(initial);
+
+    await act(async () => {
+      settle({ status: "ok" });
+    });
+    expect(result.current[2]).toBe(false);
+    expect(result.current[0]).toEqual({ status: "ok" });
   });
 });

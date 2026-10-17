@@ -13,7 +13,8 @@
  * `toggle`, `close` is the cheapest shape.
  *
  * The drawer also closes:
- *   - When a nav link is tapped (so a fresh tap re-opens it next time)
+ *   - When a nav link is tapped (SidebarNav's Link onClick calls
+ *     `close`, so query-only links and same-page taps dismiss it too)
  *   - When the user presses Escape
  *   - When the user taps the backdrop
  *
