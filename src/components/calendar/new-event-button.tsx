@@ -10,6 +10,11 @@
  *     surrounding CreateStackProvider (the original one-click
  *     inline path — still the fastest way to block time without
  *     leaving the calendar).
+ *
+ * Both entry points need `events.create`: the full page 404s without
+ * it and the composer's action redirects to "/" (dropping whatever was
+ * typed). The server page resolves the permission and passes
+ * `canCreate`; without it neither affordance renders.
  */
 
 "use client";
@@ -19,8 +24,16 @@ import { Plus, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCreateStack } from "@/components/create-stack/create-stack-provider";
 
-export function NewEventButton() {
+export function NewEventButton({
+  canCreate = true,
+}: {
+  /** Viewer holds `events.create`. Defaults to true so a caller that
+   *  hasn't resolved it yet keeps today's behaviour (the server still
+   *  enforces); pass the real flag from the page. */
+  canCreate?: boolean;
+}) {
   const { open } = useCreateStack();
+  if (!canCreate) return null;
   return (
     <div className="flex items-center gap-1">
       <Button

@@ -31,6 +31,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { formatHourLabel, HOUR_HEIGHT_PX, HOURS } from "@/lib/calendar-utils";
 import { dateKeyInTz } from "@/lib/format-date";
+import { itemDayKey } from "./grid-time";
 import type {
   CalendarItem,
   CalendarEventRow,
@@ -56,10 +57,7 @@ export function bucketDayItems(
   timedEvents: CalendarEventRow[];
   deadlines: CalendarDeadlineRow[];
 } {
-  const onDay = items.filter(
-    (i) =>
-      dateKeyInTz(i.kind === "event" ? i.startTime : i.dueDate, tz) === dayKey
-  );
+  const onDay = items.filter((i) => itemDayKey(i, tz) === dayKey);
   const events = onDay
     .filter((i): i is CalendarEventRow => i.kind === "event")
     .sort((a, b) => a.startTime.getTime() - b.startTime.getTime());

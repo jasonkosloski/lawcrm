@@ -52,6 +52,7 @@ import {
   HOURS,
 } from "@/lib/calendar-utils";
 import { dateKeyInTz } from "@/lib/format-date";
+import { itemDayKey } from "./grid-time";
 import type {
   CalendarItem,
   CalendarEventRow,
@@ -107,8 +108,9 @@ export function WeekView({
   // the Monday column.
   const byDay = new Map<string, CalendarItem[]>();
   for (const item of renderItems) {
-    const itemDate = item.kind === "event" ? item.startTime : item.dueDate;
-    const key = dateKeyInTz(itemDate, userTz);
+    // All-day events and deadlines are date-only (read in UTC);
+    // timed events bucket by the profile zone.
+    const key = itemDayKey(item, userTz);
     if (!byDay.has(key)) byDay.set(key, []);
     byDay.get(key)!.push(item);
   }

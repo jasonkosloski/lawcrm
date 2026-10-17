@@ -29,17 +29,14 @@
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
-import { isSameDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
-  eventHeightPx,
-  eventTopPx,
   HOUR_HEIGHT_PX,
   HOURS,
-  isWeekend,
   layoutOverlappingEvents,
-  nowOffsetPx,
 } from "@/lib/calendar-utils";
+import { dateOnlyKey } from "@/lib/format-date";
+import { useUserTimeZone } from "@/components/user-time-zone";
 import {
   clearActiveDrag,
   hasKind,
@@ -58,6 +55,16 @@ import type {
   CalendarDeadlineRow,
 } from "@/lib/queries/calendar";
 import type { MoveEventFn } from "./week-view";
+import {
+  chipBox,
+  clampEndToGrid,
+  clampStartToGrid,
+  computeAllDayDrop,
+  computeTimedDrop,
+  formatTimeShort,
+  nowTopPx,
+  snapMinutes,
+} from "./grid-time";
 
 // Move dispatch is owned by WeekView so the optimistic overlay,
 // the action call, and the post-action refresh stay in one place.
@@ -88,21 +95,18 @@ export function WeekAllDayCell({
     kind: CALENDAR_EVENT_KIND,
     disabled: !canEdit,
     onDrop: (data) => {
-      const droppedDate = startOfLocalDay(day);
-      const originalStart = new Date(data.startTimeIso);
-      // No-op when the chip is already all-day on this date.
-      if (data.isAllDay && isSameDay(originalStart, droppedDate)) {
-        return;
-      }
-      move(data.id, {
-        isAllDay: true,
-        start: droppedDate,
-        end: droppedDate,
-      });
+      // All-day values are date-only (UTC midnight, ADR-012): the
+      // drop date is the column's calendar-day key, never a
+      // browser-local midnight. Null = already there (no-op).
+      const schedule = computeAllDayDrop(data, dateOnlyKey(day));
+      if (schedule) move(data.id, schedule);
     },
   });
 
-  const weekend = isWeekend(day);
+  // Day Dates are noon UTC of the user-TZ calendar day (see
+  // calendarWeekInTz), so the UTC weekday is the column's weekday.
+  const dow = day.getUTCDay();
+  const weekend = dow === 0 || dow === 6;
   return (
     <div
       {...drop.handlers}
@@ -131,11 +135,10 @@ export function WeekAllDayCell({
 
 export type WeekTimeColumnProps = {
   day: Date;
-  /** True when this column represents the user's local "today".
-   *  Computed once at the page level using user-TZ date keys so
-   *  the now-line + accent appear in the right column on a UTC
-   *  server. */
-  isToday: boolean;
+  /** @deprecated Unused. The now-line decides for itself from
+   *  `now` and the user's zone. Optional only so existing callers
+   *  still compile; drop it from them. */
+  isToday?: boolean;
   now: Date;
   events: CalendarEventRow[];
   canEdit: boolean;
@@ -144,36 +147,16 @@ export type WeekTimeColumnProps = {
 
 export function WeekTimeColumn({
   day,
-  isToday,
   now,
   events,
   canEdit,
   move,
 }: WeekTimeColumnProps) {
+  const tz = useUserTimeZone();
   const [previewTopY, setPreviewTopY] = useState<number | null>(null);
-
-  // Snap helper — used by both drop and the dragover preview so
-  // the line + commit stay in sync.
-  const computeSnap = (
-    cursorYInColumn: number,
-    data: CalendarEventDragData
-  ): { topY: number; date: Date } => {
-    const chipTopY = data.isAllDay
-      ? cursorYInColumn
-      : cursorYInColumn - data.grabOffsetY;
-    const totalMinutes = clamp(
-      Math.round((chipTopY / HOUR_HEIGHT_PX) * 60 / 15) * 15,
-      0,
-      (HOURS.length - 1) * 60 + 45
-    );
-    const topY = (totalMinutes / 60) * HOUR_HEIGHT_PX;
-    const startHour = HOURS[0]!;
-    const dayStart = startOfLocalDay(day);
-    const date = new Date(dayStart);
-    date.setHours(startHour, 0, 0, 0);
-    date.setMinutes(date.getMinutes() + totalMinutes);
-    return { topY, date };
-  };
+  // The column's calendar day in the user's zone (`day` is noon UTC
+  // of that day, so its UTC date is the key).
+  const dayKey = dateOnlyKey(day);
 
   const drop = useDropTarget<CalendarEventDragData>({
     kind: CALENDAR_EVENT_KIND,
@@ -181,18 +164,11 @@ export function WeekTimeColumn({
     onDrop: (data, e) => {
       const rect = e.currentTarget.getBoundingClientRect();
       const cursorYInColumn = e.clientY - rect.top;
-      const { date: newStart } = computeSnap(cursorYInColumn, data);
-      const originalStart = new Date(data.startTimeIso);
-      const originalEnd = new Date(data.endTimeIso);
-      const durationMs = data.isAllDay
-        ? 2 * 60 * 60 * 1000
-        : Math.max(
-            15 * 60 * 1000,
-            originalEnd.getTime() - originalStart.getTime()
-          );
-      const newEnd = new Date(newStart.getTime() + durationMs);
       setPreviewTopY(null);
-      move(data.id, { isAllDay: false, start: newStart, end: newEnd });
+      // Null = the chip landed on its own slot; writing it would
+      // snap off-grid starts and push to Google for nothing.
+      const schedule = computeTimedDrop(data, cursorYInColumn, dayKey, tz);
+      if (schedule) move(data.id, schedule);
     },
   });
 
@@ -208,8 +184,9 @@ export function WeekTimeColumn({
       if (!data) return;
       const rect = e.currentTarget.getBoundingClientRect();
       const cursorYInColumn = e.clientY - rect.top;
-      const { topY } = computeSnap(cursorYInColumn, data);
-      setPreviewTopY(topY);
+      setPreviewTopY(
+        (snapMinutes(cursorYInColumn, data) / 60) * HOUR_HEIGHT_PX
+      );
     },
     onDragLeave: (e: React.DragEvent) => {
       drop.handlers.onDragLeave(e);
@@ -248,8 +225,7 @@ export function WeekTimeColumn({
     previewHeight = durationHours * HOUR_HEIGHT_PX;
   }
 
-  const nowTop = nowOffsetPx(now, day);
-  const isTodayCol = isToday;
+  const nowTop = nowTopPx(now, dayKey, tz);
   // Weekend = the day Date's UTC weekday. Day Dates are noon UTC of
   // the user-TZ calendar day (see calendarWeekInTz), so getUTCDay()
   // returns the right weekday on any server TZ.
@@ -297,6 +273,8 @@ export function WeekTimeColumn({
           lane={lane}
           laneCount={laneCount}
           move={move}
+          dayKey={dayKey}
+          tz={tz}
         />
       ))}
 
@@ -336,10 +314,6 @@ export function WeekTimeColumn({
           </div>
         </>
       )}
-
-      {/* Today indicator placeholder — preserves the prior API
-          surface for future highlight work. */}
-      {isTodayCol && null}
     </div>
   );
 }
@@ -361,7 +335,9 @@ function DraggableAllDayChip({
   return (
     <DraggableEventWrapper
       eventId={event.id}
-      canDrag={canEdit}
+      // Busy placeholders (details scrubbed) are never movable —
+      // the viewer can't see what they'd be rescheduling.
+      readOnly={!(canEdit && event.viewerCanSeeDetails)}
       buildPayload={(grabOffsetY) => ({
         kind: CALENDAR_EVENT_KIND,
         data: {
@@ -392,6 +368,8 @@ function DraggableEventBlock({
   lane,
   laneCount,
   move,
+  dayKey,
+  tz,
 }: {
   event: CalendarEventRow;
   canEdit: boolean;
@@ -401,7 +379,14 @@ function DraggableEventBlock({
    *  per-chip width = 1 / laneCount. */
   laneCount: number;
   move: MoveEventFn;
+  /** The column's calendar day (user zone), `YYYY-MM-DD`. */
+  dayKey: string;
+  /** The user's profile zone — all chip times and clamps use it. */
+  tz: string;
 }) {
+  // Busy placeholders (details scrubbed) can't be dragged or
+  // resized, even by an events.edit holder.
+  const editable = canEdit && event.viewerCanSeeDetails;
 
   // Resize state — captures the original schedule + initial mouse
   // Y at mousedown so mousemove can compute the snapped delta.
@@ -439,7 +424,7 @@ function DraggableEventBlock({
           resizing.originalStart.getTime() + deltaMinutes * 60_000
         );
         const max = new Date(resizing.originalEnd.getTime() - minDurationMs);
-        const next = clampDateAboveGrid(proposed, resizing.originalStart);
+        const next = clampStartToGrid(proposed, resizing.originalStart, tz);
         const constrained = next.getTime() > max.getTime() ? max : next;
         setResizing({ ...resizing, previewStart: constrained });
       } else {
@@ -447,7 +432,7 @@ function DraggableEventBlock({
           resizing.originalEnd.getTime() + deltaMinutes * 60_000
         );
         const min = new Date(resizing.originalStart.getTime() + minDurationMs);
-        const next = clampDateBelowGrid(proposed, resizing.originalEnd);
+        const next = clampEndToGrid(proposed, resizing.originalEnd, tz);
         const constrained = next.getTime() < min.getTime() ? min : next;
         setResizing({ ...resizing, previewEnd: constrained });
       }
@@ -474,11 +459,11 @@ function DraggableEventBlock({
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
     };
-  }, [resizing, event.id, move]);
+  }, [resizing, event.id, move, tz]);
 
   const startResize = (edge: "top" | "bottom") =>
     (e: React.MouseEvent) => {
-      if (!canEdit) return;
+      if (!editable) return;
       // Stop the chip's HTML5 drag from kicking in — the
       // wrapper is `draggable`, but mousedown on a handle should
       // initiate resize, not move.
@@ -498,8 +483,12 @@ function DraggableEventBlock({
   const renderStart = resizing?.previewStart ?? event.startTime;
   const renderEnd = resizing?.previewEnd ?? event.endTime;
 
-  const top = eventTopPx(renderStart);
-  const height = eventHeightPx(renderStart, renderEnd);
+  const { top, height, clippedTop, clippedBottom } = chipBox(
+    renderStart,
+    renderEnd,
+    dayKey,
+    tz
+  );
   // Lane → horizontal position. We leave a hairline gap between
   // adjacent chips so the boundary reads cleanly. The first lane
   // starts at the column's left padding (4px); subsequent lanes
@@ -518,7 +507,10 @@ function DraggableEventBlock({
   return (
     <DraggableEventWrapper
       eventId={event.id}
-      canDrag={canEdit && !resizing}
+      readOnly={!editable}
+      // A live resize disables the HTML5 drag but keeps the same
+      // element, so handles / hover / focus survive the gesture.
+      dragDisabled={!!resizing}
       buildPayload={(grabOffsetY) => ({
         kind: CALENDAR_EVENT_KIND,
         data: {
@@ -543,11 +535,11 @@ function DraggableEventBlock({
       // drag pickup stays reliable.
       extraStyle={{ zIndex: resizing ? 20 : 5 }}
     >
-      {/* Top resize handle — only when canEdit. The 6px strip
+      {/* Top resize handle — only when editable. The 6px strip
           gives a real click target without intruding on the
           chip body's text. Cursor switches to n-resize so the
           affordance is obvious on hover. */}
-      {canEdit && (
+      {editable && (
         <div
           aria-label="Resize event start"
           onMouseDown={startResize("top")}
@@ -556,10 +548,29 @@ function DraggableEventBlock({
         />
       )}
 
-      <ChipBody event={event} renderHeight={height} />
+      <ChipBody event={event} renderHeight={height} tz={tz} />
+
+      {/* Clipped-edge markers: the event runs past the visible
+          hours (or onto another day) beyond this edge. */}
+      {clippedTop && (
+        <span
+          aria-hidden="true"
+          className="absolute top-0 right-1 text-3xs leading-none text-ink-3"
+        >
+          ▲
+        </span>
+      )}
+      {clippedBottom && (
+        <span
+          aria-hidden="true"
+          className="absolute bottom-0 right-1 text-3xs leading-none text-ink-3"
+        >
+          ▼
+        </span>
+      )}
 
       {/* Bottom resize handle */}
-      {canEdit && (
+      {editable && (
         <div
           aria-label="Resize event end"
           onMouseDown={startResize("bottom")}
@@ -580,20 +591,12 @@ function DraggableEventBlock({
           )}
           aria-live="polite"
         >
-          {formatTimeShort(renderStart)} – {formatTimeShort(renderEnd)}
+          {formatTimeShort(renderStart, tz)} –{" "}
+          {formatTimeShort(renderEnd, tz)}
         </div>
       )}
     </DraggableEventWrapper>
   );
-}
-
-/** Format a Date as "9:00am" — used in the resize preview label. */
-function formatTimeShort(d: Date): string {
-  const h24 = d.getHours();
-  const m = d.getMinutes();
-  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
-  const suffix = h24 < 12 ? "am" : "pm";
-  return `${h12}:${String(m).padStart(2, "0")}${suffix}`;
 }
 
 /** Chip body — title plus secondary lines (time, location,
@@ -615,9 +618,11 @@ function formatTimeShort(d: Date): string {
 function ChipBody({
   event,
   renderHeight,
+  tz,
 }: {
   event: CalendarEventRow;
   renderHeight: number;
+  tz: string;
 }) {
   // Build the priority-ordered list of secondary lines. Time
   // is the user's strongest "when" anchor (visual position is
@@ -631,7 +636,8 @@ function ChipBody({
     key: "time",
     render: () => (
       <span className="text-3xs font-mono text-ink-3 truncate block">
-        {formatTimeShort(event.startTime)} – {formatTimeShort(event.endTime)}
+        {formatTimeShort(event.startTime, tz)} –{" "}
+        {formatTimeShort(event.endTime, tz)}
       </span>
     ),
   });
@@ -694,33 +700,19 @@ function ChipBody({
   );
 }
 
-/** Clamp a Date to the grid's first hour boundary. Used when
- *  resizing the top edge so a top-drag past 6am stops at 6am. */
-function clampDateAboveGrid(proposed: Date, fallback: Date): Date {
-  const startHour = HOURS[0]!;
-  const min = new Date(fallback);
-  min.setHours(startHour, 0, 0, 0);
-  return proposed.getTime() < min.getTime() ? min : proposed;
-}
-
-/** Clamp a Date to the grid's last hour boundary (HOURS[-1] + 1
- *  hour, exclusive). Used when resizing the bottom edge. */
-function clampDateBelowGrid(proposed: Date, fallback: Date): Date {
-  const endHour = HOURS[HOURS.length - 1]! + 1;
-  const max = new Date(fallback);
-  max.setHours(endHour, 0, 0, 0);
-  return proposed.getTime() > max.getTime() ? max : proposed;
-}
-
-/** Shared draggable wrapper. Read-only mode renders a Link;
- *  editable mode renders a draggable div with manual click
- *  navigation (anchor's default URL drag would compete with the
- *  payload). Captures the cursor's Y offset within the chip on
- *  dragstart so the drop handler can land the chip's TOP at the
- *  hovered slot rather than the cursor itself. */
+/** Shared draggable wrapper. Read-only mode (viewer can't edit, or
+ *  the chip is a Busy placeholder) renders a Link; editable mode
+ *  renders a draggable div with manual click navigation (anchor's
+ *  default URL drag would compete with the payload). `dragDisabled`
+ *  turns the HTML5 drag off WITHOUT changing the element type, so a
+ *  resize gesture doesn't unmount the chip's subtree. Captures the
+ *  cursor's Y offset within the chip on dragstart so the drop
+ *  handler can land the chip's TOP at the hovered slot rather than
+ *  the cursor itself. */
 function DraggableEventWrapper({
   eventId,
-  canDrag,
+  readOnly,
+  dragDisabled = false,
   buildPayload,
   title,
   style,
@@ -729,7 +721,8 @@ function DraggableEventWrapper({
   children,
 }: {
   eventId: string;
-  canDrag: boolean;
+  readOnly: boolean;
+  dragDisabled?: boolean;
   buildPayload: (
     grabOffsetY: number
   ) => DragPayload<typeof CALENDAR_EVENT_KIND, CalendarEventDragData>;
@@ -743,7 +736,7 @@ function DraggableEventWrapper({
   const pathname = usePathname();
   const sp = useSearchParams();
 
-  if (!canDrag) {
+  if (readOnly) {
     const params = new URLSearchParams(sp.toString());
     params.set("event", eventId);
     return (
@@ -776,9 +769,12 @@ function DraggableEventWrapper({
       role="button"
       tabIndex={0}
       title={title}
-      className={cn(className, "cursor-grab active:cursor-grabbing")}
+      className={cn(
+        className,
+        !dragDisabled && "cursor-grab active:cursor-grabbing"
+      )}
       style={{ ...style, ...extraStyle }}
-      draggable
+      draggable={!dragDisabled}
       onDragStart={(e) => {
         const rect = e.currentTarget.getBoundingClientRect();
         const grabOffsetY = e.clientY - rect.top;
@@ -826,30 +822,4 @@ export function DeadlineChip({ deadline }: { deadline: CalendarDeadlineRow }) {
       <span className="truncate">{deadline.title}</span>
     </Link>
   );
-}
-
-// ── Helpers ─────────────────────────────────────────────────────────────
-
-function startOfLocalDay(d: Date): Date {
-  // The `day` prop is built server-side via `addDays(startOfWeek(focal))`
-  // which on Vercel (UTC) produces UTC midnights — `2026-04-26T00:00Z`
-  // for "Sunday April 26". When that Date hydrates in a browser west of
-  // UTC (e.g. MDT, UTC-6) it represents Saturday 6pm local. A naive
-  // `setHours(0,0,0,0)` would then round DOWN to Saturday midnight local,
-  // shifting every drop one day back. Reconstruct from the input's UTC
-  // calendar components so the resulting "local midnight" lands on the
-  // calendar day the server intended.
-  return new Date(
-    d.getUTCFullYear(),
-    d.getUTCMonth(),
-    d.getUTCDate(),
-    0,
-    0,
-    0,
-    0
-  );
-}
-
-function clamp(n: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, n));
 }

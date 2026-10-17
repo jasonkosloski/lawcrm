@@ -12,10 +12,18 @@
  * (the action is a full-row upsert, so each commit submits the
  * current values for every field).
  *
+ * Schedule wire format (ADR-012): timed boundaries are datetime-local
+ * wall-clock strings in the user's PROFILE zone (`useUserTimeZone`,
+ * identical on the server render and after hydration); all-day
+ * boundaries are date-only keys read in UTC. Nothing here uses the
+ * browser's zone or local Date getters.
+ *
  * Read-only mode keeps the original static layout.
  *
  * Dismisses on backdrop click, X button, or Escape — all of which
  * strip `?event=` while preserving the calendar's view + date params.
+ * The shell traps focus, focuses itself on open and restores focus to
+ * the opener on close.
  */
 
 "use client";
@@ -26,13 +34,27 @@ import {
   useRef,
   useState,
   useTransition,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-// Client component — event instants render via the centralized
-// variants with no TZ override (browser-local after hydration).
-import { formatDate } from "@/lib/format-date";
+import {
+  formatDate,
+  formatDateOnly,
+  parseDateOnly,
+  parseWallClock,
+} from "@/lib/format-date";
+import { useUserTimeZone } from "@/components/user-time-zone";
+import {
+  dateOnly,
+  normalizeVideoUrl,
+  toScheduleInput,
+  toScheduleWire,
+  videoHref,
+  withDefaultEnd,
+  withDefaultStart,
+} from "@/lib/event-schedule";
 import {
   ArrowRight,
   Calendar,
@@ -47,7 +69,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  deleteCalendarEventAndRedirect,
+  deleteCalendarEvent,
   updateCalendarEvent,
 } from "@/app/actions/calendar-events";
 import { updateCalendarEventInitialState } from "@/lib/calendar-event-form";
@@ -80,11 +102,8 @@ const TYPE_LABEL: Record<string, string> = {
 
 // ── Editor state ────────────────────────────────────────────────────────
 
-// `EditableAttendee` + the attendee list editor moved to
-// ./attendee-picker.tsx when the standalone create form landed
-// (both surfaces share one picker). Re-exported so existing
-// importers of the modal's type keep working.
-export type { EditableAttendee } from "./attendee-picker";
+// `EditableAttendee` + the attendee list editor live in
+// ./attendee-picker.tsx (shared with the standalone create form).
 
 /** All fields the inline editor manages. Mirrors the action's
  *  schema: when a single field commits, we still build a full
@@ -95,8 +114,10 @@ type EventEditState = {
   type: string;
   isAllDay: boolean;
   /** Always stored as datetime-local format ("YYYY-MM-DDTHH:mm")
-   *  even when isAllDay — the form / FormData branches on the
-   *  flag at submission time. */
+   *  even when isAllDay (then "YYYY-MM-DDT00:00" — the date half
+   *  is the date-only value) — FormData branches on the flag at
+   *  submission time. Timed values are wall-clock in the user's
+   *  profile zone. */
   startTime: string;
   endTime: string;
   location: string;
@@ -109,25 +130,15 @@ type EventEditState = {
   visibility: string;
 };
 
-/** Convert a Date to the `YYYY-MM-DDTHH:mm` form datetime-local
- *  expects, using local time so the user sees what they entered. */
-const toDateTimeInput = (d: Date): string => {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mi = String(d.getMinutes()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
-};
-
-const dateOnly = (v: string): string => v.slice(0, 10);
-
-const buildInitialState = (event: CalendarEventDetail): EventEditState => ({
+const buildInitialState = (
+  event: CalendarEventDetail,
+  tz: string
+): EventEditState => ({
   title: event.title,
   type: event.type,
   isAllDay: event.isAllDay,
-  startTime: toDateTimeInput(event.startTime),
-  endTime: toDateTimeInput(event.endTime),
+  startTime: toScheduleInput(event.startTime, event.isAllDay, tz),
+  endTime: toScheduleInput(event.endTime, event.isAllDay, tz),
   location: event.location ?? "",
   zoomUrl: event.zoomUrl ?? "",
   description: event.description ?? "",
@@ -148,12 +159,7 @@ const buildInitialState = (event: CalendarEventDetail): EventEditState => ({
 
 // ── Modal ───────────────────────────────────────────────────────────────
 
-export function EventDetailModal({
-  event,
-  notes,
-  timeEntries,
-  canEdit = false,
-}: {
+export type EventDetailModalProps = {
   event: CalendarEventDetail;
   notes: EventNote[];
   timeEntries: EventTimeEntry[];
@@ -162,38 +168,59 @@ export function EventDetailModal({
    *  passes it through; the action server-side gates again, so
    *  flipping this client-side doesn't bypass anything. */
   canEdit?: boolean;
-}) {
+  /** Whether to offer Delete (the action gates on `events.delete`
+   *  plus the creator / personal-event rules). Defaults to
+   *  `canEdit` for callers that haven't resolved it separately;
+   *  a denied delete now reports its reason instead of failing
+   *  silently. */
+  canDelete?: boolean;
+};
+
+/** Keyed by event id so opening a different event (agenda link,
+ *  back/forward) remounts with fresh editor state. Without it an
+ *  open time-editor draft from event A could be Saved onto event B. */
+export function EventDetailModal(props: EventDetailModalProps) {
+  return <EventDetailModalInner key={props.event.id} {...props} />;
+}
+
+function EventDetailModalInner({
+  event,
+  notes,
+  timeEntries,
+  canEdit = false,
+  canDelete,
+}: EventDetailModalProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const tz = useUserTimeZone();
   const [deletePending, startDelete] = useTransition();
+  // Set once the delete succeeded: the transition settles while the
+  // redirect is still navigating, and a second click would re-run the
+  // action and flash "Event not found".
+  const [deleted, setDeleted] = useState(false);
   const [savePending, startSave] = useTransition();
   const [committed, setCommitted] = useState<EventEditState>(() =>
-    buildInitialState(event)
+    buildInitialState(event, tz)
   );
   const [error, setError] = useState<string | null>(null);
 
-  // Re-sync local state whenever a fresh `event` prop lands —
-  // either the user opened a different event without unmounting,
-  // or the router.refresh() after a save delivered the committed
-  // row back. The latter matters: server-assigned ids and display
-  // extras only exist on the re-read (a picker-added attendee
-  // flips kind:"new" → "contact" here; without the re-seed every
-  // later whole-row commit would re-send it down the
-  // create-Contact path, and edits landed by other users would be
-  // clobbered). Skipped mid-save so a refresh can't overwrite the
-  // optimistic merge — the transition settling re-runs the effect
-  // via the `savePending` dep. Open inline editors are unaffected;
-  // they hold their own draft state while editing.
-  const lastEventIdRef = useRef(event.id);
-  useEffect(() => {
-    if (savePending) return;
-    setCommitted(buildInitialState(event));
-    if (lastEventIdRef.current !== event.id) {
-      lastEventIdRef.current = event.id;
-      setError(null);
-    }
-  }, [event, savePending]);
+  // Re-sync local state whenever a fresh `event` prop lands: the
+  // action's revalidation delivers the committed row back inside the
+  // save transition. That matters: server-assigned ids and display
+  // extras only exist on the re-read (a picker-added attendee flips
+  // kind:"new" -> "contact" here; without the re-seed every later
+  // whole-row commit would re-send it down the create-Contact path,
+  // and edits landed by other users would be clobbered). Skipped
+  // mid-save so a refresh can't overwrite the optimistic merge; once
+  // the transition settles the still-unseeded prop re-seeds. Done
+  // during render (stored-previous-prop pattern), not in an effect.
+  // Open inline editors are unaffected; they hold their own drafts.
+  const [seededFrom, setSeededFrom] = useState(event);
+  if (!savePending && seededFrom !== event) {
+    setSeededFrom(event);
+    setCommitted(buildInitialState(event, tz));
+  }
 
   /** Commit a partial update: merges into committed state, builds
    *  full FormData (whole-row action), fires the update. On
@@ -208,17 +235,11 @@ export function EventDetailModal({
       fd.set("title", next.title);
       fd.set("type", next.type);
       if (next.isAllDay) fd.set("isAllDay", "on");
-      // All-day uses date-only ("YYYY-MM-DD"); timed uses the
-      // full datetime-local. The action's parser branches on
-      // the isAllDay flag.
-      fd.set(
-        "startTime",
-        next.isAllDay ? dateOnly(next.startTime) : next.startTime
-      );
-      fd.set(
-        "endTime",
-        next.isAllDay ? dateOnly(next.endTime) : next.endTime
-      );
+      // All-day uses the date-only key ("YYYY-MM-DD"); timed uses
+      // the datetime-local wall clock in the user's profile zone.
+      // The action's parser branches on the isAllDay flag.
+      fd.set("startTime", toScheduleWire(next.startTime, next.isAllDay));
+      fd.set("endTime", toScheduleWire(next.endTime, next.isAllDay));
       fd.set("location", next.location);
       fd.set("zoomUrl", next.zoomUrl);
       fd.set("description", next.description);
@@ -226,7 +247,7 @@ export function EventDetailModal({
       // Strip the display-only fields (initials / jobTitle /
       // contactType / status / attendeeId) so the wire format
       // matches the action's zod schema. Display extras flow back
-      // in when the re-sync effect re-seeds from the refreshed
+      // in when the re-sync above re-seeds from the revalidated
       // `event` prop after this save settles.
       fd.set("attendees", serializeAttendees(next.attendees));
       startSave(async () => {
@@ -236,24 +257,34 @@ export function EventDetailModal({
           fd
         );
         if (res.status === "error") {
-          // Pull the first error message we can find — field-level
+          // Pull the first error message we can find: field-level
           // first, then the action's own error key.
           const first =
             Object.values(res.errors ?? {}).flat().find(Boolean) ??
             "Couldn't save change.";
           setError(first);
           setCommitted(previous);
-        } else {
-          // Refresh to pull the freshly-committed event back in
-          // (matter linkage, attendees with new ids, etc.) —
-          // doesn't visibly flash thanks to the suspense
-          // boundary on the page.
-          router.refresh();
         }
+        // No router.refresh(): the action revalidates the calendar
+        // (and matter) paths, so the fresh row arrives with the
+        // action response in this same transition. A second
+        // refresh just re-ran every calendar query.
       });
     },
-    [committed, event.id, router]
+    [committed, event.id]
   );
+
+  // Returns false when the link is invalid so the inline editor stays
+  // open with what the user typed instead of discarding it.
+  const commitZoomUrl = (raw: string): boolean => {
+    const res = normalizeVideoUrl(raw);
+    if (!res.ok) {
+      setError(res.error);
+      return false;
+    }
+    commit({ zoomUrl: res.value });
+    return true;
+  };
 
   const onDelete = () => {
     if (
@@ -263,8 +294,19 @@ export function EventDetailModal({
     ) {
       return;
     }
+    setError(null);
     startDelete(async () => {
-      await deleteCalendarEventAndRedirect(event.id);
+      const res = await deleteCalendarEvent(event.id);
+      if (!res.ok) {
+        // Denied / already deleted: say so instead of flipping the
+        // button back with the event still on screen.
+        setError(res.error ?? "Couldn't delete this event.");
+        return;
+      }
+      setDeleted(true);
+      router.push(
+        res.matterId ? `/matters/${res.matterId}/events` : "/calendar"
+      );
     });
   };
 
@@ -275,24 +317,11 @@ export function EventDetailModal({
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }, [pathname, router, searchParams]);
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        close();
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [close]);
-
-  // Derived display strings for the read-only branches.
-  const startsAndEnds = committed.isAllDay
-    ? "All day"
-    : isSameDay(new Date(committed.startTime), new Date(committed.endTime))
-      ? `${formatDate(new Date(committed.startTime), "time")} – ${formatDate(new Date(committed.endTime), "time")}`
-      : `${formatDate(new Date(committed.startTime), "datetime")} – ${formatDate(new Date(committed.endTime), "datetime")}`;
-  const dateLabel = formatDate(new Date(committed.startTime), "full_long");
+  // Derived display strings. All-day boundaries are date-only values
+  // (formatted in UTC, never shifted); timed ones are wall-clock
+  // strings in the user's zone, converted back to instants for
+  // display in that same zone.
+  const { dateLabel, startsAndEnds } = describeSchedule(committed, event, tz);
 
   // Busy-only view: viewer is allowed to see this slot is taken
   // but not what's on it. Render a minimal modal — time + the
@@ -300,19 +329,8 @@ export function EventDetailModal({
   // predictable but no detail leaks.
   if (!event.viewerCanSeeDetails) {
     return (
-      <>
-        <button
-          type="button"
-          aria-label="Close event"
-          onClick={close}
-          className="fixed inset-0 z-40 bg-black/25 backdrop-blur-sm cursor-default animate-in fade-in duration-100"
-        />
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Busy"
-          className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[min(92vw,400px)] rounded-xl shadow-2xl ring-1 ring-black/5 border border-line bg-white flex flex-col overflow-hidden animate-in zoom-in-95 fade-in duration-100"
-        >
+      <ModalShell label="Busy" widthClass="w-[min(92vw,400px)]" onClose={close}>
+        <div className="contents">
           <header className="flex items-start gap-3 px-5 pt-5 pb-4 border-b border-line">
             <div className="w-1 self-stretch rounded-full shrink-0 bg-ink-3" />
             <div className="flex-1 min-w-0">
@@ -348,24 +366,17 @@ export function EventDetailModal({
             </p>
           </div>
         </div>
-      </>
+      </ModalShell>
     );
   }
 
   return (
-    <>
-      <button
-        type="button"
-        aria-label="Close event"
-        onClick={close}
-        className="fixed inset-0 z-40 bg-black/25 backdrop-blur-sm cursor-default animate-in fade-in duration-100"
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={committed.title}
-        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[min(92vw,560px)] max-h-[85vh] rounded-xl shadow-2xl ring-1 ring-black/5 border border-line bg-white flex flex-col overflow-hidden animate-in zoom-in-95 fade-in duration-100"
-      >
+    <ModalShell
+      label={committed.title}
+      widthClass="w-[min(92vw,560px)] max-h-[85vh]"
+      onClose={close}
+    >
+      <div className="contents">
         {/* Header with color bar */}
         <header className="flex items-start gap-4 px-5 pt-5 pb-4 border-b border-line relative">
           <div
@@ -421,7 +432,10 @@ export function EventDetailModal({
           {/* Save error — shown above all rows so the user can't
               miss it. Auto-clears on the next successful commit. */}
           {error && (
-            <div className="text-2xs text-warn bg-warn-soft border border-warn-border rounded-md px-2.5 py-1.5">
+            <div
+              role="alert"
+              className="text-2xs text-warn bg-warn-soft border border-warn-border rounded-md px-2.5 py-1.5"
+            >
               {error}
             </div>
           )}
@@ -474,22 +488,31 @@ export function EventDetailModal({
               <InlineText
                 value={committed.zoomUrl}
                 placeholder="+ add video link"
-                onCommit={(v) => commit({ zoomUrl: v })}
+                onCommit={commitZoomUrl}
                 maxLength={500}
                 ariaLabel="Video URL"
                 renderDisplay={
                   committed.zoomUrl
-                    ? (val) => (
-                        <a
-                          href={val}
-                          target="_blank"
-                          rel="noreferrer noopener"
-                          className="text-xs text-brand-700 hover:underline truncate"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          Join video call
-                        </a>
-                      )
+                    ? (val) => {
+                        const href = videoHref(val);
+                        // Legacy free-text values that aren't links
+                        // render as plain text, not a relative href.
+                        return href ? (
+                          <a
+                            href={href}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="text-xs text-brand-700 hover:underline truncate"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            Join video call
+                          </a>
+                        ) : (
+                          <span className="text-xs text-ink truncate">
+                            {val}
+                          </span>
+                        );
+                      }
                     : undefined
                 }
               />
@@ -497,14 +520,18 @@ export function EventDetailModal({
           ) : (
             committed.zoomUrl && (
               <Row icon={<Video size={14} />}>
-                <a
-                  href={committed.zoomUrl}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="text-xs text-brand-700 hover:underline truncate"
-                >
-                  Join video call
-                </a>
+                {videoHref(committed.zoomUrl) ? (
+                  <a
+                    href={videoHref(committed.zoomUrl)!}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="text-xs text-brand-700 hover:underline truncate"
+                  >
+                    Join video call
+                  </a>
+                ) : (
+                  <span className="text-xs text-ink">{committed.zoomUrl}</span>
+                )}
               </Row>
             )
           )}
@@ -532,13 +559,14 @@ export function EventDetailModal({
             </Row>
           )}
 
-          {/* Visibility toggle — editor-only. Defaults to
-              "default" (resolver applies standard rules:
-              creator + attendees + matter team see details;
-              everyone else sees Busy). Flipping to "Show
-              details to everyone" makes this specific event
-              publicly visible regardless of relationship —
-              use sparingly. */}
+          {/* Visibility toggle — editor-only. "default" lets the
+              resolver decide: creator, attendees and the matter
+              team always see details; everyone else sees Busy
+              UNLESS the creator's profile shares event details
+              firm-wide (there is no per-event "private" value
+              yet, so off means "inherit", not "hidden").
+              Flipping to "Show details to everyone" makes this
+              specific event visible in full regardless. */}
           {canEdit && (
             <Row icon={<Eye size={14} />}>
               <label className="inline-flex items-center gap-2 text-xs text-ink-2 select-none">
@@ -557,8 +585,10 @@ export function EventDetailModal({
                 <span>
                   Show details to everyone in the firm
                   <span className="text-2xs text-ink-4 ml-1.5">
-                    (otherwise only attendees + matter team see
-                    details — others see &ldquo;Busy&rdquo;)
+                    (off: attendees + matter team always see
+                    details; everyone else follows the
+                    creator&apos;s profile default — usually
+                    &ldquo;Busy&rdquo;)
                   </span>
                 </span>
               </label>
@@ -628,33 +658,39 @@ export function EventDetailModal({
             </div>
           )}
 
-          {/* Notes attached to this event */}
-          <EventNotesSection
-            eventId={event.id}
-            matterId={event.matter?.id ?? null}
-            matterName={event.matter?.name ?? null}
-            notes={notes}
-          />
+          {/* Notes attached to this event. data-modal-composer: an
+              Escape inside these drafts only blurs the field, so a
+              half-typed note isn't lost to a stray keypress. */}
+          <div data-modal-composer>
+            <EventNotesSection
+              eventId={event.id}
+              matterId={event.matter?.id ?? null}
+              matterName={event.matter?.name ?? null}
+              notes={notes}
+            />
+          </div>
 
           {/* Time entries attached to this event */}
-          <EventTimeEntriesSection
-            eventId={event.id}
-            matterId={event.matter?.id ?? null}
-            entries={timeEntries}
-          />
+          <div data-modal-composer>
+            <EventTimeEntriesSection
+              eventId={event.id}
+              matterId={event.matter?.id ?? null}
+              entries={timeEntries}
+            />
+          </div>
         </div>
 
         {/* Footer */}
         <footer className="flex items-center justify-end gap-2 px-5 py-3 border-t border-line shrink-0 bg-paper-2/30">
-          {canEdit && (
+          {canEdit && (canDelete ?? canEdit) && (
             <button
               type="button"
               onClick={onDelete}
-              disabled={deletePending}
+              disabled={deletePending || deleted}
               className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 h-7 rounded-md bg-white text-warn border border-line hover:border-warn-border hover:bg-warn-soft transition-colors disabled:opacity-50 mr-auto"
             >
               <Trash2 size={13} />
-              {deletePending ? "Deleting…" : "Delete"}
+              {deletePending || deleted ? "Deleting…" : "Delete"}
             </button>
           )}
           {canEdit && savePending && (
@@ -673,7 +709,7 @@ export function EventDetailModal({
           )}
         </footer>
       </div>
-    </>
+    </ModalShell>
   );
 }
 
@@ -694,11 +730,148 @@ function Row({
   );
 }
 
-function isSameDay(a: Date, b: Date): boolean {
+/** Date heading + range line for the read-only / collapsed time row.
+ *  All-day boundaries are date-only (UTC read); timed ones are the
+ *  committed wall-clock strings in `tz` converted back to instants so
+ *  the output is the same on the server render and after hydration. */
+function describeSchedule(
+  c: EventEditState,
+  event: CalendarEventDetail,
+  tz: string
+): { dateLabel: string; startsAndEnds: string } {
+  if (c.isAllDay) {
+    const start = parseDateOnly(dateOnly(c.startTime));
+    const end = parseDateOnly(dateOnly(c.endTime));
+    const multiDay = dateOnly(c.startTime) !== dateOnly(c.endTime);
+    return {
+      dateLabel: formatDateOnly(start, "full_long"),
+      startsAndEnds:
+        multiDay && end
+          ? `All day · through ${formatDateOnly(end, "medium")}`
+          : "All day",
+    };
+  }
+  const start = parseWallClock(c.startTime, tz) ?? event.startTime;
+  const end = parseWallClock(c.endTime, tz) ?? event.endTime;
+  const sameDay = dateOnly(c.startTime) === dateOnly(c.endTime);
+  return {
+    dateLabel: formatDate(start, "full_long", tz),
+    startsAndEnds: sameDay
+      ? `${formatDate(start, "time", tz)} – ${formatDate(end, "time", tz)}`
+      : `${formatDate(start, "datetime", tz)} – ${formatDate(end, "datetime", tz)}`,
+  };
+}
+
+// ── Dialog shell ────────────────────────────────────────────────────────
+
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [contenteditable="true"]';
+
+const EDITABLE = 'input, textarea, select, [contenteditable="true"]';
+
+/** Backdrop + role=dialog container shared by the full and Busy
+ *  views. Handles what a real modal must: focus moves into the dialog
+ *  on open, Tab is trapped inside it, focus returns to the opener on
+ *  close, and Escape closes it, without swallowing an Escape aimed at
+ *  something else (a docked composer's field) and without discarding a
+ *  half-typed note (inside `[data-modal-composer]` the first Escape
+ *  just blurs). */
+function ModalShell({
+  label,
+  widthClass,
+  onClose,
+  children,
+}: {
+  label: string;
+  widthClass: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+    return () => {
+      if (opener && opener !== document.body && document.contains(opener)) {
+        opener.focus();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    // Listens on `document`, not `window`, so handling Escape here
+    // (stopPropagation) keeps it from also reaching other window-level
+    // Escape handlers such as the create dock's.
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      const target = e.target instanceof Element ? e.target : null;
+      const onPage =
+        !target || target === document.body || target === document.documentElement;
+      const inside = !!target && !!rootRef.current?.contains(target);
+      // Focus is somewhere else on the page (e.g. a docked composer):
+      // that surface owns this Escape.
+      if (!inside && !onPage) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (inside && target.closest("[data-modal-composer]") && target.matches(EDITABLE)) {
+        (target as HTMLElement).blur();
+        return;
+      }
+      onClose();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  const trapTab = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Tab") return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const items = Array.from(
+      dialog.querySelectorAll<HTMLElement>(FOCUSABLE)
+    ).filter((el) => !el.hasAttribute("disabled") && el.tabIndex >= 0);
+    if (items.length === 0) {
+      e.preventDefault();
+      return;
+    }
+    const first = items[0]!;
+    const last = items[items.length - 1]!;
+    const active = document.activeElement;
+    if (e.shiftKey && (active === first || active === dialog)) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+
   return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
+    <div ref={rootRef} className="contents">
+      <button
+        type="button"
+        aria-label="Close event"
+        tabIndex={-1}
+        onClick={onClose}
+        className="fixed inset-0 z-40 bg-black/25 backdrop-blur-sm cursor-default animate-in fade-in duration-100"
+      />
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={label}
+        tabIndex={-1}
+        onKeyDown={trapTab}
+        className={cn(
+          "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 rounded-xl shadow-2xl ring-1 ring-black/5 border border-line bg-white flex flex-col overflow-hidden outline-none animate-in zoom-in-95 fade-in duration-100",
+          widthClass
+        )}
+      >
+        {children}
+      </div>
+    </div>
   );
 }
 
@@ -725,21 +898,18 @@ function InlineText({
 }: {
   value: string;
   placeholder?: string;
-  onCommit: (v: string) => void;
+  /** Return false to reject the value and keep the editor open. */
+  onCommit: (v: string) => void | boolean;
   required?: boolean;
   maxLength?: number;
   ariaLabel: string;
   className?: string;
   renderDisplay?: (value: string) => ReactNode;
 }) {
+  // The input mounts fresh each time editing starts, so its
+  // `defaultValue` is always the current `value`; there is no
+  // separate draft to keep in sync.
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-  // Keep draft in sync with value when not actively editing —
-  // prevents a stale draft from clobbering the next edit cycle
-  // after an external commit.
-  useEffect(() => {
-    if (!editing) setDraft(value);
-  }, [value, editing]);
 
   const commit = (raw: string) => {
     const next = raw;
@@ -749,11 +919,10 @@ function InlineText({
     }
     if (required && next.trim().length === 0) {
       // Required field can't be cleared. Revert silently.
-      setDraft(value);
       setEditing(false);
       return;
     }
-    onCommit(next);
+    if (onCommit(next) === false) return;
     setEditing(false);
   };
 
@@ -762,7 +931,7 @@ function InlineText({
       <input
         type="text"
         autoFocus
-        defaultValue={draft}
+        defaultValue={value}
         maxLength={maxLength}
         aria-label={ariaLabel}
         onBlur={(e) => commit(e.currentTarget.value)}
@@ -809,6 +978,9 @@ function InlineText({
         tabIndex={0}
         onClick={() => setEditing(true)}
         onKeyDown={(e) => {
+          // A key pressed on a link INSIDE the display (the video
+          // link) must reach that link, not open the editor.
+          if (e.target !== e.currentTarget) return;
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             setEditing(true);
@@ -856,10 +1028,6 @@ function InlineTextarea({
   ariaLabel: string;
 }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-  useEffect(() => {
-    if (!editing) setDraft(value);
-  }, [value, editing]);
 
   const commit = (raw: string) => {
     if (raw === value) {
@@ -874,7 +1042,7 @@ function InlineTextarea({
     return (
       <textarea
         autoFocus
-        defaultValue={draft}
+        defaultValue={value}
         rows={4}
         maxLength={maxLength}
         aria-label={ariaLabel}
@@ -937,7 +1105,11 @@ function InlineTextarea({
 }
 
 /** Tiny native <select>-style inline picker. Click to flip into
- *  a select; change commits + closes; Escape cancels. */
+ *  a select; picking an option with the mouse commits + closes;
+ *  Escape cancels. Arrow keys only MOVE the highlighted option
+ *  (some browsers fire `change` on every arrow press of a closed
+ *  select, which would save a neighbour on the first keystroke);
+ *  the keyboard choice commits on Enter or blur. */
 function InlineSelect({
   value,
   options,
@@ -950,6 +1122,21 @@ function InlineSelect({
   ariaLabel: string;
 }) {
   const [editing, setEditing] = useState(false);
+  // Option chosen with the keyboard, waiting for Enter / blur.
+  const [pending, setPending] = useState<string | null>(null);
+  const viaKeys = useRef(false);
+  // Set once the picker has been resolved (committed or cancelled) so
+  // a blur fired by the select unmounting can't commit a stale choice.
+  const settled = useRef(false);
+
+  const finish = (next: string | null) => {
+    if (settled.current) return;
+    settled.current = true;
+    setEditing(false);
+    setPending(null);
+    viaKeys.current = false;
+    if (next !== null && next !== value) onCommit(next);
+  };
 
   if (editing) {
     return (
@@ -957,19 +1144,37 @@ function InlineSelect({
         autoFocus
         defaultValue={value}
         aria-label={ariaLabel}
+        onPointerDown={() => {
+          viaKeys.current = false;
+        }}
         onChange={(e) => {
           const next = e.currentTarget.value;
-          setEditing(false);
-          if (next !== value) onCommit(next);
+          if (viaKeys.current) {
+            setPending(next);
+            return;
+          }
+          finish(next);
         }}
-        onBlur={() => setEditing(false)}
+        onBlur={() => finish(pending)}
         onKeyDown={(e) => {
           if (e.key === "Escape") {
             e.preventDefault();
             // Cancel the picker only — don't let the Escape
             // bubble to the modal's close handler.
             e.stopPropagation();
-            setEditing(false);
+            finish(null);
+          } else if (e.key === "Enter") {
+            e.preventDefault();
+            finish(e.currentTarget.value);
+          } else if (
+            e.key === "ArrowUp" ||
+            e.key === "ArrowDown" ||
+            e.key === "Home" ||
+            e.key === "End" ||
+            e.key === "PageUp" ||
+            e.key === "PageDown"
+          ) {
+            viaKeys.current = true;
           }
         }}
         className={cn(inputBase, "text-2xs font-mono uppercase tracking-wider")}
@@ -987,7 +1192,10 @@ function InlineSelect({
   return (
     <button
       type="button"
-      onClick={() => setEditing(true)}
+      onClick={() => {
+        settled.current = false;
+        setEditing(true);
+      }}
       aria-label={`Edit ${ariaLabel}`}
       className={cn(cellHover, "uppercase tracking-wider")}
     >
@@ -1025,20 +1233,21 @@ function InlineTimeEditor({
   const [draftStart, setDraftStart] = useState(startTime);
   const [draftEnd, setDraftEnd] = useState(endTime);
 
-  // Reseed from props when re-opening or after an external update.
-  useEffect(() => {
-    if (!editing) {
-      setDraftIsAllDay(isAllDay);
-      setDraftStart(startTime);
-      setDraftEnd(endTime);
-    }
-  }, [isAllDay, startTime, endTime, editing]);
+  // Seed the working copy from the current props every time the
+  // editor opens (the modal also remounts per event id, so a draft
+  // can never leak onto another event).
+  const open = () => {
+    setDraftIsAllDay(isAllDay);
+    setDraftStart(startTime);
+    setDraftEnd(endTime);
+    setEditing(true);
+  };
 
   if (!editing) {
     return (
       <button
         type="button"
-        onClick={() => setEditing(true)}
+        onClick={open}
         aria-label="Edit date and time"
         className={cn(cellHover, "flex flex-col leading-tight text-left")}
       >
@@ -1049,6 +1258,15 @@ function InlineTimeEditor({
   }
 
   const save = () => {
+    if (
+      draftIsAllDay === isAllDay &&
+      draftStart === startTime &&
+      draftEnd === endTime
+    ) {
+      // Nothing changed: close without a pointless write.
+      setEditing(false);
+      return;
+    }
     const changes: {
       isAllDay?: boolean;
       startTime?: string;
@@ -1067,13 +1285,21 @@ function InlineTimeEditor({
 
   const cancel = () => {
     setEditing(false);
-    setDraftIsAllDay(isAllDay);
-    setDraftStart(startTime);
-    setDraftEnd(endTime);
   };
 
   return (
-    <div className="flex flex-col gap-2 w-full">
+    <div
+      className="flex flex-col gap-2 w-full"
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          // Cancel the edit only; the modal stays open and the draft
+          // is dropped deliberately, not by a stray close.
+          e.preventDefault();
+          e.stopPropagation();
+          cancel();
+        }
+      }}
+    >
       <label className="inline-flex items-center gap-2 text-2xs text-ink-3 select-none">
         <input
           type="checkbox"
@@ -1085,10 +1311,8 @@ function InlineTimeEditor({
               // Re-toggling to timed: if the times are at midnight
               // (the all-day default), reseed to 9–10am so the
               // user doesn't get confusing 00:00 inputs.
-              if (draftStart.endsWith("T00:00"))
-                setDraftStart(`${dateOnly(draftStart)}T09:00`);
-              if (draftEnd.endsWith("T00:00"))
-                setDraftEnd(`${dateOnly(draftEnd)}T10:00`);
+              setDraftStart((v) => withDefaultStart(v));
+              setDraftEnd((v) => withDefaultEnd(v));
             }
           }}
           className="h-3.5 w-3.5 rounded border-line"

@@ -1,6 +1,7 @@
 /**
- * New Event Composer — used by the calendar page's
- * "+ New event" button.
+ * New Event Composer — the create dock's quick "event" panel
+ * (opened by the zap button in NewEventButton; the primary
+ * "New event" button goes to the full-page form instead).
  *
  * Creates a calendar event with no required matter — when no
  * matter is set, it's effectively a personal event by virtue
@@ -11,22 +12,36 @@
  * Field set: title, type, all-day, start/end, location, video
  * URL, description. A matter picker can be added here later if
  * we want one place to create both flavors.
+ *
+ * Schedule wire format (ADR-012): timed events post the
+ * datetime-local wall clock in the user's PROFILE zone; all-day
+ * events post date-only keys. Defaults and the all-day reseed come
+ * from the shared helpers in lib/event-schedule.ts.
  */
 
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import {
+  useActionState,
+  useEffect,
+  useState,
+  useTransition,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { createCalendarEvent } from "@/app/actions/calendar-events";
 import {
   createCalendarEventInitialState,
   type CreateCalendarEventState,
 } from "@/lib/calendar-event-form";
+import { EVENT_TYPES } from "@/lib/note-constants";
 import {
-  EVENT_TYPES,
-  nextHourDateTimeString,
-} from "@/lib/note-constants";
+  dateOnly,
+  nextHourInTz,
+  normalizeVideoUrl,
+  withDefaultEnd,
+  withDefaultStart,
+} from "@/lib/event-schedule";
+import { useUserTimeZone } from "@/components/user-time-zone";
 import {
   DateTimeField,
   SelectField,
@@ -34,34 +49,33 @@ import {
   TextareaField,
 } from "@/components/matters/captures/primary-fields";
 
-const dateOnly = (v: string): string => v.slice(0, 10);
-
 export function NewEventComposer({
-  panelId,
   onClose,
 }: {
-  /** Reserved — the create-stack passes the panel id so a future
-   *  composer can attach captures back to its origin. Unused
-   *  today. */
+  /** The create-stack passes the panel id so a future composer
+   *  could attach captures back to its origin; unused today, so it
+   *  is not declared. */
   panelId?: string;
   /** Optional — fired after a successful create so the dock can
    *  collapse the panel automatically. */
   onClose?: () => void;
 }) {
-  const router = useRouter();
+  const tz = useUserTimeZone();
   const [state, formAction, isPending] = useActionState<
     CreateCalendarEventState,
     FormData
   >(createCalendarEvent, createCalendarEventInitialState);
+  const [, startTransition] = useTransition();
 
   const [title, setTitle] = useState("");
   const [type, setType] =
     useState<(typeof EVENT_TYPES)[number]>("meeting");
   const [isAllDay, setIsAllDay] = useState(false);
-  const [startTime, setStartTime] = useState(nextHourDateTimeString());
-  const [endTime, setEndTime] = useState(nextHourDateTimeString(1));
+  const [startTime, setStartTime] = useState(() => nextHourInTz(tz));
+  const [endTime, setEndTime] = useState(() => nextHourInTz(tz, 1));
   const [location, setLocation] = useState("");
   const [zoomUrl, setZoomUrl] = useState("");
+  const [zoomError, setZoomError] = useState<string | null>(null);
   const [description, setDescription] = useState("");
   // Per-event visibility — local UI is a single boolean
   // ("show details to everyone in the firm" / not). Maps to the
@@ -69,19 +83,41 @@ export function NewEventComposer({
   const [showDetails, setShowDetails] = useState(false);
 
   useEffect(() => {
-    if (state.status === "ok") {
-      // Calendar revalidate already happened server-side; refresh
-      // here ensures the new event appears immediately on this
-      // tab even if the soft-cache held the old snapshot.
-      router.refresh();
-      onClose?.();
+    // createCalendarEvent revalidates the calendar / dashboard /
+    // matter paths itself, so the new event shows up without a
+    // client-side router.refresh().
+    if (state.status === "ok") onClose?.();
+  }, [state.status, onClose]);
+
+  const toggleAllDay = (next: boolean) => {
+    setIsAllDay(next);
+    // Back to timed: reseed 9-10am so the user doesn't submit a
+    // zero-length midnight event.
+    if (!next) {
+      setStartTime((v) => withDefaultStart(v));
+      setEndTime((v) => withDefaultEnd(v));
     }
-  }, [state.status, router, onClose]);
+  };
+
+  // Dispatch manually (not <form action>) so React 19 doesn't reset
+  // every field after a validation error comes back.
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const video = normalizeVideoUrl(zoomUrl);
+    if (!video.ok) {
+      setZoomError(video.error);
+      return;
+    }
+    setZoomError(null);
+    fd.set("zoomUrl", video.value);
+    startTransition(() => formAction(fd));
+  };
 
   const errs = state.errors ?? {};
 
   return (
-    <form action={formAction} className="flex flex-col gap-3">
+    <form onSubmit={onSubmit} className="flex flex-col gap-3">
       <TextField
         name="title"
         value={title}
@@ -96,7 +132,7 @@ export function NewEventComposer({
           type="checkbox"
           name="isAllDay"
           checked={isAllDay}
-          onChange={(e) => setIsAllDay(e.target.checked)}
+          onChange={(e) => toggleAllDay(e.target.checked)}
           className="h-3.5 w-3.5 rounded border-line"
         />
         All day
@@ -177,9 +213,12 @@ export function NewEventComposer({
       <TextField
         name="zoomUrl"
         value={zoomUrl}
-        onChange={setZoomUrl}
+        onChange={(v) => {
+          setZoomUrl(v);
+          setZoomError(null);
+        }}
         placeholder="Zoom / video URL (optional)"
-        error={errs.zoomUrl?.[0]}
+        error={zoomError ?? errs.zoomUrl?.[0]}
       />
 
       <TextareaField
@@ -191,10 +230,11 @@ export function NewEventComposer({
         error={errs.description?.[0]}
       />
 
-      {/* Visibility — defaults to private (resolver decides who
-          sees details). Toggle flips the per-event override to
+      {/* Visibility — toggle flips the per-event override to
           "show_details" so anyone in the firm can see the full
-          event regardless of attendance / matter membership. */}
+          event. Off means "inherit": attendees and the matter team
+          always see details; everyone else follows the creator's
+          profile default (Busy unless that is firm-wide). */}
       <input
         type="hidden"
         name="visibility"
@@ -210,13 +250,18 @@ export function NewEventComposer({
         <span>
           <span className="text-ink">Show details to everyone in the firm</span>
           <span className="block text-[10px] text-ink-4 leading-relaxed mt-0.5">
-            Off: only invited attendees and matter team see details. Others see &ldquo;Unavailable.&rdquo;
+            Off: invited attendees and the matter team always see details;
+            others follow your profile default (usually &ldquo;Busy&rdquo;).
           </span>
         </span>
       </label>
 
       <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
-        <Button type="submit" disabled={isPending} size="sm">
+        <Button
+          type="submit"
+          disabled={isPending || state.status === "ok"}
+          size="sm"
+        >
           {isPending ? "Creating…" : "Create event"}
         </Button>
       </div>

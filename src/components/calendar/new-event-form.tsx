@@ -12,6 +12,10 @@
  * autocomplete the detail modal uses, via ./attendee-picker), and
  * the visibility toggle.
  *
+ * Schedule wire format (ADR-012): timed events post the
+ * datetime-local wall clock in the user's PROFILE zone (defaults come
+ * from `nextHourInTz`); all-day events post date-only keys.
+ *
  * Submits through `createCalendarEvent` (gated on events.create).
  * The server auto-adds the creator as a firm attendee when the
  * posted list doesn't already include them, so an empty attendee
@@ -25,7 +29,14 @@
 
 "use client";
 
-import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useActionState,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Briefcase, Pin, Search, X } from "lucide-react";
@@ -36,7 +47,15 @@ import {
   TextField,
   TextareaField,
 } from "@/components/matters/captures/primary-fields";
-import { EVENT_TYPES, nextHourDateTimeString } from "@/lib/note-constants";
+import { EVENT_TYPES } from "@/lib/note-constants";
+import {
+  dateOnly,
+  nextHourInTz,
+  normalizeVideoUrl,
+  withDefaultEnd,
+  withDefaultStart,
+} from "@/lib/event-schedule";
+import { useUserTimeZone } from "@/components/user-time-zone";
 import { createCalendarEvent } from "@/app/actions/calendar-events";
 import {
   createCalendarEventInitialState,
@@ -50,16 +69,6 @@ import {
   type EditableAttendee,
 } from "./attendee-picker";
 
-/** Strip a YYYY-MM-DDTHH:mm value down to just the date half. */
-const dateOnly = (v: string): string => v.slice(0, 10);
-
-/** Reseed helpers for the all-day → timed toggle — same 9am/10am
- *  defaults as EditEventForm / the matter event composer. */
-const withDefaultStart = (v: string): string =>
-  v.length === 10 || v.endsWith("T00:00") ? `${dateOnly(v)}T09:00` : v;
-const withDefaultEnd = (v: string): string =>
-  v.length === 10 || v.endsWith("T00:00") ? `${dateOnly(v)}T10:00` : v;
-
 export function NewEventForm({
   matters,
 }: {
@@ -68,18 +77,21 @@ export function NewEventForm({
   matters: FilingMatterOption[];
 }) {
   const router = useRouter();
+  const tz = useUserTimeZone();
   const [state, formAction, isPending] = useActionState<
     CreateCalendarEventState,
     FormData
   >(createCalendarEvent, createCalendarEventInitialState);
+  const [, startTransition] = useTransition();
 
   const [title, setTitle] = useState("");
   const [type, setType] = useState<(typeof EVENT_TYPES)[number]>("meeting");
   const [isAllDay, setIsAllDay] = useState(false);
-  const [startTime, setStartTime] = useState(nextHourDateTimeString());
-  const [endTime, setEndTime] = useState(nextHourDateTimeString(1));
+  const [startTime, setStartTime] = useState(() => nextHourInTz(tz));
+  const [endTime, setEndTime] = useState(() => nextHourInTz(tz, 1));
   const [location, setLocation] = useState("");
   const [zoomUrl, setZoomUrl] = useState("");
+  const [zoomError, setZoomError] = useState<string | null>(null);
   const [description, setDescription] = useState("");
   const [matterId, setMatterId] = useState<string | null>(null);
   const [attendees, setAttendees] = useState<EditableAttendee[]>([]);
@@ -105,6 +117,21 @@ export function NewEventForm({
     }
   }, [state.status, state.eventId, router]);
 
+  // Dispatch manually (not <form action>) so React 19 doesn't reset
+  // every field when a validation error comes back.
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const video = normalizeVideoUrl(zoomUrl);
+    if (!video.ok) {
+      setZoomError(video.error);
+      return;
+    }
+    setZoomError(null);
+    fd.set("zoomUrl", video.value);
+    startTransition(() => formAction(fd));
+  };
+
   const errs = state.errors ?? {};
 
   return (
@@ -117,7 +144,7 @@ export function NewEventForm({
         Back to calendar
       </Link>
 
-      <form action={formAction} className="flex flex-col gap-3">
+      <form onSubmit={onSubmit} className="flex flex-col gap-3">
         <TextField
           name="title"
           value={title}
@@ -196,9 +223,12 @@ export function NewEventForm({
         <TextField
           name="zoomUrl"
           value={zoomUrl}
-          onChange={setZoomUrl}
+          onChange={(v) => {
+            setZoomUrl(v);
+            setZoomError(null);
+          }}
           placeholder="Zoom / video URL (optional)"
-          error={errs.zoomUrl?.[0]}
+          error={zoomError ?? errs.zoomUrl?.[0]}
         />
 
         {/* Matter — optional. Matterless events are personal
@@ -252,7 +282,7 @@ export function NewEventForm({
         />
 
         {/* Visibility — same semantics as the quick composer /
-            modal toggle. */}
+            modal toggle. Off means "inherit", not "hidden". */}
         <input
           type="hidden"
           name="visibility"
@@ -270,8 +300,9 @@ export function NewEventForm({
               Show details to everyone in the firm
             </span>
             <span className="block text-2xs text-ink-4 leading-relaxed mt-0.5">
-              Off: only invited attendees and the matter team see details.
-              Others see &ldquo;Busy.&rdquo;
+              Off: invited attendees and the matter team always see
+              details; others follow your profile default (usually
+              &ldquo;Busy&rdquo;).
             </span>
           </span>
         </label>
@@ -283,8 +314,15 @@ export function NewEventForm({
           >
             Cancel
           </Link>
-          <Button type="submit" disabled={isPending}>
-            {isPending ? "Creating…" : "Create event"}
+          {/* Stay disabled after success: the redirect to the new
+              event is still in flight, and a second click would
+              create a duplicate (and a second Google push). */}
+          <Button type="submit" disabled={isPending || state.status === "ok"}>
+            {isPending
+              ? "Creating…"
+              : state.status === "ok"
+                ? "Opening…"
+                : "Create event"}
           </Button>
         </div>
       </form>
@@ -380,15 +418,12 @@ function MatterSelect({
           }}
           placeholder="Search matters — or leave empty for a personal event"
           aria-label="Search matters"
-          aria-expanded={open}
-          aria-haspopup="listbox"
           className="h-8 w-full pl-7 pr-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
         />
       </div>
 
       {open && (
         <ul
-          role="listbox"
           aria-label="Matter options"
           className="absolute left-0 right-0 mt-1 z-50 max-h-64 overflow-y-auto rounded-md border border-line bg-white shadow-md"
         >

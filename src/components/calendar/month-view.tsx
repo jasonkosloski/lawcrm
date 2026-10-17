@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { EventLink } from "./event-link";
 import { WEEK_STARTS_ON } from "@/lib/calendar-utils";
 import { dateKeyInTz, formatDate } from "@/lib/format-date";
+import { itemDayKey } from "./grid-time";
 import type {
   CalendarItem,
   CalendarEventRow,
@@ -44,8 +45,7 @@ export function MonthView({
 
   const byDay = new Map<string, CalendarItem[]>();
   for (const item of items) {
-    const itemDate = item.kind === "event" ? item.startTime : item.dueDate;
-    const key = dateKeyInTz(itemDate, userTz);
+    const key = itemDayKey(item, userTz);
     if (!byDay.has(key)) byDay.set(key, []);
     byDay.get(key)!.push(item);
   }
