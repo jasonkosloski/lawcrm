@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, test, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 vi.mock("@/app/actions/billing", () => ({
   approveInvoice: vi.fn(),
@@ -16,6 +16,7 @@ vi.mock("@/app/actions/billing", () => ({
   sendInvoice: vi.fn(),
 }));
 
+import { approveInvoice } from "@/app/actions/billing";
 import { InvoiceActionBar } from "./invoice-action-bar";
 
 const baseProps = {
@@ -51,5 +52,22 @@ describe("InvoiceActionBar — Apply trust visibility", () => {
     expect(
       screen.queryByRole("button", { name: /apply trust/i })
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("InvoiceActionBar — Approve", () => {
+  test("posts the total the approver is looking at so a moved total is refused", async () => {
+    vi.mocked(approveInvoice).mockResolvedValue({ ok: true });
+    render(
+      <InvoiceActionBar
+        {...baseProps}
+        currentStatus="draft"
+        invoiceBalance={1234.5}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /approve/i }));
+    await waitFor(() =>
+      expect(approveInvoice).toHaveBeenCalledWith("inv1", "1234.50")
+    );
   });
 });

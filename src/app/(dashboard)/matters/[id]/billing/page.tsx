@@ -17,13 +17,9 @@
  * + calendar URL patterns.
  *
  * What's deferred (intentionally — see docs/FEATURES.md):
- *   - Invoice line-item editing beyond the auto-bundle
- *   - Expenses (no Expense model yet)
- *   - Partial payments
- *   - PDF export / email send
+ *   - Real email delivery of invoices (send is logged-only today)
  *   - Settlement distribution waterfall
  *   - Tax calculation (taxAmount stays 0)
- *   - Aging report (the row's daysUntilDue gets the user 90% there)
  */
 
 import Link from "next/link";
@@ -281,8 +277,11 @@ function MainColumn({
   selectedInvoiceId: string | null;
   isSplit: boolean;
 }) {
+  // Same definition as Outstanding AR: billed client invoices that
+  // still owe money (drafts / approved haven't reached the client;
+  // internal records have no AR).
   const openInvoiceCount = billing.invoices.filter(
-    (i) => i.status !== "paid" && i.status !== "void"
+    (i) => i.kind === "client" && (i.status === "sent" || i.status === "partial")
   ).length;
 
   const invoiceHref = (invId: string): string =>
@@ -562,15 +561,18 @@ function MainColumn({
               the same bundle-and-link mechanic, so void on either
               kind unlinks entries back to billable WIP. */}
           <div className="flex flex-wrap items-center gap-2">
+            {/* Generate / bundle sweep billable expenses too, so the
+                forms get time + expenses combined — an expenses-only
+                matter must still offer the button. */}
             <GenerateInvoiceForm
               matterId={matterId}
-              amountTotal={billing.wip.amountTotal}
-              entryCount={billing.wip.entryCount}
+              amountTotal={billing.wip.amountTotal + billing.wip.expenseTotal}
+              entryCount={billing.wip.entryCount + billing.wip.expenseCount}
             />
             <BundleInternalRecordForm
               matterId={matterId}
-              amountTotal={billing.wip.amountTotal}
-              entryCount={billing.wip.entryCount}
+              amountTotal={billing.wip.amountTotal + billing.wip.expenseTotal}
+              entryCount={billing.wip.entryCount + billing.wip.expenseCount}
             />
           </div>
           {billing.wip.recent.length > 0 && (

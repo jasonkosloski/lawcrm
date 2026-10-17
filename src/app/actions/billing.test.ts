@@ -3,9 +3,14 @@
  *
  * Runs end-to-end against the real test Postgres (`:5433`): seeds a
  * matter with billable time + expenses, runs the actions, asserts
- * the resulting invoices + linkage. Postgres matters here — the
- * concurrency tests below pin `FOR UPDATE` row-lock behavior and
- * the transaction-abort-on-failed-INSERT retry semantics.
+ * the resulting invoices + linkage.
+ *
+ * NOTE on concurrency: the shared Prisma client has a ONE-connection
+ * pool, so `Promise.all` over two actions here runs them strictly one
+ * after another. The "billing concurrency" / "double-billing" tests in
+ * this file therefore pin the sequential (second-sees-first) outcome
+ * only. Row-lock and invoice-number-retry behavior is tested with real
+ * overlapping transactions in billing.concurrency.test.ts.
  *
  * Auth context (`getCurrentUserId`) is module-mocked to return a
  * fixture userId. `next/cache.revalidatePath` is a no-op stub —
@@ -21,6 +26,9 @@ vi.mock("next/cache", () => ({
 vi.mock("@/lib/current-user", () => ({
   getCurrentUserId: vi.fn(),
 }));
+vi.mock("@/lib/current-user-tz", () => ({
+  getCurrentUserTimeZone: vi.fn(),
+}));
 vi.mock("@/lib/permission-check", () => ({
   // Action-logic tests assume the user passes the gate. The gate
   // check itself is tested separately in the "RBAC gate" describe
@@ -30,6 +38,7 @@ vi.mock("@/lib/permission-check", () => ({
 }));
 
 import { getCurrentUserId } from "@/lib/current-user";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import {
@@ -45,6 +54,7 @@ import {
 } from "@/app/actions/billing";
 import { Prisma } from "@/generated/prisma/client";
 import { lineItemEditInitialState } from "@/lib/billing-form";
+import { dateOnlyKey } from "@/lib/format-date";
 import {
   resetDb,
   seedExpense,
@@ -57,6 +67,7 @@ import {
 import { billingInitialState } from "@/lib/billing-form";
 
 const mockedGetUser = vi.mocked(getCurrentUserId);
+const mockedGetTz = vi.mocked(getCurrentUserTimeZone);
 
 let firmId: string;
 let userId: string;
@@ -76,6 +87,7 @@ beforeEach(async () => {
   const user = await seedUser({ firmId });
   userId = user.userId;
   mockedGetUser.mockResolvedValue(userId);
+  mockedGetTz.mockResolvedValue("America/Denver");
 
   const area = await seedPracticeArea();
   const matter = await seedMatter({
@@ -185,6 +197,11 @@ describe("generateInvoiceFromWip — bundling", () => {
 
   test("ignores non-billable + no-charge time entries", async () => {
     await seedTimeEntry({ matterId, userId, amount: 200, billable: false });
+    const noCharge = await seedTimeEntry({ matterId, userId, amount: 400 });
+    await prisma.timeEntry.update({
+      where: { id: noCharge.timeEntryId },
+      data: { noCharge: true },
+    });
     await seedTimeEntry({ matterId, userId, amount: 100 }); // billable
 
     const result = await generateInvoiceFromWip(
@@ -200,6 +217,11 @@ describe("generateInvoiceFromWip — bundling", () => {
     });
     expect(inv?.lineItems).toHaveLength(1);
     expect(inv?.subtotal.toNumber()).toBe(100);
+    // The no-charge entry stays in WIP, unlinked.
+    const nc = await prisma.timeEntry.findUniqueOrThrow({
+      where: { id: noCharge.timeEntryId },
+    });
+    expect(nc.invoiceId).toBeNull();
   });
 
   test("refuses when nothing billable is on the matter", async () => {
@@ -270,7 +292,10 @@ describe("updateInvoiceLineItem — happy path", () => {
     expect(te!.hours).toBe(3);
     expect(te!.rate?.toNumber()).toBe(300);
     expect(te!.amount?.toNumber()).toBe(900); // 3 × 300
-    expect(te!.date.toISOString().slice(0, 10)).toBe("2026-04-20");
+    // Date-only (ADR-012): stored at UTC midnight, read in UTC — the
+    // same calendar day in every server zone.
+    expect(dateOnlyKey(te!.date)).toBe("2026-04-20");
+    expect(te!.date.toISOString()).toBe("2026-04-20T00:00:00.000Z");
 
     // Invoice subtotal recomputed.
     const after = await prisma.invoice.findUnique({ where: { id: inv.id } });
@@ -632,7 +657,19 @@ describe("updateInvoiceLineItem — rate validation", () => {
 // internal-record "Mark recorded" flip (which has no AR) still works.
 
 describe("setInvoiceStatus — client paid/partial funnel", () => {
-  test.each(["paid", "partial"])(
+  test("refuses sent → partial (not a setInvoiceStatus target at all)", async () => {
+    await seedTimeEntry({ matterId, userId, amount: 500 });
+    await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
+    const inv = await prisma.invoice.findFirstOrThrow({ where: { matterId } });
+    await prisma.invoice.update({ where: { id: inv.id }, data: { status: "sent" } });
+    const res = await setInvoiceStatus(inv.id, "partial");
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/unknown/i);
+    const after = await prisma.invoice.findUnique({ where: { id: inv.id } });
+    expect(after!.status).toBe("sent");
+  });
+
+  test.each(["paid"])(
     "refuses sent → %s on a client invoice and leaves the row untouched",
     async (next) => {
       await seedTimeEntry({ matterId, userId, amount: 500 });
@@ -846,15 +883,25 @@ describe("billing RBAC gates", () => {
   });
 
   test.each([
-    ["approved", "billing.approve_invoice"],
-    ["sent", "billing.send_invoice"],
     ["void", "billing.void_invoice"],
     ["paid", "billing.approve_invoice"],
-    ["partial", "billing.record_payment"],
   ])("setInvoiceStatus(→ %s) gates on %s", async (next, key) => {
     await setInvoiceStatus("no-such-invoice", next);
     expect(mockedRequirePermission).toHaveBeenCalledWith(key);
   });
+
+  // approved / sent / partial have dedicated actions (approveInvoice,
+  // sendInvoice, recordInvoicePayment) with their own validation and
+  // audit detail — setInvoiceStatus must not be a back door around them.
+  test.each(["approved", "sent", "partial", "constructor"])(
+    "setInvoiceStatus(→ %s) is refused as unknown without gating",
+    async (next) => {
+      const res = await setInvoiceStatus("no-such-invoice", next);
+      expect(res.ok).toBe(false);
+      expect(res.error).toMatch(/unknown/i);
+      expect(mockedRequirePermission).not.toHaveBeenCalled();
+    }
+  );
 
   test("setInvoiceStatus refuses an unknown status without gating", async () => {
     const res = await setInvoiceStatus("no-such-invoice", "banana");

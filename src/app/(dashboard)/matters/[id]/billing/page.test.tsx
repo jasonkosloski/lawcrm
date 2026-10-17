@@ -76,7 +76,14 @@ import MatterBillingPage from "./page";
 const emptyBilling: MatterBilling = {
   matterId: "m1",
   billingMode: "client",
-  wip: { hoursTotal: 0, amountTotal: 0, entryCount: 0, recent: [] },
+  wip: {
+    hoursTotal: 0,
+    amountTotal: 0,
+    entryCount: 0,
+    expenseCount: 0,
+    expenseTotal: 0,
+    recent: [],
+  },
   trust: { balance: 0, transactions: [] },
   invoices: [],
   outstandingAr: 0,

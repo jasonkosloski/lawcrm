@@ -10,10 +10,16 @@
  * `noCharge: false`, `invoiceId: null`, AND status that the firm
  * considers "ready to bill" (we treat draft / submitted /
  * billable as candidates). `billed` and `written_off` are
- * deliberately out of WIP — they're already accounted for.
+ * deliberately out of WIP — they're already accounted for. Billable
+ * un-invoiced expenses are the second WIP bucket (`expenseCount` /
+ * `expenseTotal`): invoice generation sweeps both, so an
+ * expenses-only matter still has something to invoice.
  */
 
 import { prisma } from "@/lib/prisma";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
+import { dateKeyInTz, daysBetweenKeys, todayKey } from "@/lib/format-date";
+import { roundMoney } from "@/lib/money";
 import { TIME_ENTRY_WIP_STATUSES } from "@/lib/constants/time-entry-status";
 
 export type WipEntry = {
@@ -35,6 +41,11 @@ export type WipSummary = {
   /** Count of entries pending billing. Drives the "Generate invoice"
    *  button copy ("Generate invoice from N entries"). */
   entryCount: number;
+  /** Billable, un-invoiced expenses on the matter — the second bucket
+   *  generate / bundle sweep into an invoice. Kept apart from the time
+   *  fields so "N entries" copy stays about time. */
+  expenseCount: number;
+  expenseTotal: number;
   /** Top-N most recent entries for the inline preview list. */
   recent: WipEntry[];
 };
@@ -67,9 +78,10 @@ export type InvoiceRow = {
   invoiceNumber: string;
   issueDate: Date;
   dueDate: Date;
-  /** Days from today until dueDate. Negative when overdue. Null
-   *  when status === "paid" / "void" since "due" is no longer
-   *  meaningful. */
+  /** Days from the viewer's today until dueDate. Negative when
+   *  overdue. Null unless the invoice is `sent` / `partial` — drafts
+   *  and approved invoices haven't been billed yet, and paid / void
+   *  ones have no due clock. */
   daysUntilDue: number | null;
   subtotal: number;
   taxAmount: number;
@@ -121,8 +133,9 @@ export type MatterBilling = {
   wip: WipSummary;
   trust: TrustSummary;
   invoices: InvoiceRow[];
-  /** Sum of unpaid balances across all open invoices on this
-   *  matter. Drives the "Outstanding AR" KPI on the page. */
+  /** Sum of unpaid balances across the client invoices that have
+   *  been billed (sent / partial) on this matter. Drives the
+   *  "Outstanding AR" KPI on the page. */
   outstandingAr: number;
   /** Every payment received on this matter — drives the matter-
    *  level "Received payments" ledger. Distinct from the trust
@@ -146,14 +159,32 @@ const WIP_STATUSES = TIME_ENTRY_WIP_STATUSES;
  *  `parsedAmount > balance` — when the dust lands below the true
  *  value, the untouched "pay in full" default is falsely flagged
  *  as exceeding the balance. Rounding here keeps every derived
- *  balance exactly representable at cent precision. */
+ *  balance exactly representable at cent precision. Goes through
+ *  `roundMoney` (exact Decimal, HALF_UP) rather than float math. */
 function roundToCents(n: number): number {
-  return Math.round(n * 100) / 100;
+  return roundMoney(n).toNumber();
+}
+
+/** Days from the viewer's today until the due date; negative when
+ *  overdue. Only meaningful for invoices a client has actually been
+ *  billed on (`sent` / `partial`): a draft or approved invoice has no
+ *  due clock yet, and closed ones (`paid` / `void`) none any more —
+ *  all of those are null. Day-key arithmetic in the viewer's zone, so
+ *  DST shifts and the host's zone can't skew the count. */
+function invoiceDaysUntilDue(
+  status: string,
+  dueDate: Date,
+  tz: string,
+  now: Date = new Date()
+): number | null {
+  if (status !== "sent" && status !== "partial") return null;
+  return daysBetweenKeys(todayKey(tz, now), dateKeyInTz(dueDate, tz));
 }
 
 export async function getMatterBilling(
   matterId: string
 ): Promise<MatterBilling> {
+  const tz = await getCurrentUserTimeZone();
   // Shared WIP predicate — the aggregate (totals) and the capped
   // findMany (recent list) below must stay in lockstep or the
   // "Generate invoice from N entries" copy drifts from the preview.
@@ -167,6 +198,7 @@ export async function getMatterBilling(
 
   const [
     wipAgg,
+    expenseAgg,
     wipRecent,
     trustTxns,
     invoices,
@@ -182,6 +214,13 @@ export async function getMatterBilling(
       prisma.timeEntry.aggregate({
         where: wipWhere,
         _sum: { hours: true, amount: true },
+        _count: true,
+      }),
+      // The second WIP bucket — the same predicate the invoice-
+      // creating actions use for expenses.
+      prisma.expense.aggregate({
+        where: { matterId, billable: true, invoiceId: null },
+        _sum: { amount: true },
         _count: true,
       }),
       prisma.timeEntry.findMany({
@@ -200,7 +239,9 @@ export async function getMatterBilling(
       prisma.invoice.findMany({
         where: { matterId },
         orderBy: [{ issueDate: "desc" }, { createdAt: "desc" }],
-        include: { _count: { select: { lineItems: true } } },
+        include: {
+          _count: { select: { lineItems: true, expenseLineItems: true } },
+        },
       }),
       prisma.matter.findUnique({
         where: { id: matterId },
@@ -234,6 +275,8 @@ export async function getMatterBilling(
     hoursTotal: wipAgg._sum.hours ?? 0,
     amountTotal: wipAgg._sum.amount?.toNumber() ?? 0,
     entryCount: wipAgg._count,
+    expenseCount: expenseAgg._count,
+    expenseTotal: expenseAgg._sum.amount?.toNumber() ?? 0,
     recent: wipRecent.map((e) => ({
       id: e.id,
       date: e.date,
@@ -248,19 +291,10 @@ export async function getMatterBilling(
     })),
   };
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const dayMs = 24 * 60 * 60 * 1000;
-
   const invoiceRows: InvoiceRow[] = invoices.map((i) => {
     const total = i.totalAmount.toNumber();
     const paid = i.paidAmount.toNumber();
-    const isClosed = i.status === "paid" || i.status === "void";
-    const daysUntilDue = isClosed
-      ? null
-      : Math.floor(
-          (new Date(i.dueDate).setHours(0, 0, 0, 0) - today.getTime()) / dayMs
-        );
+    const daysUntilDue = invoiceDaysUntilDue(i.status, i.dueDate, tz);
     return {
       id: i.id,
       invoiceNumber: i.invoiceNumber,
@@ -275,19 +309,21 @@ export async function getMatterBilling(
       status: i.status,
       kind: i.kind,
       notes: i.notes,
-      lineItemCount: i._count.lineItems,
+      lineItemCount: i._count.lineItems + i._count.expenseLineItems,
     };
   });
 
-  // Outstanding AR — sum of balances on every open client invoice.
-  // Internal records are deliberately excluded (no money is owed to
-  // the firm — the doc just memorializes work done) regardless of
-  // their status.
+  // Outstanding AR — unpaid balances on client invoices that have
+  // actually been billed: `sent` and `partial`, the same two states
+  // the firm-wide AR aging report counts. Drafts and approved
+  // invoices haven't reached the client, so no money is owed yet.
+  // Internal records are deliberately excluded (the doc just
+  // memorializes work done) regardless of their status.
   const outstandingAr = roundToCents(
     invoiceRows
       .filter(
         (i) =>
-          i.kind === "client" && i.status !== "paid" && i.status !== "void"
+          i.kind === "client" && (i.status === "sent" || i.status === "partial")
       )
       .reduce((sum, i) => sum + i.balance, 0)
   );
@@ -463,17 +499,10 @@ export async function getInvoiceById(
 
   // Reuse the same daysUntilDue logic as the row shape so the
   // preview's "X days late" text matches the table.
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const dayMs = 24 * 60 * 60 * 1000;
+  const tz = await getCurrentUserTimeZone();
   const total = inv.totalAmount.toNumber();
   const paid = inv.paidAmount.toNumber();
-  const isClosed = inv.status === "paid" || inv.status === "void";
-  const daysUntilDue = isClosed
-    ? null
-    : Math.floor(
-        (new Date(inv.dueDate).setHours(0, 0, 0, 0) - today.getTime()) / dayMs
-      );
+  const daysUntilDue = invoiceDaysUntilDue(inv.status, inv.dueDate, tz);
 
   const client = inv.matter.client;
 

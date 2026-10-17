@@ -1,9 +1,16 @@
 /**
  * Billing server actions — invoices + trust ledger.
  *
- * V1 covers what a solo attorney needs to actually bill a client:
- *   - Generate an invoice from WIP time (one click → draft invoice)
- *   - Transition: draft → sent → paid (or void as the escape hatch)
+ * What it covers:
+ *   - Generate an invoice from WIP time + billable expenses (one
+ *     click → draft invoice) or bundle the same WIP into an internal
+ *     record (born paid, "Recorded"; no AR).
+ *   - Client-invoice lifecycle: draft → approved → sent → partial →
+ *     paid, with void available from approved/sent while nothing has
+ *     been paid. Drafts can be deleted instead. Payments on every
+ *     channel (incl. trust) flow through recordInvoicePayment;
+ *     sendInvoice can apply trust at send time.
+ *   - Internal-record lifecycle: draft → paid ("Recorded") → void.
  *   - Add manual trust deposits / disbursements / refunds (bumps
  *     `Matter.trustBalance` in the same transaction)
  *
@@ -41,10 +48,11 @@ import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma, type Tx } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-// Date-only inputs ("YYYY-MM-DD") must parse to LOCAL midnight —
-// `new Date(value)` reads them as UTC midnight, drifting the row a
-// day early for anyone west of UTC. See parseLocalDate docs.
-import { parseLocalDate } from "@/lib/format-date";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
+// Date-only inputs ("YYYY-MM-DD") are stored at UTC midnight and read
+// in UTC (ADR-012). "Today" is the user's calendar day in their
+// profile zone, never the server's.
+import { parseDateOnly, todayKey } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { hasAtMostDecimals, roundMoney } from "@/lib/money";
@@ -65,18 +73,51 @@ import { TIME_ENTRY_WIP_STATUSES } from "@/lib/constants/time-entry-status";
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
-/** Generate the next invoice number for the current calendar year.
+/** Today's calendar date for the acting user, stored the date-only
+ *  way (UTC midnight of their local day — ADR-012). The blank-date
+ *  fallback for payments and trust transactions; never `new Date()`,
+ *  which is already tomorrow on a UTC host after 6 pm Denver. */
+async function todayDateOnly(): Promise<Date> {
+  const tz = await getCurrentUserTimeZone();
+  return parseDateOnly(todayKey(tz))!;
+}
+
+/** The calendar year used in invoice numbers: the acting user's
+ *  current year, so a generate at 6 pm Denver on Dec 31 is still
+ *  numbered in the old year even though the UTC server is in January. */
+async function invoiceNumberYear(): Promise<string> {
+  const tz = await getCurrentUserTimeZone();
+  return todayKey(tz).slice(0, 4);
+}
+
+/** "3 time entries + 2 expenses" — the composition line shared by
+ *  the audit entries of generate and bundle. */
+function describeBundle(entryCount: number, expenseCount: number): string {
+  const parts: string[] = [];
+  if (entryCount > 0) {
+    parts.push(`${entryCount} time ${entryCount === 1 ? "entry" : "entries"}`);
+  }
+  if (expenseCount > 0) {
+    parts.push(`${expenseCount} expense${expenseCount === 1 ? "" : "s"}`);
+  }
+  return parts.join(" + ");
+}
+
+/** Generate the next invoice number for `year`.
  *  Format: "YYYY-NNN" (e.g. 2026-007). Counts existing invoices
- *  whose number starts with the year prefix. Race condition path:
+ *  whose number starts with the year prefix (max + 1, so deleting the
+ *  newest never-sent DRAFT hands its number to the next generate —
+ *  intentional: it keeps the sequence gap-free, and a draft never
+ *  reached a client). Race condition path:
  *  if two concurrent generates land on the same number, the
  *  unique-index on Invoice.invoiceNumber rejects the second. The
  *  caller then retries by re-running its WHOLE transaction — a
  *  failed INSERT aborts the Postgres transaction (SQLSTATE 25P02),
  *  so a retry inside the same transaction can never succeed. */
 async function nextInvoiceNumber(
-  tx: Tx
+  tx: Tx,
+  year: string
 ): Promise<string> {
-  const year = new Date().getFullYear();
   const prefix = `${year}-`;
   const existing = await tx.invoice.findMany({
     where: { invoiceNumber: { startsWith: prefix } },
@@ -125,6 +166,77 @@ async function adjustTrustBalance(
     data: { trustBalance: next },
   });
   return { ok: true };
+}
+
+/** Lock the matter row and return its current trust balance. The
+ *  read-check-write on trustBalance is a lost-update hazard under
+ *  READ COMMITTED; FOR UPDATE queues a competing disbursement until
+ *  this transaction commits. Lock order is invoice → matter
+ *  everywhere an invoice is involved, so deadlocks are impossible. */
+async function lockMatterTrustBalance(
+  tx: Tx,
+  matterId: string
+): Promise<Prisma.Decimal> {
+  await tx.$queryRaw`SELECT id FROM matters WHERE id = ${matterId} FOR UPDATE`;
+  const matter = await tx.matter.findUnique({
+    where: { id: matterId },
+    select: { trustBalance: true },
+  });
+  if (!matter) throw new UserFacingError("Matter not found.");
+  return matter.trustBalance;
+}
+
+/** The trust leg of paying an invoice from trust — the ONE copy used
+ *  by recordInvoicePayment (source=trust) and sendInvoice (apply
+ *  trust): a disbursement TrustTransaction linked to the invoice, the
+ *  Matter.trustBalance decrement, and the InvoicePayment pointing back
+ *  at the ledger row. The caller must hold the invoice and matter row
+ *  locks, have read `trustBalance` via lockMatterTrustBalance, and
+ *  have already checked the amount against the balance (the refusal
+ *  wording differs per caller). Returns the TrustTransaction id. */
+async function payInvoiceFromTrust(
+  tx: Tx,
+  args: {
+    invoice: { id: string; matterId: string; invoiceNumber: string };
+    trustBalance: Prisma.Decimal;
+    amount: Prisma.Decimal;
+    date: Date;
+    reference: string | null;
+    paymentDescription: string | null;
+    userId: string;
+  }
+): Promise<string> {
+  const { invoice, amount } = args;
+  const trustTxn = await tx.trustTransaction.create({
+    data: {
+      matterId: invoice.matterId,
+      type: "disbursement",
+      amount: amount.neg(),
+      description: `Payment to invoice ${invoice.invoiceNumber}`,
+      reference: args.reference,
+      date: args.date,
+      createdBy: args.userId,
+      invoiceId: invoice.id,
+    },
+    select: { id: true },
+  });
+  await tx.matter.update({
+    where: { id: invoice.matterId },
+    data: { trustBalance: roundMoney(args.trustBalance.sub(amount)) },
+  });
+  await tx.invoicePayment.create({
+    data: {
+      invoiceId: invoice.id,
+      source: "trust",
+      amount,
+      date: args.date,
+      description: args.paymentDescription,
+      reference: args.reference,
+      trustTxnId: trustTxn.id,
+      createdBy: args.userId,
+    },
+  });
+  return trustTxn.id;
 }
 
 /** Sum of per-line amounts, each rounded to cents first (invoice
@@ -207,6 +319,8 @@ export async function generateInvoiceFromWip(
     };
   }
 
+  const numberYear = await invoiceNumberYear();
+
   // Single transaction: lock the WIP rows in, compute total, mint
   // the invoice, attach the rows, flip their status. If any step
   // fails the whole thing rolls back — no half-billed entries.
@@ -281,7 +395,7 @@ export async function generateInvoiceFromWip(
       // aborts the whole Postgres transaction, so the retry lives
       // OUTSIDE `mintInvoice` (a retry in here would only see
       // "current transaction is aborted" errors).
-      const number = await nextInvoiceNumber(tx);
+      const number = await nextInvoiceNumber(tx, numberYear);
       const invoice = await tx.invoice.create({
         data: {
           invoiceNumber: number,
@@ -334,25 +448,14 @@ export async function generateInvoiceFromWip(
       }
     }
 
-    // Activity log title spells out both buckets so the audit
+    // Activity log detail spells out both buckets so the audit
     // makes the bundle's composition readable at a glance.
-    const composition: string[] = [];
-    if (result.entryCount > 0) {
-      composition.push(
-        `${result.entryCount} time ${result.entryCount === 1 ? "entry" : "entries"}`
-      );
-    }
-    if (result.expenseCount > 0) {
-      composition.push(
-        `${result.expenseCount} expense${result.expenseCount === 1 ? "" : "s"}`
-      );
-    }
     await logActivity({
       matterId: result.matter.id,
       userId,
       type: "filing",
       title: `Invoice ${result.invoiceNumber} generated`,
-      detail: `${composition.join(" + ")} · $${result.total.toFixed(2)}`,
+      detail: `${describeBundle(result.entryCount, result.expenseCount)} · $${result.total.toFixed(2)}`,
     });
 
     revalidatePath(`/matters/${matterId}/billing`);
@@ -501,21 +604,39 @@ export async function updateInvoiceLineItem(
   // line drops out of the subtotal (contingent-style rows). There
   // is no "leave unchanged" sentinel; a form that wants to keep the
   // rate must prefill it. Non-empty = parse + use.
-  const newRate =
-    parsed.data.rate && parsed.data.rate.length > 0
-      ? new Prisma.Decimal(parsed.data.rate)
-      : null;
+  //
+  // The zod refinements validate with `Number(...)`, which accepts a
+  // few shapes `Decimal` rejects — build the Decimals here so those
+  // surface as field errors instead of a raw DecimalError.
+  let newRate: Prisma.Decimal | null = null;
+  let newHoursDecimal: Prisma.Decimal;
+  try {
+    newHoursDecimal = new Prisma.Decimal(parsed.data.hours);
+  } catch {
+    return {
+      status: "error",
+      errors: { hours: ["Hours must be a number."] },
+    };
+  }
+  if (parsed.data.rate && parsed.data.rate.length > 0) {
+    try {
+      newRate = new Prisma.Decimal(parsed.data.rate);
+    } catch {
+      return {
+        status: "error",
+        errors: { rate: ["Rate must be a positive number"] },
+      };
+    }
+  }
   // Amount = hours * rate rounded to cents when both are present.
   // When rate is null, amount is null too — the entry sits on the
   // invoice but doesn't contribute to the subtotal (matches the
   // existing generateInvoiceFromWip path that skips null amounts).
   // Multiply the exact decimal hours (not the float) so 0.1-style
   // values can't introduce binary noise before rounding.
-  const newAmount = newRate
-    ? roundMoney(newRate.mul(new Prisma.Decimal(parsed.data.hours)))
-    : null;
+  const newAmount = newRate ? roundMoney(newRate.mul(newHoursDecimal)) : null;
 
-  const newDate = parseLocalDate(parsed.data.date);
+  const newDate = parseDateOnly(parsed.data.date);
   if (!newDate) {
     return { status: "error", errors: { date: ["Invalid date"] } };
   }
@@ -624,19 +745,17 @@ export async function updateInvoiceLineItem(
 // ── Invoice status transitions ──────────────────────────────────────────
 
 /** Permission key gating each target status reachable through
- *  setInvoiceStatus. "paid" via this action is only the internal-
- *  record "Mark recorded" flip (client invoices reach paid/partial
- *  exclusively through recordInvoicePayment), so it shares the
- *  approve gate — both are "finalize the document" acts. "partial"
- *  is client-only and always refused below with a pointer to
- *  recordInvoicePayment; it gates on the payment key so the refusal
- *  isn't reachable by users who couldn't record the payment anyway. */
+ *  setInvoiceStatus. Only two flips live here: `void`, and `paid`
+ *  — which is solely the internal-record "Mark recorded" flip
+ *  (client invoices reach paid/partial exclusively through
+ *  recordInvoicePayment), so it shares the approve gate: both are
+ *  "finalize the document" acts. Approve and send have dedicated
+ *  actions (approveInvoice / sendInvoice) that validate and log the
+ *  recipient, the trust leg and the $0 guard — they are deliberately
+ *  NOT reachable here, so every other status string is "unknown". */
 const SET_STATUS_PERMISSION: Record<string, string> = {
-  approved: "billing.approve_invoice",
-  sent: "billing.send_invoice",
   void: "billing.void_invoice",
   paid: "billing.approve_invoice",
-  partial: "billing.record_payment",
 };
 
 /** Returned when a status write loses a race with another change to
@@ -648,12 +767,46 @@ export async function setInvoiceStatus(
   invoiceId: string,
   next: string
 ): Promise<{ ok: boolean; error?: string }> {
-  const permissionKey = SET_STATUS_PERMISSION[next];
+  // Own-property check: a plain index lookup would resolve inherited
+  // keys ("constructor", "toString") to a function.
+  const permissionKey = Object.hasOwn(SET_STATUS_PERMISSION, next)
+    ? SET_STATUS_PERMISSION[next]
+    : undefined;
   if (!permissionKey) {
     return { ok: false, error: `Unknown invoice status "${next}".` };
   }
   await requirePermission(permissionKey);
   const userId = await getCurrentUserId();
+  try {
+    return await setInvoiceStatusUnchecked(invoiceId, next, userId);
+  } catch (err) {
+    return {
+      ok: false,
+      error: invoiceActionError(err, "billing.setInvoiceStatus"),
+    };
+  }
+}
+
+/** Client-facing message for an invoice mutation that threw after its
+ *  permission gate: intentional refusals verbatim, a row deleted out
+ *  from under us (P2025) as "not found", anything else generic. The
+ *  callers (InvoiceActionBar) only handle a returned `{ ok: false }`;
+ *  a throw would replace the whole page with the error boundary. */
+function invoiceActionError(err: unknown, context: string): string {
+  if (
+    err instanceof Prisma.PrismaClientKnownRequestError &&
+    err.code === "P2025"
+  ) {
+    return "Invoice not found.";
+  }
+  return toUserMessage(err, "Couldn't update the invoice.", context);
+}
+
+async function setInvoiceStatusUnchecked(
+  invoiceId: string,
+  next: string,
+  userId: string
+): Promise<{ ok: boolean; error?: string }> {
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
     select: {
@@ -669,25 +822,27 @@ export async function setInvoiceStatus(
   if (!invoice) return { ok: false, error: "Invoice not found." };
 
   const kind = invoice.kind as InvoiceKind;
-  const allowed = invoiceStatusTransitions(invoice.status, kind);
-  if (!(allowed as readonly string[]).includes(next)) {
-    return {
-      ok: false,
-      error: `Can't transition ${invoice.status} → ${next}.`,
-    };
-  }
 
   // Client invoices reach paid/partial ONLY through
   // recordInvoicePayment — every status flip must be paired with a
   // real InvoicePayment row + paidAmount bump. Flipping the status
   // here would leave AR reading "paid" with zero collected, and the
   // state is hard to repair (recordInvoicePayment refuses invoices
-  // that aren't sent/partial).
-  if (kind === "client" && (next === "paid" || next === "partial")) {
+  // that aren't sent/partial). Checked before the transition lookup
+  // so the pointer is the answer for every client status.
+  if (kind === "client" && next === "paid") {
     return {
       ok: false,
       error:
         "Use Record payment instead — paid/partial is set automatically when the payment lands.",
+    };
+  }
+
+  const allowed = invoiceStatusTransitions(invoice.status, kind);
+  if (!(allowed as readonly string[]).includes(next)) {
+    return {
+      ok: false,
+      error: `Can't transition ${invoice.status} → ${next}.`,
     };
   }
 
@@ -785,6 +940,20 @@ export async function deleteInvoice(
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("billing.delete_draft");
   const userId = await getCurrentUserId();
+  try {
+    return await deleteInvoiceUnchecked(invoiceId, userId);
+  } catch (err) {
+    return {
+      ok: false,
+      error: invoiceActionError(err, "billing.deleteInvoice"),
+    };
+  }
+}
+
+async function deleteInvoiceUnchecked(
+  invoiceId: string,
+  userId: string
+): Promise<{ ok: boolean; error?: string }> {
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
     select: {
@@ -866,11 +1035,37 @@ export async function deleteInvoice(
 // a dedicated audit row (approver + timestamp on the invoice) is
 // still future work.
 
+/** Refusal for approving / sending a client invoice that totals $0:
+ *  every new invoice starts unpriced (only the line-item editor sets a
+ *  rate), and a $0 invoice would "pay itself" on send and lock its
+ *  time entries to a dead-end `paid` row. */
+const ZERO_TOTAL_ERROR =
+  "This invoice totals $0.00 — price the line items before approving or sending it. Delete the draft if there is nothing to bill.";
+
 export async function approveInvoice(
-  invoiceId: string
+  invoiceId: string,
+  /** Optional: the total the approver was looking at (e.g. "1234.50").
+   *  When given, approval is refused if the invoice total moved since
+   *  — the approver must not sign off on a total they never saw. */
+  expectedTotal?: string
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("billing.approve_invoice");
   const userId = await getCurrentUserId();
+  try {
+    return await approveInvoiceUnchecked(invoiceId, userId, expectedTotal);
+  } catch (err) {
+    return {
+      ok: false,
+      error: invoiceActionError(err, "billing.approveInvoice"),
+    };
+  }
+}
+
+async function approveInvoiceUnchecked(
+  invoiceId: string,
+  userId: string,
+  expectedTotal: string | undefined
+): Promise<{ ok: boolean; error?: string }> {
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
     select: {
@@ -879,6 +1074,7 @@ export async function approveInvoice(
       invoiceNumber: true,
       kind: true,
       status: true,
+      totalAmount: true,
     },
   });
   if (!invoice) return { ok: false, error: "Invoice not found." };
@@ -891,11 +1087,31 @@ export async function approveInvoice(
       error: `Approve only applies to draft invoices (this one is ${invoice.status}).`,
     };
   }
+  if (roundMoney(invoice.totalAmount).lessThanOrEqualTo(0)) {
+    return { ok: false, error: ZERO_TOTAL_ERROR };
+  }
+  if (expectedTotal !== undefined) {
+    let expected: Prisma.Decimal;
+    try {
+      expected = roundMoney(expectedTotal);
+    } catch {
+      return { ok: false, error: "Invalid expected total." };
+    }
+    if (!expected.equals(roundMoney(invoice.totalAmount))) {
+      return { ok: false, error: INVOICE_CHANGED_ERROR };
+    }
+  }
 
-  // Conditional on the status we validated above (see
-  // setInvoiceStatus): 0 rows means someone else moved it first.
+  // Conditional on the status AND total we validated above (see
+  // setInvoiceStatus): 0 rows means someone else moved it, or a
+  // line-item edit changed the total, since we read it.
   const approved = await prisma.invoice.updateMany({
-    where: { id: invoice.id, status: "draft", kind: "client" },
+    where: {
+      id: invoice.id,
+      status: "draft",
+      kind: "client",
+      totalAmount: invoice.totalAmount,
+    },
     data: { status: "approved" },
   });
   if (approved.count === 0) return { ok: false, error: INVOICE_CHANGED_ERROR };
@@ -956,19 +1172,19 @@ export async function addTrustTransaction(
   const signed =
     data.type === "deposit" ? positive : positive.neg();
 
-  // Optional date-only field: local midnight of the picked day, or
-  // "now" when left empty. Reject malformed values up front instead
-  // of aborting mid-transaction.
-  const txnDate = data.date ? parseLocalDate(data.date) : new Date();
+  // Optional date-only field: the picked day, or the user's today
+  // when left empty. Reject malformed values up front instead of
+  // aborting mid-transaction.
+  const txnDate = data.date ? parseDateOnly(data.date) : await todayDateOnly();
   if (!txnDate) {
     return { status: "error", errors: { date: ["Invalid date"] } };
   }
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx) => {
       const balanceCheck = await adjustTrustBalance(tx, matterId, signed);
       if (!balanceCheck.ok) throw new UserFacingError(balanceCheck.error ?? "Trust update failed.");
-      const txn = await tx.trustTransaction.create({
+      await tx.trustTransaction.create({
         data: {
           matterId,
           type: data.type,
@@ -978,9 +1194,7 @@ export async function addTrustTransaction(
           date: txnDate,
           createdBy: userId,
         },
-        select: { id: true },
       });
-      return { id: txn.id };
     });
 
     await logActivity({
@@ -1060,6 +1274,8 @@ export async function bundleAsInternalRecord(
     };
   }
 
+  const numberYear = await invoiceNumberYear();
+
   // Named so the invoice-number collision path can re-run the whole
   // transaction — same shape as generateInvoiceFromWip.
   const mintRecord = () =>
@@ -1116,7 +1332,7 @@ export async function bundleAsInternalRecord(
       // Collision handling matches generateInvoiceFromWip: a P2002
       // aborts the transaction, so the retry re-runs `mintRecord`
       // from the outside rather than looping in here.
-      const number = await nextInvoiceNumber(tx);
+      const number = await nextInvoiceNumber(tx, numberYear);
       const invoice = await tx.invoice.create({
         data: {
           invoiceNumber: number,
@@ -1152,6 +1368,7 @@ export async function bundleAsInternalRecord(
         invoiceNumber: invoice.invoiceNumber,
         matter,
         entryCount: entries.length,
+        expenseCount: expenseRows.length,
         total,
       };
     });
@@ -1179,7 +1396,7 @@ export async function bundleAsInternalRecord(
       userId,
       type: "filing",
       title: `Internal record ${result.invoiceNumber} bundled`,
-      detail: `${result.entryCount} time entries · $${result.total.toFixed(2)} (${parsed.data.notes})`,
+      detail: `${describeBundle(result.entryCount, result.expenseCount)} · $${result.total.toFixed(2)} (${parsed.data.notes})`,
     });
 
     revalidatePath(`/matters/${matterId}/billing`);
@@ -1274,10 +1491,10 @@ export async function recordInvoicePayment(
   }
   const requested = roundMoney(data.amount);
 
-  // Optional date-only field: local midnight of the picked day, or
-  // "now" when left empty. Reject malformed values up front instead
-  // of aborting mid-transaction.
-  const txnDate = data.date ? parseLocalDate(data.date) : new Date();
+  // Optional date-only field: the picked day, or the user's today
+  // when left empty. Reject malformed values up front instead of
+  // aborting mid-transaction.
+  const txnDate = data.date ? parseDateOnly(data.date) : await todayDateOnly();
   if (!txnDate) {
     return { status: "error", errors: { date: ["Invalid date"] } };
   }
@@ -1341,55 +1558,42 @@ export async function recordInvoicePayment(
       // Trust path: write the trust ledger leg + decrement the
       // matter trust balance, refusing on overdraw. The InvoicePayment
       // row links back to the TrustTransaction for cross-navigation.
-      let trustTxnId: string | null = null;
       if (data.source === "trust") {
         // Same lost-update hazard on trustBalance — lock the matter
         // row so concurrent disbursements can't both pass the
-        // overdraw check. Lock order is invoice → matter everywhere
-        // (here and sendInvoice) to keep deadlocks impossible.
-        await tx.$queryRaw`SELECT id FROM matters WHERE id = ${invoice.matterId} FOR UPDATE`;
-        const matter = await tx.matter.findUnique({
-          where: { id: invoice.matterId },
-          select: { trustBalance: true },
-        });
-        if (!matter) throw new UserFacingError("Matter not found.");
-        if (requested.greaterThan(matter.trustBalance)) {
+        // overdraw check (invoice → matter lock order, see helper).
+        const trustBalance = await lockMatterTrustBalance(
+          tx,
+          invoice.matterId
+        );
+        if (requested.greaterThan(trustBalance)) {
           throw new UserFacingError(
-            `Trust balance is $${matter.trustBalance.toFixed(2)} — not enough to cover $${requested.toFixed(2)}.`
+            `Trust balance is $${trustBalance.toFixed(2)} — not enough to cover $${requested.toFixed(2)}.`
           );
         }
-        const trustTxn = await tx.trustTransaction.create({
-          data: {
-            matterId: invoice.matterId,
-            type: "disbursement",
-            amount: requested.neg(),
-            description: `Payment to invoice ${invoice.invoiceNumber}`,
-            reference: data.reference || null,
-            date: txnDate,
-            createdBy: userId,
-            invoiceId: invoice.id,
-          },
-          select: { id: true },
-        });
-        trustTxnId = trustTxn.id;
-        await tx.matter.update({
-          where: { id: invoice.matterId },
-          data: { trustBalance: roundMoney(matter.trustBalance.sub(requested)) },
-        });
-      }
-
-      await tx.invoicePayment.create({
-        data: {
-          invoiceId: invoice.id,
-          source: data.source,
+        await payInvoiceFromTrust(tx, {
+          invoice,
+          trustBalance,
           amount: requested,
           date: txnDate,
-          description: data.description || null,
           reference: data.reference || null,
-          trustTxnId,
-          createdBy: userId,
-        },
-      });
+          paymentDescription: data.description || null,
+          userId,
+        });
+      } else {
+        await tx.invoicePayment.create({
+          data: {
+            invoiceId: invoice.id,
+            source: data.source,
+            amount: requested,
+            date: txnDate,
+            description: data.description || null,
+            reference: data.reference || null,
+            trustTxnId: null,
+            createdBy: userId,
+          },
+        });
+      }
 
       const newPaid = roundMoney(invoice.paidAmount.add(requested));
       const fullyPaid = newPaid.greaterThanOrEqualTo(invoiceTotal);
@@ -1421,17 +1625,17 @@ export async function recordInvoicePayment(
         : `Partial payment to invoice ${result.invoiceNumber} · $${result.amount.toFixed(2)} (${result.source})`,
     });
 
-    // Notify client of the updated invoice. Today this is logged-
-    // only — when real email lands the same flag fires actual
-    // delivery. Skip silently if the client has no email on file
-    // rather than failing the action: the payment itself still
+    // "Send updated invoice" ticked. NOTHING is emailed today (the
+    // dialog says "Logged-only for now"), so the audit row must not
+    // claim a delivery. Skip silently if the client has no email on
+    // file rather than failing the action: the payment itself still
     // landed correctly.
     if (data.notifyClient && result.clientEmail) {
       await logActivity({
         matterId: result.matterId,
         userId,
         type: "filing",
-        title: `Updated invoice ${result.invoiceNumber} sent to ${result.clientEmail}`,
+        title: `Updated invoice ${result.invoiceNumber} copy requested for ${result.clientEmail} (not emailed)`,
         detail: `after $${result.amount.toFixed(2)} ${result.source} payment`,
       });
     }
@@ -1439,27 +1643,33 @@ export async function recordInvoicePayment(
     // Fan a payment-recorded notification out to the matter's
     // active team — case leads + co-counsel typically want to
     // know money landed. Skips the actor (no point pinging your
-    // own bell). Best-effort: failures don't roll back the
-    // payment.
-    const team = await prisma.matterTeamMember.findMany({
-      where: { matterId: result.matterId, removedAt: null },
-      select: { userId: true },
-    });
-    const recipients = team
-      .map((t) => t.userId)
-      .filter((id) => id !== userId);
-    if (recipients.length > 0) {
-      const matter = await prisma.matter.findUnique({
-        where: { id: result.matterId },
-        select: { name: true },
+    // own bell). Best-effort and fully contained: the payment has
+    // already committed, so a failing lookup here must NOT turn
+    // into an error result (the user would resubmit and record the
+    // payment twice).
+    try {
+      const team = await prisma.matterTeamMember.findMany({
+        where: { matterId: result.matterId, removedAt: null },
+        select: { userId: true },
       });
-      await createNotifications(recipients, {
-        type: "invoice_payment_recorded",
-        title: `$${result.amount.toFixed(2)} payment on ${result.invoiceNumber}`,
-        body: `${matter?.name ?? "Matter"} · ${result.source}`,
-        link: `/matters/${result.matterId}/billing?invoice=${result.invoiceId}`,
-        matterId: result.matterId,
-      });
+      const recipients = team
+        .map((t) => t.userId)
+        .filter((id) => id !== userId);
+      if (recipients.length > 0) {
+        const matter = await prisma.matter.findUnique({
+          where: { id: result.matterId },
+          select: { name: true },
+        });
+        await createNotifications(recipients, {
+          type: "invoice_payment_recorded",
+          title: `$${result.amount.toFixed(2)} payment on ${result.invoiceNumber}`,
+          body: `${matter?.name ?? "Matter"} · ${result.source}`,
+          link: `/matters/${result.matterId}/billing?invoice=${result.invoiceId}`,
+          matterId: result.matterId,
+        });
+      }
+    } catch (notifyErr) {
+      console.error("[billing.recordInvoicePayment] notify", notifyErr);
     }
 
     revalidatePath(`/matters/${result.matterId}/billing`);
@@ -1554,6 +1764,10 @@ export async function sendInvoice(
     };
   }
 
+  // The trust leg's ledger/payment date: the user's calendar day,
+  // resolved before the transaction (date-only, ADR-012).
+  const sendDate = data.applyTrust ? await todayDateOnly() : null;
+
   try {
     const result = await prisma.$transaction(async (tx) => {
       // Same lock discipline as recordInvoicePayment (invoice →
@@ -1571,6 +1785,8 @@ export async function sendInvoice(
           status: true,
           totalAmount: true,
           paidAmount: true,
+          issueDate: true,
+          dueDate: true,
         },
       });
       if (!invoice) throw new UserFacingError("Invoice not found.");
@@ -1582,6 +1798,12 @@ export async function sendInvoice(
           `Send is only available on approved invoices (this one is ${invoice.status}). Approve it first.`
         );
       }
+      // A $0 invoice would satisfy `paid >= total` below and flip
+      // straight to a dead-end `paid` with no payment, locking its
+      // time entries forever.
+      if (roundMoney(invoice.totalAmount).lessThanOrEqualTo(0)) {
+        throw new UserFacingError(ZERO_TOTAL_ERROR);
+      }
 
       // Optional apply-trust leg. Same shape as recordInvoicePayment's
       // trust branch — if it would overdraw the invoice or trust, the
@@ -1591,21 +1813,17 @@ export async function sendInvoice(
       if (data.applyTrust) {
         // Lock the matter row (trustBalance read-modify-write) —
         // see recordInvoicePayment's trust branch.
-        await tx.$queryRaw`SELECT id FROM matters WHERE id = ${invoice.matterId} FOR UPDATE`;
-        const matter = await tx.matter.findUnique({
-          where: { id: invoice.matterId },
-          select: { trustBalance: true },
-        });
-        if (!matter) throw new UserFacingError("Matter not found.");
+        const trustBalance = await lockMatterTrustBalance(
+          tx,
+          invoice.matterId
+        );
         const balance = roundMoney(invoice.totalAmount).sub(
           roundMoney(invoice.paidAmount)
         );
         // Default: cap at MIN(trust, balance). User-supplied amount
         // can step down but never up past the cap. trustAmount was
         // format-validated + $/comma-stripped by the schema.
-        const cap = matter.trustBalance.lessThan(balance)
-          ? matter.trustBalance
-          : balance;
+        const cap = trustBalance.lessThan(balance) ? trustBalance : balance;
         const applied = roundMoney(
           data.trustAmount ? new Prisma.Decimal(data.trustAmount) : cap
         );
@@ -1615,38 +1833,18 @@ export async function sendInvoice(
         if (applied.greaterThan(cap)) {
           throw new UserFacingError(
             `Can apply at most $${cap.toFixed(2)} from trust (limited by ${
-              matter.trustBalance.lessThan(balance) ? "trust balance" : "invoice balance"
+              trustBalance.lessThan(balance) ? "trust balance" : "invoice balance"
             }).`
           );
         }
-        const trustTxn = await tx.trustTransaction.create({
-          data: {
-            matterId: invoice.matterId,
-            type: "disbursement",
-            amount: applied.neg(),
-            description: `Payment to invoice ${invoice.invoiceNumber}`,
-            reference: null,
-            date: new Date(),
-            createdBy: userId,
-            invoiceId: invoice.id,
-          },
-          select: { id: true },
-        });
-        await tx.matter.update({
-          where: { id: invoice.matterId },
-          data: { trustBalance: roundMoney(matter.trustBalance.sub(applied)) },
-        });
-        await tx.invoicePayment.create({
-          data: {
-            invoiceId: invoice.id,
-            source: "trust",
-            amount: applied,
-            date: new Date(),
-            description: `Earned-fee transfer applied at invoice send`,
-            reference: null,
-            trustTxnId: trustTxn.id,
-            createdBy: userId,
-          },
+        await payInvoiceFromTrust(tx, {
+          invoice,
+          trustBalance,
+          amount: applied,
+          date: sendDate!,
+          reference: null,
+          paymentDescription: "Earned-fee transfer applied at invoice send",
+          userId,
         });
         newPaid = roundMoney(invoice.paidAmount.add(applied));
         trustApplied = applied;
@@ -1662,11 +1860,22 @@ export async function sendInvoice(
         : trustApplied
           ? "partial"
           : "sent";
+      // Sending is when the client first sees the document, so the
+      // invoice is dated now with its payment terms preserved. A
+      // draft generated Oct 1 (30-day terms) and sent Nov 5 must not
+      // arrive already overdue.
+      const sentAt = new Date();
+      const termMs = Math.max(
+        0,
+        invoice.dueDate.getTime() - invoice.issueDate.getTime()
+      );
       await tx.invoice.update({
         where: { id: invoice.id },
         data: {
           paidAmount: newPaid,
           status: finalStatus,
+          issueDate: sentAt,
+          dueDate: new Date(sentAt.getTime() + termMs),
         },
       });
 
@@ -1681,12 +1890,14 @@ export async function sendInvoice(
     });
 
     // Log: send event + (separately) the trust application if it
-    // happened. Two log lines so audit reads cleanly.
+    // happened. Two log lines so audit reads cleanly. No email is
+    // dispatched yet ("Logged-only for now" in the dialog), so the
+    // entry records the invoice as marked sent — not as delivered.
     await logActivity({
       matterId: result.matterId,
       userId,
       type: "filing",
-      title: `Invoice ${result.invoiceNumber} sent via ${result.method}`,
+      title: `Invoice ${result.invoiceNumber} marked sent via ${result.method} (not emailed)`,
       detail: `to ${result.recipient}`,
     });
     if (result.trustApplied) {

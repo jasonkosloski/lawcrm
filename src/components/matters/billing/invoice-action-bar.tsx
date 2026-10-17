@@ -137,7 +137,11 @@ export function InvoiceActionBar({
 
   const approve = () => {
     startTransition(async () => {
-      const res = await approveInvoice(invoiceId);
+      // Post the total the approver is looking at (a draft has no
+      // payments, so its balance is its total): if a line edit moved
+      // it since the page loaded, the server refuses instead of
+      // approving an amount nobody saw.
+      const res = await approveInvoice(invoiceId, invoiceBalance.toFixed(2));
       if (!res.ok) alert(res.error ?? "Couldn't approve invoice.");
     });
   };
