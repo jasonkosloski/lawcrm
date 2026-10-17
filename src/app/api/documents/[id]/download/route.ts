@@ -1,10 +1,18 @@
 /**
  * GET /api/documents/[id]/download
  *
- * Auth-gated file download. Verifies session, scopes the document
- * by the current user's firm (via the document's matter → matter's
- * client → contact's firmId — for v1 we just confirm the user can
- * see the matter), then streams the bytes from the storage adapter.
+ * Auth-gated file download. Verifies the session (and that the user
+ * belongs to a firm), looks the document up by id, then streams the
+ * bytes from the storage adapter.
+ *
+ * ACCESS MODEL (be precise — do not assume more than this): any
+ * authenticated firm user can read any document by id. There is NO
+ * firm scoping (Matter has no firmId; single-tenant today) and NO
+ * matter-team visibility check (MatterTeamMember is organizational,
+ * not an access gate — the whole app reads firm-wide). Both are
+ * tracked as separate phases (multi-tenancy; ethical walls) and must
+ * be applied consistently to the viewer, documents tab, search and
+ * this route together, not here alone.
  *
  * Supports single-range HTTP Range requests (`bytes=...`) so the
  * document viewer's <video>/<audio> elements can seek GB-scale
@@ -39,7 +47,7 @@ import {
 } from "@/lib/file-storage";
 import { isInlineSafeType } from "@/lib/inline-safe-types";
 import { resolveRangeHeader } from "./range";
-import type { Readable } from "node:stream";
+import { Readable } from "node:stream";
 
 // Per-request: never cache. Documents change owners + go away;
 // the path is the auth boundary, not the bytes.
@@ -71,9 +79,9 @@ export async function GET(
   }
 
   const { id } = await ctx.params;
-  // Resolve the firm via the user → first found firmId. Matches the
-  // chokepoint pattern used by `getCurrentFirm()` but inlined so the
-  // route handler stays standalone.
+  // Guard only: the user must belong to a firm. The firmId is NOT
+  // used to scope the document lookup below (see ACCESS MODEL in the
+  // header).
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { firmId: true },
@@ -83,18 +91,14 @@ export async function GET(
   }
 
   const doc = await prisma.document.findFirst({
-    where: {
-      id,
-      // Today, every Matter is in the seed firm and we trust the
-      // session-based gate above. When Contact gains firmId we can
-      // tighten this with `matter: { client: { firmId: user.firmId } }`.
-    },
+    // TODO (multi-tenant): once Matter carries a firmId, add
+    // `matter: { firmId: user.firmId }` here.
+    where: { id },
     select: {
       id: true,
       name: true,
       contentType: true,
       fileUrl: true,
-      fileSize: true,
     },
   });
   if (!doc || !doc.fileUrl) {
@@ -155,25 +159,18 @@ export async function GET(
   }
   const partial = range.kind === "partial";
 
-  // Web-streams interop: Node's Readable converts via fromWeb /
-  // toWeb. Next.js accepts a ReadableStream<Uint8Array> body.
+  // Web-streams interop. `Readable.toWeb` is pull-based, so a stalled
+  // client applies backpressure to the disk read (a hand-rolled 'data'
+  // listener buffers the whole range in memory) and cancelling the
+  // response (a seek aborting the previous range request) destroys the
+  // fs stream instead of leaking its descriptor.
   // Ranged reads slice at the fs layer (createReadStream start/end,
   // both inclusive) — a seek never reads the skipped bytes.
   const nodeStream = openReadStream(
     doc.fileUrl,
     partial ? { start: range.start, end: range.end } : undefined
   ) as Readable;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const webStream = (nodeStream as any).toWeb
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ? (nodeStream as any).toWeb()
-    : new ReadableStream({
-        start(controller) {
-          nodeStream.on("data", (chunk) => controller.enqueue(chunk));
-          nodeStream.on("end", () => controller.close());
-          nodeStream.on("error", (err) => controller.error(err));
-        },
-      });
+  const webStream = Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
 
   const headers: Record<string, string> = {
     "Content-Type": contentType,

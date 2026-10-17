@@ -397,8 +397,11 @@ export default async function MatterDocumentsPage({
  *  Kept from the flat-list era — the composer's display-name +
  *  category controls have no multi-file equivalent (composer uploads
  *  land at the matter root; use "Upload files" to target a folder).
- *  The upload form gets the growing slot so its expanded state keeps
- *  full width; the generate trigger stays a compact button. */
+ *  The composer only renders for users who can upload (the same
+ *  `documents.upload` gate the upload routes enforce) and uses the
+ *  active driver's transport, like "Upload files". It gets the
+ *  growing slot so its expanded state keeps full width; the
+ *  generate trigger stays a compact button. */
 function DocumentComposerRow({
   matterId,
   templates,
@@ -415,9 +418,14 @@ function DocumentComposerRow({
 }) {
   return (
     <div className="flex flex-wrap items-start gap-2">
-      <div className="flex-1 min-w-64">
-        <UploadDocumentForm matterId={matterId} />
-      </div>
+      {canUpload && (
+        <div className="flex-1 min-w-64">
+          <UploadDocumentForm
+            matterId={matterId}
+            storageDriver={activeStorageDriver()}
+          />
+        </div>
+      )}
       <GenerateFromTemplateDialog
         matterId={matterId}
         templates={templates}

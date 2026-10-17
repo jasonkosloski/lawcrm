@@ -1,129 +1,37 @@
 /**
- * Document server actions — upload + delete.
+ * Document server actions — delete.
  *
- * Storage backend is pluggable via `src/lib/file-storage.ts`. Today
- * that's local filesystem (`./uploads/`); production swaps in
- * Vercel Blob / S3 with no caller change.
+ * Uploads do NOT go through a server action: Next caps action bodies
+ * at 1 MB by default, and the documents tab handles files up to
+ * gigabytes. Every upload path (the single-file composer and the
+ * multi-file uploader alike) uses the transport that matches the
+ * active storage driver — the busboy streaming route
+ * (`src/app/api/documents/upload/route.ts`, local driver) or the
+ * client-direct Vercel Blob flow (`.../upload/blob/`, production).
+ * Generated documents are filed by `document-templates.ts`.
+ *
+ * Storage is behind the `src/lib/file-storage.ts` facade (ADR-015):
+ * a document's `fileUrl` is a bare key (local) or a full blob URL.
  *
  * Auth model:
- *   - Upload: gated on `documents.upload`. Admins always pass;
- *     other roles need the key granted via /settings/roles (most
- *     firms will grant it broadly — paralegals file exhibits
- *     without waiting on a partner).
- *   - Delete: the original uploader OR any admin. Other members
- *     have to ask. This keeps "I uploaded the wrong PDF" recoverable
- *     without making delete a free-for-all.
- *
- * Multi-firm: the matter lookup is existence-by-id only — it is
- * NOT firm-scoped, because Matter has no firmId column yet
- * (single-tenant: every Matter lives in the seed firm, so the
- * check can't fail cross-firm today). Before enabling
- * multi-tenancy this MUST be scoped or a foreign matterId would
- * be accepted — see the TODO inside `uploadDocument`.
+ *   - Delete: the original uploader OR anyone holding
+ *     `documents.delete_any`. Other members have to ask. This keeps
+ *     "I uploaded the wrong PDF" recoverable without making delete a
+ *     free-for-all.
+ *   - A document carrying flagged moments from OTHER reviewers can
+ *     only be deleted by a holder of `evidence.flag.delete_any` —
+ *     the row delete cascades every flag, and removing someone
+ *     else's flag has its own gate.
  */
 
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-import { getCurrentFirm } from "@/lib/firm";
-import {
-  currentUserHasPermission,
-  requirePermission,
-} from "@/lib/permission-check";
+import { currentUserHasPermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
-import { deleteFile, storeFile } from "@/lib/file-storage";
-import {
-  DOCUMENT_CATEGORIES,
-  MAX_DOCUMENT_BYTES,
-  documentInitialState,
-  type DocumentFormState,
-} from "@/lib/document-form";
-
-const uploadSchema = z.object({
-  // The form may post an empty name when the user wants to keep the
-  // file's original filename — we fall back to file.name in that case.
-  name: z.string().trim().max(200).optional().or(z.literal("")),
-  category: z.enum(DOCUMENT_CATEGORIES).default("other"),
-});
-
-export async function uploadDocument(
-  matterId: string,
-  _prev: DocumentFormState,
-  formData: FormData
-): Promise<DocumentFormState> {
-  const userId = await requirePermission("documents.upload");
-  // getCurrentFirm() guards that the user belongs to a firm; the
-  // result isn't used yet (single-tenant — every Matter is in the
-  // seed firm) but calling it preserves the auth chain.
-  await getCurrentFirm();
-
-  // TODO (multi-tenant): once Contact / Matter gain a firmId
-  // column, scope this find by `firmId: firm.id` so a leaked URL
-  // from another firm refuses to upload. Today there's only one
-  // firm so existence-by-id is sufficient.
-  const matter = await prisma.matter.findUnique({
-    where: { id: matterId },
-    select: { id: true, name: true },
-  });
-  if (!matter) {
-    return { status: "error", error: "Matter not found." };
-  }
-
-  const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) {
-    return { status: "error", error: "Pick a file to upload." };
-  }
-  if (file.size > MAX_DOCUMENT_BYTES) {
-    const limitMB = Math.round(MAX_DOCUMENT_BYTES / (1024 * 1024));
-    return {
-      status: "error",
-      error: `File is too large (max ${limitMB} MB).`,
-    };
-  }
-
-  const raw = {
-    name: (formData.get("name") as string | null) ?? "",
-    category: (formData.get("category") as string | null) ?? "other",
-  };
-  const parsed = uploadSchema.safeParse(raw);
-  if (!parsed.success) {
-    return { status: "error", error: "Invalid upload — check the fields." };
-  }
-
-  const stored = await storeFile(file);
-  // Display name falls back to the file's name when the user
-  // didn't override.
-  const displayName = parsed.data.name?.trim() || file.name;
-
-  const doc = await prisma.document.create({
-    data: {
-      matterId: matter.id,
-      name: displayName,
-      category: parsed.data.category,
-      source: "upload",
-      fileUrl: stored.key,
-      contentType: stored.contentType,
-      fileSize: stored.size,
-      uploadedBy: userId,
-    },
-    select: { id: true },
-  });
-
-  await logActivity({
-    matterId: matter.id,
-    userId,
-    type: "document",
-    title: "Document uploaded",
-    detail: displayName,
-  });
-
-  revalidatePath(`/matters/${matter.id}/documents`);
-  revalidatePath(`/matters/${matter.id}`);
-  return { ...documentInitialState, status: "ok" };
-}
+import { deleteFile } from "@/lib/file-storage";
 
 export async function deleteDocument(
   documentId: string
@@ -156,20 +64,68 @@ export async function deleteDocument(
     };
   }
 
-  await prisma.document.delete({ where: { id: doc.id } });
-  // File-system unlink is best-effort; the DB row is the source of
-  // truth and a stray file on disk is a non-issue.
-  if (doc.fileUrl) await deleteFile(doc.fileUrl);
+  // FlaggedMoment.document cascades: deleting the row silently drops
+  // every reviewer's flags. Another reviewer's flags may only go with
+  // the document when the user could delete them directly.
+  const [totalFlags, otherFlags] = await Promise.all([
+    prisma.flaggedMoment.count({ where: { documentId: doc.id } }),
+    prisma.flaggedMoment.count({
+      where: { documentId: doc.id, flaggedById: { not: userId } },
+    }),
+  ]);
+  if (otherFlags > 0) {
+    const canDeleteFlags = await currentUserHasPermission(
+      "evidence.flag.delete_any"
+    );
+    if (!canDeleteFlags) {
+      return {
+        ok: false,
+        error: `This document has ${otherFlags} flagged moment${
+          otherFlags === 1 ? "" : "s"
+        } from other reviewers. Deleting it would remove them, which needs the Delete-anyone's-flags permission.`,
+      };
+    }
+  }
 
+  await prisma.document.delete({ where: { id: doc.id } });
+
+  // Audit + revalidate straight after the row delete: the row is
+  // gone whatever happens to the bytes, so a storage failure below
+  // must not leave the trail empty or the list stale.
   await logActivity({
     matterId: doc.matterId,
     userId,
     type: "document",
     title: "Document deleted",
-    detail: doc.name,
+    detail:
+      totalFlags > 0
+        ? `${doc.name} (${totalFlags} flagged moment${
+            totalFlags === 1 ? "" : "s"
+          } removed)`
+        : doc.name,
   });
 
   revalidatePath(`/matters/${doc.matterId}/documents`);
   revalidatePath(`/matters/${doc.matterId}`);
+
+  // Unlink the stored bytes — best-effort: the DB row is the source
+  // of truth and a stray file is recoverable, an unlogged delete is
+  // not. Skip when another row still points at the same file (a
+  // duplicate would otherwise 410 after its twin is deleted).
+  if (doc.fileUrl) {
+    try {
+      const stillReferenced = await prisma.document.count({
+        where: { fileUrl: doc.fileUrl },
+      });
+      if (stillReferenced === 0) await deleteFile(doc.fileUrl);
+    } catch (err) {
+      console.error("[deleteDocument] storage cleanup failed", {
+        documentId: doc.id,
+        key: doc.fileUrl,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   return { ok: true };
 }

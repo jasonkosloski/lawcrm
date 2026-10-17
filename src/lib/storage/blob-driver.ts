@@ -4,7 +4,7 @@
  * Active in production (Vercel's serverless filesystem is
  * ephemeral, so the local driver can't hold user files there).
  * Server-side writes here cover SMALL files only — generated
- * templates, the ≤25MB composer form — because anything routed
+ * templates and email attachments filed to a matter — because anything routed
  * through a Vercel function body is capped at ~4.5MB in prod.
  * GB-scale uploads bypass this module entirely and go client-direct
  * via `@vercel/blob/client` (`src/app/api/documents/upload/blob/`).

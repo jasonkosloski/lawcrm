@@ -45,16 +45,30 @@ export function isBlobKey(key: string): boolean {
   return key.startsWith("https://");
 }
 
+/** Longest key suffix (STORAGE_KEY_RE enforces the same cap). */
+const MAX_NAME_LENGTH = 120;
+/** A trailing ".something" this short is treated as a file extension
+ *  worth preserving when a long name is truncated. */
+const MAX_EXTENSION_LENGTH = 17; // dot + 16 chars
+
 /** Sanitize an original filename into the key suffix: strip path
  *  separators + control chars, leading dots, cap the length. Keeps
- *  dots so the extension (MIME source of truth) survives. Mirrors
- *  what the local driver has always done — keys generated anywhere
- *  are byte-identical for the same inputs. */
+ *  dots so the extension (MIME source of truth) survives — including
+ *  when a long name is truncated: the STEM is cut, never the tail,
+ *  so a 300-char "....mp4" is still a ".mp4". Mirrors what the local
+ *  driver has always done — keys generated anywhere are
+ *  byte-identical for the same inputs. */
 export function sanitizeStorageName(originalName: string): string {
-  return originalName
+  const cleaned = originalName
     .replace(/[/\\\x00-\x1f]/g, "_")
-    .replace(/^\.+/, "")
-    .slice(0, 120);
+    .replace(/^\.+/, "");
+  if (cleaned.length <= MAX_NAME_LENGTH) return cleaned;
+  const dot = cleaned.lastIndexOf(".");
+  const ext =
+    dot > 0 && cleaned.length - dot <= MAX_EXTENSION_LENGTH
+      ? cleaned.slice(dot)
+      : "";
+  return cleaned.slice(0, MAX_NAME_LENGTH - ext.length) + ext;
 }
 
 /** Generate a storage key: `{rand}__{safe-name}`. Isomorphic —

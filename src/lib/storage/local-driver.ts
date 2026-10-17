@@ -49,7 +49,7 @@ export async function storeFileLocal(file: File): Promise<StoredFile> {
   const path = resolveKey(key);
   await mkdir(dirname(path), { recursive: true });
   // Buffer the whole upload — fine for the sizes we'll see through
-  // server-action forms (≤25MB enforced upstream). GB-scale
+  // small generated files / email attachments (callers cap them). GB-scale
   // discovery media goes through `storeStreamLocal` below instead.
   const buf = Buffer.from(await file.arrayBuffer());
   await writeFile(path, buf);

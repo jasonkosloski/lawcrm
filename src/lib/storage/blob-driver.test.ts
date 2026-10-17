@@ -217,6 +217,34 @@ describe("signedBlobUrl", () => {
     expect(validUntil! - before).toBeGreaterThanOrEqual(SIGNED_MEDIA_URL_TTL_MS - 50);
   });
 
+  test("a name with #, ? and % still addresses the right blob (SDK concatenates the pathname unencoded)", async () => {
+    vi.mocked(issueSignedToken).mockResolvedValue({
+      delegationToken: "d",
+      clientSigningToken: "c",
+      validUntil: 0,
+    });
+    // Mimic the SDK (constructBlobUrl + addPresignedParams): bare
+    // concatenation of the DECODED pathname, parse, then searchParams.set
+    // — a `#`/`?` in the name corrupts the path of this URL.
+    vi.mocked(presignUrl).mockImplementation(async (_t, opts) => {
+      const u = new URL(`${STORE}/${opts.pathname}`);
+      u.searchParams.set("vercel-blob-delegation", "d");
+      u.searchParams.set("vercel-blob-signature", "s");
+      return { presignedUrl: u.toString() };
+    });
+    const key = "k__Exhibit #3? 50%.pdf";
+    const url = new URL(
+      await signedBlobUrl(`${STORE}/${encodeURIComponent(key)}`)
+    );
+    expect(decodeURIComponent(url.pathname.slice(1))).toBe(key);
+    expect(url.hash).toBe("");
+    expect(url.searchParams.get("vercel-blob-signature")).toBe("s");
+    expect([...url.searchParams.keys()].sort()).toEqual([
+      "vercel-blob-delegation",
+      "vercel-blob-signature",
+    ]);
+  });
+
   test("download appends the CDN attachment flag outside the signature", async () => {
     wire();
     const url = new URL(await signedBlobUrl(`${STORE}/k__brief.pdf`, { download: true }));

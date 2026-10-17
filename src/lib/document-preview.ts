@@ -35,12 +35,86 @@ import { readStoredFile, statFile } from "@/lib/file-storage";
 import { sanitizeDocumentHtml } from "@/lib/sanitize-html";
 
 /** Ceiling for buffering a .docx into memory for conversion. Matches
- *  the 25 MB form-upload cap — a Word doc bigger than this is almost
+ *  a typical Word-document ceiling — a Word doc bigger than this is almost
  *  certainly image-stuffed and the user is better served downloading. */
 export const DOCX_MAX_BYTES = 25 * 1024 * 1024;
 
 /** Text/CSV previews are capped here; past it we truncate and say so. */
 export const TEXT_PREVIEW_MAX_BYTES = 1024 * 1024;
+
+/** Decompression-bomb ceilings for the docx preview, judged from the
+ *  zip's DECLARED sizes (central directory). A real Word document is
+ *  a few MB of XML plus media; these are generous for that and fatal
+ *  to a bomb. */
+export const DOCX_MAX_ENTRIES = 5_000;
+export const DOCX_MAX_ENTRY_UNCOMPRESSED_BYTES = 100 * 1024 * 1024;
+export const DOCX_MAX_TOTAL_UNCOMPRESSED_BYTES = 200 * 1024 * 1024;
+
+const TOO_BIG_REASON =
+  "This Word document expands to an unusually large size — download it to view.";
+
+/**
+ * Inspect a zip's central directory and reject archives that would
+ * inflate past the ceilings above, WITHOUT inflating anything.
+ * Declared sizes can be forged, so this is a first line of defence
+ * (it stops the realistic bomb: a tiny file declaring gigabytes),
+ * not a hard memory bound. Anything that doesn't parse as a zip is
+ * passed through — the converter reports corrupt files itself.
+ *
+ * Pure function — unit-tested directly.
+ */
+export function checkZipBounds(
+  buf: Buffer
+): { ok: true } | { ok: false; reason: string } {
+  // End-of-central-directory record: signature 0x06054b50, within the
+  // last 22 + 65535 bytes (variable-length trailing comment).
+  const EOCD_MIN = 22;
+  if (buf.length < EOCD_MIN) return { ok: true };
+  const searchFrom = Math.max(0, buf.length - EOCD_MIN - 0xffff);
+  let eocd = -1;
+  for (let i = buf.length - EOCD_MIN; i >= searchFrom; i--) {
+    if (buf.readUInt32LE(i) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd < 0) return { ok: true };
+
+  const entryCount = buf.readUInt16LE(eocd + 10);
+  const cdOffset = buf.readUInt32LE(eocd + 16);
+  // 0xffff / 0xffffffff mean "see the ZIP64 record" — an archive
+  // that needs ZIP64 is far beyond anything a Word preview needs.
+  if (entryCount === 0xffff || cdOffset === 0xffffffff) {
+    return { ok: false, reason: TOO_BIG_REASON };
+  }
+  if (entryCount > DOCX_MAX_ENTRIES) {
+    return { ok: false, reason: TOO_BIG_REASON };
+  }
+
+  let total = 0;
+  let pos = cdOffset;
+  for (let n = 0; n < entryCount; n++) {
+    if (pos + 46 > buf.length || buf.readUInt32LE(pos) !== 0x02014b50) {
+      return { ok: true }; // malformed directory — let the parser say so
+    }
+    const uncompressed = buf.readUInt32LE(pos + 24);
+    if (uncompressed === 0xffffffff) {
+      return { ok: false, reason: TOO_BIG_REASON }; // ZIP64 entry
+    }
+    if (uncompressed > DOCX_MAX_ENTRY_UNCOMPRESSED_BYTES) {
+      return { ok: false, reason: TOO_BIG_REASON };
+    }
+    total += uncompressed;
+    if (total > DOCX_MAX_TOTAL_UNCOMPRESSED_BYTES) {
+      return { ok: false, reason: TOO_BIG_REASON };
+    }
+    const nameLen = buf.readUInt16LE(pos + 28);
+    const extraLen = buf.readUInt16LE(pos + 30);
+    const commentLen = buf.readUInt16LE(pos + 32);
+    pos += 46 + nameLen + extraLen + commentLen;
+  }
+  return { ok: true };
+}
 
 export type DocxPreviewResult =
   | { ok: true; html: string }
@@ -51,9 +125,12 @@ export type DocxPreviewResult =
  *  go through an authenticated, ranged read of the private store. */
 async function readStoredBytes(
   key: string,
-  maxBytes: number
+  maxBytes: number,
+  /** Size already probed by the caller — skips a second stat (one
+   *  `head()` round trip on the blob driver). */
+  knownStat?: { size: number }
 ): Promise<{ buffer: Buffer; truncated: boolean } | null> {
-  const stat = await statFile(key);
+  const stat = knownStat ?? (await statFile(key));
   if (!stat) return null;
   const buffer = await readStoredFile(key, maxBytes);
   if (!buffer) return null;
@@ -95,12 +172,21 @@ export async function renderStoredDocxToSafeHtml(
 
   let read: Awaited<ReturnType<typeof readStoredBytes>>;
   try {
-    read = await readStoredBytes(key, DOCX_MAX_BYTES);
+    read = await readStoredBytes(key, DOCX_MAX_BYTES, stat);
   } catch {
     return { ok: false, reason: "The file could not be read from storage." };
   }
   if (!read) {
     return { ok: false, reason: "The file is missing from storage." };
+  }
+
+  // Mammoth (JSZip) inflates every entry fully in memory, and the
+  // 25 MiB cap above bounds only the COMPRESSED bytes. Productions
+  // from opposing parties are untrusted input: refuse an archive
+  // whose declared contents are absurd before inflating anything.
+  const bounds = checkZipBounds(read.buffer);
+  if (!bounds.ok) {
+    return { ok: false, reason: bounds.reason };
   }
 
   let rawHtml: string;

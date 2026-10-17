@@ -76,6 +76,33 @@ describe("sanitizeStorageName", () => {
     expect(sanitizeStorageName("...hidden")).toBe("hidden");
     expect(sanitizeStorageName("y".repeat(200))).toHaveLength(120);
   });
+
+  test("a long name keeps its extension (stem is truncated, not the tail)", () => {
+    for (const ext of [".pdf", ".mp4", ".md", ".docx"]) {
+      const out = sanitizeStorageName("x".repeat(300) + ext);
+      expect(out).toHaveLength(120);
+      expect(out.endsWith(ext)).toBe(true);
+    }
+    // A generated template name just over the cap: " — <date>.md".
+    const generated = `${"T".repeat(110)} — Apr 15, 2026.md`;
+    expect(sanitizeStorageName(generated).endsWith(".md")).toBe(true);
+  });
+
+  test("a long name with a very long 'extension' is simply cut", () => {
+    const out = sanitizeStorageName("a." + "z".repeat(200));
+    expect(out).toHaveLength(120);
+  });
+
+  test("names within the cap are untouched", () => {
+    const name = "a".repeat(116) + ".pdf"; // exactly 120
+    expect(sanitizeStorageName(name)).toBe(name);
+  });
+
+  test("the extension survives into the key and still validates", () => {
+    const key = makeStorageKey("x".repeat(300) + ".mp4");
+    expect(key.endsWith(".mp4")).toBe(true);
+    expect(isValidStorageKey(key)).toBe(true);
+  });
 });
 
 describe("isBlobKey", () => {

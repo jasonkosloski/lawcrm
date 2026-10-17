@@ -46,6 +46,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
+import { DOCUMENT_CATEGORIES } from "@/lib/document-form";
 import { isValidStorageKey } from "@/lib/storage/storage-key";
 import { BLOB_CACHE_MAX_AGE_SECONDS } from "@/lib/storage/blob-driver";
 import {
@@ -75,7 +76,17 @@ const clientPayloadSchema = z.object({
    *  is the sanitized/truncated KEY; this preserves what the user
    *  actually called the file. */
   name: z.string().min(1).max(255),
+  /** Optional category chosen in the single-file composer; the
+   *  multi-file uploader omits it (discovery productions). */
+  category: z.enum(DOCUMENT_CATEGORIES).optional(),
 });
+
+/** Token lifetimes. The SDK default is ONE hour, fixed at mint time
+ *  and reused for every multipart part, so a 2 GiB recording on an
+ *  ordinary office uplink (~70 minutes) would expire mid-transfer.
+ *  Media gets a long window; everything else keeps the default. */
+const TOKEN_TTL_MS = 60 * 60 * 1000;
+const MEDIA_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 
 /** Round-trips from token generation to the completion callback —
  *  signed into the client token by `handleUpload`, so the uploader
@@ -84,6 +95,7 @@ type TokenPayload = {
   matterId: string;
   folderId: string | null;
   name: string;
+  category: string;
   contentType: string;
   userId: string;
 };
@@ -151,6 +163,7 @@ export const onBeforeGenerateToken: HandleUploadOptions["onBeforeGenerateToken"]
       matterId: payload.matterId,
       folderId,
       name: payload.name,
+      category: payload.category ?? "discovery",
       contentType,
       userId: session.user.id,
     };
@@ -158,6 +171,9 @@ export const onBeforeGenerateToken: HandleUploadOptions["onBeforeGenerateToken"]
     return {
       allowedContentTypes: [contentType],
       maximumSizeInBytes,
+      validUntil:
+        Date.now() +
+        (isMediaType(contentType) ? MEDIA_TOKEN_TTL_MS : TOKEN_TTL_MS),
       addRandomSuffix: false,
       allowOverwrite: false,
       cacheControlMaxAge: BLOB_CACHE_MAX_AGE_SECONDS,
@@ -165,6 +181,25 @@ export const onBeforeGenerateToken: HandleUploadOptions["onBeforeGenerateToken"]
     };
   };
 
+/** Prisma FK violation (the folder or matter vanished mid-upload). */
+const isForeignKeyError = (err: unknown): boolean =>
+  typeof err === "object" &&
+  err !== null &&
+  (err as { code?: unknown }).code === "P2003";
+
+/**
+ * Vercel delivers this callback AT LEAST once and retries on any
+ * non-2xx, so it must be idempotent and must not fail permanently
+ * for a reason a retry can't fix:
+ *   - a redelivery for a blob that already has a row is a no-op;
+ *   - a matter deleted mid-upload leaves nothing to attach to: the
+ *     orphan blob is removed and the callback succeeds;
+ *   - a folder deleted mid-upload (deleteFolder only re-parents rows
+ *     that exist) files the document at the matter root instead of
+ *     failing the FK on every retry, and says so in the audit row.
+ * Transient errors (DB down, head() failing) still throw so Vercel
+ * retries them.
+ */
 export const onUploadCompleted: NonNullable<
   HandleUploadOptions["onUploadCompleted"]
 > = async ({ blob, tokenPayload }) => {
@@ -174,6 +209,13 @@ export const onUploadCompleted: NonNullable<
   // Trusted: we serialized it in onBeforeGenerateToken and
   // handleUpload verified the callback signature.
   const t = JSON.parse(tokenPayload) as TokenPayload;
+
+  // Redelivery: the row for this blob already exists.
+  const existing = await prisma.document.findFirst({
+    where: { fileUrl: blob.url },
+    select: { id: true },
+  });
+  if (existing) return;
 
   // `blob` carries no size — probe for it (also confirms the bytes
   // actually landed before we write a row pointing at them).
@@ -186,23 +228,68 @@ export const onUploadCompleted: NonNullable<
     return;
   }
 
-  await prisma.document.create({
-    data: {
+  const removeOrphan = async () => {
+    console.error("[blob-upload] matter vanished during upload; blob removed", {
       matterId: t.matterId,
-      folderId: t.folderId,
-      name: t.name,
-      // Same default as the streaming route — this path exists for
-      // discovery productions; re-categorizing is a documents-tab edit.
-      category: "discovery",
-      source: "upload",
-      // Full blob URL — the key under the vercel-blob driver
-      // (storage-key.ts documents the mapping).
-      fileUrl: blob.url,
-      contentType: t.contentType,
-      fileSize: meta.size,
-      uploadedBy: t.userId,
-    },
+    });
+    await del(blob.url).catch(() => {});
+  };
+
+  const matter = await prisma.matter.findUnique({
+    where: { id: t.matterId },
+    select: { id: true },
   });
+  if (!matter) {
+    await removeOrphan();
+    return;
+  }
+
+  let folderId = t.folderId;
+  if (folderId) {
+    const folder = await prisma.documentFolder.findFirst({
+      where: { id: folderId, matterId: t.matterId },
+      select: { id: true },
+    });
+    if (!folder) folderId = null;
+  }
+
+  const create = (targetFolderId: string | null) =>
+    prisma.document.create({
+      data: {
+        matterId: t.matterId,
+        folderId: targetFolderId,
+        name: t.name,
+        // The composer picks a category; the multi-file uploader
+        // sends none, and discovery productions are what it exists
+        // for.
+        category: t.category ?? "discovery",
+        source: "upload",
+        // Full blob URL — the key under the vercel-blob driver
+        // (storage-key.ts documents the mapping).
+        fileUrl: blob.url,
+        contentType: t.contentType,
+        fileSize: meta.size,
+        uploadedBy: t.userId,
+      },
+    });
+
+  let filedAtRoot = Boolean(t.folderId) && folderId === null;
+  try {
+    await create(folderId);
+  } catch (err) {
+    if (!isForeignKeyError(err)) throw err;
+    // Raced a delete between the checks above and the insert.
+    const stillThere = await prisma.matter.findUnique({
+      where: { id: t.matterId },
+      select: { id: true },
+    });
+    if (!stillThere) {
+      await removeOrphan();
+      return;
+    }
+    await create(null);
+    filedAtRoot = true;
+  }
 
   // One activity row PER FILE — unlike the streaming route's
   // one-per-batch, because each client upload completes via its own
@@ -213,9 +300,18 @@ export const onUploadCompleted: NonNullable<
     userId: t.userId,
     type: "document",
     title: "Document uploaded",
-    detail: t.name.slice(0, 500),
+    detail: (filedAtRoot
+      ? `${t.name} (target folder was deleted during the upload; filed at the matter root)`
+      : t.name
+    ).slice(0, 500),
   });
 
-  revalidatePath(`/matters/${t.matterId}/documents`);
-  revalidatePath(`/matters/${t.matterId}`);
+  // The row exists now: a failure here must not fail the callback
+  // (Vercel would retry and the guard above would just no-op).
+  try {
+    revalidatePath(`/matters/${t.matterId}/documents`);
+    revalidatePath(`/matters/${t.matterId}`);
+  } catch (err) {
+    console.error("[blob-upload] revalidate failed", err);
+  }
 };

@@ -10,8 +10,9 @@
  * `X-Content-Type-Options: nosniff` on every download.
  *
  * Auth / prisma / storage are mocked — the session gate itself is
- * exercised only at the "no session → 401" boundary; firm-scoping
- * belongs to an integration pass once Contact carries firmId.
+ * exercised only at the "no session → 401" boundary. There is no
+ * firm or matter-team scoping to test (see the route's ACCESS MODEL
+ * note); it belongs with the multi-tenancy / ethical-walls phases.
  */
 
 import { Readable } from "node:stream";
@@ -302,5 +303,78 @@ describe("GET /api/documents/[id]/download — blob-stored documents (302)", () 
       params: Promise.resolve({ id: "d1" }),
     });
     expect(res.status).toBe(401);
+  });
+});
+
+describe("GET /api/documents/[id]/download — local streaming lifecycle", () => {
+  /** A source that counts how many chunks have been pulled from it. */
+  function countingStream(totalChunks: number) {
+    const state = { pulled: 0 };
+    const stream = new Readable({
+      highWaterMark: 1024,
+      read() {
+        state.pulled += 1;
+        this.push(
+          state.pulled > totalChunks ? null : Buffer.alloc(1024, "a")
+        );
+      },
+    });
+    return { state, stream };
+  }
+
+  async function startDownload(stream: Readable): Promise<Response> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedAuth.mockResolvedValue({ user: { id: "u1" } } as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedFindUser.mockResolvedValue({ firmId: "f1" } as any);
+    mockedFindDoc.mockResolvedValue({
+      id: "d1",
+      name: "big.mp4",
+      contentType: "video/mp4",
+      fileUrl: "key__big.mp4",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    mockedStat.mockResolvedValue({ size: 1024 * 10_000 });
+    mockedOpen.mockReturnValue(stream);
+    const req = new Request("http://localhost/api/documents/d1/download");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return GET(req as any, { params: Promise.resolve({ id: "d1" }) });
+  }
+
+  test("a stalled client applies backpressure: the file is not read ahead into memory", async () => {
+    const { state, stream } = countingStream(10_000);
+    const res = await startDownload(stream);
+    const reader = res.body!.getReader();
+    await reader.read(); // consume one chunk, then stall
+    await new Promise((r) => setTimeout(r, 50));
+    // The old 'data'-listener fallback pulled all 10,000 chunks.
+    expect(state.pulled).toBeLessThan(100);
+    await reader.cancel();
+  });
+
+  test("cancelling the response (a seek aborting the range request) destroys the fs stream", async () => {
+    const { stream } = countingStream(10_000);
+    const res = await startDownload(stream);
+    const reader = res.body!.getReader();
+    await reader.read();
+    await reader.cancel();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(stream.destroyed).toBe(true);
+  });
+});
+
+describe("GET /api/documents/[id]/download — firm guard", () => {
+  test("403 when the session user has no firm", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedAuth.mockResolvedValue({ user: { id: "u1" } } as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedFindUser.mockResolvedValue({ firmId: null } as any);
+    const req = new Request("http://localhost/api/documents/d1/download");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = await GET(req as any, {
+      params: Promise.resolve({ id: "d1" }),
+    });
+    expect(res.status).toBe(403);
+    expect(mockedFindDoc).not.toHaveBeenCalled();
   });
 });

@@ -21,6 +21,10 @@
  *   multipart/form-data fields, in append order:
  *     - matterId  string, required — MUST precede any file part
  *     - folderId  string, optional — must belong to the same matter
+ *     - category  string, optional — one of DOCUMENT_CATEGORIES
+ *                 (default "discovery"); applies to every file
+ *     - name      string, optional display name — applies to the FIRST
+ *                 file part only (the single-file composer's override)
  *     - files     one or more file parts (field name "files"); ≥1
  *   200 → { documents: [{ id: string, name: string }] }
  *   4xx → { error: string }
@@ -68,10 +72,12 @@ import {
   deleteFile,
   storeStream,
 } from "@/lib/file-storage";
+import { DOCUMENT_CATEGORIES } from "@/lib/document-form";
 import {
   MAX_FILES_PER_BATCH,
   MAX_MEDIA_UPLOAD_BYTES,
   MAX_STANDARD_UPLOAD_BYTES,
+  capDocumentName,
   contentTypeForFilename,
   isMediaType,
 } from "./upload-config";
@@ -93,6 +99,7 @@ type ParseResult =
       ok: true;
       matterId: string;
       folderId: string | null;
+      category: string;
       files: StoredUpload[];
     }
   | (UploadFailure & {
@@ -166,10 +173,10 @@ export async function POST(req: NextRequest): Promise<Response> {
             matterId: result.matterId,
             folderId: result.folderId,
             name: f.name,
-            // "discovery" is in DOCUMENT_CATEGORIES — this route
-            // exists for discovery productions; re-categorizing is a
-            // documents-tab edit.
-            category: "discovery",
+            // Defaults to "discovery" (this route exists for
+            // discovery productions); the single-file composer
+            // passes its own category.
+            category: result.category,
             source: "upload",
             fileUrl: f.key,
             contentType: f.contentType,
@@ -213,7 +220,11 @@ export async function POST(req: NextRequest): Promise<Response> {
 async function resolveTarget(fields: {
   matterId?: string;
   folderId?: string;
-}): Promise<{ matterId: string; folderId: string | null } | UploadFailure> {
+  category?: string;
+}): Promise<
+  | { matterId: string; folderId: string | null; category: string }
+  | UploadFailure
+> {
   const matterId = fields.matterId?.trim();
   if (!matterId) {
     return {
@@ -222,8 +233,8 @@ async function resolveTarget(fields: {
         "matterId is required and must precede file parts in the form data.",
     };
   }
-  // TODO (multi-tenant): scope by firmId once Matter carries one —
-  // same caveat as the uploadDocument server action.
+  // TODO (multi-tenant): scope by firmId once Matter carries one
+  // (single-tenant today; see the download route's ACCESS MODEL).
   const matter = await prisma.matter.findUnique({
     where: { id: matterId },
     select: { id: true },
@@ -242,7 +253,11 @@ async function resolveTarget(fields: {
       return { status: 400, error: "Folder not found in this matter." };
     }
   }
-  return { matterId, folderId: folderId || null };
+  const category = fields.category?.trim() || "discovery";
+  if (!(DOCUMENT_CATEGORIES as readonly string[]).includes(category)) {
+    return { status: 400, error: "Unknown document category." };
+  }
+  return { matterId, folderId: folderId || null, category };
 }
 
 /**
@@ -267,6 +282,9 @@ async function parseAndStore(
   try {
     bb = busboy({
       headers: { "content-type": contentTypeHeader },
+      // Browsers send multipart filenames as raw UTF-8; busboy's
+      // default 'latin1' turns "Déposition.pdf" into mojibake.
+      defParamCharset: "utf8",
       limits: {
         files: MAX_FILES_PER_BATCH,
         fields: 20,
@@ -284,8 +302,20 @@ async function parseAndStore(
   }
 
   const source = Readable.fromWeb(body);
-  const fields: { matterId?: string; folderId?: string } = {};
-  let target: { matterId: string; folderId: string | null } | null = null;
+  const fields: {
+    matterId?: string;
+    folderId?: string;
+    category?: string;
+    name?: string;
+  } = {};
+  let target: {
+    matterId: string;
+    folderId: string | null;
+    category: string;
+  } | null = null;
+  /** The composer's display-name override is consumed by the first
+   *  stored file only. */
+  let nameOverrideUsed = false;
   let failure: UploadFailure | null = null;
   let chain: Promise<void> = Promise.resolve();
 
@@ -304,7 +334,12 @@ async function parseAndStore(
     };
 
     bb.on("field", (name, value) => {
-      if (name === "matterId" || name === "folderId") {
+      if (
+        name === "matterId" ||
+        name === "folderId" ||
+        name === "category" ||
+        name === "name"
+      ) {
         fields[name] = value;
       }
     });
@@ -321,7 +356,7 @@ async function parseAndStore(
           stream.resume();
           return;
         }
-        const filename = (info.filename ?? "").trim();
+        const filename = capDocumentName((info.filename ?? "").trim());
         if (!filename) {
           // An empty <input type="file"> submits a nameless empty
           // part — skip it; the zero-files check below still fires.
@@ -356,10 +391,14 @@ async function parseAndStore(
             fail({ status: 400, error: `"${filename}" is empty.` });
             return;
           }
+          const override = nameOverrideUsed
+            ? ""
+            : capDocumentName((fields.name ?? "").trim());
+          nameOverrideUsed = true;
           stored.push({
             key: s.key,
             size: s.size,
-            name: filename,
+            name: override || filename,
             contentType: resolvedType,
           });
         } catch (err) {
@@ -412,7 +451,17 @@ async function parseAndStore(
       settleAfterChain();
     });
     bb.on("close", settleAfterChain);
-    source.on("error", settleAfterChain);
+    // The client went away mid-upload (closed tab, cancel). pipe()
+    // does not end or destroy the destination when the source errors,
+    // so busboy's open file stream would never finish: the part's
+    // pipeline would wait forever and keep a partial file on disk.
+    // Destroying busboy errors the current part stream, which makes
+    // storeStream's pipeline reject and unlink its partial file.
+    source.on("error", () => {
+      source.unpipe(bb);
+      bb.destroy();
+      settleAfterChain();
+    });
 
     source.pipe(bb);
   });
@@ -425,6 +474,16 @@ async function parseAndStore(
   }
   // target is non-null here: stored.length > 0 implies at least one
   // file was processed, which requires a resolved target.
-  const t = target as unknown as { matterId: string; folderId: string | null };
-  return { ok: true, matterId: t.matterId, folderId: t.folderId, files: stored };
+  const t = target as unknown as {
+    matterId: string;
+    folderId: string | null;
+    category: string;
+  };
+  return {
+    ok: true,
+    matterId: t.matterId,
+    folderId: t.folderId,
+    category: t.category,
+    files: stored,
+  };
 }

@@ -31,7 +31,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     matter: { findUnique: vi.fn() },
     documentFolder: { findFirst: vi.fn() },
-    document: { create: vi.fn() },
+    document: { create: vi.fn(), findFirst: vi.fn() },
   },
 }));
 vi.mock("@/lib/activity-log", () => ({ logActivity: vi.fn() }));
@@ -51,6 +51,7 @@ import {
   MAX_MEDIA_UPLOAD_BYTES,
   MAX_STANDARD_UPLOAD_BYTES,
 } from "../upload-config";
+import { makeStorageKey } from "@/lib/storage/storage-key";
 import {
   UploadTokenError,
   onBeforeGenerateToken,
@@ -62,6 +63,7 @@ const mockedPerm = vi.mocked(currentUserHasPermission);
 const mockedMatter = vi.mocked(prisma.matter.findUnique);
 const mockedFolder = vi.mocked(prisma.documentFolder.findFirst);
 const mockedCreate = vi.mocked(prisma.document.create);
+const mockedDocFind = vi.mocked(prisma.document.findFirst);
 const mockedHead = vi.mocked(head);
 const mockedDel = vi.mocked(del);
 
@@ -96,6 +98,20 @@ async function tokenError(
 }
 
 afterEach(() => {
+  // mockReset (not clearAllMocks): queued mockResolvedValueOnce
+  // values from one test must never leak into the next.
+  for (const m of [
+    mockedAuth,
+    mockedPerm,
+    mockedMatter,
+    mockedFolder,
+    mockedCreate,
+    mockedDocFind,
+    mockedHead,
+    mockedDel,
+  ]) {
+    m.mockReset();
+  }
   vi.clearAllMocks();
 });
 
@@ -197,9 +213,52 @@ describe("onBeforeGenerateToken — token contract", () => {
       matterId: "m1",
       folderId: "fold1",
       name: "brief.pdf",
+      category: "discovery",
       contentType: "application/pdf",
       userId: "u1", // from the SESSION, never the client payload
     });
+  });
+
+  test("a composer-chosen category round-trips; an unknown one is rejected", async () => {
+    wireHappyGates();
+    const token = await onBeforeGenerateToken(
+      KEY,
+      JSON.stringify({ matterId: "m1", name: "brief.pdf", category: "contract" }),
+      false
+    );
+    expect(JSON.parse(token.tokenPayload as string).category).toBe("contract");
+
+    const err = await tokenError(
+      KEY,
+      JSON.stringify({ matterId: "m1", name: "brief.pdf", category: "bogus" })
+    );
+    expect(err.status).toBe(400);
+  });
+
+  test("tokens outlive the SDK's one-hour default for media (GB uploads on slow uplinks)", async () => {
+    wireHappyGates();
+    const before = Date.now();
+    const media = await onBeforeGenerateToken(
+      "AAAAAAAAAAAAAAAA__bodycam.mp4",
+      JSON.stringify({ matterId: "m1", name: "bodycam.mp4" }),
+      false
+    );
+    const pdf = await onBeforeGenerateToken(KEY, PAYLOAD, false);
+    const HOUR = 60 * 60 * 1000;
+    expect(media.validUntil).toBeGreaterThanOrEqual(before + 6 * HOUR);
+    expect(pdf.validUntil).toBeGreaterThanOrEqual(before + HOUR - 1000);
+    expect(pdf.validUntil).toBeLessThan(before + 2 * HOUR);
+  });
+
+  test("a long-named PDF keeps its type: the key's extension survives truncation", async () => {
+    wireHappyGates();
+    const key = makeStorageKey("x".repeat(300) + ".pdf");
+    const token = await onBeforeGenerateToken(
+      key,
+      JSON.stringify({ matterId: "m1", name: "x".repeat(200) + ".pdf" }),
+      false
+    );
+    expect(token.allowedContentTypes).toEqual(["application/pdf"]);
   });
 
   test("root uploads carry folderId: null", async () => {
@@ -232,7 +291,18 @@ describe("onUploadCompleted", () => {
     userId: "u1",
   });
 
+  /** Gates for a normal first delivery: no existing row, matter and
+   *  folder still there. */
+  function wireCompletion() {
+    mockedDocFind.mockResolvedValue(null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedMatter.mockResolvedValue({ id: "m1" } as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedFolder.mockResolvedValue({ id: "fold1" } as any);
+  }
+
   test("creates the Document row with the blob URL as fileUrl", async () => {
+    wireCompletion();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockedHead.mockResolvedValue({ size: 9876 } as any);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -260,6 +330,7 @@ describe("onUploadCompleted", () => {
   });
 
   test("empty upload: blob deleted, NO row created (streaming-route parity)", async () => {
+    wireCompletion();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockedHead.mockResolvedValue({ size: 0 } as any);
     mockedDel.mockResolvedValue(undefined);
@@ -274,5 +345,112 @@ describe("onUploadCompleted", () => {
       onUploadCompleted({ blob: BLOB, tokenPayload: null })
     ).rejects.toThrow(/token payload/i);
     expect(mockedCreate).not.toHaveBeenCalled();
+  });
+
+  test("a redelivered callback does not create a second row", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedDocFind.mockResolvedValue({ id: "d1" } as any);
+    await onUploadCompleted({ blob: BLOB, tokenPayload: TOKEN_PAYLOAD });
+    expect(mockedDocFind).toHaveBeenCalledWith({
+      where: { fileUrl: BLOB.url },
+      select: { id: true },
+    });
+    expect(mockedCreate).not.toHaveBeenCalled();
+    expect(logActivity).not.toHaveBeenCalled();
+    expect(mockedDel).not.toHaveBeenCalled();
+  });
+
+  test("target folder deleted mid-upload: filed at the matter root, callback succeeds", async () => {
+    wireCompletion();
+    mockedFolder.mockResolvedValue(null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedHead.mockResolvedValue({ size: 10 } as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedCreate.mockResolvedValue({ id: "d1" } as any);
+
+    await onUploadCompleted({ blob: BLOB, tokenPayload: TOKEN_PAYLOAD });
+
+    expect(mockedCreate).toHaveBeenCalledTimes(1);
+    expect(mockedCreate.mock.calls[0][0].data.folderId).toBeNull();
+    const log = vi.mocked(logActivity).mock.calls[0][0];
+    expect(log.detail).toMatch(/folder was deleted/);
+  });
+
+  test("folder deleted between the check and the insert (P2003): retried at the root", async () => {
+    wireCompletion();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedHead.mockResolvedValue({ size: 10 } as any);
+    mockedCreate
+      .mockRejectedValueOnce(Object.assign(new Error("fk"), { code: "P2003" }))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .mockResolvedValueOnce({ id: "d1" } as any);
+
+    await onUploadCompleted({ blob: BLOB, tokenPayload: TOKEN_PAYLOAD });
+
+    expect(mockedCreate).toHaveBeenCalledTimes(2);
+    expect(mockedCreate.mock.calls[0][0].data.folderId).toBe("fold1");
+    expect(mockedCreate.mock.calls[1][0].data.folderId).toBeNull();
+    expect(mockedDel).not.toHaveBeenCalled();
+  });
+
+  test("matter deleted mid-upload: orphan blob removed, callback does not throw", async () => {
+    wireCompletion();
+    mockedMatter.mockResolvedValue(null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedHead.mockResolvedValue({ size: 10 } as any);
+    mockedDel.mockResolvedValue(undefined);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(
+      onUploadCompleted({ blob: BLOB, tokenPayload: TOKEN_PAYLOAD })
+    ).resolves.toBeUndefined();
+    errSpy.mockRestore();
+
+    expect(mockedDel).toHaveBeenCalledWith(BLOB.url);
+    expect(mockedCreate).not.toHaveBeenCalled();
+  });
+
+  test("a transient DB error still throws so Vercel retries", async () => {
+    wireCompletion();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedHead.mockResolvedValue({ size: 10 } as any);
+    mockedCreate.mockRejectedValue(new Error("connection reset"));
+    await expect(
+      onUploadCompleted({ blob: BLOB, tokenPayload: TOKEN_PAYLOAD })
+    ).rejects.toThrow(/connection reset/);
+    expect(mockedDel).not.toHaveBeenCalled();
+  });
+
+  test("a revalidate failure after the insert does not fail the callback", async () => {
+    wireCompletion();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedHead.mockResolvedValue({ size: 10 } as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedCreate.mockResolvedValue({ id: "d1" } as any);
+    vi.mocked(revalidatePath).mockImplementation(() => {
+      throw new Error("cache down");
+    });
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    await expect(
+      onUploadCompleted({ blob: BLOB, tokenPayload: TOKEN_PAYLOAD })
+    ).resolves.toBeUndefined();
+    errSpy.mockRestore();
+    vi.mocked(revalidatePath).mockReset();
+  });
+
+  test("category from the token payload is stored; absent means discovery", async () => {
+    wireCompletion();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedHead.mockResolvedValue({ size: 10 } as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedCreate.mockResolvedValue({ id: "d1" } as any);
+    await onUploadCompleted({
+      blob: BLOB,
+      tokenPayload: JSON.stringify({
+        ...JSON.parse(TOKEN_PAYLOAD),
+        category: "contract",
+      }),
+    });
+    expect(mockedCreate.mock.calls[0][0].data.category).toBe("contract");
   });
 });

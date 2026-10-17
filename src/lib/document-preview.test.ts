@@ -25,7 +25,10 @@ vi.mock("@/lib/file-storage", () => ({
 import { readStoredFile, statFile } from "@/lib/file-storage";
 import {
   DOCX_MAX_BYTES,
+  DOCX_MAX_ENTRY_UNCOMPRESSED_BYTES,
+  DOCX_MAX_TOTAL_UNCOMPRESSED_BYTES,
   TEXT_PREVIEW_MAX_BYTES,
+  checkZipBounds,
   parseCsvPreview,
   readStoredTextPreview,
   renderStoredDocxToSafeHtml,
@@ -270,5 +273,89 @@ describe("parseCsvPreview", () => {
 
   test("empty text → null", () => {
     expect(parseCsvPreview("")).toBeNull();
+  });
+});
+
+describe("renderStoredDocxToSafeHtml — one stat per view", () => {
+  test("probes the stored file once (one head() on the blob driver), not twice", async () => {
+    files.set(
+      "once",
+      await buildDocx({
+        documentXml:
+          `<?xml version="1.0"?><w:document ${W_NS}><w:body>` +
+          "<w:p><w:r><w:t>hi</w:t></w:r></w:p></w:body></w:document>",
+      })
+    );
+    const result = await renderStoredDocxToSafeHtml("once");
+    expect(result.ok).toBe(true);
+    expect(vi.mocked(statFile)).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("checkZipBounds — decompression-bomb guard", () => {
+  /** Overwrite the declared uncompressed size of every central
+   *  directory entry (a forged header: the bytes stay tiny). */
+  function forgeDeclaredSize(buf: Buffer, size: number): Buffer {
+    const copy = Buffer.from(buf);
+    let pos = copy.readUInt32LE(copy.length - 22 + 16);
+    const entries = copy.readUInt16LE(copy.length - 22 + 10);
+    for (let n = 0; n < entries; n++) {
+      copy.writeUInt32LE(size, pos + 24);
+      pos +=
+        46 +
+        copy.readUInt16LE(pos + 28) +
+        copy.readUInt16LE(pos + 30) +
+        copy.readUInt16LE(pos + 32);
+    }
+    return copy;
+  }
+
+  const xml = (text: string) =>
+    `<?xml version="1.0"?><w:document ${W_NS}><w:body><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:body></w:document>`;
+
+  test("a normal document passes", async () => {
+    const buf = await buildDocx({ documentXml: xml("fine") });
+    expect(checkZipBounds(buf)).toEqual({ ok: true });
+  });
+
+  test("an entry declaring more than the per-entry ceiling is rejected", async () => {
+    const buf = forgeDeclaredSize(
+      await buildDocx({ documentXml: xml("bomb") }),
+      DOCX_MAX_ENTRY_UNCOMPRESSED_BYTES + 1
+    );
+    const res = checkZipBounds(buf);
+    expect(res.ok).toBe(false);
+  });
+
+  test("many entries that sum past the total ceiling are rejected", async () => {
+    const perEntry = Math.floor(DOCX_MAX_TOTAL_UNCOMPRESSED_BYTES / 3) + 1;
+    const zip = new JSZip();
+    for (let i = 0; i < 4; i++) zip.file(`part${i}.xml`, "x");
+    const buf = forgeDeclaredSize(
+      await zip.generateAsync({ type: "nodebuffer" }),
+      perEntry
+    );
+    expect(checkZipBounds(buf).ok).toBe(false);
+  });
+
+  test("garbage that is not a zip is passed through for the converter to report", () => {
+    expect(checkZipBounds(Buffer.from("this is not a zip archive"))).toEqual({
+      ok: true,
+    });
+    expect(checkZipBounds(Buffer.alloc(3))).toEqual({ ok: true });
+  });
+
+  test("renderStoredDocxToSafeHtml refuses the bomb with a reason and never runs the converter", async () => {
+    files.set(
+      "bomb",
+      forgeDeclaredSize(
+        await buildDocx({ documentXml: xml("bomb") }),
+        DOCX_MAX_ENTRY_UNCOMPRESSED_BYTES + 1
+      )
+    );
+    const result = await renderStoredDocxToSafeHtml("bomb");
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toMatch(/unusually large/i);
   });
 });

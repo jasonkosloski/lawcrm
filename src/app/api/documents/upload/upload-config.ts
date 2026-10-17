@@ -114,6 +114,23 @@ export function contentTypeForFilename(filename: string): string {
   return EXTENSION_MIME[ext] ?? "application/octet-stream";
 }
 
+/** Longest stored `Document.name`. The blob path rejects longer names
+ *  at the token step (zod); the streaming route trims to it. */
+export const MAX_DOCUMENT_NAME_LENGTH = 255;
+
+/** Trim a display name to `max` characters, cutting the STEM so a
+ *  short trailing extension survives (the extension is what MIME
+ *  resolution and users' eyes rely on). */
+export function capDocumentName(
+  name: string,
+  max: number = MAX_DOCUMENT_NAME_LENGTH
+): string {
+  if (name.length <= max) return name;
+  const dot = name.lastIndexOf(".");
+  const ext = dot > 0 && name.length - dot <= 17 ? name.slice(dot) : "";
+  return name.slice(0, max - ext.length) + ext;
+}
+
 /** Media (video/audio) gets the big cap; everything else the small. */
 export function isMediaType(contentType: string): boolean {
   return (

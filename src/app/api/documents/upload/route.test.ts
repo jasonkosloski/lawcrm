@@ -17,6 +17,8 @@
  * itself live in src/lib/file-storage.test.ts.
  */
 
+import { Writable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { NextRequest } from "next/server";
 
@@ -86,11 +88,13 @@ function wireHappyMocks() {
   mockedMatter.mockResolvedValue({ id: "m1" } as any);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   mockedFolder.mockResolvedValue({ id: "fold1" } as any);
-  mockedStore.mockImplementation(async (stream, filename) => {
+  mockedStore.mockImplementation((async (
+    stream: NodeJS.ReadableStream,
+    filename: string
+  ) => {
     const size = await drain(stream);
     return { key: `key-${filename}`, size, url: `key-${filename}` };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  }) as any;
+  }) as unknown as typeof storeStream);
   // The route builds prisma.document.create(...) calls and hands the
   // array to $transaction — echo each op's data back as the row.
   mockedCreate.mockImplementation(
@@ -102,9 +106,8 @@ function wireHappyMocks() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       })) as any
   );
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   mockedTxn.mockImplementation((async (ops: Promise<unknown>[]) =>
-    Promise.all(ops)) as any);
+    Promise.all(ops)) as unknown as typeof prisma.$transaction);
 }
 
 /**
@@ -282,7 +285,6 @@ describe("POST /api/documents/upload — failure semantics", () => {
       .mockImplementationOnce(async (stream, filename) => {
         const size = await drain(stream);
         return { key: `key-${filename}`, size };
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       })
       .mockImplementationOnce(async (stream) => {
         await drain(stream);
@@ -304,4 +306,124 @@ describe("POST /api/documents/upload — failure semantics", () => {
     expect(mockedDelete).toHaveBeenCalledWith("key-ok.pdf");
     expect(mockedTxn).not.toHaveBeenCalled();
   });
+});
+
+describe("POST /api/documents/upload — composer fields (category, name)", () => {
+  test("category is stored on every row; absent means discovery", async () => {
+    wireHappyMocks();
+    const res = await POST(
+      await makeRequest(
+        fdWith({ matterId: "m1", category: "contract" }, [{ name: "a.pdf" }])
+      )
+    );
+    expect(res.status).toBe(200);
+    expect(mockedCreate.mock.calls[0]![0].data.category).toBe("contract");
+  });
+
+  test("an unknown category is a 400 and nothing is stored", async () => {
+    wireHappyMocks();
+    const res = await POST(
+      await makeRequest(
+        fdWith({ matterId: "m1", category: "not-a-category" }, [
+          { name: "a.pdf" },
+        ])
+      )
+    );
+    expect(res.status).toBe(400);
+    expect(mockedStore).not.toHaveBeenCalled();
+    expect(mockedTxn).not.toHaveBeenCalled();
+  });
+
+  test("a display-name override applies to the first file only", async () => {
+    wireHappyMocks();
+    await POST(
+      await makeRequest(
+        fdWith({ matterId: "m1", name: "Signed retainer" }, [
+          { name: "scan001.pdf" },
+          { name: "scan002.pdf" },
+        ])
+      )
+    );
+    expect(mockedCreate.mock.calls[0]![0].data.name).toBe("Signed retainer");
+    expect(mockedCreate.mock.calls[1]![0].data.name).toBe("scan002.pdf");
+    // MIME still comes from the real filename, not the display name.
+    expect(mockedCreate.mock.calls[0]![0].data.contentType).toBe(
+      "application/pdf"
+    );
+  });
+});
+
+describe("POST /api/documents/upload — filenames", () => {
+  test("non-ASCII (UTF-8) filenames are not mangled as latin1", async () => {
+    wireHappyMocks();
+    const name = "Déposition – Müller.pdf";
+    await POST(await makeRequest(fdWith({ matterId: "m1" }, [{ name }])));
+    expect(mockedCreate.mock.calls[0]![0].data.name).toBe(name);
+    expect(mockedStore.mock.calls[0]![1]).toBe(name);
+  });
+
+  test("a very long filename is capped at 255 chars and keeps its extension", async () => {
+    wireHappyMocks();
+    const name = "x".repeat(1000) + ".pdf";
+    await POST(await makeRequest(fdWith({ matterId: "m1" }, [{ name }])));
+    const stored = mockedCreate.mock.calls[0]![0].data.name;
+    expect(stored).toHaveLength(255);
+    expect(stored.endsWith(".pdf")).toBe(true);
+    expect(mockedCreate.mock.calls[0]![0].data.contentType).toBe(
+      "application/pdf"
+    );
+  });
+});
+
+describe("POST /api/documents/upload — client abort mid-upload", () => {
+  test("a source error mid-file settles the request and the partial part is torn down", async () => {
+    wireHappyMocks();
+    let partCleanedUp = false;
+    mockedStore.mockImplementation((async (stream: NodeJS.ReadableStream) => {
+      // Like storeStreamLocal: a pipeline into a sink. If busboy never
+      // errors the part stream this awaits forever (the bug).
+      const sink = new Writable({
+        write(_chunk, _enc, cb) {
+          cb();
+        },
+      });
+      try {
+        await pipeline(stream, sink);
+      } catch (err) {
+        partCleanedUp = true;
+        throw err;
+      }
+      return { key: "k", size: 1, url: "k" };
+    }) as unknown as typeof storeStream);
+
+    const encoded = new Response(
+      fdWith({ matterId: "m1" }, [
+        { name: "huge.mp4", content: "v".repeat(200_000) },
+      ])
+    );
+    const bytes = new Uint8Array(await encoded.arrayBuffer());
+    // Send most of the body, then drop the connection.
+    const partial = bytes.subarray(0, Math.floor(bytes.length / 2));
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(partial);
+        setTimeout(() => controller.error(new Error("client went away")), 20);
+        return new Promise(() => {});
+      },
+    });
+    const req = new NextRequest("http://test.local/api/documents/upload", {
+      method: "POST",
+      headers: { "content-type": encoded.headers.get("content-type")! },
+      body,
+      duplex: "half",
+    });
+
+    const res = await POST(req);
+    // The request settles with a failure (nothing is committed)...
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    // ...the in-flight part's pipeline was torn down...
+    expect(partCleanedUp).toBe(true);
+    // ...and no Document row was written.
+    expect(mockedTxn).not.toHaveBeenCalled();
+  }, 3000);
 });

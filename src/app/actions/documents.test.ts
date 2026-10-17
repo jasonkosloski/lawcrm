@@ -1,50 +1,66 @@
 /**
- * Integration tests for the document upload action.
+ * Integration tests for `deleteDocument`.
  *
- * Focus: the RBAC gate. `uploadDocument` must ask for
- * `documents.upload` before touching anything (the gate mechanics
- * themselves are covered by the permission-check tests — here we
- * pin that the action asks for the right key). The happy path
- * asserts the Document row + activity entry alongside the gate so
- * a passing gate check can't hide a short-circuited no-op.
+ * Pins: the uploader-or-`documents.delete_any` rule, the
+ * flagged-moment guard (other reviewers' flags need
+ * `evidence.flag.delete_any`), audit-before-storage ordering (a
+ * storage failure still leaves the audit row), and the shared-file
+ * rule (bytes are only unlinked when no other row points at them).
  *
- * Storage is mocked — `storeFile` writes to disk in production and
- * these tests only care about the row the action persists.
+ * Storage is mocked — `deleteFile` talks to disk / Vercel Blob in
+ * production and these tests care about the rows and the call.
  */
 
 import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
-vi.mock("@/lib/firm", () => ({ getCurrentFirm: vi.fn() }));
 vi.mock("@/lib/permission-check", () => ({
   requirePermission: vi.fn(),
-  currentUserHasPermission: vi.fn().mockResolvedValue(true),
+  currentUserHasPermission: vi.fn(),
 }));
 vi.mock("@/lib/file-storage", () => ({
-  storeFile: vi.fn().mockResolvedValue({
-    key: "uploads/test-key.pdf",
-    contentType: "application/pdf",
-    size: 12,
-  }),
-  deleteFile: vi.fn(),
+  deleteFile: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { requirePermission } from "@/lib/permission-check";
-import { storeFile } from "@/lib/file-storage";
+import { revalidatePath } from "next/cache";
+import { getCurrentUserId } from "@/lib/current-user";
+import { currentUserHasPermission } from "@/lib/permission-check";
+import { deleteFile } from "@/lib/file-storage";
 import { prisma } from "@/lib/prisma";
-import { uploadDocument } from "@/app/actions/documents";
-import { documentInitialState } from "@/lib/document-form";
+import { deleteDocument } from "@/app/actions/documents";
 import {
   resetDb,
+  seedDocument,
   seedFirm,
+  seedFlaggedMoment,
   seedMatter,
   seedPracticeArea,
   seedUser,
 } from "@/test/integration-helpers";
 
-let userId: string;
+let uploaderId: string;
+let otherId: string;
 let matterId: string;
+
+/** Grant exactly these permission keys to the "current user". */
+function grant(...keys: string[]) {
+  vi.mocked(currentUserHasPermission).mockImplementation(async (key) =>
+    keys.includes(key as string)
+  );
+}
+
+async function seedFiledDocument(fileUrl: string | null = "k__a.pdf") {
+  const { documentId } = await seedDocument({
+    matterId,
+    uploadedBy: uploaderId,
+  });
+  await prisma.document.update({
+    where: { id: documentId },
+    data: { fileUrl },
+  });
+  return documentId;
+}
 
 beforeAll(() => {
   expect(process.env.DATABASE_URL).toMatch(/lawcrm_test/);
@@ -52,76 +68,145 @@ beforeAll(() => {
 
 beforeEach(async () => {
   await resetDb();
-  vi.clearAllMocks();
+  vi.mocked(revalidatePath).mockClear();
+  vi.mocked(deleteFile).mockReset();
+  vi.mocked(deleteFile).mockResolvedValue(undefined);
   const { firmId } = await seedFirm();
-  const u = await seedUser({ firmId });
-  userId = u.userId;
-  vi.mocked(requirePermission).mockResolvedValue(userId);
+  uploaderId = (await seedUser({ firmId })).userId;
+  otherId = (await seedUser({ firmId })).userId;
+  vi.mocked(getCurrentUserId).mockResolvedValue(uploaderId);
+  grant();
   const { areaId, stageId } = await seedPracticeArea();
-  const m = await seedMatter({
-    practiceAreaId: areaId,
-    stageId,
-    leadUserId: userId,
-  });
-  matterId = m.matterId;
-});
-
-const buildUploadForm = () => {
-  const fd = new FormData();
-  fd.set(
-    "file",
-    new File(["hello, world"], "exhibit-a.pdf", {
-      type: "application/pdf",
+  matterId = (
+    await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: uploaderId,
     })
-  );
-  fd.set("name", "Exhibit A");
-  fd.set("category", "other");
-  return fd;
-};
+  ).matterId;
+});
 
-describe("permission gate", () => {
-  test("asks for documents.upload before touching the matter", async () => {
-    // Unknown matter — the gate must still fire first (gate-then-
-    // lookup ordering keeps 'not found' from leaking to the ungated).
-    await uploadDocument("nope", documentInitialState, buildUploadForm());
-    expect(requirePermission).toHaveBeenCalledWith("documents.upload");
+describe("deleteDocument authorization", () => {
+  test("the uploader can delete their own document", async () => {
+    const id = await seedFiledDocument();
+    const res = await deleteDocument(id);
+    expect(res).toEqual({ ok: true });
+    expect(await prisma.document.count({ where: { id } })).toBe(0);
+    expect(deleteFile).toHaveBeenCalledWith("k__a.pdf");
+  });
+
+  test("another user without documents.delete_any is refused and nothing changes", async () => {
+    const id = await seedFiledDocument();
+    vi.mocked(getCurrentUserId).mockResolvedValue(otherId);
+    const res = await deleteDocument(id);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/uploader/i);
+    expect(await prisma.document.count({ where: { id } })).toBe(1);
+    expect(deleteFile).not.toHaveBeenCalled();
+    expect(await prisma.activityLog.count({ where: { type: "document" } })).toBe(
+      0
+    );
+  });
+
+  test("another user WITH documents.delete_any can delete", async () => {
+    const id = await seedFiledDocument();
+    vi.mocked(getCurrentUserId).mockResolvedValue(otherId);
+    grant("documents.delete_any");
+    const res = await deleteDocument(id);
+    expect(res).toEqual({ ok: true });
+    expect(await prisma.document.count({ where: { id } })).toBe(0);
+  });
+
+  test("a missing document is a clean error", async () => {
+    const res = await deleteDocument("nope");
+    expect(res).toEqual({ ok: false, error: "Document not found." });
+    expect(deleteFile).not.toHaveBeenCalled();
   });
 });
 
-describe("upload", () => {
-  test("stores the file and persists the row for the gated user", async () => {
-    const res = await uploadDocument(
-      matterId,
-      documentInitialState,
-      buildUploadForm()
-    );
-    expect(res.status).toBe("ok");
-    expect(storeFile).toHaveBeenCalledOnce();
-
-    const doc = await prisma.document.findFirstOrThrow({
-      where: { matterId },
-    });
-    // uploadedBy comes from requirePermission's return — the gate
-    // and the attribution are the same call.
-    expect(doc.uploadedBy).toBe(userId);
-    expect(doc.name).toBe("Exhibit A");
-    expect(doc.fileUrl).toBe("uploads/test-key.pdf");
-
-    const activity = await prisma.activityLog.findFirstOrThrow({
+describe("deleteDocument audit + storage ordering", () => {
+  test("writes the audit row and revalidates", async () => {
+    const id = await seedFiledDocument();
+    await deleteDocument(id);
+    const log = await prisma.activityLog.findFirstOrThrow({
       where: { type: "document" },
     });
-    expect(activity.matterId).toBe(matterId);
-    expect(activity.title).toBe("Document uploaded");
+    expect(log.title).toBe("Document deleted");
+    expect(log.matterId).toBe(matterId);
+    expect(revalidatePath).toHaveBeenCalledWith(
+      `/matters/${matterId}/documents`
+    );
   });
 
-  test("unknown matter errors without creating anything", async () => {
-    const res = await uploadDocument(
-      "nope",
-      documentInitialState,
-      buildUploadForm()
+  test("a storage failure still returns ok and still writes the audit row", async () => {
+    const id = await seedFiledDocument();
+    vi.mocked(deleteFile).mockRejectedValue(new Error("blob unavailable"));
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await deleteDocument(id);
+    errSpy.mockRestore();
+
+    expect(res).toEqual({ ok: true });
+    expect(await prisma.document.count({ where: { id } })).toBe(0);
+    expect(
+      await prisma.activityLog.count({
+        where: { title: "Document deleted", matterId },
+      })
+    ).toBe(1);
+    expect(revalidatePath).toHaveBeenCalled();
+  });
+
+  test("a document with no stored file never touches storage", async () => {
+    const id = await seedFiledDocument(null);
+    await deleteDocument(id);
+    expect(deleteFile).not.toHaveBeenCalled();
+  });
+
+  test("the file is kept while another row still references it", async () => {
+    const id = await seedFiledDocument("k__shared.pdf");
+    const twin = await seedFiledDocument("k__shared.pdf");
+    await deleteDocument(id);
+    expect(deleteFile).not.toHaveBeenCalled();
+    // ...and unlinked once the last referencing row goes.
+    await deleteDocument(twin);
+    expect(deleteFile).toHaveBeenCalledWith("k__shared.pdf");
+  });
+});
+
+describe("deleteDocument flagged moments", () => {
+  test("own flags only: deletes, and the audit detail counts them", async () => {
+    const id = await seedFiledDocument();
+    await seedFlaggedMoment({ documentId: id, flaggedById: uploaderId });
+    const res = await deleteDocument(id);
+    expect(res).toEqual({ ok: true });
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { title: "Document deleted" },
+    });
+    expect(log.detail).toMatch(/1 flagged moment removed/);
+  });
+
+  test("another reviewer's flags block the delete without evidence.flag.delete_any", async () => {
+    const id = await seedFiledDocument();
+    await seedFlaggedMoment({ documentId: id, flaggedById: otherId });
+    await seedFlaggedMoment({ documentId: id, flaggedById: otherId });
+    const res = await deleteDocument(id);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/2 flagged moments/);
+    expect(await prisma.document.count({ where: { id } })).toBe(1);
+    expect(await prisma.flaggedMoment.count({ where: { documentId: id } })).toBe(
+      2
     );
-    expect(res).toEqual({ status: "error", error: "Matter not found." });
-    expect(storeFile).not.toHaveBeenCalled();
-    expect(await prisma.document.count()).toBe(0);
+    expect(deleteFile).not.toHaveBeenCalled();
+  });
+
+  test("evidence.flag.delete_any lets the delete through and records the count", async () => {
+    const id = await seedFiledDocument();
+    await seedFlaggedMoment({ documentId: id, flaggedById: otherId });
+    grant("evidence.flag.delete_any");
+    const res = await deleteDocument(id);
+    expect(res).toEqual({ ok: true });
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { title: "Document deleted" },
+    });
+    expect(log.detail).toMatch(/1 flagged moment removed/);
   });
 });

@@ -215,53 +215,67 @@ export async function renameFolder(
 export async function deleteFolder(id: string): Promise<FolderActionResult> {
   const userId = await requirePermission("documents.folder.delete");
 
-  const folder = await prisma.documentFolder.findUnique({
-    where: { id },
-    select: { id: true, matterId: true, parentId: true, name: true },
-  });
-  if (!folder) return { ok: false, error: "Folder not found." };
+  const outcome = await prisma.$transaction(async (tx) => {
+    // Lock the folder row FIRST. A concurrent child create/move into
+    // this folder takes a FOR KEY SHARE lock on it (FK check) and so
+    // waits for us; once we commit, its insert fails its FK cleanly
+    // instead of being silently cascade-deleted with the folder. A
+    // child committed BEFORE the lock is visible to the reads below.
+    const locked = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM document_folders WHERE id = ${id} FOR UPDATE`;
+    if (locked.length === 0) return null;
 
-  const folders = await fetchMatterFolders(folder.matterId);
-  const children = siblingsOf(folders, folder.id);
-  // Names occupied at the destination once this folder is gone — its
-  // own name frees up, so exclude it alongside the moving children.
-  const taken = new Set(
-    siblingsOf(folders, folder.parentId)
-      .filter((s) => s.id !== folder.id)
-      .map((s) => s.name.toLowerCase())
-  );
-
-  const parentName = folder.parentId
-    ? folders.find((f) => f.id === folder.parentId)?.name ?? null
-    : null;
-
-  let order = nextOrder(siblingsOf(folders, folder.parentId));
-  const childUpdates = children.map((child) => {
-    const newName = nextAvailableFolderName(child.name, taken);
-    taken.add(newName.toLowerCase());
-    return prisma.documentFolder.update({
-      where: { id: child.id },
-      data: { parentId: folder.parentId, name: newName, order: order++ },
+    const folder = await tx.documentFolder.findUniqueOrThrow({
+      where: { id },
+      select: { id: true, matterId: true, parentId: true, name: true },
     });
-  });
+    const folders: FolderRecord[] = await tx.documentFolder.findMany({
+      where: { matterId: folder.matterId },
+      select: { id: true, parentId: true, name: true, order: true },
+    });
+    const children = siblingsOf(folders, folder.id);
+    // Names occupied at the destination once this folder is gone — its
+    // own name frees up, so exclude it alongside the moving children.
+    const taken = new Set(
+      siblingsOf(folders, folder.parentId)
+        .filter((s) => s.id !== folder.id)
+        .map((s) => s.name.toLowerCase())
+    );
+    const parentName = folder.parentId
+      ? (folders.find((f) => f.id === folder.parentId)?.name ?? null)
+      : null;
 
-  const results = await prisma.$transaction([
-    ...childUpdates,
-    prisma.document.updateMany({
+    let order = nextOrder(siblingsOf(folders, folder.parentId));
+    for (const child of children) {
+      const newName = nextAvailableFolderName(child.name, taken);
+      taken.add(newName.toLowerCase());
+      await tx.documentFolder.update({
+        where: { id: child.id },
+        data: { parentId: folder.parentId, name: newName, order: order++ },
+      });
+    }
+    const docs = await tx.document.updateMany({
       where: { folderId: folder.id },
       data: { folderId: folder.parentId },
-    }),
-    prisma.documentFolder.delete({ where: { id: folder.id } }),
-  ]);
-  // The updateMany BatchPayload sits right after the child updates.
-  const docsMoved = (results[childUpdates.length] as { count: number }).count;
+    });
+    await tx.documentFolder.delete({ where: { id: folder.id } });
 
+    return {
+      folder,
+      parentName,
+      childCount: children.length,
+      docsMoved: docs.count,
+    };
+  });
+  if (!outcome) return { ok: false, error: "Folder not found." };
+
+  const { folder, parentName, childCount, docsMoved } = outcome;
   await logActivity({
     matterId: folder.matterId,
     userId,
     type: "document",
     title: "Folder deleted",
-    detail: `"${folder.name}" — ${children.length} subfolder(s) and ${docsMoved} document(s) moved to ${parentName ? `"${parentName}"` : "the matter root"}`,
+    detail: `"${folder.name}" — ${childCount} subfolder(s) and ${docsMoved} document(s) moved to ${parentName ? `"${parentName}"` : "the matter root"}`,
   });
 
   revalidatePath(`/matters/${folder.matterId}/documents`);
@@ -361,50 +375,86 @@ export async function moveFolder(
   }
   if (newParentId === folder.parentId) return { ok: true, folderId: folder.id };
 
-  const folders = await fetchMatterFolders(folder.matterId);
+  // The cycle / depth / collision checks and the write run in ONE
+  // transaction that first locks the matter's folder rows. Otherwise
+  // two concurrent cross-moves (A under B, B under A) could both pass
+  // a stale check and leave a parent cycle that no root reaches.
+  const result = await prisma.$transaction(
+    async (
+      tx
+    ): Promise<
+      | { ok: true; destName: string | null; noop?: boolean }
+      | { ok: false; error: string }
+    > => {
+      await tx.$queryRaw`
+        SELECT id FROM document_folders
+        WHERE "matterId" = ${folder.matterId} FOR UPDATE`;
 
-  let destName: string | null = null;
-  if (newParentId) {
-    const dest = folders.find((f) => f.id === newParentId);
-    if (!dest) {
-      return { ok: false, error: "Destination folder not found in this matter." };
+      const current = await tx.documentFolder.findUnique({
+        where: { id: folder.id },
+        select: { parentId: true, name: true },
+      });
+      if (!current) return { ok: false, error: "Folder not found." };
+      if (newParentId === current.parentId) {
+        // A concurrent move already put it there.
+        return { ok: true, destName: null, noop: true };
+      }
+
+      const folders: FolderRecord[] = await tx.documentFolder.findMany({
+        where: { matterId: folder.matterId },
+        select: { id: true, parentId: true, name: true, order: true },
+      });
+
+      let destName: string | null = null;
+      if (newParentId) {
+        const dest = folders.find((f) => f.id === newParentId);
+        if (!dest) {
+          return {
+            ok: false,
+            error: "Destination folder not found in this matter.",
+          };
+        }
+        destName = dest.name;
+        if (collectDescendantIds(folders, folder.id).has(newParentId)) {
+          return {
+            ok: false,
+            error: "A folder can't be moved into one of its own subfolders.",
+          };
+        }
+      }
+
+      const destDepth = newParentId ? folderDepth(folders, newParentId) : 0;
+      if (destDepth + subtreeHeight(folders, folder.id) > MAX_FOLDER_DEPTH) {
+        return {
+          ok: false,
+          error: `That move would nest folders more than ${MAX_FOLDER_DEPTH} levels deep.`,
+        };
+      }
+
+      const siblings = siblingsOf(folders, newParentId);
+      if (hasNameCollision(siblings, current.name, folder.id)) {
+        return {
+          ok: false,
+          error: `A folder named "${current.name}" already exists there.`,
+        };
+      }
+
+      await tx.documentFolder.update({
+        where: { id: folder.id },
+        data: { parentId: newParentId, order: nextOrder(siblings) },
+      });
+      return { ok: true, destName };
     }
-    destName = dest.name;
-    if (collectDescendantIds(folders, folder.id).has(newParentId)) {
-      return {
-        ok: false,
-        error: "A folder can't be moved into one of its own subfolders.",
-      };
-    }
-  }
-
-  const destDepth = newParentId ? folderDepth(folders, newParentId) : 0;
-  if (destDepth + subtreeHeight(folders, folder.id) > MAX_FOLDER_DEPTH) {
-    return {
-      ok: false,
-      error: `That move would nest folders more than ${MAX_FOLDER_DEPTH} levels deep.`,
-    };
-  }
-
-  const siblings = siblingsOf(folders, newParentId);
-  if (hasNameCollision(siblings, folder.name, folder.id)) {
-    return {
-      ok: false,
-      error: `A folder named "${folder.name}" already exists there.`,
-    };
-  }
-
-  await prisma.documentFolder.update({
-    where: { id: folder.id },
-    data: { parentId: newParentId, order: nextOrder(siblings) },
-  });
+  );
+  if (!result.ok) return result;
+  if (result.noop) return { ok: true, folderId: folder.id };
 
   await logActivity({
     matterId: folder.matterId,
     userId,
     type: "document",
     title: "Folder moved",
-    detail: `"${folder.name}" → ${destName ? `"${destName}"` : "the matter root"}`,
+    detail: `"${folder.name}" → ${result.destName ? `"${result.destName}"` : "the matter root"}`,
   });
 
   revalidatePath(`/matters/${folder.matterId}/documents`);

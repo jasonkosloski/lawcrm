@@ -14,6 +14,7 @@
  * (4) exactly one activity-log summary row per operation.
  */
 
+import { Client } from "pg";
 import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -495,5 +496,61 @@ describe("moveFolder", () => {
     const { folderId } = await seedDocumentFolder({ matterId, name: "A" });
     expect((await moveFolder(folderId, null)).ok).toBe(true);
     expect(await activityRows()).toHaveLength(0);
+  });
+});
+
+describe("concurrency", () => {
+  test("deleteFolder re-parents a child committed while the delete was waiting (no silent cascade)", async () => {
+    const { folderId } = await seedDocumentFolder({
+      matterId,
+      name: "Production 1",
+    });
+
+    // The app's Prisma pool is capped at ONE connection, so the
+    // competing writer must be a separate connection (as a second
+    // serverless instance would be). It inserts a child under the
+    // folder and holds its transaction open (FOR KEY SHARE on the
+    // parent row).
+    const other = new Client({ connectionString: process.env.DATABASE_URL });
+    await other.connect();
+    try {
+      await other.query("BEGIN");
+      await other.query(
+        `INSERT INTO document_folders (id, "matterId", "parentId", name, "order", "updatedAt")
+         VALUES ('late-child', $1, $2, 'Exhibits', 0, now())`,
+        [matterId, folderId]
+      );
+
+      // The delete must wait on the folder row rather than reading a
+      // stale child list and cascade-deleting the new subfolder.
+      const deleting = deleteFolder(folderId);
+      await new Promise((r) => setTimeout(r, 300));
+      await other.query("COMMIT");
+      const res = await deleting;
+
+      expect(res).toEqual({ ok: true });
+      const exhibits = await prisma.documentFolder.findFirst({
+        where: { matterId, name: "Exhibits" },
+      });
+      expect(exhibits).not.toBeNull();
+      expect(exhibits!.parentId).toBeNull();
+    } finally {
+      await other.end();
+    }
+  });
+
+  test("two opposite cross-moves cannot both land (no parent cycle)", async () => {
+    const { folderId: a } = await seedDocumentFolder({ matterId, name: "A" });
+    const { folderId: b } = await seedDocumentFolder({ matterId, name: "B" });
+
+    const results = await Promise.all([moveFolder(a, b), moveFolder(b, a)]);
+
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    const rows = await prisma.documentFolder.findMany({
+      where: { id: { in: [a, b] } },
+    });
+    // Exactly one of them still sits at the root: the tree is
+    // reachable from a root.
+    expect(rows.filter((r) => r.parentId === null)).toHaveLength(1);
   });
 });
