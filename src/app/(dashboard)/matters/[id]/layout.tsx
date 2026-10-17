@@ -35,6 +35,7 @@ import {
   MATTER_CREATE_PERMISSION,
 } from "@/lib/matter-create-types";
 import { requireUser } from "@/lib/current-user";
+import { assertMatterAccess } from "@/lib/matter-access";
 
 const FEE_LABEL: Record<string, string> = {
   contingent: "Contingent",
@@ -50,6 +51,7 @@ export default async function MatterDetailLayout({
 }: LayoutProps<"/matters/[id]">) {
   await requireUser();
   const { id } = await params;
+  await assertMatterAccess(id);
   const [matter, canEditMatter, canManageTeam, canViewBilling, createFlags] =
     await Promise.all([
       getMatterById(id),

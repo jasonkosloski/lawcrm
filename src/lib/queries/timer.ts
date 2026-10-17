@@ -16,6 +16,7 @@
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { canAccessMatter, matterAccessWhere } from "@/lib/matter-access";
 
 export type ActiveTimerSession = {
   id: string;
@@ -48,11 +49,16 @@ export const getCurrentTimerSession = cache(
       },
     });
     if (!t) return null;
+    // Matter wall: a timer left running on a matter the user can no
+    // longer access (removed from the team, wall switched on) shows
+    // nothing identifying it - the stop composer asks for a matter.
+    const visible =
+      !t.matterId || (await canAccessMatter(userId, t.matterId));
     return {
       id: t.id,
-      matterId: t.matterId,
-      matterName: t.matter?.name ?? null,
-      matterColor: t.matter?.color ?? null,
+      matterId: visible ? t.matterId : null,
+      matterName: visible ? (t.matter?.name ?? null) : null,
+      matterColor: visible ? (t.matter?.color ?? null) : null,
       activity: t.activity,
       startedAt: t.startedAt.toISOString(),
     };
@@ -65,7 +71,10 @@ export type TimerMatterOption = { id: string; name: string };
  *  keeps the widget payload small even for a large book of cases. */
 export async function getTimerMatterOptions(): Promise<TimerMatterOption[]> {
   return prisma.matter.findMany({
-    where: { isArchived: false },
+    where: {
+      ...(await matterAccessWhere(await getCurrentUserId())),
+      isArchived: false,
+    },
     orderBy: { name: "asc" },
     select: { id: true, name: true },
   });

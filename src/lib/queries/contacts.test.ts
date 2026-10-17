@@ -18,7 +18,14 @@
  *     excluded / inactive / merged-away records, capped.
  */
 
-import { beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
+
+// The wall-aware queries resolve the viewer; the seeded matter lead
+// stands in (FIRM mode: everyone sees everything).
+const viewer = vi.hoisted(() => ({ id: "" }));
+vi.mock("@/lib/current-user", () => ({
+  getCurrentUserId: vi.fn(async () => viewer.id),
+}));
 import { prisma } from "@/lib/prisma";
 import {
   CONTACT_LIST_LIMIT,
@@ -69,6 +76,7 @@ beforeEach(async () => {
   await resetDb();
   const { firmId } = await seedFirm();
   leadUserId = (await seedUser({ firmId })).userId;
+  viewer.id = leadUserId;
   const area = await seedPracticeArea();
   areaId = area.areaId;
   stageId = area.stageId;

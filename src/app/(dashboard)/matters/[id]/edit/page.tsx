@@ -30,6 +30,7 @@ import { MatterCalendarDefaultsCard } from "@/components/settings/calendar-defau
 import { toSolPeriod } from "@/lib/sol";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
+import { assertMatterAccess } from "@/lib/matter-access";
 
 export default async function EditMatterPage({
   params,
@@ -37,6 +38,7 @@ export default async function EditMatterPage({
   // Pages guard themselves: layouts don't re-run on soft navigation (ADR-028).
   await requireUser();
   const { id } = await params;
+  await assertMatterAccess(id);
 
   // The matter loads first: the client / lead option lists must always
   // include the matter's CURRENT client and lead, even when that contact

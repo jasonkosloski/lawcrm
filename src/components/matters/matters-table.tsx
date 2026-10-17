@@ -21,7 +21,14 @@ import { FEE_LABELS, formatDeadlineDays } from "@/lib/matters-filters";
 import { formatMoney } from "@/lib/format-money";
 import type { MatterListRow } from "@/lib/queries/matters";
 
-export function MattersTable({ matters }: { matters: MatterListRow[] }) {
+export function MattersTable({
+  matters,
+  showTrust = true,
+}: {
+  matters: MatterListRow[];
+  /** False without billing.view: the trust column is omitted. */
+  showTrust?: boolean;
+}) {
   return (
     <>
       {/* Mobile + small tablet: card stack. The 7-column table is
@@ -40,7 +47,7 @@ export function MattersTable({ matters }: { matters: MatterListRow[] }) {
             />
           </li>
         ) : (
-          matters.map((m) => <MatterCard key={m.id} m={m} />)
+          matters.map((m) => <MatterCard key={m.id} m={m} showTrust={showTrust} />)
         )}
       </ul>
 
@@ -55,9 +62,11 @@ export function MattersTable({ matters }: { matters: MatterListRow[] }) {
             <SortableHead field="area">Area</SortableHead>
             <SortableHead field="lead">Lead</SortableHead>
             <SortableHead field="stage">Stage</SortableHead>
-            <SortableHead field="trust" align="right" className="text-right">
-              Trust
-            </SortableHead>
+            {showTrust && (
+              <SortableHead field="trust" align="right" className="text-right">
+                Trust
+              </SortableHead>
+            )}
             <SortableHead field="fee">Fee</SortableHead>
             <SortableHead
               field="deadline"
@@ -71,7 +80,7 @@ export function MattersTable({ matters }: { matters: MatterListRow[] }) {
         <TableBody>
           {matters.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={7} className="p-0">
+              <TableCell colSpan={showTrust ? 7 : 6} className="p-0">
                 <EmptyState
                   icon={Briefcase}
                   title="No matters match"
@@ -118,9 +127,11 @@ export function MattersTable({ matters }: { matters: MatterListRow[] }) {
                 <TableCell>
                   <StageChip stage={m.stage} isTerminal={m.stageIsTerminal} />
                 </TableCell>
-                <TableCell className="text-right font-mono text-xs text-ink">
-                  {formatMoney(m.trustBalance)}
-                </TableCell>
+                {showTrust && (
+                  <TableCell className="text-right font-mono text-xs text-ink">
+                    {formatMoney(m.trustBalance ?? 0)}
+                  </TableCell>
+                )}
                 <TableCell className="text-xs text-ink-3">
                   {FEE_LABELS[m.feeStructure] ?? m.feeStructure}
                 </TableCell>
@@ -147,7 +158,13 @@ export function MattersTable({ matters }: { matters: MatterListRow[] }) {
   );
 }
 
-function MatterCard({ m }: { m: MatterListRow }) {
+function MatterCard({
+  m,
+  showTrust,
+}: {
+  m: MatterListRow;
+  showTrust: boolean;
+}) {
   return (
     <li>
       <Link
@@ -184,9 +201,11 @@ function MatterCard({ m }: { m: MatterListRow }) {
             </div>
           </div>
           <div className="flex flex-col items-end gap-1 shrink-0">
-            <span className="font-mono text-xs text-ink">
-              {formatMoney(m.trustBalance)}
-            </span>
+            {showTrust && (
+              <span className="font-mono text-xs text-ink">
+                {formatMoney(m.trustBalance ?? 0)}
+              </span>
+            )}
             {m.nextDeadlineDays !== null && (
               <span
                 className={

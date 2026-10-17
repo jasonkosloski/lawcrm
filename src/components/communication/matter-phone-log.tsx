@@ -25,10 +25,8 @@ import {
   formatCallDuration,
   type EditableCallLog,
 } from "@/lib/call-log-form";
-import {
-  isMissedCall,
-  type MatterMessengerItemRow,
-} from "@/lib/queries/messenger";
+import { isMissedCall } from "@/lib/call-log-form";
+import type { MatterMessengerItemRow } from "@/lib/queries/messenger";
 import { ManualCallActions } from "./manual-call-actions";
 import type { CallMatterOption } from "./log-call-button";
 

@@ -45,6 +45,7 @@ import {
   formatDateOnly,
 } from "@/lib/format-date";
 import { prisma } from "@/lib/prisma";
+import { assertMatterAccess } from "@/lib/matter-access";
 
 // Ordering follows the canonical status list; labels are centralized
 // (src/lib/constants/task-status.ts). Widened to string-indexable
@@ -88,6 +89,7 @@ export default async function MatterTasksPage({
 }: PageProps<"/matters/[id]">) {
   await requireUser();
   const { id } = await params;
+  await assertMatterAccess(id);
   // Assignees feed the composer + edit-dialog pickers; the current
   // user id is the composer's default selection (self-assign).
   // The task-list library does not depend on the matter or the

@@ -22,17 +22,33 @@ vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: hasPermission,
 }));
 
+vi.mock("@/lib/matter-access", () => ({
+  filterAccessibleMatterIds: vi.fn(
+    async (_u: string, ids: string[]) => new Set(ids.filter((i) => i !== "walled"))
+  ),
+}));
+
 import { getEditableEventIds } from "./calendar-edit-flags";
 
 const grant = (...keys: string[]) =>
   hasPermission.mockImplementation(async (k: string) => keys.includes(k));
 
+const base = {
+  visibility: "default",
+  createdBy: { defaultEventVisibility: "default" },
+  attendees: [],
+  matter: null,
+};
 const rows = [
   { id: "mine-personal", createdById: "me", matterId: null },
   { id: "mine-matter", createdById: "me", matterId: "m1" },
   { id: "theirs-personal", createdById: "other", matterId: null },
   { id: "theirs-matter", createdById: "other", matterId: "m1" },
-];
+].map((r) => ({
+  ...base,
+  ...r,
+  matter: r.matterId ? { teamMembers: [{ userId: "me" }] } : null,
+}));
 
 beforeEach(() => {
   findMany.mockReset();
@@ -67,11 +83,10 @@ describe("getEditableEventIds", () => {
     ]);
   });
 
-  test("holding both keys skips the lookup and allows everything", async () => {
+  test("holding both keys allows every non-private, non-walled event", async () => {
     grant("events.edit", "events.edit_non_matter");
-    const ids = await getEditableEventIds(["a", "b"]);
-    expect([...ids].sort()).toEqual(["a", "b"]);
-    expect(findMany).not.toHaveBeenCalled();
+    const ids = await getEditableEventIds(rows.map((r) => r.id));
+    expect(ids.size).toBe(4);
   });
 
   test("no ids, no work", async () => {
@@ -84,5 +99,30 @@ describe("getEditableEventIds", () => {
     grant();
     findMany.mockResolvedValue([]);
     expect((await getEditableEventIds(["gone"])).size).toBe(0);
+  });
+});
+
+describe("getEditableEventIds - private events and the matter wall", () => {
+  test("someone else's private event and a walled matter's event get no edit even with every key", async () => {
+    grant("events.edit", "events.edit_non_matter");
+    findMany.mockResolvedValue([
+      { ...base, id: "private", createdById: "other", matterId: null, visibility: "private" },
+      {
+        ...base,
+        id: "walled",
+        createdById: "other",
+        matterId: "walled",
+        matter: { teamMembers: [] },
+      },
+      { ...base, id: "plain", createdById: "other", matterId: null },
+      { ...base, id: "own-private", createdById: "me", matterId: null, visibility: "private" },
+    ]);
+    const ids = await getEditableEventIds([
+      "private",
+      "walled",
+      "plain",
+      "own-private",
+    ]);
+    expect([...ids].sort()).toEqual(["own-private", "plain"]);
   });
 });

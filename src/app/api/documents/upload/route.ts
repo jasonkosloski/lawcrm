@@ -64,6 +64,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { canAccessMatter } from "@/lib/matter-access";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import {
@@ -152,7 +153,8 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   const result = await parseAndStore(
     req.body as unknown as WebReadableStream<Uint8Array>,
-    contentType
+    contentType,
+    userId
   );
 
   if (!result.ok) {
@@ -230,12 +232,15 @@ type Target = {
 
 /** Validate the matterId/folderId/category/name fields once, before
  *  the first file byte hits disk. */
-async function resolveTarget(fields: {
-  matterId?: string;
-  folderId?: string;
-  category?: string;
-  name?: string;
-}): Promise<Target | UploadFailure> {
+async function resolveTarget(
+  userId: string,
+  fields: {
+    matterId?: string;
+    folderId?: string;
+    category?: string;
+    name?: string;
+  }
+): Promise<Target | UploadFailure> {
   const meta = parseUploadMeta({
     name: fields.name,
     category: fields.category?.trim() || "discovery",
@@ -257,7 +262,11 @@ async function resolveTarget(fields: {
     where: { id: matterId },
     select: { id: true },
   });
-  if (!matter) return { status: 404, error: "Matter not found." };
+  // Matter wall: a hidden matter is "not found" (404), same as a
+  // missing one - checked before the first byte is written.
+  if (!matter || !(await canAccessMatter(userId, matterId))) {
+    return { status: 404, error: "Matter not found." };
+  }
 
   const folderId = fields.folderId?.trim();
   if (folderId) {
@@ -293,7 +302,8 @@ async function resolveTarget(fields: {
  */
 async function parseAndStore(
   body: WebReadableStream<Uint8Array>,
-  contentTypeHeader: string
+  contentTypeHeader: string,
+  userId: string
 ): Promise<ParseResult> {
   const stored: StoredUpload[] = [];
 
@@ -377,7 +387,7 @@ async function parseAndStore(
         }
 
         if (!target) {
-          const resolved = await resolveTarget(fields);
+          const resolved = await resolveTarget(userId, fields);
           if ("error" in resolved) {
             fail(resolved);
             stream.resume();

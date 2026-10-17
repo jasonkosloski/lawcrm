@@ -289,3 +289,23 @@ describe("auditEventTitle", () => {
     expect(auditEventTitle(undefined, "Lunch")).toBe("Lunch");
   });
 });
+
+describe("viewerMayTouchLoadedEvent (private events + matter wall)", () => {
+  const e = { createdById: "c", visibility: "default", matterId: null };
+  test("a private event is creator-only", async () => {
+    const { viewerMayTouchLoadedEvent } = await import("./calendar-visibility");
+    const priv = { ...e, visibility: "private" };
+    expect(viewerMayTouchLoadedEvent("other", priv, true)).toBe(false);
+    expect(viewerMayTouchLoadedEvent("c", priv, true)).toBe(true);
+  });
+  test("an event on an inaccessible matter is untouchable, even for its creator", async () => {
+    const { viewerMayTouchLoadedEvent } = await import("./calendar-visibility");
+    const onMatter = { ...e, matterId: "m" };
+    expect(viewerMayTouchLoadedEvent("c", onMatter, false)).toBe(false);
+    expect(viewerMayTouchLoadedEvent("c", onMatter, true)).toBe(true);
+  });
+  test("an ordinary default-visibility event stays touchable (edit_non_matter's purpose)", async () => {
+    const { viewerMayTouchLoadedEvent } = await import("./calendar-visibility");
+    expect(viewerMayTouchLoadedEvent("other", e, true)).toBe(true);
+  });
+});

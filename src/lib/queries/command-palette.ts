@@ -14,6 +14,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { matterAccessWhere } from "@/lib/matter-access";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { LEAD_CLOSED_STAGES } from "@/lib/constants/lead-stage";
 
@@ -83,10 +84,11 @@ export async function getPaletteData(): Promise<PaletteData> {
   // palette open, and the palette renders 3-5 fields per kind, so
   // pulling whole rows (contact addresses/notes, lead assessments)
   // is serialization weight for nothing.
+  const access = await matterAccessWhere(userId);
   const [canViewReports, matters, contacts, leads, users] = await Promise.all([
     currentUserHasPermission("reports.view"),
     prisma.matter.findMany({
-      where: { isArchived: false },
+      where: { ...access, isArchived: false },
       select: {
         id: true,
         name: true,

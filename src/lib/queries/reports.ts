@@ -31,6 +31,7 @@
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { filterAccessibleMatterIds, matterAccessWhere } from "@/lib/matter-access";
 import {
   daysBetweenKeys,
   dateKeyInTz,
@@ -99,7 +100,13 @@ export type PipelineReport = {
   totalOpenMatters: number;
 };
 
+// Matter wall on /reports: money and hours roll-ups (utilization, A/R
+// bucket totals, realization) stay FIRM-WIDE aggregates - the page is
+// gated on reports.view and nothing in them names a matter. Anything
+// that lists or counts MATTERS (open-matter pipeline, A/R worst
+// offenders) is restricted to the viewer's accessible matters.
 export async function getPipelineReport(tz: string): Promise<PipelineReport> {
+  const mw = await matterAccessWhere(await getCurrentUserId());
   // Viewer-tz quarter start as a true instant — createdAt/updatedAt
   // are real timestamps, not date-only columns.
   const [y, m] = todayYmdInTz(tz);
@@ -118,7 +125,7 @@ export async function getPipelineReport(tz: string): Promise<PipelineReport> {
       }),
       prisma.matter.groupBy({
         by: ["practiceAreaId", "stageId"],
-        where: { isArchived: false, stage: { isTerminal: false } },
+        where: { ...mw, isArchived: false, stage: { isTerminal: false } },
         _count: true,
       }),
       // Retired (inactive) areas still hold open matters — keep them
@@ -363,6 +370,12 @@ export async function getArAgingReport(tz: string): Promise<ArAgingReport> {
   });
 
   const today = todayKey(tz);
+  // Bucket totals are aggregate (stay firm-wide); the named offender
+  // rows are restricted to matters the viewer can access.
+  const accessible = await filterAccessibleMatterIds(
+    await getCurrentUserId(),
+    invoices.map((i) => i.matter.id)
+  );
 
   // Bucket sums stay Decimal until the return — the whole point of
   // this report is money owed, so no float accumulation mid-flight.
@@ -389,7 +402,7 @@ export async function getArAgingReport(tz: string): Promise<ArAgingReport> {
 
     // invoices arrive issueDate-asc, so the first five outstanding
     // rows ARE the five oldest.
-    if (offenders.length < 5) {
+    if (offenders.length < 5 && accessible.has(inv.matter.id)) {
       offenders.push({
         invoiceId: inv.id,
         invoiceNumber: inv.invoiceNumber,

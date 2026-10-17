@@ -61,6 +61,13 @@ export type VisibilityInput = {
   /** Active matter team member user ids when the event has a
    *  matter. Empty array when no matter or no team. */
   matterTeamUserIds: readonly string[];
+  /** Whether the viewer may see the event's matter at all (matter-team
+   *  access / "ethical walls", ADR-039). Ignored when the event has no
+   *  matter. Omitted = accessible: only surfaces that are ALREADY
+   *  scoped to matters the viewer can see (a matter's own page) may
+   *  omit it; every cross-matter surface (calendar, dashboard) must
+   *  pass it. */
+  matterAccessible?: boolean;
 };
 
 /** Per-event visibility values stored on `CalendarEvent.visibility`. */
@@ -82,8 +89,15 @@ export function canViewEventDetails(input: VisibilityInput): boolean {
   if (input.eventVisibility === "private") {
     return !!input.createdById && input.createdById === input.viewerId;
   }
-  // 1. Creator bypass.
+  // 1. Creator bypass. Deliberate choice: the creator still sees their
+  // OWN event even if they've since lost access to its matter — it is
+  // their entry, and hiding it from them would orphan it.
   if (input.createdById && input.createdById === input.viewerId) return true;
+  // Matter wall: an event on a matter the viewer can't access is "Busy"
+  // for them — it beats attendee status, the per-event override and the
+  // creator's show-details default (an attendee invite must not punch
+  // through the wall). Only the creator (above) is exempt.
+  if (input.matterId && input.matterAccessible === false) return false;
   // 2. Attendee.
   if (input.attendeeUserIds.includes(input.viewerId)) return true;
   // 3. Matter team.
@@ -161,4 +175,46 @@ export function canEditEvent(input: EditInput): boolean {
   // user with plain events.edit can't edit other users'
   // personal events.
   return input.perms.hasEventsEditNonMatter;
+}
+
+// ── Mutation gate: Busy viewers can't touch what they can't see ─────────
+//
+// `canEditEvent` answers "do your permission keys allow this edit?".
+// It says nothing about whether the viewer may reach the event at all.
+// Two hard walls sit on top of it, for every per-event mutation
+// (update, move/resize, delete):
+//
+//   - PRIVATE events (ADR-037) are creator-only: a viewer who only
+//     sees the "Busy" placeholder - an invitee, the matter team, even
+//     an `events.edit` / Admin holder - can't move, resize, edit or
+//     delete one. Without this, anyone with `events.edit` could
+//     rearrange a colleague's private calendar blind.
+//   - An event on a matter the viewer can't access (matter-team walls,
+//     ADR-039) is Busy for them and untouchable: seeing is the
+//     precondition for doing - including for its creator, who may
+//     still SEE their own entry (canViewEventDetails) but can't act on
+//     a matter they've lost.
+//
+// Deliberately NOT a blanket "Busy => no edit": a non-private,
+// non-walled personal event that merely defaults to Busy stays editable
+// by a holder of `events.edit_non_matter`, which is that key's whole
+// purpose (cross-user personal-calendar admin).
+
+/** The relations/columns `viewerMayTouchLoadedEvent` needs. */
+export type LoadedEventForTouch = {
+  createdById: string | null;
+  visibility: string;
+  matterId: string | null;
+};
+
+export function viewerMayTouchLoadedEvent(
+  viewerId: string,
+  e: LoadedEventForTouch,
+  matterAccessible: boolean
+): boolean {
+  if (e.matterId && !matterAccessible) return false;
+  if (e.visibility === "private") {
+    return !!e.createdById && e.createdById === viewerId;
+  }
+  return true;
 }

@@ -23,12 +23,14 @@ import { allowedCaptureKinds } from "@/lib/note-constants";
 import { NoteComposer } from "@/components/matters/notes/note-composer";
 import { NotesTabBody } from "@/components/matters/notes/notes-tab-body";
 import { requireUser } from "@/lib/current-user";
+import { assertMatterAccess } from "@/lib/matter-access";
 
 export default async function MatterNotesPage({
   params,
 }: PageProps<"/matters/[id]">) {
   await requireUser();
   const { id } = await params;
+  await assertMatterAccess(id);
   const [notes, access] = await Promise.all([
     getMatterNotes(id),
     getNoteAccess(),

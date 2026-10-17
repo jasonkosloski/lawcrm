@@ -51,12 +51,15 @@ export function MattersToolbar({
   view,
   visibleCount,
   totalCount,
+  showTrust = true,
 }: {
   filter: MattersFilter;
   options: FilterOptions;
   view: ViewMode;
   visibleCount: number;
   totalCount: number;
+  /** False without billing.view: the Trust filter is hidden. */
+  showTrust?: boolean;
 }) {
   // Writes compose with navigations still in flight (see the hook), so
   // rapid filter clicks no longer overwrite each other.
@@ -222,19 +225,21 @@ export function MattersToolbar({
           onToggle={(v) => toggleInList("fee", v)}
           onClear={() => setParams((p) => p.delete("fee"))}
         />
-        <SingleSelectFilter<TrustFilter>
-          label="Trust"
-          active={filter.trust !== "any"}
-          activeLabel={TRUST_LABELS[filter.trust]}
-          options={[
-            { value: "any", label: "Any" },
-            { value: "has", label: "Has trust (> $0)" },
-            { value: "none", label: "No trust ($0)" },
-            { value: "over-10k", label: "Over $10,000" },
-          ]}
-          selected={filter.trust}
-          onSelect={(v) => setSingle("trust", v === "any" ? null : v)}
-        />
+        {showTrust && (
+          <SingleSelectFilter<TrustFilter>
+            label="Trust"
+            active={filter.trust !== "any"}
+            activeLabel={TRUST_LABELS[filter.trust]}
+            options={[
+              { value: "any", label: "Any" },
+              { value: "has", label: "Has trust (> $0)" },
+              { value: "none", label: "No trust ($0)" },
+              { value: "over-10k", label: "Over $10,000" },
+            ]}
+            selected={filter.trust}
+            onSelect={(v) => setSingle("trust", v === "any" ? null : v)}
+          />
+        )}
         <SingleSelectFilter<DeadlineFilter>
           label="Deadline"
           active={filter.deadline !== "any"}

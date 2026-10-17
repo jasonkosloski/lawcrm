@@ -32,6 +32,7 @@ import { currentUserHasPermission } from "@/lib/permission-check";
 // them on the viewer's calendar, not the server's (ADR-012).
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { requireUser } from "@/lib/current-user";
+import { assertMatterAccess } from "@/lib/matter-access";
 
 export default async function MatterCommunicationPage({
   params,
@@ -39,6 +40,7 @@ export default async function MatterCommunicationPage({
 }: PageProps<"/matters/[id]/communication">) {
   await requireUser();
   const { id } = await params;
+  await assertMatterAccess(id);
   const sp = await searchParams;
   const rawChannel = Array.isArray(sp.channel) ? sp.channel[0] : sp.channel;
   const channel = rawChannel === "phone" ? "phone" : "email";

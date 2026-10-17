@@ -14,6 +14,33 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { visibleEmailThreadWhere } from "@/lib/email-visibility";
+import {
+  matterAccessWhere,
+  optionalMatterAccessClause,
+} from "@/lib/matter-access";
+
+/** Ethical walls: a thread filed to a matter the viewer can't see is
+ *  hidden from every list / count / reader (unfiled threads stay).
+ *  Spread as `AND: await threadMatterAccessAnd(userId)`. */
+async function threadMatterAccessAnd(
+  userId: string
+): Promise<Prisma.EmailThreadWhereInput[]> {
+  return (await optionalMatterAccessClause(
+    userId
+  )) as Prisma.EmailThreadWhereInput[];
+}
+
+/** Raw-SQL twin of `threadMatterAccessAnd` for the rail-count scan
+ *  (alias `t`). Empty when unrestricted. */
+async function threadMatterAccessSql(userId: string): Promise<Prisma.Sql> {
+  const where = await matterAccessWhere(userId);
+  if (Object.keys(where).length === 0) return Prisma.empty;
+  const ids = (
+    await prisma.matter.findMany({ where, select: { id: true } })
+  ).map((m) => m.id);
+  if (ids.length === 0) return Prisma.sql`AND t."matterId" IS NULL`;
+  return Prisma.sql`AND (t."matterId" IS NULL OR t."matterId" IN (${Prisma.join(ids)}))`;
+}
 
 export type CommunicationFilter =
   /** Default working surface: unarchived threads that aren't
@@ -111,6 +138,7 @@ export async function listThreads(
   // user's accounts.
   const where: Prisma.EmailThreadWhereInput = {
     ...visibleEmailThreadWhere(userId),
+    AND: await threadMatterAccessAnd(userId),
   };
   if (filter === "unread") {
     where.isRead = false;
@@ -211,7 +239,11 @@ function parseRecipients(raw: string | null): Array<{ name?: string; email: stri
 export async function getThreadById(id: string): Promise<ThreadDetail | null> {
   const userId = await getCurrentUserId();
   const thread = await prisma.emailThread.findFirst({
-    where: { id, ...visibleEmailThreadWhere(userId) },
+    where: {
+      id,
+      ...visibleEmailThreadWhere(userId),
+      AND: await threadMatterAccessAnd(userId),
+    },
     include: {
       matter: {
         select: {
@@ -287,7 +319,11 @@ export async function listThreadsForMatter(
 ): Promise<ThreadListRow[]> {
   const userId = await getCurrentUserId();
   const threads = await prisma.emailThread.findMany({
-    where: { matterId, ...visibleEmailThreadWhere(userId) },
+    where: {
+      matterId,
+      ...visibleEmailThreadWhere(userId),
+      AND: await threadMatterAccessAnd(userId),
+    },
     // 500-thread cap matches listThreads. A single matter rarely
     // exceeds this; if one does, build per-matter paging.
     take: 500,
@@ -325,6 +361,7 @@ export async function listThreadsForEmail(
   const candidates = await prisma.emailThread.findMany({
     where: {
       ...visibleEmailThreadWhere(userId),
+      AND: await threadMatterAccessAnd(userId),
       messages: { some: { OR: matchOr } },
     },
     // Same 500-thread cap as listThreads - a per-lead view never
@@ -410,6 +447,8 @@ type CheapEmailCountsRow = {
 export async function getCommunicationCounts(): Promise<CommunicationCounts> {
   const userId = await getCurrentUserId();
   const now = new Date();
+  const accessSql = await threadMatterAccessSql(userId);
+  const accessAnd = await threadMatterAccessAnd(userId);
   const [cheap, untimed] = await Promise.all([
     prisma.$queryRaw<CheapEmailCountsRow[]>(Prisma.sql`
       SELECT
@@ -429,10 +468,12 @@ export async function getCommunicationCounts(): Promise<CommunicationCounts> {
       JOIN email_accounts a ON a.id = t."accountId"
       -- Keep in step with visibleEmailThreadWhere (email-visibility.ts).
       WHERE a."userId" = ${userId}
+      ${accessSql}
     `),
     prisma.emailThread.count({
       where: {
         ...visibleEmailThreadWhere(userId),
+        AND: accessAnd,
         messages: { none: { timeEntries: { some: { userId } } } },
       },
     }),
@@ -459,6 +500,7 @@ export async function getEmailUnreadCount(): Promise<number> {
   return prisma.emailThread.count({
     where: {
       ...visibleEmailThreadWhere(userId),
+      AND: await threadMatterAccessAnd(userId),
       isRead: false,
       isArchived: false,
     },
@@ -480,7 +522,11 @@ export async function getFilingMatterOptions(): Promise<FilingMatterOption[]> {
   const userId = await getCurrentUserId();
   const [matters, pins] = await Promise.all([
     prisma.matter.findMany({
-      where: { isArchived: false, stage: { isTerminal: false } },
+      where: {
+        ...(await matterAccessWhere(userId)),
+        isArchived: false,
+        stage: { isTerminal: false },
+      },
       orderBy: [{ updatedAt: "desc" }],
       select: {
         id: true,
@@ -544,7 +590,10 @@ export async function getCommunicationPinnedMatters(): Promise<
 > {
   const userId = await getCurrentUserId();
   const pins = await prisma.userMatterPin.findMany({
-    where: { userId, matter: { isArchived: false } },
+    where: {
+      userId,
+      matter: { ...(await matterAccessWhere(userId)), isArchived: false },
+    },
     orderBy: { createdAt: "desc" },
     select: {
       matter: {

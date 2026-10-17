@@ -20,7 +20,14 @@ import { FEE_LABELS, formatDeadlineDays } from "@/lib/matters-filters";
 import { formatMoney } from "@/lib/format-money";
 import type { MatterListRow } from "@/lib/queries/matters";
 
-export function MattersKanban({ matters }: { matters: MatterListRow[] }) {
+export function MattersKanban({
+  matters,
+  showTrust = true,
+}: {
+  matters: MatterListRow[];
+  /** False without billing.view: trust balances are omitted. */
+  showTrust?: boolean;
+}) {
   // Group by stage name, tracking the smallest order seen per name so
   // columns read in lifecycle order even when multiple practice areas
   // contribute the same stage name.
@@ -67,7 +74,7 @@ export function MattersKanban({ matters }: { matters: MatterListRow[] }) {
             </header>
             <div className="flex flex-col gap-2 p-2 min-h-20">
               {rows.map((m) => (
-                <KanbanCard key={m.id} matter={m} />
+                <KanbanCard key={m.id} matter={m} showTrust={showTrust} />
               ))}
             </div>
           </section>
@@ -77,7 +84,13 @@ export function MattersKanban({ matters }: { matters: MatterListRow[] }) {
   );
 }
 
-function KanbanCard({ matter }: { matter: MatterListRow }) {
+function KanbanCard({
+  matter,
+  showTrust,
+}: {
+  matter: MatterListRow;
+  showTrust: boolean;
+}) {
   return (
     <Link
       href={`/matters/${matter.id}`}
@@ -116,9 +129,11 @@ function KanbanCard({ matter }: { matter: MatterListRow }) {
               {matter.leadInitials}
             </span>
           )}
-          <span className="font-mono text-2xs text-ink-3">
-            {formatMoney(matter.trustBalance)}
-          </span>
+          {showTrust && (
+            <span className="font-mono text-2xs text-ink-3">
+              {formatMoney(matter.trustBalance ?? 0)}
+            </span>
+          )}
         </div>
         <span className="font-mono text-2xs">
           {matter.nextDeadlineDays === null ? (

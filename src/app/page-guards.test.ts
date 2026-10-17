@@ -195,3 +195,86 @@ describe("layout auth guards", () => {
     }
   );
 });
+
+// ── Matter-access guard (ethical walls) ────────────────────────────────
+//
+// Every page and the layout under matters/[id] must 404 a matter the
+// viewer can't see. Pages guard themselves (ADR-028), so each one calls
+// `assertMatterAccess(id)` right after the session guard — AFTER it, so
+// the session check stays the first await.
+
+const MATTER_DETAIL_PREFIX = "(dashboard)/matters/[id]/";
+const ASSERT_ACCESS = /\bawait\s+assertMatterAccess\s*\(/;
+
+/** Pure check on source text (self-checked below). */
+function checkMatterAccessSource(src: string): string | null {
+  const body = stripNoise(src);
+  const start = body.indexOf("export default");
+  const fn = start === -1 ? body : body.slice(start);
+  const access = ASSERT_ACCESS.exec(fn);
+  if (!access) return "no assertMatterAccess call";
+  const guard = AWAITED_GUARD.exec(fn);
+  if (!guard || guard.index > access.index) {
+    return "assertMatterAccess runs before the session guard";
+  }
+  return null;
+}
+
+const matterDetailFiles = [...pages, ...layouts].filter((f) =>
+  rel(f).startsWith(MATTER_DETAIL_PREFIX)
+);
+
+describe("matter detail access guards", () => {
+  test("the scan finds the matter detail pages and layout", () => {
+    const names = matterDetailFiles.map(rel);
+    expect(names).toContain(`${MATTER_DETAIL_PREFIX}layout.tsx`);
+    expect(names).toContain(`${MATTER_DETAIL_PREFIX}page.tsx`);
+    expect(names).toContain(`${MATTER_DETAIL_PREFIX}billing/page.tsx`);
+    expect(names).toContain(`${MATTER_DETAIL_PREFIX}documents/[documentId]/page.tsx`);
+    expect(names.length).toBeGreaterThanOrEqual(15);
+  });
+
+  test.each(matterDetailFiles.map((f) => [rel(f), f] as const))(
+    "%s asserts matter access",
+    (name, file) => {
+      expect(checkMatterAccessSource(readFileSync(file, "utf8")), name).toBeNull();
+    }
+  );
+
+  test("accepts a page that asserts after the session guard (self-check)", () => {
+    expect(
+      checkMatterAccessSource(
+        `export default async function P({ params }) {\n` +
+          `  await requireUser();\n  const { id } = await params;\n` +
+          `  await assertMatterAccess(id);\n}`
+      )
+    ).toBeNull();
+  });
+
+  test("rejects a page with no access assertion (self-check)", () => {
+    expect(
+      checkMatterAccessSource(
+        `export default async function P({ params }) {\n` +
+          `  await requireUser();\n  const { id } = await params;\n  await getMatterById(id);\n}`
+      )
+    ).toBe("no assertMatterAccess call");
+  });
+
+  test("ignores an assertion mentioned only in a comment (self-check)", () => {
+    expect(
+      checkMatterAccessSource(
+        `export default async function P() {\n` +
+          `  // await assertMatterAccess(id);\n  await requireUser();\n}`
+      )
+    ).toBe("no assertMatterAccess call");
+  });
+
+  test("rejects an assertion that precedes the session guard (self-check)", () => {
+    expect(
+      checkMatterAccessSource(
+        `export default async function P({ params }) {\n` +
+          `  await assertMatterAccess(id);\n  await requireUser();\n}`
+      )
+    ).toBe("assertMatterAccess runs before the session guard");
+  });
+});

@@ -12,7 +12,13 @@
  * zone), not the server's.
  */
 
-import { beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
+
+// The queries scope by the session user's matter access.
+let viewerId = "";
+vi.mock("@/lib/current-user", () => ({
+  getCurrentUserId: vi.fn(async () => viewerId),
+}));
 import { prisma } from "@/lib/prisma";
 import {
   getFirmActivity,
@@ -39,6 +45,7 @@ beforeAll(() => {
 beforeEach(async () => {
   await resetDb();
   ({ firmId } = await seedFirm());
+  ({ userId: viewerId } = await seedUser({ firmId, name: "Viewer", initials: "VV" }));
 });
 
 describe("listFirmActivityAuthors", () => {

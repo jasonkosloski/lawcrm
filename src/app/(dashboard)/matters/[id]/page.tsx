@@ -34,6 +34,7 @@ import {
   getMatterTimeSummary,
 } from "@/lib/queries/matter-detail";
 import { requireUser } from "@/lib/current-user";
+import { assertMatterAccess } from "@/lib/matter-access";
 
 const ROLE_LABEL: Record<string, string> = {
   lead: "Lead attorney",
@@ -55,6 +56,7 @@ export default async function MatterOverviewPage({
 }: PageProps<"/matters/[id]">) {
   await requireUser();
   const { id } = await params;
+  await assertMatterAccess(id);
   const tz = await getCurrentUserTimeZone();
 
   // Everything runs as one wave: the previews are narrow queries (only

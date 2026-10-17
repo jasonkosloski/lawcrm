@@ -23,10 +23,8 @@ import { cn } from "@/lib/utils";
 // calendar-date fallback, which uses the viewer's zone.
 import { formatRelative } from "@/lib/format-date";
 import { formatPhone } from "@/lib/format-phone";
-import {
-  isMissedCall,
-  type MessengerThreadRow,
-} from "@/lib/queries/messenger";
+import { isMissedCall } from "@/lib/call-log-form";
+import type { MessengerThreadRow } from "@/lib/queries/messenger";
 import type { MessengerFilter } from "./messenger-mailbox-rail";
 import { MailboxDrawerTrigger } from "./mailbox-drawer";
 import { contactInitials } from "./contact-initials";

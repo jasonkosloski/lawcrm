@@ -22,7 +22,7 @@
  * this route sits outside the (dashboard) layout, so the page must
  * authenticate itself; `generateMetadata` authenticates too, before
  * it reads the invoice). Gated by `billing.view` (the same key as the
- * matter Billing tab); there is no matter-team check yet.  `getInvoiceById`
+ * matter Billing tab) PLUS matter access (`assertChildMatterAccess("invoice", id)`, 404 when hidden).  `getInvoiceById`
  * returns null for missing ids; we 404 in that case. Firm scoping
  * is not enforced (single-tenant today).
  */
@@ -35,6 +35,7 @@ import { PrintToolbar } from "@/components/matters/billing/print-toolbar";
 import { getCurrentFirm } from "@/lib/firm";
 import { getInvoiceById } from "@/lib/queries/billing";
 import { requirePermission } from "@/lib/permission-check";
+import { assertChildMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 
 // The page and generateMetadata both need the invoice; cache() makes
@@ -48,6 +49,8 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   await requirePermission("billing.view");
   const { id } = await params;
+  // Matter wall: an invoice on a hidden matter 404s (also for the title).
+  await assertChildMatterAccess("invoice", id);
   const invoice = await loadInvoice(id);
   return {
     // Generic when the invoice is missing — the page 404s anyway.
@@ -64,6 +67,9 @@ export default async function PrintInvoicePage({
   searchParams: Promise<{ autoprint?: string }>;
 }) {
   await requirePermission("billing.view");
+  const { id: invoiceId } = await params;
+  // Matter wall: the invoice's matter must be accessible (404 if not).
+  await assertChildMatterAccess("invoice", invoiceId);
   const [{ id }, sp, firm, timeZone] = await Promise.all([
     params,
     searchParams,

@@ -69,6 +69,7 @@ import {
   documentStatusMeta,
   formatFileSize,
 } from "@/lib/document-display";
+import { assertMatterAccess } from "@/lib/matter-access";
 
 const firstParam =(v: string | string[] | undefined): string | undefined =>
   Array.isArray(v) ? v[0] : v;
@@ -79,6 +80,7 @@ export default async function DocumentViewerPage({
 }: PageProps<"/matters/[id]/documents/[documentId]">) {
   await requireUser();
   const { id, documentId } = await params;
+  await assertMatterAccess(id);
   const [doc, tz] = await Promise.all([
     getDocumentForViewer(id, documentId),
     getCurrentUserTimeZone(),

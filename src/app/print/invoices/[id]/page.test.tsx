@@ -19,6 +19,9 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/queries/billing", () => ({ getInvoiceById: vi.fn() }));
 vi.mock("@/lib/firm", () => ({ getCurrentFirm: vi.fn() }));
 vi.mock("@/lib/permission-check", () => ({ requirePermission: vi.fn() }));
+vi.mock("@/lib/matter-access", () => ({
+  assertChildMatterAccess: vi.fn(async () => null),
+}));
 vi.mock("@/lib/current-user-tz", () => ({ getCurrentUserTimeZone: vi.fn() }));
 vi.mock("@/components/matters/billing/print-toolbar", () => ({
   PrintToolbar: () => null,
@@ -31,6 +34,7 @@ import { getInvoiceById } from "@/lib/queries/billing";
 import { getCurrentFirm } from "@/lib/firm";
 import { requirePermission } from "@/lib/permission-check";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
+import { assertChildMatterAccess } from "@/lib/matter-access";
 import PrintInvoicePage, { generateMetadata } from "./page";
 
 const params = Promise.resolve({ id: "inv_1" });
@@ -60,6 +64,19 @@ describe("print invoice page — permission guard", () => {
   test("generateMetadata is gated by billing.view before reading the invoice", async () => {
     vi.mocked(requirePermission).mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
     await expect(generateMetadata({ params })).rejects.toThrow("NEXT_REDIRECT");
+    expect(getInvoiceById).not.toHaveBeenCalled();
+  });
+});
+
+describe("print invoice page - matter wall", () => {
+  test("an invoice on a hidden matter 404s before the invoice is read", async () => {
+    vi.mocked(assertChildMatterAccess).mockRejectedValueOnce(
+      new Error("NEXT_NOT_FOUND")
+    );
+    await expect(
+      PrintInvoicePage({ params, searchParams })
+    ).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(assertChildMatterAccess).toHaveBeenCalledWith("invoice", "inv_1");
     expect(getInvoiceById).not.toHaveBeenCalled();
   });
 });

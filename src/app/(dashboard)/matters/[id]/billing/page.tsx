@@ -93,6 +93,7 @@ import {
 } from "@/lib/billing-form";
 import { formatDate, formatDateOnly } from "@/lib/format-date";
 import { bundleTotal } from "@/components/matters/billing/bundle-summary";
+import { assertMatterAccess } from "@/lib/matter-access";
 
 const formatMoney = (n: number): string =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -142,6 +143,7 @@ export default async function MatterBillingPage({
   // tab link is hidden in the layout too.
   await requirePermission("billing.view");
   const { id } = await params;
+  await assertMatterAccess(id);
   const sp = await searchParams;
   const rawInvoice = Array.isArray(sp.invoice) ? sp.invoice[0] : sp.invoice;
   const requestedInvoiceId =

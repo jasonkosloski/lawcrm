@@ -28,6 +28,7 @@ import {
   getEventNotes,
   getEventTimeEntries,
 } from "@/lib/queries/calendar";
+import { assertMatterAccess } from "@/lib/matter-access";
 
 export default async function MatterEventsPage({
   params,
@@ -36,6 +37,7 @@ export default async function MatterEventsPage({
   // Pages guard themselves: layouts don't re-run on soft navigation (ADR-028).
   await requireUser();
   const { id } = await params;
+  await assertMatterAccess(id);
   const sp = await searchParams;
 
   const rawEventParam = Array.isArray(sp.event) ? sp.event[0] : sp.event;

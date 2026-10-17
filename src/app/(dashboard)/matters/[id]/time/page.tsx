@@ -58,6 +58,7 @@ import {
   type TimeEntryRow,
 } from "@/lib/queries/matter-detail";
 import { requireUser } from "@/lib/current-user";
+import { assertMatterAccess } from "@/lib/matter-access";
 
 /// The expense composer's receipt picker is a native <select>; an
 /// unbounded document list (thousands of discovery files) would ship
@@ -79,6 +80,7 @@ export default async function MatterTimePage({
 }: PageProps<"/matters/[id]/time">) {
   const currentUserId = await requireUser();
   const { id } = await params;
+  await assertMatterAccess(id);
   const [
     entries,
     summary,

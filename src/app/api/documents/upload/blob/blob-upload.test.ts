@@ -34,6 +34,9 @@ vi.mock("@/lib/prisma", () => ({
     document: { create: vi.fn(), findFirst: vi.fn() },
   },
 }));
+vi.mock("@/lib/matter-access", () => ({
+  canAccessMatter: vi.fn(async () => true),
+}));
 vi.mock("@/lib/activity-log", () => ({ logActivity: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@vercel/blob", async (importOriginal) => {

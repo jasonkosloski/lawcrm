@@ -12,6 +12,8 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { addDaysToKey, instantInTz } from "@/lib/format-date";
+import { getCurrentUserId } from "@/lib/current-user";
+import { optionalMatterAccessClause } from "@/lib/matter-access";
 
 export type FirmActivityRow = {
   id: string;
@@ -36,6 +38,8 @@ const FIRM_ACTIVITY_LIMIT = 200;
 export type FirmActivityFilter = {
   types?: readonly string[];
   userId?: string;
+  /** Whose matter access scopes the rows; defaults to the session user. */
+  viewerId?: string;
   /** "YYYY-MM-DD" — inclusive lower bound: the start of that calendar
    *  day in `tz`. Malformed values are ignored. */
   from?: string;
@@ -71,7 +75,12 @@ function startOfDayInstant(key: string, tz: string): Date | null {
 export async function getFirmActivity(
   filter: FirmActivityFilter = {}
 ): Promise<FirmActivityRow[]> {
-  const where: Prisma.ActivityLogWhereInput = {};
+  const viewerId = filter.viewerId ?? (await getCurrentUserId());
+  // Ethical walls: rows on a hidden matter are not listed (firm-scope
+  // rows with no matter stay).
+  const where: Prisma.ActivityLogWhereInput = {
+    AND: (await optionalMatterAccessClause(viewerId)) as Prisma.ActivityLogWhereInput[],
+  };
   if (filter.types && filter.types.length > 0) {
     where.type = { in: [...filter.types] };
   }
@@ -124,12 +133,16 @@ export async function getFirmActivity(
  *  in the query engine, which would materialize every ActivityLog
  *  row (the fastest-growing table in the app) just to fill a
  *  dropdown. */
-export async function listFirmActivityAuthors(): Promise<
-  Array<{ id: string; name: string; initials: string | null }>
-> {
+export async function listFirmActivityAuthors(
+  viewerIdArg?: string
+): Promise<Array<{ id: string; name: string; initials: string | null }>> {
+  const viewerId = viewerIdArg ?? (await getCurrentUserId());
   const grouped = await prisma.activityLog.groupBy({
     by: ["userId"],
-    where: { userId: { not: null } },
+    where: {
+      userId: { not: null },
+      AND: (await optionalMatterAccessClause(viewerId)) as Prisma.ActivityLogWhereInput[],
+    },
   });
   const userIds = grouped
     .map((g) => g.userId)

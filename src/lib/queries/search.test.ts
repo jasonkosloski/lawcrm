@@ -9,9 +9,9 @@
  *     its title never appears anywhere in the serialized result
  *     (leak test), while creator / show_details / matter-team paths
  *     all match.
- *   - Privileged time entries: narrative matches only for the
- *     author; an activity match on someone else's privileged entry
- *     never quotes the narrative in the snippet.
+ *   - Privileged time entries: the narrative is searchable and
+ *     quoted for anyone who can access the matter (hidden matters
+ *     are filtered out by matter access; see matter-access-reads).
  *   - Contacts: inactive + merged rows excluded.
  *   - Notes: raw-HTML match, but snippets/titles are tag-stripped
  *     and markup-only matches (e.g. inside an href) are dropped.
@@ -481,7 +481,7 @@ describe("globalSearch — messenger", () => {
   });
 });
 
-describe("globalSearch — time entries (privilege gate)", () => {
+describe("globalSearch — time entries (privileged narrative)", () => {
   const seedEntry = (opts: {
     userId: string;
     activity: string;
@@ -501,19 +501,20 @@ describe("globalSearch — time entries (privilege gate)", () => {
       select: { id: true },
     });
 
-  test("someone else's PRIVILEGED narrative never matches", async () => {
-    await seedEntry({
+  test("a colleague's PRIVILEGED narrative is searchable and quoted for anyone who can access the matter", async () => {
+    const e = await seedEntry({
       userId: otherId,
       activity: "Strategy call",
       narrative: "Privileged: discussed the ambulance report weakness.",
       privileged: true,
     });
     const res = await globalSearch("ambulance");
-    expect(groupOf(res, "time")).toBeUndefined();
-    expect(JSON.stringify(res)).not.toContain("weakness");
+    const hit = groupOf(res, "time")?.hits.find((h) => h.id === e.id);
+    expect(hit).toBeDefined();
+    expect(hit!.snippet).toContain(marked("ambulance"));
   });
 
-  test("the author still finds their own privileged narrative", async () => {
+  test("the author finds their own privileged narrative", async () => {
     const e = await seedEntry({
       userId: viewerId,
       activity: "Strategy call",
@@ -535,21 +536,6 @@ describe("globalSearch — time entries (privilege gate)", () => {
     });
     const res = await globalSearch("ambulance");
     expect(groupOf(res, "time")?.hits.map((h) => h.id)).toContain(e.id);
-  });
-
-  test("activity match on someone else's privileged entry shows the hit but never quotes the narrative", async () => {
-    const e = await seedEntry({
-      userId: otherId,
-      activity: "Ambulance records review",
-      narrative: "Privileged narrative that must stay hidden.",
-      privileged: true,
-    });
-    const res = await globalSearch("ambulance");
-    const hit = groupOf(res, "time")?.hits.find((h) => h.id === e.id);
-    expect(hit).toBeDefined();
-    // Snippet comes from the activity line only.
-    expect(hit!.snippet ?? "").not.toContain("hidden");
-    expect(JSON.stringify(res)).not.toContain("stay hidden");
   });
 });
 

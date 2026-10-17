@@ -18,6 +18,8 @@ import { prisma } from "@/lib/prisma";
 import { toSolPeriod } from "@/lib/sol";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
+import { matterAccessWhere } from "@/lib/matter-access";
+import { ADMIN_ROLE_NAME } from "@/lib/role-constants";
 import { TIME_ENTRY_WIP_STATUSES } from "@/lib/constants/time-entry-status";
 import {
   addDaysToKey,
@@ -42,7 +44,9 @@ export type MatterListRow = {
   /** True when the stage is a closing state (Settled/Closed-equivalent). */
   stageIsTerminal: boolean;
   feeStructure: string;
-  trustBalance: number;
+  /** Null when the viewer lacks `billing.view` (ADR-038): trust
+   *  balances are billing data and are never sent to them. */
+  trustBalance: number | null;
   color: string;
   leadInitials: string | null;
   leadName: string | null;
@@ -61,7 +65,12 @@ export type MatterListRow = {
  *  truncated by a row cap. `tz` is the viewer's zone: deadline
  *  windows are calendar days in the viewer's today (ADR-012), never
  *  the server's clock. */
-function buildWhere(filter: MattersFilter, currentUserId: string, tz: string) {
+function buildWhere(
+  filter: MattersFilter,
+  currentUserId: string,
+  tz: string,
+  canViewTrust: boolean
+) {
   const where: Record<string, unknown> = {};
 
   if (filter.q) {
@@ -107,7 +116,8 @@ function buildWhere(filter: MattersFilter, currentUserId: string, tz: string) {
     };
   }
 
-  switch (filter.trust) {
+  // The trust filter is a billing surface: ignored without billing.view.
+  switch (canViewTrust ? filter.trust : "any") {
     case "has":
       where.trustBalance = { gt: 0 };
       break;
@@ -158,6 +168,29 @@ function buildWhere(filter: MattersFilter, currentUserId: string, tz: string) {
   return where;
 }
 
+/** True when `userId` holds `billing.view` (Admin implicitly). Gates
+ *  the trust column / sort / filter on the matters list (ADR-038). */
+export async function userCanViewTrust(userId: string): Promise<boolean> {
+  const hit = await prisma.user.findFirst({
+    where: {
+      id: userId,
+      isActive: true,
+      userRoles: {
+        some: {
+          role: {
+            OR: [
+              { name: ADMIN_ROLE_NAME },
+              { permissions: { some: { permission: "billing.view" } } },
+            ],
+          },
+        },
+      },
+    },
+    select: { id: true },
+  });
+  return !!hit;
+}
+
 /** Comparator for the in-memory sort. Pinned matters ALWAYS sort first,
  *  ahead of the chosen field (like the sidebar); the chosen field then
  *  orders each group. */
@@ -185,7 +218,7 @@ function makeComparator(sort: MattersSort) {
         diff = a.feeStructure.localeCompare(b.feeStructure);
         break;
       case "trust":
-        diff = a.trustBalance - b.trustBalance;
+        diff = (a.trustBalance ?? 0) - (b.trustBalance ?? 0);
         break;
       case "deadline": {
         const aD = a.nextDeadlineDays ?? Number.POSITIVE_INFINITY;
@@ -227,7 +260,17 @@ export async function listMatters(
 ): Promise<MatterListRow[]> {
   const userId = currentUserId ?? (await getCurrentUserId());
   const zone = tz ?? (await getCurrentUserTimeZone());
-  const where = buildWhere(filter, userId, zone);
+  const canViewTrust = await userCanViewTrust(userId);
+  // Trust sort is a billing surface too: fall back to the default.
+  if (!canViewTrust && sort.field === "trust") {
+    sort = { field: "created", dir: "desc" };
+  }
+  const where = {
+    AND: [
+      await matterAccessWhere(userId),
+      buildWhere(filter, userId, zone, canViewTrust),
+    ],
+  };
   const matters = await prisma.matter.findMany({
     where,
     take: LIST_MATTERS_SCAN_LIMIT,
@@ -275,7 +318,7 @@ export async function listMatters(
     // Decimal → number at the API boundary so the row shape stays
     // primitive-only (matches comparator + display helpers). The DB
     // keeps Decimal precision; UI doesn't need it.
-    trustBalance: m.trustBalance.toNumber(),
+    trustBalance: canViewTrust ? m.trustBalance.toNumber() : null,
     color: m.color,
     leadInitials: m.teamMembers[0]?.user.initials ?? null,
     leadName: m.teamMembers[0]?.user.name ?? null,
@@ -303,7 +346,15 @@ export async function countMatters(
 ): Promise<number> {
   const userId = currentUserId ?? (await getCurrentUserId());
   const zone = tz ?? (await getCurrentUserTimeZone());
-  return prisma.matter.count({ where: buildWhere(filter, userId, zone) });
+  const canViewTrust = await userCanViewTrust(userId);
+  return prisma.matter.count({
+    where: {
+      AND: [
+        await matterAccessWhere(userId),
+        buildWhere(filter, userId, zone, canViewTrust),
+      ],
+    },
+  });
 }
 
 /** Filter options surfaced in the toolbar popovers. */
@@ -320,7 +371,11 @@ export type MattersFilterOptions = {
  * areas). Fee structures are the distinct values in use; lead options
  * are the ACTIVE leads of active users (what the lead filter matches).
  */
-export async function getMattersFilterOptions(): Promise<MattersFilterOptions> {
+export async function getMattersFilterOptions(
+  currentUserId?: string
+): Promise<MattersFilterOptions> {
+  const userId = currentUserId ?? (await getCurrentUserId());
+  const access = await matterAccessWhere(userId);
   const [areas, stages, matters, leadAssignments] = await Promise.all([
     prisma.practiceArea.findMany({
       where: { isActive: true },
@@ -333,6 +388,7 @@ export async function getMattersFilterOptions(): Promise<MattersFilterOptions> {
       orderBy: [{ order: "asc" }, { name: "asc" }],
     }),
     prisma.matter.findMany({
+      where: access,
       distinct: ["feeStructure"],
       select: { feeStructure: true },
     }),
@@ -340,7 +396,13 @@ export async function getMattersFilterOptions(): Promise<MattersFilterOptions> {
       // Same predicate as buildWhere's lead filter (active lead rows).
       // Deactivated users are intentionally hidden from the filter
       // options, even though they can remain lead on existing matters.
-      where: { role: "lead", removedAt: null, user: { isActive: true } },
+      where: {
+        role: "lead",
+        removedAt: null,
+        user: { isActive: true },
+        // Only leads of matters the viewer can see (no roster leak).
+        matter: access,
+      },
       distinct: ["userId"],
       include: { user: { select: { id: true, name: true, initials: true } } },
       orderBy: { user: { name: "asc" } },
@@ -388,8 +450,8 @@ export async function getMattersFilterOptions(): Promise<MattersFilterOptions> {
  */
 export const getMatterById = cache(async (id: string) => {
   const userId = await getCurrentUserId();
-  const matter = await prisma.matter.findUnique({
-    where: { id },
+  const matter = await prisma.matter.findFirst({
+    where: { AND: [{ id }, await matterAccessWhere(userId)] },
     // The stored wipAmount column is stale (never maintained) — omit it.
     omit: { wipAmount: true },
     include: {

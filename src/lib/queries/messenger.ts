@@ -12,6 +12,8 @@
 
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUserId } from "@/lib/current-user";
+import { matterAccessWhere } from "@/lib/matter-access";
 import { isManualCallLog, isMissedCall } from "@/lib/call-log-form";
 import type { CommTimeEntry } from "@/lib/queries/communication";
 
@@ -128,6 +130,28 @@ const UNFILED_THREAD_WHERE: Prisma.MessengerThreadWhereInput = {
   items: { none: { matterId: { not: null } } },
 };
 
+/**
+ * Ethical walls for the (firm-shared) messenger inbox: a thread whose
+ * default matter is hidden from the viewer disappears (unfiled threads
+ * stay). `{}` when the viewer sees every matter.
+ */
+async function threadAccessWhere(
+  userId: string
+): Promise<Prisma.MessengerThreadWhereInput> {
+  const access = await matterAccessWhere(userId);
+  if (Object.keys(access).length === 0) return {};
+  return { OR: [{ defaultMatterId: null }, { defaultMatter: access }] };
+}
+
+/** Same, for items filed directly to a matter. */
+async function itemAccessWhere(
+  userId: string
+): Promise<Prisma.MessengerItemWhereInput> {
+  const access = await matterAccessWhere(userId);
+  if (Object.keys(access).length === 0) return {};
+  return { OR: [{ matterId: null }, { matter: access }] };
+}
+
 /** Inbox page size — no pager yet (see FEATURES.md). */
 const THREAD_LIST_LIMIT = 200;
 
@@ -155,6 +179,9 @@ export async function listMessengerThreads({
   /** Threads resolved to this contact, whatever number they use. */
   contactId?: string;
 } = {}): Promise<MessengerThreadRow[]> {
+  const userId = await getCurrentUserId();
+  const threadAccess = await threadAccessWhere(userId);
+  const itemAccess = await itemAccessWhere(userId);
   const scope: Prisma.MessengerThreadWhereInput[] = [];
   if (contactPhone) scope.push({ contactPhone });
   if (contactPhones?.length) scope.push({ contactPhone: { in: contactPhones } });
@@ -166,7 +193,7 @@ export async function listMessengerThreads({
       ...(filter === "unread" ? { unreadCount: { gt: 0 } } : {}),
       ...(filter === "pinned" ? { isPinned: true } : {}),
       ...(filter === "unfiled" ? UNFILED_THREAD_WHERE : {}),
-      ...(scope.length ? { OR: scope } : {}),
+      AND: [threadAccess, ...(scope.length ? [{ OR: scope }] : [])],
     },
     orderBy: [{ isPinned: "desc" }, { lastItemAt: "desc" }],
     take: THREAD_LIST_LIMIT,
@@ -174,6 +201,7 @@ export async function listMessengerThreads({
       contact: { select: { id: true, name: true, type: true } },
       defaultMatter: { select: { id: true, name: true, color: true } },
       items: {
+        where: itemAccess,
         orderBy: { occurredAt: "desc" },
         take: 1,
         select: {
@@ -280,16 +308,17 @@ export type MessengerMailboxCounts = {
 };
 
 export async function getMessengerMailboxCounts(): Promise<MessengerMailboxCounts> {
+  const acc = await threadAccessWhere(await getCurrentUserId());
   const [all, unread, unfiled, pinned] = await Promise.all([
-    prisma.messengerThread.count({ where: { isArchived: false } }),
+    prisma.messengerThread.count({ where: { isArchived: false, ...acc } }),
     prisma.messengerThread.count({
-      where: { isArchived: false, unreadCount: { gt: 0 } },
+      where: { isArchived: false, unreadCount: { gt: 0 }, ...acc },
     }),
     prisma.messengerThread.count({
-      where: { isArchived: false, ...UNFILED_THREAD_WHERE },
+      where: { isArchived: false, ...UNFILED_THREAD_WHERE, ...acc },
     }),
     prisma.messengerThread.count({
-      where: { isArchived: false, isPinned: true },
+      where: { isArchived: false, isPinned: true, ...acc },
     }),
   ]);
   return { all, unread, unfiled, pinned };
@@ -298,8 +327,9 @@ export async function getMessengerMailboxCounts(): Promise<MessengerMailboxCount
 /** Unread conversations (the Messages tab badge) - one cheap count
  *  for when the email view needs only the other family's badge. */
 export async function getMessengerUnreadCount(): Promise<number> {
+  const acc = await threadAccessWhere(await getCurrentUserId());
   return prisma.messengerThread.count({
-    where: { isArchived: false, unreadCount: { gt: 0 } },
+    where: { isArchived: false, unreadCount: { gt: 0 }, ...acc },
   });
 }
 
@@ -311,14 +341,16 @@ export async function getMessengerUnreadCount(): Promise<number> {
 export async function getMessengerThread(
   threadId: string
 ): Promise<MessengerThreadDetail | null> {
-  const t = await prisma.messengerThread.findUnique({
-    where: { id: threadId },
+  const userId = await getCurrentUserId();
+  const t = await prisma.messengerThread.findFirst({
+    where: { AND: [{ id: threadId }, await threadAccessWhere(userId)] },
     include: {
       contact: {
         select: { id: true, name: true, type: true, organization: true },
       },
       defaultMatter: { select: { id: true, name: true, color: true } },
       items: {
+        where: await itemAccessWhere(userId),
         orderBy: { occurredAt: "asc" },
         include: {
           matter: { select: { id: true, name: true, color: true } },

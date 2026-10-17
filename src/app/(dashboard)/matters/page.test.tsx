@@ -28,6 +28,9 @@ import MattersListPage from "./page";
 vi.mock("@/lib/current-user", () => ({
   requireUser: vi.fn(async () => "user_1"),
 }));
+vi.mock("@/lib/matter-access", () => ({
+  matterAccessWhere: vi.fn(async () => ({})),
+}));
 vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn(async () => true),
 }));
@@ -95,6 +98,7 @@ async function renderPage(sp: Record<string, string | string[]>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(currentUserHasPermission).mockResolvedValue(true);
   optionsMock.mockResolvedValue({
     areas: [],
     stages: [],

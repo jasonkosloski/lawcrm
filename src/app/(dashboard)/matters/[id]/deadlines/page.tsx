@@ -44,6 +44,7 @@ import { currentUserHasPermission } from "@/lib/permission-check";
 import { getCaptureAccess } from "@/lib/capture-access";
 import { ApplyDeadlineRuleDialog } from "@/components/automations/apply-deadline-rule-dialog";
 import { requireUser } from "@/lib/current-user";
+import { assertMatterAccess } from "@/lib/matter-access";
 
 // Label maps are centralized (src/lib/constants/deadline-status.ts).
 // Widened to string-indexable here because DB values arrive untyped.
@@ -89,6 +90,7 @@ export default async function MatterDeadlinesPage({
 }: PageProps<"/matters/[id]">) {
   await requireUser();
   const { id } = await params;
+  await assertMatterAccess(id);
   // The rule library does not depend on the matter or the permission
   // result, so it runs in the same batch; it is discarded below for
   // viewers who couldn't apply a rule.

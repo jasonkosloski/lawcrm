@@ -5,14 +5,12 @@
  * belongs to a firm), looks the document up by id, then streams the
  * bytes from the storage adapter.
  *
- * ACCESS MODEL (be precise — do not assume more than this): any
- * authenticated firm user can read any document by id. There is NO
- * firm scoping (Matter has no firmId; single-tenant today) and NO
- * matter-team visibility check (MatterTeamMember is organizational,
- * not an access gate — the whole app reads firm-wide). Both are
- * tracked as separate phases (multi-tenancy; ethical walls) and must
- * be applied consistently to the viewer, documents tab, search and
- * this route together, not here alone.
+ * ACCESS MODEL: an authenticated firm user can read a document by id
+ * when they can access its matter (`canAccessMatter`, ADR-039 matter-
+ * team walls: team member, matters.view_all, or the firm in FIRM
+ * mode). A document on a hidden matter 404s exactly like a missing
+ * one. There is still NO firm scoping (Matter has no firmId;
+ * single-tenant today).
  *
  * Supports single-range HTTP Range requests (`bytes=...`) so the
  * document viewer's <video>/<audio> elements can seek GB-scale
@@ -39,6 +37,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { canAccessMatter } from "@/lib/matter-access";
 import {
   isBlobKey,
   openReadStream,
@@ -99,9 +98,16 @@ export async function GET(
       name: true,
       contentType: true,
       fileUrl: true,
+      matterId: true,
     },
   });
-  if (!doc || !doc.fileUrl) {
+  // Matter wall: a document on a matter the user can't access is
+  // indistinguishable from a missing one (404, never 403).
+  if (
+    !doc ||
+    !doc.fileUrl ||
+    !(await canAccessMatter(session.user.id, doc.matterId))
+  ) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 

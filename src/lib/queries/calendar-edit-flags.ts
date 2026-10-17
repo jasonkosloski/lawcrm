@@ -14,7 +14,11 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
-import { canEditEvent } from "@/lib/calendar-visibility";
+import {
+  canEditEvent,
+  viewerMayTouchLoadedEvent,
+} from "@/lib/calendar-visibility";
+import { filterAccessibleMatterIds } from "@/lib/matter-access";
 
 /**
  * The subset of `eventIds` the current viewer may edit (and so drag,
@@ -30,17 +34,26 @@ export async function getEditableEventIds(
     currentUserHasPermission("events.edit"),
     currentUserHasPermission("events.edit_non_matter"),
   ]);
-  // Holding both keys means every event is editable (creator bypass
-  // or not) — skip the lookup.
-  if (hasEventsEdit && hasEventsEditNonMatter) return new Set(eventIds);
-
+  // A private event of someone else, or an event behind the matter wall,
+  // never gets edit/drag/resize affordances, whatever the viewer's keys
+  // (the same viewerMayTouchLoadedEvent rule the actions enforce) - so
+  // the lookup always runs.
   const rows = await prisma.calendarEvent.findMany({
     where: { id: { in: [...eventIds] } },
-    select: { id: true, createdById: true, matterId: true },
+    select: { id: true, createdById: true, matterId: true, visibility: true },
   });
+  const accessible = await filterAccessibleMatterIds(
+    viewerId,
+    rows.flatMap((r) => (r.matterId ? [r.matterId] : []))
+  );
   const editable = new Set<string>();
   for (const row of rows) {
     if (
+      viewerMayTouchLoadedEvent(
+        viewerId,
+        row,
+        row.matterId ? accessible.has(row.matterId) : true
+      ) &&
       canEditEvent({
         viewerId,
         createdById: row.createdById,

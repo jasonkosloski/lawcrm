@@ -32,6 +32,8 @@ import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { formatPhone } from "@/lib/format-phone";
 import { getLeadById, LEAD_SOURCE_LABEL } from "@/lib/queries/leads";
 import { runConflictMatcher } from "@/lib/conflict-check";
+import { redactConflictResultForViewer } from "@/lib/conflict-check-redact";
+import { getCurrentUserId } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
 
 const ASSESSMENT_LABEL: Record<string, string> = {
@@ -100,7 +102,11 @@ export default async function LeadOverviewPage({
           email: lead.contact?.email ?? lead.email ?? null,
           organization: lead.contact?.organization ?? null,
           ownContactId: lead.contactId,
-        }),
+        }).then(async (r) =>
+          // Matter wall: hits on matters this viewer can't access keep
+          // their severity but lose the matter name (display only).
+          redactConflictResultForViewer(await getCurrentUserId(), r)
+        ),
     // No re-run / override on a closed lead.
     !isResolved && currentUserHasPermission("intake.conflict_check.run"),
     !isResolved && currentUserHasPermission("intake.conflict_check.override"),

@@ -24,14 +24,22 @@ import {
   listMatters,
 } from "@/lib/queries/matters";
 import { requireUser } from "@/lib/current-user";
+import { matterAccessWhere } from "@/lib/matter-access";
 import { currentUserHasPermission } from "@/lib/permission-check";
 
 export default async function MattersListPage({
   searchParams,
 }: PageProps<"/matters">) {
-  await requireUser();
+  const userId = await requireUser();
   const sp = await searchParams;
-  const { filter, sort, view } = parseMattersParams(sp);
+  const parsed = parseMattersParams(sp);
+  // Trust is a billing surface (ADR-038): without billing.view the
+  // column, sort and filter are all dropped (the query ignores them
+  // too — this just keeps the UI honest).
+  const canViewTrust = await currentUserHasPermission("billing.view");
+  const { sort, view } = parsed;
+  const filter = canViewTrust ? parsed.filter : { ...parsed.filter, trust: "any" as const };
+  const access = await matterAccessWhere(userId);
 
   const [
     matters,
@@ -42,7 +50,7 @@ export default async function MattersListPage({
     canCreateMatter,
   ] = await Promise.all([
       listMatters(filter, sort),
-      getMattersFilterOptions(),
+      getMattersFilterOptions(userId),
       // Denominator for "showing N of M" — a DB-side count with the
       // exact same filters as listMatters, text search included (both
       // go through one buildWhere). Immune to LIST_MATTERS_CAP.
@@ -51,10 +59,10 @@ export default async function MattersListPage({
       // current filter so the header keeps its reference point even
       // with show-closed off.
       prisma.matter.count({
-        where: { isArchived: false, stage: { isTerminal: false } },
+        where: { ...access, isArchived: false, stage: { isTerminal: false } },
       }),
       prisma.matter.count({
-        where: { isArchived: false, stage: { isTerminal: true } },
+        where: { ...access, isArchived: false, stage: { isTerminal: true } },
       }),
       // Same key createMatter / the New matter page enforce — hide the
       // button instead of offering a form that bounces to "/".
@@ -81,14 +89,15 @@ export default async function MattersListPage({
           filter={filter}
           options={options}
           view={view}
+          showTrust={canViewTrust}
           visibleCount={matters.length}
           totalCount={totalCount}
         />
 
         {view === "kanban" ? (
-          <MattersKanban matters={matters} />
+          <MattersKanban matters={matters} showTrust={canViewTrust} />
         ) : (
-          <MattersTable matters={matters} />
+          <MattersTable matters={matters} showTrust={canViewTrust} />
         )}
       </div>
     </>

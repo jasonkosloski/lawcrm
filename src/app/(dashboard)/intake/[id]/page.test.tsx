@@ -13,7 +13,13 @@ vi.mock("next/navigation", () => ({
     throw new Error("NOT_FOUND");
   }),
 }));
-vi.mock("@/lib/current-user", () => ({ requireUser: vi.fn() }));
+vi.mock("@/lib/current-user", () => ({
+  requireUser: vi.fn(),
+  getCurrentUserId: vi.fn(async () => "u1"),
+}));
+vi.mock("@/lib/conflict-check-redact", () => ({
+  redactConflictResultForViewer: vi.fn(async (_u: string, r: unknown) => r),
+}));
 vi.mock("@/lib/current-user-tz", () => ({
   getCurrentUserTimeZone: vi.fn(async () => "America/Denver"),
 }));

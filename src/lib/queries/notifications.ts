@@ -15,6 +15,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { filterAccessibleMatterIds } from "@/lib/matter-access";
 
 export type NotificationRow = {
   id: string;
@@ -63,19 +64,23 @@ export async function getNotificationsBell(): Promise<NotificationsBell> {
       where: { userId, readAt: null },
       orderBy: { createdAt: "desc" },
       take: RECENT_CAP,
-      include: { matter: { select: { name: true } } },
+      include: { matter: { select: { id: true, name: true } } },
     }),
     prisma.notification.findMany({
       where: { userId, readAt: { not: null } },
       orderBy: { createdAt: "desc" },
       take: READ_TAIL,
-      include: { matter: { select: { name: true } } },
+      include: { matter: { select: { id: true, name: true } } },
     }),
     prisma.notification.count({
       where: { userId, readAt: null },
     }),
   ]);
 
+  const visible = await filterAccessibleMatterIds(
+    userId,
+    [...unread, ...recentRead].flatMap((r) => (r.matterId ? [r.matterId] : []))
+  );
   const map = (rows: typeof unread, isRead: boolean): NotificationRow[] =>
     rows.map((r) => ({
       id: r.id,
@@ -84,7 +89,9 @@ export async function getNotificationsBell(): Promise<NotificationsBell> {
       body: r.body,
       link: r.link,
       matterId: r.matterId,
-      matterName: r.matter?.name ?? null,
+      // Hidden matter: the notification exists, its name does not leak.
+      matterName:
+        r.matterId && !visible.has(r.matterId) ? null : (r.matter?.name ?? null),
       isRead,
       createdAt: r.createdAt,
     }));
@@ -145,8 +152,12 @@ export async function getNotificationsFeed(
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     skip: (safePage - 1) * NOTIFICATIONS_PAGE_SIZE,
     take: NOTIFICATIONS_PAGE_SIZE,
-    include: { matter: { select: { name: true } } },
+    include: { matter: { select: { id: true, name: true } } },
   });
+  const visible = await filterAccessibleMatterIds(
+    userId,
+    rows.flatMap((r) => (r.matterId ? [r.matterId] : []))
+  );
 
   return {
     rows: rows.map((r) => ({
@@ -156,7 +167,8 @@ export async function getNotificationsFeed(
       body: r.body,
       link: r.link,
       matterId: r.matterId,
-      matterName: r.matter?.name ?? null,
+      matterName:
+        r.matterId && !visible.has(r.matterId) ? null : (r.matter?.name ?? null),
       isRead: r.readAt !== null,
       createdAt: r.createdAt,
     })),

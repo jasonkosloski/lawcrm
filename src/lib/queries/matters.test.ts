@@ -397,7 +397,7 @@ describe("getMattersFilterOptions (F762/F788/F849)", () => {
         data: { name: "m", practiceAreaId: areaId, stageId, feeStructure: fee },
       });
     }
-    const opts = await getMattersFilterOptions();
+    const opts = await getMattersFilterOptions(userId);
     expect(opts.feeStructures).toEqual(["contingent", "hourly"]);
   });
 
@@ -421,7 +421,7 @@ describe("getMattersFilterOptions (F762/F788/F849)", () => {
       data: { removedAt: new Date() },
     });
 
-    const opts = await getMattersFilterOptions();
+    const opts = await getMattersFilterOptions(userId);
     expect(opts.leads.map((l) => l.name)).toEqual(["Active Lead"]);
   });
 });

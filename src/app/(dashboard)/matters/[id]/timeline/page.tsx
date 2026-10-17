@@ -57,6 +57,7 @@ import {
   getMatterActivityTypeCounts,
 } from "@/lib/queries/matter-detail";
 import { getMatterById } from "@/lib/queries/matters";
+import { assertMatterAccess } from "@/lib/matter-access";
 
 const ACTIVITY_ICONS: Record<string, LucideIcon> = {
   gavel: Gavel,
@@ -120,6 +121,7 @@ export default async function MatterTimelinePage({
   // Pages guard themselves: layouts don't re-run on soft navigation (ADR-028).
   await requireUser();
   const { id } = await params;
+  await assertMatterAccess(id);
   const sp = await searchParams;
   const rawType = Array.isArray(sp.type) ? sp.type[0] : sp.type;
   // Own-property check: `in` also matches prototype keys

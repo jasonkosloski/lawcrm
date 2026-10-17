@@ -11,8 +11,10 @@
  *
  * Auth / prisma / storage are mocked — the session gate itself is
  * exercised only at the "no session → 401" boundary. There is no
- * firm or matter-team scoping to test (see the route's ACCESS MODEL
- * note); it belongs with the multi-tenancy / ethical-walls phases.
+ * firm scoping to test (see the route's ACCESS MODEL note). The
+ * matter wall (canAccessMatter) is mocked here; its 404 is pinned in
+ * the "matter wall" describe, and exercised against a real DB in
+ * src/lib/queries/matter-access-dashboard.test.ts.
  */
 
 import { Readable } from "node:stream";
@@ -24,6 +26,9 @@ vi.mock("@/lib/prisma", () => ({
     user: { findUnique: vi.fn() },
     document: { findFirst: vi.fn() },
   },
+}));
+vi.mock("@/lib/matter-access", () => ({
+  canAccessMatter: vi.fn(async () => true),
 }));
 vi.mock("@/lib/file-storage", () => ({
   openReadStream: vi.fn(),
@@ -42,6 +47,7 @@ vi.mock("@/lib/file-storage", () => ({
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { openReadStream, statFile } from "@/lib/file-storage";
+import { canAccessMatter } from "@/lib/matter-access";
 import { GET } from "./route";
 
 const mockedAuth = vi.mocked(auth);
@@ -405,5 +411,14 @@ describe("GET /api/documents/[id]/download — firm guard", () => {
     });
     expect(res.status).toBe(403);
     expect(mockedFindDoc).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/documents/[id]/download - matter wall", () => {
+  test("a document on a matter the user can't access is a 404, never a 403", async () => {
+    vi.mocked(canAccessMatter).mockResolvedValueOnce(false);
+    const res = await download("application/pdf");
+    expect(res.status).toBe(404);
+    expect(mockedOpen).not.toHaveBeenCalled();
   });
 });

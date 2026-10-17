@@ -37,12 +37,14 @@ import {
   type PartyCategory,
 } from "@/lib/party-constants";
 import { requireUser } from "@/lib/current-user";
+import { assertMatterAccess } from "@/lib/matter-access";
 
 export default async function MatterPartiesPage({
   params,
 }: PageProps<"/matters/[id]">) {
   await requireUser();
   const { id } = await params;
+  await assertMatterAccess(id);
 
   const [parties, contacts, canEditContact, canCreate, canEdit, canDelete] =
     await Promise.all([

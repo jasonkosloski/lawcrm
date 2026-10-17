@@ -35,6 +35,12 @@
  *      `events.edit_non_matter`; there's no dedicated
  *      delete_non_matter key yet).
  *
+ * On top of `canEditEvent`, every per-event mutation also requires
+ * `viewerMayTouchEvent`: a private event is creator-only (a Busy
+ * viewer can't move/resize/edit/delete it, whatever their keys) and
+ * the event's matter must be accessible (ADR-039). Creation rejects a
+ * matter the creator can't access.
+ *
  * Creation (`createCalendarEvent`) has no per-event target, so it
  * gates on `events.create` alone. Any new per-event mutation added to
  * this file must follow the load-then-`canEditEvent` shape above, and
@@ -61,7 +67,12 @@ import {
   EVENT_VISIBILITIES,
   auditEventTitle,
   canEditEvent,
+  viewerMayTouchLoadedEvent,
 } from "@/lib/calendar-visibility";
+import {
+  assertChildMatterAccess,
+  assertOptionalMatterAccess,
+} from "@/lib/matter-access";
 import { getEffectiveCalendarDefaults } from "@/lib/calendar-defaults";
 import { logActivity } from "@/lib/activity-log";
 import {
@@ -84,6 +95,22 @@ import {
   type CreateCalendarEventState,
   type UpdateCalendarEventFormState,
 } from "@/lib/calendar-event-form";
+
+/**
+ * The "may this viewer touch this event at all" half of every
+ * per-event mutation, on top of `canEditEvent`'s permission half
+ * (see `viewerMayTouchLoadedEvent`): a Busy-only viewer of a PRIVATE
+ * event can't move/resize/edit/delete it, whatever keys they hold.
+ * The matter wall (ADR-039) is asserted separately, up front, with
+ * `assertChildMatterAccess("calendarEvent", id)` in each action.
+ */
+function viewerMayTouchEvent(
+  viewerId: string,
+  event: Parameters<typeof viewerMayTouchLoadedEvent>[1]
+): boolean {
+  // Matter access was asserted before the event was loaded.
+  return viewerMayTouchLoadedEvent(viewerId, event, true);
+}
 
 function revalidateForEvent(matterId: string | null): void {
   revalidatePath("/calendar");
@@ -538,6 +565,8 @@ export async function updateCalendarEvent(
   // the caller is known, and the schema needs the zone to read the
   // posted wall-clock times.
   const viewerId = await getCurrentUserId();
+  // Matter wall: an event on a matter this user can't access is gone.
+  await assertChildMatterAccess("calendarEvent", eventId);
   const tz = await getCurrentUserTimeZone();
 
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -596,7 +625,7 @@ export async function updateCalendarEvent(
       event.matter?.teamMembers.map((m) => m.userId) ?? [],
     perms: { hasEventsEdit, hasEventsEditNonMatter },
   });
-  if (!allowed) {
+  if (!allowed || !viewerMayTouchEvent(viewerId, event)) {
     return {
       status: "error",
       errors: {
@@ -739,6 +768,7 @@ export async function deleteCalendarEvent(
 ): Promise<{ ok: boolean; error?: string; matterId: string | null }> {
   // Session before the first read (see the header).
   const viewerId = await getCurrentUserId();
+  await assertChildMatterAccess("calendarEvent", eventId);
   const event = await prisma.calendarEvent.findUnique({
     where: { id: eventId },
     select: {
@@ -782,7 +812,7 @@ export async function deleteCalendarEvent(
       hasEventsEditNonMatter: hasEventsDelete && hasEventsEditNonMatter,
     },
   });
-  if (!allowed) {
+  if (!allowed || !viewerMayTouchEvent(viewerId, event)) {
     return {
       ok: false,
       error: "You don't have permission to delete this event.",
@@ -876,6 +906,8 @@ export async function createCalendarEvent(
         errors: { matterId: ["Pick an open matter for this event."] },
       };
     }
+    // Matter wall: creating on a matter the user can't access 404s.
+    await assertOptionalMatterAccess(matterId);
   }
 
   // Parse + resolve posted attendees (full-page form). Rejections
@@ -1084,6 +1116,7 @@ export async function moveCalendarEvent(
   input: { isAllDay: boolean; startTime: string; endTime: string }
 ): Promise<{ ok: boolean; error?: string }> {
   const viewerId = await getCurrentUserId();
+  await assertChildMatterAccess("calendarEvent", eventId);
   const tz = await getCurrentUserTimeZone();
   const parsed = makeMoveSchema(tz).safeParse(input);
   if (!parsed.success) {
@@ -1132,7 +1165,7 @@ export async function moveCalendarEvent(
       event.matter?.teamMembers.map((m) => m.userId) ?? [],
     perms: { hasEventsEdit, hasEventsEditNonMatter },
   });
-  if (!allowed) {
+  if (!allowed || !viewerMayTouchEvent(viewerId, event)) {
     return {
       ok: false,
       error: "You don't have permission to move this event.",

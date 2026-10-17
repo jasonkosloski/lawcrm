@@ -27,6 +27,9 @@ vi.mock("@/lib/queries/settlements", () => ({
   getMatterSettlement: vi.fn(),
 }));
 vi.mock("@/lib/firm", () => ({ getCurrentFirm: vi.fn() }));
+vi.mock("@/lib/matter-access", () => ({
+  assertMatterAccess: vi.fn(async () => "user_1"),
+}));
 vi.mock("@/lib/current-user", () => ({
   getCurrentUserId: vi.fn(async () => "user_1"),
   requireUser: vi.fn(async () => "user_1"),

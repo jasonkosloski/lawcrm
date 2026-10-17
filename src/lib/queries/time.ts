@@ -25,6 +25,7 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { dateOnlyKey, dateOnlyRange } from "@/lib/format-date";
+import { optionalMatterAccessClause } from "@/lib/matter-access";
 import { getCurrentTimerSession } from "@/lib/queries/timer";
 
 /** Shed float-accumulation noise from summed hours (0.1 + 0.2 …). */
@@ -90,6 +91,9 @@ export async function getMyWeekTime(dayKeys: string[]): Promise<MyWeekTime> {
     where: {
       userId,
       date: dateOnlyRange(dayKeys[0]!, dayKeys[dayKeys.length - 1]!),
+      // Matter wall: own entries on matters the user can no longer
+      // access are hidden (intake / lead time has no matter and stays).
+      AND: await optionalMatterAccessClause(userId),
     },
     select: {
       date: true,
@@ -212,6 +216,7 @@ export async function getMyDayTime(dayKey: string): Promise<MyDayTime> {
     where: {
       userId,
       date: dateOnlyRange(dayKey, dayKey),
+      AND: await optionalMatterAccessClause(userId),
     },
     orderBy: { createdAt: "asc" },
     select: {

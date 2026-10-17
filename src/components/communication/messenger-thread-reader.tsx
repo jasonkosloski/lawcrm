@@ -30,10 +30,10 @@ import { dateKeyInTz, formatDate, formatRelative } from "@/lib/format-date";
 import { formatPhone } from "@/lib/format-phone";
 import { BackToListButton } from "./back-to-list-button";
 import { MarkThreadRead } from "./mark-thread-read";
-import {
-  isMissedCall,
-  type MessengerItemRow,
-  type MessengerThreadDetail,
+import { isMissedCall } from "@/lib/call-log-form";
+import type {
+  MessengerItemRow,
+  MessengerThreadDetail,
 } from "@/lib/queries/messenger";
 import { InboxActionButtons } from "./inbox-action-buttons";
 import { FollowUpButton } from "./follow-up-button";

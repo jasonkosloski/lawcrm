@@ -22,6 +22,9 @@ import type {
 } from "@/lib/queries/matter-detail";
 
 // Page auth guard (src/lib/current-user.ts) — session exists here.
+vi.mock("@/lib/matter-access", () => ({
+  assertMatterAccess: vi.fn(async () => "user_1"),
+}));
 vi.mock("@/lib/current-user", () => ({
   requireUser: vi.fn(async () => "user_1"),
 }));

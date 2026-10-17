@@ -33,6 +33,9 @@ vi.mock("next/navigation", () => ({
     throw new Error("NEXT_NOT_FOUND");
   }),
 }));
+vi.mock("@/lib/matter-access", () => ({
+  assertMatterAccess: vi.fn(async () => "user_1"),
+}));
 vi.mock("@/lib/current-user", () => ({ requireUser: vi.fn() }));
 vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn(),

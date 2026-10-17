@@ -62,6 +62,7 @@ import {
   documentStatusMeta,
   formatFileSize,
 } from "@/lib/document-display";
+import { assertMatterAccess } from "@/lib/matter-access";
 
 export default async function MatterDocumentsPage({
   params,
@@ -69,6 +70,7 @@ export default async function MatterDocumentsPage({
 }: PageProps<"/matters/[id]/documents">) {
   await requireUser();
   const { id } = await params;
+  await assertMatterAccess(id);
   const sp = await searchParams;
   const rawFolder = typeof sp.folder === "string" ? sp.folder : null;
 

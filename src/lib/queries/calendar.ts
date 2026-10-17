@@ -28,6 +28,11 @@ import { sanitizeUserHtml } from "@/lib/sanitize-html";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { canViewEventDetails } from "@/lib/calendar-visibility";
+import {
+  canAccessMatter,
+  filterAccessibleMatterIds,
+  matterRelationAccessWhere,
+} from "@/lib/matter-access";
 import { dateKeyInTz, dateOnlyRange } from "@/lib/format-date";
 
 export type CalendarEventRow = {
@@ -124,6 +129,10 @@ export async function getCalendarItems(
   //   - matter team's active member userIds (when matter event)
   // Everything else stays the same as the prior shape.
   const viewerId = await getCurrentUserId();
+  // Matter wall: deadlines on matters the viewer can't access are
+  // dropped; EVENTS on them stay as "Busy" blocks (time is shared,
+  // details aren't) - see canViewEventDetails.matterAccessible.
+  const deadlineAccess = await matterRelationAccessWhere(viewerId);
   const [events, deadlines] = await Promise.all([
     prisma.calendarEvent.findMany({
       where: eventsInRangeWhere(rangeStart, rangeEnd, tz),
@@ -155,6 +164,7 @@ export async function getCalendarItems(
       where: {
         dueDate: dayBoundsOf(rangeStart, rangeEnd, tz),
         status: "open",
+        ...deadlineAccess,
       },
       include: {
         matter: { select: { id: true, name: true } },
@@ -162,6 +172,13 @@ export async function getCalendarItems(
       orderBy: { dueDate: "asc" },
     }),
   ]);
+
+  // One query for the whole batch: which of the events' matters can
+  // the viewer see?
+  const accessibleMatters = await filterAccessibleMatterIds(
+    viewerId,
+    events.flatMap((e) => (e.matter ? [e.matter.id] : []))
+  );
 
   const mappedEvents: CalendarItem[] = events.map((e) => {
     const attendeeUserIds = e.attendees
@@ -178,6 +195,7 @@ export async function getCalendarItems(
       matterId: e.matter?.id ?? null,
       attendeeUserIds,
       matterTeamUserIds,
+      matterAccessible: e.matter ? accessibleMatters.has(e.matter.id) : true,
     });
 
     if (!canSee) {
@@ -336,6 +354,9 @@ export async function getCalendarEventById(
     matterId: e.matter?.id ?? null,
     attendeeUserIds,
     matterTeamUserIds,
+    matterAccessible: e.matter
+      ? await canAccessMatter(viewerId, e.matter.id)
+      : true,
   });
   if (!canSee) {
     return {

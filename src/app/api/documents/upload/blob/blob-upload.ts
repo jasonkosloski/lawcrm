@@ -44,6 +44,7 @@ import type { HandleUploadOptions } from "@vercel/blob/client";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { canAccessMatter } from "@/lib/matter-access";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { DOCUMENT_CATEGORIES, type DocumentCategory } from "@/lib/document-form";
@@ -136,7 +137,10 @@ export const onBeforeGenerateToken: HandleUploadOptions["onBeforeGenerateToken"]
       where: { id: payload.matterId },
       select: { id: true },
     });
-    if (!matter) throw new UploadTokenError(404, "Matter not found.");
+    // Matter wall: hidden == missing, before any token is issued.
+    if (!matter || !(await canAccessMatter(session.user.id, payload.matterId))) {
+      throw new UploadTokenError(404, "Matter not found.");
+    }
 
     const folderId = payload.folderId ?? null;
     if (folderId) {

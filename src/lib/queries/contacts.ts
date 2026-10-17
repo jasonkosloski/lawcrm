@@ -6,6 +6,8 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { getCurrentUserId } from "@/lib/current-user";
+import { canAccessMatter, matterAccessWhere } from "@/lib/matter-access";
 import {
   CONTACT_LIST_LIMIT,
   CONTACT_PICKER_LIMIT,
@@ -53,6 +55,10 @@ export async function listContacts({
   type?: string;
 }): Promise<ContactListRow[]> {
   const q = search?.trim();
+  // Matter wall: the per-contact matter count only counts matters the
+  // viewer can access (a hidden matter must not leak via the count).
+  const mw = await matterAccessWhere(await getCurrentUserId());
+  const walled = Object.keys(mw).length > 0;
   const contacts = await prisma.contact.findMany({
     where: {
       isActive: true,
@@ -70,9 +76,15 @@ export async function listContacts({
     take: CONTACT_LIST_LIMIT,
     orderBy: [{ name: "asc" }],
     include: {
-      clientMatters: { select: { id: true } },
-      mattersAsClient: { select: { matterId: true } },
-      representationOf: { select: { matterId: true } },
+      clientMatters: { where: mw, select: { id: true } },
+      mattersAsClient: {
+        where: walled ? { matter: mw } : {},
+        select: { matterId: true },
+      },
+      representationOf: {
+        where: walled ? { matter: mw } : {},
+        select: { matterId: true },
+      },
     },
   });
 
@@ -158,6 +170,12 @@ export type ContactDetail = {
 };
 
 export async function getContactById(id: string): Promise<ContactDetail | null> {
+  // Matter wall: the contact itself is firm-wide, but the matters it
+  // is tied to are listed (and counted) only when the viewer can see
+  // them. Everything below filters at the query, so hidden names,
+  // colors and counts never leave the server.
+  const mw = await matterAccessWhere(await getCurrentUserId());
+  const walled = Object.keys(mw).length > 0;
   const c = await prisma.contact.findUnique({
     where: { id },
     include: {
@@ -166,6 +184,7 @@ export async function getContactById(id: string): Promise<ContactDetail | null> 
         select: { id: true, label: true, number: true, isPrimary: true },
       },
       clientMatters: {
+        where: mw,
         select: {
           id: true,
           name: true,
@@ -176,6 +195,7 @@ export async function getContactById(id: string): Promise<ContactDetail | null> 
         },
       },
       mattersAsClient: {
+        where: walled ? { matter: mw } : {},
         include: {
           matter: {
             select: {
@@ -189,6 +209,7 @@ export async function getContactById(id: string): Promise<ContactDetail | null> 
         },
       },
       representationOf: {
+        where: walled ? { matter: mw } : {},
         select: {
           id: true,
           contact: { select: { name: true } },
@@ -314,7 +335,15 @@ export async function listContactPickerOptions(opts?: {
   // The matter's own people are resolved FIRST and fetched by id, so
   // the alphabetical cap below can never push them out of the list.
   const priorityIds = new Set<string>();
-  if (opts?.priorityMatterId) {
+  if (
+    opts?.priorityMatterId &&
+    // A matter behind the wall must not leak its people via the
+    // "priority" ordering.
+    (await canAccessMatter(
+      await getCurrentUserId(),
+      opts.priorityMatterId
+    ))
+  ) {
     const [parties, matter] = await Promise.all([
       prisma.matterContact.findMany({
         where: { matterId: opts.priorityMatterId },

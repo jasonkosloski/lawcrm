@@ -93,14 +93,18 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-const viewers = () => [
-  ["invitee", inviteeId],
-  ["matter teammate", teammateId],
-  ["stranger", strangerId],
-] as const;
+// Ids are only known after beforeEach seeds them, so the table holds
+// resolvers (a test.each row built at collection time would be undefined).
+const viewers = () =>
+  [
+    ["invitee", () => inviteeId],
+    ["matter teammate", () => teammateId],
+    ["stranger", () => strangerId],
+  ] as const;
 
 describe("private events - calendar grid and modal", () => {
-  test.each(viewers())("%s sees Busy with the times intact", async (_label, uid) => {
+  test.each(viewers())("%s sees Busy with the times intact", async (_label, getUid) => {
+    const uid = getUid();
     mockedGetUser.mockResolvedValue(uid);
     const items = await getCalendarItems(RANGE_START, RANGE_END);
     const evt = items.find((i) => i.kind === "event" && i.id === eventId);
@@ -141,7 +145,8 @@ describe("private events - calendar grid and modal", () => {
 });
 
 describe("private events - matter Events tab", () => {
-  test.each(viewers())("%s gets a Busy shell", async (_label, uid) => {
+  test.each(viewers())("%s gets a Busy shell", async (_label, getUid) => {
+    const uid = getUid();
     mockedGetUser.mockResolvedValue(uid);
     const rows = await getMatterEvents(matterId);
     expect(rows).toHaveLength(1);
@@ -157,7 +162,8 @@ describe("private events - matter Events tab", () => {
 });
 
 describe("private events - search and dashboard agenda", () => {
-  test.each(viewers())("%s never finds it by title in search", async (_label, uid) => {
+  test.each(viewers())("%s never finds it by title in search", async (_label, getUid) => {
+    const uid = getUid();
     mockedGetUser.mockResolvedValue(uid);
     const res = await globalSearch("Zebracorn");
     const events = res.groups.find((g) => g.type === "event");
@@ -171,7 +177,8 @@ describe("private events - search and dashboard agenda", () => {
     expect(res.groups.find((g) => g.type === "event")?.hits).toHaveLength(1);
   });
 
-  test.each(viewers())("%s sees Busy on the agenda", async (_label, uid) => {
+  test.each(viewers())("%s sees Busy on the agenda", async (_label, getUid) => {
+    const uid = getUid();
     mockedGetUser.mockResolvedValue(uid);
     const agenda = await getTodayAgenda("America/Denver");
     expect(agenda).toHaveLength(1);

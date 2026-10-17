@@ -10,6 +10,9 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
+vi.mock("@/lib/matter-access", () => ({
+  assertMatterAccess: vi.fn(async () => "user_1"),
+}));
 vi.mock("@/lib/current-user", () => ({
   requireUser: vi.fn(async () => "user_1"),
   getCurrentUserId: vi.fn(async () => "user_1"),

@@ -12,7 +12,13 @@
  * summary occupies body) without parsing the preview string.
  */
 
-import { beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
+
+// The queries scope by the session user's matter access.
+let viewerId = "";
+vi.mock("@/lib/current-user", () => ({
+  getCurrentUserId: vi.fn(async () => viewerId),
+}));
 import { prisma } from "@/lib/prisma";
 import {
   getMessengerMailboxCounts,
@@ -71,6 +77,7 @@ beforeEach(async () => {
   await resetDb();
   const { firmId } = await seedFirm();
   const { userId } = await seedUser({ firmId });
+  viewerId = userId;
   const { areaId, stageId } = await seedPracticeArea();
   ({ matterId } = await seedMatter({
     practiceAreaId: areaId,

@@ -27,6 +27,11 @@ import { getFirmGoals } from "@/lib/firm";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { canViewEventDetails } from "@/lib/calendar-visibility";
 import { visibleEmailThreadWhere } from "@/lib/email-visibility";
+import {
+  filterAccessibleMatterIds,
+  matterAccessWhere,
+  optionalMatterAccessClause,
+} from "@/lib/matter-access";
 import { TASK_CLOSED_STATUSES } from "@/lib/constants/task-status";
 import { TASK_PRIORITIES } from "@/lib/constants/priority";
 import {
@@ -79,13 +84,22 @@ export async function getDashboardKpis(tz: string): Promise<DashboardKpis> {
   ]);
   const canViewFinancials = canViewReports && canViewBilling;
   const today = todayKey(tz);
+  // Matter wall: the matter COUNT tiles only count matters the viewer
+  // can see. The firm-wide trust total below stays an aggregate (it is
+  // already gated on reports.view + billing.view, like /reports).
+  const matterAccess = await matterAccessWhere(userId);
   const [openMatters, mattersThisWeek, unreadEmail, flaggedEmail, hoursAgg, trustAgg, goals] =
     await Promise.all([
       prisma.matter.count({
-        where: { isArchived: false, stage: { isTerminal: false } },
+        where: {
+          ...matterAccess,
+          isArchived: false,
+          stage: { isTerminal: false },
+        },
       }),
       prisma.matter.count({
         where: {
+          ...matterAccess,
           isArchived: false,
           createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
         },
@@ -222,6 +236,13 @@ export async function getTodayAgenda(tz: string): Promise<AgendaItem[]> {
     },
   });
 
+  // Matter wall: events on matters this viewer can't access stay on
+  // the agenda as "Busy" blocks (canViewEventDetails.matterAccessible).
+  const accessibleMatters = await filterAccessibleMatterIds(
+    viewerId,
+    events.flatMap((e) => (e.matter ? [e.matter.id] : []))
+  );
+
   // All-day rows lead the agenda, then timed events in start order
   // (Array.sort is stable, so the DB's startTime order is kept).
   const ordered = [...events].sort(
@@ -241,6 +262,7 @@ export async function getTodayAgenda(tz: string): Promise<AgendaItem[]> {
         .map((a) => a.userId)
         .filter((id): id is string => !!id),
       matterTeamUserIds: e.matter?.teamMembers.map((t) => t.userId) ?? [],
+      matterAccessible: e.matter ? accessibleMatters.has(e.matter.id) : true,
     });
 
     // Busy scrub - identical to the calendar's: the time block stays,
@@ -294,6 +316,10 @@ export async function getRecentActivity(
       currentUserHasPermission("firm.view_activity"),
       currentUserHasPermission("billing.view"),
     ]);
+  const viewerId = await getCurrentUserId();
+  // Matter wall: matter-linked rows only for accessible matters
+  // (firm-scope rows, matterId null, stay under their own gate below).
+  const activityAccess = await optionalMatterAccessClause(viewerId);
   const entries = await prisma.activityLog.findMany({
     where: {
       // Sign-in/password audit rows and firm-settings changes (practice
@@ -302,6 +328,7 @@ export async function getRecentActivity(
       // /settings/security for auth) only.
       type: { notIn: ["auth", "settings"] },
       AND: [
+        ...activityAccess,
         // Settlement rows carry gross amounts + lienholders: same key
         // that gates the settlement UI.
         ...(canViewSettlements ? [] : [{ type: { not: "settlement" } }]),
@@ -363,6 +390,22 @@ export async function getFollowUpsDueToday(tz: string): Promise<FollowUpItem[]> 
   // "overdue" in the evening of its own day for a viewer west of UTC.
   const today = todayKey(tz);
   const dueBefore = dateOnlyRange(today, today).lt;
+  // Matter wall: a follow-up whose thread is filed to a matter the
+  // viewer can't access is left off the card (no name leak, and the
+  // thread itself 404s for them).
+  const emailMatterAccess = await optionalMatterAccessClause(userId);
+  const hiddenMatterWhere = await matterAccessWhere(userId);
+  const messengerMatterAccess =
+    Object.keys(hiddenMatterWhere).length === 0
+      ? []
+      : [
+          {
+            OR: [
+              { defaultMatterId: null },
+              { defaultMatter: hiddenMatterWhere },
+            ],
+          },
+        ];
   const [emails, messages] = await Promise.all([
     prisma.emailThread.findMany({
       // Viewer's own mailbox only (EmailThread -> EmailAccount.userId),
@@ -371,6 +414,7 @@ export async function getFollowUpsDueToday(tz: string): Promise<FollowUpItem[]> 
         followUpAt: { lt: dueBefore },
         isArchived: false,
         ...visibleEmailThreadWhere(userId),
+        AND: emailMatterAccess,
       },
       orderBy: { followUpAt: "asc" },
       take: 50,
@@ -379,7 +423,11 @@ export async function getFollowUpsDueToday(tz: string): Promise<FollowUpItem[]> 
       },
     }),
     prisma.messengerThread.findMany({
-      where: { followUpAt: { lt: dueBefore }, isArchived: false },
+      where: {
+        followUpAt: { lt: dueBefore },
+        isArchived: false,
+        AND: messengerMatterAccess,
+      },
       orderBy: { followUpAt: "asc" },
       take: 50,
       include: {
@@ -472,7 +520,12 @@ export async function getUpcomingDeadlines(
   const today = todayKey(tz);
   const lastKey = addDaysToKey(today, withinDays);
   const windowBounds = dateOnlyRange(today, lastKey);
-  const base = { status: "open", matter: { isArchived: false } };
+  // Matter wall: only deadlines on matters the viewer can access.
+  const wallMatter = await matterAccessWhere(await getCurrentUserId());
+  const base = {
+    status: "open",
+    matter: { ...wallMatter, isArchived: false },
+  };
   const select = {
     id: true,
     title: true,
@@ -562,9 +615,12 @@ const priorityRank = (priority: string): number => {
  */
 export async function getMyOpenTasks(tz: string): Promise<MyTasksGrouped> {
   const userId = await getCurrentUserId();
+  // Matter wall: firm-wide tasks (no matter) stay; matter tasks need
+  // access to the matter.
   const where = {
     ownerId: userId,
     status: { notIn: [...TASK_CLOSED_STATUSES] },
+    AND: await optionalMatterAccessClause(userId),
   };
 
   const [tasks, total, overdueCount] = await Promise.all([

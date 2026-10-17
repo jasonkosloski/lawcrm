@@ -35,6 +35,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { optionalMatterAccessClause } from "@/lib/matter-access";
 import {
   isBlobKey,
   openReadStream,
@@ -69,7 +70,14 @@ export async function GET(
   const attachment = await prisma.emailAttachment.findFirst({
     where: {
       id,
-      message: { thread: { account: { userId: session.user.id } } },
+      message: {
+        thread: {
+          account: { userId: session.user.id },
+          // Matter wall: a thread filed to a matter the user can't
+          // access 404s (unfiled threads stay readable).
+          AND: await optionalMatterAccessClause(session.user.id),
+        },
+      },
     },
     select: { id: true, filename: true },
   });

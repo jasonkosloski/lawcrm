@@ -34,6 +34,9 @@ vi.mock("@/lib/prisma", () => ({
     $transaction: vi.fn(),
   },
 }));
+vi.mock("@/lib/matter-access", () => ({
+  canAccessMatter: vi.fn(async () => true),
+}));
 vi.mock("@/lib/activity-log", () => ({ logActivity: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/file-storage", async (importOriginal) => {

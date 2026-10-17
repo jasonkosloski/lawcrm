@@ -32,13 +32,14 @@
  *     calendar-visibility.ts). Private events a viewer can't see
  *     never match and never leak snippets — they're dropped before
  *     any hit/snippet is built.
- *   - Time entries flagged `privileged` only match on their
- *     `narrative` for the entry's AUTHOR. The privilege flag exists
- *     precisely to keep that content out of casual surfaces; the
- *     `activity` line is billing-grade metadata and stays searchable.
- *     (Open policy question: the matter/intake Time tabs still show
- *     every viewer the narrative, so search is currently stricter
- *     than those surfaces.)
+ *   - Matter access (ethical walls, src/lib/matter-access.ts): every
+ *     matter-scoped group (matters, notes, documents, tasks, deadlines,
+ *     events, time, messages) only matches rows on matters the viewer
+ *     may see, in the SQL where so counts agree. Email/message hits
+ *     filed to a hidden matter drop the matter name.
+ *   - Time entries: a `privileged` narrative is searchable and quoted
+ *     for anyone who can access the entry's matter (hidden matters are
+ *     already filtered out above), matching the Time tabs.
  *   - Contacts: active only, merged losers (`mergedIntoId` set)
  *     excluded — same posture as the contacts directory.
  *
@@ -55,6 +56,12 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { visibleEmailThreadWhere } from "@/lib/email-visibility";
 import { canViewEventDetails } from "@/lib/calendar-visibility";
+import {
+  filterAccessibleMatterIds,
+  matterAccessWhere,
+  matterRelationAccessWhere,
+  optionalMatterAccessClause,
+} from "@/lib/matter-access";
 import {
   SNIPPET_MARK_END,
   SNIPPET_MARK_START,
@@ -233,6 +240,9 @@ export async function globalSearch(
   );
   const viewerId = await getCurrentUserId();
   const qLower = q.toLowerCase();
+  const accessMatter = await matterAccessWhere(viewerId);
+  const accessRel = await matterRelationAccessWhere(viewerId);
+  const accessOpt = await optionalMatterAccessClause(viewerId);
 
   /** Shared ILIKE fragment (LIKE metacharacters escaped). */
   const ci = { contains: escapeLike(q), mode: "insensitive" as const };
@@ -257,6 +267,7 @@ export async function globalSearch(
     // ("2026-CV-00481", the other side's name), and the palette only
     // preloads active matters.
     const where = {
+      AND: [accessMatter],
       OR: [
         { name: ci },
         { description: ci },
@@ -394,7 +405,7 @@ export async function globalSearch(
     // hits are found. `total` is the SQL count minus the markup-only
     // rows we scanned: exact when the scan reached the end, an upper
     // bound otherwise — gone once FTS indexes the stripped text.
-    const where = { OR: ciHtml.map((c) => ({ content: c })) };
+    const where = { ...accessRel, OR: ciHtml.map((c) => ({ content: c })) };
     const total = await prisma.note.count({ where });
     const hits: SearchHit[] = [];
     let markupOnly = 0;
@@ -435,7 +446,7 @@ export async function globalSearch(
   const searchDocuments = async (): Promise<SearchGroup> => {
     // Document has no description column (the schema is the truth
     // here) — name is the only text field worth matching.
-    const where = { name: ci };
+    const where = { ...accessRel, name: ci };
     const [rows, total] = await Promise.all([
       prisma.document.findMany({
         where,
@@ -467,7 +478,10 @@ export async function globalSearch(
   };
 
   const searchTasks = async (): Promise<SearchGroup> => {
-    const where = { OR: [{ title: ci }, { description: ci }] };
+    const where = {
+      AND: [...accessOpt],
+      OR: [{ title: ci }, { description: ci }],
+    };
     const [rows, total] = await Promise.all([
       prisma.task.findMany({
         where,
@@ -500,7 +514,7 @@ export async function globalSearch(
   };
 
   const searchDeadlines = async (): Promise<SearchGroup> => {
-    const where = { OR: [{ title: ci }, { description: ci }] };
+    const where = { ...accessRel, OR: [{ title: ci }, { description: ci }] };
     const [rows, total] = await Promise.all([
       prisma.deadline.findMany({
         where,
@@ -540,7 +554,10 @@ export async function globalSearch(
     // `total` is the visible count within a CANDIDATE_CAP window
     // (a documented v1 approximation).
     const candidates = await prisma.calendarEvent.findMany({
-      where: { OR: [{ title: ci }, { description: ci }, { location: ci }] },
+      where: {
+        AND: [...accessOpt],
+        OR: [{ title: ci }, { description: ci }, { location: ci }],
+      },
       select: {
         id: true,
         title: true,
@@ -623,6 +640,7 @@ export async function globalSearch(
     const total = await prisma.emailThread.count({ where });
     const hits: SearchHit[] = [];
     let markupOnly = 0;
+    // Matter names on a thread filed to a hidden matter are withheld.
     // Page through candidate threads (newest first, stable order)
     // until `take` verified hits, bounded like the notes scan so a
     // markup-only query ("style", "center") can't become a full
@@ -634,6 +652,7 @@ export async function globalSearch(
           id: true,
           subject: true,
           snippet: true,
+          matterId: true,
           matter: { select: { name: true } },
           messages: {
             where: bodyMatch,
@@ -646,6 +665,10 @@ export async function globalSearch(
         skip: page * EMAIL_SCAN_PAGE,
         take: EMAIL_SCAN_PAGE,
       });
+      const visibleMatters = await filterAccessibleMatterIds(
+        viewerId,
+        rows.flatMap((r) => (r.matterId ? [r.matterId] : []))
+      );
       for (const t of rows) {
         if (hits.length >= take) break;
         const snippetCol = makeSnippet(t.snippet, q);
@@ -692,7 +715,10 @@ export async function globalSearch(
           title: t.subject || "(no subject)",
           snippet: snippetCol ?? bodySnippet,
           href: `/communication?view=email&thread=${t.id}`,
-          context: t.matter?.name ?? null,
+          context:
+            t.matterId && !visibleMatters.has(t.matterId)
+              ? null
+              : (t.matter?.name ?? null),
         });
       }
       if (hits.length >= take || rows.length < EMAIL_SCAN_PAGE) break;
@@ -713,7 +739,24 @@ export async function globalSearch(
   const searchMessages = async (): Promise<SearchGroup> => {
     // SMS bodies + voicemail/call transcripts. Hits deep-link to
     // the thread (per-item anchors don't exist yet).
-    const where = { OR: [{ body: ci }, { transcript: ci }] };
+    // Effective matter = item override ?? thread default; items
+    // resolving to a hidden matter are dropped.
+    const where = {
+      AND: [
+        ...(Object.keys(accessMatter).length === 0
+          ? []
+          : [
+              {
+                OR: [
+                  { matterId: null, thread: { defaultMatterId: null } },
+                  { matter: accessMatter },
+                  { matterId: null, thread: { defaultMatter: accessMatter } },
+                ],
+              },
+            ]),
+      ],
+      OR: [{ body: ci }, { transcript: ci }],
+    };
     const [rows, total] = await Promise.all([
       prisma.messengerItem.findMany({
         where,
@@ -756,21 +799,13 @@ export async function globalSearch(
   };
 
   const searchTime = async (): Promise<SearchGroup> => {
-    // The `privileged` flag exists precisely to keep narrative
-    // content out of casual surfaces (privilege / work-product
-    // review): a privileged entry's narrative only matches — and is
-    // only ever quoted — for the entry's author. The activity line
-    // is billing metadata and stays searchable for everyone.
+    // Matter access gates the entry (hidden matters never match).
+    // For entries the viewer can reach, a privileged narrative is
+    // searchable and quotable like any other (the Time tabs show it
+    // to the same people).
     const where = {
-      OR: [
-        { activity: ci },
-        {
-          AND: [
-            { narrative: ci },
-            { OR: [{ privileged: false }, { userId: viewerId }] },
-          ],
-        },
-      ],
+      AND: [...accessOpt],
+      OR: [{ activity: ci }, { narrative: ci }],
     };
     const [rows, total] = await Promise.all([
       prisma.timeEntry.findMany({
@@ -779,8 +814,6 @@ export async function globalSearch(
           id: true,
           activity: true,
           narrative: true,
-          privileged: true,
-          userId: true,
           matterId: true,
           matter: { select: { name: true } },
           // Lead-scoped (intake) entries have no matter — exactly one
@@ -798,14 +831,13 @@ export async function globalSearch(
       type: "time",
       total,
       hits: rows.map((t) => {
-        const canQuoteNarrative = !t.privileged || t.userId === viewerId;
         return {
           type: "time",
           id: t.id,
           title: clip(t.activity),
           snippet:
             makeSnippet(t.activity, q) ??
-            (canQuoteNarrative ? makeSnippet(t.narrative, q) : null),
+            makeSnippet(t.narrative, q),
           // Intake entries route to the lead's Time tab; the
           // no-scope fallback (invariant breach) degrades to the
           // standalone /time page rather than a broken matter link.

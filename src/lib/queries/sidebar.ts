@@ -19,6 +19,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { matterAccessWhere } from "@/lib/matter-access";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { dateOnlyRange, todayKey } from "@/lib/format-date";
 import { currentUserHasPermission } from "@/lib/permission-check";
@@ -73,6 +74,10 @@ export async function getSidebarData(): Promise<SidebarData> {
   // date-only UTC-midnight value — ADR-012), not the server's.
   const tz = await getCurrentUserTimeZone();
   const today = todayKey(tz);
+  // Ethical walls: every matter-derived figure is scoped to what the
+  // viewer may see.
+  const access = await matterAccessWhere(currentUserId);
+  const openWhere = { ...OPEN_MATTER_WHERE, ...access };
 
   const [
     user,
@@ -89,7 +94,7 @@ export async function getSidebarData(): Promise<SidebarData> {
       where: { id: currentUserId },
       select: { id: true, name: true, initials: true, jobTitle: true },
     }),
-    prisma.matter.count({ where: OPEN_MATTER_WHERE }),
+    prisma.matter.count({ where: openWhere }),
     // Own mailbox only (never coworkers' unread volume), and archived
     // threads don't count — the badge means "unread in my inbox".
     prisma.emailThread.count({
@@ -105,7 +110,10 @@ export async function getSidebarData(): Promise<SidebarData> {
     // Pinned matters for this user only, ordered by the pin createdAt
     // (most recently pinned first).
     prisma.userMatterPin.findMany({
-      where: { userId: currentUserId, matter: { isArchived: false } },
+      where: {
+        userId: currentUserId,
+        matter: { ...access, isArchived: false },
+      },
       orderBy: { createdAt: "desc" },
       select: {
         matter: {
@@ -120,7 +128,7 @@ export async function getSidebarData(): Promise<SidebarData> {
     }),
     prisma.matter.groupBy({
       by: ["practiceAreaId"],
-      where: OPEN_MATTER_WHERE,
+      where: openWhere,
       _count: true,
     }),
     // Fetch ALL areas (including retired ones): open matters in a
