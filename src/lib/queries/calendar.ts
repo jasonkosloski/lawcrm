@@ -5,12 +5,30 @@
  * shaped for the week/month views. Both are rendered together —
  * deadlines are time-less (due by end-of-day) and get distinct
  * visual treatment.
+ *
+ * ## Dates (ADR-012)
+ *
+ * The caller passes the range as INSTANTS (the viewer's first
+ * midnight to last 23:59, from `calendarWeekInTz` & co.). Two kinds of
+ * rows are matched against it differently:
+ *
+ *   - Timed events are instants: matched by OVERLAP with the range, so
+ *     an event that started before it (or spans midnight) still shows.
+ *   - Deadlines (`dueDate`) and all-day events are date-only values
+ *     stored at UTC midnight. The range is converted to inclusive day
+ *     keys in the viewer's zone and matched with `dateOnlyRange`;
+ *     filtering them by the instant range misplaces them by a day for
+ *     anyone west of UTC. Consumers bucket them with `dateOnlyKey`
+ *     (never `dateKeyInTz`) — see `eventDayKeys` in calendar-utils.
  */
 
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/generated/prisma/client";
 import { sanitizeUserHtml } from "@/lib/sanitize-html";
 import { getCurrentUserId } from "@/lib/current-user";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { canViewEventDetails } from "@/lib/calendar-visibility";
+import { dateKeyInTz, dateOnlyRange } from "@/lib/format-date";
 
 export type CalendarEventRow = {
   id: string;
@@ -56,10 +74,48 @@ export type CalendarDeadlineRow = {
 
 export type CalendarItem = CalendarEventRow | CalendarDeadlineRow;
 
+/** Inclusive first/last day keys of an instant range, in the viewer's
+ *  zone, as the date-only bounds deadlines and all-day events match. */
+function dayBoundsOf(rangeStart: Date, rangeEnd: Date, tz: string) {
+  return dateOnlyRange(dateKeyInTz(rangeStart, tz), dateKeyInTz(rangeEnd, tz));
+}
+
+/** Prisma `where` selecting the events that touch the range:
+ *  timed events by instant overlap, all-day events by day-key overlap.
+ *  (A timed event ending exactly at the range start doesn't count,
+ *  but a zero-length one starting at it does.) */
+function eventsInRangeWhere(
+  rangeStart: Date,
+  rangeEnd: Date,
+  tz: string
+): Prisma.CalendarEventWhereInput {
+  const days = dayBoundsOf(rangeStart, rangeEnd, tz);
+  return {
+    OR: [
+      {
+        isAllDay: false,
+        startTime: { lte: rangeEnd },
+        OR: [
+          { endTime: { gt: rangeStart } },
+          { startTime: { gte: rangeStart } },
+        ],
+      },
+      {
+        isAllDay: true,
+        startTime: { lt: days.lt },
+        endTime: { gte: days.gte },
+      },
+    ],
+  };
+}
+
 export async function getCalendarItems(
   rangeStart: Date,
-  rangeEnd: Date
+  rangeEnd: Date,
+  /** The viewer's zone; resolved from the session when omitted. */
+  tzArg?: string
 ): Promise<CalendarItem[]> {
+  const tz = tzArg ?? (await getCurrentUserTimeZone());
   // The visibility resolver runs per-event (creator + attendee
   // + matter team + per-event override + creator's user-default
   // override). To answer those questions we pull:
@@ -70,9 +126,7 @@ export async function getCalendarItems(
   const viewerId = await getCurrentUserId();
   const [events, deadlines] = await Promise.all([
     prisma.calendarEvent.findMany({
-      where: {
-        startTime: { gte: rangeStart, lte: rangeEnd },
-      },
+      where: eventsInRangeWhere(rangeStart, rangeEnd, tz),
       include: {
         matter: {
           select: {
@@ -99,7 +153,7 @@ export async function getCalendarItems(
     }),
     prisma.deadline.findMany({
       where: {
-        dueDate: { gte: rangeStart, lte: rangeEnd },
+        dueDate: dayBoundsOf(rangeStart, rangeEnd, tz),
         status: "open",
       },
       include: {
@@ -405,9 +459,9 @@ export async function getEventTimeEntries(
 
 /** Notes directly attached to a specific calendar event (calendarEventId
  *  FK). Sorted pinned-first / most-recent-first so the most important
- *  court notes surface at the top. Replies (notes with parentNoteId
- *  set) are included only when their parent is also attached to this
- *  event — keeps the modal focused without fragmenting threads. */
+ *  court notes surface at the top. Every note carrying the event's id
+ *  is returned flat — replies (parentNoteId set) are NOT threaded or
+ *  filtered here; the matter's Notes tab is the threaded surface. */
 export async function getEventNotes(eventId: string): Promise<EventNote[]> {
   const rows = await prisma.note.findMany({
     where: { calendarEventId: eventId },
@@ -426,31 +480,29 @@ export async function getEventNotes(eventId: string): Promise<EventNote[]> {
   }));
 }
 
-/** Summary counts for the top-bar crumb. */
+/** Summary counts for the top-bar crumb. Same matching rules as
+ *  `getCalendarItems` (overlap for events, day keys for deadlines). */
 export async function getCalendarSummary(
   rangeStart: Date,
-  rangeEnd: Date
+  rangeEnd: Date,
+  /** The viewer's zone; resolved from the session when omitted. */
+  tzArg?: string
 ): Promise<{
   events: number;
   deadlines: number;
   criticalDeadlines: number;
 }> {
+  const tz = tzArg ?? (await getCurrentUserTimeZone());
+  const days = dayBoundsOf(rangeStart, rangeEnd, tz);
   const [events, deadlines, critical] = await Promise.all([
     prisma.calendarEvent.count({
-      where: { startTime: { gte: rangeStart, lte: rangeEnd } },
+      where: eventsInRangeWhere(rangeStart, rangeEnd, tz),
     }),
     prisma.deadline.count({
-      where: {
-        dueDate: { gte: rangeStart, lte: rangeEnd },
-        status: "open",
-      },
+      where: { dueDate: days, status: "open" },
     }),
     prisma.deadline.count({
-      where: {
-        dueDate: { gte: rangeStart, lte: rangeEnd },
-        status: "open",
-        kind: "critical",
-      },
+      where: { dueDate: days, status: "open", kind: "critical" },
     }),
   ]);
   return { events, deadlines, criticalDeadlines: critical };

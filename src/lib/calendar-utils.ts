@@ -10,11 +10,19 @@ import {
   addDays,
   addMonths,
   format,
+  isValid,
   parseISO,
   startOfDay,
   startOfMonth,
 } from "date-fns";
-import { dateKeyInTz, instantInTz } from "@/lib/format-date";
+import {
+  addDaysToKey,
+  dateKeyInTz,
+  dateOnlyKey,
+  instantInTz,
+  toWallClockInput,
+  type DayKey,
+} from "@/lib/format-date";
 
 export type CalendarView = "week" | "month" | "day";
 export const DEFAULT_VIEW: CalendarView = "week";
@@ -49,15 +57,23 @@ export function filterCalendarItems<T extends { kind: "event" | "deadline" }>(
  * 0 = Sunday (US convention), 1 = Monday (European / ISO convention).
  * Currently a module-level constant — when the `UserPreferences` model
  * lands, this will become a per-user setting resolved via the current
- * user context. Every caller that needs week-start goes through here,
- * so swapping is a single edit.
+ * user context.
+ *
+ * NOT yet a single edit: the range helpers `calendarWeekInTz` and
+ * `calendarMonthGridInTz` (format-date.ts) hard-code a Sunday start, so
+ * flipping this alone would put Monday-first header labels over
+ * Sunday-first query ranges and day columns. Thread it through those
+ * helpers (and the views that build their own header rows) first.
  */
 export const WEEK_STARTS_ON: 0 | 1 = 0;
 
-/** True if the given date falls on Saturday or Sunday. Used to give
- *  weekend cells/columns a subtle warm tint in the calendar views. */
+/** True if the given calendar day falls on Saturday or Sunday. Used to
+ *  give weekend cells/columns a subtle warm tint in the calendar views.
+ *  Takes the views' day convention — noon UTC of the calendar day
+ *  (`calendarWeekInTz().days`) — and reads its UTC weekday, so the
+ *  answer is the same on the server and in any browser zone. */
 export function isWeekend(date: Date): boolean {
-  const d = date.getDay();
+  const d = date.getUTCDay();
   return d === 0 || d === 6;
 }
 
@@ -98,11 +114,11 @@ export function parseCalendarParams(
   const rawDate = Array.isArray(sp.d) ? sp.d[0] : sp.d;
   let focal: Date;
   if (rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
-    try {
-      focal = startOfDay(parseISO(rawDate));
-    } catch {
-      focal = todayFocal();
-    }
+    // parseISO returns an Invalid Date (it doesn't throw) for an
+    // impossible day like 2026-02-30 or month 13; passing that on
+    // crashes every range helper downstream, so fall back to today.
+    const parsed = parseISO(rawDate);
+    focal = isValid(parsed) ? startOfDay(parsed) : todayFocal();
   } else {
     focal = todayFocal();
   }
@@ -201,9 +217,25 @@ export function formatHourLabel(hour: number): string {
   return `${h12}${suffix}`;
 }
 
-/** Position an event's top offset (in px) within the hour grid. */
-export function eventTopPx(start: Date): number {
-  const h = start.getHours() + start.getMinutes() / 60;
+/** Hour-of-day (fractional) of an instant: in `tz` when given, else in
+ *  the runtime's zone. Pass `tz` — the runtime zone differs between the
+ *  UTC server render and the browser, so a tz-less chip is positioned
+ *  differently on each (and a 9:00 MDT event lands in the 3 pm slot on
+ *  the server). */
+function fractionalHour(d: Date, tz?: string | null): number {
+  if (!tz) return d.getHours() + d.getMinutes() / 60;
+  const [h, m] = toWallClockInput(d, tz).slice(11).split(":").map(Number) as [
+    number,
+    number,
+  ];
+  return h + m / 60;
+}
+
+/** Position an event's top offset (in px) within the hour grid. Pass
+ *  the viewer's zone (`useUserTimeZone()`) so server render and
+ *  hydration agree. */
+export function eventTopPx(start: Date, tz?: string | null): number {
+  const h = fractionalHour(start, tz);
   const from = HOURS[0];
   return (h - from) * HOUR_HEIGHT_PX;
 }
@@ -215,10 +247,23 @@ export function eventHeightPx(start: Date, end: Date): number {
 }
 
 /** Top offset (px) of the "now" line within the hour grid, or null if
- *  `now` is not on `day` or is outside the visible hour range. */
-export function nowOffsetPx(now: Date, day: Date): number | null {
-  if (now.toDateString() !== day.toDateString()) return null;
-  const h = now.getHours() + now.getMinutes() / 60;
+ *  `now` is not on `day` or is outside the visible hour range.
+ *
+ *  With `tz`, `day` is the views' noon-UTC calendar day and "is `now`
+ *  on it" means the viewer's calendar date (`dateKeyInTz`) equals the
+ *  day's UTC date. Without `tz` both are compared in the runtime zone
+ *  (legacy — differs between server render and browser). */
+export function nowOffsetPx(
+  now: Date,
+  day: Date,
+  tz?: string | null
+): number | null {
+  if (tz) {
+    if (dateKeyInTz(now, tz) !== dateOnlyKey(day)) return null;
+  } else if (now.toDateString() !== day.toDateString()) {
+    return null;
+  }
+  const h = fractionalHour(now, tz);
   const from = HOURS[0];
   const to = HOURS[HOURS.length - 1] + 1;
   if (h < from || h > to) return null;
@@ -329,4 +374,56 @@ export function layoutOverlappingEvents<T extends LayoutInput>(
   flushCluster();
 
   return result;
+}
+
+// ── Which days does an event cover? ────────────────────────────────────
+
+/** Hard stop so a corrupt multi-year event can't fan out thousands of
+ *  day buckets. */
+const MAX_EVENT_DAYS = 366;
+
+/**
+ * Every calendar day (`YYYY-MM-DD`) an event touches, for bucketing a
+ * multi-day event into each of its day cells.
+ *
+ *  - All-day events are date-only values (ADR-012): first/last day are
+ *    `dateOnlyKey(start)` / `dateOnlyKey(end)` (the end is INCLUSIVE),
+ *    no zone applied.
+ *  - Timed events are instants: days in the viewer's `tz`. An event
+ *    ending exactly at midnight does not touch the next day.
+ *
+ * `within` (inclusive keys, e.g. the visible week) clips the result.
+ */
+export function eventDayKeys(
+  event: { startTime: Date; endTime: Date; isAllDay: boolean },
+  tz: string,
+  within?: { first: DayKey; last: DayKey }
+): DayKey[] {
+  let first: DayKey;
+  let last: DayKey;
+  if (event.isAllDay) {
+    first = dateOnlyKey(event.startTime);
+    last = dateOnlyKey(event.endTime);
+  } else {
+    first = dateKeyInTz(event.startTime, tz);
+    last = dateKeyInTz(event.endTime, tz);
+    const endsAtMidnight =
+      event.endTime.getTime() > event.startTime.getTime() &&
+      toWallClockInput(event.endTime, tz).endsWith("T00:00");
+    if (endsAtMidnight && last > first) last = addDaysToKey(last, -1);
+  }
+  if (last < first) last = first;
+  if (within) {
+    if (first < within.first) first = within.first;
+    if (last > within.last) last = within.last;
+  }
+  const keys: DayKey[] = [];
+  for (
+    let k = first;
+    k <= last && keys.length < MAX_EVENT_DAYS;
+    k = addDaysToKey(k, 1)
+  ) {
+    keys.push(k);
+  }
+  return keys;
 }

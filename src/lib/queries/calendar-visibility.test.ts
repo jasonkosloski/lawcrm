@@ -21,12 +21,19 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
+// The calendar queries match date-only rows by the viewer's day keys;
+// current-user-tz is server-only, so stub the viewer's profile zone.
+vi.mock("@/lib/current-user-tz", () => ({
+  getCurrentUserTimeZone: vi.fn(async () => "America/Denver"),
+}));
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { dateOnlyKey, instantInTz } from "@/lib/format-date";
 import {
   getCalendarEventById,
   getCalendarItems,
+  getCalendarSummary,
 } from "@/lib/queries/calendar";
 import {
   getMatterDeadlines,
@@ -498,5 +505,194 @@ describe("event labels on sibling matter tabs — same Busy rule", () => {
     expect(t.spawnedFrom?.label).toBe("Strategy session");
     const [n] = await getMatterNotes(matterId);
     expect(n.link?.label).toBe("Strategy session");
+  });
+});
+
+// ── ADR-012: date-only deadlines / all-day events, overlap ─────────────
+//
+// Deadlines and all-day events are calendar dates stored at UTC midnight.
+// The range the page passes is the viewer's local day/week as INSTANTS
+// (Denver midnight = 06:00Z), so filtering them by that range put every
+// due date one day early for anyone west of UTC.
+
+describe("getCalendarItems / getCalendarSummary — date-only values and overlap", () => {
+  const DENVER = "America/Denver";
+  /** Denver local day/week bounds as the page builds them. */
+  const dayRange = (y: number, m: number, d: number, tz = DENVER) => ({
+    start: instantInTz(y, m, d, 0, 0, tz),
+    end: instantInTz(y, m, d, 23, 59, tz),
+  });
+
+  const mkDeadline = (title: string, dueDate: string) =>
+    prisma.deadline.create({
+      data: { matterId, title, dueDate: new Date(dueDate), kind: "critical" },
+    });
+
+  const titles = (items: Awaited<ReturnType<typeof getCalendarItems>>) =>
+    items.map((i) => i.title).sort();
+
+  test("day view: a deadline due the viewed day shows; tomorrow's and yesterday's do not", async () => {
+    await mkDeadline("due Apr 12", "2026-04-12T00:00:00Z");
+    await mkDeadline("due Apr 13", "2026-04-13T00:00:00Z");
+    await mkDeadline("due Apr 14", "2026-04-14T00:00:00Z");
+    const { start, end } = dayRange(2026, 4, 13);
+    const items = await getCalendarItems(start, end, DENVER);
+    expect(titles(items)).toEqual(["due Apr 13"]);
+    const deadline = items.find((i) => i.kind === "deadline");
+    // The row hands back the stored date-only value untouched; the
+    // views key it with dateOnlyKey().
+    expect(
+      deadline?.kind === "deadline" && dateOnlyKey(deadline.dueDate)
+    ).toBe("2026-04-13");
+  });
+
+  test("week view: Sunday through Saturday inclusive, nothing outside", async () => {
+    await mkDeadline("Sat Apr 11", "2026-04-11T00:00:00Z");
+    await mkDeadline("Sun Apr 12", "2026-04-12T00:00:00Z");
+    await mkDeadline("Sat Apr 18", "2026-04-18T00:00:00Z");
+    await mkDeadline("Sun Apr 19", "2026-04-19T00:00:00Z");
+    const start = dayRange(2026, 4, 12).start;
+    const end = dayRange(2026, 4, 18).end;
+    const items = await getCalendarItems(start, end, DENVER);
+    expect(titles(items)).toEqual(["Sat Apr 18", "Sun Apr 12"]);
+  });
+
+  test("legacy rows stored at a Denver laptop's local midnight still land on their day", async () => {
+    await mkDeadline("legacy Apr 13", "2026-04-13T06:00:00Z");
+    const { start, end } = dayRange(2026, 4, 13);
+    expect(titles(await getCalendarItems(start, end, DENVER))).toEqual([
+      "legacy Apr 13",
+    ]);
+  });
+
+  test("the viewer's zone decides which day the range covers (Tokyo)", async () => {
+    await mkDeadline("due Apr 13", "2026-04-13T00:00:00Z");
+    await mkDeadline("due Apr 14", "2026-04-14T00:00:00Z");
+    const { start, end } = dayRange(2026, 4, 13, "Asia/Tokyo");
+    expect(titles(await getCalendarItems(start, end, "Asia/Tokyo"))).toEqual([
+      "due Apr 13",
+    ]);
+  });
+
+  test("zone defaults to the session user's profile zone when omitted", async () => {
+    await mkDeadline("due Apr 13", "2026-04-13T00:00:00Z");
+    const { start, end } = dayRange(2026, 4, 13);
+    expect(titles(await getCalendarItems(start, end))).toEqual(["due Apr 13"]);
+  });
+
+  test("summary counts follow the same day-key rule", async () => {
+    await mkDeadline("due Apr 12", "2026-04-12T00:00:00Z");
+    await mkDeadline("due Apr 13", "2026-04-13T00:00:00Z");
+    await prisma.deadline.create({
+      data: {
+        matterId,
+        title: "manual Apr 13",
+        dueDate: new Date("2026-04-13T00:00:00Z"),
+        kind: "manual",
+      },
+    });
+    const { start, end } = dayRange(2026, 4, 13);
+    const summary = await getCalendarSummary(start, end, DENVER);
+    expect(summary.deadlines).toBe(2);
+    expect(summary.criticalDeadlines).toBe(1);
+  });
+
+  test("an all-day event stored at UTC midnight shows on its own day view", async () => {
+    await prisma.calendarEvent.create({
+      data: {
+        title: "Trial day",
+        isAllDay: true,
+        startTime: new Date("2026-04-13T00:00:00Z"),
+        endTime: new Date("2026-04-13T00:00:00Z"),
+        createdById: creatorId,
+      },
+    });
+    const sameDay = dayRange(2026, 4, 13);
+    expect(
+      titles(await getCalendarItems(sameDay.start, sameDay.end, DENVER))
+    ).toEqual(["Busy"]);
+    const dayBefore = dayRange(2026, 4, 12);
+    expect(
+      await getCalendarItems(dayBefore.start, dayBefore.end, DENVER)
+    ).toHaveLength(0);
+    const dayAfter = dayRange(2026, 4, 14);
+    expect(
+      await getCalendarItems(dayAfter.start, dayAfter.end, DENVER)
+    ).toHaveLength(0);
+  });
+
+  test("a multi-day all-day event appears in every day and week it covers", async () => {
+    await prisma.calendarEvent.create({
+      data: {
+        title: "Trial",
+        isAllDay: true,
+        startTime: new Date("2026-07-10T00:00:00Z"), // Fri
+        endTime: new Date("2026-07-13T00:00:00Z"), // Mon
+        createdById: creatorId,
+      },
+    });
+    for (const [y, m, d, expected] of [
+      [2026, 7, 9, 0],
+      [2026, 7, 10, 1],
+      [2026, 7, 11, 1],
+      [2026, 7, 12, 1],
+      [2026, 7, 13, 1],
+      [2026, 7, 14, 0],
+    ] as const) {
+      const r = dayRange(y, m, d);
+      expect(
+        (await getCalendarItems(r.start, r.end, DENVER)).length
+      ).toBe(expected);
+    }
+    // The following week (Sun Jul 12 - Sat Jul 18) still shows it.
+    const week = {
+      start: dayRange(2026, 7, 12).start,
+      end: dayRange(2026, 7, 18).end,
+    };
+    expect(
+      (await getCalendarItems(week.start, week.end, DENVER)).length
+    ).toBe(1);
+    expect((await getCalendarSummary(week.start, week.end, DENVER)).events).toBe(
+      1
+    );
+  });
+
+  test("a timed event that started before the range and runs into it is included", async () => {
+    await prisma.calendarEvent.create({
+      data: {
+        title: "Overnight",
+        startTime: new Date("2026-04-13T03:00:00Z"), // Apr 12 9 PM MDT
+        endTime: new Date("2026-04-13T08:00:00Z"), // Apr 13 2 AM MDT
+        createdById: creatorId,
+      },
+    });
+    const { start, end } = dayRange(2026, 4, 13);
+    expect((await getCalendarItems(start, end, DENVER)).length).toBe(1);
+  });
+
+  test("a timed event that ends exactly at the range start is not on that day", async () => {
+    await prisma.calendarEvent.create({
+      data: {
+        title: "Ends at midnight",
+        startTime: new Date("2026-04-13T05:00:00Z"),
+        endTime: new Date("2026-04-13T06:00:00Z"), // Apr 13 00:00 MDT
+        createdById: creatorId,
+      },
+    });
+    const { start, end } = dayRange(2026, 4, 13);
+    expect(await getCalendarItems(start, end, DENVER)).toHaveLength(0);
+  });
+
+  test("a zero-length timed event at the range start is included", async () => {
+    await prisma.calendarEvent.create({
+      data: {
+        title: "Instant",
+        startTime: new Date("2026-04-13T06:00:00Z"),
+        endTime: new Date("2026-04-13T06:00:00Z"),
+        createdById: creatorId,
+      },
+    });
+    const { start, end } = dayRange(2026, 4, 13);
+    expect(await getCalendarItems(start, end, DENVER)).toHaveLength(1);
   });
 });

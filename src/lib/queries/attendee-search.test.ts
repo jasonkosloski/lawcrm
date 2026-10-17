@@ -232,7 +232,9 @@ describe("searchAttendees", () => {
     const out = await searchAttendees("Match");
     const userCount = out.filter((r) => r.kind === "user").length;
     const contactCount = out.filter((r) => r.kind === "contact").length;
-    expect(userCount).toBeLessThanOrEqual(6);
-    expect(contactCount).toBeLessThanOrEqual(6);
+    // 8 of each match, so the cap must bite at exactly 6 (a `<=` would
+    // also pass if a regression returned nothing at all).
+    expect(userCount).toBe(6);
+    expect(contactCount).toBe(6);
   });
 });

@@ -9,6 +9,7 @@ import {
   DEFAULT_VIEW,
   buildCalendarHref,
   calendarDayInTz,
+  eventDayKeys,
   eventHeightPx,
   eventTopPx,
   filterCalendarItems,
@@ -557,5 +558,175 @@ describe("layoutOverlappingEvents", () => {
     expect(byId.a!.laneCount).toBe(2);
     expect(byId.b!.laneCount).toBe(2);
     expect(byId.d!.laneCount).toBe(1);
+  });
+});
+
+// ── ADR-012 additions ──────────────────────────────────────────────────
+
+describe("parseCalendarParams — impossible dates", () => {
+  const TZ = "America/Denver";
+  const NOW = new Date("2026-04-28T02:00:00Z"); // Apr 27, 8 PM in Denver
+
+  test.each(["2026-02-30", "2026-02-31", "2025-02-29", "2026-13-01", "2026-00-10", "2026-04-31"])(
+    "?d=%s falls back to today instead of an Invalid Date",
+    (d) => {
+      const { focal } = parseCalendarParams({ d }, TZ, NOW);
+      expect(Number.isNaN(focal.getTime())).toBe(false);
+      expect(toDateParam(focal)).toBe("2026-04-27");
+    }
+  );
+
+  test("a leap day in a leap year is honored", () => {
+    const { focal } = parseCalendarParams({ d: "2028-02-29" }, TZ, NOW);
+    expect(toDateParam(focal)).toBe("2028-02-29");
+  });
+
+  test("an impossible date no longer crashes the range helpers", () => {
+    const { focal } = parseCalendarParams({ d: "2026-02-30", view: "day" }, TZ, NOW);
+    expect(() => calendarDayInTz(focal, TZ)).not.toThrow();
+  });
+});
+
+describe("eventTopPx / nowOffsetPx with the viewer's zone", () => {
+  // 9:00 AM MDT = 15:00Z. Without tz the answer depends on the host
+  // zone (UTC server: the 3 pm slot; Denver browser: the 9 am slot).
+  const nineAmDenver = new Date("2026-06-10T15:00:00Z");
+
+  test("eventTopPx(start, tz) positions by the viewer's wall clock on any host", () => {
+    expect(eventTopPx(nineAmDenver, "America/Denver")).toBe(
+      (9 - HOURS[0]!) * HOUR_HEIGHT_PX
+    );
+    // Same instant for a Tokyo viewer is midnight the next day (00:00),
+    // above the 6 am grid start -> negative top, not the Denver slot.
+    expect(eventTopPx(nineAmDenver, "Asia/Tokyo")).toBe(
+      (0 - HOURS[0]!) * HOUR_HEIGHT_PX
+    );
+  });
+
+  test("eventTopPx handles half hours in the viewer's zone", () => {
+    expect(eventTopPx(new Date("2026-06-10T15:30:00Z"), "America/Denver")).toBe(
+      (9.5 - HOURS[0]!) * HOUR_HEIGHT_PX
+    );
+  });
+
+  test("nowOffsetPx(now, day, tz): the day is matched on the viewer's calendar date", () => {
+    // Noon-UTC convention for a calendar day (calendarWeekInTz().days).
+    const june10 = new Date("2026-06-10T12:00:00Z");
+    const june11 = new Date("2026-06-11T12:00:00Z");
+    // 9:00 PM MDT on Jun 10 is 03:00Z Jun 11: still Jun 10 for Denver.
+    const now = new Date("2026-06-11T03:00:00Z");
+    expect(nowOffsetPx(now, june10, "America/Denver")).toBe(
+      (21 - HOURS[0]!) * HOUR_HEIGHT_PX
+    );
+    expect(nowOffsetPx(now, june11, "America/Denver")).toBeNull();
+  });
+
+  test("nowOffsetPx(now, day, tz) is null outside the visible hours", () => {
+    const june10 = new Date("2026-06-10T12:00:00Z");
+    const threeAmDenver = new Date("2026-06-10T09:00:00Z");
+    expect(nowOffsetPx(threeAmDenver, june10, "America/Denver")).toBeNull();
+  });
+});
+
+describe("eventDayKeys", () => {
+  const TZ = "America/Denver";
+
+  test("all-day events cover start..end inclusive by their date-only keys, no zone applied", () => {
+    expect(
+      eventDayKeys(
+        {
+          startTime: new Date("2026-07-10T00:00:00Z"),
+          endTime: new Date("2026-07-13T00:00:00Z"),
+          isAllDay: true,
+        },
+        TZ
+      )
+    ).toEqual(["2026-07-10", "2026-07-11", "2026-07-12", "2026-07-13"]);
+  });
+
+  test("a single all-day event is one key (not the previous day for a Denver viewer)", () => {
+    expect(
+      eventDayKeys(
+        {
+          startTime: new Date("2026-07-10T00:00:00Z"),
+          endTime: new Date("2026-07-10T00:00:00Z"),
+          isAllDay: true,
+        },
+        TZ
+      )
+    ).toEqual(["2026-07-10"]);
+  });
+
+  test("timed events use the viewer's calendar days", () => {
+    // 9 PM MDT Jun 10 -> 2 AM MDT Jun 11.
+    expect(
+      eventDayKeys(
+        {
+          startTime: new Date("2026-06-11T03:00:00Z"),
+          endTime: new Date("2026-06-11T08:00:00Z"),
+          isAllDay: false,
+        },
+        TZ
+      )
+    ).toEqual(["2026-06-10", "2026-06-11"]);
+  });
+
+  test("a timed event ending exactly at midnight does not touch the next day", () => {
+    expect(
+      eventDayKeys(
+        {
+          startTime: new Date("2026-06-11T03:00:00Z"),
+          endTime: new Date("2026-06-11T06:00:00Z"), // Jun 11 00:00 MDT
+          isAllDay: false,
+        },
+        TZ
+      )
+    ).toEqual(["2026-06-10"]);
+  });
+
+  test("a zero-length timed event is one day", () => {
+    const at = new Date("2026-06-11T06:00:00Z"); // Jun 11 00:00 MDT
+    expect(
+      eventDayKeys({ startTime: at, endTime: at, isAllDay: false }, TZ)
+    ).toEqual(["2026-06-11"]);
+  });
+
+  test("`within` clips to the visible range", () => {
+    expect(
+      eventDayKeys(
+        {
+          startTime: new Date("2026-07-10T00:00:00Z"),
+          endTime: new Date("2026-07-20T00:00:00Z"),
+          isAllDay: true,
+        },
+        TZ,
+        { first: "2026-07-12", last: "2026-07-14" }
+      )
+    ).toEqual(["2026-07-12", "2026-07-13", "2026-07-14"]);
+  });
+
+  test("an end before the start degrades to the start day", () => {
+    expect(
+      eventDayKeys(
+        {
+          startTime: new Date("2026-07-10T00:00:00Z"),
+          endTime: new Date("2026-07-08T00:00:00Z"),
+          isAllDay: true,
+        },
+        TZ
+      )
+    ).toEqual(["2026-07-10"]);
+  });
+
+  test("a corrupt multi-year span is capped", () => {
+    const keys = eventDayKeys(
+      {
+        startTime: new Date("2020-01-01T00:00:00Z"),
+        endTime: new Date("2030-01-01T00:00:00Z"),
+        isAllDay: true,
+      },
+      TZ
+    );
+    expect(keys.length).toBe(366);
   });
 });

@@ -171,6 +171,23 @@ describe("parseLocalDate", () => {
     expect(parseLocalDate("2026-4-5")).toBeNull(); // needs zero-padding
     expect(parseLocalDate("2026-04-15T12:00")).toBeNull(); // datetime not allowed
   });
+
+  test("rejects impossible calendar dates instead of rolling them over", () => {
+    expect(parseLocalDate("2026-02-30")).toBeNull();
+    expect(parseLocalDate("2026-02-31")).toBeNull();
+    expect(parseLocalDate("2025-02-29")).toBeNull(); // not a leap year
+    expect(parseLocalDate("2026-13-01")).toBeNull();
+    expect(parseLocalDate("2026-00-10")).toBeNull();
+    expect(parseLocalDate("2026-04-31")).toBeNull();
+    // Valid edge: leap day.
+    expect(parseLocalDate("2024-02-29")).not.toBeNull();
+  });
+
+  test("keeps two-digit-century years as written (no 19xx remap)", () => {
+    const d = parseLocalDate("0050-01-01");
+    expect(d).not.toBeNull();
+    expect(d!.getFullYear()).toBe(50);
+  });
 });
 
 describe("parseLocalDateOrDateTime", () => {
@@ -194,6 +211,23 @@ describe("parseLocalDateOrDateTime", () => {
 
   test("garbage returns null", () => {
     expect(parseLocalDateOrDateTime("not a date")).toBeNull();
+  });
+
+  test("an impossible date-only value is null, not a rolled-over date", () => {
+    expect(parseLocalDateOrDateTime("2026-02-30")).toBeNull();
+  });
+
+  test("with a tz, a zone-less datetime is the user's wall clock — not the server's", () => {
+    // 9:00 AM in Denver (MDT, UTC-6) is 15:00Z regardless of the
+    // host zone the suite runs in.
+    expect(
+      parseLocalDateOrDateTime("2026-06-10T09:00", "America/Denver")!.toISOString()
+    ).toBe("2026-06-10T15:00:00.000Z");
+    // Explicit zones still win.
+    expect(
+      parseLocalDateOrDateTime("2026-06-10T09:00:00.000Z", "America/Denver")!.toISOString()
+    ).toBe("2026-06-10T09:00:00.000Z");
+    expect(parseLocalDateOrDateTime("not a date", "America/Denver")).toBeNull();
   });
 });
 

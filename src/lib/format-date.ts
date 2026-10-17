@@ -416,26 +416,48 @@ export function parseLocalDate(value: string): Date | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!m) return null;
   const [, y, mo, d] = m;
-  const date = new Date(Number(y), Number(mo) - 1, Number(d), 0, 0, 0, 0);
-  return Number.isNaN(date.getTime()) ? null : date;
+  const year = Number(y);
+  const month = Number(mo);
+  const day = Number(d);
+  const date = new Date(year, month - 1, day, 0, 0, 0, 0);
+  // `new Date(y, m, d)` rolls 2026-02-31 over into March, wraps month
+  // 13 into the next January and maps years 0-99 to 1900-1999; a
+  // round-trip check turns all three into the documented null.
+  date.setFullYear(year);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+  return date;
 }
 
 /**
  * @deprecated Use `parseDateOnly` for date-only values and
- * `parseWallClock(value, tz)` for datetimes — a zone-less datetime-local
- * value fed to `new Date()` here is read in the server's zone.
+ * `parseWallClock(value, tz)` for datetimes.
  *
  * Like `parseLocalDate`, but tolerates a full ISO datetime
  * (`2026-04-15T13:30:00.000Z` or datetime-local's
- * `2026-04-15T13:30`) by falling through to `new Date(value)` —
- * full datetimes carry their own time (and often zone) so the
- * UTC-midnight trap doesn't apply. Use for fields that may be fed
- * either shape (AI capture output, mixed API inputs).
+ * `2026-04-15T13:30`).
+ *
+ * Pass `tz` (the user's profile zone, `getCurrentUserTimeZone()`) so a
+ * zone-less `YYYY-MM-DDTHH:mm` is read as that user's wall-clock time
+ * (via `parseWallClock`); values carrying `Z` / an offset are taken as
+ * the instants they are. Without `tz` a zone-less datetime falls
+ * through to `new Date(value)`, which reads it in the SERVER's zone
+ * (UTC in production — hours off for everyone else) — kept only for
+ * callers that have not been migrated yet.
  */
-export function parseLocalDateOrDateTime(value: string): Date | null {
+export function parseLocalDateOrDateTime(
+  value: string,
+  tz?: string | null
+): Date | null {
   const dateOnly = parseLocalDate(value);
   if (dateOnly) return dateOnly;
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return null; // date-only but invalid
+  if (tz) return parseWallClock(value, tz);
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
 }
@@ -551,7 +573,9 @@ function focalDateParts(focal: Date): [number, number, number] {
  * exact start (Sunday 00:00 in TZ) and end (Saturday 23:59 in TZ)
  * of the user's week — those are what the DB query needs.
  *
- * Week starts on Sunday to match the rest of the calendar.
+ * Week starts on Sunday (hard-coded — `WEEK_STARTS_ON` in
+ * calendar-utils.ts is NOT threaded through yet) to match the rest of
+ * the calendar.
  */
 export function calendarWeekInTz(
   focal: Date,
