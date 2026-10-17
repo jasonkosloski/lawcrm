@@ -94,7 +94,13 @@ export async function GET(
           return NextResponse.json({ error: err.message }, { status: 502 });
       }
     }
-    throw err;
+    // Unexpected (storage / DB failure): a logged JSON 502 rather than
+    // a bare 500 page.
+    console.error("[email-attachments] download failed", err);
+    return NextResponse.json(
+      { error: "Couldn't fetch the attachment. Try again." },
+      { status: 502 }
+    );
   }
 
   // DB row vs storage drift (file pruned out-of-band) → 410 Gone,
@@ -118,7 +124,12 @@ export async function GET(
   // proxied); the redirect is the auth boundary and must not be
   // cached. Same inline-vs-attachment split as documents (ADR-018).
   if (isBlobKey(key)) {
-    const target = await signedBlobUrl(key, { download: !inlineSafe });
+    const target = await signedBlobUrl(key, {
+      download: !inlineSafe,
+      // Audio/video get the long media TTL (ADR-018) so playback and
+      // seeking survive past the short default expiry.
+      media: /^(audio|video)\//i.test(contentType),
+    });
     return NextResponse.redirect(target, {
       status: 302,
       headers: {

@@ -23,12 +23,15 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { parseDateOnly } from "@/lib/format-date";
 
 export async function setEmailThreadFollowUp(
   threadId: string,
   /** Date string in `YYYY-MM-DD` form, or null to clear. Stored as
-   *  end-of-day in the user's locale so a "follow up by Friday"
-   *  doesn't expire at midnight that morning. */
+   *  end-of-day in the SERVER's zone (UTC in production) so a "follow
+   *  up by Friday" doesn't expire at midnight that morning. The
+   *  dashboard compares against the same server-local end-of-day, so
+   *  the two stay consistent. */
   dateString: string | null
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await getCurrentUserId();
@@ -90,14 +93,22 @@ export async function setMessengerThreadFollowUp(
 }
 
 /** Convert a `YYYY-MM-DD` date string to a Date at the END of that
- *  day (23:59:59.999) so a follow-up "by Friday" stays active all of
- *  Friday. Returns null on parse failure or empty input. */
+ *  day (23:59:59.999, server-local - see the field comment above) so a
+ *  follow-up "by Friday" stays active all of Friday. Returns null on
+ *  parse failure, an impossible date (2026-02-30) or empty input. */
 function parseEndOfDay(dateString: string | null): Date | null {
   if (!dateString) return null;
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateString);
-  if (!m) return null;
-  const [, y, mo, d] = m;
-  const date = new Date(Number(y), Number(mo) - 1, Number(d), 23, 59, 59, 999);
-  if (Number.isNaN(date.getTime())) return null;
-  return date;
+  // parseDateOnly validates the calendar date (rejects Feb 30 instead of
+  // rolling it into March); its UTC components are the intended Y/M/D.
+  const day = parseDateOnly(dateString);
+  if (!day) return null;
+  return new Date(
+    day.getUTCFullYear(),
+    day.getUTCMonth(),
+    day.getUTCDate(),
+    23,
+    59,
+    59,
+    999
+  );
 }

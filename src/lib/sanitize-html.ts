@@ -46,6 +46,8 @@ const ALLOWED_TAGS = [
   "h6",
   "a",
   "span",
+  // StarterKit's HorizontalRule ("---" input rule) emits <hr>.
+  "hr",
 ];
 
 /** Per-tag allowed attributes. NO `class` anywhere: the app ships a
@@ -59,7 +61,27 @@ const ALLOWED_TAGS = [
  *  profile does so for `email-blocked-image`). */
 const ALLOWED_ATTRIBUTES: sanitizeHtml.IOptions["allowedAttributes"] = {
   a: ["href", "target", "rel"],
+  // Tiptap's OrderedList emits <ol start="3"> when the user types "3. ";
+  // dropping it silently renumbers legal lists (discovery responses,
+  // numbered paragraphs). Both values are checked in TRANSFORM_TAGS.
+  ol: ["start", "type"],
+  li: ["value"],
 };
+
+/** Keep an integer list-numbering attribute, drop anything else. */
+function cleanListNumber(
+  attribs: Record<string, string>,
+  name: "start" | "value"
+): Record<string, string> {
+  const next = { ...attribs };
+  if (!(name in next)) return next;
+  if (/^-?\d{1,6}$/.test(next[name].trim())) next[name] = next[name].trim();
+  else delete next[name];
+  return next;
+}
+
+/** `<ol type>` is only meaningful as 1 / a / A / i / I. */
+const ORDERED_LIST_TYPES = new Set(["1", "a", "A", "i", "I"]);
 
 /** Force every <a> tag to carry `rel="noopener noreferrer"` and
  *  `target="_blank"` so external links can't reverse-tabnab the
@@ -67,6 +89,15 @@ const ALLOWED_ATTRIBUTES: sanitizeHtml.IOptions["allowedAttributes"] = {
  *  it runs on every <a>, even ones the author didn't manually
  *  configure. */
 const TRANSFORM_TAGS: sanitizeHtml.IOptions["transformTags"] = {
+  ol: (tagName, attribs) => {
+    const next = cleanListNumber(attribs, "start");
+    if ("type" in next && !ORDERED_LIST_TYPES.has(next.type)) delete next.type;
+    return { tagName, attribs: next };
+  },
+  li: (tagName, attribs) => ({
+    tagName,
+    attribs: cleanListNumber(attribs, "value"),
+  }),
   a: (tagName, attribs) => ({
     tagName,
     attribs: {
@@ -134,7 +165,6 @@ const DOCUMENT_ALLOWED_TAGS = [
   "i",
   "sup",
   "sub",
-  "hr",
   // Tables — contracts and discovery logs are full of them.
   "table",
   "caption",
@@ -184,7 +214,11 @@ export function sanitizeDocumentHtml(html: string): string {
 // ── Email profile ───────────────────────────────────────────────────────
 //
 // For PROVIDER-SYNCED email bodies (Gmail sync writes through this at
-// persist time — see `src/lib/google/gmail-sync.ts`). Real-world mail
+// persist time — see `src/lib/google/gmail-sync.ts`). CRM-SENT bodies
+// are written by a different path (`sanitizeUserHtml` / the
+// plain-text fallback in `actions/email-send.ts`); both writers are
+// allowlist sanitizers, so a change to this profile does NOT cover
+// sent bodies. Real-world mail
 // is the most hostile HTML we ingest: it arrives from arbitrary
 // senders and is rendered inside the thread reader, so this profile
 // is a hard security boundary, applied at WRITE time so nothing
@@ -275,6 +309,10 @@ const EMAIL_OPTIONS: sanitizeHtml.IOptions = {
   // Exact-name allowlist: any other class token is stripped.
   allowedClasses: { span: ["email-blocked-image"] },
   allowedSchemes: ALLOWED_SCHEMES,
+  // Drop the TEXT of these when they are disallowed wrappers. Without
+  // it a <title> or <head> block leaks its text in front of the body
+  // ("Your statement<div>...") and defeats the reader's HTML detection.
+  nonTextTags: ["script", "style", "textarea", "option", "xmp", "title", "head"],
   // Belt + braces behind the img transform: only data: survives.
   allowedSchemesByTag: { img: ["data"] },
   allowProtocolRelative: false,
@@ -283,9 +321,10 @@ const EMAIL_OPTIONS: sanitizeHtml.IOptions = {
 };
 
 /** Sanitize provider-synced email HTML. Applied at WRITE time by the
- *  Gmail sync engine — `EmailMessage.body` only ever contains output
- *  of this function (or of the plain-text→HTML fallback, which also
- *  passes through here). */
+ *  Gmail sync engine. `EmailMessage.body` has two writers: this
+ *  function (synced mail) and `sanitizeUserHtml` / `plainTextToHtml`
+ *  in `actions/email-send.ts` (CRM-sent mail). Both are allowlist
+ *  sanitizers. */
 export function sanitizeEmailHtml(html: string): string {
   return sanitizeHtml(html, EMAIL_OPTIONS).trim();
 }

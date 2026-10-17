@@ -32,7 +32,7 @@ import {
   test,
   vi,
 } from "vitest";
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -52,6 +52,7 @@ import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/permission-check";
 import { getCurrentUserId } from "@/lib/current-user";
 import { GmailAuthError, gmailFetch } from "@/lib/google/gmail-client";
+import { GoogleOAuthError } from "@/lib/google/oauth";
 import { prisma } from "@/lib/prisma";
 import {
   resetDb,
@@ -114,6 +115,9 @@ async function seedAttachment(opts?: {
     data: {
       userId: opts?.ownerUserId ?? userId,
       emailAddress: `box-${Math.random().toString(36).slice(2, 8)}@example.com`,
+      // A connected mailbox holds a refresh token; a disconnected one
+      // (null) is short-circuited before any Gmail call.
+      refreshToken: "enc-refresh-token",
     },
     select: { id: true },
   });
@@ -312,6 +316,111 @@ describe("filing", () => {
     expect(res.error).toMatch(/[Rr]econnect/);
     expect(await prisma.document.count()).toBe(0);
     expect(await prisma.activityLog.count()).toBe(0);
+  });
+});
+
+/** Every file under the temp uploads dir (recursive). */
+function storedFileCount(): number {
+  try {
+    return readdirSync(join(TEST_TMP, "uploads"), {
+      recursive: true,
+      withFileTypes: true,
+    }).filter((e) => e.isFile()).length;
+  } catch {
+    return 0;
+  }
+}
+
+describe("repeat filing does not re-read the bytes (F661)", () => {
+  test("alreadyFiled is decided from the backfilled fileSize before any storage read", async () => {
+    const attachmentId = await seedAttachment();
+    mockedGmailFetch.mockResolvedValue(gmailPayload("PDF-BYTES"));
+    expect(
+      await actions.fileAttachmentToMatter(attachmentId, matterId)
+    ).toEqual({ ok: true });
+
+    // Remove the cached attachment bytes from storage. A re-filing that
+    // still read them first would fail; the size-based dedupe must not.
+    const { deleteFile } = await import("@/lib/file-storage");
+    const cached = await prisma.emailAttachment.findUniqueOrThrow({
+      where: { id: attachmentId },
+      select: { fileUrl: true },
+    });
+    await deleteFile(cached.fileUrl as string);
+
+    expect(
+      await actions.fileAttachmentToMatter(attachmentId, matterId)
+    ).toEqual({ ok: true, alreadyFiled: true });
+  });
+});
+
+describe("failures return a result instead of throwing (F670)", () => {
+  test.each([
+    ["network TypeError", () => new TypeError("fetch failed")],
+    ["transient token-refresh error", () => new GoogleOAuthError("503", null, 503)],
+  ])("%s while fetching bytes -> ok:false, nothing created", async (_n, make) => {
+    const attachmentId = await seedAttachment();
+    mockedGmailFetch.mockRejectedValue(make());
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await actions.fileAttachmentToMatter(attachmentId, matterId);
+    errSpy.mockRestore();
+    expect(res.ok).toBe(false);
+    expect(res.error).toBeTruthy();
+    expect(await prisma.document.count()).toBe(0);
+  });
+
+  test("a non-JSON 200 from Gmail -> ok:false", async () => {
+    const attachmentId = await seedAttachment();
+    mockedGmailFetch.mockResolvedValue(new Response("<html>oops</html>"));
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await actions.fileAttachmentToMatter(attachmentId, matterId);
+    errSpy.mockRestore();
+    expect(res.ok).toBe(false);
+    expect(await prisma.document.count()).toBe(0);
+  });
+
+  test("storage drift (cached bytes missing) -> ok:false, not a thrown error", async () => {
+    const attachmentId = await seedAttachment();
+    mockedGmailFetch.mockResolvedValue(gmailPayload("PDF-BYTES"));
+    // Cache it without filing: second matter's filing will need the bytes.
+    await actions.fileAttachmentToMatter(attachmentId, matterId);
+    const { deleteFile } = await import("@/lib/file-storage");
+    const cached = await prisma.emailAttachment.findUniqueOrThrow({
+      where: { id: attachmentId },
+      select: { fileUrl: true },
+    });
+    await deleteFile(cached.fileUrl as string);
+    const { areaId, stageId } = await seedPracticeArea({ name: "Area D" });
+    const second = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await actions.fileAttachmentToMatter(
+      attachmentId,
+      second.matterId
+    );
+    errSpy.mockRestore();
+    expect(res.ok).toBe(false);
+  });
+
+  test("a failed Document insert removes the stored copy and returns ok:false", async () => {
+    const attachmentId = await seedAttachment();
+    mockedGmailFetch.mockResolvedValue(gmailPayload("PDF-BYTES"));
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const spy = vi
+      .spyOn(prisma.document, "create")
+      .mockRejectedValueOnce(new Error("db down"));
+
+    const res = await actions.fileAttachmentToMatter(attachmentId, matterId);
+
+    spy.mockRestore();
+    errSpy.mockRestore();
+    expect(res.ok).toBe(false);
+    expect(await prisma.document.count()).toBe(0);
+    // Only the attachment's own cached bytes remain - no orphaned copy.
+    expect(storedFileCount()).toBe(1);
   });
 });
 

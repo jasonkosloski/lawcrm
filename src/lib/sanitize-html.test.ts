@@ -469,3 +469,56 @@ describe("protocol-relative and obfuscated hrefs", () => {
     }
   });
 });
+
+describe("ordered-list numbering survives every profile (F253)", () => {
+  const sanitizers = [
+    ["note", sanitizeUserHtml],
+    ["document", sanitizeDocumentHtml],
+    ["email", sanitizeEmailHtml],
+  ] as const;
+
+  test.each(sanitizers)("%s profile keeps <ol start> and a valid type", (_n, fn) => {
+    expect(fn('<ol start="3"><li><p>Third</p></li></ol>')).toBe(
+      '<ol start="3"><li><p>Third</p></li></ol>'
+    );
+    const out = fn('<ol type="a" start="5"><li>x</li></ol>');
+    expect(out).toContain('start="5"');
+    expect(out).toContain('type="a"');
+  });
+
+  test.each(sanitizers)("%s profile drops a non-integer start and an unknown type", (_n, fn) => {
+    expect(fn('<ol start="javascript:1" type="z"><li>x</li></ol>')).toBe(
+      "<ol><li>x</li></ol>"
+    );
+    expect(fn('<ol start="1234567"><li>x</li></ol>')).toBe(
+      "<ol><li>x</li></ol>"
+    );
+  });
+
+  test.each(sanitizers)("%s profile keeps an integer <li value> and drops junk", (_n, fn) => {
+    expect(fn('<ol><li value="9">x</li></ol>')).toBe(
+      '<ol><li value="9">x</li></ol>'
+    );
+    expect(fn('<ol><li value="x">x</li></ol>')).toBe("<ol><li>x</li></ol>");
+  });
+
+  test("a plain <ol> is unchanged", () => {
+    expect(sanitizeUserHtml("<ol><li>a</li></ol>")).toBe("<ol><li>a</li></ol>");
+  });
+
+  test("the note profile keeps <hr> (StarterKit's HorizontalRule)", () => {
+    expect(sanitizeUserHtml("<p>a</p><hr><p>b</p>")).toBe(
+      "<p>a</p><hr /><p>b</p>"
+    );
+  });
+});
+
+describe("sanitizeEmailHtml - head/title text does not leak (F203)", () => {
+  test("a <title> block is dropped with its text", () => {
+    expect(
+      sanitizeEmailHtml(
+        "<html><head><title>Your statement</title></head><body><div>Body</div></body></html>"
+      )
+    ).toBe("<div>Body</div>");
+  });
+});

@@ -100,7 +100,10 @@ const HREF_RE = /href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i;
  *  doesn't separate the marker from its text. */
 const BARE_MARKER_RE = /(?:^|\n) *(?:-|\d+\.) $/;
 
-type ListFrame = { ordered: boolean; count: number };
+/** `count` is the last number printed (ordered lists; <ol start="N">
+ *  seeds it with N-1); `items` is how many items this list has opened,
+ *  which decides whether the next one is a sibling. */
+type ListFrame = { ordered: boolean; count: number; items: number };
 type AnchorFrame = { href: string | null; start: number };
 
 export function htmlToText(html: string): string {
@@ -188,21 +191,40 @@ export function htmlToText(html: string): string {
       } else {
         if (lists.length === 0) want(2);
         else pending = 1; // nested list continues the current item
-        lists.push({ ordered: name === "ol", count: 0 });
+        // <ol start="N"> numbers from N (Tiptap emits it when the user
+        // types "3. ").
+        const start =
+          name === "ol" ? /\bstart\s*=\s*["']?(\d{1,6})\b/i.exec(attrs) : null;
+        lists.push({
+          ordered: name === "ol",
+          count: start ? Math.max(0, Number(start[1]) - 1) : 0,
+          items: 0,
+        });
       }
       continue;
     }
 
     if (name === "li") {
-      if (!isClose) {
-        const frame = lists[lists.length - 1];
+      const frame = lists[lists.length - 1];
+      if (isClose) {
+        // An item that closed with nothing after its marker is empty:
+        // drop the marker (and renumber) instead of letting later
+        // content glue onto a bare "- ".
+        if (BARE_MARKER_RE.test(out)) {
+          out = out.replace(/\n? *(?:-|\d+\.) $/, "");
+          if (frame) {
+            frame.items = Math.max(0, frame.items - 1);
+            if (frame.ordered) frame.count = Math.max(0, frame.count - 1);
+          }
+        }
+      } else {
         want(1);
         // Sibling items sit on adjacent lines even when Tiptap's
         // <p> wrappers requested a paragraph break.
-        flush(frame && frame.count > 0 ? 1 : undefined);
+        flush(frame && frame.items > 0 ? 1 : undefined);
         const indent = "  ".repeat(Math.max(0, lists.length - 1));
         const marker = frame?.ordered ? `${++frame.count}. ` : "- ";
-        if (frame && !frame.ordered) frame.count += 1;
+        if (frame) frame.items += 1;
         out += indent + marker;
       }
       continue;

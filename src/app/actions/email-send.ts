@@ -87,7 +87,16 @@ export type ReplyToThreadInput = {
 };
 
 export type SendEmailResult =
-  | { ok: true; threadId: string }
+  | {
+      ok: true;
+      /** Local thread id, or Gmail's thread id when the local copy
+       *  could not be written (see `warning`). */
+      threadId: string;
+      /** Set when Gmail ACCEPTED the message but saving the local copy
+       *  failed. The send is final - the composer must clear the draft
+       *  and must not offer a resend. */
+      warning?: string;
+    }
   | {
       ok: false;
       error: string;
@@ -100,6 +109,17 @@ export type SendEmailResult =
 
 /** Sanity cap on To / Cc list length for a posted recipient list. */
 const MAX_RECIPIENTS_PER_FIELD = 50;
+/** Cap on To + Cc combined for one message. */
+const MAX_RECIPIENTS_TOTAL = 100;
+/** RFC 5321 forward-path limit. */
+const MAX_ADDRESS_LENGTH = 254;
+/** Gmail rejects an unfolded Subject over 998 characters. */
+const MAX_SUBJECT_LENGTH = 998;
+/** Plain-text / HTML body cap (the action body limit is ~1 MB). */
+const MAX_BODY_LENGTH = 1_000_000;
+
+const SAVED_LOCALLY_WARNING =
+  "Sent, but the local copy could not be saved. It will appear after the next sync.";
 
 const NOT_CONNECTED_ERROR =
   "This mailbox isn't connected. Reconnect it from Settings → Integrations.";
@@ -137,9 +157,14 @@ export async function sendEmail(
   if (to.addresses.length === 0) {
     return { ok: false, error: "Add at least one recipient." };
   }
+  if (to.addresses.length + cc.addresses.length > MAX_RECIPIENTS_TOTAL) {
+    return { ok: false, error: "Too many recipients." };
+  }
   if (!input.bodyText.trim()) {
     return { ok: false, error: "The message body is empty." };
   }
+  const sizeError = checkContentSize(input.subject, input);
+  if (sizeError) return { ok: false, error: sizeError };
 
   const subject = input.subject.trim();
   const sentAt = new Date();
@@ -147,7 +172,7 @@ export async function sendEmail(
   // BEFORE the MIME builder sees it (see module header).
   const bodyHtml =
     sanitizeUserHtml(input.bodyHtml) || plainTextToHtml(input.bodyText);
-  const mime = buildMimeMessage({
+  const raw = tryBuildRaw({
     from: { name: account.user.name, email: account.emailAddress },
     to: to.addresses,
     cc: cc.addresses,
@@ -156,37 +181,44 @@ export async function sendEmail(
     html: bodyHtml,
     date: sentAt,
   });
+  if (!raw.ok) return raw;
 
-  const sent = await postGmailSend(account.id, {
-    raw: encodeMimeForGmail(mime),
-  });
+  const sent = await postGmailSend(account.id, { raw: raw.raw });
   if (!sent.ok) return sent;
 
-  const persisted = await persistSentMessage({
-    accountId: account.id,
-    gmailMessageId: sent.id,
-    gmailThreadId: sent.threadId,
-    subject: subject || "(no subject)",
-    fromName: account.user.name,
-    fromEmail: account.emailAddress,
-    to: to.addresses,
-    cc: cc.addresses,
-    bodyHtml,
-    bodyText: input.bodyText,
-    sentAt,
-  });
-
-  if (persisted.matterId) {
-    await logActivity({
-      matterId: persisted.matterId,
-      userId,
-      type: "email",
-      title: "Email sent",
-      detail: subject || "(no subject)",
+  // Gmail has ACCEPTED the message. Nothing below may turn the result
+  // into a failure: the composer would keep the draft and the user would
+  // send the same email to the recipient a second time.
+  try {
+    const persisted = await persistSentMessage({
+      accountId: account.id,
+      gmailMessageId: sent.id,
+      gmailThreadId: sent.threadId,
+      subject: subject || "(no subject)",
+      fromName: account.user.name,
+      fromEmail: account.emailAddress,
+      to: to.addresses,
+      cc: cc.addresses,
+      bodyHtml,
+      bodyText: input.bodyText,
+      sentAt,
     });
+
+    if (persisted.matterId) {
+      await logActivity({
+        matterId: persisted.matterId,
+        userId,
+        type: "email",
+        title: "Email sent",
+        detail: subject || "(no subject)",
+      });
+    }
+    revalidateSendSurfaces(persisted.matterId);
+    return { ok: true, threadId: persisted.threadId };
+  } catch (err) {
+    console.error("[email-send] sent but local save failed", sent.id, err);
+    return { ok: true, threadId: sent.threadId, warning: SAVED_LOCALLY_WARNING };
   }
-  revalidateSendSurfaces(persisted.matterId);
-  return { ok: true, threadId: persisted.threadId };
 }
 
 export async function replyToThread(
@@ -290,6 +322,15 @@ export async function replyToThread(
     to = derived.to;
     cc = derived.cc;
   }
+  // Derived recipients come from stored headers and were never run
+  // through validateAddresses; a malformed one (group syntax such as
+  // "Team: a@b.com", "ops@localhost") would make the MIME builder throw.
+  // Drop them rather than fail the whole reply.
+  to = to.filter((a) => isSendableAddress(a.email));
+  cc = cc.filter((a) => isSendableAddress(a.email));
+  if (to.length + cc.length > MAX_RECIPIENTS_TOTAL) {
+    return { ok: false, error: "Too many recipients." };
+  }
   if (to.length === 0) {
     return {
       ok: false,
@@ -299,11 +340,13 @@ export async function replyToThread(
   }
 
   const subject = buildReplySubject(thread.subject);
+  const sizeError = checkContentSize(subject, input);
+  if (sizeError) return { ok: false, error: sizeError };
   const sentAt = new Date();
   // Same outbound sanitize boundary as sendEmail (module header).
   const bodyHtml =
     sanitizeUserHtml(input.bodyHtml) || plainTextToHtml(input.bodyText);
-  const mime = buildMimeMessage({
+  const raw = tryBuildRaw({
     from: {
       name: thread.account.user.name,
       email: thread.account.emailAddress,
@@ -317,43 +360,48 @@ export async function replyToThread(
     // No In-Reply-To/References — Message-ID headers aren't stored
     // locally (see module header). Gmail threads via `threadId`.
   });
+  if (!raw.ok) return raw;
 
-  const payload: { raw: string; threadId?: string } = {
-    raw: encodeMimeForGmail(mime),
-  };
+  const payload: { raw: string; threadId?: string } = { raw: raw.raw };
   if (thread.externalId) payload.threadId = thread.externalId;
 
   const sent = await postGmailSend(thread.account.id, payload);
   if (!sent.ok) return sent;
 
-  const persisted = await persistSentMessage({
-    accountId: thread.account.id,
-    gmailMessageId: sent.id,
-    gmailThreadId: sent.threadId,
-    subject,
-    fromName: thread.account.user.name,
-    fromEmail: thread.account.emailAddress,
-    to,
-    cc,
-    bodyHtml,
-    bodyText: input.bodyText,
-    sentAt,
-    // Prefer appending to the thread the user replied from when
-    // Gmail's threadId isn't locally known yet.
-    localThreadId: thread.id,
-  });
-
-  if (persisted.matterId) {
-    await logActivity({
-      matterId: persisted.matterId,
-      userId,
-      type: "email",
-      title: "Email reply sent",
-      detail: subject,
+  // Gmail has ACCEPTED the message - see sendEmail: never fail past here.
+  try {
+    const persisted = await persistSentMessage({
+      accountId: thread.account.id,
+      gmailMessageId: sent.id,
+      gmailThreadId: sent.threadId,
+      subject,
+      fromName: thread.account.user.name,
+      fromEmail: thread.account.emailAddress,
+      to,
+      cc,
+      bodyHtml,
+      bodyText: input.bodyText,
+      sentAt,
+      // Prefer appending to the thread the user replied from when
+      // Gmail's threadId isn't locally known yet.
+      localThreadId: thread.id,
     });
+
+    if (persisted.matterId) {
+      await logActivity({
+        matterId: persisted.matterId,
+        userId,
+        type: "email",
+        title: "Email reply sent",
+        detail: subject,
+      });
+    }
+    revalidateSendSurfaces(persisted.matterId);
+    return { ok: true, threadId: persisted.threadId };
+  } catch (err) {
+    console.error("[email-send] reply sent but local save failed", sent.id, err);
+    return { ok: true, threadId: thread.id, warning: SAVED_LOCALLY_WARNING };
   }
-  revalidateSendSurfaces(persisted.matterId);
-  return { ok: true, threadId: persisted.threadId };
 }
 
 // ── Internals ────────────────────────────────────────────────────────────
@@ -362,16 +410,64 @@ type AddressValidation =
   | { ok: true; addresses: MimeAddress[] }
   | { ok: false; error: string };
 
+/** isValidEmailAddress is deliberately permissive (it is shared with the
+ *  client composer); on the server we additionally refuse control
+ *  characters, quotes and over-long addresses. */
+function isSendableAddress(email: string): boolean {
+  return (
+    email.length <= MAX_ADDRESS_LENGTH &&
+    !/[\x00-\x1f\x7f"]/.test(email) &&
+    isValidEmailAddress(email)
+  );
+}
+
+/** Subject / body size limits; returns a friendly error or null. */
+function checkContentSize(
+  subject: string,
+  input: { bodyHtml: string; bodyText: string }
+): string | null {
+  if (subject.trim().length > MAX_SUBJECT_LENGTH) {
+    return `The subject is too long (max ${MAX_SUBJECT_LENGTH} characters).`;
+  }
+  if (
+    input.bodyText.length > MAX_BODY_LENGTH ||
+    input.bodyHtml.length > MAX_BODY_LENGTH
+  ) {
+    return "The message is too large to send.";
+  }
+  return null;
+}
+
+/** buildMimeMessage throws on a header it cannot encode; turn that
+ *  into a draft-preserving failure. */
+function tryBuildRaw(
+  input: Parameters<typeof buildMimeMessage>[0]
+): { ok: true; raw: string } | { ok: false; error: string } {
+  try {
+    return { ok: true, raw: encodeMimeForGmail(buildMimeMessage(input)) };
+  } catch (err) {
+    console.warn("[email-send] could not build message", err);
+    return {
+      ok: false,
+      error:
+        "Couldn't build the message - check the recipients and subject. Your draft is untouched.",
+    };
+  }
+}
+
 function validateAddresses(
   raw: string[],
   opts?: { allowEmpty?: boolean }
 ): AddressValidation {
   const addresses: MimeAddress[] = [];
   const seen = new Set<string>();
+  if (raw.length > MAX_RECIPIENTS_PER_FIELD) {
+    return { ok: false, error: "Too many recipients." };
+  }
   for (const entry of raw) {
     const email = entry.trim();
     if (!email && opts?.allowEmpty) continue;
-    if (!isValidEmailAddress(email)) {
+    if (!isSendableAddress(email)) {
       return { ok: false, error: `Invalid email address: "${entry}".` };
     }
     const key = email.toLowerCase();

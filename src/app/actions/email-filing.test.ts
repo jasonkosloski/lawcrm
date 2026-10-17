@@ -47,7 +47,7 @@ async function seedThread(opts?: { matterId?: string }): Promise<string> {
       accountId: account.id,
       matterId: opts?.matterId ?? null,
       subject: "RE: Discovery responses",
-      lastMessageAt: new Date("2026-06-10T14:30"),
+      lastMessageAt: new Date("2026-06-10T14:30:00Z"),
     },
     select: { id: true },
   });
@@ -178,7 +178,7 @@ describe("mailbox ownership", () => {
         accountId: account.id,
         matterId: filedTo ?? null,
         subject: "Privileged: settlement authority",
-        lastMessageAt: new Date("2026-06-10T14:30"),
+        lastMessageAt: new Date("2026-06-10T14:30:00Z"),
       },
       select: { id: true },
     });
@@ -213,6 +213,64 @@ describe("mailbox ownership", () => {
       where: { id: threadId },
     });
     expect(thread.matterId).toBe(matterId);
+    expect(await prisma.activityLog.count()).toBe(0);
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+});
+
+describe("moving and re-filing (F557 / F662)", () => {
+  async function seedSecondMatter(): Promise<string> {
+    const first = await prisma.matter.findUniqueOrThrow({
+      where: { id: matterId },
+      select: { practiceAreaId: true, stageId: true },
+    });
+    const m = await seedMatter({
+      practiceAreaId: first.practiceAreaId,
+      stageId: first.stageId,
+      leadUserId: userId,
+      name: "Second matter",
+    });
+    return m.matterId;
+  }
+
+  test("moving A -> B logs removal on A and filing on B", async () => {
+    const otherMatterId = await seedSecondMatter();
+    const threadId = await seedThread({ matterId });
+
+    const res = await setEmailThreadMatter(threadId, otherMatterId);
+    expect(res).toEqual({ ok: true });
+
+    const thread = await prisma.emailThread.findUniqueOrThrow({
+      where: { id: threadId },
+    });
+    expect(thread.matterId).toBe(otherMatterId);
+
+    const onA = await prisma.activityLog.findMany({
+      where: { matterId, type: "email" },
+    });
+    expect(onA.map((a) => a.title)).toEqual(["Email removed from matter"]);
+    expect(onA[0].detail).toBe("RE: Discovery responses");
+    const onB = await prisma.activityLog.findMany({
+      where: { matterId: otherMatterId, type: "email" },
+    });
+    expect(onB.map((a) => a.title)).toEqual(["Email filed to matter"]);
+
+    // Both sides' Communication tabs refresh.
+    expect(revalidatePath).toHaveBeenCalledWith(
+      `/matters/${matterId}/communication`
+    );
+    expect(revalidatePath).toHaveBeenCalledWith(
+      `/matters/${otherMatterId}/communication`
+    );
+  });
+
+  test("re-selecting the matter the thread is already on writes and logs nothing", async () => {
+    const threadId = await seedThread({ matterId });
+    vi.mocked(revalidatePath).mockClear();
+
+    const res = await setEmailThreadMatter(threadId, matterId);
+
+    expect(res).toEqual({ ok: true });
     expect(await prisma.activityLog.count()).toBe(0);
     expect(revalidatePath).not.toHaveBeenCalled();
   });

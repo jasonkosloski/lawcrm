@@ -71,7 +71,7 @@ describe("email attachment blob redirect uses the server-derived type", () => {
     expect(res.status).toBe(302);
     expect(vi.mocked(signedBlobUrl)).toHaveBeenCalledWith(
       expect.any(String),
-      { download: true }
+      { download: true, media: false }
     );
   });
 
@@ -80,7 +80,7 @@ describe("email attachment blob redirect uses the server-derived type", () => {
     expect(res.status).toBe(302);
     expect(vi.mocked(signedBlobUrl)).toHaveBeenCalledWith(
       expect.any(String),
-      { download: false }
+      { download: false, media: false }
     );
   });
 
@@ -88,7 +88,7 @@ describe("email attachment blob redirect uses the server-derived type", () => {
     await redirectFor("report", "application/pdf");
     expect(vi.mocked(signedBlobUrl)).toHaveBeenCalledWith(
       expect.any(String),
-      { download: true }
+      { download: true, media: false }
     );
   });
 
@@ -96,7 +96,70 @@ describe("email attachment blob redirect uses the server-derived type", () => {
     await redirectFor("logo.svg", "image/png");
     expect(vi.mocked(signedBlobUrl)).toHaveBeenCalledWith(
       expect.any(String),
-      { download: true }
+      { download: true, media: false }
     );
+  });
+});
+
+describe("email attachment blob redirect - TTL, caching and failure shapes", () => {
+  test("audio / video attachments get the long media TTL (ADR-018)", async () => {
+    await redirectFor("voicemail.mp3", null);
+    expect(vi.mocked(signedBlobUrl)).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.objectContaining({ media: true })
+    );
+    await redirectFor("clip.mp4", null);
+    expect(vi.mocked(signedBlobUrl)).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.objectContaining({ media: true })
+    );
+  });
+
+  test("the redirect (the auth boundary) is never cacheable and is not proxied", async () => {
+    const res = await redirectFor("brief.pdf", null);
+    expect(res.headers.get("Location")).toBe(
+      "https://abc123.private.blob.vercel-storage.com/signed"
+    );
+    expect(res.headers.get("Cache-Control")).toContain("no-store");
+  });
+
+  test("blob gone (stat null) -> 410 and nothing is signed", async () => {
+    vi.mocked(auth).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(prisma.emailAttachment.findFirst).mockResolvedValue({
+      id: "a1",
+      filename: "brief.pdf",
+    } as never);
+    vi.mocked(ensureAttachmentBytes).mockResolvedValue({
+      key: BLOB_KEY,
+    } as never);
+    vi.mocked(statFile).mockResolvedValue(null);
+    const res = await GET(
+      new Request("http://localhost/api/email-attachments/a1/download") as never,
+      { params: Promise.resolve({ id: "a1" }) }
+    );
+    expect(res.status).toBe(410);
+    expect(vi.mocked(signedBlobUrl)).not.toHaveBeenCalled();
+  });
+
+  test("an unexpected failure while caching bytes is a logged JSON 502, not a bare 500", async () => {
+    vi.mocked(auth).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(prisma.emailAttachment.findFirst).mockResolvedValue({
+      id: "a1",
+      filename: "brief.pdf",
+    } as never);
+    vi.mocked(ensureAttachmentBytes).mockRejectedValue(
+      new Error("blob store down")
+    );
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await GET(
+      new Request("http://localhost/api/email-attachments/a1/download") as never,
+      { params: Promise.resolve({ id: "a1" }) }
+    );
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({
+      error: expect.stringMatching(/try again/i),
+    });
+    expect(errSpy).toHaveBeenCalled();
+    errSpy.mockRestore();
   });
 });

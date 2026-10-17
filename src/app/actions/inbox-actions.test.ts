@@ -300,7 +300,7 @@ describe("messenger promotions", () => {
       where: { messengerItemId },
     });
     expect(row.matterId).toBe(matterId);
-    expect(row.dueDate.toISOString()).toMatch(/^2026-08-01/);
+    expect(row.dueDate).toEqual(new Date("2026-08-01T00:00:00.000Z"));
   });
 
   test("matter resolution falls back to the thread's defaultMatterId for unfiled items", async () => {
@@ -402,5 +402,119 @@ describe("email promotions — mailbox ownership", () => {
     expect(await prisma.deadline.count()).toBe(0);
     expect(await prisma.note.count()).toBe(0);
     expect(await prisma.activityLog.count()).toBe(0);
+  });
+});
+
+describe("email promotions — owner succeeds (pairs with the non-owner case)", () => {
+  test("the mailbox owner can spawn a task, deadline and note from their own filed thread", async () => {
+    const task = await createTaskFromEmail(
+      emailThreadId,
+      inboxActionInitialState,
+      taskForm()
+    );
+    const deadline = await createDeadlineFromEmail(
+      emailThreadId,
+      inboxActionInitialState,
+      deadlineForm()
+    );
+    const note = await createNoteFromEmail(
+      emailThreadId,
+      inboxActionInitialState,
+      noteForm()
+    );
+    expect(task.status).toBe("ok");
+    expect(deadline.status).toBe("ok");
+    expect(note.status).toBe("ok");
+    expect(await prisma.task.count({ where: { emailThreadId } })).toBe(1);
+    expect(await prisma.deadline.count({ where: { emailThreadId } })).toBe(1);
+    expect(await prisma.note.count({ where: { emailThreadId } })).toBe(1);
+  });
+});
+
+describe("date-only due dates are zone-independent (ADR-012)", () => {
+  test("a deadline due 2026-08-01 is stored at UTC midnight whatever the server zone", async () => {
+    await createDeadlineFromEmail(
+      emailThreadId,
+      inboxActionInitialState,
+      deadlineForm({ dueDate: "2026-08-01" })
+    );
+    const row = await prisma.deadline.findFirstOrThrow({
+      where: { emailThreadId },
+    });
+    expect(row.dueDate).toEqual(new Date("2026-08-01T00:00:00.000Z"));
+  });
+
+  test("a task due date is stored at UTC midnight and an impossible date is a field error", async () => {
+    await createTaskFromEmail(
+      emailThreadId,
+      inboxActionInitialState,
+      taskForm({ dueDate: "2026-04-15" })
+    );
+    const row = await prisma.task.findFirstOrThrow({ where: { emailThreadId } });
+    expect(row.dueDate).toEqual(new Date("2026-04-15T00:00:00.000Z"));
+
+    const bad = await createTaskFromEmail(
+      emailThreadId,
+      inboxActionInitialState,
+      taskForm({ dueDate: "2026-02-30" })
+    );
+    expect(bad.status).toBe("error");
+    expect(bad.errors?.dueDate).toBeTruthy();
+  });
+});
+
+describe("note promotions (F666 / F667)", () => {
+  test("the activity preview shows decoded text, not HTML entities", async () => {
+    await createNoteFromEmail(
+      emailThreadId,
+      inboxActionInitialState,
+      noteForm({ content: '<p>Smith &amp; Jones said "no" &lt;today&gt;</p>' })
+    );
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { title: "Note saved from email" },
+    });
+    expect(log.detail).toBe('Smith & Jones said "no" <today>');
+  });
+
+  test("the message variant decodes the preview too", async () => {
+    await createNoteFromMessage(
+      messengerItemId,
+      inboxActionInitialState,
+      noteForm({ content: "<p>AT&amp;T called</p>" })
+    );
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { title: "Note saved from message" },
+    });
+    expect(log.detail).toBe("AT&T called");
+  });
+
+  test("the note and its author read marker commit together - a failed marker leaves no note", async () => {
+    const original = prisma.$transaction.bind(prisma) as (
+      fn: (tx: unknown) => Promise<unknown>
+    ) => Promise<unknown>;
+    const spy = vi
+      .spyOn(prisma, "$transaction")
+      .mockImplementationOnce(((fn: (tx: unknown) => Promise<unknown>) =>
+        original((tx) =>
+          fn(
+            new Proxy(tx as object, {
+              get(target, prop) {
+                if (prop === "noteRead") {
+                  return {
+                    create: () => Promise.reject(new Error("connection lost")),
+                  };
+                }
+                return (target as Record<string | symbol, unknown>)[prop];
+              },
+            })
+          )
+        )) as never);
+
+    await expect(
+      createNoteFromEmail(emailThreadId, inboxActionInitialState, noteForm())
+    ).rejects.toThrow("connection lost");
+    spy.mockRestore();
+
+    expect(await prisma.note.count()).toBe(0);
   });
 });

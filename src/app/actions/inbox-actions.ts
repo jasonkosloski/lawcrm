@@ -27,7 +27,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-import { parseLocalDate } from "@/lib/format-date";
+import { parseDateOnly } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
 import { visibleEmailThreadWhere } from "@/lib/email-visibility";
 import { NOTE_TYPES } from "@/lib/note-constants";
@@ -39,6 +39,7 @@ import {
   isEffectivelyEmpty,
   sanitizeUserHtml as sanitize,
 } from "@/lib/sanitize-html";
+import { notePreviewText } from "@/lib/note-preview";
 
 /** Resolve the matter for an email thread. Inbox actions require a
  *  filed source — unfiled threads can't spawn matter-scoped entities
@@ -104,19 +105,18 @@ function revalidateForSpawn(
 
 // ── Schemas ─────────────────────────────────────────────────────────────
 
-// Due dates are date-only "YYYY-MM-DD" from <input type="date"> —
-// parse to LOCAL midnight via parseLocalDate right in the schema.
-// `new Date(value)` would read them as UTC midnight and drift the
-// due date a day early for anyone west of UTC.
+// Due dates are date-only "YYYY-MM-DD" from <input type="date"> -
+// stored at UTC midnight via parseDateOnly right in the schema
+// (ADR-012: no time zone is ever applied to a calendar date).
 
-/** Optional date-only field → local-midnight Date or null. */
+/** Optional date-only field → UTC-midnight Date or null. */
 const optionalLocalDate = z
   .string()
   .optional()
   .or(z.literal(""))
   .transform((v, ctx) => {
     if (!v) return null;
-    const d = parseLocalDate(v);
+    const d = parseDateOnly(v);
     if (!d) {
       ctx.addIssue({ code: "custom", message: "Invalid date" });
       return z.NEVER;
@@ -124,12 +124,12 @@ const optionalLocalDate = z
     return d;
   });
 
-/** Required date-only field → local-midnight Date. */
+/** Required date-only field → UTC-midnight Date. */
 const requiredLocalDate = z
   .string()
   .min(1, "Due date is required")
   .transform((v, ctx) => {
-    const d = parseLocalDate(v);
+    const d = parseDateOnly(v);
     if (!d) {
       ctx.addIssue({ code: "custom", message: "Invalid date" });
       return z.NEVER;
@@ -263,19 +263,24 @@ export async function createNoteFromEmail(
       errors: { content: ["Email thread isn't filed to a matter — file it first."] },
     };
   }
-  const created = await prisma.note.create({
-    data: {
-      matterId: ctx.matterId,
-      authorId: userId,
-      emailThreadId,
-      content: clean,
-      type: parsed.data.type,
-    },
-    select: { id: true },
-  });
-  // Author auto-reads their own note.
-  await prisma.noteRead.create({
-    data: { userId, noteId: created.id },
+  // Note + the author's own read marker commit together (same as
+  // createNote): a half-write would leave the note unread for its
+  // author and make a retry create a duplicate.
+  await prisma.$transaction(async (tx) => {
+    const created = await tx.note.create({
+      data: {
+        matterId: ctx.matterId,
+        authorId: userId,
+        emailThreadId,
+        content: clean,
+        type: parsed.data.type,
+      },
+      select: { id: true },
+    });
+    // Author auto-reads their own note.
+    await tx.noteRead.create({
+      data: { userId, noteId: created.id },
+    });
   });
   revalidateForSpawn(ctx.matterId, "note", "email");
   await logActivity({
@@ -283,12 +288,7 @@ export async function createNoteFromEmail(
     userId,
     type: "note",
     title: "Note saved from email",
-    detail:
-      clean
-        .replace(/<[^>]+>/g, " ")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 80) || "Note",
+    detail: notePreviewText(clean),
   });
   return { status: "ok" };
 }
@@ -400,18 +400,20 @@ export async function createNoteFromMessage(
     };
   }
   const userId = await getCurrentUserId();
-  const created = await prisma.note.create({
-    data: {
-      matterId: ctx.matterId,
-      authorId: userId,
-      messengerItemId,
-      content: clean,
-      type: parsed.data.type,
-    },
-    select: { id: true },
-  });
-  await prisma.noteRead.create({
-    data: { userId, noteId: created.id },
+  await prisma.$transaction(async (tx) => {
+    const created = await tx.note.create({
+      data: {
+        matterId: ctx.matterId,
+        authorId: userId,
+        messengerItemId,
+        content: clean,
+        type: parsed.data.type,
+      },
+      select: { id: true },
+    });
+    await tx.noteRead.create({
+      data: { userId, noteId: created.id },
+    });
   });
   revalidateForSpawn(ctx.matterId, "note", "messenger");
   await logActivity({
@@ -419,12 +421,7 @@ export async function createNoteFromMessage(
     userId,
     type: "note",
     title: "Note saved from message",
-    detail:
-      clean
-        .replace(/<[^>]+>/g, " ")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 80) || "Note",
+    detail: notePreviewText(clean),
   });
   return { status: "ok" };
 }

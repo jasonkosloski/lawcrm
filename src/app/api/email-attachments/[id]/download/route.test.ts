@@ -99,6 +99,7 @@ async function seedAttachment(opts?: {
     data: {
       userId: opts?.ownerUserId ?? userId,
       emailAddress: `box-${Math.random().toString(36).slice(2, 8)}@example.com`,
+      refreshToken: "enc-refresh-token", // connected mailbox
     },
     select: { id: true },
   });

@@ -44,7 +44,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
-import { storeFile } from "@/lib/file-storage";
+import { deleteFile, storeFile } from "@/lib/file-storage";
 import {
   AttachmentBytesError,
   ensureAttachmentBytes,
@@ -64,6 +64,8 @@ export type FileAttachmentResult = {
    *  no-oped (nothing created, nothing logged). */
   alreadyFiled?: boolean;
 };
+
+const FILING_FAILED_ERROR = "Could not file the attachment - try again.";
 
 export async function fileAttachmentToMatter(
   attachmentId: string,
@@ -101,6 +103,17 @@ export async function fileAttachmentToMatter(
     }
   }
 
+  const isAlreadyFiled = async (size: number): Promise<boolean> =>
+    (await prisma.document.findFirst({
+      where: {
+        matterId,
+        source: "email",
+        name: attachment.filename,
+        fileSize: size,
+      },
+      select: { id: true },
+    })) !== null;
+
   let sourceKey: string;
   try {
     ({ key: sourceKey } = await ensureAttachmentBytes(attachment.id));
@@ -108,47 +121,62 @@ export async function fileAttachmentToMatter(
     if (err instanceof AttachmentBytesError) {
       return { ok: false, error: err.message };
     }
-    throw err;
+    console.error("[email-attachments] could not cache attachment", err);
+    return { ok: false, error: FILING_FAILED_ERROR };
   }
-  const bytes = await readStoredBytes(sourceKey);
 
-  // Dedupe (heuristic, see module docstring): same attachment
-  // already filed to this matter → friendly no-op.
-  const existing = await prisma.document.findFirst({
-    where: {
-      matterId,
-      source: "email",
-      name: attachment.filename,
-      fileSize: bytes.byteLength,
-    },
-    select: { id: true },
+  // Cheap dedupe first: ensureAttachmentBytes backfills
+  // EmailAttachment.fileSize with the true byte count, so a repeat
+  // filing of a large attachment needn't download it from storage
+  // just to no-op. (Re-checked below with the real size - the stored
+  // size can be Gmail's claim on older rows.)
+  const cached = await prisma.emailAttachment.findUnique({
+    where: { id: attachment.id },
+    select: { fileSize: true },
   });
-  if (existing) {
+  if (cached?.fileSize != null && (await isAlreadyFiled(cached.fileSize))) {
     return { ok: true, alreadyFiled: true };
   }
 
-  // Independent copy under its own key — see module docstring.
   const contentType = contentTypeForFilename(attachment.filename);
-  const stored = await storeFile(
-    new File([new Uint8Array(bytes)], attachment.filename, {
-      type: contentType,
-    })
-  );
+  let storedKey: string | null = null;
+  try {
+    const bytes = await readStoredBytes(sourceKey);
 
-  await prisma.document.create({
-    data: {
-      matterId,
-      folderId: targetFolderId,
-      name: attachment.filename,
-      category: "correspondence",
-      source: "email",
-      fileUrl: stored.key,
-      contentType,
-      fileSize: stored.size,
-      uploadedBy: userId,
-    },
-    select: { id: true },
-  });
+    // Dedupe (heuristic, see module docstring): same attachment
+    // already filed to this matter → friendly no-op.
+    if (await isAlreadyFiled(bytes.byteLength)) {
+      return { ok: true, alreadyFiled: true };
+    }
+
+    // Independent copy under its own key — see module docstring.
+    const stored = await storeFile(
+      new File([new Uint8Array(bytes)], attachment.filename, {
+        type: contentType,
+      })
+    );
+    storedKey = stored.key;
+
+    await prisma.document.create({
+      data: {
+        matterId,
+        folderId: targetFolderId,
+        name: attachment.filename,
+        category: "correspondence",
+        source: "email",
+        fileUrl: stored.key,
+        contentType,
+        fileSize: stored.size,
+        uploadedBy: userId,
+      },
+      select: { id: true },
+    });
+  } catch (err) {
+    console.error("[email-attachments] filing failed", err);
+    // Don't orphan the copy when the row never got written.
+    if (storedKey) await deleteFile(storedKey).catch(() => undefined);
+    return { ok: false, error: FILING_FAILED_ERROR };
+  }
 
   await logActivity({
     matterId,

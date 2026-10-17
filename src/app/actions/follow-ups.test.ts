@@ -136,6 +136,19 @@ describe("setEmailThreadFollowUp", () => {
     expect(thread.followUpAt).toBeNull();
   });
 
+  test("rejects an impossible calendar date instead of rolling it into the next month", async () => {
+    // new Date(2026, 1, 30) silently becomes Mar 2; parseDateOnly refuses.
+    for (const bad of ["2026-02-30", "2026-13-01", "2026-00-10"]) {
+      const result = await setEmailThreadFollowUp(emailThreadId, bad);
+      expect(result).toEqual({ ok: false, error: "Invalid date" });
+    }
+    const thread = await prisma.emailThread.findUniqueOrThrow({
+      where: { id: emailThreadId },
+      select: { followUpAt: true },
+    });
+    expect(thread.followUpAt).toBeNull();
+  });
+
   test("cannot touch a thread in another user's mailbox", async () => {
     // Signed in as `userId`, targeting the other user's thread — must
     // read as not-found (indistinguishable from a nonexistent id) and

@@ -13,14 +13,19 @@
  *     Gmail label writeback (archive: `writebackGmailMessages` over
  *     the synced message ids only; star: `writebackGmailThread`), which NEVER
  *     rejects: auth failures record the reconnect signal on the
- *     account, transients warn and Gmail simply lags. Threads
+ *     account, transients warn. The local flag is KEPT, but Gmail's
+ *     labels win the next time sync reports that thread (the sync
+ *     re-derives isRead/isStarred/isArchived from labels), so a
+ *     failed writeback can revert itself later. Threads
  *     without an `externalId` (none today — every email thread is
  *     Gmail-synced or send-upserted — but the column is nullable)
  *     just skip writeback.
- *   - No-op discipline: `setEmailThreadArchived` with the current
- *     value writes nothing, revalidates nothing, writes back
- *     nothing. (Star is a toggle, so every accepted call changes
- *     state by construction.)
+ *   - No-op discipline: `setEmailThreadArchived` /
+ *     `setEmailThreadStarred` with the current value write nothing,
+ *     revalidate nothing, write back nothing. Both take the DESIRED
+ *     state (never a server-side flip), so a stale client cannot
+ *     invert the user's intent. `toggleEmailThreadStar` remains as a
+ *     thin wrapper for legacy callers.
  *
  * Label mapping (see gmail-writeback.ts for echo-safety):
  *   star    → add STARRED    unstar    → remove STARRED
@@ -54,6 +59,9 @@ async function findOwnThread(threadId: string) {
   });
 }
 
+/** Flip the star from the server's current value. Prefer
+ *  `setEmailThreadStarred` - this reads-modifies-writes, so a stale UI
+ *  inverts intent. */
 export async function toggleEmailThreadStar(
   threadId: string
 ): Promise<{ ok: boolean; isStarred?: boolean }> {
@@ -61,8 +69,25 @@ export async function toggleEmailThreadStar(
   // Not the caller's thread (or nonexistent) — refuse without
   // leaking whether the id exists.
   if (!thread) return { ok: false };
+  return applyStar(thread, !thread.isStarred);
+}
 
-  const isStarred = !thread.isStarred;
+/** Set the star to an explicit value. Idempotent: the current value
+ *  writes nothing. */
+export async function setEmailThreadStarred(
+  threadId: string,
+  starred: boolean
+): Promise<{ ok: boolean; isStarred?: boolean }> {
+  const thread = await findOwnThread(threadId);
+  if (!thread) return { ok: false };
+  if (thread.isStarred === starred) return { ok: true, isStarred: starred };
+  return applyStar(thread, starred);
+}
+
+async function applyStar(
+  thread: NonNullable<Awaited<ReturnType<typeof findOwnThread>>>,
+  isStarred: boolean
+): Promise<{ ok: boolean; isStarred?: boolean }> {
   await prisma.emailThread.update({
     where: { id: thread.id },
     data: { isStarred },
@@ -76,37 +101,6 @@ export async function toggleEmailThreadStar(
   }
   revalidateThreadSurfaces(thread.matterId);
   return { ok: true, isStarred };
-}
-
-/**
- * Idempotent star: sets the thread to the state the user SAW and
- * chose, instead of toggling whatever the DB holds now. A toggle
- * inverts the user's intent when sync changed the flag after the
- * list rendered (starred in Gmail on a phone -> the click would
- * unstar it, in the CRM and in Gmail). Already in the requested
- * state -> no write, no writeback, no revalidation.
- */
-export async function setEmailThreadStarred(
-  threadId: string,
-  starred: boolean
-): Promise<{ ok: boolean; isStarred?: boolean }> {
-  const thread = await findOwnThread(threadId);
-  if (!thread) return { ok: false };
-  if (thread.isStarred === starred) return { ok: true, isStarred: starred };
-
-  await prisma.emailThread.update({
-    where: { id: thread.id },
-    data: { isStarred: starred },
-  });
-  if (thread.externalId) {
-    await writebackGmailThread(
-      thread.accountId,
-      thread.externalId,
-      starred ? { addLabelIds: ["STARRED"] } : { removeLabelIds: ["STARRED"] }
-    );
-  }
-  revalidateThreadSurfaces(thread.matterId);
-  return { ok: true, isStarred: starred };
 }
 
 export async function setEmailThreadArchived(

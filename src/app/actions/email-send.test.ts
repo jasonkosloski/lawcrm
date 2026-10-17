@@ -823,3 +823,151 @@ describe("replyToThread — local persistence", () => {
     expect(await prisma.emailMessage.count()).toBe(1); // nothing appended
   });
 });
+
+// ── Hardening (F248 / F276 / F702) ───────────────────────────────────────
+
+describe("send — a post-send persistence failure is NOT a failure (F276)", () => {
+  test("sendEmail: Gmail accepted, local save throws -> ok:true with a warning, never ok:false", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    mockedGmailFetch.mockResolvedValue(gmailOk("gm-9", "gt-9"));
+    const spy = vi
+      .spyOn(prisma.emailMessage, "upsert")
+      .mockRejectedValueOnce(new Error("db down"));
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await sendEmail(accountId, BASE_SEND);
+
+    spy.mockRestore();
+    errSpy.mockRestore();
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.threadId).toBe("gt-9");
+      expect(result.warning).toMatch(/could not be saved/i);
+    }
+    expect(mockedGmailFetch).toHaveBeenCalledTimes(1);
+  });
+
+  test("replyToThread: Gmail accepted, local save throws -> ok:true with the local thread id", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    const { threadId } = await seedThread({ accountId });
+    await seedMessage({
+      threadId,
+      fromEmail: "alice@example.com",
+      to: [{ email: "me@firm.com" }],
+    });
+    mockedGmailFetch.mockResolvedValue(gmailOk("gm-9", "gt-1"));
+    const spy = vi
+      .spyOn(prisma.emailMessage, "upsert")
+      .mockRejectedValueOnce(new Error("db down"));
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await replyToThread(threadId, BASE_REPLY);
+
+    spy.mockRestore();
+    errSpy.mockRestore();
+    expect(result).toMatchObject({ ok: true, threadId });
+    if (result.ok) expect(result.warning).toBeTruthy();
+  });
+});
+
+describe("reply — malformed stored recipients never throw (F248)", () => {
+  test("group-syntax / dotless stored addresses are dropped, the valid one still gets the reply", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    const { threadId } = await seedThread({ accountId });
+    await seedMessage({
+      threadId,
+      fromEmail: "alice@example.com",
+      to: [{ email: "me@firm.com" }, { email: "Team: a@b.com" }],
+      cc: [{ email: "ops@localhost" }, { email: "carol@example.com" }],
+    });
+    mockedGmailFetch.mockResolvedValue(gmailOk("gm-2", "gt-1"));
+
+    const result = await replyToThread(threadId, {
+      ...BASE_REPLY,
+      replyAll: true,
+    });
+
+    expect(result.ok).toBe(true);
+    const { mime } = sentPayload();
+    expect(mime).toContain("alice@example.com");
+    expect(mime).toContain("carol@example.com");
+    expect(mime).not.toContain("localhost");
+    expect(mime).not.toContain("Team:");
+  });
+
+  test("a thread whose only recipient is malformed returns the edit hint instead of throwing", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    const { threadId } = await seedThread({ accountId });
+    await seedMessage({
+      threadId,
+      fromEmail: "Team: a@b.com",
+      to: [{ email: "me@firm.com" }],
+    });
+    const result = await replyToThread(threadId, BASE_REPLY);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/edit the recipients/i);
+    expect(mockedGmailFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("send — size and address hardening (F702)", () => {
+  test("rejects control characters and quotes in addresses", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    for (const bad of ["a\u0000b@example.com", 'a"b@example.com']) {
+      const r = await sendEmail(accountId, { ...BASE_SEND, to: [bad] });
+      expect(r.ok).toBe(false);
+    }
+    expect(mockedGmailFetch).not.toHaveBeenCalled();
+  });
+
+  test("rejects an over-long address, subject, body and recipient flood", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    const longAddr = `${"a".repeat(250)}@example.com`;
+    expect(
+      (await sendEmail(accountId, { ...BASE_SEND, to: [longAddr] })).ok
+    ).toBe(false);
+    expect(
+      (await sendEmail(accountId, { ...BASE_SEND, subject: "s".repeat(999) }))
+        .ok
+    ).toBe(false);
+    expect(
+      (
+        await sendEmail(accountId, {
+          ...BASE_SEND,
+          bodyText: "x".repeat(1_000_001),
+        })
+      ).ok
+    ).toBe(false);
+    const many = Array.from({ length: 51 }, (_, i) => `u${i}@example.com`);
+    expect((await sendEmail(accountId, { ...BASE_SEND, to: many })).ok).toBe(
+      false
+    );
+    // 50 To + 51 Cc: Cc alone is over the per-field cap.
+    const fifty = many.slice(0, 50);
+    const cc = fifty.map((a) => `cc-${a}`);
+    const combined = await sendEmail(accountId, {
+      ...BASE_SEND,
+      to: fifty,
+      cc: [...cc, "extra@example.com"],
+    });
+    expect(combined.ok).toBe(false);
+    expect(mockedGmailFetch).not.toHaveBeenCalled();
+  });
+
+  test("plus-tagged addresses stay valid", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    mockedGmailFetch.mockResolvedValue(gmailOk());
+    const r = await sendEmail(accountId, {
+      ...BASE_SEND,
+      to: ["alice+case@example.com"],
+    });
+    expect(r.ok).toBe(true);
+  });
+});

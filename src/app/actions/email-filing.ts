@@ -47,11 +47,28 @@ export async function setEmailThreadMatter(
     });
     if (!matter) return { ok: false, error: "Matter not found" };
 
-    await prisma.emailThread.update({
-      where: { id: threadId },
+    // Already filed to this matter (the picker lets the user click the
+    // active one) - nothing changes, so nothing is written or logged.
+    if (thread.matterId === matterId) return { ok: true };
+
+    // Owner-scoped write (defense in depth: the lookup above already
+    // proved ownership).
+    await prisma.emailThread.updateMany({
+      where: { id: threadId, ...visibleEmailThreadWhere(userId) },
       data: { matterId },
     });
 
+    // A move A -> B must be as auditable as an unfile: record the
+    // departure on the matter the email left, then the arrival.
+    if (thread.matterId) {
+      await logActivity({
+        matterId: thread.matterId,
+        userId,
+        type: "email",
+        title: "Email removed from matter",
+        detail: thread.subject,
+      });
+    }
     await logActivity({
       matterId,
       userId,
@@ -62,8 +79,8 @@ export async function setEmailThreadMatter(
   } else {
     // Unfile — leave the previous matter's revalidation paths in
     // place so the moved-out side updates too.
-    await prisma.emailThread.update({
-      where: { id: threadId },
+    await prisma.emailThread.updateMany({
+      where: { id: threadId, ...visibleEmailThreadWhere(userId) },
       data: { matterId: null },
     });
 

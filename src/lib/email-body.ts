@@ -1,29 +1,30 @@
 /**
  * EmailMessage.body carries two shapes that must render differently:
  *
- *   - Gmail-synced / CRM-sent messages: sanitized HTML — written
- *     through sanitizeEmailHtml at the sync/send boundary, so
- *     rendering it via dangerouslySetInnerHTML is safe by
+ *   - Gmail-synced / CRM-sent messages: sanitized HTML. Two writers
+ *     produce it, both allowlist sanitizers: `sanitizeEmailHtml` at
+ *     the Gmail sync boundary and `sanitizeUserHtml` /
+ *     `plainTextToHtml` at the CRM send boundary (actions/email-send).
+ *     Rendering it via dangerouslySetInnerHTML is safe by
  *     construction.
- *   - Legacy / seeded messages: plain text — must keep the
+ *   - Legacy / seeded messages: plain text - must keep the
  *     pre-wrap text path (HTML rendering would collapse newlines).
  *
- * The discriminator is deliberately dumb: sanitized HTML usually
- * starts with an element (and when it starts with bare text, a known
- * tag appears later - see KNOWN_TAG_RE), while human plain text
- * essentially never starts with "<".
- * A plain-text body that DID start with "<" would render escaped
- * before this existed and renders as (sanitizer-shaped) markup
- * after — acceptable for a shape that doesn't occur in practice.
+ * The discriminator is deliberately dumb and errs toward HTML:
+ * sanitized HTML usually starts with an element, but NOT always -
+ * the sanitizer discards disallowed wrappers (html/body/font) and
+ * keeps their text, so a body can begin with bare text
+ * ("Hello AT&amp;T,<br />..."). So a body also counts as HTML when
+ * it contains any well-formed tag or an HTML character reference.
+ * Sanitizer output escapes every literal `&` and `<` in text, so
+ * a raw "<" can only be a tag, whereas human plain text essentially
+ * never contains either. `<name@host>` (an address in angle
+ * brackets) is not a tag: the `@` stops the tag-name match.
  */
+const TAG_RE = /<\/?[a-z][a-z0-9]*(?:\s[^<>]*)?\/?>/i;
+const ENTITY_RE = /&(?:amp|lt|gt|quot|apos|nbsp|#\d+|#x[0-9a-f]+);/i;
+
 export function isHtmlEmailBody(body: string): boolean {
   if (body.trimStart().startsWith("<")) return true;
-  // Sanitized HTML CAN start with a bare text run ("Hello<br>...",
-  // a synced body whose first node is text) - without this it would
-  // render as literal markup. A known tag anywhere is a reliable
-  // signal; plain text with a bare "<" (e.g. "a < b") still isn't one.
-  return KNOWN_TAG_RE.test(body);
+  return TAG_RE.test(body) || ENTITY_RE.test(body);
 }
-
-const KNOWN_TAG_RE =
-  /<\/?(?:p|div|br|span|a|b|i|u|strong|em|ul|ol|li|table|thead|tbody|tr|td|th|blockquote|h[1-6]|pre|code|img|hr|font|center|small|sup|sub|caption|tfoot|colgroup|col)(?:\s[^<>]*)?\/?>/i;

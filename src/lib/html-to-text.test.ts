@@ -165,3 +165,49 @@ describe("htmlToText — hostile / degenerate shapes", () => {
     expect(htmlToText("<p>open<ul><li>item")).toBe("open\n\n- item");
   });
 });
+
+describe("htmlToText - empty list items and ordered start (F674)", () => {
+  test("an emptied middle bullet disappears instead of printing '- -'", () => {
+    expect(
+      htmlToText("<ul><li><p>a</p></li><li><p></p></li><li><p>x</p></li></ul>")
+    ).toBe("- a\n- x");
+  });
+
+  test("an empty first bullet is dropped", () => {
+    expect(htmlToText("<ul><li><p></p></li><li><p>x</p></li></ul>")).toBe(
+      "- x"
+    );
+  });
+
+  test("an empty bullet does not turn the next paragraph into a bullet", () => {
+    expect(
+      htmlToText("<p>a</p><ul><li><p></p></li></ul><p>b</p>")
+    ).toBe("a\n\nb");
+  });
+
+  test("an empty numbered item is skipped and numbering stays contiguous", () => {
+    expect(
+      htmlToText("<ol><li>a</li><li></li><li>c</li></ol>")
+    ).toBe("1. a\n2. c");
+  });
+
+  test("<ol start=N> numbers from N", () => {
+    expect(
+      htmlToText('<ol start="3"><li><p>Third</p></li><li><p>Fourth</p></li></ol>')
+    ).toBe("3. Third\n4. Fourth");
+  });
+
+  test("a nested list after <ol start> keeps its own counter", () => {
+    expect(
+      htmlToText(
+        '<ol start="5"><li>a<ul><li>sub</li></ul></li><li>b</li></ol>'
+      )
+    ).toBe("5. a\n  - sub\n6. b");
+  });
+
+  test("regular (non-empty) Tiptap lists are unchanged", () => {
+    expect(
+      htmlToText("<ul><li><p>one</p></li><li><p>two</p></li></ul>")
+    ).toBe("- one\n- two");
+  });
+});

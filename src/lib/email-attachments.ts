@@ -36,12 +36,14 @@
  *                      (GmailAuthError). Uncached bytes are
  *                      unreachable until the owner reconnects — the
  *                      route maps this to 409 + a reconnect message.
- *   - "fetch_failed" — Gmail answered non-OK / unparseable payload.
- *                      Transient; retry later.
+ *   - "fetch_failed" — Gmail answered non-OK / unparseable payload,
+ *                      or the request itself failed transiently
+ *                      (token-refresh 5xx, network error). Retry later.
  */
 
 import { prisma } from "@/lib/prisma";
 import { GmailAuthError, gmailFetch } from "@/lib/google/gmail-client";
+import { GoogleOAuthError } from "@/lib/google/oauth";
 import {
   deleteFile,
   readStoredFile,
@@ -98,7 +100,12 @@ export async function ensureAttachmentBytes(
       message: {
         select: {
           externalId: true,
-          thread: { select: { accountId: true } },
+          thread: {
+            select: {
+              accountId: true,
+              account: { select: { refreshToken: true } },
+            },
+          },
         },
       },
     },
@@ -122,7 +129,17 @@ export async function ensureAttachmentBytes(
   const gmailAttachmentId = parked.slice(GMAIL_PARKED_PREFIX.length);
   const accountId = attachment.message.thread.accountId;
 
+  // A deliberately disconnected mailbox has no tokens. Calling Gmail
+  // anyway would make getGmailAccessToken flag the account as an
+  // authorization ERROR in Settings -> Integrations (the same trap
+  // gmail-writeback pre-checks for). Report "disconnected" without
+  // touching the account.
+  if (!attachment.message.thread.account.refreshToken) {
+    throw new AttachmentBytesError("disconnected", RECONNECT_MESSAGE);
+  }
+
   let res: Response;
+  let body: { data?: unknown };
   try {
     res = await gmailFetch(
       accountId,
@@ -130,9 +147,23 @@ export async function ensureAttachmentBytes(
         attachment.message.externalId
       )}/attachments/${encodeURIComponent(gmailAttachmentId)}`
     );
+    // MessagePartBody: `data` is base64url. `size` is Gmail's claim;
+    // we persist the decoded length instead.
+    body = res.ok ? ((await res.json()) as { data?: unknown }) : {};
   } catch (err) {
     if (err instanceof GmailAuthError) {
       throw new AttachmentBytesError("disconnected", RECONNECT_MESSAGE);
+    }
+    if (
+      err instanceof GoogleOAuthError ||
+      err instanceof TypeError || // network-level fetch failure
+      err instanceof SyntaxError // non-JSON 200
+    ) {
+      console.error("[email-attachments] Gmail fetch failed", err);
+      throw new AttachmentBytesError(
+        "fetch_failed",
+        "Couldn't fetch the attachment from Gmail right now - try again in a moment."
+      );
     }
     throw err;
   }
@@ -142,10 +173,6 @@ export async function ensureAttachmentBytes(
       `Gmail returned ${res.status} while fetching the attachment.`
     );
   }
-
-  // MessagePartBody: `data` is base64url. `size` is Gmail's claim;
-  // we persist the decoded length instead.
-  const body = (await res.json()) as { data?: unknown };
   if (typeof body.data !== "string" || body.data.length === 0) {
     throw new AttachmentBytesError(
       "fetch_failed",
