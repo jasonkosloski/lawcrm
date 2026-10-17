@@ -18,19 +18,17 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-// Date-only inputs ("YYYY-MM-DD") must parse to LOCAL midnight —
-// `new Date(value)` reads them as UTC midnight, drifting the day
-// for anyone west of UTC. See parseLocalDate docs.
-import { parseLocalDate } from "@/lib/format-date";
+// Date-only inputs ("YYYY-MM-DD") are stored at UTC midnight and read
+// in UTC (ADR-012) - parseDateOnly, never `new Date(value)`.
+import { parseDateOnly } from "@/lib/format-date";
+import { plural } from "@/lib/utils";
 import {
   requirePermission,
   requirePermissions,
 } from "@/lib/permission-check";
 import { requiredCapturePermissions } from "@/lib/capture-permissions";
-import {
-  addDefaultEventAttendees,
-  resolveAutoAddTeam,
-} from "@/lib/calendar-default-attendees";
+import { resolveAutoAddTeam } from "@/lib/calendar-default-attendees";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { pushEventToGoogle } from "@/lib/google/google-calendar-push";
 import { DEADLINE_KINDS } from "@/lib/constants/deadline-status";
 import { TASK_PRIORITIES } from "@/lib/constants/priority";
@@ -40,7 +38,13 @@ import type {
   BulkAttachFormState,
   NoteAttachmentFormState,
 } from "@/lib/note-attachment-form";
-import { captureSchema, type ValidCapture } from "@/lib/capture-schemas";
+import {
+  createCaptureRecord,
+  missingPermissions,
+  parseCaptures,
+  permissionDeniedMessage,
+} from "@/lib/note-captures";
+import { CAPTURE_KIND_LABEL, type CaptureKind } from "@/lib/note-constants";
 
 /** Resolve the matter the note belongs to. Used by every attach
  *  action since attached children inherit the note's matter. Throws
@@ -111,7 +115,7 @@ export async function addTaskToNote(
   }
 
   const dueDate = parsed.data.dueDate
-    ? parseLocalDate(parsed.data.dueDate)
+    ? parseDateOnly(parsed.data.dueDate)
     : null;
   if (parsed.data.dueDate && !dueDate) {
     return { status: "error", errors: { dueDate: ["Invalid due date"] } };
@@ -170,7 +174,7 @@ export async function addDeadlineToNote(
     };
   }
 
-  const dueDate = parseLocalDate(parsed.data.dueDate);
+  const dueDate = parseDateOnly(parsed.data.dueDate);
   if (!dueDate) {
     return { status: "error", errors: { dueDate: ["Invalid due date"] } };
   }
@@ -244,7 +248,7 @@ export async function addTimeEntryToNote(
     };
   }
 
-  const date = parseLocalDate(parsed.data.date);
+  const date = parseDateOnly(parsed.data.date);
   if (!date) {
     return { status: "error", errors: { date: ["Invalid date"] } };
   }
@@ -287,13 +291,15 @@ const bulkSchema = z.object({
 
 /**
  * Bulk-attach the contents of a CaptureStack to a saved note in
- * one transaction. Mirrors the capture-loop in `createNote` but
- * scoped to an existing note.
+ * one transaction. Shares its parse + create pipeline with
+ * `createNote` (src/lib/note-captures.ts), scoped to an existing
+ * note.
  *
- * `note_sibling` captures from the stack create independent matter
- * notes (without parentNoteId) — same semantics as the top-level
- * NoteComposer's CaptureStack. If a user wants threaded replies
- * they should use the reply composer instead.
+ * Only task / deadline / time / event captures are created here.
+ * `note_sibling` captures are dropped: replies belong to the reply
+ * composer, and the bulk surfaces never offer the kind. A payload
+ * that holds nothing creatable is rejected as "Nothing to save"
+ * rather than reporting a phantom success.
  */
 export async function addCapturesToNoteBulk(
   noteId: string,
@@ -306,48 +312,47 @@ export async function addCapturesToNoteBulk(
     return { status: "error", errors: parsed.error.flatten().fieldErrors };
   }
 
-  let rawArr: unknown[] = [];
-  try {
-    const decoded = JSON.parse(parsed.data.attachments);
-    rawArr = Array.isArray(decoded) ? decoded : [];
-  } catch {
+  const tz = await getCurrentUserTimeZone();
+  const parsedCaptures = parseCaptures(parsed.data.attachments, tz);
+  if (!parsedCaptures.ok) {
+    if (parsedCaptures.reason === "malformed") {
+      return {
+        status: "error",
+        errors: { attachments: ["Captures payload was malformed"] },
+      };
+    }
     return {
       status: "error",
-      errors: { attachments: ["Captures payload was malformed"] },
+      errors: {},
+      attachmentErrors: parsedCaptures.attachmentErrors,
     };
   }
-  if (rawArr.length === 0) {
+
+  // Creatable kinds only (see the docstring). Everything below -
+  // gates, rows, activity tally - works from this filtered list.
+  const prepared = parsedCaptures.captures.filter(
+    (p) => p.cap.kind !== "note_sibling"
+  );
+  if (prepared.length === 0) {
     return { status: "error", errors: { attachments: ["Nothing to save"] } };
   }
-
-  const attachmentErrors: Record<string, Record<string, string[]>> = {};
-  const validCaptures: ValidCapture[] = [];
-  for (const a of rawArr) {
-    const result = captureSchema.safeParse(a);
-    if (!result.success) {
-      const tempId =
-        (a as { tempId?: unknown })?.tempId &&
-        typeof (a as { tempId: unknown }).tempId === "string"
-          ? ((a as { tempId: string }).tempId as string)
-          : "unknown";
-      attachmentErrors[tempId] = result.error.flatten().fieldErrors;
-      continue;
-    }
-    validCaptures.push(result.data);
-  }
-  if (Object.keys(attachmentErrors).length > 0) {
-    return { status: "error", errors: {}, attachmentErrors };
-  }
+  const validCaptures = prepared.map((p) => p.cap);
 
   // Gate on the union of capabilities the payload exercises (shared
   // with createNote / the primary composers). One denied kind rejects
-  // the whole batch — it's a single transaction, so partially applying
-  // the stack would be surprising. `note_sibling` is ignored by this
-  // surface's loop (replies belong to the reply composer), so it needs
-  // no key here.
-  await requirePermissions(
-    requiredCapturePermissions(validCaptures, { ignoreKinds: ["note_sibling"] })
-  );
+  // the whole batch - it's a single transaction, so partially applying
+  // the stack would be surprising. The friendly check returns a form
+  // error (the stack keeps its contents); requirePermissions is the
+  // enforcement point.
+  const requiredKeys = requiredCapturePermissions(validCaptures);
+  const missing = await missingPermissions(requiredKeys);
+  if (missing.length > 0) {
+    return {
+      status: "error",
+      errors: { attachments: [permissionDeniedMessage(missing)] },
+    };
+  }
+  await requirePermissions(requiredKeys);
 
   const note = await resolveNoteMatter(noteId);
   if (!note) {
@@ -361,77 +366,18 @@ export async function addCapturesToNoteBulk(
   const autoAddTeam = await resolveAutoAddTeam(note.matterId, validCaptures);
   const createdEventIds: string[] = [];
   await prisma.$transaction(async (tx) => {
-    for (const cap of validCaptures) {
-      if (cap.kind === "task") {
-        await tx.task.create({
-          data: {
-            matterId: note.matterId,
-            noteId,
-            title: cap.title,
-            priority: cap.priority,
-            // Capture dates are schema-validated as YYYY-MM-DD
-            // (capture-schemas.ts), so parseLocalDate can't miss.
-            dueDate: cap.dueDate ? parseLocalDate(cap.dueDate) : null,
-            ownerId: userId,
-          },
-        });
-      } else if (cap.kind === "deadline") {
-        await tx.deadline.create({
-          data: {
-            matterId: note.matterId,
-            noteId,
-            title: cap.title,
-            dueDate: parseLocalDate(cap.dueDate)!,
-            kind: cap.kind_,
-            description: cap.description || null,
-            ownerId: userId,
-          },
-        });
-      } else if (cap.kind === "time") {
-        await tx.timeEntry.create({
-          data: {
-            matterId: note.matterId,
-            userId,
-            noteId,
-            date: parseLocalDate(cap.date)!,
-            hours: Number(cap.hours),
-            activity: cap.activity,
-            narrative: cap.narrative || null,
-            source: "manual",
-          },
-        });
-      } else if (cap.kind === "event") {
-        // Events have their own primary surface; the link from
-        // note-via-eventId is a thinner association. Don't set
-        // noteId — Note.calendarEventId is the existing channel.
-        // Creator + default attendees, same as the Events composer, so
-        // the creator can see/edit it and it can sync to Google.
-        const ev = await tx.calendarEvent.create({
-          data: {
-            matterId: note.matterId,
-            createdById: userId,
-            title: cap.title,
-            type: cap.type,
-            startTime: new Date(cap.startTime),
-            endTime: new Date(cap.endTime),
-            location: cap.location || null,
-          },
-          select: { id: true },
-        });
-        await addDefaultEventAttendees(tx, {
-          eventId: ev.id,
-          matterId: note.matterId,
-          userId,
-          autoAddTeam,
-        });
-        createdEventIds.push(ev.id);
-      }
-      // `note_sibling` deliberately ignored — replies belong to
-      // the reply composer, not the bulk-attach surface.
+    for (const p of prepared) {
+      await createCaptureRecord(tx, p, {
+        matterId: note.matterId,
+        userId,
+        noteId,
+        autoAddTeam,
+        createdEventIds,
+      });
     }
   });
 
-  // Google Calendar push for the new events — after the commit.
+  // Google Calendar push for the new events - after the commit.
   // Never rejects.
   for (const id of createdEventIds) await pushEventToGoogle(id);
 
@@ -452,22 +398,24 @@ export async function addCapturesToNoteBulk(
     revalidatePath(`/matters/${note.matterId}/notes`);
   }
 
-  // Compose a "1 task · 2 deadlines" summary for the activity log.
+  // Compose a "1 task · 2 deadlines · 2 time entries" summary for the
+  // activity log.
   const tally = validCaptures.reduce<Record<string, number>>((acc, c) => {
     acc[c.kind] = (acc[c.kind] ?? 0) + 1;
     return acc;
   }, {});
   const summary = Object.entries(tally)
-    .map(([k, n]) => `${n} ${k}${n === 1 ? "" : "s"}`)
+    .map(([k, n]) =>
+      plural(n, (CAPTURE_KIND_LABEL[k as CaptureKind] ?? k).toLowerCase())
+    )
     .join(" · ");
   await logActivity({
     matterId: note.matterId,
     userId,
     type: "note",
-    title: `${validCaptures.length} ${validCaptures.length === 1 ? "item" : "items"} added to note`,
+    title: `${plural(validCaptures.length, "item")} added to note`,
     detail: summary,
   });
 
   return { status: "ok" };
 }
-

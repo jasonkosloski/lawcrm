@@ -143,3 +143,76 @@ describe("AddNoteOnEntityDialog — close on success", () => {
     expect(onOpenChange).not.toHaveBeenCalled();
   });
 });
+
+describe("AddNoteOnEntityDialog - form behavior", () => {
+  test("the note text is labelled and the type pills expose aria-pressed", async () => {
+    const user = setupUser();
+    render(<AddNoteOnEntityDialog {...baseProps} open onOpenChange={vi.fn()} />);
+    expect(screen.getByLabelText("Note")).toBe(
+      screen.getByPlaceholderText("Write a note…")
+    );
+    expect(screen.getByRole("button", { name: "Note" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    await user.click(screen.getByRole("button", { name: "Memo" }));
+    expect(screen.getByRole("button", { name: "Memo" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+  });
+
+  test("a failed submit keeps the typed text and the chosen type", async () => {
+    action.mockImplementation(async () => ({
+      status: "error" as const,
+      errors: { content: ["Nope"] },
+    }));
+    const user = setupUser();
+    render(<AddNoteOnEntityDialog {...baseProps} open onOpenChange={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: "Strategy" }));
+    await user.type(screen.getByPlaceholderText("Write a note…"), "keep this");
+    await user.click(screen.getByRole("button", { name: /add note/i }));
+    await screen.findByText("Nope");
+    expect(screen.getByPlaceholderText("Write a note…")).toHaveValue("keep this");
+    expect(screen.getByRole("button", { name: "Strategy" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    const fd = action.mock.calls[0][1];
+    expect(fd.get("type")).toBe("strategy");
+    expect(fd.get("content")).toBe("keep this");
+  });
+
+  test("every open starts blank: text and type from the last open are gone", async () => {
+    function Harness() {
+      const [open, setOpen] = useState(true);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>
+            reopen dialog
+          </button>
+          <AddNoteOnEntityDialog
+            {...baseProps}
+            open={open}
+            onOpenChange={setOpen}
+          />
+        </>
+      );
+    }
+    const user = setupUser();
+    render(<Harness />);
+    await user.click(screen.getByRole("button", { name: "Chatter" }));
+    await user.type(screen.getByPlaceholderText("Write a note…"), "abandoned");
+    await user.click(screen.getByRole("button", { name: /cancel/i }));
+    await waitFor(() =>
+      expect(screen.queryByPlaceholderText("Write a note…")).toBeNull()
+    );
+
+    await user.click(screen.getByRole("button", { name: /reopen dialog/i }));
+    expect(await screen.findByPlaceholderText("Write a note…")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Note" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+  });
+});

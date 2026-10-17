@@ -1,9 +1,14 @@
 /**
  * Single Note card with inline pin toggle + delete menu.
  *
- * Content is pre-sanitized server-side (see `src/app/actions/notes.ts`)
- * so `dangerouslySetInnerHTML` is safe here — we never render raw
- * user input that hasn't passed through DOMPurify first.
+ * Content is pre-sanitized server-side (see `src/app/actions/notes.ts`,
+ * which runs `sanitizeUserHtml` before insert) so
+ * `dangerouslySetInnerHTML` is safe here — we never render raw user
+ * input that hasn't passed through the sanitizer first.
+ *
+ * Controls are gated by the viewer's `access` (resolved on the server,
+ * see `getNoteAccess`): a control the viewer can't use is hidden
+ * rather than shown and bounced to the dashboard on click.
  */
 
 "use client";
@@ -33,8 +38,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { deleteNote, toggleNotePin } from "@/app/actions/notes";
-import { NOTE_TYPE_LABEL, type NoteType } from "@/lib/note-constants";
+import {
+  NOTE_TYPE_LABEL,
+  type NoteAccess,
+  type NoteType,
+} from "@/lib/note-constants";
+import { noteToPlainText } from "@/lib/note-text";
 import { formatDate } from "@/lib/format-date";
+import { useUserTimeZone } from "@/components/user-time-zone";
 import type {
   NoteAttachedDeadline,
   NoteAttachedTask,
@@ -55,9 +66,12 @@ export type NoteCardNote = {
   type: string;
   content: string;
   isPinned: boolean;
+  authorId: string;
   authorName: string;
   authorInitials: string;
-  updatedAt: Date;
+  /** When the note was written. (Not `updatedAt`: pinning bumps that,
+   *  which would relabel an old note with today's date.) */
+  createdAt: Date;
   parentNoteId: string | null;
   link: NoteLink | null;
   isRead: boolean;
@@ -67,13 +81,10 @@ export type NoteCardNote = {
   attachedTimeEntries: NoteAttachedTimeEntry[];
 };
 
-// Client component — timestamps render via the centralized variants
-// with no TZ override (browser-local after hydration).
-const formatDateTime = (d: Date): string => formatDate(d, "datetime_medium");
-
 export function NoteCard({
   note,
   matterId,
+  access,
   /** True when this card is rendered as a reply inside a thread — the
    *  parent groups control spacing + the connector line, so the card
    *  itself renders without the usual outer margin. */
@@ -81,8 +92,15 @@ export function NoteCard({
 }: {
   note: NoteCardNote;
   matterId: string;
+  /** Required so a new caller can't forget to gate the controls. */
+  access: NoteAccess;
   isReply?: boolean;
 }) {
+  // Timestamps are instants: show them in the viewer's PROFILE zone,
+  // the same zone the server renders with (no hydration mismatch).
+  const tz = useUserTimeZone();
+  const canDelete =
+    note.authorId === access.userId || access.canDeleteAnyNote;
   const [pending, startTransition] = useTransition();
   const [replyOpen, setReplyOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
@@ -107,11 +125,7 @@ export function NoteCard({
   // Plain-text preview of the note content — drives the prefilled
   // task title (first non-empty line) + description (the rest) when
   // the user clicks "Convert to task."
-  const plainContent = note.content
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  const plainContent = noteToPlainText(note.content);
   const convertTitleDefault =
     plainContent.length > 80
       ? plainContent.slice(0, 77) + "…"
@@ -148,56 +162,72 @@ export function NoteCard({
           <div className="flex-1 min-w-0">
             <div className="text-xs font-medium text-ink">{note.authorName}</div>
             <div className="text-2xs text-ink-4">
-              {formatDateTime(note.updatedAt)}
+              {formatDate(note.createdAt, "datetime_medium", tz)}
             </div>
           </div>
           <span className="inline-block text-2xs font-medium px-2 py-0.5 rounded-full border bg-brand-soft text-brand-700 border-brand-200">
             {typeLabel}
           </span>
-          <button
-            type="button"
-            onClick={onTogglePin}
-            disabled={pending}
-            title={note.isPinned ? "Unpin" : "Pin to top"}
-            aria-label={note.isPinned ? "Unpin note" : "Pin note"}
-            className={cn(
-              "inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors",
-              note.isPinned
-                ? "text-brand-700 hover:bg-brand-soft"
-                : "text-ink-3 hover:text-brand-700 hover:bg-brand-soft"
-            )}
-          >
-            <Pin
-              size={13}
-              className={cn(note.isPinned && "fill-brand-500 text-brand-500")}
-            />
-          </button>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              aria-label="Note actions"
+          {access.canPin ? (
+            <button
+              type="button"
+              onClick={onTogglePin}
               disabled={pending}
-              className="inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-3 hover:text-brand-700 hover:bg-paper-2 transition-colors disabled:opacity-60"
+              title={note.isPinned ? "Unpin" : "Pin to top"}
+              aria-label={note.isPinned ? "Unpin note" : "Pin note"}
+              className={cn(
+                "inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors",
+                note.isPinned
+                  ? "text-brand-700 hover:bg-brand-soft"
+                  : "text-ink-3 hover:text-brand-700 hover:bg-brand-soft"
+              )}
             >
-              <MoreHorizontal size={14} />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem onClick={() => setConvertOpen(true)}>
-                <ArrowRight size={13} />
-                Convert to task
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={onDelete}
+              <Pin
+                size={13}
+                className={cn(note.isPinned && "fill-brand-500 text-brand-500")}
+              />
+            </button>
+          ) : (
+            note.isPinned && (
+              <span
+                title="Pinned"
+                role="img"
+                aria-label="Pinned"
+                className="inline-flex items-center justify-center w-7 h-7 text-brand-500"
               >
-                <Trash2 size={13} />
-                Delete note
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <Pin size={13} className="fill-brand-500" />
+              </span>
+            )
+          )}
+          {(access.canCreateTask || canDelete) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label="Note actions"
+                disabled={pending}
+                className="inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-3 hover:text-brand-700 hover:bg-paper-2 transition-colors disabled:opacity-60"
+              >
+                <MoreHorizontal size={14} />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                {access.canCreateTask && (
+                  <DropdownMenuItem onClick={() => setConvertOpen(true)}>
+                    <ArrowRight size={13} />
+                    Convert to task
+                  </DropdownMenuItem>
+                )}
+                {access.canCreateTask && canDelete && <DropdownMenuSeparator />}
+                {canDelete && (
+                  <DropdownMenuItem variant="destructive" onClick={onDelete}>
+                    <Trash2 size={13} />
+                    Delete note
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
 
-        {note.link && <LinkChip link={note.link} matterId={matterId} />}
+        {note.link && <LinkChip link={note.link} matterId={matterId} tz={tz} />}
 
         <div
           className={cn(
@@ -211,7 +241,7 @@ export function NoteCard({
             "[&_code]:bg-paper-2 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[11px] [&_code]:font-mono",
             "[&_pre]:bg-paper-2 [&_pre]:p-2 [&_pre]:rounded [&_pre]:text-[11px]"
           )}
-          // Content is sanitized server-side by DOMPurify before insert.
+          // Content is sanitized server-side (sanitizeUserHtml) before insert.
           dangerouslySetInnerHTML={{ __html: note.content }}
         />
 
@@ -226,6 +256,7 @@ export function NoteCard({
           tasks={note.attachedTasks}
           deadlines={note.attachedDeadlines}
           timeEntries={note.attachedTimeEntries}
+          access={access}
         />
 
         {/* Reactions bar — above the reply divider so quick reacts
@@ -234,25 +265,28 @@ export function NoteCard({
           <ReactionsBar noteId={note.id} reactions={note.reactions} />
         </div>
 
-        {/* Reply control + inline reply composer */}
-        <div className="mt-2 pt-2 border-t border-line">
-          {replyOpen ? (
-            <ReplyComposer
-              matterId={matterId}
-              parentNoteId={note.id}
-              onDone={() => setReplyOpen(false)}
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={() => setReplyOpen(true)}
-              className="inline-flex items-center gap-1 text-2xs text-ink-3 hover:text-brand-700 transition-colors"
-            >
-              <CornerUpLeft size={11} />
-              Reply
-            </button>
-          )}
-        </div>
+        {/* Reply control + inline reply composer (notes.create) */}
+        {access.canCreateNote && (
+          <div className="mt-2 pt-2 border-t border-line">
+            {replyOpen ? (
+              <ReplyComposer
+                matterId={matterId}
+                parentNoteId={note.id}
+                access={access}
+                onDone={() => setReplyOpen(false)}
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setReplyOpen(true)}
+                className="inline-flex items-center gap-1 text-2xs text-ink-3 hover:text-brand-700 transition-colors"
+              >
+                <CornerUpLeft size={11} />
+                Reply
+              </button>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
 
@@ -272,9 +306,12 @@ export function NoteCard({
 function LinkChip({
   link,
   matterId,
+  tz,
 }: {
   link: NoteLink;
   matterId: string;
+  /** Viewer's profile zone - the event start is an instant. */
+  tz: string;
 }) {
   // Event links deep-link to the shared event detail modal via the
   // ?event=<id> contract; other link kinds render as read-only chips
@@ -293,7 +330,7 @@ function LinkChip({
           <span className="text-ink-4">Event</span>
           <span className="truncate text-ink-2">{link.label}</span>
           <span className="font-mono text-ink-4">
-            {formatDate(link.startTime, "short")}
+            {formatDate(link.startTime, "short", tz)}
           </span>
         </>
       ) : link.kind === "task" ? (

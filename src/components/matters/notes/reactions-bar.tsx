@@ -38,8 +38,14 @@ export function ReactionsBar({
   const toggle = (emoji: ReactionEmoji) => {
     setPickerOpen(false);
     startTransition(async () => {
-      const res = await toggleNoteReaction(noteId, emoji);
-      if (!res.ok && res.error) alert(res.error);
+      try {
+        const res = await toggleNoteReaction(noteId, emoji);
+        if (!res.ok && res.error) alert(res.error);
+      } catch {
+        // A network blip must not take down the whole Notes tab via
+        // the error boundary - the pill simply stays as it was.
+        alert("Couldn't save your reaction. Try again.");
+      }
     });
   };
 

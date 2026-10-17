@@ -12,9 +12,10 @@ import { render, screen } from "@testing-library/react";
 
 vi.mock("@/lib/current-user", () => ({
   requireUser: vi.fn(async () => "user_1"),
+  getCurrentUserId: vi.fn(async () => "user_1"),
 }));
 vi.mock("@/lib/permission-check", () => ({
-  currentUserHasPermission: vi.fn(),
+  getCurrentUserPermissions: vi.fn(),
 }));
 vi.mock("@/lib/queries/matter-detail", () => ({
   getMatterNotes: vi.fn(async () => []),
@@ -28,13 +29,14 @@ vi.mock("@/components/matters/notes/notes-tab-body", () => ({
   NotesTabBody: () => <div data-testid="notes-body" />,
 }));
 
-import { currentUserHasPermission } from "@/lib/permission-check";
+import { getCurrentUserPermissions } from "@/lib/permission-check";
 import MatterNotesPage from "./page";
 
 const grant = (keys: string[]) =>
-  vi
-    .mocked(currentUserHasPermission)
-    .mockImplementation(async (key: string) => keys.includes(key));
+  vi.mocked(getCurrentUserPermissions).mockResolvedValue({
+    isAdmin: false,
+    granted: new Set(keys),
+  } as Awaited<ReturnType<typeof getCurrentUserPermissions>>);
 
 const renderPage = async () =>
   render(

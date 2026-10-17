@@ -20,134 +20,32 @@ import { NoteCard, type NoteCardNote } from "./note-card";
 import {
   NOTE_TYPES,
   NOTE_TYPE_LABEL,
+  type NoteAccess,
   type NoteType,
 } from "@/lib/note-constants";
+import { noteToPlainText } from "@/lib/note-text";
+import {
+  buildTrees,
+  countNodes,
+  rollupDescendants,
+  subtreeHasUnread,
+  subtreeMatches,
+  summarizeRollup,
+  type NoteNode as GenericNoteNode,
+} from "@/lib/note-threads";
 
-function stripHtml(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/** Tree node — a note plus its (recursive) children. Reddit-style:
- *  any note can itself be replied to and those replies nest further
- *  beneath it. The recursion terminates because parentNoteId only
- *  points to existing notes in the matter; a visited set guards
- *  against hypothetical cycles. */
-type NoteNode = { note: NoteCardNote; children: NoteNode[] };
-
-function buildTrees(notes: NoteCardNote[]): NoteNode[] {
-  const ids = new Set(notes.map((n) => n.id));
-  const childrenByParent = new Map<string, NoteCardNote[]>();
-  const roots: NoteCardNote[] = [];
-  for (const n of notes) {
-    // A note is a root if it has no parent OR the parent isn't in this
-    // matter's set (edge case — cascade deletes should keep this clean).
-    if (n.parentNoteId && ids.has(n.parentNoteId)) {
-      if (!childrenByParent.has(n.parentNoteId))
-        childrenByParent.set(n.parentNoteId, []);
-      childrenByParent.get(n.parentNoteId)!.push(n);
-    } else {
-      roots.push(n);
-    }
-  }
-  const visited = new Set<string>();
-  const make = (n: NoteCardNote): NoteNode => {
-    if (visited.has(n.id)) return { note: n, children: [] };
-    visited.add(n.id);
-    return {
-      note: n,
-      children: (childrenByParent.get(n.id) ?? []).map(make),
-    };
-  };
-  // Pinned roots first; within each group the server already sorted
-  // oldest-to-newest, but roots look best newest-to-oldest at the top.
-  const pinned = roots.filter((r) => r.isPinned);
-  const rest = roots.filter((r) => !r.isPinned).reverse();
-  return [...pinned, ...rest].map(make);
-}
-
-function subtreeMatches(
-  node: NoteNode,
-  matches: (n: NoteCardNote) => boolean
-): boolean {
-  if (matches(node.note)) return true;
-  return node.children.some((c) => subtreeMatches(c, matches));
-}
-
-function countNodes(node: NoteNode): number {
-  return (
-    1 + node.children.reduce((sum, c) => sum + countNodes(c), 0)
-  );
-}
-
-/** True if any note in the subtree is still unread for the current
- *  user — drives the default collapse state so threads with fresh
- *  replies stay expanded on load. */
-function subtreeHasUnread(node: NoteNode): boolean {
-  if (!node.note.isRead) return true;
-  return node.children.some((c) => subtreeHasUnread(c));
-}
-
-/** Aggregate counts of attached tasks/deadlines/time entries across
- *  every descendant of `node` (children only — the node itself's
- *  attachments are already shown on its own card). Powers the parent
- *  rollup chip "Thread has 4 items in 2 replies." */
-export type ThreadRollup = {
-  tasks: number;
-  deadlines: number;
-  timeEntries: number;
-  totalHours: number;
-  /** Number of descendant notes that have at least one attachment. */
-  notesWithAttachments: number;
-};
-
-function summarizeRollup(r: ThreadRollup): string {
-  const parts: string[] = [];
-  if (r.tasks > 0) parts.push(`${r.tasks} ${r.tasks === 1 ? "task" : "tasks"}`);
-  if (r.deadlines > 0)
-    parts.push(`${r.deadlines} ${r.deadlines === 1 ? "deadline" : "deadlines"}`);
-  if (r.timeEntries > 0)
-    parts.push(
-      `${r.timeEntries} time ${r.timeEntries === 1 ? "entry" : "entries"} (${r.totalHours.toFixed(1)}h)`
-    );
-  return `${parts.join(" · ")} across ${r.notesWithAttachments} ${r.notesWithAttachments === 1 ? "reply" : "replies"}`;
-}
-
-function rollupDescendants(node: NoteNode): ThreadRollup {
-  let tasks = 0;
-  let deadlines = 0;
-  let timeEntries = 0;
-  let totalHours = 0;
-  let notesWithAttachments = 0;
-  const walk = (n: NoteNode) => {
-    for (const child of n.children) {
-      const t = child.note.attachedTasks.length;
-      const d = child.note.attachedDeadlines.length;
-      const e = child.note.attachedTimeEntries.length;
-      tasks += t;
-      deadlines += d;
-      timeEntries += e;
-      totalHours += child.note.attachedTimeEntries.reduce(
-        (s, x) => s + x.hours,
-        0
-      );
-      if (t + d + e > 0) notesWithAttachments++;
-      walk(child);
-    }
-  };
-  walk(node);
-  return { tasks, deadlines, timeEntries, totalHours, notesWithAttachments };
-}
+type NoteNode = GenericNoteNode<NoteCardNote>;
 
 export function NotesTabBody({
   notes,
   matterId,
+  access,
 }: {
   notes: NoteCardNote[];
   matterId: string;
+  /** Viewer's permissions, resolved on the server; gates every
+   *  control on the cards below. */
+  access: NoteAccess;
 }) {
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<Set<NoteType>>(new Set());
@@ -189,7 +87,7 @@ export function NotesTabBody({
       return false;
     const q = query.trim().toLowerCase();
     if (q.length > 0) {
-      const hay = (stripHtml(n.content) + " " + n.authorName).toLowerCase();
+      const hay = (noteToPlainText(n.content) + " " + n.authorName).toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -257,6 +155,7 @@ export function NotesTabBody({
                 key={t}
                 type="button"
                 onClick={() => toggleType(t)}
+                aria-pressed={on}
                 disabled={c === 0 && !on}
                 className={cn(
                   "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-2xs font-medium border transition-colors",
@@ -333,6 +232,7 @@ export function NotesTabBody({
               key={tree.note.id}
               node={tree}
               matterId={matterId}
+              access={access}
               depth={0}
             />
           ))}
@@ -352,10 +252,12 @@ const MAX_INDENT_DEPTH = 6;
 function ThreadView({
   node,
   matterId,
+  access,
   depth,
 }: {
   node: NoteNode;
   matterId: string;
+  access: NoteAccess;
   depth: number;
 }) {
   const hasChildren = node.children.length > 0;
@@ -387,6 +289,7 @@ function ThreadView({
       <NoteCard
         note={node.note}
         matterId={matterId}
+        access={access}
         isReply={depth > 0}
       />
       {hasChildren && (
@@ -443,6 +346,7 @@ function ThreadView({
                   key={child.note.id}
                   node={child}
                   matterId={matterId}
+                  access={access}
                   depth={depth + 1}
                 />
               ))}

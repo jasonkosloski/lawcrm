@@ -7,13 +7,16 @@
  *   - Time entries → mini-card list mirroring EventTimeEntriesSection
  *     so the design language stays cohesive across the app.
  *
- * Below the categories, three "Add" buttons collapse to a single
- * row when nothing is being composed; clicking one expands its
- * dedicated inline form. Only one composer is open at a time.
+ * Below the categories, the "Add" buttons the viewer may use collapse
+ * to a single row when nothing is being composed; clicking one
+ * expands its dedicated inline form. Only one composer is open at a
+ * time. Both the Add buttons and the delete controls are gated by the
+ * viewer's `access` so nothing is offered that the server would
+ * bounce to the dashboard (discarding what was typed).
  *
- * The whole section hides when there's nothing attached AND the
- * composer is collapsed — applies on reply notes so threads don't
- * fill with "+ Add task" rows on every leaf.
+ * Due dates and time-entry dates are date-only values (UTC midnight,
+ * ADR-012): they are formatted with `formatDateOnly` and compared to
+ * the viewer's today by day key, never as instants.
  */
 
 "use client";
@@ -46,18 +49,23 @@ import {
   AddTimeEntryForm,
 } from "./note-attachment-forms";
 import { CaptureStack } from "@/components/matters/captures/capture-stack";
-import type { NoteCapture } from "@/lib/note-constants";
+import {
+  allowedCaptureKinds,
+  type NoteAccess,
+  type NoteCapture,
+} from "@/lib/note-constants";
 import { addCapturesToNoteBulk } from "@/app/actions/note-attachments";
 import {
   bulkAttachInitialState,
   type BulkAttachFormState,
 } from "@/lib/note-attachment-form";
-// Due dates + entry dates here are date-only values (server-local
-// midnight) — the centralized "short" variant with no TZ override
-// keeps them on the day grid they were saved on.
-import { formatDate as formatDateVariant } from "@/lib/format-date";
+import {
+  daysUntilDateOnly,
+  formatDateOnly,
+} from "@/lib/format-date";
+import { useUserTimeZone } from "@/components/user-time-zone";
 
-const formatDate = (d: Date): string => formatDateVariant(d, "short");
+const formatDate = (d: Date): string => formatDateOnly(d, "short");
 
 type ComposerKind = "task" | "deadline" | "time" | "bulk" | null;
 
@@ -67,12 +75,15 @@ export function NoteAttachmentsSection({
   tasks,
   deadlines,
   timeEntries,
+  access,
 }: {
   noteId: string;
   matterId: string;
   tasks: NoteAttachedTask[];
   deadlines: NoteAttachedDeadline[];
   timeEntries: NoteAttachedTimeEntry[];
+  /** Required so a new caller can't forget to gate the controls. */
+  access: NoteAccess;
 }) {
   const [composer, setComposer] = useState<ComposerKind>(null);
 
@@ -85,6 +96,7 @@ export function NoteAttachmentsSection({
               key={t.id}
               task={t}
               href={`/matters/${matterId}/tasks`}
+              canDelete={access.canDeleteTask}
             />
           ))}
         </ChipRow>
@@ -97,6 +109,7 @@ export function NoteAttachmentsSection({
               key={d.id}
               deadline={d}
               href={`/matters/${matterId}/deadlines`}
+              canDelete={access.canDeleteDeadline}
             />
           ))}
         </ChipRow>
@@ -106,11 +119,12 @@ export function NoteAttachmentsSection({
         <TimeEntriesGroup
           entries={timeEntries}
           matterId={matterId}
+          access={access}
         />
       )}
 
       {composer === null ? (
-        <AddButtonRow onPick={setComposer} />
+        <AddButtonRow onPick={setComposer} access={access} />
       ) : composer === "task" ? (
         <AddTaskForm
           noteId={noteId}
@@ -132,6 +146,7 @@ export function NoteAttachmentsSection({
       ) : (
         <BulkComposer
           noteId={noteId}
+          access={access}
           onCancel={() => setComposer(null)}
           onSaved={() => setComposer(null)}
         />
@@ -146,10 +161,12 @@ export function NoteAttachmentsSection({
  *  on initial save; surfaced here so saved notes get the same power. */
 function BulkComposer({
   noteId,
+  access,
   onCancel,
   onSaved,
 }: {
   noteId: string;
+  access: NoteAccess;
   onCancel: () => void;
   onSaved: () => void;
 }) {
@@ -160,11 +177,10 @@ function BulkComposer({
   >(action, bulkAttachInitialState);
   const [captures, setCaptures] = useState<NoteCapture[]>([]);
 
+  // Close on success. The composer unmounts with it, so there is no
+  // local state left to reset.
   useEffect(() => {
-    if (state.status === "ok") {
-      setCaptures([]);
-      onSaved();
-    }
+    if (state.status === "ok") onSaved();
   }, [state.status, onSaved]);
 
   const errs = state.errors ?? {};
@@ -185,7 +201,7 @@ function BulkComposer({
         // Matches the reply composer's restriction — events have
         // their own primary surface and sibling notes don't make
         // sense as attachments to an existing note.
-        allowedKinds={["task", "deadline", "time"]}
+        allowedKinds={allowedCaptureKinds(access, ["task", "deadline", "time"])}
       />
 
       {errs.attachments && (
@@ -250,19 +266,49 @@ const TASK_PRIORITY_DOT: Record<string, string> = {
   low: "bg-line",
 };
 
+/** Delete control shared by the task and deadline chips. A sibling of
+ *  the chip's link (not nested inside it - a button inside an anchor is
+ *  invalid HTML). Hover-revealed on pointer devices, but visible on
+ *  keyboard focus and on touch, where there is no hover. */
+function ChipDeleteButton({
+  label,
+  onClick,
+  className,
+}: {
+  label: string;
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      className={cn(
+        "ml-0.5 shrink-0 opacity-0 group-hover/chip:opacity-100 focus-visible:opacity-100",
+        "[@media(pointer:coarse)]:opacity-100 transition-opacity hover:text-warn",
+        className
+      )}
+    >
+      <Trash2 size={10} />
+    </button>
+  );
+}
+
 function TaskChip({
   task,
   href,
+  canDelete,
 }: {
   task: NoteAttachedTask;
   href: string;
+  canDelete: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const done = task.status === "done" || task.status === "cancelled";
 
-  const onDelete = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const onDelete = () => {
     if (!confirm(`Delete "${task.title}"?`)) return;
     startTransition(async () => {
       // Surface failures (e.g. "Task not found") — otherwise the chip
@@ -273,65 +319,70 @@ function TaskChip({
   };
 
   return (
-    <Link
-      href={href}
-      title={task.title}
+    <span
       className={cn(
-        "group/chip inline-flex items-center gap-1.5 max-w-full text-2xs px-2 py-1 rounded-md border bg-paper-2/60 border-line",
+        "group/chip inline-flex items-center max-w-full text-2xs px-2 py-1 rounded-md border bg-paper-2/60 border-line",
         "hover:border-brand-300 hover:bg-brand-soft transition-colors",
         done && "opacity-60",
         pending && "opacity-40"
       )}
     >
-      <ListTodo size={10} className="shrink-0 text-ink-4" />
-      <span
-        className={cn(
-          "w-1.5 h-1.5 rounded-full shrink-0",
-          TASK_PRIORITY_DOT[task.priority] ?? TASK_PRIORITY_DOT.normal
-        )}
-      />
-      <span
-        className={cn(
-          "truncate text-ink-2",
-          done && "line-through text-ink-4"
-        )}
+      <Link
+        href={href}
+        title={task.title}
+        className="inline-flex items-center gap-1.5 min-w-0"
       >
-        {task.title}
-      </span>
-      {task.dueDate && (
-        <span className="font-mono text-ink-4 shrink-0">
-          {formatDate(task.dueDate)}
+        <ListTodo size={10} className="shrink-0 text-ink-4" />
+        <span
+          className={cn(
+            "w-1.5 h-1.5 rounded-full shrink-0",
+            TASK_PRIORITY_DOT[task.priority] ?? TASK_PRIORITY_DOT.normal
+          )}
+        />
+        <span
+          className={cn(
+            "truncate text-ink-2",
+            done && "line-through text-ink-4"
+          )}
+        >
+          {task.title}
         </span>
+        {task.dueDate && (
+          <span className="font-mono text-ink-4 shrink-0">
+            {formatDate(task.dueDate)}
+          </span>
+        )}
+      </Link>
+      {canDelete && (
+        <ChipDeleteButton
+          label="Delete task"
+          onClick={onDelete}
+          className="text-ink-4"
+        />
       )}
-      <button
-        type="button"
-        onClick={onDelete}
-        title="Delete task"
-        aria-label="Delete task"
-        className="ml-0.5 text-ink-4 hover:text-warn opacity-0 group-hover/chip:opacity-100 transition-opacity"
-      >
-        <Trash2 size={10} />
-      </button>
-    </Link>
+    </span>
   );
 }
 
 function DeadlineChip({
   deadline,
   href,
+  canDelete,
 }: {
   deadline: NoteAttachedDeadline;
   href: string;
+  canDelete: boolean;
 }) {
   const [pending, startTransition] = useTransition();
+  const tz = useUserTimeZone();
+  // Date-only due date vs the viewer's today, by calendar day: due
+  // today is not overdue, and nothing flips the evening before.
   const isOverdue =
-    deadline.status === "open" && deadline.dueDate.getTime() < Date.now();
+    deadline.status === "open" && daysUntilDateOnly(deadline.dueDate, tz) < 0;
   const isCritical = deadline.kind === "critical";
   const done = deadline.status === "completed" || deadline.status === "waived";
 
-  const onDelete = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const onDelete = () => {
     if (!confirm(`Delete "${deadline.title}"?`)) return;
     startTransition(async () => {
       // Surface failures — otherwise the chip just un-dims and
@@ -342,11 +393,9 @@ function DeadlineChip({
   };
 
   return (
-    <Link
-      href={href}
-      title={deadline.title}
+    <span
       className={cn(
-        "group/chip inline-flex items-center gap-1.5 max-w-full text-2xs px-2 py-1 rounded-md border transition-colors",
+        "group/chip inline-flex items-center max-w-full text-2xs px-2 py-1 rounded-md border transition-colors",
         isOverdue
           ? "bg-warn-soft border-warn-border text-warn hover:bg-warn-soft"
           : isCritical
@@ -356,26 +405,23 @@ function DeadlineChip({
         pending && "opacity-40"
       )}
     >
-      <CircleAlert size={10} className="shrink-0" />
-      <span
-        className={cn(
-          "truncate",
-          done && "line-through"
-        )}
+      <Link
+        href={href}
+        title={deadline.title}
+        className="inline-flex items-center gap-1.5 min-w-0"
       >
-        {deadline.title}
-      </span>
-      <span className="font-mono shrink-0">{formatDate(deadline.dueDate)}</span>
-      <button
-        type="button"
-        onClick={onDelete}
-        title="Delete deadline"
-        aria-label="Delete deadline"
-        className="ml-0.5 opacity-0 group-hover/chip:opacity-100 transition-opacity hover:text-warn"
-      >
-        <Trash2 size={10} />
-      </button>
-    </Link>
+        <CircleAlert size={10} className="shrink-0" />
+        <span className={cn("truncate", done && "line-through")}>
+          {deadline.title}
+        </span>
+        <span className="font-mono shrink-0">
+          {formatDate(deadline.dueDate)}
+        </span>
+      </Link>
+      {canDelete && (
+        <ChipDeleteButton label="Delete deadline" onClick={onDelete} />
+      )}
+    </span>
   );
 }
 
@@ -393,13 +439,9 @@ const TIME_STATUS_LABEL: Record<string, string> = {
  *  collapsed-summary line so the user knows who logged how much
  *  without expanding the full list.
  *
- *  Identity caveat: NoteAttachedTimeEntry carries no userId, so we
- *  key by name+initials. Initials alone would merge two distinct
- *  "JS" users into one row under the first user's name; with the
- *  composite key, rows only merge when name AND initials match —
- *  i.e. when the displayed attribution is identical anyway. The
- *  real fix is a userId on the query type; switch the key to it
- *  if/when that lands.
+ *  Keyed by user id: two people who share initials (or even a
+ *  display name) are separate rows, and one person's entries always
+ *  merge.
  *
  *  Exported for tests. */
 export function aggregateByUser(
@@ -410,9 +452,7 @@ export function aggregateByUser(
     { key: string; initials: string; name: string; hours: number }
   >();
   for (const e of entries) {
-    // NUL separator: unlike a space it can't appear in a name,
-    // so "Jo hn"+"X" and "Jo"+"hn X" can't collide into one key.
-    const key = `${e.userName}\u0000${e.userInitials}`;
+    const key = e.userId;
     const existing = byUser.get(key);
     if (existing) {
       existing.hours += e.hours;
@@ -431,9 +471,11 @@ export function aggregateByUser(
 function TimeEntriesGroup({
   entries,
   matterId,
+  access,
 }: {
   entries: NoteAttachedTimeEntry[];
   matterId: string;
+  access: NoteAccess;
 }) {
   // Default to collapsed — once a note has more than a couple of
   // entries the expanded list dominates the card. Summary line still
@@ -501,7 +543,13 @@ function TimeEntriesGroup({
       {expanded && (
         <ul className="flex flex-col gap-2">
           {entries.map((e) => (
-            <TimeEntryItem key={e.id} entry={e} />
+            <TimeEntryItem
+              key={e.id}
+              entry={e}
+              canDelete={
+                e.userId === access.userId || access.canDeleteAnyTime
+              }
+            />
           ))}
         </ul>
       )}
@@ -509,7 +557,13 @@ function TimeEntriesGroup({
   );
 }
 
-function TimeEntryItem({ entry }: { entry: NoteAttachedTimeEntry }) {
+function TimeEntryItem({
+  entry,
+  canDelete,
+}: {
+  entry: NoteAttachedTimeEntry;
+  canDelete: boolean;
+}) {
   const [pending, startTransition] = useTransition();
 
   const onDelete = () => {
@@ -562,23 +616,25 @@ function TimeEntryItem({ entry }: { entry: NoteAttachedTimeEntry }) {
         >
           {entry.hours.toFixed(1)}h
         </span>
-        <button
-          type="button"
-          onClick={onDelete}
-          disabled={pending}
-          title={
-            entry.status === "billed"
-              ? "Entry is billed — unbill before deleting"
-              : "Delete"
-          }
-          aria-label="Delete time entry"
-          className={cn(
-            "inline-flex items-center justify-center w-6 h-6 rounded-md text-ink-3 hover:text-warn hover:bg-warn-soft transition-colors disabled:opacity-60",
-            entry.status === "billed" && "opacity-40"
-          )}
-        >
-          <Trash2 size={11} />
-        </button>
+        {canDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={pending}
+            title={
+              entry.status === "billed"
+                ? "Entry is billed — unbill before deleting"
+                : "Delete"
+            }
+            aria-label="Delete time entry"
+            className={cn(
+              "inline-flex items-center justify-center w-6 h-6 rounded-md text-ink-3 hover:text-warn hover:bg-warn-soft transition-colors disabled:opacity-60",
+              entry.status === "billed" && "opacity-40"
+            )}
+          >
+            <Trash2 size={11} />
+          </button>
+        )}
       </div>
 
       {entry.narrative && (
@@ -600,26 +656,44 @@ function TimeEntryItem({ entry }: { entry: NoteAttachedTimeEntry }) {
 
 function AddButtonRow({
   onPick,
+  access,
 }: {
   onPick: (kind: ComposerKind) => void;
+  access: NoteAccess;
 }) {
+  // "Add multiple" mixes kinds, so it is offered when the viewer can
+  // add at least two of them (a single kind has its own button).
+  const kindCount = [
+    access.canCreateTask,
+    access.canCreateDeadline,
+    access.canCreateTime,
+  ].filter(Boolean).length;
+  if (kindCount === 0) return null;
   return (
     <div className="flex items-center gap-1 flex-wrap">
-      <AddPill onClick={() => onPick("task")} icon={<ListTodo size={11} />}>
-        Add task
-      </AddPill>
-      <AddPill
-        onClick={() => onPick("deadline")}
-        icon={<CircleAlert size={11} />}
-      >
-        Add deadline
-      </AddPill>
-      <AddPill onClick={() => onPick("time")} icon={<Clock size={11} />}>
-        Log time
-      </AddPill>
-      <AddPill onClick={() => onPick("bulk")} icon={<Layers size={11} />}>
-        Add multiple
-      </AddPill>
+      {access.canCreateTask && (
+        <AddPill onClick={() => onPick("task")} icon={<ListTodo size={11} />}>
+          Add task
+        </AddPill>
+      )}
+      {access.canCreateDeadline && (
+        <AddPill
+          onClick={() => onPick("deadline")}
+          icon={<CircleAlert size={11} />}
+        >
+          Add deadline
+        </AddPill>
+      )}
+      {access.canCreateTime && (
+        <AddPill onClick={() => onPick("time")} icon={<Clock size={11} />}>
+          Log time
+        </AddPill>
+      )}
+      {kindCount > 1 && (
+        <AddPill onClick={() => onPick("bulk")} icon={<Layers size={11} />}>
+          Add multiple
+        </AddPill>
+      )}
     </div>
   );
 }

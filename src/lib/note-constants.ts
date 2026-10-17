@@ -67,6 +67,7 @@ export {
 import { TASK_PRIORITIES } from "@/lib/constants/priority";
 import { EVENT_TYPES } from "@/lib/constants/calendar-event-type";
 import { DEADLINE_KINDS } from "@/lib/constants/deadline-status";
+import { parseWallClock, todayKey, toWallClockInput } from "@/lib/format-date";
 
 export type TaskCapture = {
   kind: "task";
@@ -129,33 +130,45 @@ export const CAPTURE_KIND_LABEL: Record<CaptureKind, string> = {
   note_sibling: "Note",
 };
 
-/** Today's date in YYYY-MM-DD form — the local-timezone "today" is
- *  what users expect when they open a capture form. */
-export function todayDateString(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+/** The runtime's own zone - what a form falls back to when the caller
+ *  has no profile zone to pass (component tests, public pages). */
+function runtimeZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
-/** Round now up to the next :00 in local time, formatted for
- *  datetime-local inputs (YYYY-MM-DDTHH:mm). */
-export function nextHourDateTimeString(addHours = 0): string {
-  const d = new Date();
-  d.setMinutes(0, 0, 0);
-  d.setHours(d.getHours() + 1 + addHours);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${y}-${m}-${day}T${hh}:${mm}`;
+/** Today's date in YYYY-MM-DD form for a viewer in `tz` (their profile
+ *  zone: `useUserTimeZone()` in client components). Falls back to the
+ *  runtime zone, which is what the browser would have said before. */
+export function todayDateString(tz: string = runtimeZone()): string {
+  return todayKey(tz);
+}
+
+/** The next :00 (plus `addHours`) after now, formatted for
+ *  datetime-local inputs (YYYY-MM-DDTHH:mm) as wall-clock time in
+ *  `tz`. The server parses these with `parseWallClock(value, tz)` in
+ *  the same zone, so the value round-trips without drifting. */
+export function nextHourDateTimeString(
+  addHours = 0,
+  tz: string = runtimeZone()
+): string {
+  const now = new Date();
+  // Start of the current wall-clock hour in tz (half-hour zones
+  // included), then step forward in real time.
+  const wall = toWallClockInput(now, tz);
+  const hourStart = parseWallClock(`${wall.slice(0, 13)}:00`, tz) ?? now;
+  const next = new Date(hourStart.getTime() + (1 + addHours) * 3_600_000);
+  return toWallClockInput(next, tz);
 }
 
 /** Factory functions for new capture sub-forms — keep the shape
  *  consistent so the composer doesn't need to branch on kind. */
-export function newCapture(kind: CaptureKind, tempId: string): NoteCapture {
+export function newCapture(
+  kind: CaptureKind,
+  tempId: string,
+  /** Viewer's profile zone (`useUserTimeZone()`); drives the default
+   *  date / time on new captures. */
+  tz: string = runtimeZone()
+): NoteCapture {
   switch (kind) {
     case "task":
       return {
@@ -170,8 +183,8 @@ export function newCapture(kind: CaptureKind, tempId: string): NoteCapture {
         kind: "event",
         tempId,
         title: "",
-        startTime: nextHourDateTimeString(),
-        endTime: nextHourDateTimeString(1),
+        startTime: nextHourDateTimeString(0, tz),
+        endTime: nextHourDateTimeString(1, tz),
         type: "meeting",
         location: "",
       };
@@ -188,7 +201,7 @@ export function newCapture(kind: CaptureKind, tempId: string): NoteCapture {
       return {
         kind: "time",
         tempId,
-        date: todayDateString(),
+        date: todayDateString(tz),
         hours: "",
         activity: "",
         narrative: "",
@@ -202,4 +215,63 @@ export function newCapture(kind: CaptureKind, tempId: string): NoteCapture {
         isPinned: false,
       };
   }
+}
+
+// ── Viewer access (UI gating) ──────────────────────────────────────────
+
+/**
+ * What the signed-in viewer may do on the Notes surfaces, resolved
+ * once on the server (see `getNoteAccess` in note-access.ts) and
+ * passed down as plain booleans. The actions stay the enforcement
+ * point; this only decides which controls to offer, so a user never
+ * clicks a control that bounces them to the dashboard and throws away
+ * what they typed.
+ */
+export type NoteAccess = {
+  userId: string;
+  /** notes.create - write notes and replies. */
+  canCreateNote: boolean;
+  /** notes.pin */
+  canPin: boolean;
+  /** notes.delete_any - delete other people's notes. */
+  canDeleteAnyNote: boolean;
+  canCreateTask: boolean;
+  canDeleteTask: boolean;
+  canCreateDeadline: boolean;
+  canDeleteDeadline: boolean;
+  /** time_entries.create */
+  canCreateTime: boolean;
+  /** time_entries.delete_any - delete other people's time entries. */
+  canDeleteAnyTime: boolean;
+  canCreateEvent: boolean;
+};
+
+/** Fail-closed default: no viewer, nothing offered. */
+export const NO_NOTE_ACCESS: NoteAccess = {
+  userId: "",
+  canCreateNote: false,
+  canPin: false,
+  canDeleteAnyNote: false,
+  canCreateTask: false,
+  canDeleteTask: false,
+  canCreateDeadline: false,
+  canDeleteDeadline: false,
+  canCreateTime: false,
+  canDeleteAnyTime: false,
+  canCreateEvent: false,
+};
+
+/** `kinds` narrowed to the capture kinds the viewer may create. */
+export function allowedCaptureKinds(
+  access: NoteAccess,
+  kinds: readonly CaptureKind[]
+): CaptureKind[] {
+  const allowed: Record<CaptureKind, boolean> = {
+    task: access.canCreateTask,
+    deadline: access.canCreateDeadline,
+    time: access.canCreateTime,
+    event: access.canCreateEvent,
+    note_sibling: access.canCreateNote,
+  };
+  return kinds.filter((k) => allowed[k]);
 }

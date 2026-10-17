@@ -13,11 +13,11 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { canViewEventDetails } from "@/lib/calendar-visibility";
 import { EXPENSE_ACTIVITY_TITLE_PREFIX } from "@/lib/expense-activity";
 import { REACTION_EMOJIS } from "@/lib/note-constants";
+import { noteToPlainText } from "@/lib/note-text";
 import { sanitizeUserHtml } from "@/lib/sanitize-html";
 import { TIME_ENTRY_WIP_STATUSES } from "@/lib/constants/time-entry-status";
 import { dateOnlyKey, daysBetweenKeys, todayKey } from "@/lib/format-date";
 import { formatPhone } from "@/lib/format-phone";
-import { htmlToText } from "@/lib/html-to-text";
 import type { EventNote, EventTimeEntry } from "@/lib/queries/calendar";
 
 /** The viewer's time zone, resolved lazily so callers that already
@@ -613,6 +613,9 @@ export type NoteAttachedTimeEntry = {
   noCharge: boolean;
   privileged: boolean;
   status: string;
+  /** Who logged it - the UI offers Delete to the author or a
+   *  time_entries.delete_any holder. */
+  userId: string;
   userName: string;
   userInitials: string;
 };
@@ -622,6 +625,9 @@ export type NoteRow = {
   type: string;
   content: string;
   isPinned: boolean;
+  /** Author's user id - the UI offers Delete to the author or a
+   *  notes.delete_any holder. */
+  authorId: string;
   authorName: string;
   authorInitials: string;
   createdAt: Date;
@@ -650,12 +656,8 @@ function truncate(s: string, n: number): string {
   return s.length <= n ? s : `${s.slice(0, n - 1)}…`;
 }
 
-/** Single-line plain text of stored note HTML. Entities are decoded
- *  ("Smith &amp; Jones" -> "Smith & Jones") because React escapes the
- *  label again when it renders. */
-function plainTextFromHtml(html: string): string {
-  return htmlToText(html).replace(/\s+/g, " ").trim();
-}
+// Entity-decoded (stored note HTML is "Smith &amp; Jones").
+const plainTextFromHtml = noteToPlainText;
 
 /** Chip label for a phone number: formatted, or a placeholder. */
 function prettyPhoneForLink(p: string): string {
@@ -823,6 +825,7 @@ export async function getMatterNotes(
       type: n.type,
       content: sanitizeUserHtml(n.content),
       isPinned: n.isPinned,
+      authorId: n.authorId,
       authorName: n.author.name,
       authorInitials: n.author.initials,
       createdAt: n.createdAt,
@@ -843,6 +846,7 @@ export async function getMatterNotes(
         noCharge: t.noCharge,
         privileged: t.privileged,
         status: t.status,
+        userId: t.userId,
         userName: t.user.name,
         userInitials: t.user.initials,
       })),

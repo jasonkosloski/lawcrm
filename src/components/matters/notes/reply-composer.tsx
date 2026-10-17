@@ -8,20 +8,26 @@
  * on the top-level note composer — serialized into the `attachments`
  * field. The server creates them with `noteId` pointing at the new
  * reply, so they surface in that reply's attached-list immediately.
+ * Only the kinds the viewer may create are offered.
  *
  * Intentionally simpler than NoteComposer in two ways:
  *   - No type pills (replies are always plain notes)
  *   - No pin (replies inherit thread context, pinning a reply alone
  *     would orphan it from its parent)
+ *
+ * Submit is dispatched by hand (see NoteComposer): a failed save keeps
+ * the typed reply, and success is handled in the handler.
  */
 
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { createNote } from "@/app/actions/notes";
 import {
+  allowedCaptureKinds,
   noteInitialState,
+  type NoteAccess,
   type NoteCapture,
   type NoteFormState,
 } from "@/lib/note-constants";
@@ -31,38 +37,40 @@ import { CaptureStack } from "@/components/matters/captures/capture-stack";
 export function ReplyComposer({
   matterId,
   parentNoteId,
+  access,
   onDone,
 }: {
   matterId: string;
   parentNoteId: string;
+  /** Viewer's permissions - narrows the capture kinds offered. */
+  access: NoteAccess;
   /** Called after a successful save so the parent can collapse the
    *  reply form. */
   onDone: () => void;
 }) {
-  const action = createNote.bind(null, matterId);
-  const [state, formAction, isPending] = useActionState<
-    NoteFormState,
-    FormData
-  >(action, noteInitialState);
+  const [state, setState] = useState<NoteFormState>(noteInitialState);
+  const [isPending, startTransition] = useTransition();
 
   const [html, setHtml] = useState("");
-  const [editorKey, setEditorKey] = useState(0);
   const [captures, setCaptures] = useState<NoteCapture[]>([]);
 
-  useEffect(() => {
-    if (state.status === "ok") {
-      setHtml("");
-      setCaptures([]);
-      setEditorKey((k) => k + 1);
-      onDone();
-    }
-  }, [state.status, onDone]);
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    startTransition(async () => {
+      const res = await createNote(matterId, noteInitialState, fd);
+      // The parent collapses (unmounts) this form on success, so
+      // there is no local state left to reset.
+      if (res.status === "ok") onDone();
+      else setState(res);
+    });
+  };
 
   const errs = state.errors ?? {};
   const attachmentErrors = state.attachmentErrors ?? {};
 
   return (
-    <form action={formAction} className="flex flex-col gap-2">
+    <form onSubmit={onSubmit} className="flex flex-col gap-2">
       <input type="hidden" name="content" value={html} />
       <input type="hidden" name="parentNoteId" value={parentNoteId} />
       <input type="hidden" name="type" value="note" />
@@ -72,12 +80,7 @@ export function ReplyComposer({
         value={JSON.stringify(captures)}
       />
 
-      <NoteEditor
-        key={editorKey}
-        onChange={setHtml}
-        placeholder="Reply…"
-        autoFocus
-      />
+      <NoteEditor onChange={setHtml} placeholder="Reply…" autoFocus />
 
       {errs.content && errs.content.length > 0 && (
         <div className="text-2xs text-warn">{errs.content[0]}</div>
@@ -91,7 +94,7 @@ export function ReplyComposer({
         captures={captures}
         onChange={setCaptures}
         errors={attachmentErrors}
-        allowedKinds={["task", "deadline", "time"]}
+        allowedKinds={allowedCaptureKinds(access, ["task", "deadline", "time"])}
       />
 
       <div className="flex items-center justify-end gap-2">

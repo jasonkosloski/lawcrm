@@ -326,21 +326,31 @@ describe("createNote — captures and pinning need their own keys", () => {
     ["time entry", TIME_CAP],
   ])("notes.create alone cannot create a %s capture", async (_label, cap) => {
     await actAs(["notes.create"]);
-    await expect(
-      createNote(matterId, noteInitialState, noteForm([cap]))
-    ).rejects.toThrow(REDIRECT);
+    // A denied kind answers with a form error (the composer keeps what
+    // the user typed) instead of redirecting to the dashboard.
+    const res = await createNote(matterId, noteInitialState, noteForm([cap]));
+    expect(res.status).toBe("error");
+    expect(res.errors?.content?.[0]).toMatch(/permission/i);
     // Atomic: the note itself wasn't written either.
     expect(await rowCounts()).toEqual(ZERO);
   });
 
   test("notes.create alone cannot create a pinned note or a pinned sibling", async () => {
     await actAs(["notes.create"]);
-    await expect(
-      createNote(matterId, noteInitialState, noteForm([], { isPinned: "on" }))
-    ).rejects.toThrow(REDIRECT);
-    await expect(
-      createNote(matterId, noteInitialState, noteForm([PINNED_NOTE_CAP]))
-    ).rejects.toThrow(REDIRECT);
+    const pinned = await createNote(
+      matterId,
+      noteInitialState,
+      noteForm([], { isPinned: "on" })
+    );
+    expect(pinned.status).toBe("error");
+    expect(pinned.errors?.content?.[0]).toMatch(/pin notes/i);
+    const sibling = await createNote(
+      matterId,
+      noteInitialState,
+      noteForm([PINNED_NOTE_CAP])
+    );
+    expect(sibling.status).toBe("error");
+    expect(sibling.errors?.content?.[0]).toMatch(/pin notes/i);
     expect(await rowCounts()).toEqual(ZERO);
   });
 
@@ -384,9 +394,10 @@ describe("addCapturesToNoteBulk — still gates the union via the shared helper"
     });
     const fd = new FormData();
     fd.set("attachments", JSON.stringify([TASK_CAP, TIME_CAP]));
-    await expect(
-      addCapturesToNoteBulk(note.id, bulkAttachInitialState, fd)
-    ).rejects.toThrow(REDIRECT);
+    // Form error, not a redirect: the stack keeps its contents.
+    const res = await addCapturesToNoteBulk(note.id, bulkAttachInitialState, fd);
+    expect(res.status).toBe("error");
+    expect(res.errors?.attachments?.[0]).toMatch(/permission to log time/i);
     expect(await prisma.task.count()).toBe(0);
     expect(await prisma.timeEntry.count()).toBe(0);
   });

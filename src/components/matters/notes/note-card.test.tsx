@@ -1,0 +1,197 @@
+/**
+ * NoteCard — viewer-gated controls, creation-time stamp, plain-text
+ * prefill for Convert-to-task.
+ *
+ * Pinned regressions:
+ *  - the card showed `updatedAt`, which pinning bumps, so pinning a
+ *    2024 memo relabelled it with today's date;
+ *  - Pin / Delete / Reply / Convert were offered to everyone and
+ *    bounced users without the permission to the dashboard, losing
+ *    what they had typed;
+ *  - Convert-to-task prefilled "Smith &amp; Jones" (entity-encoded).
+ * Timestamps render in the viewer's PROFILE zone (UserTimeZoneProvider).
+ */
+
+import { beforeEach, describe, expect, test, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+
+vi.mock("next/link", () => ({
+  default: ({
+    href,
+    children,
+    ...rest
+  }: React.ComponentProps<"a"> & { href: string }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
+}));
+vi.mock("@/app/actions/notes", () => ({
+  deleteNote: vi.fn(async () => ({ ok: true })),
+  toggleNotePin: vi.fn(async () => ({ ok: true })),
+  toggleNoteReaction: vi.fn(async () => ({ ok: true })),
+  createNote: vi.fn(),
+}));
+// Children with their own suites / heavy deps.
+vi.mock("./note-attachments-section", () => ({
+  NoteAttachmentsSection: () => <div data-testid="attachments" />,
+}));
+vi.mock("./reply-composer", () => ({
+  ReplyComposer: () => <div data-testid="reply-composer" />,
+}));
+vi.mock("./reactions-bar", () => ({ ReactionsBar: () => null }));
+vi.mock("@/components/conversions/convert-dialogs", () => ({
+  ConvertNoteToTaskDialog: ({
+    defaultTitle,
+    defaultDescription,
+  }: {
+    defaultTitle: string;
+    defaultDescription: string;
+  }) => (
+    <div
+      data-testid="convert"
+      data-title={defaultTitle}
+      data-description={defaultDescription}
+    />
+  ),
+}));
+
+import { deleteNote, toggleNotePin } from "@/app/actions/notes";
+import { UserTimeZoneProvider } from "@/components/user-time-zone";
+import { NO_NOTE_ACCESS, type NoteAccess } from "@/lib/note-constants";
+import { NoteCard, type NoteCardNote } from "./note-card";
+
+const FULL: NoteAccess = {
+  userId: "me",
+  canCreateNote: true,
+  canPin: true,
+  canDeleteAnyNote: true,
+  canCreateTask: true,
+  canDeleteTask: true,
+  canCreateDeadline: true,
+  canDeleteDeadline: true,
+  canCreateTime: true,
+  canDeleteAnyTime: true,
+  canCreateEvent: true,
+};
+
+const note = (over: Partial<NoteCardNote> = {}): NoteCardNote => ({
+  id: "n1",
+  type: "note",
+  content: "<p>Body</p>",
+  isPinned: false,
+  authorId: "me",
+  authorName: "Ann Author",
+  authorInitials: "AA",
+  createdAt: new Date("2024-03-05T17:42:00Z"),
+  parentNoteId: null,
+  link: null,
+  isRead: true,
+  reactions: [],
+  attachedTasks: [],
+  attachedDeadlines: [],
+  attachedTimeEntries: [],
+  ...over,
+});
+
+function renderCard(n: NoteCardNote, access: NoteAccess) {
+  return render(
+    <UserTimeZoneProvider timeZone="America/Denver">
+      <NoteCard note={n} matterId="m1" access={access} />
+    </UserTimeZoneProvider>
+  );
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.stubGlobal("confirm", vi.fn(() => true));
+  vi.stubGlobal("alert", vi.fn());
+});
+
+describe("NoteCard timestamp", () => {
+  test("shows when the note was CREATED, in the viewer's profile zone", () => {
+    // 17:42Z on Mar 5 2024 = 10:42 AM MST. The card must not show an
+    // updatedAt-derived time (pinning bumps updatedAt).
+    renderCard(note(), FULL);
+    expect(screen.getByText("Mar 5, 2024, 10:42 AM")).toBeInTheDocument();
+  });
+});
+
+describe("NoteCard gating", () => {
+  test("a viewer with no permissions sees no pin, reply, or actions menu on someone else's note", () => {
+    renderCard(note({ authorId: "someone-else" }), {
+      ...NO_NOTE_ACCESS,
+      userId: "me",
+    });
+    expect(screen.queryByRole("button", { name: /pin note/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^reply$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /note actions/i })).toBeNull();
+  });
+
+  test("a pinned note still reads as pinned for a viewer who cannot toggle it", () => {
+    renderCard(note({ isPinned: true, authorId: "x" }), {
+      ...NO_NOTE_ACCESS,
+      userId: "me",
+    });
+    expect(screen.getByRole("img", { name: "Pinned" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /unpin note/i })).toBeNull();
+  });
+
+  test("notes.pin holders get the toggle, and it calls the action", async () => {
+    const user = userEvent.setup();
+    renderCard(note(), FULL);
+    await user.click(screen.getByRole("button", { name: /pin note/i }));
+    expect(toggleNotePin).toHaveBeenCalledWith("n1");
+  });
+
+  test("the author can delete their own note without notes.delete_any", async () => {
+    const user = userEvent.setup();
+    renderCard(note({ authorId: "me" }), {
+      ...NO_NOTE_ACCESS,
+      userId: "me",
+    });
+    await user.click(screen.getByRole("button", { name: /note actions/i }));
+    await user.click(await screen.findByText("Delete note"));
+    expect(deleteNote).toHaveBeenCalledWith("n1");
+  });
+
+  test("someone else's note is deletable only with notes.delete_any", async () => {
+    const user = userEvent.setup();
+    // Can create tasks (so the menu exists) but not delete others' notes.
+    renderCard(note({ authorId: "other" }), {
+      ...NO_NOTE_ACCESS,
+      userId: "me",
+      canCreateTask: true,
+    });
+    await user.click(screen.getByRole("button", { name: /note actions/i }));
+    expect(await screen.findByText("Convert to task")).toBeInTheDocument();
+    expect(screen.queryByText("Delete note")).toBeNull();
+  });
+
+  test("Reply needs notes.create", () => {
+    const { unmount } = renderCard(note(), FULL);
+    expect(screen.getByRole("button", { name: /^reply$/i })).toBeInTheDocument();
+    unmount();
+    renderCard(note(), { ...FULL, canCreateNote: false });
+    expect(screen.queryByRole("button", { name: /^reply$/i })).toBeNull();
+  });
+});
+
+describe("Convert-to-task prefill", () => {
+  test("entities are decoded: '&amp;' is '&', '&lt;' is '<'", () => {
+    renderCard(
+      note({
+        content: "<p>Call Smith &amp; Jones re: &lt;redacted&gt; exhibit</p>",
+      }),
+      FULL
+    );
+    const convert = screen.getByTestId("convert");
+    expect(convert.dataset.title).toBe(
+      "Call Smith & Jones re: <redacted> exhibit"
+    );
+    expect(convert.dataset.description).toBe(
+      "Call Smith & Jones re: <redacted> exhibit"
+    );
+  });
+});

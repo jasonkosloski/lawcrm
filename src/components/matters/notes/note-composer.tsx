@@ -7,12 +7,17 @@
  * fresh without reload. All content is posted as an HTML string in
  * the hidden `content` field; the server action sanitizes it before
  * insert.
+ *
+ * The submit is dispatched by hand (not `<form action>`): React 19
+ * resets a form-action form after the action settles even when it
+ * returned a validation error, which would wipe what the user typed.
+ * The result is read in the handler, so a save resets the composer
+ * right there and a failure leaves everything in place.
  */
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useDialogActionState } from "@/hooks/use-dialog-action-state";
+import { useState, useTransition } from "react";
 import { Pin, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,6 +26,7 @@ import {
   NOTE_TYPE_LABEL,
   NOTE_TYPES,
   noteInitialState,
+  type CaptureKind,
   type NoteCapture,
   type NoteFormState,
 } from "@/lib/note-constants";
@@ -30,6 +36,7 @@ import { CaptureStack } from "@/components/matters/captures/capture-stack";
 export function NoteComposer({
   matterId,
   canPin = false,
+  allowedKinds,
 }: {
   matterId: string;
   /** Whether the viewer holds `notes.pin`. The Pin toggle is hidden
@@ -37,39 +44,44 @@ export function NoteComposer({
    *  lacks the key. Defaults to false (hidden) so a caller that
    *  forgets to resolve it fails closed. */
   canPin?: boolean;
+  /** Capture kinds the viewer may create (each needs its own create
+   *  permission). Omit to offer CaptureStack's default set. */
+  allowedKinds?: CaptureKind[];
 }) {
   const [expanded, setExpanded] = useState(false);
-  const boundCreate = createNote.bind(null, matterId);
-  // Wrapped useActionState: masks state left over from a previous
-  // expand, so a failed attempt's errors don't reappear when the
-  // composer is re-expanded. See src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    NoteFormState,
-    FormData
-  >(boundCreate, noteInitialState, expanded);
+  const [state, setState] = useState<NoteFormState>(noteInitialState);
+  const [isPending, startTransition] = useTransition();
 
   const [html, setHtml] = useState("");
   const [type, setType] = useState<(typeof NOTE_TYPES)[number]>("note");
   const [pin, setPin] = useState(false);
   const [captures, setCaptures] = useState<NoteCapture[]>([]);
-  // Bumped after each successful save so the editor remounts with a
-  // fresh empty document.
+  // Bumped on every reset so the editor remounts with a fresh empty
+  // document.
   const [editorKey, setEditorKey] = useState(0);
-  const formRef = useRef<HTMLFormElement>(null);
 
-  // Collapse + reset after a successful save. Deps key on the state
-  // OBJECT, not state.status — identity is the reliable "a
-  // submission just finished" signal (see TimeComposer for the full
-  // rationale).
-  useEffect(() => {
-    if (state.status !== "ok") return;
+  // Back to a pristine, collapsed composer. Used by both Cancel and a
+  // successful save: type, pin and queued captures must not leak into
+  // the next note.
+  const reset = () => {
     setHtml("");
     setType("note");
     setPin(false);
     setCaptures([]);
     setExpanded(false);
+    setState(noteInitialState);
     setEditorKey((k) => k + 1);
-  }, [state]);
+  };
+
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    startTransition(async () => {
+      const res = await createNote(matterId, noteInitialState, fd);
+      if (res.status === "ok") reset();
+      else setState(res);
+    });
+  };
 
   const errs = state.errors ?? {};
   const attachmentErrors = state.attachmentErrors ?? {};
@@ -77,11 +89,7 @@ export function NoteComposer({
   return (
     <Card className={cn(expanded && "border-brand-200")}>
       <CardContent className="p-3">
-        <form
-          ref={formRef}
-          action={formAction}
-          className="flex flex-col gap-2"
-        >
+        <form onSubmit={onSubmit} className="flex flex-col gap-2">
           {/* Hidden fields mirror local state so the submit carries them. */}
           <input type="hidden" name="content" value={html} />
           <input type="hidden" name="type" value={type} />
@@ -95,7 +103,11 @@ export function NoteComposer({
           {!expanded ? (
             <button
               type="button"
-              onClick={() => setExpanded(true)}
+              onClick={() => {
+                // A failed attempt's errors belong to that attempt.
+                setState(noteInitialState);
+                setExpanded(true);
+              }}
               className={cn(
                 "flex items-center gap-2 h-9 px-3 text-xs text-ink-4",
                 "rounded-md border border-dashed border-line bg-white",
@@ -122,17 +134,23 @@ export function NoteComposer({
                 captures={captures}
                 onChange={setCaptures}
                 errors={attachmentErrors}
+                allowedKinds={allowedKinds}
               />
 
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   {/* Type pills */}
-                  <div className="flex items-center gap-0.5 rounded-md border border-line bg-white p-0.5">
+                  <div
+                    role="group"
+                    aria-label="Note type"
+                    className="flex items-center gap-0.5 rounded-md border border-line bg-white p-0.5"
+                  >
                     {NOTE_TYPES.map((t) => (
                       <button
                         key={t}
                         type="button"
                         onClick={() => setType(t)}
+                        aria-pressed={type === t}
                         className={cn(
                           "text-2xs font-medium px-2 py-0.5 rounded transition-colors",
                           type === t
@@ -170,11 +188,7 @@ export function NoteComposer({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      setExpanded(false);
-                      setHtml("");
-                      setEditorKey((k) => k + 1);
-                    }}
+                    onClick={reset}
                     className="text-xs text-ink-3 hover:text-ink-2 px-2"
                   >
                     Cancel

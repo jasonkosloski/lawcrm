@@ -33,8 +33,17 @@ vi.mock("@/lib/google/google-calendar-push", () => ({
   pushEventToGoogle: vi.fn().mockResolvedValue(undefined),
 }));
 
+// server-only; the viewer's profile zone drives event wall-clock times.
+vi.mock("@/lib/current-user-tz", () => ({
+  getCurrentUserTimeZone: vi.fn().mockResolvedValue("America/Denver"),
+}));
+
 import { getCurrentUserId } from "@/lib/current-user";
-import { requirePermission } from "@/lib/permission-check";
+import {
+  currentUserHasPermission,
+  requirePermission,
+} from "@/lib/permission-check";
+import { pushEventToGoogle } from "@/lib/google/google-calendar-push";
 import { prisma } from "@/lib/prisma";
 import {
   addCapturesToNoteBulk,
@@ -87,6 +96,8 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.clearAllMocks();
+  vi.mocked(requirePermission).mockReset().mockResolvedValue("test-user");
+  vi.mocked(currentUserHasPermission).mockReset().mockResolvedValue(true);
 });
 
 const buildTaskForm = () => {
@@ -213,9 +224,10 @@ describe("addCapturesToNoteBulk gates", () => {
     expect(await prisma.calendarEvent.count({ where: { matterId } })).toBe(1);
   });
 
-  test("note_sibling-only payload requires no create permission", async () => {
-    // The bulk loop deliberately ignores note_sibling captures, so
-    // there's no row creation to gate.
+  test("a note_sibling-only payload is rejected as nothing to save (no phantom success or activity row)", async () => {
+    // Replies belong to the reply composer: the bulk surface drops
+    // note_sibling captures. It used to return ok and log
+    // "1 item added to note" for a payload that wrote nothing.
     const result = await addCapturesToNoteBulk(
       noteId,
       bulkAttachInitialState,
@@ -223,7 +235,200 @@ describe("addCapturesToNoteBulk gates", () => {
         { kind: "note_sibling", tempId: "n1", content: "A sibling note" },
       ])
     );
+    expect(result.status).toBe("error");
+    expect(result.errors?.attachments?.[0]).toBe("Nothing to save");
     expect(mockedRequirePermission).not.toHaveBeenCalled();
+    expect(await prisma.note.count()).toBe(1); // just the base note
+    expect(await prisma.activityLog.count({ where: { matterId } })).toBe(0);
+  });
+
+  test("siblings mixed with real captures are dropped and not counted", async () => {
+    const result = await addCapturesToNoteBulk(
+      noteId,
+      bulkAttachInitialState,
+      buildBulkForm([
+        { kind: "task", tempId: "t1", title: "Real task" },
+        { kind: "note_sibling", tempId: "n1", content: "ignored" },
+      ])
+    );
     expect(result.status).toBe("ok");
+    expect(await prisma.note.count()).toBe(1);
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { matterId },
+    });
+    expect(log.title).toBe("1 item added to note");
+    expect(log.detail).toBe("1 task");
+  });
+
+  test("activity detail pluralizes by label: '2 time entries', not '2 times'", async () => {
+    await addCapturesToNoteBulk(
+      noteId,
+      bulkAttachInitialState,
+      buildBulkForm([
+        { kind: "time", tempId: "a", date: "2026-07-01", hours: "1", activity: "A" },
+        { kind: "time", tempId: "b", date: "2026-07-02", hours: "1", activity: "B" },
+        { kind: "task", tempId: "c", title: "T" },
+        { kind: "deadline", tempId: "d", title: "D1", dueDate: "2026-08-01" },
+        { kind: "deadline", tempId: "e", title: "D2", dueDate: "2026-08-02" },
+      ])
+    );
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { matterId },
+    });
+    expect(log.title).toBe("5 items added to note");
+    expect(log.detail).toBe("2 time entries · 1 task · 2 deadlines");
+  });
+
+  test("a denied kind returns a form error and nothing is created", async () => {
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (key) => key !== "deadlines.create"
+    );
+    const result = await addCapturesToNoteBulk(
+      noteId,
+      bulkAttachInitialState,
+      buildBulkForm([
+        { kind: "task", tempId: "t1", title: "Fine" },
+        {
+          kind: "deadline",
+          tempId: "d1",
+          title: "Denied",
+          dueDate: "2026-08-01",
+        },
+      ])
+    );
+    expect(result.status).toBe("error");
+    expect(result.errors?.attachments?.[0]).toMatch(
+      /permission to create deadlines/i
+    );
+    // All-or-nothing: the permitted task was not created either.
+    expect(await prisma.task.count({ where: { noteId } })).toBe(0);
+    expect(await prisma.deadline.count({ where: { noteId } })).toBe(0);
+  });
+
+  test("the enforcing gate still rejects when the friendly check is bypassed", async () => {
+    mockedRequirePermission.mockImplementation(async (key) => {
+      if (key === "tasks.create") throw new Error("NEXT_REDIRECT");
+      return "test-user";
+    });
+    await expect(
+      addCapturesToNoteBulk(
+        noteId,
+        bulkAttachInitialState,
+        buildBulkForm([{ kind: "task", tempId: "t1", title: "T" }])
+      )
+    ).rejects.toThrow("NEXT_REDIRECT");
+    expect(await prisma.task.count({ where: { noteId } })).toBe(0);
+  });
+
+  test("an event capture is stored in the viewer's zone, owned, attended, and pushed", async () => {
+    await addCapturesToNoteBulk(
+      noteId,
+      bulkAttachInitialState,
+      buildBulkForm([
+        {
+          kind: "event",
+          tempId: "e1",
+          title: "Status conference",
+          startTime: "2026-08-01T09:00",
+          endTime: "2026-08-01T10:00",
+          type: "hearing",
+        },
+      ])
+    );
+    const ev = await prisma.calendarEvent.findFirstOrThrow({
+      where: { matterId },
+      include: { attendees: true },
+    });
+    // 09:00 MDT = 15:00Z (not 09:00Z, which a naive server-zone parse
+    // gives on the UTC host).
+    expect(ev.startTime.toISOString()).toBe("2026-08-01T15:00:00.000Z");
+    expect(ev.createdById).toBe(userId);
+    expect(ev.attendees.map((a) => a.userId)).toContain(userId);
+    expect(pushEventToGoogle).toHaveBeenCalledWith(ev.id);
+  });
+
+  test("date-only captures are stored as UTC-midnight calendar dates", async () => {
+    await addCapturesToNoteBulk(
+      noteId,
+      bulkAttachInitialState,
+      buildBulkForm([
+        { kind: "deadline", tempId: "d", title: "D", dueDate: "2026-04-16" },
+        {
+          kind: "time",
+          tempId: "m",
+          date: "2026-04-17",
+          hours: "1",
+          activity: "A",
+        },
+      ])
+    );
+    expect(
+      (
+        await prisma.deadline.findFirstOrThrow({ where: { noteId } })
+      ).dueDate.toISOString()
+    ).toBe("2026-04-16T00:00:00.000Z");
+    expect(
+      (
+        await prisma.timeEntry.findFirstOrThrow({ where: { noteId } })
+      ).date.toISOString()
+    ).toBe("2026-04-17T00:00:00.000Z");
+  });
+
+  test("an invalid capture returns attachmentErrors keyed by tempId and writes nothing", async () => {
+    const result = await addCapturesToNoteBulk(
+      noteId,
+      bulkAttachInitialState,
+      buildBulkForm([
+        { kind: "task", tempId: "ok", title: "Fine" },
+        {
+          kind: "time",
+          tempId: "bad",
+          date: "2026-07-01",
+          hours: "99",
+          activity: "A",
+        },
+      ])
+    );
+    expect(result.status).toBe("error");
+    expect(result.attachmentErrors?.bad).toBeTruthy();
+    expect(await prisma.task.count({ where: { noteId } })).toBe(0);
+  });
+});
+
+describe("single-attach date handling", () => {
+  test("addDeadlineToNote stores the due date at UTC midnight", async () => {
+    await addDeadlineToNote(
+      noteId,
+      noteAttachmentInitialState,
+      buildDeadlineForm()
+    );
+    expect(
+      (
+        await prisma.deadline.findFirstOrThrow({ where: { noteId } })
+      ).dueDate.toISOString()
+    ).toBe("2026-08-01T00:00:00.000Z");
+  });
+
+  test("addTimeEntryToNote stores the date at UTC midnight and rejects a bad date", async () => {
+    await addTimeEntryToNote(
+      noteId,
+      noteAttachmentInitialState,
+      buildTimeForm()
+    );
+    expect(
+      (
+        await prisma.timeEntry.findFirstOrThrow({ where: { noteId } })
+      ).date.toISOString()
+    ).toBe("2026-07-01T00:00:00.000Z");
+
+    const bad = buildTimeForm();
+    bad.set("date", "2026-02-31");
+    const res = await addTimeEntryToNote(
+      noteId,
+      noteAttachmentInitialState,
+      bad
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.date?.[0]).toBe("Invalid date");
   });
 });

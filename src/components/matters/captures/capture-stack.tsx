@@ -27,6 +27,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useUserTimeZone } from "@/components/user-time-zone";
 import {
   CAPTURE_KIND_LABEL,
   DEADLINE_KINDS,
@@ -46,8 +47,6 @@ import {
 import { DEADLINE_KIND_LABEL } from "@/lib/constants/deadline-status";
 import { EVENT_TYPE_LABEL } from "@/lib/constants/calendar-event-type";
 import { TASK_PRIORITY_LABEL } from "@/lib/constants/priority";
-import { useUserTimeZone } from "@/components/user-time-zone";
-import { nextHourInput, todayInput } from "@/lib/capture-defaults";
 
 const KIND_ICON: Record<CaptureKind, typeof ListTodo> = {
   task: ListTodo,
@@ -79,23 +78,17 @@ export function CaptureStack({
   canPin?: boolean;
 }) {
   const idPrefix = useId();
-  // Monotonic per mounted stack: ids stay unique across re-renders and
-  // after removals (a per-render counter restarted at 0 every render).
-  const counter = useRef(0);
-  // Defaults are computed in the viewer's PROFILE zone, the same zone
-  // the server reads datetime-local values in (ADR-012).
+  // New captures default to today / the next hour in the viewer's
+  // PROFILE zone - the zone the server reads event times in.
   const tz = useUserTimeZone();
+  // Counter lives in a ref and is only touched inside the click handler
+  // (never during render), so ids stay unique across re-renders.
+  const counter = useRef(0);
 
   const add = (kind: CaptureKind) => {
     counter.current += 1;
-    const created = newCapture(kind, `cap-${idPrefix}-${counter.current}`);
-    if (created.kind === "event") {
-      created.startTime = nextHourInput(tz);
-      created.endTime = nextHourInput(tz, 1);
-    } else if (created.kind === "time") {
-      created.date = todayInput(tz);
-    }
-    onChange([...captures, created]);
+    const tempId = `cap-${idPrefix}-${counter.current}`;
+    onChange([...captures, newCapture(kind, tempId, tz)]);
   };
   const remove = (tempId: string) => {
     onChange(captures.filter((c) => c.tempId !== tempId));
@@ -107,6 +100,10 @@ export function CaptureStack({
       )
     );
   };
+
+  // Nothing the viewer may add and nothing queued: render no stray
+  // "Also capture" label.
+  if (allowedKinds.length === 0 && captures.length === 0) return null;
 
   return (
     <div className="flex flex-col gap-2">

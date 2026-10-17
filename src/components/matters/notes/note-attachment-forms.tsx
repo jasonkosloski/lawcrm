@@ -26,6 +26,7 @@ import {
   TASK_PRIORITIES,
   todayDateString,
 } from "@/lib/note-constants";
+import { useUserTimeZone } from "@/components/user-time-zone";
 
 // ── Shared input primitives ────────────────────────────────────────────
 
@@ -114,6 +115,7 @@ export function AddTaskForm({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Task title"
+            aria-label="Task title"
             autoFocus
             className={cn(inputClass, "w-full", errs.title && inputErrorClass)}
           />
@@ -132,6 +134,7 @@ export function AddTaskForm({
         </div>
         <select
           name="priority"
+          aria-label="Priority"
           value={priority}
           onChange={(e) => setPriority(e.target.value)}
           className={cn(inputClass, "capitalize")}
@@ -149,6 +152,7 @@ export function AddTaskForm({
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         placeholder="Details (optional)"
+        aria-label="Task details"
         rows={2}
         className={cn(
           "px-2 py-1.5 rounded-md border bg-white text-xs text-ink leading-relaxed",
@@ -206,6 +210,7 @@ export function AddDeadlineForm({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Deadline title (e.g. 'CGIA notice due')"
+            aria-label="Deadline title"
             autoFocus
             className={cn(inputClass, "w-full", errs.title && inputErrorClass)}
           />
@@ -224,6 +229,7 @@ export function AddDeadlineForm({
         </div>
         <select
           name="kind"
+          aria-label="Deadline type"
           value={kind}
           onChange={(e) =>
             setKind(e.target.value as (typeof DEADLINE_KINDS)[number])
@@ -243,6 +249,7 @@ export function AddDeadlineForm({
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         placeholder="Why this deadline applies (optional)"
+        aria-label="Why this deadline applies"
         rows={2}
         className={cn(
           "px-2 py-1.5 rounded-md border bg-white text-xs text-ink leading-relaxed",
@@ -279,7 +286,9 @@ export function AddTimeEntryForm({
     FormData
   >(action, noteAttachmentInitialState);
 
-  const [date, setDate] = useState(todayDateString());
+  // "Today" in the viewer's profile zone, not the browser's.
+  const tz = useUserTimeZone();
+  const [date, setDate] = useState(() => todayDateString(tz));
   const [hours, setHours] = useState("");
   const [activity, setActivity] = useState("");
   const [narrative, setNarrative] = useState("");
@@ -315,6 +324,7 @@ export function AddTimeEntryForm({
             value={hours}
             onChange={(e) => setHours(e.target.value)}
             placeholder="Hrs"
+            aria-label="Hours"
             inputMode="decimal"
             className={cn(
               inputClass,
@@ -331,6 +341,7 @@ export function AddTimeEntryForm({
             value={activity}
             onChange={(e) => setActivity(e.target.value)}
             placeholder="Activity (e.g. 'Strategy memo · drafting')"
+            aria-label="Activity"
             className={cn(inputClass, "w-full", errs.activity && inputErrorClass)}
           />
           <FieldError msg={errs.activity?.[0]} />
@@ -342,6 +353,7 @@ export function AddTimeEntryForm({
         value={narrative}
         onChange={(e) => setNarrative(e.target.value)}
         placeholder="Narrative (optional, client-facing)"
+        aria-label="Narrative"
         rows={2}
         className={cn(
           "px-2 py-1.5 rounded-md border bg-white text-xs text-ink leading-relaxed",

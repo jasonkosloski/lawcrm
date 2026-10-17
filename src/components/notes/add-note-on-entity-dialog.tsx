@@ -14,7 +14,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import {
   Dialog,
@@ -65,15 +65,6 @@ export function AddNoteOnEntityDialog({
     FormData
   >(action, noteAttachmentInitialState, open);
 
-  const [content, setContent] = useState("");
-  const [type, setType] = useState<NoteType>("note");
-
-  useEffect(() => {
-    if (!open) return;
-    setContent("");
-    setType("note");
-  }, [open]);
-
   // Close on success. Deps key on the state OBJECT, not
   // state.status: useActionState keeps its state across
   // submissions, so after the first success the status string is
@@ -85,8 +76,6 @@ export function AddNoteOnEntityDialog({
     if (state.status === "ok") onOpenChange(false);
   }, [state, onOpenChange]);
 
-  const errs = state.errors ?? {};
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -97,52 +86,93 @@ export function AddNoteOnEntityDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form action={formAction} className="flex flex-col gap-3">
-          {/* Hidden type input mirrors the segmented control below — the
-              control writes to React state, the hidden input writes to
-              the form so we don't need a controlled <select>. */}
-          <input type="hidden" name="type" value={type} />
-          <div className="inline-flex items-center gap-0.5 rounded-md border border-line bg-paper-2 p-0.5 self-start">
-            {NOTE_TYPES.map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setType(t)}
-                className={cn(
-                  "text-2xs font-medium px-2 py-0.5 rounded transition-colors",
-                  type === t
-                    ? "bg-brand-500 text-white"
-                    : "text-ink-3 hover:text-brand-700"
-                )}
-              >
-                {NOTE_TYPE_LABEL[t]}
-              </button>
-            ))}
-          </div>
-
-          <TextareaField
-            name="content"
-            value={content}
-            onChange={setContent}
-            placeholder="Write a note…"
-            rows={5}
-            error={errs.content?.[0]}
-          />
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isPending || !content.trim()}>
-              {isPending ? "Saving…" : "Add note"}
-            </Button>
-          </DialogFooter>
-        </form>
+        {/* The form (and its working copy of the text + type) lives in
+            the dialog's content, which unmounts on close - so every
+            open starts blank without any reset effect. */}
+        <NoteForm
+          formAction={formAction}
+          isPending={isPending}
+          contentError={state.errors?.content?.[0]}
+          onCancel={() => onOpenChange(false)}
+        />
       </DialogContent>
     </Dialog>
+  );
+}
+
+function NoteForm({
+  formAction,
+  isPending,
+  contentError,
+  onCancel,
+}: {
+  formAction: (payload: FormData) => void;
+  isPending: boolean;
+  contentError: string | undefined;
+  onCancel: () => void;
+}) {
+  const [content, setContent] = useState("");
+  const [type, setType] = useState<NoteType>("note");
+  // Dispatch manually instead of <form action>: React 19 resets the
+  // form after the action settles even when it returned a validation
+  // error, which would wipe the typed note. (The fields are
+  // controlled, but the explicit dispatch keeps that true regardless.)
+  const [, startSubmit] = useTransition();
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    startSubmit(() => formAction(fd));
+  };
+
+  return (
+    <form onSubmit={onSubmit} className="flex flex-col gap-3">
+      {/* Hidden type input mirrors the segmented control below — the
+          control writes to React state, the hidden input writes to
+          the form so we don't need a controlled <select>. */}
+      <input type="hidden" name="type" value={type} />
+      <div
+        role="group"
+        aria-label="Note type"
+        className="inline-flex items-center gap-0.5 rounded-md border border-line bg-paper-2 p-0.5 self-start"
+      >
+        {NOTE_TYPES.map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setType(t)}
+            aria-pressed={type === t}
+            className={cn(
+              "text-2xs font-medium px-2 py-0.5 rounded transition-colors",
+              type === t
+                ? "bg-brand-500 text-white"
+                : "text-ink-3 hover:text-brand-700"
+            )}
+          >
+            {NOTE_TYPE_LABEL[t]}
+          </button>
+        ))}
+      </div>
+
+      <label className="flex flex-col">
+        <span className="sr-only">Note</span>
+        <TextareaField
+          name="content"
+          value={content}
+          onChange={setContent}
+          placeholder="Write a note…"
+          rows={5}
+          error={contentError}
+        />
+      </label>
+
+      <DialogFooter>
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={isPending || !content.trim()}>
+          {isPending ? "Saving…" : "Add note"}
+        </Button>
+      </DialogFooter>
+    </form>
   );
 }

@@ -4,7 +4,9 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { parseWallClock } from "./format-date";
 import {
+  allowedCaptureKinds,
   CAPTURE_KIND_LABEL,
   DEADLINE_KINDS,
   DEADLINE_STATUSES,
@@ -13,6 +15,7 @@ import {
   NOTE_TYPE_LABEL,
   newCapture,
   nextHourDateTimeString,
+  NO_NOTE_ACCESS,
   noteInitialState,
   REACTION_EMOJIS,
   TASK_PRIORITIES,
@@ -78,14 +81,21 @@ describe("todayDateString", () => {
     vi.useRealTimers();
   });
 
-  test("returns YYYY-MM-DD in local time", () => {
-    // Pin to noon UTC on a non-DST date to avoid TZ flakiness.
+  test("is the viewer's calendar day in the given zone, not UTC's", () => {
+    // 02:00Z on Apr 28 is still Apr 27 (8 PM) in Denver. A UTC-based
+    // implementation - or the old test's round-trip assertion, which
+    // any YYYY-MM-DD string satisfies - would say Apr 28.
+    vi.setSystemTime(new Date("2026-04-28T02:00:00Z"));
+    expect(todayDateString("America/Denver")).toBe("2026-04-27");
+    expect(todayDateString("UTC")).toBe("2026-04-28");
+    expect(todayDateString("Pacific/Auckland")).toBe("2026-04-28");
+  });
+
+  test("without a zone it uses the runtime's own zone", () => {
     vi.setSystemTime(new Date("2026-04-15T12:00:00Z"));
-    const out = todayDateString();
-    expect(out).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    // The exact day depends on the local TZ — the test's
-    // assertion is just "shape + parses cleanly."
-    expect(new Date(out).toISOString().slice(0, 10)).toBe(out);
+    expect(todayDateString()).toBe(
+      todayDateString(Intl.DateTimeFormat().resolvedOptions().timeZone)
+    );
   });
 });
 
@@ -97,27 +107,59 @@ describe("nextHourDateTimeString", () => {
     vi.useRealTimers();
   });
 
-  test("rounds up to the next hour boundary, format YYYY-MM-DDTHH:mm", () => {
-    // Pin to 14:23 local. Should round to 15:00.
-    const fixed = new Date();
-    fixed.setHours(14, 23, 17, 0);
-    vi.setSystemTime(fixed);
-    const out = nextHourDateTimeString();
-    expect(out).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:00$/);
-    // Hour part is 15 (or 16 if local TZ shifted).
-    const hour = parseInt(out.slice(11, 13), 10);
-    expect([15, 16]).toContain(hour);
+  test("rounds up to the next :00 in the given zone", () => {
+    // 20:23 UTC = 2:23 PM MDT -> 15:00 wall-clock in Denver.
+    vi.setSystemTime(new Date("2026-04-15T20:23:17Z"));
+    expect(nextHourDateTimeString(0, "America/Denver")).toBe(
+      "2026-04-15T15:00"
+    );
+    expect(nextHourDateTimeString(0, "UTC")).toBe("2026-04-15T21:00");
   });
 
   test("addHours offsets from the next hour boundary", () => {
-    const fixed = new Date();
-    fixed.setHours(10, 0, 0, 0);
-    vi.setSystemTime(fixed);
-    const base = nextHourDateTimeString(0);
-    const plusOne = nextHourDateTimeString(1);
-    const baseHr = parseInt(base.slice(11, 13), 10);
-    const plusHr = parseInt(plusOne.slice(11, 13), 10);
-    expect(plusHr).toBe(baseHr + 1);
+    vi.setSystemTime(new Date("2026-04-15T20:23:17Z"));
+    expect(nextHourDateTimeString(1, "America/Denver")).toBe(
+      "2026-04-15T16:00"
+    );
+  });
+
+  test("rolls over midnight in the zone, not in UTC", () => {
+    // 05:30Z = 11:30 PM MDT on Apr 14 -> next hour is midnight Apr 15.
+    vi.setSystemTime(new Date("2026-04-15T05:30:00Z"));
+    expect(nextHourDateTimeString(0, "America/Denver")).toBe(
+      "2026-04-15T00:00"
+    );
+  });
+
+  test("handles a half-hour-offset zone (next :00 wall-clock)", () => {
+    // 20:23Z = 01:53 IST (Apr 16) -> 02:00.
+    vi.setSystemTime(new Date("2026-04-15T20:23:00Z"));
+    expect(nextHourDateTimeString(0, "Asia/Kolkata")).toBe("2026-04-16T02:00");
+  });
+
+  test("round-trips through parseWallClock in the same zone", () => {
+    vi.setSystemTime(new Date("2026-04-15T20:23:17Z"));
+    const wall = nextHourDateTimeString(0, "America/Denver");
+    expect(parseWallClock(wall, "America/Denver")?.toISOString()).toBe(
+      "2026-04-15T21:00:00.000Z"
+    );
+  });
+});
+
+describe("allowedCaptureKinds", () => {
+  test("narrows to the kinds the viewer may create", () => {
+    expect(
+      allowedCaptureKinds(
+        { ...NO_NOTE_ACCESS, canCreateTask: true, canCreateTime: true },
+        ["task", "event", "deadline", "time"]
+      )
+    ).toEqual(["task", "time"]);
+  });
+
+  test("fail-closed default offers nothing", () => {
+    expect(
+      allowedCaptureKinds(NO_NOTE_ACCESS, ["task", "event", "deadline", "time"])
+    ).toEqual([]);
   });
 });
 
@@ -133,15 +175,20 @@ describe("newCapture factory", () => {
     }
   });
 
-  test("event capture seeds startTime + endTime an hour apart", () => {
+  test("event capture seeds startTime + endTime an hour apart, in the viewer's zone", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-15T20:23:17Z"));
+    try {
+      const out = newCapture("event", "tmp2", "America/Denver");
+      if (out.kind !== "event") throw new Error("wrong shape");
+      expect(out.startTime).toBe("2026-04-15T15:00");
+      expect(out.endTime).toBe("2026-04-15T16:00");
+      expect(out.type).toBe("meeting");
+    } finally {
+      vi.useRealTimers();
+    }
     const out = newCapture("event", "tmp2");
     if (out.kind !== "event") throw new Error("wrong shape");
-    // Start hour < end hour by 1 (or wraps midnight — accept that).
-    const startHr = parseInt(out.startTime.slice(11, 13), 10);
-    const endHr = parseInt(out.endTime.slice(11, 13), 10);
-    const diff = endHr - startHr;
-    expect([1, -23]).toContain(diff); // -23 covers a midnight wrap
-    expect(out.type).toBe("meeting");
     expect(out.location).toBe("");
     expect(out.title).toBe("");
   });
@@ -154,7 +201,16 @@ describe("newCapture factory", () => {
     expect(out.description).toBe("");
   });
 
-  test("time capture seeds today's date + empty hours/activity", () => {
+  test("time capture seeds today's date (viewer's zone) + empty hours/activity", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-28T02:00:00Z"));
+    try {
+      const denver = newCapture("time", "tmp4", "America/Denver");
+      if (denver.kind !== "time") throw new Error("wrong shape");
+      expect(denver.date).toBe("2026-04-27");
+    } finally {
+      vi.useRealTimers();
+    }
     const out = newCapture("time", "tmp4");
     if (out.kind !== "time") throw new Error("wrong shape");
     expect(out.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);

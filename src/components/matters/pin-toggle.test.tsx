@@ -40,7 +40,7 @@ describe("PinToggle", () => {
   });
 
   test("a refused pin alerts and the button returns to its real state", async () => {
-    mockedSet.mockResolvedValue({ ok: false, error: "Couldn't update the pin." });
+    mockedSet.mockResolvedValue({ ok: false, pinned: false, error: "Couldn't update the pin." });
     const alertSpy = vi.fn();
     vi.stubGlobal("alert", alertSpy);
     render(<PinToggle matterId="m1" initialPinned={false} />);

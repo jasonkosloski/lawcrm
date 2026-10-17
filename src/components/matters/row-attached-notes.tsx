@@ -19,10 +19,10 @@ import Link from "next/link";
 import { ChevronDown, ChevronRight, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NOTE_TYPE_LABEL, type NoteType } from "@/lib/note-constants";
-// Client component — no user-TZ prop threaded here yet, so the
-// centralized "datetime" variant falls back to the runtime zone
-// (browser-local after hydration). See format-date.ts header.
+// Note timestamps are instants: show them in the viewer's PROFILE
+// zone (the dashboard layout provides it), matching the server render.
 import { formatDate } from "@/lib/format-date";
+import { useUserTimeZone } from "@/components/user-time-zone";
 import type { AttachedNotePreview } from "@/lib/queries/matter-detail";
 
 export function RowAttachedNotes({
@@ -79,6 +79,7 @@ function NoteItem({
   note: AttachedNotePreview;
   matterId: string;
 }) {
+  const tz = useUserTimeZone();
   const typeLabel = NOTE_TYPE_LABEL[note.type as NoteType] ?? note.type;
   return (
     <li className="rounded-md border border-line bg-paper-2/40 p-2.5 flex flex-col gap-1.5">
@@ -94,7 +95,7 @@ function NoteItem({
             {note.authorName}
           </span>
           <span className="text-[10px] font-mono text-ink-4">
-            {formatDate(note.createdAt, "datetime")}
+            {formatDate(note.createdAt, "datetime", tz)}
           </span>
         </div>
         <span className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full border bg-white text-ink-3 border-line shrink-0">
@@ -120,7 +121,7 @@ function NoteItem({
           "[&_blockquote]:border-l-2 [&_blockquote]:border-line [&_blockquote]:pl-2 [&_blockquote]:text-ink-3 [&_blockquote]:italic",
           "[&_code]:bg-paper-2 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[10px] [&_code]:font-mono"
         )}
-        // Server-side sanitization happened on insert; safe to render.
+        // sanitizeUserHtml ran on insert; safe to render.
         dangerouslySetInnerHTML={{ __html: note.content }}
       />
     </li>

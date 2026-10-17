@@ -33,27 +33,27 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma, type Tx } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-// Capture date fields are schema-validated "YYYY-MM-DD" — parse to
-// LOCAL midnight via parseLocalDate. `new Date(value)` would read
-// them as UTC midnight and drift the day for anyone west of UTC.
-import { parseLocalDate } from "@/lib/format-date";
 import {
   currentUserHasPermission,
   requirePermission,
   requirePermissions,
 } from "@/lib/permission-check";
 import { requiredCapturePermissions } from "@/lib/capture-permissions";
-import {
-  addDefaultEventAttendees,
-  resolveAutoAddTeam,
-} from "@/lib/calendar-default-attendees";
+import { resolveAutoAddTeam } from "@/lib/calendar-default-attendees";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { pushEventToGoogle } from "@/lib/google/google-calendar-push";
 import {
   NOTE_TYPES,
   REACTION_EMOJIS,
   type NoteFormState,
 } from "@/lib/note-constants";
-import { captureSchema } from "@/lib/capture-schemas";
+import {
+  createCaptureRecord,
+  missingPermissions,
+  parseCaptures,
+  permissionDeniedMessage,
+} from "@/lib/note-captures";
+import { noteToPlainText } from "@/lib/note-text";
 import { logActivity } from "@/lib/activity-log";
 import {
   isEffectivelyEmpty,
@@ -82,13 +82,10 @@ const noteSchema = z.object({
 // this action and the Task/Event/Deadline/Time composers' actions
 // can share a single parse + validation path.
 
-/** Short plain-text preview of note HTML for activity-log entries. */
+/** Short plain-text preview of note HTML for activity-log entries
+ *  (entities decoded, so "Smith &amp; Jones" reads "Smith & Jones"). */
 function notePreview(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 80);
+  return noteToPlainText(html).slice(0, 80);
 }
 
 // ── Create ──────────────────────────────────────────────────────────────
@@ -119,51 +116,46 @@ export async function createNote(
   }
 
   // Parse + validate attachments before touching the DB so we don't
-  // half-commit a note with broken captures.
-  let rawAttachments: unknown[] = [];
-  try {
-    const decoded = JSON.parse(parsed.data.attachments);
-    rawAttachments = Array.isArray(decoded) ? decoded : [];
-  } catch {
-    return {
-      status: "error",
-      errors: { content: ["Captured items were malformed — try again."] },
-      values: raw,
-    };
-  }
-
-  const attachmentErrors: Record<string, Record<string, string[]>> = {};
-  const validCaptures: Array<z.infer<typeof captureSchema>> = [];
-  for (const a of rawAttachments) {
-    const result = captureSchema.safeParse(a);
-    if (!result.success) {
-      const tempId =
-        (a as { tempId?: unknown })?.tempId &&
-        typeof (a as { tempId: unknown }).tempId === "string"
-          ? ((a as { tempId: string }).tempId as string)
-          : "unknown";
-      attachmentErrors[tempId] = result.error.flatten().fieldErrors;
-      continue;
+  // half-commit a note with broken captures. Event times are typed as
+  // wall-clock time in the viewer's profile zone.
+  const tz = await getCurrentUserTimeZone();
+  const parsedCaptures = parseCaptures(parsed.data.attachments, tz);
+  if (!parsedCaptures.ok) {
+    if (parsedCaptures.reason === "malformed") {
+      return {
+        status: "error",
+        errors: { content: ["Captured items were malformed — try again."] },
+        values: raw,
+      };
     }
-    validCaptures.push(result.data);
-  }
-  if (Object.keys(attachmentErrors).length > 0) {
     return {
       status: "error",
       errors: {},
-      attachmentErrors,
+      attachmentErrors: parsedCaptures.attachmentErrors,
       values: raw,
     };
   }
+  const prepared = parsedCaptures.captures;
+  const validCaptures = prepared.map((p) => p.cap);
 
   // Every record kind the note carries must clear its own create
   // gate (and pinning needs notes.pin) BEFORE any write — notes.create
   // alone must not mint tasks / deadlines / events / billable time.
-  await requirePermissions(
-    requiredCapturePermissions(validCaptures, {
-      pinRequested: parsed.data.isPinned === "on",
-    })
-  );
+  // The friendly check comes first: a denied kind returns a form error
+  // (the composer keeps what was typed); requirePermissions below is
+  // the enforcement point and redirects for anything that slips past.
+  const requiredKeys = requiredCapturePermissions(validCaptures, {
+    pinRequested: parsed.data.isPinned === "on",
+  });
+  const missing = await missingPermissions(requiredKeys);
+  if (missing.length > 0) {
+    return {
+      status: "error",
+      errors: { content: [permissionDeniedMessage(missing)] },
+      values: raw,
+    };
+  }
+  await requirePermissions(requiredKeys);
 
   // Guard the matter actually exists — cheap, avoids cryptic FK errors.
   const matter = await prisma.matter.findUnique({
@@ -277,87 +269,14 @@ export async function createNote(
       data: { userId: currentUserId, noteId: created.id },
     });
 
-    for (const cap of validCaptures) {
-      if (cap.kind === "task") {
-        await tx.task.create({
-          data: {
-            matterId,
-            // Link the capture back to the note that spawned it so the
-            // note's attached-list surfaces it (matches the after-the-
-            // fact "+ Add task" affordance behavior).
-            noteId: created.id,
-            title: cap.title,
-            priority: cap.priority,
-            dueDate: cap.dueDate ? parseLocalDate(cap.dueDate) : null,
-            ownerId: currentUserId,
-          },
-        });
-      } else if (cap.kind === "event") {
-        // Events deliberately don't carry noteId — the events tab is
-        // their primary surface; the note's link chip is sufficient.
-        // They do carry a creator + the default attendees (same as the
-        // Events composer) so the creator can see/edit them and the
-        // Google push has an owner to push for.
-        const ev = await tx.calendarEvent.create({
-          data: {
-            matterId,
-            createdById: currentUserId,
-            title: cap.title,
-            type: cap.type,
-            startTime: new Date(cap.startTime),
-            endTime: new Date(cap.endTime),
-            location: cap.location || null,
-          },
-          select: { id: true },
-        });
-        await addDefaultEventAttendees(tx, {
-          eventId: ev.id,
-          matterId,
-          userId: currentUserId,
-          autoAddTeam,
-        });
-        createdEventIds.push(ev.id);
-      } else if (cap.kind === "deadline") {
-        await tx.deadline.create({
-          data: {
-            matterId,
-            noteId: created.id,
-            title: cap.title,
-            // Schema-validated as YYYY-MM-DD — parseLocalDate can't miss.
-            dueDate: parseLocalDate(cap.dueDate)!,
-            kind: cap.kind_,
-            description: cap.description || null,
-            ownerId: currentUserId,
-          },
-        });
-      } else if (cap.kind === "time") {
-        await tx.timeEntry.create({
-          data: {
-            matterId,
-            userId: currentUserId,
-            noteId: created.id,
-            date: parseLocalDate(cap.date)!,
-            hours: Number(cap.hours),
-            activity: cap.activity,
-            narrative: cap.narrative || null,
-            source: "manual",
-          },
-        });
-      } else if (cap.kind === "note_sibling") {
-        const sibling = await tx.note.create({
-          data: {
-            matterId,
-            authorId: currentUserId,
-            content: sanitize(cap.content),
-            type: cap.type,
-            isPinned: cap.isPinned,
-          },
-          select: { id: true },
-        });
-        await tx.noteRead.create({
-          data: { userId: currentUserId, noteId: sibling.id },
-        });
-      }
+    for (const p of prepared) {
+      await createCaptureRecord(tx, p, {
+        matterId,
+        userId: currentUserId,
+        noteId: created.id,
+        autoAddTeam,
+        createdEventIds,
+      });
     }
   });
 
@@ -491,12 +410,12 @@ export async function deleteNote(
   // The delete cascades to every reply. The author bypass covers
   // the author's own words only: if anyone else replied (at any
   // depth) removing the thread destroys their content, so it takes
-  // notes.delete_any. Counted + deleted in one transaction to keep
-  // the check and the delete close together; at READ COMMITTED this
-  // narrows, not closes, the window - a reply inserted between the
-  // count and the delete would still cascade. Accepted: the window
-  // is milliseconds and replies are only deleted along with a thread
-  // the caller was already entitled to remove.
+  // notes.delete_any. The reply walk and the delete share one
+  // transaction so they run back to back, but at the default READ
+  // COMMITTED isolation that only narrows the race: a reply that
+  // lands between the walk and the delete is still removed by the
+  // database cascade without having been counted. Accepted - the
+  // window is milliseconds, and the thread was the caller's to remove.
   const outcome = await prisma.$transaction(async (tx) => {
     const replies = await collectReplies(tx, noteId);
     const othersReplies = replies.filter((r) => r.authorId !== actorId).length;
@@ -656,14 +575,14 @@ export async function toggleNoteReaction(
 
   const userId = await getCurrentUserId();
   const key = { userId, noteId, emoji };
-  const existing = await prisma.noteReaction.findUnique({
-    where: { userId_noteId_emoji: key },
-    select: { userId: true },
-  });
-  if (existing) {
-    await prisma.noteReaction.delete({ where: { userId_noteId_emoji: key } });
-  } else {
-    await prisma.noteReaction.create({ data: key });
+  // Delete-then-create instead of read-then-write: two tabs (or a
+  // double tap) racing the same toggle used to throw P2002 / P2025
+  // out of the action and blank the Notes tab. deleteMany never
+  // throws on a missing row, and createMany + skipDuplicates never
+  // throws on an existing one.
+  const removed = await prisma.noteReaction.deleteMany({ where: key });
+  if (removed.count === 0) {
+    await prisma.noteReaction.createMany({ data: [key], skipDuplicates: true });
   }
 
   revalidatePath(`/matters/${note.matterId}/notes`);
