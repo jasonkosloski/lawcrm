@@ -4,8 +4,14 @@
  * files can only export async functions.
  */
 
+import type { RecalcChange } from "@/lib/automations/recalc-plan";
+
 export type UpdateDeadlineFormState = {
-  status: "idle" | "ok" | "error";
+  /** "confirm": the new date would move other deadlines that count
+   *  from this one — nothing was saved; `cascade` lists them for the
+   *  user to confirm (ADR-040). */
+  status: "idle" | "ok" | "error" | "confirm";
+  cascade?: RecalcChange[];
   errors?: Partial<
     Record<
       "title" | "dueDate" | "kind" | "sourceRef" | "description" | "status" | "_form",

@@ -18,6 +18,7 @@ import Link from "next/link";
 import { useActionState, useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { updateMatter } from "@/app/actions/matters";
+import { CascadeConfirm } from "@/components/automations/cascade-confirm";
 import {
   computeSolDate,
   formatStatutePeriod,
@@ -133,8 +134,14 @@ export function EditMatterForm({
       | HTMLElement
       | null;
     const fd = new FormData(e.currentTarget, submitter);
+    setSubmittedIncident(incidentDateInput);
     startTransition(() => formAction(fd));
   };
+  // "Other deadlines will change" (ADR-040): shown for the incident
+  // date it was computed for; editing the date again, or Go back,
+  // dismisses the stale list (the next Save asks afresh).
+  const [submittedIncident, setSubmittedIncident] = useState<string | null>(null);
+  const [dismissedConfirm, setDismissedConfirm] = useState<UpdateMatterState | null>(null);
 
   // On validation error, echo back the user's submitted values so
   // nothing typed gets lost. On first render, use the matter's
@@ -574,6 +581,18 @@ export function EditMatterForm({
           </p>
         )}
 
+      {state.status === "confirm" &&
+      state !== dismissedConfirm &&
+      submittedIncident === incidentDateInput &&
+      (state.cascade?.length ?? 0) > 0 ? (
+        <CascadeConfirm
+          key={JSON.stringify(state.cascade?.map((c) => c.deadlineId))}
+          changes={state.cascade ?? []}
+          changedLabel="the incident date"
+          isPending={isPending}
+          onCancel={() => setDismissedConfirm(state)}
+        />
+      ) : (
       <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
         <Link
           href={`/matters/${matter.id}`}
@@ -592,6 +611,7 @@ export function EditMatterForm({
           {isPending ? "Saving…" : "Save changes"}
         </button>
       </div>
+      )}
     </form>
   );
 }

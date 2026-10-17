@@ -34,6 +34,14 @@ import {
 import { dateOnlyKey, parseDateOnly } from "@/lib/format-date";
 import { getCurrentFirm } from "@/lib/firm";
 import { applyAutoDefaults, describeDefaults } from "@/lib/automations/apply";
+import {
+  applyRecalc,
+  describeRecalc,
+  previewRecalc,
+  readCascadeDecision,
+  type RecalcChange,
+  type RecalcTrigger,
+} from "@/lib/automations/recalc";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import {
   MATTER_TEAM_ROLES,
@@ -591,6 +599,7 @@ export async function updateMatter(
     where: { id: matterId },
     select: {
       name: true,
+      incidentDate: true,
       caseNumber: true,
       court: true,
       feeStructure: true,
@@ -699,6 +708,27 @@ export async function updateMatter(
     where: { id: resolved.stageId },
     select: { name: true, isTerminal: true },
   });
+
+  // Dependent deadlines (ADR-040): a changed incident date may move
+  // rule-generated deadlines counting from it. Never without
+  // confirmation — the first submit saves NOTHING and returns the list;
+  // the form resubmits with cascadeDecision=apply (+ ticked cascadeIds)
+  // or skip. A cleared incident date moves nothing (no date to count
+  // from), so it needs no confirmation.
+  const { decision: cascadeDecision, selectedIds: cascadeIds } =
+    readCascadeDecision(formData);
+  const incidentTrigger: RecalcTrigger | null =
+    resolved.hasStatuteOfLimitations &&
+    parsedDates.incident &&
+    (!stored.incidentDate ||
+      dateOnlyKey(stored.incidentDate) !== dateOnlyKey(parsedDates.incident))
+      ? { kind: "incident", newIncidentKey: dateOnlyKey(parsedDates.incident) }
+      : null;
+  if (incidentTrigger && !cascadeDecision) {
+    const cascade = await previewRecalc(prisma, matterId, incidentTrigger);
+    if (cascade.length > 0) return { status: "confirm", cascade, values: raw };
+  }
+  let recalculated: RecalcChange[] = [];
 
   const sol = await prisma.$transaction(async (tx) => {
     // The matter row is the source of truth for the SOL fields and the
@@ -865,6 +895,10 @@ export async function updateMatter(
       });
     }
 
+    if (incidentTrigger && cascadeDecision === "apply") {
+      recalculated = await applyRecalc(tx, matterId, incidentTrigger, cascadeIds);
+    }
+
     return {
       before: {
         incident: cur.incidentDate,
@@ -874,6 +908,16 @@ export async function updateMatter(
       after: { incident: incidentDate, date: solDate, notes: solNotes },
     };
   });
+
+  for (const c of recalculated) {
+    await logActivity({
+      matterId,
+      userId: currentUserId,
+      type: "deadline",
+      title: "Deadline recalculated",
+      detail: `${describeRecalc(c)} — after the incident date changed`,
+    });
+  }
 
   // ── Audit trail (after commit; a log failure never rolls back) ───────
   // Field names, ids and dates only — never the matter's privileged

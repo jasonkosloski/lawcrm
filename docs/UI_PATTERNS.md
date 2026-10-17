@@ -493,6 +493,14 @@ values as the profile-zone wall clock and all-day values as date-only keys
   primitives (calendar, label, scroll-area, select, separator, sheet, tabs,
   tooltip) were deleted: re-add with `shadcn add` when needed (a re-added base-ui `Select` needs `items` on `<Select>` or the trigger shows the raw value).
 - Reorderable dialog lists use stable row keys, not indexes.
+- **Confirm before a save changes other records** (ADR-040): the action
+  returns `status: "confirm"` with the list and writes nothing; the form
+  renders `CascadeConfirm` (`components/automations/cascade-confirm.tsx`)
+  INSIDE itself, so its checkboxes (`cascadeId`) and the two submit buttons
+  (`cascadeDecision=apply|skip`) post with the user's other fields — submit
+  with `new FormData(form, submitter)`. Show the panel only for the value it
+  was computed for (track the submitted value; editing it again drops the
+  stale list), and hide the plain Save while it's up.
 - Multi-connection-pool lock tests: see TESTING.md.
 
 ## Adding a matter-scoped page or action (matter access)

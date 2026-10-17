@@ -46,6 +46,7 @@ vi.mock("next/navigation", () => ({
 
 import { getCurrentUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
+import { dateOnlyKey } from "@/lib/format-date";
 import {
   currentUserHasPermission,
   requirePermission,
@@ -1242,5 +1243,73 @@ describe("updateMatterStage", () => {
     await prisma.matterStage.update({ where: { id: s2 }, data: { isActive: false } });
     expect((await updateMatterStage(matterId, s2)).ok).toBe(false);
     expect(requirePermission).toHaveBeenCalledWith("matters.edit");
+  });
+});
+
+// ── Incident date → dependent deadlines (ADR-040) ───────────────────────
+
+describe("updateMatter — incident date change needs confirmation for dependent deadlines", () => {
+  async function seedIncidentMatter() {
+    const { matterId } = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId });
+    await prisma.matter.update({
+      where: { id: matterId },
+      data: { incidentDate: new Date("2026-03-10T00:00:00Z") },
+    });
+    const rule = await prisma.deadlineRule.create({
+      data: { title: "CGIA notice", anchor: "incident_date", offsetDays: 182 },
+    });
+    const notice = await prisma.deadline.create({
+      data: {
+        matterId,
+        title: "CGIA notice",
+        dueDate: new Date("2026-09-08T00:00:00Z"),
+        kind: "critical",
+        status: "open",
+        deadlineRuleId: rule.id,
+      },
+    });
+    return { matterId, noticeId: notice.id };
+  }
+  const due = async (id: string) =>
+    dateOnlyKey((await prisma.deadline.findUniqueOrThrow({ where: { id } })).dueDate);
+
+  test("first save writes nothing and returns the deadlines that would move", async () => {
+    const { matterId, noticeId } = await seedIncidentMatter();
+    const res = await updateMatter(matterId, updateMatterInitialState, updateForm({ incidentDate: "2026-03-20" }));
+    expect(res.status).toBe("confirm");
+    expect(res.cascade?.map((c) => [c.title, c.fromKey, c.toKey, c.anchorText])).toEqual([
+      ["CGIA notice", "2026-09-08", "2026-09-18", "Incident date"],
+    ]);
+    // Nothing saved — not even the incident date.
+    const m = await prisma.matter.findUniqueOrThrow({ where: { id: matterId } });
+    expect(dateOnlyKey(m.incidentDate!)).toBe("2026-03-10");
+    expect(await due(noticeId)).toBe("2026-09-08");
+  });
+
+  test("apply saves the matter and moves the ticked deadline", async () => {
+    const { matterId, noticeId } = await seedIncidentMatter();
+    const fd = updateForm({ incidentDate: "2026-03-20", cascadeDecision: "apply" });
+    fd.append("cascadeId", noticeId);
+    await expect(updateMatter(matterId, updateMatterInitialState, fd)).rejects.toThrow(/__REDIRECT__/);
+    expect(await due(noticeId)).toBe("2026-09-18");
+    const log = await prisma.activityLog.findFirstOrThrow({ where: { matterId, title: "Deadline recalculated" } });
+    expect(log.detail).toMatch(/after the incident date changed/);
+  });
+
+  test("skip saves the matter and leaves the deadline", async () => {
+    const { matterId, noticeId } = await seedIncidentMatter();
+    await expect(
+      updateMatter(matterId, updateMatterInitialState, updateForm({ incidentDate: "2026-03-20", cascadeDecision: "skip" }))
+    ).rejects.toThrow(/__REDIRECT__/);
+    const m = await prisma.matter.findUniqueOrThrow({ where: { id: matterId } });
+    expect(dateOnlyKey(m.incidentDate!)).toBe("2026-03-20");
+    expect(await due(noticeId)).toBe("2026-09-08");
+  });
+
+  test("an unchanged incident date never asks", async () => {
+    const { matterId } = await seedIncidentMatter();
+    await expect(
+      updateMatter(matterId, updateMatterInitialState, updateForm({ incidentDate: "2026-03-10" }))
+    ).rejects.toThrow(/__REDIRECT__/);
   });
 });

@@ -33,6 +33,14 @@ import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { SOL_SOURCE_TYPE } from "@/lib/sol";
 import { dateOnlyKey, parseDateOnly } from "@/lib/format-date";
+import {
+  applyRecalc,
+  describeRecalc,
+  previewRecalc,
+  readCascadeDecision,
+  type RecalcChange,
+  type RecalcTrigger,
+} from "@/lib/automations/recalc";
 
 const SOL_MANAGED_MESSAGE =
   "The statute of limitations is managed on the matter. Change or clear it from the matter's Edit page.";
@@ -185,6 +193,7 @@ export async function updateDeadline(
       sourceRef: true,
       description: true,
       updatedAt: true,
+      deadlineRuleId: true,
     },
   });
   if (!deadline) {
@@ -260,19 +269,49 @@ export async function updateDeadline(
     };
   }
 
-  const write = await prisma.deadline.updateMany({
-    where,
-    data: {
-      title: parsed.data.title,
-      dueDate,
-      kind: parsed.data.kind,
-      sourceRef: parsed.data.sourceRef || null,
-      description: parsed.data.description || null,
-      status: newStatus,
-      completedAt,
-    },
+  // Dependent deadlines (ADR-040): a new date may move rule-generated
+  // deadlines that count from this one. Never without confirmation —
+  // the first submit returns the list and saves NOTHING; the dialog
+  // resubmits with cascadeDecision=apply (+ the ticked cascadeIds) or
+  // skip.
+  const dateChanged = dateOnlyKey(dueDate) !== dateOnlyKey(deadline.dueDate);
+  const trigger: RecalcTrigger = {
+    kind: "deadline",
+    deadlineId,
+    newDueKey: dateOnlyKey(dueDate),
+  };
+  const { decision, selectedIds } = readCascadeDecision(formData);
+  if (dateChanged && !decision) {
+    const cascade = await previewRecalc(prisma, deadline.matterId, trigger);
+    if (cascade.length > 0) return { status: "confirm", cascade };
+  }
+
+  let recalculated: RecalcChange[] = [];
+  const saved = await prisma.$transaction(async (tx) => {
+    const write = await tx.deadline.updateMany({
+      where,
+      data: {
+        title: parsed.data.title,
+        dueDate,
+        kind: parsed.data.kind,
+        sourceRef: parsed.data.sourceRef || null,
+        description: parsed.data.description || null,
+        status: newStatus,
+        completedAt,
+        // A rule-generated deadline moved by hand keeps its new date
+        // when its own anchor later moves (listed unticked).
+        ...(dateChanged && deadline.deadlineRuleId
+          ? { dueDateSetManually: true }
+          : {}),
+      },
+    });
+    if (write.count === 0) return false;
+    if (dateChanged && decision === "apply") {
+      recalculated = await applyRecalc(tx, deadline.matterId, trigger, selectedIds);
+    }
+    return true;
   });
-  if (write.count === 0) {
+  if (!saved) {
     revalidateForDeadline(deadline.matterId);
     return { status: "error", errors: { _form: [STALE_MESSAGE] } };
   }
@@ -311,6 +350,15 @@ export async function updateDeadline(
             ? (STATUS_LOG_TITLE[newStatus] ?? "Deadline updated")
             : "Deadline updated",
       detail: `${parsed.data.title}: ${changes.join("; ")}`,
+    });
+  }
+  for (const c of recalculated) {
+    await logActivity({
+      matterId: deadline.matterId,
+      userId,
+      type: "deadline",
+      title: "Deadline recalculated",
+      detail: `${describeRecalc(c)} — after "${parsed.data.title}" moved`,
     });
   }
 

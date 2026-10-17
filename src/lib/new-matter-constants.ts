@@ -6,6 +6,8 @@
  * (constants, types, initial state) break the build.
  */
 
+import type { RecalcChange } from "@/lib/automations/recalc-plan";
+
 /** Sentinel value in the `clientId` dropdown that opens the inline
  *  "create new client" fields on the form. */
 export const NEW_CLIENT_SENTINEL = "__new__";
@@ -22,6 +24,14 @@ export const createMatterInitialState: CreateMatterState = {
   status: "idle",
 };
 
-/** Update-matter shares the same shape — alias keeps callsites readable. */
-export type UpdateMatterState = CreateMatterState;
+/** Update-matter: the create shape plus a "confirm" round-trip — a
+ *  changed incident date that would move deadlines counting from it
+ *  saves nothing and returns `cascade` for the user to confirm
+ *  (ADR-040). */
+export type UpdateMatterState = {
+  status: "idle" | "error" | "confirm";
+  errors?: Record<string, string[]>;
+  values?: Record<string, string>;
+  cascade?: RecalcChange[];
+};
 export const updateMatterInitialState: UpdateMatterState = { status: "idle" };

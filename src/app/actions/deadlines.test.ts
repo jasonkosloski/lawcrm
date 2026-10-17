@@ -611,3 +611,145 @@ describe("updateDeadline - stale form guard (F521)", () => {
     expect(rows[0].detail).toContain("description edited");
   });
 });
+
+// ── Dependent deadlines (ADR-040) ───────────────────────────────────────
+
+describe("updateDeadline — dependent deadlines need explicit confirmation", () => {
+  // Trial (entered) → Motions in limine 30 days before → Witness list 7 days before motions.
+  async function seedChain() {
+    const trialRule = await prisma.deadlineRule.create({
+      data: { title: "Trial", anchor: "prompt", offsetDays: 0 },
+    });
+    const motionsRule = await prisma.deadlineRule.create({
+      data: { title: "Motions in limine", anchor: "rule", anchorRuleId: trialRule.id, offsetDays: -30 },
+    });
+    const witnessRule = await prisma.deadlineRule.create({
+      data: { title: "Witness list", anchor: "rule", anchorRuleId: motionsRule.id, offsetDays: -7 },
+    });
+    const mk = (title: string, ruleId: string, key: string) =>
+      prisma.deadline.create({
+        data: { matterId, title, dueDate: new Date(`${key}T00:00:00Z`), kind: "auto_rule", status: "open", deadlineRuleId: ruleId },
+        select: { id: true, updatedAt: true },
+      });
+    const trial = await mk("Trial", trialRule.id, "2027-06-01");
+    const motions = await mk("Motions in limine", motionsRule.id, "2027-05-02");
+    const witness = await mk("Witness list", witnessRule.id, "2027-04-25");
+    return { trial, motions, witness };
+  }
+  const due = async (id: string) =>
+    dateOnlyKey((await prisma.deadline.findUniqueOrThrow({ where: { id } })).dueDate);
+  const moveForm = (newKey: string, extra: Record<string, string | string[]> = {}) => {
+    const fd = new FormData();
+    fd.set("title", "Trial");
+    fd.set("dueDate", newKey);
+    fd.set("kind", "auto_rule");
+    fd.set("status", "open");
+    for (const [k, v] of Object.entries(extra)) {
+      for (const one of Array.isArray(v) ? v : [v]) fd.append(k, one);
+    }
+    return fd;
+  };
+
+  test("first save writes NOTHING and lists every deadline that would move", async () => {
+    const { trial, motions, witness } = await seedChain();
+    const res = await updateDeadline(trial.id, updateDeadlineInitialState, moveForm("2027-07-01"));
+    expect(res.status).toBe("confirm");
+    expect(res.cascade?.map((c) => [c.title, c.fromKey, c.toKey])).toEqual([
+      ["Motions in limine", "2027-05-02", "2027-06-01"],
+      ["Witness list", "2027-04-25", "2027-05-25"],
+    ]);
+    expect(await due(trial.id)).toBe("2027-06-01");
+    expect(await due(motions.id)).toBe("2027-05-02");
+    expect(await due(witness.id)).toBe("2027-04-25");
+  });
+
+  test("apply moves exactly the ticked deadlines, clears their hand-set marker, and logs each", async () => {
+    const { trial, motions, witness } = await seedChain();
+    const res = await updateDeadline(
+      trial.id,
+      updateDeadlineInitialState,
+      moveForm("2027-07-01", { cascadeDecision: "apply", cascadeId: [motions.id, witness.id] })
+    );
+    expect(res.status).toBe("ok");
+    expect(await due(trial.id)).toBe("2027-07-01");
+    expect(await due(motions.id)).toBe("2027-06-01");
+    expect(await due(witness.id)).toBe("2027-05-25");
+    // The edited deadline was set by hand; the recalculated ones are back on their rule.
+    expect((await prisma.deadline.findUniqueOrThrow({ where: { id: trial.id } })).dueDateSetManually).toBe(true);
+    expect((await prisma.deadline.findUniqueOrThrow({ where: { id: motions.id } })).dueDateSetManually).toBe(false);
+    const logs = await prisma.activityLog.findMany({ where: { matterId, title: "Deadline recalculated" } });
+    expect(logs.map((l) => l.detail).sort()).toEqual([
+      'Motions in limine: due 2027-05-02 → 2027-06-01 (counts from Trial) — after "Trial" moved',
+      'Witness list: due 2027-04-25 → 2027-05-25 (counts from Motions in limine) — after "Trial" moved',
+    ]);
+  });
+
+  test("unticking a deadline keeps it and what counts from it, even if its id is posted for a child", async () => {
+    const { trial, motions, witness } = await seedChain();
+    await updateDeadline(
+      trial.id,
+      updateDeadlineInitialState,
+      moveForm("2027-07-01", { cascadeDecision: "apply", cascadeId: [witness.id] })
+    );
+    expect(await due(trial.id)).toBe("2027-07-01");
+    expect(await due(motions.id)).toBe("2027-05-02");
+    expect(await due(witness.id)).toBe("2027-04-25");
+  });
+
+  test("skip saves only the edited deadline", async () => {
+    const { trial, motions } = await seedChain();
+    const res = await updateDeadline(
+      trial.id,
+      updateDeadlineInitialState,
+      moveForm("2027-07-01", { cascadeDecision: "skip", cascadeId: [motions.id] })
+    );
+    expect(res.status).toBe("ok");
+    expect(await due(trial.id)).toBe("2027-07-01");
+    expect(await due(motions.id)).toBe("2027-05-02");
+    expect(await prisma.activityLog.count({ where: { title: "Deadline recalculated" } })).toBe(0);
+  });
+
+  test("an id that wasn't part of the plan is never touched", async () => {
+    const { trial } = await seedChain();
+    const unrelated = await seedDeadline({ title: "Unrelated", dueDate: new Date("2027-01-15T00:00:00Z") });
+    await updateDeadline(
+      trial.id,
+      updateDeadlineInitialState,
+      moveForm("2027-07-01", { cascadeDecision: "apply", cascadeId: [unrelated] })
+    );
+    expect(await due(unrelated)).toBe("2027-01-15");
+  });
+
+  test("deadlines nothing counts from save directly — no confirmation", async () => {
+    const id = await seedDeadline({ title: "Hand-entered", dueDate: new Date("2027-01-15T00:00:00Z") });
+    const fd = new FormData();
+    fd.set("title", "Hand-entered");
+    fd.set("dueDate", "2027-02-15");
+    fd.set("kind", "manual");
+    fd.set("status", "open");
+    expect((await updateDeadline(id, updateDeadlineInitialState, fd)).status).toBe("ok");
+    expect(await due(id)).toBe("2027-02-15");
+    // Not rule-generated → never marked as hand-set.
+    expect((await prisma.deadline.findUniqueOrThrow({ where: { id } })).dueDateSetManually).toBe(false);
+  });
+
+  test("a hand-set dependent is listed and flagged", async () => {
+    const { trial, motions } = await seedChain();
+    await prisma.deadline.update({ where: { id: motions.id }, data: { dueDateSetManually: true } });
+    const res = await updateDeadline(trial.id, updateDeadlineInitialState, moveForm("2027-07-01"));
+    expect(res.cascade?.find((c) => c.deadlineId === motions.id)?.manual).toBe(true);
+  });
+
+  test("the stale-form guard still applies on the confirmed resubmit", async () => {
+    const { trial, motions } = await seedChain();
+    const stale = new Date(trial.updatedAt.getTime() - 60_000).toISOString();
+    const res = await updateDeadline(
+      trial.id,
+      updateDeadlineInitialState,
+      moveForm("2027-07-01", { cascadeDecision: "apply", cascadeId: [motions.id], expectedUpdatedAt: stale })
+    );
+    expect(res.status).toBe("error");
+    expect(await due(trial.id)).toBe("2027-06-01");
+    expect(await due(motions.id)).toBe("2027-05-02");
+  });
+});

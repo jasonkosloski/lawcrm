@@ -643,10 +643,21 @@ Email results are scoped to the viewer's OWN mailbox. No
   Keys: `automations.view`, `automations.deadline_rule.*`,
   `automations.task_list.*`, `automations.defaults.{create,delete}`.
   Sweep fixes added locking and duplicate-force handling; status
-  unchanged. Follow-ups: recalculate dependent deadlines when an anchor date
-  moves (v1 snapshots dates at apply time); task due dates relative to
-  a deadline; more triggers (stage change); assignment notifications
-  for auto-created tasks.
+  unchanged. **Dependent-deadline recalculation** shipped 2026-10-18
+  (ADR-040): changing a deadline's date (edit dialog) or a matter's
+  incident date (matter edit form) that other rule-generated deadlines
+  count from never moves them silently — the first save writes nothing
+  and shows "Changing … will change N other deadlines" with each one's
+  old → new date and what it counts from; the user ticks which to
+  update and saves via "Save and update N deadlines" or "Save, don't
+  change them". Whole chains follow; completed/waived deadlines (and
+  what counts from them) stay put; a date someone set by hand
+  (`Deadline.dueDateSetManually`) is listed, flagged, unticked by
+  default; unticking a deadline also keeps what counts from it; the
+  server re-plans on the confirmed submit and moves only ticked ids.
+  Each moved deadline is activity-logged with old → new. Follow-ups:
+  task due dates relative to a deadline; more triggers (stage change);
+  assignment notifications for auto-created tasks.
 - [ ] **Export / print to PDF — beyond invoices.** Invoices ✓ (chrome-
   free `/print/invoices/[id]` route, browser Save-as-PDF). Demand
   letters + trust reports still pending.

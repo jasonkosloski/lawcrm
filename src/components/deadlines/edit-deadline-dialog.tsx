@@ -46,6 +46,7 @@ import {
 import { formatDateOnly, parseDateOnly } from "@/lib/format-date";
 import { SOL_SOURCE_TYPE } from "@/lib/sol";
 import { updateDeadline } from "@/app/actions/deadlines";
+import { CascadeConfirm } from "@/components/automations/cascade-confirm";
 import {
   updateDeadlineInitialState,
   type UpdateDeadlineFormState,
@@ -113,6 +114,7 @@ export function EditDeadlineDialog({
 
         <EditDeadlineForm
           deadline={deadline}
+          state={state}
           errors={state.errors ?? {}}
           formAction={formAction}
           isPending={isPending}
@@ -125,12 +127,14 @@ export function EditDeadlineDialog({
 
 function EditDeadlineForm({
   deadline,
+  state,
   errors: errs,
   formAction,
   isPending,
   onCancel,
 }: {
   deadline: EditableDeadline;
+  state: UpdateDeadlineFormState;
   errors: NonNullable<UpdateDeadlineFormState["errors"]>;
   formAction: (formData: FormData) => void;
   isPending: boolean;
@@ -152,11 +156,25 @@ function EditDeadlineForm({
   // form after the action settles — even on a validation error —
   // which would wipe what the user typed.
   const [, startSubmit] = useTransition();
+  // The due date this form last submitted, and the confirm answer we
+  // dismissed: the "other deadlines will change" panel (ADR-040) only
+  // shows for the date it was computed for — edit the date again and
+  // the stale list goes away (the next Save asks afresh).
+  const [submittedDue, setSubmittedDue] = useState<string | null>(null);
+  const [dismissed, setDismissed] = useState<UpdateDeadlineFormState | null>(null);
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const fd = new FormData(e.currentTarget);
+    const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLElement | null;
+    // The submitter carries cascadeDecision=apply|skip from the panel.
+    const fd = new FormData(e.currentTarget, submitter);
+    setSubmittedDue(dueDate);
     startSubmit(() => formAction(fd));
   };
+  const confirming =
+    state.status === "confirm" &&
+    state !== dismissed &&
+    submittedDue === dueDate &&
+    (state.cascade?.length ?? 0) > 0;
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-3">
@@ -251,14 +269,25 @@ function EditDeadlineForm({
         />
       )}
 
-      <DialogFooter>
-        <Button type="button" variant="ghost" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={isPending}>
-          {isPending ? "Saving…" : "Save"}
-        </Button>
-      </DialogFooter>
+      {confirming ? (
+        <CascadeConfirm
+          // Remount per answer so ticks reset with a fresh list.
+          key={JSON.stringify(state.cascade?.map((c) => c.deadlineId))}
+          changes={state.cascade ?? []}
+          changedLabel="this deadline's date"
+          isPending={isPending}
+          onCancel={() => setDismissed(state)}
+        />
+      ) : (
+        <DialogFooter>
+          <Button type="button" variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={isPending}>
+            {isPending ? "Saving…" : "Save"}
+          </Button>
+        </DialogFooter>
+      )}
     </form>
   );
 }
