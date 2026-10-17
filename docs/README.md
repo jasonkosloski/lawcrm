@@ -9,7 +9,7 @@ This folder contains living documentation for the CRM build. These files are mai
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | System architecture, tech stack, folder structure, data flow patterns |
 | [FEATURES.md](./FEATURES.md) | Feature roadmap — planned, in-progress, and completed features with scope and status |
 | [SCHEMA_NOTES.md](./SCHEMA_NOTES.md) | Data model decisions, trade-offs, and evolution notes as the schema grows |
-| [PERMISSIONS.md](./PERMISSIONS.md) | Permission model — granular keys, roles, guard helpers, page-guard rule, and what matter visibility does and does not enforce today |
+| [PERMISSIONS.md](./PERMISSIONS.md) | Permission model — granular keys, roles, guard helpers, page-guard rule, and matter-team access (ethical walls) |
 | [TESTING.md](./TESTING.md) | Testing discipline — what to test, layer conventions, Docker test DB, running commands |
 | [UI_PATTERNS.md](./UI_PATTERNS.md) | Reusable UI patterns, component conventions, design system implementation notes |
 | [DECISIONS.md](./DECISIONS.md) | Architectural Decision Records (ADRs) — why we chose X over Y |

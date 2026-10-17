@@ -56,7 +56,7 @@ This file tracks decisions, trade-offs, and evolution of the Prisma schema as we
 | MessengerItem | 2026-04-24 | SMS / call / voicemail item; idempotent on `providerEventId`; per-item `matterId` filing override |
 | Account | 2026-04-25 | Auth.js OAuth account table — empty until Google OAuth lands (see AUTH_PLAN.md) |
 | VerificationToken | 2026-04-25 | Auth.js token table — reserved for password-reset / email-verify flows |
-| Firm | 2026-04-25 | Firm profile; single-tenant today, `firmId` is the future multi-tenant scoping handle. `matterVisibility` (FIRM \| TEAM, default FIRM) is the Phase 5 matter-access switch; not enforced yet |
+| Firm | 2026-04-25 | Firm profile; single-tenant today, `firmId` is the future multi-tenant scoping handle. `matterVisibility` (FIRM \| TEAM, default FIRM) is the Phase 5 matter-access switch (enforced, ADR-039) |
 | Role / UserRole | 2026-04-25 | First-class roles; Admin/default seeded as locked system roles |
 | InvoicePayment | 2026-04-25 | Per-invoice payment record across all channels; trust payments double-write to TrustTransaction |
 | Expense | 2026-04-27 | Out-of-pocket costs, distinct from TimeEntry; `billable` + `clientAdvanced` flags |
@@ -164,7 +164,6 @@ Batch 4 shipped as `20261017120000_quality_sweep` (see the changelog). What is s
 | Optional `Document @@index([matterId, folderId, name])` | Large folders | Only if a big production folder appears |
 | Drop `PracticeArea.statutePeriodDays` | Deprecated by ADR-035; no code reads or writes it | One release after the quality sweep ships and areas are verified |
 | Replace `Lead.statuteWindow` with an absolute SOL date | The snapshot is days-remaining as of `createdAt` | Product decision |
-| `matters.view_all` permission key + enforcement of `Firm.matterVisibility` | The matter-team access phase (ADR-029, Proposed); the column already exists, `view_all` is a code-side key | Product go-ahead |
 | Drop `Matter.wipAmount` and `Settlement.clientNet` | Dead columns | Confirm no consumer |
 | `CalendarEvent.origin`, `EmailAccount.backfillBefore` | Google-born cleanup and explicit backfill anchor (ADR-023, ADR-031) | Deferred |
 | Dedicated ActivityLog type for expense rows | Replaces the `Expense ` title-prefix convention (ADR-021) | Backfill |

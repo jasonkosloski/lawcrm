@@ -25,8 +25,7 @@ passes.
 
 **Permissions are capability keys, not data scopes.** A key says what
 a user may *do*; it does not say which matters they may see. See
-[Matter visibility](#matter-visibility-today-and-planned) below, which
-states plainly what is and is not restricted today.
+[Matter access](#matter-access-ethical-walls) below.
 
 ---
 
@@ -55,56 +54,59 @@ their guard yet. See ADR-028 in [DECISIONS.md](./DECISIONS.md).
 
 ---
 
-## Matter visibility (today and planned)
+## Matter access (ethical walls)
 
-**Today there is no matter-level read restriction.** Every signed-in,
-active user, including one whose only role is the zero-permission
-`default` role, can list, open, search, download and export every
-matter and everything attached to it: notes (including strategy
-memos), documents, invoices, the trust ledger and time narratives. The
-matter detail layout, its tabs, the Billing tab and
-`/print/invoices/[id]` all guard with `requireUser()` only (there is no
-billing "view" key and no team-membership filter on reads). Permission
-keys gate *actions* and a few sensitive read-side slices (below), not
-which matters a user can open.
+A user can see a matter, and everything attached to it (notes,
+documents, time incl. privileged narratives, expenses, invoices, trust,
+deadlines, tasks, events, parties, activity), when ANY of:
 
-`MatterTeamMember` does **not** restrict reads. It drives assignment
-pickers, notifications, calendar-detail unlocks (`canViewEventDetails`),
-auto-attendees on events, and the lead filter. Do not describe team
-membership as a visibility gate anywhere.
+1. they are an **active** `MatterTeamMember` (`removedAt = null`);
+2. they hold **`matters.view_all`** (Admins implicitly);
+3. the firm's `matterVisibility` is `FIRM` (the default, "Everyone").
 
-Two things *are* scoped per user today, but neither is team-based:
+An Admin flips the firm to `TEAM` ("Team only") in Settings, Firm
+(admin-only, not a delegable key; logged in the activity log). Same
+page lists "thin teams" (open matters with no active member, or only
+the lead) so rosters can be fixed first. **Before flipping, grant
+`matters.view_all` to roles that need firm-wide reach (billing, office
+manager, reception).** Inactive users see nothing in either mode.
 
-- **Email** is mailbox-personal. A thread belongs to the
-  `EmailAccount` that synced it and is visible only to that account's
-  owner, even after it is filed to a matter and even to Admins. Every
-  email query and email-derived action (file/unfile, spawn
-  task/deadline/note, log time, search, badges, attachment download)
-  must use `visibleEmailThreadWhere` / `visibleEmailMessageWhere` from
-  `src/lib/email-visibility.ts` rather than re-deriving the scope.
-- **Calendar event detail** is shown or replaced by "Busy" per event via
-  `canViewEventDetails`; labels that reference an event elsewhere (e.g.
-  the matter Events tab) use the same scrub (ADR-021).
+Hidden == missing: pages call `notFound()` (404) and routes return 404,
+never 403. Seeing is the precondition for doing: every matter-scoped
+server action asserts the same access after its permission key.
 
-### Planned (NOT built): matter-team access / ethical walls
+Helpers (`src/lib/matter-access.ts`, ADR-039):
 
-Design draft: `out/sweep/MATTER_ACCESS_DESIGN.md` (a working note, not
-shipped). No code implements any of this yet: there is no
-`src/lib/matter-access.ts`, no firm-level visibility setting, and
-`matters.view_all` is **not** in the permission catalog. The planned
-rule, decided 2026-10-16:
+| Need | Use |
+|---|---|
+| list / count / aggregate matters | `matterAccessWhere(userId)` spread into the `Matter` where |
+| child list with required matter | `matterRelationAccessWhere(userId)` |
+| child list with nullable matter | `optionalMatterAccessWhere` / `optionalMatterAccessClause` |
+| page or action with a matterId | `assertMatterAccess(matterId)` (`assertOptionalMatterAccess` if nullable) |
+| action with a child id | `assertChildMatterAccess(kind, id)` |
+| boolean checks | `canAccessMatter(userId, matterId)`, `filterAccessibleMatterIds` |
 
-- A user sees a matter, and everything attached, if they are an active
-  team member, hold a grantable `matters.view_all` key (Admins
-  implicitly), or the firm-level switch is still on "Everyone".
-- The switch lives in Settings, Firm and starts at "Everyone"; an admin
-  flips it to "Team only" after fixing rosters (a "thin teams" list
-  helps). Hidden matters read as missing (404, not 403). Writes require
-  the same access on top of their existing key.
-- Events on inaccessible matters show as "Busy" (the existing scrub).
+Enforcement tests: `src/app/page-guards.test.ts` (every `matters/[id]`
+page and layout asserts), `src/app/actions/matter-access-guards.test.ts`
+(every action taking a matter/child id asserts; commented allowlist),
+plus two-user integration tests.
 
-Until that lands, treat every matter as readable by every staff
-member. See docs/DECISIONS.md for the recorded decision.
+Related per-surface rules:
+
+- **Calendar**: events on inaccessible matters render as "Busy"
+  (`matterAccessible` input to `canViewEventDetails`; the creator still
+  sees their own event). A viewer who only sees an event as Busy cannot
+  move, resize, edit or delete a private event or an event on a hidden
+  matter (`viewerMayTouchLoadedEvent`, enforced in
+  `actions/calendar-events.ts`; the UI offers drag only to editable ids).
+- **Privileged time narratives** are visible to anyone with access to
+  the matter (search included) and to nobody else.
+- **Trust column** in the matters list/kanban, its sort and filter need
+  `billing.view` (ADR-038).
+- **Conflict checks** still scan every matter; hits on matters the
+  viewer cannot access keep their severity but lose the matter name.
+- **Email** remains mailbox-personal (`visibleEmailThreadWhere`); threads
+  filed to a hidden matter are additionally hidden from non-access users.
 
 ---
 
@@ -751,10 +753,8 @@ boxes."
 
 - **Per-user permissions.** Roles only. If a single user needs an
   unusual capability, give them a role for it.
-- **Per-matter / per-resource visibility.** "User X can see Matter Y
-  but not Matter Z" is not supported today: all matters are readable
-  by all staff (see Matter visibility above). Team-based access
-  (ethical walls) is a planned phase, not built.
+- **Per-user matter exceptions.** Matter access is team-based (see
+  Matter access above); there is no "deny user X on matter Y" list.
 - **Time-bound grants.** No expiry on `RolePermission`. If we ever
   need "until end of quarter" grants, add `expiresAt` and filter at
   read time.
@@ -792,7 +792,7 @@ Beyond page-level keys, some matter data is filtered per viewer inside the query
 - **Timeline** — settlement rows need `matters.settlement.view`, expense rows need `matters.expense.view`, trust `deposit` rows need `billing.view`; without them the rows are omitted, not redacted (`activityMoneyFilters` in `src/lib/queries/matter-detail.ts`).
 - **Billing** — `billing.view` gates the matter Billing tab (page guard, redirect to `/`; the tab link is hidden), the `/print/invoices/[id]` route and its metadata, and the Overview Trust balance / WIP facts (ADR-038). Granted by the migration to every role already holding a `billing.*` or `trust.*` key; Admin is a wildcard. Still open: the matters list/kanban Trust column.
 - **Dashboard** — Firm pulse needs `reports.view`; the Trust balance KPI needs `reports.view` AND `billing.view`. Recent activity omits settlement rows without `matters.settlement.view`, trust deposit rows without `billing.view`, `Expense ...` rows without `matters.expense.view`, and firm-scope (`matterId` null) rows without `firm.view_activity`. Pinned by `src/lib/queries/dashboard-privacy.test.ts`.
-- **Email** — mailbox-personal; see Matter visibility.
+- **Email** — mailbox-personal; see Matter access.
 - **Evidence flags** — `edit_any` rewrites of another reviewer's flag are audited.
 
 ---
@@ -816,3 +816,5 @@ Beyond page-level keys, some matter data is filtered per viewer inside the query
 | 2026-10-16 | Added `requireUser()` and the "Page and layout guards" rule (ADR-028): every page/layout self-authenticates; `/matters/new` now requires `matters.create`. No new permission keys. |
 | 2026-10-17 | New key `billing.view` (billing category, ADR-038): read gate for the matter Billing tab, invoice print route, Overview trust/WIP facts, dashboard trust KPI and trust deposit activity rows. The Batch 4 migration grants it to every role that holds a `billing.*` or `trust.*` key. |
 | 2026-10-17 | Doc sweep to match the code: matter-visibility truth (no read restriction; `MatterTeamMember` is not a gate; ethical walls planned, not built), `requirePermissionResult`, `PermissionEntry.unwired`, last-admin invariant now an in-transaction recount, cross-key gates (`apply_trust`, `generate_invoice`, settlement approve, `contacts.edit` with `parties.edit`, `matters.manage_team` for lead change, `intake.decline`), read-side control flags, dashboard/timeline money-row gating. No new keys. |
+
+| 2026-10-17 | Phase 5: matter-team access built. New key `matters.view_all`; `src/lib/matter-access.ts`; firm switch (admin-only) + thin teams in Settings, Firm; enforced on all read surfaces and matter-scoped writes (ADR-039). Docs rewritten from "planned" to built. |

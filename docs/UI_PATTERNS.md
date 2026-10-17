@@ -494,3 +494,21 @@ values as the profile-zone wall clock and all-day values as date-only keys
   tooltip) were deleted: re-add with `shadcn add` when needed (a re-added base-ui `Select` needs `items` on `<Select>` or the trigger shows the raw value).
 - Reorderable dialog lists use stable row keys, not indexes.
 - Multi-connection-pool lock tests: see TESTING.md.
+
+## Adding a matter-scoped page or action (matter access)
+
+Every page under `matters/[id]` (and any page or route reached with a matter or child id) must restrict itself, ADR-039:
+
+```ts
+export default async function Page({ params }) {
+  await requireUser();                       // first await stays the session guard
+  const { id } = await params;
+  await assertMatterAccess(id);              // 404 when hidden
+  ...
+}
+```
+
+- Server actions: `requirePermission(key)` first, then `assertMatterAccess(matterId)` or `assertChildMatterAccess("note", noteId)` BEFORE any write.
+- Lists/aggregates: spread `matterAccessWhere(userId)` into a Matter query, `matterRelationAccessWhere(userId)` into a child with a required matter, `optionalMatterAccessWhere` for nullable matters.
+- Never return a 403 or a "no access" message; hidden looks missing. Show calendar items on hidden matters as Busy.
+- `page-guards.test.ts` and `matter-access-guards.test.ts` fail the build if you forget; justify exceptions in their allowlists.

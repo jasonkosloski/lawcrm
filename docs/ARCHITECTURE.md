@@ -142,14 +142,13 @@ error follow the React 19 patterns in [UI_PATTERNS.md](./UI_PATTERNS.md).
   closed; `CRON_SECRET` is required in production) and are listed in the proxy's
   self-authenticated paths (pinned by `src/vercel-config.test.ts`). Response
   security headers are set in `next.config.ts`.
-- **Matter visibility**: there is none beyond sign-in. Every signed-in user can
-  read every matter and its notes, documents, invoices and time;
-  `MatterTeamMember` drives assignment, notifications, calendar detail unlocks and
-  default attendees, not read access. Email is the exception: threads are visible
-  only to their mailbox owner (`visibleEmailThreadWhere`,
-  `src/lib/email-visibility.ts`), and all email-derived queries/actions use it.
-  Matter-team access is a planned phase, not built — see
-  [PERMISSIONS.md](./PERMISSIONS.md).
+- **Matter access (ethical walls, ADR-039)**: a matter and everything attached
+  is visible to its active team, holders of `matters.view_all` (Admin implicit),
+  or everyone while `Firm.matterVisibility` is `FIRM` (default). Hidden == 404.
+  Reads add `matterAccessWhere(userId)`; pages/actions call
+  `assertMatterAccess` / `assertChildMatterAccess` (`src/lib/matter-access.ts`);
+  static tests enforce both. Email stays mailbox-personal
+  (`visibleEmailThreadWhere`). See [PERMISSIONS.md](./PERMISSIONS.md).
 - **Permissions**: granular keys in `src/lib/permissions.ts`, enforced in every
   server action via `requirePermission(...)` and in read paths via
   `currentUserHasPermission(...)`. Full model in [PERMISSIONS.md](./PERMISSIONS.md).

@@ -22,12 +22,13 @@ Each decision is numbered and immutable once written. If we reverse a decision, 
 | 026 | Conflict matcher scope |
 | 027 | Matter owns the SOL; Deadline is a mirror |
 | 028 | Layouts are not auth gates |
-| 029 | Matter visibility today: every signed-in user sees every matter (Proposed: matter-team access) |
+| 029 | Matter visibility before Phase 5: every signed-in user sees every matter (superseded by 039) |
 | 030 | Settlement status follows the approval chain |
 | 031 | Google sync coordination: claim CAS, deterministic event ids, junk mail |
 | 032 | Database pool sizing |
 | 033 | Error boundaries use retry(); the bell reads via GET |
 | 034 | Document bytes never travel through server actions |
+| 039 | Matter-team access (ethical walls) |
 | - | Open product decisions (not ADRs) at the end of the file |
 
 ---
@@ -632,7 +633,7 @@ The original decision stored date-only values at **server-local** midnight and d
 ## ADR-029: Matter visibility today is firm-wide; matter-team access is planned, not built
 
 **Date:** 2026-10-17
-**Status:** Accepted (current behavior) / Proposed (matter-team access phase)
+**Status:** Accepted (history); superseded by ADR-039
 
 **Context:** Older docs implied `MatterTeamMember` restricts who can see a matter. It does not, and the sweep confirmed it on every read path. The firm decided on 2026-10-16 how the restriction should work; the design is in `out/sweep/MATTER_ACCESS_DESIGN.md`. This ADR records the truth so nobody builds on the wrong assumption.
 
@@ -749,10 +750,10 @@ These are not ADRs: each needs a human call, and when it is made it becomes an A
 1. **Trust `deposit` activity rows.** "Trust applied to invoice ... $amount" rows show to every viewer on the matter Timeline. Should they require a billing-view key? No such key exists (ADR-021, ADR-029).
 2. **Does `Contact.conflictStatus` feed the conflict matcher?** It is a manual flag the matcher never reads (ADR-026).
 3. **`documents.template.delete` versus `.edit` for archive/restore.** The catalog text for `documents.template.delete` says "Archive or permanently remove", but `document-templates.ts` gates archive and restore on `documents.template.edit` (the action docstring calls this deliberate). Align the catalog text or the code.
-4. **Privileged time narratives.** Search hides them from non-authors; the Time tabs show them to everyone (ADR-014). Decide the policy and apply it everywhere.
+4. ~~Privileged time narratives.~~ Decided in ADR-039: visible to anyone who can access the matter.
 5. ~~A per-event `private` calendar visibility value.~~ Decided and shipped: ADR-037.
 6. **Reads that need a key before they can be gated:** `exportContactsCsv`, the command-palette data, `searchAttendeesAction`, `previewDocumentFromTemplate`, and the billing read surface (ADR-028 added only session guards).
-7. **Matter-team access phase** (ADR-029): approve building it, including `matters.view_all`, the firm switch and the thin-teams list.
+7. ~~Matter-team access phase.~~ Built: ADR-039.
 8. **Document metadata edit** (rename, re-categorize) needs a `documents.edit` key (ADR-034); the receipt picker is capped at 200 documents.
 9. **Google-born event cleanup and an explicit backfill anchor** need `CalendarEvent.origin` and `EmailAccount.backfillBefore` (ADR-023, ADR-031).
 
@@ -831,8 +832,32 @@ These are not ADRs: each needs a human call, and when it is made it becomes an A
 **Decision:**
 - New key `billing.view` ("View billing, trust ledger and invoices"). It gates the matter Billing page (`requirePermission`, redirect to `/` like other denied pages), the Billing tab link (hidden without it), the invoice print route and its metadata, the Overview "Trust balance" and "WIP" facts, the dashboard Trust balance KPI (needs `reports.view` too), and trust `deposit` activity rows on the matter Timeline and the dashboard feed (omitted, as with settlement/expense rows).
 - The migration grants `billing.view` to every role that already holds any `billing.*` or `trust.*` key, so nobody who could act on billing loses the tab. Admin is a wildcard in code and needs no row. Other roles gain nothing until an admin ticks the key.
-- Known remaining surface: the matters list/kanban "Trust" column and sort/filter still read `Matter.trustBalance` for every viewer; gating them with the key is a follow-up (they are list views, not the ledger).
+- The matters list/kanban "Trust" column and its sort/filter are now gated by `billing.view` too (ADR-039).
 
 **Trade-offs:**
 - (+) Billing data has an explicit read gate separate from the action keys
 - (-) Roles that could view billing only because everyone could (no `billing.*` key) lose the tab until granted
+
+## ADR-039: Matter-team access (ethical walls)
+
+**Date:** 2026-10-17
+**Status:** Accepted
+
+**Context:** ADR-029 recorded that every signed-in user could read every matter. The firm decided (2026-10-16) on team-based access with a safe rollout.
+
+**Decision:**
+- A user sees a matter and everything on it when they are an active `MatterTeamMember`, hold the new `matters.view_all` key (Admins implicitly), or `Firm.matterVisibility` is `FIRM` (default, today's behavior). Inactive users see nothing.
+- Hidden is indistinguishable from missing: 404 on pages and routes, `notFound()` in actions; never 403.
+- One module, `src/lib/matter-access.ts`: `matterAccessWhere` for lists/aggregates, `assertMatterAccess` / `assertChildMatterAccess` for details and writes, cached per request. Pages guard themselves (ADR-028); every matter-scoped write asserts after its permission key. Static tests enforce both (`page-guards.test.ts`, `matter-access-guards.test.ts`).
+- Rollout switch in Settings, Firm: admin-only (not a delegable key, since a delegate could wall off the firm), logged; a "thin teams" list shows open matters with no active member or only a lead.
+- Calendar: events on inaccessible matters are "Busy" (ADR-021 scrub); a Busy-only viewer cannot move/edit/delete private events or events on hidden matters (closes the ADR-037 gap).
+- Privileged time narratives: visible to anyone with matter access, hidden from everyone else (search included).
+- Matters list Trust column/sort/filter need `billing.view` (closes the ADR-038 gap).
+- Conflict-check hits on inaccessible matters keep their severity but lose the matter name/link: filtering them out would silently clear a real conflict.
+- Aggregates gated by `reports.view` (firm pulse, trust total, A/R aging, utilization, realization) stay firm-wide; named per-matter rows are filtered.
+- No schema change: the `matterVisibility` column shipped in the Batch 4 migration.
+
+**Trade-offs:**
+- (+) Real walls with a staged rollout and no behavior change until the switch flips
+- (-) Every new matter-scoped page/action must remember the assert (the static tests catch omissions); contacts that exist only on hidden matters remain findable by name; `mergeContacts` is a firm-wide directory operation and is allowlisted
+- (-) Admins must grant `matters.view_all` to billing/office roles before flipping
