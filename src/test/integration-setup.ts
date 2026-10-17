@@ -8,7 +8,8 @@
  *      healthcheck handles most of this; we add a small retry
  *      loop for the case where someone runs `vitest` faster than
  *      the container can finish booting).
- *   3. Take a session-level advisory lock on that database for the
+ *   3. Take a session-level advisory lock (on the `postgres` maintenance
+ *      DB, keyed by the base DB name) for the
  *      whole run, so a second `vitest` process aimed at the SAME
  *      database (a commit hook plus a manual `npm test`, two agent
  *      sessions) queues behind the first instead of wiping its rows
@@ -20,9 +21,13 @@
  *      against schema.prisma is checked separately by
  *      `npm run check:migrations`, which the pre-commit hook runs
  *      when prisma/ changes.)
- *   5. Each test calls `resetDb()` (see integration-helpers) in
- *      `beforeEach` to DELETE FROM every table, so tests stay
- *      independent without recreating the schema each time.
+ *   5. Clone the pushed base DB into one database per Vitest worker
+ *      (`<base>_w1..N`, CREATE DATABASE ... TEMPLATE). The setupFile
+ *      `worker-db-setup.ts` points each worker at its own clone, so
+ *      test files run in parallel without sharing rows.
+ *   6. Each test calls `resetDb()` (see integration-helpers) in
+ *      `beforeEach` to DELETE FROM every table of ITS worker's DB, so
+ *      tests stay independent without recreating the schema each time.
  *
  * No data seeding here — fixtures are per-test responsibility.
  */
@@ -31,6 +36,13 @@ import { execSync } from "node:child_process";
 import { Client } from "pg";
 import type { TestProject } from "vitest/node";
 import { assertTestDatabaseUrl } from "./test-db-guard";
+import {
+  baseTestDbUrl,
+  dbNameOf,
+  maintenanceDbUrl,
+  resolveMaxWorkers,
+  workerDbUrl,
+} from "./test-db-config";
 
 // TEST_DATABASE_URL lets two suites run at once on one machine (e.g.
 // parallel git worktrees), each against its own database in the same
@@ -38,9 +50,11 @@ import { assertTestDatabaseUrl } from "./test-db-guard";
 // point this at .../lawcrm_test_2. It must still be a local database
 // named lawcrm_test* (assertTestDatabaseUrl) — setup() force-pushes
 // the schema and every test deletes all rows.
-const TEST_DB_URL =
-  process.env.TEST_DATABASE_URL ??
-  "postgresql://lawcrm_test:lawcrm_test@localhost:5433/lawcrm_test";
+const TEST_DB_URL = baseTestDbUrl();
+// The run lock lives on the `postgres` maintenance database, not the
+// base one: CREATE DATABASE ... TEMPLATE needs the template to have
+// zero other connections, so nothing may stay connected to it.
+const LOCK_DB_URL = maintenanceDbUrl(TEST_DB_URL);
 
 /** Arbitrary constant naming "an integration run owns this database". */
 export const RUN_LOCK_KEY = 727_001_001;
@@ -100,7 +114,7 @@ async function waitForDatabase(): Promise<void> {
  * blocking so a stuck holder produces a clear error, not a hung hook.
  */
 async function acquireRunLock(): Promise<void> {
-  const client = new Client({ connectionString: TEST_DB_URL });
+  const client = new Client({ connectionString: LOCK_DB_URL });
   // A Postgres restart mid-run emits 'error' on an idle client; with no
   // listener that would crash the globalSetup process. Postgres drops
   // the lock with the connection, so there is nothing to recover here.
@@ -109,9 +123,11 @@ async function acquireRunLock(): Promise<void> {
   const deadline = Date.now() + LOCK_TIMEOUT_MS;
   let announced = false;
   for (;;) {
+    // Two-int form: (RUN_LOCK_KEY, hash of the base database name), so
+    // different base databases on one server don't block each other.
     const res = await client.query<{ locked: boolean }>(
-      "SELECT pg_try_advisory_lock($1) AS locked",
-      [RUN_LOCK_KEY]
+      "SELECT pg_try_advisory_lock($1, hashtext($2)) AS locked",
+      [RUN_LOCK_KEY, dbNameOf(TEST_DB_URL)]
     );
     if (res.rows[0]?.locked) {
       lockClient = client;
@@ -134,6 +150,36 @@ async function acquireRunLock(): Promise<void> {
       );
     }
     await new Promise((r) => setTimeout(r, LOCK_POLL_MS));
+  }
+}
+
+const quoteIdent = (name: string) => `"${name.replace(/"/g, '""')}"`;
+
+/**
+ * (Re)create `<base>_w1..N` as clones of the freshly pushed base DB.
+ * Stale clones from a previous run are dropped first (WITH FORCE, in
+ * case a crashed run left connections). Runs on the maintenance DB.
+ */
+async function refreshWorkerDatabases(count: number): Promise<void> {
+  const base = dbNameOf(TEST_DB_URL);
+  const admin = new Client({ connectionString: LOCK_DB_URL });
+  await admin.connect();
+  try {
+    // The template must have no other sessions (Prisma's connections
+    // from db push are closed by now; this is belt and braces).
+    await admin.query(
+      "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()",
+      [base]
+    );
+    for (let n = 1; n <= count; n++) {
+      const url = workerDbUrl(TEST_DB_URL, n);
+      assertTestDatabaseUrl(url, "worker database");
+      const name = quoteIdent(dbNameOf(url));
+      await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+      await admin.query(`CREATE DATABASE ${name} TEMPLATE ${quoteIdent(base)}`);
+    }
+  } finally {
+    await admin.end().catch(() => {});
   }
 }
 
@@ -169,6 +215,10 @@ export async function setup(project: TestProject): Promise<void> {
     },
     stdio: "inherit",
   });
+
+  await refreshWorkerDatabases(
+    project.vitest.config.maxWorkers || resolveMaxWorkers()
+  );
 }
 
 export async function teardown(): Promise<void> {

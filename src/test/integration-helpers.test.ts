@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { TABLES_IN_DELETE_ORDER, resetDb } from "./integration-helpers";
 import { RUN_LOCK_KEY } from "./integration-setup";
+import { baseTestDbUrl, dbNameOf } from "./test-db-config";
 
 const savedUrl = process.env.DATABASE_URL;
 afterEach(() => {
@@ -38,15 +39,18 @@ describe("TABLES_IN_DELETE_ORDER", () => {
 
 describe("run lock", () => {
   it("globalSetup holds the per-database advisory lock for the whole run", async () => {
-    // A second run against this database would block in
-    // acquireRunLock() until this one finishes.
+    // A second run against this base database would block in
+    // acquireRunLock() until this one finishes. The lock sits on the
+    // `postgres` maintenance DB, keyed (RUN_LOCK_KEY, hashtext(base)).
+    const base = dbNameOf(baseTestDbUrl());
     const rows = await prisma.$queryRaw<Array<{ held: number }>>`
       SELECT count(*)::int AS held FROM pg_locks
       WHERE locktype = 'advisory'
         AND granted
-        AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
-        AND classid = 0
-        AND objid = ${RUN_LOCK_KEY}`;
+        AND database = (SELECT oid FROM pg_database WHERE datname = 'postgres')
+        AND classid = ${RUN_LOCK_KEY}::oid
+        AND objid = hashtext(${base})::oid
+        AND objsubid = 2`;
     expect(rows[0].held).toBeGreaterThanOrEqual(1);
   });
 });

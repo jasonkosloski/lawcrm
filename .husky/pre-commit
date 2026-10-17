@@ -1,11 +1,15 @@
 # Pre-commit gate. Checks, in order, fail-fast:
 #   1. tsc — catch type errors before they hit the diff.
 #   2. eslint — `npm run lint`, zero warnings allowed.
-#   3. vitest — the whole suite, unit + component + Postgres-backed
-#      integration tests. It needs the Docker test database
-#      (`docker compose -f docker-compose.test.yml up -d`) and takes
-#      about a minute and a half, so run `npm test` while you work
-#      rather than discovering failures here.
+#      (1 + 2 are `npm run precommit`.)
+#   3. vitest, RELATED TESTS ONLY — `vitest related` runs just the test
+#      files whose import graph reaches a staged src/**/*.ts(x) file
+#      (deleted files excluded). Skipped entirely when no such file is
+#      staged. It still needs the Docker test database
+#      (`docker compose -f docker-compose.test.yml up -d`) because
+#      every vitest run goes through the DB globalSetup. The FULL
+#      suite is not run here: run `npm test` before pushing, and CI
+#      (.github/workflows/test.yml) runs it on every push and PR.
 #   4. migration drift — ONLY when prisma/schema.prisma or
 #      prisma/migrations is staged: apply every migration to a scratch
 #      database and diff it against schema.prisma (ADR-016). Catches a
@@ -22,6 +26,18 @@
 # progress branches before a final cleanup commit). Don't make
 # it a habit.
 npm run precommit || exit 1
+
+staged_src=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^src/.*\.(ts|tsx)$')
+if [ -n "$staged_src" ]; then
+  # Split on newlines only and disable globbing: Next route dirs
+  # contain [brackets] and (parens).
+  set -f
+  # shellcheck disable=SC2086 -- word-splitting the file list is intended
+  npm run test:related -- $staged_src || exit 1
+  set +f
+else
+  echo "pre-commit: no src/ .ts/.tsx files staged, skipping tests"
+fi
 
 if git diff --cached --name-only | grep -qE '^prisma/(schema\.prisma|migrations/)'; then
   npm run check:migrations

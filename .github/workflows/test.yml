@@ -1,0 +1,51 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # The suite pins date behaviour; run it in a US zone and UTC.
+        tz: [America/Denver, UTC]
+    env:
+      TZ: ${{ matrix.tz }}
+      TEST_DATABASE_URL: postgresql://lawcrm_test:lawcrm_test@localhost:5432/lawcrm_test
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: lawcrm_test
+          POSTGRES_PASSWORD: lawcrm_test
+          POSTGRES_DB: lawcrm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lawcrm_test -d lawcrm_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run typecheck
+      - run: npm run lint
+      # Vitest globalSetup pushes the schema and clones per-worker
+      # databases; no docker CLI or Prisma agent-consent variable needed.
+      - run: npm test

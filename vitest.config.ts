@@ -17,12 +17,15 @@
 
 import path from "node:path";
 import { defineConfig } from "vitest/config";
+import { resolveMaxWorkers } from "./src/test/test-db-config";
 
 export default defineConfig({
   test: {
     environment: "happy-dom",
     globals: true,
-    setupFiles: ["./src/test/setup.ts"],
+    // worker-db-setup MUST be first: it repoints DATABASE_URL at this
+    // worker's own database before anything imports src/lib/prisma.
+    setupFiles: ["./src/test/worker-db-setup.ts", "./src/test/setup.ts"],
     // Layer-3 integration tests need a real test Postgres.
     // `globalSetup` runs once before any test file, points
     // DATABASE_URL at the test container, takes a per-database run
@@ -30,21 +33,15 @@ export default defineConfig({
     // invocation, including pure unit tests, so the Docker test DB
     // must be up. See `src/test/integration-setup.ts`.
     globalSetup: ["./src/test/integration-setup.ts"],
-    // Integration tests share a single Postgres test DB and reset
-    // it via `beforeEach` (see `src/test/integration-helpers.ts`).
-    // Vitest's default file-level parallelism would race on that
-    // shared state — file A truncating the DB while file B's
-    // test is mid-flight. `fileParallelism: false` runs files
-    // one-at-a-time. Tests within a file still run in document
-    // order with sequential `beforeEach` calls, which is exactly
-    // what the resetDb pattern needs.
-    //
-    // Trade-off: layer 1 + 2 tests are pure / no-DB and could
-    // safely run in parallel. The full suite takes about 1.5
-    // minutes serially. Splitting it into unit / integration
-    // projects needs a classification pass first (many DB-backed
-    // tests are plain `*.test.ts`), so it has not been done.
-    fileParallelism: false,
+    // Files run in parallel, each worker against its OWN database:
+    // globalSetup pushes the schema once and clones it to
+    // `<base>_w1..maxWorkers` (src/test/integration-setup.ts); the
+    // worker-db-setup setupFile selects the clone by VITEST_POOL_ID.
+    // `resetDb()` in beforeEach therefore only wipes that worker's DB.
+    // Tests inside a file still run in order. maxWorkers defaults to
+    // half the cores, capped at 4; override with TEST_MAX_WORKERS.
+    fileParallelism: true,
+    maxWorkers: resolveMaxWorkers(),
     // Match the project's TS path alias so tests import the same
     // way the app does ("@/lib/foo" instead of "../../src/lib/foo").
     include: ["src/**/*.{test,spec}.{ts,tsx}"],

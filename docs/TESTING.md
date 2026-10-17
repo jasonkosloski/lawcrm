@@ -11,13 +11,14 @@ disagrees with what's here, the doc is right — fix the code.
 - **Tests live alongside source.** `src/lib/sol.ts` →
   `src/lib/sol.test.ts`, no separate `__tests__` folder.
 - **Every new feature ships with at least one test.** The
-  pre-commit hook runs typecheck, lint and the full suite on every
-  commit; failures block.
+  pre-commit hook runs typecheck, lint and the tests related to the
+  staged files on every commit; failures block. CI runs the full suite.
 - **Tests run on every git commit.** Husky pre-commit hook in
   `.husky/pre-commit`.
 - **The suite needs the Docker test database** (every `vitest` run,
-  even a pure-unit one, goes through the DB `globalSetup`) and takes
-  about a minute and a half.
+  even a pure-unit one, goes through the DB `globalSetup`). The full
+  suite runs files in parallel, one database per worker, and takes
+  under two minutes on a laptop.
 
 ---
 
@@ -50,19 +51,30 @@ real Gmail OAuth — covered by the manual-test plan in
 
 1. `npm run typecheck` — `next typegen && tsc --noEmit`
 2. `npm run lint` — ESLint with `--max-warnings 0`
-3. `npm test` — the full `vitest run` suite (unit, component and
-   Postgres-backed integration tests)
+3. `npm run test:related -- <staged src .ts/.tsx files>` — i.e.
+   `vitest related --run`, which runs only the test files whose import
+   graph reaches a staged file (deleted files excluded). Skipped when
+   no `src/` TypeScript file is staged.
 
-and, only when `prisma/schema.prisma` or `prisma/migrations/` is
+(`npm run precommit` is steps 1 and 2; the hook adds step 3.) and, only when `prisma/schema.prisma` or `prisma/migrations/` is
 staged, `npm run check:migrations` (applies every migration to a
 scratch database and diffs it against `schema.prisma`, ADR-016).
 
-The full suite takes about 1.5 minutes, so don't discover failures at
-commit time. For a fast local loop use `npx vitest related <changed
-files> --run` (runs only the tests that import them; it still needs the
-test DB up), `npm run test:watch`, or a single file with
-`npx vitest run path/to/file.test.ts`, and run the whole suite before
-committing. There is no CI workflow in the repo; the hook is the gate.
+The hook deliberately does NOT run the whole suite. Related-test
+selection follows static imports, so it can miss a test that only
+reaches your change through a dynamic import, a config/schema file, or
+shared DB state: run `npm test` (full suite) before pushing. For a fast
+local loop use `npm run test:related -- <files>`, `npm run test:watch`,
+or a single file with `npx vitest run path/to/file.test.ts`.
+
+**CI** (`.github/workflows/test.yml`, on push and pull request to
+`main`) is the full-suite gate: Postgres 17 service container, Node 24,
+`npm ci`, `prisma generate`, typecheck, lint, then `npm test` in a
+matrix of `TZ=America/Denver` and `TZ=UTC` with `TEST_DATABASE_URL`
+pointing at the service. It needs no secrets (tests are hermetic) and no
+docker CLI: `integration-setup.ts` talks to Postgres through `pg`. The
+Prisma agent-consent variable is only needed when an AI agent drives
+Prisma locally; CI is not one.
 
 **Bypass** (`git commit --no-verify`) is allowed only for
 work-in-progress branches that you'll clean up before merging.
@@ -185,8 +197,28 @@ use selectively for the highest-leverage workflows.
   `DIRECT_DATABASE_URL` at the test container, sets
   `DATABASE_POOL_MAX=4` (so lock-contention tests really overlap),
   waits up to 30s for the DB, takes a **per-database advisory run
-  lock**, then pushes the current schema via
-  `npx prisma db push --accept-data-loss`.
+  lock**, pushes the current schema via
+  `npx prisma db push --accept-data-loss` into the base database, then
+  clones it into the per-worker databases (next bullet).
+- **Per-worker databases.** The base database (`lawcrm_test`, or
+  `TEST_DATABASE_URL`) is only a template. `globalSetup` drops and
+  recreates `<base>_w1 .. <base>_wN` with
+  `CREATE DATABASE ... TEMPLATE <base>` (N = `maxWorkers`), and the
+  setupFile `src/test/worker-db-setup.ts` (first in `setupFiles`) points
+  each worker's `DATABASE_URL` at `<base>_w<VITEST_POOL_ID>` before
+  `@/lib/prisma` loads. Test files therefore run in parallel without
+  sharing rows; `resetDb()` only wipes the worker's own database.
+  `maxWorkers` is half the cores capped at 4 (`TEST_MAX_WORKERS`
+  overrides; helpers in `src/test/test-db-config.ts`). The worker URLs
+  still pass `test-db-guard.ts` (`lawcrm_test_w3` matches). Because
+  `TEMPLATE` needs zero connections on the base database, the run lock
+  is held on the `postgres` maintenance database, keyed by
+  `(RUN_LOCK_KEY, hashtext(base name))`. The `_wN` databases are left
+  in place between runs (refreshed next run); drop them with
+  `DROP DATABASE` if you want them gone. Concurrency tests
+  (`billing.concurrency.test.ts`, advisory-lock and parallel-login
+  tests) stay correct since each file has a private database; nothing
+  needs to run serially.
 - **Run lock.** A second one-shot `vitest` run against the SAME
   database (a commit hook plus a manual `npm test`, two agent
   sessions) queues behind the first instead of truncating its rows,
@@ -206,10 +238,11 @@ use selectively for the highest-leverage workflows.
   `seedUser`, `seedPracticeArea`, `seedMatter`, `seedTimeEntry`,
   `seedExpense`, `seedContact`, `seedMatterContact`, `seedLead`)
   return the row id for chaining.
-- `vitest.config.ts` sets `fileParallelism: false` because the
-  test DB is shared across files — file-level parallelism would
-  race on the shared state. Tests within a file still run
-  sequentially via `beforeEach { resetDb() }`.
+- `vitest.config.ts` sets `fileParallelism: true` with
+  `maxWorkers` from `resolveMaxWorkers()`; safe because every worker has
+  its own database. Tests within a file still run sequentially via
+  `beforeEach { resetDb() }`. Never open a connection to the base
+  `lawcrm_test` database from a test; use `DATABASE_URL`.
 
 **Mocking pattern** for action tests:
 
@@ -383,7 +416,9 @@ Production runs in UTC while developers (and their browsers) sit
 west of it; a bug that mixes the two frames passes in one zone and
 fails in the other, so date work should be green in both.
 
-**Parallel suites.** Each database is single-tenant and guarded by a run
+**Parallel suites.** (Files inside ONE run are already parallel, see
+"Per-worker databases" in Layer 3; this is about two separate runs.)
+Each base database is single-tenant and guarded by a run
 lock (see Layer 3). Integration tests default to the `lawcrm_test`
 database on `localhost:5433`. Set `TEST_DATABASE_URL` to run a second
 suite at the same time against its own database in the same

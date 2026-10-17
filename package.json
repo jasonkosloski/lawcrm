@@ -15,7 +15,8 @@
     "test:coverage": "vitest run --coverage",
     "typecheck": "next typegen && tsc --noEmit -p tsconfig.json",
     "check:migrations": "node scripts/check-migrations.mjs",
-    "precommit": "npm run typecheck && npm run lint && npm test",
+    "test:related": "vitest related --run --passWithNoTests",
+    "precommit": "npm run typecheck && npm run lint",
     "prepare": "husky",
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset --force"
