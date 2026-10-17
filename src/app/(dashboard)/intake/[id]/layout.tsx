@@ -18,6 +18,7 @@ import { DeclineLeadButton } from "@/components/intake/decline-lead-button";
 import { getLeadById, LEAD_STAGE_LABEL } from "@/lib/queries/leads";
 import { getPracticeAreaOptions } from "@/lib/queries/practice-area-options";
 import { requireUser } from "@/lib/current-user";
+import { currentUserHasPermission } from "@/lib/permission-check";
 
 function StageChip({ stage }: { stage: string }) {
   // DB stage values arrive untyped — fall back to the raw slug
@@ -48,9 +49,15 @@ export default async function LeadDetailLayout({
 }: LayoutProps<"/intake/[id]">) {
   await requireUser();
   const { id } = await params;
-  const [lead, areas] = await Promise.all([
+  // Hide the lead-level actions the viewer's role can't use — the
+  // server actions still gate, but a refused click just bounces to "/"
+  // after the user has typed into the dialog. Convert creates a Matter
+  // (matters.create); Decline has its own key.
+  const [lead, areas, canConvert, canDecline] = await Promise.all([
     getLeadById(id),
     getPracticeAreaOptions(),
+    currentUserHasPermission("matters.create"),
+    currentUserHasPermission("intake.decline"),
   ]);
   if (!lead) notFound();
 
@@ -74,12 +81,14 @@ export default async function LeadDetailLayout({
         actions={
           !isResolved ? (
             <>
-              <DeclineLeadButton leadId={lead.id} />
-              <ConvertLeadButton
-                leadId={lead.id}
-                defaultMatterName={lead.displayName}
-                areas={areas}
-              />
+              {canDecline && <DeclineLeadButton leadId={lead.id} />}
+              {canConvert && (
+                <ConvertLeadButton
+                  leadId={lead.id}
+                  defaultMatterName={lead.displayName}
+                  areas={areas}
+                />
+              )}
             </>
           ) : lead.convertedMatter ? (
             <Button

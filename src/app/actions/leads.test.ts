@@ -92,6 +92,7 @@ async function seedArea(opts: {
 async function seedIntakeLead(opts?: {
   dateOfIncident?: Date | null;
   stage?: string;
+  conflictCheck?: string;
 }): Promise<{ leadId: string }> {
   const lead = await prisma.lead.create({
     data: {
@@ -99,6 +100,7 @@ async function seedIntakeLead(opts?: {
       email: "priya@example.com",
       dateOfIncident: opts?.dateOfIncident ?? null,
       stage: opts?.stage ?? "new",
+      ...(opts?.conflictCheck ? { conflictCheck: opts.conflictCheck } : {}),
     },
     select: { id: true },
   });
@@ -501,12 +503,81 @@ describe("convertLeadToMatter — automatic defaults (ADR-019)", () => {
 
   test("no defaults → conversion still logs where the matter came from", async () => {
     const { areaId, stageId } = await seedArea({});
-    const { leadId } = await seedIntakeLead();
+    const { leadId } = await seedIntakeLead({ conflictCheck: "clear" });
     await expect(
       convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
     ).rejects.toThrow(/^REDIRECT:/);
     const titles = (await prisma.activityLog.findMany()).map((l) => l.title);
     expect(titles).toEqual(["Converted from lead: Priya Patel"]);
+  });
+});
+
+// ── Conflict-check audit on conversion (F267) ───────────────────────────
+
+describe("convertLeadToMatter — conflict-check audit", () => {
+  const conversionTitles = async (): Promise<string[]> =>
+    (await prisma.activityLog.findMany({ orderBy: { timestamp: "asc" } })).map(
+      (l) => l.title
+    );
+
+  test.each(["pending", "warn", "conflict"])(
+    "a lead converted with conflict check '%s' leaves a reviewable timeline entry",
+    async (status) => {
+      const { areaId, stageId } = await seedArea({});
+      const { leadId } = await seedIntakeLead({ conflictCheck: status });
+      await expect(
+        convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+      ).rejects.toThrow(/^REDIRECT:/);
+      expect(await conversionTitles()).toContain(
+        `Converted with conflict check: ${status}`
+      );
+      const row = await prisma.activityLog.findFirstOrThrow({
+        where: { title: `Converted with conflict check: ${status}` },
+      });
+      expect(row.matterId).not.toBeNull();
+      expect(row.detail).toContain(leadId);
+    }
+  );
+
+  test.each(["clear", "override"])(
+    "a lead whose check is '%s' adds no conflict entry",
+    async (status) => {
+      const { areaId, stageId } = await seedArea({});
+      const { leadId } = await seedIntakeLead({ conflictCheck: status });
+      await expect(
+        convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+      ).rejects.toThrow(/^REDIRECT:/);
+      expect(
+        (await conversionTitles()).some((t) => t.startsWith("Converted with conflict check"))
+      ).toBe(false);
+    }
+  );
+});
+
+// ── Audit labelling + date-only description ─────────────────────────────
+
+describe("lead audit and description details", () => {
+  test("the decline audit entry is labelled with the Intake source, not Documents", async () => {
+    const { leadId } = await seedIntakeLead();
+    await declineLead(leadId, { status: "idle" }, declineForm("No case"));
+    const row = await prisma.activityLog.findFirstOrThrow({
+      where: { title: { startsWith: "Lead declined" } },
+    });
+    expect(row.source).toBe("Intake");
+  });
+
+  test("the matter description carries the incident date as its calendar day", async () => {
+    const { areaId, stageId } = await seedArea({});
+    const { leadId } = await seedIntakeLead({
+      dateOfIncident: new Date("2026-04-15T00:00:00.000Z"),
+    });
+    await expect(
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+    ).rejects.toThrow(/^REDIRECT:/);
+    const matter = await prisma.matter.findFirstOrThrow({
+      where: { name: "Patel v. Doe" },
+    });
+    expect(matter.description).toContain("Date of incident: 2026-04-15");
   });
 });
 

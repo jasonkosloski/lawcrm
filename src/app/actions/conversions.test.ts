@@ -228,3 +228,46 @@ describe("convertTaskToDeadline", () => {
     expect(res.errors?.dueDate?.length).toBeGreaterThan(0);
   });
 });
+
+// ── Date-only due dates (ADR-012) ───────────────────────────────────────
+
+describe("conversion due dates are date-only (UTC midnight)", () => {
+  test("note → task stores the typed day at UTC midnight", async () => {
+    const noteId = await seedNote();
+    const fd = noteToTaskForm();
+    fd.set("dueDate", "2026-04-15");
+    const res = await convertNoteToTask(noteId, inboxActionInitialState, fd);
+    expect(res.status).toBe("ok");
+    const task = await prisma.task.findFirstOrThrow({ where: { noteId } });
+    expect(task.dueDate!.toISOString()).toBe("2026-04-15T00:00:00.000Z");
+  });
+
+  test("task → deadline stores the typed day at UTC midnight", async () => {
+    const taskId = await seedTask();
+    const fd = taskToDeadlineForm();
+    fd.set("dueDate", "2026-04-15");
+    const res = await convertTaskToDeadline(taskId, inboxActionInitialState, fd);
+    expect(res.status).toBe("ok");
+    const dl = await prisma.deadline.findFirstOrThrow({
+      where: { parentTaskId: taskId },
+    });
+    expect(dl.dueDate.toISOString()).toBe("2026-04-15T00:00:00.000Z");
+  });
+
+  test("an impossible date (2026-02-31) is a field error, not a crash", async () => {
+    const noteId = await seedNote();
+    const nfd = noteToTaskForm();
+    nfd.set("dueDate", "2026-02-31");
+    const nres = await convertNoteToTask(noteId, inboxActionInitialState, nfd);
+    expect(nres.status).toBe("error");
+    expect(nres.errors?.dueDate?.[0]).toMatch(/invalid/i);
+
+    const taskId = await seedTask();
+    const dfd = taskToDeadlineForm();
+    dfd.set("dueDate", "2026-02-31");
+    const dres = await convertTaskToDeadline(taskId, inboxActionInitialState, dfd);
+    expect(dres.status).toBe("error");
+    expect(dres.errors?.dueDate?.[0]).toMatch(/invalid/i);
+    expect(await prisma.deadline.count()).toBe(0);
+  });
+});

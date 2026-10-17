@@ -17,18 +17,17 @@ import {
   Mail,
   MapPin,
   Phone,
-  ShieldCheck,
-  TriangleAlert,
   UserCheck,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmailLink } from "@/components/ui/email-link";
 import { ConflictCheckCard } from "@/components/intake/conflict-check-card";
 // Centralized date formatting — default "medium" matches the
-// "Apr 15, 2026" this page always used. dateOfIncident is date-only
-// (server-local day grid, no TZ override); createdAt is a real
+// "Apr 15, 2026" this page always used. dateOfIncident is a date-only
+// value (formatDateOnly never shifts the day); createdAt is a real
 // instant, so it threads the viewer's TZ (ADR-012).
-import { formatDate } from "@/lib/format-date";
+import { formatDate, formatDateOnly } from "@/lib/format-date";
+import { describeStatuteRemaining } from "@/lib/lead-statute";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { formatPhone } from "@/lib/format-phone";
 import { getLeadById, LEAD_SOURCE_LABEL } from "@/lib/queries/leads";
@@ -86,22 +85,36 @@ export default async function LeadOverviewPage({
   const lead = await getLeadById(id);
   if (!lead) notFound();
 
-  // Run the matcher live on every page load so a freshly added
-  // contact / opposing party shows up without re-clicking "Run."
-  // The matcher is read-only and bounded — see lib/conflict-check.ts.
+  // Run the matcher live on every page load of an OPEN lead so a
+  // freshly added contact / opposing party shows up without
+  // re-clicking "Run." The matcher is read-only and bounded — see
+  // lib/conflict-check.ts. A converted / declined lead drives no
+  // further decision, so skip the several-query scan and show the
+  // status recorded at the last run/override instead.
+  const isResolved = lead.stage === "converted" || lead.stage === "declined";
   const [conflictResult, canRunCheck, canOverride, tz] = await Promise.all([
-    runConflictMatcher({
-      name: lead.contact?.name ?? lead.name ?? null,
-      email: lead.contact?.email ?? lead.email ?? null,
-      organization: lead.contact?.organization ?? null,
-      ownContactId: lead.contactId,
-    }),
-    currentUserHasPermission("intake.conflict_check.run"),
-    currentUserHasPermission("intake.conflict_check.override"),
+    isResolved
+      ? Promise.resolve({ matches: [] })
+      : runConflictMatcher({
+          name: lead.contact?.name ?? lead.name ?? null,
+          email: lead.contact?.email ?? lead.email ?? null,
+          organization: lead.contact?.organization ?? null,
+          ownContactId: lead.contactId,
+        }),
+    // No re-run / override on a closed lead.
+    !isResolved && currentUserHasPermission("intake.conflict_check.run"),
+    !isResolved && currentUserHasPermission("intake.conflict_check.override"),
     // "Received" is a real instant — render it on the viewer's
     // calendar, not the server's (UTC in prod).
     getCurrentUserTimeZone(),
   ]);
+
+  // The stored statuteWindow is a snapshot from intake day; show the
+  // live countdown so the <= 30 day warning can actually fire.
+  const statute =
+    lead.statuteDaysRemaining !== null
+      ? describeStatuteRemaining(lead.statuteDaysRemaining)
+      : null;
 
   return (
     <div className="p-3 sm:p-5">
@@ -135,7 +148,7 @@ export default async function LeadOverviewPage({
                 <Field
                   icon={<Hourglass size={11} />}
                   label="Date of incident"
-                  value={formatDate(lead.dateOfIncident)}
+                  value={formatDateOnly(lead.dateOfIncident)}
                 />
                 <Field label="Injuries" value={lead.injuries} />
                 <Field
@@ -322,14 +335,8 @@ export default async function LeadOverviewPage({
                 />
                 <MetaRow
                   label="Statute window"
-                  value={
-                    lead.statuteWindow !== null
-                      ? `${lead.statuteWindow} days`
-                      : null
-                  }
-                  warn={
-                    lead.statuteWindow !== null && lead.statuteWindow <= 30
-                  }
+                  value={statute ? statute.long : null}
+                  warn={!!statute?.warn && !isResolved}
                   mono
                 />
                 <MetaRow
@@ -363,6 +370,7 @@ export default async function LeadOverviewPage({
                 matches={conflictResult.matches}
                 canRun={canRunCheck}
                 canOverride={canOverride}
+                matchesNotLive={isResolved}
               />
             </CardContent>
           </Card>

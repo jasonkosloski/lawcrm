@@ -35,7 +35,8 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
-import { computeSolDate } from "@/lib/sol";
+import { computeSolDate, SOL_SOURCE_TYPE } from "@/lib/sol";
+import { dateOnlyKey } from "@/lib/format-date";
 import { applyAutoDefaults, describeDefaults } from "@/lib/automations/apply";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import type {
@@ -65,12 +66,6 @@ class LeadClaimLostError extends Error {}
 
 // ── Convert ─────────────────────────────────────────────────────────────
 
-/** Signature of the one auto-managed SOL deadline per matter. MUST
- *  match `SOL_SOURCE_TYPE` in matters.ts — updateMatter /
- *  setMatterSolSatisfied find-and-update the row by this value, so a
- *  drift here would orphan conversion-created SOL deadlines. */
-const SOL_SOURCE_TYPE = "statute_of_limitations";
-
 const convertSchema = z.object({
   practiceAreaId: z.string().trim().min(1, "Practice area is required"),
   stageId: z.string().trim().min(1, "Initial stage is required"),
@@ -98,7 +93,7 @@ function composeMatterDescription(lead: {
   if (lead.location) lines.push(`Incident location: ${lead.location}`);
   if (lead.dateOfIncident) {
     lines.push(
-      `Date of incident: ${lead.dateOfIncident.toISOString().slice(0, 10)}`
+      `Date of incident: ${dateOnlyKey(lead.dateOfIncident)}`
     );
   }
   if (lead.injuries) lines.push(`Injuries: ${lead.injuries}`);
@@ -396,6 +391,20 @@ export async function convertLeadToMatter(
     });
   }
 
+  // Conversion is not blocked on the conflict check (policy decision
+  // pending), so make the gap reviewable: a lead converted while its
+  // check was never run, flagged, or still unresolved says so on the
+  // matter's timeline. "clear" and "override" (justified) stay silent.
+  if (lead.conflictCheck !== "clear" && lead.conflictCheck !== "override") {
+    await logActivity({
+      matterId,
+      userId,
+      type: "automation",
+      title: `Converted with conflict check: ${lead.conflictCheck}`,
+      detail: `lead ${leadId}: ${lead.name} — no override recorded`,
+    });
+  }
+
   // Audit trail for the roll-forward — the matter's timeline should
   // say where its pre-conversion hours came from. Outside the
   // transaction on purpose: logActivity is fire-and-forget by
@@ -496,6 +505,8 @@ export async function declineLead(
     matterId: null,
     userId: actorId,
     type: "filing",
+    // "filing" would label this "Documents" in the feeds.
+    source: "Intake",
     // ActivityLog has no lead reference, so the lead is named in the
     // title and identified by id in the detail (same as the
     // conflict-check entries).

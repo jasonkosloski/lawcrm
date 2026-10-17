@@ -12,8 +12,10 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { hydrateRoot } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 
 vi.mock("@/app/actions/conflict-check", () => ({
   runLeadConflictCheck: vi.fn(),
@@ -414,5 +416,126 @@ describe("ConflictCheckCard — matches list", () => {
     );
     const link = screen.getByRole("link", { name: /Matter/ });
     expect(link).toHaveAttribute("href", "/matters/m456");
+  });
+});
+
+describe("ConflictCheckCard — list keys", () => {
+  test("one contact opposing on several matters renders every row with no duplicate-key warning", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    render(
+      <ConflictCheckCard
+        leadId="lead1"
+        status="conflict"
+        checkedAt={null}
+        resolutionNotes={null}
+        matches={[
+          {
+            kind: "matter_opposing_party",
+            severity: "conflict",
+            matchedField: "name",
+            description: "Doe — appears as opposing on matter A",
+            matterId: "mA",
+            contactId: "c1",
+          },
+          {
+            kind: "matter_opposing_party",
+            severity: "conflict",
+            matchedField: "name",
+            description: "Doe — appears as opposing on matter B",
+            matterId: "mB",
+            contactId: "c1",
+          },
+        ]}
+        canRun={false}
+        canOverride={false}
+      />
+    );
+    expect(screen.getByText(/matter A/)).toBeInTheDocument();
+    expect(screen.getByText(/matter B/)).toBeInTheDocument();
+    const dupKey = errorSpy.mock.calls.some((c) =>
+      String(c[0]).includes("same key")
+    );
+    expect(dupKey).toBe(false);
+  });
+});
+
+describe("ConflictCheckCard — relative time hydration", () => {
+  test("a 'checked Nm ago' label that moved on between SSR and hydration is not a hydration error", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const container = document.createElement("div");
+    const held: { root: ReturnType<typeof hydrateRoot> | null } = { root: null };
+    try {
+      const t0 = new Date("2026-04-28T12:00:00Z");
+      vi.setSystemTime(t0);
+      const el = (
+        <ConflictCheckCard
+          leadId="lead1"
+          status="clear"
+          checkedAt={new Date(t0.getTime() - 5 * 60 * 1000)}
+          resolutionNotes={null}
+          matches={NO_MATCHES}
+          canRun={false}
+          canOverride={false}
+        />
+      );
+      const html = renderToString(el);
+      expect(html).toContain("5m ago");
+
+      // The client hydrates a couple of minutes later.
+      vi.setSystemTime(new Date(t0.getTime() + 2 * 60 * 1000));
+      container.innerHTML = html;
+      document.body.appendChild(container);
+      const recoverable = vi.fn();
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      await act(async () => {
+        held.root = hydrateRoot(container, el, {
+          onRecoverableError: recoverable,
+        });
+      });
+      // Without suppressHydrationWarning on the label, React reports a
+      // text mismatch here and re-renders the whole tree on the client.
+      expect(recoverable).not.toHaveBeenCalled();
+    } finally {
+      if (held.root) {
+        const r = held.root;
+        await act(async () => r.unmount());
+      }
+      container.remove();
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("ConflictCheckCard — closed leads (matches not live)", () => {
+  test("explains that matching is not re-run instead of reading as a fresh 'no matches'", () => {
+    render(
+      <ConflictCheckCard
+        leadId="lead1"
+        status="clear"
+        checkedAt={null}
+        resolutionNotes={null}
+        matches={NO_MATCHES}
+        canRun={false}
+        canOverride={false}
+        matchesNotLive
+      />
+    );
+    expect(screen.getByText(/live matching is not re-run/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^No matches/)).not.toBeInTheDocument();
+  });
+
+  test("an open lead keeps the live 'No matches' copy", () => {
+    render(
+      <ConflictCheckCard
+        leadId="lead1"
+        status="clear"
+        checkedAt={null}
+        resolutionNotes={null}
+        matches={NO_MATCHES}
+        canRun={false}
+        canOverride={false}
+      />
+    );
+    expect(screen.getByText(/^No matches/)).toBeInTheDocument();
   });
 });

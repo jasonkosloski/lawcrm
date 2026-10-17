@@ -9,6 +9,13 @@
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { LEAD_CLOSED_STAGES } from "@/lib/constants/lead-stage";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
+import {
+  dateKeyInTz,
+  daysBetweenKeys,
+  instantInTz,
+  todayKey,
+} from "@/lib/format-date";
 
 // Stage value set + labels moved to their canonical client-safe home
 // in `src/lib/constants/lead-stage.ts` (this server-only file can't
@@ -38,36 +45,83 @@ export type LeadListRow = {
   score: number | null;
   liabilityAssessment: string | null;
   damagesAssessment: string | null;
+  /** The stored snapshot (`Lead.statuteWindow`): days of statute left
+   *  AS OF the day the lead was created. It does not count down, so it
+   *  is never displayed directly — use `statuteDaysRemaining`. */
   statuteWindow: number | null;
+  /** Days of statute left TODAY (viewer's calendar): the snapshot minus
+   *  the days elapsed since the lead came in. Negative = the window has
+   *  run. Null when the lead has no statute window. */
+  statuteDaysRemaining: number | null;
   conflictCheck: string;
-  /** Days since the lead came in. */
+  /** Calendar days since the lead came in (viewer's zone). */
   ageDays: number;
   isActive: boolean;
 };
 
-const daysBetween = (a: Date, b: Date): number =>
-  Math.floor((a.getTime() - b.getTime()) / (24 * 60 * 60 * 1000));
+/** Whole calendar days (in `tz`) from the day the lead was created to
+ *  today. Never negative. */
+export function leadAgeDays(createdAt: Date, tz: string, now: Date): number {
+  return Math.max(
+    0,
+    daysBetweenKeys(dateKeyInTz(createdAt, tz), todayKey(tz, now))
+  );
+}
 
-/// Hard cap on listLeads — same rationale as LIST_MATTERS_CAP in
-/// matters.ts. Most firms have far fewer active leads than this,
-/// and converted/declined leads still count toward the cap so this
-/// is the "all intake history" bound. Build paging when needed.
-const LIST_LEADS_CAP = 200;
+/** `Lead.statuteWindow` is a one-time snapshot ("days remaining" when
+ *  the lead was entered), so the live figure is the snapshot minus the
+ *  days elapsed since. Without this the queue would read the same
+ *  "340d" ten months later and the <= 30 day warning could never fire.
+ *  Negative = the window has run. */
+export function statuteDaysRemaining(
+  statuteWindow: number | null,
+  createdAt: Date,
+  tz: string,
+  now: Date
+): number | null {
+  if (statuteWindow === null) return null;
+  return statuteWindow - leadAgeDays(createdAt, tz, now);
+}
 
-export async function listLeads(): Promise<LeadListRow[]> {
-  const leads = await prisma.lead.findMany({
-    take: LIST_LEADS_CAP,
-    orderBy: [{ createdAt: "desc" }],
-    include: {
-      // Joined Contact wins for display fields when present — keeps
-      // intake and the contact directory consistent if the user edits
-      // the Contact (e.g. updates the phone number). Falls back to
-      // the legacy Lead.email/.phone columns for un-backfilled rows.
-      contact: { select: { id: true, name: true, email: true, phone: true } },
-    },
-  });
-  const now = new Date();
-  return leads.map((l) => ({
+/// Safety bound on ACTIVE leads in the queue. Open leads carry
+/// statute-of-limitations exposure, so they are never cut by the
+/// history cap below — this only guards against a runaway table.
+const ACTIVE_LEADS_SAFETY_CAP = 1000;
+/// Cap on the CLOSED (converted / declined) history listed after the
+/// active leads — same rationale as LIST_MATTERS_CAP in matters.ts.
+/// Build paging when needed.
+const CLOSED_LEADS_CAP = 200;
+
+export async function listLeads(
+  now: Date = new Date()
+): Promise<LeadListRow[]> {
+  const include = {
+    // Joined Contact wins for display fields when present — keeps
+    // intake and the contact directory consistent if the user edits
+    // the Contact (e.g. updates the phone number). Falls back to
+    // the legacy Lead.email/.phone columns for un-backfilled rows.
+    contact: { select: { id: true, name: true, email: true, phone: true } },
+  } as const;
+  const closedStages = [...LEAD_CLOSED_STAGES];
+  // Two queries so closed history can never push an older, still-open
+  // lead out of the cap (the old single newest-200 query did, while the
+  // header's uncapped activeCount still counted it).
+  const [tz, active, closed] = await Promise.all([
+    getCurrentUserTimeZone(),
+    prisma.lead.findMany({
+      where: { stage: { notIn: closedStages } },
+      take: ACTIVE_LEADS_SAFETY_CAP,
+      orderBy: [{ createdAt: "desc" }],
+      include,
+    }),
+    prisma.lead.findMany({
+      where: { stage: { in: closedStages } },
+      take: CLOSED_LEADS_CAP,
+      orderBy: [{ createdAt: "desc" }],
+      include,
+    }),
+  ]);
+  return [...active, ...closed].map((l) => ({
     id: l.id,
     contactId: l.contact?.id ?? l.contactId,
     name: l.contact?.name ?? l.name,
@@ -81,8 +135,14 @@ export async function listLeads(): Promise<LeadListRow[]> {
     liabilityAssessment: l.liabilityAssessment,
     damagesAssessment: l.damagesAssessment,
     statuteWindow: l.statuteWindow,
+    statuteDaysRemaining: statuteDaysRemaining(
+      l.statuteWindow,
+      l.createdAt,
+      tz,
+      now
+    ),
     conflictCheck: l.conflictCheck,
-    ageDays: Math.max(0, daysBetween(now, l.createdAt)),
+    ageDays: leadAgeDays(l.createdAt, tz, now),
     isActive: !(LEAD_CLOSED_STAGES as readonly string[]).includes(l.stage),
   }));
 }
@@ -146,6 +206,8 @@ export const getLeadById = cache(async (id: string) => {
       }
     : null;
 
+  const tz = await getCurrentUserTimeZone();
+
   // Resolve display fields once — joined Contact wins, legacy text
   // mirrors are the fallback for un-backfilled rows. Pages should
   // read displayName / displayEmail / displayPhone instead of the raw
@@ -153,6 +215,13 @@ export const getLeadById = cache(async (id: string) => {
   return {
     ...lead,
     convertedMatter,
+    /** Live days of statute left (see `statuteDaysRemaining`). */
+    statuteDaysRemaining: statuteDaysRemaining(
+      lead.statuteWindow,
+      lead.createdAt,
+      tz,
+      new Date()
+    ),
     displayName: lead.contact?.name ?? lead.name,
     displayEmail: lead.contact?.email ?? lead.email,
     displayPhone: lead.contact?.phone ?? lead.phone,
@@ -160,20 +229,25 @@ export const getLeadById = cache(async (id: string) => {
 });
 
 /** Aggregate counts for the intake-page header: total active, new today,
- *  conflict warnings. Cheap — small dataset. */
-export async function getLeadSummary() {
-  const now = new Date();
-  const startOfToday = new Date(now);
-  startOfToday.setHours(0, 0, 0, 0);
+ *  conflict warnings on OPEN leads. Cheap — small dataset. "Today" is the
+ *  viewer's calendar day (createdAt is an instant — ADR-012). */
+export async function getLeadSummary(now: Date = new Date()) {
+  const tz = await getCurrentUserTimeZone();
+  const [y, m, d] = todayKey(tz, now).split("-").map(Number);
+  const startOfToday = instantInTz(y, m, d, 0, 0, tz);
+  const openStage = { notIn: [...LEAD_CLOSED_STAGES] };
 
   const [activeCount, newTodayCount, conflictCount, convertedCount] =
     await Promise.all([
-      prisma.lead.count({
-        where: { stage: { notIn: [...LEAD_CLOSED_STAGES] } },
-      }),
+      prisma.lead.count({ where: { stage: openStage } }),
       prisma.lead.count({ where: { createdAt: { gte: startOfToday } } }),
+      // Open leads only: a flagged lead that was later converted or
+      // declined must not inflate the "N conflict" header forever.
       prisma.lead.count({
-        where: { conflictCheck: { in: ["warn", "conflict"] } },
+        where: {
+          stage: openStage,
+          conflictCheck: { in: ["warn", "conflict"] },
+        },
       }),
       prisma.lead.count({ where: { stage: "converted" } }),
     ]);

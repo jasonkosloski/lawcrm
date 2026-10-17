@@ -11,7 +11,7 @@
 
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState, useTransition } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -65,7 +65,7 @@ export function ConvertLeadButton({
   // Wrapped useActionState: masks state left over from a previous
   // open, so a failed attempt's error banner doesn't reappear when
   // the dialog is reopened. (Success redirects to the new matter, so
-  // there's no close-on-success effect here.) See
+  // there's no close-on-success handling here.) See
   // src/hooks/use-dialog-action-state.ts.
   const [state, formAction, isPending] = useDialogActionState<
     ConvertLeadFormState,
@@ -79,36 +79,52 @@ export function ConvertLeadButton({
   );
   const [feeStructure, setFeeStructure] = useState("contingent");
 
-  // Reset stage to the area's first non-terminal stage whenever the
-  // user picks a different practice area.
-  useEffect(() => {
-    const stage = firstNonTerminalStage(areas.find((a) => a.id === areaId));
+  // Seed every field from the CURRENT props each time the dialog opens
+  // (done in the open handler, not an effect keyed on the props: a
+  // router refresh while the dialog is open hands down a new `areas`
+  // array, and that must not wipe what the user has typed). Covers the
+  // stale stage a previous open left behind, too.
+  const seedFields = () => {
+    setName(defaultMatterName);
+    setAreaId(areas[0]?.id ?? "");
+    setStageId(firstNonTerminalStage(areas[0])?.id ?? "");
+    setFeeStructure("contingent");
+  };
+  const handleOpenChange = (next: boolean) => {
+    if (next) seedFields();
+    setOpen(next);
+  };
+
+  // Picking a different practice area snaps the stage to that area's
+  // first non-terminal stage — in the same event, so the stage select
+  // never renders a stage that belongs to the previous area.
+  const handleAreaChange = (nextAreaId: string) => {
+    setAreaId(nextAreaId);
+    const stage = firstNonTerminalStage(areas.find((a) => a.id === nextAreaId));
     if (stage) setStageId(stage.id);
-  }, [areaId, areas]);
+  };
 
-  // Reset state when reopened. stageId must be reset here too — the
-  // area-sync effect above only fires when areaId *changes*, so if the
-  // area is already areas[0] a previously picked stage would otherwise
-  // survive the reopen.
-  useEffect(() => {
-    if (open) {
-      setName(defaultMatterName);
-      setAreaId(areas[0]?.id ?? "");
-      setStageId(firstNonTerminalStage(areas[0])?.id ?? "");
-      setFeeStructure("contingent");
-    }
-  }, [open, defaultMatterName, areas]);
+  // Manual dispatch: <form action> resets the form after the action
+  // settles, even when the server returned a validation error.
+  const [, startSubmit] = useTransition();
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    startSubmit(() => formAction(fd));
+  };
 
-  const stagesForArea = useMemo(
-    () => areas.find((a) => a.id === areaId)?.stages ?? [],
-    [areaId, areas]
-  );
+  const stagesForArea = areas.find((a) => a.id === areaId)?.stages ?? [];
 
   const errs = state.errors ?? {};
   const formError = errs._form?.[0];
+  // The three selects have no inline error slot, so their server field
+  // errors (area/stage retired while the dialog was open, bad fee) are
+  // surfaced in one banner — otherwise the submit just silently stops.
+  const fieldError =
+    errs.practiceAreaId?.[0] ?? errs.stageId?.[0] ?? errs.feeStructure?.[0];
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger render={<Button size="sm"><ArrowRight />Convert to matter</Button>} />
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
@@ -120,7 +136,7 @@ export function ConvertLeadButton({
           </DialogDescription>
         </DialogHeader>
 
-        <form action={formAction} className="flex flex-col gap-3">
+        <form onSubmit={onSubmit} className="flex flex-col gap-3">
           {areas.length === 0 ? (
             <div className="text-xs text-warn p-3 rounded-md bg-warn-soft border border-warn-border">
               No practice areas exist yet. Create one in Settings → Practice
@@ -141,7 +157,7 @@ export function ConvertLeadButton({
                 <SelectField
                   name="practiceAreaId"
                   value={areaId}
-                  onChange={setAreaId}
+                  onChange={handleAreaChange}
                   options={areas.map((a) => ({ value: a.id, label: a.name }))}
                 />
                 <SelectField
@@ -162,6 +178,14 @@ export function ConvertLeadButton({
                 options={FEE_OPTIONS}
               />
 
+              {fieldError && (
+                <div
+                  role="alert"
+                  className="text-xs text-warn px-3 py-2 rounded-md bg-warn-soft border border-warn-border"
+                >
+                  {fieldError}
+                </div>
+              )}
               {formError && (
                 <div className="text-xs text-warn px-3 py-2 rounded-md bg-warn-soft border border-warn-border">
                   {formError}

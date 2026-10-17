@@ -9,7 +9,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useState, useTransition } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,20 @@ import {
 
 export function DeclineLeadButton({ leadId }: { leadId: string }) {
   const [open, setOpen] = useState(false);
-  const action = declineLead.bind(null, leadId);
+  const [reason, setReason] = useState("");
+
+  // Close on success, in the action's own continuation (each
+  // submission settles exactly once — no stale-"ok" trap, no
+  // setState-in-effect). Server revalidation then re-renders the
+  // layout with the resolved-lead topbar variant.
+  const action = useCallback(
+    async (prev: DeclineLeadFormState, formData: FormData) => {
+      const res = await declineLead(leadId, prev, formData);
+      if (res.status === "ok") setOpen(false);
+      return res;
+    },
+    [leadId]
+  );
   // Wrapped useActionState: masks state left over from a previous
   // open, so a failed attempt's error banner doesn't reappear when
   // the dialog is reopened. See src/hooks/use-dialog-action-state.ts.
@@ -40,26 +53,25 @@ export function DeclineLeadButton({ leadId }: { leadId: string }) {
     FormData
   >(action, declineLeadInitialState, open);
 
-  const [reason, setReason] = useState("");
+  // A fresh dialog each time: clear the reason in the open handler.
+  const handleOpenChange = (next: boolean) => {
+    if (next) setReason("");
+    setOpen(next);
+  };
 
-  useEffect(() => {
-    if (open) setReason("");
-  }, [open]);
-
-  // Close on success — server revalidation re-renders the layout with
-  // the resolved-lead topbar variant. Deps key on the state OBJECT,
-  // not state.status: useActionState keeps its state across
-  // submissions, so keyed on the string the effect would never
-  // re-fire for a later success. Identity is the reliable signal.
-  useEffect(() => {
-    if (state.status === "ok") setOpen(false);
-  }, [state]);
+  // Manual dispatch so a server error doesn't wipe the typed reason.
+  const [, startSubmit] = useTransition();
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    startSubmit(() => formAction(fd));
+  };
 
   const errs = state.errors ?? {};
   const formError = errs._form?.[0];
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger
         render={
           <Button size="sm" variant="outline">
@@ -78,7 +90,7 @@ export function DeclineLeadButton({ leadId }: { leadId: string }) {
           </DialogDescription>
         </DialogHeader>
 
-        <form action={formAction} className="flex flex-col gap-3">
+        <form onSubmit={onSubmit} className="flex flex-col gap-3">
           <TextareaField
             name="reason"
             value={reason}

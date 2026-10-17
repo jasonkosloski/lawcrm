@@ -32,6 +32,7 @@ import {
   type LeadListRow,
 } from "@/lib/queries/leads";
 import { requireUser } from "@/lib/current-user";
+import { describeStatuteRemaining } from "@/lib/lead-statute";
 
 const ASSESSMENT_LABEL: Record<string, string> = {
   strong: "Strong",
@@ -115,6 +116,31 @@ function SourceLabel({ source, detail }: { source: string | null; detail: string
     <span className="text-2xs text-ink-3">
       {LEAD_SOURCE_LABEL[source] ?? source}
       {detail && <span className="text-ink-4"> · {detail}</span>}
+    </span>
+  );
+}
+
+/** Live statute countdown (the stored column is only an intake-day
+ *  snapshot). Closed leads show the figure without the warning colour —
+ *  a converted or declined lead's statute is no longer the queue's
+ *  concern. */
+function StatuteText({ lead }: { lead: LeadListRow }) {
+  if (lead.statuteDaysRemaining === null) return null;
+  const s = describeStatuteRemaining(lead.statuteDaysRemaining);
+  const warn = s.warn && lead.isActive;
+  return (
+    <span
+      className={
+        "font-mono text-2xs " +
+        (warn ? "text-warn font-medium" : "text-ink-3")
+      }
+      title={
+        s.expired
+          ? "The statute window has run"
+          : "Days left, counted down from intake"
+      }
+    >
+      {s.short}
     </span>
   );
 }
@@ -222,17 +248,8 @@ export default async function IntakePage() {
                     </div>
                     <div className="flex flex-col items-end gap-1 shrink-0">
                       <ScoreBadge score={lead.score} />
-                      {lead.statuteWindow !== null && (
-                        <span
-                          className={
-                            "font-mono text-2xs " +
-                            (lead.statuteWindow <= 30
-                              ? "text-warn font-medium"
-                              : "text-ink-3")
-                          }
-                        >
-                          {lead.statuteWindow}d
-                        </span>
+                      {lead.statuteDaysRemaining !== null && (
+                        <StatuteText lead={lead} />
                       )}
                     </div>
                   </div>
@@ -270,7 +287,7 @@ export default async function IntakePage() {
                 </TableRow>
               ) : (
                 sorted.map((lead) => (
-                  <TableRow key={lead.id} className="cursor-pointer">
+                  <TableRow key={lead.id}>
                     <TableCell className="pl-4">
                       <Link
                         href={`/intake/${lead.id}`}
@@ -294,14 +311,10 @@ export default async function IntakePage() {
                       <AssessmentBadges row={lead} />
                     </TableCell>
                     <TableCell className="text-right font-mono text-2xs">
-                      {lead.statuteWindow === null ? (
+                      {lead.statuteDaysRemaining === null ? (
                         <span className="text-ink-4">—</span>
-                      ) : lead.statuteWindow <= 30 ? (
-                        <span className="text-warn font-medium">
-                          {lead.statuteWindow}d
-                        </span>
                       ) : (
-                        <span className="text-ink-3">{lead.statuteWindow}d</span>
+                        <StatuteText lead={lead} />
                       )}
                     </TableCell>
                     <TableCell>

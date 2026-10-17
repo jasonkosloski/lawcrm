@@ -24,10 +24,10 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-// Date-only inputs ("YYYY-MM-DD") must parse to LOCAL midnight —
-// `new Date(value)` reads them as UTC midnight, drifting the due
-// date a day early for anyone west of UTC. See parseLocalDate docs.
-import { parseLocalDate } from "@/lib/format-date";
+// Due dates are date-only values stored at UTC midnight (ADR-012).
+// parseDateOnly also rejects impossible dates (2026-02-31) so they
+// surface as a field error instead of an Invalid Date reaching Prisma.
+import { parseDateOnly } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { DEADLINE_KINDS } from "@/lib/constants/deadline-status";
@@ -67,7 +67,7 @@ export async function convertNoteToTask(
   }
 
   const dueDate = parsed.data.dueDate
-    ? parseLocalDate(parsed.data.dueDate)
+    ? parseDateOnly(parsed.data.dueDate)
     : null;
   if (parsed.data.dueDate && !dueDate) {
     return { status: "error", errors: { dueDate: ["Invalid due date"] } };
@@ -131,7 +131,7 @@ export async function convertTaskToDeadline(
     };
   }
 
-  const dueDate = parseLocalDate(parsed.data.dueDate);
+  const dueDate = parseDateOnly(parsed.data.dueDate);
   if (!dueDate) {
     return { status: "error", errors: { dueDate: ["Invalid due date"] } };
   }

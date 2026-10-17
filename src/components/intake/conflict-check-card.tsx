@@ -89,6 +89,7 @@ export function ConflictCheckCard({
   matches,
   canRun,
   canOverride,
+  matchesNotLive = false,
 }: {
   leadId: string;
   status: Status;
@@ -97,6 +98,10 @@ export function ConflictCheckCard({
   matches: ConflictMatch[];
   canRun: boolean;
   canOverride: boolean;
+  /** True for converted / declined leads, where the page skips the live
+   *  matcher: `matches` is then empty by omission, not because nothing
+   *  matched, so the card must not read as a fresh "no matches". */
+  matchesNotLive?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [overrideOpen, setOverrideOpen] = useState(false);
@@ -160,7 +165,9 @@ export function ConflictCheckCard({
           <Icon size={12} />
           {meta.label}
         </div>
-        <div className="text-2xs text-ink-4 font-mono">
+        {/* "5m ago" is computed from the clock, so the server HTML and
+            the hydrating client can land on different minutes. */}
+        <div className="text-2xs text-ink-4 font-mono" suppressHydrationWarning>
           checked {formatRelative(checkedAt)}
         </div>
       </div>
@@ -258,7 +265,7 @@ export function ConflictCheckCard({
           <ul className="border border-line rounded-md overflow-hidden divide-y divide-line">
             {matches.map((m, idx) => (
               <li
-                key={`${m.kind}-${m.contactId ?? m.matterId ?? idx}`}
+                key={`${m.kind}-${m.matterId ?? ""}-${m.contactId ?? ""}-${idx}`}
                 className="flex items-start justify-between gap-3 px-3 py-2"
               >
                 <div className="min-w-0 flex-1">
@@ -302,6 +309,12 @@ export function ConflictCheckCard({
               </li>
             ))}
           </ul>
+        </div>
+      ) : matchesNotLive ? (
+        <div className="text-2xs text-ink-4">
+          This lead is closed, so live matching is not re-run. The status above
+          is the result recorded when the check was last run
+          {status === "override" ? " or overridden" : ""}.
         </div>
       ) : (
         status !== "pending" && (

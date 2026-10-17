@@ -9,7 +9,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useState, useTransition } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import {
   Dialog,
@@ -56,7 +56,18 @@ export function ConvertNoteToTaskDialog({
   defaultTitle: string;
   defaultDescription: string;
 }) {
-  const action = convertNoteToTask.bind(null, noteId);
+  // Close on success, in the action's own continuation: each
+  // submission settles exactly once, so there is no stale-"ok" trap
+  // (a second successful conversion leaving the dialog open) and no
+  // setState-in-effect.
+  const action = useCallback(
+    async (prev: InboxActionFormState, formData: FormData) => {
+      const res = await convertNoteToTask(noteId, prev, formData);
+      if (res.status === "ok") onOpenChange(false);
+      return res;
+    },
+    [noteId, onOpenChange]
+  );
   // Wrapped useActionState: masks state left over from a previous
   // open, so a failed attempt's errors don't reappear when the
   // dialog is reopened. See src/hooks/use-dialog-action-state.ts.
@@ -70,23 +81,28 @@ export function ConvertNoteToTaskDialog({
   const [dueDate, setDueDate] = useState("");
   const [priority, setPriority] = useState("normal");
 
-  useEffect(() => {
-    if (!open) return;
-    setTitle(defaultTitle);
-    setDescription(defaultDescription);
-    setDueDate("");
-    setPriority("normal");
-  }, [open, defaultTitle, defaultDescription]);
+  // Re-seed the working copy from the current prefill each time the
+  // dialog opens (stored-previous-prop pattern: adjust state during
+  // render rather than in an effect).
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) {
+      setTitle(defaultTitle);
+      setDescription(defaultDescription);
+      setDueDate("");
+      setPriority("normal");
+    }
+  }
 
-  // Close on success. Deps key on the state OBJECT, not
-  // state.status: useActionState keeps its state across submissions,
-  // so after the first success the status string is "ok" forever and
-  // a second successful conversion would skip the effect, leaving
-  // the dialog open. Each action invocation returns a fresh object,
-  // so identity is the reliable signal.
-  useEffect(() => {
-    if (state.status === "ok") onOpenChange(false);
-  }, [state, onOpenChange]);
+  // Manual dispatch: <form action> resets the form after the action
+  // settles, even on a validation error.
+  const [, startSubmit] = useTransition();
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    startSubmit(() => formAction(fd));
+  };
 
   const errs = state.errors ?? {};
 
@@ -100,7 +116,7 @@ export function ConvertNoteToTaskDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form action={formAction} className="flex flex-col gap-3">
+        <form onSubmit={onSubmit} className="flex flex-col gap-3">
           <TextField
             name="title"
             value={title}
@@ -177,7 +193,16 @@ export function ConvertTaskToDeadlineDialog({
   defaultDueDate: string;
   defaultDescription: string;
 }) {
-  const action = convertTaskToDeadline.bind(null, taskId);
+  // Close on success in the action's continuation — see
+  // ConvertNoteToTaskDialog above.
+  const action = useCallback(
+    async (prev: InboxActionFormState, formData: FormData) => {
+      const res = await convertTaskToDeadline(taskId, prev, formData);
+      if (res.status === "ok") onOpenChange(false);
+      return res;
+    },
+    [taskId, onOpenChange]
+  );
   // Wrapped useActionState — see ConvertNoteToTaskDialog above.
   const [state, formAction, isPending] = useDialogActionState<
     InboxActionFormState,
@@ -189,19 +214,24 @@ export function ConvertTaskToDeadlineDialog({
   const [kind, setKind] = useState<(typeof DEADLINE_KINDS)[number]>("manual");
   const [description, setDescription] = useState(defaultDescription);
 
-  useEffect(() => {
-    if (!open) return;
-    setTitle(defaultTitle);
-    setDueDate(defaultDueDate);
-    setKind("manual");
-    setDescription(defaultDescription);
-  }, [open, defaultTitle, defaultDueDate, defaultDescription]);
+  // Re-seed on every open — see ConvertNoteToTaskDialog above.
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) {
+      setTitle(defaultTitle);
+      setDueDate(defaultDueDate);
+      setKind("manual");
+      setDescription(defaultDescription);
+    }
+  }
 
-  // Close on success — identity-keyed for the same reason as the
-  // note → task dialog above.
-  useEffect(() => {
-    if (state.status === "ok") onOpenChange(false);
-  }, [state, onOpenChange]);
+  const [, startSubmit] = useTransition();
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    startSubmit(() => formAction(fd));
+  };
 
   const errs = state.errors ?? {};
 
@@ -216,7 +246,7 @@ export function ConvertTaskToDeadlineDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form action={formAction} className="flex flex-col gap-3">
+        <form onSubmit={onSubmit} className="flex flex-col gap-3">
           <TextField
             name="title"
             value={title}

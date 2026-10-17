@@ -19,6 +19,7 @@ vi.mock("@/app/actions/leads", () => ({
   convertLeadToMatter: vi.fn(),
 }));
 
+import { convertLeadToMatter } from "@/app/actions/leads";
 import { ConvertLeadButton } from "./convert-lead-button";
 import type { PracticeAreaOption } from "@/lib/queries/practice-area-options";
 
@@ -130,5 +131,100 @@ describe("ConvertLeadButton — cancel + reopen reset", () => {
       (screen.getByRole("option", { name: "Hourly" })
         .closest("select") as HTMLSelectElement).value
     ).toBe("contingent");
+  });
+});
+
+describe("ConvertLeadButton — server errors and live props", () => {
+  test("a stage error from the server is shown (the select has no inline slot)", async () => {
+    const user = userEvent.setup();
+    vi.mocked(convertLeadToMatter).mockResolvedValue({
+      status: "error",
+      errors: { stageId: ["Stage is no longer active"] },
+    });
+    renderButton();
+    await openDialog(user);
+    await user.click(screen.getByRole("button", { name: /^convert$/i }));
+    expect(
+      await screen.findByText("Stage is no longer active")
+    ).toBeInTheDocument();
+  });
+
+  test.each([
+    ["practiceAreaId", "Practice area is not available"],
+    ["feeStructure", "Invalid fee structure"],
+  ] as const)("a %s error from the server is shown", async (field, message) => {
+    const user = userEvent.setup();
+    vi.mocked(convertLeadToMatter).mockResolvedValue({
+      status: "error",
+      errors: { [field]: [message] },
+    });
+    renderButton();
+    await openDialog(user);
+    await user.click(screen.getByRole("button", { name: /^convert$/i }));
+    expect(await screen.findByText(message)).toBeInTheDocument();
+  });
+
+  test("a server error keeps what the user typed", async () => {
+    const user = userEvent.setup();
+    vi.mocked(convertLeadToMatter).mockResolvedValue({
+      status: "error",
+      errors: { _form: ["Lead is already converted to a matter."] },
+    });
+    renderButton();
+    await openDialog(user);
+    const nameInput = screen.getByPlaceholderText("Matter name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "Edited name");
+    await user.selectOptions(
+      screen.getByRole("option", { name: "Hourly" }).closest("select")!,
+      "hourly"
+    );
+    await user.click(screen.getByRole("button", { name: /^convert$/i }));
+    await screen.findByText("Lead is already converted to a matter.");
+    expect(screen.getByPlaceholderText("Matter name")).toHaveValue(
+      "Edited name"
+    );
+    expect(
+      (screen.getByRole("option", { name: "Hourly" })
+        .closest("select") as HTMLSelectElement).value
+    ).toBe("hourly");
+  });
+
+  test("a refresh that hands down a new areas array does not wipe an open form", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderButton();
+    await openDialog(user);
+    const nameInput = screen.getByPlaceholderText("Matter name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "Typed name");
+    await user.selectOptions(stageSelect(), "st-closed");
+
+    // Same data, new array identity — what a router refresh produces.
+    rerender(
+      <ConvertLeadButton
+        leadId="lead1"
+        defaultMatterName="Doe v. Acme"
+        areas={AREAS.map((a) => ({ ...a }))}
+      />
+    );
+    expect(screen.getByPlaceholderText("Matter name")).toHaveValue(
+      "Typed name"
+    );
+    expect(stageSelect().value).toBe("st-closed");
+  });
+
+  test("never renders a stage from the previous area after switching area", async () => {
+    const user = userEvent.setup();
+    renderButton();
+    await openDialog(user);
+    const areaSelect = screen
+      .getByRole("option", { name: "Personal Injury" })
+      .closest("select") as HTMLSelectElement;
+    await user.selectOptions(areaSelect, "pa-fam");
+    const familyStage = screen
+      .getByRole("option", { name: "Consultation" })
+      .closest("select") as HTMLSelectElement;
+    const offered = Array.from(familyStage.options).map((o) => o.value);
+    expect(offered).toContain(familyStage.value);
   });
 });

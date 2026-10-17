@@ -18,7 +18,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useState, useTransition } from "react";
 import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
@@ -28,7 +28,8 @@ import {
   timeEntryInitialState,
   type TimeEntryFormState,
 } from "@/lib/time-entry-constants";
-import { todayDateString } from "@/lib/note-constants";
+import { todayKey } from "@/lib/format-date";
+import { useUserTimeZone } from "@/components/user-time-zone";
 import {
   DateField,
   TextField,
@@ -40,16 +41,12 @@ import {
 } from "@/components/time-entries/time-entry-fields";
 
 export function LeadTimeComposer({ leadId }: { leadId: string }) {
+  // "Today" is the viewer's calendar day in their PROFILE zone (the
+  // date input is a date-only value — ADR-012), not the browser's.
+  const tz = useUserTimeZone();
   const [expanded, setExpanded] = useState(false);
-  const action = createLeadTimeEntry.bind(null, leadId);
-  // Wrapped useActionState: masks a previous attempt's errors when
-  // the composer is re-expanded (same hook the matter composers use).
-  const [state, formAction, isPending] = useDialogActionState<
-    TimeEntryFormState,
-    FormData
-  >(action, timeEntryInitialState, expanded);
 
-  const [date, setDate] = useState(todayDateString());
+  const [date, setDate] = useState(() => todayKey(tz));
   const [hours, setHours] = useState("");
   const [activity, setActivity] = useState("");
   const [narrative, setNarrative] = useState("");
@@ -58,8 +55,8 @@ export function LeadTimeComposer({ leadId }: { leadId: string }) {
   const [noCharge, setNoCharge] = useState(false);
   const [privileged, setPrivileged] = useState(false);
 
-  const reset = () => {
-    setDate(todayDateString());
+  const reset = useCallback(() => {
+    setDate(todayKey(tz));
     setHours("");
     setActivity("");
     setNarrative("");
@@ -67,18 +64,39 @@ export function LeadTimeComposer({ leadId }: { leadId: string }) {
     setBillable(false);
     setNoCharge(false);
     setPrivileged(false);
-  };
+  }, [tz]);
 
-  // Reset + collapse on success. Keyed on the state OBJECT (not
-  // .status) — useActionState keeps state across submissions, so
-  // after the first success the string stays "ok" forever; object
-  // identity is the fresh-result signal (TimeComposer pattern).
-  useEffect(() => {
-    if (state.status === "ok") {
-      reset();
-      setExpanded(false);
-    }
-  }, [state]);
+  // Reset + collapse on success happens here, in the action's own
+  // continuation, rather than in an effect watching the result: each
+  // submission settles exactly once, so there is no stale-"ok" trap and
+  // no setState-in-effect cascade.
+  const action = useCallback(
+    async (prev: TimeEntryFormState, formData: FormData) => {
+      const res = await createLeadTimeEntry(leadId, prev, formData);
+      if (res.status === "ok") {
+        reset();
+        setExpanded(false);
+      }
+      return res;
+    },
+    [leadId, reset]
+  );
+  // Wrapped useActionState: masks a previous attempt's errors when
+  // the composer is re-expanded (same hook the matter composers use).
+  const [state, formAction, isPending] = useDialogActionState<
+    TimeEntryFormState,
+    FormData
+  >(action, timeEntryInitialState, expanded);
+
+  // Manual dispatch: <form action> would reset every field after a
+  // validation error, wiping what the user typed. Success resets
+  // explicitly above.
+  const [, startSubmit] = useTransition();
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    startSubmit(() => formAction(fd));
+  };
 
   const errs = state.errors ?? {};
   const hasContent = hours.trim().length > 0 && activity.trim().length > 0;
@@ -89,7 +107,11 @@ export function LeadTimeComposer({ leadId }: { leadId: string }) {
         {!expanded ? (
           <button
             type="button"
-            onClick={() => setExpanded(true)}
+            onClick={() => {
+              // Re-seed the date: the page may have sat open past midnight.
+              setDate(todayKey(tz));
+              setExpanded(true);
+            }}
             className={cn(
               "flex items-center gap-2 h-9 px-3 text-xs text-ink-4 w-full",
               "rounded-md border border-dashed border-line bg-white",
@@ -100,7 +122,7 @@ export function LeadTimeComposer({ leadId }: { leadId: string }) {
             Log intake time
           </button>
         ) : (
-          <form action={formAction} className="flex flex-col gap-2">
+          <form onSubmit={onSubmit} className="flex flex-col gap-2">
             <div className="grid grid-cols-[auto_auto_1fr] gap-2 items-start">
               <DateField
                 name="date"
