@@ -18,7 +18,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { logActivity } from "@/lib/activity-log";
+import { logActivity, logActivityTx } from "@/lib/activity-log";
 import {
   resetDb,
   seedFirm,
@@ -200,5 +200,45 @@ describe("logActivity — fire-and-forget on failure", () => {
     ).resolves.toBeUndefined();
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
+  });
+});
+
+describe("logActivityTx — atomic with the mutation", () => {
+  test("writes the row on the transaction client (no revalidate)", async () => {
+    await prisma.$transaction(async (tx) => {
+      await logActivityTx(tx, {
+        matterId,
+        userId,
+        type: "note",
+        title: "in-tx",
+      });
+    });
+    const row = await prisma.activityLog.findFirst({
+      where: { title: "in-tx" },
+    });
+    expect(row!.icon).toBe("note");
+    expect(row!.source).toBe("Notes");
+    expect(mockedRevalidate).not.toHaveBeenCalled();
+  });
+
+  test("a failed audit write propagates and rolls the mutation back", async () => {
+    await expect(
+      prisma.$transaction(async (tx) => {
+        await tx.matter.update({
+          where: { id: matterId },
+          data: { name: "Renamed in tx" },
+        });
+        await logActivityTx(tx, {
+          matterId,
+          userId: "no-such-user", // FK violation
+          type: "note",
+          title: "doomed",
+        });
+      })
+    ).rejects.toThrow();
+
+    const m = await prisma.matter.findUnique({ where: { id: matterId } });
+    expect(m!.name).not.toBe("Renamed in tx");
+    expect(await prisma.activityLog.count({ where: { title: "doomed" } })).toBe(0);
   });
 });

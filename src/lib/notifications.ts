@@ -15,7 +15,6 @@
  * reading the same table.
  */
 
-import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 
 export type NotificationType =
@@ -56,8 +55,10 @@ export type CreateNotificationInput = {
 };
 
 /**
- * Persist a single notification + revalidate the topbar so the
- * bell badge picks up the new unread count on the next render.
+ * Persist a single notification. No cache revalidation: the bell is
+ * client state that polls (and refetches on open), and the recipient
+ * is usually a different user whose browser a revalidate in the
+ * actor's request can't reach anyway.
  *
  * Fire-and-forget on failure — the audit log and the user's
  * primary action remain authoritative; observability never blocks
@@ -77,9 +78,6 @@ export async function createNotification(
         matterId: input.matterId ?? null,
       },
     });
-    // The bell lives in the dashboard layout — revalidate the whole
-    // tree so the badge count refreshes without a full reload.
-    revalidatePath("/", "layout");
   } catch (err) {
     console.warn("[notifications] failed to write notification", err);
   }
@@ -111,7 +109,6 @@ export async function createNotifications(
         matterId: shape.matterId ?? null,
       })),
     });
-    revalidatePath("/", "layout");
   } catch (err) {
     console.warn("[notifications] failed to fan out notification", err);
   }

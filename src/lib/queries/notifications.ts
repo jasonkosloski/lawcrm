@@ -29,6 +29,10 @@ export type NotificationRow = {
 };
 
 export type NotificationsBell = {
+  /** Created-at of the user's newest notification when this snapshot
+   *  was read (DB clock). Pass it to `markAllNotificationsRead` so
+   *  "mark all read" only clears what the user could have seen. */
+  asOf?: Date | null;
   unreadCount: number;
   /** Recent rows for the dropdown — unread first, then the 5 most
    *  recent read entries for context. Capped at 20. */
@@ -38,8 +42,21 @@ export type NotificationsBell = {
 const RECENT_CAP = 20;
 const READ_TAIL = 5;
 
+/** createdAt of the user's newest notification — read BEFORE the
+ *  list/count queries so anything inserted afterwards is newer than
+ *  the cutoff (a conservative "mark all read" boundary). */
+async function newestNotificationAt(userId: string): Promise<Date | null> {
+  const row = await prisma.notification.findFirst({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  });
+  return row?.createdAt ?? null;
+}
+
 export async function getNotificationsBell(): Promise<NotificationsBell> {
   const userId = await getCurrentUserId();
+  const asOf = await newestNotificationAt(userId);
 
   const [unread, recentRead, unreadCount] = await Promise.all([
     prisma.notification.findMany({
@@ -73,6 +90,7 @@ export async function getNotificationsBell(): Promise<NotificationsBell> {
     }));
 
   return {
+    asOf,
     unreadCount,
     // Unread first (visually distinct in the dropdown), then a tail
     // of read rows so the dropdown doesn't go empty for a brand-new
@@ -95,6 +113,8 @@ export type NotificationsFeed = {
   pageCount: number;
   total: number;
   unreadCount: number;
+  /** See `NotificationsBell.asOf` — hand it to "Mark all read". */
+  asOf: Date | null;
 };
 
 /** One page of the current user's full notification history, newest
@@ -104,6 +124,7 @@ export async function getNotificationsFeed(
   page: number
 ): Promise<NotificationsFeed> {
   const userId = await getCurrentUserId();
+  const asOf = await newestNotificationAt(userId);
 
   const [total, unreadCount] = await Promise.all([
     prisma.notification.count({ where: { userId } }),
@@ -143,5 +164,6 @@ export async function getNotificationsFeed(
     pageCount,
     total,
     unreadCount,
+    asOf,
   };
 }

@@ -9,10 +9,18 @@
  * and tones come from the shared NOTIFICATION_TYPE_META so a row
  * looks identical in both surfaces.
  *
- * Note: "Mark all read" clears EVERY unread row server-side, not
- * just the visible page — locally we can only flip the rows we
- * have, which is fine because the other pages re-render read on
- * next fetch.
+ * Note: "Mark all read" clears every unread row server-side up to the
+ * `asOf` cutoff the page was rendered with — not just the visible
+ * page, but also not anything that arrived after the user last
+ * looked. Locally we can only flip the rows we have, which is fine
+ * because the other pages re-render read on next fetch.
+ *
+ * Failures: the optimistic update is rolled back (and a message
+ * shown) when the server action throws or reports !ok, instead of
+ * letting the error escape the transition to the error boundary.
+ *
+ * Times render in the viewer's PROFILE zone (`tz`), not the runtime's,
+ * so server render and hydration agree.
  */
 
 "use client";
@@ -33,30 +41,64 @@ import type { NotificationRow } from "@/lib/queries/notifications";
 export function NotificationsFeed({
   initialRows,
   initialUnreadCount,
+  tz,
+  asOf = null,
 }: {
   initialRows: NotificationRow[];
   initialUnreadCount: number;
+  /** Viewer's IANA zone (getCurrentUserTimeZone() in the page). */
+  tz: string;
+  /** Server-side cutoff for "Mark all read" (see getNotificationsFeed). */
+  asOf?: Date | null;
 }) {
   const [rows, setRows] = useState(initialRows);
   const [unread, setUnread] = useState(initialUnreadCount);
+  const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+
+  /** Undo an optimistic mark-read: put the given rows back to unread
+   *  and restore the counter. Only the affected rows are touched, so
+   *  a concurrent click on another row isn't clobbered. */
+  const rollback = (ids: Set<string>, restoreUnread: (n: number) => number) => {
+    setRows((prev) =>
+      prev.map((r) => (ids.has(r.id) ? { ...r, isRead: false } : r))
+    );
+    setUnread(restoreUnread);
+    setError("Couldn't update your notifications. Please try again.");
+  };
 
   const handleMarkOne = (row: NotificationRow) => {
     if (row.isRead) return;
+    setError(null);
     setRows((prev) =>
       prev.map((r) => (r.id === row.id ? { ...r, isRead: true } : r))
     );
     setUnread((n) => Math.max(0, n - 1));
     startTransition(async () => {
-      await markNotificationRead(row.id);
+      try {
+        const res = await markNotificationRead(row.id);
+        if (!res.ok) throw new Error("mark-read refused");
+      } catch (err) {
+        console.warn("[notifications-feed] mark-read failed", err);
+        rollback(new Set([row.id]), (n) => n + 1);
+      }
     });
   };
 
   const handleMarkAll = () => {
+    const wasUnread = new Set(rows.filter((r) => !r.isRead).map((r) => r.id));
+    const unreadBefore = unread;
+    setError(null);
     setRows((prev) => prev.map((r) => ({ ...r, isRead: true })));
     setUnread(0);
     startTransition(async () => {
-      await markAllNotificationsRead();
+      try {
+        const res = await markAllNotificationsRead(asOf);
+        if (!res.ok) throw new Error("mark-all-read refused");
+      } catch (err) {
+        console.warn("[notifications-feed] mark-all-read failed", err);
+        rollback(wasUnread, () => unreadBefore);
+      }
     });
   };
 
@@ -81,6 +123,15 @@ export function NotificationsFeed({
         )}
       </div>
 
+      {error && (
+        <div
+          role="alert"
+          className="border-b border-line px-3 py-2 text-2xs text-warn"
+        >
+          {error}
+        </div>
+      )}
+
       {rows.length === 0 ? (
         <EmptyState
           icon={Bell}
@@ -91,7 +142,12 @@ export function NotificationsFeed({
       ) : (
         <ul>
           {rows.map((r) => (
-            <FeedRow key={r.id} row={r} onMarkRead={() => handleMarkOne(r)} />
+            <FeedRow
+              key={r.id}
+              row={r}
+              tz={tz}
+              onMarkRead={() => handleMarkOne(r)}
+            />
           ))}
         </ul>
       )}
@@ -101,9 +157,11 @@ export function NotificationsFeed({
 
 function FeedRow({
   row,
+  tz,
   onMarkRead,
 }: {
   row: NotificationRow;
+  tz: string;
   onMarkRead: () => void;
 }) {
   const { icon: Icon, tone } = notificationTypeMeta(row.type);
@@ -138,8 +196,13 @@ function FeedRow({
               {row.matterName}
             </span>
           )}
-          <span title={formatDate(row.createdAt)}>
-            {formatRelative(row.createdAt)}
+          {/* "5m ago" reads the clock, so server and client can differ
+              at a minute boundary — that mismatch is expected. */}
+          <span
+            title={formatDate(row.createdAt, "medium", tz)}
+            suppressHydrationWarning
+          >
+            {formatRelative(row.createdAt, tz)}
           </span>
         </div>
       </div>
@@ -160,7 +223,10 @@ function FeedRow({
         !row.isRead && "bg-brand-tint/30",
         (row.link || !row.isRead) && "cursor-pointer"
       )}
-      onClick={onMarkRead}
+      // Linked rows: the click bubbles up from the (focusable) Link.
+      // Link-less rows get their own button below so keyboard and
+      // screen-reader users can mark them read too.
+      onClick={row.link ? onMarkRead : undefined}
     >
       {row.link ? (
         // next/link for the same reason as the bell: a full-page
@@ -169,7 +235,16 @@ function FeedRow({
           {inner}
         </Link>
       ) : (
-        <div>{inner}</div>
+        <button
+          type="button"
+          onClick={onMarkRead}
+          disabled={row.isRead}
+          // No aria-label: it would replace the content-derived name
+          // and hide the body/matter/time from screen readers.
+          className="block w-full text-left disabled:cursor-default"
+        >
+          {inner}
+        </button>
       )}
     </li>
   );

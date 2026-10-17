@@ -48,7 +48,7 @@ export default async function ReportsPage() {
   const [pipeline, utilization, arAging, realization] = await Promise.all([
     getPipelineReport(tz),
     getUtilizationReport(tz),
-    getArAgingReport(),
+    getArAgingReport(tz),
     getRealizationReport(tz),
   ]);
 

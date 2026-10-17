@@ -22,6 +22,7 @@ import {
   NOTIFICATIONS_PAGE_SIZE,
 } from "@/lib/queries/notifications";
 import { requireUser } from "@/lib/current-user";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 
 export default async function NotificationsPage({
   searchParams,
@@ -30,7 +31,10 @@ export default async function NotificationsPage({
 }) {
   await requireUser();
   const sp = await searchParams;
-  const feed = await getNotificationsFeed(Number(sp.page ?? "1"));
+  const [feed, tz] = await Promise.all([
+    getNotificationsFeed(Number(sp.page ?? "1")),
+    getCurrentUserTimeZone(),
+  ]);
 
   const rangeStart = (feed.page - 1) * NOTIFICATIONS_PAGE_SIZE + 1;
   const rangeEnd = Math.min(feed.total, feed.page * NOTIFICATIONS_PAGE_SIZE);
@@ -47,6 +51,8 @@ export default async function NotificationsPage({
             key={feed.page}
             initialRows={feed.rows}
             initialUnreadCount={feed.unreadCount}
+            tz={tz}
+            asOf={feed.asOf}
           />
 
           {/* Pager — only when there's more than one page. */}

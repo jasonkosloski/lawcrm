@@ -15,12 +15,18 @@
  * the endpoint open.
  *
  * The route calls the UNthrottled sweep — the cron's own schedule
- * is the throttle. The sweep is idempotent, so overlap with the
- * dashboard's opportunistic hourly run is harmless.
+ * is the throttle. The sweep is idempotent and serialized by an
+ * advisory lock, so overlap with the dashboard's opportunistic
+ * hourly run is harmless (the later one waits, then finds nothing
+ * new to write).
  */
 
 import { isAuthorizedCron } from "@/lib/cron-auth";
 import { runDeadlineNotificationSweep } from "@/lib/notification-sweeps";
+
+/** Headroom for waiting on the sweep's advisory lock behind an
+ *  overlapping run. */
+export const maxDuration = 60;
 
 export async function GET(request: Request): Promise<Response> {
   if (!isAuthorizedCron(request)) {

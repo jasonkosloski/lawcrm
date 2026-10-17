@@ -19,6 +19,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
+import { dateOnlyRange, todayKey } from "@/lib/format-date";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { visibleEmailThreadWhere } from "@/lib/email-visibility";
 import { LEAD_CLOSED_STAGES } from "@/lib/constants/lead-stage";
@@ -59,17 +61,6 @@ export type SidebarData = {
   canViewReports: boolean;
 };
 
-const startOfToday = (): Date => {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-};
-const endOfToday = (): Date => {
-  const d = new Date();
-  d.setHours(23, 59, 59, 999);
-  return d;
-};
-
 /** Shared "open matter" constraint: not archived, stage not terminal. */
 const OPEN_MATTER_WHERE = {
   isArchived: false,
@@ -78,6 +69,10 @@ const OPEN_MATTER_WHERE = {
 
 export async function getSidebarData(): Promise<SidebarData> {
   const currentUserId = await getCurrentUserId();
+  // "Today" is the VIEWER's calendar day (TimeEntry.date is a
+  // date-only UTC-midnight value — ADR-012), not the server's.
+  const tz = await getCurrentUserTimeZone();
+  const today = todayKey(tz);
 
   const [
     user,
@@ -128,14 +123,15 @@ export async function getSidebarData(): Promise<SidebarData> {
       where: OPEN_MATTER_WHERE,
       _count: true,
     }),
-    // Fetch all active areas so we can join labels/colors onto the groups.
+    // Fetch ALL areas (including retired ones): open matters in a
+    // deactivated area still count in the groupBy above and must keep
+    // their label/colour instead of showing as "(unknown)".
     prisma.practiceArea.findMany({
-      where: { isActive: true },
       select: { id: true, name: true, label: true, color: true, order: true },
     }),
     prisma.timeEntry.aggregate({
       where: {
-        date: { gte: startOfToday(), lte: endOfToday() },
+        date: dateOnlyRange(today, today),
         userId: currentUserId,
       },
       _sum: { hours: true },

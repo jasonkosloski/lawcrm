@@ -47,6 +47,11 @@ import {
   getUtilizationReport,
 } from "@/lib/queries/reports";
 import {
+  addDaysToKey,
+  parseDateOnly,
+  todayKey,
+} from "@/lib/format-date";
+import {
   resetDb,
   seedFirm,
   seedMatter,
@@ -117,8 +122,8 @@ async function seedInvoice(opts: {
   return { invoiceId: inv.id, invoiceNumber };
 }
 
-/** A time entry on a specific calendar day (server-local midnight —
- *  how parseLocalDate stores date-only columns). */
+/** A time entry on a specific calendar day (UTC midnight —
+ *  how parseDateOnly stores date-only columns). */
 async function seedEntryOn(opts: {
   date: Date;
   hours: number;
@@ -246,13 +251,13 @@ describe("getPipelineReport", () => {
 
 describe("getUtilizationReport", () => {
   test("splits billable vs total for the viewer-tz month; prior-month rows drop", async () => {
-    await seedEntryOn({ date: new Date(2026, 5, 2), hours: 3 }); // June, billable
+    await seedEntryOn({ date: new Date(Date.UTC(2026, 5, 2)), hours: 3 }); // June, billable
     await seedEntryOn({
-      date: new Date(2026, 5, 10),
+      date: new Date(Date.UTC(2026, 5, 10)),
       hours: 1.5,
       billable: false,
     }); // June, non-billable
-    await seedEntryOn({ date: new Date(2026, 4, 31), hours: 8 }); // May 31 — out
+    await seedEntryOn({ date: new Date(Date.UTC(2026, 4, 31)), hours: 8 }); // May 31 — out
 
     const report = await getUtilizationReport(DENVER);
 
@@ -271,7 +276,7 @@ describe("getUtilizationReport", () => {
     });
     // Even with hours logged, an inactive user stays off the report.
     await seedEntryOn({
-      date: new Date(2026, 5, 3),
+      date: new Date(Date.UTC(2026, 5, 3)),
       hours: 2,
       userId: gone.userId,
     });
@@ -307,8 +312,10 @@ describe("getUtilizationReport", () => {
 // ── AR aging ────────────────────────────────────────────────────────────
 
 describe("getArAgingReport", () => {
+  // Date-only (UTC midnight) issue dates, counted back from the
+  // VIEWER's (Denver) calendar today — June 15 at the frozen NOW.
   const issuedDaysAgo = (days: number): Date =>
-    new Date(NOW.getTime() - days * DAY_MS);
+    parseDateOnly(addDaysToKey(todayKey(DENVER, NOW), -days)) as Date;
 
   test("buckets by age with Decimal-safe outstanding; filters status + kind", async () => {
     await seedInvoice({ matterId, issueDate: issuedDaysAgo(10), total: 500 });
@@ -348,7 +355,7 @@ describe("getArAgingReport", () => {
       paid: 300, // sent but fully covered — not AR
     });
 
-    const report = await getArAgingReport();
+    const report = await getArAgingReport(DENVER);
 
     expect(report.buckets.map((b) => [b.key, b.total, b.count])).toEqual([
       ["0-30", 500, 1],
@@ -364,9 +371,29 @@ describe("getArAgingReport", () => {
     await seedInvoice({ matterId, issueDate: issuedDaysAgo(30), total: 100 });
     await seedInvoice({ matterId, issueDate: issuedDaysAgo(31), total: 200 });
 
-    const report = await getArAgingReport();
+    const report = await getArAgingReport(DENVER);
     expect(report.buckets[0]).toMatchObject({ key: "0-30", total: 100 });
     expect(report.buckets[1]).toMatchObject({ key: "31-60", total: 200 });
+  });
+
+  test("ages by the viewer's calendar day, not the instant (evening Denver)", async () => {
+    // NOW = Jun 15, 8 PM in Denver / Jun 16 in Tokyo. An invoice issued
+    // May 16 is exactly 30 calendar days old for Denver (0-30 bucket);
+    // an instant diff (31.08 days) would wrongly push it to 31-60.
+    await seedInvoice({
+      matterId,
+      issueDate: parseDateOnly("2026-05-16") as Date,
+      total: 100,
+    });
+
+    const denver = await getArAgingReport(DENVER);
+    expect(denver.buckets[0]).toMatchObject({ key: "0-30", total: 100 });
+    expect(denver.worstOffenders[0].daysOutstanding).toBe(30);
+
+    // Tokyo is already on Jun 16 → 31 days → next bucket.
+    const tokyo = await getArAgingReport(TOKYO);
+    expect(tokyo.buckets[1]).toMatchObject({ key: "31-60", total: 100 });
+    expect(tokyo.worstOffenders[0].daysOutstanding).toBe(31);
   });
 
   test("worst offenders: five oldest, oldest first, with matter link data", async () => {
@@ -378,7 +405,7 @@ describe("getArAgingReport", () => {
       });
     }
 
-    const report = await getArAgingReport();
+    const report = await getArAgingReport(DENVER);
 
     expect(report.worstOffenders).toHaveLength(5);
     expect(report.worstOffenders.map((o) => o.daysOutstanding)).toEqual([
@@ -390,7 +417,7 @@ describe("getArAgingReport", () => {
   });
 
   test("empty book → four zero buckets, no offenders", async () => {
-    const report = await getArAgingReport();
+    const report = await getArAgingReport(DENVER);
     expect(report.buckets.map((b) => b.total)).toEqual([0, 0, 0, 0]);
     expect(report.totalOutstanding).toBe(0);
     expect(report.worstOffenders).toEqual([]);
@@ -403,33 +430,33 @@ describe("getRealizationReport", () => {
   test("trailing 3 viewer-tz months: worked vs billed vs collected with percentages", async () => {
     const { invoiceId } = await seedInvoice({
       matterId,
-      issueDate: new Date(2026, 3, 20),
+      issueDate: new Date(Date.UTC(2026, 3, 20)),
       total: 1250,
     });
 
     // April: 10h worked billable, 5h of it billed at $1250.
-    await seedEntryOn({ date: new Date(2026, 3, 10), hours: 5 });
+    await seedEntryOn({ date: new Date(Date.UTC(2026, 3, 10)), hours: 5 });
     await seedEntryOn({
-      date: new Date(2026, 3, 12),
+      date: new Date(Date.UTC(2026, 3, 12)),
       hours: 5,
       invoiceId,
       amount: 1250,
     });
     // Non-billable never counts as worked.
     await seedEntryOn({
-      date: new Date(2026, 3, 15),
+      date: new Date(Date.UTC(2026, 3, 15)),
       hours: 9,
       billable: false,
     });
     // May: 8h worked, nothing billed.
-    await seedEntryOn({ date: new Date(2026, 4, 5), hours: 8 });
+    await seedEntryOn({ date: new Date(Date.UTC(2026, 4, 5)), hours: 8 });
     // April payment of $600 → collected 600 / billed 1250 = 48%.
     await prisma.invoicePayment.create({
       data: {
         invoiceId,
         source: "check",
         amount: new Prisma.Decimal(600),
-        date: new Date(2026, 3, 25),
+        date: new Date(Date.UTC(2026, 3, 25)),
       },
     });
 
@@ -467,5 +494,109 @@ describe("getRealizationReport", () => {
 
     const tokyo = await getRealizationReport(TOKYO);
     expect(tokyo.map((m) => m.key)).toEqual(["2026-05", "2026-06", "2026-07"]);
+  });
+});
+
+// ── Review fixes (B2 notifications-reports-activity) ────────────────────
+
+describe("getPipelineReport — retired areas and conversion dating", () => {
+  test("open matters in a retired (inactive) practice area still count", async () => {
+    await prisma.practiceArea.update({
+      where: { id: areaId },
+      data: { isActive: false },
+    });
+
+    const report = await getPipelineReport(DENVER);
+
+    expect(report.totalOpenMatters).toBe(1);
+    expect(report.areas.map((a) => a.areaId)).toEqual([areaId]);
+  });
+
+  test("convertedThisQuarter dates a conversion by its matter, not by later lead edits", async () => {
+    // Converted in Q1 (matter created March 1), then touched today —
+    // a contact merge / edit bumps Lead.updatedAt into Q2.
+    const oldMatter = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+      name: "Q1 conversion",
+    });
+    await prisma.$executeRaw`UPDATE matters SET "createdAt" = ${new Date("2026-03-01T12:00:00Z")} WHERE id = ${oldMatter.matterId}`;
+    await prisma.lead.create({
+      data: {
+        name: "Merged later",
+        stage: "converted",
+        convertedMatterId: oldMatter.matterId,
+      },
+    });
+    // Genuinely converted this quarter: matter created now (June 16).
+    const freshMatter = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+      name: "Q2 conversion",
+    });
+    await prisma.lead.create({
+      data: {
+        name: "Fresh",
+        stage: "converted",
+        convertedMatterId: freshMatter.matterId,
+      },
+    });
+
+    const report = await getPipelineReport(DENVER);
+    expect(report.convertedThisQuarter).toBe(1);
+  });
+});
+
+describe("getUtilizationReport — date-only month bounds (ADR-012)", () => {
+  test("an entry dated the 1st of the month counts; the 1st of next month does not", async () => {
+    await seedEntryOn({ date: new Date(Date.UTC(2026, 5, 1)), hours: 2 });
+    await seedEntryOn({ date: new Date(Date.UTC(2026, 6, 1)), hours: 7 });
+
+    const report = await getUtilizationReport(DENVER);
+    const me = report.users.find((u) => u.userId === userId)!;
+    expect(me.totalHours).toBe(2);
+  });
+});
+
+describe("getRealizationReport — what counts as billed", () => {
+  test("only entries on sent / partial / paid CLIENT invoices count as billed", async () => {
+    const day = new Date(Date.UTC(2026, 5, 3));
+    const mk = async (
+      opts: { status: string; kind?: string },
+      amount: number
+    ) => {
+      const { invoiceId } = await seedInvoice({
+        matterId,
+        issueDate: day,
+        total: amount,
+        status: opts.status,
+        kind: opts.kind,
+      });
+      await seedEntryOn({ date: day, hours: 1, invoiceId, amount });
+    };
+    await mk({ status: "draft" }, 100);
+    await mk({ status: "approved" }, 200);
+    await mk({ status: "paid", kind: "internal_record" }, 400);
+    await mk({ status: "sent" }, 1000);
+    await mk({ status: "partial" }, 2000);
+    await mk({ status: "paid" }, 4000);
+
+    const june = (await getRealizationReport(DENVER))[2];
+
+    expect(june.workedHours).toBe(6);
+    expect(june.billedHours).toBe(3);
+    expect(june.billedAmount).toBe(7000);
+    expect(june.billedPctOfWorked).toBe(50);
+  });
+
+  test("an entry dated the 1st of a month lands in that month's block", async () => {
+    await seedEntryOn({ date: new Date(Date.UTC(2026, 5, 1)), hours: 4 });
+    await seedEntryOn({ date: new Date(Date.UTC(2026, 4, 31)), hours: 1 });
+
+    const months = await getRealizationReport(DENVER);
+    expect(months[2].workedHours).toBe(4);
+    expect(months[1].workedHours).toBe(1);
   });
 });

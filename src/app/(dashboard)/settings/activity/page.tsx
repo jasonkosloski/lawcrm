@@ -15,7 +15,7 @@
 
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { formatDate} from "@/lib/format-date";
+import { formatDate } from "@/lib/format-date";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import {
   Briefcase,
@@ -41,6 +41,10 @@ import {
   listFirmActivityAuthors,
 } from "@/lib/queries/firm-activity";
 import { requireUser } from "@/lib/current-user";
+import {
+  ACTIVITY_FILTER_BUCKETS as FILTER_BUCKETS,
+  ACTIVITY_PILL_ORDER as PILL_ORDER,
+} from "@/lib/constants/activity-filters";
 
 const ACTIVITY_ICONS: Record<string, LucideIcon> = {
   gavel: Gavel,
@@ -57,38 +61,6 @@ const ACTIVITY_ICONS: Record<string, LucideIcon> = {
   shield: ShieldCheck,
 };
 
-const FILTER_BUCKETS: Record<
-  string,
-  { label: string; types: readonly string[] }
-> = {
-  all: { label: "All", types: [] },
-  filings: { label: "Filings", types: ["filing"] },
-  communications: { label: "Communications", types: ["email"] },
-  deadlines: { label: "Deadlines", types: ["deadline"] },
-  tasks: { label: "Tasks", types: ["task", "task_complete"] },
-  notes: { label: "Notes", types: ["note"] },
-  time: { label: "Time", types: ["time_entry"] },
-  financial: {
-    label: "Financial",
-    types: ["deposit", "settlement"],
-  },
-  events: { label: "Events", types: ["event"] },
-  security: { label: "Security", types: ["auth"] },
-};
-
-const PILL_ORDER = [
-  "all",
-  "filings",
-  "communications",
-  "deadlines",
-  "tasks",
-  "notes",
-  "time",
-  "financial",
-  "events",
-  "security",
-] as const;
-
 // Date rendering routes through the centralized formatter.
 
 export default async function FirmActivityPage({
@@ -104,7 +76,9 @@ export default async function FirmActivityPage({
 
   const rawType = Array.isArray(sp.type) ? sp.type[0] : sp.type;
   const filterKey =
-    typeof rawType === "string" && rawType in FILTER_BUCKETS ? rawType : "all";
+    typeof rawType === "string" && Object.hasOwn(FILTER_BUCKETS, rawType)
+      ? rawType
+      : "all";
 
   const rawUser = Array.isArray(sp.user) ? sp.user[0] : sp.user;
   const userId =
@@ -118,15 +92,18 @@ export default async function FirmActivityPage({
 
   const bucket = FILTER_BUCKETS[filterKey];
 
-  const [rows, authors, tz] = await Promise.all([
+  // Day filters cut on the VIEWER's calendar days (rows display in
+  // this zone), so resolve it before querying.
+  const tz = await getCurrentUserTimeZone();
+  const [rows, authors] = await Promise.all([
     getFirmActivity({
       types: bucket.types.length > 0 ? bucket.types : undefined,
       userId,
       from,
       to,
+      tz,
     }),
     listFirmActivityAuthors(),
-    getCurrentUserTimeZone(),
   ]);
 
   /** Build a query-string preserving the other filters when one
@@ -189,10 +166,14 @@ export default async function FirmActivityPage({
           <input type="hidden" name="type" value={filterKey} />
         )}
         <div className="flex flex-col gap-1">
-          <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+          <label
+            htmlFor="activity-user"
+            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+          >
             User
           </label>
           <select
+            id="activity-user"
             name="user"
             defaultValue={userId ?? ""}
             className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
@@ -206,10 +187,14 @@ export default async function FirmActivityPage({
           </select>
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+          <label
+            htmlFor="activity-from"
+            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+          >
             From
           </label>
           <input
+            id="activity-from"
             type="date"
             name="from"
             defaultValue={from ?? ""}
@@ -217,10 +202,14 @@ export default async function FirmActivityPage({
           />
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+          <label
+            htmlFor="activity-to"
+            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+          >
             To
           </label>
           <input
+            id="activity-to"
             type="date"
             name="to"
             defaultValue={to ?? ""}

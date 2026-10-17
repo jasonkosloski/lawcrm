@@ -11,6 +11,7 @@
 
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { addDaysToKey, instantInTz } from "@/lib/format-date";
 
 export type FirmActivityRow = {
   id: string;
@@ -35,11 +36,37 @@ const FIRM_ACTIVITY_LIMIT = 200;
 export type FirmActivityFilter = {
   types?: readonly string[];
   userId?: string;
-  /** ISO date "YYYY-MM-DD" — inclusive lower bound (start of day). */
+  /** "YYYY-MM-DD" — inclusive lower bound: the start of that calendar
+   *  day in `tz`. Malformed values are ignored. */
   from?: string;
-  /** ISO date "YYYY-MM-DD" — inclusive upper bound (end of day). */
+  /** "YYYY-MM-DD" — inclusive upper bound: through the end of that
+   *  calendar day in `tz`. Malformed values are ignored. */
   to?: string;
+  /** The VIEWER's IANA zone. ActivityLog.timestamp is a real instant
+   *  shown in this zone on the page, so the day filters must cut on
+   *  the same calendar days (the page passes getCurrentUserTimeZone()).
+   *  Defaults to UTC when omitted. */
+  tz?: string;
 };
+
+const DAY_KEY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** Start-of-day instant for a YYYY-MM-DD key in `tz`; null when the
+ *  key is malformed or not a real calendar date. */
+function startOfDayInstant(key: string, tz: string): Date | null {
+  const m = DAY_KEY_RE.exec(key);
+  if (!m) return null;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const probe = new Date(Date.UTC(y, mo - 1, d));
+  if (
+    probe.getUTCFullYear() !== y ||
+    probe.getUTCMonth() !== mo - 1 ||
+    probe.getUTCDate() !== d
+  ) {
+    return null;
+  }
+  return instantInTz(y, mo, d, 0, 0, tz);
+}
 
 export async function getFirmActivity(
   filter: FirmActivityFilter = {}
@@ -51,20 +78,18 @@ export async function getFirmActivity(
   if (filter.userId) {
     where.userId = filter.userId;
   }
-  if (filter.from || filter.to) {
-    const range: Prisma.DateTimeFilter = {};
-    if (filter.from) {
-      const d = new Date(filter.from);
-      d.setHours(0, 0, 0, 0);
-      range.gte = d;
-    }
-    if (filter.to) {
-      const d = new Date(filter.to);
-      d.setHours(23, 59, 59, 999);
-      range.lte = d;
-    }
-    where.timestamp = range;
-  }
+  const tz = filter.tz ?? "UTC";
+  const range: Prisma.DateTimeFilter = {};
+  const gte = filter.from ? startOfDayInstant(filter.from, tz) : null;
+  if (gte) range.gte = gte;
+  // Half-open: before the start of the day AFTER `to` (DST-safe, and
+  // no 23:59:59.999 off-by-a-millisecond edge).
+  const lt =
+    filter.to && startOfDayInstant(filter.to, tz)
+      ? startOfDayInstant(addDaysToKey(filter.to, 1), tz)
+      : null;
+  if (lt) range.lt = lt;
+  if (gte || lt) where.timestamp = range;
   const rows = await prisma.activityLog.findMany({
     where,
     orderBy: { timestamp: "desc" },

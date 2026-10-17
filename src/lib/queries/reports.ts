@@ -20,19 +20,24 @@
  * convention as queries/dashboard.ts) — the Decimal stays canonical
  * in the DB; report display tolerates the precision floor.
  *
- * TZ: where a date range applies it's the VIEWER's calendar, not
- * the server's. Date-only columns (TimeEntry.date, InvoicePayment
- * dates entered via parseLocalDate) store server-local midnight of
- * their calendar day, so month bounds are server-local midnight of
- * the viewer-tz month — the date-key round-trip documented at
- * length in queries/dashboard.ts. Real instants (Lead.updatedAt)
+ * TZ (ADR-012): where a date range applies it's the VIEWER's
+ * calendar, not the server's. Date-only columns (TimeEntry.date,
+ * InvoicePayment.date) are calendar dates stored at UTC midnight, so
+ * a month's bounds are UTC midnights of the viewer-tz month's first
+ * day — never a server-local Date. Real instants (Lead.updatedAt)
  * get true UTC bounds via instantInTz.
  */
 
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-import { dateKeyInTz, instantInTz } from "@/lib/format-date";
+import {
+  daysBetweenKeys,
+  dateKeyInTz,
+  dateOnlyKey,
+  instantInTz,
+  todayKey,
+} from "@/lib/format-date";
 import {
   LEAD_OPEN_STAGES,
   LEAD_STAGE_LABEL,
@@ -47,13 +52,13 @@ const todayYmdInTz = (tz: string): [number, number, number] =>
     number,
   ];
 
-/** Server-local midnight of the 1st of the viewer's month, shifted
- *  back `monthsBack` months. The Date constructor normalizes month
- *  underflow (month -1 → December of the prior year). Correct lower
- *  bound for date-only columns, which store server-local midnight. */
+/** UTC midnight of the 1st of the viewer's month, shifted back
+ *  `monthsBack` months (negative goes forward). Date.UTC normalizes
+ *  month under/overflow. Correct bound for date-only columns, which
+ *  store UTC midnight (ADR-012). */
 const startOfMonthInTz = (tz: string, monthsBack = 0): Date => {
   const [y, m] = todayYmdInTz(tz);
-  return new Date(y, m - 1 - monthsBack, 1, 0, 0, 0, 0);
+  return new Date(Date.UTC(y, m - 1 - monthsBack, 1));
 };
 
 // ── Pipeline ────────────────────────────────────────────────────────────
@@ -74,10 +79,11 @@ export type PipelineReport = {
    *  Stages with zero leads still appear so the funnel shape reads. */
   leadsByStage: { stage: string; label: string; count: number }[];
   totalActiveLeads: number;
-  /** Leads marked converted whose last update falls in the viewer's
-   *  current calendar quarter. Lead has no dedicated convertedAt
-   *  column, so updatedAt is the (documented) proxy — converting is
-   *  almost always the final write to the row. */
+  /** Leads converted during the viewer's current calendar quarter.
+   *  Lead has no convertedAt column, so the converted matter's
+   *  createdAt dates the conversion (later edits and contact merges
+   *  bump Lead.updatedAt and must not re-date it); a converted lead
+   *  with no linked matter falls back to updatedAt. */
   convertedThisQuarter: number;
   /** Open (non-archived, non-terminal-stage) matters grouped
    *  practice area → stage. Areas ordered by their settings `order`;
@@ -94,25 +100,31 @@ export type PipelineReport = {
 };
 
 export async function getPipelineReport(tz: string): Promise<PipelineReport> {
-  // Viewer-tz quarter start as a true instant — updatedAt is a real
-  // timestamp, not a date-only column.
+  // Viewer-tz quarter start as a true instant — createdAt/updatedAt
+  // are real timestamps, not date-only columns.
   const [y, m] = todayYmdInTz(tz);
   const quarterStartMonth = Math.floor((m - 1) / 3) * 3 + 1;
   const quarterStart = instantInTz(y, quarterStartMonth, 1, 0, 0, tz);
 
-  const [leadGroups, convertedThisQuarter, matterGroups, areas] =
+  const [leadGroups, convertedCandidates, matterGroups, areas] =
     await Promise.all([
       prisma.lead.groupBy({ by: ["stage"], _count: true }),
-      prisma.lead.count({
+      // updatedAt >= conversion time, so this is a superset of the
+      // leads converted this quarter; the matter's createdAt narrows
+      // it below.
+      prisma.lead.findMany({
         where: { stage: "converted", updatedAt: { gte: quarterStart } },
+        select: { convertedMatterId: true },
       }),
       prisma.matter.groupBy({
         by: ["practiceAreaId", "stageId"],
         where: { isArchived: false, stage: { isTerminal: false } },
         _count: true,
       }),
+      // Retired (inactive) areas still hold open matters — keep them
+      // so the report's open-matter total matches the sidebar; areas
+      // with no open matters are filtered out below.
       prisma.practiceArea.findMany({
-        where: { isActive: true },
         orderBy: [{ order: "asc" }, { name: "asc" }],
         select: {
           id: true,
@@ -126,6 +138,21 @@ export async function getPipelineReport(tz: string): Promise<PipelineReport> {
         },
       }),
     ]);
+
+  const linkedMatterIds = convertedCandidates
+    .map((l) => l.convertedMatterId)
+    .filter((id): id is string => id !== null);
+  const unlinkedConverted = convertedCandidates.length - linkedMatterIds.length;
+  const convertedThisQuarter =
+    unlinkedConverted +
+    (linkedMatterIds.length > 0
+      ? await prisma.matter.count({
+          where: {
+            id: { in: linkedMatterIds },
+            createdAt: { gte: quarterStart },
+          },
+        })
+      : 0);
 
   const countByLeadStage = new Map(leadGroups.map((g) => [g.stage, g._count]));
   const leadsByStage = LEAD_PIPELINE_STAGES.map((s) => ({
@@ -194,13 +221,13 @@ export type UtilizationReport = {
 };
 
 /** Mon–Fri days from the 1st of the viewer's month through their
- *  today, inclusive. Weekday computed from the plain Y-M-D triple,
- *  so the server zone can't skew it. */
+ *  today, inclusive. Weekday computed from the plain Y-M-D triple
+ *  in UTC, so the server zone can't skew it. */
 const businessDaysElapsedInMonth = (tz: string): number => {
   const [y, m, today] = todayYmdInTz(tz);
   let count = 0;
   for (let day = 1; day <= today; day++) {
-    const dow = new Date(y, m - 1, day).getDay();
+    const dow = new Date(Date.UTC(y, m - 1, day)).getUTCDay();
     if (dow >= 1 && dow <= 5) count++;
   }
   return count;
@@ -229,7 +256,9 @@ export async function getUtilizationReport(
     // One group per (user, billable-flag) — two rows max per user.
     prisma.timeEntry.groupBy({
       by: ["userId", "billable"],
-      where: { date: { gte: startOfMonthInTz(tz) } },
+      where: {
+        date: { gte: startOfMonthInTz(tz), lt: startOfMonthInTz(tz, -1) },
+      },
       _sum: { hours: true },
     }),
   ]);
@@ -274,6 +303,15 @@ export async function getUtilizationReport(
 
 // ── AR aging ────────────────────────────────────────────────────────────
 
+/** Client-invoice statuses where money is owed (accounts receivable). */
+export const AR_OPEN_STATUSES = ["sent", "partial"] as const;
+
+/** Client-invoice statuses that count as "billed": the invoice has
+ *  been issued to the client. (draft / approved are unsent; void is
+ *  unlinked from its entries.) Exported so the dashboard's duplicate
+ *  lists can share this source. */
+export const BILLED_STATUSES = ["sent", "partial", "paid"] as const;
+
 const AR_BUCKETS = [
   { key: "0-30", label: "0–30 days", min: 0, max: 30 },
   { key: "31-60", label: "31–60 days", min: 31, max: 60 },
@@ -305,13 +343,14 @@ export type ArAgingReport = {
  * stay Prisma Decimal until the final toNumber so partial payments
  * never accumulate float drift.
  *
- * Aging uses whole days elapsed since issueDate in server time —
- * buckets are 30-day bands, so a viewer-tz boundary case moves an
- * invoice by at most one day, which is noise at this granularity.
+ * issueDate is a date-only value (UTC midnight), so age is whole
+ * calendar days from its key to the VIEWER's today (ADR-012) — never
+ * an instant difference, which would read every invoice a day older
+ * to a Denver user in the evening and shift the 30/60/90 bucket edges.
  */
-export async function getArAgingReport(): Promise<ArAgingReport> {
+export async function getArAgingReport(tz: string): Promise<ArAgingReport> {
   const invoices = await prisma.invoice.findMany({
-    where: { kind: "client", status: { in: ["sent", "partial"] } },
+    where: { kind: "client", status: { in: [...AR_OPEN_STATUSES] } },
     orderBy: { issueDate: "asc" },
     select: {
       id: true,
@@ -323,8 +362,7 @@ export async function getArAgingReport(): Promise<ArAgingReport> {
     },
   });
 
-  const dayMs = 24 * 60 * 60 * 1000;
-  const nowMs = Date.now();
+  const today = todayKey(tz);
 
   // Bucket sums stay Decimal until the return — the whole point of
   // this report is money owed, so no float accumulation mid-flight.
@@ -341,7 +379,7 @@ export async function getArAgingReport(): Promise<ArAgingReport> {
     const outstanding = inv.totalAmount.minus(inv.paidAmount);
     if (outstanding.lte(0)) continue; // fully paid but status not flipped — not AR
 
-    const age = Math.max(0, Math.floor((nowMs - inv.issueDate.getTime()) / dayMs));
+    const age = Math.max(0, daysBetweenKeys(dateOnlyKey(inv.issueDate), today));
     const idx = AR_BUCKETS.findIndex((b) => age >= b.min && age <= b.max);
     const bucket = bucketSums[idx >= 0 ? idx : AR_BUCKETS.length - 1];
     bucket.total = bucket.total.plus(outstanding);
@@ -399,8 +437,11 @@ export type RealizationMonth = {
 
 /**
  * Trailing 3 viewer-tz calendar months (oldest first, current month
- * last). Worked = billable hours; billed = the subset with an
- * invoiceId; collected = InvoicePayment sums by payment date.
+ * last). Worked = billable hours; billed = the subset rolled into a
+ * client invoice that has gone out (sent / partial / paid) — NOT
+ * draft or approved invoices nobody has received yet, and NOT
+ * internal records (which close out WIP without billing anyone);
+ * collected = InvoicePayment sums by payment date.
  *
  * Collections are bucketed by when the payment LANDED, not when the
  * underlying hours were worked — standard cash-basis realization,
@@ -425,6 +466,10 @@ export async function getRealizationReport(
           where: {
             billable: true,
             invoiceId: { not: null },
+            invoice: {
+              kind: "client",
+              status: { in: [...BILLED_STATUSES] },
+            },
             date: { gte: start, lt: end },
           },
           _sum: { hours: true, amount: true },
@@ -441,8 +486,12 @@ export async function getRealizationReport(
       const collectedAmount = collectedAgg._sum.amount?.toNumber() ?? 0;
 
       return {
-        key: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}`,
-        label: start.toLocaleString("en-US", { month: "short", year: "numeric" }),
+        key: dateOnlyKey(start).slice(0, 7),
+        label: start.toLocaleString("en-US", {
+          month: "short",
+          year: "numeric",
+          timeZone: "UTC",
+        }),
         workedHours,
         billedHours,
         billedAmount,

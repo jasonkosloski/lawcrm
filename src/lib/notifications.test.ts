@@ -2,7 +2,7 @@
  * Integration tests for the notifications writer + the bell read.
  *
  * Covers:
- *   - createNotification persists the row + revalidates
+ *   - createNotification persists the row (no cache revalidation)
  *   - createNotifications fans out, dedupes recipients, no-ops
  *     on empty input
  *   - getNotificationsBell returns the unread count + recent
@@ -68,7 +68,7 @@ afterEach(() => {
 });
 
 describe("createNotification", () => {
-  test("writes a row + revalidates the layout", async () => {
+  test("writes a row without revalidating the layout (the bell polls)", async () => {
     await createNotification({
       userId,
       type: "matter_assigned",
@@ -84,7 +84,7 @@ describe("createNotification", () => {
     expect(rows[0]!.body).toBe("You're co-counsel.");
     expect(rows[0]!.matterId).toBe(matterId);
     expect(rows[0]!.readAt).toBeNull();
-    expect(mockedRevalidate).toHaveBeenCalledWith("/", "layout");
+    expect(mockedRevalidate).not.toHaveBeenCalled();
   });
 
   test("normalizes optional fields to null", async () => {
@@ -135,6 +135,8 @@ describe("createNotifications (fan-out)", () => {
     });
     const rows = await prisma.notification.findMany({ where: { userId } });
     expect(rows).toHaveLength(1);
+    // The bell polls; a revalidate in the actor's request reaches nobody.
+    expect(mockedRevalidate).not.toHaveBeenCalled();
   });
 
   test("no-ops on empty recipients (no DB call, no revalidate)", async () => {

@@ -3,20 +3,43 @@
  *
  * Scheduled-ish notification producers that don't hang off a user
  * mutation. Today: the deadline sweep — "deadline_approaching" at
- * 7 days and again at 1 day before the due date, and a one-time
- * "deadline_overdue" once the due date passes while the deadline is
- * still open.
+ * 7 days, 1 day and on the due day itself, and a one-time
+ * "deadline_overdue" once the due date has fully passed while the
+ * deadline is still open.
  *
- * Recipients: the deadline's owner; ownerless deadlines fan out to
- * every ACTIVE member of the matter's team (removedAt = null).
+ * Calendar days, not instants (ADR-012): `Deadline.dueDate` is a
+ * date-only value (UTC midnight of the due day). "Days until due" is
+ * the whole-calendar-day distance from the RECIPIENT's today (their
+ * profile time zone) to that date — 0 = due today, negative = overdue
+ * — so a deadline due Oct 20 is overdue from Oct 21, never at the
+ * start of Oct 20 (or the evening of Oct 19 in Denver).
+ *
+ * Recipients: the deadline's owner when the owner is still active;
+ * otherwise (ownerless, or the owner was deactivated) every ACTIVE
+ * member of the matter's team (removedAt = null, isActive = true) —
+ * a departed associate must not swallow notices the team needs.
  *
  * Idempotency — the sweep may run any number of times (every
  * dashboard load races with the cron): before writing, it checks for
  * an existing notification with the same (userId, type, link). The
- * threshold is encoded in the link's `due` query param
- * (`due=7d` / `due=1d` / `due=overdue`), which makes the 7-day and
- * 1-day notices distinct one-time events while keeping the link a
+ * link encodes the deadline id, the bucket (`due=7d` / `1d` /
+ * `today` / `overdue`) AND the due date it was computed for
+ * (`on=YYYY-MM-DD`), so each threshold is a distinct one-time event
+ * PER due date: rescheduling a deadline (an extension, an SOL
+ * correction) starts a fresh 7d/1d/today/overdue cycle instead of
+ * being silenced by notices sent for the old date. The link stays a
  * working click-target (the deadlines tab ignores unknown params).
+ * Rollout note: notices written before `on=` existed carry no date,
+ * so each in-window deadline gets one extra notice per bucket the
+ * first time the new sweep runs — deliberately accepted over the
+ * alternative of missing a re-notice.
+ *
+ * Concurrency — the whole read-check-write runs in one transaction
+ * behind a Postgres advisory lock (`pg_advisory_xact_lock`), so the
+ * cron and a dashboard-triggered sweep on another instance take turns
+ * and the second one sees the first one's rows. (No unique index
+ * exists to enforce it in the schema: the table legitimately repeats
+ * (user, type, link) for other notification types.)
  *
  * Throttle — `maybeRunDeadlineNotificationSweep()` (the dashboard
  * entry point) skips when a sweep already ran in the last hour.
@@ -34,6 +57,11 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import type { NotificationType } from "@/lib/notifications";
+import {
+  daysBetweenKeys,
+  dateOnlyKey,
+  todayKey,
+} from "@/lib/format-date";
 
 /** First heads-up: deadline due within a week. */
 export const DEADLINE_SOON_THRESHOLD_DAYS = 7;
@@ -41,6 +69,9 @@ export const DEADLINE_SOON_THRESHOLD_DAYS = 7;
 export const DEADLINE_IMMINENT_THRESHOLD_DAYS = 1;
 /** Dashboard-load throttle — at most one sweep per instance/hour. */
 export const SWEEP_MIN_INTERVAL_MS = 60 * 60 * 1000;
+
+/** Recipients default to this zone when the user row has none. */
+const FALLBACK_TIME_ZONE = "America/Denver";
 
 export type SweepResult = {
   /** Open deadlines inside the widest window (incl. overdue). */
@@ -51,35 +82,49 @@ export type SweepResult = {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** The three sweep buckets a deadline can fall into. Exactly one
- *  applies per run — a deadline due tomorrow gets its 1d notice, not
- *  a simultaneous 7d + 1d double-ping. The 7d notice still lands for
- *  deadlines seen while further out; each bucket is its own one-time
- *  event keyed by the link's `due` param. */
+/** Arbitrary constant key for the sweep's advisory lock. */
+const SWEEP_LOCK_KEY = 7_302_026;
+
+/** The sweep buckets a deadline can fall into. Exactly one applies
+ *  per recipient per run — a deadline due tomorrow gets its 1d
+ *  notice, not a simultaneous 7d + 1d double-ping. Each bucket is
+ *  its own one-time event keyed by the link's `due` param (and the
+ *  due date in `on`). */
 type Bucket = {
   type: NotificationType;
   /** Link token that makes this bucket's notification unique. */
-  dueToken: "7d" | "1d" | "overdue";
+  dueToken: "7d" | "1d" | "today" | "overdue";
   title: (deadlineTitle: string) => string;
 };
 
-function bucketFor(dueDate: Date, now: Date): Bucket | null {
-  const delta = dueDate.getTime() - now.getTime();
-  if (delta < 0) {
+/**
+ * Bucket for a deadline `days` calendar days from the recipient's
+ * today (0 = due today, negative = overdue); null when it is more
+ * than a week out.
+ */
+export function bucketForDaysUntil(days: number): Bucket | null {
+  if (days < 0) {
     return {
       type: "deadline_overdue",
       dueToken: "overdue",
       title: (t) => `Deadline overdue: ${t}`,
     };
   }
-  if (delta <= DEADLINE_IMMINENT_THRESHOLD_DAYS * DAY_MS) {
+  if (days === 0) {
+    return {
+      type: "deadline_approaching",
+      dueToken: "today",
+      title: (t) => `Deadline due today: ${t}`,
+    };
+  }
+  if (days <= DEADLINE_IMMINENT_THRESHOLD_DAYS) {
     return {
       type: "deadline_approaching",
       dueToken: "1d",
       title: (t) => `Deadline due within 1 day: ${t}`,
     };
   }
-  if (delta <= DEADLINE_SOON_THRESHOLD_DAYS * DAY_MS) {
+  if (days <= DEADLINE_SOON_THRESHOLD_DAYS) {
     return {
       type: "deadline_approaching",
       dueToken: "7d",
@@ -91,10 +136,10 @@ function bucketFor(dueDate: Date, now: Date): Bucket | null {
 
 /**
  * The sweep proper — scan open deadlines, write the missing
- * notifications. Idempotent (see module docstring); safe to call
- * concurrently or repeatedly. Throws on DB failure so the cron
- * route can surface a 500; the dashboard entry point below wraps it
- * fire-and-forget.
+ * notifications. Idempotent (see module docstring) and serialized by
+ * an advisory lock, so it is safe to call concurrently or
+ * repeatedly. Throws on DB failure so the cron route can surface a
+ * 500; the dashboard entry point below wraps it fire-and-forget.
  *
  * `now` is injectable for tests ("advance a week, sweep again").
  */
@@ -108,96 +153,140 @@ export async function runDeadlineNotificationSweep(
     revalidate?: boolean;
   } = {}
 ): Promise<SweepResult> {
+  // Widest window across recipient zones: "today" can be a day ahead
+  // of (or behind) UTC, so over-fetch by two days and let the
+  // per-recipient day math decide.
   const soonCutoff = new Date(
-    now.getTime() + DEADLINE_SOON_THRESHOLD_DAYS * DAY_MS
+    now.getTime() + (DEADLINE_SOON_THRESHOLD_DAYS + 2) * DAY_MS
   );
 
-  // Everything open and due within the widest window — including
-  // already-past due dates (status "open" with dueDate < now is the
-  // overdue-flip case).
-  const deadlines = await prisma.deadline.findMany({
-    where: { status: "open", dueDate: { lte: soonCutoff } },
-    select: {
-      id: true,
-      title: true,
-      dueDate: true,
-      ownerId: true,
-      matterId: true,
-      matter: {
+  const result = await prisma.$transaction(
+    async (tx): Promise<SweepResult> => {
+      // Serialize overlapping sweeps (cron vs. dashboard, or two
+      // instances). Blocking, not try-lock: the second run waits and
+      // then sees the first run's rows, so it still completes
+      // correctly. Released automatically at commit/rollback.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${SWEEP_LOCK_KEY})`;
+
+      // Everything open and due within the widest window — including
+      // already-past due dates (status "open" with a past dueDate is
+      // the overdue case).
+      const deadlines = await tx.deadline.findMany({
+        where: { status: "open", dueDate: { lte: soonCutoff } },
         select: {
-          name: true,
-          isArchived: true,
-          teamMembers: {
-            where: { removedAt: null },
-            select: { userId: true },
+          id: true,
+          title: true,
+          dueDate: true,
+          ownerId: true,
+          matterId: true,
+          owner: { select: { isActive: true, timeZone: true } },
+          matter: {
+            select: {
+              name: true,
+              isArchived: true,
+              teamMembers: {
+                where: { removedAt: null, user: { isActive: true } },
+                select: { userId: true, user: { select: { timeZone: true } } },
+              },
+            },
           },
         },
-      },
-    },
-  });
-
-  type Candidate = {
-    userId: string;
-    type: NotificationType;
-    title: string;
-    body: string;
-    link: string;
-    matterId: string;
-  };
-  const candidates: Candidate[] = [];
-
-  for (const d of deadlines) {
-    // Archived matters keep their rows but shouldn't ping anyone.
-    if (d.matter.isArchived) continue;
-    const bucket = bucketFor(d.dueDate, now);
-    if (!bucket) continue;
-
-    const recipients = d.ownerId
-      ? [d.ownerId]
-      : d.matter.teamMembers.map((m) => m.userId);
-    if (recipients.length === 0) continue;
-
-    // `due` token in the link = the idempotency discriminator per
-    // threshold. `deadline` pins the link to the specific row so two
-    // deadlines on the same matter don't collide.
-    const link = `/matters/${d.matterId}/deadlines?deadline=${d.id}&due=${bucket.dueToken}`;
-    for (const userId of new Set(recipients)) {
-      candidates.push({
-        userId,
-        type: bucket.type,
-        title: bucket.title(d.title),
-        body: d.matter.name,
-        link,
-        matterId: d.matterId,
       });
-    }
-  }
 
-  if (candidates.length === 0) return { scanned: deadlines.length, created: 0 };
+      type Candidate = {
+        userId: string;
+        type: NotificationType;
+        title: string;
+        body: string;
+        link: string;
+        matterId: string;
+      };
+      const candidates: Candidate[] = [];
 
-  // One-time-per-(user, type, link): drop candidates that already
-  // have a row. The link encodes deadline id + threshold, so this is
-  // exactly the "same notice for the same event" check.
-  const existing = await prisma.notification.findMany({
-    where: {
-      link: { in: Array.from(new Set(candidates.map((c) => c.link))) },
-      type: { in: ["deadline_approaching", "deadline_overdue"] },
+      for (const d of deadlines) {
+        // Archived matters keep their rows but shouldn't ping anyone.
+        if (d.matter.isArchived) continue;
+
+        // Active owner → just them. Ownerless, or the owner was
+        // deactivated → the matter's active team instead.
+        const recipients: { userId: string; tz: string }[] =
+          d.ownerId && d.owner?.isActive
+            ? [
+                {
+                  userId: d.ownerId,
+                  tz: d.owner.timeZone || FALLBACK_TIME_ZONE,
+                },
+              ]
+            : d.matter.teamMembers.map((m) => ({
+                userId: m.userId,
+                tz: m.user.timeZone || FALLBACK_TIME_ZONE,
+              }));
+        if (recipients.length === 0) continue;
+
+        const dueKey = dateOnlyKey(d.dueDate);
+        const seenRecipient = new Set<string>();
+        for (const r of recipients) {
+          if (seenRecipient.has(r.userId)) continue;
+          seenRecipient.add(r.userId);
+
+          // Whole calendar days from the recipient's today to the
+          // due date — never an instant comparison.
+          const days = daysBetweenKeys(todayKey(r.tz, now), dueKey);
+          const bucket = bucketForDaysUntil(days);
+          if (!bucket) continue;
+
+          // `due` = threshold, `on` = the due date it was computed
+          // for: together with `deadline` they are the idempotency
+          // key. A rescheduled deadline gets a new `on`, hence a new
+          // cycle of notices.
+          const link = `/matters/${d.matterId}/deadlines?deadline=${d.id}&due=${bucket.dueToken}&on=${dueKey}`;
+          candidates.push({
+            userId: r.userId,
+            type: bucket.type,
+            title: bucket.title(d.title),
+            body: d.matter.name,
+            link,
+            matterId: d.matterId,
+          });
+        }
+      }
+
+      if (candidates.length === 0) {
+        return { scanned: deadlines.length, created: 0 };
+      }
+
+      // One-time-per-(user, type, link): drop candidates that already
+      // have a row. The link encodes deadline id + threshold + due
+      // date, so this is exactly the "same notice for the same event"
+      // check.
+      const existing = await tx.notification.findMany({
+        where: {
+          link: { in: Array.from(new Set(candidates.map((c) => c.link))) },
+          type: { in: ["deadline_approaching", "deadline_overdue"] },
+        },
+        select: { userId: true, type: true, link: true },
+      });
+      const seen = new Set(
+        existing.map((e) => `${e.userId}|${e.type}|${e.link}`)
+      );
+      const fresh = candidates.filter(
+        (c) => !seen.has(`${c.userId}|${c.type}|${c.link}`)
+      );
+
+      if (fresh.length > 0) {
+        await tx.notification.createMany({ data: fresh });
+      }
+      return { scanned: deadlines.length, created: fresh.length };
     },
-    select: { userId: true, type: true, link: true },
-  });
-  const seen = new Set(existing.map((e) => `${e.userId}|${e.type}|${e.link}`));
-  const fresh = candidates.filter(
-    (c) => !seen.has(`${c.userId}|${c.type}|${c.link}`)
+    // Waiting on the advisory lock counts against the interactive
+    // transaction's clock; a sweep is a handful of queries.
+    { timeout: 30_000, maxWait: 30_000 }
   );
 
-  if (fresh.length > 0) {
-    await prisma.notification.createMany({ data: fresh });
-    // Without revalidation (dashboard path) the bell's 60s poll still
-    // picks the new rows up.
-    if (opts.revalidate) revalidatePath("/", "layout");
-  }
-
-  return { scanned: deadlines.length, created: fresh.length };
+  // Without revalidation (dashboard path) the bell's 60s poll still
+  // picks the new rows up.
+  if (opts.revalidate && result.created > 0) revalidatePath("/", "layout");
+  return result;
 }
 
 // Per-instance throttle clock. See module docstring for why this is

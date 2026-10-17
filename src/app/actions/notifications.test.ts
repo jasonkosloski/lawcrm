@@ -17,6 +17,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vi
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 
+import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import {
@@ -24,6 +25,7 @@ import {
   markNotificationRead,
 } from "@/app/actions/notifications";
 import {
+  getNotificationsBell,
   getNotificationsFeed,
   NOTIFICATIONS_PAGE_SIZE,
 } from "@/lib/queries/notifications";
@@ -113,6 +115,97 @@ describe("markAllNotificationsRead", () => {
       where: { userId: otherUserId, readAt: null },
     });
     expect(theirs).toBe(1);
+  });
+});
+
+describe("mark-read actions don't revalidate the layout", () => {
+  test("neither action re-renders the current route (client state owns the rows)", async () => {
+    const n = await prisma.notification.create({
+      data: { userId, type: "generic", title: "x" },
+      select: { id: true },
+    });
+    await markNotificationRead(n.id);
+    await prisma.notification.create({
+      data: { userId, type: "generic", title: "y" },
+    });
+    await markAllNotificationsRead();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+});
+
+describe("markAllNotificationsRead — cutoff", () => {
+  test("only clears notices created at or before the cutoff the client saw", async () => {
+    const seen = new Date("2026-10-16T10:00:00Z");
+    await prisma.notification.createMany({
+      data: [
+        { userId, type: "generic", title: "seen", createdAt: seen },
+        {
+          userId,
+          type: "generic",
+          title: "arrived-later",
+          createdAt: new Date("2026-10-16T10:01:00Z"),
+        },
+      ],
+    });
+
+    const res = await markAllNotificationsRead(seen);
+    expect(res.ok).toBe(true);
+
+    const rows = await prisma.notification.findMany({
+      orderBy: { createdAt: "asc" },
+    });
+    expect(rows.map((r) => [r.title, r.readAt !== null])).toEqual([
+      ["seen", true],
+      ["arrived-later", false],
+    ]);
+  });
+
+  test("accepts an ISO string and refuses a garbage cutoff without widening it", async () => {
+    await prisma.notification.create({
+      data: { userId, type: "generic", title: "u" },
+    });
+    const bad = await markAllNotificationsRead("not-a-date");
+    expect(bad.ok).toBe(false);
+    expect(
+      await prisma.notification.count({ where: { userId, readAt: null } })
+    ).toBe(1);
+
+    const ok = await markAllNotificationsRead(
+      new Date(Date.now() + 60_000).toISOString()
+    );
+    expect(ok.ok).toBe(true);
+    expect(
+      await prisma.notification.count({ where: { userId, readAt: null } })
+    ).toBe(0);
+  });
+
+  test("the feed and the bell hand back an asOf that covers what they showed", async () => {
+    const newest = new Date("2026-10-16T09:00:00Z");
+    await prisma.notification.createMany({
+      data: [
+        {
+          userId,
+          type: "generic",
+          title: "old",
+          createdAt: new Date("2026-10-15T09:00:00Z"),
+        },
+        { userId, type: "generic", title: "new", createdAt: newest },
+        // Another user's newer notice must not leak into my cutoff.
+        {
+          userId: otherUserId,
+          type: "generic",
+          title: "theirs",
+          createdAt: new Date("2026-10-17T09:00:00Z"),
+        },
+      ],
+    });
+
+    expect((await getNotificationsFeed(1)).asOf).toEqual(newest);
+    expect((await getNotificationsBell()).asOf).toEqual(newest);
+  });
+
+  test("asOf is null when there is nothing yet", async () => {
+    expect((await getNotificationsFeed(1)).asOf).toBeNull();
   });
 });
 
