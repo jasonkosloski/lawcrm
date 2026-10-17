@@ -30,6 +30,7 @@ vi.mock("next/headers", () => ({
 }));
 
 import * as argon2 from "argon2";
+import { argon2HashOptions } from "@/lib/argon2-options";
 import { prisma } from "@/lib/prisma";
 import { AuthError } from "next-auth";
 import { auth, signIn, signOut, unstable_update } from "@/auth";
@@ -55,7 +56,7 @@ beforeEach(async () => {
   ({ userId } = await seedUser({ firmId, email: EMAIL }));
   await prisma.user.update({
     where: { id: userId },
-    data: { passwordHash: await argon2.hash(CURRENT, { type: argon2.argon2id }) },
+    data: { passwordHash: await argon2.hash(CURRENT, argon2HashOptions()) },
   });
   vi.mocked(getCurrentUserId).mockResolvedValue(userId);
 });

@@ -184,6 +184,13 @@ async function refreshWorkerDatabases(count: number): Promise<void> {
 }
 
 export async function setup(project: TestProject): Promise<void> {
+  // Vitest projects (vitest.config.ts) inherit globalSetup and call it once
+  // per project in the same process, possibly from a freshly loaded copy of
+  // this module (so a module-level flag is not enough). A second call would
+  // deadlock on our own run lock and re-clone databases under the first
+  // project's feet. process.env is shared across the copies.
+  if (process.env.LAWCRM_TEST_GLOBAL_SETUP_DONE === "1") return;
+  process.env.LAWCRM_TEST_GLOBAL_SETUP_DONE = "1";
   // Never force-push a schema into anything but a local test DB, even
   // if TEST_DATABASE_URL was pointed somewhere else by mistake.
   assertTestDatabaseUrl(TEST_DB_URL, "TEST_DATABASE_URL");

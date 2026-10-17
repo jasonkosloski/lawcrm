@@ -277,6 +277,8 @@ export async function syncEmailAccount(
   opts?: {
     /** Test seam: override the catch-up safety cap. */
     catchUpMaxThreads?: number;
+    /** Test seam: override FULL_SYNC_MAX_THREADS (initial-import cap). */
+    fullSyncMaxThreads?: number;
   }
 ): Promise<AccountSyncResult> {
   const account = await prisma.emailAccount.findUnique({
@@ -376,13 +378,20 @@ export async function syncEmailAccount(
           accountId,
           labelMap,
           account.lastSyncAt ?? undefined,
-          opts?.catchUpMaxThreads
+          opts?.catchUpMaxThreads,
+          opts?.fullSyncMaxThreads
         );
       } else {
         outcome = incremental;
       }
     } else {
-      outcome = await runFullSync(accountId, labelMap);
+      outcome = await runFullSync(
+        accountId,
+        labelMap,
+        undefined,
+        undefined,
+        opts?.fullSyncMaxThreads
+      );
     }
 
     const threadsIndexed = await prisma.emailThread.count({
@@ -540,7 +549,8 @@ async function runFullSync(
   accountId: string,
   labelMap: Map<string, string>,
   catchUpSince?: Date,
-  catchUpMaxThreads?: number
+  catchUpMaxThreads?: number,
+  fullSyncMaxThreads?: number
 ): Promise<SyncOutcome> {
   // Cursor FIRST: anything that changes while we walk the list is
   // covered by the next incremental pass (at-least-once + idempotent
@@ -557,7 +567,7 @@ async function runFullSync(
 
   const cap = catchUpSince
     ? (catchUpMaxThreads ?? CATCHUP_MAX_THREADS)
-    : FULL_SYNC_MAX_THREADS;
+    : (fullSyncMaxThreads ?? FULL_SYNC_MAX_THREADS);
   // Age half of the cap. Initial import: relative `newer_than`.
   // Catch-up: absolute `after:<epoch s>`, a day of slack before the
   // last good sync so clock skew / in-flight mail can't open a gap.

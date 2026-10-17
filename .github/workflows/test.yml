@@ -19,8 +19,14 @@ jobs:
       matrix:
         # The suite pins date behaviour; run it in a US zone and UTC.
         tz: [America/Denver, UTC]
+        # Each TZ still runs the WHOLE suite, split across two shards
+        # (own runner + own Postgres service each) to halve wall time.
+        shard: [1, 2]
     env:
       TZ: ${{ matrix.tz }}
+      # Tests are DB-bound (each worker owns a cloned database), so
+      # oversubscribing the 4 vCPUs beats the default of cores/2 = 2.
+      TEST_MAX_WORKERS: 4
       TEST_DATABASE_URL: postgresql://lawcrm_test:lawcrm_test@localhost:5432/lawcrm_test
     services:
       postgres:
@@ -37,15 +43,18 @@ jobs:
           --health-timeout 3s
           --health-retries 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
       - run: npm ci
       - run: npx prisma generate
-      - run: npm run typecheck
-      - run: npm run lint
+      # Static checks don't depend on TZ or shard: run them once per TZ.
+      - if: matrix.shard == 1
+        run: npm run typecheck
+      - if: matrix.shard == 1
+        run: npm run lint
       # Vitest globalSetup pushes the schema and clones per-worker
       # databases; no docker CLI or Prisma agent-consent variable needed.
-      - run: npm test
+      - run: npm test -- --shard=${{ matrix.shard }}/2

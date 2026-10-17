@@ -21,7 +21,6 @@ import { resolveMaxWorkers } from "./src/test/test-db-config";
 
 export default defineConfig({
   test: {
-    environment: "happy-dom",
     globals: true,
     // worker-db-setup MUST be first: it repoints DATABASE_URL at this
     // worker's own database before anything imports src/lib/prisma.
@@ -33,6 +32,8 @@ export default defineConfig({
     // invocation, including pure unit tests, so the Docker test DB
     // must be up. See `src/test/integration-setup.ts`.
     globalSetup: ["./src/test/integration-setup.ts"],
+    // Projects inherit this via `extends: true`, so Vitest invokes it once
+    // per project; setup() is idempotent per process (see integration-setup.ts).
     // Files run in parallel, each worker against its OWN database:
     // globalSetup pushes the schema once and clones it to
     // `<base>_w1..maxWorkers` (src/test/integration-setup.ts); the
@@ -44,7 +45,28 @@ export default defineConfig({
     maxWorkers: resolveMaxWorkers(),
     // Match the project's TS path alias so tests import the same
     // way the app does ("@/lib/foo" instead of "../../src/lib/foo").
-    include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    // Two projects split by environment: *.test.tsx render React and need
+    // happy-dom; *.test.ts (server actions, lib, DB integration) run in the
+    // much cheaper node environment. A .ts file that needs DOM APIs opts in
+    // with a `// @vitest-environment happy-dom` docblock.
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "dom",
+          environment: "happy-dom",
+          include: ["src/**/*.{test,spec}.tsx"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "node",
+          environment: "node",
+          include: ["src/**/*.{test,spec}.ts"],
+        },
+      },
+    ],
     exclude: ["node_modules", ".next", "src/generated"],
     // Cap each test at 10s — anything slower is almost certainly
     // accidentally hitting the network or a real DB connection.

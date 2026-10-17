@@ -17,6 +17,7 @@
 
 import { AuthError } from "next-auth";
 import * as argon2 from "argon2";
+import { argon2HashOptions } from "@/lib/argon2-options";
 import { z } from "zod";
 import { auth, signIn, signOut, unstable_update } from "@/auth";
 import {
@@ -206,9 +207,7 @@ export async function changePasswordAction(
     };
   }
 
-  const passwordHash = await argon2.hash(newPassword, {
-    type: argon2.argon2id,
-  });
+  const passwordHash = await argon2.hash(newPassword, argon2HashOptions());
   await prisma.user.update({ where: { id: userId }, data: { passwordHash } });
   await logAuthEvent({ userId, kind: "password_changed" });
 

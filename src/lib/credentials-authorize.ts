@@ -62,6 +62,7 @@
 
 import { randomBytes } from "node:crypto";
 import * as argon2 from "argon2";
+import { argon2HashOptions } from "@/lib/argon2-options";
 import { z } from "zod";
 import {
   AUTH_EVENT_TITLES,
@@ -194,9 +195,7 @@ export async function settleAttempt(
 // password".
 let dummyHash: Promise<string> | undefined;
 async function burnVerify(password: string): Promise<void> {
-  dummyHash ??= argon2.hash(randomBytes(16).toString("hex"), {
-    type: argon2.argon2id,
-  });
+  dummyHash ??= argon2.hash(randomBytes(16).toString("hex"), argon2HashOptions());
   try {
     await argon2.verify(await dummyHash, password);
   } catch {

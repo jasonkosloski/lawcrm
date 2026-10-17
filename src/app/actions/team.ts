@@ -52,6 +52,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import * as argon2 from "argon2";
+import { argon2HashOptions } from "@/lib/argon2-options";
 import { randomBytes } from "node:crypto";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -87,7 +88,7 @@ function generateTempPassword(): string {
 }
 
 async function hashPassword(plain: string): Promise<string> {
-  return argon2.hash(plain, { type: argon2.argon2id });
+  return argon2.hash(plain, argon2HashOptions());
 }
 
 /** Thrown inside the update transaction when the in-transaction

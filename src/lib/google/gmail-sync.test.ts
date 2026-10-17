@@ -362,7 +362,10 @@ describe("syncEmailAccount — full sync (no cursor)", () => {
 
   it("enforces the initial-import cap (newest FULL_SYNC_MAX_THREADS only)", async () => {
     const accountId = await seedAccount();
-    const total = FULL_SYNC_MAX_THREADS + 50;
+    // The cap is injected (production value is FULL_SYNC_MAX_THREADS) so
+    // this builds 8 threads instead of 250; the cap logic is identical.
+    const cap = 5;
+    const total = cap + 3;
     const threads: GmailThread[] = Array.from({ length: total }, (_, i) => ({
       id: `t${i}`,
       messages: [
@@ -378,12 +381,12 @@ describe("syncEmailAccount — full sync (no cursor)", () => {
     }));
     installFakeGmail({ labels: [], threads });
 
-    const result = await syncEmailAccount(accountId);
-    expect(result.threadsSynced).toBe(FULL_SYNC_MAX_THREADS);
-    expect(await prisma.emailThread.count({ where: { accountId } })).toBe(
-      FULL_SYNC_MAX_THREADS
-    );
-    // Newest (t0) in, first-over-the-cap (t200) out.
+    const result = await syncEmailAccount(accountId, {
+      fullSyncMaxThreads: cap,
+    });
+    expect(result.threadsSynced).toBe(cap);
+    expect(await prisma.emailThread.count({ where: { accountId } })).toBe(cap);
+    // Newest (t0) in, first-over-the-cap (t5) out.
     const externalIds = new Set(
       (
         await prisma.emailThread.findMany({
@@ -393,8 +396,12 @@ describe("syncEmailAccount — full sync (no cursor)", () => {
       ).map((t) => t.externalId)
     );
     expect(externalIds.has("t0")).toBe(true);
-    expect(externalIds.has(`t${FULL_SYNC_MAX_THREADS}`)).toBe(false);
-  }, 30_000);
+    expect(externalIds.has(`t${cap}`)).toBe(false);
+  });
+
+  it("the production initial-import cap is still 200 and is the default", () => {
+    expect(FULL_SYNC_MAX_THREADS).toBe(200);
+  });
 });
 
 // ── Incremental sync ─────────────────────────────────────────────────────
@@ -1191,6 +1198,9 @@ describe("deactivated owners (F071/F348)", () => {
 });
 
 describe("history-expired catch-up (F257)", () => {
+  // Injected initial-import cap (production: FULL_SYNC_MAX_THREADS = 200)
+  // so these build a handful of threads instead of 205.
+  const CAP = 5;
   function manyThreads(n: number): GmailThread[] {
     return Array.from({ length: n }, (_, i) => ({
       id: `t${i}`,
@@ -1211,13 +1221,16 @@ describe("history-expired catch-up (F257)", () => {
     installFakeGmail({
       profileHistoryId: "h-new",
       labels: [],
-      threads: manyThreads(FULL_SYNC_MAX_THREADS + 5),
+      threads: manyThreads(CAP + 5),
       history: { status: 404 },
     });
 
-    const result = await syncEmailAccount(accountId);
+    const result = await syncEmailAccount(accountId, {
+      fullSyncMaxThreads: CAP,
+    });
     expect(result.mode).toBe("full");
-    expect(result.threadsSynced).toBe(FULL_SYNC_MAX_THREADS + 5);
+    // More than the initial-import cap: the catch-up path ignores it.
+    expect(result.threadsSynced).toBe(CAP + 5);
 
     const listCall = requestedPaths().find((p) =>
       p.startsWith("/users/me/threads?")
@@ -1235,11 +1248,13 @@ describe("history-expired catch-up (F257)", () => {
     installFakeGmail({
       profileHistoryId: "h-new",
       labels: [],
-      threads: manyThreads(FULL_SYNC_MAX_THREADS + 5),
+      threads: manyThreads(CAP + 5),
       history: { status: 404 },
     });
-    const result = await syncEmailAccount(accountId);
-    expect(result.threadsSynced).toBe(FULL_SYNC_MAX_THREADS);
+    const result = await syncEmailAccount(accountId, {
+      fullSyncMaxThreads: CAP,
+    });
+    expect(result.threadsSynced).toBe(CAP);
     const listCall = requestedPaths().find((p) =>
       p.startsWith("/users/me/threads?")
     )!;

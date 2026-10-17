@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 /**
  * Unit tests for the docx-preview post-render sanitation pass.
  *

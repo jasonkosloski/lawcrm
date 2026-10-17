@@ -15,6 +15,7 @@ vi.mock("argon2", async (importOriginal) => {
 });
 
 import * as argon2 from "argon2";
+import { argon2HashOptions } from "@/lib/argon2-options";
 import { logAuthEvent } from "@/lib/auth-events";
 import { prisma } from "@/lib/prisma";
 import {
@@ -38,7 +39,7 @@ beforeEach(async () => {
   ({ userId } = await seedUser({ firmId, email: EMAIL }));
   await prisma.user.update({
     where: { id: userId },
-    data: { passwordHash: await argon2.hash(PASSWORD, { type: argon2.argon2id }) },
+    data: { passwordHash: await argon2.hash(PASSWORD, argon2HashOptions()) },
   });
 });
 
@@ -191,7 +192,7 @@ describe("authorizeCredentials — lockout", () => {
     const other = await seedUser({ firmId, email: "other@kosloskilaw.com" });
     await prisma.user.update({
       where: { id: other.userId },
-      data: { passwordHash: await argon2.hash(PASSWORD, { type: argon2.argon2id }) },
+      data: { passwordHash: await argon2.hash(PASSWORD, argon2HashOptions()) },
     });
     await failTimes(LOCKOUT_THRESHOLD);
     expect(

@@ -115,21 +115,23 @@ export const TABLES_IN_DELETE_ORDER = [
   "firms",
 ];
 
-/** Clear every table via `DELETE FROM` (FK-ordered), in one
- *  transaction so a partial failure leaves no half-cleaned state.
+/** Clear every table via `DELETE FROM` (FK-ordered), in one atomic
+ *  statement so a partial failure leaves no half-cleaned state.
  *  Refuses to run unless DATABASE_URL is a local lawcrm_test*
  *  database, so a runner that skips globalSetup can never wipe a dev
  *  or production database. */
 export async function resetDb(): Promise<void> {
   assertTestDatabaseUrl(process.env.DATABASE_URL);
-  await prisma.$transaction([
-    // deadline_rules.anchorRuleId → deadline_rules is ON DELETE
-    // RESTRICT (checked per row), so break the chain before deleting.
-    prisma.$executeRawUnsafe(`UPDATE deadline_rules SET "anchorRuleId" = NULL`),
-    ...TABLES_IN_DELETE_ORDER.map((table) =>
-      prisma.$executeRawUnsafe(`DELETE FROM ${table}`)
-    ),
-  ]);
+  // One statement (a DO block = one round trip, atomic) instead of
+  // ~60 sequential DELETEs. Measured ~1-4ms vs ~10ms for the batched
+  // DELETEs and ~37ms for TRUNCATE ... CASCADE (file churn per table).
+  // deadline_rules.anchorRuleId → deadline_rules is ON DELETE RESTRICT
+  // (checked per row), so break the chain before deleting.
+  await prisma.$executeRawUnsafe(
+    `DO $$ BEGIN UPDATE deadline_rules SET "anchorRuleId" = NULL; ${TABLES_IN_DELETE_ORDER.map(
+      (table) => `DELETE FROM ${table};`
+    ).join(" ")} END $$`
+  );
 }
 
 // ── Fixture builders ────────────────────────────────────────────────────

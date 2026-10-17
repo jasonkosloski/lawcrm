@@ -9,9 +9,7 @@
  * Referenced from `vitest.config.ts` via `setupFiles`.
  */
 
-import "@testing-library/jest-dom/vitest";
 import { afterEach } from "vitest";
-import { cleanup } from "@testing-library/react";
 
 // Deterministic 32-byte key so integration tests can exercise the
 // EmailAccount token encryption extension (src/lib/email-token-
@@ -77,9 +75,18 @@ if (typeof realFetch === "function") {
   }) as typeof fetch;
 }
 
-// Auto-cleanup after each test — unmounts any rendered components
-// so matchers from prior tests don't leak. RTL ships this for
-// Jest by default but Vitest needs the manual hookup.
-afterEach(() => {
-  cleanup();
-});
+// DOM-only wiring (jest-dom matchers + RTL auto-cleanup). Server-side
+// files run in the node environment (see vitest.config.ts projects) and
+// must not pay for importing react-dom / testing-library. A node-project
+// file that opts into DOM via a `@vitest-environment happy-dom` docblock
+// still gets this, because the check is on the live environment.
+if (typeof document !== "undefined") {
+  await import("@testing-library/jest-dom/vitest");
+  const { cleanup } = await import("@testing-library/react");
+  // Auto-cleanup after each test — unmounts any rendered components
+  // so matchers from prior tests don't leak. RTL ships this for
+  // Jest by default but Vitest needs the manual hookup.
+  afterEach(() => {
+    cleanup();
+  });
+}
