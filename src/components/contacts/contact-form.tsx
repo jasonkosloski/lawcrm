@@ -119,15 +119,20 @@ export function ContactForm({
             error={errs.name?.[0]}
             autoFocus
           />
-          <SelectField
-            name="type"
-            value={v.type}
-            onChange={(x) => set("type", x)}
-            options={CONTACT_TYPES.map((t) => ({
-              value: t,
-              label: CONTACT_TYPE_LABEL[t],
-            }))}
-          />
+          {/* SelectField renders no label and has no placeholder, so
+              the wrapping <label> is the control's accessible name. */}
+          <label className="flex flex-col">
+            <span className="sr-only">Contact type</span>
+            <SelectField
+              name="type"
+              value={v.type}
+              onChange={(x) => set("type", x)}
+              options={CONTACT_TYPES.map((t) => ({
+                value: t,
+                label: CONTACT_TYPE_LABEL[t],
+              }))}
+            />
+          </label>
         </div>
 
         <TextField

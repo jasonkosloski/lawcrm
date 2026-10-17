@@ -91,6 +91,60 @@ describe("ContactPhonesCard manager", () => {
   });
 });
 
+describe("ContactPhonesCard row identity", () => {
+  test("Move down / Remove act on the row the user is on: rows keep their DOM node", async () => {
+    const user = setupUser();
+    render(<ContactPhonesCard contactId="c1" phones={phones} canEdit />);
+    await user.click(screen.getByRole("button", { name: /manage/i }));
+
+    const [rowA, rowB] = (await screen.findAllByLabelText(
+      "Phone number"
+    )) as HTMLInputElement[];
+    expect([rowA.value, rowB.value]).toEqual([
+      "(303) 555-0101",
+      "(303) 555-0102",
+    ]);
+
+    // Move the first row down. With index keys the two inputs would
+    // just swap values in place (and keyboard focus would stay on the
+    // same slot, now holding the OTHER row); with stable keys each
+    // input element travels with its row.
+    await user.click(screen.getAllByRole("button", { name: "Move down" })[0]);
+
+    const after = screen.getAllByLabelText("Phone number") as HTMLInputElement[];
+    expect(after[0]).toBe(rowB);
+    expect(after[1]).toBe(rowA);
+    expect(after.map((n) => n.value)).toEqual([
+      "(303) 555-0102",
+      "(303) 555-0101",
+    ]);
+
+    // Remove the (now first) row: the survivor is the same element.
+    await user.click(screen.getAllByRole("button", { name: "Remove phone" })[0]);
+    const left = screen.getAllByLabelText("Phone number");
+    expect(left).toHaveLength(1);
+    expect(left[0]).toBe(rowA);
+  });
+
+  test("saving strips the client-only row keys", async () => {
+    const user = setupUser();
+    render(<ContactPhonesCard contactId="c1" phones={phones} canEdit />);
+    await user.click(screen.getByRole("button", { name: /manage/i }));
+    await screen.findAllByLabelText("Phone number");
+    await user.click(screen.getByRole("button", { name: /add phone/i }));
+    const inputs = screen.getAllByLabelText("Phone number");
+    await user.type(inputs[2], "(303) 555-0103");
+    await user.click(screen.getByRole("button", { name: /save phones/i }));
+
+    await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(1));
+    expect(mockedUpdate).toHaveBeenCalledWith("c1", [
+      { label: "Cell", number: "(303) 555-0101", isPrimary: true },
+      { label: "Office", number: "(303) 555-0102", isPrimary: false },
+      { label: "", number: "(303) 555-0103", isPrimary: false },
+    ]);
+  });
+});
+
 describe("seedPhoneRows", () => {
   test("prefers rows, falls back to the legacy phone, else empty", () => {
     expect(seedPhoneRows(phones)).toHaveLength(2);

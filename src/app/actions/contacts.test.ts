@@ -34,6 +34,10 @@ vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
 }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
+// current-user-tz is server-only; stub it with a fixed Denver zone.
+vi.mock("@/lib/current-user-tz", () => ({
+  getCurrentUserTimeZone: vi.fn(async () => "America/Denver"),
+}));
 
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/permission-check";
@@ -46,6 +50,8 @@ import {
   deleteContact,
   exportContactsCsv,
   mergeContacts,
+  reactivateContact,
+  searchMergeCandidatesAction,
   setContactConflictStatus,
   updateContact,
   updateContactPhones,
@@ -56,6 +62,7 @@ import {
   resetDb,
   seedContact,
   seedFirm,
+  seedLead,
   seedMatter,
   seedMatterContact,
   seedPracticeArea,
@@ -931,7 +938,8 @@ describe("bulkSetContactType", () => {
     expect(entries).toHaveLength(1);
     expect(entries[0].userId).toBe(userId);
     expect(entries[0].title).toMatch(/Expert.*2 contacts/);
-    expect(entries[0].detail).toBe("Alpha, Beta");
+    // Previous types ride along - they are recorded nowhere else.
+    expect(entries[0].detail).toBe("Alpha, Beta (was: 2 Client)");
   });
 
   test("dedupes repeated ids before counting", async () => {
@@ -1087,6 +1095,19 @@ describe("exportContactsCsv", () => {
       '"Whitfield, Dana",Opposing counsel,Acme LLC,dana@example.com,(303) 555-0101,"1 Main St, Denver, CO 80202",yes'
     );
     expect(res.filename).toMatch(/^contacts-export-\d{4}-\d{2}-\d{2}\.csv$/);
+  });
+
+  test("stamps the filename with the viewer's day, not the UTC day", async () => {
+    const { contactId } = await seedContact({ name: "Evening Eve" });
+    // 2026-04-28T02:00Z is Apr 27, 8 PM in Denver.
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-04-28T02:00:00Z") });
+    try {
+      const res = await exportContactsCsv([contactId]);
+      if (!res.ok) throw new Error(res.error);
+      expect(res.filename).toBe("contacts-export-2026-04-27.csv");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("includes inactive contacts, marked active=no, and logs ONE audit row", async () => {
@@ -1291,5 +1312,301 @@ describe("single-contact audit entries", () => {
     expect(
       await prisma.activityLog.count({ where: { type: "contact" } })
     ).toBe(0);
+  });
+});
+
+// ── Create / update input checks ────────────────────────────────────────
+
+describe("createContact firmId + email validation", () => {
+  test("stamps the creator's firmId on the new contact", async () => {
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    expect(user.firmId).toBeTruthy();
+
+    await createContact(contactFormInitialState, contactForm());
+
+    const c = await prisma.contact.findFirstOrThrow();
+    expect(c.firmId).toBe(user.firmId);
+  });
+
+  test("rejects a malformed email with a field error and writes nothing", async () => {
+    const res = await createContact(
+      contactFormInitialState,
+      contactForm({ email: "dana at example" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.email).toEqual(["Enter a valid email address"]);
+    expect(await prisma.contact.count()).toBe(0);
+  });
+
+  test("updateContact rejects a NEW malformed email but tolerates an unchanged legacy one", async () => {
+    const { contactId } = await seedContact({
+      name: "Dana Whitfield",
+      email: "legacy-address",
+    });
+
+    // Saving other edits with the stored (odd) email untouched works.
+    const ok = await updateContact(
+      contactId,
+      contactFormInitialState,
+      contactForm({ email: "legacy-address", organization: "Acme" })
+    );
+    expect(ok.status).toBe("ok");
+
+    // Changing it to something still malformed does not.
+    const bad = await updateContact(
+      contactId,
+      contactFormInitialState,
+      contactForm({ email: "still bad@" })
+    );
+    expect(bad.status).toBe("error");
+    expect(bad.errors?.email).toBeTruthy();
+    expect(
+      (await prisma.contact.findUniqueOrThrow({ where: { id: contactId } }))
+        .email
+    ).toBe("legacy-address");
+  });
+});
+
+// ── Merge: opposite sides + concurrency ─────────────────────────────────
+
+describe("mergeContacts opposite-sides guard", () => {
+  async function clientVsOpposing() {
+    const { areaId, stageId } = await seedPracticeArea();
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    const { contactId: clientDupe } = await seedContact({ name: "John Smith" });
+    const { contactId: defendant } = await seedContact({ name: "John Smith" });
+    await prisma.matter.update({
+      where: { id: matterId },
+      data: { clientId: clientDupe },
+    });
+    await seedMatterContact({ matterId, contactId: clientDupe, category: "client" });
+    await seedMatterContact({ matterId, contactId: defendant, category: "opposing" });
+    return { matterId, clientDupe, defendant };
+  }
+
+  test("refuses (and writes nothing) when one record is the client and the other the opposing party", async () => {
+    const { clientDupe, defendant } = await clientVsOpposing();
+
+    const res = await mergeContacts(clientDupe, defendant);
+    expect(res.ok).toBe(false);
+    expect(res.code).toBe("opposite_sides");
+    expect(res.error).toMatch(/opposite sides of 1 matter/);
+
+    expect(
+      (await prisma.contact.findUniqueOrThrow({ where: { id: clientDupe } }))
+        .mergedIntoId
+    ).toBeNull();
+    expect(await prisma.activityLog.count({ where: { type: "merge" } })).toBe(0);
+  });
+
+  test("the reverse direction (opposing into client) is refused too", async () => {
+    const { clientDupe, defendant } = await clientVsOpposing();
+    const res = await mergeContacts(defendant, clientDupe);
+    expect(res.code).toBe("opposite_sides");
+  });
+
+  test("confirmOppositeSides lets the merge through", async () => {
+    const { clientDupe, defendant } = await clientVsOpposing();
+    const res = await mergeContacts(clientDupe, defendant, {
+      confirmOppositeSides: true,
+    });
+    expect(res).toEqual({ ok: true });
+    expect(
+      (await prisma.contact.findUniqueOrThrow({ where: { id: clientDupe } }))
+        .mergedIntoId
+    ).toBe(defendant);
+  });
+
+  test("a witness and an opposing party on the same matter are not a conflict", async () => {
+    const { areaId, stageId } = await seedPracticeArea();
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    const { contactId: a } = await seedContact({ name: "Wit A" });
+    const { contactId: b } = await seedContact({ name: "Wit A" });
+    await seedMatterContact({ matterId, contactId: a, category: "lay_witness" });
+    await seedMatterContact({ matterId, contactId: b, category: "opposing" });
+
+    expect(await mergeContacts(a, b)).toEqual({ ok: true });
+  });
+});
+
+describe("mergeContacts concurrency guard", () => {
+  test("a survivor retired between the pre-check and the transaction aborts the merge cleanly", async () => {
+    const { areaId, stageId } = await seedPracticeArea();
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    const { contactId: a } = await seedContact({ name: "A" });
+    const { contactId: b } = await seedContact({ name: "B" });
+    const { contactId: c } = await seedContact({ name: "C" });
+    await seedMatterContact({ matterId, contactId: a, category: "lay_witness" });
+
+    // Someone else's merge B -> C commits after our pre-check read B
+    // as active. Hand the action the stale (pre-merge) rows.
+    const [staleA, staleB] = await Promise.all([
+      prisma.contact.findUniqueOrThrow({ where: { id: a } }),
+      prisma.contact.findUniqueOrThrow({ where: { id: b } }),
+    ]);
+    await prisma.contact.update({
+      where: { id: b },
+      data: { isActive: false, mergedIntoId: c },
+    });
+    const spy = vi
+      .spyOn(prisma.contact, "findUnique")
+      .mockResolvedValueOnce(staleA as never)
+      .mockResolvedValueOnce(staleB as never);
+
+    try {
+      const res = await mergeContacts(a, b);
+      expect(res.ok).toBe(false);
+      expect(res.error).toMatch(/changed or merged by someone else/i);
+    } finally {
+      spy.mockRestore();
+    }
+
+    // Nothing moved onto the retired record, and A is still live.
+    expect(await prisma.matterContact.count({ where: { contactId: b } })).toBe(0);
+    const aRow = await prisma.contact.findUniqueOrThrow({ where: { id: a } });
+    expect(aRow.mergedIntoId).toBeNull();
+    expect(aRow.isActive).toBe(true);
+    expect(await prisma.activityLog.count({ where: { type: "merge" } })).toBe(0);
+  });
+});
+
+describe("searchMergeCandidatesAction", () => {
+  test("is gated on contacts.merge and searches on the server", async () => {
+    const { contactId: self } = await seedContact({ name: "Smith A" });
+    const { contactId: other } = await seedContact({ name: "Smith B" });
+
+    const rows = await searchMergeCandidatesAction(self, "smith");
+    expect(mockedRequirePermission).toHaveBeenLastCalledWith("contacts.merge");
+    expect(rows.map((r) => r.id)).toEqual([other]);
+  });
+
+  test("bails when the gate throws", async () => {
+    mockedRequirePermission.mockRejectedValue(new Error("NEXT_REDIRECT:/"));
+    await expect(searchMergeCandidatesAction("x", "smith")).rejects.toThrow();
+  });
+});
+
+// ── Deactivate guard + reactivate ───────────────────────────────────────
+
+describe("deleteContact / bulkDeactivateContacts guard", () => {
+  async function clientOfMatter(isArchived: boolean) {
+    const { areaId, stageId } = await seedPracticeArea();
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    const { contactId } = await seedContact({ name: "Paul Zimmerman" });
+    await prisma.matter.update({
+      where: { id: matterId },
+      data: { clientId: contactId, isArchived },
+    });
+    return contactId;
+  }
+
+  test("refuses to deactivate the client of an open matter", async () => {
+    const contactId = await clientOfMatter(false);
+
+    const res = await deleteContact(contactId);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/Paul Zimmerman.*client of 1 open matter/);
+    expect(
+      (await prisma.contact.findUniqueOrThrow({ where: { id: contactId } }))
+        .isActive
+    ).toBe(true);
+    expect(await prisma.activityLog.count()).toBe(0);
+  });
+
+  test("an archived matter does not block", async () => {
+    const contactId = await clientOfMatter(true);
+    expect((await deleteContact(contactId)).ok).toBe(true);
+  });
+
+  test("a live lead blocks; a converted or declined one does not", async () => {
+    const { contactId } = await seedContact({ name: "Lead Person" });
+    const { leadId } = await seedLead({ contactId });
+
+    const blocked = await deleteContact(contactId);
+    expect(blocked.ok).toBe(false);
+    expect(blocked.error).toMatch(/1 active lead/);
+
+    await prisma.lead.update({ where: { id: leadId }, data: { stage: "declined" } });
+    expect((await deleteContact(contactId)).ok).toBe(true);
+  });
+
+  test("bulk deactivate is all-or-nothing and names the blocked contact", async () => {
+    const blockedId = await clientOfMatter(false);
+    const { contactId: freeId } = await seedContact({ name: "Free Person" });
+
+    const res = await bulkDeactivateContacts([blockedId, freeId]);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/Paul Zimmerman/);
+    expect(await prisma.contact.count({ where: { isActive: false } })).toBe(0);
+    expect(await prisma.activityLog.count()).toBe(0);
+  });
+});
+
+describe("reactivateContact", () => {
+  test("gated on contacts.delete; brings the contact back and logs it", async () => {
+    const { contactId } = await seedContact({ name: "Back Again", isActive: false });
+
+    const res = await reactivateContact(contactId);
+    expect(res).toEqual({ ok: true });
+    expect(mockedRequirePermission).toHaveBeenLastCalledWith("contacts.delete");
+    expect(
+      (await prisma.contact.findUniqueOrThrow({ where: { id: contactId } }))
+        .isActive
+    ).toBe(true);
+    expect(
+      await prisma.activityLog.count({
+        where: { title: "Contact reactivated — Back Again", userId },
+      })
+    ).toBe(1);
+  });
+
+  test("a merged-away contact stays retired", async () => {
+    const { contactId: survivor } = await seedContact({ name: "Survivor" });
+    const { contactId: loser } = await seedContact({ name: "Loser" });
+    await mergeContacts(loser, survivor);
+
+    const res = await reactivateContact(loser);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/merged/i);
+    expect(
+      (await prisma.contact.findUniqueOrThrow({ where: { id: loser } }))
+        .isActive
+    ).toBe(false);
+  });
+
+  test("reports a missing contact; already-active is a quiet no-op", async () => {
+    expect(await reactivateContact("gone")).toEqual({
+      ok: false,
+      error: "Contact not found",
+    });
+    const { contactId } = await seedContact();
+    expect(await reactivateContact(contactId)).toEqual({ ok: true });
+    expect(await prisma.activityLog.count()).toBe(0);
+  });
+
+  test("bails before writing when the gate throws", async () => {
+    const { contactId } = await seedContact({ isActive: false });
+    mockedRequirePermission.mockRejectedValue(new Error("NEXT_REDIRECT:/"));
+    await expect(reactivateContact(contactId)).rejects.toThrow();
+    expect(
+      (await prisma.contact.findUniqueOrThrow({ where: { id: contactId } }))
+        .isActive
+    ).toBe(false);
   });
 });

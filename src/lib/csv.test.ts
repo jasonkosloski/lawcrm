@@ -8,7 +8,17 @@
  */
 
 import { describe, expect, test } from "vitest";
-import { buildCsv, csvEscape } from "./csv";
+import { buildCsv, CSV_BOM, csvEscape } from "./csv";
+
+describe("CSV_BOM", () => {
+  test("is the UTF-8 byte-order mark and stays out of buildCsv", () => {
+    expect(CSV_BOM).toBe("﻿");
+    expect(Array.from(new TextEncoder().encode(CSV_BOM))).toEqual([
+      0xef, 0xbb, 0xbf,
+    ]);
+    expect(buildCsv(["Name"], [["José"]]).startsWith(CSV_BOM)).toBe(false);
+  });
+});
 
 describe("csvEscape", () => {
   test("passes plain values through untouched", () => {

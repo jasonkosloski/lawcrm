@@ -5,10 +5,15 @@
  *   1. A contact with `mergedIntoId` set never renders — the page
  *      redirects to the surviving record (the whole point of keeping
  *      the loser row after a merge).
- *   2. The merge menu / log-call button only mount with their keys,
- *      and the contact-picker fetch is skipped entirely when neither
- *      consumer is visible (same chained-fetch discipline as the
- *      matter communication tab).
+ *   2. The merge menu / log-call button only mount with their keys.
+ *      The page never fetches the contact-picker list (log-call is
+ *      pinned to this contact; the merge dialog searches on the
+ *      server), and skips the matter-options fetch when the log-call
+ *      button isn't visible.
+ *   3. A deactivated contact is labelled "Inactive", offers Reactivate
+ *      instead of Delete, and hides Merge / Log call.
+ *   4. The Matters card counts DISTINCT matters and lists the parties
+ *      a contact represents (opposing counsel has no party row).
  */
 
 import { beforeEach, describe, expect, test, vi } from "vitest";
@@ -56,12 +61,10 @@ vi.mock("@/components/contacts/contact-delete-button", () => ({
   ContactDeleteButton: () => <div data-testid="delete-button" />,
 }));
 vi.mock("@/components/contacts/contact-merge-menu", () => ({
-  ContactMergeMenu: (props: { candidates: Array<{ id: string }> }) => (
-    <div
-      data-testid="merge-menu"
-      data-candidate-count={props.candidates.length}
-    />
-  ),
+  ContactMergeMenu: () => <div data-testid="merge-menu" />,
+}));
+vi.mock("@/components/contacts/contact-reactivate-button", () => ({
+  ContactReactivateButton: () => <div data-testid="reactivate-button" />,
 }));
 vi.mock("@/components/contacts/contact-phones-card", () => ({
   ContactPhonesCard: (props: { canEdit: boolean }) => (
@@ -108,12 +111,15 @@ function contactDetail(overrides: Partial<ContactDetail> = {}): ContactDetail {
     zip: null,
     notes: null,
     conflictStatus: "clear",
+    isActive: true,
     mergedIntoId: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     phones: [],
     asClientMatters: [],
     asPartyMatters: [],
+    representing: [],
+    matterCount: 0,
     ...overrides,
   };
 }
@@ -150,17 +156,30 @@ describe("merged-record redirect", () => {
 });
 
 describe("permission-driven mounts", () => {
-  test("with every key: merge menu (self excluded), log-call, editable phones", async () => {
+  test("with every key: merge menu, log-call, editable phones", async () => {
     render(await ContactDetailPage(props()));
 
     expect(screen.getByTestId("log-call-button")).toBeInTheDocument();
     expect(screen.getByTestId("delete-button")).toBeInTheDocument();
     expect(screen.getByTestId("conflict-control")).toBeInTheDocument();
-    // Self is filtered out of the merge candidates.
-    expect(screen.getByTestId("merge-menu").dataset.candidateCount).toBe("1");
+    expect(screen.getByTestId("merge-menu")).toBeInTheDocument();
+    expect(screen.queryByTestId("reactivate-button")).not.toBeInTheDocument();
     expect(screen.getByTestId("phones-card").dataset.canEdit).toBe("true");
-    // One shared picker fetch feeds merge + log-call.
-    expect(mockedPicker).toHaveBeenCalledTimes(1);
+    // The log-call button is pinned to this contact (fixedContact), so
+    // the 500-row picker list is never fetched for the detail page.
+    expect(mockedPicker).not.toHaveBeenCalled();
+    expect(mockedFiling).toHaveBeenCalledTimes(1);
+  });
+
+  test("merge without log-call needs no picker fetch (the dialog searches on the server)", async () => {
+    mockedHasPermission.mockImplementation(
+      async (key: string) => key === "contacts.merge"
+    );
+
+    render(await ContactDetailPage(props()));
+
+    expect(screen.getByTestId("merge-menu")).toBeInTheDocument();
+    expect(mockedPicker).not.toHaveBeenCalled();
   });
 
   test("with no keys: read-only page, no picker or matter fetches", async () => {
@@ -175,5 +194,85 @@ describe("permission-driven mounts", () => {
     expect(screen.getByTestId("phones-card").dataset.canEdit).toBe("false");
     expect(mockedPicker).not.toHaveBeenCalled();
     expect(mockedFiling).not.toHaveBeenCalled();
+  });
+});
+
+describe("deactivated contact", () => {
+  test("shows an Inactive badge, offers Reactivate, and hides Merge / Log call", async () => {
+    mockedGetContact.mockResolvedValue(contactDetail({ isActive: false }));
+
+    render(await ContactDetailPage(props()));
+
+    expect(screen.getByText("Inactive")).toBeInTheDocument();
+    expect(screen.getByTestId("reactivate-button")).toBeInTheDocument();
+    expect(screen.queryByTestId("delete-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("merge-menu")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("log-call-button")).not.toBeInTheDocument();
+    expect(mockedPicker).not.toHaveBeenCalled();
+  });
+
+  test("an active contact has no Inactive badge", async () => {
+    render(await ContactDetailPage(props()));
+    expect(screen.queryByText("Inactive")).not.toBeInTheDocument();
+  });
+
+  test("Reactivate needs contacts.delete", async () => {
+    mockedGetContact.mockResolvedValue(contactDetail({ isActive: false }));
+    mockedHasPermission.mockImplementation(
+      async (key: string) => key !== "contacts.delete"
+    );
+
+    render(await ContactDetailPage(props()));
+
+    expect(screen.queryByTestId("reactivate-button")).not.toBeInTheDocument();
+  });
+});
+
+describe("Matters card", () => {
+  test("shows the distinct-matter count, a Represents row, and archived tags", async () => {
+    mockedGetContact.mockResolvedValue(
+      contactDetail({
+        type: "opposing_counsel",
+        asClientMatters: [],
+        asPartyMatters: [],
+        representing: [
+          {
+            id: "mc1",
+            matterId: "m1",
+            matterName: "Whitfield v. City",
+            matterColor: "#123456",
+            partyName: "City of Denver",
+            isArchived: false,
+          },
+          {
+            id: "mc2",
+            matterId: "m2",
+            matterName: "Old Matter",
+            matterColor: "#654321",
+            partyName: "Officer Jones",
+            isArchived: true,
+          },
+        ],
+        matterCount: 2,
+      })
+    );
+
+    render(await ContactDetailPage(props()));
+
+    expect(screen.queryByText("Not linked to any matter yet.")).toBeNull();
+    expect(screen.getByText("Whitfield v. City")).toBeInTheDocument();
+    expect(screen.getByText("Represents City of Denver")).toBeInTheDocument();
+    expect(screen.getByText("Represents Officer Jones")).toBeInTheDocument();
+    expect(screen.getByText("archived")).toBeInTheDocument();
+    expect(
+      screen.getByText("2", { selector: "span.font-mono" })
+    ).toBeInTheDocument();
+  });
+
+  test("empty state when the contact touches no matter", async () => {
+    render(await ContactDetailPage(props()));
+    expect(
+      screen.getByText("Not linked to any matter yet.")
+    ).toBeInTheDocument();
   });
 });

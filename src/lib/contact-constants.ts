@@ -30,6 +30,19 @@ export type ContactType = (typeof CONTACT_TYPES)[number];
  */
 export const BULK_CONTACT_LIMIT = 100;
 
+/** Row cap on the /contacts directory query. When a result hits it the
+ *  page tells the user to refine the search instead of silently
+ *  dropping everyone past the cut. */
+export const CONTACT_LIST_LIMIT = 500;
+
+/** Alphabetical cap on the contact picker options (log-call
+ *  typeahead). A matter's own people are fetched separately and are
+ *  exempt from it. */
+export const CONTACT_PICKER_LIMIT = 500;
+
+/** Max suggestions the merge dialog's server-side search returns. */
+export const MERGE_SEARCH_LIMIT = 20;
+
 export const CONTACT_TYPE_LABEL: Record<ContactType, string> = {
   client: "Client",
   opposing_counsel: "Opposing counsel",

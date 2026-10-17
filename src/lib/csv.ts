@@ -19,6 +19,15 @@
  * unmangled.
  */
 
+/**
+ * UTF-8 byte-order mark. Excel ignores a download's MIME charset and
+ * opens a saved .csv in the ANSI code page ("JosÃ© MartÃ­nez") unless
+ * the file starts with a BOM. Prepend it when handing the file to the
+ * browser (`downloadCsv`), NOT inside `buildCsv`, so other consumers
+ * of the CSV string don't see a stray character in the first header.
+ */
+export const CSV_BOM = "﻿";
+
 const NEEDS_QUOTING = /[",\r\n]/;
 const FORMULA_LEAD = /^[=+\-@\t\r]/;
 const PLAIN_NUMBER_OR_PHONE = /^[+-]?\d[\d\s().,-]*$/;

@@ -134,6 +134,15 @@ export function seedPhoneRows(
   return [];
 }
 
+type KeyedPhoneEntry = ContactPhoneEntry & { key: number };
+
+// Monotonic id source for row keys. Only the uniqueness matters, so a
+// module counter is enough (no persistence, never shown).
+let rowKeySeq = 0;
+function withRowKey(entry: ContactPhoneEntry): KeyedPhoneEntry {
+  return { ...entry, key: ++rowKeySeq };
+}
+
 function ManagePhonesDialog({
   contactId,
   phones,
@@ -177,8 +186,12 @@ function ManagePhonesBody({
   legacyPhone?: string | null;
   onOpenChange: (open: boolean) => void;
 }) {
-  const [rows, setRows] = useState<ContactPhoneEntry[]>(() =>
-    seedPhoneRows(phones, legacyPhone),
+  // Each working-copy row carries a client-only `key` so React keeps a
+  // row's DOM (and focus) with the row when it is moved or others are
+  // removed - an index key leaves focus on the same slot, which then
+  // holds a different row. The key is stripped before saving.
+  const [rows, setRows] = useState<KeyedPhoneEntry[]>(() =>
+    seedPhoneRows(phones, legacyPhone).map(withRowKey),
   );
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -206,7 +219,7 @@ function ManagePhonesBody({
   const add = () =>
     setRows((prev) => [
       ...prev,
-      { label: "", number: "", isPrimary: prev.length === 0 },
+      withRowKey({ label: "", number: "", isPrimary: prev.length === 0 }),
     ]);
 
   const save = () => {
@@ -214,8 +227,13 @@ function ManagePhonesBody({
       setError("Every phone needs a number — remove empty rows first.");
       return;
     }
+    const entries: ContactPhoneEntry[] = rows.map((r) => ({
+      label: r.label,
+      number: r.number,
+      isPrimary: r.isPrimary,
+    }));
     startTransition(async () => {
-      const res = await updateContactPhones(contactId, rows);
+      const res = await updateContactPhones(contactId, entries);
       if (res.ok) {
         onOpenChange(false);
       } else {
@@ -241,7 +259,7 @@ function ManagePhonesBody({
           </div>
         )}
         {rows.map((r, i) => (
-          <div key={i} className="flex items-center gap-1.5">
+          <div key={r.key} className="flex items-center gap-1.5">
             <input
               type="radio"
               name="primary-phone"

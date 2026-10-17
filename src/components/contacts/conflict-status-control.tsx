@@ -1,11 +1,11 @@
 /**
  * Conflict-flag control for the contact detail page.
  *
- * The conflict checker sets `conflictStatus` programmatically; this
- * is the manual override for contacts.edit holders — flag a contact,
- * record an override, or clear the flag. A short justification is
- * required and lands in the firm activity log, so there's always a
- * human-readable "why" next to a manual change.
+ * `conflictStatus` is a MANUAL flag: only this control writes it, and
+ * the intake conflict matcher does not read it (yet). For contacts.edit
+ * holders — flag a contact, record an override, or clear the flag. A
+ * short justification is required and lands in the firm activity log,
+ * so there's always a human-readable "why" next to a manual change.
  */
 
 "use client";
@@ -94,19 +94,28 @@ export function ConflictStatusControl({
           </DialogHeader>
 
           <div className="flex flex-col gap-3">
-            <SelectField
-              name="conflictStatus"
-              value={status}
-              onChange={setStatus}
-              options={STATUS_OPTIONS}
-            />
-            <TextareaField
-              name="justification"
-              value={justification}
-              onChange={setJustification}
-              placeholder="Why? e.g. “Adverse party on Smith v. Jones (2023), waiver signed 3/12.”"
-              rows={3}
-            />
+            {/* The field primitives render no label of their own, so
+                the controls get their accessible names from a wrapping
+                <label> (the select has no placeholder to fall back on). */}
+            <label className="flex flex-col">
+              <span className="sr-only">Conflict status</span>
+              <SelectField
+                name="conflictStatus"
+                value={status}
+                onChange={setStatus}
+                options={STATUS_OPTIONS}
+              />
+            </label>
+            <label className="flex flex-col">
+              <span className="sr-only">Justification</span>
+              <TextareaField
+                name="justification"
+                value={justification}
+                onChange={setJustification}
+                placeholder="Why? e.g. “Adverse party on Smith v. Jones (2023), waiver signed 3/12.”"
+                rows={3}
+              />
+            </label>
             {error && (
               <div className="text-xs text-warn px-3 py-2 rounded-md bg-warn-soft border border-warn-border">
                 {error}

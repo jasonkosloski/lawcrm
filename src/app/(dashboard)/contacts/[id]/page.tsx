@@ -17,14 +17,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmailLink } from "@/components/ui/email-link";
 import { ContactDeleteButton } from "@/components/contacts/contact-delete-button";
 import { ContactMergeMenu } from "@/components/contacts/contact-merge-menu";
+import { ContactReactivateButton } from "@/components/contacts/contact-reactivate-button";
 import { ContactPhonesCard } from "@/components/contacts/contact-phones-card";
 import { ConflictStatusControl } from "@/components/contacts/conflict-status-control";
 import { LogCallButton } from "@/components/communication/log-call-button";
 import { CONTACT_TYPE_LABEL } from "@/lib/contact-constants";
-import {
-  getContactById,
-  listContactPickerOptions,
-} from "@/lib/queries/contacts";
+import { getContactById } from "@/lib/queries/contacts";
 import { getFilingMatterOptions } from "@/lib/queries/communication";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { requireUser } from "@/lib/current-user";
@@ -61,14 +59,15 @@ export default async function ContactDetailPage({
     currentUserHasPermission("communication.log_call"),
   ]);
 
-  // One picker fetch feeds both the merge dialog and the log-call
-  // composer; skip it entirely when neither is visible.
-  const [pickerOptions, callMatters] = await Promise.all([
-    canMerge || canLogCall
-      ? listContactPickerOptions()
-      : Promise.resolve([]),
-    canLogCall ? getFilingMatterOptions() : Promise.resolve([]),
-  ]);
+  // Logging a call or merging only makes sense for a live record - a
+  // deactivated contact is out of the directory, pickers and conflict
+  // lists until someone reactivates it.
+  const showLogCall = canLogCall && c.isActive;
+  const showMerge = canMerge && c.isActive;
+
+  // The log-call button is pinned to this contact (fixedContact), so it
+  // needs no contact picker list; only the matter options are loaded.
+  const callMatters = showLogCall ? await getFilingMatterOptions() : [];
 
   const typeLabel =
     CONTACT_TYPE_LABEL[c.type as keyof typeof CONTACT_TYPE_LABEL] ?? c.type;
@@ -82,21 +81,28 @@ export default async function ContactDetailPage({
         title={c.name}
         crumbs={`Contacts / ${typeLabel}`}
         subtitle={
-          c.conflictStatus === "flagged" ? (
-            <span className="text-2xs font-medium px-2 py-0.5 rounded-full bg-warn-soft text-warn border border-warn-border">
-              Conflict
-            </span>
-          ) : c.conflictStatus === "override" ? (
-            <span className="text-2xs font-medium px-2 py-0.5 rounded-full bg-brand-soft text-brand-700 border border-brand-200">
-              Override
-            </span>
-          ) : null
+          <>
+            {!c.isActive && (
+              <span className="text-2xs font-medium px-2 py-0.5 rounded-full bg-paper-2 text-ink-3 border border-line">
+                Inactive
+              </span>
+            )}
+            {c.conflictStatus === "flagged" ? (
+              <span className="text-2xs font-medium px-2 py-0.5 rounded-full bg-warn-soft text-warn border border-warn-border">
+                Conflict
+              </span>
+            ) : c.conflictStatus === "override" ? (
+              <span className="text-2xs font-medium px-2 py-0.5 rounded-full bg-brand-soft text-brand-700 border border-brand-200">
+                Override
+              </span>
+            ) : null}
+          </>
         }
         actions={
           <>
-            {canLogCall && (
+            {showLogCall && (
               <LogCallButton
-                contacts={pickerOptions}
+                contacts={[]}
                 matters={callMatters.map((m) => ({
                   id: m.id,
                   name: m.name,
@@ -109,9 +115,15 @@ export default async function ContactDetailPage({
                 }}
               />
             )}
-            {canDelete && (
-              <ContactDeleteButton contactId={c.id} contactName={c.name} />
-            )}
+            {canDelete &&
+              (c.isActive ? (
+                <ContactDeleteButton contactId={c.id} contactName={c.name} />
+              ) : (
+                <ContactReactivateButton
+                  contactId={c.id}
+                  contactName={c.name}
+                />
+              ))}
             {canEdit && (
               <Button
                 size="sm"
@@ -121,12 +133,8 @@ export default async function ContactDetailPage({
                 Edit
               </Button>
             )}
-            {canMerge && (
-              <ContactMergeMenu
-                contactId={c.id}
-                contactName={c.name}
-                candidates={pickerOptions.filter((o) => o.id !== c.id)}
-              />
+            {showMerge && (
+              <ContactMergeMenu contactId={c.id} contactName={c.name} />
             )}
           </>
         }
@@ -203,13 +211,12 @@ export default async function ContactDetailPage({
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
                 Matters
                 <span className="text-2xs font-mono font-normal text-ink-4">
-                  {c.asClientMatters.length + c.asPartyMatters.length}
+                  {c.matterCount}
                 </span>
               </CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4">
-              {c.asClientMatters.length === 0 &&
-              c.asPartyMatters.length === 0 ? (
+              {c.matterCount === 0 ? (
                 <div className="py-3 text-xs text-ink-4">
                   Not linked to any matter yet.
                 </div>
@@ -227,6 +234,7 @@ export default async function ContactDetailPage({
                       />
                       <span className="flex-1 text-xs text-ink truncate">
                         {m.name}
+                        {m.isArchived && <ArchivedTag />}
                       </span>
                       <span className="text-2xs text-ink-4 font-mono shrink-0">
                         client
@@ -248,10 +256,30 @@ export default async function ContactDetailPage({
                       />
                       <span className="flex-1 text-xs text-ink truncate">
                         {mc.matterName}
+                        {mc.isArchived && <ArchivedTag />}
                       </span>
                       <span className="text-2xs text-ink-4 font-mono shrink-0">
                         {PARTY_CATEGORY_LABEL[mc.category] ?? mc.category}
                         {mc.role ? ` · ${mc.role}` : ""}
+                      </span>
+                    </Link>
+                  ))}
+                  {c.representing.map((r) => (
+                    <Link
+                      key={`rep-${r.id}`}
+                      href={`/matters/${r.matterId}`}
+                      className="flex items-center gap-3 py-2 border-b border-line last:border-b-0 hover:bg-paper-2 -mx-2 px-2 rounded-sm transition-colors"
+                    >
+                      <span
+                        className="w-1.5 h-1.5 rounded-full shrink-0"
+                        style={{ background: r.matterColor }}
+                      />
+                      <span className="flex-1 text-xs text-ink truncate">
+                        {r.matterName}
+                        {r.isArchived && <ArchivedTag />}
+                      </span>
+                      <span className="text-2xs text-ink-4 font-mono shrink-0">
+                        Represents {r.partyName}
                       </span>
                     </Link>
                   ))}
@@ -262,6 +290,12 @@ export default async function ContactDetailPage({
         </div>
       </div>
     </>
+  );
+}
+
+function ArchivedTag() {
+  return (
+    <span className="ml-2 text-2xs font-mono text-ink-4">archived</span>
   );
 }
 

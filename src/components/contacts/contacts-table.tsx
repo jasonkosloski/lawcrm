@@ -46,6 +46,7 @@ import {
   CONTACT_TYPES,
   CONTACT_TYPE_LABEL,
 } from "@/lib/contact-constants";
+import { CSV_BOM } from "@/lib/csv";
 // Type-only import — erased at build time, so it doesn't pull the
 // Prisma-backed queries module into the client bundle.
 import type { ContactListRow } from "@/lib/queries/contacts";
@@ -57,7 +58,9 @@ import {
 
 /** Trigger a browser download of an in-memory CSV. */
 function downloadCsv(csv: string, filename: string) {
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  // BOM first: without it Excel opens the file in the ANSI code page
+  // and garbles accented names.
+  const blob = new Blob([CSV_BOM, csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -112,6 +115,13 @@ export function ContactsTable({
 
   const runSetType = (type: string) => {
     if (!type) return;
+    // Same guard as Deactivate: a closed <select> fires change on
+    // arrow-key / typeahead presses, and this rewrites up to 100 rows.
+    const n = selected.length;
+    const label = CONTACT_TYPE_LABEL[type as keyof typeof CONTACT_TYPE_LABEL] ?? type;
+    if (!confirm(`Set type to "${label}" on ${n} contact${n === 1 ? "" : "s"}?`)) {
+      return;
+    }
     startTransition(async () => {
       const res = await bulkSetContactType(selectedIdList(), type);
       if (!res.ok) {

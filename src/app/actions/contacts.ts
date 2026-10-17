@@ -15,10 +15,15 @@
  * Auth: gated on the granular contacts.* catalog keys —
  * `contacts.create` (createContact), `contacts.edit` (updateContact,
  * updateContactPhones, setContactConflictStatus, bulkSetContactType),
- * `contacts.delete` (deleteContact, bulkDeactivateContacts), and
- * `contacts.merge` (mergeContacts). Admins short-circuit; other
+ * `contacts.delete` (deleteContact, bulkDeactivateContacts,
+ * reactivateContact), and `contacts.merge` (mergeContacts,
+ * searchMergeCandidatesAction). Admins short-circuit; other
  * roles need explicit grants via the matrix. `exportContactsCsv`
  * mutates nothing, so it only requires a signed-in session.
+ *
+ * Deactivating (single or bulk) is refused for the client of an open
+ * matter or the subject of a live lead; a deactivated contact can be
+ * brought back with reactivateContact (never a merged-away one).
  */
 
 "use server";
@@ -29,6 +34,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permission-check";
 import { getCurrentUserId } from "@/lib/current-user";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
+import { todayKey } from "@/lib/format-date";
 import { buildCsv } from "@/lib/csv";
 import {
   BULK_CONTACT_LIMIT,
@@ -41,6 +48,10 @@ import {
   phoneDedupeKey,
   type ContactFormState,
 } from "@/lib/contact-form";
+import {
+  searchMergeCandidates,
+  type MergeCandidateOption,
+} from "@/lib/queries/contacts";
 import {
   mergeConflictStatus,
   mergeContactNotes,
@@ -60,6 +71,24 @@ const contactSchema = z.object({
   zip: z.string().trim().max(20).optional().or(z.literal("")),
   notes: z.string().trim().max(4000).optional().or(z.literal("")),
 });
+
+/** Lenient shape check: something@something.tld, no whitespace. Not a
+ *  deliverability test - it only catches typos like "dana@" or
+ *  "dana example.com". */
+const LENIENT_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** A field error for a malformed email, or null. On edit, an email
+ *  that is unchanged from the stored value is never rejected, so old
+ *  records that predate this check stay editable. */
+function emailFieldError(
+  email: string | undefined,
+  unchangedFrom?: string | null
+): string[] | null {
+  const v = (email ?? "").trim();
+  if (!v || LENIENT_EMAIL.test(v)) return null;
+  if (unchangedFrom != null && v === unchangedFrom.trim()) return null;
+  return ["Enter a valid email address"];
+}
 
 /**
  * Firm-scope audit entry for contact-level events (conflict flags,
@@ -109,9 +138,23 @@ export async function createContact(
     };
   }
 
+  const emailError = emailFieldError(parsed.data.email);
+  if (emailError) {
+    return { status: "error", errors: { email: emailError } };
+  }
+
+  // Contact.firmId: "new writes always set it via the action layer"
+  // (schema comment). Resolved before the transaction; a user with no
+  // firm row simply gets null, as before.
+  const owner = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { firmId: true },
+  });
+
   const created = await prisma.$transaction(async (tx) => {
     const c = await tx.contact.create({
       data: {
+        firmId: owner?.firmId ?? null,
         name: parsed.data.name,
         type: parsed.data.type,
         email: parsed.data.email || null,
@@ -190,6 +233,10 @@ export async function updateContact(
       status: "error",
       errors: { _form: ["Contact no longer exists"] },
     };
+  }
+  const emailError = emailFieldError(parsed.data.email, existing.email);
+  if (emailError) {
+    return { status: "error", errors: { email: emailError } };
   }
 
   // Sync the denormalized phone + the primary ContactPhone row in
@@ -384,10 +431,12 @@ const CONFLICT_TITLE: Record<(typeof CONFLICT_STATUSES)[number], string> = {
 };
 
 /**
- * Manually set / clear the conflict flag the conflict checker
- * normally maintains. A short justification is required — it lands
- * in the firm activity log so the audit trail explains WHY a human
- * overrode (or raised) the flag.
+ * Manually set / clear a contact's conflict flag. The flag is
+ * manual-only: nothing else writes `Contact.conflictStatus`, and the
+ * intake conflict matcher (src/lib/conflict-check.ts) does not read it
+ * yet - it is a directory-level marker for staff. A short
+ * justification is required - it lands in the firm activity log so the
+ * audit trail explains WHY a human overrode (or raised) the flag.
  */
 export async function setContactConflictStatus(
   contactId: string,
@@ -434,6 +483,59 @@ export async function setContactConflictStatus(
 
 // ── Merge ───────────────────────────────────────────────────────────────
 
+const MERGE_NOTES_TOO_LONG =
+  "The combined internal notes are too long to merge — shorten the notes on one contact first";
+
+/** Thrown inside the merge transaction to roll it back with a
+ *  user-facing message (mapped to `{ ok: false }` by the caller). */
+class MergeAbort extends Error {}
+
+/**
+ * How many matters have one of the two contacts on the client side
+ * (Matter.clientId or a category "client" party row) and the other on
+ * the opposing side (category "opposing"). Both directions count.
+ */
+async function countOppositeSideMatters(
+  aId: string,
+  bId: string
+): Promise<number> {
+  const [parties, clientOf] = await Promise.all([
+    prisma.matterContact.findMany({
+      where: { contactId: { in: [aId, bId] } },
+      select: { matterId: true, contactId: true, category: true },
+    }),
+    prisma.matter.findMany({
+      where: { clientId: { in: [aId, bId] } },
+      select: { id: true, clientId: true },
+    }),
+  ]);
+  const sides = new Map<string, { client: Set<string>; opposing: Set<string> }>();
+  const slot = (matterId: string) => {
+    let s = sides.get(matterId);
+    if (!s) {
+      s = { client: new Set(), opposing: new Set() };
+      sides.set(matterId, s);
+    }
+    return s;
+  };
+  for (const p of parties) {
+    if (p.category === "client") slot(p.matterId).client.add(p.contactId);
+    if (p.category === "opposing") slot(p.matterId).opposing.add(p.contactId);
+  }
+  for (const m of clientOf) {
+    if (m.clientId) slot(m.id).client.add(m.clientId);
+  }
+  let count = 0;
+  for (const s of sides.values()) {
+    const crossed = [aId, bId].some(
+      (x) =>
+        s.client.has(x) && [...s.opposing].some((other) => other !== x)
+    );
+    if (crossed) count++;
+  }
+  return count;
+}
+
 /**
  * Merge the `loser` contact into the `survivor`: every reference to
  * the loser is re-pointed at the survivor in one transaction, then
@@ -465,8 +567,19 @@ export async function setContactConflictStatus(
  */
 export async function mergeContacts(
   loserId: string,
-  survivorId: string
-): Promise<{ ok: boolean; error?: string }> {
+  survivorId: string,
+  opts?: {
+    /** The user saw the "opposite sides of a matter" warning and
+     *  wants to merge anyway (e.g. a client who was once adverse). */
+    confirmOppositeSides?: boolean;
+  }
+): Promise<{
+  ok: boolean;
+  error?: string;
+  /** "opposite_sides": the two records sit on opposite sides of a
+   *  matter - resubmit with `confirmOppositeSides` to proceed. */
+  code?: "opposite_sides";
+}> {
   const userId = await requirePermission("contacts.merge");
 
   if (loserId === survivorId) {
@@ -491,18 +604,26 @@ export async function mergeContacts(
   // The retired contact's internal notes + conflict flag carry over
   // (its detail page redirects to the survivor, so anything left on
   // the loser would be unreachable). Refuse rather than truncate.
+  // (Re-checked against fresh rows inside the transaction below.)
   const mergedNotes = mergeContactNotes(survivor.notes, loser.notes, loser.name);
   if (mergedNotes.tooLong) {
-    return {
-      ok: false,
-      error:
-        "The combined internal notes are too long to merge — shorten the notes on one contact first",
-    };
+    return { ok: false, error: MERGE_NOTES_TOO_LONG };
   }
-  const mergedConflict = mergeConflictStatus(
-    survivor.conflictStatus,
-    loser.conflictStatus
-  );
+
+  // Merging a client's record into an opposing party's (or the other
+  // way round) moves the client's matters, leads and phones onto the
+  // wrong person and can't be undone. Warn first; the caller may
+  // confirm explicitly (a former adverse party can become a client).
+  if (!opts?.confirmOppositeSides) {
+    const overlap = await countOppositeSideMatters(loserId, survivorId);
+    if (overlap > 0) {
+      return {
+        ok: false,
+        code: "opposite_sides",
+        error: `"${loser.name}" and "${survivor.name}" are on opposite sides of ${overlap} matter${overlap === 1 ? "" : "s"} (client vs. opposing party). Merging would make the opposing party the client of record.`,
+      };
+    }
+  }
 
   // Same refusal for folded party-row notes: the party forms cap notes
   // at PARTY_NOTES_MAX, so a longer merged value would make the row
@@ -533,144 +654,189 @@ export async function mergeContacts(
     }
   }
 
-  await prisma.$transaction(async (tx) => {
-    // MatterContact — per-row because of the (matterId, contactId,
-    // category) unique: survivor already on the matter in the same
-    // category ⇒ fold the loser's row details (role, notes,
-    // representation) into the survivor's row, then drop the duplicate.
-    const loserParties = await tx.matterContact.findMany({
-      where: { contactId: loserId },
-    });
-    for (const row of loserParties) {
-      const dupe = await tx.matterContact.findUnique({
-        where: {
-          matterId_contactId_category: {
-            matterId: row.matterId,
-            contactId: survivorId,
-            category: row.category,
-          },
-        },
+  let mergedConflict: string;
+  try {
+    mergedConflict = await prisma.$transaction(async (tx) => {
+      // The checks above ran outside the transaction. Lock both rows
+      // (in id order, so two merges can't deadlock) and re-assert the
+      // preconditions: a concurrent A→B / B→C merge would otherwise
+      // re-point A's references onto a record that was just retired.
+      for (const id of [loserId, survivorId].sort()) {
+        const locked = await tx.contact.updateMany({
+          where:
+            id === survivorId
+              ? { id, isActive: true, mergedIntoId: null }
+              : { id, mergedIntoId: null },
+          data: { updatedAt: new Date() },
+        });
+        if (locked.count !== 1) {
+          throw new MergeAbort(
+            id === survivorId
+              ? "The contact to merge into was changed or merged by someone else — refresh and try again"
+              : "This contact was already merged"
+          );
+        }
+      }
+      // Merge from the rows as they are NOW (an edit may have landed
+      // between the pre-check and the lock).
+      const [loser, survivor] = await Promise.all([
+        tx.contact.findUniqueOrThrow({ where: { id: loserId } }),
+        tx.contact.findUniqueOrThrow({ where: { id: survivorId } }),
+      ]);
+      const mergedNotes = mergeContactNotes(
+        survivor.notes,
+        loser.notes,
+        loser.name
+      );
+      if (mergedNotes.tooLong) throw new MergeAbort(MERGE_NOTES_TOO_LONG);
+      const nextConflict = mergeConflictStatus(
+        survivor.conflictStatus,
+        loser.conflictStatus
+      );
+
+      // MatterContact — per-row because of the (matterId, contactId,
+      // category) unique: survivor already on the matter in the same
+      // category ⇒ fold the loser's row details (role, notes,
+      // representation) into the survivor's row, then drop the duplicate.
+      const loserParties = await tx.matterContact.findMany({
+        where: { contactId: loserId },
       });
-      if (dupe) {
-        const merged = mergePartyDetails(dupe, row, loser.name);
-        await tx.matterContact.update({
-          where: { id: dupe.id },
-          data: {
-            role: merged.role,
-            notes: merged.notes,
-            isRepresented: merged.isRepresented,
-            representationContactId: merged.representationContactId,
-            representationName: merged.representationName,
-            representationFirm: merged.representationFirm,
-            representationEmail: merged.representationEmail,
-            representationPhone: merged.representationPhone,
+      for (const row of loserParties) {
+        const dupe = await tx.matterContact.findUnique({
+          where: {
+            matterId_contactId_category: {
+              matterId: row.matterId,
+              contactId: survivorId,
+              category: row.category,
+            },
           },
         });
-        await tx.matterContact.delete({ where: { id: row.id } });
-      } else {
-        await tx.matterContact.update({
-          where: { id: row.id },
-          data: { contactId: survivorId },
+        if (dupe) {
+          const merged = mergePartyDetails(dupe, row, loser.name);
+          await tx.matterContact.update({
+            where: { id: dupe.id },
+            data: {
+              role: merged.role,
+              notes: merged.notes,
+              isRepresented: merged.isRepresented,
+              representationContactId: merged.representationContactId,
+              representationName: merged.representationName,
+              representationFirm: merged.representationFirm,
+              representationEmail: merged.representationEmail,
+              representationPhone: merged.representationPhone,
+            },
+          });
+          await tx.matterContact.delete({ where: { id: row.id } });
+        } else {
+          await tx.matterContact.update({
+            where: { id: row.id },
+            data: { contactId: survivorId },
+          });
+        }
+      }
+
+      await tx.matterContact.updateMany({
+        where: { representationContactId: loserId },
+        data: { representationContactId: survivorId },
+      });
+      await tx.matter.updateMany({
+        where: { clientId: loserId },
+        data: { clientId: survivorId },
+      });
+      await tx.lead.updateMany({
+        where: { contactId: loserId },
+        data: { contactId: survivorId },
+      });
+      await tx.messengerThread.updateMany({
+        where: { contactId: loserId },
+        data: { contactId: survivorId },
+      });
+      await tx.calendarAttendee.updateMany({
+        where: { contactId: loserId },
+        data: { contactId: survivorId },
+      });
+      await tx.invoice.updateMany({
+        where: { clientId: loserId },
+        data: { clientId: survivorId },
+      });
+
+      // Phones: move the loser's rows over, dropping numbers the
+      // survivor already has. Survivor keeps its primary; incoming
+      // rows land demoted, after the survivor's existing order range.
+      const [survivorPhones, loserPhones] = await Promise.all([
+        tx.contactPhone.findMany({
+          where: { contactId: survivorId },
+          orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+        }),
+        tx.contactPhone.findMany({
+          where: { contactId: loserId },
+          orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+        }),
+      ]);
+      const seen = new Set(survivorPhones.map((p) => phoneDedupeKey(p.number)));
+      let nextOrder =
+        survivorPhones.reduce((max, p) => Math.max(max, p.order), -1) + 1;
+      for (const p of loserPhones) {
+        const key = phoneDedupeKey(p.number);
+        if (seen.has(key)) {
+          await tx.contactPhone.delete({ where: { id: p.id } });
+          continue;
+        }
+        seen.add(key);
+        await tx.contactPhone.update({
+          where: { id: p.id },
+          data: { contactId: survivorId, isPrimary: false, order: nextOrder++ },
         });
       }
-    }
 
-    await tx.matterContact.updateMany({
-      where: { representationContactId: loserId },
-      data: { representationContactId: survivorId },
-    });
-    await tx.matter.updateMany({
-      where: { clientId: loserId },
-      data: { clientId: survivorId },
-    });
-    await tx.lead.updateMany({
-      where: { contactId: loserId },
-      data: { contactId: survivorId },
-    });
-    await tx.messengerThread.updateMany({
-      where: { contactId: loserId },
-      data: { contactId: survivorId },
-    });
-    await tx.calendarAttendee.updateMany({
-      where: { contactId: loserId },
-      data: { contactId: survivorId },
-    });
-    await tx.invoice.updateMany({
-      where: { clientId: loserId },
-      data: { clientId: survivorId },
-    });
-
-    // Phones: move the loser's rows over, dropping numbers the
-    // survivor already has. Survivor keeps its primary; incoming
-    // rows land demoted, after the survivor's existing order range.
-    const [survivorPhones, loserPhones] = await Promise.all([
-      tx.contactPhone.findMany({
+      // Repair the one-primary invariant (survivor may have had zero
+      // rows before the move) and resolve the mirrored Contact.phone.
+      const combined = await tx.contactPhone.findMany({
         where: { contactId: survivorId },
         orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-      }),
-      tx.contactPhone.findMany({
-        where: { contactId: loserId },
-        orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-      }),
-    ]);
-    const seen = new Set(survivorPhones.map((p) => phoneDedupeKey(p.number)));
-    let nextOrder =
-      survivorPhones.reduce((max, p) => Math.max(max, p.order), -1) + 1;
-    for (const p of loserPhones) {
-      const key = phoneDedupeKey(p.number);
-      if (seen.has(key)) {
-        await tx.contactPhone.delete({ where: { id: p.id } });
-        continue;
+      });
+      let primaryNumber = combined.find((p) => p.isPrimary)?.number ?? null;
+      if (!primaryNumber && combined.length > 0) {
+        await tx.contactPhone.update({
+          where: { id: combined[0].id },
+          data: { isPrimary: true },
+        });
+        primaryNumber = combined[0].number;
       }
-      seen.add(key);
-      await tx.contactPhone.update({
-        where: { id: p.id },
-        data: { contactId: survivorId, isPrimary: false, order: nextOrder++ },
+      // No rows at all ⇒ fall back to the denormalized columns (some
+      // contacts predate ContactPhone rows).
+      const phone =
+        combined.length > 0 ? primaryNumber : (survivor.phone ?? loser.phone);
+
+      // Scalar gap backfill + phone mirror on the survivor.
+      await tx.contact.update({
+        where: { id: survivorId },
+        data: {
+          phone,
+          email: survivor.email ?? loser.email,
+          organization: survivor.organization ?? loser.organization,
+          address: survivor.address ?? loser.address,
+          city: survivor.city ?? loser.city,
+          state: survivor.state ?? loser.state,
+          zip: survivor.zip ?? loser.zip,
+          notes: mergedNotes.notes,
+          conflictStatus: nextConflict,
+        },
       });
-    }
 
-    // Repair the one-primary invariant (survivor may have had zero
-    // rows before the move) and resolve the mirrored Contact.phone.
-    const combined = await tx.contactPhone.findMany({
-      where: { contactId: survivorId },
-      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-    });
-    let primaryNumber = combined.find((p) => p.isPrimary)?.number ?? null;
-    if (!primaryNumber && combined.length > 0) {
-      await tx.contactPhone.update({
-        where: { id: combined[0].id },
-        data: { isPrimary: true },
+      // Retire the loser. phone: null keeps the mirror invariant honest
+      // (its ContactPhone rows just moved away).
+      await tx.contact.update({
+        where: { id: loserId },
+        data: { isActive: false, mergedIntoId: survivorId, phone: null },
       });
-      primaryNumber = combined[0].number;
-    }
-    // No rows at all ⇒ fall back to the denormalized columns (some
-    // contacts predate ContactPhone rows).
-    const phone =
-      combined.length > 0 ? primaryNumber : (survivor.phone ?? loser.phone);
 
-    // Scalar gap backfill + phone mirror on the survivor.
-    await tx.contact.update({
-      where: { id: survivorId },
-      data: {
-        phone,
-        email: survivor.email ?? loser.email,
-        organization: survivor.organization ?? loser.organization,
-        address: survivor.address ?? loser.address,
-        city: survivor.city ?? loser.city,
-        state: survivor.state ?? loser.state,
-        zip: survivor.zip ?? loser.zip,
-        notes: mergedNotes.notes,
-        conflictStatus: mergedConflict,
-      },
+      return nextConflict;
     });
-
-    // Retire the loser. phone: null keeps the mirror invariant honest
-    // (its ContactPhone rows just moved away).
-    await tx.contact.update({
-      where: { id: loserId },
-      data: { isActive: false, mergedIntoId: survivorId, phone: null },
-    });
-  });
+  } catch (err) {
+    if (err instanceof MergeAbort) return { ok: false, error: err.message };
+    throw err;
+  }
 
   await logContactActivity({
     userId,
@@ -695,6 +861,24 @@ export async function mergeContacts(
   return { ok: true };
 }
 
+/**
+ * Typeahead behind the merge dialog's "merge into" picker. Searched on
+ * the server (name / organization / email, case-insensitive, 20 max)
+ * so every active contact is reachable however large the directory is.
+ * Same gate as the merge itself.
+ */
+export async function searchMergeCandidatesAction(
+  contactId: string,
+  query: string
+): Promise<MergeCandidateOption[]> {
+  await requirePermission("contacts.merge");
+  if (typeof query !== "string") return [];
+  return searchMergeCandidates({
+    query: query.slice(0, 100),
+    excludeId: contactId,
+  });
+}
+
 // ── Delete (soft) ───────────────────────────────────────────────────────
 
 export async function deleteContact(
@@ -707,6 +891,12 @@ export async function deleteContact(
     select: { id: true, name: true },
   });
   if (!c) return { ok: false, error: "Contact not found" };
+
+  // A contact who is the client of an open matter (or has a live
+  // intake) would vanish from the directory, pickers and attendee
+  // search while Matter.clientId still points at them.
+  const blocked = (await findDeactivationBlockers([c]))[0];
+  if (blocked) return { ok: false, error: blocked };
 
   // Always soft-delete (isActive=false). Contacts hang off far more
   // than matters — messenger threads, leads, representation links,
@@ -727,6 +917,93 @@ export async function deleteContact(
   });
 
   revalidatePath("/contacts");
+  revalidatePath(`/contacts/${contactId}`);
+  return { ok: true };
+}
+
+/** Lead stages that no longer need the contact (the intake is over). */
+const CLOSED_LEAD_STAGES = ["converted", "declined"];
+
+/**
+ * One message per contact that must not be deactivated yet: the client
+ * of a non-archived matter, or the subject of a live (not converted /
+ * declined) lead. Empty when everything is free to deactivate.
+ */
+async function findDeactivationBlockers(
+  contacts: Array<{ id: string; name: string }>
+): Promise<string[]> {
+  const ids = contacts.map((c) => c.id);
+  const [matters, leads] = await Promise.all([
+    prisma.matter.findMany({
+      where: { clientId: { in: ids }, isArchived: false },
+      select: { clientId: true },
+    }),
+    prisma.lead.findMany({
+      where: { contactId: { in: ids }, stage: { notIn: CLOSED_LEAD_STAGES } },
+      select: { contactId: true },
+    }),
+  ]);
+  const tally = (rows: Array<string | null>) => {
+    const m = new Map<string, number>();
+    for (const id of rows) if (id) m.set(id, (m.get(id) ?? 0) + 1);
+    return m;
+  };
+  const matterCounts = tally(matters.map((m) => m.clientId));
+  const leadCounts = tally(leads.map((l) => l.contactId));
+  const messages: string[] = [];
+  for (const c of contacts) {
+    const parts: string[] = [];
+    const nm = matterCounts.get(c.id) ?? 0;
+    const nl = leadCounts.get(c.id) ?? 0;
+    if (nm > 0) parts.push(`the client of ${nm} open matter${nm === 1 ? "" : "s"}`);
+    if (nl > 0) parts.push(`on ${nl} active lead${nl === 1 ? "" : "s"}`);
+    if (parts.length > 0) {
+      messages.push(
+        `"${c.name}" is ${parts.join(" and ")} — archive or reassign ${nm + nl === 1 ? "it" : "them"} before deactivating`
+      );
+    }
+  }
+  return messages;
+}
+
+/**
+ * Undo a (non-merge) deactivation: the contact returns to the
+ * directory, pickers and attendee search. Gated on contacts.delete -
+ * the same key that can deactivate. A contact that was merged away
+ * stays retired: its references moved to the survivor.
+ */
+export async function reactivateContact(
+  contactId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const userId = await requirePermission("contacts.delete");
+
+  const c = await prisma.contact.findUnique({
+    where: { id: contactId },
+    select: { id: true, name: true, isActive: true, mergedIntoId: true },
+  });
+  if (!c) return { ok: false, error: "Contact not found" };
+  if (c.mergedIntoId) {
+    return {
+      ok: false,
+      error: "This contact was merged into another record and can't be reactivated",
+    };
+  }
+  if (c.isActive) return { ok: true };
+
+  await prisma.contact.update({
+    where: { id: contactId },
+    data: { isActive: true },
+  });
+
+  await logContactActivity({
+    userId,
+    type: "contact",
+    icon: "user",
+    title: `Contact reactivated — ${c.name}`,
+  });
+
+  revalidatePath("/contacts");
+  revalidatePath(`/contacts/${contactId}`);
   return { ok: true };
 }
 
@@ -743,6 +1020,7 @@ const bulkIdsSchema = z
 type BulkContactRow = {
   id: string;
   name: string;
+  type: string;
   isActive: boolean;
   mergedIntoId: string | null;
 };
@@ -772,7 +1050,13 @@ async function loadBulkContacts(
 
   const contacts = await prisma.contact.findMany({
     where: { id: { in: ids } },
-    select: { id: true, name: true, isActive: true, mergedIntoId: true },
+    select: {
+      id: true,
+      name: true,
+      type: true,
+      isActive: true,
+      mergedIntoId: true,
+    },
     orderBy: [{ name: "asc" }],
   });
   if (contacts.length !== ids.length) {
@@ -828,12 +1112,20 @@ export async function bulkSetContactType(
     data: { type: parsedType.data },
   });
 
+  // The previous types go on the audit entry (grouped counts) - once
+  // overwritten they are recorded nowhere else.
+  const was = new Map<string, number>();
+  for (const c of loaded.contacts) was.set(c.type, (was.get(c.type) ?? 0) + 1);
+  const wasText = [...was.entries()]
+    .map(([t, n]) => `${n} ${CONTACT_TYPE_LABEL[t as ContactType] ?? t}`)
+    .join(", ");
+
   await logContactActivity({
     userId,
     type: "bulk",
     icon: "zap",
     title: `Set type to "${CONTACT_TYPE_LABEL[parsedType.data]}" on ${pluralContacts(res.count)}`,
-    detail: summarizeNames(loaded.contacts.map((c) => c.name)),
+    detail: `${summarizeNames(loaded.contacts.map((c) => c.name))} (was: ${wasText})`,
   });
 
   revalidatePath("/contacts");
@@ -843,10 +1135,10 @@ export async function bulkSetContactType(
 /**
  * Bulk soft-delete — same semantics as the single `deleteContact`
  * path: flip `isActive` to false and touch nothing else (matter
- * links, threads, leads, invoices all keep their rows), so it only
- * requires that every id exists. Already-inactive rows are a no-op,
- * matching the single path's unconditional flip. One summary audit
- * entry for the whole batch.
+ * links, threads, leads, invoices all keep their rows), and the same
+ * guard (no client of an open matter / live lead - all-or-nothing).
+ * Already-inactive rows are a no-op. One summary audit entry for the
+ * whole batch.
  */
 export async function bulkDeactivateContacts(
   contactIds: string[]
@@ -855,6 +1147,20 @@ export async function bulkDeactivateContacts(
 
   const loaded = await loadBulkContacts(contactIds, { requireActive: false });
   if (!loaded.ok) return loaded;
+
+  // Same guard as the single deleteContact: all-or-nothing, so a
+  // client of an open matter can't slip out of the directory in a batch.
+  const blockers = await findDeactivationBlockers(
+    loaded.contacts.filter((c) => c.isActive)
+  );
+  if (blockers.length > 0) {
+    return {
+      ok: false,
+      error:
+        blockers.slice(0, 3).join("; ") +
+        (blockers.length > 3 ? `; and ${blockers.length - 3} more` : ""),
+    };
+  }
 
   const res = await prisma.contact.updateMany({
     where: { id: { in: loaded.contacts.map((c) => c.id) } },
@@ -931,6 +1237,8 @@ export async function exportContactsCsv(
     detail: summarizeNames(rows.map((c) => c.name)),
   });
 
-  const stamp = new Date().toISOString().slice(0, 10);
+  // Viewer-zone "today" (ADR-012): a UTC slice would name the file with
+  // tomorrow's date for a Denver user exporting after 6 PM.
+  const stamp = todayKey(await getCurrentUserTimeZone());
   return { ok: true, csv, filename: `contacts-export-${stamp}.csv` };
 }

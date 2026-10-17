@@ -60,4 +60,21 @@ describe("formatPhone", () => {
       "303-555-1212 ext. 42"
     );
   });
+
+  test("a 7-digit number with an extension is not turned into a fake US number", () => {
+    // 7 + 3 digits = 10, but it is NOT a 10-digit US number.
+    expect(formatPhone("555-1212 ext. 123")).toBe("555-1212 ext. 123");
+    expect(formatPhone("555-1212 x123")).toBe("555-1212 x123");
+  });
+
+  test("a non-+1 international number with 10 digits is left alone", () => {
+    expect(formatPhone("+32 2 123 45 67")).toBe("+32 2 123 45 67");
+    // A "+1" number that is one digit short must not be re-chunked.
+    expect(formatPhone("+1 303 555 121")).toBe("+1 303 555 121");
+  });
+
+  test("+1 numbers still format", () => {
+    expect(formatPhone("+1 303 555 1212")).toBe("(303) 555-1212");
+    expect(formatPhone("+1 (303) 555-1212")).toBe("(303) 555-1212");
+  });
 });

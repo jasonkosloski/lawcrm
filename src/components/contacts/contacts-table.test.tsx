@@ -151,6 +151,23 @@ describe("ContactsTable — set type", () => {
     expect(refresh).toHaveBeenCalled();
   });
 
+  test("asks to confirm first; cancelling never calls the action and keeps the selection", async () => {
+    confirmMock.mockReturnValue(false);
+    const user = userEvent.setup();
+    renderTable();
+
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select all contacts" })
+    );
+    await user.selectOptions(screen.getByLabelText("Set type"), "witness");
+
+    expect(confirmMock).toHaveBeenCalledWith(
+      'Set type to "Witness" on 2 contacts?'
+    );
+    expect(mockedSetType).not.toHaveBeenCalled();
+    expect(screen.getByText("2 selected")).toBeInTheDocument();
+  });
+
   test("keeps the selection and alerts on failure", async () => {
     mockedSetType.mockResolvedValue({ ok: false, error: "Nope" });
     const user = userEvent.setup();
@@ -209,6 +226,32 @@ describe("ContactsTable — export", () => {
     await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
     // Export leaves the selection intact — no mutation happened.
     expect(screen.getByText("1 selected")).toBeInTheDocument();
+  });
+
+  test("the downloaded file starts with a UTF-8 BOM so Excel reads accents", async () => {
+    mockedExport.mockResolvedValue({
+      ok: true,
+      csv: "Name\r\nJosé Martínez\r\n",
+      filename: "contacts-export.csv",
+    });
+    let blob: Blob | undefined;
+    URL.createObjectURL = vi.fn((b: Blob | MediaSource) => {
+      blob = b as Blob;
+      return "blob:test";
+    });
+    const user = userEvent.setup();
+    renderTable();
+
+    await user.click(screen.getByRole("checkbox", { name: "Select Beta" }));
+    await user.click(screen.getByRole("button", { name: /Export CSV/ }));
+
+    await waitFor(() => expect(blob).toBeDefined());
+    const bytes = new Uint8Array(await blob!.arrayBuffer());
+    expect(Array.from(bytes.slice(0, 3))).toEqual([0xef, 0xbb, 0xbf]);
+    // The CSV itself follows the BOM, unchanged.
+    expect(new TextDecoder().decode(bytes.slice(3))).toBe(
+      "Name\r\nJosé Martínez\r\n"
+    );
   });
 });
 

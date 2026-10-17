@@ -20,6 +20,7 @@ import {
   getContactTypeCounts,
   listContacts,
 } from "@/lib/queries/contacts";
+import { CONTACT_LIST_LIMIT } from "@/lib/contact-constants";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { requireUser } from "@/lib/current-user";
 
@@ -64,6 +65,7 @@ export default async function ContactsPage({
           <input
             type="search"
             name="q"
+            aria-label="Search contacts"
             defaultValue={q ?? ""}
             placeholder="Search name, email, organization…"
             className="h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink w-72 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
@@ -106,6 +108,17 @@ export default async function ContactsPage({
             );
           })}
         </div>
+
+        {rows.length >= CONTACT_LIST_LIMIT && (
+          <p
+            role="status"
+            className="text-xs text-ink-3 rounded-md border border-line bg-paper-2 px-3 py-2"
+          >
+            Showing the first {CONTACT_LIST_LIMIT} contacts (A-Z). More match
+            than fit on the page — refine the search or pick a type to see the
+            rest.
+          </p>
+        )}
 
         {rows.length === 0 ? (
           <Card className="p-0">
