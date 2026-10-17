@@ -32,6 +32,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma, type Tx } from "@/lib/prisma";
+import { assertChildMatterAccess, assertMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 import {
   currentUserHasPermission,
@@ -96,6 +97,7 @@ export async function createNote(
   formData: FormData
 ): Promise<NoteFormState> {
   await requirePermission("notes.create");
+  await assertMatterAccess(matterId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = noteSchema.safeParse(raw);
   if (!parsed.success) {
@@ -330,6 +332,7 @@ export async function toggleNotePin(
   noteId: string
 ): Promise<{ ok: boolean; error?: string }> {
   const actorId = await requirePermission("notes.pin");
+  await assertChildMatterAccess("note", noteId);
   const note = await prisma.note.findUnique({
     where: { id: noteId },
     select: {
@@ -388,6 +391,7 @@ async function collectReplies(
 export async function deleteNote(
   noteId: string
 ): Promise<{ ok: boolean; error?: string }> {
+  await assertChildMatterAccess("note", noteId);
   const note = await prisma.note.findUnique({
     where: { id: noteId },
     select: {
@@ -478,6 +482,7 @@ export async function updateNote(
     };
   }
 
+  await assertChildMatterAccess("note", noteId);
   const note = await prisma.note.findUnique({
     where: { id: noteId },
     select: { authorId: true, matterId: true },
@@ -537,8 +542,11 @@ export async function markMatterNotesRead(
   // create dangling reads. Limit quietly to the submitted ids.
   const existing = await prisma.note.findMany({
     where: { id: { in: noteIds } },
-    select: { id: true },
+    select: { id: true, matterId: true },
   });
+  for (const mid of new Set(existing.map((n) => n.matterId))) {
+    await assertMatterAccess(mid);
+  }
   const validIds = existing.map((n) => n.id);
   if (validIds.length === 0) return { ok: true };
 
@@ -567,6 +575,7 @@ export async function toggleNoteReaction(
     return { ok: false, error: "Emoji not in reaction palette" };
   }
 
+  await assertChildMatterAccess("note", noteId);
   const note = await prisma.note.findUnique({
     where: { id: noteId },
     select: { id: true, matterId: true, calendarEventId: true },

@@ -30,6 +30,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { assertMatterAccess, assertOptionalMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 // Date-only input ("YYYY-MM-DD") is stored as UTC midnight and read
 // in UTC on every surface (ADR-012) — never apply a time zone to it.
@@ -93,6 +94,7 @@ export async function startTimer(input?: {
   const parsed = timerFieldsSchema.safeParse(input ?? {});
   if (!parsed.success) return { ok: false, error: "Invalid timer input" };
 
+  await assertOptionalMatterAccess(parsed.data.matterId);
   const matterError = await matterMissingError(parsed.data.matterId);
   if (matterError) return { ok: false, error: matterError };
 
@@ -158,6 +160,7 @@ export async function updateTimer(input: {
   });
   if (!session) return { ok: false, error: "No running timer" };
 
+  await assertOptionalMatterAccess(parsed.data.matterId);
   const matterError = await matterMissingError(parsed.data.matterId);
   if (matterError) return { ok: false, error: matterError };
 
@@ -249,6 +252,7 @@ export async function stopTimer(
   });
   if (!session) return staleTimerState(raw);
 
+  await assertMatterAccess(parsed.data.matterId);
   const matter = await prisma.matter.findUnique({
     where: { id: parsed.data.matterId },
     select: { id: true },

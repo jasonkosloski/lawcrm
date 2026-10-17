@@ -14,6 +14,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma, type Tx } from "@/lib/prisma";
+import { assertMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 import {
   currentUserHasPermission,
@@ -562,6 +563,7 @@ export async function updateMatter(
   formData: FormData
 ): Promise<UpdateMatterState> {
   await requirePermission("matters.edit");
+  await assertMatterAccess(matterId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = updateMatterSchema.safeParse(raw);
 
@@ -1000,6 +1002,7 @@ export async function updateMatterStage(
   warning?: string;
 }> {
   await requirePermission("matters.edit");
+  await assertMatterAccess(matterId);
   const userId = await getCurrentUserId();
   const matter = await prisma.matter.findUnique({
     where: { id: matterId },
@@ -1101,6 +1104,7 @@ export async function setMatterSolSatisfied(
   satisfied: boolean
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("matters.edit");
+  await assertMatterAccess(matterId);
   const matter = await prisma.matter.findUnique({
     where: { id: matterId },
     select: {
@@ -1200,6 +1204,7 @@ export async function addMatterTeamMember(
   formData: FormData
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("matters.manage_team");
+  await assertMatterAccess(matterId);
   const actorId = await getCurrentUserId();
 
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -1359,6 +1364,7 @@ export async function removeMatterTeamMember(
   membershipId: string
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("matters.manage_team");
+  await assertMatterAccess(matterId);
   const actorId = await getCurrentUserId();
 
   const member = await prisma.matterTeamMember.findUnique({

@@ -39,6 +39,9 @@ vi.mock("next/navigation", () => ({
   redirect: vi.fn((url: string) => {
     throw new Error(`__REDIRECT__:${url}`);
   }),
+  notFound: vi.fn(() => {
+    throw new Error("NEXT_NOT_FOUND");
+  }),
 }));
 
 import { getCurrentUserId } from "@/lib/current-user";
@@ -1233,7 +1236,9 @@ describe("updateMatterStage", () => {
   });
 
   test("unknown matter / inactive stage are refused; gated on matters.edit", async () => {
-    expect((await updateMatterStage("nope", s2)).ok).toBe(false);
+    await expect(updateMatterStage("nope", s2)).rejects.toThrow(
+      /NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/
+    );
     await prisma.matterStage.update({ where: { id: s2 }, data: { isActive: false } });
     expect((await updateMatterStage(matterId, s2)).ok).toBe(false);
     expect(requirePermission).toHaveBeenCalledWith("matters.edit");

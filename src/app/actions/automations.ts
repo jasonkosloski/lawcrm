@@ -18,6 +18,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma, type Tx } from "@/lib/prisma";
+import { assertMatterAccess } from "@/lib/matter-access";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
@@ -550,6 +551,7 @@ export async function applyDeadlineRuleToMatter(
   opts: { anchorDate?: string; force?: boolean } = {}
 ): Promise<ApplyRuleResult> {
   const userId = await requirePermission("deadlines.create");
+  await assertMatterAccess(matterId);
   if (opts.anchorDate && !isDayKey(opts.anchorDate)) {
     return { status: "error", error: "Enter a valid date." };
   }
@@ -612,6 +614,7 @@ export async function applyTaskListToMatter(
   opts: { force?: boolean } = {}
 ): Promise<ApplyTaskListResult> {
   const userId = await requirePermission("tasks.create");
+  await assertMatterAccess(matterId);
   const [matter, tz] = await Promise.all([
     prisma.matter.findUnique({ where: { id: matterId }, select: { id: true } }),
     getCurrentUserTimeZone(),

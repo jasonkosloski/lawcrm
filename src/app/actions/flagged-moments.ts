@@ -49,6 +49,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { assertChildMatterAccess, assertOptionalMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
@@ -214,6 +215,7 @@ export async function createFlaggedMoment(
   input: FlagInput
 ): Promise<FlagActionResult> {
   const userId = await requirePermission("evidence.flag.create");
+  await assertChildMatterAccess("document", documentId);
 
   const parsed = flagSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
@@ -311,6 +313,7 @@ export async function updateFlaggedMoment(
     },
   });
   if (!flag) return { ok: false, error: FLAG_NOT_FOUND };
+  await assertOptionalMatterAccess(flag.document?.matterId);
 
   // Creator can always edit their own; otherwise gate.
   if (flag.flaggedById !== actorId) {
@@ -398,6 +401,7 @@ export async function deleteFlaggedMoment(
     },
   });
   if (!flag) return { ok: false, error: FLAG_NOT_FOUND };
+  await assertOptionalMatterAccess(flag.document?.matterId);
 
   // Creator can always delete their own; otherwise gate.
   if (flag.flaggedById !== actorId) {

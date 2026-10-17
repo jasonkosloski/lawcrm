@@ -30,6 +30,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { assertChildMatterAccess } from "@/lib/matter-access";
 import { TASK_PRIORITIES } from "@/lib/constants/priority";
 import {
   TASK_STATUSES,
@@ -62,6 +63,7 @@ export async function setTaskStatus(
   status: TaskStatus
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("tasks.edit");
+  await assertChildMatterAccess("task", taskId);
   if (!(TASK_STATUSES as readonly string[]).includes(status)) {
     return { ok: false, error: `Unknown status: ${status}` };
   }
@@ -128,6 +130,7 @@ export async function setTaskOwner(
   ownerId: string | null
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("tasks.edit");
+  await assertChildMatterAccess("task", taskId);
   const actorId = await getCurrentUserId();
 
   const task = await prisma.task.findUnique({
@@ -167,6 +170,7 @@ export async function deleteTask(
   taskId: string
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("tasks.delete");
+  await assertChildMatterAccess("task", taskId);
   const userId = await getCurrentUserId();
   const task = await prisma.task.findUnique({
     where: { id: taskId },
@@ -217,6 +221,7 @@ export async function updateTask(
   formData: FormData
 ): Promise<UpdateTaskFormState> {
   await requirePermission("tasks.edit");
+  await assertChildMatterAccess("task", taskId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = updateTaskSchema.safeParse(raw);
   if (!parsed.success) {

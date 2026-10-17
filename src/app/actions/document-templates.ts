@@ -31,6 +31,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { assertMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentFirm } from "@/lib/firm";
 import { requirePermission } from "@/lib/permission-check";
@@ -373,6 +374,7 @@ export async function previewDocumentFromTemplate(
   templateId: string,
   matterId: string
 ): Promise<TemplatePreviewResult> {
+  await assertMatterAccess(matterId);
   const template = await prisma.documentTemplate.findUnique({
     where: { id: templateId },
     select: { name: true, body: true, isActive: true },
@@ -419,6 +421,7 @@ export async function generateDocumentFromTemplate(
   matterId: string
 ): Promise<GenerateDocumentResult> {
   const userId = await requirePermission("documents.upload");
+  await assertMatterAccess(matterId);
 
   const template = await prisma.documentTemplate.findUnique({
     where: { id: templateId },

@@ -16,6 +16,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { assertMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 
 /** Set the current user's pin on a matter to exactly `pinned`.
@@ -28,6 +29,8 @@ export async function setMatterPin(
   pinned: boolean
 ): Promise<{ ok: boolean; pinned: boolean; error?: string }> {
   const userId = await getCurrentUserId();
+  // Outside the try: notFound() must not be swallowed by the catch.
+  if (pinned) await assertMatterAccess(matterId);
 
   try {
     if (pinned) {
@@ -38,10 +41,11 @@ export async function setMatterPin(
       if (!matter) {
         return { ok: false, pinned: false, error: "Matter not found." };
       }
-      await prisma.userMatterPin.upsert({
-        where: { userId_matterId: { userId, matterId } },
-        create: { userId, matterId },
-        update: {},
+      // ON CONFLICT DO NOTHING: atomic under concurrent pins (an
+      // upsert can race its own existence check into a unique violation).
+      await prisma.userMatterPin.createMany({
+        data: [{ userId, matterId }],
+        skipDuplicates: true,
       });
     } else {
       await prisma.userMatterPin.deleteMany({ where: { userId, matterId } });
@@ -70,6 +74,7 @@ export async function toggleMatterPin(
   matterId: string
 ): Promise<{ pinned: boolean }> {
   const userId = await getCurrentUserId();
+  await assertMatterAccess(matterId);
   const existing = await prisma.userMatterPin.findUnique({
     where: { userId_matterId: { userId, matterId } },
     select: { userId: true },

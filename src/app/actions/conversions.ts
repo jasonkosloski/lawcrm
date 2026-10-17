@@ -23,6 +23,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { assertChildMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 // Due dates are date-only values stored at UTC midnight (ADR-012).
 // parseDateOnly also rejects impossible dates (2026-02-31) so they
@@ -49,6 +50,7 @@ export async function convertNoteToTask(
   formData: FormData
 ): Promise<InboxActionFormState> {
   await requirePermission("tasks.create");
+  await assertChildMatterAccess("note", noteId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = noteToTaskSchema.safeParse(raw);
   if (!parsed.success) {
@@ -114,6 +116,7 @@ export async function convertTaskToDeadline(
   formData: FormData
 ): Promise<InboxActionFormState> {
   await requirePermission("deadlines.create");
+  await assertChildMatterAccess("task", taskId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = taskToDeadlineSchema.safeParse(raw);
   if (!parsed.success) {

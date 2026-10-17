@@ -162,9 +162,8 @@ describe("startTimer", () => {
   });
 
   test("rejects a matter id that doesn't exist", async () => {
-    const res = await startTimer({ matterId: "nope" });
-    expect(res.ok).toBe(false);
-    expect(res.error).toMatch(/matter not found/i);
+    // Unknown == hidden: the matter wall answers with notFound().
+    await expect(startTimer({ matterId: "nope" })).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
     expect(await getSession()).toBeNull();
   });
 
@@ -228,8 +227,7 @@ describe("updateTimer", () => {
 
   test("rejects a matter id that doesn't exist", async () => {
     await startTimer();
-    const res = await updateTimer({ matterId: "nope" });
-    expect(res.ok).toBe(false);
+    await expect(updateTimer({ matterId: "nope" })).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
     expect((await getSession())?.matterId).toBeNull();
   });
 });
@@ -356,12 +354,9 @@ describe("stopTimer", () => {
 
   test("rejects a matter that doesn't exist", async () => {
     await startTimer();
-    const res = await stopTimer(
-      timeEntryInitialState,
-      await buildStopForm({ matterId: "nope" })
-    );
-    expect(res.status).toBe("error");
-    expect(res.errors?.matterId?.[0]).toMatch(/not found/i);
+    await expect(
+      stopTimer(timeEntryInitialState, await buildStopForm({ matterId: "nope" }))
+    ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
   });
 
   test("rejects an unknown UTBMS code", async () => {

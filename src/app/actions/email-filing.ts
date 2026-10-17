@@ -21,6 +21,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { assertOptionalMatterAccess } from "@/lib/matter-access";
 import { logActivity } from "@/lib/activity-log";
 import { requirePermission } from "@/lib/permission-check";
 import { visibleEmailThreadWhere } from "@/lib/email-visibility";
@@ -37,6 +38,8 @@ export async function setEmailThreadMatter(
     select: { id: true, subject: true, matterId: true },
   });
   if (!thread) return { ok: false, error: "Thread not found" };
+  await assertOptionalMatterAccess(thread.matterId);
+  await assertOptionalMatterAccess(matterId);
 
   // Verify the target matter exists when filing — defends against
   // stale picker values + makes the activity log honest.

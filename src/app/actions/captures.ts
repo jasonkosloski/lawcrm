@@ -25,6 +25,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma, type Tx } from "@/lib/prisma";
+import { assertMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 // ADR-012: date-only inputs ("YYYY-MM-DD") are stored at UTC midnight
 // via `parseDateOnly`; datetime-local values (event start/end) are
@@ -321,6 +322,7 @@ export async function createTaskWithCaptures(
   formData: FormData
 ): Promise<CaptureFormState> {
   await requirePermission("tasks.create");
+  await assertMatterAccess(matterId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = taskSchema.safeParse(raw);
   if (!parsed.success) {
@@ -450,6 +452,7 @@ export async function createEventWithCaptures(
   formData: FormData
 ): Promise<CaptureFormState> {
   await requirePermission("events.create");
+  await assertMatterAccess(matterId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = eventSchema.safeParse(raw);
   if (!parsed.success) {
@@ -553,6 +556,7 @@ export async function createDeadlineWithCaptures(
   formData: FormData
 ): Promise<CaptureFormState> {
   await requirePermission("deadlines.create");
+  await assertMatterAccess(matterId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = deadlineSchema.safeParse(raw);
   if (!parsed.success) {
@@ -654,6 +658,7 @@ export async function createTimeEntryWithCaptures(
   formData: FormData
 ): Promise<CaptureFormState> {
   await requirePermission("time_entries.create");
+  await assertMatterAccess(matterId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = timeEntrySchema.safeParse(raw);
   if (!parsed.success) {

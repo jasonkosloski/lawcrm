@@ -22,6 +22,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { assertOptionalMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 import { parseDateOnly } from "@/lib/format-date";
 
@@ -78,6 +79,7 @@ export async function setMessengerThreadFollowUp(
     select: { defaultMatterId: true },
   });
   if (!thread) return { ok: false, error: "Thread not found" };
+  await assertOptionalMatterAccess(thread.defaultMatterId);
 
   await prisma.messengerThread.update({
     where: { id: threadId },

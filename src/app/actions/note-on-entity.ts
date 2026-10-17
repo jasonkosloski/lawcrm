@@ -21,6 +21,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { assertChildMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
@@ -53,6 +54,7 @@ export async function addNoteToTask(
   // Same key as the primary note composer (notes.ts createNote) — the
   // inline task composer is just another door into note authorship.
   await requirePermission("notes.create");
+  await assertChildMatterAccess("task", taskId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = noteSchema.safeParse(raw);
   if (!parsed.success) {
@@ -117,6 +119,7 @@ export async function addNoteToDeadline(
   // Same key as the primary note composer (notes.ts createNote) — the
   // inline deadline composer is just another door into note authorship.
   await requirePermission("notes.create");
+  await assertChildMatterAccess("deadline", deadlineId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = noteSchema.safeParse(raw);
   if (!parsed.success) {

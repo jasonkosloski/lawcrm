@@ -28,6 +28,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { assertChildMatterAccess, assertMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 import { logActivity } from "@/lib/activity-log";
 import { createNotifications } from "@/lib/notifications";
@@ -110,6 +111,7 @@ export async function upsertSettlement(
   formData: FormData
 ): Promise<SettlementFormState> {
   await requirePermission("matters.settlement.edit");
+  await assertMatterAccess(matterId);
   const actorId = await getCurrentUserId();
 
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -373,6 +375,7 @@ export async function addSettlementLien(
   formData: FormData
 ): Promise<SettlementFormState> {
   await requirePermission("matters.settlement.manage_liens");
+  await assertChildMatterAccess("settlement", settlementId);
   const actorId = await getCurrentUserId();
 
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -443,6 +446,7 @@ export async function updateSettlementLien(
   formData: FormData
 ): Promise<SettlementFormState> {
   await requirePermission("matters.settlement.manage_liens");
+  await assertChildMatterAccess("settlementLien", lienId);
   const actorId = await getCurrentUserId();
 
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -515,6 +519,7 @@ export async function deleteSettlementLien(
   lienId: string
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("matters.settlement.manage_liens");
+  await assertChildMatterAccess("settlementLien", lienId);
   const actorId = await getCurrentUserId();
 
   const found = await prisma.settlementLien.findUnique({
@@ -584,6 +589,7 @@ export async function setApprovalStepStatus(
   });
   if (!parsedArgs.success) return { ok: false, error: "Invalid request." };
   const { approvalId, status } = parsedArgs.data;
+  await assertChildMatterAccess("settlementApproval", approvalId);
   const notes = parsedArgs.data.notes;
 
   // The step write, the "is the chain complete?" re-read and the

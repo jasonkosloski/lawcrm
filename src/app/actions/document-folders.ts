@@ -34,6 +34,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { assertChildMatterAccess, assertMatterAccess } from "@/lib/matter-access";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import {
@@ -98,6 +99,7 @@ export async function createFolder(
   name: string
 ): Promise<FolderActionResult> {
   const userId = await requirePermission("documents.folder.create");
+  await assertMatterAccess(matterId);
 
   const valid = validateName(name);
   if ("error" in valid) return { ok: false, error: valid.error };
@@ -162,6 +164,7 @@ export async function renameFolder(
   name: string
 ): Promise<FolderActionResult> {
   const userId = await requirePermission("documents.folder.edit");
+  await assertChildMatterAccess("documentFolder", id);
 
   const valid = validateName(name);
   if ("error" in valid) return { ok: false, error: valid.error };
@@ -214,6 +217,7 @@ export async function renameFolder(
  */
 export async function deleteFolder(id: string): Promise<FolderActionResult> {
   const userId = await requirePermission("documents.folder.delete");
+  await assertChildMatterAccess("documentFolder", id);
 
   const outcome = await prisma.$transaction(async (tx) => {
     // Lock the folder row FIRST. A concurrent child create/move into
@@ -314,6 +318,7 @@ export async function moveDocuments(
     return { ok: false, error: "Some documents were not found." };
   }
   const matterIds = new Set(docs.map((d) => d.matterId));
+  for (const mid of matterIds) await assertMatterAccess(mid);
   if (matterIds.size > 1) {
     return { ok: false, error: "Documents must all belong to one matter." };
   }
@@ -364,6 +369,7 @@ export async function moveFolder(
   newParentId: string | null
 ): Promise<FolderActionResult> {
   const userId = await requirePermission("documents.organize");
+  await assertChildMatterAccess("documentFolder", id);
 
   const folder = await prisma.documentFolder.findUnique({
     where: { id },

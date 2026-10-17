@@ -44,6 +44,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { assertOptionalMatterAccess } from "@/lib/matter-access";
 import { logActivity } from "@/lib/activity-log";
 import { requirePermission } from "@/lib/permission-check";
 import { sanitizeUserHtml } from "@/lib/sanitize-html";
@@ -256,6 +257,7 @@ export async function replyToThread(
     },
   });
   if (!thread) return { ok: false, error: "Thread not found." };
+  await assertOptionalMatterAccess(thread.matterId);
   if (!isSendableStatus(thread.account.syncStatus)) {
     return { ok: false, error: NOT_CONNECTED_ERROR };
   }

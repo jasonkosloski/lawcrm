@@ -103,10 +103,11 @@ describe("setMatterPin", () => {
     expect(await pinCount(userId)).toBe(1);
   });
 
-  test("an unknown matter returns a generic error instead of throwing", async () => {
+  test("an unknown matter is not found (matter wall: unknown == hidden)", async () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const res = await setMatterPin("00000000-0000-0000-0000-000000000000", true);
-    expect(res.ok).toBe(false);
+    await expect(
+      setMatterPin("00000000-0000-0000-0000-000000000000", true)
+    ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
     spy.mockRestore();
   });
 });

@@ -18,6 +18,14 @@ import { Client } from "pg";
 import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+// Matter-wall asserts are covered in matter-access-writes.test.ts; this
+// file exercises other behaviour with no authenticated session user.
+vi.mock("@/lib/matter-access", () => ({
+  assertMatterAccess: vi.fn(async () => "test-user"),
+  assertOptionalMatterAccess: vi.fn(async () => "test-user"),
+  assertChildMatterAccess: vi.fn(async () => null),
+  canAccessMatter: vi.fn(async () => true),
+}));
 vi.mock("@/lib/permission-check", () => ({
   requirePermission: vi.fn(),
   currentUserHasPermission: vi.fn().mockResolvedValue(true),

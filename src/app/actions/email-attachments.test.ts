@@ -180,8 +180,10 @@ describe("gate + scoping", () => {
 
   test("unknown matter", async () => {
     const attachmentId = await seedAttachment();
-    const res = await actions.fileAttachmentToMatter(attachmentId, "nope");
-    expect(res).toEqual({ ok: false, error: "Matter not found." });
+    // Unknown == hidden: the matter wall answers with notFound().
+    await expect(
+      actions.fileAttachmentToMatter(attachmentId, "nope")
+    ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
   });
 
   test("a folder from a DIFFERENT matter must not leak the file into it", async () => {

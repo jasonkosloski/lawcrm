@@ -132,13 +132,10 @@ describe("createTimeEntry — validation", () => {
   });
 
   test("returns error when matter doesn't exist", async () => {
-    const res = await createTimeEntry(
-      "missing-matter",
-      timeEntryInitialState,
-      buildCreateForm({})
-    );
-    expect(res.status).toBe("error");
-    expect(res.errors?.activity?.[0]).toMatch(/not found/i);
+    // Unknown == hidden: the matter wall answers with notFound().
+    await expect(
+      createTimeEntry("missing-matter", timeEntryInitialState, buildCreateForm({}))
+    ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
   });
 });
 

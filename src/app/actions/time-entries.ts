@@ -29,6 +29,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { assertMatterAccess, assertOptionalMatterAccess } from "@/lib/matter-access";
 import { roundMoney } from "@/lib/money";
 import { getCurrentUserId } from "@/lib/current-user";
 // Date-only input ("YYYY-MM-DD") is stored as UTC midnight and read
@@ -86,6 +87,7 @@ export async function createTimeEntry(
   formData: FormData
 ): Promise<TimeEntryFormState> {
   await requirePermission("time_entries.create");
+  await assertMatterAccess(matterId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = timeEntrySchema.safeParse(raw);
   if (!parsed.success) {
@@ -342,6 +344,7 @@ export async function updateTimeEntry(
       values: raw,
     };
   }
+  await assertOptionalMatterAccess(entry.matterId);
 
   // Author can always edit their own; otherwise require the
   // `_any` permission. Admins pass either path.
@@ -478,6 +481,7 @@ export async function setTimeEntryStatus(
     },
   });
   if (!entry) return { ok: false, error: "Time entry not found" };
+  await assertOptionalMatterAccess(entry.matterId);
 
   // Status changes are still edits. Author bypass; otherwise gate.
   const actorId = await getCurrentUserId();
@@ -547,6 +551,7 @@ export async function deleteTimeEntry(
     },
   });
   if (!entry) return { ok: false, error: "Time entry not found" };
+  await assertOptionalMatterAccess(entry.matterId);
   // Author can always delete their own unbilled entries; otherwise
   // gate on time_entries.delete_any.
   const actorId = await getCurrentUserId();

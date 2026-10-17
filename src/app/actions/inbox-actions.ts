@@ -26,6 +26,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { assertMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 import { parseDateOnly } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
@@ -171,6 +172,7 @@ export async function createTaskFromEmail(
   }
   const userId = await getCurrentUserId();
   const ctx = await resolveEmailMatter(emailThreadId, userId);
+  if (ctx) await assertMatterAccess(ctx.matterId);
   if (!ctx) {
     return {
       status: "error",
@@ -212,6 +214,7 @@ export async function createDeadlineFromEmail(
   }
   const userId = await getCurrentUserId();
   const ctx = await resolveEmailMatter(emailThreadId, userId);
+  if (ctx) await assertMatterAccess(ctx.matterId);
   if (!ctx) {
     return {
       status: "error",
@@ -257,6 +260,7 @@ export async function createNoteFromEmail(
   }
   const userId = await getCurrentUserId();
   const ctx = await resolveEmailMatter(emailThreadId, userId);
+  if (ctx) await assertMatterAccess(ctx.matterId);
   if (!ctx) {
     return {
       status: "error",
@@ -307,6 +311,7 @@ export async function createTaskFromMessage(
     return { status: "error", errors: parsed.error.flatten().fieldErrors };
   }
   const ctx = await resolveMessengerMatter(messengerItemId);
+  if (ctx) await assertMatterAccess(ctx.matterId);
   if (!ctx) {
     return {
       status: "error",
@@ -348,6 +353,7 @@ export async function createDeadlineFromMessage(
     return { status: "error", errors: parsed.error.flatten().fieldErrors };
   }
   const ctx = await resolveMessengerMatter(messengerItemId);
+  if (ctx) await assertMatterAccess(ctx.matterId);
   if (!ctx) {
     return {
       status: "error",
@@ -393,6 +399,7 @@ export async function createNoteFromMessage(
     return { status: "error", errors: { content: ["Note can't be empty"] } };
   }
   const ctx = await resolveMessengerMatter(messengerItemId);
+  if (ctx) await assertMatterAccess(ctx.matterId);
   if (!ctx) {
     return {
       status: "error",

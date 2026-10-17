@@ -28,6 +28,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { assertChildMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
@@ -37,6 +38,7 @@ export async function deleteDocument(
   documentId: string
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await getCurrentUserId();
+  await assertChildMatterAccess("document", documentId);
   const doc = await prisma.document.findUnique({
     where: { id: documentId },
     select: {

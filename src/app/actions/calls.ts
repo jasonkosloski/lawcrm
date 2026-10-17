@@ -47,6 +47,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { assertOptionalMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { requirePermission } from "@/lib/permission-check";
@@ -174,6 +175,7 @@ export async function logCall(
   }
 
   const matterId = input.matterId || null;
+  await assertOptionalMatterAccess(matterId);
   if (matterId) {
     const matter = await prisma.matter.findUnique({
       where: { id: matterId },
@@ -375,6 +377,7 @@ export async function updateCallLog(
   if (!item) {
     return { status: "error", errors: { form: ["Call log not found"] } };
   }
+  await assertOptionalMatterAccess(item.matterId ?? item.thread.defaultMatterId);
   // Provider-synced items are immutable records of what actually
   // happened on the line — only manual logs may be corrected.
   if (item.kind !== "call" || !isManualCallLog(item.providerEventId)) {
@@ -385,6 +388,7 @@ export async function updateCallLog(
   }
 
   const matterId = input.matterId || null;
+  await assertOptionalMatterAccess(matterId);
   let newMatterName: string | null = null;
   if (matterId) {
     const matter = await prisma.matter.findUnique({
@@ -526,6 +530,7 @@ export async function deleteCallLog(
     },
   });
   if (!item) return { ok: false, error: "Call log not found" };
+  await assertOptionalMatterAccess(item.matterId ?? item.thread.defaultMatterId);
   // Provider-synced items are immutable records of what actually
   // happened on the line — only manual logs may be removed.
   if (item.kind !== "call" || !isManualCallLog(item.providerEventId)) {

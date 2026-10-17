@@ -40,6 +40,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { assertOptionalMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 import { writebackGmailMessages } from "@/lib/google/gmail-writeback";
 
@@ -98,6 +99,7 @@ export async function markMessengerThreadRead(
     select: { unreadCount: true, defaultMatterId: true },
   });
   if (!thread) return { ok: false };
+  await assertOptionalMatterAccess(thread.defaultMatterId);
 
   // Item flags + the denormalized counter flip together so a crash
   // between the two can't leave a badge pointing at read rows.

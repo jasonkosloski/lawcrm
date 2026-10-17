@@ -153,8 +153,10 @@ describe("createExpense", () => {
   });
 
   test("unknown matter is a clean error", async () => {
-    const res = await createExpense("nope", expenseInitialState, form());
-    expect(res).toEqual({ status: "error", error: "Matter not found." });
+    // Unknown == hidden: the matter wall answers with notFound().
+    await expect(
+      createExpense("nope", expenseInitialState, form())
+    ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
   });
 
   test("receipt: a document on THIS matter links; another matter's or an unknown id becomes null", async () => {

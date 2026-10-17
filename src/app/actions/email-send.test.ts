@@ -28,6 +28,14 @@ import { GoogleOAuthError } from "@/lib/google/oauth";
 import { replyToThread, sendEmail } from "./email-send";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+// Matter-wall asserts are covered in matter-access-writes.test.ts; this
+// file exercises other behaviour with no authenticated session user.
+vi.mock("@/lib/matter-access", () => ({
+  assertMatterAccess: vi.fn(async () => "test-user"),
+  assertOptionalMatterAccess: vi.fn(async () => "test-user"),
+  assertChildMatterAccess: vi.fn(async () => null),
+  canAccessMatter: vi.fn(async () => true),
+}));
 
 vi.mock("@/lib/permission-check", () => ({
   requirePermission: vi.fn(),

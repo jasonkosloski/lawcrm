@@ -28,6 +28,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma, type Tx } from "@/lib/prisma";
+import { assertChildMatterAccess, assertMatterAccess } from "@/lib/matter-access";
 import {
   currentUserHasPermission,
   requirePermission,
@@ -326,6 +327,7 @@ export async function createMatterContact(
   formData: FormData
 ): Promise<PartyFormState> {
   const userId = await requirePermission("parties.create");
+  await assertMatterAccess(matterId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = partySchema.safeParse(raw);
   if (!parsed.success) {
@@ -560,6 +562,7 @@ export async function updateMatterContact(
   formData: FormData
 ): Promise<PartyFormState> {
   const userId = await requirePermission("parties.edit");
+  await assertChildMatterAccess("party", matterContactId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = partyUpdateSchema.safeParse(raw);
   if (!parsed.success) {
@@ -785,6 +788,7 @@ export async function removeMatterContact(
   matterContactId: string
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("parties.delete");
+  await assertChildMatterAccess("party", matterContactId);
   const row = await prisma.matterContact.findUnique({
     where: { id: matterContactId },
     select: {

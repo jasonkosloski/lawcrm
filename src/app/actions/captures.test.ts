@@ -356,13 +356,14 @@ describe("createDeadlineWithCaptures", () => {
   });
 
   test("a stale matter id is a form error, not an FK crash, and writes nothing", async () => {
-    const res = await createDeadlineWithCaptures(
-      "no-such-matter",
-      captureInitialState,
-      deadlineForm()
-    );
-    expect(res.status).toBe("error");
-    expect(res.errors?._form?.[0]).toMatch(/no longer exists/i);
+    // Unknown == hidden: the matter wall answers with notFound().
+    await expect(
+      createDeadlineWithCaptures(
+        "no-such-matter",
+        captureInitialState,
+        deadlineForm()
+      )
+    ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
     expect(await prisma.deadline.count()).toBe(0);
   });
 });
@@ -426,13 +427,9 @@ describe("createTaskWithCaptures — siblings", () => {
   });
 
   test("a stale matter id is a form error and writes nothing", async () => {
-    const res = await createTaskWithCaptures(
-      "no-such-matter",
-      captureInitialState,
-      taskForm()
-    );
-    expect(res.status).toBe("error");
-    expect(res.errors?._form?.[0]).toMatch(/no longer exists/i);
+    await expect(
+      createTaskWithCaptures("no-such-matter", captureInitialState, taskForm())
+    ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
     expect(await prisma.task.count()).toBe(0);
   });
 });

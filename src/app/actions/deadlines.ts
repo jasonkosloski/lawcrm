@@ -22,6 +22,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { assertChildMatterAccess } from "@/lib/matter-access";
 import {
   DEADLINE_KINDS,
   DEADLINE_STATUSES,
@@ -64,6 +65,7 @@ export async function setDeadlineStatus(
   status: DeadlineStatus
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("deadlines.edit");
+  await assertChildMatterAccess("deadline", deadlineId);
   if (!(DEADLINE_STATUSES as readonly string[]).includes(status)) {
     return { ok: false, error: `Unknown status: ${status}` };
   }
@@ -109,6 +111,7 @@ export async function deleteDeadline(
   deadlineId: string
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("deadlines.delete");
+  await assertChildMatterAccess("deadline", deadlineId);
   const deadline = await prisma.deadline.findUnique({
     where: { id: deadlineId },
     select: {
@@ -160,6 +163,7 @@ export async function updateDeadline(
   formData: FormData
 ): Promise<UpdateDeadlineFormState> {
   const userId = await requirePermission("deadlines.edit");
+  await assertChildMatterAccess("deadline", deadlineId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = updateDeadlineSchema.safeParse(raw);
   if (!parsed.success) {

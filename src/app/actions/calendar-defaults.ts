@@ -18,6 +18,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { assertMatterAccess } from "@/lib/matter-access";
 import { getCurrentFirm } from "@/lib/firm";
 import { requirePermission } from "@/lib/permission-check";
 import { logAuditEntry } from "@/lib/audit-entry";
@@ -80,6 +81,7 @@ export async function updateMatterCalendarDefaults(
   formData: FormData
 ): Promise<{ status: "idle" | "ok" | "error"; error?: string }> {
   const userId = await requirePermission("matters.edit");
+  await assertMatterAccess(matterId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = matterSchema.safeParse(raw);
   if (!parsed.success) {

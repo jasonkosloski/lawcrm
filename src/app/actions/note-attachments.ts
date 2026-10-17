@@ -17,6 +17,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { assertChildMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 // Date-only inputs ("YYYY-MM-DD") are stored at UTC midnight and read
 // in UTC (ADR-012) - parseDateOnly, never `new Date(value)`.
@@ -100,6 +101,7 @@ export async function addTaskToNote(
   // Same gate as the standalone task composer — attaching to a note
   // still creates a Task row, so the same capability applies.
   await requirePermission("tasks.create");
+  await assertChildMatterAccess("note", noteId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = addTaskSchema.safeParse(raw);
   if (!parsed.success) {
@@ -160,6 +162,7 @@ export async function addDeadlineToNote(
   formData: FormData
 ): Promise<NoteAttachmentFormState> {
   await requirePermission("deadlines.create");
+  await assertChildMatterAccess("note", noteId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = addDeadlineSchema.safeParse(raw);
   if (!parsed.success) {
@@ -234,6 +237,7 @@ export async function addTimeEntryToNote(
   formData: FormData
 ): Promise<NoteAttachmentFormState> {
   await requirePermission("time_entries.create");
+  await assertChildMatterAccess("note", noteId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = addTimeEntrySchema.safeParse(raw);
   if (!parsed.success) {
@@ -306,6 +310,7 @@ export async function addCapturesToNoteBulk(
   _prev: BulkAttachFormState,
   formData: FormData
 ): Promise<BulkAttachFormState> {
+  await assertChildMatterAccess("note", noteId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = bulkSchema.safeParse(raw);
   if (!parsed.success) {

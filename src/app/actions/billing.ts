@@ -47,6 +47,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma, type Tx } from "@/lib/prisma";
+import { assertChildMatterAccess, assertMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 // Date-only inputs ("YYYY-MM-DD") are stored at UTC midnight and read
@@ -309,6 +310,7 @@ export async function generateInvoiceFromWip(
   formData: FormData
 ): Promise<BillingFormState> {
   await requirePermission("billing.generate_invoice");
+  await assertMatterAccess(matterId);
   const userId = await getCurrentUserId();
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = generateSchema.safeParse(raw);
@@ -540,6 +542,7 @@ export async function updateInvoiceLineItem(
   // Pricing an invoice line rewrites the invoice total: gate it on
   // the billing key, not just authorship.
   await requirePermission("billing.generate_invoice");
+  await assertChildMatterAccess("timeEntry", timeEntryId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = updateLineItemSchema.safeParse(raw);
   if (!parsed.success) {
@@ -776,6 +779,7 @@ export async function setInvoiceStatus(
     return { ok: false, error: `Unknown invoice status "${next}".` };
   }
   await requirePermission(permissionKey);
+  await assertChildMatterAccess("invoice", invoiceId);
   const userId = await getCurrentUserId();
   try {
     return await setInvoiceStatusUnchecked(invoiceId, next, userId);
@@ -939,6 +943,7 @@ export async function deleteInvoice(
   invoiceId: string
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("billing.delete_draft");
+  await assertChildMatterAccess("invoice", invoiceId);
   const userId = await getCurrentUserId();
   try {
     return await deleteInvoiceUnchecked(invoiceId, userId);
@@ -1050,6 +1055,7 @@ export async function approveInvoice(
   expectedTotal?: string
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("billing.approve_invoice");
+  await assertChildMatterAccess("invoice", invoiceId);
   const userId = await getCurrentUserId();
   try {
     return await approveInvoiceUnchecked(invoiceId, userId, expectedTotal);
@@ -1156,6 +1162,7 @@ export async function addTrustTransaction(
   formData: FormData
 ): Promise<BillingFormState> {
   await requirePermission("trust.record_transaction");
+  await assertMatterAccess(matterId);
   const userId = await getCurrentUserId();
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = trustTxnSchema.safeParse(raw);
@@ -1264,6 +1271,7 @@ export async function bundleAsInternalRecord(
   // Same key as generateInvoiceFromWip — bundling is the same
   // "sweep WIP into a document" capability, just born-locked.
   await requirePermission("billing.generate_invoice");
+  await assertMatterAccess(matterId);
   const userId = await getCurrentUserId();
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = internalRecordSchema.safeParse(raw);
@@ -1472,6 +1480,7 @@ export async function recordInvoicePayment(
   formData: FormData
 ): Promise<BillingFormState> {
   await requirePermission("billing.record_payment");
+  await assertChildMatterAccess("invoice", invoiceId);
   const userId = await getCurrentUserId();
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = recordPaymentSchema.safeParse(raw);
@@ -1736,6 +1745,7 @@ export async function sendInvoice(
   formData: FormData
 ): Promise<BillingFormState> {
   await requirePermission("billing.send_invoice");
+  await assertChildMatterAccess("invoice", invoiceId);
   const userId = await getCurrentUserId();
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = sendInvoiceSchema.safeParse(raw);

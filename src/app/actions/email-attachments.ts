@@ -41,6 +41,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { assertMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
@@ -73,6 +74,7 @@ export async function fileAttachmentToMatter(
   folderId?: string | null
 ): Promise<FileAttachmentResult> {
   const userId = await requirePermission("documents.upload");
+  await assertMatterAccess(matterId);
 
   // Owner-scoped resolve — mirrors the download route + read model.
   const attachment = await prisma.emailAttachment.findFirst({
@@ -198,6 +200,7 @@ export async function listMatterFolders(
   matterId: string
 ): Promise<FlatFolder[]> {
   await getCurrentUserId();
+  await assertMatterAccess(matterId);
   const rows = await prisma.documentFolder.findMany({
     where: { matterId },
     select: { id: true, parentId: true, name: true, order: true },

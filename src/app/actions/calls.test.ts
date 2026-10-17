@@ -153,12 +153,10 @@ describe("validation", () => {
   });
 
   test("rejects an unknown matter", async () => {
-    const res = await logCall(
-      callLogInitialState,
-      callForm({ matterId: "nope" })
-    );
-    expect(res.status).toBe("error");
-    expect(res.errors?.matterId).toBeTruthy();
+    // Unknown == hidden: the matter wall answers with notFound().
+    await expect(
+      logCall(callLogInitialState, callForm({ matterId: "nope" }))
+    ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
   });
 
   test("rejects a malformed occurredAt with a field error", async () => {
@@ -624,12 +622,12 @@ describe("updateCallLog", () => {
   test("rejects an unknown matter", async () => {
     await logCall(callLogInitialState, callForm());
     const item = await prisma.messengerItem.findFirstOrThrow();
-    const res = await updateCallLog(
-      callLogInitialState,
-      updateForm(item.id, { matterId: "nope" })
-    );
-    expect(res.status).toBe("error");
-    expect(res.errors?.matterId).toBeTruthy();
+    await expect(
+      updateCallLog(
+        callLogInitialState,
+        updateForm(item.id, { matterId: "nope" })
+      )
+    ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
   });
 
   test("errors cleanly on a vanished item", async () => {

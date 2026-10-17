@@ -583,7 +583,8 @@ describe("approveInvoice", () => {
   test("a total edited between the read and the write is refused", async () => {
     const id = await makeInvoice({ status: "draft", total: 100 });
     const realFind = prisma.invoice.findUnique.bind(prisma.invoice);
-    vi.spyOn(prisma.invoice, "findUnique").mockImplementationOnce((async (args: unknown) => {
+    vi.spyOn(prisma.invoice, "findUnique").mockImplementationOnce(realFind as never) // 1st read: matter-access resolver
+    .mockImplementationOnce((async (args: unknown) => {
       const row = await realFind(args as never);
       // A line-item edit commits after the approver's read.
       await prisma.invoice.update({

@@ -351,8 +351,10 @@ describe("generate", () => {
 
   test("unknown matter / archived template error without writing", async () => {
     const t = await seedTemplate();
-    const miss = await generateDocumentFromTemplate(t.id, "nope");
-    expect(miss).toEqual({ ok: false, error: "Matter not found." });
+    // Unknown == hidden: the matter wall answers with notFound().
+    await expect(generateDocumentFromTemplate(t.id, "nope")).rejects.toThrow(
+      /NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/
+    );
 
     const archived = await seedTemplate({ isActive: false });
     const res = await generateDocumentFromTemplate(archived.id, matterId);

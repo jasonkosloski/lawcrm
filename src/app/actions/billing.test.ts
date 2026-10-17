@@ -1043,6 +1043,7 @@ describe("updateInvoiceLineItem — billing gate + audit trail", () => {
     const realFind = prisma.timeEntry.findUnique.bind(prisma.timeEntry);
     const spy = vi
       .spyOn(prisma.timeEntry, "findUnique")
+      .mockImplementationOnce(realFind as never) // 1st read: matter-access resolver
       .mockImplementationOnce((async (args: unknown) => {
         const row = await realFind(args as never);
         await prisma.invoice.update({
@@ -1380,6 +1381,7 @@ describe("invoice status transitions — conflict handling", () => {
     const realFind = prisma.invoice.findUnique.bind(prisma.invoice);
     const spy = vi
       .spyOn(prisma.invoice, "findUnique")
+      .mockImplementationOnce(realFind as never) // 1st read: matter-access resolver
       .mockImplementationOnce((async (args: unknown) => {
         const row = (await realFind(args as never)) as object | null;
         return row && { ...row, paidAmount: new Prisma.Decimal(0) };
@@ -1405,6 +1407,7 @@ describe("invoice status transitions — conflict handling", () => {
     const realFind = prisma.invoice.findUnique.bind(prisma.invoice);
     const spy = vi
       .spyOn(prisma.invoice, "findUnique")
+      .mockImplementationOnce(realFind as never) // 1st read: matter-access resolver
       .mockImplementationOnce((async (args: unknown) => {
         const row = await realFind(args as never);
         await prisma.invoice.update({
@@ -1429,6 +1432,7 @@ describe("invoice status transitions — conflict handling", () => {
     const realFind = prisma.invoice.findUnique.bind(prisma.invoice);
     const spy = vi
       .spyOn(prisma.invoice, "findUnique")
+      .mockImplementationOnce(realFind as never) // 1st read: matter-access resolver
       .mockImplementationOnce((async (args: unknown) => {
         const row = await realFind(args as never);
         await prisma.invoice.update({

@@ -16,6 +16,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { assertChildMatterAccess, assertOptionalMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 import { parseDateOnly } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
@@ -54,6 +55,7 @@ export async function addTimeEntryToTask(
   formData: FormData
 ): Promise<NoteAttachmentFormState> {
   await requirePermission("time_entries.create");
+  await assertChildMatterAccess("task", taskId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = timeSchema.safeParse(raw);
   if (!parsed.success) {
@@ -111,6 +113,7 @@ export async function addTimeEntryToDeadline(
   formData: FormData
 ): Promise<NoteAttachmentFormState> {
   await requirePermission("time_entries.create");
+  await assertChildMatterAccess("deadline", deadlineId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = timeSchema.safeParse(raw);
   if (!parsed.success) {
@@ -182,6 +185,7 @@ export async function addTimeEntryToEmailMessage(
       thread: { select: { matterId: true, subject: true } },
     },
   });
+  await assertOptionalMatterAccess(msg?.thread.matterId);
   if (!msg || !msg.thread.matterId) {
     return {
       status: "error",
@@ -259,6 +263,7 @@ export async function addTimeEntryToMessengerItem(
   // Item-level matterId wins; fall back to thread default — same
   // resolution as resolveMessengerMatter in inbox-actions.ts.
   const matterId = item.matterId ?? item.thread?.defaultMatterId ?? null;
+  await assertOptionalMatterAccess(matterId);
   if (!matterId) {
     return {
       status: "error",

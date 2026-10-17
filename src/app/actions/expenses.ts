@@ -26,6 +26,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { assertChildMatterAccess, assertMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 import { logActivity } from "@/lib/activity-log";
 import {
@@ -124,6 +125,7 @@ export async function createExpense(
   formData: FormData
 ): Promise<ExpenseFormState> {
   await requirePermission("matters.expense.create");
+  await assertMatterAccess(matterId);
   const actorId = await getCurrentUserId();
 
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -196,6 +198,7 @@ export async function updateExpense(
   formData: FormData
 ): Promise<ExpenseFormState> {
   await requirePermission("matters.expense.edit");
+  await assertChildMatterAccess("expense", expenseId);
   const actorId = await getCurrentUserId();
 
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -282,6 +285,7 @@ export async function deleteExpense(
   expenseId: string
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("matters.expense.delete");
+  await assertChildMatterAccess("expense", expenseId);
   const actorId = await getCurrentUserId();
 
   const existing = await prisma.expense.findUnique({
