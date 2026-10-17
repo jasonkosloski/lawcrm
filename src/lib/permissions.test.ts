@@ -97,6 +97,7 @@ describe("expected-key invariants", () => {
   // the early-warning system.
   test.each([
     "matters.create",
+    "matters.view_all",
     "matters.manage_team",
     "matters.expense.create",
     "matters.expense.delete",

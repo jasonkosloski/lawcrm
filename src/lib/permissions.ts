@@ -47,6 +47,12 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
           "Open a new matter — manually via the New matter form or programmatically by converting a lead. Doesn't grant team-management or edit rights on existing matters.",
       },
       {
+        key: "matters.view_all",
+        label: "View all matters",
+        description:
+          "See every matter and everything on it (notes, documents, time, billing, calendar details) even when not on its case team. Only matters once the firm's matter visibility is set to Team only in Settings → Firm; Admins always have it. Grant to roles such as billing or office manager before turning team-only on.",
+      },
+      {
         key: "matters.manage_team",
         label: "Manage team members",
         description:
