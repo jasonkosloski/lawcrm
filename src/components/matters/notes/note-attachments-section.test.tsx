@@ -109,6 +109,7 @@ const FULL_ACCESS: NoteAccess = {
   canCreateNote: true,
   canPin: true,
   canDeleteAnyNote: true,
+  canEditAnyNote: true,
   canCreateTask: true,
   canDeleteTask: true,
   canCreateDeadline: true,

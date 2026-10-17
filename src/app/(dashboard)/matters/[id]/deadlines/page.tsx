@@ -103,6 +103,7 @@ export default async function MatterDeadlinesPage({
     canEdit,
     canDelete,
     canLogTime,
+    canAddNote,
     captureAccess,
   ] = await Promise.all([
     getMatterDeadlines(id),
@@ -117,6 +118,7 @@ export default async function MatterDeadlinesPage({
     currentUserHasPermission("deadlines.edit"),
     currentUserHasPermission("deadlines.delete"),
     currentUserHasPermission("time_entries.create"),
+    currentUserHasPermission("notes.create"),
     getCaptureAccess(),
   ]);
   const rules = canCreate ? allRules : [];
@@ -249,6 +251,7 @@ export default async function MatterDeadlinesPage({
                     canEdit={canEdit}
                     canDelete={canDelete}
                     canLogTime={canLogTime}
+                    canAddNote={canAddNote}
                     deadline={{
                       id: d.id,
                       title: d.title,

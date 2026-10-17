@@ -1,82 +1,105 @@
 /**
- * Expense Row Actions — kebab menu on every expense row.
+ * Expense Row Actions — kebab menu on every expense row: Edit
+ * (`matters.expense.edit`) and Delete (`matters.expense.delete`).
  *
- * Today: Delete only. Server refuses delete on rows that have
- * been billed onto an invoice (the FK is set), so the action
- * naturally guards against accidental data loss after an invoice
- * has gone out.
- *
- * Edit-in-place is the next round (UI exists in the action layer
- * via `updateExpense` — we just need the dialog).
+ * Both are hidden on rows already billed onto an invoice: the server
+ * refuses edits/deletes there (the invoice's amounts would silently
+ * drift), so the menu doesn't offer a dead end.
  */
 
 "use client";
 
-import { useTransition } from "react";
-import { MoreHorizontal, Trash2 } from "lucide-react";
+import { useState, useTransition } from "react";
+import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { deleteExpense } from "@/app/actions/expenses";
+import { EditExpenseDialog, type EditableExpense } from "./edit-expense-dialog";
+import type { ExpenseDocumentOption } from "./expense-fields";
 
 export function ExpenseRowActions({
-  expenseId,
-  description,
+  expense,
   isBilled,
+  canEdit,
   canDelete,
+  documentOptions = [],
 }: {
-  expenseId: string;
-  description: string;
-  /** True when the expense has been linked onto an invoice. The
-   *  server refuses the delete in that case; we hide the menu
-   *  item entirely so the user doesn't see a dead-end action. */
+  expense: EditableExpense;
+  /** True when the expense has been linked onto an invoice. */
   isBilled: boolean;
-  /** True when the current user holds `matters.expense.delete`. */
+  /** matters.expense.edit */
+  canEdit: boolean;
+  /** matters.expense.delete */
   canDelete: boolean;
+  /** Receipt candidates for the edit dialog. */
+  documentOptions?: ExpenseDocumentOption[];
 }) {
   const [pending, startTransition] = useTransition();
+  const [editOpen, setEditOpen] = useState(false);
 
   // Nothing to render if there's no permitted action — the kebab
   // would just be visual noise.
+  const showEdit = canEdit && !isBilled;
   const showDelete = canDelete && !isBilled;
-  if (!showDelete) return null;
+  if (!showEdit && !showDelete) return null;
 
   const handleDelete = () => {
     if (
       !confirm(
-        `Delete expense "${description}"? This is permanent. The audit log keeps a record of the deletion.`
+        `Delete expense "${expense.description}"? This is permanent. The audit log keeps a record of the deletion.`
       )
     )
       return;
     startTransition(async () => {
-      const res = await deleteExpense(expenseId);
+      const res = await deleteExpense(expense.id);
       if (!res.ok) alert(res.error ?? "Couldn't delete expense.");
     });
   };
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <button
-            type="button"
-            aria-label="Expense actions"
-            disabled={pending}
-            className="inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-4 hover:bg-paper-2 hover:text-ink disabled:opacity-50"
-          >
-            <MoreHorizontal size={14} />
-          </button>
-        }
-      />
-      <DropdownMenuContent align="end" className="min-w-44">
-        <DropdownMenuItem variant="destructive" onClick={handleDelete}>
-          <Trash2 />
-          Delete expense
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <button
+              type="button"
+              aria-label="Expense actions"
+              disabled={pending}
+              className="inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-4 hover:bg-paper-2 hover:text-ink disabled:opacity-50"
+            >
+              <MoreHorizontal size={14} />
+            </button>
+          }
+        />
+        <DropdownMenuContent align="end" className="min-w-44">
+          {showEdit && (
+            <DropdownMenuItem onClick={() => setEditOpen(true)}>
+              <Pencil />
+              Edit expense
+            </DropdownMenuItem>
+          )}
+          {showEdit && showDelete && <DropdownMenuSeparator />}
+          {showDelete && (
+            <DropdownMenuItem variant="destructive" onClick={handleDelete}>
+              <Trash2 />
+              Delete expense
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {showEdit && (
+        <EditExpenseDialog
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          expense={expense}
+          documentOptions={documentOptions}
+        />
+      )}
+    </>
   );
 }

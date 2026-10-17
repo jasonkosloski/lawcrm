@@ -25,6 +25,7 @@ import {
   Mail,
   MessageSquare,
   MoreHorizontal,
+  Pencil,
   Phone,
   Pin,
   Trash2,
@@ -60,6 +61,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { ConvertNoteToTaskDialog } from "@/components/conversions/convert-dialogs";
+import { EditNoteDialog } from "./edit-note-dialog";
 
 export type NoteCardNote = {
   id: string;
@@ -99,11 +101,14 @@ export function NoteCard({
   // Timestamps are instants: show them in the viewer's PROFILE zone,
   // the same zone the server renders with (no hydration mismatch).
   const tz = useUserTimeZone();
-  const canDelete =
-    note.authorId === access.userId || access.canDeleteAnyNote;
+  const isAuthor = note.authorId === access.userId;
+  const canDelete = isAuthor || access.canDeleteAnyNote;
+  // Same rule updateNote enforces: authors always, others need notes.edit_any.
+  const canEdit = isAuthor || access.canEditAnyNote;
   const [pending, startTransition] = useTransition();
   const [replyOpen, setReplyOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   const onTogglePin = () => {
     startTransition(async () => {
@@ -199,7 +204,7 @@ export function NoteCard({
               </span>
             )
           )}
-          {(access.canCreateTask || canDelete) && (
+          {(canEdit || access.canCreateTask || canDelete) && (
             <DropdownMenu>
               <DropdownMenuTrigger
                 aria-label="Note actions"
@@ -209,13 +214,19 @@ export function NoteCard({
                 <MoreHorizontal size={14} />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-44">
+                {canEdit && (
+                  <DropdownMenuItem onClick={() => setEditOpen(true)}>
+                    <Pencil size={13} />
+                    Edit note
+                  </DropdownMenuItem>
+                )}
                 {access.canCreateTask && (
                   <DropdownMenuItem onClick={() => setConvertOpen(true)}>
                     <ArrowRight size={13} />
                     Convert to task
                   </DropdownMenuItem>
                 )}
-                {access.canCreateTask && canDelete && <DropdownMenuSeparator />}
+                {(canEdit || access.canCreateTask) && canDelete && <DropdownMenuSeparator />}
                 {canDelete && (
                   <DropdownMenuItem variant="destructive" onClick={onDelete}>
                     <Trash2 size={13} />
@@ -290,7 +301,12 @@ export function NoteCard({
       </CardContent>
     </Card>
 
-    <ConvertNoteToTaskDialog
+    <EditNoteDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        note={{ id: note.id, type: note.type, content: note.content }}
+      />
+      <ConvertNoteToTaskDialog
       open={convertOpen}
       onOpenChange={setConvertOpen}
       noteId={note.id}

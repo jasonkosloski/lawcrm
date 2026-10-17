@@ -235,6 +235,8 @@ export type NoteAccess = {
   canPin: boolean;
   /** notes.delete_any - delete other people's notes. */
   canDeleteAnyNote: boolean;
+  /** notes.edit_any - edit other people's notes (authors always may). */
+  canEditAnyNote: boolean;
   canCreateTask: boolean;
   canDeleteTask: boolean;
   canCreateDeadline: boolean;
@@ -252,6 +254,7 @@ export const NO_NOTE_ACCESS: NoteAccess = {
   canCreateNote: false,
   canPin: false,
   canDeleteAnyNote: false,
+  canEditAnyNote: false,
   canCreateTask: false,
   canDeleteTask: false,
   canCreateDeadline: false,

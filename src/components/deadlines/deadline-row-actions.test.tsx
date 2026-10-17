@@ -17,6 +17,9 @@ vi.mock("@/app/actions/deadlines", () => ({
   setDeadlineStatus: vi.fn(),
   updateDeadline: vi.fn(),
 }));
+vi.mock("@/app/actions/note-on-entity", () => ({
+  addNoteToDeadline: vi.fn(),
+}));
 vi.mock("@/app/actions/time-on-entity", () => ({
   addTimeEntryToDeadline: vi.fn(),
 }));
@@ -36,7 +39,7 @@ const base: EditableDeadline = {
   status: "open",
 };
 
-const all = { canEdit: true, canDelete: true, canLogTime: true };
+const all = { canEdit: true, canDelete: true, canLogTime: true, canAddNote: true };
 
 const setupUser = () => userEvent.setup({ pointerEventsCheck: 0 });
 
@@ -102,6 +105,7 @@ describe("DeadlineRowMenu - permission-gated items", () => {
         canEdit
         canDelete={false}
         canLogTime={false}
+        canAddNote={false}
       />
     );
     await open(user);
@@ -119,6 +123,7 @@ describe("DeadlineRowMenu - permission-gated items", () => {
         canEdit={false}
         canDelete
         canLogTime={false}
+        canAddNote={false}
       />
     );
     await open(user);
@@ -134,10 +139,32 @@ describe("DeadlineRowMenu - permission-gated items", () => {
         canEdit={false}
         canDelete={false}
         canLogTime={false}
+        canAddNote={false}
       />
     );
     expect(
       screen.queryByRole("button", { name: /deadline actions/i })
     ).toBeNull();
+  });
+});
+
+describe("DeadlineRowMenu — Add note", () => {
+  const openMenu = async (user: ReturnType<typeof setupUser>) =>
+    user.click(screen.getByRole("button", { name: /deadline actions/i }));
+  test("notes.create alone shows the kebab with just 'Add note', which opens the composer", async () => {
+    const user = setupUser();
+    render(
+      <DeadlineRowMenu
+        deadline={base}
+        canEdit={false}
+        canDelete={false}
+        canLogTime={false}
+        canAddNote
+      />
+    );
+    await openMenu(user);
+    await user.click(await screen.findByText("Add note on this deadline"));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.queryByText("Edit")).toBeNull();
   });
 });

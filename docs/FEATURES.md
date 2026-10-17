@@ -26,9 +26,6 @@ defects, but some things are still PARTIAL or unbuilt:
   [PERMISSIONS.md](./PERMISSIONS.md). `matters.manage_team` is still not a read gate.
 - **Invoice email delivery is logged-only** (audit titles say "not
   emailed"); nothing is actually sent to the client.
-- `updateExpense` exists server-side
-  with no UI. Note edit UI (`updateNote`) and "Add note" on a
-  deadline (`addNoteToDeadline`) have no UI caller.
 
 The remaining work clusters around three buckets:
 

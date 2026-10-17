@@ -8,9 +8,10 @@ import userEvent from "@testing-library/user-event";
 
 vi.mock("@/app/actions/expenses", () => ({
   deleteExpense: vi.fn(),
+  updateExpense: vi.fn(async () => ({ status: "ok" })),
 }));
 
-import { deleteExpense } from "@/app/actions/expenses";
+import { deleteExpense, updateExpense } from "@/app/actions/expenses";
 import { ExpenseRowActions } from "./expense-row-actions";
 
 // happy-dom doesn't implement alert/confirm — stub them as globals
@@ -31,12 +32,25 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+const expenseRow = {
+  id: "e1",
+  date: "2026-09-30",
+  amount: "12.50",
+  description: "Postage",
+  category: "postage" as const,
+  utbmsCode: "",
+  billable: true,
+  clientAdvanced: false,
+  notes: "",
+  receiptDocumentId: "doc-old",
+};
+
 const renderRow = (over: Partial<Parameters<typeof ExpenseRowActions>[0]> = {}) =>
   render(
     <ExpenseRowActions
-      expenseId="e1"
-      description="Postage"
+      expense={expenseRow}
       isBilled={false}
+      canEdit={false}
       canDelete
       {...over}
     />
@@ -87,5 +101,48 @@ describe("ExpenseRowActions", () => {
         expect.stringMatching(/billed on an invoice/)
       )
     );
+  });
+});
+
+describe("ExpenseRowActions — Edit", () => {
+  test("hidden without matters.expense.edit, and on billed rows", async () => {
+    const user = userEvent.setup();
+    renderRow({ canEdit: false });
+    await user.click(screen.getByRole("button", { name: /expense actions/i }));
+    await screen.findByText(/delete expense/i);
+    expect(screen.queryByText(/edit expense/i)).toBeNull();
+  });
+
+  test("edit-only viewers get a kebab; billed rows get none", () => {
+    const { container, unmount } = renderRow({ canEdit: true, canDelete: false, isBilled: true });
+    expect(container.firstChild).toBeNull();
+    unmount();
+    renderRow({ canEdit: true, canDelete: false });
+    expect(screen.getByRole("button", { name: /expense actions/i })).toBeInTheDocument();
+  });
+
+  test("the dialog is seeded from the row and posts every field, keeping an off-list receipt", async () => {
+    const user = userEvent.setup();
+    renderRow({ canEdit: true, documentOptions: [{ id: "doc-new", name: "New receipt.pdf" }] });
+    await user.click(screen.getByRole("button", { name: /expense actions/i }));
+    await user.click(await screen.findByText(/edit expense/i));
+
+    const amount = await screen.findByLabelText(/amount/i);
+    expect(amount).toHaveValue("12.50");
+    expect(screen.getByLabelText(/^date/i)).toHaveValue("2026-09-30");
+    await user.clear(amount);
+    await user.type(amount, "15.00");
+    await user.click(screen.getByRole("button", { name: /save expense/i }));
+
+    const [id, , fd] = vi.mocked(updateExpense).mock.calls[0];
+    expect(id).toBe("e1");
+    const f = fd as FormData;
+    expect(f.get("amount")).toBe("15.00");
+    expect(f.get("date")).toBe("2026-09-30");
+    expect(f.get("description")).toBe("Postage");
+    expect(f.get("category")).toBe("postage");
+    expect(f.get("billable")).toBe("on");
+    // The attached receipt isn't in the picker list but must survive.
+    expect(f.getAll("receiptDocumentId")).toEqual(["doc-old"]);
   });
 });

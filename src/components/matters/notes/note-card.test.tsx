@@ -32,6 +32,7 @@ vi.mock("@/app/actions/notes", () => ({
   toggleNotePin: vi.fn(async () => ({ ok: true })),
   toggleNoteReaction: vi.fn(async () => ({ ok: true })),
   createNote: vi.fn(),
+  updateNote: vi.fn(async () => ({ status: "ok" })),
 }));
 // Children with their own suites / heavy deps.
 vi.mock("./note-attachments-section", () => ({
@@ -57,7 +58,7 @@ vi.mock("@/components/conversions/convert-dialogs", () => ({
   ),
 }));
 
-import { deleteNote, toggleNotePin } from "@/app/actions/notes";
+import { deleteNote, toggleNotePin, updateNote } from "@/app/actions/notes";
 import { UserTimeZoneProvider } from "@/components/user-time-zone";
 import { NO_NOTE_ACCESS, type NoteAccess } from "@/lib/note-constants";
 import { NoteCard, type NoteCardNote } from "./note-card";
@@ -67,6 +68,7 @@ const FULL: NoteAccess = {
   canCreateNote: true,
   canPin: true,
   canDeleteAnyNote: true,
+  canEditAnyNote: true,
   canCreateTask: true,
   canDeleteTask: true,
   canCreateDeadline: true,
@@ -193,5 +195,47 @@ describe("Convert-to-task prefill", () => {
     expect(convert.dataset.description).toBe(
       "Call Smith & Jones re: <redacted> exhibit"
     );
+  });
+});
+
+describe("NoteCard — Edit note", () => {
+  const openMenu = async (user: ReturnType<typeof userEvent.setup>) =>
+    user.click(screen.getByRole("button", { name: /note actions/i }));
+
+  test("the author can edit their own note without notes.edit_any", async () => {
+    const user = userEvent.setup();
+    renderCard(note({ authorId: "me" }), { ...NO_NOTE_ACCESS, userId: "me" });
+    await openMenu(user);
+    expect(await screen.findByText("Edit note")).toBeInTheDocument();
+  });
+
+  test("someone else's note: Edit only with notes.edit_any", async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderCard(note({ authorId: "other" }), {
+      ...NO_NOTE_ACCESS,
+      userId: "me",
+      canCreateTask: true, // keeps the kebab present
+    });
+    await openMenu(user);
+    await screen.findByText("Convert to task");
+    expect(screen.queryByText("Edit note")).toBeNull();
+    unmount();
+
+    renderCard(note({ authorId: "other" }), { ...NO_NOTE_ACCESS, userId: "me", canEditAnyNote: true });
+    await openMenu(user);
+    expect(await screen.findByText("Edit note")).toBeInTheDocument();
+  });
+
+  test("saving posts the note's content and chosen type to updateNote", async () => {
+    const user = userEvent.setup();
+    renderCard(note({ authorId: "me", type: "note", content: "<p>Body</p>" }), { ...NO_NOTE_ACCESS, userId: "me" });
+    await openMenu(user);
+    await user.click(await screen.findByText("Edit note"));
+    await user.click(await screen.findByRole("button", { name: "Strategy" }));
+    await user.click(screen.getByRole("button", { name: /save note/i }));
+    const [noteId, , fd] = vi.mocked(updateNote).mock.calls[0];
+    expect(noteId).toBe("n1");
+    expect((fd as FormData).get("type")).toBe("strategy");
+    expect((fd as FormData).get("content")).toContain("Body");
   });
 });

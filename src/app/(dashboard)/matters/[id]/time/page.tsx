@@ -19,7 +19,7 @@
 import Link from "next/link";
 // Entry/expense dates are date-only values (ADR-012): formatDateOnly
 // reads them in UTC, so they never shift with any zone.
-import { formatDateOnly } from "@/lib/format-date";
+import { dateOnlyKey, formatDateOnly } from "@/lib/format-date";
 import { Card } from "@/components/ui/card";
 import {
   Table,
@@ -87,6 +87,7 @@ export default async function MatterTimePage({
     totalEntries,
     canViewExpenses,
     canCreateExpense,
+    canEditExpense,
     canDeleteExpense,
     canCreateTime,
     canEditAnyTime,
@@ -98,6 +99,7 @@ export default async function MatterTimePage({
     prisma.timeEntry.count({ where: { matterId: id } }),
     currentUserHasPermission("matters.expense.view"),
     currentUserHasPermission("matters.expense.create"),
+    currentUserHasPermission("matters.expense.edit"),
     currentUserHasPermission("matters.expense.delete"),
     // Hide what the server would refuse (and bounce to '/', losing
     // the typed input). The actions stay the real gate.
@@ -109,11 +111,12 @@ export default async function MatterTimePage({
   // permission check itself, so amounts/receipts must not be fetched
   // (never mind rendered) for viewers without matters.expense.view.
   // The document list only feeds the expense composer's receipt
-  // picker, so it loads only for viewers who can create expenses.
+  // and edit-dialog receipt pickers, so it loads only for viewers who
+  // can create or edit expenses.
   const [expenses, matterDocuments] = canViewExpenses
     ? await Promise.all([
         getMatterExpenses(id),
-        canCreateExpense
+        canCreateExpense || canEditExpense
           ? // Compact, capped projection - name + id only.
             prisma.document.findMany({
               where: { matterId: id },
@@ -140,6 +143,7 @@ export default async function MatterTimePage({
             matterId={id}
             expenses={expenses}
             canCreate={canCreateExpense}
+            canEdit={canEditExpense}
             canDelete={canDeleteExpense}
             documentOptions={expenseDocumentOptions}
           />
@@ -222,6 +226,7 @@ export default async function MatterTimePage({
           matterId={id}
           expenses={expenses}
           canCreate={canCreateExpense}
+          canEdit={canEditExpense}
           canDelete={canDeleteExpense}
           documentOptions={expenseDocumentOptions}
         />
@@ -377,12 +382,14 @@ function ExpensesSection({
   matterId,
   expenses,
   canCreate,
+  canEdit,
   canDelete,
   documentOptions,
 }: {
   matterId: string;
   expenses: { rows: ExpenseRow[]; totalAmount: number; billableUnbilledAmount: number };
   canCreate: boolean;
+  canEdit: boolean;
   canDelete: boolean;
   documentOptions: ExpenseDocumentOption[];
 }) {
@@ -436,7 +443,9 @@ function ExpensesSection({
                   key={e.id}
                   expense={e}
                   matterId={matterId}
+                  canEdit={canEdit}
                   canDelete={canDelete}
+                  documentOptions={documentOptions}
                 />
               ))}
             </TableBody>
@@ -450,11 +459,15 @@ function ExpensesSection({
 function ExpenseTableRow({
   expense,
   matterId,
+  canEdit,
   canDelete,
+  documentOptions,
 }: {
   expense: ExpenseRow;
   matterId: string;
+  canEdit: boolean;
   canDelete: boolean;
+  documentOptions: ExpenseDocumentOption[];
 }) {
   return (
     <TableRow>
@@ -538,10 +551,24 @@ function ExpenseTableRow({
       </TableCell>
       <TableCell className="pr-4 text-right">
         <ExpenseRowActions
-          expenseId={expense.id}
-          description={expense.description}
+          // Server-shaped for the edit dialog: a day key + fixed-2
+          // string, never a Date the browser would re-read (ADR-012).
+          expense={{
+            id: expense.id,
+            date: dateOnlyKey(expense.date),
+            amount: expense.amount.toFixed(2),
+            description: expense.description,
+            category: expense.category as ExpenseCategory,
+            utbmsCode: expense.utbmsCode ?? "",
+            billable: expense.billable,
+            clientAdvanced: expense.clientAdvanced,
+            notes: expense.notes ?? "",
+            receiptDocumentId: expense.receiptDocumentId ?? "",
+          }}
           isBilled={!!expense.invoiceId}
+          canEdit={canEdit}
           canDelete={canDelete}
+          documentOptions={documentOptions}
         />
       </TableCell>
     </TableRow>

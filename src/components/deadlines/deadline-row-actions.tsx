@@ -14,7 +14,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Clock, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Clock, MessageSquarePlus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,20 +39,26 @@ import {
   type EditableDeadline,
 } from "./edit-deadline-dialog";
 import { LogTimeOnEntityDialog } from "@/components/time-entries/log-time-on-entity-dialog";
+import { AddNoteOnEntityDialog } from "@/components/notes/add-note-on-entity-dialog";
+import { addNoteToDeadline } from "@/app/actions/note-on-entity";
 
 export function DeadlineRowMenu({
   deadline,
   canEdit,
   canDelete,
   canLogTime,
+  canAddNote,
 }: {
   deadline: EditableDeadline;
   canEdit: boolean;
   canDelete: boolean;
   canLogTime: boolean;
+  /** notes.create — Add note on this deadline (addNoteToDeadline). */
+  canAddNote: boolean;
 }) {
   const [editOpen, setEditOpen] = useState(false);
   const [logTimeOpen, setLogTimeOpen] = useState(false);
+  const [addNoteOpen, setAddNoteOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   // The auto-managed SOL row can't be deleted or moved from here.
@@ -84,7 +90,7 @@ export function DeadlineRowMenu({
   };
 
   // Nothing this viewer may do -> no empty kebab.
-  if (!canEdit && !showDelete && !canLogTime) return null;
+  if (!canEdit && !showDelete && !canLogTime && !canAddNote) return null;
 
   return (
     <>
@@ -117,6 +123,12 @@ export function DeadlineRowMenu({
             <DropdownMenuItem onClick={() => setLogTimeOpen(true)}>
               <Clock />
               Log time on this deadline
+            </DropdownMenuItem>
+          )}
+          {canAddNote && (
+            <DropdownMenuItem onClick={() => setAddNoteOpen(true)}>
+              <MessageSquarePlus />
+              Add note on this deadline
             </DropdownMenuItem>
           )}
           {canEdit && (
@@ -159,6 +171,14 @@ export function DeadlineRowMenu({
         open={logTimeOpen}
         onOpenChange={setLogTimeOpen}
         action={addTimeEntryToDeadline.bind(null, deadline.id)}
+        parentLabel={deadline.title}
+        parentKind="deadline"
+      />
+
+      <AddNoteOnEntityDialog
+        open={addNoteOpen}
+        onOpenChange={setAddNoteOpen}
+        action={addNoteToDeadline.bind(null, deadline.id)}
         parentLabel={deadline.title}
         parentKind="deadline"
       />

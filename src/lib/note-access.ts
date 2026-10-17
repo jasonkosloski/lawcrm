@@ -21,6 +21,7 @@ export async function getNoteAccess(): Promise<NoteAccess> {
     canCreateNote: has("notes.create"),
     canPin: has("notes.pin"),
     canDeleteAnyNote: has("notes.delete_any"),
+    canEditAnyNote: has("notes.edit_any"),
     canCreateTask: has("tasks.create"),
     canDeleteTask: has("tasks.delete"),
     canCreateDeadline: has("deadlines.create"),

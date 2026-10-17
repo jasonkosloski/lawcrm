@@ -206,14 +206,23 @@ describe("MatterTimePage — matters.expense.view gate", () => {
 });
 
 describe("MatterTimePage — receipt picker documents", () => {
-  test("documents are not fetched for a viewer who cannot create expenses", async () => {
+  test("documents are not fetched for a viewer who can neither create nor edit expenses", async () => {
     arrange();
-    grantAllExcept("matters.expense.create");
+    grantAllExcept("matters.expense.create", "matters.expense.edit");
 
     render(await MatterTimePage(props()));
 
     expect(mockedExpenses).toHaveBeenCalled();
     expect(mockedFindDocuments).not.toHaveBeenCalled();
+  });
+
+  test("edit-only viewers still get the documents (the edit dialog's receipt picker)", async () => {
+    arrange();
+    grantAllExcept("matters.expense.create");
+
+    render(await MatterTimePage(props()));
+
+    expect(mockedFindDocuments).toHaveBeenCalled();
   });
 
   test("the picker query is capped", async () => {
