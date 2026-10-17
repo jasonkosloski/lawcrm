@@ -16,16 +16,24 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FirmEditForm } from "@/components/settings/firm-edit-form";
 import { FirmReadView } from "@/components/settings/firm-read-view";
 import { FirmCalendarDefaultsCard } from "@/components/settings/calendar-defaults-card";
-import { ADMIN_ROLE_NAME, getCurrentFirm, getFirmGoals } from "@/lib/firm";
+import { MatterVisibilityCard } from "@/components/settings/matter-visibility-card";
+import {
+  ADMIN_ROLE_NAME,
+  getCurrentFirm,
+  getFirmGoals,
+  isCurrentUserAdmin,
+} from "@/lib/firm";
+import { listThinTeams } from "@/lib/queries/thin-teams";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/current-user";
 
 export default async function FirmSettingsPage() {
   await requireUser();
-  const [firm, canEdit] = await Promise.all([
+  const [firm, canEdit, isAdmin] = await Promise.all([
     getCurrentFirm(),
     currentUserHasPermission("firm.edit_info"),
+    isCurrentUserAdmin(),
   ]);
 
   // Calendar default toggles aren't on the FirmProfile shape; the
@@ -36,10 +44,13 @@ export default async function FirmSettingsPage() {
       select: {
         autoAddTeamToNewEvents: true,
         autoAddTeamToUpcomingEvents: true,
+        matterVisibility: true,
       },
     }),
     getFirmGoals(),
   ]);
+  // Admin-only: the wall switch + the rosters to fix before flipping it.
+  const thin = isAdmin ? await listThinTeams() : null;
   const calendarDefaults = {
     autoAddTeamToNewEvents: firmSettings.autoAddTeamToNewEvents,
     autoAddTeamToUpcomingEvents: firmSettings.autoAddTeamToUpcomingEvents,
@@ -87,6 +98,16 @@ export default async function FirmSettingsPage() {
             canEdit={canEdit}
           />
         </div>
+
+        {isAdmin && thin && (
+          <div className="mt-6">
+            <MatterVisibilityCard
+              current={firmSettings.matterVisibility}
+              thinTotal={thin.total}
+              thinRows={thin.rows}
+            />
+          </div>
+        )}
       </div>
 
       {/* Right rail — quick context about firm members + admins. */}
