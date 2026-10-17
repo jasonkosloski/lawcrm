@@ -4,12 +4,13 @@
  * Server component. Renders the document body only (firm
  * letterhead, invoice meta, bill-to, line items, totals, notes).
  * The sticky top header (close button + state-machine action
- * buttons) lives in the parent page so the same component can be
- * reused in a future print / PDF route without the chrome.
+ * buttons) lives in the parent page, so the same component also
+ * renders the chrome-free print / Save-as-PDF route
+ * (`/print/invoices/[id]`, `printMode`).
  *
- * Designed to look like the document that'll eventually be PDF'd
- * and emailed — when that lands (deferred), we render the same
- * tree to a print-friendly route + PDF the result.
+ * Dates (ADR-012): line-item / expense / payment dates are
+ * date-only values shown on the stored calendar day; issue and due
+ * dates are instants shown in the viewer's profile zone (`timeZone`).
  */
 
 import { Building2, FileText, Wallet } from "lucide-react";
@@ -21,16 +22,11 @@ import {
 } from "@/lib/billing-form";
 import type { FirmProfile } from "@/lib/firm";
 import type { InvoiceDetail } from "@/lib/queries/billing";
-import { formatDate as formatDateVariant } from "@/lib/format-date";
+import { formatDate, formatDateOnly } from "@/lib/format-date";
 import { EditableLineItemRow } from "./editable-line-item-row";
 
 const formatMoney = (n: number): string =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-// Letterhead meta dates ("long") + row dates ("short"). Line-item /
-// expense / payment dates are date-only values (server-local
-// midnight) — no TZ override, same day grid they were saved on.
-const formatDate = (d: Date): string => formatDateVariant(d, "long");
 
 const STATUS_META: Record<string, string> = {
   draft: "bg-paper-2 text-ink-3 border-line",
@@ -45,6 +41,7 @@ const STATUS_META: Record<string, string> = {
 export function InvoicePreview({
   invoice,
   firm,
+  timeZone,
   printMode = false,
   editable = false,
   currentUserId = null,
@@ -52,6 +49,9 @@ export function InvoicePreview({
 }: {
   invoice: InvoiceDetail;
   firm: FirmProfile;
+  /** The viewer's profile zone (`getCurrentUserTimeZone()`): the
+   *  issue / due dates are instants and display in it. */
+  timeZone: string;
   /** When true, drops the `h-full` + `overflow-y-auto` scroll
    *  chrome that the side-panel layout needs. The document then
    *  flows naturally — letting browsers paginate it across
@@ -81,6 +81,11 @@ export function InvoicePreview({
     (canEditAnyTimeEntry || lineItemUserId === currentUserId);
   const statusClass = STATUS_META[invoice.status] ?? STATUS_META.draft;
   const isInternal = invoice.kind === "internal_record";
+  // A voided invoice owes nothing: the stored balance is just
+  // total - paid (= the full total, since void is refused once
+  // payments exist), so showing it as "Total due" on the document
+  // would contradict the Void badge and the AR figure.
+  const isVoid = invoice.status === "void";
   // Letterhead label flips per kind so the doc reads like what it
   // actually is — a real bill vs. a record-of-work file copy.
   const headerLabel = isInternal ? "Internal Record" : "Invoice";
@@ -215,11 +220,11 @@ export function InvoicePreview({
             <dl className="text-2xs grid grid-cols-[5rem_1fr] gap-y-1 self-start">
               <dt className="text-ink-4">Issued</dt>
               <dd className="text-ink font-mono">
-                {formatDate(invoice.issueDate)}
+                {formatDate(invoice.issueDate, "long", timeZone)}
               </dd>
               <dt className="text-ink-4">Due</dt>
               <dd className="text-ink font-mono">
-                {formatDate(invoice.dueDate)}
+                {formatDate(invoice.dueDate, "long", timeZone)}
                 {invoice.daysUntilDue !== null && invoice.daysUntilDue < 0 && (
                   <span className="text-warn ml-1.5">
                     ({Math.abs(invoice.daysUntilDue)} days late)
@@ -240,7 +245,7 @@ export function InvoicePreview({
               )}
               <dt className="text-ink-4">Balance</dt>
               <dd className="text-ink font-mono font-semibold">
-                {formatMoney(invoice.balance)}
+                {isVoid ? "—" : formatMoney(invoice.balance)}
               </dd>
             </dl>
           </div>
@@ -299,7 +304,7 @@ export function InvoicePreview({
                         className="border-b border-line/60 last:border-b-0 align-top"
                       >
                         <td className="py-2 font-mono text-ink-3 whitespace-nowrap pr-3">
-                          {formatDateVariant(li.date, "short")}
+                          {formatDateOnly(li.date, "short")}
                         </td>
                         <td className="py-2 pr-3">
                           <div className="text-ink">{li.activity}</div>
@@ -370,7 +375,7 @@ export function InvoicePreview({
                       className="border-b border-line/60 last:border-b-0 align-top"
                     >
                       <td className="py-2 font-mono text-ink-3 whitespace-nowrap pr-3">
-                        {formatDateVariant(ex.date, "short")}
+                        {formatDateOnly(ex.date, "short")}
                       </td>
                       <td className="py-2 pr-3">
                         <div className="text-ink">{ex.description}</div>
@@ -415,7 +420,7 @@ export function InvoicePreview({
                 Total due
               </dt>
               <dd className="text-ink font-mono font-semibold pt-1 border-t border-line mt-1">
-                {formatMoney(invoice.balance)}
+                {isVoid ? "Void — nothing due" : formatMoney(invoice.balance)}
               </dd>
             </dl>
           </div>
@@ -456,7 +461,7 @@ export function InvoicePreview({
                       className="border-b border-line/60 last:border-b-0 align-top"
                     >
                       <td className="py-2 font-mono text-ink-3 whitespace-nowrap pr-3">
-                        {formatDateVariant(p.date, "short")}
+                        {formatDateOnly(p.date, "short")}
                       </td>
                       <td className="py-2 pr-3">
                         <div className="text-ink">

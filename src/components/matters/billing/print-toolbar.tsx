@@ -6,10 +6,10 @@
  *      auto-print prompt was dismissed or the page was reloaded.
  *   2. Auto-trigger `window.print()` once on mount when
  *      `?autoprint=1` is in the URL — the default for the
- *      print-affordance link from the action bar. We use a small
- *      delay so fonts + layout settle before the print preview
- *      snapshot is taken (otherwise serif fonts can render in a
- *      fallback face on the PDF).
+ *      print-affordance link from the action bar. We wait for
+ *      `document.fonts.ready` (capped at 1.5 s) so fonts settle
+ *      before the print preview snapshot is taken (otherwise serif
+ *      fonts can render in a fallback face on the PDF).
  *
  * The toolbar itself is hidden in print via `@media print` rules
  * in `globals.css` (the `print:hidden` class).
@@ -20,14 +20,31 @@
 import { useEffect } from "react";
 import { Printer, X } from "lucide-react";
 
+/** Longest auto-print waits for web fonts before printing anyway. */
+const AUTOPRINT_FONT_WAIT_MS = 1500;
+
 export function PrintToolbar({ autoprint }: { autoprint: boolean }) {
   useEffect(() => {
     if (!autoprint) return;
-    // 250ms is enough for Inter / Fraunces / JetBrains Mono to
-    // resolve their CSS font-face downloads on a warm cache; web-
-    // fonts in the printed PDF look noticeably wrong otherwise.
-    const t = setTimeout(() => window.print(), 250);
-    return () => clearTimeout(t);
+    // Wait for the web fonts (Inter / Fraunces / JetBrains Mono) to
+    // finish loading before the print snapshot — a fixed delay can
+    // print with fallback faces on a cold cache. The race caps the
+    // wait so a font that never resolves can't block printing, and
+    // `document.fonts` may be missing (older engines, test DOM), in
+    // which case the cap alone applies.
+    let cancelled = false;
+    let capTimer: ReturnType<typeof setTimeout> | undefined;
+    const cap = new Promise<void>((resolve) => {
+      capTimer = setTimeout(resolve, AUTOPRINT_FONT_WAIT_MS);
+    });
+    const fontsReady: Promise<unknown> = document.fonts?.ready ?? cap;
+    void Promise.race([fontsReady, cap]).then(() => {
+      if (!cancelled) window.print();
+    });
+    return () => {
+      cancelled = true;
+      clearTimeout(capTimer);
+    };
   }, [autoprint]);
 
   return (

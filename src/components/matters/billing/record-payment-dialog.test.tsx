@@ -30,6 +30,7 @@ vi.mock("@/app/actions/billing", () => ({
 
 import { recordInvoicePayment } from "@/app/actions/billing";
 import { RecordPaymentDialog } from "./record-payment-dialog";
+import { UserTimeZoneProvider } from "@/components/user-time-zone";
 
 const mockedAction = vi.mocked(recordInvoicePayment);
 
@@ -281,5 +282,148 @@ describe("RecordPaymentDialog — Trust method needs billing.apply_trust", () =>
       />
     );
     expect(methodValues()).not.toContain("trust");
+  });
+});
+
+describe("RecordPaymentDialog — amount parsing matches the server (F467)", () => {
+  const amountInput = () =>
+    screen.getByLabelText(/^amount/i) as HTMLInputElement;
+
+  test("'1,200.00' on a $5,000 invoice previews $1,200.00, not $1.00", async () => {
+    const user = setupUser();
+    render(
+      <RecordPaymentDialog
+        {...baseProps}
+        invoiceBalance={5000}
+        open
+        onOpenChange={vi.fn()}
+      />
+    );
+    await user.clear(amountInput());
+    await user.type(amountInput(), "1,200.00");
+    expect(
+      screen.getByRole("button", { name: "Record $1,200.00" })
+    ).toBeEnabled();
+    expect(screen.getByText("$3,800.00")).toBeInTheDocument();
+  });
+
+  test("'$500' is accepted (the server strips the $)", async () => {
+    const user = setupUser();
+    render(
+      <RecordPaymentDialog {...baseProps} open onOpenChange={vi.fn()} />
+    );
+    await user.clear(amountInput());
+    await user.type(amountInput(), "$500");
+    expect(
+      screen.getByRole("button", { name: "Record $500.00 · mark paid" })
+    ).toBeEnabled();
+  });
+
+  test("the over-balance guard fires on a comma amount", async () => {
+    const user = setupUser();
+    render(
+      <RecordPaymentDialog {...baseProps} open onOpenChange={vi.fn()} />
+    );
+    await user.clear(amountInput());
+    await user.type(amountInput(), "1,000");
+    expect(screen.getByText(/exceeds the invoice balance/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /record \$/i })).toBeDisabled();
+  });
+
+  test("unparseable text says so instead of silently disabling submit", async () => {
+    const user = setupUser();
+    render(
+      <RecordPaymentDialog {...baseProps} open onOpenChange={vi.fn()} />
+    );
+    await user.clear(amountInput());
+    await user.type(amountInput(), "12.345");
+    expect(screen.getByText("Enter a valid amount.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /record \$/i })).toBeDisabled();
+  });
+});
+
+describe("RecordPaymentDialog — form behaviour", () => {
+  test("labels are associated with their controls (F468)", () => {
+    render(
+      <RecordPaymentDialog
+        {...baseProps}
+        trustBalance={900}
+        canApplyTrust
+        open
+        onOpenChange={vi.fn()}
+      />
+    );
+    expect(screen.getByLabelText(/^amount/i)).toHaveAttribute("name", "amount");
+    expect(screen.getByLabelText(/^method/i)).toHaveAttribute("name", "source");
+    expect(screen.getByLabelText(/^date/i)).toHaveAttribute("name", "date");
+    expect(screen.getByLabelText(/^reference/i)).toHaveAttribute(
+      "name",
+      "reference"
+    );
+    expect(screen.getByLabelText(/^memo/i)).toHaveAttribute(
+      "name",
+      "description"
+    );
+  });
+
+  test("a failed submit keeps what the user typed (no form-reset wipe)", async () => {
+    mockedAction.mockImplementation(async () => ({
+      status: "error" as const,
+      error: "Invoice is not in a payable state.",
+    }));
+    const user = setupUser();
+    render(
+      <RecordPaymentDialog {...baseProps} open onOpenChange={vi.fn()} />
+    );
+    await user.type(screen.getByLabelText(/^reference/i), "Check 4411");
+    await user.selectOptions(screen.getByLabelText(/^method/i), "ach");
+    await user.click(screen.getByRole("button", { name: /record \$/i }));
+    await screen.findByText("Invoice is not in a payable state.");
+    expect(screen.getByLabelText(/^reference/i)).toHaveValue("Check 4411");
+    expect(screen.getByLabelText(/^method/i)).toHaveValue("ach");
+  });
+
+  test("reopening re-seeds the working copy (typed amount does not survive)", async () => {
+    function Harness() {
+      const [open, setOpen] = useState(true);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>
+            reopen dialog
+          </button>
+          <RecordPaymentDialog
+            {...baseProps}
+            open={open}
+            onOpenChange={setOpen}
+          />
+        </>
+      );
+    }
+    const user = setupUser();
+    render(<Harness />);
+    await user.clear(screen.getByLabelText(/^amount/i));
+    await user.type(screen.getByLabelText(/^amount/i), "42");
+    await user.click(screen.getByRole("button", { name: /^cancel$/i }));
+    await waitFor(() =>
+      expect(screen.queryByLabelText(/^amount/i)).not.toBeInTheDocument()
+    );
+    await user.click(screen.getByRole("button", { name: /reopen dialog/i }));
+    expect(await screen.findByLabelText(/^amount/i)).toHaveValue("500.00");
+  });
+
+  test("the date defaults to the viewer's today in their zone (evening Denver is still the same day)", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    // 02:00Z on Apr 28 = 8 PM MDT on Apr 27.
+    vi.setSystemTime(new Date("2026-04-28T02:00:00Z"));
+    try {
+      render(
+        <UserTimeZoneProvider timeZone="America/Denver">
+          <RecordPaymentDialog {...baseProps} open onOpenChange={vi.fn()} />
+        </UserTimeZoneProvider>
+      );
+      expect(screen.getByLabelText(/^date/i)).toHaveValue("2026-04-27");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -11,7 +11,7 @@
 
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useCallback, useId, useState, useTransition } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { Plus, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -23,15 +23,33 @@ import {
   type BillingFormState,
   type TrustTxnType,
 } from "@/lib/billing-form";
-
-const todayIso = (): string => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
+import { todayKey } from "@/lib/format-date";
+import { useUserTimeZone } from "@/components/user-time-zone";
 
 export function TrustTransactionForm({ matterId }: { matterId: string }) {
   const [expanded, setExpanded] = useState(false);
-  const action = addTrustTransaction.bind(null, matterId);
+  const [type, setType] = useState<TrustTxnType>("deposit");
+  // Date input default: the viewer's today (their profile zone),
+  // captured when the form opens — never read during render.
+  const tz = useUserTimeZone();
+  const [defaultDate, setDefaultDate] = useState("");
+  const ids = useId();
+  // Collapse + reset on success, from inside the action wrapper: it
+  // runs once per invocation, so every success collapses the form
+  // (an effect keyed on `state.status` would not re-fire — the
+  // status stays "ok" — and one keyed on the state object needs a
+  // setState inside an effect).
+  const action = useCallback(
+    async (prev: BillingFormState, formData: FormData) => {
+      const res = await addTrustTransaction(matterId, prev, formData);
+      if (res.status === "ok") {
+        setExpanded(false);
+        setType("deposit");
+      }
+      return res;
+    },
+    [matterId]
+  );
   // Wrapped useActionState: masks state left over from a previous
   // expand, so a failed attempt's error banner doesn't reappear when
   // the form is re-expanded. See src/hooks/use-dialog-action-state.ts.
@@ -39,7 +57,6 @@ export function TrustTransactionForm({ matterId }: { matterId: string }) {
     BillingFormState,
     FormData
   >(action, billingInitialState, expanded);
-  const [type, setType] = useState<TrustTxnType>("deposit");
   // Dispatch via onSubmit + startTransition instead of
   // <form action={formAction}>: React 19 resets every form-action
   // form after the action settles — error or not — which wipes the
@@ -55,24 +72,14 @@ export function TrustTransactionForm({ matterId }: { matterId: string }) {
     startSubmit(() => formAction(fd));
   };
 
-  // Collapse + reset on success. Deps key on the state OBJECT, not
-  // state.status: useActionState keeps its state across
-  // submissions, so after the first success the status string is
-  // "ok" forever and a second success would skip the effect,
-  // leaving the form expanded. Each action invocation returns a
-  // fresh object, so identity is the reliable signal.
-  useEffect(() => {
-    if (state.status === "ok") {
-      setExpanded(false);
-      setType("deposit");
-    }
-  }, [state]);
-
   if (!expanded) {
     return (
       <button
         type="button"
-        onClick={() => setExpanded(true)}
+        onClick={() => {
+          setDefaultDate(todayKey(tz));
+          setExpanded(true);
+        }}
         className={cn(
           "inline-flex items-center gap-2 h-8 px-3 text-xs",
           "rounded-md border border-dashed border-line bg-white",
@@ -94,10 +101,14 @@ export function TrustTransactionForm({ matterId }: { matterId: string }) {
     >
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1">
-          <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+          <label
+            htmlFor={`${ids}-type`}
+            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+          >
             Type <span className="text-warn">*</span>
           </label>
           <select
+            id={`${ids}-type`}
             name="type"
             value={type}
             onChange={(e) => setType(e.target.value as TrustTxnType)}
@@ -111,10 +122,14 @@ export function TrustTransactionForm({ matterId }: { matterId: string }) {
           </select>
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+          <label
+            htmlFor={`${ids}-amount`}
+            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+          >
             Amount <span className="text-warn">*</span>
           </label>
           <input
+            id={`${ids}-amount`}
             name="amount"
             type="text"
             inputMode="decimal"
@@ -132,10 +147,14 @@ export function TrustTransactionForm({ matterId }: { matterId: string }) {
           )}
         </div>
         <div className="flex flex-col gap-1 col-span-2">
-          <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+          <label
+            htmlFor={`${ids}-description`}
+            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+          >
             Description <span className="text-warn">*</span>
           </label>
           <input
+            id={`${ids}-description`}
             name="description"
             type="text"
             required
@@ -153,10 +172,14 @@ export function TrustTransactionForm({ matterId }: { matterId: string }) {
           )}
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+          <label
+            htmlFor={`${ids}-reference`}
+            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+          >
             Reference
           </label>
           <input
+            id={`${ids}-reference`}
             name="reference"
             type="text"
             placeholder="Check #, wire ID, etc."
@@ -165,13 +188,17 @@ export function TrustTransactionForm({ matterId }: { matterId: string }) {
           />
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+          <label
+            htmlFor={`${ids}-date`}
+            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+          >
             Date
           </label>
           <input
+            id={`${ids}-date`}
             name="date"
             type="date"
-            defaultValue={todayIso()}
+            defaultValue={defaultDate}
             className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
           />
         </div>

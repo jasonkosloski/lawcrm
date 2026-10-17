@@ -2,15 +2,20 @@
  * Generate Invoice from WIP — admin composer.
  *
  * Sits inside the WIP card on the billing page. Collapsed: a single
- * CTA showing the WIP summary ("$X over Y entries — generate
- * invoice"). Expanded: dueDays + notes form, then submit. On
+ * CTA showing the WIP summary ("$X over Y entries + Z expenses —
+ * generate invoice"). Expanded: dueDays + notes form, then submit. On
  * success the action revalidates and we collapse back; the new
  * invoice row appears in the invoices table above.
+ *
+ * WIP here is time entries AND billable expenses: the server action
+ * bundles both and only refuses when both are empty, so a matter
+ * with only unbilled expenses (a filing fee) must still be invoiceable
+ * from this button.
  */
 
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useCallback, useId, useState, useTransition } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { FilePlus2, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -19,6 +24,7 @@ import {
   billingInitialState,
   type BillingFormState,
 } from "@/lib/billing-form";
+import { bundleCountLabel, bundleTotal } from "./bundle-summary";
 
 const formatMoney = (n: number): string =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -27,13 +33,34 @@ export function GenerateInvoiceForm({
   matterId,
   amountTotal,
   entryCount,
+  expenseTotal = 0,
+  expenseCount = 0,
 }: {
   matterId: string;
+  /** Unbilled time dollars. */
   amountTotal: number;
+  /** Unbilled time entries. */
   entryCount: number;
+  /** Unbilled billable expense dollars (the server bundles them too). */
+  expenseTotal?: number;
+  /** Unbilled billable expenses. */
+  expenseCount?: number;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const action = generateInvoiceFromWip.bind(null, matterId);
+  const ids = useId();
+  // Collapse on success, from inside the action wrapper: it runs once
+  // per invocation, so a SECOND success collapses the form too (an
+  // effect keyed on `state.status` would not re-fire — the status
+  // stays "ok" — and one keyed on the state object needs a setState
+  // inside an effect).
+  const action = useCallback(
+    async (prev: BillingFormState, formData: FormData) => {
+      const res = await generateInvoiceFromWip(matterId, prev, formData);
+      if (res.status === "ok") setExpanded(false);
+      return res;
+    },
+    [matterId]
+  );
   // Wrapped useActionState: masks state left over from a previous
   // expand, so a failed attempt's error banner doesn't reappear when
   // the form is re-expanded. See src/hooks/use-dialog-action-state.ts.
@@ -56,24 +83,17 @@ export function GenerateInvoiceForm({
     startSubmit(() => formAction(fd));
   };
 
-  // Collapse on success. Deps key on the state OBJECT, not
-  // state.status: useActionState keeps its state across
-  // submissions, so after the first success the status string is
-  // "ok" forever and a second success would skip the effect,
-  // leaving the form expanded. Each action invocation returns a
-  // fresh object, so identity is the reliable signal.
-  useEffect(() => {
-    if (state.status === "ok") setExpanded(false);
-  }, [state]);
-
-  if (entryCount === 0) {
+  if (entryCount + expenseCount === 0) {
     return (
       <div className="text-2xs text-ink-4 italic">
-        No unbilled time on this matter — log billable time on the Time
-        tab to generate an invoice.
+        No unbilled time or expenses on this matter — log billable time
+        or an expense on the Time tab to generate an invoice.
       </div>
     );
   }
+
+  const total = bundleTotal(amountTotal, expenseTotal);
+  const counts = bundleCountLabel(entryCount, expenseCount);
 
   if (!expanded) {
     return (
@@ -86,8 +106,7 @@ export function GenerateInvoiceForm({
         )}
       >
         <FilePlus2 size={13} />
-        Generate invoice — {formatMoney(amountTotal)} ·{" "}
-        {entryCount} {entryCount === 1 ? "entry" : "entries"}
+        Generate invoice — {formatMoney(total)} · {counts}
       </button>
     );
   }
@@ -98,17 +117,20 @@ export function GenerateInvoiceForm({
       className="flex flex-col gap-3 p-3 rounded-md border border-line bg-paper-2/40"
     >
       <div className="text-xs text-ink">
-        Bundle <strong>{entryCount}</strong>{" "}
-        {entryCount === 1 ? "entry" : "entries"} totaling{" "}
-        <strong>{formatMoney(amountTotal)}</strong> into a draft invoice.
+        Bundle <strong>{counts}</strong> totaling{" "}
+        <strong>{formatMoney(total)}</strong> into a draft invoice.
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1">
-          <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+          <label
+            htmlFor={`${ids}-dueDays`}
+            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+          >
             Due in (days)
           </label>
           <input
+            id={`${ids}-dueDays`}
             name="dueDays"
             type="number"
             min={0}
@@ -118,10 +140,14 @@ export function GenerateInvoiceForm({
           />
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+          <label
+            htmlFor={`${ids}-notes`}
+            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+          >
             Notes to client (optional, printed on invoice)
           </label>
           <input
+            id={`${ids}-notes`}
             name="notes"
             type="text"
             placeholder="Printed on the invoice the client receives"

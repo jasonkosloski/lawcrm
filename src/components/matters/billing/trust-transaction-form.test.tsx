@@ -20,6 +20,7 @@ vi.mock("@/app/actions/billing", () => ({
 
 import { addTrustTransaction } from "@/app/actions/billing";
 import { TrustTransactionForm } from "./trust-transaction-form";
+import { UserTimeZoneProvider } from "@/components/user-time-zone";
 
 const mockedAction = vi.mocked(addTrustTransaction);
 
@@ -107,5 +108,63 @@ describe("TrustTransactionForm — keeps input after a server error", () => {
     await user.click(screen.getByRole("button", { name: /add transaction/i }));
     expect(typeSelect().value).toBe("deposit");
     expect(field("amount").value).toBe("");
+  });
+
+  test("collapses after every successful submit, not just the first", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    mockedAction.mockImplementation(async () => ({ status: "ok" as const }));
+    render(<TrustTransactionForm matterId="m1" />);
+
+    for (let round = 0; round < 2; round++) {
+      await user.click(screen.getByRole("button", { name: /add transaction/i }));
+      await user.type(field("amount"), "10");
+      await user.type(field("description"), "Deposit");
+      await user.click(
+        screen.getByRole("button", { name: /record transaction/i })
+      );
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("button", { name: /record transaction/i })
+        ).not.toBeInTheDocument()
+      );
+    }
+    expect(mockedAction).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("TrustTransactionForm — labels and date default", () => {
+  test("every field is associated with its label", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(<TrustTransactionForm matterId="m1" />);
+    await user.click(screen.getByRole("button", { name: /add transaction/i }));
+    expect(screen.getByLabelText(/^type/i)).toHaveAttribute("name", "type");
+    expect(screen.getByLabelText(/^amount/i)).toHaveAttribute("name", "amount");
+    expect(screen.getByLabelText(/^description/i)).toHaveAttribute(
+      "name",
+      "description"
+    );
+    expect(screen.getByLabelText(/^reference/i)).toHaveAttribute(
+      "name",
+      "reference"
+    );
+    expect(screen.getByLabelText(/^date/i)).toHaveAttribute("name", "date");
+  });
+
+  test("the date defaults to the viewer's today in their zone (an evening in Denver is still that day)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    // 02:00Z on Apr 28 = 8 PM MDT on Apr 27.
+    vi.setSystemTime(new Date("2026-04-28T02:00:00Z"));
+    try {
+      const user = userEvent.setup({ pointerEventsCheck: 0 });
+      render(
+        <UserTimeZoneProvider timeZone="America/Denver">
+          <TrustTransactionForm matterId="m1" />
+        </UserTimeZoneProvider>
+      );
+      await user.click(screen.getByRole("button", { name: /add transaction/i }));
+      expect(screen.getByLabelText(/^date/i)).toHaveValue("2026-04-27");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

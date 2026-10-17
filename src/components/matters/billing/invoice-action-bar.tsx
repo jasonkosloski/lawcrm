@@ -19,6 +19,12 @@
  * Internal records keep their pre-refactor machine: a bare "Mark
  * recorded" status flip (draft → paid).
  *
+ * Every action is also gated on the viewer's permission flag (props
+ * from the billing page): a denied server action redirects to "/"
+ * without a message, so the bar never offers what the viewer can't
+ * do. Apply trust needs both billing.record_payment and
+ * billing.apply_trust, like the server.
+ *
  * Void lives in the kebab menu and is refused by the server when
  * any payment has been recorded — the kebab still shows the option
  * but the server is the source of truth (defense-in-depth against
@@ -82,6 +88,16 @@ export function InvoiceActionBar({
    *  forgets it can't expose them; the server enforces the key
    *  regardless. */
   canApplyTrust = false,
+  /** Per-action permission flags, resolved server-side by the page
+   *  (`currentUserHasPermission`). Each defaults to false so a
+   *  caller that forgets one can't offer a button the server would
+   *  answer with a silent redirect to "/" (requirePermission). The
+   *  server still enforces every key regardless. */
+  canApproveInvoice = false,
+  canSendInvoice = false,
+  canRecordInvoicePayment = false,
+  canVoid = false,
+  canDeleteDraft = false,
 }: {
   invoiceId: string;
   invoiceNumber: string;
@@ -92,15 +108,30 @@ export function InvoiceActionBar({
   paidAmount?: number;
   clientEmail?: string | null;
   canApplyTrust?: boolean;
+  /** billing.approve_invoice — also gates "Mark recorded" (the
+   *  server maps the internal-record paid flip to the same key). */
+  canApproveInvoice?: boolean;
+  /** billing.send_invoice */
+  canSendInvoice?: boolean;
+  /** billing.record_payment — Apply trust additionally needs
+   *  `canApplyTrust` (the server stacks both keys). */
+  canRecordInvoicePayment?: boolean;
+  /** billing.void_invoice */
+  canVoid?: boolean;
+  /** billing.delete_draft */
+  canDeleteDraft?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [sendOpen, setSendOpen] = useState(false);
   const [recordOpen, setRecordOpen] = useState(false);
   const [applyTrustOpen, setApplyTrustOpen] = useState(false);
 
-  const canApprove = kind === "client" && currentStatus === "draft";
-  const canSend = kind === "client" && currentStatus === "approved";
+  const canApprove =
+    canApproveInvoice && kind === "client" && currentStatus === "draft";
+  const canSend =
+    canSendInvoice && kind === "client" && currentStatus === "approved";
   const canRecordPayment =
+    canRecordInvoicePayment &&
     kind === "client" &&
     (currentStatus === "sent" || currentStatus === "partial") &&
     invoiceBalance > 0;
@@ -112,10 +143,13 @@ export function InvoiceActionBar({
   const showApplyTrust =
     canApplyTrust && canRecordPayment && trustBalance > 0;
   const canMarkRecorded =
+    canApproveInvoice &&
     kind === "internal_record" &&
     invoiceStatusTransitions(currentStatus, kind).includes("paid");
-  const deleteAllowed = canDeleteInvoice(currentStatus, paidAmount, kind);
-  const voidAllowed = canVoidInvoice(currentStatus, paidAmount, kind);
+  const deleteAllowed =
+    canDeleteDraft && canDeleteInvoice(currentStatus, paidAmount, kind);
+  const voidAllowed =
+    canVoid && canVoidInvoice(currentStatus, paidAmount, kind);
 
   const nothingToDo =
     !canApprove &&

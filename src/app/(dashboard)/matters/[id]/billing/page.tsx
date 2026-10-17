@@ -20,6 +20,17 @@
  *   - Real email delivery of invoices (send is logged-only today)
  *   - Settlement distribution waterfall
  *   - Tax calculation (taxAmount stays 0)
+ *   - Aging report (the row's daysUntilDue gets the user 90% there)
+ *
+ * Permissions: every mutating control is shown only to viewers
+ * holding its key (resolved here with currentUserHasPermission) —
+ * a denied server action silently redirects to "/", so the UI must
+ * not offer what the server will refuse. The server actions still
+ * enforce each key.
+ *
+ * Dates (ADR-012): invoice issue/due dates are instants shown in the
+ * viewer's profile zone; expense / payment / trust / time-entry
+ * dates are date-only values shown on their stored calendar day.
  */
 
 import Link from "next/link";
@@ -55,14 +66,20 @@ import { SettlementLienForm } from "@/components/matters/settlement/settlement-l
 import {
   getMatterBilling,
   getInvoiceById,
+  type InvoiceDetail,
   type MatterBilling,
 } from "@/lib/queries/billing";
+import {
+  getUnbilledExpenseSummary,
+  type UnbilledExpenseSummary,
+} from "@/lib/queries/billing-expenses";
 import {
   getMatterSettlement,
   type MatterSettlement,
 } from "@/lib/queries/settlements";
 import { getCurrentFirm } from "@/lib/firm";
 import { getCurrentUserId, requireUser } from "@/lib/current-user";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import {
   invoiceStatusLabel,
@@ -70,19 +87,29 @@ import {
   type InvoiceKind,
   type InvoicePaymentSource,
 } from "@/lib/billing-form";
-import { formatDate as formatDateVariant } from "@/lib/format-date";
+import { formatDate, formatDateOnly } from "@/lib/format-date";
+import { bundleTotal } from "@/components/matters/billing/bundle-summary";
 
 const formatMoney = (n: number): string =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 // Billing dates on this page are a mix of date-only values (expense /
-// payment / trust-transaction dates, stored at server-local midnight)
-// and instants (invoice issue/due, minted with `new Date()`). Both
-// funnel through the centralized "medium" variant on the server-local
-// grid — the day the value was saved on. Threading the viewer's TZ
-// for the instant flavor is deferred until the two storage shapes
-// are split apart.
-const formatDate = (d: Date): string => formatDateVariant(d, "medium");
+// payment / trust-transaction dates: shown on their stored calendar
+// day, no zone) and instants (invoice issue/due, minted with
+// `new Date()`: shown in the viewer's profile zone). ADR-012.
+const formatDay = (d: Date): string => formatDateOnly(d, "medium");
+
+/** Which mutating billing controls the viewer's keys allow. */
+type BillingPermissions = {
+  generateInvoice: boolean;
+  approveInvoice: boolean;
+  sendInvoice: boolean;
+  recordPayment: boolean;
+  applyTrust: boolean;
+  voidInvoice: boolean;
+  deleteDraft: boolean;
+  recordTrustTransaction: boolean;
+};
 
 const STATUS_META: Record<string, string> = {
   draft: "bg-paper-2 text-ink-3 border-line",
@@ -113,27 +140,43 @@ export default async function MatterBillingPage({
   const requestedInvoiceId =
     typeof rawInvoice === "string" ? rawInvoice : null;
 
+  // Gates the entire Settlement card — the waterfall (gross, firm
+  // fee, liens, client net) is the most sensitive number set on the
+  // matter, so billing-tab access alone isn't enough to see it.
+  // Started first so the settlement query below (settlement + liens
+  // + approvals) is skipped entirely for viewers who can't see it.
+  const canViewSettlementP = currentUserHasPermission(
+    "matters.settlement.view"
+  );
+
   const [
     billing,
     firm,
-    settlement,
+    timeZone,
+    unbilledExpenses,
     canViewSettlement,
+    settlement,
     canEditSettlement,
     canManageLiens,
     canApproveSettlement,
     canEditAnyTimeEntry,
     canApplyTrust,
-    canEditLineItems,
+    canGenerateInvoice,
+    canApproveInvoice,
+    canSendInvoice,
+    canRecordPayment,
+    canVoidInvoice,
+    canDeleteDraft,
+    canRecordTrustTransaction,
     currentUserId,
+    requestedInvoice,
   ] = await Promise.all([
     getMatterBilling(id),
     getCurrentFirm(),
-    getMatterSettlement(id),
-    // Gates the entire Settlement card — the waterfall (gross,
-    // firm fee, liens, client net) is the most sensitive number
-    // set on the matter, so billing-tab access alone isn't enough
-    // to see it.
-    currentUserHasPermission("matters.settlement.view"),
+    getCurrentUserTimeZone(),
+    getUnbilledExpenseSummary(id),
+    canViewSettlementP,
+    canViewSettlementP.then((ok) => (ok ? getMatterSettlement(id) : null)),
     currentUserHasPermission("matters.settlement.edit"),
     currentUserHasPermission("matters.settlement.manage_liens"),
     currentUserHasPermission("matters.settlement.approve"),
@@ -146,28 +189,53 @@ export default async function MatterBillingPage({
     // Apply-trust button, the Trust payment method and apply-at-send
     // (the server enforces the same key).
     currentUserHasPermission("billing.apply_trust"),
-    // Line-item edits price the invoice; the server requires the
-    // same key that creates the draft.
+    // Generate / bundle / line-item edits price the invoice; the
+    // server requires this key for all three.
     currentUserHasPermission("billing.generate_invoice"),
+    currentUserHasPermission("billing.approve_invoice"),
+    currentUserHasPermission("billing.send_invoice"),
+    currentUserHasPermission("billing.record_payment"),
+    currentUserHasPermission("billing.void_invoice"),
+    currentUserHasPermission("billing.delete_draft"),
+    currentUserHasPermission("trust.record_transaction"),
     getCurrentUserId(),
+    // Fetched in parallel with the rest instead of after it. It is
+    // only USED if the invoice belongs to this matter (below), so an
+    // id from another matter is read and discarded, never rendered.
+    requestedInvoiceId ? getInvoiceById(requestedInvoiceId) : null,
   ]);
+
+  const permissions: BillingPermissions = {
+    generateInvoice: canGenerateInvoice,
+    approveInvoice: canApproveInvoice,
+    sendInvoice: canSendInvoice,
+    recordPayment: canRecordPayment,
+    applyTrust: canApplyTrust,
+    voidInvoice: canVoidInvoice,
+    deleteDraft: canDeleteDraft,
+    recordTrustTransaction: canRecordTrustTransaction,
+  };
 
   // Validate the requested invoice belongs to this matter — defends
   // against a stale ?invoice= surviving navigation between matters
-  // (and against URL-tampering once we go multi-tenant).
-  const selectedInvoiceId =
-    requestedInvoiceId &&
-    billing.invoices.some((i) => i.id === requestedInvoiceId)
-      ? requestedInvoiceId
+  // (and against URL-tampering once we go multi-tenant). Both the
+  // matter's own invoice list AND the loaded row's matterId must
+  // agree.
+  const selectedInvoice: InvoiceDetail | null =
+    requestedInvoice &&
+    requestedInvoice.matterId === id &&
+    billing.invoices.some((i) => i.id === requestedInvoice.id)
+      ? requestedInvoice
       : null;
-  const selectedInvoice = selectedInvoiceId
-    ? await getInvoiceById(selectedInvoiceId)
-    : null;
+  const selectedInvoiceId = selectedInvoice?.id ?? null;
 
   const main = (
     <MainColumn
       matterId={id}
       billing={billing}
+      unbilledExpenses={unbilledExpenses}
+      permissions={permissions}
+      timeZone={timeZone}
       settlement={settlement}
       canViewSettlement={canViewSettlement}
       canEditSettlement={canEditSettlement}
@@ -202,7 +270,10 @@ export default async function MatterBillingPage({
           <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 mr-auto pl-1">
             Invoice {selectedInvoice.invoiceNumber}
           </div>
+          {/* Keyed by invoice: the bar owns dialog open-flags, which
+              must not carry over to the next selected invoice. */}
           <InvoiceActionBar
+            key={selectedInvoice.id}
             invoiceId={selectedInvoice.id}
             invoiceNumber={selectedInvoice.invoiceNumber}
             currentStatus={selectedInvoice.status}
@@ -211,7 +282,12 @@ export default async function MatterBillingPage({
             trustBalance={billing.trust.balance}
             paidAmount={selectedInvoice.paidAmount}
             clientEmail={selectedInvoice.clientEmail}
-            canApplyTrust={canApplyTrust}
+            canApplyTrust={permissions.applyTrust}
+            canApproveInvoice={permissions.approveInvoice}
+            canSendInvoice={permissions.sendInvoice}
+            canRecordInvoicePayment={permissions.recordPayment}
+            canVoid={permissions.voidInvoice}
+            canDeleteDraft={permissions.deleteDraft}
           />
           {/* Print / Save as PDF — opens the print route in a new
               tab with auto-print enabled so the browser dialog
@@ -241,10 +317,13 @@ export default async function MatterBillingPage({
           <InvoicePreview
             invoice={selectedInvoice}
             firm={firm}
+            timeZone={timeZone}
             // Line items are editable only while the invoice is a
             // `draft` (approval signs off on a specific total), and
             // only for users holding billing.generate_invoice.
-            editable={selectedInvoice.status === "draft" && canEditLineItems}
+            editable={
+              selectedInvoice.status === "draft" && permissions.generateInvoice
+            }
             currentUserId={currentUserId}
             canEditAnyTimeEntry={canEditAnyTimeEntry}
           />
@@ -259,6 +338,9 @@ export default async function MatterBillingPage({
 function MainColumn({
   matterId,
   billing,
+  unbilledExpenses,
+  permissions,
+  timeZone,
   settlement,
   canViewSettlement,
   canEditSettlement,
@@ -269,6 +351,12 @@ function MainColumn({
 }: {
   matterId: string;
   billing: MatterBilling;
+  /** Billable, un-invoiced expenses — the generate / bundle actions
+   *  sweep these along with the time in `billing.wip`. */
+  unbilledExpenses: UnbilledExpenseSummary;
+  permissions: BillingPermissions;
+  /** Viewer's profile zone, for the invoice issue / due instants. */
+  timeZone: string;
   settlement: MatterSettlement | null;
   canViewSettlement: boolean;
   canEditSettlement: boolean;
@@ -289,6 +377,22 @@ function MainColumn({
 
   const billingMode = billing.billingMode as BillingMode;
   const isTraditional = billingMode === "client";
+
+  // WIP = unbilled time + unbilled billable expenses: the invoice
+  // actions bundle both, so the KPI and card must count both.
+  const wipTotal = bundleTotal(
+    billing.wip.amountTotal,
+    unbilledExpenses.total
+  );
+  const wipItemCount = billing.wip.entryCount + unbilledExpenses.count;
+  const wipSecondary = [
+    `${billing.wip.hoursTotal.toFixed(1)} h · ${billing.wip.entryCount} ${billing.wip.entryCount === 1 ? "entry" : "entries"}`,
+    unbilledExpenses.count > 0
+      ? `${unbilledExpenses.count} ${unbilledExpenses.count === 1 ? "expense" : "expenses"}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <>
@@ -336,8 +440,8 @@ function MainColumn({
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Kpi
           label="Work-in-progress"
-          primary={formatMoney(billing.wip.amountTotal)}
-          secondary={`${billing.wip.hoursTotal.toFixed(1)} h · ${billing.wip.entryCount} ${billing.wip.entryCount === 1 ? "entry" : "entries"}`}
+          primary={formatMoney(wipTotal)}
+          secondary={wipSecondary}
         />
         <Kpi
           label="Trust balance"
@@ -477,7 +581,7 @@ function MainColumn({
                         )}
                       </TableCell>
                       <TableCell className="text-2xs font-mono text-ink-3 p-0">
-                        {cellLink(formatDate(inv.issueDate))}
+                        {cellLink(formatDate(inv.issueDate, "medium", timeZone))}
                       </TableCell>
                       <TableCell className="text-2xs font-mono p-0">
                         {cellLink(
@@ -489,7 +593,7 @@ function MainColumn({
                                 : "text-ink-3"
                             }
                           >
-                            {formatDate(inv.dueDate)}
+                            {formatDate(inv.dueDate, "medium", timeZone)}
                             {inv.daysUntilDue !== null &&
                               inv.daysUntilDue < 0 && (
                                 <span className="ml-1 text-warn">
@@ -511,10 +615,16 @@ function MainColumn({
                         {cellLink(
                           <span
                             className={
-                              inv.balance > 0 ? "text-ink" : "text-ink-4"
+                              inv.status !== "void" && inv.balance > 0
+                                ? "text-ink"
+                                : "text-ink-4"
                             }
                           >
-                            {formatMoney(inv.balance)}
+                            {/* A voided invoice owes nothing (its stored
+                                balance is just the untouched total). */}
+                            {inv.status === "void"
+                              ? "—"
+                              : formatMoney(inv.balance)}
                           </span>
                         )}
                       </TableCell>
@@ -549,7 +659,7 @@ function MainColumn({
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             Work-in-progress
             <span className="text-2xs font-mono font-normal text-ink-4">
-              {billing.wip.entryCount}
+              {wipItemCount}
             </span>
           </CardTitle>
         </CardHeader>
@@ -560,21 +670,31 @@ function MainColumn({
               fee-already-collected-elsewhere cases. Both share
               the same bundle-and-link mechanic, so void on either
               kind unlinks entries back to billable WIP. */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Generate / bundle sweep billable expenses too, so the
-                forms get time + expenses combined — an expenses-only
-                matter must still offer the button. */}
-            <GenerateInvoiceForm
-              matterId={matterId}
-              amountTotal={billing.wip.amountTotal + billing.wip.expenseTotal}
-              entryCount={billing.wip.entryCount + billing.wip.expenseCount}
-            />
-            <BundleInternalRecordForm
-              matterId={matterId}
-              amountTotal={billing.wip.amountTotal + billing.wip.expenseTotal}
-              entryCount={billing.wip.entryCount + billing.wip.expenseCount}
-            />
-          </div>
+          {permissions.generateInvoice ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <GenerateInvoiceForm
+                matterId={matterId}
+                amountTotal={billing.wip.amountTotal}
+                entryCount={billing.wip.entryCount}
+                expenseTotal={unbilledExpenses.total}
+                expenseCount={unbilledExpenses.count}
+              />
+              <BundleInternalRecordForm
+                matterId={matterId}
+                amountTotal={billing.wip.amountTotal}
+                entryCount={billing.wip.entryCount}
+                expenseTotal={unbilledExpenses.total}
+                expenseCount={unbilledExpenses.count}
+              />
+            </div>
+          ) : (
+            wipItemCount > 0 && (
+              <div className="text-2xs text-ink-4 italic">
+                Generating an invoice from this work-in-progress needs the
+                billing.generate_invoice permission.
+              </div>
+            )
+          )}
           {billing.wip.recent.length > 0 && (
             <div className="border border-line rounded-md overflow-hidden">
               <Table>
@@ -591,7 +711,7 @@ function MainColumn({
                   {billing.wip.recent.map((e) => (
                     <TableRow key={e.id}>
                       <TableCell className="pl-4 text-2xs font-mono text-ink-3">
-                        {formatDate(e.date)}
+                        {formatDay(e.date)}
                       </TableCell>
                       <TableCell className="text-xs text-ink truncate max-w-md">
                         {e.activity}
@@ -662,7 +782,7 @@ function MainColumn({
                   {billing.receivedPayments.rows.map((p) => (
                     <TableRow key={p.id}>
                       <TableCell className="pl-4 text-2xs font-mono text-ink-3">
-                        {formatDate(p.date)}
+                        {formatDay(p.date)}
                       </TableCell>
                       <TableCell className="text-2xs text-ink-3">
                         {INVOICE_PAYMENT_SOURCE_LABEL[
@@ -709,7 +829,9 @@ function MainColumn({
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4 flex flex-col gap-3">
-          <TrustTransactionForm matterId={matterId} />
+          {permissions.recordTrustTransaction && (
+            <TrustTransactionForm matterId={matterId} />
+          )}
           {billing.trust.transactions.length === 0 ? (
             <div className="text-2xs text-ink-4 italic">
               No trust activity yet on this matter.
@@ -730,7 +852,7 @@ function MainColumn({
                   {billing.trust.transactions.map((t) => (
                     <TableRow key={t.id}>
                       <TableCell className="pl-4 text-2xs font-mono text-ink-3">
-                        {formatDate(t.date)}
+                        {formatDay(t.date)}
                       </TableCell>
                       <TableCell className="text-2xs text-ink-3 capitalize">
                         {TRUST_TYPE_LABEL[t.type] ?? t.type}
@@ -800,6 +922,8 @@ function SettlementCard({
   canManageLiens: boolean;
   canApprove: boolean;
 }) {
+  const settlementLocked =
+    settlement?.status === "disbursed" || settlement?.status === "closed";
   return (
     <Card className="p-0 overflow-hidden">
       <CardHeader className="pb-2 pt-4 px-4">
@@ -932,7 +1056,10 @@ function SettlementCard({
               </div>
             )}
 
-            {canManageLiens && (
+            {/* Liens are frozen once the settlement is disbursed /
+                closed (addSettlementLien refuses) — don't offer a
+                form that can only fail on submit. */}
+            {canManageLiens && !settlementLocked && (
               <SettlementLienForm settlementId={settlement.id} />
             )}
 
@@ -951,10 +1078,7 @@ function SettlementCard({
                   notes: a.notes,
                 }))}
                 canApprove={canApprove}
-                settlementLocked={
-                  settlement.status === "disbursed" ||
-                  settlement.status === "closed"
-                }
+                settlementLocked={settlementLocked}
               />
             )}
 

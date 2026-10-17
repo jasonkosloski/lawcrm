@@ -5,12 +5,15 @@
  * Sits OUTSIDE the (dashboard) route group so the sidebar +
  * topbar don't render. The root layout still provides the html /
  * body / fonts / Providers wrapper; this layout just adds a
- * white background and a small "print this page" toolbar that
- * itself hides during print via `@media print`.
+ * white background. It reads no data and does not authenticate —
+ * each page under /print authenticates itself (a layout is not an
+ * auth gate; see src/app/page-guards.test.ts).
  *
- * Pages under `/print/*` should render their document content
- * directly — no surrounding cards, no max-width gutters — so
- * the printed output matches the on-screen render.
+ * Pages under `/print/*` render their document content directly —
+ * no surrounding cards, no max-width gutters beyond their own — and
+ * own their on-screen toolbar (e.g. PrintToolbar), which hides during
+ * print via `@media print`, so the printed output matches the
+ * on-screen render.
  */
 
 export default function PrintLayout({

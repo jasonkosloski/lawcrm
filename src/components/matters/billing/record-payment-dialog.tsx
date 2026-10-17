@@ -11,11 +11,17 @@
  * "paid in full" case is one click. A payment that fully covers
  * the balance flips the invoice to "paid"; a partial payment moves
  * it to "partial" so the row stays surfaced as still-owing money.
+ *
+ * Structure: the outer component owns the action state (it stays
+ * mounted across close/reopen) and the close-on-success effect; the
+ * form body is a child of DialogContent, which unmounts on close, so
+ * its working copies are re-seeded from props on every open without
+ * a reset effect.
  */
 
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState, useTransition } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import {
   Dialog,
@@ -35,14 +41,12 @@ import {
   type BillingFormState,
   type InvoicePaymentSource,
 } from "@/lib/billing-form";
+import { todayKey } from "@/lib/format-date";
+import { parseMoneyInput } from "@/lib/parse-money-input";
+import { useUserTimeZone } from "@/components/user-time-zone";
 
 const formatMoney = (n: number): string =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-const todayIso = (): string => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
 
 // Reference field placeholder hints at what the firm typically
 // captures per channel. Cosmetic — the field accepts anything.
@@ -113,27 +117,6 @@ export function RecordPaymentDialog({
     [invoiceBalance]
   );
 
-  const [amount, setAmount] = useState(defaultAmount);
-  const [date, setDate] = useState(todayIso());
-  const [source, setSource] = useState<InvoicePaymentSource>("check");
-  const [reference, setReference] = useState("");
-  const [description, setDescription] = useState("");
-  // Default to checked when the client has an email — the common
-  // case is "got the check, send them an updated copy." If there's
-  // no email on file the checkbox stays disabled + unchecked
-  // regardless of clicks.
-  const [notifyClient, setNotifyClient] = useState(!!clientEmail);
-
-  useEffect(() => {
-    if (!open) return;
-    setAmount(defaultAmount);
-    setDate(todayIso());
-    setSource("check");
-    setReference("");
-    setDescription("");
-    setNotifyClient(!!clientEmail);
-  }, [open, defaultAmount, clientEmail]);
-
   // Close on success. Deps must be the state OBJECT, not
   // state.status: useActionState keeps its state across
   // submissions, so after the first success the status string is
@@ -147,20 +130,6 @@ export function RecordPaymentDialog({
     if (state.status === "ok") onOpenChange(false);
   }, [state, onOpenChange]);
 
-  const errs = state.errors ?? {};
-  const parsedAmount = parseFloat(amount);
-  const validAmount = Number.isFinite(parsedAmount) && parsedAmount > 0;
-  const overBalance =
-    Number.isFinite(parsedAmount) && parsedAmount > invoiceBalance;
-  const overTrust =
-    source === "trust" &&
-    Number.isFinite(parsedAmount) &&
-    parsedAmount > trustBalance;
-  const balanceAfter = Number.isFinite(parsedAmount)
-    ? Math.max(0, invoiceBalance - parsedAmount)
-    : invoiceBalance;
-  const willMarkPaid = validAmount && balanceAfter === 0;
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -173,200 +142,296 @@ export function RecordPaymentDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form action={formAction} className="flex flex-col gap-3">
-          {/* Context strip — just the invoice side. No trust here. */}
-          <div className="grid grid-cols-2 gap-2 text-2xs">
-            <div className="px-3 py-2 rounded-md border border-line bg-paper-2/40">
-              <div className="font-mono uppercase tracking-wider text-ink-4">
-                Open balance
-              </div>
-              <div className="text-ink font-mono mt-0.5">
-                {formatMoney(invoiceBalance)}
-              </div>
-            </div>
-            <div className="px-3 py-2 rounded-md border border-line bg-paper-2/40">
-              <div className="font-mono uppercase tracking-wider text-ink-4">
-                After this payment
-              </div>
-              <div
-                className={cn(
-                  "text-ink font-mono mt-0.5",
-                  willMarkPaid && "text-ok"
-                )}
-              >
-                {formatMoney(balanceAfter)}
-                {willMarkPaid && " · paid"}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
-              Amount <span className="text-warn">*</span>
-            </label>
-            <input
-              name="amount"
-              type="text"
-              inputMode="decimal"
-              required
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className={cn(
-                "h-9 px-3 rounded-md border bg-white text-sm text-ink font-mono",
-                "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-                errs.amount || overBalance || overTrust
-                  ? "border-warn"
-                  : "border-line"
-              )}
-            />
-            {errs.amount && (
-              <span className="text-2xs text-warn">{errs.amount[0]}</span>
-            )}
-            {!errs.amount && overBalance && (
-              <span className="text-2xs text-warn">
-                Exceeds the invoice balance — record the balance or less.
-              </span>
-            )}
-            {!errs.amount && !overBalance && overTrust && (
-              <span className="text-2xs text-warn">
-                Exceeds the trust balance — drop the amount or pick a
-                different method.
-              </span>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
-                Method <span className="text-warn">*</span>
-              </label>
-              <select
-                name="source"
-                required
-                value={source}
-                onChange={(e) =>
-                  setSource(e.target.value as InvoicePaymentSource)
-                }
-                className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
-              >
-                {selectableSources.map((s) => (
-                  <option key={s} value={s}>
-                    {INVOICE_PAYMENT_SOURCE_LABEL[s]}
-                    {s === "trust" && ` (avail: $${trustBalance.toFixed(2)})`}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
-                Date
-              </label>
-              <input
-                name="date"
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
-              Reference
-            </label>
-            <input
-              name="reference"
-              type="text"
-              value={reference}
-              onChange={(e) => setReference(e.target.value)}
-              placeholder={REFERENCE_PLACEHOLDER[source]}
-              maxLength={120}
-              className="h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
-            />
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
-              Memo
-            </label>
-            <textarea
-              name="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional — appears on the invoice's payment row"
-              rows={2}
-              maxLength={400}
-              className="px-2.5 py-1.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4 resize-none"
-            />
-          </div>
-
-          {/* Notify-client opt-out. Checked by default so the lawyer
-              doesn't have to think about it; unchecks silently when
-              there's no email on file. The hidden input mirrors the
-              boolean so the server reads "true" / "" cleanly. */}
-          <label
-            className={cn(
-              "flex items-start gap-2 px-3 py-2 rounded-md border text-xs",
-              clientEmail
-                ? "cursor-pointer border-line bg-paper-2/40 hover:bg-paper-2/60"
-                : "border-line bg-paper-2/30 cursor-not-allowed opacity-70"
-            )}
-          >
-            <input
-              type="checkbox"
-              checked={notifyClient && !!clientEmail}
-              disabled={!clientEmail}
-              onChange={(e) => setNotifyClient(e.target.checked)}
-              className="mt-0.5"
-            />
-            <input
-              type="hidden"
-              name="notifyClient"
-              value={notifyClient && clientEmail ? "true" : ""}
-            />
-            <div>
-              <div className="text-ink font-medium">
-                Send updated invoice to client
-              </div>
-              <div className="text-2xs text-ink-4 mt-0.5">
-                {clientEmail
-                  ? `Emails a refreshed copy reflecting this payment to ${clientEmail}. (Logged-only for now.)`
-                  : "No email on file for the client — add one on the client record to enable this."}
-              </div>
-            </div>
-          </label>
-
-          {state.status === "error" && state.error && (
-            <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">
-              <TriangleAlert size={12} className="shrink-0 mt-px" />
-              <span>{state.error}</span>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={
-                isPending || !validAmount || overBalance || overTrust
-              }
-            >
-              {isPending
-                ? "Recording…"
-                : willMarkPaid
-                  ? `Record ${formatMoney(parsedAmount || 0)} · mark paid`
-                  : `Record ${formatMoney(parsedAmount || 0)}`}
-            </Button>
-          </DialogFooter>
-        </form>
+        {/* Keyed on the seed inputs: a balance / email change while
+            the dialog is open re-seeds the form, like a fresh open. */}
+        <RecordPaymentForm
+          key={`${defaultAmount}|${clientEmail ?? ""}`}
+          state={state}
+          formAction={formAction}
+          isPending={isPending}
+          onCancel={() => onOpenChange(false)}
+          defaultAmount={defaultAmount}
+          invoiceBalance={invoiceBalance}
+          trustBalance={trustBalance}
+          clientEmail={clientEmail}
+          selectableSources={selectableSources}
+        />
       </DialogContent>
     </Dialog>
+  );
+}
+
+function RecordPaymentForm({
+  state,
+  formAction,
+  isPending,
+  onCancel,
+  defaultAmount,
+  invoiceBalance,
+  trustBalance,
+  clientEmail,
+  selectableSources,
+}: {
+  state: BillingFormState;
+  formAction: (payload: FormData) => void;
+  isPending: boolean;
+  onCancel: () => void;
+  defaultAmount: string;
+  invoiceBalance: number;
+  trustBalance: number;
+  clientEmail: string | null;
+  selectableSources: InvoicePaymentSource[];
+}) {
+  const tz = useUserTimeZone();
+  const ids = useId();
+  // Dispatch via onSubmit + startTransition instead of
+  // <form action={formAction}>: React 19 resets the form after the
+  // action settles — error or not — and a reset snaps even a
+  // controlled <select> back to its first option (the typed
+  // Method would silently revert to "Check" after a server error).
+  // A manual dispatch keeps the user's input so they can correct
+  // and resubmit. Native `required` validation still runs first.
+  const [, startSubmit] = useTransition();
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    startSubmit(() => formAction(fd));
+  };
+  // Working copies, seeded when the form mounts (= on every open).
+  const [amount, setAmount] = useState(defaultAmount);
+  const [date, setDate] = useState(() => todayKey(tz));
+  const [source, setSource] = useState<InvoicePaymentSource>("check");
+  const [reference, setReference] = useState("");
+  const [description, setDescription] = useState("");
+  // Default to checked when the client has an email — the common
+  // case is "got the check, send them an updated copy." If there's
+  // no email on file the checkbox stays disabled + unchecked
+  // regardless of clicks.
+  const [notifyClient, setNotifyClient] = useState(!!clientEmail);
+
+  const errs = state.errors ?? {};
+  // Same parse as the server's amount schema ("$1,200.00" is
+  // $1,200.00) — parseFloat would read it as $1.00.
+  const parsedAmount = parseMoneyInput(amount);
+  const amountUnparseable = amount.trim() !== "" && parsedAmount === null;
+  const validAmount = parsedAmount !== null && parsedAmount > 0;
+  const overBalance = parsedAmount !== null && parsedAmount > invoiceBalance;
+  const overTrust =
+    source === "trust" && parsedAmount !== null && parsedAmount > trustBalance;
+  const balanceAfter =
+    parsedAmount !== null
+      ? Math.max(0, invoiceBalance - parsedAmount)
+      : invoiceBalance;
+  const willMarkPaid = validAmount && balanceAfter === 0;
+
+  return (
+    <form onSubmit={onSubmit} className="flex flex-col gap-3">
+      {/* Context strip — just the invoice side. No trust here. */}
+      <div className="grid grid-cols-2 gap-2 text-2xs">
+        <div className="px-3 py-2 rounded-md border border-line bg-paper-2/40">
+          <div className="font-mono uppercase tracking-wider text-ink-4">
+            Open balance
+          </div>
+          <div className="text-ink font-mono mt-0.5">
+            {formatMoney(invoiceBalance)}
+          </div>
+        </div>
+        <div className="px-3 py-2 rounded-md border border-line bg-paper-2/40">
+          <div className="font-mono uppercase tracking-wider text-ink-4">
+            After this payment
+          </div>
+          <div
+            className={cn(
+              "text-ink font-mono mt-0.5",
+              willMarkPaid && "text-ok"
+            )}
+          >
+            {formatMoney(balanceAfter)}
+            {willMarkPaid && " · paid"}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label
+          htmlFor={`${ids}-amount`}
+          className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+        >
+          Amount <span className="text-warn">*</span>
+        </label>
+        <input
+          id={`${ids}-amount`}
+          name="amount"
+          type="text"
+          inputMode="decimal"
+          required
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className={cn(
+            "h-9 px-3 rounded-md border bg-white text-sm text-ink font-mono",
+            "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
+            errs.amount || amountUnparseable || overBalance || overTrust
+              ? "border-warn"
+              : "border-line"
+          )}
+        />
+        {errs.amount && (
+          <span className="text-2xs text-warn">{errs.amount[0]}</span>
+        )}
+        {!errs.amount && amountUnparseable && (
+          <span className="text-2xs text-warn">Enter a valid amount.</span>
+        )}
+        {!errs.amount && overBalance && (
+          <span className="text-2xs text-warn">
+            Exceeds the invoice balance — record the balance or less.
+          </span>
+        )}
+        {!errs.amount && !overBalance && overTrust && (
+          <span className="text-2xs text-warn">
+            Exceeds the trust balance — drop the amount or pick a
+            different method.
+          </span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1">
+          <label
+            htmlFor={`${ids}-source`}
+            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+          >
+            Method <span className="text-warn">*</span>
+          </label>
+          <select
+            id={`${ids}-source`}
+            name="source"
+            required
+            value={source}
+            onChange={(e) => setSource(e.target.value as InvoicePaymentSource)}
+            className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
+          >
+            {selectableSources.map((s) => (
+              <option key={s} value={s}>
+                {INVOICE_PAYMENT_SOURCE_LABEL[s]}
+                {s === "trust" && ` (avail: $${trustBalance.toFixed(2)})`}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label
+            htmlFor={`${ids}-date`}
+            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+          >
+            Date
+          </label>
+          <input
+            id={`${ids}-date`}
+            name="date"
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label
+          htmlFor={`${ids}-reference`}
+          className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+        >
+          Reference
+        </label>
+        <input
+          id={`${ids}-reference`}
+          name="reference"
+          type="text"
+          value={reference}
+          onChange={(e) => setReference(e.target.value)}
+          placeholder={REFERENCE_PLACEHOLDER[source]}
+          maxLength={120}
+          className="h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+        />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label
+          htmlFor={`${ids}-description`}
+          className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+        >
+          Memo
+        </label>
+        <textarea
+          id={`${ids}-description`}
+          name="description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Optional — appears on the invoice's payment row"
+          rows={2}
+          maxLength={400}
+          className="px-2.5 py-1.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4 resize-none"
+        />
+      </div>
+
+      {/* Notify-client opt-out. Checked by default so the lawyer
+          doesn't have to think about it; unchecks silently when
+          there's no email on file. The hidden input mirrors the
+          boolean so the server reads "true" / "" cleanly. */}
+      <label
+        className={cn(
+          "flex items-start gap-2 px-3 py-2 rounded-md border text-xs",
+          clientEmail
+            ? "cursor-pointer border-line bg-paper-2/40 hover:bg-paper-2/60"
+            : "border-line bg-paper-2/30 cursor-not-allowed opacity-70"
+        )}
+      >
+        <input
+          type="checkbox"
+          checked={notifyClient && !!clientEmail}
+          disabled={!clientEmail}
+          onChange={(e) => setNotifyClient(e.target.checked)}
+          className="mt-0.5"
+        />
+        <input
+          type="hidden"
+          name="notifyClient"
+          value={notifyClient && clientEmail ? "true" : ""}
+        />
+        <div>
+          <div className="text-ink font-medium">
+            Send updated invoice to client
+          </div>
+          <div className="text-2xs text-ink-4 mt-0.5">
+            {clientEmail
+              ? `Emails a refreshed copy reflecting this payment to ${clientEmail}. (Logged-only for now.)`
+              : "No email on file for the client — add one on the client record to enable this."}
+          </div>
+        </div>
+      </label>
+
+      {state.status === "error" && state.error && (
+        <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">
+          <TriangleAlert size={12} className="shrink-0 mt-px" />
+          <span>{state.error}</span>
+        </div>
+      )}
+
+      <DialogFooter>
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button
+          type="submit"
+          disabled={isPending || !validAmount || overBalance || overTrust}
+        >
+          {isPending
+            ? "Recording…"
+            : willMarkPaid
+              ? `Record ${formatMoney(parsedAmount ?? 0)} · mark paid`
+              : `Record ${formatMoney(parsedAmount ?? 0)}`}
+        </Button>
+      </DialogFooter>
+    </form>
   );
 }

@@ -11,12 +11,20 @@
  * Both surfaces ultimately call recordInvoicePayment with
  * source=trust — so the four-leg op (trust ledger row, trust
  * balance decrement, InvoicePayment row, invoice paidAmount +
- * status flip) lands atomically server-side.
+ * status flip) lands atomically server-side. The server stacks
+ * billing.record_payment AND billing.apply_trust for it;
+ * InvoiceActionBar only renders this dialog for viewers holding
+ * both.
+ *
+ * Structure: the outer component owns the action state (it stays
+ * mounted across close/reopen) and the close-on-success effect; the
+ * form body is a child of DialogContent, which unmounts on close, so
+ * its working copies are re-seeded from props on every open.
  */
 
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState, useTransition } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import {
   Dialog,
@@ -34,14 +42,12 @@ import {
   billingInitialState,
   type BillingFormState,
 } from "@/lib/billing-form";
+import { todayKey } from "@/lib/format-date";
+import { parseMoneyInput } from "@/lib/parse-money-input";
+import { useUserTimeZone } from "@/components/user-time-zone";
 
 const formatMoney = (n: number): string =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-const todayIso = (): string => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
 
 export function ApplyTrustDialog({
   open,
@@ -78,19 +84,6 @@ export function ApplyTrustDialog({
     return n > 0 ? n.toFixed(2) : "0.00";
   }, [invoiceBalance, trustBalance]);
 
-  const [amount, setAmount] = useState(defaultAmount);
-  const [date, setDate] = useState(todayIso());
-  // See RecordPaymentDialog: default checked when there's an email
-  // to send to; disabled when not.
-  const [notifyClient, setNotifyClient] = useState(!!clientEmail);
-
-  useEffect(() => {
-    if (!open) return;
-    setAmount(defaultAmount);
-    setDate(todayIso());
-    setNotifyClient(!!clientEmail);
-  }, [open, defaultAmount, clientEmail]);
-
   // Close on success. Deps key on the state OBJECT, not
   // state.status: useActionState keeps its state across
   // submissions, so after the first success the status string is
@@ -101,22 +94,6 @@ export function ApplyTrustDialog({
   useEffect(() => {
     if (state.status === "ok") onOpenChange(false);
   }, [state, onOpenChange]);
-
-  const errs = state.errors ?? {};
-  const parsedAmount = parseFloat(amount);
-  const validAmount = Number.isFinite(parsedAmount) && parsedAmount > 0;
-  const overTrust =
-    Number.isFinite(parsedAmount) && parsedAmount > trustBalance;
-  const overBalance =
-    Number.isFinite(parsedAmount) && parsedAmount > invoiceBalance;
-
-  const trustAfter = Number.isFinite(parsedAmount)
-    ? Math.max(0, trustBalance - parsedAmount)
-    : trustBalance;
-  const invoiceAfter = Number.isFinite(parsedAmount)
-    ? Math.max(0, invoiceBalance - parsedAmount)
-    : invoiceBalance;
-  const willMarkPaid = validAmount && invoiceAfter === 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -131,162 +108,243 @@ export function ApplyTrustDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form action={formAction} className="flex flex-col gap-3">
-          {/* Locked source — this dialog is trust-only. The Record
-              payment dialog handles other channels. */}
-          <input type="hidden" name="source" value="trust" />
-
-          {/* Context strip — trust + invoice balances with after-
-              this-application previews. */}
-          <div className="grid grid-cols-2 gap-2 text-2xs">
-            <div className="px-3 py-2 rounded-md border border-line bg-paper-2/40">
-              <div className="font-mono uppercase tracking-wider text-ink-4">
-                Trust balance
-              </div>
-              <div className="text-ink font-mono mt-0.5">
-                {formatMoney(trustBalance)}
-              </div>
-              <div
-                className={cn(
-                  "text-2xs font-mono mt-0.5",
-                  overTrust ? "text-warn" : "text-ink-4"
-                )}
-              >
-                after: {formatMoney(trustAfter)}
-              </div>
-            </div>
-            <div className="px-3 py-2 rounded-md border border-line bg-paper-2/40">
-              <div className="font-mono uppercase tracking-wider text-ink-4">
-                Invoice balance
-              </div>
-              <div className="text-ink font-mono mt-0.5">
-                {formatMoney(invoiceBalance)}
-              </div>
-              <div
-                className={cn(
-                  "text-2xs font-mono mt-0.5",
-                  willMarkPaid ? "text-ok" : "text-ink-4"
-                )}
-              >
-                after: {formatMoney(invoiceAfter)}
-                {willMarkPaid && " · paid"}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
-              Amount <span className="text-warn">*</span>
-            </label>
-            <input
-              name="amount"
-              type="text"
-              inputMode="decimal"
-              required
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className={cn(
-                "h-9 px-3 rounded-md border bg-white text-sm text-ink font-mono",
-                "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-                errs.amount || overTrust || overBalance
-                  ? "border-warn"
-                  : "border-line"
-              )}
-            />
-            {errs.amount && (
-              <span className="text-2xs text-warn">{errs.amount[0]}</span>
-            )}
-            {!errs.amount && overTrust && (
-              <span className="text-2xs text-warn">
-                Exceeds the trust balance — drop the amount or deposit
-                more trust first.
-              </span>
-            )}
-            {!errs.amount && !overTrust && overBalance && (
-              <span className="text-2xs text-warn">
-                Exceeds the invoice balance — pay the balance or less.
-              </span>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
-              Date
-            </label>
-            <input
-              name="date"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 max-w-[12rem]"
-            />
-          </div>
-
-          {/* Notify-client opt-out — see RecordPaymentDialog for the
-              full rationale; same shape so the lawyer sees a
-              consistent control across both dialogs. */}
-          <label
-            className={cn(
-              "flex items-start gap-2 px-3 py-2 rounded-md border text-xs",
-              clientEmail
-                ? "cursor-pointer border-line bg-paper-2/40 hover:bg-paper-2/60"
-                : "border-line bg-paper-2/30 cursor-not-allowed opacity-70"
-            )}
-          >
-            <input
-              type="checkbox"
-              checked={notifyClient && !!clientEmail}
-              disabled={!clientEmail}
-              onChange={(e) => setNotifyClient(e.target.checked)}
-              className="mt-0.5"
-            />
-            <input
-              type="hidden"
-              name="notifyClient"
-              value={notifyClient && clientEmail ? "true" : ""}
-            />
-            <div>
-              <div className="text-ink font-medium">
-                Send updated invoice to client
-              </div>
-              <div className="text-2xs text-ink-4 mt-0.5">
-                {clientEmail
-                  ? `Emails a refreshed copy reflecting the trust application to ${clientEmail}. (Logged-only for now.)`
-                  : "No email on file for the client — add one on the client record to enable this."}
-              </div>
-            </div>
-          </label>
-
-          {state.status === "error" && state.error && (
-            <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">
-              <TriangleAlert size={12} className="shrink-0 mt-px" />
-              <span>{state.error}</span>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={
-                isPending || !validAmount || overTrust || overBalance
-              }
-            >
-              {isPending
-                ? "Applying…"
-                : willMarkPaid
-                  ? `Apply ${formatMoney(parsedAmount || 0)} · mark paid`
-                  : `Apply ${formatMoney(parsedAmount || 0)} from trust`}
-            </Button>
-          </DialogFooter>
-        </form>
+        {/* Keyed on the seed inputs: a balance / email change while
+            the dialog is open re-seeds the form, like a fresh open. */}
+        <ApplyTrustForm
+          key={`${defaultAmount}|${clientEmail ?? ""}`}
+          state={state}
+          formAction={formAction}
+          isPending={isPending}
+          onCancel={() => onOpenChange(false)}
+          defaultAmount={defaultAmount}
+          invoiceBalance={invoiceBalance}
+          trustBalance={trustBalance}
+          clientEmail={clientEmail}
+        />
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ApplyTrustForm({
+  state,
+  formAction,
+  isPending,
+  onCancel,
+  defaultAmount,
+  invoiceBalance,
+  trustBalance,
+  clientEmail,
+}: {
+  state: BillingFormState;
+  formAction: (payload: FormData) => void;
+  isPending: boolean;
+  onCancel: () => void;
+  defaultAmount: string;
+  invoiceBalance: number;
+  trustBalance: number;
+  clientEmail: string | null;
+}) {
+  const tz = useUserTimeZone();
+  const ids = useId();
+  // Dispatch via onSubmit + startTransition instead of
+  // <form action={formAction}>: React 19 resets the form after the
+  // action settles — error or not — wiping what the user typed when
+  // the server refuses. A manual dispatch keeps the input so they
+  // can correct and resubmit. Native `required` validation still
+  // runs first.
+  const [, startSubmit] = useTransition();
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    startSubmit(() => formAction(fd));
+  };
+  // Working copies, seeded when the form mounts (= on every open).
+  const [amount, setAmount] = useState(defaultAmount);
+  const [date, setDate] = useState(() => todayKey(tz));
+  // See RecordPaymentDialog: default checked when there's an email
+  // to send to; disabled when not.
+  const [notifyClient, setNotifyClient] = useState(!!clientEmail);
+
+  const errs = state.errors ?? {};
+  // Same parse as the server's amount schema ("$1,200.00" is
+  // $1,200.00) — parseFloat would read it as $1.00.
+  const parsedAmount = parseMoneyInput(amount);
+  const amountUnparseable = amount.trim() !== "" && parsedAmount === null;
+  const validAmount = parsedAmount !== null && parsedAmount > 0;
+  const overTrust = parsedAmount !== null && parsedAmount > trustBalance;
+  const overBalance = parsedAmount !== null && parsedAmount > invoiceBalance;
+
+  const trustAfter =
+    parsedAmount !== null
+      ? Math.max(0, trustBalance - parsedAmount)
+      : trustBalance;
+  const invoiceAfter =
+    parsedAmount !== null
+      ? Math.max(0, invoiceBalance - parsedAmount)
+      : invoiceBalance;
+  const willMarkPaid = validAmount && invoiceAfter === 0;
+
+  return (
+    <form onSubmit={onSubmit} className="flex flex-col gap-3">
+      {/* Locked source — this dialog is trust-only. The Record
+          payment dialog handles other channels. */}
+      <input type="hidden" name="source" value="trust" />
+
+      {/* Context strip — trust + invoice balances with after-
+          this-application previews. */}
+      <div className="grid grid-cols-2 gap-2 text-2xs">
+        <div className="px-3 py-2 rounded-md border border-line bg-paper-2/40">
+          <div className="font-mono uppercase tracking-wider text-ink-4">
+            Trust balance
+          </div>
+          <div className="text-ink font-mono mt-0.5">
+            {formatMoney(trustBalance)}
+          </div>
+          <div
+            className={cn(
+              "text-2xs font-mono mt-0.5",
+              overTrust ? "text-warn" : "text-ink-4"
+            )}
+          >
+            after: {formatMoney(trustAfter)}
+          </div>
+        </div>
+        <div className="px-3 py-2 rounded-md border border-line bg-paper-2/40">
+          <div className="font-mono uppercase tracking-wider text-ink-4">
+            Invoice balance
+          </div>
+          <div className="text-ink font-mono mt-0.5">
+            {formatMoney(invoiceBalance)}
+          </div>
+          <div
+            className={cn(
+              "text-2xs font-mono mt-0.5",
+              willMarkPaid ? "text-ok" : "text-ink-4"
+            )}
+          >
+            after: {formatMoney(invoiceAfter)}
+            {willMarkPaid && " · paid"}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label
+          htmlFor={`${ids}-amount`}
+          className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+        >
+          Amount <span className="text-warn">*</span>
+        </label>
+        <input
+          id={`${ids}-amount`}
+          name="amount"
+          type="text"
+          inputMode="decimal"
+          required
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className={cn(
+            "h-9 px-3 rounded-md border bg-white text-sm text-ink font-mono",
+            "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
+            errs.amount || amountUnparseable || overTrust || overBalance
+              ? "border-warn"
+              : "border-line"
+          )}
+        />
+        {errs.amount && (
+          <span className="text-2xs text-warn">{errs.amount[0]}</span>
+        )}
+        {!errs.amount && amountUnparseable && (
+          <span className="text-2xs text-warn">Enter a valid amount.</span>
+        )}
+        {!errs.amount && overTrust && (
+          <span className="text-2xs text-warn">
+            Exceeds the trust balance — drop the amount or deposit
+            more trust first.
+          </span>
+        )}
+        {!errs.amount && !overTrust && overBalance && (
+          <span className="text-2xs text-warn">
+            Exceeds the invoice balance — pay the balance or less.
+          </span>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label
+          htmlFor={`${ids}-date`}
+          className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+        >
+          Date
+        </label>
+        <input
+          id={`${ids}-date`}
+          name="date"
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 max-w-[12rem]"
+        />
+      </div>
+
+      {/* Notify-client opt-out — see RecordPaymentDialog for the
+          full rationale; same shape so the lawyer sees a
+          consistent control across both dialogs. */}
+      <label
+        className={cn(
+          "flex items-start gap-2 px-3 py-2 rounded-md border text-xs",
+          clientEmail
+            ? "cursor-pointer border-line bg-paper-2/40 hover:bg-paper-2/60"
+            : "border-line bg-paper-2/30 cursor-not-allowed opacity-70"
+        )}
+      >
+        <input
+          type="checkbox"
+          checked={notifyClient && !!clientEmail}
+          disabled={!clientEmail}
+          onChange={(e) => setNotifyClient(e.target.checked)}
+          className="mt-0.5"
+        />
+        <input
+          type="hidden"
+          name="notifyClient"
+          value={notifyClient && clientEmail ? "true" : ""}
+        />
+        <div>
+          <div className="text-ink font-medium">
+            Send updated invoice to client
+          </div>
+          <div className="text-2xs text-ink-4 mt-0.5">
+            {clientEmail
+              ? `Emails a refreshed copy reflecting the trust application to ${clientEmail}. (Logged-only for now.)`
+              : "No email on file for the client — add one on the client record to enable this."}
+          </div>
+        </div>
+      </label>
+
+      {state.status === "error" && state.error && (
+        <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">
+          <TriangleAlert size={12} className="shrink-0 mt-px" />
+          <span>{state.error}</span>
+        </div>
+      )}
+
+      <DialogFooter>
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button
+          type="submit"
+          disabled={isPending || !validAmount || overTrust || overBalance}
+        >
+          {isPending
+            ? "Applying…"
+            : willMarkPaid
+              ? `Apply ${formatMoney(parsedAmount ?? 0)} · mark paid`
+              : `Apply ${formatMoney(parsedAmount ?? 0)} from trust`}
+        </Button>
+      </DialogFooter>
+    </form>
   );
 }

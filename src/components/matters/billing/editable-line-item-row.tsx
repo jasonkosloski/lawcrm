@@ -28,7 +28,11 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { updateInvoiceLineItem } from "@/app/actions/billing";
-import { formatDate, parseLocalDate } from "@/lib/format-date";
+import {
+  dateOnlyKey,
+  formatDateOnly,
+  parseDateOnly,
+} from "@/lib/format-date";
 import { lineItemEditInitialState } from "@/lib/billing-form";
 
 type Field = "date" | "activity" | "narrative" | "hours" | "rate";
@@ -36,18 +40,13 @@ type Field = "date" | "activity" | "narrative" | "hours" | "rate";
 const formatMoney = (n: number): string =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-const toIso = (d: Date): string => {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-};
-
 const formatDateShort = (iso: string): string => {
-  // Render `YYYY-MM-DD` back to "Apr 15" for view mode. Parse as
-  // local date (not UTC) so the day doesn't slip a timezone over.
-  const date = parseLocalDate(iso);
-  return date ? formatDate(date, "short") : iso;
+  // Render `YYYY-MM-DD` back to "Apr 15" for view mode. Time-entry
+  // dates are date-only values (ADR-012): read and shown on the UTC
+  // calendar grid, identically on the server and in the browser, so
+  // the day never slips and SSR matches hydration.
+  const date = parseDateOnly(iso);
+  return date ? formatDateOnly(date, "short") : iso;
 };
 
 type RowState = {
@@ -79,14 +78,18 @@ export function EditableLineItemRow({
 }) {
   // Local working state for the row. The action operates on the
   // whole tuple, so a single-cell edit composes with the row's
-  // last-known values.
-  const [committed, setCommitted] = useState<RowState>({
-    date: toIso(initial.date),
+  // last-known values. The date is the stored calendar day
+  // (`dateOnlyKey`, UTC grid) — never the browser's local getters,
+  // which read a UTC-midnight date as the previous day west of UTC
+  // and would write that earlier day back on the next edit.
+  const fromInitial = (): RowState => ({
+    date: dateOnlyKey(initial.date),
     activity: initial.activity,
     narrative: initial.narrative ?? "",
     hours: String(initial.hours),
     rate: initial.rate !== null ? String(initial.rate) : "",
   });
+  const [committed, setCommitted] = useState<RowState>(fromInitial);
   const [editing, setEditing] = useState<Field | null>(null);
   const [draft, setDraft] = useState<string>("");
   const [pending, startTransition] = useTransition();
@@ -94,23 +97,20 @@ export function EditableLineItemRow({
 
   // If the server-rendered row updates after revalidate, sync the
   // local committed state to the new initial — otherwise the row
-  // would show stale values until the next full reload.
-  useEffect(() => {
-    setCommitted({
-      date: toIso(initial.date),
-      activity: initial.activity,
-      narrative: initial.narrative ?? "",
-      hours: String(initial.hours),
-      rate: initial.rate !== null ? String(initial.rate) : "",
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    initial.date.getTime(),
+  // would show stale values until the next full reload. Done during
+  // render (stored-previous-prop pattern), not in an effect.
+  const initialSignature = JSON.stringify([
+    dateOnlyKey(initial.date),
     initial.activity,
     initial.narrative,
     initial.hours,
     initial.rate,
   ]);
+  const [seenSignature, setSeenSignature] = useState(initialSignature);
+  if (seenSignature !== initialSignature) {
+    setSeenSignature(initialSignature);
+    setCommitted(fromInitial());
+  }
 
   const beginEdit = (field: Field) => {
     if (pending) return;

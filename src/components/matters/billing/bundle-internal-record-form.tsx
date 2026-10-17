@@ -9,6 +9,9 @@
  * kind="internal_record" and is excluded from Outstanding-AR
  * aggregates.
  *
+ * Like the invoice path it sweeps billable expenses as well as time
+ * entries, so the confirmation copy counts both.
+ *
  * The reason field is required-ish so the resulting record reads
  * naturally on its own ("recorded because: settled with mediator
  * — fees came out of settlement").
@@ -16,7 +19,7 @@
 
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useCallback, useId, useState, useTransition } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { Archive, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -25,6 +28,7 @@ import {
   billingInitialState,
   type BillingFormState,
 } from "@/lib/billing-form";
+import { bundleCountLabel, bundleTotal } from "./bundle-summary";
 
 const formatMoney = (n: number): string =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -33,13 +37,32 @@ export function BundleInternalRecordForm({
   matterId,
   amountTotal,
   entryCount,
+  expenseTotal = 0,
+  expenseCount = 0,
 }: {
   matterId: string;
+  /** Unbilled time dollars. */
   amountTotal: number;
+  /** Unbilled time entries. */
   entryCount: number;
+  /** Unbilled billable expense dollars (the server bundles them too). */
+  expenseTotal?: number;
+  /** Unbilled billable expenses. */
+  expenseCount?: number;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const action = bundleAsInternalRecord.bind(null, matterId);
+  const ids = useId();
+  // Collapse on success, from inside the action wrapper (runs once
+  // per invocation, so every success collapses — see
+  // GenerateInvoiceForm).
+  const action = useCallback(
+    async (prev: BillingFormState, formData: FormData) => {
+      const res = await bundleAsInternalRecord(matterId, prev, formData);
+      if (res.status === "ok") setExpanded(false);
+      return res;
+    },
+    [matterId]
+  );
   // Wrapped useActionState: masks state left over from a previous
   // expand, so a failed attempt's error banner doesn't reappear when
   // the form is re-expanded. See src/hooks/use-dialog-action-state.ts.
@@ -50,11 +73,10 @@ export function BundleInternalRecordForm({
   // Dispatch via onSubmit + startTransition instead of
   // <form action={formAction}>: React 19 resets every form-action
   // form after the action settles — error or not — which wipes the
-  // typed fields (and snaps an uncontrolled-looking select back to
-  // its first option) when the server returns a validation /
-  // business-rule error. A manual dispatch keeps the user's input so
-  // they can correct and resubmit. Native `required` validation
-  // still runs before onSubmit fires.
+  // typed fields when the server returns a validation / business-rule
+  // error. A manual dispatch keeps the user's input so they can
+  // correct and resubmit. Native `required` validation still runs
+  // before onSubmit fires.
   const [, startSubmit] = useTransition();
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -62,19 +84,9 @@ export function BundleInternalRecordForm({
     startSubmit(() => formAction(fd));
   };
 
-  // Collapse on success. Deps key on the state OBJECT, not
-  // state.status: useActionState keeps its state across
-  // submissions, so after the first success the status string is
-  // "ok" forever and a second success would skip the effect,
-  // leaving the form expanded. Each action invocation returns a
-  // fresh object, so identity is the reliable signal.
-  useEffect(() => {
-    if (state.status === "ok") setExpanded(false);
-  }, [state]);
-
   // Hidden when there's no WIP — the parent surface usually shows a
   // "log billable time first" hint for that case.
-  if (entryCount === 0) return null;
+  if (entryCount + expenseCount === 0) return null;
 
   if (!expanded) {
     return (
@@ -101,18 +113,23 @@ export function BundleInternalRecordForm({
       className="flex flex-col gap-3 p-3 rounded-md border border-line bg-paper-2/40"
     >
       <div className="text-xs text-ink">
-        Close out <strong>{entryCount}</strong>{" "}
-        {entryCount === 1 ? "entry" : "entries"} totaling{" "}
-        <strong>{formatMoney(amountTotal)}</strong> as an internal
-        record. No invoice goes to the client; the entries leave WIP
-        and the doc files into the matter for tracking.
+        Close out{" "}
+        <strong>{bundleCountLabel(entryCount, expenseCount)}</strong>{" "}
+        totaling <strong>{formatMoney(bundleTotal(amountTotal, expenseTotal))}</strong>{" "}
+        as an internal record. No invoice goes to the client; the
+        entries leave WIP and the doc files into the matter for
+        tracking.
       </div>
 
       <div className="flex flex-col gap-1">
-        <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+        <label
+          htmlFor={`${ids}-notes`}
+          className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+        >
           Reason <span className="text-warn">*</span>
         </label>
         <input
+          id={`${ids}-notes`}
           name="notes"
           type="text"
           required

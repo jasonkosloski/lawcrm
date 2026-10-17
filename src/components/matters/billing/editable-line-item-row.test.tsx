@@ -34,7 +34,10 @@ beforeEach(() => {
 const baseProps = {
   timeEntryId: "te1",
   initial: {
-    date: new Date(2026, 3, 15),
+    // Stored form of a date-only value (ADR-012): UTC midnight.
+    // Browser-local getters read this as Apr 14 anywhere west of UTC
+    // (the firm is in Denver), which is what the old code did.
+    date: new Date("2026-04-15T00:00:00Z"),
     activity: "Research",
     narrative: "Reviewed discovery responses",
     hours: 1.5,
@@ -97,5 +100,65 @@ describe("EditableLineItemRow — commit trims outer whitespace", () => {
     expect(
       screen.getByRole("button", { name: "Drafted motion in limine" })
     ).toBeInTheDocument();
+  });
+});
+
+describe("EditableLineItemRow — date-only values stay on the stored calendar day (ADR-012)", () => {
+  test("view mode shows the stored day, not the previous local day", () => {
+    renderRow();
+    expect(screen.getByRole("button", { name: "Apr 15" })).toBeInTheDocument();
+    expect(screen.queryByText("Apr 14")).not.toBeInTheDocument();
+  });
+
+  test("a narrative-only edit posts the unchanged stored date, never a drifted one", async () => {
+    const user = userEvent.setup();
+    renderRow();
+    await user.click(
+      screen.getByRole("button", { name: "Reviewed discovery responses" })
+    );
+    await user.keyboard("Fixed a typo{Enter}");
+
+    expect(mockedAction).toHaveBeenCalledOnce();
+    const fd = mockedAction.mock.calls[0][2] as FormData;
+    expect(fd.get("date")).toBe("2026-04-15");
+    expect(fd.get("narrative")).toBe("Fixed a typo");
+    // View mode still reads Apr 15 after the optimistic update.
+    expect(screen.getByRole("button", { name: "Apr 15" })).toBeInTheDocument();
+  });
+
+  test("the date editor is seeded with the stored day", async () => {
+    const user = userEvent.setup();
+    renderRow();
+    await user.click(screen.getByRole("button", { name: "Apr 15" }));
+    const input = document.querySelector(
+      'input[type="date"]'
+    ) as HTMLInputElement;
+    expect(input.value).toBe("2026-04-15");
+  });
+
+  test("re-syncs from a new server value (no stale row after revalidate)", () => {
+    const { rerender } = render(
+      <table>
+        <tbody>
+          <EditableLineItemRow {...baseProps} />
+        </tbody>
+      </table>
+    );
+    rerender(
+      <table>
+        <tbody>
+          <EditableLineItemRow
+            {...baseProps}
+            initial={{
+              ...baseProps.initial,
+              date: new Date("2026-05-02T00:00:00Z"),
+              activity: "Drafting",
+            }}
+          />
+        </tbody>
+      </table>
+    );
+    expect(screen.getByRole("button", { name: "May 2" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Drafting" })).toBeInTheDocument();
   });
 });
