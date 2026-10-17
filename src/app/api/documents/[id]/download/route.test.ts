@@ -60,7 +60,7 @@ afterEach(() => {
  *  start/end) so 206 slice assertions are meaningful. */
 async function download(
   contentType: string | null,
-  opts?: { bytes?: string; range?: string }
+  opts?: { bytes?: string; range?: string; query?: string }
 ): Promise<Response> {
   const bytes = Buffer.from(opts?.bytes ?? "data");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -82,7 +82,7 @@ async function download(
     ])
   );
 
-  const req = new Request("http://localhost/api/documents/d1/download", {
+  const req = new Request(`http://localhost/api/documents/d1/download${opts?.query ?? ""}`, {
     headers: opts?.range ? { range: opts.range } : undefined,
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -156,6 +156,28 @@ describe("GET /api/documents/[id]/download — XSS-hardened headers", () => {
       expect(res.headers.get("Content-Disposition")).toMatch(/^inline;/);
       expect(res.headers.get("Content-Security-Policy")).toBeNull();
     }
+  });
+});
+
+describe("GET /api/documents/[id]/download — ?download=1", () => {
+  test("inline-safe types are served as attachment on request", async () => {
+    for (const type of ["application/pdf", "video/mp4"]) {
+      const res = await download(type, { query: "?download=1" });
+      expect(res.headers.get("Content-Disposition")).toMatch(/^attachment;/);
+      // Not a sandbox case — the type is still passive.
+      expect(res.headers.get("Content-Security-Policy")).toBeNull();
+      expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    }
+  });
+
+  test("the bare URL still renders inline (viewer embeds)", async () => {
+    const res = await download("application/pdf");
+    expect(res.headers.get("Content-Disposition")).toMatch(/^inline;/);
+  });
+
+  test("any other value is ignored", async () => {
+    const res = await download("application/pdf", { query: "?download=0" });
+    expect(res.headers.get("Content-Disposition")).toMatch(/^inline;/);
   });
 });
 
@@ -246,7 +268,7 @@ describe("GET /api/documents/[id]/download — blob-stored documents (302)", () 
    *  the shape that selects the redirect branch (ADR-015). */
   async function downloadBlob(
     contentType: string | null,
-    opts?: { missing?: boolean }
+    opts?: { missing?: boolean; query?: string }
   ): Promise<Response> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockedAuth.mockResolvedValue({ user: { id: "u1" } } as any);
@@ -262,7 +284,9 @@ describe("GET /api/documents/[id]/download — blob-stored documents (302)", () 
     } as any);
     mockedStat.mockResolvedValue(opts?.missing ? null : { size: 100 });
 
-    const req = new Request("http://localhost/api/documents/d1/download");
+    const req = new Request(
+      `http://localhost/api/documents/d1/download${opts?.query ?? ""}`
+    );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return GET(req as any, { params: Promise.resolve({ id: "d1" }) });
   }
@@ -281,6 +305,11 @@ describe("GET /api/documents/[id]/download — blob-stored documents (302)", () 
     // but forcing download preserves the local path's UX contract.
     const res = await downloadBlob("text/html");
     expect(res.status).toBe(302);
+    expect(res.headers.get("Location")).toBe(`${BLOB_URL}?signed=1&download=1`);
+  });
+
+  test("?download=1 signs an inline-safe type for attachment", async () => {
+    const res = await downloadBlob("application/pdf", { query: "?download=1" });
     expect(res.headers.get("Location")).toBe(`${BLOB_URL}?signed=1&download=1`);
   });
 

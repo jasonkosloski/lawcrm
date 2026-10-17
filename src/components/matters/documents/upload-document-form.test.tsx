@@ -1,17 +1,18 @@
 /**
- * Component tests for the single-file upload composer.
+ * Component tests for the single-file composer.
  *
- * Regression: the composer used to submit through a server action,
- * which Next caps at 1 MB — any realistic PDF failed before the
- * action ran. It now travels the same pipes as the multi-file
- * uploader, so what's pinned is the transport per storage driver and
- * the field contract (target + category + display name carried), plus
- * the client preflight.
+ * The composer used to POST the File as a server-action body, which
+ * Next caps at 1 MB (and Vercel at ~4.5 MB) - anything bigger failed
+ * into the error boundary despite the advertised 25 MB. These tests
+ * pin the replacement contract: the bytes travel via fetch to the
+ * streaming route (local) or client-direct upload() (blob), the
+ * name + category ride along, and an oversize file is rejected
+ * inline before any transport is touched.
  */
 
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -23,112 +24,138 @@ import { upload } from "@vercel/blob/client";
 import { UploadDocumentForm } from "./upload-document-form";
 
 const mockedUpload = vi.mocked(upload);
+const fetchMock = vi.fn();
+
+beforeEach(() => {
+  vi.stubGlobal("fetch", fetchMock);
+  fetchMock.mockResolvedValue(
+    new Response(JSON.stringify({ documents: [] }), { status: 200 })
+  );
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
+  fetchMock.mockReset();
 });
 
-async function fillAndSubmit(
+async function fill(
   driver: "local" | "vercel-blob" | undefined,
   file: File,
-  opts?: { name?: string }
+  opts?: { name?: string; category?: string }
 ) {
   const user = userEvent.setup({ applyAccept: false });
   render(<UploadDocumentForm matterId="m1" storageDriver={driver} />);
   await user.click(screen.getByRole("button", { name: /upload document/i }));
-  const fileInput = document.querySelector(
-    'input[type="file"]'
-  ) as HTMLInputElement;
-  await user.upload(fileInput, file);
+  // Labels are programmatically associated (a11y).
+  await user.upload(screen.getByLabelText(/^file/i), file);
   if (opts?.name) {
-    await user.type(screen.getByPlaceholderText(/./), opts.name);
+    await user.type(screen.getByLabelText(/display name/i), opts.name);
   }
-  await user.selectOptions(screen.getByRole("combobox"), "contract");
-  await user.click(screen.getByRole("button", { name: /^upload$/i }));
+  if (opts?.category) {
+    await user.selectOptions(screen.getByLabelText(/category/i), opts.category);
+  }
+  await user.click(screen.getByRole("button", { name: "Upload" }));
 }
 
-describe("UploadDocumentForm — local driver", () => {
-  test("POSTs multipart to the streaming route (not a server action), target fields before the file", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ documents: [] }), { status: 200 })
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    // 3 MB: over Next's 1 MB server-action body cap.
-    const file = new File([new Uint8Array(3 * 1024 * 1024)], "scan.pdf", {
-      type: "application/pdf",
+describe("local driver → streaming route", () => {
+  test("POSTs the file (not a server action) with name + category after matterId", async () => {
+    await fill("local", new File(["pdf"], "scan.pdf"), {
+      name: "Complaint",
+      category: "pleading",
     });
-    await fillAndSubmit("local", file, { name: "Signed retainer" });
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("/api/documents/upload");
     expect(init.method).toBe("POST");
     const fd = init.body as FormData;
-    expect([...fd.keys()]).toEqual(["matterId", "category", "name", "files"]);
+    // Contract: target before the file part.
+    expect([...fd.keys()]).toEqual(["matterId", "name", "category", "files"]);
     expect(fd.get("matterId")).toBe("m1");
-    expect(fd.get("category")).toBe("contract");
-    expect(fd.get("name")).toBe("Signed retainer");
+    expect(fd.get("name")).toBe("Complaint");
+    expect(fd.get("category")).toBe("pleading");
     expect((fd.get("files") as File).name).toBe("scan.pdf");
+    expect(mockedUpload).not.toHaveBeenCalled();
+
+    // Success refreshes the listing and collapses the composer.
     await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(
+      await screen.findByRole("button", { name: /upload document/i })
+    ).toBeInTheDocument();
   });
 
-  test("a server error message is shown and the form stays open", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ error: "Unknown document category." }), {
-          status: 400,
-        })
-      )
+  test("a server rejection is shown inline and the typed form is kept", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ error: "Matter not found." }), {
+        status: 404,
+      })
     );
-    await fillAndSubmit("local", new File(["x"], "a.pdf"));
-    expect(
-      await screen.findByText("Unknown document category.")
-    ).toBeInTheDocument();
+    await fill("local", new File(["pdf"], "scan.pdf"), { name: "Keep me" });
+
+    expect(await screen.findByText("Matter not found.")).toBeInTheDocument();
+    // Not collapsed, not reset.
+    expect(screen.getByLabelText(/display name/i)).toHaveValue("Keep me");
     expect(refresh).not.toHaveBeenCalled();
   });
 });
 
-describe("UploadDocumentForm — vercel-blob driver", () => {
-  test("uploads client-direct with the target, name and category in the signed payload", async () => {
-    mockedUpload.mockResolvedValue({} as never);
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-
-    await fillAndSubmit(
-      "vercel-blob",
-      new File([new Uint8Array(2048)], "brief.pdf"),
-      { name: "Client brief" }
-    );
+describe("vercel-blob driver → client-direct upload()", () => {
+  test("sends name + category in the clientPayload; server action is never involved", async () => {
+    mockedUpload.mockResolvedValue({ url: "https://s/x" } as never);
+    await fill("vercel-blob", new File(["pdf"], "scan.pdf"), {
+      name: "Complaint",
+      category: "pleading",
+    });
 
     await waitFor(() => expect(mockedUpload).toHaveBeenCalledTimes(1));
-    const [pathname, , options] = mockedUpload.mock.calls[0]!;
-    expect(pathname).toMatch(/^[A-Za-z0-9_-]{16}__brief\.pdf$/);
-    expect(options).toMatchObject({
+    const [pathname, , opts] = mockedUpload.mock.calls[0];
+    expect(pathname).toMatch(/^[A-Za-z0-9_-]{16}__scan\.pdf$/);
+    expect(opts).toMatchObject({
       access: "private",
       handleUploadUrl: "/api/documents/upload/blob",
       contentType: "application/pdf",
-      multipart: true,
     });
-    expect(JSON.parse(options.clientPayload as string)).toEqual({
+    expect(JSON.parse(opts.clientPayload as string)).toEqual({
       matterId: "m1",
       folderId: null,
-      name: "Client brief",
-      category: "contract",
+      name: "Complaint",
+      category: "pleading",
     });
-    // Never through the app server.
     expect(fetchMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+  });
+
+  test("the display name falls back to the file's own name", async () => {
+    mockedUpload.mockResolvedValue({ url: "https://s/x" } as never);
+    await fill("vercel-blob", new File(["pdf"], "scan.pdf"));
+    await waitFor(() => expect(mockedUpload).toHaveBeenCalled());
+    const payload = JSON.parse(
+      mockedUpload.mock.calls[0][2].clientPayload as string
+    );
+    expect(payload.name).toBe("scan.pdf");
+    expect(payload.category).toBe("other");
+  });
+
+  test("a token-route rejection reads as friendly text", async () => {
+    mockedUpload.mockRejectedValue(
+      new Error("Vercel Blob: Failed to  retrieve the client token")
+    );
+    await fill("vercel-blob", new File(["pdf"], "scan.pdf"));
+    expect(
+      await screen.findByText(/upload was rejected.*lost permission/i)
+    ).toBeInTheDocument();
   });
 });
 
-describe("UploadDocumentForm — preflight", () => {
-  test("an empty file is rejected client-side with nothing sent", async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-    await fillAndSubmit("local", new File([], "empty.pdf"));
-    expect(await screen.findByText(/is empty/i)).toBeInTheDocument();
+describe("client-side size check", () => {
+  test("a file over 25 MB fails inline; no transport is touched", async () => {
+    const big = new File(["x"], "huge.pdf");
+    Object.defineProperty(big, "size", { value: 25 * 1024 * 1024 + 1 });
+    await fill("local", big);
+
+    expect(await screen.findByText(/too large \(max 25 MB\)/i)).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(mockedUpload).not.toHaveBeenCalled();
   });
 });

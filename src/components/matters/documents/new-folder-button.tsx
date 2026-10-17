@@ -92,6 +92,7 @@ export function NewFolderButton({
             <input
               type="text"
               value={name}
+              aria-label="Folder name"
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Production 1 — APD records"
               maxLength={120}

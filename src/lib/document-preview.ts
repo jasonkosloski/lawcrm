@@ -34,10 +34,13 @@ import mammoth from "mammoth";
 import { readStoredFile, statFile } from "@/lib/file-storage";
 import { sanitizeDocumentHtml } from "@/lib/sanitize-html";
 
-/** Ceiling for buffering a .docx into memory for conversion. Matches
- *  a typical Word-document ceiling — a Word doc bigger than this is almost
- *  certainly image-stuffed and the user is better served downloading. */
-export const DOCX_MAX_BYTES = 25 * 1024 * 1024;
+/** Ceiling for buffering a .docx into memory for the server-side
+ *  mammoth conversion. That conversion is only the FALLBACK for a
+ *  docx-preview failure but runs on every docx view, so it is kept
+ *  small: a larger Word doc is almost certainly image-stuffed, and
+ *  the client-side docx-preview (which has no such cap) is still the
+ *  primary render. */
+export const DOCX_MAX_BYTES = 5 * 1024 * 1024;
 
 /** Text/CSV previews are capped here; past it we truncate and say so. */
 export const TEXT_PREVIEW_MAX_BYTES = 1024 * 1024;

@@ -128,14 +128,53 @@ describe("vercel-blob driver → client-direct upload()", () => {
     await waitFor(() => expect(mockedUpload).toHaveBeenCalledTimes(2));
   });
 
-  test("surfaces the token route's rejection message", async () => {
+  test("a token-route rejection reads as friendly text, not the SDK's generic message", async () => {
+    // What @vercel/blob/client really throws for ANY non-2xx from the
+    // token route (it discards the route's { error } body).
     mockedUpload.mockRejectedValue(
-      new Error("You don't have permission to upload documents.")
+      new Error("Vercel Blob: Failed to  retrieve the client token")
     );
     await pickFiles([new File(["a"], "a.pdf", { type: "application/pdf" })]);
     expect(
-      await screen.findByText("You don't have permission to upload documents.")
+      await screen.findByText(/upload was rejected.*lost permission/i)
     ).toBeInTheDocument();
+    expect(screen.queryByText(/retrieve the client token/)).toBeNull();
+  });
+
+  test("a genuine network error keeps its own message", async () => {
+    mockedUpload.mockRejectedValue(new Error("Network request failed"));
+    await pickFiles([new File(["a"], "a.pdf", { type: "application/pdf" })]);
+    expect(
+      await screen.findByText("Network request failed")
+    ).toBeInTheDocument();
+  });
+
+  test("cancelling mid-batch still refreshes so finished files show up", async () => {
+    // First file completes; the second hangs until the user cancels.
+    mockedUpload
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .mockResolvedValueOnce({ url: "https://s/a" } as any)
+      .mockImplementationOnce(
+        (_p, _f, opts) =>
+          new Promise((_resolve, reject) => {
+            opts.abortSignal?.addEventListener("abort", () =>
+              reject(new Error("aborted"))
+            );
+          })
+      );
+    const user = userEvent.setup({ applyAccept: false });
+    await pickFiles([
+      new File(["a"], "a.pdf", { type: "application/pdf" }),
+      new File(["b"], "b.pdf", { type: "application/pdf" }),
+    ]);
+    await waitFor(() => expect(mockedUpload).toHaveBeenCalledTimes(2));
+    expect(refresh).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Cancel upload" }));
+
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    // A user cancel is not an error.
+    expect(screen.queryByText("aborted")).toBeNull();
   });
 });
 

@@ -92,6 +92,8 @@ export function MoveToFolderDialog({
         key={id ?? "__root__"}
         type="button"
         disabled={isDisabled || isCurrent || pending}
+        // Selection state for assistive tech (colour alone isn't enough).
+        aria-pressed={isPicked}
         onClick={() => setTarget(id)}
         className={cn(
           "flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-left text-xs",

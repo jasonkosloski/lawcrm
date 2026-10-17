@@ -63,6 +63,7 @@ import {
   makeStorageKey,
   type StorageDriver,
 } from "@/lib/storage/storage-key";
+import { blobUploadErrorMessage } from "./upload-errors";
 
 /** Picker filter: pdf / word / excel (+ppt, text) / images / audio /
  *  video. The server derives the real MIME from the extension and
@@ -254,16 +255,15 @@ export function MultiFileUpload({
     } catch (err) {
       cancelRef.current = null;
       reset();
-      if (!controller.signal.aborted) {
-        // Completed files stay uploaded (per-file transfers can't be
-        // all-or-nothing); the second refresh shows what landed.
-        setError(
-          err instanceof Error && err.message
-            ? err.message
-            : "Upload failed — check your connection and try again."
-        );
-        router.refresh();
-      }
+      // A user cancel is silent, a failure is not.
+      if (!controller.signal.aborted) setError(blobUploadErrorMessage(err));
+      // Failure OR cancel: files that finished before it stay
+      // uploaded (per-file transfers can't be all-or-nothing), so
+      // refresh either way - a stale list invites a re-upload of the
+      // whole batch (duplicates). The second refresh catches rows
+      // whose completion callback landed late.
+      router.refresh();
+      refreshTimerRef.current = setTimeout(() => router.refresh(), 2000);
     }
   };
 

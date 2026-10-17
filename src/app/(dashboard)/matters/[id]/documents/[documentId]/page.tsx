@@ -64,47 +64,13 @@ import {
   TextPreview,
 } from "@/components/documents-viewer/text-preview";
 
-// Viewer-local copies of the tab's display maps — the tab page is a
-// separate feature surface; sharing would couple the two files.
-const CATEGORY_LABEL: Record<string, string> = {
-  filing: "Filing",
-  pleading: "Pleading",
-  correspondence: "Correspondence",
-  contract: "Contract",
-  intake: "Intake",
-  discovery: "Discovery",
-  expert_report: "Expert report",
-  evidence: "Evidence",
-  vendor: "Vendor",
-  archive: "Archive",
-  other: "Other",
-};
+import {
+  documentCategoryLabel,
+  documentStatusMeta,
+  formatFileSize,
+} from "@/lib/document-display";
 
-const STATUS_META: Record<string, { label: string; className: string }> = {
-  active: { label: "Active", className: "bg-paper-2 text-ink-3 border-line" },
-  filed: { label: "Filed", className: "bg-ok-soft text-ok border-line" },
-  received: {
-    label: "Received",
-    className: "bg-brand-soft text-brand-700 border-brand-200",
-  },
-  review: {
-    label: "Under review",
-    className: "bg-warn-soft text-warn border-warn-border",
-  },
-  archived: {
-    label: "Archived",
-    className: "bg-paper-2 text-ink-4 border-line",
-  },
-};
-
-const formatSize = (bytes: number | null): string => {
-  if (bytes === null || bytes === 0) return "—";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-};
-
-const firstParam = (v: string | string[] | undefined): string | undefined =>
+const firstParam =(v: string | string[] | undefined): string | undefined =>
   Array.isArray(v) ? v[0] : v;
 
 export default async function DocumentViewerPage({
@@ -136,7 +102,7 @@ export default async function DocumentViewerPage({
   const backHref = `/matters/${id}/documents${
     doc.folderId ? `?folder=${encodeURIComponent(doc.folderId)}` : ""
   }`;
-  const status = STATUS_META[doc.status] ?? STATUS_META.active;
+  const status = documentStatusMeta(doc.status);
 
   // Evidence-review data — every renderer flags now, so fetch
   // whenever there's an actual file to review.
@@ -214,7 +180,7 @@ export default async function DocumentViewerPage({
               {doc.name}
             </h1>
             <span className="inline-block rounded-full border border-line bg-paper-2 px-2 py-0.5 text-2xs font-medium text-ink-3">
-              {CATEGORY_LABEL[doc.category] ?? doc.category}
+              {documentCategoryLabel(doc.category)}
             </span>
             <span
               className={`inline-block rounded-full border px-2 py-0.5 text-2xs font-medium ${status.className}`}
@@ -223,7 +189,7 @@ export default async function DocumentViewerPage({
             </span>
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-2xs text-ink-4">
-            <span className="font-mono">{formatSize(doc.fileSize)}</span>
+            <span className="font-mono">{formatFileSize(doc.fileSize)}</span>
             <span aria-hidden>·</span>
             <span>
               Uploaded
@@ -250,7 +216,7 @@ export default async function DocumentViewerPage({
           />
           {doc.fileUrl && (
             <a
-              href={downloadHref}
+              href={`${downloadHref}?download=1`}
               download={doc.name}
               className="inline-flex h-7 items-center gap-1.5 rounded-md border border-line bg-white px-2.5 text-xs font-medium text-ink-2 transition-colors hover:border-brand-300 hover:text-brand-700"
             >
@@ -457,7 +423,7 @@ async function renderBody(
         <DocumentReview {...shared}>
           <ViewerFallbackCard
             title="No inline preview for this file type"
-            detail={`${doc.contentType ?? "Unknown type"} · ${formatSize(doc.fileSize)}. Download it to view.`}
+            detail={`${doc.contentType ?? "Unknown type"} · ${formatFileSize(doc.fileSize)}. Download it to view.`}
             downloadHref={downloadHref}
             downloadName={doc.name}
           />

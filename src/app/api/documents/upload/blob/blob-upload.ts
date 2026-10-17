@@ -46,7 +46,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
-import { DOCUMENT_CATEGORIES } from "@/lib/document-form";
+import { DOCUMENT_CATEGORIES, type DocumentCategory } from "@/lib/document-form";
 import { isValidStorageKey } from "@/lib/storage/storage-key";
 import { BLOB_CACHE_MAX_AGE_SECONDS } from "@/lib/storage/blob-driver";
 import {
@@ -72,12 +72,13 @@ export class UploadTokenError extends Error {
 const clientPayloadSchema = z.object({
   matterId: z.string().min(1),
   folderId: z.string().min(1).nullish(),
-  /** Original filename — the Document display name. The pathname
+  /** Document display name: the original filename, or the composer's
+   *  override. The pathname
    *  is the sanitized/truncated KEY; this preserves what the user
    *  actually called the file. */
-  name: z.string().min(1).max(255),
-  /** Optional category chosen in the single-file composer; the
-   *  multi-file uploader omits it (discovery productions). */
+  name: z.string().trim().min(1).max(255),
+  /** Single-file composer's category; batch uploads omit it
+   *  (→ "discovery", same default as the streaming route). */
   category: z.enum(DOCUMENT_CATEGORIES).optional(),
 });
 
@@ -95,7 +96,7 @@ type TokenPayload = {
   matterId: string;
   folderId: string | null;
   name: string;
-  category: string;
+  category: DocumentCategory;
   contentType: string;
   userId: string;
 };

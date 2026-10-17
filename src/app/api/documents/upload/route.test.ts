@@ -334,7 +334,7 @@ describe("POST /api/documents/upload — composer fields (category, name)", () =
     expect(mockedTxn).not.toHaveBeenCalled();
   });
 
-  test("a display-name override applies to the first file only", async () => {
+  test("a display-name override is ignored for a multi-file batch", async () => {
     wireHappyMocks();
     await POST(
       await makeRequest(
@@ -344,9 +344,20 @@ describe("POST /api/documents/upload — composer fields (category, name)", () =
         ])
       )
     );
-    expect(mockedCreate.mock.calls[0]![0].data.name).toBe("Signed retainer");
+    expect(mockedCreate.mock.calls[0]![0].data.name).toBe("scan001.pdf");
     expect(mockedCreate.mock.calls[1]![0].data.name).toBe("scan002.pdf");
-    // MIME still comes from the real filename, not the display name.
+  });
+
+  test("a display-name override applies to a single-file upload", async () => {
+    wireHappyMocks();
+    await POST(
+      await makeRequest(
+        fdWith({ matterId: "m1", name: "Signed retainer" }, [
+          { name: "scan001.pdf" },
+        ])
+      )
+    );
+    expect(mockedCreate.mock.calls[0]![0].data.name).toBe("Signed retainer");
     expect(mockedCreate.mock.calls[0]![0].data.contentType).toBe(
       "application/pdf"
     );

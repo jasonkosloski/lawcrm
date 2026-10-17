@@ -53,7 +53,8 @@ export async function POST(request: Request): Promise<Response> {
     return NextResponse.json(jsonResponse);
   } catch (err) {
     // UploadTokenError messages are written to be user-safe and carry
-    // a real status (401/403/404/400). ANY OTHER error (Prisma, SDK,
+    // a real status (401/403/404/400) - but the @vercel/blob client
+    // never shows them to the uploader (see the note below). ANY OTHER error (Prisma, SDK,
     // zod, ...) is internal: its text is logged server-side but never
     // echoed to the caller (browser or Vercel's callback), and it maps
     // to 500 - a failed onUploadCompleted still lands here, and any

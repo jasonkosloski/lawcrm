@@ -1,8 +1,8 @@
 /**
  * Document Row Actions — kebab menu next to each document row.
  *
- * Download (anchor to /api/documents/[id]/download, only when the row
- * has a file) + "Move to…" (documents.organize — re-files the
+ * Download (anchor to /api/documents/[id]/download?download=1 — saves
+ * as an attachment — only when the row has a file) + "Move to…" (documents.organize — re-files the
  * document via the shared folder picker) + Delete (uploader or
  * documents.delete_any holder, with confirm).
  */
@@ -94,11 +94,10 @@ export function DocumentRowActions({
           {hasFile && (
             <DropdownMenuItem
               render={
-                <a
-                  href={`/api/documents/${documentId}/download`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
+                // ?download=1 → Content-Disposition: attachment, so
+                // PDFs/media save to disk instead of opening in a tab
+                // (opening is what the row link / viewer are for).
+                <a href={`/api/documents/${documentId}/download?download=1`}>
                   <Download />
                   Download
                 </a>

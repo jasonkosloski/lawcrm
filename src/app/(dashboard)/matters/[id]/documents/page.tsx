@@ -44,7 +44,7 @@ import { getCurrentUserId, requireUser } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { formatDate } from "@/lib/format-date";
 import { currentUserHasPermission } from "@/lib/permission-check";
-import { activeStorageDriver } from "@/lib/file-storage";
+import { activeStorageDriver, type StorageDriver } from "@/lib/file-storage";
 import {
   MAX_FOLDER_DEPTH,
   buildFolderTree,
@@ -57,50 +57,11 @@ import {
   getFolderDocuments,
   getMatterDocumentFolders,
 } from "@/lib/queries/matter-detail";
-
-const CATEGORY_LABEL: Record<string, string> = {
-  filing: "Filing",
-  pleading: "Pleading",
-  correspondence: "Correspondence",
-  contract: "Contract",
-  intake: "Intake",
-  discovery: "Discovery",
-  expert_report: "Expert report",
-  evidence: "Evidence",
-  vendor: "Vendor",
-  archive: "Archive",
-  other: "Other",
-};
-
-const STATUS_META: Record<string, { label: string; className: string }> = {
-  active: {
-    label: "Active",
-    className: "bg-paper-2 text-ink-3 border-line",
-  },
-  filed: {
-    label: "Filed",
-    className: "bg-ok-soft text-ok border-line",
-  },
-  received: {
-    label: "Received",
-    className: "bg-brand-soft text-brand-700 border-brand-200",
-  },
-  review: {
-    label: "Under review",
-    className: "bg-warn-soft text-warn border-warn-border",
-  },
-  archived: {
-    label: "Archived",
-    className: "bg-paper-2 text-ink-4 border-line",
-  },
-};
-
-const formatSize = (bytes: number | null): string => {
-  if (bytes === null || bytes === 0) return "—";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-};
+import {
+  documentCategoryLabel,
+  documentStatusMeta,
+  formatFileSize,
+} from "@/lib/document-display";
 
 export default async function MatterDocumentsPage({
   params,
@@ -325,7 +286,7 @@ export default async function MatterDocumentsPage({
                   );
                 })}
                 {documents.map((d) => {
-                  const status = STATUS_META[d.status] ?? STATUS_META.active;
+                  const status = documentStatusMeta(d.status);
                   const canDelete =
                     canDeleteAny || d.uploadedBy === currentUserId;
                   return (
@@ -344,7 +305,7 @@ export default async function MatterDocumentsPage({
                         </Link>
                       </TableCell>
                       <TableCell className="text-2xs font-mono text-ink-4">
-                        {CATEGORY_LABEL[d.category] ?? d.category}
+                        {documentCategoryLabel(d.category)}
                       </TableCell>
                       <TableCell>
                         <span
@@ -354,7 +315,7 @@ export default async function MatterDocumentsPage({
                         </span>
                       </TableCell>
                       <TableCell className="text-2xs font-mono text-ink-3">
-                        {formatSize(d.fileSize)}
+                        {formatFileSize(d.fileSize)}
                       </TableCell>
                       <TableCell className="text-2xs font-mono text-ink-3">
                         <span title={d.uploaderName ?? undefined}>
@@ -387,6 +348,7 @@ export default async function MatterDocumentsPage({
           matterId={id}
           templates={templates}
           canUpload={canUpload}
+          storageDriver={activeStorageDriver()}
         />
       </div>
     </div>
@@ -397,15 +359,13 @@ export default async function MatterDocumentsPage({
  *  Kept from the flat-list era — the composer's display-name +
  *  category controls have no multi-file equivalent (composer uploads
  *  land at the matter root; use "Upload files" to target a folder).
- *  The composer only renders for users who can upload (the same
- *  `documents.upload` gate the upload routes enforce) and uses the
- *  active driver's transport, like "Upload files". It gets the
- *  growing slot so its expanded state keeps full width; the
- *  generate trigger stays a compact button. */
+ *  The upload form gets the growing slot so its expanded state keeps
+ *  full width; the generate trigger stays a compact button. */
 function DocumentComposerRow({
   matterId,
   templates,
   canUpload,
+  storageDriver,
 }: {
   matterId: string;
   templates: {
@@ -415,14 +375,17 @@ function DocumentComposerRow({
     description: string | null;
   }[];
   canUpload: boolean;
+  storageDriver: StorageDriver;
 }) {
   return (
     <div className="flex flex-wrap items-start gap-2">
+      {/* Hidden without documents.upload — a denied submit would
+          redirect to / and throw away the typed form. */}
       {canUpload && (
         <div className="flex-1 min-w-64">
           <UploadDocumentForm
             matterId={matterId}
-            storageDriver={activeStorageDriver()}
+            storageDriver={storageDriver}
           />
         </div>
       )}

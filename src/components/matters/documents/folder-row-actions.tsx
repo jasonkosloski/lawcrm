@@ -172,6 +172,7 @@ export function FolderRowActions({
             <input
               type="text"
               value={newName}
+              aria-label="Folder name"
               onChange={(e) => setNewName(e.target.value)}
               maxLength={120}
               autoFocus

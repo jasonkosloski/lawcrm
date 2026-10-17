@@ -101,7 +101,8 @@ export function FolderTree({
             <button
               type="button"
               onClick={() => toggle(node.id)}
-              aria-label={isExpanded ? "Collapse folder" : "Expand folder"}
+              aria-label={`${isExpanded ? "Collapse" : "Expand"} ${node.name}`}
+              aria-expanded={isExpanded}
               className="shrink-0 w-5 h-6 inline-flex items-center justify-center text-ink-4 hover:text-ink-2"
             >
               {isExpanded ? (

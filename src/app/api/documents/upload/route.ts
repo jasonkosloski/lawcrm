@@ -21,10 +21,10 @@
  *   multipart/form-data fields, in append order:
  *     - matterId  string, required — MUST precede any file part
  *     - folderId  string, optional — must belong to the same matter
- *     - category  string, optional — one of DOCUMENT_CATEGORIES
- *                 (default "discovery"); applies to every file
- *     - name      string, optional display name — applies to the FIRST
- *                 file part only (the single-file composer's override)
+ *     - category  string, optional — one of DOCUMENT_CATEGORIES;
+ *                 defaults to "discovery" (batch uploads)
+ *     - name      string, optional — display-name override, applied
+ *                 only when the request carries exactly one file
  *     - files     one or more file parts (field name "files"); ≥1
  *   200 → { documents: [{ id: string, name: string }] }
  *   4xx → { error: string }
@@ -72,7 +72,7 @@ import {
   deleteFile,
   storeStream,
 } from "@/lib/file-storage";
-import { DOCUMENT_CATEGORIES } from "@/lib/document-form";
+import { parseUploadMeta, type DocumentCategory } from "@/lib/document-form";
 import {
   MAX_FILES_PER_BATCH,
   MAX_MEDIA_UPLOAD_BYTES,
@@ -99,7 +99,8 @@ type ParseResult =
       ok: true;
       matterId: string;
       folderId: string | null;
-      category: string;
+      category: DocumentCategory;
+      displayName: string;
       files: StoredUpload[];
     }
   | (UploadFailure & {
@@ -172,10 +173,15 @@ export async function POST(req: NextRequest): Promise<Response> {
           data: {
             matterId: result.matterId,
             folderId: result.folderId,
-            name: f.name,
-            // Defaults to "discovery" (this route exists for
-            // discovery productions); the single-file composer
-            // passes its own category.
+            // A display-name override only makes sense for a single
+            // file; batches keep each file's own name.
+            name:
+              result.files.length === 1 && result.displayName
+                ? capDocumentName(result.displayName)
+                : f.name,
+            // Default "discovery": the batch uploader exists for
+            // discovery productions; the single-file composer sends
+            // an explicit category.
             category: result.category,
             source: "upload",
             fileUrl: f.key,
@@ -215,16 +221,28 @@ export async function POST(req: NextRequest): Promise<Response> {
   return NextResponse.json({ documents });
 }
 
-/** Validate the matterId/folderId fields once, before the first
- *  file byte hits disk. */
+type Target = {
+  matterId: string;
+  folderId: string | null;
+  category: DocumentCategory;
+  displayName: string;
+};
+
+/** Validate the matterId/folderId/category/name fields once, before
+ *  the first file byte hits disk. */
 async function resolveTarget(fields: {
   matterId?: string;
   folderId?: string;
   category?: string;
-}): Promise<
-  | { matterId: string; folderId: string | null; category: string }
-  | UploadFailure
-> {
+  name?: string;
+}): Promise<Target | UploadFailure> {
+  const meta = parseUploadMeta({
+    name: fields.name,
+    category: fields.category?.trim() || "discovery",
+  });
+  if (!meta) {
+    return { status: 400, error: "Invalid document name or category." };
+  }
   const matterId = fields.matterId?.trim();
   if (!matterId) {
     return {
@@ -253,11 +271,12 @@ async function resolveTarget(fields: {
       return { status: 400, error: "Folder not found in this matter." };
     }
   }
-  const category = fields.category?.trim() || "discovery";
-  if (!(DOCUMENT_CATEGORIES as readonly string[]).includes(category)) {
-    return { status: 400, error: "Unknown document category." };
-  }
-  return { matterId, folderId: folderId || null, category };
+  return {
+    matterId,
+    folderId: folderId || null,
+    category: meta.category,
+    displayName: meta.name,
+  };
 }
 
 /**
@@ -308,14 +327,7 @@ async function parseAndStore(
     category?: string;
     name?: string;
   } = {};
-  let target: {
-    matterId: string;
-    folderId: string | null;
-    category: string;
-  } | null = null;
-  /** The composer's display-name override is consumed by the first
-   *  stored file only. */
-  let nameOverrideUsed = false;
+  let target: Target | null = null;
   let failure: UploadFailure | null = null;
   let chain: Promise<void> = Promise.resolve();
 
@@ -391,14 +403,10 @@ async function parseAndStore(
             fail({ status: 400, error: `"${filename}" is empty.` });
             return;
           }
-          const override = nameOverrideUsed
-            ? ""
-            : capDocumentName((fields.name ?? "").trim());
-          nameOverrideUsed = true;
           stored.push({
             key: s.key,
             size: s.size,
-            name: override || filename,
+            name: filename,
             contentType: resolvedType,
           });
         } catch (err) {
@@ -474,16 +482,13 @@ async function parseAndStore(
   }
   // target is non-null here: stored.length > 0 implies at least one
   // file was processed, which requires a resolved target.
-  const t = target as unknown as {
-    matterId: string;
-    folderId: string | null;
-    category: string;
-  };
+  const t = target as unknown as Target;
   return {
     ok: true,
     matterId: t.matterId,
     folderId: t.folderId,
     category: t.category,
+    displayName: t.displayName,
     files: stored,
   };
 }

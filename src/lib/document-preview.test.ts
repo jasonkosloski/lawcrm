@@ -156,8 +156,22 @@ describe("renderStoredDocxToSafeHtml — failure paths", () => {
     const result = await renderStoredDocxToSafeHtml("huge");
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.reason).toMatch(/larger than 25 MB/);
+    expect(result.reason).toMatch(/larger than 5 MB/);
     expect(vi.mocked(readStoredFile)).not.toHaveBeenCalled();
+  });
+
+  test("stats the file once per conversion (one blob head, not two)", async () => {
+    files.set(
+      "once",
+      await buildDocx({
+        documentXml:
+          `<?xml version="1.0"?><w:document ${W_NS}><w:body>` +
+          "<w:p><w:r><w:t>Hello</w:t></w:r></w:p></w:body></w:document>",
+      })
+    );
+    const result = await renderStoredDocxToSafeHtml("once");
+    expect(result.ok).toBe(true);
+    expect(vi.mocked(statFile)).toHaveBeenCalledTimes(1);
   });
 
   test("storage read error → reason, not a throw", async () => {

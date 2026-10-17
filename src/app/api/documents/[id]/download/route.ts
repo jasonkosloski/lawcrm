@@ -118,6 +118,12 @@ export async function GET(
   // Bare-media-type comparison lives in the shared predicate — a
   // stored "text/html; charset=utf-8" must not slip past.
   const inlineSafe = isInlineSafeType(contentType);
+  // ?download=1 is the explicit "save this file" request (row-menu
+  // and viewer Download buttons). Inline-safe types otherwise render
+  // in the browser; the viewer's embeds (iframe/img/video) keep using
+  // the bare URL.
+  const forceDownload = new URL(req.url).searchParams.get("download") === "1";
+  const asAttachment = forceDownload || !inlineSafe;
 
   // ── Blob-stored document → 302 to a presigned URL ──────────────
   // Range/seeking is the CDN's job from here; we never proxy the
@@ -130,7 +136,7 @@ export async function GET(
   // boundary.
   if (isBlobKey(doc.fileUrl)) {
     const target = await signedBlobUrl(doc.fileUrl, {
-      download: !inlineSafe,
+      download: asAttachment,
       media: /^(audio|video)\//i.test(contentType),
     });
     return NextResponse.redirect(target, {
@@ -183,11 +189,11 @@ export async function GET(
     // Without nosniff, browsers may sniff even a benign declared
     // type into something active (e.g. octet-stream → HTML).
     "X-Content-Type-Options": "nosniff",
-    // filename* (RFC 5987) handles non-ASCII names cleanly. The UI
-    // link uses target="_blank" so allowlisted types (PDFs, images)
-    // preview inline; anything user-declared beyond that set is
-    // forced to download — see INLINE_SAFE_TYPES for why.
-    "Content-Disposition": `${inlineSafe ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(doc.name)}`,
+    // filename* (RFC 5987) handles non-ASCII names cleanly. Without
+    // ?download=1, allowlisted types (PDFs, images) render inline;
+    // anything user-declared beyond that set is forced to download —
+    // see INLINE_SAFE_TYPES for why.
+    "Content-Disposition": `${asAttachment ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(doc.name)}`,
     "Cache-Control": "private, no-cache, no-store, must-revalidate",
   };
   if (!inlineSafe) {
