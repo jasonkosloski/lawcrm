@@ -212,7 +212,7 @@ export function formatDayBucket(
 // a UTC production server, a developer laptop in Denver and a browser
 // anywhere.
 //
-// Rows written before this convention by `parseLocalDate` on a server
+// Rows written before this convention by a server-local-midnight parser on a server
 // at or west of UTC sit at that server's local midnight (00:00Z in
 // production, 06:00/07:00Z on a Denver laptop) — still inside the right
 // UTC day, so UTC reads and half-open UTC day ranges handle them too.
@@ -383,83 +383,6 @@ export function toWallClockInput(d: Date, tz: string): string {
   const get = (type: Intl.DateTimeFormatPartTypes): string =>
     parts.find((p) => p.type === type)?.value ?? "00";
   return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
-}
-
-// ── Legacy date-only parsing ───────────────────────────────────────────
-
-/**
- * @deprecated Use `parseDateOnly` (UTC midnight). This server-local
- * parser predates the UTC convention in ADR-012; on the UTC production
- * host the two return the same instant. Kept only until every caller
- * has moved over.
- *
- * Parse a date-only string (`YYYY-MM-DD`, the wire format of
- * `<input type="date">`) into **local midnight** of that calendar
- * day.
- *
- * We never feed date-only strings to `new Date(value)` directly:
- * the ISO short form parses as *UTC* midnight, so any server (or
- * browser) west of UTC reads the value back a day early with local
- * getters — and a form that round-trips the value drifts the date
- * one day earlier per save. Local midnight keeps parse and display
- * on the same day grid. A malformed value ("abc", tampered POST)
- * returns null instead of an Invalid Date so callers surface a
- * field error rather than a Prisma 500.
- *
- * This is the shared version of the pattern established in
- * `parseLocalDueDate` (actions/deadlines.ts, tasks.ts),
- * `parseEventBoundary` (actions/calendar-events.ts) and
- * `parseLocalEstablishedAt` (actions/firm.ts) — new callsites
- * should use this instead of re-deriving it.
- */
-export function parseLocalDate(value: string): Date | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!m) return null;
-  const [, y, mo, d] = m;
-  const year = Number(y);
-  const month = Number(mo);
-  const day = Number(d);
-  const date = new Date(year, month - 1, day, 0, 0, 0, 0);
-  // `new Date(y, m, d)` rolls 2026-02-31 over into March, wraps month
-  // 13 into the next January and maps years 0-99 to 1900-1999; a
-  // round-trip check turns all three into the documented null.
-  date.setFullYear(year);
-  if (
-    date.getFullYear() !== year ||
-    date.getMonth() !== month - 1 ||
-    date.getDate() !== day
-  ) {
-    return null;
-  }
-  return date;
-}
-
-/**
- * @deprecated Use `parseDateOnly` for date-only values and
- * `parseWallClock(value, tz)` for datetimes.
- *
- * Like `parseLocalDate`, but tolerates a full ISO datetime
- * (`2026-04-15T13:30:00.000Z` or datetime-local's
- * `2026-04-15T13:30`).
- *
- * Pass `tz` (the user's profile zone, `getCurrentUserTimeZone()`) so a
- * zone-less `YYYY-MM-DDTHH:mm` is read as that user's wall-clock time
- * (via `parseWallClock`); values carrying `Z` / an offset are taken as
- * the instants they are. Without `tz` a zone-less datetime falls
- * through to `new Date(value)`, which reads it in the SERVER's zone
- * (UTC in production — hours off for everyone else) — kept only for
- * callers that have not been migrated yet.
- */
-export function parseLocalDateOrDateTime(
-  value: string,
-  tz?: string | null
-): Date | null {
-  const dateOnly = parseLocalDate(value);
-  if (dateOnly) return dateOnly;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return null; // date-only but invalid
-  if (tz) return parseWallClock(value, tz);
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 // ── Time-zone arithmetic ───────────────────────────────────────────────

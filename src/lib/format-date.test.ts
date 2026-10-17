@@ -27,8 +27,6 @@ import {
   formatRelative,
   instantInTz,
   parseDateOnly,
-  parseLocalDate,
-  parseLocalDateOrDateTime,
   parseWallClock,
   todayKey,
   toWallClockInput,
@@ -148,86 +146,6 @@ describe("formatDate", () => {
     expect(out).toMatch(/Apr/);
     expect(out).toMatch(/2026/);
     expect(out).toMatch(/2:30/);
-  });
-});
-
-describe("parseLocalDate", () => {
-  test("parses YYYY-MM-DD to LOCAL midnight (not UTC)", () => {
-    const d = parseLocalDate("2026-04-15");
-    expect(d).not.toBeNull();
-    // Local getters must read back the same calendar day — the
-    // whole point of the helper. `new Date("2026-04-15")` would
-    // fail this in any environment west of UTC.
-    expect(d!.getFullYear()).toBe(2026);
-    expect(d!.getMonth()).toBe(3);
-    expect(d!.getDate()).toBe(15);
-    expect(d!.getHours()).toBe(0);
-    expect(d!.getMinutes()).toBe(0);
-  });
-
-  test("rejects malformed values instead of yielding Invalid Date", () => {
-    expect(parseLocalDate("")).toBeNull();
-    expect(parseLocalDate("abc")).toBeNull();
-    expect(parseLocalDate("2026-4-5")).toBeNull(); // needs zero-padding
-    expect(parseLocalDate("2026-04-15T12:00")).toBeNull(); // datetime not allowed
-  });
-
-  test("rejects impossible calendar dates instead of rolling them over", () => {
-    expect(parseLocalDate("2026-02-30")).toBeNull();
-    expect(parseLocalDate("2026-02-31")).toBeNull();
-    expect(parseLocalDate("2025-02-29")).toBeNull(); // not a leap year
-    expect(parseLocalDate("2026-13-01")).toBeNull();
-    expect(parseLocalDate("2026-00-10")).toBeNull();
-    expect(parseLocalDate("2026-04-31")).toBeNull();
-    // Valid edge: leap day.
-    expect(parseLocalDate("2024-02-29")).not.toBeNull();
-  });
-
-  test("keeps two-digit-century years as written (no 19xx remap)", () => {
-    const d = parseLocalDate("0050-01-01");
-    expect(d).not.toBeNull();
-    expect(d!.getFullYear()).toBe(50);
-  });
-});
-
-describe("parseLocalDateOrDateTime", () => {
-  test("date-only goes through the local-midnight path", () => {
-    const d = parseLocalDateOrDateTime("2026-04-15");
-    expect(d!.getDate()).toBe(15);
-    expect(d!.getHours()).toBe(0);
-  });
-
-  test("datetime-local strings parse as local wall-clock time", () => {
-    const d = parseLocalDateOrDateTime("2026-04-15T13:30");
-    expect(d!.getDate()).toBe(15);
-    expect(d!.getHours()).toBe(13);
-    expect(d!.getMinutes()).toBe(30);
-  });
-
-  test("full ISO instants keep their exact moment", () => {
-    const d = parseLocalDateOrDateTime("2026-04-15T13:30:00.000Z");
-    expect(d!.getTime()).toBe(Date.parse("2026-04-15T13:30:00.000Z"));
-  });
-
-  test("garbage returns null", () => {
-    expect(parseLocalDateOrDateTime("not a date")).toBeNull();
-  });
-
-  test("an impossible date-only value is null, not a rolled-over date", () => {
-    expect(parseLocalDateOrDateTime("2026-02-30")).toBeNull();
-  });
-
-  test("with a tz, a zone-less datetime is the user's wall clock — not the server's", () => {
-    // 9:00 AM in Denver (MDT, UTC-6) is 15:00Z regardless of the
-    // host zone the suite runs in.
-    expect(
-      parseLocalDateOrDateTime("2026-06-10T09:00", "America/Denver")!.toISOString()
-    ).toBe("2026-06-10T15:00:00.000Z");
-    // Explicit zones still win.
-    expect(
-      parseLocalDateOrDateTime("2026-06-10T09:00:00.000Z", "America/Denver")!.toISOString()
-    ).toBe("2026-06-10T09:00:00.000Z");
-    expect(parseLocalDateOrDateTime("not a date", "America/Denver")).toBeNull();
   });
 });
 

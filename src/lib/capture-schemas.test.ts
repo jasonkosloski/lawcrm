@@ -239,7 +239,7 @@ describe("timeCaptureSchema", () => {
     expect(r.success).toBe(true);
   });
 
-  test("rejects non-YYYY-MM-DD date (actions parseLocalDate rely on it)", () => {
+  test("rejects non-YYYY-MM-DD date (actions parse it with parseDateOnly)", () => {
     const r = timeCaptureSchema.safeParse({ ...base, date: "Apr 25, 2026" });
     expect(r.success).toBe(false);
   });

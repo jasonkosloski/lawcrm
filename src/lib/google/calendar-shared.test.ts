@@ -76,7 +76,7 @@ describe("eventToGoogleResource", () => {
     expect(fallBack.start).toEqual({ date: "2026-11-01" });
     expect(fallBack.end).toEqual({ date: "2026-11-02" });
 
-    // Legacy row written by parseLocalDate on a Denver laptop: local
+    // Legacy row written by the old local-midnight parser on a Denver laptop: local
     // midnight = 06:00Z/07:00Z, still the right UTC day.
     const legacy = eventToGoogleResource({
       ...base,

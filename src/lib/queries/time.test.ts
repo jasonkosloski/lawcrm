@@ -312,7 +312,7 @@ describe("date-only bucketing (UTC midnight rows, any server zone)", () => {
   });
 
   test("legacy rows stored at a western server's local midnight still land on their day", async () => {
-    // Pre-ADR-012 rows written by parseLocalDate on a Denver laptop sit
+    // Pre-ADR-012 rows written by the old local-midnight parser on a Denver laptop sit
     // at 06:00/07:00Z - still inside the right UTC day.
     await createEntry({
       userId,

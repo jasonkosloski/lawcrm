@@ -114,7 +114,7 @@ export const timeCaptureSchema = z.object({
 
 /** Sibling note attached to another primary (not the main note flow
  *  on the Notes tab — that's the primary there). The content is
- *  plain text or lightweight HTML; it still runs through DOMPurify
+ *  plain text or lightweight HTML; it still runs through sanitizeUserHtml
  *  server-side before insert. */
 export const noteSiblingCaptureSchema = z.object({
   kind: z.literal("note_sibling"),

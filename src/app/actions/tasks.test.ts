@@ -365,7 +365,7 @@ describe("updateTask — happy path", () => {
   test("dueDate is stored as UTC midnight in any server zone (regression)", async () => {
     // ADR-012: a date-only value is a calendar date at UTC midnight,
     // read back in UTC by every consumer. Local-midnight storage
-    // (the old parseLocalDate frame) lands on 06:00/07:00Z on a Denver
+    // (the old server-local-midnight frame) lands on 06:00/07:00Z on a Denver
     // machine, which this exact-instant assertion catches there.
     const id = await seedTask();
     const fd = new FormData();
