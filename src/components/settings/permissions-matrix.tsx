@@ -199,6 +199,14 @@ export function PermissionsMatrix({
                       <td className="sticky left-0 bg-paper px-3 py-2 align-top">
                         <div className="text-xs text-ink font-medium">
                           {p.label}
+                          {p.unwired && (
+                            <span
+                              className="ml-2 align-middle text-[10px] font-normal text-ink-4 px-1.5 py-px rounded-full border border-line bg-paper-2"
+                              title="No action or page checks this permission yet — granting it changes nothing today."
+                            >
+                              Not enforced yet
+                            </span>
+                          )}
                         </div>
                         <div className="text-2xs text-ink-4 mt-0.5 leading-relaxed max-w-md">
                           {p.description}

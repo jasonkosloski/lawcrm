@@ -17,7 +17,6 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUserId } from "@/lib/current-user";
 import { logActivity } from "@/lib/activity-log";
 import {
   ADMIN_ROLE_NAME,
@@ -26,7 +25,7 @@ import {
 } from "@/lib/firm";
 import {
   getCurrentUserPermissions,
-  requirePermission,
+  requirePermissionResult,
 } from "@/lib/permission-check";
 import {
   ADMIN_ONLY_PERMISSIONS,
@@ -37,6 +36,12 @@ import {
   roleInitialState,
   type RoleFormState,
 } from "@/lib/role-form";
+
+/** Gate denial as form state — role forms render `_form`, so a
+ *  denied caller sees why nothing happened (no silent redirect). */
+function denied(error: string): RoleFormState {
+  return { status: "error", errors: { _form: [error] } };
+}
 
 const RESERVED_NAMES = new Set(
   [ADMIN_ROLE_NAME, DEFAULT_ROLE_NAME].map((n) => n.toLowerCase())
@@ -74,7 +79,9 @@ export async function createRoleAction(
   _prev: RoleFormState,
   formData: FormData
 ): Promise<RoleFormState> {
-  const actorId = await requirePermission("firm.manage_roles");
+  const gate = await requirePermissionResult("firm.manage_roles");
+  if (!gate.ok) return denied(gate.error);
+  const actorId = gate.userId;
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = roleSchema.safeParse(raw);
   if (!parsed.success) {
@@ -131,7 +138,9 @@ export async function updateRoleAction(
   _prev: RoleFormState,
   formData: FormData
 ): Promise<RoleFormState> {
-  const actorId = await requirePermission("firm.manage_roles");
+  const gate = await requirePermissionResult("firm.manage_roles");
+  if (!gate.ok) return denied(gate.error);
+  const actorId = gate.userId;
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = roleSchema.safeParse(raw);
   if (!parsed.success) {
@@ -215,7 +224,9 @@ export async function updateRoleAction(
 export async function deleteRoleAction(
   roleId: string
 ): Promise<RoleFormState> {
-  const actorId = await requirePermission("firm.manage_roles");
+  const gate = await requirePermissionResult("firm.manage_roles");
+  if (!gate.ok) return denied(gate.error);
+  const actorId = gate.userId;
   const firm = await getCurrentFirm();
   const target = await prisma.role.findFirst({
     where: { id: roleId, firmId: firm.id },
@@ -283,7 +294,8 @@ export async function setRolePermissionAction(
   // rows freely, but the meta keys (ADMIN_ONLY_PERMISSIONS) are
   // guarded below so they can't bootstrap themselves — or a peer
   // role — out of admin oversight.
-  await requirePermission("firm.manage_permissions");
+  const gate = await requirePermissionResult("firm.manage_permissions");
+  if (!gate.ok) return { ok: false, error: gate.error };
   if (!isKnownPermission(permission)) {
     return { ok: false, error: "Unknown permission key." };
   }
@@ -349,10 +361,9 @@ export async function setRolePermissionAction(
   // gets misconfigured. matterId=null because this is firm-scope
   // governance, not matter-scoped activity.
   if (!isNoOp) {
-    const actorId = await getCurrentUserId();
     await logActivity({
       matterId: null,
-      userId: actorId,
+      userId: gate.userId,
       type: "auth",
       title: granted
         ? `Granted "${permissionLabel(permission)}" to ${target.name}`

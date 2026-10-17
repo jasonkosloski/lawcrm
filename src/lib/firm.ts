@@ -12,6 +12,7 @@
  * from the session for free.
  */
 
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
@@ -39,11 +40,16 @@ export type FirmProfile = {
   logoUrl: string | null;
 };
 
-/** The current user's firm. Throws via `redirect("/login")` when
- *  the user isn't signed in (delegated to getCurrentUserId).
- *  Throws a plain Error when a signed-in user has no firm — that's
- *  a data integrity bug, not a normal flow. */
-export async function getCurrentFirm(): Promise<FirmProfile> {
+/** The current user's firm, read fresh from the database. Throws via
+ *  `redirect("/login")` when the user isn't signed in (delegated to
+ *  getCurrentUserId). Throws a plain Error when a signed-in user has
+ *  no firm — that's a data integrity bug, not a normal flow.
+ *
+ *  Uncached on purpose: the action that edits the firm profile
+ *  (updateFirmAction) must read the pre-edit row without seeding the
+ *  request-level cache that the re-rendered page reads afterwards.
+ *  Everything else should call the cached `getCurrentFirm`. */
+export async function loadCurrentFirm(): Promise<FirmProfile> {
   const userId = await getCurrentUserId();
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -79,6 +85,11 @@ export async function getCurrentFirm(): Promise<FirmProfile> {
   return user.firm;
 }
 
+/** The current user's firm, deduped per request (many query helpers
+ *  and actions each resolve it once per render). */
+export const getCurrentFirm: () => Promise<FirmProfile> =
+  cache(loadCurrentFirm);
+
 /** The firm-level productivity targets. Deliberately NOT part of
  *  `FirmProfile` — the profile shape is mocked across many test
  *  files and most callers (dashboard, /time) only need these two
@@ -91,10 +102,10 @@ export type FirmGoals = {
   monthlyBillableGoal: number;
 };
 
-/** The current user's firm goals. Same resolution path (and the
- *  same no-firm integrity error) as `getCurrentFirm()`, but selects
- *  only the two goal columns. */
-export async function getFirmGoals(): Promise<FirmGoals> {
+/** The current user's firm goals, read fresh. Same resolution path
+ *  (and the same no-firm integrity error) as `getCurrentFirm()`, but
+ *  selects only the two goal columns. */
+export async function loadFirmGoals(): Promise<FirmGoals> {
   const userId = await getCurrentUserId();
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -111,6 +122,9 @@ export async function getFirmGoals(): Promise<FirmGoals> {
   }
   return user.firm;
 }
+
+/** Firm goals deduped per request (the dashboard asks twice). */
+export const getFirmGoals: () => Promise<FirmGoals> = cache(loadFirmGoals);
 
 /** True when the current user holds the firm's "Admin" role and is
  *  active. Cheap — single user-by-id lookup with a count. Use the

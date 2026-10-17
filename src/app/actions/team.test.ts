@@ -32,6 +32,9 @@ vi.mock("@/lib/firm", async (importOriginal) => {
 });
 vi.mock("@/lib/permission-check", () => ({
   requirePermission: vi.fn().mockResolvedValue("test-user"),
+  requirePermissionResult: vi
+    .fn()
+    .mockResolvedValue({ ok: true, userId: "test-user" }),
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
 }));
 

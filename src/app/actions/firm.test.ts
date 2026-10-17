@@ -19,21 +19,27 @@ import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/permission-check", () => ({
   requirePermission: vi.fn().mockResolvedValue("test-user"),
+  requirePermissionResult: vi.fn(),
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
 }));
 vi.mock("@/lib/firm", () => ({
-  getCurrentFirm: vi.fn(),
+  loadCurrentFirm: vi.fn(),
+  loadFirmGoals: vi.fn(),
 }));
 
-import { getCurrentFirm } from "@/lib/firm";
+import { loadCurrentFirm, loadFirmGoals } from "@/lib/firm";
+import { requirePermissionResult } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { updateFirmAction } from "@/app/actions/firm";
 import { firmInitialState } from "@/lib/firm-form";
-import { resetDb, seedFirm } from "@/test/integration-helpers";
+import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
-const mockedGetFirm = vi.mocked(getCurrentFirm);
+const mockedGetFirm = vi.mocked(loadCurrentFirm);
+const mockedGetGoals = vi.mocked(loadFirmGoals);
+const mockedGate = vi.mocked(requirePermissionResult);
 
 let firmId: string;
+let actorId: string;
 
 beforeAll(() => {
   expect(process.env.DATABASE_URL).toMatch(/lawcrm_test/);
@@ -43,7 +49,14 @@ beforeEach(async () => {
   await resetDb();
   const seeded = await seedFirm();
   firmId = seeded.firmId;
+  actorId = (await seedUser({ firmId, roleIds: [seeded.adminRoleId] })).userId;
 
+  mockedGate.mockReset();
+  mockedGate.mockResolvedValue({ ok: true, userId: actorId });
+  mockedGetGoals.mockResolvedValue({
+    dailyHoursGoal: 6.0,
+    monthlyBillableGoal: 200,
+  });
   mockedGetFirm.mockResolvedValue({
     id: firmId,
     name: "Test Firm LLC",
@@ -100,7 +113,7 @@ describe("updateFirmAction", () => {
   });
 
   describe("establishedAt", () => {
-    test("stores YYYY-MM-DD as local midnight of that day", async () => {
+    test("stores YYYY-MM-DD as UTC midnight of that day (date-only, ADR-012)", async () => {
       const res = await updateFirmAction(
         firmInitialState,
         firmForm({ establishedAt: "2015-03-09" })
@@ -110,19 +123,16 @@ describe("updateFirmAction", () => {
         where: { id: firmId },
         select: { establishedAt: true },
       });
-      // Local getters, not UTC — `new Date("2015-03-09")` would parse
-      // as UTC midnight and read back as Mar 8 in negative-offset
-      // timezones. The action must pin the day the user picked.
-      expect(firm.establishedAt?.getFullYear()).toBe(2015);
-      expect(firm.establishedAt?.getMonth()).toBe(2);
-      expect(firm.establishedAt?.getDate()).toBe(9);
-      expect(firm.establishedAt?.getHours()).toBe(0);
+      // Date-only values are UTC midnight regardless of the server's
+      // zone: a server-local `new Date(2015, 2, 9)` is Mar 8 23:00Z
+      // anywhere east of UTC and drifts a day on every re-save.
+      expect(firm.establishedAt?.toISOString()).toBe("2015-03-09T00:00:00.000Z");
     });
 
     test("empty string nulls out the date", async () => {
       await prisma.firm.update({
         where: { id: firmId },
-        data: { establishedAt: new Date(2015, 2, 9) },
+        data: { establishedAt: new Date("2015-03-09T00:00:00.000Z") },
       });
       const res = await updateFirmAction(
         firmInitialState,
@@ -151,6 +161,64 @@ describe("updateFirmAction", () => {
       });
       expect(firm.name).toBe("Test Firm LLC");
       expect(firm.establishedAt).toBeNull();
+    });
+  });
+
+  describe("permission gate", () => {
+    test("a denied caller gets a form error (no redirect) and nothing is written", async () => {
+      mockedGate.mockResolvedValue({
+        ok: false,
+        error: "You do not have permission to do that.",
+      });
+      const res = await updateFirmAction(firmInitialState, firmForm());
+      expect(res.status).toBe("error");
+      expect(res.errors?._form?.[0]).toMatch(/permission/);
+      expect(mockedGate).toHaveBeenCalledWith("firm.edit_info");
+      const firm = await prisma.firm.findUniqueOrThrow({
+        where: { id: firmId },
+      });
+      expect(firm.name).not.toBe("Kosloski Law");
+    });
+  });
+
+  describe("audit trail", () => {
+    test("logs which fields changed without ever logging values like the EIN", async () => {
+      const res = await updateFirmAction(
+        firmInitialState,
+        firmForm({
+          ein: "12-3456789",
+          city: "Denver",
+          establishedAt: "2015-03-09",
+          dailyHoursGoal: "7.5",
+        })
+      );
+      expect(res.status).toBe("ok");
+      const log = await prisma.activityLog.findFirstOrThrow({
+        where: { userId: actorId, title: "Updated firm profile" },
+      });
+      expect(log.type).toBe("auth");
+      expect(log.matterId).toBeNull();
+      expect(log.detail).toContain("name");
+      expect(log.detail).toContain("ein");
+      expect(log.detail).toContain("city");
+      expect(log.detail).toContain("establishedAt");
+      expect(log.detail).toContain("dailyHoursGoal (6 -> 7.5)");
+      expect(log.detail).not.toContain("monthlyBillableGoal");
+      expect(log.detail).not.toContain("12-3456789");
+      expect(log.detail).not.toContain("Denver");
+    });
+
+    test("an unchanged re-save writes no log row", async () => {
+      const res = await updateFirmAction(
+        firmInitialState,
+        firmForm({ name: "Test Firm LLC" })
+      );
+      expect(res.status).toBe("ok");
+      expect(
+        await prisma.activityLog.count({
+          where: { title: "Updated firm profile" },
+        })
+      ).toBe(0);
     });
   });
 

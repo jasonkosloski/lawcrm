@@ -23,6 +23,10 @@ export type PermissionEntry = {
   key: string;
   label: string;
   description: string;
+  /** True when the key is catalogued (so it can be granted ahead of
+   *  time) but no action or page enforces it yet. The matrix marks
+   *  these so an admin doesn't assume ticking them changes anything. */
+  unwired?: boolean;
 };
 
 export type PermissionCategory = {
@@ -56,12 +60,14 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       },
       {
         key: "matters.archive",
+        unwired: true,
         label: "Archive matters",
         description:
           "Move a matter to archived state (preserved, hidden from the active list). Reserved for the Matter Actions menu.",
       },
       {
         key: "matters.delete",
+        unwired: true,
         label: "Delete matters",
         description:
           "Permanently delete a matter and its associated rows. Reserved for the Matter Actions menu.",
@@ -286,19 +292,19 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         key: "documents.template.create",
         label: "Create document templates",
         description:
-          "Add reusable templates (demand letters, discovery, retainers) to the firm template library. Anyone can generate documents FROM templates — these keys govern the library itself.",
+          "Add reusable templates (demand letters, discovery, retainers) to the firm template library. Generating a document from a template needs Upload documents, not this key — these keys govern the library itself.",
       },
       {
         key: "documents.template.edit",
         label: "Edit document templates",
         description:
-          "Change a template's name, category, or body. Edits affect every future generation, so treat like firm-wide content.",
+          "Change a template's name, category, or body, and archive or restore it (archived templates drop out of every matter's Generate picker). Edits affect every future generation, so treat like firm-wide content.",
       },
       {
         key: "documents.template.delete",
         label: "Delete document templates",
         description:
-          "Archive or permanently remove templates from the library. Already-generated documents are untouched.",
+          "Permanently remove templates from the library (archiving is under Edit document templates). Already-generated documents are untouched.",
       },
     ],
   },
@@ -552,15 +558,15 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
     permissions: [
       {
         key: "evidence.flag.create",
-        label: "Flag moments in media",
+        label: "Flag evidence for review",
         description:
-          "Mark timestamped moments/spans while reviewing bodycam, dashcam, or call recordings — category + note, surfaced on the matter's Evidence review page. Creators can always edit their own flags.",
+          "Flag timestamped moments in bodycam, dashcam, or call recordings, pages and passages in documents, or whole files — category + note, surfaced on the matter's Evidence review page. Creators can always edit their own flags.",
       },
       {
         key: "evidence.flag.edit_any",
         label: "Edit anyone's flags",
         description:
-          "Change another reviewer's flagged moments (category, note, timestamps). Own flags are always editable without this.",
+          "Change another reviewer's flagged moments (category, note, anchor). Own flags are always editable without this.",
       },
       {
         key: "evidence.flag.delete_any",

@@ -10,7 +10,7 @@
  */
 
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 
 // Mock the server action BEFORE importing the component so the
 // import inside the component resolves to the mock.
@@ -19,6 +19,7 @@ vi.mock("@/app/actions/firm", () => ({
 }));
 
 import { FirmEditForm } from "./firm-edit-form";
+import { FirmReadView } from "./firm-read-view";
 import type { FirmGoals, FirmProfile } from "@/lib/firm";
 
 const BASE_GOALS: FirmGoals = {
@@ -124,5 +125,26 @@ describe("FirmEditForm — goal inputs", () => {
     expect(monthly?.type).toBe("number");
     expect(monthly?.defaultValue).toBe("180");
     expect(monthly?.max).toBe("744");
+  });
+});
+
+describe("FirmReadView — established date", () => {
+  test("shows the stored calendar day, not the previous local day (west of UTC)", () => {
+    render(
+      <FirmReadView
+        firm={{
+          ...BASE_FIRM,
+          establishedAt: new Date("2015-03-09T00:00:00.000Z"),
+        }}
+        goals={BASE_GOALS}
+      />
+    );
+    expect(screen.getByText("March 9, 2015")).toBeTruthy();
+  });
+
+  test("shows a dash when no date is set", () => {
+    render(<FirmReadView firm={BASE_FIRM} goals={BASE_GOALS} />);
+    const dd = screen.getByText("Established").nextElementSibling;
+    expect(dd?.textContent).toBe("—");
   });
 });

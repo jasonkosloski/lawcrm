@@ -8,12 +8,16 @@
  * returns a temporary password we render alongside a copy hint —
  * once email delivery lands (Phase 2 of AUTH_PLAN) this becomes a
  * magic-link send instead and the password panel goes away.
+ *
+ * Submission is dispatched manually (not `<form action>`) so React 19
+ * does not reset the fields — including the ticked roles — after a
+ * rejected invite (duplicate email, say): fix the one field, resubmit.
  */
 
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
-import { Plus, TriangleAlert, X } from "lucide-react";
+import { useActionState, useState, useTransition } from "react";
+import { Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { inviteFirmMember } from "@/app/actions/team";
 import {
@@ -21,26 +25,42 @@ import {
   type TeamFormState,
 } from "@/lib/team-form";
 import { RoleMultiSelect } from "./member-edit-form";
+import { Field, FormErrorBanner, formErrorMessage, inputClass } from "./form-field";
 import type { RoleChip } from "@/lib/queries/team";
+
+// No roles checked by default — server adds "default" automatically.
+const NONE_SELECTED = new Set<string>();
 
 export function InviteMemberComposer({
   rolePickerOptions,
+  viewerIsAdmin = true,
+  privilegedRoleIds = [],
 }: {
   rolePickerOptions: RoleChip[];
+  /** False for a delegated (non-Admin) directory manager — the Admin
+   *  role and access-management roles can't be handed out, so those
+   *  boxes lock. */
+  viewerIsAdmin?: boolean;
+  privilegedRoleIds?: string[];
 }) {
   const [state, formAction, isPending] = useActionState<
     TeamFormState,
     FormData
   >(inviteFirmMember, teamInitialState);
+  const [, startTransition] = useTransition();
   const [expanded, setExpanded] = useState(false);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [tempEmail, setTempEmail] = useState<string | null>(null);
+  // Each action result is a fresh object, so tracking the last one
+  // handled (rather than state.status) reacts to EVERY success.
+  const [handledState, setHandledState] = useState(state);
 
-  useEffect(() => {
+  if (state !== handledState) {
+    setHandledState(state);
     if (state.status === "ok" && state.invitePassword) {
       setTempPassword(state.invitePassword);
     }
-  }, [state.status, state.invitePassword]);
+  }
 
   if (!expanded && !tempPassword) {
     return (
@@ -61,8 +81,9 @@ export function InviteMemberComposer({
 
   const errs = state.errors ?? {};
   const v = state.values ?? {};
-  // No roles checked by default — server adds "default" automatically.
-  const noneSelected = new Set<string>();
+  const lockedRoleIds = viewerIsAdmin
+    ? new Set<string>()
+    : new Set(privilegedRoleIds);
 
   return (
     <div className="flex flex-col gap-3 p-4 rounded-md border border-line bg-paper-2/40">
@@ -109,98 +130,111 @@ export function InviteMemberComposer({
         </div>
       ) : (
         <form
-          action={(formData) => {
+          onSubmit={(e) => {
+            e.preventDefault();
+            const formData = new FormData(e.currentTarget);
             const email = formData.get("email");
             if (typeof email === "string") setTempEmail(email);
-            return formAction(formData);
+            startTransition(() => formAction(formData));
           }}
           className="flex flex-col gap-3"
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Name" name="name" required error={errs.name?.[0]}>
-              <input
-                name="name"
-                type="text"
-                required
-                defaultValue={v.name ?? ""}
-                className={inputClass(!!errs.name)}
-              />
+            <Field label="Name" required error={errs.name?.[0]}>
+              {(c) => (
+                <input
+                  {...c}
+                  name="name"
+                  type="text"
+                  required
+                  defaultValue={v.name ?? ""}
+                  className={inputClass(!!errs.name)}
+                />
+              )}
+            </Field>
+            <Field label="Email" required error={errs.email?.[0]}>
+              {(c) => (
+                <input
+                  {...c}
+                  name="email"
+                  type="email"
+                  required
+                  defaultValue={v.email ?? ""}
+                  className={inputClass(!!errs.email)}
+                />
+              )}
+            </Field>
+            <Field label="Initials" required error={errs.initials?.[0]}>
+              {(c) => (
+                <input
+                  {...c}
+                  name="initials"
+                  type="text"
+                  required
+                  maxLength={3}
+                  defaultValue={v.initials ?? ""}
+                  placeholder="AB"
+                  className={cn(
+                    inputClass(!!errs.initials),
+                    "uppercase font-mono"
+                  )}
+                />
+              )}
+            </Field>
+            <Field label="Job title" required error={errs.jobTitle?.[0]}>
+              {(c) => (
+                <input
+                  {...c}
+                  name="jobTitle"
+                  type="text"
+                  required
+                  defaultValue={v.jobTitle ?? ""}
+                  placeholder="Counsel, Paralegal, Intake…"
+                  className={inputClass(!!errs.jobTitle)}
+                />
+              )}
+            </Field>
+            <Field label="Phone" error={errs.phone?.[0]}>
+              {(c) => (
+                <input
+                  {...c}
+                  name="phone"
+                  type="tel"
+                  defaultValue={v.phone ?? ""}
+                  className={inputClass(!!errs.phone)}
+                />
+              )}
             </Field>
             <Field
-              label="Email"
-              name="email"
-              required
-              error={errs.email?.[0]}
+              label="Bar number"
+              hint="Attorneys only."
+              error={errs.barNumber?.[0]}
             >
-              <input
-                name="email"
-                type="email"
-                required
-                defaultValue={v.email ?? ""}
-                className={inputClass(!!errs.email)}
-              />
-            </Field>
-            <Field
-              label="Initials"
-              name="initials"
-              required
-              error={errs.initials?.[0]}
-            >
-              <input
-                name="initials"
-                type="text"
-                required
-                maxLength={3}
-                defaultValue={v.initials ?? ""}
-                placeholder="AB"
-                className={cn(inputClass(!!errs.initials), "uppercase font-mono")}
-              />
-            </Field>
-            <Field
-              label="Job title"
-              name="jobTitle"
-              required
-              error={errs.jobTitle?.[0]}
-            >
-              <input
-                name="jobTitle"
-                type="text"
-                required
-                defaultValue={v.jobTitle ?? ""}
-                placeholder="Counsel, Paralegal, Intake…"
-                className={inputClass(!!errs.jobTitle)}
-              />
-            </Field>
-            <Field label="Phone" name="phone">
-              <input
-                name="phone"
-                type="tel"
-                defaultValue={v.phone ?? ""}
-                className={inputClass(!!errs.phone)}
-              />
-            </Field>
-            <Field label="Bar number" name="barNumber" hint="Attorneys only.">
-              <input
-                name="barNumber"
-                type="text"
-                defaultValue={v.barNumber ?? ""}
-                className={inputClass(!!errs.barNumber)}
-              />
+              {(c) => (
+                <input
+                  {...c}
+                  name="barNumber"
+                  type="text"
+                  defaultValue={v.barNumber ?? ""}
+                  className={inputClass(!!errs.barNumber)}
+                />
+              )}
             </Field>
           </div>
 
           <RoleMultiSelect
             options={rolePickerOptions}
-            defaultSelected={noneSelected}
+            defaultSelected={NONE_SELECTED}
+            lockedIds={lockedRoleIds}
             error={errs.roleId?.[0]}
           />
 
-          {state.status === "error" && !state.errors && (
-            <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">
-              <TriangleAlert size={12} className="shrink-0 mt-px" />
-              <span>Couldn’t invite — check the highlighted fields.</span>
-            </div>
-          )}
+          <FormErrorBanner
+            message={formErrorMessage(
+              state,
+              "Couldn’t invite — check the highlighted fields."
+            )}
+          />
 
           <div className="flex items-center justify-end gap-2">
             <button
@@ -225,47 +259,5 @@ export function InviteMemberComposer({
         </form>
       )}
     </div>
-  );
-}
-
-function Field({
-  label,
-  name,
-  hint,
-  error,
-  required,
-  children,
-}: {
-  label: string;
-  name: string;
-  hint?: string;
-  error?: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <label
-        htmlFor={name}
-        className="text-2xs font-mono uppercase tracking-wider text-ink-4"
-      >
-        {label}
-        {required && <span className="text-warn ml-1">*</span>}
-      </label>
-      {children}
-      {hint && !error && (
-        <span className="text-[10px] text-ink-4 leading-relaxed">{hint}</span>
-      )}
-      {error && <span className="text-2xs text-warn">{error}</span>}
-    </div>
-  );
-}
-
-function inputClass(hasError: boolean): string {
-  return cn(
-    "h-8 px-2.5 rounded-md border bg-white text-xs text-ink",
-    "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-    "placeholder:text-ink-4",
-    hasError ? "border-warn" : "border-line"
   );
 }

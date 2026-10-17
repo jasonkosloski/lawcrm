@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FirmEditForm } from "@/components/settings/firm-edit-form";
 import { FirmReadView } from "@/components/settings/firm-read-view";
 import { FirmCalendarDefaultsCard } from "@/components/settings/calendar-defaults-card";
-import { getCurrentFirm } from "@/lib/firm";
+import { ADMIN_ROLE_NAME, getCurrentFirm, getFirmGoals } from "@/lib/firm";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/current-user";
@@ -28,25 +28,21 @@ export default async function FirmSettingsPage() {
     currentUserHasPermission("firm.edit_info"),
   ]);
 
-  // Calendar default toggles + goal targets aren't on the
-  // FirmProfile shape; pull them directly so the card + form have
-  // the live values.
-  const firmSettings = await prisma.firm.findUniqueOrThrow({
-    where: { id: firm.id },
-    select: {
-      autoAddTeamToNewEvents: true,
-      autoAddTeamToUpcomingEvents: true,
-      dailyHoursGoal: true,
-      monthlyBillableGoal: true,
-    },
-  });
+  // Calendar default toggles aren't on the FirmProfile shape; the
+  // goal targets come from the request-cached getFirmGoals.
+  const [firmSettings, goals] = await Promise.all([
+    prisma.firm.findUniqueOrThrow({
+      where: { id: firm.id },
+      select: {
+        autoAddTeamToNewEvents: true,
+        autoAddTeamToUpcomingEvents: true,
+      },
+    }),
+    getFirmGoals(),
+  ]);
   const calendarDefaults = {
     autoAddTeamToNewEvents: firmSettings.autoAddTeamToNewEvents,
     autoAddTeamToUpcomingEvents: firmSettings.autoAddTeamToUpcomingEvents,
-  };
-  const goals = {
-    dailyHoursGoal: firmSettings.dailyHoursGoal,
-    monthlyBillableGoal: firmSettings.monthlyBillableGoal,
   };
 
   // Fetch the team count + admin list for the side panel — fast,
@@ -62,7 +58,7 @@ export default async function FirmSettingsPage() {
       where: {
         firmId: firm.id,
         isActive: true,
-        userRoles: { some: { role: { name: "Admin" } } },
+        userRoles: { some: { role: { name: ADMIN_ROLE_NAME } } },
       },
       select: { id: true, name: true, email: true, initials: true },
       orderBy: { name: "asc" },
@@ -70,8 +66,8 @@ export default async function FirmSettingsPage() {
   ]);
 
   return (
-    <div className="grid grid-cols-[1fr_18rem] gap-6 max-w-5xl">
-      <div>
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_18rem] gap-6 max-w-5xl">
+      <div className="min-w-0">
         <div className="mb-4">
           <h1 className="text-base font-semibold text-ink">Firm info</h1>
           <p className="text-xs text-ink-3 mt-1">
@@ -105,7 +101,7 @@ export default async function FirmSettingsPage() {
               {memberCount === 1 ? "active member" : "active members"}.
             </div>
             <div className="text-2xs text-ink-4 mt-2">
-              Manage roster, invites, and roles on the Team page (coming next).
+              Manage roster, invites, and roles on the Team page.
             </div>
           </CardContent>
         </Card>
@@ -141,8 +137,8 @@ export default async function FirmSettingsPage() {
               ))
             )}
             <div className="text-[10px] text-ink-4 leading-relaxed pt-1 border-t border-line">
-              Every firm needs at least one admin. The Team page will
-              prevent demoting the last one.
+              Every firm needs at least one admin. The Team page
+              prevents demoting the last one.
             </div>
           </CardContent>
         </Card>

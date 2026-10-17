@@ -320,6 +320,15 @@ describe("PermissionsMatrix — meta keys locked for non-admin editors", () => {
   });
 });
 
+describe("PermissionsMatrix — unwired catalog keys", () => {
+  test("marks keys no action enforces yet, and only those", () => {
+    render(<PermissionsMatrix roles={ROLES} grants={{}} canEdit viewerIsAdmin />);
+    // matters.archive + matters.delete are reserved for the Matter
+    // Actions menu: grantable, but nothing checks them.
+    expect(screen.getAllByText("Not enforced yet")).toHaveLength(2);
+  });
+});
+
 describe("PermissionsMatrix — error revert", () => {
   test("server error reverts the optimistic flip + surfaces the warning", async () => {
     mockedAction.mockResolvedValueOnce({

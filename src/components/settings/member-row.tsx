@@ -15,6 +15,7 @@ import { useState, useTransition } from "react";
 import {
   KeyRound,
   Lock,
+  LockOpen,
   MoreHorizontal,
   Pencil,
   ShieldCheck,
@@ -27,7 +28,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { resetFirmMemberPassword } from "@/app/actions/team";
+import {
+  resetFirmMemberPassword,
+  unlockFirmMemberSignIn,
+} from "@/app/actions/team";
+import { ADMIN_ROLE_NAME } from "@/lib/role-constants";
 import { MemberEditForm } from "./member-edit-form";
 import type { FirmUserRow, RoleChip } from "@/lib/queries/team";
 
@@ -35,9 +40,17 @@ export function MemberRow({
   member,
   canManageDirectory,
   rolePickerOptions,
+  viewerIsAdmin = true,
+  privilegedRoleIds = [],
 }: {
   member: FirmUserRow;
   canManageDirectory: boolean;
+  /** False for a delegated (non-Admin) directory manager. The server
+   *  refuses edits to Admins and password resets / unlocks of
+   *  Admin-class members from them, so those actions are hidden. */
+  viewerIsAdmin?: boolean;
+  /** Admin + every role carrying an admin-only permission. */
+  privilegedRoleIds?: string[];
   /** Full list of firm roles, passed down so the edit form's
    *  multi-select shows everything available. */
   rolePickerOptions: RoleChip[];
@@ -48,6 +61,12 @@ export function MemberRow({
   // state keeps the password tied to the row that triggered it.
   const [resetPassword, setResetPassword] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const privileged = new Set(privilegedRoleIds);
+  const targetIsPrivileged =
+    member.isAdmin || member.roles.some((r) => privileged.has(r.id));
+  // Delegated managers can't touch Admin-class accounts at all.
+  const canEditMember = viewerIsAdmin || !member.isAdmin;
+  const canTakeOverMember = viewerIsAdmin || !targetIsPrivileged;
 
   const onResetPassword = () => {
     if (
@@ -67,13 +86,26 @@ export function MemberRow({
     });
   };
 
-  if (editing) {
+  const onUnlock = () => {
+    startTransition(async () => {
+      const result = await unlockFirmMemberSignIn(member.id);
+      if (result.status === "ok") {
+        alert(`${member.name} can sign in again.`);
+      } else {
+        alert(result.errors?._form?.[0] ?? "Couldn't unlock sign-in.");
+      }
+    });
+  };
+
+  if (editing && canEditMember) {
     return (
       <TableRow>
         <TableCell colSpan={6} className="p-3 bg-paper-2/30">
           <MemberEditForm
             member={member}
             rolePickerOptions={rolePickerOptions}
+            viewerIsAdmin={viewerIsAdmin}
+            privilegedRoleIds={privilegedRoleIds}
             onDone={() => setEditing(false)}
           />
         </TableCell>
@@ -132,7 +164,7 @@ export function MemberRow({
         )}
       </TableCell>
       <TableCell className="pr-4 text-right">
-        {canManageDirectory && (
+        {canManageDirectory && (canEditMember || canTakeOverMember) && (
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
@@ -147,14 +179,24 @@ export function MemberRow({
               }
             />
             <DropdownMenuContent align="end" className="min-w-44">
-              <DropdownMenuItem onClick={() => setEditing(true)}>
-                <Pencil />
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onResetPassword}>
-                <KeyRound />
-                Reset password
-              </DropdownMenuItem>
+              {canEditMember && (
+                <DropdownMenuItem onClick={() => setEditing(true)}>
+                  <Pencil />
+                  Edit
+                </DropdownMenuItem>
+              )}
+              {canTakeOverMember && (
+                <>
+                  <DropdownMenuItem onClick={onResetPassword}>
+                    <KeyRound />
+                    Reset password
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={onUnlock}>
+                    <LockOpen />
+                    Unlock sign-in
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         )}
@@ -172,7 +214,7 @@ function RoleChips({ roles }: { roles: RoleChip[] }) {
   return (
     <div className="flex flex-wrap gap-1">
       {roles.map((r) => {
-        const isAdmin = r.name === "Admin";
+        const isAdmin = r.name === ADMIN_ROLE_NAME;
         return (
           <span
             key={r.id}

@@ -7,8 +7,9 @@
  */
 
 import { Lock } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { FirmGoals, FirmProfile } from "@/lib/firm";
-import { formatDate } from "@/lib/format-date";
+import { formatDateOnly } from "@/lib/format-date";
 
 export function FirmReadView({
   firm,
@@ -36,10 +37,12 @@ export function FirmReadView({
         <Row label="Short name" value={firm.shortName} />
         <Row label="EIN" value={firm.ein} mono />
         <Row label="Website" value={firm.website} />
-        {/* Date-only value stored at server-local midnight (see
-            parseLocalEstablishedAt in actions/firm.ts) — format on
-            the same server-local day grid, no TZ override. */}
-        <Row label="Established" value={formatDate(firm.establishedAt, "long")} />
+        {/* Date-only value stored at UTC midnight (ADR-012) —
+            formatDateOnly reads its UTC calendar day, no zone. */}
+        <Row
+          label="Established"
+          value={firm.establishedAt ? formatDateOnly(firm.establishedAt, "long") : null}
+        />
       </Section>
 
       <Section label="Contact">
@@ -87,7 +90,7 @@ function Section({
       <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
         {label}
       </div>
-      <dl className="grid grid-cols-[12rem_1fr] gap-y-1.5 text-xs">
+      <dl className="grid grid-cols-1 sm:grid-cols-[12rem_1fr] gap-y-0.5 sm:gap-y-1.5 text-xs">
         {children}
       </dl>
     </div>
@@ -105,8 +108,13 @@ function Row({
 }) {
   return (
     <>
-      <dt className="text-ink-4">{label}</dt>
-      <dd className={mono ? "text-ink font-mono" : "text-ink"}>
+      <dt className="text-ink-4 mt-1.5 sm:mt-0">{label}</dt>
+      <dd
+        className={cn(
+          "min-w-0 break-words",
+          mono ? "text-ink font-mono" : "text-ink"
+        )}
+      >
         {value ?? "—"}
       </dd>
     </>

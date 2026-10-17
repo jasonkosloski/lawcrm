@@ -30,10 +30,12 @@ vi.mock("@/lib/current-user", () => ({
 import { getCurrentUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import {
+  PERMISSION_DENIED_MESSAGE,
   currentUserHasAnyPermission,
   currentUserHasPermission,
   getCurrentUserPermissions,
   requirePermission,
+  requirePermissionResult,
   requirePermissions,
 } from "@/lib/permission-check";
 import {
@@ -281,5 +283,45 @@ describe("currentUserHasAnyPermission", () => {
     expect(
       await currentUserHasAnyPermission(["this.does.not.exist"])
     ).toBe(true);
+  });
+});
+
+describe("requirePermissionResult — denial as a value", () => {
+  test("a user lacking the key gets an error result and NO redirect", async () => {
+    const { userId } = await seedUser({ firmId, roleIds: [defaultRoleId] });
+    mockedGetUser.mockResolvedValue(userId);
+
+    const res = await requirePermissionResult("firm.edit_info");
+    expect(res).toEqual({
+      ok: false,
+      error: PERMISSION_DENIED_MESSAGE,
+    });
+  });
+
+  test("a user holding the key gets their id back", async () => {
+    const { userId } = await seedUser({ firmId, roleIds: [customRoleId] });
+    mockedGetUser.mockResolvedValue(userId);
+
+    expect(await requirePermissionResult("billing.send_invoice")).toEqual({
+      ok: true,
+      userId,
+    });
+  });
+
+  test("admins pass; inactive users are denied even with the Admin role", async () => {
+    const admin = await seedUser({ firmId, roleIds: [adminRoleId] });
+    mockedGetUser.mockResolvedValue(admin.userId);
+    expect(await requirePermissionResult("anything.at.all")).toEqual({
+      ok: true,
+      userId: admin.userId,
+    });
+
+    const inactive = await seedUser({
+      firmId,
+      roleIds: [adminRoleId],
+      isActive: false,
+    });
+    mockedGetUser.mockResolvedValue(inactive.userId);
+    expect((await requirePermissionResult("anything.at.all")).ok).toBe(false);
   });
 });

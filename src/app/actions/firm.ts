@@ -19,8 +19,10 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getCurrentFirm } from "@/lib/firm";
-import { requirePermission } from "@/lib/permission-check";
+import { loadCurrentFirm, loadFirmGoals } from "@/lib/firm";
+import { logActivity } from "@/lib/activity-log";
+import { dateOnlyKey, parseDateOnly } from "@/lib/format-date";
+import { requirePermissionResult } from "@/lib/permission-check";
 import {
   firmInitialState,
   type FirmFormState,
@@ -73,7 +75,7 @@ const firmSchema = z.object({
   zip: z.string().trim().max(20).optional().or(z.literal("")),
   country: z.string().trim().min(1).max(60).default("US"),
   /** ISO date string from a `<input type="date">`. Empty string =
-   *  null out the date. Parsed by `parseLocalEstablishedAt` below —
+   *  null out the date. Parsed with `parseDateOnly` in the action —
    *  kept as a plain string here so a bad value surfaces as a field
    *  error, not a crash. */
   establishedAt: z.string().trim().optional().or(z.literal("")),
@@ -85,34 +87,34 @@ const firmSchema = z.object({
   monthlyBillableGoal: goalField("Monthly billable goal", 744),
 });
 
-/** Parse the establishedAt field (`YYYY-MM-DD` from a
- *  `<input type="date">`) into local midnight of that day.
- *
- *  We don't use `new Date(value)` directly for two reasons: a
- *  tampered/malformed post (e.g. "abc") yields an Invalid Date that
- *  Prisma rejects with an unhandled 500 instead of a field error,
- *  and ISO date-only strings parse as UTC midnight, which renders a
- *  day early for any user west of UTC. Mirrors parseLocalDueDate
- *  (deadlines.ts) and parseEventBoundary (calendar-events.ts).
- *
- *  Returns null when the value can't be parsed (caller surfaces
- *  the field error). */
-function parseLocalEstablishedAt(value: string): Date | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!m) return null;
-  const [, y, mo, d] = m;
-  const date = new Date(Number(y), Number(mo) - 1, Number(d), 0, 0, 0, 0);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
+/** Profile columns whose change is recorded (by NAME only — values
+ *  such as the EIN never reach the activity log). */
+const PROFILE_FIELDS = [
+  "name",
+  "shortName",
+  "ein",
+  "website",
+  "phone",
+  "email",
+  "addressLine1",
+  "addressLine2",
+  "city",
+  "state",
+  "zip",
+  "country",
+] as const;
 
 export async function updateFirmAction(
   _prev: FirmFormState,
   formData: FormData
 ): Promise<FirmFormState> {
-  // Auth gate — non-admins can't reach this even if they spoof a
   // Gated on `firm.edit_info`. Admin always has it; other roles
-  // pick it up via the matrix.
-  await requirePermission("firm.edit_info");
+  // pick it up via the matrix. A denial comes back as a form error
+  // (the form renders `_form`), not a silent redirect.
+  const gate = await requirePermissionResult("firm.edit_info");
+  if (!gate.ok) {
+    return { status: "error", errors: { _form: [gate.error] } };
+  }
 
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = firmSchema.safeParse(raw);
@@ -128,8 +130,9 @@ export async function updateFirmAction(
 
   // Validate the date before touching the DB — same friendly field
   // error the zod failures above get, instead of a Prisma 500.
+  // Date-only value: stored at UTC midnight (ADR-012), no zone.
   const establishedAt = data.establishedAt
-    ? parseLocalEstablishedAt(data.establishedAt)
+    ? parseDateOnly(data.establishedAt)
     : null;
   if (data.establishedAt && !establishedAt) {
     return {
@@ -139,29 +142,66 @@ export async function updateFirmAction(
     };
   }
 
-  const firm = await getCurrentFirm();
+  // Fresh (uncached) reads: the page re-renders after this action and
+  // must not see the pre-edit row through a request-level cache.
+  const [firm, oldGoals] = await Promise.all([
+    loadCurrentFirm(),
+    loadFirmGoals(),
+  ]);
+
+  const next = {
+    name: data.name,
+    shortName: data.shortName || null,
+    ein: data.ein || null,
+    website: data.website || null,
+    phone: data.phone || null,
+    email: data.email || null,
+    addressLine1: data.addressLine1 || null,
+    addressLine2: data.addressLine2 || null,
+    city: data.city || null,
+    state: data.state || null,
+    zip: data.zip || null,
+    country: data.country,
+  };
 
   await prisma.firm.update({
     where: { id: firm.id },
     data: {
-      name: data.name,
-      shortName: data.shortName || null,
-      ein: data.ein || null,
-      website: data.website || null,
-      phone: data.phone || null,
-      email: data.email || null,
-      addressLine1: data.addressLine1 || null,
-      addressLine2: data.addressLine2 || null,
-      city: data.city || null,
-      state: data.state || null,
-      zip: data.zip || null,
-      country: data.country,
+      ...next,
       establishedAt,
       // Safe Number() — the goalField regex admits only \d+(\.\d)?
       dailyHoursGoal: Number(data.dailyHoursGoal),
       monthlyBillableGoal: Number(data.monthlyBillableGoal),
     },
   });
+
+  // Audit trail: which fields changed (names only — never the EIN or
+  // any other value), plus old -> new for the numeric goals.
+  const changed: string[] = PROFILE_FIELDS.filter(
+    (f) => (firm[f] ?? null) !== next[f]
+  );
+  const oldKey = firm.establishedAt ? dateOnlyKey(firm.establishedAt) : null;
+  const newKey = establishedAt ? dateOnlyKey(establishedAt) : null;
+  if (oldKey !== newKey) changed.push("establishedAt");
+  const newDaily = Number(data.dailyHoursGoal);
+  const newMonthly = Number(data.monthlyBillableGoal);
+  if (newDaily !== oldGoals.dailyHoursGoal) {
+    changed.push(`dailyHoursGoal (${oldGoals.dailyHoursGoal} -> ${newDaily})`);
+  }
+  if (newMonthly !== oldGoals.monthlyBillableGoal) {
+    changed.push(
+      `monthlyBillableGoal (${oldGoals.monthlyBillableGoal} -> ${newMonthly})`
+    );
+  }
+  if (changed.length > 0) {
+    await logActivity({
+      matterId: null,
+      userId: gate.userId,
+      type: "auth",
+      title: "Updated firm profile",
+      detail: `Changed: ${changed.join(", ")}`,
+    });
+  }
 
   revalidatePath("/settings/firm");
   // Layout-level revalidate — firm name might surface in the topbar

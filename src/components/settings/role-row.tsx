@@ -13,11 +13,11 @@ import {
   MoreHorizontal,
   Pencil,
   Trash2,
-  TriangleAlert,
   Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/format-date";
+import { useUserTimeZone } from "@/components/user-time-zone";
 import { TableCell, TableRow } from "@/components/ui/table";
 import {
   DropdownMenu,
@@ -35,6 +35,7 @@ import {
   type RoleFormState,
 } from "@/lib/role-form";
 import type { FirmRoleRow } from "@/lib/queries/team";
+import { Field, FormErrorBanner, formErrorMessage, inputClass } from "./form-field";
 
 export function RoleRow({
   role,
@@ -45,6 +46,9 @@ export function RoleRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
+  // createdAt is an instant: format in the viewer's profile zone so
+  // the server render and the hydrated client agree (ADR-012).
+  const tz = useUserTimeZone();
 
   const onDelete = () => {
     if (
@@ -102,7 +106,7 @@ export function RoleRow({
         </span>
       </TableCell>
       <TableCell className="text-2xs text-ink-4">
-        {formatDate(role.createdAt, "medium")}
+        {formatDate(role.createdAt, "medium", tz)}
       </TableCell>
       <TableCell className="pr-4 text-right">
         {isAdmin && (
@@ -156,6 +160,7 @@ function RoleEditForm({
     RoleFormState,
     FormData
   >(action, roleInitialState);
+  const [, startTransition] = useTransition();
 
   useEffect(() => {
     if (state.status === "ok") onDone();
@@ -164,52 +169,54 @@ function RoleEditForm({
   const errs = state.errors ?? {};
 
   return (
-    <form action={formAction} className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1">
-        <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
-          Name <span className="text-warn">*</span>
-        </label>
-        <input
-          name="name"
-          type="text"
-          required
-          maxLength={60}
-          defaultValue={role.name}
-          className={cn(
-            "h-8 px-2.5 rounded-md border bg-white text-xs text-ink",
-            "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-            errs.name ? "border-warn" : "border-line"
-          )}
-        />
-        {errs.name && (
-          <span className="text-2xs text-warn">{errs.name[0]}</span>
+    // Manual dispatch (not `<form action>`): React 19 would reset the
+    // fields to the saved values after a rejected rename.
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        const fd = new FormData(e.currentTarget);
+        startTransition(() => formAction(fd));
+      }}
+      className="flex flex-col gap-3"
+    >
+      <Field label="Name" required error={errs.name?.[0]}>
+        {(c) => (
+          <input
+            {...c}
+            name="name"
+            type="text"
+            required
+            maxLength={60}
+            defaultValue={role.name}
+            className={inputClass(!!errs.name)}
+          />
         )}
-      </div>
+      </Field>
 
-      <div className="flex flex-col gap-1">
-        <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
-          Description
-        </label>
-        <textarea
-          name="description"
-          rows={2}
-          maxLength={400}
-          defaultValue={role.description ?? ""}
-          className={cn(
-            "px-2.5 py-1.5 rounded-md border bg-white text-xs text-ink",
-            "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-            "resize-y",
-            errs.description ? "border-warn" : "border-line"
-          )}
-        />
-      </div>
+      <Field label="Description" error={errs.description?.[0]}>
+        {(c) => (
+          <textarea
+            {...c}
+            name="description"
+            rows={2}
+            maxLength={400}
+            defaultValue={role.description ?? ""}
+            className={cn(
+              "px-2.5 py-1.5 rounded-md border bg-white text-xs text-ink",
+              "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
+              "resize-y",
+              errs.description ? "border-warn" : "border-line"
+            )}
+          />
+        )}
+      </Field>
 
-      {state.status === "error" && !state.errors && (
-        <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">
-          <TriangleAlert size={12} className="shrink-0 mt-px" />
-          <span>Couldn’t save — check the highlighted fields.</span>
-        </div>
-      )}
+      <FormErrorBanner
+        message={formErrorMessage(
+          state,
+          "Couldn’t save — check the highlighted fields."
+        )}
+      />
 
       <div className="flex items-center justify-end gap-2">
         <button

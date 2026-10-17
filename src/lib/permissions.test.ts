@@ -202,7 +202,7 @@ describe("permission keys used in code", () => {
   test("every literal key passed to a permission gate exists in the catalog", () => {
     const srcRoot = join(process.cwd(), "src");
     const single =
-      /(?:requirePermission|currentUserHasPermission)\(\s*["'`]([^"'`]+)["'`]/g;
+      /(?:requirePermission|requirePermissionResult|currentUserHasPermission)\(\s*["'`]([^"'`]+)["'`]/g;
     const anyOf = /currentUserHasAnyPermission\(\s*\[([^\]]*)\]/g;
     const found = new Map<string, string>();
     for (const file of walk(srcRoot)) {
@@ -217,5 +217,27 @@ describe("permission keys used in code", () => {
     expect(found.size).toBeGreaterThan(20); // the scan is actually finding calls
     const unknown = [...found].filter(([k]) => !isKnownPermission(k));
     expect(unknown).toEqual([]);
+    // The newest result-returning gate is scanned too (regression: a
+    // regex that only matched `requirePermission(` skipped it).
+    expect(found.has("firm.manage_team_directory")).toBe(true);
+    expect(found.has("firm.edit_info")).toBe(true);
+  });
+
+  test("keys marked unwired are really enforced nowhere (drop the marker when wiring one)", () => {
+    const unwired = PERMISSION_CATEGORIES.flatMap((c) => c.permissions)
+      .filter((p) => p.unwired)
+      .map((p) => p.key);
+    expect(unwired).toEqual(["matters.archive", "matters.delete"]);
+
+    const srcRoot = join(process.cwd(), "src");
+    const used: string[] = [];
+    for (const file of walk(srcRoot)) {
+      if (file.endsWith(join("lib", "permissions.ts"))) continue;
+      const text = readFileSync(file, "utf8");
+      for (const key of unwired) {
+        if (text.includes(`"${key}"`)) used.push(`${key} in ${file}`);
+      }
+    }
+    expect(used).toEqual([]);
   });
 });

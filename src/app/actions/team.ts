@@ -64,8 +64,8 @@ import {
   getCurrentFirm,
   isCurrentUserAdmin,
 } from "@/lib/firm";
-import { requirePermission } from "@/lib/permission-check";
-import { ADMIN_ONLY_PERMISSIONS } from "@/lib/permissions";
+import { requirePermissionResult } from "@/lib/permission-check";
+import { getPrivilegedRoleIds } from "@/lib/queries/team";
 import {
   teamInitialState,
   type TeamFormState,
@@ -128,25 +128,11 @@ async function getFirmRoleMap(firmId: string): Promise<{
   return { byId, adminId, defaultId };
 }
 
-/** Roles only an Admin may hand out or take away: Admin itself and
- *  any role carrying an ADMIN_ONLY permission (manage_permissions /
- *  manage_roles / manage_team_directory). */
-async function getPrivilegedRoleIds(firmId: string): Promise<Set<string>> {
-  const rows = await prisma.role.findMany({
-    where: {
-      firmId,
-      OR: [
-        { name: ADMIN_ROLE_NAME },
-        {
-          permissions: {
-            some: { permission: { in: [...ADMIN_ONLY_PERMISSIONS] } },
-          },
-        },
-      ],
-    },
-    select: { id: true },
-  });
-  return new Set(rows.map((r) => r.id));
+/** Gate denial as form state — these actions are called from inline
+ *  forms and menu items that render `_form`, so a denied caller sees
+ *  why nothing happened instead of a silent bounce to the dashboard. */
+function denied(error: string, values?: Record<string, string>): TeamFormState {
+  return { status: "error", errors: { _form: [error] }, values };
 }
 
 const PRIVILEGED_ROLE_MESSAGE =
@@ -154,6 +140,21 @@ const PRIVILEGED_ROLE_MESSAGE =
 
 const ADMIN_TARGET_MESSAGE =
   "Only an Admin can edit or deactivate an Admin.";
+
+/** " — granted: A; revoked: B" for the audit detail (empty when the
+ *  role set didn't change). */
+function roleDiffSuffix(
+  added: string[],
+  removed: string[],
+  byId: Map<string, { name: string }>
+): string {
+  const names = (ids: string[]) =>
+    ids.map((id) => byId.get(id)?.name ?? id).sort().join(", ");
+  const parts: string[] = [];
+  if (added.length) parts.push(`granted: ${names(added)}`);
+  if (removed.length) parts.push(`revoked: ${names(removed)}`);
+  return parts.length ? ` — ${parts.join("; ")}` : "";
+}
 
 function sameSet(a: Set<string>, b: Set<string>): boolean {
   return a.size === b.size && [...a].every((x) => b.has(x));
@@ -178,7 +179,8 @@ export async function inviteFirmMember(
   _prev: TeamFormState,
   formData: FormData
 ): Promise<TeamFormState> {
-  await requirePermission("firm.manage_team_directory");
+  const gate = await requirePermissionResult("firm.manage_team_directory");
+  if (!gate.ok) return denied(gate.error);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = inviteSchema.safeParse(raw);
   if (!parsed.success) {
@@ -308,7 +310,8 @@ export async function updateFirmMember(
   _prev: TeamFormState,
   formData: FormData
 ): Promise<TeamFormState> {
-  await requirePermission("firm.manage_team_directory");
+  const gate = await requirePermissionResult("firm.manage_team_directory");
+  if (!gate.ok) return denied(gate.error);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = updateSchema.safeParse(raw);
   if (!parsed.success) {
@@ -423,6 +426,11 @@ export async function updateFirmMember(
   const wasAdminActive = wasAdmin && target.isActive;
   const willBeAdminActive = willBeAdmin && newIsActive;
 
+  // Role changes actually applied (filled inside the transaction, from
+  // the rows it read) — the audit entry lists them.
+  let addedRoleIds: string[] = [];
+  let removedRoleIds: string[] = [];
+
   try {
     await prisma.$transaction(
       async (tx) => {
@@ -459,16 +467,34 @@ export async function updateFirmMember(
             isActive: newIsActive,
           },
         });
-        // Replace-all on roles. Cheap (≤ a handful of rows per user) and
-        // matches the mental model of the multi-select form.
-        await tx.userRole.deleteMany({ where: { userId: target.id } });
-        if (validRoleIds.size > 0) {
+        // Apply only the DIFF: rewriting every row would stamp
+        // assignedById / assignedAt of unchanged roles with whoever
+        // last edited an unrelated field, erasing who really granted
+        // (say) Admin. Current rows are re-read inside the
+        // transaction so the diff matches what is actually stored.
+        const currentIds = new Set(
+          (
+            await tx.userRole.findMany({
+              where: { userId: target.id },
+              select: { roleId: true },
+            })
+          ).map((r) => r.roleId)
+        );
+        removedRoleIds = [...currentIds].filter((id) => !validRoleIds.has(id));
+        addedRoleIds = [...validRoleIds].filter((id) => !currentIds.has(id));
+        if (removedRoleIds.length > 0) {
+          await tx.userRole.deleteMany({
+            where: { userId: target.id, roleId: { in: removedRoleIds } },
+          });
+        }
+        if (addedRoleIds.length > 0) {
           await tx.userRole.createMany({
-            data: [...validRoleIds].map((roleId) => ({
+            data: addedRoleIds.map((roleId) => ({
               userId: target.id,
               roleId,
               assignedById: currentUserId,
             })),
+            skipDuplicates: true,
           });
         }
       },
@@ -514,7 +540,9 @@ export async function updateFirmMember(
     userId: currentUserId,
     type: "auth",
     title: `Updated team member ${parsed.data.name}`,
-    detail: `Roles: ${roleNames.join(", ")} — ${newIsActive ? "active" : "deactivated"}`,
+    detail:
+      `Roles: ${roleNames.join(", ")} — ${newIsActive ? "active" : "deactivated"}` +
+      roleDiffSuffix(addedRoleIds, removedRoleIds, roleMap.byId),
   });
 
   revalidatePath("/settings/team");
@@ -530,7 +558,8 @@ export async function updateFirmMember(
 export async function resetFirmMemberPassword(
   userId: string
 ): Promise<TeamFormState> {
-  await requirePermission("firm.manage_team_directory");
+  const gate = await requirePermissionResult("firm.manage_team_directory");
+  if (!gate.ok) return denied(gate.error);
   const firm = await getCurrentFirm();
   const target = await prisma.user.findFirst({
     where: { id: userId, firmId: firm.id },
@@ -615,7 +644,8 @@ export async function resetFirmMemberPassword(
 export async function unlockFirmMemberSignIn(
   userId: string
 ): Promise<TeamFormState> {
-  await requirePermission("firm.manage_team_directory");
+  const gate = await requirePermissionResult("firm.manage_team_directory");
+  if (!gate.ok) return denied(gate.error);
   const firm = await getCurrentFirm();
   const target = await prisma.user.findFirst({
     where: { id: userId, firmId: firm.id },

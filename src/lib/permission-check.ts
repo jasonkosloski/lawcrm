@@ -155,3 +155,25 @@ export async function requirePermission(
   }
   return userId;
 }
+
+/** Message returned by `requirePermissionResult` on denial. */
+export const PERMISSION_DENIED_MESSAGE =
+  "You do not have permission to do that.";
+
+/**
+ * Non-redirecting twin of `requirePermission` for actions whose
+ * caller is an inline component (form, toggle, menu item) that can
+ * render a message: denial comes back as a value instead of a
+ * navigation to the dashboard, so the user sees WHY nothing
+ * happened. Still redirects to /login when there is no session
+ * (delegated to getCurrentUserId). Page-level gates and actions
+ * that depend on the redirect keep using `requirePermission`.
+ */
+export async function requirePermissionResult(
+  permission: string
+): Promise<{ ok: true; userId: string } | { ok: false; error: string }> {
+  const userId = await getCurrentUserId();
+  const ok = await currentUserHasPermission(permission);
+  if (!ok) return { ok: false, error: PERMISSION_DENIED_MESSAGE };
+  return { ok: true, userId };
+}

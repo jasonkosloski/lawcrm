@@ -29,17 +29,31 @@ import {
 } from "@/components/ui/table";
 import { MemberRow } from "@/components/settings/member-row";
 import { InviteMemberComposer } from "@/components/settings/invite-member-composer";
-import { getCurrentUserId } from "@/lib/current-user";
-import { currentUserHasPermission } from "@/lib/permission-check";
-import { listFirmUsers, listRolePickerOptions } from "@/lib/queries/team";
+import { requireUser } from "@/lib/current-user";
+import { getCurrentFirm } from "@/lib/firm";
+import { getCurrentUserPermissions } from "@/lib/permission-check";
+import {
+  getPrivilegedRoleIds,
+  listFirmUsers,
+  listRolePickerOptions,
+} from "@/lib/queries/team";
 
 export default async function TeamSettingsPage() {
-  const currentUserId = await getCurrentUserId();
-  const [members, canManageDirectory, rolePickerOptions] = await Promise.all([
-    listFirmUsers(currentUserId),
-    currentUserHasPermission("firm.manage_team_directory"),
-    listRolePickerOptions(),
-  ]);
+  const currentUserId = await requireUser();
+  const firm = await getCurrentFirm();
+  const [members, resolved, rolePickerOptions, privilegedIds] =
+    await Promise.all([
+      listFirmUsers(currentUserId),
+      getCurrentUserPermissions(),
+      listRolePickerOptions(),
+      getPrivilegedRoleIds(firm.id),
+    ]);
+  const viewerIsAdmin = resolved.isAdmin;
+  const canManageDirectory =
+    viewerIsAdmin || resolved.granted.has("firm.manage_team_directory");
+  // Roles only an Admin may hand out; the forms lock them for a
+  // delegated manager (the server refuses them regardless).
+  const privilegedRoleIds = [...privilegedIds];
 
   const activeCount = members.filter((m) => m.isActive).length;
   const adminCount = members.filter((m) => m.isAdmin && m.isActive).length;
@@ -76,6 +90,8 @@ export default async function TeamSettingsPage() {
                 member={m}
                 canManageDirectory={canManageDirectory}
                 rolePickerOptions={rolePickerOptions}
+                viewerIsAdmin={viewerIsAdmin}
+                privilegedRoleIds={privilegedRoleIds}
               />
             ))}
           </TableBody>
@@ -84,7 +100,11 @@ export default async function TeamSettingsPage() {
 
       {canManageDirectory && (
         <div className="flex flex-col gap-2">
-          <InviteMemberComposer rolePickerOptions={rolePickerOptions} />
+          <InviteMemberComposer
+            rolePickerOptions={rolePickerOptions}
+            viewerIsAdmin={viewerIsAdmin}
+            privilegedRoleIds={privilegedRoleIds}
+          />
           <div className="text-[10px] text-ink-4 leading-relaxed">
             Invites generate a one-time password you deliver to the new
             member. Email-based invites land when we wire delivery

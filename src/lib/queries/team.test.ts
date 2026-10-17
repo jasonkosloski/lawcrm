@@ -15,7 +15,8 @@ import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 
 import { getCurrentUserId } from "@/lib/current-user";
-import { listAssigneeOptions } from "@/lib/queries/team";
+import { prisma } from "@/lib/prisma";
+import { getPrivilegedRoleIds, listAssigneeOptions } from "@/lib/queries/team";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
 const mockedGetUser = vi.mocked(getCurrentUserId);
@@ -85,5 +86,42 @@ describe("listAssigneeOptions", () => {
     });
     const options = await listAssigneeOptions();
     expect(options.map((o) => o.name)).toEqual(["Zoe Viewer"]);
+  });
+});
+
+describe("getPrivilegedRoleIds", () => {
+  test("returns Admin plus every role carrying an admin-only permission, scoped to the firm", async () => {
+    const { adminRoleId, defaultRoleId } = await seedFirm({ name: "Priv Firm" });
+    const firm = await prisma.firm.findFirstOrThrow({
+      where: { name: "Priv Firm" },
+      select: { id: true },
+    });
+    const accessManager = await prisma.role.create({
+      data: {
+        firmId: firm.id,
+        name: "Access manager",
+        isSystem: false,
+        permissions: { create: { permission: "firm.manage_team_directory" } },
+      },
+      select: { id: true },
+    });
+    const billing = await prisma.role.create({
+      data: {
+        firmId: firm.id,
+        name: "Billing",
+        isSystem: false,
+        permissions: { create: { permission: "billing.send_invoice" } },
+      },
+      select: { id: true },
+    });
+    // Another firm's Admin must not leak in.
+    const other = await seedFirm({ name: "Other Firm" });
+
+    const ids = await getPrivilegedRoleIds(firm.id);
+    expect(ids.has(adminRoleId)).toBe(true);
+    expect(ids.has(accessManager.id)).toBe(true);
+    expect(ids.has(billing.id)).toBe(false);
+    expect(ids.has(defaultRoleId)).toBe(false);
+    expect(ids.has(other.adminRoleId)).toBe(false);
   });
 });

@@ -8,6 +8,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { ADMIN_ROLE_NAME, getCurrentFirm } from "@/lib/firm";
+import { ADMIN_ONLY_PERMISSIONS } from "@/lib/permissions";
 
 /** Compact role view used wherever we render role chips. */
 export type RoleChip = {
@@ -146,46 +147,29 @@ export async function listAssigneeOptions(): Promise<AssigneeOption[]> {
   });
 }
 
-/** Single-user fetch for the edit row. Returns null when not found
- *  (or out-of-firm — defense against URL-tampering once we go
- *  multi-tenant). */
-export async function getFirmUserById(
-  userId: string,
-  currentUserId: string
-): Promise<FirmUserRow | null> {
-  const firm = await getCurrentFirm();
-  const r = await prisma.user.findFirst({
-    where: { id: userId, firmId: firm.id },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      initials: true,
-      jobTitle: true,
-      phone: true,
-      barNumber: true,
-      isActive: true,
-      createdAt: true,
-      ...ROLE_INCLUDE,
-    },
-  });
-  if (!r) return null;
-  return shapeRow(r, currentUserId);
-}
-
-/** Count of active users with the Admin role — drives the
- *  "can't demote the last admin" invariant. Cheap; called from
- *  every mutating action that might leave the firm without an
- *  admin. */
-export async function countActiveAdmins(): Promise<number> {
-  const firm = await getCurrentFirm();
-  return prisma.user.count({
+/** Roles only an Admin may hand out or take away: Admin itself and
+ *  any role carrying an ADMIN_ONLY permission (manage_permissions /
+ *  manage_roles / manage_team_directory). Shared by the team actions
+ *  (server-side escalation guard) and the team page (UI hides what
+ *  the server would refuse). */
+export async function getPrivilegedRoleIds(
+  firmId: string
+): Promise<Set<string>> {
+  const rows = await prisma.role.findMany({
     where: {
-      firmId: firm.id,
-      isActive: true,
-      userRoles: { some: { role: { name: ADMIN_ROLE_NAME } } },
+      firmId,
+      OR: [
+        { name: ADMIN_ROLE_NAME },
+        {
+          permissions: {
+            some: { permission: { in: [...ADMIN_ONLY_PERMISSIONS] } },
+          },
+        },
+      ],
     },
+    select: { id: true },
   });
+  return new Set(rows.map((r) => r.id));
 }
 
 // ── Role management ───────────────────────────────────────────────────────

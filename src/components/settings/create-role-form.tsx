@@ -5,31 +5,39 @@
  * for name + optional description. Reserved names ("Admin",
  * "default") are blocked at the action level — Zod surfaces the
  * error inline.
+ *
+ * Submission is dispatched manually (not `<form action>`) so React 19
+ * doesn't wipe the typed name after a rejected create.
  */
 
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
-import { Plus, TriangleAlert } from "lucide-react";
+import { useActionState, useState, useTransition } from "react";
+import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createRoleAction } from "@/app/actions/roles";
 import {
   roleInitialState,
   type RoleFormState,
 } from "@/lib/role-form";
+import { Field, FormErrorBanner, formErrorMessage, inputClass } from "./form-field";
 
 export function CreateRoleForm() {
   const [state, formAction, isPending] = useActionState<
     RoleFormState,
     FormData
   >(createRoleAction, roleInitialState);
+  const [, startTransition] = useTransition();
   const [expanded, setExpanded] = useState(false);
+  // The action returns a fresh object on every call, so comparing the
+  // whole state (not just its status string) collapses the composer
+  // after EVERY successful create, not only the first.
+  const [handledState, setHandledState] = useState(state);
 
-  useEffect(() => {
-    if (state.status === "ok") {
-      setExpanded(false);
-    }
-  }, [state.status]);
+  if (state !== handledState) {
+    setHandledState(state);
+    if (state.status === "ok") setExpanded(false);
+  }
 
   if (!expanded) {
     return (
@@ -53,67 +61,54 @@ export function CreateRoleForm() {
 
   return (
     <form
-      action={formAction}
+      onSubmit={(e) => {
+        e.preventDefault();
+        const fd = new FormData(e.currentTarget);
+        startTransition(() => formAction(fd));
+      }}
       className="flex flex-col gap-3 p-4 rounded-md border border-line bg-paper-2/40"
     >
-      <div className="flex flex-col gap-1">
-        <label
-          htmlFor="name"
-          className="text-2xs font-mono uppercase tracking-wider text-ink-4"
-        >
-          Name <span className="text-warn">*</span>
-        </label>
-        <input
-          name="name"
-          type="text"
-          required
-          maxLength={60}
-          autoFocus
-          defaultValue={v.name ?? ""}
-          placeholder="e.g. Billing, Litigation, Read-only"
-          className={cn(
-            "h-9 px-3 rounded-md border bg-white text-xs text-ink",
-            "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-            "placeholder:text-ink-4",
-            errs.name ? "border-warn" : "border-line"
-          )}
-        />
-        {errs.name && (
-          <span className="text-2xs text-warn">{errs.name[0]}</span>
+      <Field label="Name" required error={errs.name?.[0]}>
+        {(c) => (
+          <input
+            {...c}
+            name="name"
+            type="text"
+            required
+            maxLength={60}
+            autoFocus
+            defaultValue={v.name ?? ""}
+            placeholder="e.g. Billing, Litigation, Read-only"
+            className={inputClass(!!errs.name, "md")}
+          />
         )}
-      </div>
+      </Field>
 
-      <div className="flex flex-col gap-1">
-        <label
-          htmlFor="description"
-          className="text-2xs font-mono uppercase tracking-wider text-ink-4"
-        >
-          Description
-        </label>
-        <textarea
-          name="description"
-          rows={2}
-          maxLength={400}
-          defaultValue={v.description ?? ""}
-          placeholder="What does this role mean for your firm?"
-          className={cn(
-            "px-3 py-2 rounded-md border bg-white text-xs text-ink",
-            "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-            "placeholder:text-ink-4 resize-y",
-            errs.description ? "border-warn" : "border-line"
-          )}
-        />
-        {errs.description && (
-          <span className="text-2xs text-warn">{errs.description[0]}</span>
+      <Field label="Description" error={errs.description?.[0]}>
+        {(c) => (
+          <textarea
+            {...c}
+            name="description"
+            rows={2}
+            maxLength={400}
+            defaultValue={v.description ?? ""}
+            placeholder="What does this role mean for your firm?"
+            className={cn(
+              "px-3 py-2 rounded-md border bg-white text-xs text-ink",
+              "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
+              "placeholder:text-ink-4 resize-y",
+              errs.description ? "border-warn" : "border-line"
+            )}
+          />
         )}
-      </div>
+      </Field>
 
-      {state.status === "error" && !state.errors && (
-        <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">
-          <TriangleAlert size={12} className="shrink-0 mt-px" />
-          <span>Couldn’t create — check the highlighted fields.</span>
-        </div>
-      )}
+      <FormErrorBanner
+        message={formErrorMessage(
+          state,
+          "Couldn’t create — check the highlighted fields."
+        )}
+      />
 
       <div className="flex items-center justify-end gap-2">
         <button
