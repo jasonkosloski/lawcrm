@@ -13,7 +13,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChangePasswordForm } from "@/components/settings/change-password-form";
 import { EmptyState } from "@/components/shared/empty-state";
-import { getCurrentUserId } from "@/lib/current-user";
+import { AUTH_EVENT_TITLES } from "@/lib/auth-events";
+import { requireUser } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { formatDate } from "@/lib/format-date";
 import { prisma } from "@/lib/prisma";
@@ -22,10 +23,19 @@ import { cn } from "@/lib/utils";
 const HISTORY_LIMIT = 15;
 
 export default async function SecuritySettingsPage() {
-  const userId = await getCurrentUserId();
+  const userId = await requireUser();
   const [events, tz] = await Promise.all([
     prisma.activityLog.findMany({
-      where: { userId, type: "auth", matterId: null },
+      // Only the user's OWN auth events. Admin actions they performed
+      // on others (invites, member edits, resets) are also `type:
+      // "auth"` rows under their userId; those aren't account
+      // activity and would crowd real sign-ins out of the 15-row cap.
+      where: {
+        userId,
+        type: "auth",
+        matterId: null,
+        title: { in: Object.values(AUTH_EVENT_TITLES) },
+      },
       orderBy: { timestamp: "desc" },
       take: HISTORY_LIMIT,
       select: { id: true, title: true, detail: true, timestamp: true },

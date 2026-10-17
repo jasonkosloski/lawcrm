@@ -4,12 +4,11 @@
  * Coverage:
  *   - `getCurrentUserId` returns the session user id.
  *   - `getCurrentUserId` redirects to `/login` when signed out.
- *   - `getCurrentUser` returns null when signed out (login layout
- *     renders too — the null branch is load-bearing).
  *   - `requireUser` (the page guard) returns the id or redirects to
  *     `/login`.
- *   - Both resolvers are wrapped in React `cache()` so repeated
- *     calls in one request pay a single `auth()` (and DB) hit.
+ *   - `getSession` / `getCurrentUserId` are wrapped in React `cache()`
+ *     so repeated calls in one request pay a single `auth()` (and DB)
+ *     hit.
  *
  * The cache-wrapping assertion needs a real memoizer: the client
  * build of React that Vitest resolves ships `cache()` as a plain
@@ -51,21 +50,16 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
-vi.mock("@/lib/prisma", () => ({
-  prisma: { user: { findUnique: vi.fn() } },
-}));
 
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
 import {
-  getCurrentUser,
   getCurrentUserId,
+  getSession,
   requireUser,
 } from "@/lib/current-user";
 
 const mockedAuth = vi.mocked(auth);
-const mockedFindUnique = vi.mocked(prisma.user.findUnique);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -89,42 +83,19 @@ describe("getCurrentUserId", () => {
     mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
     await expect(getCurrentUserId()).resolves.toBe("user-1");
     await expect(getCurrentUserId()).resolves.toBe("user-1");
-    // One auth() decode (and its per-call user.count in the jwt
+    // One auth() decode (and its per-call user.findUnique in the jwt
     // callback) per request — not one per call site.
     expect(mockedAuth).toHaveBeenCalledTimes(1);
   });
 });
 
-describe("getCurrentUser", () => {
-  test("returns null when signed out, without touching the DB", async () => {
-    mockedAuth.mockResolvedValue(null as never);
-    await expect(getCurrentUser()).resolves.toBeNull();
-    expect(mockedFindUnique).not.toHaveBeenCalled();
-  });
-
-  test("reads display fields for the session user", async () => {
+describe("getSession", () => {
+  test("decodes the session once per request, shared with getCurrentUserId", async () => {
     mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
-    const row = { id: "user-1", name: "Ada", initials: "AL", jobTitle: null };
-    mockedFindUnique.mockResolvedValue(row as never);
-    await expect(getCurrentUser()).resolves.toEqual(row);
-    expect(mockedFindUnique).toHaveBeenCalledWith({
-      where: { id: "user-1" },
-      select: { id: true, name: true, initials: true, jobTitle: true },
-    });
-  });
-
-  test("dedupes auth() + user fetch across repeated calls", async () => {
-    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
-    mockedFindUnique.mockResolvedValue({
-      id: "user-1",
-      name: "Ada",
-      initials: "AL",
-      jobTitle: null,
-    } as never);
-    await getCurrentUser();
-    await getCurrentUser();
+    await getSession();
+    await getSession();
+    await getCurrentUserId();
     expect(mockedAuth).toHaveBeenCalledTimes(1);
-    expect(mockedFindUnique).toHaveBeenCalledTimes(1);
   });
 });
 

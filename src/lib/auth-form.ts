@@ -9,6 +9,10 @@ export type LoginFormState = {
   /** Generic error message — never leaks which field failed (no email
    *  enumeration). The client renders this verbatim. */
   error?: string;
+  /** The email the user typed, echoed back on error so React 19's
+   *  post-action form reset doesn't blank the field. NEVER the
+   *  password. */
+  email?: string;
 };
 
 export const loginInitialState: LoginFormState = { status: "idle" };

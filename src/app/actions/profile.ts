@@ -62,8 +62,10 @@ const profileSchema = z.object({
     }, "Unknown time zone."),
   /** Per-user default for event detail visibility. "default" =
    *  matter team / attendees see details, everyone else sees a
-   *  Busy block. "show_details" = every event you create is
-   *  firm-wide visible unless overridden per-event.
+   *  Busy block. "show_details" = every event you create (past and
+   *  future — canViewEventDetails reads the creator's CURRENT
+   *  default) is firm-wide visible; there is no per-event "private"
+   *  value that overrides it (F128, deferred to the calendar).
    *  Enum-checked here so a tampered form can't sneak in a
    *  third value the resolver doesn't know how to handle. */
   defaultEventVisibility: z.enum(["default", "show_details"]),

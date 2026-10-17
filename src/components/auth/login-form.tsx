@@ -38,6 +38,7 @@ export function LoginForm({ next }: { next: string }) {
             autoComplete="email"
             required
             autoFocus
+            defaultValue={state.email ?? ""}
             className={cn(
               "h-9 px-3 rounded-md border bg-white text-sm text-ink",
               "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",

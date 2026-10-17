@@ -25,15 +25,15 @@ import {
 } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ProfileEditForm } from "@/components/settings/profile-edit-form";
-import { getCurrentUserId } from "@/lib/current-user";
+import { requireUser } from "@/lib/current-user";
 import { getCurrentFirm } from "@/lib/firm";
 import { formatDate } from "@/lib/format-date";
 import { prisma } from "@/lib/prisma";
 
 export default async function ProfileSettingsPage() {
-  const userId = await getCurrentUserId();
-  // Pull every field directly — getCurrentUser is the lite version
-  // for the sidebar; we want the full row for the edit form.
+  const userId = await requireUser();
+  // Pull every field directly — the sidebar gets its lite display
+  // fields from getSidebarData; we want the full row for the edit form.
   const [user, firm] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
@@ -59,13 +59,13 @@ export default async function ProfileSettingsPage() {
     }),
     getCurrentFirm(),
   ]);
-  // The middleware + getCurrentUserId guarantee a session, so a
+  // requireUser (above) guarantees a session, so a
   // missing row here would mean the row was deleted between the
   // session check and this query — treat as not-found.
   if (!user) notFound();
 
   return (
-    <div className="grid grid-cols-[1fr_18rem] gap-6 max-w-5xl">
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_18rem] gap-6 max-w-5xl">
       <div>
         <div className="mb-4">
           <h1 className="text-base font-semibold text-ink">Profile</h1>

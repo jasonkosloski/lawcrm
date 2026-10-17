@@ -18,7 +18,7 @@
 
 import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
-import { proxy } from "./proxy";
+import { config, proxy } from "./proxy";
 
 const SESSION_COOKIE = "authjs.session-token=some-token";
 
@@ -134,5 +134,36 @@ describe("x-pathname request-header injection", () => {
   it("sets it as a request header, not a client-visible response header", () => {
     const res = proxy(makeRequest("/matters", { cookie: SESSION_COOKIE }));
     expect(res.headers.get("x-pathname")).toBeNull();
+  });
+});
+
+// F977: when a proxy runs, Next buffers the request body (10 MB
+// default) and hands the handler a truncated copy — fatal for the
+// streaming multi-GB upload route. The matcher must skip exactly that
+// route and nothing broader.
+describe("proxy matcher", () => {
+  const source = config.matcher[0];
+  // Next anchors matcher sources like this when it compiles them.
+  const re = new RegExp(`^${source}$`);
+
+  it.each([
+    "/api/documents/upload",
+    "/_next/static/chunks/a.js",
+    "/favicon.ico",
+    "/logo.png",
+  ])("does not run the proxy for %s", (path) => {
+    expect(re.test(path)).toBe(false);
+  });
+
+  it.each([
+    "/",
+    "/matters",
+    "/api/documents/upload/blob",
+    "/api/documents/upload-admin",
+    "/api/documents/123/download",
+    "/api/email-sync",
+    "/login",
+  ])("still runs the proxy for %s", (path) => {
+    expect(re.test(path)).toBe(true);
   });
 });

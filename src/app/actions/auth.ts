@@ -47,12 +47,15 @@ export async function loginAction(
 ): Promise<LoginFormState> {
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = loginSchema.safeParse(raw);
+  // Echoed back on every error so the form reset keeps what was typed.
+  const email = typeof raw.email === "string" ? raw.email : undefined;
   if (!parsed.success) {
     // Generic — never reveal which field failed; "Enter a valid
     // email" is fine because that's a syntactic check, not a
     // database one.
     return {
       status: "error",
+      email,
       error:
         parsed.error.flatten().fieldErrors.email?.[0] ??
         parsed.error.flatten().fieldErrors.password?.[0] ??
@@ -78,6 +81,7 @@ export async function loginAction(
         // "locked" message would confirm the account exists.
         return {
           status: "error",
+          email,
           error:
             "Invalid email or password. After repeated failures, sign-in pauses for 15 minutes.",
         };
@@ -88,6 +92,7 @@ export async function loginAction(
       console.error("[auth] sign-in failed with a non-credentials error", err);
       return {
         status: "error",
+        email,
         error: "Sign-in is temporarily unavailable. Please try again shortly.",
       };
     }

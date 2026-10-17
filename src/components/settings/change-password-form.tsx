@@ -10,7 +10,7 @@
 
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useEffect, useRef, useTransition } from "react";
 import { CheckCircle2, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { changePasswordAction } from "@/app/actions/auth";
@@ -26,6 +26,16 @@ export function ChangePasswordForm() {
     FormData
   >(changePasswordAction, changePasswordInitialState);
   const formRef = useRef<HTMLFormElement>(null);
+  // Manual dispatch: React 19 resets every `<form action>` form after
+  // the action settles — even on an error — which would make a
+  // confirm mismatch wipe all three fields. Clear explicitly on
+  // success only (effect below).
+  const [, startSubmit] = useTransition();
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    startSubmit(() => formAction(fd));
+  };
 
   // Clear the fields after a successful change so the new password
   // isn't left sitting in the DOM.
@@ -36,7 +46,7 @@ export function ChangePasswordForm() {
   const errs = state.errors ?? {};
 
   return (
-    <form ref={formRef} action={formAction} className="flex flex-col gap-3">
+    <form ref={formRef} onSubmit={onSubmit} className="flex flex-col gap-3">
       <Field
         label="Current password"
         name="currentPassword"

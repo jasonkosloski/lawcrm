@@ -231,6 +231,24 @@ describe("loginAction", () => {
     );
   });
 
+  test("every error state echoes the typed email (never the password) so the form reset keeps it", async () => {
+    // Invalid syntax: fails the schema before signIn.
+    const bad = new FormData();
+    bad.set("email", "not-an-email");
+    bad.set("password", "hunter2");
+    const syntactic = await loginAction(loginInitialState, bad);
+    expect(syntactic.status).toBe("error");
+    expect(syntactic.email).toBe("not-an-email");
+
+    // Wrong credentials.
+    vi.mocked(signIn).mockRejectedValueOnce(
+      Object.assign(new AuthError("x"), { type: "CredentialsSignin" })
+    );
+    const wrong = await loginAction(loginInitialState, loginForm());
+    expect(wrong.email).toBe(EMAIL);
+    expect(JSON.stringify(wrong)).not.toContain("whatever");
+  });
+
   test("CredentialsSignin maps to the generic credential message", async () => {
     const err = Object.assign(new AuthError("x"), { type: "CredentialsSignin" });
     vi.mocked(signIn).mockRejectedValueOnce(err);

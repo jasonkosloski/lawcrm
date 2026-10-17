@@ -1,12 +1,15 @@
 /**
- * Edge proxy — optimistic auth gate.
+ * Edge proxy — optimistic cookie-presence gate (a UX redirect, NOT
+ * the authority).
  *
  * In Next.js 16, what was `middleware.ts` is now `proxy.ts`. Its job
  * here is the cheap "is there ANY session cookie?" check, redirecting
- * unauthenticated requests to /login before they hit a layout. The
- * real authoritative check happens in `getCurrentUserId()` (server
- * components / actions) so an attacker can't bypass auth by spoofing
- * the cookie name — they'd hit the redirect from `auth()` anyway.
+ * unauthenticated requests to /login before they render anything. The
+ * real check happens in every page / action / route handler
+ * (`requireUser()` / `getCurrentUserId()` / `requirePermission`) —
+ * pages authenticate themselves — so an attacker can't bypass auth by
+ * spoofing the cookie name: they'd hit the redirect from `auth()`
+ * anyway.
  *
  * Per the Next.js auth guide we deliberately do NOT validate the JWT
  * here:
@@ -22,6 +25,8 @@
  *   - SELF_AUTHENTICATED_PATHS — cron + blob-callback endpoints that
  *     carry their own credential instead of a cookie
  *   - Static assets (Next handles via the matcher exclusion below)
+ *   - /api/documents/upload is excluded by the matcher (see below); the
+ *     route does its own session + permission check and answers JSON 401
  */
 
 import { NextResponse, type NextRequest } from "next/server";
@@ -103,7 +108,16 @@ export const config = {
   // Run on every request EXCEPT static assets and Next internals.
   // Path-based exclusion (regex negative lookahead) is the canonical
   // pattern from the Next.js docs.
+  //
+  // `api/documents/upload$` (exact — NOT /upload/blob, which stays
+  // matched) is also excluded: when a proxy runs, Next clones and
+  // buffers the request body, capped at 10 MB by default
+  // (`proxyClientMaxBodySize`), and only the truncated body reaches the
+  // handler. That route streams multi-GB multipart uploads through
+  // busboy and would silently store corrupt files. It authenticates
+  // itself (session 401 + `documents.upload` 403), so the cookie gate
+  // adds nothing; it does not read `x-pathname`.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/documents/upload$|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)$).*)",
   ],
 };

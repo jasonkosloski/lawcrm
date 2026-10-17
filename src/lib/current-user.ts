@@ -19,18 +19,27 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
 
 /**
- * Cached per-request via React `cache()`: every `auth()` call runs
- * the jwt callback, which fires a `user.count` DB query — and this
- * function is called several times per request (a single
- * `requirePermission` gate hits it twice: once directly, once inside
- * the permission resolver). With the pg pool capped at 1 connection
- * those redundant round-trips serialize, so deduping matters.
+ * The request's Auth.js session, decoded ONCE per request.
+ *
+ * Every `auth()` call runs the full session action: JWE decrypt, the
+ * jwt callback's `user.findUnique` (isActive + password fingerprint,
+ * ADR-017) and a re-encrypt whose cookie is discarded. `auth()` itself
+ * is not memoised, and React `cache()` only dedupes per wrapper, so
+ * every server-side reader (layouts, queries, `getCurrentUserId`)
+ * should go through this one wrapper. With the pg pool capped at 1
+ * connection, redundant round-trips serialize, so deduping matters.
+ */
+export const getSession = cache(() => auth());
+
+/**
+ * Cached per-request (via `getSession`): this function is called
+ * several times per request (a single `requirePermission` gate hits it
+ * twice: once directly, once inside the permission resolver).
  */
 export const getCurrentUserId = cache(async (): Promise<string> => {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) {
     // Anything past this point would dereference a missing user, so
     // bounce to login. This throws — no return value.
@@ -55,17 +64,3 @@ export const getCurrentUserId = cache(async (): Promise<string> => {
 export async function requireUser(): Promise<string> {
   return getCurrentUserId();
 }
-
-/** Read the current user's display fields for the sidebar / topbar.
- *  Returns null if not signed in (the layout is rendered for the
- *  login page too, so the null branch matters). Cached per-request
- *  for the same reason as `getCurrentUserId` — layouts and pages
- *  both call it during one render. */
-export const getCurrentUser = cache(async () => {
-  const session = await auth();
-  if (!session?.user?.id) return null;
-  return prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { id: true, name: true, initials: true, jobTitle: true },
-  });
-});
