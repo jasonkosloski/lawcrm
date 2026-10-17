@@ -14,16 +14,18 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-import { isSearchHitType, type SearchHitType } from "@/lib/queries/search";
+import {
+  isSearchHitType,
+  SAVED_SEARCH_CAP,
+  SAVED_SEARCH_NAME_MAX,
+  SEARCH_QUERY_MAX_LENGTH,
+  type SearchHitType,
+} from "@/lib/constants/search";
 
-/** Hard per-user row cap, enforced in `createSavedSearch`. Saved
- *  searches are a pin board, not an archive — past ~50 the strip is
- *  unusable anyway. */
-export const SAVED_SEARCH_CAP = 50;
-
-/** Display-name length bounds (name defaults to the query text
- *  client-side; see src/components/search/save-search-button.tsx). */
-export const SAVED_SEARCH_NAME_MAX = 80;
+// Client-safe constants live in src/lib/constants/search.ts (the
+// palette and the saved-search UI import them from there); re-exported
+// here for the long-standing importers of this module.
+export { SAVED_SEARCH_CAP, SAVED_SEARCH_NAME_MAX, SEARCH_QUERY_MAX_LENGTH };
 
 export type SavedSearchRow = {
   id: string;

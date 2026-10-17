@@ -27,11 +27,11 @@ import { SearchResults } from "@/components/search/search-results";
 import { SaveSearchButton } from "@/components/search/save-search-button";
 import { SavedSearchChips } from "@/components/search/saved-search-chips";
 import {
-  globalSearch,
   isSearchHitType,
+  normalizeSearchQuery,
   SEARCH_MIN_QUERY_LENGTH,
-  type GlobalSearchResult,
-} from "@/lib/queries/search";
+} from "@/lib/constants/search";
+import { globalSearch, type GlobalSearchResult } from "@/lib/queries/search";
 import { getSavedSearches } from "@/lib/queries/saved-searches";
 import { requireUser } from "@/lib/current-user";
 
@@ -42,7 +42,11 @@ export default async function SearchPage({
 }) {
   await requireUser();
   const sp = await searchParams;
-  const q = (Array.isArray(sp.q) ? sp.q[0] : sp.q)?.trim() ?? "";
+  // Same cap globalSearch and createSavedSearch apply, so the saved
+  // strip's (q, type) comparison and the Save button stay consistent.
+  const q = normalizeSearchQuery(
+    (Array.isArray(sp.q) ? sp.q[0] : sp.q) ?? ""
+  );
   const rawType = Array.isArray(sp.type) ? sp.type[0] : sp.type;
   const expandedType = isSearchHitType(rawType) ? rawType : null;
 
@@ -107,13 +111,6 @@ export default async function SearchPage({
               icon={Search}
               title="Keep typing"
               description={`Searches need at least ${SEARCH_MIN_QUERY_LENGTH} characters.`}
-            />
-          ) : result.groups.length === 0 ? (
-            <EmptyState
-              framed
-              icon={Search}
-              title={`No results for “${q}”`}
-              description="Try fewer or different words — matching is exact-substring for now."
             />
           ) : (
             <SearchResults result={result} expandedType={expandedType} />

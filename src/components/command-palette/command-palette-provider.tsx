@@ -11,6 +11,7 @@
 
 "use client";
 
+import dynamic from "next/dynamic";
 import {
   createContext,
   useCallback,
@@ -19,7 +20,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { CommandPalette } from "./command-palette";
+
+// cmdk, the dialog and ~20 icons are only needed once the palette is
+// first opened — keep them out of every page's initial bundle.
+const CommandPalette = dynamic(
+  () => import("./command-palette").then((m) => m.CommandPalette),
+  { ssr: false }
+);
 
 type PaletteContextValue = {
   open: boolean;
@@ -32,6 +39,10 @@ const PaletteContext = createContext<PaletteContextValue | null>(null);
 
 export function CommandPaletteProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  // Mount the (lazy) palette on first open and keep it mounted so
+  // closing/reopening is instant and its state survives.
+  const [everOpened, setEverOpened] = useState(false);
+  if (open && !everOpened) setEverOpened(true);
 
   const openPalette = useCallback(() => setOpen(true), []);
   const closePalette = useCallback(() => setOpen(false), []);
@@ -55,7 +66,7 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
       value={{ open, openPalette, closePalette, togglePalette }}
     >
       {children}
-      <CommandPalette open={open} onOpenChange={setOpen} />
+      {everOpened && <CommandPalette open={open} onOpenChange={setOpen} />}
     </PaletteContext.Provider>
   );
 }

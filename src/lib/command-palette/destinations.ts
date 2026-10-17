@@ -5,9 +5,15 @@
  * want to jump to directly. Keywords are the extra terms users might
  * search by ("cases" → Matters, "inbox" → Email) beyond the label.
  *
- * Icon is a lucide component name string resolved in the UI layer —
+ * Icon is a lucide component name (IconName) resolved in the UI layer —
  * keeps this file free of component imports so it stays a pure data
  * module.
+ *
+ * Only destinations that exist belong here: there is no firm-wide
+ * /billing page (billing lives per matter and under /settings/billing),
+ * so no "Billing" entry. `nav:reports` is permission-gated — the
+ * palette hides it unless PaletteData.canViewReports (see
+ * REPORTS_NAV_ID).
  */
 
 export type NavDestination = {
@@ -15,8 +21,11 @@ export type NavDestination = {
   label: string;
   keywords: string;
   href: string;
-  icon: string;
+  icon: IconName;
 };
+
+/** Destination hidden from users without `reports.view`. */
+export const REPORTS_NAV_ID = "nav:reports";
 
 export const NAV_DESTINATIONS: NavDestination[] = [
   { id: "nav:today", label: "Today", keywords: "home dashboard start", href: "/", icon: "home" },
@@ -28,18 +37,18 @@ export const NAV_DESTINATIONS: NavDestination[] = [
   { id: "nav:contacts", label: "Contacts", keywords: "directory people address book clients opposing experts witnesses", href: "/contacts", icon: "userSquare" },
   { id: "nav:contacts-new", label: "New contact", keywords: "create contact add person", href: "/contacts/new", icon: "userSquare" },
   { id: "nav:time", label: "Time tracking", keywords: "hours billing timer", href: "/time", icon: "clock" },
-  { id: "nav:billing", label: "Billing", keywords: "invoices payments ar", href: "/billing", icon: "dollar" },
   { id: "nav:reports", label: "Reports", keywords: "analytics dashboards", href: "/reports", icon: "chart" },
-  { id: "nav:automations", label: "Automations", keywords: "triggers templates", href: "/automations", icon: "zap" },
+  { id: "nav:automations", label: "Automations", keywords: "triggers templates", href: "/settings/automations", icon: "zap" },
   { id: "nav:settings", label: "Settings", keywords: "preferences account", href: "/settings", icon: "settings" },
   { id: "nav:settings-profile", label: "Settings — Profile", keywords: "me user account", href: "/settings/profile", icon: "settings" },
   { id: "nav:settings-integrations", label: "Settings — Integrations", keywords: "gmail calendar oauth connections", href: "/settings/integrations", icon: "settings" },
   { id: "nav:settings-team", label: "Settings — Team", keywords: "users roles staff members", href: "/settings/team", icon: "settings" },
 ];
 
-/** Maps string icon names used in NAV_DESTINATIONS + palette item kinds
- *  to lucide components. Lives here so the registry stays a pure data
- *  module, but consumers can still render icons. */
+/** Every icon name a destination may use. The palette's ICON_MAP is
+ *  typed `Record<IconName, LucideIcon>`, so a typo in a destination
+ *  (or a name with no icon) fails to compile instead of silently
+ *  rendering the Home icon. */
 export const ICON_NAMES = [
   "home",
   "gavel",
@@ -55,6 +64,8 @@ export const ICON_NAMES = [
   "user",
   "userSquare",
   "briefcase",
-  "leaf",
+  "filePlus",
+  "calendarPlus",
+  "inboxPlus",
 ] as const;
 export type IconName = (typeof ICON_NAMES)[number];

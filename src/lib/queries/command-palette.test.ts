@@ -135,6 +135,29 @@ describe("getPaletteData", () => {
     });
   });
 
+  test("returns the caller's id and a reports.view flag", async () => {
+    const none = await getPaletteData();
+    expect(none.userId).toBe(userId);
+    expect(none.canViewReports).toBe(false);
+
+    const role = await prisma.role.create({
+      data: { firmId, name: "Reporter" },
+      select: { id: true },
+    });
+    await prisma.rolePermission.create({
+      data: { roleId: role.id, permission: "reports.view" },
+    });
+    const { userId: reporterId } = await seedUser({
+      firmId,
+      name: "Rita Reporter",
+      roleIds: [role.id],
+    });
+    mockedGetUser.mockResolvedValue(reporterId);
+    const granted = await getPaletteData();
+    expect(granted.userId).toBe(reporterId);
+    expect(granted.canViewReports).toBe(true);
+  });
+
   test("isPinned reflects the caller's pins, not other users'", async () => {
     const other = await seedUser({ firmId, name: "Someone Else" });
     const { matterId } = await seedMatter({

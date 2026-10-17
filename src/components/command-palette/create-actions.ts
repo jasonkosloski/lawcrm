@@ -11,12 +11,14 @@
  *   data the palette doesn't preload and has no URL affordance to
  *   auto-open on /communication. Navigating without opening the
  *   dialog would be a lie.
- * - "Start timer" — startTimer() upserts the user's single
- *   TimerSession, silently replacing (= discarding) a running clock.
- *   The TimerWidget guards discard behind a two-step confirm; the
- *   palette can't replicate that without knowing whether a timer is
- *   running, and PaletteData doesn't carry it. Revisit if palette
- *   data ever includes the active session.
+ * - "Start timer" — startTimer() refuses to replace a running clock
+ *   unless called with `replace: true`; no UI affordance for that
+ *   confirmation ("Replace running timer?") exists yet, and the
+ *   palette doesn't know whether a timer is running (PaletteData
+ *   doesn't carry it). Revisit once the confirm UI exists.
+ * - "New intake / lead" — /intake/new is still a placeholder page
+ *   with no form, so offering it would be a dead end. Re-add once
+ *   the intake form ships.
  *
  * Shape matches NavDestination so these rows reuse the palette's
  * nav-row rendering AND resolve from localStorage recents through
@@ -42,13 +44,6 @@ export const CREATE_ACTIONS: NavDestination[] = [
     keywords: "create add calendar appointment meeting schedule",
     href: "/calendar/events/new",
     icon: "calendarPlus",
-  },
-  {
-    id: "create:lead",
-    label: "New intake / lead",
-    keywords: "create add lead prospect intake",
-    href: "/intake/new",
-    icon: "inboxPlus",
   },
 ];
 

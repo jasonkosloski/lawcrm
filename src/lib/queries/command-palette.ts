@@ -14,6 +14,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { currentUserHasPermission } from "@/lib/permission-check";
 import { LEAD_CLOSED_STAGES } from "@/lib/constants/lead-stage";
 
 export type PaletteMatter = {
@@ -61,6 +62,12 @@ export type PaletteItem =
 
 export type PaletteData = {
   items: PaletteItem[];
+  /** The caller's id — namespaces the localStorage recents so a
+   *  shared browser never shows the previous user's history. */
+  userId: string;
+  /** reports.view — the Reports destination is hidden without it
+   *  (the page would bounce the user back to the dashboard). */
+  canViewReports: boolean;
 };
 
 /** 500-row cap per kind, most-recently-updated first. Same safety
@@ -76,7 +83,8 @@ export async function getPaletteData(): Promise<PaletteData> {
   // palette open, and the palette renders 3-5 fields per kind, so
   // pulling whole rows (contact addresses/notes, lead assessments)
   // is serialization weight for nothing.
-  const [matters, contacts, leads, users] = await Promise.all([
+  const [canViewReports, matters, contacts, leads, users] = await Promise.all([
+    currentUserHasPermission("reports.view"),
     prisma.matter.findMany({
       where: { isArchived: false },
       select: {
@@ -162,5 +170,5 @@ export async function getPaletteData(): Promise<PaletteData> {
     ),
   ];
 
-  return { items };
+  return { items, userId, canViewReports };
 }

@@ -5,8 +5,12 @@
  * case-insensitive substring match (Prisma `contains` +
  * `mode: "insensitive"`, i.e. Postgres ILIKE) across every content-
  * bearing entity, grouped by type with a per-type `take` and a
- * per-type total count. All per-type searches fire in ONE parallel
- * batch (a single outer `Promise.all`).
+ * per-type total count. All per-type searches are issued from a
+ * single outer `Promise.all`; note the Prisma pool is one connection
+ * (src/lib/prisma.ts, `max: 1`), so in production the ~21 statements
+ * (findMany + count per type) actually execute one after another.
+ * LIKE metacharacters in the query (% _ and backslash) are escaped
+ * so they match literally (see `escapeLike`).
  *
  * ── v1 scope / upgrade path ─────────────────────────────────────────
  * This is deliberately ILIKE v1: simple, correct, zero new infra.
@@ -32,6 +36,9 @@
  *     `narrative` for the entry's AUTHOR. The privilege flag exists
  *     precisely to keep that content out of casual surfaces; the
  *     `activity` line is billing-grade metadata and stays searchable.
+ *     (Open policy question: the matter/intake Time tabs still show
+ *     every viewer the narrative, so search is currently stricter
+ *     than those surfaces.)
  *   - Contacts: active only, merged losers (`mergedIntoId` set)
  *     excluded — same posture as the contacts directory.
  *
@@ -55,27 +62,26 @@ import {
 
 // ── Public shapes ───────────────────────────────────────────────────────
 
-export const SEARCH_HIT_TYPES = [
-  "matter",
-  "contact",
-  "lead",
-  "note",
-  "document",
-  "task",
-  "deadline",
-  "event",
-  "email",
-  "message",
-  "time",
-] as const;
+// The hit-type list and thresholds live in a client-safe module so the
+// palette, the saved-search chips and this file cannot drift. Re-
+// exported for the long-standing importers of this module.
+import {
+  isSearchHitType,
+  SEARCH_HIT_TYPES,
+  normalizeSearchQuery,
+  SEARCH_MIN_QUERY_LENGTH,
+  SEARCH_QUERY_MAX_LENGTH,
+  type SearchHitType,
+} from "@/lib/constants/search";
 
-export type SearchHitType = (typeof SEARCH_HIT_TYPES)[number];
-
-export function isSearchHitType(v: unknown): v is SearchHitType {
-  return (
-    typeof v === "string" && (SEARCH_HIT_TYPES as readonly string[]).includes(v)
-  );
-}
+export {
+  isSearchHitType,
+  normalizeSearchQuery,
+  SEARCH_HIT_TYPES,
+  SEARCH_MIN_QUERY_LENGTH,
+  SEARCH_QUERY_MAX_LENGTH,
+  type SearchHitType,
+};
 
 export type SearchHit = {
   type: SearchHitType;
@@ -87,8 +93,10 @@ export type SearchHit = {
    *  Null when the match was on the title itself and there's no
    *  secondary text worth quoting. */
   snippet: string | null;
-  /** Deep link — matter tab routes, thread routes, ?event= modal, … */
-  href: string;
+  /** Deep link — matter tab routes, thread routes, ?event= modal, …
+   *  Null when no page would show the hit (a firm-wide task): the
+   *  results page renders it unlinked. */
+  href: string | null;
   /** Context label — matter name where applicable, org for contacts. */
   context: string | null;
 };
@@ -96,8 +104,10 @@ export type SearchHit = {
 export type SearchGroup = {
   type: SearchHitType;
   /** Total matches of this type (may exceed hits.length). For the
-   *  post-filtered types (events, notes) this is documented as an
-   *  approximation — see the per-type notes below. */
+   *  post-filtered types this is an approximation — see the per-type
+   *  notes below (events: the visible count inside a CANDIDATE_CAP
+   *  window, a lower bound; notes/email: the SQL count minus the
+   *  markup-only rows that were scanned, an upper bound). */
   total: number;
   hits: SearchHit[];
 };
@@ -107,8 +117,6 @@ export type GlobalSearchResult = {
   groups: SearchGroup[];
 };
 
-/** Queries shorter than this return no results (too noisy to scan). */
-export const SEARCH_MIN_QUERY_LENGTH = 2;
 /** Default hits per type on the grouped results page. */
 export const SEARCH_GROUP_TAKE = 10;
 /** Take used when a single type is expanded via ?type=. */
@@ -116,9 +124,22 @@ export const SEARCH_EXPANDED_TAKE = 100;
 
 const SNIPPET_RADIUS = 60;
 /** Candidate window for types whose read-model filter must run in
- *  JS (calendar visibility) or that need post-verification (note
- *  markup). */
+ *  JS (calendar visibility). */
 const CANDIDATE_CAP = 200;
+/** Notes are matched on raw HTML in SQL, then verified against the
+ *  tag-stripped text. We page through candidates (newest first) until
+ *  `take` real hits are found, bounded so a pathological query (an
+ *  HTML tag name like "strong") can't become a full-table read. */
+const NOTE_SCAN_PAGE = 100;
+const NOTE_SCAN_MAX_PAGES = 5;
+/** Matching messages fetched per email thread, so a markup-only match
+ *  on the newest message can't hide a real one on an older message. */
+const EMAIL_BODY_CANDIDATES = 3;
+/** Extra pages of EMAIL_BODY_CANDIDATES older matching messages
+ *  examined per thread when the newest ones were all markup-only. */
+const EMAIL_BODY_MAX_EXTRA_PAGES = 5;
+/** Candidate threads per page of the email scan. */
+const EMAIL_SCAN_PAGE = 50;
 
 // ── Pure helpers (exported for tests) ───────────────────────────────────
 
@@ -164,6 +185,25 @@ export function makeSnippet(
   );
 }
 
+/** Escape LIKE/ILIKE metacharacters. Prisma's `contains` and
+ *  insensitive `equals` put the value into an ILIKE pattern without
+ *  escaping, so a raw "%" or "_" over-matches ("__" matches every
+ *  row) and a trailing backslash is a Postgres error. Postgres'
+ *  default LIKE escape character is backslash. */
+export function escapeLike(s: string): string {
+  return s.replace(/[\\%_]/g, "\\$&");
+}
+
+/** `s` as the HTML sanitizers store it ("Smith & Wesson" becomes
+ *  "Smith &amp; Wesson"). */
+function escapeHtmlText(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 /** Clip long derived titles (note bodies used as titles). */
 function clip(s: string, max = 80): string {
   const t = s.trim();
@@ -184,7 +224,7 @@ export async function globalSearch(
   rawQuery: string,
   opts?: GlobalSearchOptions
 ): Promise<GlobalSearchResult> {
-  const q = rawQuery.trim();
+  const q = normalizeSearchQuery(rawQuery);
   if (q.length < SEARCH_MIN_QUERY_LENGTH) return { query: q, groups: [] };
 
   const take = Math.min(
@@ -194,19 +234,38 @@ export async function globalSearch(
   const viewerId = await getCurrentUserId();
   const qLower = q.toLowerCase();
 
-  /** Shared ILIKE fragment. */
-  const ci = { contains: q, mode: "insensitive" as const };
+  /** Shared ILIKE fragment (LIKE metacharacters escaped). */
+  const ci = { contains: escapeLike(q), mode: "insensitive" as const };
+  /** Same, for columns that hold sanitized HTML: a query containing
+   *  & < > " is stored entity-encoded, so also try the encoded form. */
+  const qHtml = escapeHtmlText(q);
+  const ciHtml: Array<{ contains: string; mode: "insensitive" }> =
+    qHtml === q
+      ? [ci]
+      : [ci, { contains: escapeLike(qHtml), mode: "insensitive" as const }];
 
   // ── Per-type searchers ────────────────────────────────────────────
   // Each returns a full SearchGroup. They are invoked together in
-  // the single Promise.all at the bottom — one parallel batch.
+  // the single Promise.all at the bottom.
 
   const searchMatters = async (): Promise<SearchGroup> => {
     // Archived matters stay searchable on purpose: content
     // retrieval ("which matter mentioned…") is exactly when you
     // reach for an old case. The ⌘K palette hides archived rows
     // because it's a jump-to-recent surface; this isn't.
-    const where = { OR: [{ name: ci }, { description: ci }] };
+    // caseNumber / court / opposing* are how a lawyer looks a case up
+    // ("2026-CV-00481", the other side's name), and the palette only
+    // preloads active matters.
+    const where = {
+      OR: [
+        { name: ci },
+        { description: ci },
+        { caseNumber: ci },
+        { court: ci },
+        { opposingParty: ci },
+        { opposingFirm: ci },
+      ],
+    };
     const [rows, total] = await Promise.all([
       prisma.matter.findMany({
         where,
@@ -214,6 +273,10 @@ export async function globalSearch(
           id: true,
           name: true,
           description: true,
+          caseNumber: true,
+          court: true,
+          opposingParty: true,
+          opposingFirm: true,
           client: { select: { name: true } },
         },
         orderBy: { updatedAt: "desc" },
@@ -228,7 +291,12 @@ export async function globalSearch(
         type: "matter",
         id: m.id,
         title: m.name,
-        snippet: makeSnippet(m.description, q),
+        snippet:
+          makeSnippet(m.description, q) ??
+          makeSnippet(m.caseNumber, q) ??
+          makeSnippet(m.opposingParty, q) ??
+          makeSnippet(m.opposingFirm, q) ??
+          makeSnippet(m.court, q),
         href: `/matters/${m.id}`,
         context: m.client?.name ?? null,
       })),
@@ -318,14 +386,20 @@ export async function globalSearch(
     // Note bodies are sanitized Tiptap HTML. We match the RAW
     // column in SQL (an entity-split like "ambulance</p>" can't be
     // fixed by ILIKE anyway) but build title + snippet from the
-    // tag-stripped text. A raw match that only hit markup (e.g. a
-    // link href) is dropped from the hits after stripping, so
-    // `total` (the SQL count) is an upper bound for this type —
-    // acceptable ILIKE-v1 slack, gone once FTS indexes the
-    // stripped text.
-    const where = { content: ci };
-    const [rows, total] = await Promise.all([
-      prisma.note.findMany({
+    // tag-stripped text. A raw match that only hit markup (a link's
+    // rel="noopener", <strong>, <code>…) is dropped after stripping.
+    // Because recent markup-only notes could otherwise fill a small
+    // candidate window and hide older real hits, we page through
+    // candidates (bounded by NOTE_SCAN_MAX_PAGES) until `take` real
+    // hits are found. `total` is the SQL count minus the markup-only
+    // rows we scanned: exact when the scan reached the end, an upper
+    // bound otherwise — gone once FTS indexes the stripped text.
+    const where = { OR: ciHtml.map((c) => ({ content: c })) };
+    const total = await prisma.note.count({ where });
+    const hits: SearchHit[] = [];
+    let markupOnly = 0;
+    for (let page = 0; page < NOTE_SCAN_MAX_PAGES; page++) {
+      const rows = await prisma.note.findMany({
         where,
         select: {
           id: true,
@@ -333,26 +407,29 @@ export async function globalSearch(
           matterId: true,
           matter: { select: { name: true } },
         },
-        orderBy: { updatedAt: "desc" },
-        take: Math.max(take * 3, 30),
-      }),
-      prisma.note.count({ where }),
-    ]);
-    const hits: SearchHit[] = [];
-    for (const n of rows) {
-      if (hits.length >= take) break;
-      const text = stripHtmlTags(n.content);
-      if (!text.toLowerCase().includes(qLower)) continue; // markup-only match
-      hits.push({
-        type: "note",
-        id: n.id,
-        title: clip(text),
-        snippet: makeSnippet(text, q),
-        href: `/matters/${n.matterId}/notes`,
-        context: n.matter.name,
+        orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+        skip: page * NOTE_SCAN_PAGE,
+        take: NOTE_SCAN_PAGE,
       });
+      for (const n of rows) {
+        if (hits.length >= take) break;
+        const text = stripHtmlTags(n.content);
+        if (!text.toLowerCase().includes(qLower)) {
+          markupOnly++; // matched markup only
+          continue;
+        }
+        hits.push({
+          type: "note",
+          id: n.id,
+          title: clip(text),
+          snippet: makeSnippet(text, q),
+          href: `/matters/${n.matterId}/notes`,
+          context: n.matter.name,
+        });
+      }
+      if (hits.length >= take || rows.length < NOTE_SCAN_PAGE) break;
     }
-    return { type: "note", total, hits };
+    return { type: "note", total: Math.max(total - markupOnly, hits.length), hits };
   };
 
   const searchDocuments = async (): Promise<SearchGroup> => {
@@ -381,7 +458,9 @@ export async function globalSearch(
         id: d.id,
         title: d.name,
         snippet: null,
-        href: `/matters/${d.matterId}/documents`,
+        // The viewer route, not the tab root: the Documents tab lists
+        // one folder at a time, so a file in a subfolder isn't there.
+        href: `/matters/${d.matterId}/documents/${d.id}`,
         context: d.matter.name,
       })),
     };
@@ -411,9 +490,10 @@ export async function globalSearch(
         id: t.id,
         title: t.title,
         snippet: makeSnippet(t.description, q),
-        // Firm-wide tasks (no matter) have no dedicated page — they
-        // surface on the dashboard's "Your tasks" card.
-        href: t.matter ? `/matters/${t.matter.id}/tasks` : "/",
+        // Firm-wide tasks (no matter) have no page that lists them
+        // (the dashboard card shows only the viewer's own open
+        // tasks), so the hit is rendered unlinked.
+        href: t.matter ? `/matters/${t.matter.id}/tasks` : null,
         context: t.matter?.name ?? "Firm-wide",
       })),
     };
@@ -522,6 +602,12 @@ export async function globalSearch(
     // Mailboxes are personal: scope to the viewer's own threads via
     // the shared read-model helper. The same `where` feeds findMany
     // AND count, so neither hits nor the total leak other mailboxes.
+    // Bodies are sanitized HTML, matched raw in SQL (so a query like
+    // "center" or "color" also hits markup such as text-align:center).
+    // Each thread is therefore verified against the tag-stripped
+    // text of its matching messages and dropped when only markup
+    // matched; `total` is the SQL count minus those dropped rows.
+    const bodyMatch = { OR: ciHtml.map((c) => ({ body: c })) };
     const where = {
       AND: [
         visibleEmailThreadWhere(viewerId),
@@ -529,13 +615,20 @@ export async function globalSearch(
           OR: [
             { subject: ci },
             { snippet: ci },
-            { messages: { some: { body: ci } } },
+            { messages: { some: bodyMatch } },
           ],
         },
       ],
     };
-    const [rows, total] = await Promise.all([
-      prisma.emailThread.findMany({
+    const total = await prisma.emailThread.count({ where });
+    const hits: SearchHit[] = [];
+    let markupOnly = 0;
+    // Page through candidate threads (newest first, stable order)
+    // until `take` verified hits, bounded like the notes scan so a
+    // markup-only query ("style", "center") can't become a full
+    // mailbox read.
+    for (let page = 0; page < NOTE_SCAN_MAX_PAGES; page++) {
+      const rows = await prisma.emailThread.findMany({
         where,
         select: {
           id: true,
@@ -543,33 +636,71 @@ export async function globalSearch(
           snippet: true,
           matter: { select: { name: true } },
           messages: {
-            where: { body: ci },
-            orderBy: { sentAt: "desc" },
-            take: 1,
+            where: bodyMatch,
+            orderBy: [{ sentAt: "desc" }, { id: "desc" }],
+            take: EMAIL_BODY_CANDIDATES,
             select: { body: true },
           },
         },
-        orderBy: { lastMessageAt: "desc" },
-        take,
-      }),
-      prisma.emailThread.count({ where }),
-    ]);
-    return {
-      type: "email",
-      total,
-      hits: rows.map((t) => {
-        const matchedBody = t.messages[0]?.body;
-        return {
+        orderBy: [{ lastMessageAt: "desc" }, { id: "desc" }],
+        skip: page * EMAIL_SCAN_PAGE,
+        take: EMAIL_SCAN_PAGE,
+      });
+      for (const t of rows) {
+        if (hits.length >= take) break;
+        const snippetCol = makeSnippet(t.snippet, q);
+        const subjectHit = t.subject.toLowerCase().includes(qLower);
+        let bodySnippet: string | null = null;
+        if (!subjectHit && !snippetCol) {
+          const scan = (msgs: Array<{ body: string }>) => {
+            for (const m of msgs) {
+              const found = makeSnippet(stripHtmlTags(m.body), q);
+              if (found) return found;
+            }
+            return null;
+          };
+          bodySnippet = scan(t.messages);
+          // The newest matching messages were all markup-only (an HTML
+          // signature/table). Walk further back, bounded, so an older
+          // real match still surfaces.
+          let skip = t.messages.length;
+          let more = t.messages.length >= EMAIL_BODY_CANDIDATES;
+          for (
+            let extra = 0;
+            !bodySnippet && more && extra < EMAIL_BODY_MAX_EXTRA_PAGES;
+            extra++
+          ) {
+            const older = await prisma.emailMessage.findMany({
+              where: { threadId: t.id, ...bodyMatch },
+              orderBy: [{ sentAt: "desc" }, { id: "desc" }],
+              skip,
+              take: EMAIL_BODY_CANDIDATES,
+              select: { body: true },
+            });
+            bodySnippet = scan(older);
+            skip += older.length;
+            more = older.length >= EMAIL_BODY_CANDIDATES;
+          }
+        }
+        if (!subjectHit && !snippetCol && !bodySnippet) {
+          markupOnly++; // only markup / entity-encoding matched
+          continue;
+        }
+        hits.push({
           type: "email",
           id: t.id,
           title: t.subject || "(no subject)",
-          snippet:
-            makeSnippet(t.snippet, q) ??
-            (matchedBody ? makeSnippet(stripHtmlTags(matchedBody), q) : null),
+          snippet: snippetCol ?? bodySnippet,
           href: `/communication?view=email&thread=${t.id}`,
           context: t.matter?.name ?? null,
-        };
-      }),
+        });
+      }
+      if (hits.length >= take || rows.length < EMAIL_SCAN_PAGE) break;
+    }
+    return {
+      type: "email",
+      total: Math.max(total - markupOnly, hits.length),
+      hits,
     };
   };
 
@@ -705,7 +836,8 @@ export async function globalSearch(
     time: searchTime,
   };
 
-  // ONE parallel batch — every enabled type fires simultaneously.
+  // Every enabled type is issued together (on the one-connection
+  // production pool the statements still run back to back).
   const enabledTypes = SEARCH_HIT_TYPES.filter(
     (t) => !opts?.type || opts.type === t
   );

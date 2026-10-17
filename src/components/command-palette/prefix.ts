@@ -25,6 +25,8 @@
  * unit-tested in prefix.test.ts.
  */
 
+import type { SearchHitType } from "@/lib/constants/search";
+
 export type PaletteScope = "matters" | "people" | "actions";
 
 /** What a CommandItem's value is tagged as. `person` covers contacts
@@ -63,9 +65,25 @@ export function parsePaletteQuery(raw: string): ParsedPaletteQuery {
 
 // ── Value tagging ───────────────────────────────────────────────────────
 
-/** Wrap a CommandItem `value` with its kind sentinel. */
-export function paletteValue(kind: PaletteValueKind, text: string): string {
-  return `$${kind}$ ${text}`;
+/** Separator between a value's matchable text and its unique-id
+ *  suffix (an ASCII control char: it can't appear in user text and
+ *  survives cmdk's value trim). */
+const UID_SEP = "\u001f";
+
+/** Wrap a CommandItem `value` with its kind sentinel.
+ *
+ *  cmdk treats `value` as the item's IDENTITY (selection and
+ *  arrow-key navigation compare values), so two rows that render the
+ *  same text (a Recent row and its Navigation twin, two contacts with
+ *  the same name) must not share one — pass a `uid` that is unique
+ *  per rendered row (e.g. `recent:matter:<id>`). The uid is stripped
+ *  again by splitPaletteValue and never takes part in matching. */
+export function paletteValue(
+  kind: PaletteValueKind,
+  text: string,
+  uid?: string
+): string {
+  return `$${kind}$ ${text}${uid ? `${UID_SEP}${uid}` : ""}`;
 }
 
 const VALUE_TAG_RE = /^\$(matter|person|lead|action)\$ /;
@@ -77,11 +95,13 @@ export function splitPaletteValue(value: string): {
   kind: PaletteValueKind | null;
   text: string;
 } {
-  const m = VALUE_TAG_RE.exec(value);
-  if (!m) return { kind: null, text: value };
+  const sep = value.lastIndexOf(UID_SEP);
+  const bare = sep === -1 ? value : value.slice(0, sep);
+  const m = VALUE_TAG_RE.exec(bare);
+  if (!m) return { kind: null, text: bare };
   return {
     kind: m[1] as PaletteValueKind,
-    text: value.slice(m[0].length),
+    text: bare.slice(m[0].length),
   };
 }
 
@@ -103,17 +123,16 @@ export function scopeAllowsKind(
 
 /**
  * ?type= value for /search when the "Search everywhere" row fires
- * under a scope. Mirrors SEARCH_HIT_TYPES in src/lib/queries/search.ts
- * (kept as literals — importing the query module would pull Prisma
- * into the client bundle, same reason SEARCH_MIN_QUERY_LENGTH is
- * mirrored in command-palette.tsx).
+ * under a scope. Typed against SearchHitType (client-safe constants
+ * module), so a renamed search type fails to compile here instead of
+ * producing a dead ?type= link.
  *
  * - matters → full-text scoped to the matter group
  * - people  → scoped to contacts (users/leads have no full-text group;
  *             contacts is the closest useful narrowing)
  * - actions → null: actions aren't full-text-searchable, the row hides
  */
-export const SCOPE_SEARCH_TYPE: Record<PaletteScope, string | null> = {
+export const SCOPE_SEARCH_TYPE: Record<PaletteScope, SearchHitType | null> = {
   matters: "matter",
   people: "contact",
   actions: null,

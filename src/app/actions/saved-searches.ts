@@ -13,6 +13,8 @@
  * Validation mirrors the search page's own gates:
  *   - `q` must clear SEARCH_MIN_QUERY_LENGTH after trimming (a
  *     shorter query can't produce results, so saving it is a trap).
+ *   - `q` is capped at SEARCH_QUERY_MAX_LENGTH (the search page
+ *     truncates its own `q` to the same length).
  *   - `name` is 1..SAVED_SEARCH_NAME_MAX chars (the client defaults
  *     it to the query text).
  *   - `type`, when present, must be a real SearchHitType.
@@ -26,13 +28,12 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import {
   isSearchHitType,
-  SEARCH_MIN_QUERY_LENGTH,
-  type SearchHitType,
-} from "@/lib/queries/search";
-import {
   SAVED_SEARCH_CAP,
   SAVED_SEARCH_NAME_MAX,
-} from "@/lib/queries/saved-searches";
+  SEARCH_MIN_QUERY_LENGTH,
+  SEARCH_QUERY_MAX_LENGTH,
+  type SearchHitType,
+} from "@/lib/constants/search";
 
 export type SavedSearchCreateResult =
   | { ok: true; id: string }
@@ -72,6 +73,13 @@ export async function createSavedSearch(
     };
   }
 
+  if (query.length > SEARCH_QUERY_MAX_LENGTH) {
+    return {
+      ok: false,
+      error: `Searches are capped at ${SEARCH_QUERY_MAX_LENGTH} characters.`,
+    };
+  }
+
   const named = cleanName(name);
   if ("error" in named) return { ok: false, error: named.error };
 
@@ -87,14 +95,17 @@ export async function createSavedSearch(
   // Idempotent on (query, scope): saving the same search twice
   // returns the existing row instead of stacking duplicates.
   // Case-insensitive on the query because the search itself is.
-  const existing = await prisma.savedSearch.findFirst({
-    where: {
-      userId,
-      type: scope,
-      q: { equals: query, mode: "insensitive" },
-    },
-    select: { id: true },
+  // Compared in JS over the user's (<= SAVED_SEARCH_CAP) rows for this
+  // scope: Prisma's insensitive `equals` is an unescaped ILIKE, so
+  // "100%" would match a saved "100 days" and a trailing backslash
+  // would be a Postgres error.
+  const sameScope = await prisma.savedSearch.findMany({
+    where: { userId, type: scope },
+    select: { id: true, q: true },
+    take: SAVED_SEARCH_CAP,
   });
+  const lowered = query.toLowerCase();
+  const existing = sameScope.find((r) => r.q.toLowerCase() === lowered);
   if (existing) return { ok: true, id: existing.id };
 
   const count = await prisma.savedSearch.count({ where: { userId } });

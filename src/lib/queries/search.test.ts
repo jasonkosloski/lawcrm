@@ -24,6 +24,7 @@ import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import {
+  escapeLike,
   globalSearch,
   isSearchHitType,
   makeSnippet,
@@ -275,14 +276,15 @@ describe("globalSearch — documents", () => {
     expect(g.hits[0]).toMatchObject({
       id: doc.id,
       title: "Ambulance run report.pdf",
-      href: `/matters/${matterId}/documents`,
+      // The viewer route: the Documents tab only lists one folder.
+      href: `/matters/${matterId}/documents/${doc.id}`,
       context: "Alvarez v. City of Aurora",
     });
   });
 });
 
 describe("globalSearch — tasks", () => {
-  test("matter tasks deep-link to the matter's tasks tab; firm-wide tasks to the dashboard", async () => {
+  test("matter tasks deep-link to the matter's tasks tab; firm-wide tasks are unlinked", async () => {
     const matterTask = await prisma.task.create({
       data: { matterId, title: "Subpoena the ambulance records" },
       select: { id: true },
@@ -297,7 +299,7 @@ describe("globalSearch — tasks", () => {
     const m = g.hits.find((h) => h.id === matterTask.id)!;
     const f = g.hits.find((h) => h.id === firmTask.id)!;
     expect(m.href).toBe(`/matters/${matterId}/tasks`);
-    expect(f.href).toBe("/");
+    expect(f.href).toBeNull();
     expect(f.context).toBe("Firm-wide");
   });
 });
@@ -673,5 +675,227 @@ describe("globalSearch — email mailbox privacy", () => {
     expect(json).not.toContain("Quarterly update");
     expect(json).not.toContain("250k");
     expect(groupOf(res, "email")?.total ?? 0).toBe(0);
+  });
+});
+
+// NOTE: the tests below assert the escaped value handed to Prisma plus
+// the DB-backed "literal %, _" cases; that Prisma 7's pg adapter does
+// not escape LIKE metacharacters itself was verified manually against a
+// real database. If a Prisma upgrade starts escaping internally, the
+// "wildcards match literally" suite below will fail (double-escape).
+describe("escapeLike", () => {
+  test("escapes %, _ and backslash", () => {
+    expect(escapeLike("50%_x\\")).toBe("50\\%\\_x\\\\");
+    expect(escapeLike("plain")).toBe("plain");
+  });
+});
+
+describe("globalSearch — LIKE wildcards match literally", () => {
+  test("'__' and '%%' do not enumerate every row", async () => {
+    // seeded matters already exist; neither contains an underscore/percent
+    expect(await globalSearch("__")).toMatchObject({ groups: [] });
+    expect(await globalSearch("%%")).toMatchObject({ groups: [] });
+  });
+
+  test("a literal percent matches only text containing it", async () => {
+    await prisma.matter.update({
+      where: { id: matterId },
+      data: { description: "Contingency fee of 33% plus costs" },
+    });
+    await prisma.matter.update({
+      where: { id: otherMatterId },
+      data: { description: "Settled for 3300 dollars" },
+    });
+    const g = groupOf(await globalSearch("33%"), "matter")!;
+    expect(g.total).toBe(1);
+    expect(g.hits[0].id).toBe(matterId);
+    expect(g.hits[0].snippet).toContain(marked("33%"));
+  });
+
+  test("an underscore is literal and a trailing backslash does not throw", async () => {
+    await prisma.task.create({ data: { title: "file_number cleanup" } });
+    await prisma.task.create({ data: { title: "fileXnumber cleanup" } });
+    const g = groupOf(await globalSearch("file_number"), "task")!;
+    expect(g.total).toBe(1);
+    await expect(globalSearch("abc\\")).resolves.toMatchObject({ groups: [] });
+  });
+});
+
+describe("globalSearch — matter lookup fields", () => {
+  test("finds a matter by docket number, court and opposing party/firm (archived too)", async () => {
+    await prisma.matter.update({
+      where: { id: otherMatterId },
+      data: {
+        caseNumber: "2026-CV-00481",
+        court: "Denver District Court",
+        opposingParty: "Zenith Holdings",
+        opposingFirm: "Brightwater LLP",
+        isArchived: true,
+      },
+    });
+    for (const needle of [
+      "2026-CV-00481",
+      "denver district",
+      "zenith",
+      "brightwater",
+    ]) {
+      const g = groupOf(await globalSearch(needle), "matter")!;
+      expect(g.hits.map((h) => h.id), needle).toEqual([otherMatterId]);
+      expect(g.hits[0].snippet, needle).toContain(SNIPPET_MARK_START);
+    }
+  });
+});
+
+describe("globalSearch — markup-only matches do not crowd out real hits", () => {
+  test("old real notes still surface past 30 newer notes that only match markup", async () => {
+    const real = await prisma.note.create({
+      data: {
+        matterId,
+        authorId: viewerId,
+        content: "<p>client has a strong excessive-force claim</p>",
+        updatedAt: new Date("2025-01-01T00:00:00Z"),
+      },
+      select: { id: true },
+    });
+    await prisma.note.createMany({
+      data: Array.from({ length: 45 }, (_, i) => ({
+        matterId,
+        authorId: viewerId,
+        content: `<p><strong>bold ${i}</strong></p>`,
+        updatedAt: new Date(Date.UTC(2026, 0, 1, 0, i)),
+      })),
+    });
+    const g = groupOf(await globalSearch("strong"), "note")!;
+    expect(g.hits.map((h) => h.id)).toEqual([real.id]);
+    // total excludes the markup-only rows that were scanned
+    expect(g.total).toBe(1);
+  });
+
+  test("an entity-encoded ampersand in a note is findable", async () => {
+    const note = await prisma.note.create({
+      data: {
+        matterId,
+        authorId: viewerId,
+        content: "<p>Smith &amp; Wesson revolver recovered</p>",
+      },
+      select: { id: true },
+    });
+    const g = groupOf(await globalSearch("Smith & Wesson"), "note")!;
+    expect(g.hits.map((h) => h.id)).toEqual([note.id]);
+  });
+
+  test("email whose only match is inline-style markup is dropped, not listed snippet-less", async () => {
+    const account = await prisma.emailAccount.create({
+      data: { userId: viewerId, emailAddress: "inbox2@firm.test" },
+      select: { id: true },
+    });
+    const mk = (subject: string, body: string) =>
+      prisma.emailThread.create({
+        data: {
+          accountId: account.id,
+          subject,
+          lastMessageAt: new Date("2026-07-01T12:00:00Z"),
+          messages: {
+            create: {
+              fromName: "X",
+              fromEmail: "x@example.test",
+              toRecipients: "[]",
+              body,
+              sentAt: new Date("2026-07-01T12:00:00Z"),
+            },
+          },
+        },
+        select: { id: true },
+      });
+    await mk("Newsletter", '<p style="text-align:center">Hello there</p>');
+    const real = await mk(
+      "Records",
+      "<p>Transferred to the medical center downtown</p>"
+    );
+    const g = groupOf(await globalSearch("center"), "email")!;
+    expect(g.hits.map((h) => h.id)).toEqual([real.id]);
+    expect(g.total).toBe(1);
+    expect(g.hits[0].snippet).toContain(marked("center"));
+  });
+
+  test("email paging: more than `take` newer markup-only threads do not hide an older real hit", async () => {
+    const account = await prisma.emailAccount.create({
+      data: { userId: viewerId, emailAddress: "inbox3@firm.test" },
+      select: { id: true },
+    });
+    const mk = (subject: string, body: string, at: Date) =>
+      prisma.emailThread.create({
+        data: {
+          accountId: account.id,
+          subject,
+          lastMessageAt: at,
+          messages: {
+            create: {
+              fromName: "X",
+              fromEmail: "x@example.test",
+              toRecipients: "[]",
+              body,
+              sentAt: at,
+            },
+          },
+        },
+        select: { id: true },
+      });
+    const real = await mk(
+      "Records",
+      "<p>Transferred to the medical center downtown</p>",
+      new Date("2025-01-01T00:00:00Z")
+    );
+    // More than SEARCH_GROUP_TAKE (and more than one 50-thread page).
+    for (let i = 0; i < 55; i++) {
+      await mk(
+        `Newsletter ${i}`,
+        '<p style="text-align:center">Hello there</p>',
+        new Date(Date.UTC(2026, 0, 1, 0, i))
+      );
+    }
+    const g = groupOf(await globalSearch("center"), "email")!;
+    expect(g.hits.map((h) => h.id)).toEqual([real.id]);
+    expect(g.total).toBe(1);
+  });
+
+  test("email message window: older real match behind several markup-only messages still surfaces", async () => {
+    const account = await prisma.emailAccount.create({
+      data: { userId: viewerId, emailAddress: "inbox4@firm.test" },
+      select: { id: true },
+    });
+    const thread = await prisma.emailThread.create({
+      data: {
+        accountId: account.id,
+        subject: "Long thread",
+        lastMessageAt: new Date("2026-07-10T00:00:00Z"),
+      },
+      select: { id: true },
+    });
+    await prisma.emailMessage.create({
+      data: {
+        threadId: thread.id,
+        fromName: "X",
+        fromEmail: "x@example.test",
+        toRecipients: "[]",
+        body: "<p>Meet at the medical center</p>",
+        sentAt: new Date("2026-07-01T00:00:00Z"),
+      },
+    });
+    for (let i = 0; i < 5; i++) {
+      await prisma.emailMessage.create({
+        data: {
+          threadId: thread.id,
+          fromName: "X",
+          fromEmail: "x@example.test",
+          toRecipients: "[]",
+          body: `<p style="text-align:center">sig ${i}</p>`,
+          sentAt: new Date(Date.UTC(2026, 6, 5 + i)),
+        },
+      });
+    }
+    const g = groupOf(await globalSearch("center"), "email")!;
+    expect(g.hits.map((h) => h.id)).toEqual([thread.id]);
+    expect(g.hits[0].snippet).toContain(marked("center"));
   });
 });

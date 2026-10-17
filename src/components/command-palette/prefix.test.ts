@@ -87,6 +87,17 @@ describe("paletteValue / splitPaletteValue", () => {
     });
   });
 
+  test("a uid suffix makes identical text unique but is stripped on split", () => {
+    const a = paletteValue("action", "All matters cases", "nav:matters");
+    const b = paletteValue("action", "All matters cases", "recent:nav:nav:matters");
+    expect(a).not.toBe(b);
+    expect(splitPaletteValue(a)).toEqual({
+      kind: "action",
+      text: "All matters cases",
+    });
+    expect(splitPaletteValue(b)).toEqual(splitPaletteValue(a));
+  });
+
   test("untagged and unknown-tag values come back kind:null, untouched", () => {
     expect(splitPaletteValue("plain old value")).toEqual({
       kind: null,

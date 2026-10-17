@@ -33,6 +33,7 @@ import {
   deleteSavedSearch,
   renameSavedSearch,
 } from "@/app/actions/saved-searches";
+import { SAVED_SEARCH_NAME_MAX } from "@/lib/constants/search";
 import type { SavedSearchRow } from "@/lib/queries/saved-searches";
 import { TYPE_META } from "./search-results";
 
@@ -81,8 +82,14 @@ function SavedSearchChip({
   const onDelete = () => {
     if (!confirm(`Delete the saved search "${row.name}"?`)) return;
     startTransition(async () => {
-      const res = await deleteSavedSearch(row.id);
-      if (!res.ok) alert(res.error);
+      try {
+        const res = await deleteSavedSearch(row.id);
+        if (!res.ok) alert(res.error);
+      } catch (err) {
+        // Don't let a rejected transition reach the error boundary.
+        console.error("[saved-searches] delete failed", err);
+        alert("Couldn't delete the saved search. Please try again.");
+      }
     });
   };
 
@@ -154,12 +161,17 @@ function RenameDialog({
   const onSubmit = (formData: FormData) => {
     const name = String(formData.get("name") ?? "");
     startTransition(async () => {
-      const res = await renameSavedSearch(row.id, name);
-      if (!res.ok) {
-        alert(res.error);
-        return;
+      try {
+        const res = await renameSavedSearch(row.id, name);
+        if (!res.ok) {
+          alert(res.error);
+          return;
+        }
+        onOpenChange(false);
+      } catch (err) {
+        console.error("[saved-searches] rename failed", err);
+        alert("Couldn't rename the saved search. Please try again.");
       }
-      onOpenChange(false);
     });
   };
 
@@ -169,14 +181,22 @@ function RenameDialog({
         <DialogHeader>
           <DialogTitle>Rename saved search</DialogTitle>
         </DialogHeader>
-        <form action={onSubmit} className="flex flex-col gap-3">
+        {/* Manual dispatch (not `action=`): React 19 would reset the
+            input after a failed rename and discard what was typed. */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSubmit(new FormData(e.currentTarget));
+          }}
+          className="flex flex-col gap-3"
+        >
           <input
             // Re-key on open so a cancelled edit doesn't linger.
             key={open ? "open" : "closed"}
             name="name"
             defaultValue={row.name}
             required
-            maxLength={80}
+            maxLength={SAVED_SEARCH_NAME_MAX}
             autoFocus
             aria-label="Saved search name"
             className="w-full h-9 px-3 rounded-md border border-line-2 bg-white text-sm text-ink focus:outline-none focus:border-brand-300 transition-colors"

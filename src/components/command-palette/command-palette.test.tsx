@@ -43,6 +43,13 @@ import { CommandPalette } from "./command-palette";
 
 const mockedFetch = vi.mocked(getPaletteData);
 
+/** PaletteData with the caller metadata the real action always adds. */
+const EMPTY: PaletteData = { items: [], userId: "u1", canViewReports: true };
+const paletteData = (
+  items: PaletteData["items"],
+  extra: Partial<PaletteData> = {}
+): PaletteData => ({ ...EMPTY, items, ...extra });
+
 // Radix locks body pointer-events while the dialog is open;
 // userEvent's computed-style check trips over that in happy-dom,
 // so disable it — the elements are genuinely interactive.
@@ -86,6 +93,7 @@ describe("CommandPalette — fetch failure on open", () => {
 
   test("successful fetch still populates the palette (fallback isn't unconditional)", async () => {
     const data: PaletteData = {
+      ...EMPTY,
       items: [
         {
           kind: "matter",
@@ -109,7 +117,7 @@ describe("CommandPalette — fetch failure on open", () => {
 
 describe("CommandPalette — 'Search everywhere' row", () => {
   beforeEach(() => {
-    mockedFetch.mockResolvedValue({ items: [] });
+    mockedFetch.mockResolvedValue(EMPTY);
     push.mockReset();
   });
 
@@ -137,8 +145,8 @@ describe("CommandPalette — 'Search everywhere' row", () => {
   });
 
   test("coexists with jump-to matches instead of replacing them", async () => {
-    mockedFetch.mockResolvedValue({
-      items: [
+    mockedFetch.mockResolvedValue(
+      paletteData([
         {
           kind: "matter",
           id: "m1234567890abcdefghij",
@@ -150,8 +158,8 @@ describe("CommandPalette — 'Search everywhere' row", () => {
           color: "#336699",
           isPinned: false,
         },
-      ],
-    });
+      ])
+    );
     render(<CommandPalette open onOpenChange={() => {}} />);
     const user = setupUser();
     await user.type(
@@ -201,6 +209,7 @@ describe("CommandPalette — 'Search everywhere' row", () => {
 // Data with one of each entity kind whose names all match "am", so
 // scoping (not the term) is what separates them.
 const SCOPED_DATA: PaletteData = {
+  ...EMPTY,
   items: [
     {
       kind: "matter",
@@ -285,7 +294,7 @@ describe("CommandPalette — scoping prefixes", () => {
 
 describe("CommandPalette — create-new actions", () => {
   beforeEach(() => {
-    mockedFetch.mockResolvedValue({ items: [] });
+    mockedFetch.mockResolvedValue(EMPTY);
     push.mockReset();
   });
 
@@ -296,7 +305,8 @@ describe("CommandPalette — create-new actions", () => {
     expect(await screen.findByText("New matter")).toBeInTheDocument();
     expect(screen.getByText("New contact")).toBeInTheDocument();
     expect(screen.getByText("New event")).toBeInTheDocument();
-    expect(screen.getByText("New intake / lead")).toBeInTheDocument();
+    // The intake form is still a placeholder page: no dead-end row.
+    expect(screen.queryByText("New intake / lead")).not.toBeInTheDocument();
   });
 
   test("selecting 'New matter' navigates to /matters/new and closes", async () => {
@@ -332,5 +342,159 @@ describe("CommandPalette — create-new actions", () => {
     );
     expect(await screen.findByText("New contact")).toBeInTheDocument();
     expect(screen.getAllByText("New contact")).toHaveLength(1);
+  });
+});
+
+// ── Regressions from the search/palette sweep ──────────────────────────
+
+const MATTER = {
+  kind: "matter" as const,
+  id: "m1234567890abcdefghij",
+  name: "Smith v. Jones",
+  caseNumber: null,
+  clientName: null,
+  area: "pi",
+  stage: "Litigation",
+  color: "#336699",
+  isPinned: true,
+};
+const LEAD = {
+  kind: "lead" as const,
+  id: "l1234567890abcdefghij",
+  name: "Jane Doe",
+  email: null,
+  stage: "qualifying",
+};
+
+describe("CommandPalette — destinations", () => {
+  beforeEach(() => {
+    mockedFetch.mockResolvedValue(EMPTY);
+    push.mockReset();
+  });
+
+  test("no Billing row (no /billing route); Automations points at /settings/automations", async () => {
+    render(<CommandPalette open onOpenChange={() => {}} />);
+    expect(await screen.findByText("Automations")).toBeInTheDocument();
+    expect(screen.queryByText("Billing")).not.toBeInTheDocument();
+    const user = setupUser();
+    await user.click(screen.getByText("Automations"));
+    expect(push).toHaveBeenCalledWith("/settings/automations");
+  });
+
+  test("Reports is hidden without reports.view and shown with it", async () => {
+    mockedFetch.mockResolvedValue(paletteData([], { canViewReports: false }));
+    const { unmount } = render(
+      <CommandPalette open onOpenChange={() => {}} />
+    );
+    await screen.findByText("Calendar");
+    await waitFor(() =>
+      expect(screen.queryByText("Reports")).not.toBeInTheDocument()
+    );
+    unmount();
+
+    mockedFetch.mockResolvedValue(paletteData([], { canViewReports: true }));
+    render(<CommandPalette open onOpenChange={() => {}} />);
+    expect(await screen.findByText("Reports")).toBeInTheDocument();
+  });
+});
+
+describe("CommandPalette — leads", () => {
+  beforeEach(() => {
+    mockedFetch.mockResolvedValue(paletteData([LEAD]));
+    push.mockReset();
+  });
+
+  test("selecting a lead opens that lead, and the stage shows its label", async () => {
+    render(<CommandPalette open onOpenChange={() => {}} />);
+    const user = setupUser();
+    const row = await screen.findByText("Jane Doe");
+    expect(screen.getByText("Qualifying")).toBeInTheDocument();
+    await user.click(row);
+    expect(push).toHaveBeenCalledWith(`/intake/${LEAD.id}`);
+  });
+});
+
+describe("CommandPalette — keyboard navigation with recents", () => {
+  const STORAGE_KEY = "lawcrm:palette:recents:u1";
+
+  beforeEach(() => {
+    push.mockReset();
+    mockedFetch.mockResolvedValue(paletteData([MATTER]));
+  });
+
+  test("a Recent row does not share an identity with its Navigation twin (no ArrowDown loop)", async () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify([{ kind: "nav", id: "nav:matters" }])
+    );
+    render(<CommandPalette open onOpenChange={() => {}} />);
+    await screen.findByText("Recent");
+    const user = setupUser();
+    const input = screen.getByPlaceholderText(/type to search/i);
+    input.focus();
+
+    // Walk the list with ArrowDown; every step must select a NEW row.
+    const seen: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      await user.keyboard("{ArrowDown}");
+      const selected = document.querySelectorAll(
+        '[cmdk-item][aria-selected="true"]'
+      );
+      // Exactly one highlighted row at a time (duplicate values
+      // highlighted two rows at once).
+      expect(selected).toHaveLength(1);
+      seen.push(selected[0].getAttribute("data-value") ?? "");
+    }
+    expect(new Set(seen).size).toBe(seen.length);
+  });
+
+  test("a pinned matter appears under Pinned and Matters with distinct identities", async () => {
+    render(<CommandPalette open onOpenChange={() => {}} />);
+    await screen.findByText("Pinned matters");
+    const rows = Array.from(document.querySelectorAll("[cmdk-item]")).filter(
+      (el) => el.textContent?.includes("Smith v. Jones")
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows[0].getAttribute("data-value")).not.toBe(
+      rows[1].getAttribute("data-value")
+    );
+  });
+});
+
+describe("CommandPalette — recents are per user", () => {
+  test("another user's stored recents are not shown, and picks are stored under the caller's key", async () => {
+    window.localStorage.setItem(
+      "lawcrm:palette:recents:someone-else",
+      JSON.stringify([{ kind: "nav", id: "nav:calendar" }])
+    );
+    window.localStorage.setItem(
+      "lawcrm:palette:recents",
+      JSON.stringify([{ kind: "nav", id: "nav:calendar" }])
+    );
+    push.mockReset();
+    mockedFetch.mockResolvedValue(EMPTY);
+    render(<CommandPalette open onOpenChange={() => {}} />);
+    await screen.findByText("Calendar");
+    expect(screen.queryByText("Recent")).not.toBeInTheDocument();
+
+    const user = setupUser();
+    await user.click(screen.getByText("Contacts"));
+    expect(
+      JSON.parse(window.localStorage.getItem("lawcrm:palette:recents:u1")!)
+    ).toEqual([{ kind: "nav", id: "nav:contacts" }]);
+  });
+});
+
+describe("CommandPalette — reopening", () => {
+  test("the previous query is cleared when the palette reopens", async () => {
+    mockedFetch.mockResolvedValue(EMPTY);
+    const { rerender } = render(
+      <CommandPalette open onOpenChange={() => {}} />
+    );
+    const user = setupUser();
+    await user.type(screen.getByPlaceholderText(/type to search/i), "smith");
+    rerender(<CommandPalette open={false} onOpenChange={() => {}} />);
+    rerender(<CommandPalette open onOpenChange={() => {}} />);
+    expect(screen.getByPlaceholderText(/type to search/i)).toHaveValue("");
   });
 });

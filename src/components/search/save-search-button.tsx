@@ -19,12 +19,10 @@ import {
   createSavedSearch,
   deleteSavedSearch,
 } from "@/app/actions/saved-searches";
-import type { SearchHitType } from "@/lib/queries/search";
-
-/** Keep in sync with SAVED_SEARCH_NAME_MAX (lib/queries/
- *  saved-searches.ts) — not imported so the prisma-touching query
- *  module stays out of the client bundle. */
-const NAME_MAX = 80;
+import {
+  SAVED_SEARCH_NAME_MAX,
+  type SearchHitType,
+} from "@/lib/constants/search";
 
 export function SaveSearchButton({
   query,
@@ -43,10 +41,21 @@ export function SaveSearchButton({
 
   const onClick = () => {
     startTransition(async () => {
-      const res = saved
-        ? await deleteSavedSearch(savedId)
-        : await createSavedSearch(query.trim().slice(0, NAME_MAX), query, type);
-      if (!res.ok) alert(res.error);
+      // A rejected async transition would be rethrown to the nearest
+      // error boundary and replace the whole /search page.
+      try {
+        const res = saved
+          ? await deleteSavedSearch(savedId)
+          : await createSavedSearch(
+              query.trim().slice(0, SAVED_SEARCH_NAME_MAX),
+              query,
+              type
+            );
+        if (!res.ok) alert(res.error);
+      } catch (err) {
+        console.error("[save-search] action failed", err);
+        alert("Couldn't update saved searches. Please try again.");
+      }
     });
   };
 

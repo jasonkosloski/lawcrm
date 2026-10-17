@@ -34,6 +34,7 @@ import {
   getSavedSearches,
   SAVED_SEARCH_CAP,
 } from "@/lib/queries/saved-searches";
+import { SEARCH_QUERY_MAX_LENGTH } from "@/lib/constants/search";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
 const mockedGetUser = vi.mocked(getCurrentUserId);
@@ -134,6 +135,33 @@ describe("createSavedSearch", () => {
     const scoped = await createSavedSearch("Ambulance notes", "ambulance", "note");
     expect(scoped.ok).toBe(true);
     expect(await prisma.savedSearch.count({ where: { userId } })).toBe(2);
+  });
+
+  test("dedupe compares literally: '100%' is not a duplicate of '100 days'", async () => {
+    const first = await createSavedSearch("100 days", "100 days");
+    const second = await createSavedSearch("100 percent", "100%");
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+    expect(second.id).not.toBe(first.id);
+    expect(await prisma.savedSearch.count({ where: { userId } })).toBe(2);
+    // ...and the literal itself still dedupes.
+    const again = await createSavedSearch("100 pct", "100%");
+    expect(again).toEqual({ ok: true, id: second.id });
+  });
+
+  test("a query ending in a backslash saves instead of throwing", async () => {
+    const res = await createSavedSearch("slash", "abc\\");
+    expect(res.ok).toBe(true);
+    const again = await createSavedSearch("slash", "ABC\\");
+    expect(again).toEqual(res);
+  });
+
+  test("rejects a query over the length cap", async () => {
+    const res = await createSavedSearch("long", "x".repeat(SEARCH_QUERY_MAX_LENGTH + 1));
+    expect(res.ok).toBe(false);
+    expect(await prisma.savedSearch.count({ where: { userId } })).toBe(0);
+    const ok = await createSavedSearch("edge", "x".repeat(SEARCH_QUERY_MAX_LENGTH));
+    expect(ok.ok).toBe(true);
   });
 
   test("caps rows per user with a clear error", async () => {

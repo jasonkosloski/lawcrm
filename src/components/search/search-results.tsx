@@ -20,6 +20,7 @@ import {
   Inbox,
   Mail,
   MessageSquare,
+  Search,
   StickyNote,
   User,
   type LucideIcon,
@@ -30,6 +31,7 @@ import type {
   SearchHit,
   SearchHitType,
 } from "@/lib/queries/search";
+import { EmptyState } from "@/components/shared/empty-state";
 import { SearchSnippet } from "./snippet";
 
 export const TYPE_META: Record<
@@ -57,6 +59,29 @@ export function SearchResults({
   expandedType: SearchHitType | null;
 }) {
   const backHref = `/search?q=${encodeURIComponent(result.query)}`;
+  if (result.groups.length === 0) {
+    // An expanded type with nothing in it points back at the all-types
+    // search; otherwise the generic empty state.
+    return expandedType ? (
+      <EmptyState
+        framed
+        icon={Search}
+        title={`No ${TYPE_META[expandedType].label.toLowerCase()} results for “${result.query}”`}
+        description="Other types may still match."
+      >
+        <Link href={backHref} className="text-xs text-brand-700 hover:underline">
+          Search all types for “{result.query}”
+        </Link>
+      </EmptyState>
+    ) : (
+      <EmptyState
+        framed
+        icon={Search}
+        title={`No results for “${result.query}”`}
+        description="Try fewer or different words — matching is exact-substring for now."
+      />
+    );
+  }
   return (
     <div className="flex flex-col gap-4">
       {expandedType && (
@@ -123,11 +148,8 @@ function GroupSection({
 }
 
 function HitRow({ hit }: { hit: SearchHit }) {
-  return (
-    <Link
-      href={hit.href}
-      className="flex items-start gap-3 px-3 py-2 hover:bg-paper-2 transition-colors"
-    >
+  const body = (
+    <>
       <div className="min-w-0 flex-1 flex flex-col gap-0.5">
         <span className="text-sm text-ink truncate">{hit.title}</span>
         {hit.snippet && (
@@ -141,6 +163,19 @@ function HitRow({ hit }: { hit: SearchHit }) {
           {hit.context}
         </span>
       )}
+    </>
+  );
+  // Hits with no page that would show them (firm-wide tasks) render
+  // unlinked rather than pointing somewhere misleading.
+  if (!hit.href) {
+    return <div className="flex items-start gap-3 px-3 py-2">{body}</div>;
+  }
+  return (
+    <Link
+      href={hit.href}
+      className="flex items-start gap-3 px-3 py-2 hover:bg-paper-2 transition-colors"
+    >
+      {body}
     </Link>
   );
 }
