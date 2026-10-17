@@ -13,6 +13,15 @@
 # The Vitest globalSetup (src/test/integration-setup.ts) expects
 # this on localhost:5433 — non-default port so it doesn't collide
 # with a host-installed Postgres.
+#
+# Concurrent runs: each database is single-tenant (every test deletes
+# all rows), so globalSetup holds a Postgres advisory lock per
+# database and a second run against the same one waits for the first.
+# To run suites in parallel (git worktrees, parallel agent sessions)
+# give each its own database in THIS container and point the run at it:
+#   docker exec lawcrm-test-postgres createdb -U lawcrm_test lawcrm_test_2
+#   TEST_DATABASE_URL=postgresql://lawcrm_test:lawcrm_test@localhost:5433/lawcrm_test_2 npm test
+# (the name must start with lawcrm_test; anything else is refused).
 
 services:
   test-db:

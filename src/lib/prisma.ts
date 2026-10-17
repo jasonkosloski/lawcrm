@@ -9,15 +9,23 @@
  * against a Postgres URL (Prisma Postgres in production, a local
  * Docker container for tests, your dev DB for local dev).
  *
- * **Serverless connection-pool sizing:** the default `pg` pool is
- * 10 connections per process. In serverless that's a foot-gun —
- * each Lambda gets its own pool, and Postgres has a hard
- * connection cap (Vercel Postgres / Prisma Postgres start at ~20
- * for hobby tiers). A single Lambda only handles one request at a
- * time, so anything above 1 just wastes a connection slot. We cap
- * the pool at 1 here. If you need higher per-Lambda concurrency
- * (e.g. parallel queries inside a single request), bump this — but
- * also make sure your Postgres tier has the headroom.
+ * **Connection-pool sizing:** the default `pg` pool is 10 connections
+ * per process, and Postgres has a hard connection cap (Prisma
+ * Postgres starts small), so the pool is bounded explicitly - but not
+ * at 1. Vercel's Fluid compute runs many invocations concurrently in
+ * ONE instance sharing this module-level pool, and pages fan out
+ * parallel queries (the dashboard runs ~30, search ~21). A single
+ * connection serializes all of it, and one interactive
+ * `$transaction` (it pins its connection until commit) would starve
+ * every other request on the instance until Prisma's 2 s `maxWait`
+ * aborts the next transaction start with P2028.
+ *
+ * Default 5 per instance; override with `DATABASE_POOL_MAX` once you
+ * know the plan's connection cap (instances x max must stay below
+ * it). The integration tests set it so concurrent transactions really
+ * overlap on separate connections (see src/test/integration-setup.ts).
+ * `connectionTimeoutMillis` makes a saturated pool fail fast instead
+ * of waiting forever; idle connections are released after 30 s.
  *
  * **Cache to globalThis in every env:** the legacy "dev only"
  * Prisma cookbook pattern was about hot-module reloads in `next
@@ -33,6 +41,16 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma/client";
 import { emailTokenEncryption } from "@/lib/email-token-encryption";
 
+const DEFAULT_POOL_MAX = 5;
+
+/** Pool size from `DATABASE_POOL_MAX` (a positive integer), else the default. */
+export function resolvePoolMax(raw: string | undefined): number {
+  const n = Number(raw);
+  return raw !== undefined && Number.isInteger(n) && n >= 1
+    ? n
+    : DEFAULT_POOL_MAX;
+}
+
 const createClient = () => {
   // DATABASE_URL is required. We deliberately don't fall back to a
   // default — a missing DATABASE_URL in production should fail
@@ -44,8 +62,13 @@ const createClient = () => {
         "production: Vercel project env vars)."
     );
   }
-  // Cap pool at 1 connection — see file header for the reasoning.
-  const adapter = new PrismaPg({ connectionString, max: 1 });
+  // Bounded pool - see file header for the sizing reasoning.
+  const adapter = new PrismaPg({
+    connectionString,
+    max: resolvePoolMax(process.env.DATABASE_POOL_MAX),
+    connectionTimeoutMillis: 10_000,
+    idleTimeoutMillis: 30_000,
+  });
   // OAuth token fields encrypt-at-rest via a query extension — see
   // src/lib/email-token-encryption.ts.
   return new PrismaClient({ adapter }).$extends(emailTokenEncryption);

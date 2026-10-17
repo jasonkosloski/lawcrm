@@ -18,8 +18,13 @@
  * SEED_ADMIN_PASSWORD, or is generated randomly and printed once at
  * the end of the run; no password is stored in the repo.
  *
- * All timestamps are anchored to `NOW` (2026-04-24) so relative labels
- * like "deadlines this week" and "hours today" match reality.
+ * All dates are anchored to TODAY in the firm's zone (America/Denver),
+ * not to the machine running the seed, so "deadlines this week",
+ * "today's agenda" and "hours today" are real on any day. Set
+ * SEED_NOW=YYYY-MM-DD to pin a fixed anchor for a screenshot / demo.
+ * Date-only values (due dates, time-entry dates, ledger dates) are
+ * stored at UTC midnight per ADR-012; instants are wall-clock times
+ * in the firm zone converted to real UTC moments.
  */
 
 import "dotenv/config";
@@ -28,6 +33,12 @@ import * as argon2 from "argon2";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { checkDestructiveDbAllowed } from "../src/lib/seed-guard";
+import {
+  addDaysToKey,
+  parseDateOnly,
+  parseWallClock,
+  todayKey,
+} from "../src/lib/format-date";
 
 // Refuse BEFORE a client exists, let alone a single deleteMany runs.
 const guard = checkDestructiveDbAllowed(process.env);
@@ -52,17 +63,43 @@ if (!connectionString) {
 const adapter = new PrismaPg({ connectionString });
 const prisma = new PrismaClient({ adapter });
 
-// Anchor date — everything relative is computed from this.
-const NOW = new Date("2026-04-24T09:00:00-06:00");
+// Anchor date — everything relative is computed from this. The firm's
+// zone, not the machine's, decides what "today" and "9 AM" mean.
+const SEED_TZ = "America/Denver";
+const TODAY_KEY: string = (() => {
+  const pinned = process.env.SEED_NOW;
+  if (pinned) {
+    if (!parseDateOnly(pinned)) {
+      throw new Error(`SEED_NOW must be YYYY-MM-DD, got "${pinned}".`);
+    }
+    return pinned;
+  }
+  return todayKey(SEED_TZ);
+})();
 
-/** Helpers for relative date arithmetic. */
-const daysFromNow = (days: number, hour = 9, minute = 0): Date => {
-  const d = new Date(NOW);
-  d.setDate(d.getDate() + days);
-  d.setHours(hour, minute, 0, 0);
+/** Wall-clock time on a calendar day in the firm zone, as a real instant. */
+const wallClockOn = (dayKey: string, hour: number, minute = 0): Date => {
+  const hh = String(hour).padStart(2, "0");
+  const mm = String(minute).padStart(2, "0");
+  const d = parseWallClock(`${dayKey}T${hh}:${mm}`, SEED_TZ);
+  if (!d) throw new Error(`Bad seed wall-clock ${dayKey} ${hh}:${mm}`);
   return d;
 };
+
+const NOW = wallClockOn(TODAY_KEY, 9, 0);
+
+/** Instant: `days` from today at `hour:minute` firm-zone wall clock. */
+const daysFromNow = (days: number, hour = 9, minute = 0): Date =>
+  wallClockOn(addDaysToKey(TODAY_KEY, days), hour, minute);
 const at = (hour: number, minute = 0): Date => daysFromNow(0, hour, minute);
+/** Date-only value (UTC midnight, ADR-012) from a YYYY-MM-DD literal. */
+const dateOnly = (key: string): Date => {
+  const d = parseDateOnly(key);
+  if (!d) throw new Error(`Bad seed date ${key}`);
+  return d;
+};
+/** Date-only value `days` from today. */
+const dayOnly = (days: number): Date => dateOnly(addDaysToKey(TODAY_KEY, days));
 
 async function main() {
   console.log("🌱 Seeding database…\n");
@@ -127,7 +164,7 @@ async function main() {
       state: "CO",
       zip: "80202",
       country: "US",
-      establishedAt: new Date("2018-09-01"),
+      establishedAt: dateOnly("2018-09-01"),
     },
   });
 
@@ -414,6 +451,21 @@ async function main() {
     }),
   };
 
+  // Contact.phone is the denormalized primary phone; the Phones card and
+  // the party editor read ContactPhone rows. Give every contact with a
+  // phone a matching primary row so editing a party never nulls it.
+  await prisma.contactPhone.createMany({
+    data: Object.values(contacts)
+      .filter((c) => !!c.phone)
+      .map((c) => ({
+        contactId: c.id,
+        label: "Primary",
+        number: c.phone as string,
+        isPrimary: true,
+        order: 0,
+      })),
+  });
+
   // ─────────────────────────────────────────────────────────────────────
   // Practice areas + stages (firm-configurable in settings)
   //
@@ -499,8 +551,8 @@ async function main() {
         caseNumber: "2026-CV-00481",
         ...ref("§1983", "Discovery"),
         court: "D. Colorado · Hon. L. Martinez",
-        filedDate: new Date("2026-01-14"),
-        trialDate: new Date("2026-10-05"),
+        filedDate: dateOnly("2026-01-14"),
+        trialDate: dateOnly("2026-10-05"),
         feeStructure: "contingent",
         trustBalance: 5000,
         wipAmount: 28400,
@@ -510,7 +562,7 @@ async function main() {
         clientId: contacts.mariaAlvarez.id,
         opposingParty: "Officer J. Doe, APD, City of Aurora",
         opposingFirm: "Aurora City Attorney · R. Alvarado",
-        createdAt: new Date("2026-01-10"),
+        createdAt: wallClockOn("2026-01-10", 9),
       },
     }),
     williams: await prisma.matter.create({
@@ -519,8 +571,8 @@ async function main() {
         caseNumber: "2025-CV-02014",
         ...ref("§1983", "Dispositive"),
         court: "D. Colorado",
-        filedDate: new Date("2025-08-12"),
-        trialDate: new Date("2026-07-15"),
+        filedDate: dateOnly("2025-08-12"),
+        trialDate: dateOnly("2026-07-15"),
         feeStructure: "contingent",
         trustBalance: 0,
         wipAmount: 14200,
@@ -529,7 +581,7 @@ async function main() {
         clientId: contacts.derekWilliams.id,
         opposingParty: "Denver PD officers",
         opposingFirm: "Denver City Attorney",
-        createdAt: new Date("2025-08-01"),
+        createdAt: wallClockOn("2025-08-01", 9),
       },
     }),
     patel: await prisma.matter.create({
@@ -569,7 +621,7 @@ async function main() {
         wipAmount: 11900,
         color: "#3d83b8",
         clientId: contacts.danChen.id,
-        createdAt: new Date("2026-01-20"),
+        createdAt: wallClockOn("2026-01-20", 9),
       },
     }),
     aurora: await prisma.matter.create({
@@ -578,13 +630,13 @@ async function main() {
         caseNumber: "2026-CV-00122",
         ...ref("Class", "Cert"),
         court: "D. Colorado",
-        filedDate: new Date("2026-02-03"),
+        filedDate: dateOnly("2026-02-03"),
         feeStructure: "contingent",
         trustBalance: 0,
         wipAmount: 41800,
         description: "Class action cert motion in progress. 142 class members.",
         color: "#8a6a2d",
-        createdAt: new Date("2026-01-28"),
+        createdAt: wallClockOn("2026-01-28", 9),
       },
     }),
     nguyen: await prisma.matter.create({
@@ -641,12 +693,13 @@ async function main() {
         caseNumber: "2024-CV-01188",
         ...ref("§1983", "Settled"),
         feeStructure: "contingent",
-        trustBalance: 425000,
+        // Net of the ledger below: 425,000 deposit - 286,400 transfer.
+        trustBalance: 138600,
         wipAmount: 0,
         description: "Settled — distribution pending lien negotiations.",
         color: "#3d83b8",
         clientId: contacts.carlaRivera.id,
-        createdAt: new Date("2024-06-01"),
+        createdAt: wallClockOn("2024-06-01", 9),
       },
     }),
     jenner: await prisma.matter.create({
@@ -659,7 +712,7 @@ async function main() {
         isArchived: true,
         color: "#b6623d",
         clientId: contacts.markJenner.id,
-        createdAt: new Date("2024-11-15"),
+        createdAt: wallClockOn("2024-11-15", 9),
       },
     }),
   };
@@ -793,6 +846,7 @@ async function main() {
     data: [
       {
         matterId: matters.alvarez.id,
+        createdById: jason.id,
         title: "Alvarez — deposition prep",
         type: "meeting",
         startTime: at(9, 0),
@@ -801,6 +855,7 @@ async function main() {
       },
       {
         matterId: matters.williams.id,
+        createdById: jason.id,
         title: "Williams — status conference call",
         type: "hearing",
         startTime: at(10, 30),
@@ -809,6 +864,7 @@ async function main() {
       },
       {
         matterId: null,
+        createdById: jason.id,
         title: "Intake — Patel phone screen",
         type: "intake",
         startTime: at(13, 0),
@@ -817,6 +873,7 @@ async function main() {
       },
       {
         matterId: matters.rivera.id,
+        createdById: jason.id,
         title: "Rivera — settlement distribution review",
         type: "meeting",
         startTime: at(14, 30),
@@ -825,6 +882,7 @@ async function main() {
       },
       {
         matterId: null,
+        createdById: jason.id,
         title: "Team standup",
         type: "meeting",
         startTime: at(16, 0),
@@ -833,6 +891,7 @@ async function main() {
       },
       {
         matterId: matters.alvarez.id,
+        createdById: jason.id,
         title: "Deposition — Officer Doe",
         type: "deposition",
         startTime: daysFromNow(3, 9, 0),
@@ -841,6 +900,7 @@ async function main() {
       },
       {
         matterId: matters.aurora.id,
+        createdById: jason.id,
         title: "Class cert hearing",
         type: "hearing",
         startTime: daysFromNow(7, 13, 30),
@@ -859,7 +919,7 @@ async function main() {
       {
         matterId: matters.patel.id,
         title: "CGIA notice — Patel",
-        dueDate: daysFromNow(2, 17, 0),
+        dueDate: dayOnly(2),
         kind: "critical",
         sourceType: "statute",
         sourceRef: "CRS §24-10-109",
@@ -870,7 +930,7 @@ async function main() {
       {
         matterId: matters.williams.id,
         title: "Discovery cutoff — Williams",
-        dueDate: daysFromNow(4, 17, 0),
+        dueDate: dayOnly(4),
         kind: "auto_rule",
         sourceType: "scheduling_order",
         ownerId: jason.id,
@@ -878,7 +938,7 @@ async function main() {
       {
         matterId: matters.alvarez.id,
         title: "Expert report deadline — Alvarez",
-        dueDate: daysFromNow(5, 17, 0),
+        dueDate: dayOnly(5),
         kind: "auto_rule",
         sourceType: "scheduling_order",
         ownerId: jason.id,
@@ -886,14 +946,14 @@ async function main() {
       {
         matterId: matters.rivera.id,
         title: "Client meeting — Rivera",
-        dueDate: daysFromNow(6, 14, 0),
+        dueDate: dayOnly(6),
         kind: "manual",
         ownerId: jason.id,
       },
       {
         matterId: matters.alvarez.id,
         title: "MTC response due",
-        dueDate: daysFromNow(12, 17, 0),
+        dueDate: dayOnly(12),
         kind: "auto_rule",
         sourceType: "filing_rule",
         sourceRef: "FRCP 37",
@@ -902,7 +962,7 @@ async function main() {
       {
         matterId: matters.aurora.id,
         title: "Class cert reply brief",
-        dueDate: daysFromNow(19, 17, 0),
+        dueDate: dayOnly(19),
         kind: "critical",
         sourceType: "scheduling_order",
         ownerId: leo.id,
@@ -911,16 +971,17 @@ async function main() {
   });
 
   // ─────────────────────────────────────────────────────────────────────
-  // Time entries — drives "Hours today" (4.2) and "Billable MTD" (142.6)
+  // Time entries — drives "Hours today" and "Billable MTD"
   // ─────────────────────────────────────────────────────────────────────
   console.log("  Creating time entries…");
-  // Today — totals 4.2 hours for Jason
+  // Today — 4.2 hours here; the note / task / comm examples further down
+  // add 5.0 more dated today (9.2 hours total for Jason).
   await prisma.timeEntry.createMany({
     data: [
       {
         matterId: matters.alvarez.id,
         userId: jason.id,
-        date: NOW,
+        date: dayOnly(0),
         hours: 1.5,
         activity: "Deposition prep — Officer Doe",
         utbmsCode: "L330",
@@ -932,7 +993,7 @@ async function main() {
       {
         matterId: matters.williams.id,
         userId: jason.id,
-        date: NOW,
+        date: dayOnly(0),
         hours: 0.7,
         activity: "Status conference call w/ opposing",
         utbmsCode: "L120",
@@ -944,7 +1005,7 @@ async function main() {
       {
         matterId: matters.alvarez.id,
         userId: jason.id,
-        date: NOW,
+        date: dayOnly(0),
         hours: 1.2,
         activity: "Review Officer Doe CORA production",
         utbmsCode: "L310",
@@ -956,7 +1017,7 @@ async function main() {
       {
         matterId: matters.rivera.id,
         userId: jason.id,
-        date: NOW,
+        date: dayOnly(0),
         hours: 0.8,
         activity: "Settlement distribution review",
         utbmsCode: "L160",
@@ -968,8 +1029,9 @@ async function main() {
     ],
   });
 
-  // Prior days this month — backfill to ~142.6h MTD for Jason
-  // Today contributes 4.2h; we need ~138.4 more across 23 prior days.
+  // Prior weekdays — backfill the previous 23 days (~6h per weekday) so
+  // Billable MTD / the week view have history. The MTD figure depends
+  // on the day of the month the seed runs.
   const priorDayEntries: Array<{
     matterId: string;
     userId: string;
@@ -1001,11 +1063,11 @@ async function main() {
     "Meet and confer",
     "Draft opposition brief",
   ];
-  // Spread 138.4h across weekdays in April so far (approx 6h/weekday).
+  // Roughly 6h per weekday, 2-3 entries a day.
   for (let daysBack = 1; daysBack <= 23; daysBack++) {
-    const d = daysFromNow(-daysBack, 10, 0);
-    // Skip weekends
-    if (d.getDay() === 0 || d.getDay() === 6) continue;
+    const d = dayOnly(-daysBack);
+    // Skip weekends (date-only values read in UTC)
+    if (d.getUTCDay() === 0 || d.getUTCDay() === 6) continue;
     // 2-3 entries per day averaging ~6.5 hours
     const entryCount = 2 + (daysBack % 2);
     const dayTotal = 6 + ((daysBack % 3) - 1) * 0.8; // ~5.2–6.8
@@ -1097,7 +1159,7 @@ async function main() {
   });
 
   // ─────────────────────────────────────────────────────────────────────
-  // Trust transactions — drives "Trust balance" KPI (~$142,800 across 6)
+  // Trust transactions — drives "Trust balance" KPI (~$154,920 across 6)
   // ─────────────────────────────────────────────────────────────────────
   console.log("  Creating trust transactions…");
   const trustSeeds: Array<[string, number, string, number]> = [
@@ -1116,7 +1178,7 @@ async function main() {
       type: amount > 0 ? "deposit" : "disbursement",
       amount,
       description,
-      date: daysFromNow(offset),
+      date: dayOnly(offset),
       reconciled: true,
       createdBy: jason.id,
     })),
@@ -1168,22 +1230,58 @@ async function main() {
       notes: "Discovery sprint — invoiced before settlement talks.",
     },
   ];
+  // Each invoice bills three of its matter's backfilled time entries
+  // (invoiceId + status "billed"), and its total is the sum of those
+  // lines, so the preview, the WIP totals and the AR numbers agree.
+  // A paid invoice also gets the InvoicePayment row the app would have
+  // written when the payment was recorded.
   for (const f of invoiceFixtures) {
-    await prisma.invoice.create({
+    const lines = await prisma.timeEntry.findMany({
+      where: { matterId: f.matterId, status: "billable", invoiceId: null },
+      orderBy: { date: "asc" },
+      take: 3,
+      select: { id: true, amount: true },
+    });
+    const linesTotal = +lines
+      .reduce((sum, l) => sum + Number(l.amount), 0)
+      .toFixed(2);
+    const total = lines.length > 0 ? linesTotal : f.total;
+    const paid = f.status === "paid" ? total : f.paid;
+    const invoice = await prisma.invoice.create({
       data: {
         invoiceNumber: f.number,
         matterId: f.matterId,
         clientId: f.clientId,
-        issueDate: daysFromNow(f.issueOffsetDays),
-        dueDate: daysFromNow(f.dueOffsetDays),
-        subtotal: f.total,
+        issueDate: dayOnly(f.issueOffsetDays),
+        dueDate: dayOnly(f.dueOffsetDays),
+        subtotal: total,
         taxAmount: 0,
-        totalAmount: f.total,
-        paidAmount: f.paid,
+        totalAmount: total,
+        paidAmount: paid,
         status: f.status,
         notes: f.notes,
       },
     });
+    if (lines.length > 0) {
+      await prisma.timeEntry.updateMany({
+        where: { id: { in: lines.map((l) => l.id) } },
+        data: { invoiceId: invoice.id, status: "billed" },
+      });
+    }
+    if (f.status === "paid") {
+      await prisma.invoicePayment.create({
+        data: {
+          invoiceId: invoice.id,
+          source: "check",
+          amount: paid,
+          // Paid five days after it was issued.
+          date: dayOnly(f.issueOffsetDays + 5),
+          description: "Paid in full",
+          reference: "Check #1042",
+          createdBy: jason.id,
+        },
+      });
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -1205,7 +1303,7 @@ async function main() {
         sourceDetail: "referral · Fox",
         summary:
           "Alleged FHA violation — landlord refused reasonable accommodation for service animal.",
-        dateOfIncident: new Date("2026-02-18"),
+        dateOfIncident: dateOnly("2026-02-18"),
         score: 82,
         liabilityAssessment: "strong",
         damagesAssessment: "moderate",
@@ -1222,7 +1320,7 @@ async function main() {
         source: "web",
         summary:
           "Police encounter — alleged excessive force during traffic stop. Seeking representation.",
-        dateOfIncident: new Date("2026-04-02"),
+        dateOfIncident: dateOnly("2026-04-02"),
         score: 76,
         liabilityAssessment: "strong",
         damagesAssessment: "strong",
@@ -1248,7 +1346,7 @@ async function main() {
         phone: "(720) 555-0331",
         source: "phone",
         summary: "Workplace retaliation after pregnancy disclosure.",
-        dateOfIncident: new Date("2026-03-15"),
+        dateOfIncident: dateOnly("2026-03-15"),
         score: 68,
         liabilityAssessment: "moderate",
         damagesAssessment: "moderate",
@@ -1270,7 +1368,7 @@ async function main() {
         title: "Draft Officer Doe deposition outline",
         priority: "high",
         status: "in_progress",
-        dueDate: daysFromNow(2, 17, 0),
+        dueDate: dayOnly(2),
         ownerId: jason.id,
       },
       {
@@ -1278,7 +1376,7 @@ async function main() {
         title: "Obtain Officer Doe UOF history via CORA",
         priority: "high",
         status: "open",
-        dueDate: daysFromNow(5, 17, 0),
+        dueDate: dayOnly(5),
         ownerId: marco.id,
       },
       {
@@ -1286,7 +1384,7 @@ async function main() {
         title: "Coordinate Dr. Singh expert report",
         priority: "urgent",
         status: "open",
-        dueDate: daysFromNow(5, 17, 0),
+        dueDate: dayOnly(5),
         ownerId: rachel.id,
       },
       {
@@ -1294,7 +1392,7 @@ async function main() {
         title: "File CGIA notice",
         priority: "urgent",
         status: "open",
-        dueDate: daysFromNow(2, 17, 0),
+        dueDate: dayOnly(2),
         ownerId: jason.id,
       },
       {
@@ -1302,7 +1400,7 @@ async function main() {
         title: "Finalize lien negotiations w/ Memorial",
         priority: "high",
         status: "in_review",
-        dueDate: daysFromNow(6, 17, 0),
+        dueDate: dayOnly(6),
         ownerId: rachel.id,
       },
     ],
@@ -2210,7 +2308,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
           "They're proposing a discovery cutoff that's tighter than I want. Counter with the original schedule + cite the case-management order.",
         priority: "high",
         ownerId: jason.id,
-        dueDate: hoursAgo(-72), // 3 days out
+        dueDate: dayOnly(3),
       },
     });
     inboxActionsCreated++;
@@ -2241,7 +2339,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
         description:
           "Counsel asked for a 7-day extension via text. Granting puts the cutoff here.",
         kind: "manual",
-        dueDate: hoursAgo(-7 * 24),
+        dueDate: dayOnly(7),
         ownerId: jason.id,
       },
     });
@@ -2268,7 +2366,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
         title: "Pull Memorial Hospital lien reduction precedent",
         priority: "high",
         ownerId: rachel.id,
-        dueDate: hoursAgo(-48),
+        dueDate: dayOnly(2),
       },
     });
     await prisma.deadline.create({
@@ -2277,7 +2375,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
         noteId: williamsNote.id,
         title: "Lien reduction proposal due",
         kind: "manual",
-        dueDate: hoursAgo(-10 * 24),
+        dueDate: dayOnly(10),
         ownerId: jason.id,
       },
     });
@@ -2286,7 +2384,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
         matterId: matters.williams.id,
         userId: jason.id,
         noteId: williamsNote.id,
-        date: hoursAgo(2),
+        date: dayOnly(0),
         hours: 1.5,
         activity: "Review + draft strategy memo on lien negotiation",
         narrative:
@@ -2404,7 +2502,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
         eventId: sampleEvent.id,
         title: "Submit pre-hearing brief",
         kind: "manual",
-        dueDate: hoursAgo(-5 * 24),
+        dueDate: dayOnly(5),
         ownerId: jason.id,
       },
     });
@@ -2418,7 +2516,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
         title: "Draft response addressing this deadline",
         priority: "normal",
         ownerId: jason.id,
-        dueDate: hoursAgo(-24),
+        dueDate: dayOnly(1),
       },
     });
     siblingCaptureCount += 1;
@@ -2445,7 +2543,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
         matterId: taskWithoutTime.matterId,
         userId: jason.id,
         taskId: taskWithoutTime.id,
-        date: hoursAgo(4),
+        date: dayOnly(0),
         hours: 0.8,
         activity: "Working through the assigned task",
         billable: true,
@@ -2460,7 +2558,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
         matterId: deadlineWithoutTime.matterId,
         userId: jason.id,
         deadlineId: deadlineWithoutTime.id,
-        date: hoursAgo(8),
+        date: dayOnly(0),
         hours: 2.1,
         activity: "Drafting in advance of deadline",
         billable: true,
@@ -2496,11 +2594,10 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
     followUpCount++;
   }
   if (followUpMessage) {
-    const today = new Date(NOW);
-    today.setHours(23, 59, 59, 999);
+    // End of today, firm zone.
     await prisma.messengerThread.update({
       where: { id: followUpMessage.id },
-      data: { followUpAt: today },
+      data: { followUpAt: wallClockOn(TODAY_KEY, 23, 59) },
     });
     followUpCount++;
   }
@@ -2555,7 +2652,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
         title: "Call Memorial Hospital re: lien letter timing",
         priority: "normal",
         ownerId: rachel.id,
-        dueDate: hoursAgo(-48),
+        dueDate: dayOnly(2),
       },
     });
     await prisma.deadline.create({
@@ -2564,7 +2661,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
         noteId: reply.id,
         title: "Memorial response window",
         kind: "manual",
-        dueDate: hoursAgo(-7 * 24),
+        dueDate: dayOnly(7),
         ownerId: jason.id,
       },
     });
@@ -2600,7 +2697,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
         matterId: sampleEmailMessage.thread.matterId,
         userId: jason.id,
         emailMessageId: sampleEmailMessage.id,
-        date: hoursAgo(3),
+        date: dayOnly(0),
         hours: 0.4,
         activity: "Read + drafted response to opposing counsel",
         billable: true,
@@ -2621,7 +2718,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
           matterId,
           userId: jason.id,
           messengerItemId: sampleVoicemail.id,
-          date: hoursAgo(3),
+          date: dayOnly(0),
           hours: 0.2,
           activity: "Listened to voicemail + summarized for file",
           billable: true,

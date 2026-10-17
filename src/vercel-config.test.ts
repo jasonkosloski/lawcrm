@@ -56,3 +56,55 @@ describe("vercel.json crons", () => {
     expect(res.headers.has("location")).toBe(false);
   });
 });
+
+const root = path.join(__dirname, "..");
+const readRoot = (...parts: string[]): string =>
+  fs.readFileSync(path.join(root, ...parts), "utf8");
+
+describe(".env.example documents what the crons and Google sync need", () => {
+  const envExample = readRoot(".env.example");
+
+  it("lists CRON_SECRET (both cron routes 401 without it)", () => {
+    expect(envExample).toMatch(/^CRON_SECRET=/m);
+  });
+
+  it("tells operators to enable the Calendar API and the calendar.events scope", () => {
+    expect(envExample).toMatch(/Google Calendar API/);
+    expect(envExample).toMatch(/calendar\.events/);
+  });
+});
+
+describe("tooling wiring", () => {
+  const pkg = JSON.parse(readRoot("package.json")) as {
+    scripts: Record<string, string>;
+    dependencies: Record<string, string>;
+  };
+
+  it("runs the migration drift check from the pre-commit hook when prisma/ is staged", () => {
+    expect(readRoot(".husky", "pre-commit")).toMatch(/check:migrations/);
+    expect(pkg.scripts["check:migrations"]).toBe(
+      "node scripts/check-migrations.mjs"
+    );
+    expect(fs.existsSync(path.join(root, "scripts", "check-migrations.mjs"))).toBe(
+      true
+    );
+  });
+
+  it("keeps the Prisma packages on one exact version (CLI, client, adapter)", () => {
+    const versions = new Set([
+      pkg.dependencies["prisma"],
+      pkg.dependencies["@prisma/client"],
+      pkg.dependencies["@prisma/adapter-pg"],
+    ]);
+    expect(versions.size).toBe(1);
+    expect([...versions][0]).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
+  it("declares dotenv, which prisma.config.ts and the seed import", () => {
+    expect(pkg.dependencies["dotenv"]).toBeTruthy();
+  });
+
+  it("exposes the coverage run that enforces the vitest thresholds", () => {
+    expect(pkg.scripts["test:coverage"]).toMatch(/--coverage/);
+  });
+});

@@ -22,11 +22,19 @@
 
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { dateOnlyKey, parseDateOnly } from "@/lib/format-date";
+import { assertTestDatabaseUrl } from "./test-db-guard";
+
+/** Today's calendar date (UTC) as a stored date-only value (ADR-012). */
+function todayDateOnly(): Date {
+  return parseDateOnly(dateOnlyKey(new Date())) as Date;
+}
 
 /** All Prisma model table names, in dependency order — children
  *  first so we can DELETE without FK violations. Keep this list
- *  in sync with @@map() entries in `prisma/schema.prisma`. */
-const TABLES_IN_DELETE_ORDER = [
+ *  in sync with @@map() entries in `prisma/schema.prisma`;
+ *  integration-helpers.test.ts fails when a table is missing. */
+export const TABLES_IN_DELETE_ORDER = [
   // Settlement chain (children of Settlement)
   "settlement_approvals",
   "settlement_liens",
@@ -107,10 +115,13 @@ const TABLES_IN_DELETE_ORDER = [
   "firms",
 ];
 
-/** Truncate every table. SQLite-friendly via `DELETE FROM` (it
- *  doesn't support TRUNCATE). Wrapped in a transaction so a
- *  partial failure leaves no half-cleaned state. */
+/** Clear every table via `DELETE FROM` (FK-ordered), in one
+ *  transaction so a partial failure leaves no half-cleaned state.
+ *  Refuses to run unless DATABASE_URL is a local lawcrm_test*
+ *  database, so a runner that skips globalSetup can never wipe a dev
+ *  or production database. */
 export async function resetDb(): Promise<void> {
+  assertTestDatabaseUrl(process.env.DATABASE_URL);
   await prisma.$transaction([
     // deadline_rules.anchorRuleId → deadline_rules is ON DELETE
     // RESTRICT (checked per row), so break the chain before deleting.
@@ -264,7 +275,7 @@ export async function seedTimeEntry(opts: {
       matterId: opts.matterId ?? null,
       leadId: opts.leadId ?? null,
       userId: opts.userId,
-      date: new Date(),
+      date: todayDateOnly(),
       hours,
       activity: "Test work",
       rate: new Prisma.Decimal(rate),
@@ -288,7 +299,7 @@ export async function seedExpense(opts: {
   const row = await prisma.expense.create({
     data: {
       matterId: opts.matterId,
-      date: new Date(),
+      date: todayDateOnly(),
       description: "Test expense",
       category: "filing_fee",
       amount: new Prisma.Decimal(opts.amount ?? 100),

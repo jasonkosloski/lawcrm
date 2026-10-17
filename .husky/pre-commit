@@ -1,11 +1,27 @@
-# Pre-commit gate. Two checks, in order, fail-fast:
-#   1. tsc — catch type errors before they hit the diff. Cheap
-#      on an incremental run, prevents "fix the type error in CI"
-#      churn.
-#   2. vitest — run the unit-test suite. Currently fast (<5s).
+# Pre-commit gate. Checks, in order, fail-fast:
+#   1. tsc — catch type errors before they hit the diff.
+#   2. vitest — the whole suite, unit + component + Postgres-backed
+#      integration tests. It needs the Docker test database
+#      (`docker compose -f docker-compose.test.yml up -d`) and takes
+#      about a minute and a half, so run `npm test` while you work
+#      rather than discovering failures here.
+#   3. migration drift — ONLY when prisma/schema.prisma or
+#      prisma/migrations is staged: apply every migration to a scratch
+#      database and diff it against schema.prisma (ADR-016). Catches a
+#      schema edit committed without its migration.
+#
+# This checks the working tree, not the staged index, so unrelated
+# unstaged edits (another session mid-refactor) can fail the commit
+# and a partial `git add -p` can pass on unstaged fixes. That is a
+# deliberate simplicity trade-off; stashing around the hook would
+# hide other sessions' work.
 #
 # Bypass with `git commit --no-verify` only when committing
 # something genuinely unfinishable in this checkout (work-in-
 # progress branches before a final cleanup commit). Don't make
 # it a habit.
-npm run precommit
+npm run precommit || exit 1
+
+if git diff --cached --name-only | grep -qE '^prisma/(schema\.prisma|migrations/)'; then
+  npm run check:migrations
+fi

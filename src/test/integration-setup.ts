@@ -8,11 +8,20 @@
  *      healthcheck handles most of this; we add a small retry
  *      loop for the case where someone runs `vitest` faster than
  *      the container can finish booting).
- *   3. `prisma db push` the current schema so test files start
+ *   3. Take a session-level advisory lock on that database for the
+ *      whole run, so a second `vitest` process aimed at the SAME
+ *      database (a commit hook plus a manual `npm test`, two agent
+ *      sessions) queues behind the first instead of wiping its rows
+ *      mid-test. Runs that need to go in parallel use separate
+ *      databases via `TEST_DATABASE_URL` (see below).
+ *   4. `prisma db push` the current schema so test files start
  *      against a known shape. The schema lives at one place;
- *      tests don't carry their own migrations.
- *   4. Each test calls `resetDb()` (see integration-helpers) in
- *      `beforeEach` to TRUNCATE every table, so tests stay
+ *      tests don't carry their own migrations. (Migration drift
+ *      against schema.prisma is checked separately by
+ *      `npm run check:migrations`, which the pre-commit hook runs
+ *      when prisma/ changes.)
+ *   5. Each test calls `resetDb()` (see integration-helpers) in
+ *      `beforeEach` to DELETE FROM every table, so tests stay
  *      independent without recreating the schema each time.
  *
  * No data seeding here — fixtures are per-test responsibility.
@@ -20,15 +29,38 @@
 
 import { execSync } from "node:child_process";
 import { Client } from "pg";
+import type { TestProject } from "vitest/node";
+import { assertTestDatabaseUrl } from "./test-db-guard";
 
 // TEST_DATABASE_URL lets two suites run at once on one machine (e.g.
 // parallel git worktrees), each against its own database in the same
 // container: `createdb -U lawcrm_test lawcrm_test_2` inside it, then
-// point this at .../lawcrm_test_2. Never aim it at a non-test DB —
-// setup() force-pushes the schema and every test truncates tables.
+// point this at .../lawcrm_test_2. It must still be a local database
+// named lawcrm_test* (assertTestDatabaseUrl) — setup() force-pushes
+// the schema and every test deletes all rows.
 const TEST_DB_URL =
   process.env.TEST_DATABASE_URL ??
   "postgresql://lawcrm_test:lawcrm_test@localhost:5433/lawcrm_test";
+
+/** Arbitrary constant naming "an integration run owns this database". */
+export const RUN_LOCK_KEY = 727_001_001;
+const LOCK_POLL_MS = 1_000;
+const LOCK_TIMEOUT_MS = Number(process.env.TEST_DB_LOCK_TIMEOUT_MS ?? 600_000);
+
+let lockClient: Client | null = null;
+
+/**
+ * Interactive sessions (`vitest` watch, `--ui`) stay alive for hours.
+ * Holding the run lock there would make every commit hook's `npm test`
+ * wait out the timeout and fail, so they skip it (as before this
+ * lock existed). One-shot runs queue.
+ */
+export function shouldHoldRunLock(config: {
+  watch?: boolean;
+  ui?: boolean;
+}): boolean {
+  return !config.watch && !config.ui;
+}
 
 async function waitForDatabase(): Promise<void> {
   // Healthcheck poll. Docker's `--wait` flag handles this when
@@ -61,13 +93,69 @@ async function waitForDatabase(): Promise<void> {
   );
 }
 
-export async function setup(): Promise<void> {
+/**
+ * Hold a session-level advisory lock for the whole run. Postgres
+ * drops it automatically when the connection dies (Ctrl-C, crash),
+ * so a killed run can never wedge the next one. Polls instead of
+ * blocking so a stuck holder produces a clear error, not a hung hook.
+ */
+async function acquireRunLock(): Promise<void> {
+  const client = new Client({ connectionString: TEST_DB_URL });
+  // A Postgres restart mid-run emits 'error' on an idle client; with no
+  // listener that would crash the globalSetup process. Postgres drops
+  // the lock with the connection, so there is nothing to recover here.
+  client.on("error", () => {});
+  await client.connect();
+  const deadline = Date.now() + LOCK_TIMEOUT_MS;
+  let announced = false;
+  for (;;) {
+    const res = await client.query<{ locked: boolean }>(
+      "SELECT pg_try_advisory_lock($1) AS locked",
+      [RUN_LOCK_KEY]
+    );
+    if (res.rows[0]?.locked) {
+      lockClient = client;
+      return;
+    }
+    if (!announced) {
+      announced = true;
+      console.warn(
+        "[integration-setup] Another test run is using this database (likely another `vitest` run " +
+          "or a one-shot `npm test` from a commit hook or agent session); waiting for it to finish. " +
+          "To run in parallel, point TEST_DATABASE_URL at its own database."
+      );
+    }
+    if (Date.now() >= deadline) {
+      await client.end().catch(() => {});
+      throw new Error(
+        `Another test run held the lock on ${TEST_DB_URL} for ${LOCK_TIMEOUT_MS} ms ` +
+          "(likely another `vitest` run or session on this database). " +
+          "Wait for it, or give this run its own database via TEST_DATABASE_URL."
+      );
+    }
+    await new Promise((r) => setTimeout(r, LOCK_POLL_MS));
+  }
+}
+
+export async function setup(project: TestProject): Promise<void> {
+  // Never force-push a schema into anything but a local test DB, even
+  // if TEST_DATABASE_URL was pointed somewhere else by mistake.
+  assertTestDatabaseUrl(TEST_DB_URL, "TEST_DATABASE_URL");
+
   process.env.DATABASE_URL = TEST_DB_URL;
   // Direct URL is the same as the pooled URL for the local test
   // container — no pgbouncer in front of it.
   process.env.DIRECT_DATABASE_URL = TEST_DB_URL;
+  // More than one pooled connection, so tests that fire concurrent
+  // transactions (invoice payments, trust disbursements, role
+  // demotions) really overlap on separate connections instead of
+  // queueing behind a single one. Respect an explicit override.
+  process.env.DATABASE_POOL_MAX ??= "4";
 
   await waitForDatabase();
+  if (shouldHoldRunLock(project.vitest.config)) {
+    await acquireRunLock();
+  }
 
   // Push the current schema. `--accept-data-loss` is fine — the
   // tmpfs container starts empty on every boot, and `resetDb()`
@@ -84,9 +172,13 @@ export async function setup(): Promise<void> {
 }
 
 export async function teardown(): Promise<void> {
-  // Nothing to do — the container is the user's responsibility
-  // (it lives across test runs so they don't pay the schema-push
-  // cost every time). To wipe state, restart the container; to
-  // shut it down, run `docker compose -f docker-compose.test.yml
-  // down`.
+  // Release the run lock. The container itself is the user's
+  // responsibility (it lives across test runs so they don't pay the
+  // schema-push cost every time). To wipe state, restart the
+  // container; to shut it down, run `docker compose -f
+  // docker-compose.test.yml down`.
+  if (lockClient) {
+    await lockClient.end().catch(() => {});
+    lockClient = null;
+  }
 }
