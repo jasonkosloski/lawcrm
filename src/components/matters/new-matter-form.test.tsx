@@ -110,8 +110,8 @@ describe("NewMatterForm — validation-error re-seed", () => {
       values: { name: "Alvarez, Maria - Custom Name", location: "Aurora" },
     };
     render(<NewMatterForm options={options} />);
-    // vals.name marks the field dirty, so the auto-name effect must
-    // not blow it away even though the auto value ("Aurora") differs.
+    // vals.name marks the field dirty, so the derived auto name must
+    // not replace it even though the auto value ("Aurora") differs.
     expect(screen.getByLabelText(/matter name/i)).toHaveValue(
       "Alvarez, Maria - Custom Name"
     );

@@ -1,7 +1,7 @@
 /**
  * Matter Team Management
  *
- * Admin-only card on the matter edit page. Lists active team
+ * Card on the matter edit page, rendered for users with matters.manage_team. Lists active team
  * members with a Remove button per row, lists former members
  * read-only with a "(former)" suffix, and exposes an Add form
  * (user picker + role select).
@@ -18,7 +18,7 @@
 
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { Plus, TriangleAlert, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -60,7 +60,14 @@ export function MatterTeamManagement({
   userOptions: TeamUserOption[];
 }) {
   const [pending, startTransition] = useTransition();
+  // Which operation is in flight, so only the Add button reads "Adding…"
+  // during an add (not during a removal).
+  const [pendingKind, setPendingKind] = useState<"add" | "remove" | null>(
+    null
+  );
   const [error, setError] = useState<string | null>(null);
+  const addUserSelectId = useId();
+  const addRoleSelectId = useId();
   const [addUserId, setAddUserId] = useState("");
   const [addRole, setAddRole] = useState<MatterTeamRole>("co_counsel");
 
@@ -82,13 +89,24 @@ export function MatterTeamManagement({
     const fd = new FormData();
     fd.set("userId", addUserId);
     fd.set("role", addRole);
+    setPendingKind("add");
     startTransition(async () => {
-      const res = await addMatterTeamMember(matterId, fd);
-      if (!res.ok) {
-        setError(res.error ?? "Couldn't add team member.");
-      } else {
-        setAddUserId("");
-        setAddRole("co_counsel");
+      // A thrown action (network blip, post-commit failure) must not
+      // escape to the route error boundary — that would replace the
+      // whole edit page and discard unsaved edits in the form above.
+      // The add/remove actions are idempotent, so retrying is safe.
+      try {
+        const res = await addMatterTeamMember(matterId, fd);
+        if (!res.ok) {
+          setError(res.error ?? "Couldn't add team member.");
+        } else {
+          setAddUserId("");
+          setAddRole("co_counsel");
+        }
+      } catch {
+        setError("Couldn't update the team. Please retry.");
+      } finally {
+        setPendingKind(null);
       }
     });
   };
@@ -101,9 +119,16 @@ export function MatterTeamManagement({
     )
       return;
     setError(null);
+    setPendingKind("remove");
     startTransition(async () => {
-      const res = await removeMatterTeamMember(matterId, membershipId);
-      if (!res.ok) setError(res.error ?? "Couldn't remove team member.");
+      try {
+        const res = await removeMatterTeamMember(matterId, membershipId);
+        if (!res.ok) setError(res.error ?? "Couldn't remove team member.");
+      } catch {
+        setError("Couldn't update the team. Please retry.");
+      } finally {
+        setPendingKind(null);
+      }
     });
   };
 
@@ -149,7 +174,14 @@ export function MatterTeamManagement({
                 <button
                   type="button"
                   onClick={() => handleRemove(m.membershipId, m.name)}
-                  disabled={pending}
+                  // The server always refuses to remove the lead; make
+                  // that visible instead of offering a dead-end button.
+                  disabled={pending || m.role === "lead"}
+                  title={
+                    m.role === "lead"
+                      ? "Promote another member to lead first"
+                      : undefined
+                  }
                   aria-label={`Remove ${m.name}`}
                   className="inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-4 hover:bg-warn-soft hover:text-warn disabled:opacity-50"
                 >
@@ -166,10 +198,14 @@ export function MatterTeamManagement({
       {candidates.length > 0 && (
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex flex-col gap-1 flex-1 min-w-48">
-            <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+            <label
+              htmlFor={addUserSelectId}
+              className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+            >
               Add member
             </label>
             <select
+              id={addUserSelectId}
               value={addUserId}
               onChange={(e) => setAddUserId(e.target.value)}
               disabled={pending}
@@ -185,10 +221,14 @@ export function MatterTeamManagement({
             </select>
           </div>
           <div className="flex flex-col gap-1 w-44">
-            <label className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+            <label
+              htmlFor={addRoleSelectId}
+              className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+            >
               Role
             </label>
             <select
+              id={addRoleSelectId}
               value={addRole}
               onChange={(e) =>
                 setAddRole(e.target.value as MatterTeamRole)
@@ -210,7 +250,7 @@ export function MatterTeamManagement({
             className="h-8 px-3 text-xs"
           >
             <Plus size={12} />
-            {pending ? "Adding…" : "Add"}
+            {pendingKind === "add" ? "Adding…" : "Add"}
           </Button>
         </div>
       )}

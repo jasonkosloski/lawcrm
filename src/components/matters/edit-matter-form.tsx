@@ -6,6 +6,10 @@
  * Pre-filled from the existing matter; submission hits the
  * `updateMatter` server action which writes the diff, syncs the lead
  * team assignment, and redirects back to the matter detail.
+ *
+ * SOL: an auto-derived deadline is shown as a live "Auto-computed"
+ * hint under the Deadline date field (which stays empty so the server
+ * recomputes); a real manual override is pre-filled.
  */
 
 "use client";
@@ -14,12 +18,13 @@ import Link from "next/link";
 import { useActionState, useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { updateMatter } from "@/app/actions/matters";
+import { computeSolDate, formatStatutePeriod } from "@/lib/sol";
 import {
-  computeSolDate,
-  formatStatutePeriod,
-  parseSolDateInput,
-  solDayKey,
-} from "@/lib/sol";
+  dateOnlyKey,
+  formatDateOnly,
+  parseDateOnly,
+} from "@/lib/format-date";
+import { FEE_OPTIONS } from "@/lib/fee-structure-constants";
 import {
   BILLING_MODES,
   BILLING_MODE_LABEL,
@@ -28,14 +33,13 @@ import {
   updateMatterInitialState,
   type UpdateMatterState,
 } from "@/lib/new-matter-constants";
-
-const FEE_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "contingent", label: "Contingent" },
-  { value: "hourly", label: "Hourly" },
-  { value: "flat", label: "Flat fee" },
-  { value: "hybrid", label: "Hybrid" },
-  { value: "pro_bono", label: "Pro bono" },
-];
+import {
+  Field,
+  Row,
+  Section,
+  inputCls,
+  selectCls,
+} from "./form-primitives";
 
 export type MatterForEdit = {
   id: string;
@@ -60,8 +64,8 @@ export type EditAreaOption = {
   id: string;
   name: string;
   hasStatuteOfLimitations: boolean;
-  /** Total-days statute period; drives the auto-compute preview
-   *  shown below the incident-date input. */
+  /** Total-days statute period; drives the auto-computed hint shown
+   *  under the Deadline date input. */
   statutePeriodDays: number | null;
   statuteSourceCitation: string | null;
   stages: Array<{
@@ -134,7 +138,7 @@ export function EditMatterForm({
   const vals = state.values ?? {};
   const errs = state.errors ?? {};
   const dateInputValue = (d: Date | null): string =>
-    d ? d.toISOString().slice(0, 10) : "";
+    d ? dateOnlyKey(d) : "";
   // The stored SOL date is either auto-derived (it equals incident +
   // the stored area's period) or a manual override. Only a real
   // override is pre-filled into the "Deadline date" input; an
@@ -149,7 +153,7 @@ export function EditMatterForm({
   const storedIsAuto =
     !matter.statuteOfLimitationsDate ||
     (!!storedAuto &&
-      solDayKey(storedAuto) === solDayKey(matter.statuteOfLimitationsDate));
+      dateOnlyKey(storedAuto) === dateOnlyKey(matter.statuteOfLimitationsDate));
   const storedOverrideValue = storedIsAuto
     ? ""
     : dateInputValue(matter.statuteOfLimitationsDate);
@@ -189,6 +193,25 @@ export function EditMatterForm({
   const [practiceAreaId, setPracticeAreaId] = useState<string>(initialAreaId);
   const [stageId, setStageId] = useState<string>(initialStageId);
 
+  // Lead and client are controlled so a change made elsewhere on the page
+  // (the Team card promotes a new lead; the matter is re-linked) shows up
+  // here. An uncontrolled select keeps its mount-time DOM value, so the
+  // next Save would post the stale lead and silently undo the team change.
+  // "Reset when a prop changes": remember the prop, adopt the new value
+  // during render when it differs.
+  const [leadUserId, setLeadUserId] = useState<string>(init.leadUserId);
+  const [seenLeadProp, setSeenLeadProp] = useState(matter.leadUserId);
+  if (seenLeadProp !== matter.leadUserId) {
+    setSeenLeadProp(matter.leadUserId);
+    setLeadUserId(matter.leadUserId ?? "");
+  }
+  const [clientId, setClientId] = useState<string>(init.clientId);
+  const [seenClientProp, setSeenClientProp] = useState(matter.clientId);
+  if (seenClientProp !== matter.clientId) {
+    setSeenClientProp(matter.clientId);
+    setClientId(matter.clientId ?? "");
+  }
+
   const [incidentDateInput, setIncidentDateInput] = useState<string>(
     init.incidentDate
   );
@@ -200,18 +223,13 @@ export function EditMatterForm({
   // Live "what auto-compute will produce" from the incident input and
   // the currently selected area.
   const parsedIncident = incidentDateInput
-    ? parseSolDateInput(incidentDateInput)
+    ? parseDateOnly(incidentDateInput)
     : null;
   const autoPreview = computeSolDate(
     parsedIncident,
     selectedArea?.statutePeriodDays
   );
-  const previewLabel = autoPreview
-    ? autoPreview.toLocaleDateString("en-US", {
-        timeZone: "UTC",
-        dateStyle: "medium",
-      })
-    : null;
+  const previewLabel = autoPreview ? formatDateOnly(autoPreview) : null;
   const stageOptions = selectedArea?.stages ?? [];
 
   const handleAreaChange = (nextAreaId: string) => {
@@ -346,7 +364,8 @@ export function EditMatterForm({
             <select
               id="clientId"
               name="clientId"
-              defaultValue={init.clientId}
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
               className={selectCls(!!errs.clientId)}
             >
               <option value="">— No client —</option>
@@ -374,12 +393,13 @@ export function EditMatterForm({
             <select
               id="leadUserId"
               name={canChangeLead ? "leadUserId" : undefined}
-              defaultValue={init.leadUserId}
+              value={leadUserId}
+              onChange={(e) => setLeadUserId(e.target.value)}
               required={canChangeLead}
               disabled={!canChangeLead}
               className={selectCls(!!errs.leadUserId)}
             >
-              {init.leadUserId === "" && (
+              {leadUserId === "" && (
                 <option value="">Choose a lead…</option>
               )}
               {options.users.map((u) => (
@@ -571,73 +591,3 @@ export function EditMatterForm({
     </form>
   );
 }
-
-// ── Layout helpers (shared shape with NewMatterForm) ───────────────────
-
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="flex flex-col gap-3">
-      <h2 className="text-2xs font-mono uppercase tracking-wider text-ink-4">
-        {title}
-      </h2>
-      <div className="flex flex-col gap-3">{children}</div>
-    </section>
-  );
-}
-
-function Row({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{children}</div>;
-}
-
-function Field({
-  label,
-  name,
-  required,
-  error,
-  hint,
-  children,
-}: {
-  label: string;
-  name: string;
-  required?: boolean;
-  error?: string[];
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <label htmlFor={name} className="text-xs font-medium text-ink-2">
-        {label}
-        {required && <span className="text-warn ml-0.5">*</span>}
-      </label>
-      {children}
-      {error && error.length > 0 && (
-        <div className="text-2xs text-warn">{error[0]}</div>
-      )}
-      {hint && !error?.length && (
-        <div className="text-2xs text-ink-4">{hint}</div>
-      )}
-    </div>
-  );
-}
-
-const inputCls = (hasError: boolean): string =>
-  cn(
-    "h-8 px-2.5 rounded-md border bg-white text-xs text-ink",
-    "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-    "placeholder:text-ink-4",
-    hasError ? "border-warn" : "border-line"
-  );
-
-const selectCls = (hasError: boolean): string =>
-  cn(
-    "h-8 px-2 rounded-md border bg-white text-xs text-ink",
-    "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-    hasError ? "border-warn" : "border-line"
-  );

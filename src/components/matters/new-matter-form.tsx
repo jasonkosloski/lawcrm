@@ -12,8 +12,9 @@
  * and per-practice-area overrides.
  *
  * Dirty-tracking: once the user types in the matter name input, we
- * stop overwriting their value. A "Reset to auto" link restores the
- * auto-generated name.
+ * stop overwriting their value. While it is not dirty the displayed
+ * name is derived from the other fields during render (no effect). A
+ * "Reset to auto" link restores the auto-generated name.
  *
  * Typeahead client picker: matches existing Contacts as the user
  * types. Picking one links to the contact. Case location is
@@ -29,6 +30,7 @@ import Link from "next/link";
 import {
   useActionState,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -38,19 +40,20 @@ import { Sparkles, UserCheck, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createMatter } from "@/app/actions/matters";
 import { formatStatutePeriod } from "@/lib/sol";
+import { FEE_OPTIONS } from "@/lib/fee-structure-constants";
+import { autoMatterName } from "@/lib/matter-name";
+import {
+  Field,
+  Row,
+  Section,
+  inputCls,
+  selectCls,
+} from "./form-primitives";
 import {
   createMatterInitialState,
   NEW_CLIENT_SENTINEL,
   type CreateMatterState,
 } from "@/lib/new-matter-constants";
-
-const FEE_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "contingent", label: "Contingent" },
-  { value: "hourly", label: "Hourly" },
-  { value: "flat", label: "Flat fee" },
-  { value: "hybrid", label: "Hybrid" },
-  { value: "pro_bono", label: "Pro bono" },
-];
 
 type ClientOption = {
   id: string;
@@ -83,43 +86,6 @@ export type NewMatterFormOptions = {
 };
 
 const MAX_SUGGESTIONS = 6;
-
-/** Split a full name into first + last on the last whitespace. Handles
- *  single-word names ("Madonna" → last only) and multi-part first names
- *  ("Mary Jane Watson" → first="Mary Jane", last="Watson"). */
-function splitName(full: string): { firstName: string; lastName: string } {
-  const trimmed = full.trim();
-  if (!trimmed) return { firstName: "", lastName: "" };
-  const parts = trimmed.split(/\s+/);
-  if (parts.length === 1) return { firstName: "", lastName: parts[0] };
-  return {
-    lastName: parts[parts.length - 1],
-    firstName: parts.slice(0, -1).join(" "),
-  };
-}
-
-/** Build the firm's matter-name pattern from the filled-in parts.
- *  Only joins non-empty segments with " - " so partial fills read
- *  naturally: "Alvarez, Maria - Aurora" rather than "Alvarez, Maria
- *  -  - Aurora". */
-function buildAutoMatterName(parts: {
-  firstName: string;
-  lastName: string;
-  caseNumber: string;
-  location: string;
-}): string {
-  const segments: string[] = [];
-  const f = parts.firstName.trim();
-  const l = parts.lastName.trim();
-  if (f && l) segments.push(`${l}, ${f}`);
-  else if (l) segments.push(l);
-  else if (f) segments.push(f);
-  const c = parts.caseNumber.trim();
-  if (c) segments.push(c);
-  const loc = parts.location.trim();
-  if (loc) segments.push(loc);
-  return segments.join(" - ");
-}
 
 export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
   const [state, formAction, isPending] = useActionState<
@@ -159,6 +125,12 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
     initialSelectedId
   );
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  // Highlighted suggestion for keyboard selection (-1 = none).
+  const [activeIndex, setActiveIndex] = useState(-1);
+  // Set when the user unlinks a picked client so the freshly mounted
+  // text input takes focus (the unlink button that had it unmounts).
+  const [focusClientInput, setFocusClientInput] = useState(false);
+  const listboxId = useId();
   const clientInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
@@ -204,21 +176,23 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
     if (!stageBelongs) setStageId(nextArea?.stages[0]?.id ?? "");
   };
 
-  const autoName = useMemo(() => {
-    const { firstName, lastName } = splitName(clientName);
-    return buildAutoMatterName({
-      firstName,
-      lastName,
-      caseNumber,
-      location,
-    });
-  }, [clientName, caseNumber, location]);
+  const selectedClient = selectedClientId
+    ? options.clients.find((c) => c.id === selectedClientId)
+    : null;
 
-  // Sync matter name from auto-generated value — but only when the
-  // user hasn't taken ownership of the field.
-  useEffect(() => {
-    if (!isNameDirty) setMatterName(autoName);
-  }, [autoName, isNameDirty]);
+  // The auto name is pure derived state. Until the user takes ownership
+  // of the field the input shows it directly — no effect, no stale
+  // first render.
+  const autoName = autoMatterName({
+    clientName,
+    // A picked contact whose organization is its own name is an
+    // organization — never invert it into "Fund, Colorado Freedom".
+    isOrganization:
+      !!selectedClient && selectedClient.organization === selectedClient.name,
+    caseNumber,
+    location,
+  });
+  const displayedName = isNameDirty ? matterName : autoName;
 
   // ── Client suggestions (typeahead) ───────────────────────────────────
   const suggestions = useMemo(() => {
@@ -253,17 +227,68 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
     setSelectedClientId(c.id);
     setClientName(c.name);
     setSuggestionsOpen(false);
+    setActiveIndex(-1);
   };
 
+  // Unlinking also clears the typed name: leaving the old name in the
+  // box would turn it straight into a "create new client" with that
+  // same name (a duplicate contact).
   const clearExisting = () => {
     setSelectedClientId(null);
+    setClientName("");
     setSuggestionsOpen(false);
-    clientInputRef.current?.focus();
+    setActiveIndex(-1);
+    setFocusClientInput(true);
   };
 
   const resetNameToAuto = () => {
     setIsNameDirty(false);
-    setMatterName(autoName);
+  };
+
+  const activeOption =
+    suggestionsOpen && suggestions.length > 0
+      ? Math.min(activeIndex, suggestions.length - 1)
+      : -1;
+  const optionId = (i: number) => `${listboxId}-opt-${i}`;
+
+  // Combobox keyboard support. Enter never falls through to form
+  // submit while the list is open: it picks the highlighted client, or
+  // (nothing highlighted) just closes the list — otherwise Enter would
+  // submit the typed name as a brand-new duplicate client.
+  const onClientKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const listOpen = suggestionsOpen && suggestions.length > 0;
+    if (e.key === "Escape") {
+      if (suggestionsOpen) {
+        e.preventDefault();
+        setSuggestionsOpen(false);
+        setActiveIndex(-1);
+      }
+      return;
+    }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      if (suggestions.length === 0) return;
+      e.preventDefault();
+      if (!suggestionsOpen) {
+        setSuggestionsOpen(true);
+        setActiveIndex(e.key === "ArrowDown" ? 0 : suggestions.length - 1);
+        return;
+      }
+      const delta = e.key === "ArrowDown" ? 1 : -1;
+      const from = activeOption;
+      setActiveIndex(
+        from === -1
+          ? delta === 1
+            ? 0
+            : suggestions.length - 1
+          : (from + delta + suggestions.length) % suggestions.length
+      );
+      return;
+    }
+    if (e.key === "Enter" && listOpen) {
+      e.preventDefault();
+      if (activeOption >= 0) pickExisting(suggestions[activeOption]);
+      else setSuggestionsOpen(false);
+    }
   };
 
   const hiddenClientId = selectedClientId
@@ -271,10 +296,6 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
     : clientName.trim().length > 0
       ? NEW_CLIENT_SENTINEL
       : "";
-
-  const selectedClient = selectedClientId
-    ? options.clients.find((c) => c.id === selectedClientId)
-    : null;
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-6">
@@ -288,7 +309,7 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
             >
               Matter name
               <span className="text-warn">*</span>
-              {!isNameDirty && matterName && (
+              {!isNameDirty && displayedName && (
                 <span
                   className="inline-flex items-center gap-1 text-2xs font-mono text-brand-700 bg-brand-soft px-1.5 py-0.5 rounded-full border border-brand-200"
                   title="Auto-generated from Client + Case number + Location"
@@ -312,7 +333,7 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
             id="name"
             name="name"
             type="text"
-            value={matterName}
+            value={displayedName}
             onChange={(e) => {
               setMatterName(e.target.value);
               setIsNameDirty(true);
@@ -474,11 +495,21 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
                   name="newClientName"
                   type="text"
                   autoComplete="off"
+                  autoFocus={focusClientInput}
+                  role="combobox"
+                  aria-expanded={suggestionsOpen && suggestions.length > 0}
+                  aria-controls={listboxId}
+                  aria-autocomplete="list"
+                  aria-activedescendant={
+                    activeOption >= 0 ? optionId(activeOption) : undefined
+                  }
                   value={clientName}
                   onChange={(e) => {
                     setClientName(e.target.value);
                     setSuggestionsOpen(e.target.value.trim().length > 0);
+                    setActiveIndex(-1);
                   }}
+                  onKeyDown={onClientKeyDown}
                   onFocus={() => {
                     if (clientName.trim().length > 0) setSuggestionsOpen(true);
                   }}
@@ -490,18 +521,25 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
                 {suggestionsOpen && suggestions.length > 0 && (
                   <div
                     ref={suggestionsRef}
+                    id={listboxId}
                     role="listbox"
+                    aria-label="Matching clients"
                     className="absolute left-0 right-0 top-[calc(100%+2px)] z-20 rounded-md border border-line bg-white shadow-md py-1"
                   >
                     <div className="px-2.5 py-1 text-2xs font-mono uppercase tracking-wider text-ink-4">
                       Matching clients
                     </div>
-                    {suggestions.map((c) => (
-                      <button
+                    {suggestions.map((c, i) => (
+                      <div
                         key={c.id}
-                        type="button"
+                        id={optionId(i)}
+                        role="option"
+                        aria-selected={i === activeOption}
                         onClick={() => pickExisting(c)}
-                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-brand-tint"
+                        className={cn(
+                          "w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left cursor-pointer hover:bg-brand-tint",
+                          i === activeOption && "bg-brand-tint"
+                        )}
                       >
                         <UserCheck
                           size={12}
@@ -518,7 +556,7 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
                             {c.city}
                           </span>
                         )}
-                      </button>
+                      </div>
                     ))}
                     <div className="border-t border-line mt-1 pt-1 px-2.5 pb-0.5 text-2xs text-ink-4 flex items-center gap-1">
                       <UserPlus size={11} />
@@ -765,73 +803,3 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
     </form>
   );
 }
-
-// ── Layout helpers ─────────────────────────────────────────────────────
-
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="flex flex-col gap-3">
-      <h2 className="text-2xs font-mono uppercase tracking-wider text-ink-4">
-        {title}
-      </h2>
-      <div className="flex flex-col gap-3">{children}</div>
-    </section>
-  );
-}
-
-function Row({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{children}</div>;
-}
-
-function Field({
-  label,
-  name,
-  required,
-  error,
-  hint,
-  children,
-}: {
-  label: string;
-  name: string;
-  required?: boolean;
-  error?: string[];
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <label htmlFor={name} className="text-xs font-medium text-ink-2">
-        {label}
-        {required && <span className="text-warn ml-0.5">*</span>}
-      </label>
-      {children}
-      {error && error.length > 0 && (
-        <div className="text-2xs text-warn">{error[0]}</div>
-      )}
-      {hint && !error?.length && (
-        <div className="text-2xs text-ink-4">{hint}</div>
-      )}
-    </div>
-  );
-}
-
-const inputCls = (hasError: boolean): string =>
-  cn(
-    "h-8 px-2.5 rounded-md border bg-white text-xs text-ink",
-    "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-    "placeholder:text-ink-4",
-    hasError ? "border-warn" : "border-line"
-  );
-
-const selectCls = (hasError: boolean): string =>
-  cn(
-    "h-8 px-2 rounded-md border bg-white text-xs text-ink",
-    "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-    hasError ? "border-warn" : "border-line"
-  );
