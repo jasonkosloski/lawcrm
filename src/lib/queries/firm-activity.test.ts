@@ -27,6 +27,7 @@ import {
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
 let firmId: string;
+let adminRoleId: string;
 
 async function seedLogRow(userId: string | null): Promise<void> {
   await prisma.activityLog.create({
@@ -44,7 +45,7 @@ beforeAll(() => {
 
 beforeEach(async () => {
   await resetDb();
-  ({ firmId } = await seedFirm());
+  ({ firmId, adminRoleId } = await seedFirm());
   ({ userId: viewerId } = await seedUser({ firmId, name: "Viewer", initials: "VV" }));
 });
 
@@ -148,5 +149,33 @@ describe("getFirmActivity — from/to cut on the viewer's calendar days", () => 
     expect(
       await titles({ from: "2026-11-01", to: "2026-11-01", tz: DENVER })
     ).toEqual(["late"]);
+  });
+});
+
+// F085 / F145: Settings → Activity is the audit trail, not a way
+// around the settlement / expense / billing view keys.
+describe("getFirmActivity — money rows follow their view keys", () => {
+  async function seedMoneyRows() {
+    await prisma.activityLog.createMany({
+      data: [
+        { type: "note", title: "Plain note" },
+        { type: "settlement", title: "Settlement updated · gross $250,000.00" },
+        { type: "deposit", title: "Trust deposit · $5,000.00" },
+        { type: "filing", title: "Expense logged · $1,200.00 · Expert retainer" },
+        { type: "filing", title: "Filed complaint" },
+      ],
+    });
+  }
+  const titles = async () => (await getFirmActivity()).map((r) => r.title).sort();
+
+  test("a viewer without the keys sees no amounts", async () => {
+    await seedMoneyRows();
+    expect(await titles()).toEqual(["Filed complaint", "Plain note"]);
+  });
+
+  test("an admin (all keys) sees every row", async () => {
+    ({ userId: viewerId } = await seedUser({ firmId, name: "Admin", roleIds: [adminRoleId] }));
+    await seedMoneyRows();
+    expect(await titles()).toHaveLength(5);
   });
 });

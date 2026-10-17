@@ -50,7 +50,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireUser } from "@/lib/current-user";
-import { currentUserHasPermission } from "@/lib/permission-check";
+import { resolveActivityMoneyAccess } from "@/lib/activity-money-filters";
 import {
   MATTER_ACTIVITY_LIMIT,
   getMatterActivity,
@@ -137,14 +137,7 @@ export default async function MatterTimelinePage({
   // and time tabs gate the same numbers the same way). Rows are
   // omitted entirely rather than redacted, and the pill counts use
   // the same filter so they never hint at hidden rows.
-  const [canViewSettlement, canViewExpense, canViewBilling] =
-    await Promise.all([
-      currentUserHasPermission("matters.settlement.view"),
-      currentUserHasPermission("matters.expense.view"),
-      // Trust deposit rows ("deposit" type) need billing.view.
-      currentUserHasPermission("billing.view"),
-    ]);
-  const access = { canViewSettlement, canViewExpense, canViewBilling };
+  const access = await resolveActivityMoneyAccess();
 
   // The existence check runs alongside the data reads (the cached
   // getMatterById is shared with the layout) instead of ahead of them.

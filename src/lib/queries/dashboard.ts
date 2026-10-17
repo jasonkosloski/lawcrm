@@ -25,6 +25,10 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getFirmGoals } from "@/lib/firm";
 import { currentUserHasPermission } from "@/lib/permission-check";
+import {
+  activityMoneyFilters,
+  resolveActivityMoneyAccess,
+} from "@/lib/activity-money-filters";
 import { canViewEventDetails } from "@/lib/calendar-visibility";
 import { visibleEmailThreadWhere } from "@/lib/email-visibility";
 import {
@@ -305,17 +309,10 @@ export async function getRecentActivity(
   tz: string,
   limit = 5
 ): Promise<ActivityItem[]> {
-  const [
-    canViewSettlements,
-    canViewExpenses,
-    canViewFirmActivity,
-    canViewBilling,
-  ] = await Promise.all([
-      currentUserHasPermission("matters.settlement.view"),
-      currentUserHasPermission("matters.expense.view"),
-      currentUserHasPermission("firm.view_activity"),
-      currentUserHasPermission("billing.view"),
-    ]);
+  const [moneyAccess, canViewFirmActivity] = await Promise.all([
+    resolveActivityMoneyAccess(),
+    currentUserHasPermission("firm.view_activity"),
+  ]);
   const viewerId = await getCurrentUserId();
   // Matter wall: matter-linked rows only for accessible matters
   // (firm-scope rows, matterId null, stay under their own gate below).
@@ -329,23 +326,9 @@ export async function getRecentActivity(
       type: { notIn: ["auth", "settings"] },
       AND: [
         ...activityAccess,
-        // Settlement rows carry gross amounts + lienholders: same key
-        // that gates the settlement UI.
-        ...(canViewSettlements ? [] : [{ type: { not: "settlement" } }]),
-        // Trust deposit rows: billing.view.
-        ...(canViewBilling ? [] : [{ type: { not: "deposit" } }]),
-        // Expense rows (type "filing", "Expense logged . $X . desc")
-        // carry amounts + descriptions: gated by matters.expense.view.
-        ...(canViewExpenses
-          ? []
-          : [
-              {
-                NOT: {
-                  matterId: { not: null },
-                  title: { startsWith: "Expense " },
-                },
-              },
-            ]),
+        // Settlement / trust / expense rows carry amounts — the same
+        // rule as the Timeline and Settings → Activity.
+        ...activityMoneyFilters(moneyAccess),
         // Firm-scope rows (matterId null: role grants, conflict-check
         // overrides, lead declines, rule edits) are the governance
         // feed /settings/activity gates on firm.view_activity.

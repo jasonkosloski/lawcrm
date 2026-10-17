@@ -11,7 +11,10 @@ import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { canViewEventDetails } from "@/lib/calendar-visibility";
-import { EXPENSE_ACTIVITY_TITLE_PREFIX } from "@/lib/expense-activity";
+import {
+  activityMoneyFilters,
+  type ActivityMoneyAccess,
+} from "@/lib/activity-money-filters";
 import { REACTION_EMOJIS } from "@/lib/note-constants";
 import { noteToPlainText } from "@/lib/note-text";
 import { sanitizeUserHtml } from "@/lib/sanitize-html";
@@ -1427,41 +1430,8 @@ export const MATTER_ACTIVITY_LIMIT = 200;
 /** What the viewer may see of money-bearing activity rows. All
  *  default to false (hidden) so a caller that forgets to resolve the
  *  permissions fails closed. */
-export type ActivityMoneyAccess = {
-  /** Holds matters.settlement.view — settlement / lien rows carry
-   *  gross, lienholder and negotiated amounts in their titles. */
-  canViewSettlement?: boolean;
-  /** Holds matters.expense.view — expense rows (logged as type
-   *  "filing", title prefix "Expense ") carry amounts + descriptions. */
-  canViewExpense?: boolean;
-  /** Holds billing.view - trust deposit / disbursement rows (type
-   *  "deposit") carry amounts and ledger movement. */
-  canViewBilling?: boolean;
-};
-
-/** Prisma AND-clauses that hide the rows a viewer may not see.
- *  Settlement rows are hidden whole (type "settlement"); expense rows
- *  by their title prefix. Exported for tests. */
-export function activityMoneyFilters(
-  access: ActivityMoneyAccess
-): Prisma.ActivityLogWhereInput[] {
-  const clauses: Prisma.ActivityLogWhereInput[] = [];
-  if (!access.canViewBilling) {
-    clauses.push({ type: { not: "deposit" } });
-  }
-  if (!access.canViewSettlement) {
-    clauses.push({ type: { not: "settlement" } });
-  }
-  if (!access.canViewExpense) {
-    clauses.push({
-      NOT: {
-        type: "filing",
-        title: { startsWith: EXPENSE_ACTIVITY_TITLE_PREFIX },
-      },
-    });
-  }
-  return clauses;
-}
+// Shared with the dashboard feed and Settings → Activity (F085 / F145).
+export { activityMoneyFilters, type ActivityMoneyAccess } from "@/lib/activity-money-filters";
 
 /** Pull the matter's activity log rows (newest first), joined to
  *  the author for display. Optional `types` filter narrows to a

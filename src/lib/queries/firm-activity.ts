@@ -14,6 +14,10 @@ import { prisma } from "@/lib/prisma";
 import { addDaysToKey, instantInTz } from "@/lib/format-date";
 import { getCurrentUserId } from "@/lib/current-user";
 import { optionalMatterAccessClause } from "@/lib/matter-access";
+import {
+  activityMoneyFilters,
+  resolveActivityMoneyAccess,
+} from "@/lib/activity-money-filters";
 
 export type FirmActivityRow = {
   id: string;
@@ -78,8 +82,18 @@ export async function getFirmActivity(
   const viewerId = filter.viewerId ?? (await getCurrentUserId());
   // Ethical walls: rows on a hidden matter are not listed (firm-scope
   // rows with no matter stay).
+  const [matterClause, moneyAccess] = await Promise.all([
+    optionalMatterAccessClause(viewerId),
+    resolveActivityMoneyAccess(),
+  ]);
   const where: Prisma.ActivityLogWhereInput = {
-    AND: (await optionalMatterAccessClause(viewerId)) as Prisma.ActivityLogWhereInput[],
+    AND: [
+      ...(matterClause as Prisma.ActivityLogWhereInput[]),
+      // Settlement / trust / expense amounts need their own view keys
+      // here too — firm.view_activity is the audit trail, not every
+      // number in it (F085 / F145).
+      ...activityMoneyFilters(moneyAccess),
+    ],
   };
   if (filter.types && filter.types.length > 0) {
     where.type = { in: [...filter.types] };

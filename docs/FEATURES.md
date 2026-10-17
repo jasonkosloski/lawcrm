@@ -24,11 +24,6 @@ defects, but some things are still PARTIAL or unbuilt:
 - **Matter-team access is built** (ADR-039) but ships OFF: the firm switch
   defaults to "Everyone". See the Phase 5 entry below and
   [PERMISSIONS.md](./PERMISSIONS.md). `matters.manage_team` is still not a read gate.
-- **Some page/data-layer session guards are PARTIAL** (F084, F026,
-  F085, F145): the dashboard agenda/activity halves are done, but the
-  parties, evidence and deadlines pages and a few dashboard readers
-  still lack their own session guard (rule: ADR-028 in
-  `docs/DECISIONS.md`).
 - **Invoice email delivery is logged-only** (audit titles say "not
   emailed"); nothing is actually sent to the client.
 - `updateExpense` exists server-side
