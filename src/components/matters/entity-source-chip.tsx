@@ -28,7 +28,7 @@ export function EntitySourceChip({
   className,
 }: {
   source: EntitySource;
-  /** Required to build matter-scoped hrefs for note + email sources. */
+  /** Required to build the matter-scoped href for every source kind. */
   matterId: string;
   className?: string;
 }) {
@@ -71,9 +71,9 @@ export function EntitySourceChip({
     return {
       Icon: Phone,
       prefix: "From message",
-      // Messenger view isn't matter-scoped yet — drop into the
-      // firm-wide messenger inbox with the source thread selected.
-      href: `/communication?view=messages&thread=${source.id}`,
+      // Calls / texts live on the matter Communication tab's phone
+      // channel.
+      href: `/matters/${matterId}/communication?channel=phone`,
     };
   })();
 

@@ -7,9 +7,9 @@
  * area-specific stages slot in based on their configured position.
  *
  * Matters inside a column are already ordered by the page's sort, so
- * changing sort re-orders within columns. Empty columns render with a
- * subtle "no matters" placeholder so the pipeline structure stays
- * legible.
+ * changing sort re-orders within columns. Only stages that hold at
+ * least one matter in the result get a column (the stage list is not
+ * passed in), so a stage with no matches simply has no column.
  *
  * Drag-and-drop to change stage is deferred — this is a read-only
  * visualisation for now.
@@ -17,10 +17,8 @@
 
 import Link from "next/link";
 import { FEE_LABELS, formatDeadlineDays } from "@/lib/matters-filters";
+import { formatMoney } from "@/lib/format-money";
 import type { MatterListRow } from "@/lib/queries/matters";
-
-const formatMoney = (n: number): string =>
-  n === 0 ? "$0" : `$${n.toLocaleString("en-US")}`;
 
 export function MattersKanban({ matters }: { matters: MatterListRow[] }) {
   // Group by stage name, tracking the smallest order seen per name so
@@ -53,7 +51,7 @@ export function MattersKanban({ matters }: { matters: MatterListRow[] }) {
   }
 
   return (
-    <div className="flex gap-3 overflow-x-auto pb-2 -mx-5 px-5">
+    <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 sm:-mx-5 sm:px-5">
       {stages.map((stage) => {
         const rows = byStage.get(stage) ?? [];
         return (
@@ -68,13 +66,9 @@ export function MattersKanban({ matters }: { matters: MatterListRow[] }) {
               </span>
             </header>
             <div className="flex flex-col gap-2 p-2 min-h-20">
-              {rows.length === 0 ? (
-                <div className="text-2xs text-ink-4 italic text-center py-4">
-                  No matters
-                </div>
-              ) : (
-                rows.map((m) => <KanbanCard key={m.id} matter={m} />)
-              )}
+              {rows.map((m) => (
+                <KanbanCard key={m.id} matter={m} />
+              ))}
             </div>
           </section>
         );

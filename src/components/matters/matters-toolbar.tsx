@@ -13,8 +13,7 @@
 
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Search, X, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,12 +25,15 @@ import {
 import { cn, plural } from "@/lib/utils";
 import {
   FEE_LABELS,
+  FILTER_PARAM_KEYS,
+  isFilterActive,
   type DeadlineFilter,
   type MattersFilter,
   type TrustFilter,
   type ViewMode,
 } from "@/lib/matters-filters";
 import { MattersViewToggle } from "@/components/matters/matters-view-toggle";
+import { useUrlParams } from "@/hooks/use-url-params";
 
 const SEARCH_DEBOUNCE_MS = 250;
 
@@ -56,17 +58,9 @@ export function MattersToolbar({
   visibleCount: number;
   totalCount: number;
 }) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const [pending, startTransition] = useTransition();
-
-  const setParams = (mutate: (p: URLSearchParams) => void) => {
-    const next = new URLSearchParams(searchParams.toString());
-    mutate(next);
-    startTransition(() => {
-      router.replace(`?${next.toString()}`, { scroll: false });
-    });
-  };
+  // Writes compose with navigations still in flight (see the hook), so
+  // rapid filter clicks no longer overwrite each other.
+  const { setParams, pending } = useUrlParams();
 
   const toggleInList = (key: string, value: string) => {
     setParams((p) => {
@@ -94,60 +88,56 @@ export function MattersToolbar({
     });
   };
 
-  const clearAll = () => {
-    setParams((p) => {
-      for (const k of [
-        "q",
-        "area",
-        "stage",
-        "lead",
-        "fee",
-        "trust",
-        "deadline",
-        "archived",
-        "pinned",
-        "show_closed",
-      ]) {
-        p.delete(k);
-      }
-    });
-  };
-
   // ── Debounced text search ────────────────────────────────────────────
+  // `qLocal` is what the box shows; `sentQ` is the last value we wrote to
+  // the URL. A URL change that is NOT our own write (back button, Clear
+  // all) re-syncs the box; our own write coming back never clobbers
+  // characters typed since.
   const [qLocal, setQLocal] = useState(filter.q);
-  const latestQ = useRef(filter.q);
-  useEffect(() => {
-    // Keep local state in sync with URL changes from elsewhere (clear-all, etc).
-    if (filter.q !== latestQ.current) {
+  const [sentQ, setSentQ] = useState(filter.q);
+  const [prevUrlQ, setPrevUrlQ] = useState(filter.q);
+  if (filter.q !== prevUrlQ) {
+    setPrevUrlQ(filter.q);
+    if (filter.q !== sentQ) {
       setQLocal(filter.q);
-      latestQ.current = filter.q;
+      setSentQ(filter.q);
     }
-  }, [filter.q]);
-  useEffect(() => {
-    if (qLocal === latestQ.current) return;
-    const handle = setTimeout(() => {
-      latestQ.current = qLocal;
+  }
+
+  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelDebounce = () => {
+    if (debounce.current !== null) clearTimeout(debounce.current);
+    debounce.current = null;
+  };
+  useEffect(() => cancelDebounce, []);
+
+  const onQChange = (value: string) => {
+    setQLocal(value);
+    cancelDebounce();
+    debounce.current = setTimeout(() => {
+      debounce.current = null;
+      setSentQ(value);
       setParams((p) => {
-        if (qLocal) p.set("q", qLocal);
+        if (value) p.set("q", value);
         else p.delete("q");
       });
     }, SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(handle);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [qLocal]);
+  };
+
+  const clearAll = () => {
+    // A pending debounced search must not re-apply q on top of the reset.
+    cancelDebounce();
+    setQLocal("");
+    setSentQ("");
+    setParams((p) => {
+      for (const k of FILTER_PARAM_KEYS) p.delete(k);
+    });
+  };
 
   const statusFlagCount =
     (filter.includeArchived ? 1 : 0) + (filter.pinnedOnly ? 1 : 0);
 
-  const anyActive =
-    filter.q.length > 0 ||
-    filter.areas.length > 0 ||
-    filter.stages.length > 0 ||
-    filter.leadIds.length > 0 ||
-    filter.feeStructures.length > 0 ||
-    filter.trust !== "any" ||
-    filter.deadline !== "any" ||
-    statusFlagCount > 0;
+  const anyActive = isFilterActive(filter);
 
   return (
     <div className={cn("flex flex-col gap-3", pending && "opacity-95")}>
@@ -160,14 +150,15 @@ export function MattersToolbar({
           />
           <Input
             value={qLocal}
-            onChange={(e) => setQLocal(e.target.value)}
+            onChange={(e) => onQChange(e.target.value)}
             placeholder="Search by matter name or case number…"
+            aria-label="Search matters"
             className="pl-8 h-8 text-xs"
           />
           {qLocal && (
             <button
               type="button"
-              onClick={() => setQLocal("")}
+              onClick={() => onQChange("")}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-4 hover:text-ink-2"
               aria-label="Clear search"
             >
@@ -428,6 +419,7 @@ function MultiSelectFilter({
                 <button
                   type="button"
                   onClick={() => onToggle(o.value)}
+                  aria-pressed={on}
                   className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-muted/60"
                 >
                   <span
@@ -492,6 +484,7 @@ function SingleSelectFilter<T extends string>({
                 <button
                   type="button"
                   onClick={() => onSelect(o.value)}
+                  aria-pressed={on}
                   className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-muted/60"
                 >
                   <span
@@ -530,6 +523,7 @@ function FlagRow({
     <button
       type="button"
       onClick={() => onToggle(!checked)}
+      aria-pressed={checked}
       className="w-full flex items-center gap-2 px-1.5 py-1.5 text-xs text-left rounded hover:bg-muted/60"
     >
       <span

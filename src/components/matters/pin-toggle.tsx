@@ -2,8 +2,10 @@
  * Pin Toggle
  *
  * A pin/unpin button for the matter detail header. Optimistically flips
- * the icon state on click, then calls the `setMatterPin` server
- * action which updates the DB and revalidates the sidebar + list.
+ * the icon state on click, then calls `setMatterPin` with the state the
+ * user clicked toward (idempotent, so a stale view in another tab can't
+ * invert the intent) which updates the DB and revalidates the sidebar +
+ * list. A failure drops the optimistic flip and tells the user.
  */
 
 "use client";
@@ -24,12 +26,17 @@ export function PinToggle({
   const [pending, startTransition] = useTransition();
 
   const onClick = () => {
+    const target = !optimisticPinned;
     startTransition(async () => {
-      const next = !optimisticPinned;
-      setOptimisticPinned(next);
-      // State the wanted value, not a blind flip: a stale tab can't
-      // unpin a matter the user just pinned elsewhere.
-      await setMatterPin(matterId, next);
+      setOptimisticPinned(target);
+      try {
+        const res = await setMatterPin(matterId, target);
+        // The optimistic value falls back to the (unchanged) prop when
+        // the transition ends, so a refusal needs no manual revert.
+        if (!res.ok) alert(res.error ?? "Couldn't update the pin.");
+      } catch {
+        alert("Couldn't update the pin. Please try again.");
+      }
     });
   };
 

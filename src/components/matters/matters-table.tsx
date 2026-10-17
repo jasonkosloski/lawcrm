@@ -13,16 +13,13 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { SortableHeader } from "@/components/matters/sortable-header";
+import { SortableHead } from "@/components/matters/sortable-header";
 import { FEE_LABELS, formatDeadlineDays } from "@/lib/matters-filters";
+import { formatMoney } from "@/lib/format-money";
 import type { MatterListRow } from "@/lib/queries/matters";
-
-const formatMoney = (n: number): string =>
-  n === 0 ? "$0" : `$${n.toLocaleString("en-US")}`;
 
 export function MattersTable({ matters }: { matters: MatterListRow[] }) {
   return (
@@ -52,31 +49,23 @@ export function MattersTable({ matters }: { matters: MatterListRow[] }) {
         <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="pl-4">
-              <SortableHeader field="name">Matter</SortableHeader>
-            </TableHead>
-            <TableHead>
-              <SortableHeader field="area">Area</SortableHeader>
-            </TableHead>
-            <TableHead>
-              <SortableHeader field="lead">Lead</SortableHeader>
-            </TableHead>
-            <TableHead>
-              <SortableHeader field="stage">Stage</SortableHeader>
-            </TableHead>
-            <TableHead className="text-right">
-              <SortableHeader field="trust" align="right">
-                Trust
-              </SortableHeader>
-            </TableHead>
-            <TableHead>
-              <SortableHeader field="fee">Fee</SortableHeader>
-            </TableHead>
-            <TableHead className="text-right pr-4">
-              <SortableHeader field="deadline" align="right">
-                Next deadline
-              </SortableHeader>
-            </TableHead>
+            <SortableHead field="name" className="pl-4">
+              Matter
+            </SortableHead>
+            <SortableHead field="area">Area</SortableHead>
+            <SortableHead field="lead">Lead</SortableHead>
+            <SortableHead field="stage">Stage</SortableHead>
+            <SortableHead field="trust" align="right" className="text-right">
+              Trust
+            </SortableHead>
+            <SortableHead field="fee">Fee</SortableHead>
+            <SortableHead
+              field="deadline"
+              align="right"
+              className="text-right pr-4"
+            >
+              Next deadline
+            </SortableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -93,11 +82,13 @@ export function MattersTable({ matters }: { matters: MatterListRow[] }) {
             </TableRow>
           ) : (
             matters.map((m) => (
-              <TableRow key={m.id} className="cursor-pointer">
+              // The name link is stretched over the whole row (after:
+              // pseudo-element), so the pointer cursor is honest.
+              <TableRow key={m.id} className="relative cursor-pointer">
                 <TableCell className="pl-4">
                   <Link
                     href={`/matters/${m.id}`}
-                    className="flex items-center gap-2 hover:text-brand-700"
+                    className="flex items-center gap-2 hover:text-brand-700 after:absolute after:inset-0"
                   >
                     <span
                       className="w-1.5 h-1.5 rounded-full shrink-0"

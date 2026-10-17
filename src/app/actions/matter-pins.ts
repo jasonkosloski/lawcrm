@@ -29,21 +29,32 @@ export async function setMatterPin(
 ): Promise<{ ok: boolean; pinned: boolean; error?: string }> {
   const userId = await getCurrentUserId();
 
-  if (pinned) {
-    const matter = await prisma.matter.findUnique({
-      where: { id: matterId },
-      select: { id: true },
-    });
-    if (!matter) {
-      return { ok: false, pinned: false, error: "Matter not found." };
+  try {
+    if (pinned) {
+      const matter = await prisma.matter.findUnique({
+        where: { id: matterId },
+        select: { id: true },
+      });
+      if (!matter) {
+        return { ok: false, pinned: false, error: "Matter not found." };
+      }
+      await prisma.userMatterPin.upsert({
+        where: { userId_matterId: { userId, matterId } },
+        create: { userId, matterId },
+        update: {},
+      });
+    } else {
+      await prisma.userMatterPin.deleteMany({ where: { userId, matterId } });
     }
-    await prisma.userMatterPin.upsert({
-      where: { userId_matterId: { userId, matterId } },
-      create: { userId, matterId },
-      update: {},
-    });
-  } else {
-    await prisma.userMatterPin.deleteMany({ where: { userId, matterId } });
+  } catch (err) {
+    // e.g. the matter was deleted between the check and the write (FK
+    // violation). Log the detail, show a generic message.
+    console.error("setMatterPin failed", err);
+    return {
+      ok: false,
+      pinned: false,
+      error: "Couldn't update the pin. Please try again.",
+    };
   }
 
   // Sidebar lives in the dashboard layout — revalidate the whole tree so

@@ -2,18 +2,23 @@
  * Sortable Column Header
  *
  * Client-side header cell that updates the URL's `sort` and `dir` params
- * when clicked. The default direction for each field is set in
- * `DEFAULT_DIR_FOR_FIELD` so users get sensible defaults on first click
- * (A-Z for text, largest-first for numbers).
+ * when clicked. Each header runs a three-state cycle on its own field:
+ * first click sorts ascending, second descending, third clears the sort
+ * (the page's default ordering applies again). Every field starts
+ * ascending — there is no per-field default direction.
+ *
+ * `SortableHead` is the `<th>` wrapper that also publishes `aria-sort`
+ * (the attribute belongs on the column header, not the button inside).
  */
 
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
-import { useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { DEFAULT_SORT, type SortField } from "@/lib/matters-filters";
+import type { SortField } from "@/lib/matters-filters";
+import { TableHead } from "@/components/ui/table";
+import { useUrlParams } from "@/hooks/use-url-params";
 
 export function SortableHeader({
   field,
@@ -24,30 +29,26 @@ export function SortableHeader({
   children: React.ReactNode;
   align?: "left" | "right";
 }) {
-  const router = useRouter();
-  const params = useSearchParams();
-  const [pending, startTransition] = useTransition();
+  const { searchParams, setParams, pending } = useUrlParams();
 
   // URL state — `sort` param absent = no active sort (default ordering applies).
-  const activeField = params.get("sort");
-  const activeDir = params.get("dir");
+  const activeField = searchParams.get("sort");
+  const activeDir = searchParams.get("dir");
   const isActive = activeField === field;
 
-  // Three-state cycle: click 1 → asc, click 2 → desc, click 3 → clear.
   const onClick = () => {
-    const next = new URLSearchParams(params.toString());
-    if (!isActive) {
-      next.set("sort", field);
-      next.set("dir", "asc");
-    } else if (activeDir === "asc") {
-      next.set("sort", field);
-      next.set("dir", "desc");
-    } else {
-      next.delete("sort");
-      next.delete("dir");
-    }
-    startTransition(() => {
-      router.replace(`?${next.toString()}`, { scroll: false });
+    // Decide from the latest params (including a click still in flight),
+    // not the committed render, so rapid clicks advance the cycle.
+    setParams((next) => {
+      if (next.get("sort") !== field) {
+        next.set("sort", field);
+        next.set("dir", "asc");
+      } else if (next.get("dir") === "asc") {
+        next.set("dir", "desc");
+      } else {
+        next.delete("sort");
+        next.delete("dir");
+      }
     });
   };
 
@@ -67,5 +68,34 @@ export function SortableHeader({
       {children}
       <Icon size={11} className={isActive ? "opacity-100" : "opacity-40"} />
     </button>
+  );
+}
+
+/** A table `<th>` hosting a SortableHeader, with `aria-sort` set from
+ *  the URL so assistive tech announces the active sort. */
+export function SortableHead({
+  field,
+  children,
+  align = "left",
+  className,
+}: {
+  field: SortField;
+  children: React.ReactNode;
+  align?: "left" | "right";
+  className?: string;
+}) {
+  const searchParams = useSearchParams();
+  const isActive = searchParams.get("sort") === field;
+  const ariaSort = !isActive
+    ? "none"
+    : searchParams.get("dir") === "asc"
+      ? "ascending"
+      : "descending";
+  return (
+    <TableHead className={className} aria-sort={ariaSort}>
+      <SortableHeader field={field} align={align}>
+        {children}
+      </SortableHeader>
+    </TableHead>
   );
 }

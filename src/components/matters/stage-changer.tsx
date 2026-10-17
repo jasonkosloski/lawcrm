@@ -48,6 +48,11 @@ export type StageOption = {
   name: string;
   order: number;
   isTerminal: boolean;
+  /** False for an archived stage. The matter page includes the matter's
+   *  own stage even when archived (so the stepper can still show where
+   *  it sits); such a stage is shown but never offered as a move target.
+   *  Omitted = active. */
+  isActive?: boolean;
 };
 
 export function StageChanger({
@@ -152,6 +157,9 @@ export function StageChanger({
               <ul className="flex flex-col">
                 {stages.map((stage, idx) => {
                   const isCurrent = stage.id === optimisticStageId;
+                  // Archived stages can't be moved into (the server
+                  // refuses); only list one when it is the current one.
+                  if (stage.isActive === false && !isCurrent) return null;
                   const isPassed =
                     currentIndex >= 0 && idx < currentIndex && !isCurrent;
 
@@ -180,7 +188,10 @@ export function StageChanger({
                             <Check size={12} />
                           ) : null}
                         </span>
-                        <span className="flex-1">{stage.name}</span>
+                        <span className="flex-1">
+                          {stage.name}
+                          {stage.isActive === false && " (archived)"}
+                        </span>
                         {stage.isTerminal && !isCurrent && (
                           <span className="text-2xs text-ink-4">terminal</span>
                         )}
@@ -247,6 +258,7 @@ export function StageChanger({
                   )}
                 >
                   {stage.name}
+                  {stage.isActive === false && " (archived)"}
                 </div>
               </div>
             );
@@ -268,7 +280,9 @@ export function StageChanger({
           <>
             Currently in{" "}
             <span className="text-ink-2 font-medium">
-              {currentStage?.name}
+              {currentStage
+                ? `${currentStage.name}${currentStage.isActive === false ? " (archived)" : ""}`
+                : "a stage that is no longer listed"}
             </span>
             {stagesRemaining > 0 && (
               <>

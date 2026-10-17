@@ -171,6 +171,22 @@ export function parseMattersParams(
   };
 }
 
+/** Every query-param key that `parseMattersParams` reads into the
+ *  filter (sort/dir/view are not filters). The toolbar's "Clear all"
+ *  deletes exactly these, so a new filter key is added here once. */
+export const FILTER_PARAM_KEYS = [
+  "q",
+  "area",
+  "stage",
+  "lead",
+  "fee",
+  "trust",
+  "deadline",
+  "archived",
+  "pinned",
+  "show_closed",
+] as const;
+
 /** True if any filter is active (used to show the "clear" link). */
 export function isFilterActive(f: MattersFilter): boolean {
   return (

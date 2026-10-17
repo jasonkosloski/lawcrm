@@ -109,9 +109,22 @@ export default async function MatterOverviewPage({
   if (!matter) notFound();
 
   const stageOptions = await prisma.matterStage.findMany({
-    where: { practiceAreaId: matter.practiceAreaId, isActive: true },
+    // Active stages, plus the matter's own stage even if it was
+    // archived after the matter landed there (the stepper must still
+    // show where the matter sits; StageChanger won't offer an
+    // archived stage as a move target).
+    where: {
+      practiceAreaId: matter.practiceAreaId,
+      OR: [{ isActive: true }, { id: matter.stageId }],
+    },
     orderBy: { order: "asc" },
-    select: { id: true, name: true, order: true, isTerminal: true },
+    select: {
+      id: true,
+      name: true,
+      order: true,
+      isTerminal: true,
+      isActive: true,
+    },
   });
 
   // Pin the primary client (Matter.clientId) to the top of the list.

@@ -8,11 +8,10 @@
 
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
-import { useTransition } from "react";
 import { Rows3, Columns3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DEFAULT_VIEW, type ViewMode } from "@/lib/matters-filters";
+import { useUrlParams } from "@/hooks/use-url-params";
 
 const VIEWS: Array<{
   value: ViewMode;
@@ -24,16 +23,12 @@ const VIEWS: Array<{
 ];
 
 export function MattersViewToggle({ view }: { view: ViewMode }) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const [pending, startTransition] = useTransition();
+  const { setParams, pending } = useUrlParams();
 
   const setView = (next: ViewMode) => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (next === DEFAULT_VIEW) params.delete("view");
-    else params.set("view", next);
-    startTransition(() => {
-      router.replace(`?${params.toString()}`, { scroll: false });
+    setParams((params) => {
+      if (next === DEFAULT_VIEW) params.delete("view");
+      else params.set("view", next);
     });
   };
 

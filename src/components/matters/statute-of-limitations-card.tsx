@@ -20,9 +20,15 @@
 
 import { useOptimistic, useTransition } from "react";
 import { CheckCircle2, Circle, Loader2, TriangleAlert } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { formatDate } from "@/lib/format-date";
+import { cn, plural } from "@/lib/utils";
+import {
+  dateOnlyKey,
+  daysUntilDateOnly,
+  formatDate,
+  formatDateOnly,
+} from "@/lib/format-date";
 import { computeSolDate } from "@/lib/sol";
+import { useUserTimeZone } from "@/components/user-time-zone";
 import { Card, CardContent } from "@/components/ui/card";
 import { setMatterSolSatisfied } from "@/app/actions/matters";
 
@@ -53,40 +59,11 @@ export type StatuteOfLimitationsCardProps = {
   canEdit: boolean;
 };
 
-const ONE_DAY = 24 * 60 * 60 * 1000;
-
-/**
- * Whole calendar days from "now" until the stored SOL deadline.
- *
- * Date-only fields (SOL deadline, incident date) are stored as UTC
- * midnight — the server parses the "YYYY-MM-DD" input with
- * `new Date(...)`. Reading the deadline via local getters shifts it
- * to the previous day for anyone west of UTC, so its calendar day
- * must come from the getUTC* components. "Today" is the viewer's
- * LOCAL calendar date. Both are placed on the UTC day grid so the
- * subtraction counts whole days regardless of zone or DST.
- */
-export function daysUntil(deadline: Date, now: Date): number {
-  const deadlineDay = Date.UTC(
-    deadline.getUTCFullYear(),
-    deadline.getUTCMonth(),
-    deadline.getUTCDate()
-  );
-  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-  return Math.round((deadlineDay - today) / ONE_DAY);
-}
-
 /** For date-only values stored as UTC midnight (SOL deadline,
  *  incident date): format on the UTC day grid, or users west of UTC
- *  see the previous day — a factually wrong deadline. */
+ *  see the previous day - a factually wrong deadline (ADR-012). */
 export function formatCalendarDate(d: Date): string {
-  return formatDate(d, "full_short", "UTC");
-}
-
-/** For real timestamps (satisfiedAt is `new Date()` at click time):
- *  the viewer's local zone is the right frame — do NOT force UTC. */
-function formatTimestampDate(d: Date): string {
-  return formatDate(d, "full_short");
+  return formatDateOnly(d, "full_short");
 }
 
 export function StatuteOfLimitationsCard({
@@ -103,6 +80,10 @@ export function StatuteOfLimitationsCard({
   const [optimisticSatisfied, setOptimisticSatisfied] =
     useOptimistic(satisfied);
   const [pending, startTransition] = useTransition();
+  // "Today" is the viewer's calendar day in their PROFILE zone - the
+  // same zone the server render uses - so SSR and hydration agree
+  // instead of the server (UTC) and browser disagreeing each evening.
+  const tz = useUserTimeZone();
 
   const toggle = () => {
     startTransition(async () => {
@@ -121,8 +102,7 @@ export function StatuteOfLimitationsCard({
   const isManualDate =
     !!date &&
     !!computedFromIncident &&
-    computedFromIncident.toISOString().slice(0, 10) !==
-      date.toISOString().slice(0, 10);
+    dateOnlyKey(computedFromIncident) !== dateOnlyKey(date);
 
   // No date set yet — gentle prompt instead of countdown chrome.
   if (!date) {
@@ -144,8 +124,7 @@ export function StatuteOfLimitationsCard({
     );
   }
 
-  const now = new Date();
-  const days = daysUntil(date, now);
+  const days = daysUntilDateOnly(date, tz);
   const past = days < 0;
 
   // Tone: satisfied dominates; otherwise escalate by days.
@@ -171,10 +150,10 @@ export function StatuteOfLimitationsCard({
   const labelText = optimisticSatisfied
     ? "Satisfied"
     : past
-      ? `${Math.abs(days)} days overdue`
+      ? `${plural(Math.abs(days), "day")} overdue`
       : days === 0
         ? "Due today"
-        : `${days} days remaining`;
+        : `${plural(days, "day")} remaining`;
 
   const labelTone = {
     ok: "text-ok",
@@ -235,7 +214,7 @@ export function StatuteOfLimitationsCard({
 
         {optimisticSatisfied && satisfiedAt && (
           <div className="text-2xs text-ink-4">
-            Marked satisfied {formatTimestampDate(satisfiedAt)}
+            Marked satisfied {formatDate(satisfiedAt, "full_short", tz)}
           </div>
         )}
 

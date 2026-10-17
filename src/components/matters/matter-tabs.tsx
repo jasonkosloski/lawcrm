@@ -5,26 +5,20 @@
  * `usePathname`. Hosted in the matter detail layout above the nested
  * tab content.
  *
- * The right end of the tab bar renders a contextual "Add …" button
- * for tabs where there's an obvious single thing to create (Add
- * party on Parties, Add deadline on Deadlines, etc.). This balances
- * the visual weight of the bar and gives users a CTA without having
- * to reach for the header Create dropdown. The button opens a new
- * panel in the matter Create stack — the current focused panel (if
- * any) minimizes to a chip.
+ * There is deliberately no contextual "Add …" button here: the
+ * matter Create stack has real form bodies only for notes, so a button
+ * for deadlines / tasks / time / documents / events opened a placeholder
+ * panel with a disabled Save. Each of those tabs has its own working
+ * inline composer, which is the create surface. Bring the button back
+ * once the stack has real bodies for those types (and gate it on the
+ * matching create permission, resolved on the server).
  */
 
 "use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  findMatterCreateEntry,
-  type MatterCreateType,
-} from "@/lib/matter-create-types";
-import { useCreateStack } from "@/components/create-stack/create-stack-provider";
 
 const TABS = [
   { slug: "", label: "Overview" },
@@ -41,22 +35,8 @@ const TABS = [
   { slug: "billing", label: "Billing" },
 ] as const;
 
-/** Map of tab slug → the create type to surface as a right-end button.
- *  Tabs not in this map have no contextual single-add action — the tab
- *  either has its own inline create surface (Notes uses a composer at
- *  the top of the tab) or there's no obvious single thing to create
- *  (Overview, Timeline, Billing). */
-const TAB_ADD_TYPE: Record<string, MatterCreateType> = {
-  events: "event",
-  documents: "document",
-  deadlines: "deadline",
-  tasks: "task",
-  time: "time",
-};
-
 export function MatterTabs({ matterId }: { matterId: string }) {
   const pathname = usePathname();
-  const { open } = useCreateStack();
   const base = `/matters/${matterId}`;
 
   // `undefined` when on a non-tab sub-route (e.g. /edit) so no tab
@@ -66,8 +46,6 @@ export function MatterTabs({ matterId }: { matterId: string }) {
     if (t.slug === "") return pathname === base;
     return pathname.startsWith(`${base}/${t.slug}`);
   })?.slug;
-  const addType = activeSlug ? TAB_ADD_TYPE[activeSlug] : undefined;
-  const addEntry = addType ? findMatterCreateEntry(addType) : undefined;
 
   return (
     <div className="flex items-center border-b border-line px-3 sm:px-5 gap-2">
@@ -82,6 +60,7 @@ export function MatterTabs({ matterId }: { matterId: string }) {
             <Link
               key={t.slug || "overview"}
               href={href}
+              aria-current={active ? "page" : undefined}
               className={cn(
                 "px-3 py-2.5 text-xs font-medium border-b-2 transition-colors whitespace-nowrap shrink-0",
                 active
@@ -94,20 +73,6 @@ export function MatterTabs({ matterId }: { matterId: string }) {
           );
         })}
       </nav>
-
-      {addEntry && (
-        <button
-          type="button"
-          onClick={() => open(addEntry.type)}
-          className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium bg-white text-ink-2 border border-line hover:border-brand-300 hover:text-brand-700 transition-colors shrink-0"
-          title={addEntry.label}
-        >
-          <Plus size={13} />
-          {/* Hide the label below sm — the icon + tooltip carry the
-              meaning. Saves valuable horizontal pixels. */}
-          <span className="hidden sm:inline">{addEntry.label}</span>
-        </button>
-      )}
     </div>
   );
 }
