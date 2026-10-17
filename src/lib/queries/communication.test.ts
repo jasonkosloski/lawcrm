@@ -11,13 +11,35 @@
  * the thread's FIRST sender even when the matching message arrives
  * later in the thread (the candidate fetch only loads one message
  * per thread now).
+ *
+ * Also pinned here: the mailbox-scoping security boundary
+ * (getThreadById / listThreads / counts never reach another user's
+ * mail), the Inbox archive/snooze matrix, and that every rail count
+ * equals its list's length (the badge and the list must agree).
  */
 
 import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-import { listThreadsForEmail } from "@/lib/queries/communication";
-import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
+import {
+  defaultEmailFilter,
+  getCommunicationCounts,
+  getCommunicationPinnedMatters,
+  getEmailUnreadCount,
+  getFilingMatterOptions,
+  getThreadById,
+  listThreads,
+  listThreadsForEmail,
+  listThreadsForMatter,
+  type CommunicationFilter,
+} from "@/lib/queries/communication";
+import {
+  resetDb,
+  seedFirm,
+  seedMatter,
+  seedPracticeArea,
+  seedUser,
+} from "@/test/integration-helpers";
 
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 const mockedGetUser = vi.mocked(getCurrentUserId);
@@ -200,5 +222,249 @@ describe("listThreadsForEmail", () => {
 
   test("empty email short-circuits to an empty list", async () => {
     expect(await listThreadsForEmail("")).toEqual([]);
+  });
+});
+
+// -- Mailbox scoping, filters, counts -----------------------------------
+
+let otherUserId: string;
+let otherAccountId: string;
+let matterId: string;
+
+async function seedFlagged(opts: {
+  accountId: string;
+  subject: string;
+  at?: string;
+  isRead?: boolean;
+  isStarred?: boolean;
+  isArchived?: boolean;
+  followUpAt?: Date | null;
+  matterId?: string | null;
+}): Promise<string> {
+  const at = new Date(opts.at ?? "2026-06-01T10:00:00Z");
+  const t = await prisma.emailThread.create({
+    data: {
+      accountId: opts.accountId,
+      subject: opts.subject,
+      lastMessageAt: at,
+      isRead: opts.isRead ?? true,
+      isStarred: opts.isStarred ?? false,
+      isArchived: opts.isArchived ?? false,
+      followUpAt: opts.followUpAt ?? null,
+      matterId: opts.matterId ?? null,
+      messages: {
+        create: [
+          {
+            fromName: "Sender",
+            fromEmail: "sender@example.com",
+            toRecipients: "[]",
+            body: "b",
+            sentAt: at,
+          },
+        ],
+      },
+    },
+    select: { id: true },
+  });
+  return t.id;
+}
+
+describe("mailbox scoping (security boundary)", () => {
+  beforeEach(async () => {
+    const { firmId } = await seedFirm();
+    ({ userId: otherUserId } = await seedUser({ firmId }));
+    otherAccountId = await seedAccount(otherUserId);
+  });
+
+  test("getThreadById returns null for another user's thread id", async () => {
+    const theirs = await seedFlagged({
+      accountId: otherAccountId,
+      subject: "Privileged: theirs",
+    });
+    const mine = await seedFlagged({ accountId, subject: "Mine" });
+
+    expect(await getThreadById(theirs)).toBeNull();
+    expect((await getThreadById(mine))?.subject).toBe("Mine");
+  });
+
+  test("every list and count ignores other users' mailboxes", async () => {
+    await seedFlagged({ accountId, subject: "Mine", isRead: false });
+    await seedFlagged({
+      accountId: otherAccountId,
+      subject: "Theirs",
+      isRead: false,
+      isStarred: true,
+    });
+
+    for (const f of ["inbox", "all", "unread", "starred", "unfiled"] as const) {
+      const rows = await listThreads(f);
+      expect(rows.every((r) => r.subject === "Mine")).toBe(true);
+    }
+    const counts = await getCommunicationCounts();
+    expect(counts.all).toBe(1);
+    expect(counts.unread).toBe(1);
+    expect(counts.starred).toBe(0);
+    expect(await getEmailUnreadCount()).toBe(1);
+  });
+
+  test("listThreadsForMatter is scoped to the viewer's own mailbox", async () => {
+    const area = await seedPracticeArea();
+    const m = await seedMatter({
+      practiceAreaId: area.areaId,
+      stageId: area.stageId,
+      leadUserId: userId,
+    });
+    await seedFlagged({ accountId, subject: "Mine", matterId: m.matterId });
+    await seedFlagged({
+      accountId: otherAccountId,
+      subject: "Theirs",
+      matterId: m.matterId,
+    });
+    const rows = await listThreadsForMatter(m.matterId);
+    expect(rows.map((r) => r.subject)).toEqual(["Mine"]);
+  });
+});
+
+describe("listThreads filters + counts agree", () => {
+  const NOW = Date.now();
+  const FUTURE = new Date(NOW + 7 * 86_400_000);
+  const PAST = new Date(NOW - 7 * 86_400_000);
+
+  beforeEach(async () => {
+    const area = await seedPracticeArea();
+    ({ matterId } = await seedMatter({
+      practiceAreaId: area.areaId,
+      stageId: area.stageId,
+      leadUserId: userId,
+    }));
+    await seedFlagged({ accountId, subject: "plain" });
+    await seedFlagged({ accountId, subject: "unread", isRead: false });
+    await seedFlagged({ accountId, subject: "starred", isStarred: true });
+    await seedFlagged({ accountId, subject: "archived", isArchived: true });
+    await seedFlagged({
+      accountId,
+      subject: "archived-unread",
+      isArchived: true,
+      isRead: false,
+    });
+    await seedFlagged({ accountId, subject: "snoozed", followUpAt: FUTURE });
+    await seedFlagged({ accountId, subject: "snooze-expired", followUpAt: PAST });
+    await seedFlagged({ accountId, subject: "filed", matterId });
+    await seedFlagged({
+      accountId,
+      subject: "filed-archived",
+      matterId,
+      isArchived: true,
+    });
+  });
+
+  const FILTERS: CommunicationFilter[] = [
+    "inbox",
+    "all",
+    "unread",
+    "starred",
+    "archived",
+    "unfiled",
+    "filed",
+    "untimed",
+  ];
+
+  test.each(FILTERS)("rail count for '%s' equals the list length", async (f) => {
+    const counts = await getCommunicationCounts();
+    const rows = await listThreads(f);
+    expect(counts[f]).toBe(rows.length);
+  });
+
+  test("Inbox hides archived and still-snoozed threads, shows expired snoozes", async () => {
+    const subjects = (await listThreads("inbox")).map((r) => r.subject);
+    expect(subjects).toContain("plain");
+    expect(subjects).toContain("snooze-expired");
+    expect(subjects).not.toContain("snoozed");
+    expect(subjects).not.toContain("archived");
+    expect(subjects).not.toContain("filed-archived");
+    // "All" shows everything.
+    expect(await listThreads("all")).toHaveLength(9);
+  });
+
+  test("Unread excludes archived threads (same rule as the sidebar badge)", async () => {
+    const subjects = (await listThreads("unread")).map((r) => r.subject);
+    expect(subjects).toEqual(["unread"]);
+    expect(await getEmailUnreadCount()).toBe(1);
+    expect((await getCommunicationCounts()).unread).toBe(1);
+  });
+
+  test("a matter id overrides the flat filters and reaches archived threads", async () => {
+    const subjects = (await listThreads("all", matterId)).map((r) => r.subject);
+    expect(subjects.sort()).toEqual(["filed", "filed-archived"]);
+  });
+
+  test("untimed drops threads where the viewer logged time on a message", async () => {
+    const t = await prisma.emailThread.findFirstOrThrow({
+      where: { subject: "plain" },
+      include: { messages: true },
+    });
+    await prisma.timeEntry.create({
+      data: {
+        matterId,
+        userId,
+        date: new Date("2026-06-01"),
+        hours: 0.2,
+        activity: "email",
+        emailMessageId: t.messages[0].id,
+      },
+    });
+    const subjects = (await listThreads("untimed")).map((r) => r.subject);
+    expect(subjects).not.toContain("plain");
+    expect((await getCommunicationCounts()).untimed).toBe(subjects.length);
+  });
+
+  test("a pinned matter's rail badge equals what its drilldown lists", async () => {
+    await prisma.userMatterPin.create({ data: { userId, matterId } });
+    const pinned = await getCommunicationPinnedMatters();
+    expect(pinned).toHaveLength(1);
+    // The drilldown's landing filter is the matter-mode default...
+    const filter = defaultEmailFilter(matterId);
+    expect(filter).toBe("all");
+    const rows = await listThreads(filter, matterId);
+    // ...so the badge (all threads on the matter) matches the list,
+    // archived ones included. With the Inbox default it showed 2 vs 1.
+    expect(pinned[0].threadCount).toBe(rows.length);
+    expect(rows).toHaveLength(2);
+    expect(defaultEmailFilter(null)).toBe("inbox");
+  });
+});
+
+describe("getFilingMatterOptions", () => {
+  test("lists open matters only, pinned first", async () => {
+    const area = await seedPracticeArea();
+    await seedMatter({
+      practiceAreaId: area.areaId,
+      stageId: area.stageId,
+      leadUserId: userId,
+      name: "Open A",
+    });
+    const b = await seedMatter({
+      practiceAreaId: area.areaId,
+      stageId: area.stageId,
+      leadUserId: userId,
+      name: "Open B",
+    });
+    const archived = await seedMatter({
+      practiceAreaId: area.areaId,
+      stageId: area.stageId,
+      leadUserId: userId,
+      name: "Archived",
+    });
+    await prisma.matter.update({
+      where: { id: archived.matterId },
+      data: { isArchived: true },
+    });
+    await prisma.userMatterPin.create({
+      data: { userId, matterId: b.matterId },
+    });
+    const opts = await getFilingMatterOptions();
+    expect(opts.map((o) => o.name)).toEqual(["Open B", "Open A"]);
+    expect(opts[0].isPinned).toBe(true);
+    expect(opts.some((o) => o.id === archived.matterId)).toBe(false);
   });
 });

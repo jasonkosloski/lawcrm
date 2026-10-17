@@ -10,8 +10,15 @@
  * pre-resolve contact + matter so the UI doesn't N+1.
  */
 
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { isManualCallLog } from "@/lib/call-log-form";
+import { isManualCallLog, isMissedCall } from "@/lib/call-log-form";
+import type { CommTimeEntry } from "@/lib/queries/communication";
+
+// The missed-call rule lives in the pure call-log-form module so the
+// inbox list, the thread reader and the matter Phone log share one
+// definition. Re-exported here for existing importers.
+export { MISSED_CALL_STATUSES, isMissedCall } from "@/lib/call-log-form";
 
 export type MessengerKind = "sms" | "call" | "voicemail";
 export type MessengerDirection = "inbound" | "outbound";
@@ -46,15 +53,7 @@ export type MessengerThreadRow = {
 /** Compact view of a time entry logged on a messenger item — drives
  *  the inline time-logged indicator on SMS bubbles, call events, and
  *  voicemail cards. */
-export type MessengerItemTime = {
-  id: string;
-  hours: number;
-  date: Date;
-  activity: string;
-  userName: string;
-  userInitials: string;
-  billable: boolean;
-};
+export type MessengerItemTime = CommTimeEntry;
 
 export type MessengerItemRow = {
   id: string;
@@ -102,44 +101,6 @@ export type MessengerThreadDetail = {
   items: MessengerItemRow[];
 };
 
-/**
- * Call statuses that get the "missed" treatment (warn color,
- * PhoneMissed glyph) when the call is inbound.
- *
- * Value space is MessengerItem.callStatus: answered | missed |
- * voicemail | busy | failed | no_answer | declined.
- *
- * Included: `missed` and `no_answer` (caller rang out — the same
- * pair the thread reader and MatterPhoneLog already flag), plus
- * `declined` (a deliberately-rejected inbound call still means the
- * caller reached nobody and likely needs follow-up).
- *
- * Excluded by choice: `busy` and `failed` — those signal line or
- * network trouble on the connection itself rather than a caller the
- * firm failed to pick up, and the sibling call surfaces (thread
- * reader, matter phone log) render them neutrally. Flagging them
- * here would make the inbox disagree with the reader it opens into.
- */
-export const MISSED_CALL_STATUSES: ReadonlySet<string> = new Set([
-  "missed",
-  "no_answer",
-  "declined",
-]);
-
-/** True when an item (or thread preview) represents a missed call:
- *  an inbound call whose status is in MISSED_CALL_STATUSES. Pure —
- *  safe to use from components. */
-export function isMissedCall(
-  direction: MessengerDirection | null,
-  callStatus: string | null
-): boolean {
-  return (
-    direction === "inbound" &&
-    callStatus !== null &&
-    MISSED_CALL_STATUSES.has(callStatus)
-  );
-}
-
 const SAFE_MEDIA: MessengerItemRow["mediaUrls"] = [];
 
 /** Best-effort cast of a Prisma JSON value into the typed mediaUrls
@@ -158,46 +119,57 @@ function parseMediaUrls(raw: unknown): MessengerItemRow["mediaUrls"] {
     }));
 }
 
+/** "Unfiled" thread: no default matter AND no item filed to a matter.
+ *  Manually logged calls are filed per item (the thread carries no
+ *  default), so item-level filing must count. Shared by the list
+ *  filter and the rail count so they cannot drift. */
+const UNFILED_THREAD_WHERE: Prisma.MessengerThreadWhereInput = {
+  defaultMatterId: null,
+  items: { none: { matterId: { not: null } } },
+};
+
+/** Inbox page size — no pager yet (see FEATURES.md). */
+const THREAD_LIST_LIMIT = 200;
+
 /**
  * Inbox: messenger threads ordered by last activity. Filters:
  *   - filter "all" (default), "unread", "unfiled" (no defaultMatter
  *     and no item-level matter), "pinned"
- *   - matterId for the matter-detail Communication tab
+ *   - contactPhone / contactPhones / contactId scope to one person's
+ *     threads (the lead Communication tab); they OR together.
  *
  * Returns a denormalized row shape (contact + matter joined) so the
  * left rail can render directly without per-row lookups.
  */
 export async function listMessengerThreads({
   filter = "all",
-  matterId,
   contactPhone,
-  take = 200,
+  contactPhones,
+  contactId,
 }: {
   filter?: "all" | "unread" | "unfiled" | "pinned";
-  matterId?: string;
-  /** Exact-match (E.164) filter — used by the lead Communication
-   *  tab to scope to one phone number. */
+  /** Exact-match (E.164) filter. */
   contactPhone?: string;
-  take?: number;
+  /** Exact-match (E.164) filter over several numbers. */
+  contactPhones?: string[];
+  /** Threads resolved to this contact, whatever number they use. */
+  contactId?: string;
 } = {}): Promise<MessengerThreadRow[]> {
+  const scope: Prisma.MessengerThreadWhereInput[] = [];
+  if (contactPhone) scope.push({ contactPhone });
+  if (contactPhones?.length) scope.push({ contactPhone: { in: contactPhones } });
+  if (contactId) scope.push({ contactId });
+
   const threads = await prisma.messengerThread.findMany({
     where: {
       isArchived: false,
       ...(filter === "unread" ? { unreadCount: { gt: 0 } } : {}),
       ...(filter === "pinned" ? { isPinned: true } : {}),
-      ...(filter === "unfiled" ? { defaultMatterId: null } : {}),
-      ...(matterId
-        ? {
-            OR: [
-              { defaultMatterId: matterId },
-              { items: { some: { matterId } } },
-            ],
-          }
-        : {}),
-      ...(contactPhone ? { contactPhone } : {}),
+      ...(filter === "unfiled" ? UNFILED_THREAD_WHERE : {}),
+      ...(scope.length ? { OR: scope } : {}),
     },
     orderBy: [{ isPinned: "desc" }, { lastItemAt: "desc" }],
-    take,
+    take: THREAD_LIST_LIMIT,
     include: {
       contact: { select: { id: true, name: true, type: true } },
       defaultMatter: { select: { id: true, name: true, color: true } },
@@ -220,10 +192,7 @@ export async function listMessengerThreads({
     const lastBody =
       last?.body ??
       (last?.kind === "call"
-        ? isMissedCall(
-            (last.direction ?? null) as MessengerDirection | null,
-            last.callStatus
-          )
+        ? isMissedCall(last.direction ?? null, last.callStatus)
           ? "Missed call"
           : last.direction === "inbound"
             ? "Inbound call"
@@ -253,22 +222,33 @@ export async function listMessengerThreads({
   });
 }
 
-/** Normalize a US phone string for matching: strips everything but
- *  digits, then prepends `+1` for the common 10-digit case so the
- *  result lines up with E.164-stored thread.contactPhone. */
+/**
+ * Normalize a typed/stored phone string to the E.164 form thread keys
+ * use. Accepts a US number (10 digits, or 11 starting with 1) in any
+ * punctuation, an optional trailing extension ("x123", "ext. 4"), or
+ * an explicit international "+" number of 8-15 digits. Anything else
+ * (7-digit local numbers, junk like "n/a") returns null so callers can
+ * ask for a real number instead of minting a thread that no later
+ * lookup would ever match.
+ */
 export function normalizePhone(raw: string | null | undefined): string | null {
   if (!raw) return null;
-  const digits = raw.replace(/\D/g, "");
-  if (digits.length === 0) return null;
+  const withoutExt = raw
+    .trim()
+    .replace(/\s*(?:x|ext\.?|extension|#)\s*\d+\s*$/i, "");
+  const digits = withoutExt.replace(/\D/g, "");
   if (digits.length === 10) return `+1${digits}`;
   if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
-  return `+${digits}`;
+  if (withoutExt.startsWith("+") && digits.length >= 8 && digits.length <= 15) {
+    return `+${digits}`;
+  }
+  return null;
 }
 
 /**
- * Threads scoped to a phone number — used by the lead Communication
- * tab. Falls back to digit-only comparison so seeded `(303) 555-0182`
- * matches stored `+13035550182` even before normalization migration.
+ * Threads scoped to a phone number. The input is normalized and then
+ * EXACT-matched against stored `contactPhone` values (E.164) - there
+ * is no digit-only fallback for non-normalized stored numbers.
  */
 export async function listMessengerThreadsForPhone(
   phone: string
@@ -276,6 +256,32 @@ export async function listMessengerThreadsForPhone(
   const normalized = normalizePhone(phone);
   if (!normalized) return [];
   return listMessengerThreads({ contactPhone: normalized });
+}
+
+/**
+ * Threads for a lead's contact - used by the lead Communication tab.
+ * Matches threads resolved to the contact (`contactId`, which is what
+ * "Log call" sets whatever number was typed) OR sitting on any of the
+ * contact's known numbers (so webhook threads not yet resolved to the
+ * contact still show).
+ */
+export async function listMessengerThreadsForLead({
+  contactId,
+  phones,
+}: {
+  contactId?: string | null;
+  phones: Array<string | null | undefined>;
+}): Promise<MessengerThreadRow[]> {
+  const numbers = [
+    ...new Set(
+      phones.map((p) => normalizePhone(p)).filter((p): p is string => !!p)
+    ),
+  ];
+  if (!contactId && numbers.length === 0) return [];
+  return listMessengerThreads({
+    contactPhones: numbers,
+    contactId: contactId ?? undefined,
+  });
 }
 
 /** Counts for the mailbox rail on the messenger view. */
@@ -293,7 +299,7 @@ export async function getMessengerMailboxCounts(): Promise<MessengerMailboxCount
       where: { isArchived: false, unreadCount: { gt: 0 } },
     }),
     prisma.messengerThread.count({
-      where: { isArchived: false, defaultMatterId: null },
+      where: { isArchived: false, ...UNFILED_THREAD_WHERE },
     }),
     prisma.messengerThread.count({
       where: { isArchived: false, isPinned: true },
@@ -302,9 +308,18 @@ export async function getMessengerMailboxCounts(): Promise<MessengerMailboxCount
   return { all, unread, unfiled, pinned };
 }
 
+/** Unread conversations (the Messages tab badge) - one cheap count
+ *  for when the email view needs only the other family's badge. */
+export async function getMessengerUnreadCount(): Promise<number> {
+  return prisma.messengerThread.count({
+    where: { isArchived: false, unreadCount: { gt: 0 } },
+  });
+}
+
 /**
- * Full thread + items for the right pane reader. Null when missing
- * so the page can `notFound()`.
+ * Full thread + items for the right pane reader. Null when the id
+ * matches no thread - the page then renders the empty reader rather
+ * than a 404.
  */
 export async function getMessengerThread(
   threadId: string

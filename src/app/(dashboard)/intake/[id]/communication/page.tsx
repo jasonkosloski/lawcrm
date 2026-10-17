@@ -7,7 +7,9 @@
  *
  * Either side renders only when the corresponding contact channel is
  * known. Empty state covers the genuinely-no-contact case (no email
- * AND no phone). Clicking an email thread updates `?thread=<id>` in
+ * AND no phone). SMS / calls match by the contact record (calls logged
+ * from this tab file to the contact whatever number was typed) or any
+ * of the contact's known numbers. Clicking an email thread updates `?thread=<id>` in
  * place; SMS rows link out to the main `/communication?view=messages`
  * page since there's no embedded messenger reader today.
  *
@@ -29,7 +31,7 @@ import {
   listThreadsForEmail,
 } from "@/lib/queries/communication";
 import {
-  listMessengerThreadsForPhone,
+  listMessengerThreadsForLead,
   type MessengerThreadRow,
 } from "@/lib/queries/messenger";
 // Thread timestamps are real instants — render them on the viewer's
@@ -62,11 +64,19 @@ export default async function LeadCommunicationPage({
 
   // Email + SMS in parallel; either may be empty depending on what
   // contact channels we know about.
-  const [emailThreads, messengerThreads, filingOptions, callContacts, tz] =
+  const [emailThreads, messengerThreads, callContacts, tz] =
     await Promise.all([
       email ? listThreadsForEmail(email) : Promise.resolve([]),
-      phone ? listMessengerThreadsForPhone(phone) : Promise.resolve([]),
-      getFilingMatterOptions(),
+      phone
+        ? listMessengerThreadsForLead({
+            contactId: lead.contact?.id,
+            phones: [
+              phone,
+              lead.contact?.phone,
+              ...(lead.contact?.phones.map((p) => p.number) ?? []),
+            ],
+          })
+        : Promise.resolve([]),
       // Contact typeahead options for the log-call composer — only
       // when the gate passes AND the lead has a joined contact to
       // pre-select (leads always do post-migration, but stay safe).
@@ -99,7 +109,11 @@ export default async function LeadCommunicationPage({
       ? requestedThreadId
       : null;
 
-  const selectedThread = threadId ? await getThreadById(threadId) : null;
+  // The filing-matter list only feeds the open thread's reader, so
+  // skip that (unbounded) query until a thread is selected.
+  const [selectedThread, filingOptions] = threadId
+    ? await Promise.all([getThreadById(threadId), getFilingMatterOptions()])
+    : [null, []];
 
   // Truly no contact info — show a single empty card. The composer
   // stays available (it accepts a typed phone number) so the first
@@ -189,14 +203,14 @@ function SmsSection({
   return (
     <div className="flex flex-col gap-2 shrink-0">
       <div className="text-2xs font-mono text-ink-4">
-        SMS / calls on{" "}
+        SMS / calls with this contact ·{" "}
         <span className="text-ink-3">{formatPhone(phone)}</span>
       </div>
       <Card className="p-0 overflow-hidden">
         {threads.length === 0 ? (
           <div className="p-4 text-xs text-ink-3 flex items-center gap-2">
             <MessageCircle size={13} className="text-ink-4" />
-            No texts or calls with {formatPhone(phone)} yet.
+            No texts or calls with this contact yet.
           </div>
         ) : (
           <ul className="divide-y divide-line">

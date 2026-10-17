@@ -1,15 +1,19 @@
 /**
  * Communication Queries
  *
- * Server-only data access for the unified-inbox /communication page.
- * Email-first today; SMS queries will slot in alongside when the
- * integration lands (see SCHEMA_NOTES open question on Email* vs.
- * polymorphic Communication*).
+ * Server-only data access for the EMAIL half of the unified-inbox
+ * /communication page. The SMS / call / voicemail half lives in
+ * `@/lib/queries/messenger.ts` (a separate model family).
+ *
+ * Every email read here is scoped to the viewer's own mailbox via
+ * `visibleEmailThreadWhere` (src/lib/email-visibility.ts) - the one
+ * definition of which threads a user may see.
  */
 
-import type { Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { visibleEmailThreadWhere } from "@/lib/email-visibility";
 
 export type CommunicationFilter =
   /** Default working surface: unarchived threads that aren't
@@ -18,6 +22,9 @@ export type CommunicationFilter =
   | "inbox"
   /** Everything, including archived + snoozed. */
   | "all"
+  /** Unread threads that are still in the working mailbox -
+   *  archived threads don't count (same rule as the sidebar badge
+   *  and the rail count, so the three always agree). */
   | "unread"
   | "starred"
   /** Threads archived out of the working inbox (isArchived) — the
@@ -48,58 +55,33 @@ export type ThreadListRow = {
   matter: { id: string; name: string; color: string } | null;
 };
 
-export async function listThreads(
-  filter: CommunicationFilter = "all",
-  /** When set, filters to threads on this specific matter — used by
-   *  the per-pinned-matter sub-rail entries. Overrides matter-related
-   *  filters. */
-  matterId?: string
-): Promise<ThreadListRow[]> {
-  const userId = await getCurrentUserId();
+/** Landing filter when the URL carries none: the working Inbox, except
+ *  in a pinned-matter drilldown where the rail badge counts every
+ *  thread filed to the matter - archived ones included (filing then
+ *  archiving is the normal workflow) - so the list must show them too. */
+export function defaultEmailFilter(
+  matterId: string | null | undefined
+): CommunicationFilter {
+  return matterId ? "all" : "inbox";
+}
 
-  // `where` builds from the filter, but always scoped to the current
-  // user's accounts.
-  const where: Record<string, unknown> = {
-    account: { userId },
-  };
-  if (filter === "unread") where.isRead = false;
-  if (filter === "starred") where.isStarred = true;
-  if (filter === "archived") where.isArchived = true;
-  if (filter === "unfiled") where.matterId = null;
-  if (filter === "filed") where.matterId = { not: null };
-  if (filter === "untimed") {
-    // No message in this thread has a time entry by the current user.
-    // Other users' time entries don't disqualify — this is "what
-    // I haven't billed yet" for me specifically.
-    where.messages = {
-      none: { timeEntries: { some: { userId } } },
-    };
-  }
-  if (filter === "inbox") {
-    // Working inbox: not archived AND not snoozed for later.
-    Object.assign(where, inboxVisibilityWhere());
-  }
-  // Per-pinned-matter override — wins over any matter-related filter.
-  if (matterId) where.matterId = matterId;
+/** Shared include for every thread-list query. */
+const threadListInclude = {
+  matter: { select: { id: true, name: true, color: true } },
+  // First message only - just for fromDisplay.
+  messages: {
+    orderBy: { sentAt: "asc" },
+    take: 1,
+    select: { fromName: true, fromEmail: true },
+  },
+} satisfies Prisma.EmailThreadInclude;
 
-  const threads = await prisma.emailThread.findMany({
-    where,
-    // 500-thread cap on the inbox — matches how Gmail / Outlook
-    // both default to "most recent N" without a true infinite
-    // scroll. Build proper paging when a real firm exceeds this.
-    take: 500,
-    include: {
-      matter: { select: { id: true, name: true, color: true } },
-      messages: {
-        orderBy: { sentAt: "asc" },
-        take: 1,
-        select: { fromName: true, fromEmail: true },
-      },
-    },
-    orderBy: { lastMessageAt: "desc" },
-  });
+type ThreadListRecord = Prisma.EmailThreadGetPayload<{
+  include: typeof threadListInclude;
+}>;
 
-  return threads.map((t) => ({
+function toThreadListRow(t: ThreadListRecord): ThreadListRow {
+  return {
     id: t.id,
     subject: t.subject,
     snippet: t.snippet,
@@ -113,7 +95,57 @@ export async function listThreads(
     fromDisplay:
       t.messages[0]?.fromName ?? t.messages[0]?.fromEmail ?? "Unknown",
     matter: t.matter,
-  }));
+  };
+}
+
+export async function listThreads(
+  filter: CommunicationFilter = "all",
+  /** When set, filters to threads on this specific matter - used by
+   *  the per-pinned-matter sub-rail entries. Overrides matter-related
+   *  filters. */
+  matterId?: string
+): Promise<ThreadListRow[]> {
+  const userId = await getCurrentUserId();
+
+  // `where` builds from the filter, but always scoped to the current
+  // user's accounts.
+  const where: Prisma.EmailThreadWhereInput = {
+    ...visibleEmailThreadWhere(userId),
+  };
+  if (filter === "unread") {
+    where.isRead = false;
+    where.isArchived = false;
+  }
+  if (filter === "starred") where.isStarred = true;
+  if (filter === "archived") where.isArchived = true;
+  if (filter === "unfiled") where.matterId = null;
+  if (filter === "filed") where.matterId = { not: null };
+  if (filter === "untimed") {
+    // No message in this thread has a time entry by the current user.
+    // Other users' time entries don't disqualify - this is "what
+    // I haven't billed yet" for me specifically.
+    where.messages = {
+      none: { timeEntries: { some: { userId } } },
+    };
+  }
+  if (filter === "inbox") {
+    // Working inbox: not archived AND not snoozed for later.
+    Object.assign(where, inboxVisibilityWhere());
+  }
+  // Per-pinned-matter override - wins over any matter-related filter.
+  if (matterId) where.matterId = matterId;
+
+  const threads = await prisma.emailThread.findMany({
+    where,
+    // 500-thread cap on the inbox - matches how Gmail / Outlook
+    // both default to "most recent N" without a true infinite
+    // scroll. Build proper paging when a real firm exceeds this.
+    take: 500,
+    include: threadListInclude,
+    orderBy: { lastMessageAt: "desc" },
+  });
+
+  return threads.map(toThreadListRow);
 }
 
 /** Compact view of a time entry logged against a single email message
@@ -179,7 +211,7 @@ function parseRecipients(raw: string | null): Array<{ name?: string; email: stri
 export async function getThreadById(id: string): Promise<ThreadDetail | null> {
   const userId = await getCurrentUserId();
   const thread = await prisma.emailThread.findFirst({
-    where: { id, account: { userId } },
+    where: { id, ...visibleEmailThreadWhere(userId) },
     include: {
       matter: {
         select: {
@@ -255,35 +287,14 @@ export async function listThreadsForMatter(
 ): Promise<ThreadListRow[]> {
   const userId = await getCurrentUserId();
   const threads = await prisma.emailThread.findMany({
-    where: { matterId, account: { userId } },
+    where: { matterId, ...visibleEmailThreadWhere(userId) },
     // 500-thread cap matches listThreads. A single matter rarely
     // exceeds this; if one does, build per-matter paging.
     take: 500,
-    include: {
-      matter: { select: { id: true, name: true, color: true } },
-      messages: {
-        orderBy: { sentAt: "asc" },
-        take: 1,
-        select: { fromName: true, fromEmail: true },
-      },
-    },
+    include: threadListInclude,
     orderBy: { lastMessageAt: "desc" },
   });
-  return threads.map((t) => ({
-    id: t.id,
-    subject: t.subject,
-    snippet: t.snippet,
-    isRead: t.isRead,
-    isStarred: t.isStarred,
-    isArchived: t.isArchived,
-    hasAttachments: t.hasAttachments,
-    messageCount: t.messageCount,
-    lastMessageAt: t.lastMessageAt,
-    followUpAt: t.followUpAt,
-    fromDisplay:
-      t.messages[0]?.fromName ?? t.messages[0]?.fromEmail ?? "Unknown",
-    matter: t.matter,
-  }));
+  return threads.map(toThreadListRow);
 }
 
 /** Threads that touch a given email address (sender OR recipient).
@@ -313,25 +324,17 @@ export async function listThreadsForEmail(
 
   const candidates = await prisma.emailThread.findMany({
     where: {
-      account: { userId },
+      ...visibleEmailThreadWhere(userId),
       messages: { some: { OR: matchOr } },
     },
-    // Same 500-thread cap as listThreads — a per-lead view never
+    // Same 500-thread cap as listThreads - a per-lead view never
     // needs more, and without it a busy address pulls its entire
-    // history in one query.
+    // history in one query. Recipient JSON for verification comes from
+    // the message-scoped query below; loading it here would scale with
+    // total mail volume in every candidate thread, not with the number
+    // of actual matches.
     take: 500,
-    include: {
-      matter: { select: { id: true, name: true, color: true } },
-      // First message only — just for fromDisplay. Recipient JSON for
-      // verification comes from the message-scoped query below;
-      // loading it here would scale with total mail volume in every
-      // candidate thread, not with the number of actual matches.
-      messages: {
-        orderBy: { sentAt: "asc" },
-        take: 1,
-        select: { fromName: true, fromEmail: true },
-      },
-    },
+    include: threadListInclude,
     orderBy: { lastMessageAt: "desc" },
   });
   if (candidates.length === 0) return [];
@@ -365,23 +368,7 @@ export async function listThreadsForEmail(
     if (isMatch) verified.add(m.threadId);
   }
 
-  return candidates
-    .filter((t) => verified.has(t.id))
-    .map((t) => ({
-      id: t.id,
-      subject: t.subject,
-      snippet: t.snippet,
-      isRead: t.isRead,
-      isStarred: t.isStarred,
-      isArchived: t.isArchived,
-      hasAttachments: t.hasAttachments,
-      messageCount: t.messageCount,
-      lastMessageAt: t.lastMessageAt,
-      followUpAt: t.followUpAt,
-      fromDisplay:
-        t.messages[0]?.fromName ?? t.messages[0]?.fromEmail ?? "Unknown",
-      matter: t.matter,
-    }));
+  return candidates.filter((t) => verified.has(t.id)).map(toThreadListRow);
 }
 
 export type CommunicationCounts = {
@@ -395,35 +382,87 @@ export type CommunicationCounts = {
   untimed: number;
 };
 
+type CheapEmailCountsRow = {
+  inbox: number;
+  all: number;
+  unread: number;
+  starred: number;
+  archived: number;
+  unfiled: number;
+  filed: number;
+};
+
+/**
+ * Rail counts. The seven cheap, row-local counts come from ONE
+ * conditional-aggregate scan of the viewer's threads (each FILTER
+ * mirrors the matching `listThreads` filter - keep them in step); the
+ * `untimed` anti-join stays a separate count. Raw SQL uses the mapped
+ * table / column names.
+ *
+ * MAILBOX SCOPE: the raw SQL cannot spread `visibleEmailThreadWhere`
+ * (src/lib/email-visibility.ts), so the `JOIN email_accounts ...
+ * WHERE a."userId"` below is a hand-written copy of that scope. If the
+ * helper ever widens (shared mailbox flag, etc.) this query MUST change
+ * with it. The real-database tests in communication.test.ts execute
+ * this SQL (mailbox-scoping and "every rail count equals its list"
+ * cases), so a column / FILTER drift fails there.
+ */
 export async function getCommunicationCounts(): Promise<CommunicationCounts> {
   const userId = await getCurrentUserId();
-  const base = { account: { userId } };
   const now = new Date();
-  const [inbox, all, unread, starred, archived, unfiled, filed, untimed] =
-    await Promise.all([
-      prisma.emailThread.count({
-        where: {
-          ...base,
-          isArchived: false,
-          OR: [{ followUpAt: null }, { followUpAt: { lte: now } }],
-        },
-      }),
-      prisma.emailThread.count({ where: base }),
-      prisma.emailThread.count({ where: { ...base, isRead: false } }),
-      prisma.emailThread.count({ where: { ...base, isStarred: true } }),
-      prisma.emailThread.count({ where: { ...base, isArchived: true } }),
-      prisma.emailThread.count({ where: { ...base, matterId: null } }),
-      prisma.emailThread.count({ where: { ...base, matterId: { not: null } } }),
-      prisma.emailThread.count({
-        where: {
-          ...base,
-          messages: {
-            none: { timeEntries: { some: { userId } } },
-          },
-        },
-      }),
-    ]);
-  return { inbox, all, unread, starred, archived, unfiled, filed, untimed };
+  const [cheap, untimed] = await Promise.all([
+    prisma.$queryRaw<CheapEmailCountsRow[]>(Prisma.sql`
+      SELECT
+        COUNT(*) FILTER (
+          WHERE t."isArchived" = false
+            AND (t."followUpAt" IS NULL OR t."followUpAt" <= ${now})
+        )::int AS inbox,
+        COUNT(*)::int AS "all",
+        COUNT(*) FILTER (
+          WHERE t."isRead" = false AND t."isArchived" = false
+        )::int AS unread,
+        COUNT(*) FILTER (WHERE t."isStarred" = true)::int AS starred,
+        COUNT(*) FILTER (WHERE t."isArchived" = true)::int AS archived,
+        COUNT(*) FILTER (WHERE t."matterId" IS NULL)::int AS unfiled,
+        COUNT(*) FILTER (WHERE t."matterId" IS NOT NULL)::int AS filed
+      FROM email_threads t
+      JOIN email_accounts a ON a.id = t."accountId"
+      -- Keep in step with visibleEmailThreadWhere (email-visibility.ts).
+      WHERE a."userId" = ${userId}
+    `),
+    prisma.emailThread.count({
+      where: {
+        ...visibleEmailThreadWhere(userId),
+        messages: { none: { timeEntries: { some: { userId } } } },
+      },
+    }),
+  ]);
+  const row = cheap[0];
+  return {
+    inbox: row?.inbox ?? 0,
+    all: row?.all ?? 0,
+    unread: row?.unread ?? 0,
+    starred: row?.starred ?? 0,
+    archived: row?.archived ?? 0,
+    unfiled: row?.unfiled ?? 0,
+    filed: row?.filed ?? 0,
+    untimed,
+  };
+}
+
+/** Unread (non-archived) threads in the viewer's mailbox - the Email
+ *  tab badge. One cheap count for when the messages view needs only
+ *  this number rather than every rail count. Same rule as the rail's
+ *  Unread count and the sidebar badge. */
+export async function getEmailUnreadCount(): Promise<number> {
+  const userId = await getCurrentUserId();
+  return prisma.emailThread.count({
+    where: {
+      ...visibleEmailThreadWhere(userId),
+      isRead: false,
+      isArchived: false,
+    },
+  });
 }
 
 /** Compact matter row used by the file-to-matter picker on the
@@ -485,12 +524,13 @@ function inboxVisibilityWhere(now: Date = new Date()) {
   };
 }
 
-/** Pinned matter + inbox-thread count for the communication rail's
+/** Pinned matter + thread count for the communication rail's
  *  per-matter drilldown section. Every non-archived pin is returned,
  *  including ones with zero threads (the page resolves its matter
- *  label from this list). The count is the visible Inbox rows
- *  (archived and snoozed threads excluded) because the rail link
- *  opens the matter under the default Inbox filter. */
+ *  label from this list). The count is every thread filed to the
+ *  matter in the viewer's mailbox — archived and snoozed included —
+ *  because the drilldown opens on the "all" filter
+ *  (defaultEmailFilter(matterId)): filed mail is the case record. */
 export type CommPinnedMatter = {
   id: string;
   name: string;
@@ -523,9 +563,8 @@ export async function getCommunicationPinnedMatters(): Promise<
   const counts = await prisma.emailThread.groupBy({
     by: ["matterId"],
     where: {
-      account: { userId },
+      ...visibleEmailThreadWhere(userId),
       matterId: { in: matterIds },
-      ...inboxVisibilityWhere(),
     },
     _count: true,
   });

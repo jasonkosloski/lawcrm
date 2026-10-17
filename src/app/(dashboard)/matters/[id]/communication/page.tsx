@@ -114,11 +114,11 @@ export default async function MatterCommunicationPage({
             canEditCall={canEditCall}
             canDeleteCall={canDeleteCall}
             matterName={matter.name}
+            tz={tz}
             editMatters={(editMatters ?? []).map((m) => ({
               id: m.id,
               name: m.name,
             }))}
-            tz={tz}
           />
         </div>
       </div>

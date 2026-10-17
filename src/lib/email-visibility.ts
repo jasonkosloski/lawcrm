@@ -14,6 +14,11 @@
  * unfile, spawn task/deadline/note, log time on a message) must use
  * this helper rather than re-deriving the scope, so a future widening
  * (e.g. an explicit shared-mailbox flag) happens in exactly one place.
+ *
+ * One hand-written copy exists: the raw-SQL rail counts in
+ * getCommunicationCounts (queries/communication.ts) join
+ * `email_accounts` on `userId` directly. Change both together; the
+ * real-DB tests in communication.test.ts exercise that SQL.
  */
 
 import type { Prisma } from "@/generated/prisma/client";

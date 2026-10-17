@@ -10,8 +10,10 @@ import {
   durationSecToMinutesInput,
   formatCallDuration,
   isManualCallLog,
-  toDateTimeLocal,
+  isMissedCall,
+  parseCallOccurredAt,
 } from "./call-log-form";
+import { toWallClockInput } from "./format-date";
 
 describe("formatCallDuration", () => {
   it("returns null for missing / zero / negative durations", () => {
@@ -32,6 +34,13 @@ describe("formatCallDuration", () => {
 
   it("formats mixed hours + minutes", () => {
     expect(formatCallDuration(65 * 60)).toBe("1h 5m");
+  });
+
+  it("shows sub-minute calls in seconds, never 0m", () => {
+    expect(formatCallDuration(1)).toBe("1s");
+    expect(formatCallDuration(20)).toBe("20s");
+    expect(formatCallDuration(29)).toBe("29s");
+    expect(formatCallDuration(59)).toBe("59s");
   });
 
   it("rounds seconds to the nearest minute", () => {
@@ -77,19 +86,68 @@ describe("asCallOutcome (edit prefill)", () => {
   });
 });
 
-describe("toDateTimeLocal (edit prefill / composer default)", () => {
-  it("renders a datetime-local value with zero padding", () => {
-    expect(toDateTimeLocal(new Date(2026, 5, 10, 14, 30))).toBe(
-      "2026-06-10T14:30"
-    );
-    expect(toDateTimeLocal(new Date(2026, 0, 3, 9, 5))).toBe(
-      "2026-01-03T09:05"
+describe("parseCallOccurredAt (composer value -> instant, user zone)", () => {
+  it("reads the wall-clock value in the USER's zone, not the process zone", () => {
+    // 14:30 on Jun 10 in Denver (MDT, UTC-6) is 20:30Z - whatever the
+    // zone this test process runs in (the suite runs in both
+    // America/Denver and UTC).
+    expect(
+      parseCallOccurredAt("2026-06-10T14:30", "America/Denver")?.toISOString()
+    ).toBe("2026-06-10T20:30:00.000Z");
+    expect(
+      parseCallOccurredAt("2026-06-10T14:30", "UTC")?.toISOString()
+    ).toBe("2026-06-10T14:30:00.000Z");
+    expect(
+      parseCallOccurredAt("2026-01-10T14:30", "America/Denver")?.toISOString()
+    ).toBe("2026-01-10T21:30:00.000Z"); // MST, UTC-7
+  });
+
+  it("round-trips through the edit prefill without drifting", () => {
+    // The old behaviour re-read the browser-local prefill as server
+    // time, shifting the call by the zone offset on every save.
+    const tz = "America/Denver";
+    let instant = parseCallOccurredAt("2026-06-10T14:30", tz)!;
+    for (let i = 0; i < 3; i++) {
+      instant = parseCallOccurredAt(toWallClockInput(instant, tz), tz)!;
+    }
+    expect(instant.toISOString()).toBe("2026-06-10T20:30:00.000Z");
+  });
+
+  it("pins a date-only value to midnight of that day in the user's zone", () => {
+    expect(
+      parseCallOccurredAt("2026-06-10", "America/Denver")?.toISOString()
+    ).toBe("2026-06-10T06:00:00.000Z");
+    expect(parseCallOccurredAt("2026-06-10", "UTC")?.toISOString()).toBe(
+      "2026-06-10T00:00:00.000Z"
     );
   });
 
-  it("round-trips through the action's `new Date(...)` parse", () => {
-    const d = new Date(2026, 6, 4, 23, 59);
-    expect(new Date(toDateTimeLocal(d)).getTime()).toBe(d.getTime());
+  it("returns null for malformed or impossible values", () => {
+    expect(parseCallOccurredAt("not-a-date", "UTC")).toBeNull();
+    expect(parseCallOccurredAt("2026-02-30", "UTC")).toBeNull();
+    expect(parseCallOccurredAt("2026-06-10T25:00", "UTC")).toBeNull();
+    expect(parseCallOccurredAt("", "UTC")).toBeNull();
+  });
+});
+
+describe("isMissedCall", () => {
+  it("flags only inbound calls that rang out or were declined", () => {
+    expect(isMissedCall("inbound", "missed")).toBe(true);
+    expect(isMissedCall("inbound", "no_answer")).toBe(true);
+    expect(isMissedCall("inbound", "declined")).toBe(true);
+    expect(isMissedCall("inbound", "answered")).toBe(false);
+    expect(isMissedCall("inbound", "busy")).toBe(false);
+    expect(isMissedCall("inbound", "failed")).toBe(false);
+  });
+
+  it("an outbound unanswered attempt is not a missed call", () => {
+    expect(isMissedCall("outbound", "no_answer")).toBe(false);
+    expect(isMissedCall("outbound", "missed")).toBe(false);
+  });
+
+  it("is false without a direction or status", () => {
+    expect(isMissedCall(null, "missed")).toBe(false);
+    expect(isMissedCall("inbound", null)).toBe(false);
   });
 });
 

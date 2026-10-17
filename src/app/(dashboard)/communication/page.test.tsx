@@ -21,14 +21,20 @@ vi.mock("@/lib/google/gmail-sync", () => ({
 vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn(async () => true),
 }));
-vi.mock("@/lib/queries/communication", () => ({
+// The page schedules a background sync with after(); no request scope here.
+vi.mock("next/server", () => ({ after: vi.fn() }));
+vi.mock("@/lib/queries/communication", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/queries/communication")>()),
   getCommunicationCounts: vi.fn(async () => ({ all: 0, unread: 0 })),
   getCommunicationPinnedMatters: vi.fn(async () => []),
+  getEmailUnreadCount: vi.fn(async () => 0),
   getFilingMatterOptions: vi.fn(async () => []),
   getThreadById: vi.fn(),
   listThreads: vi.fn(async () => []),
 }));
-vi.mock("@/lib/queries/messenger", () => ({
+vi.mock("@/lib/queries/messenger", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/queries/messenger")>()),
+  getMessengerUnreadCount: vi.fn(async () => 0),
   getMessengerMailboxCounts: vi.fn(async () => ({ all: 0, unread: 0 })),
   getMessengerThread: vi.fn(),
   listMessengerThreads: vi.fn(async () => []),

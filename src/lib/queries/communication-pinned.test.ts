@@ -52,8 +52,8 @@ beforeEach(async () => {
   }));
 });
 
-describe("getCommunicationPinnedMatters - badge matches the Inbox rows", () => {
-  test("archived and snoozed threads are not counted", async () => {
+describe("getCommunicationPinnedMatters - badge matches the matter drilldown", () => {
+  test("counts every filed thread, archived and snoozed included", async () => {
     await prisma.userMatterPin.create({ data: { userId, matterId } });
     const account = await prisma.emailAccount.create({
       data: { userId, emailAddress: "me@firm.test" },
@@ -70,14 +70,14 @@ describe("getCommunicationPinnedMatters - badge matches the Inbox rows", () => {
           ...extra,
         },
       });
-    await thread({}); // visible
-    await thread({ followUpAt: new Date("2020-01-01T00:00:00Z") }); // snooze expired -> visible
-    await thread({ isArchived: true }); // hidden
-    await thread({ followUpAt: new Date("2999-01-01T00:00:00Z") }); // snoozed -> hidden
+    await thread({});
+    await thread({ followUpAt: new Date("2020-01-01T00:00:00Z") });
+    await thread({ isArchived: true });
+    await thread({ followUpAt: new Date("2999-01-01T00:00:00Z") });
 
     const pins = await getCommunicationPinnedMatters();
     expect(pins).toHaveLength(1);
-    expect(pins[0]).toMatchObject({ id: matterId, threadCount: 2 });
+    expect(pins[0]).toMatchObject({ id: matterId, threadCount: 4 });
   });
 
   test("a pin with no visible threads is still returned with a zero count", async () => {
