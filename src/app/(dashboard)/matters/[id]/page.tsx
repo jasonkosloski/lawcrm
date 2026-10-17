@@ -13,7 +13,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { Mail, Phone, Pin } from "lucide-react";
+import { Mail, Phone } from "lucide-react";
 import { StageChanger } from "@/components/matters/stage-changer";
 import { StatuteOfLimitationsCard } from "@/components/matters/statute-of-limitations-card";
 import { EmailLink } from "@/components/ui/email-link";
@@ -21,7 +21,7 @@ import { formatPhone } from "@/lib/format-phone";
 // Filed / trial / task due dates are date-only (formatDateOnly never
 // shifts the day); the pinned-note timestamp is an instant and renders
 // in the viewer's profile zone (ADR-012).
-import { formatDate, formatDateOnly } from "@/lib/format-date";
+import { formatDateOnly } from "@/lib/format-date";
 import { formatMoney } from "@/lib/format-money";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { prisma } from "@/lib/prisma";
@@ -35,6 +35,10 @@ import {
 } from "@/lib/queries/matter-detail";
 import { requireUser } from "@/lib/current-user";
 import { assertMatterAccess } from "@/lib/matter-access";
+import { getNoteAccess } from "@/lib/note-access";
+import { allowedCaptureKinds } from "@/lib/note-constants";
+import { NoteComposer } from "@/components/matters/notes/note-composer";
+import { NotesTabBody } from "@/components/matters/notes/notes-tab-body";
 
 const ROLE_LABEL: Record<string, string> = {
   lead: "Lead attorney",
@@ -66,7 +70,8 @@ export default async function MatterOverviewPage({
     matter,
     deadlines,
     tasks,
-    pinnedNotes,
+    notes,
+    noteAccess,
     timeSummary,
     clientRows,
     canEditMatter,
@@ -75,10 +80,10 @@ export default async function MatterOverviewPage({
     getMatterById(id),
     getMatterDeadlines(id, { tz, openOnly: true, limit: 4 }),
     getMatterTasks(id, { tz, openOnly: true, limit: 5 }),
-    // Every pinned note shows on the overview — the lawyer expressly
-    // chose them as the "always-visible reference items" for this
-    // case. Un-pinned notes live on the Notes tab (one click away).
-    getMatterNotes(id, { pinnedOnly: true }),
+    // The full notes list, same as the Notes tab (pinned first), so
+    // notes can be read and written from the matter's main page.
+    getMatterNotes(id),
+    getNoteAccess(),
     // Live WIP — the same unbilled-time figure the Billing tab shows.
     // (Matter.wipAmount is never written by any action.)
     getMatterTimeSummary(id),
@@ -218,82 +223,43 @@ export default async function MatterOverviewPage({
             </CardContent>
           </Card>
 
-          {/* Pinned notes — every pinned note for this matter,
-              stacked. Content is sanitized by sanitizeUserHtml
-              (sanitize-html, src/lib/sanitize-html.ts) at write time and
-              again when getMatterNotes reads it, so dangerouslySetInnerHTML
-              is safe and lets the rich-text composer's markup
-              actually render instead of leaking <p>/<ul>/etc. as
-              literal text. Plain-text seed notes pass through fine
-              — bare text inside the div renders as bare text. */}
-          {pinnedNotes.length > 0 && (
-            <Card>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-semibold">
-                    <div className="flex items-center gap-2">
-                      <Pin
-                        size={12}
-                        className="fill-brand-500 text-brand-500"
-                      />
-                      Pinned{" "}
-                      {pinnedNotes.length === 1 ? "note" : "notes"}
-                      <span className="text-2xs font-mono font-normal text-ink-4 ml-0.5">
-                        {pinnedNotes.length}
-                      </span>
-                    </div>
-                  </CardTitle>
-                  <Link
-                    href={`/matters/${matter.id}/notes`}
-                    className="text-2xs text-brand-700 hover:underline"
-                  >
-                    All notes →
-                  </Link>
-                </div>
-              </CardHeader>
-              <CardContent className="px-4 pb-4 flex flex-col gap-3">
-                {pinnedNotes.map((note, idx) => (
-                  <div
-                    key={note.id}
-                    className={cn(
-                      "flex flex-col gap-1.5",
-                      // Hairline separators between stacked notes;
-                      // first one needs none.
-                      idx > 0 && "pt-3 border-t border-line"
-                    )}
-                  >
-                    <div className="flex items-center justify-between text-2xs">
-                      <span className="text-ink-3">
-                        {note.authorName}
-                      </span>
-                      <Link
-                        href={`/matters/${matter.id}/notes#note-${note.id}`}
-                        className="font-mono text-ink-4 hover:text-brand-700 hover:underline"
-                      >
-                        {formatDate(note.createdAt, "medium", tz)} →
-                      </Link>
-                    </div>
-                    <div
-                      className={cn(
-                        "prose prose-sm max-w-none text-xs text-ink leading-relaxed line-clamp-6",
-                        // Match the composer's content styles so
-                        // reading + writing look the same. Mirrors
-                        // note-card.tsx so the overview preview
-                        // and the full Notes tab feel identical.
-                        "[&_p]:my-1 [&_p]:text-xs [&_p]:text-ink",
-                        "[&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-2 [&_h2]:mb-0.5",
-                        "[&_h3]:text-xs [&_h3]:font-semibold [&_h3]:mt-1 [&_h3]:mb-0.5",
-                        "[&_ul]:my-1 [&_ol]:my-1 [&_li]:text-xs [&_ul]:pl-5 [&_ol]:pl-5 [&_ul]:list-disc [&_ol]:list-decimal",
-                        "[&_blockquote]:border-l-2 [&_blockquote]:border-line [&_blockquote]:pl-3 [&_blockquote]:text-ink-3 [&_blockquote]:italic",
-                        "[&_code]:bg-paper-2 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[11px] [&_code]:font-mono"
-                      )}
-                      dangerouslySetInnerHTML={{ __html: note.content }}
-                    />
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
+          {/* Notes — the same composer + list as the Notes tab (search,
+              type filter, pinned-only, threads, replies, reactions),
+              pinned notes first. Controls are gated by the viewer's
+              note access, resolved on the server. */}
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold">
+                  Notes
+                  <span className="text-2xs font-mono font-normal text-ink-4 ml-1.5">
+                    {notes.length}
+                  </span>
+                </CardTitle>
+                <Link
+                  href={`/matters/${matter.id}/notes`}
+                  className="text-2xs text-brand-700 hover:underline"
+                >
+                  Notes tab →
+                </Link>
+              </div>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 flex flex-col gap-4">
+              {noteAccess.canCreateNote && (
+                <NoteComposer
+                  matterId={matter.id}
+                  canPin={noteAccess.canPin}
+                  allowedKinds={allowedCaptureKinds(noteAccess, [
+                    "task",
+                    "event",
+                    "deadline",
+                    "time",
+                  ])}
+                />
+              )}
+              <NotesTabBody notes={notes} matterId={matter.id} access={noteAccess} />
+            </CardContent>
+          </Card>
 
           {/* Open tasks preview */}
           <Card>

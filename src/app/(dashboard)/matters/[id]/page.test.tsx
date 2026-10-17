@@ -3,7 +3,7 @@
  *
  * Pins: live WIP (not the never-written Matter.wipAmount column),
  * calendar-day deadline/task labels ("today", never "0d late"),
- * date-only facts that don't shift a day, the pinned-note stamp in the
+ * date-only facts that don't shift a day, the notes section's wiring, the
  * viewer's zone, and the narrow preview queries (no whole-matter
  * loads to render a handful of rows).
  */
@@ -56,8 +56,16 @@ vi.mock("@/components/matters/statute-of-limitations-card", () => ({
   StatuteOfLimitationsCard: () => null,
 }));
 vi.mock("@/components/ui/email-link", () => ({ EmailLink: () => null }));
+// The notes section reuses the Notes-tab components (their own suites
+// cover rendering); here we only check what the page hands them.
+vi.mock("@/lib/note-access", () => ({ getNoteAccess: vi.fn() }));
+vi.mock("@/components/matters/notes/note-composer", () => ({
+  NoteComposer: () => <div data-testid="note-composer" />,
+}));
+vi.mock("@/components/matters/notes/notes-tab-body", () => ({
+  NotesTabBody: vi.fn(() => <div data-testid="notes-body" />),
+}));
 
-import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { getMatterById } from "@/lib/queries/matters";
 import {
   getMatterDeadlines,
@@ -70,6 +78,9 @@ import type {
   NoteRow,
   TaskRow,
 } from "@/lib/queries/matter-detail";
+import { getNoteAccess } from "@/lib/note-access";
+import { NotesTabBody } from "@/components/matters/notes/notes-tab-body";
+import { NO_NOTE_ACCESS } from "@/lib/note-constants";
 import MatterOverviewPage from "./page";
 
 const matter = {
@@ -139,6 +150,7 @@ beforeEach(() => {
   vi.mocked(getMatterDeadlines).mockResolvedValue([]);
   vi.mocked(getMatterTasks).mockResolvedValue([]);
   vi.mocked(getMatterNotes).mockResolvedValue([]);
+  vi.mocked(getNoteAccess).mockResolvedValue({ ...NO_NOTE_ACCESS, userId: "u1", canCreateNote: true });
   vi.mocked(getMatterTimeSummary).mockResolvedValue({
     totalHours: 0,
     billableHours: 0,
@@ -206,27 +218,33 @@ describe("MatterOverviewPage", () => {
     expect(screen.getByText("Jun 15")).toBeTruthy();
   });
 
-  test("a pinned note's stamp uses the viewer's zone, not the server's", async () => {
-    vi.mocked(getMatterNotes).mockResolvedValue([
-      {
-        id: "n1",
-        authorName: "Ann",
-        // 01:00Z Oct 16 = 7 PM Oct 15 in Denver.
-        createdAt: new Date("2026-10-16T01:00:00Z"),
-        content: "<p>Remember</p>",
-        isPinned: true,
-      } as unknown as NoteRow,
-    ]);
+  test("shows the full notes list (same as the Notes tab) with the viewer's access", async () => {
+    const notes = [
+      { id: "n1", isPinned: true, content: "<p>Pinned</p>" },
+      { id: "n2", isPinned: false, content: "<p>Regular</p>" },
+    ] as unknown as NoteRow[];
+    vi.mocked(getMatterNotes).mockResolvedValue(notes);
     await renderPage();
-    expect(screen.getByText(/Oct 15, 2026/)).toBeTruthy();
-
-    vi.mocked(getCurrentUserTimeZone).mockResolvedValueOnce("UTC");
-    document.body.innerHTML = "";
-    await renderPage();
-    expect(screen.getByText(/Oct 16, 2026/)).toBeTruthy();
+    expect(screen.getByText("Notes")).toBeTruthy();
+    expect(screen.getByTestId("notes-body")).toBeTruthy();
+    const props = vi.mocked(NotesTabBody).mock.calls.at(-1)![0];
+    expect(props.notes).toBe(notes);
+    expect(props.matterId).toBe("m1");
+    expect(props.access).toMatchObject({ userId: "u1", canCreateNote: true });
   });
 
-  test("loads only what the cards render (open + limited, pinned only)", async () => {
+  test("the composer shows only for viewers who can write notes", async () => {
+    await renderPage();
+    expect(screen.getByTestId("note-composer")).toBeTruthy();
+
+    vi.mocked(getNoteAccess).mockResolvedValue({ ...NO_NOTE_ACCESS, userId: "u1" });
+    document.body.innerHTML = "";
+    await renderPage();
+    expect(screen.queryByTestId("note-composer")).toBeNull();
+    expect(screen.getByTestId("notes-body")).toBeTruthy();
+  });
+
+  test("loads only what the cards render (open + limited previews; every note)", async () => {
     await renderPage();
     expect(getMatterDeadlines).toHaveBeenCalledWith("m1", {
       tz: "America/Denver",
@@ -238,7 +256,7 @@ describe("MatterOverviewPage", () => {
       openOnly: true,
       limit: 5,
     });
-    expect(getMatterNotes).toHaveBeenCalledWith("m1", { pinnedOnly: true });
+    expect(getMatterNotes).toHaveBeenCalledWith("m1");
   });
 
   test("a missing matter 404s", async () => {
