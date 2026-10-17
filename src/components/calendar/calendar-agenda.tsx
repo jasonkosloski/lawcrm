@@ -12,95 +12,112 @@
  */
 
 import Link from "next/link";
-import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { EventLink } from "./event-link";
 import {
-  dateKeyInTz,
+  addDaysToKey,
   formatDate,
-  instantInTz} from "@/lib/format-date";
-import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
+  formatDateOnly,
+  instantInTz,
+  parseDateOnly,
+  todayKey as todayKeyInTz,
+  type DayKey,
+} from "@/lib/format-date";
 import {
   getCalendarItems,
   type CalendarItem,
   type CalendarEventRow,
   type CalendarDeadlineRow,
 } from "@/lib/queries/calendar";
+import { deadlineRank, itemDayKeys } from "./bucket-items";
 
-const AGENDA_DAYS = 14;
+export const AGENDA_DAYS = 14;
 
-function dayHeading(dayKey: string, todayKey: string, tomorrowKey: string): string {
+function dayHeading(
+  dayKey: DayKey,
+  todayKey: DayKey,
+  tomorrowKey: DayKey
+): string {
   if (dayKey === todayKey) return "Today";
   if (dayKey === tomorrowKey) return "Tomorrow";
-  // Reconstruct a noon-UTC Date from the YYYY-MM-DD key for
-  // formatting. Noon UTC keeps `format()` from re-interpreting in
-  // server-local TZ.
-  const [y, m, d] = dayKey.split("-").map(Number) as [
-    number,
-    number,
-    number,
-  ];
-  const noon = new Date(Date.UTC(y, m - 1, d, 12));
-  return format(noon, "EEE, MMM d");
+  const date = parseDateOnly(dayKey);
+  return date ? formatDateOnly(date, "short_weekday") : dayKey;
 }
 
-export async function CalendarAgenda() {
-  const userTz = await getCurrentUserTimeZone();
-  const now = new Date();
-  // Range bounds anchored to "today midnight in user TZ" through
-  // "AGENDA_DAYS later" — the user thinks "next two weeks" in
-  // their local time, not the server's UTC.
-  const todayKey = dateKeyInTz(now, userTz);
+/** The instant bounds `getCalendarItems` is queried with: the start
+ *  of the viewer's today through the end of day `AGENDA_DAYS` later,
+ *  in the viewer's zone. Exported for tests. */
+export function agendaRange(
+  todayKey: DayKey,
+  tz: string
+): { start: Date; end: Date } {
   const [ty, tm, td] = todayKey.split("-").map(Number) as [
     number,
     number,
     number,
   ];
-  const start = instantInTz(ty, tm, td, 0, 0, userTz);
-  const endNoon = new Date(Date.UTC(ty, tm - 1, td, 12));
-  endNoon.setUTCDate(endNoon.getUTCDate() + AGENDA_DAYS);
-  const end = instantInTz(
-    endNoon.getUTCFullYear(),
-    endNoon.getUTCMonth() + 1,
-    endNoon.getUTCDate(),
-    23,
-    59,
-    userTz
-  );
-  const items = await getCalendarItems(start, end);
+  const [ey, em, ed] = addDaysToKey(todayKey, AGENDA_DAYS)
+    .split("-")
+    .map(Number) as [number, number, number];
+  return {
+    start: instantInTz(ty, tm, td, 0, 0, tz),
+    end: instantInTz(ey, em, ed, 23, 59, tz),
+  };
+}
 
-  // Sort chronologically. For same-day items, events sort by startTime;
-  // deadlines go first within their day (higher priority visually).
-  const sorted = [...items].sort((a, b) => {
-    const aT =
-      a.kind === "event" ? a.startTime.getTime() : a.dueDate.getTime();
-    const bT =
-      b.kind === "event" ? b.startTime.getTime() : b.dueDate.getTime();
-    if (aT !== bT) return aT - bT;
-    if (a.kind !== b.kind) return a.kind === "deadline" ? -1 : 1;
-    return 0;
-  });
+/** Order within one agenda day: deadlines first (critical-first),
+ *  then all-day events, then timed events by start. */
+function compareWithinDay(a: CalendarItem, b: CalendarItem): number {
+  if (a.kind !== b.kind) return a.kind === "deadline" ? -1 : 1;
+  if (a.kind === "deadline" && b.kind === "deadline") {
+    return deadlineRank(a) - deadlineRank(b);
+  }
+  if (a.kind === "event" && b.kind === "event") {
+    if (a.isAllDay !== b.isAllDay) return a.isAllDay ? -1 : 1;
+    return a.startTime.getTime() - b.startTime.getTime();
+  }
+  return 0;
+}
 
-  // Bucket into day groups using the user's TZ. Two events at
-  // different UTC instants can still share the same calendar day
-  // in user TZ — that's what we want.
-  const groups: Array<{ dayKey: string; items: CalendarItem[] }> = [];
-  for (const item of sorted) {
-    const itemDate = item.kind === "event" ? item.startTime : item.dueDate;
-    const dayKey = dateKeyInTz(itemDate, userTz);
-    const last = groups[groups.length - 1];
-    if (last && last.dayKey === dayKey) {
-      last.items.push(item);
-    } else {
-      groups.push({ dayKey, items: [item] });
+/**
+ * Group items into the agenda's per-day sections, `todayKey` through
+ * `AGENDA_DAYS` later. Timed events group by the viewer's calendar
+ * day; deadlines and all-day events are date-only values grouped by
+ * their stored calendar date (ADR-012) — so a deadline due today sits
+ * under "Today", not under yesterday. A multi-day all-day event shows
+ * under every day it covers inside the window. Exported for tests.
+ */
+export function buildAgendaGroups(
+  items: readonly CalendarItem[],
+  userTz: string,
+  todayKey: DayKey
+): Array<{ dayKey: DayKey; items: CalendarItem[] }> {
+  const lastKey = addDaysToKey(todayKey, AGENDA_DAYS);
+  const byDay = new Map<DayKey, CalendarItem[]>();
+  for (const item of items) {
+    for (const key of itemDayKeys(item, userTz)) {
+      if (key < todayKey || key > lastKey) continue;
+      const list = byDay.get(key);
+      if (list) list.push(item);
+      else byDay.set(key, [item]);
     }
   }
-  // Pre-compute "tomorrow" key for the day-heading helper.
-  const tomorrowNoon = new Date(Date.UTC(ty, tm - 1, td, 12));
-  tomorrowNoon.setUTCDate(tomorrowNoon.getUTCDate() + 1);
-  const tomorrowKey = `${tomorrowNoon.getUTCFullYear()}-${String(
-    tomorrowNoon.getUTCMonth() + 1
-  ).padStart(2, "0")}-${String(tomorrowNoon.getUTCDate()).padStart(2, "0")}`;
+  return [...byDay.keys()]
+    .sort()
+    .map((dayKey) => ({
+      dayKey,
+      items: byDay.get(dayKey)!.sort(compareWithinDay),
+    }));
+}
+
+export async function CalendarAgenda({ userTz }: { userTz: string }) {
+  // The viewer's zone comes from the page (already resolved there) —
+  // one fewer user lookup per render.
+  const todayKey = todayKeyInTz(userTz);
+  const { start, end } = agendaRange(todayKey, userTz);
+  const items = await getCalendarItems(start, end);
+  const groups = buildAgendaGroups(items, userTz, todayKey);
+  const tomorrowKey = addDaysToKey(todayKey, 1);
 
   return (
     <aside className="hidden lg:flex w-72 shrink-0 border-l border-line bg-paper-2/30 flex-col min-h-0">

@@ -30,21 +30,23 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { formatHourLabel, HOUR_HEIGHT_PX, HOURS } from "@/lib/calendar-utils";
-import { dateKeyInTz } from "@/lib/format-date";
-import { itemDayKey } from "./grid-time";
+import { dateKeyInTz, dateOnlyKey } from "@/lib/format-date";
 import type {
   CalendarItem,
   CalendarEventRow,
   CalendarDeadlineRow,
 } from "@/lib/queries/calendar";
+import { deadlineRank, itemIsOnDay } from "./bucket-items";
 import { WeekAllDayCell, WeekTimeColumn } from "./week-day-column";
 import { useEventMoves } from "./use-event-moves";
 
 /** Split a day's items into the three sections the view renders.
- *  Items are bucketed by their user-TZ calendar date (same
- *  discipline as the week view) — the fetch range is already the
- *  single day, but an optimistically-moved event may have left
- *  the day, and trusting the range alone would double-render it.
+ *  Items are bucketed by calendar day (same discipline as the week
+ *  view): timed events by the viewer's zone, deadlines and all-day
+ *  events as date-only values read in UTC (multi-day all-day events
+ *  appear on every day they cover). The fetch range is already the
+ *  single day, but an optimistically-moved event may have left the
+ *  day, and trusting the range alone would double-render it.
  *  Deadlines are sorted critical-first (matching the month view's
  *  "deadlines first" priority), events by start time. Exported
  *  for tests. */
@@ -57,17 +59,13 @@ export function bucketDayItems(
   timedEvents: CalendarEventRow[];
   deadlines: CalendarDeadlineRow[];
 } {
-  const onDay = items.filter((i) => itemDayKey(i, tz) === dayKey);
+  const onDay = items.filter((i) => itemIsOnDay(i, dayKey, tz));
   const events = onDay
     .filter((i): i is CalendarEventRow => i.kind === "event")
     .sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
   const deadlines = onDay
     .filter((i): i is CalendarDeadlineRow => i.kind === "deadline")
-    .sort((a, b) => {
-      const rank = (d: CalendarDeadlineRow) =>
-        d.deadlineKind === "critical" ? 0 : 1;
-      return rank(a) - rank(b);
-    });
+    .sort((a, b) => deadlineRank(a) - deadlineRank(b));
   return {
     allDayEvents: events.filter((e) => e.isAllDay),
     timedEvents: events.filter((e) => !e.isAllDay),
@@ -79,6 +77,7 @@ export function DayView({
   day,
   items,
   canEditEvents = false,
+  editableEventIds,
   userTz,
   deadlinesOnly = false,
 }: {
@@ -92,6 +91,10 @@ export function DayView({
    *  zones. The server still gates `moveCalendarEvent` on
    *  `events.edit` regardless. */
   canEditEvents?: boolean;
+  /** Ids of the events the viewer may edit (the per-event
+   *  `canEditEvent` resolver the actions enforce). Omitted = every
+   *  event; a drag of any other event is refused client-side. */
+  editableEventIds?: readonly string[];
   /** User's IANA TZ — drives item bucketing + the now-line so a
    *  user in MDT viewing on a UTC server still sees their local
    *  day. */
@@ -103,15 +106,18 @@ export function DayView({
   deadlinesOnly?: boolean;
 }) {
   // Shared optimistic-move pipeline (same hook as WeekView).
-  const { renderItems, moveEvent } = useEventMoves(items);
+  const editable = editableEventIds ? new Set(editableEventIds) : null;
+  const { renderItems, moveEvent } = useEventMoves(
+    items,
+    editable ? (id) => editable.has(id) : undefined
+  );
+
+  const canDragEvent = editable ? (id: string) => editable.has(id) : undefined;
 
   const now = new Date();
   const todayKey = dateKeyInTz(now, userTz);
-  // Day key from the noon-UTC Date's UTC components — matches
-  // what `dateKeyInTz` produces for items on this calendar day.
-  const dayKey = `${day.getUTCFullYear()}-${String(
-    day.getUTCMonth() + 1
-  ).padStart(2, "0")}-${String(day.getUTCDate()).padStart(2, "0")}`;
+  // Day key from the noon-UTC Date's UTC components.
+  const dayKey = dateOnlyKey(day);
 
   const { allDayEvents, timedEvents, deadlines } = bucketDayItems(
     renderItems,
@@ -168,6 +174,7 @@ export function DayView({
           events={allDayEvents}
           deadlines={[]}
           canEdit={canEditEvents}
+          canDragEvent={canDragEvent}
           move={moveEvent}
         />
       </div>
@@ -213,6 +220,7 @@ export function DayView({
           now={now}
           events={timedEvents}
           canEdit={canEditEvents}
+          canDragEvent={canDragEvent}
           move={moveEvent}
         />
       </div>

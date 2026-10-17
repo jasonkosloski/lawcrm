@@ -15,7 +15,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { Pin, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -36,7 +36,33 @@ export function EventNoteComposer({
   eventId: string;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const action = createNote.bind(null, matterId);
+
+  const [html, setHtml] = useState("");
+  const [type, setType] = useState<(typeof NOTE_TYPES)[number]>("note");
+  const [pin, setPin] = useState(false);
+  const [editorKey, setEditorKey] = useState(0);
+
+  // One reset for every way the draft ends — a saved note AND Cancel —
+  // so a discarded "Strategy + Pin" draft can't leak into the next
+  // quick note.
+  const reset = () => {
+    setHtml("");
+    setType("note");
+    setPin(false);
+    setEditorKey((k) => k + 1);
+  };
+
+  // Reset + collapse when the save lands, from inside the action
+  // itself (an event-driven path) instead of an effect watching the
+  // returned state.
+  const action = async (prev: NoteFormState, formData: FormData) => {
+    const result = await createNote(matterId, prev, formData);
+    if (result.status === "ok") {
+      reset();
+      setExpanded(false);
+    }
+    return result;
+  };
   // Wrapped useActionState: masks state left over from a previous
   // expand, so a failed attempt's errors don't reappear when the
   // composer is re-expanded. See src/hooks/use-dialog-action-state.ts.
@@ -44,23 +70,6 @@ export function EventNoteComposer({
     NoteFormState,
     FormData
   >(action, noteInitialState, expanded);
-
-  const [html, setHtml] = useState("");
-  const [type, setType] = useState<(typeof NOTE_TYPES)[number]>("note");
-  const [pin, setPin] = useState(false);
-  const [editorKey, setEditorKey] = useState(0);
-
-  // Reset + collapse on success. Deps key on the state OBJECT, not
-  // state.status — identity is the reliable "a submission just
-  // finished" signal (see TimeComposer for the full rationale).
-  useEffect(() => {
-    if (state.status !== "ok") return;
-    setHtml("");
-    setType("note");
-    setPin(false);
-    setEditorKey((k) => k + 1);
-    setExpanded(false);
-  }, [state]);
 
   const errs = state.errors ?? {};
 
@@ -144,8 +153,7 @@ export function EventNoteComposer({
             type="button"
             onClick={() => {
               setExpanded(false);
-              setHtml("");
-              setEditorKey((k) => k + 1);
+              reset();
             }}
             className="text-2xs text-ink-3 hover:text-ink-2 px-2"
           >

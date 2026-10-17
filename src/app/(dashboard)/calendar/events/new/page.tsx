@@ -4,8 +4,9 @@
  * The full-page create form (matter picker, attendee picker,
  * visibility) linked from the calendar toolbar's "New event"
  * button; the docked quick composer stays available as the
- * lightweight secondary path. Mirrors the edit page's shape:
- * server component gates + fetches, client form does the rest.
+ * lightweight secondary path. Server component gates + fetches,
+ * client form does the rest. (Existing events are edited inline in
+ * the event modal; there is no standalone edit route.)
  *
  * Access: `events.create` — the same key `createCalendarEvent`
  * enforces server-side; the page check just avoids rendering a

@@ -7,6 +7,7 @@
  * or stick on a position the server rejected.
  */
 
+import { dateOnlyKey } from "@/lib/format-date";
 import type { CalendarItem } from "@/lib/queries/calendar";
 
 /** A pending move waiting for server confirmation. */
@@ -56,10 +57,17 @@ export function reconcilePending(
       (i) => i.kind === "event" && i.id === id
     );
     if (!serverItem || serverItem.kind !== "event") continue;
+    // All-day bounds are date-only values (ADR-012): the optimistic
+    // target is whatever the drop computed (browser-local midnight)
+    // while the server stores UTC midnight, so compare calendar days,
+    // not instants. Timed bounds are real instants and compare exactly.
     const matches =
-      serverItem.startTime.getTime() === move.startTime.getTime() &&
-      serverItem.endTime.getTime() === move.endTime.getTime() &&
-      serverItem.isAllDay === move.isAllDay;
+      serverItem.isAllDay === move.isAllDay &&
+      (move.isAllDay
+        ? dateOnlyKey(serverItem.startTime) === dateOnlyKey(move.startTime) &&
+          dateOnlyKey(serverItem.endTime) === dateOnlyKey(move.endTime)
+        : serverItem.startTime.getTime() === move.startTime.getTime() &&
+          serverItem.endTime.getTime() === move.endTime.getTime());
     if (matches) {
       next.delete(id);
       changed = true;

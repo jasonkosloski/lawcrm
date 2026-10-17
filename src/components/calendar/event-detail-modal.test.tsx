@@ -233,7 +233,7 @@ describe("Escape handling — inline editors cancel without closing the modal", 
     // Typing a non-matching name opens the dropdown (the
     // "Add as new contact" row shows even with zero results).
     await user.type(
-      screen.getByRole("textbox", { name: "Search attendees" }),
+      screen.getByRole("combobox", { name: "Search attendees" }),
       "Bob"
     );
     await screen.findByRole("listbox", { name: "Attendee suggestions" });

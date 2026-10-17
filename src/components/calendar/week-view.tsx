@@ -44,20 +44,23 @@
 "use client";
 
 import Link from "next/link";
-import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
   formatHourLabel,
   HOUR_HEIGHT_PX,
   HOURS,
 } from "@/lib/calendar-utils";
-import { dateKeyInTz } from "@/lib/format-date";
-import { itemDayKey } from "./grid-time";
+import { dateKeyInTz, dateOnlyKey } from "@/lib/format-date";
 import type {
   CalendarItem,
   CalendarEventRow,
   CalendarDeadlineRow,
 } from "@/lib/queries/calendar";
+import {
+  bucketItemsByDay,
+  deadlineRank,
+  weekdayShort,
+} from "./bucket-items";
 import { DeadlineChip, WeekAllDayCell, WeekTimeColumn } from "./week-day-column";
 import { useEventMoves } from "./use-event-moves";
 
@@ -69,6 +72,7 @@ export function WeekView({
   days,
   items,
   canEditEvents = false,
+  editableEventIds,
   userTz,
   deadlinesOnly = false,
 }: {
@@ -82,6 +86,10 @@ export function WeekView({
    *  zones. The server still gates `moveCalendarEvent` on
    *  `events.edit` regardless. */
   canEditEvents?: boolean;
+  /** Ids of the events the viewer may edit (the per-event
+   *  `canEditEvent` resolver the actions enforce). Omitted = every
+   *  event; a drag of any other event is refused client-side. */
+  editableEventIds?: readonly string[];
   /** User's IANA TZ — drives event bucketing + the "today"
    *  highlight so a user in MDT viewing on a UTC server still
    *  sees their local day. */
@@ -95,7 +103,13 @@ export function WeekView({
   // Shared optimistic-move pipeline (also used by DayView) —
   // `renderItems` carries the pending overlay so a moved chip
   // lands in its new column / time slot immediately.
-  const { renderItems, moveEvent } = useEventMoves(items);
+  const editable = editableEventIds ? new Set(editableEventIds) : null;
+  const { renderItems, moveEvent } = useEventMoves(
+    items,
+    editable ? (id) => editable.has(id) : undefined
+  );
+
+  const canDragEvent = editable ? (id: string) => editable.has(id) : undefined;
 
   const now = new Date();
   // "Today" in the user's TZ — used to highlight the right column
@@ -103,27 +117,18 @@ export function WeekView({
   // the comparison site.
   const todayKey = dateKeyInTz(now, userTz);
 
-  // Bucket items by their user-TZ calendar date. Without the TZ,
-  // an event at "Sunday 11pm MDT" (UTC: Monday 5am) would land in
-  // the Monday column.
-  const byDay = new Map<string, CalendarItem[]>();
-  for (const item of renderItems) {
-    // All-day events and deadlines are date-only (read in UTC);
-    // timed events bucket by the profile zone.
-    const key = itemDayKey(item, userTz);
-    if (!byDay.has(key)) byDay.set(key, []);
-    byDay.get(key)!.push(item);
-  }
+  // Bucket items by calendar day. Timed events use the viewer's
+  // zone (an event at "Sunday 11pm MDT" — UTC Monday 5am — belongs
+  // in Sunday's column); deadlines and all-day events are date-only
+  // values read in UTC, never shifted by any zone (ADR-012), and
+  // multi-day all-day events appear on every day they cover.
+  const byDay = bucketItemsByDay(renderItems, userTz);
 
   // Pre-compute per-day buckets so the all-day row + time grid
   // each pull from the same map without re-filtering. Day keys are
-  // derived from the noon-UTC Date's UTC components — that matches
-  // what `dateKeyInTz` produced for events on the same calendar
-  // day in the user's TZ.
+  // derived from the noon-UTC Date's UTC components.
   const byDayBuckets = days.map((day) => {
-    const key = `${day.getUTCFullYear()}-${String(
-      day.getUTCMonth() + 1
-    ).padStart(2, "0")}-${String(day.getUTCDate()).padStart(2, "0")}`;
+    const key = dateOnlyKey(day);
     const dayItems = byDay.get(key) ?? [];
     return {
       day,
@@ -134,9 +139,11 @@ export function WeekView({
       timedEvents: dayItems.filter(
         (i): i is CalendarEventRow => i.kind === "event" && !i.isAllDay
       ),
-      deadlines: dayItems.filter(
-        (i): i is CalendarDeadlineRow => i.kind === "deadline"
-      ),
+      // Critical-first in every layout, so when a day is crowded the
+      // deadline that matters most is the last one anyone loses.
+      deadlines: dayItems
+        .filter((i): i is CalendarDeadlineRow => i.kind === "deadline")
+        .sort((a, z) => deadlineRank(a) - deadlineRank(z)),
     };
   });
 
@@ -181,7 +188,7 @@ export function WeekView({
                 weekend ? "text-ink-4/80" : "text-ink-4"
               )}
             >
-              {format(day, "EEE")}
+              {weekdayShort(day)}
             </div>
             <div
               className={cn(
@@ -210,8 +217,6 @@ export function WeekView({
   // sorted critical-first like the day view's deadline section.
   if (deadlinesOnly) {
     const weekHasDeadlines = byDayBuckets.some((b) => b.deadlines.length > 0);
-    const rank = (d: CalendarDeadlineRow) =>
-      d.deadlineKind === "critical" ? 0 : 1;
     return (
       <div className="flex flex-col flex-1 min-h-0 overflow-y-auto [--cal-gutter:36px] sm:[--cal-gutter:56px]">
         {headerRow}
@@ -235,11 +240,9 @@ export function WeekView({
                   weekend && "bg-paper"
                 )}
               >
-                {[...b.deadlines]
-                  .sort((a, z) => rank(a) - rank(z))
-                  .map((d) => (
-                    <DeadlineChip key={d.id} deadline={d} />
-                  ))}
+                {b.deadlines.map((d) => (
+                  <DeadlineChip key={d.id} deadline={d} />
+                ))}
               </div>
             );
           })}
@@ -263,12 +266,12 @@ export function WeekView({
       (b) => b.allDayEvents.length + b.deadlines.length
     )
   );
-  // 28px per chip (two-line all-day or single-line deadline) +
-  // 2px gap. Cap to a reasonable max for very full weeks.
-  const allDayRowHeight = Math.min(
-    180,
-    Math.max(36, maxAllDayChipCount * 28 + 8)
-  );
+  // ~32px per chip (a two-line all-day chip is ~31px; a deadline
+  // chip is shorter) + padding. Deliberately NOT capped: the cell
+  // clips overflow, so any cap silently hides the chips past it —
+  // the deadlines, which render last. A crowded week just gets a
+  // taller row inside the view's own scroll container.
+  const allDayRowHeight = Math.max(36, maxAllDayChipCount * 32 + 8);
 
   return (
     <div
@@ -300,6 +303,7 @@ export function WeekView({
             events={b.allDayEvents}
             deadlines={b.deadlines}
             canEdit={canEditEvents}
+            canDragEvent={canDragEvent}
             move={moveEvent}
           />
         ))}
@@ -334,6 +338,7 @@ export function WeekView({
             now={now}
             events={b.timedEvents}
             canEdit={canEditEvents}
+            canDragEvent={canDragEvent}
             move={moveEvent}
           />
         ))}

@@ -39,10 +39,15 @@ vi.mock("next/link", () => ({
   default: ({
     href,
     children,
-    scroll: _scroll,
-    ...rest
-  }: React.ComponentProps<"a"> & { href: string; scroll?: boolean }) => (
-    <a href={href} {...rest}>
+    className,
+    title,
+  }: {
+    href: string;
+    children: React.ReactNode;
+    className?: string;
+    title?: string;
+  }) => (
+    <a href={href} className={className} title={title}>
       {children}
     </a>
   ),
@@ -52,6 +57,7 @@ vi.mock("@/app/actions/calendar-events", () => ({
   moveCalendarEvent: vi.fn(async () => ({ ok: true as const })),
 }));
 
+import { parseDateOnly } from "@/lib/format-date";
 import { bucketDayItems, DayView } from "./day-view";
 
 const TZ = "America/Denver";
@@ -148,7 +154,70 @@ describe("bucketDayItems", () => {
   });
 });
 
+describe("bucketDayItems — date-only items (ADR-012)", () => {
+  // Real deadlines / all-day events are stored at UTC midnight. The
+  // old viewer-zone bucket read 2026-07-07T00:00Z as 2026-07-06 for a
+  // Denver user: today's deadline vanished from its own Day view and
+  // tomorrow's showed up instead.
+  test("a deadline due on the displayed day appears, in any host zone", () => {
+    const dueToday = deadline({
+      id: "today",
+      dueDate: parseDateOnly("2026-07-07")!,
+    });
+    const dueTomorrow = deadline({
+      id: "tomorrow",
+      dueDate: parseDateOnly("2026-07-08")!,
+    });
+    const result = bucketDayItems([dueToday, dueTomorrow], DAY_KEY, TZ);
+    expect(result.deadlines.map((d) => d.id)).toEqual(["today"]);
+  });
+
+  test("an all-day event on the displayed day is bucketed by its date", () => {
+    const trial = event({
+      id: "trial",
+      isAllDay: true,
+      startTime: parseDateOnly("2026-07-07")!,
+      endTime: parseDateOnly("2026-07-07")!,
+    });
+    expect(
+      bucketDayItems([trial], DAY_KEY, TZ).allDayEvents.map((e) => e.id)
+    ).toEqual(["trial"]);
+    expect(bucketDayItems([trial], "2026-07-06", TZ).allDayEvents).toEqual([]);
+  });
+
+  test("a multi-day all-day event shows on its middle days", () => {
+    const trial = event({
+      id: "trial",
+      isAllDay: true,
+      startTime: parseDateOnly("2026-07-06")!,
+      endTime: parseDateOnly("2026-07-10")!,
+    });
+    expect(
+      bucketDayItems([trial], DAY_KEY, TZ).allDayEvents.map((e) => e.id)
+    ).toEqual(["trial"]);
+    expect(bucketDayItems([trial], "2026-07-11", TZ).allDayEvents).toEqual([]);
+  });
+});
+
 describe("DayView render", () => {
+  test("renders a deadline stored at UTC midnight on its own day", () => {
+    render(
+      <DayView
+        day={DAY}
+        items={[
+          deadline({
+            id: "dl-utc",
+            title: "Opposition due",
+            dueDate: parseDateOnly("2026-07-07")!,
+          }),
+        ]}
+        canEditEvents={false}
+        userTz={TZ}
+      />
+    );
+    expect(screen.getByText("Opposition due")).toBeTruthy();
+  });
+
   test("renders timed chip (with location + matter), all-day chip, and deadline pill", () => {
     render(
       <DayView

@@ -11,7 +11,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -20,7 +20,9 @@ import {
   timeEntryInitialState,
   type TimeEntryFormState,
 } from "@/lib/time-entry-constants";
-import { todayDateString } from "@/lib/note-constants";
+import { todayKey } from "@/lib/format-date";
+import { useUserTimeZone } from "@/components/user-time-zone";
+import { useEventAttachmentsViewer } from "./event-attachments-context";
 
 export function EventTimeEntryComposer({
   matterId,
@@ -30,16 +32,15 @@ export function EventTimeEntryComposer({
   eventId: string;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const action = createTimeEntry.bind(null, matterId);
-  // Wrapped useActionState: masks state left over from a previous
-  // expand, so a failed attempt's errors don't reappear when the
-  // composer is re-expanded. See src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    TimeEntryFormState,
-    FormData
-  >(action, timeEntryInitialState, expanded);
 
-  const [date, setDate] = useState(todayDateString());
+  // The entry defaults to the EVENT's date (supplied by the surface
+  // that knows the event), falling back to the viewer's today in
+  // their profile zone — not the browser's.
+  const tz = useUserTimeZone();
+  const { defaultTimeEntryDate } = useEventAttachmentsViewer();
+  const initialDate = defaultTimeEntryDate ?? todayKey(tz);
+
+  const [date, setDate] = useState(initialDate);
   const [hours, setHours] = useState("");
   const [activity, setActivity] = useState("");
   const [narrative, setNarrative] = useState("");
@@ -48,7 +49,7 @@ export function EventTimeEntryComposer({
   const [privileged, setPrivileged] = useState(false);
 
   const reset = () => {
-    setDate(todayDateString());
+    setDate(initialDate);
     setHours("");
     setActivity("");
     setNarrative("");
@@ -57,14 +58,24 @@ export function EventTimeEntryComposer({
     setPrivileged(false);
   };
 
-  // Reset + collapse on success. Deps key on the state OBJECT, not
-  // state.status — identity is the reliable "a submission just
-  // finished" signal (see TimeComposer for the full rationale).
-  useEffect(() => {
-    if (state.status !== "ok") return;
-    reset();
-    setExpanded(false);
-  }, [state]);
+  // Reset + collapse when the save lands, from inside the action
+  // itself (an event-driven path) instead of an effect watching the
+  // returned state.
+  const action = async (prev: TimeEntryFormState, formData: FormData) => {
+    const result = await createTimeEntry(matterId, prev, formData);
+    if (result.status === "ok") {
+      reset();
+      setExpanded(false);
+    }
+    return result;
+  };
+  // Wrapped useActionState: masks state left over from a previous
+  // expand, so a failed attempt's errors don't reappear when the
+  // composer is re-expanded. See src/hooks/use-dialog-action-state.ts.
+  const [state, formAction, isPending] = useDialogActionState<
+    TimeEntryFormState,
+    FormData
+  >(action, timeEntryInitialState, expanded);
 
   const errs = state.errors ?? {};
   const hasContent = hours.trim().length > 0 && activity.trim().length > 0;
@@ -73,7 +84,13 @@ export function EventTimeEntryComposer({
     return (
       <button
         type="button"
-        onClick={() => setExpanded(true)}
+        onClick={() => {
+          // Seed the working copy on every open: the modal can be
+          // reused across events, so the date from the last open (or
+          // a typed draft) must not carry over.
+          reset();
+          setExpanded(true);
+        }}
         className={cn(
           "flex items-center gap-2 h-8 px-3 text-2xs text-ink-4 w-full",
           "rounded-md border border-dashed border-line bg-white",

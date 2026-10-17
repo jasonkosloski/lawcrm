@@ -16,11 +16,17 @@ import Link from "next/link";
 import { ExternalLink, Lock, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { deleteTimeEntry } from "@/app/actions/time-entries";
-// Entry dates are date-only values (server-local midnight) — the
-// centralized "short" variant with no TZ override keeps them on the
-// same day grid they were saved on.
-import { formatDate } from "@/lib/format-date";
+// Entry dates are date-only values (ADR-012): `formatDateOnly` reads
+// them in UTC, so the server render and every browser show the day
+// they were saved on. (`formatDate` without a zone ran in the
+// browser's zone and showed Denver users the previous day.)
+import { formatDateOnly } from "@/lib/format-date";
+import { formatHours } from "@/lib/format-hours";
 import type { EventTimeEntry } from "@/lib/queries/calendar";
+import {
+  canDeleteRecord,
+  useEventAttachmentsViewer,
+} from "./event-attachments-context";
 import { EventTimeEntryComposer } from "./event-time-entry-composer";
 
 export function EventTimeEntriesSection({
@@ -48,9 +54,9 @@ export function EventTimeEntriesSection({
           </div>
           {entries.length > 0 && (
             <div className="text-2xs font-mono text-ink-3">
-              {totalHours.toFixed(1)}h total
+              {formatHours(totalHours)}h total
               {billableHours !== totalHours &&
-                ` · ${billableHours.toFixed(1)}h billable`}
+                ` · ${formatHours(billableHours)}h billable`}
             </div>
           )}
         </div>
@@ -87,6 +93,14 @@ export function EventTimeEntriesSection({
 
 function EventTimeEntryItem({ entry }: { entry: EventTimeEntry }) {
   const [pending, startTransition] = useTransition();
+  // Deleting a colleague's entry needs time_entries.delete_any; hide
+  // the button rather than bounce the user to "/" on denial.
+  const { viewerId, canDeleteAnyTimeEntry } = useEventAttachmentsViewer();
+  const canDelete = canDeleteRecord(
+    entry.userId,
+    viewerId,
+    canDeleteAnyTimeEntry
+  );
 
   const onDelete = () => {
     if (!confirm("Delete this time entry? This can't be undone.")) return;
@@ -128,7 +142,7 @@ function EventTimeEntryItem({ entry }: { entry: EventTimeEntry }) {
           )}
         </div>
         <span className="font-mono text-2xs text-ink-3 shrink-0">
-          {formatDate(entry.date, "short")}
+          {formatDateOnly(entry.date, "short")}
         </span>
         <span
           className={cn(
@@ -136,25 +150,27 @@ function EventTimeEntryItem({ entry }: { entry: EventTimeEntry }) {
             mutedForBilling ? "text-ink-4" : "text-ink"
           )}
         >
-          {entry.hours.toFixed(1)}h
+          {formatHours(entry.hours)}h
         </span>
-        <button
-          type="button"
-          onClick={onDelete}
-          disabled={pending}
-          title={
-            entry.status === "billed"
-              ? "Entry is billed — unbill before deleting"
-              : "Delete"
-          }
-          aria-label="Delete time entry"
-          className={cn(
-            "inline-flex items-center justify-center w-6 h-6 rounded-md text-ink-3 hover:text-warn hover:bg-warn-soft transition-colors disabled:opacity-60",
-            entry.status === "billed" && "opacity-40"
-          )}
-        >
-          <Trash2 size={11} />
-        </button>
+        {canDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={pending}
+            title={
+              entry.status === "billed"
+                ? "Entry is billed — unbill before deleting"
+                : "Delete"
+            }
+            aria-label="Delete time entry"
+            className={cn(
+              "inline-flex items-center justify-center w-6 h-6 rounded-md text-ink-3 hover:text-warn hover:bg-warn-soft transition-colors disabled:opacity-60",
+              entry.status === "billed" && "opacity-40"
+            )}
+          >
+            <Trash2 size={11} />
+          </button>
+        )}
       </div>
 
       {entry.narrative && (

@@ -233,4 +233,67 @@ describe("reconcilePending", () => {
     expect(out.has("evt-1")).toBe(false);
     expect(out.has("evt-2")).toBe(true);
   });
+
+  test("an all-day move reconciles by calendar day, not exact instant", () => {
+    // The drop computed browser-local midnight (06:00Z for Denver)
+    // while the server stored UTC midnight for the same date: same
+    // calendar day, different instants. Comparing instants would
+    // leave the overlay stuck forever.
+    const pending = new Map<string, PendingMove>([
+      [
+        "evt-1",
+        {
+          isAllDay: true,
+          startTime: new Date("2026-04-29T06:00:00.000Z"),
+          endTime: new Date("2026-04-29T06:00:00.000Z"),
+        },
+      ],
+    ]);
+    const serverItems: CalendarItem[] = [
+      {
+        ...baseEvent,
+        isAllDay: true,
+        startTime: new Date("2026-04-29T00:00:00.000Z"),
+        endTime: new Date("2026-04-29T00:00:00.000Z"),
+      },
+    ];
+    expect(reconcilePending(serverItems, pending).size).toBe(0);
+  });
+
+  test("an all-day move to a DIFFERENT day stays pending", () => {
+    const pending = new Map<string, PendingMove>([
+      [
+        "evt-1",
+        {
+          isAllDay: true,
+          startTime: new Date("2026-04-29T06:00:00.000Z"),
+          endTime: new Date("2026-04-29T06:00:00.000Z"),
+        },
+      ],
+    ]);
+    const serverItems: CalendarItem[] = [
+      {
+        ...baseEvent,
+        isAllDay: true,
+        startTime: new Date("2026-04-28T00:00:00.000Z"),
+        endTime: new Date("2026-04-28T00:00:00.000Z"),
+      },
+    ];
+    expect(reconcilePending(serverItems, pending).size).toBe(1);
+  });
+
+  test("a timed move still needs the exact instants", () => {
+    const pending = new Map<string, PendingMove>([
+      [
+        "evt-1",
+        {
+          isAllDay: false,
+          startTime: new Date("2026-04-28T15:15:00.000Z"),
+          endTime: new Date("2026-04-28T16:00:00.000Z"),
+        },
+      ],
+    ]);
+    // Same day, 15 minutes off: not confirmed.
+    expect(reconcilePending([baseEvent], pending).size).toBe(1);
+  });
 });

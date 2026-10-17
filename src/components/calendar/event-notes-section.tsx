@@ -16,11 +16,13 @@ import { ExternalLink, Pin, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { deleteNote, toggleNotePin } from "@/app/actions/notes";
 import { NOTE_TYPE_LABEL, type NoteType } from "@/lib/note-constants";
-// Client component — no user-TZ prop threaded here yet, so the
-// centralized "datetime" variant falls back to the runtime zone
-// (browser-local after hydration). See format-date.ts header.
 import { formatDate } from "@/lib/format-date";
+import { useUserTimeZone } from "@/components/user-time-zone";
 import type { EventNote } from "@/lib/queries/calendar";
+import {
+  canDeleteRecord,
+  useEventAttachmentsViewer,
+} from "./event-attachments-context";
 import { EventNoteComposer } from "./event-note-composer";
 
 export function EventNotesSection({
@@ -84,6 +86,15 @@ export function EventNotesSection({
 
 function EventNoteItem({ note }: { note: EventNote }) {
   const [pending, startTransition] = useTransition();
+  // Note timestamps are instants: show them in the viewer's PROFILE
+  // zone so the server render and the hydrated client agree.
+  const tz = useUserTimeZone();
+  // Hide the controls the server would refuse (it redirects to "/"
+  // with no message): pinning needs notes.pin, deleting someone
+  // else's note needs notes.delete_any.
+  const { viewerId, canPinNotes, canDeleteAnyNote } =
+    useEventAttachmentsViewer();
+  const canDelete = canDeleteRecord(note.authorId, viewerId, canDeleteAnyNote);
 
   const onTogglePin = () => {
     startTransition(async () => {
@@ -122,40 +133,44 @@ function EventNoteItem({ note }: { note: EventNote }) {
             {note.authorName}
           </span>
           <span className="text-[10px] text-ink-4 font-mono">
-            {formatDate(note.createdAt, "datetime")}
+            {formatDate(note.createdAt, "datetime", tz)}
           </span>
         </div>
         <span className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full border bg-white text-ink-3 border-line shrink-0">
           {typeLabel}
         </span>
-        <button
-          type="button"
-          onClick={onTogglePin}
-          disabled={pending}
-          title={note.isPinned ? "Unpin" : "Pin to top"}
-          aria-label={note.isPinned ? "Unpin note" : "Pin note"}
-          className={cn(
-            "inline-flex items-center justify-center w-6 h-6 rounded-md transition-colors",
-            note.isPinned
-              ? "text-brand-700 hover:bg-brand-soft"
-              : "text-ink-3 hover:text-brand-700 hover:bg-brand-soft"
-          )}
-        >
-          <Pin
-            size={11}
-            className={cn(note.isPinned && "fill-brand-500 text-brand-500")}
-          />
-        </button>
-        <button
-          type="button"
-          onClick={onDelete}
-          disabled={pending}
-          title="Delete"
-          aria-label="Delete note"
-          className="inline-flex items-center justify-center w-6 h-6 rounded-md text-ink-3 hover:text-warn hover:bg-warn-soft transition-colors disabled:opacity-60"
-        >
-          <Trash2 size={11} />
-        </button>
+        {canPinNotes && (
+          <button
+            type="button"
+            onClick={onTogglePin}
+            disabled={pending}
+            title={note.isPinned ? "Unpin" : "Pin to top"}
+            aria-label={note.isPinned ? "Unpin note" : "Pin note"}
+            className={cn(
+              "inline-flex items-center justify-center w-6 h-6 rounded-md transition-colors",
+              note.isPinned
+                ? "text-brand-700 hover:bg-brand-soft"
+                : "text-ink-3 hover:text-brand-700 hover:bg-brand-soft"
+            )}
+          >
+            <Pin
+              size={11}
+              className={cn(note.isPinned && "fill-brand-500 text-brand-500")}
+            />
+          </button>
+        )}
+        {canDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={pending}
+            title="Delete"
+            aria-label="Delete note"
+            className="inline-flex items-center justify-center w-6 h-6 rounded-md text-ink-3 hover:text-warn hover:bg-warn-soft transition-colors disabled:opacity-60"
+          >
+            <Trash2 size={11} />
+          </button>
+        )}
       </div>
 
       <div

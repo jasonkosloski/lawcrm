@@ -4,9 +4,9 @@
  * "New event"; the docked quick composer remains the lightweight
  * secondary path).
  *
- * Mirrors the edit surface's capabilities: title / type /
+ * Mirrors the detail modal's edit capabilities: title / type /
  * start–end / all-day (with the same reseed-on-toggle behavior as
- * EditEventForm), location, video URL, description, MATTER picker
+ * the matter event composer), location, video URL, description, MATTER picker
  * (searchable, optional — matterless events are personal),
  * attendee picker (the same users + contacts + new-contact
  * autocomplete the detail modal uses, via ./attendee-picker), and
@@ -62,7 +62,7 @@ import {
   type CreateCalendarEventState,
 } from "@/lib/calendar-event-form";
 import type { FilingMatterOption } from "@/lib/queries/communication";
-import { DateOnlyField } from "./edit-event-form";
+import { DateOnlyField } from "./date-only-field";
 import {
   AttendeePicker,
   serializeAttendees,

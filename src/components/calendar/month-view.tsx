@@ -9,27 +9,30 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { EventLink } from "./event-link";
-import { WEEK_STARTS_ON } from "@/lib/calendar-utils";
-import { dateKeyInTz, formatDate } from "@/lib/format-date";
-import { itemDayKey } from "./grid-time";
+import { dateKeyInTz, dateOnlyKey, formatDate } from "@/lib/format-date";
 import type {
   CalendarItem,
   CalendarEventRow,
   CalendarDeadlineRow,
 } from "@/lib/queries/calendar";
+import { bucketItemsByDay, weekdayShort } from "./bucket-items";
 
 const MAX_ITEMS_PER_CELL = 3;
 
 export function MonthView({
-  focal,
+  focalKey,
   days,
   items,
   userTz,
 }: {
-  /** The focal date the user navigated to. Used only to decide
-   *  which days are "in this month" vs trailing/leading week
-   *  carry-over (rendered dim). */
-  focal: Date;
+  /** The focal date the user navigated to, as `YYYY-MM-DD`, computed
+   *  by the page from the same `?d=` the grid was built from. Used
+   *  only to decide which days are "in this month" vs trailing /
+   *  leading week carry-over (rendered dim). A string, not a Date:
+   *  re-deriving the month from a Date through the viewer's zone put
+   *  a focal on the 1st (every Next/Prev click) in the previous
+   *  month. */
+  focalKey: string;
   /** 42 noon-UTC Dates (6 weeks × 7 days) built in user TZ via
    *  `calendarMonthGridInTz`. */
   days: Date[];
@@ -38,35 +41,27 @@ export function MonthView({
 }) {
   const now = new Date();
   const todayKey = dateKeyInTz(now, userTz);
-  // The "in this month" check needs to know which calendar month
-  // the focal lives in *in the user's TZ* — same reason as the
-  // bucketing below.
-  const focalMonth = dateKeyInTz(focal, userTz).slice(0, 7); // "YYYY-MM"
+  const focalMonth = focalKey.slice(0, 7); // "YYYY-MM"
 
-  const byDay = new Map<string, CalendarItem[]>();
-  for (const item of items) {
-    const key = itemDayKey(item, userTz);
-    if (!byDay.has(key)) byDay.set(key, []);
-    byDay.get(key)!.push(item);
-  }
+  // Bucket by calendar day: timed events in the viewer's zone,
+  // deadlines and all-day events as date-only values in UTC (ADR-012).
+  const byDay = bucketItemsByDay(items, userTz);
   // Sort items within each day: deadlines first (high-priority visual),
-  // then events by start time.
+  // then all-day events, then timed events by start time.
   for (const [, list] of byDay) {
     list.sort((a, b) => {
       if (a.kind !== b.kind) return a.kind === "deadline" ? -1 : 1;
       if (a.kind === "event" && b.kind === "event") {
+        if (a.isAllDay !== b.isAllDay) return a.isAllDay ? -1 : 1;
         return a.startTime.getTime() - b.startTime.getTime();
       }
       return 0;
     });
   }
 
-  // Order labels so the first column matches WEEK_STARTS_ON.
-  const WEEKDAYS_SUN_FIRST = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const weekdayLabels =
-    WEEK_STARTS_ON === 0
-      ? WEEKDAYS_SUN_FIRST
-      : [...WEEKDAYS_SUN_FIRST.slice(1), WEEKDAYS_SUN_FIRST[0]];
+  // Weekday labels come from the grid's own first row, so the header
+  // can never disagree with the columns the grid builder laid out.
+  const weekdayLabels = days.slice(0, 7).map(weekdayShort);
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -91,11 +86,9 @@ export function MonthView({
       {/* Day grid — 6 rows fill available vertical space */}
       <div className="grid grid-cols-7 flex-1 min-h-0">
         {days.map((day) => {
-          // Day Dates are noon UTC of the user-TZ calendar day, so
-          // `getUTC*` accessors give the right calendar components.
-          const key = `${day.getUTCFullYear()}-${String(
-            day.getUTCMonth() + 1
-          ).padStart(2, "0")}-${String(day.getUTCDate()).padStart(2, "0")}`;
+          // Day Dates are noon UTC of the calendar day, so UTC
+          // accessors give the right calendar components.
+          const key = dateOnlyKey(day);
           const dayItems = byDay.get(key) ?? [];
           const visible = dayItems.slice(0, MAX_ITEMS_PER_CELL);
           const overflow = dayItems.length - visible.length;

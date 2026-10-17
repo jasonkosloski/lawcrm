@@ -10,21 +10,20 @@
 
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import {
-  format,
-  parseISO,
-  startOfWeek,
-  endOfWeek,
-} from "date-fns";
+import { parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
   buildCalendarHref,
+  calendarDayInTz,
   stepCalendarFocal,
-  WEEK_STARTS_ON,
   type CalendarShow,
   type CalendarView,
 } from "@/lib/calendar-utils";
-import { dateKeyInTz } from "@/lib/format-date";
+import {
+  calendarWeekInTz,
+  dateKeyInTz,
+  formatDateOnly,
+} from "@/lib/format-date";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 
 /**
@@ -44,19 +43,36 @@ export function todayFocalInTz(now: Date, tz: string): Date {
   return parseISO(dateKeyInTz(now, tz));
 }
 
-function formatRangeLabel(view: CalendarView, focal: Date): string {
+/**
+ * The toolbar's range label. The days come from the SAME helpers
+ * that build the grid (`calendarWeekInTz` / `calendarDayInTz`), so
+ * the label can never disagree with the columns on screen — it used
+ * to re-derive the week with date-fns and `WEEK_STARTS_ON`, which the
+ * grid builders don't honor. Those helpers return noon-UTC Dates;
+ * `formatDateOnly` reads them in UTC, so no zone shifts the day.
+ */
+export function formatRangeLabel(
+  view: CalendarView,
+  focal: Date,
+  tz: string
+): string {
   if (view === "day") {
-    return format(focal, "EEEE, MMMM d, yyyy");
+    return formatDateOnly(calendarDayInTz(focal, tz).day, "full_long");
   }
   if (view === "week") {
-    const start = startOfWeek(focal, { weekStartsOn: WEEK_STARTS_ON });
-    const end = endOfWeek(focal, { weekStartsOn: WEEK_STARTS_ON });
-    if (start.getMonth() === end.getMonth()) {
-      return `Week of ${format(start, "MMM d, yyyy")}`;
+    const { days } = calendarWeekInTz(focal, tz);
+    const start = days[0]!;
+    const end = days[6]!;
+    if (start.getUTCMonth() === end.getUTCMonth()) {
+      return `Week of ${formatDateOnly(start, "medium")}`;
     }
-    return `${format(start, "MMM d")} – ${format(end, "MMM d, yyyy")}`;
+    return `${formatDateOnly(start, "short")} – ${formatDateOnly(end, "medium")}`;
   }
-  return format(focal, "MMMM yyyy");
+  return calendarDayInTz(focal, tz).day.toLocaleString("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 const SHOW_LABEL: Record<CalendarShow, string> = {
@@ -106,7 +122,7 @@ export async function CalendarToolbar({
           </Link>
         </div>
         <h2 className="text-sm font-display font-medium text-ink truncate">
-          {formatRangeLabel(view, focal)}
+          {formatRangeLabel(view, focal, userTz)}
         </h2>
       </div>
 

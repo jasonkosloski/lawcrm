@@ -12,13 +12,22 @@
 "use client";
 
 import { useState } from "react";
-import { isSameDay } from "date-fns";
 import { ChevronDown, Clock, Maximize2, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
-// Client component — event instants render via the centralized
-// variants with no TZ override (browser-local after hydration).
-import { formatDate } from "@/lib/format-date";
+// Event instants render in the viewer's PROFILE zone (useUserTimeZone),
+// never the runtime's: this client component is also server-rendered,
+// and a browser-zone format would disagree with the UTC server text and
+// trip a hydration mismatch. All-day events are date-only values and
+// read in UTC.
+import { dateKeyInTz, formatDate, formatDateOnly } from "@/lib/format-date";
+import { formatHours } from "@/lib/format-hours";
+import { useUserTimeZone } from "@/components/user-time-zone";
 import { EventLink } from "@/components/calendar/event-link";
+import {
+  EventAttachmentsProvider,
+  type EventAttachmentsViewer,
+} from "@/components/calendar/event-attachments-context";
+import { eventTimeEntryDate } from "@/components/calendar/event-dates";
 import { EventNotesSection } from "@/components/calendar/event-notes-section";
 import { EventTimeEntriesSection } from "@/components/calendar/event-time-entries-section";
 import type { MatterEventRow } from "@/lib/queries/matter-detail";
@@ -34,14 +43,24 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 /** Plain-text preview of the first (pinned-first, most-recent) note
- *  shown under the event title when the row is collapsed. */
-function notePreview(note: {
+ *  shown under the event title when the row is collapsed. Note content
+ *  is sanitized HTML, so after the tags go the entities must be decoded
+ *  too ("Smith &amp; Wesson" -> "Smith & Wesson"); `&amp;` is decoded
+ *  LAST so "&amp;lt;" stays the literal text "&lt;" instead of being
+ *  double-decoded. The result is rendered as React text (escaped), so
+ *  decoding is XSS-safe. Exported for tests. */
+export function notePreview(note: {
   content: string;
   authorInitials: string;
 }): string {
   const text = note.content
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/g, " ")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;|&apos;/g, "'")
+    .replace(/&amp;/g, "&")
     .replace(/\s+/g, " ")
     .trim();
   const snippet = text.length > 110 ? `${text.slice(0, 109)}…` : text;
@@ -52,11 +71,17 @@ export function EventRowExpandable({
   event,
   matterId,
   matterName,
+  viewer,
 }: {
   event: MatterEventRow;
   matterId: string;
   matterName: string;
+  /** What the signed-in user may do with the notes / time entries
+   *  inside (resolved on the server by the page). Omitted = the
+   *  buttons all show and the server decides, as before. */
+  viewer?: Partial<Omit<EventAttachmentsViewer, "defaultTimeEntryDate">>;
 }) {
+  const tz = useUserTimeZone();
   // "Busy" shell rows (viewer can't see this event's details) carry
   // no notes/time and expose no expand or modal affordance.
   const canSeeDetails = event.viewerCanSeeDetails;
@@ -68,9 +93,12 @@ export function EventRowExpandable({
 
   const timeLabel = event.isAllDay
     ? "All day"
-    : isSameDay(event.startTime, event.endTime)
-      ? `${formatDate(event.startTime, "time")} – ${formatDate(event.endTime, "time")}`
-      : `${formatDate(event.startTime, "datetime")} – ${formatDate(event.endTime, "datetime")}`;
+    : dateKeyInTz(event.startTime, tz) === dateKeyInTz(event.endTime, tz)
+      ? `${formatDate(event.startTime, "time", tz)} – ${formatDate(event.endTime, "time", tz)}`
+      : `${formatDate(event.startTime, "datetime", tz)} – ${formatDate(event.endTime, "datetime", tz)}`;
+  const dateLabel = event.isAllDay
+    ? formatDateOnly(event.startTime, "short_weekday")
+    : formatDate(event.startTime, "short_weekday", tz);
 
   const notesCount = event.notes.length;
   const timeCount = event.timeEntries.length;
@@ -101,7 +129,7 @@ export function EventRowExpandable({
             />
             <div className="flex flex-col leading-tight w-28 shrink-0">
               <span className="text-xs font-medium text-ink">
-                {formatDate(event.startTime, "short_weekday")}
+                {dateLabel}
               </span>
               <span className="text-2xs font-mono text-ink-4">
                 {timeLabel}
@@ -124,10 +152,10 @@ export function EventRowExpandable({
                 {timeCount > 0 && (
                   <span
                     className="inline-flex items-center gap-0.5 text-2xs font-medium text-ok bg-ok-soft border border-line px-1.5 py-0.5 rounded-full shrink-0 font-mono"
-                    title={`${totalHours.toFixed(1)} hours logged across ${timeCount} entr${timeCount === 1 ? "y" : "ies"}`}
+                    title={`${formatHours(totalHours)} hours logged across ${timeCount} entr${timeCount === 1 ? "y" : "ies"}`}
                   >
                     <Clock size={10} />
-                    {totalHours.toFixed(1)}h
+                    {formatHours(totalHours)}h
                   </span>
                 )}
               </div>
@@ -186,19 +214,24 @@ export function EventRowExpandable({
       </div>
 
       {canSeeDetails && expanded && (
-        <div className="px-5 py-3 border-t border-line bg-paper-2/30 flex flex-col gap-4">
-          <EventNotesSection
-            eventId={event.id}
-            matterId={matterId}
-            matterName={matterName}
-            notes={event.notes}
-          />
-          <EventTimeEntriesSection
-            eventId={event.id}
-            matterId={matterId}
-            entries={event.timeEntries}
-          />
-        </div>
+        <EventAttachmentsProvider
+          {...viewer}
+          defaultTimeEntryDate={eventTimeEntryDate(event, tz)}
+        >
+          <div className="px-5 py-3 border-t border-line bg-paper-2/30 flex flex-col gap-4">
+            <EventNotesSection
+              eventId={event.id}
+              matterId={matterId}
+              matterName={matterName}
+              notes={event.notes}
+            />
+            <EventTimeEntriesSection
+              eventId={event.id}
+              matterId={matterId}
+              entries={event.timeEntries}
+            />
+          </div>
+        </EventAttachmentsProvider>
       )}
     </li>
   );

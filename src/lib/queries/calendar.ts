@@ -400,6 +400,11 @@ export type EventNote = {
   type: string;
   content: string;
   isPinned: boolean;
+  /** Author's user id — lets the UI hide Delete on a colleague's note
+   *  the viewer isn't allowed to delete. Optional: rows built by other
+   *  queries (matter Events tab) may omit it, which leaves the decision
+   *  to the server. */
+  authorId?: string;
   authorName: string;
   authorInitials: string;
   createdAt: Date;
@@ -419,6 +424,8 @@ export type EventTimeEntry = {
   noCharge: boolean;
   privileged: boolean;
   status: string;
+  /** Entry owner's user id — same purpose as `EventNote.authorId`. */
+  userId?: string;
   userName: string;
   userInitials: string;
   /** Null for lead-scoped (intake) entries — TimeEntry.matterId is
@@ -451,6 +458,7 @@ export async function getEventTimeEntries(
     noCharge: e.noCharge,
     privileged: e.privileged,
     status: e.status,
+    userId: e.userId,
     userName: e.user.name,
     userInitials: e.user.initials,
     matterId: e.matterId,
@@ -473,6 +481,7 @@ export async function getEventNotes(eventId: string): Promise<EventNote[]> {
     type: n.type,
     content: sanitizeUserHtml(n.content),
     isPinned: n.isPinned,
+    authorId: n.authorId,
     authorName: n.author.name,
     authorInitials: n.author.initials,
     createdAt: n.createdAt,

@@ -47,6 +47,7 @@ import {
   type DragPayload,
 } from "@/lib/dnd";
 import {
+  allDayDropSchedule,
   CALENDAR_EVENT_KIND,
   type CalendarEventDragData,
 } from "./event-drag";
@@ -59,7 +60,6 @@ import {
   chipBox,
   clampEndToGrid,
   clampStartToGrid,
-  computeAllDayDrop,
   computeTimedDrop,
   formatTimeShort,
   nowTopPx,
@@ -78,6 +78,10 @@ export type WeekAllDayCellProps = {
   events: CalendarEventRow[];
   deadlines: CalendarDeadlineRow[];
   canEdit: boolean;
+  /** Per-event drag gate (the `canEditEvent` resolver's result for
+   *  each visible event). Omitted = every event is draggable when
+   *  `canEdit` is true. */
+  canDragEvent?: (eventId: string) => boolean;
   /** Move dispatcher provided by WeekView. Owns the optimistic
    *  overlay so the chip jumps to its new spot before the server
    *  confirms. */
@@ -89,16 +93,17 @@ export function WeekAllDayCell({
   events,
   deadlines,
   canEdit,
+  canDragEvent,
   move,
 }: WeekAllDayCellProps) {
+  // `day` is the noon-UTC Date of this calendar day.
+  const dayKey = dateOnlyKey(day);
   const drop = useDropTarget<CalendarEventDragData>({
     kind: CALENDAR_EVENT_KIND,
     disabled: !canEdit,
     onDrop: (data) => {
-      // All-day values are date-only (UTC midnight, ADR-012): the
-      // drop date is the column's calendar-day key, never a
-      // browser-local midnight. Null = already there (no-op).
-      const schedule = computeAllDayDrop(data, dateOnlyKey(day));
+      // Date-only, span-preserving; null = already all-day on this day.
+      const schedule = allDayDropSchedule(data, dayKey);
       if (schedule) move(data.id, schedule);
     },
   });
@@ -122,7 +127,18 @@ export function WeekAllDayCell({
       )}
     >
       {events.map((e) => (
-        <DraggableAllDayChip key={e.id} event={e} canEdit={canEdit} />
+        <DraggableAllDayChip
+          key={e.id}
+          event={e}
+          // Only the first day's chip drags: a continuation chip on a
+          // later day of a multi-day event is a plain link, since
+          // dropping it would be ambiguous about which day moved.
+          canEdit={
+            canEdit &&
+            dateOnlyKey(e.startTime) === dayKey &&
+            (canDragEvent ? canDragEvent(e.id) : true)
+          }
+        />
       ))}
       {deadlines.map((d) => (
         <DeadlineChip key={d.id} deadline={d} />
@@ -142,6 +158,8 @@ export type WeekTimeColumnProps = {
   now: Date;
   events: CalendarEventRow[];
   canEdit: boolean;
+  /** Per-event drag/resize gate; omitted = every event when `canEdit`. */
+  canDragEvent?: (eventId: string) => boolean;
   move: MoveEventFn;
 };
 
@@ -150,6 +168,7 @@ export function WeekTimeColumn({
   now,
   events,
   canEdit,
+  canDragEvent,
   move,
 }: WeekTimeColumnProps) {
   const tz = useUserTimeZone();
@@ -269,7 +288,7 @@ export function WeekTimeColumn({
         <DraggableEventBlock
           key={event.id}
           event={event}
-          canEdit={canEdit}
+          canEdit={canEdit && (canDragEvent ? canDragEvent(event.id) : true)}
           lane={lane}
           laneCount={laneCount}
           move={move}

@@ -20,7 +20,7 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { searchAttendeesAction } from "@/app/actions/attendee-search";
@@ -198,10 +198,29 @@ function AttendeeAutocomplete({
 }) {
   const [query, setQuery] = useState("");
   const [email, setEmail] = useState("");
-  const [results, setResults] = useState<AttendeeSearchResult[]>([]);
+  // The rows come tagged with the query they answer, so rows for an
+  // older query are never shown against a newer one.
+  const [fetched, setFetched] = useState<{
+    q: string;
+    rows: AttendeeSearchResult[];
+  }>({ q: "", rows: [] });
   const [open, setOpen] = useState(false);
   const [focusedIdx, setFocusedIdx] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const listboxId = useId();
+  // The trimmed query the user is waiting on. A search response only
+  // lands if it still answers THIS query: otherwise a slow response
+  // for an old query (or one in flight when a pick cleared the box)
+  // re-opens stale suggestions — including the person just added.
+  const latestQueryRef = useRef("");
+
+  const trimmedQuery = query.trim();
+  // Derived, not stored: only rows that answer the CURRENT query show.
+  // An empty or since-edited query has none, so deleting "a" and typing
+  // "b" never offers (or lets Enter pick) the old "a" suggestions while
+  // the "b" response is still in flight.
+  const results =
+    trimmedQuery.length > 0 && fetched.q === trimmedQuery ? fetched.rows : [];
 
   // Compute already-picked ids so the search action excludes
   // duplicates on the server. Names + emails alone aren't
@@ -217,10 +236,8 @@ function AttendeeAutocomplete({
   // instant" against the round-trip cost on every keystroke.
   useEffect(() => {
     const trimmed = query.trim();
-    if (trimmed.length === 0) {
-      setResults([]);
-      return;
-    }
+    latestQueryRef.current = trimmed;
+    if (trimmed.length === 0) return;
     const t = setTimeout(async () => {
       try {
         const r = await searchAttendeesAction(
@@ -228,15 +245,18 @@ function AttendeeAutocomplete({
           excludeUserIds,
           excludeContactIds
         );
-        setResults(r);
+        if (latestQueryRef.current !== trimmed) return; // stale response
+        setFetched({ q: trimmed, rows: r });
         setFocusedIdx(0);
       } catch {
         // Search failures are non-blocking — the user can still
         // pick "Add as new contact" or refine the query.
-        setResults([]);
+        if (latestQueryRef.current === trimmed) setFetched({ q: trimmed, rows: [] });
       }
     }, 250);
     return () => clearTimeout(t);
+    // The exclusion lists are read when the timer fires; re-running on
+    // every pick would only re-search the query that was just cleared.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
@@ -252,7 +272,6 @@ function AttendeeAutocomplete({
     return () => document.removeEventListener("mousedown", onClick);
   }, [open]);
 
-  const trimmedQuery = query.trim();
   const trimmedEmail = email.trim();
   // Light client-side email check. The server re-validates with
   // the same regex, so this is purely UX (don't enable the
@@ -272,6 +291,16 @@ function AttendeeAutocomplete({
   // Total selectable rows in the dropdown — used for keyboard
   // navigation bounds.
   const totalRows = results.length + (showAddNew ? 1 : 0);
+
+  const clearInputs = () => {
+    // Drop the awaited query first so a response already in flight for
+    // it is discarded instead of repopulating the dropdown.
+    latestQueryRef.current = "";
+    setQuery("");
+    setEmail("");
+    setFetched({ q: "", rows: [] });
+    setOpen(false);
+  };
 
   const pickResult = (r: AttendeeSearchResult) => {
     if (r.kind === "user") {
@@ -296,10 +325,7 @@ function AttendeeAutocomplete({
         contactType: r.type,
       });
     }
-    setQuery("");
-    setEmail("");
-    setResults([]);
-    setOpen(false);
+    clearInputs();
   };
 
   const pickAddNew = () => {
@@ -313,13 +339,22 @@ function AttendeeAutocomplete({
       name: trimmedQuery,
       email: trimmedEmail,
     });
-    setQuery("");
-    setEmail("");
-    setResults([]);
-    setOpen(false);
+    clearInputs();
   };
 
-  const onKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
+  const handleKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+    isEmailField: boolean
+  ) => {
+    if (e.key === "Enter" && isEmailField) {
+      // In the email box Enter means "add the typed contact", never
+      // "pick the highlighted suggestion" — otherwise typing a new
+      // person's address while a partial-name match is showing adds the
+      // wrong (existing) person.
+      e.preventDefault();
+      if (showAddNew && addNewEnabled) pickAddNew();
+      return;
+    }
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setOpen(true);
@@ -351,6 +386,9 @@ function AttendeeAutocomplete({
     }
   };
 
+  const optionId = (i: number) => `${listboxId}-opt-${i}`;
+  const dropdownOpen = open && (results.length > 0 || showAddNew);
+
   return (
     <div ref={containerRef} className="relative">
       <div className="grid grid-cols-[1fr_1fr] gap-2">
@@ -362,26 +400,35 @@ function AttendeeAutocomplete({
             setOpen(true);
           }}
           onFocus={() => setOpen(query.length > 0)}
-          onKeyDown={onKeyDown}
+          onKeyDown={(e) => handleKeyDown(e, false)}
           placeholder="Add attendee — name, email, or jobTitle…"
           className="h-7 px-2 rounded-md border border-line text-xs text-ink bg-white"
           aria-label="Search attendees"
-          aria-expanded={open}
+          role="combobox"
+          aria-expanded={dropdownOpen}
           aria-haspopup="listbox"
+          aria-autocomplete="list"
+          aria-controls={dropdownOpen ? listboxId : undefined}
+          aria-activedescendant={
+            dropdownOpen
+              ? optionId(Math.min(focusedIdx, totalRows - 1))
+              : undefined
+          }
         />
         <input
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          onKeyDown={onKeyDown}
+          onKeyDown={(e) => handleKeyDown(e, true)}
           placeholder="Email (for new contact)"
           className="h-7 px-2 rounded-md border border-line text-xs text-ink bg-white font-mono"
           aria-label="Attendee email"
         />
       </div>
 
-      {open && (results.length > 0 || showAddNew) && (
+      {dropdownOpen && (
         <ul
+          id={listboxId}
           role="listbox"
           aria-label="Attendee suggestions"
           className="absolute left-0 right-0 mt-1 z-50 max-h-64 overflow-y-auto rounded-md border border-line bg-white shadow-md"
@@ -389,6 +436,7 @@ function AttendeeAutocomplete({
           {results.map((r, i) => (
             <li
               key={`${r.kind}-${r.id}`}
+              id={optionId(i)}
               role="option"
               aria-selected={i === focusedIdx}
               onMouseEnter={() => setFocusedIdx(i)}
@@ -416,6 +464,7 @@ function AttendeeAutocomplete({
           ))}
           {showAddNew && (
             <li
+              id={optionId(results.length)}
               role="option"
               aria-selected={focusedIdx === results.length}
               aria-disabled={!addNewEnabled}
