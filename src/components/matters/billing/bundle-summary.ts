@@ -8,8 +8,6 @@
  * understates what the draft will contain.
  */
 
-import { roundMoney } from "@/lib/money";
-
 /** "5 entries", "2 expenses" or "5 entries + 2 expenses". */
 export function bundleCountLabel(
   entryCount: number,
@@ -25,7 +23,10 @@ export function bundleCountLabel(
   return parts.join(" + ");
 }
 
-/** Time + expense dollars, rounded to cents (no float dust). */
+/** Time + expense dollars, rounded to cents (no float dust). Done in
+ *  integer cents rather than via `@/lib/money`: that module pulls the
+ *  Prisma client (node:module) into the browser bundle of every page
+ *  that renders these client forms, which breaks `next build`. */
 export function bundleTotal(timeTotal: number, expenseTotal: number): number {
-  return roundMoney(timeTotal + expenseTotal).toNumber();
+  return Math.round((timeTotal + expenseTotal) * 100) / 100;
 }
