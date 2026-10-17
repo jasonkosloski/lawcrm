@@ -35,7 +35,8 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentFirm } from "@/lib/firm";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
-import { storeFile } from "@/lib/file-storage";
+import { deleteFile, storeFile } from "@/lib/file-storage";
+import { toUserMessage } from "@/lib/user-facing-error";
 import { formatDate } from "@/lib/format-date";
 import {
   composeCityStateZip,
@@ -48,6 +49,7 @@ import {
   MAX_TEMPLATE_NAME,
   documentCategoryForTemplate,
   isTemplateCategory,
+  templateCategoryLabel,
   templateFormInitialState,
   type TemplateFormState,
 } from "@/lib/template-constants";
@@ -57,7 +59,7 @@ const templateSchema = z.object({
   // Category is a free string in the schema; v1 validates against
   // the curated list so the picker + grouping stay coherent. When
   // firm-defined categories land, loosen here only.
-  category: z.string().refine(isTemplateCategory, "Unknown category."),
+  category: z.string().min(1, "Category is required.").max(60),
   description: z
     .string()
     .trim()
@@ -70,7 +72,13 @@ const templateSchema = z.object({
     .max(MAX_TEMPLATE_BODY, "Template body is too long."),
 });
 
-function parseTemplateForm(formData: FormData):
+function parseTemplateForm(
+  formData: FormData,
+  /** An existing row's category stays valid when unchanged even if
+   *  it isn't in the curated list (imported / pre-validation rows),
+   *  so fixing a typo in the body doesn't force a re-categorize. */
+  keepCategory?: string
+):
   | { ok: true; data: z.infer<typeof templateSchema> }
   | { ok: false; error: string } {
   const parsed = templateSchema.safeParse({
@@ -86,7 +94,30 @@ function parseTemplateForm(formData: FormData):
         parsed.error.issues[0]?.message ?? "Invalid template — check the fields.",
     };
   }
+  if (
+    !isTemplateCategory(parsed.data.category) &&
+    parsed.data.category !== keepCategory
+  ) {
+    return { ok: false, error: "Unknown category." };
+  }
   return { ok: true, data: parsed.data };
+}
+
+/** Firm-scope audit entry (no matter) for library changes — a
+ *  rewritten or deleted template changes every future letter. */
+async function logTemplateChange(
+  userId: string,
+  title: string,
+  detail: string | null
+): Promise<void> {
+  await logActivity({
+    matterId: null,
+    userId,
+    type: "document",
+    title,
+    detail,
+    source: "Settings",
+  });
 }
 
 // ── Library CRUD ───────────────────────────────────────────────────────
@@ -99,7 +130,7 @@ export async function createDocumentTemplate(
   const parsed = parseTemplateForm(formData);
   if (!parsed.ok) return { status: "error", error: parsed.error };
 
-  await prisma.documentTemplate.create({
+  const created = await prisma.documentTemplate.create({
     data: {
       name: parsed.data.name,
       category: parsed.data.category,
@@ -107,7 +138,14 @@ export async function createDocumentTemplate(
       body: parsed.data.body,
       createdById: userId,
     },
+    select: { id: true },
   });
+
+  await logTemplateChange(
+    userId,
+    `Template "${parsed.data.name}" created`,
+    `Category: ${templateCategoryLabel(parsed.data.category)} (id ${created.id})`
+  );
 
   revalidatePath("/settings/templates");
   return { ...templateFormInitialState, status: "ok" };
@@ -118,17 +156,24 @@ export async function updateDocumentTemplate(
   _prev: TemplateFormState,
   formData: FormData
 ): Promise<TemplateFormState> {
-  await requirePermission("documents.template.edit");
-  const parsed = parseTemplateForm(formData);
-  if (!parsed.ok) return { status: "error", error: parsed.error };
+  const userId = await requirePermission("documents.template.edit");
 
   const existing = await prisma.documentTemplate.findUnique({
     where: { id: templateId },
-    select: { id: true },
+    select: {
+      id: true,
+      name: true,
+      category: true,
+      description: true,
+      body: true,
+    },
   });
   if (!existing) {
     return { status: "error", error: "Template not found." };
   }
+
+  const parsed = parseTemplateForm(formData, existing.category);
+  if (!parsed.ok) return { status: "error", error: parsed.error };
 
   await prisma.documentTemplate.update({
     where: { id: templateId },
@@ -139,6 +184,25 @@ export async function updateDocumentTemplate(
       body: parsed.data.body,
     },
   });
+
+  // Old -> new for the small fields; the body can be 50k chars, so
+  // only record THAT it changed (the audit trail answers who/when).
+  const newDescription = parsed.data.description?.trim() || null;
+  const changes = [
+    existing.name !== parsed.data.name
+      ? `name "${existing.name}" -> "${parsed.data.name}"`
+      : null,
+    existing.category !== parsed.data.category
+      ? `category ${existing.category} -> ${parsed.data.category}`
+      : null,
+    existing.description !== newDescription ? "description changed" : null,
+    existing.body !== parsed.data.body ? "body changed" : null,
+  ].filter((c): c is string => c !== null);
+  await logTemplateChange(
+    userId,
+    `Template "${parsed.data.name}" updated`,
+    changes.length > 0 ? changes.join("; ") : "No field changes"
+  );
 
   revalidatePath("/settings/templates");
   return { ...templateFormInitialState, status: "ok" };
@@ -151,10 +215,10 @@ export async function setDocumentTemplateActive(
   templateId: string,
   isActive: boolean
 ): Promise<{ ok: boolean; error?: string }> {
-  await requirePermission("documents.template.edit");
+  const userId = await requirePermission("documents.template.edit");
   const existing = await prisma.documentTemplate.findUnique({
     where: { id: templateId },
-    select: { id: true },
+    select: { id: true, name: true, isActive: true },
   });
   if (!existing) return { ok: false, error: "Template not found." };
 
@@ -162,6 +226,13 @@ export async function setDocumentTemplateActive(
     where: { id: templateId },
     data: { isActive },
   });
+  if (existing.isActive !== isActive) {
+    await logTemplateChange(
+      userId,
+      `Template "${existing.name}" ${isActive ? "restored" : "archived"}`,
+      null
+    );
+  }
   revalidatePath("/settings/templates");
   return { ok: true };
 }
@@ -172,14 +243,19 @@ export async function setDocumentTemplateActive(
 export async function deleteDocumentTemplate(
   templateId: string
 ): Promise<{ ok: boolean; error?: string }> {
-  await requirePermission("documents.template.delete");
+  const userId = await requirePermission("documents.template.delete");
   const existing = await prisma.documentTemplate.findUnique({
     where: { id: templateId },
-    select: { id: true },
+    select: { id: true, name: true, category: true },
   });
   if (!existing) return { ok: false, error: "Template not found." };
 
   await prisma.documentTemplate.delete({ where: { id: templateId } });
+  await logTemplateChange(
+    userId,
+    `Template "${existing.name}" deleted`,
+    `Category: ${templateCategoryLabel(existing.category)} (id ${existing.id})`
+  );
   revalidatePath("/settings/templates");
   return { ok: true };
 }
@@ -367,23 +443,52 @@ export async function generateDocumentFromTemplate(
 
   // Node's global File — same shape uploadDocument receives from the
   // browser, so storeFile needs no new entry point for text output.
-  const stored = await storeFile(
-    new File([merged.text], documentName, { type: "text/markdown" })
-  );
+  // Infrastructure failures (blob 5xx, misconfigured driver, matter
+  // deleted mid-request) come back as {ok:false} so the dialog shows
+  // an inline error instead of the route error boundary.
+  let stored: Awaited<ReturnType<typeof storeFile>>;
+  try {
+    stored = await storeFile(
+      new File([merged.text], documentName, { type: "text/markdown" })
+    );
+  } catch (err) {
+    return {
+      ok: false,
+      error: toUserMessage(
+        err,
+        "Couldn't save the document — storage is unavailable. Try again.",
+        "generateDocumentFromTemplate.storeFile"
+      ),
+    };
+  }
 
-  const doc = await prisma.document.create({
-    data: {
-      matterId,
-      name: documentName,
-      category: documentCategoryForTemplate(template.category),
-      source: "generated",
-      fileUrl: stored.key,
-      contentType: stored.contentType,
-      fileSize: stored.size,
-      uploadedBy: userId,
-    },
-    select: { id: true },
-  });
+  let doc: { id: string };
+  try {
+    doc = await prisma.document.create({
+      data: {
+        matterId,
+        name: documentName,
+        category: documentCategoryForTemplate(template.category),
+        source: "generated",
+        fileUrl: stored.key,
+        contentType: stored.contentType,
+        fileSize: stored.size,
+        uploadedBy: userId,
+      },
+      select: { id: true },
+    });
+  } catch (err) {
+    // The file is already written; no row will ever point at it.
+    await deleteFile(stored.key).catch(() => {});
+    return {
+      ok: false,
+      error: toUserMessage(
+        err,
+        "Couldn't save the document. Try again.",
+        "generateDocumentFromTemplate.create"
+      ),
+    };
+  }
 
   await logActivity({
     matterId,

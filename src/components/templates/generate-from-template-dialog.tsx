@@ -58,7 +58,11 @@ export function GenerateFromTemplateDialog({
   const [templateId, setTemplateId] = useState("");
   const [preview, setPreview] = useState<TemplatePreviewResult | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Name of the Document just saved - shown in place of silently
+  // closing, since the file lands at the matter's root list.
+  const [savedName, setSavedName] = useState<string | null>(null);
   const [previewPending, startPreview] = useTransition();
   const [savePending, startSave] = useTransition();
 
@@ -72,7 +76,9 @@ export function GenerateFromTemplateDialog({
       setTemplateId("");
       setPreview(null);
       setCopied(false);
+      setCopyError(false);
       setSaveError(null);
+      setSavedName(null);
     }
   }
 
@@ -80,7 +86,9 @@ export function GenerateFromTemplateDialog({
     setTemplateId(id);
     setPreview(null);
     setSaveError(null);
+    setSavedName(null);
     setCopied(false);
+    setCopyError(false);
     if (!id) return;
     startPreview(async () => {
       const res = await previewDocumentFromTemplate(id, matterId);
@@ -90,9 +98,19 @@ export function GenerateFromTemplateDialog({
 
   const onCopy = async () => {
     if (!preview?.ok) return;
-    await navigator.clipboard.writeText(preview.text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    // writeText rejects on permission denial / lost focus, and
+    // navigator.clipboard is undefined on non-secure origins - never
+    // let the user paste a stale clipboard believing it worked.
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("no clipboard");
+      await navigator.clipboard.writeText(preview.text);
+      setCopyError(false);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+      setCopyError(true);
+    }
   };
 
   const onSave = () => {
@@ -101,9 +119,10 @@ export function GenerateFromTemplateDialog({
     startSave(async () => {
       const res = await generateDocumentFromTemplate(templateId, matterId);
       if (res.ok) {
-        // The action revalidated the documents route — closing is
-        // enough for the new row to be visible.
-        setOpen(false);
+        // The action revalidated the documents route. The document is
+        // filed at the matter root, which is invisible if a subfolder
+        // is open - so confirm by name instead of closing silently.
+        setSavedName(res.documentName);
       } else {
         setSaveError(res.error);
       }
@@ -233,6 +252,30 @@ export function GenerateFromTemplateDialog({
                 </>
               )}
 
+              {copyError && (
+                <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">
+                  <TriangleAlert size={12} className="shrink-0 mt-px" />
+                  <span>
+                    Couldn&apos;t copy — select the preview text and copy it
+                    manually.
+                  </span>
+                </div>
+              )}
+
+              {savedName && (
+                <div
+                  role="status"
+                  className="flex items-start gap-2 px-3 py-2 rounded-md bg-paper-2/40 border border-line text-2xs text-ink-2"
+                >
+                  <Check size={12} className="shrink-0 mt-px" />
+                  <span>
+                    Saved as <span className="font-medium">{savedName}</span>{" "}
+                    in All documents (the matter&apos;s root list — switch
+                    folders to see it).
+                  </span>
+                </div>
+              )}
+
               {saveError && (
                 <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">
                   <TriangleAlert size={12} className="shrink-0 mt-px" />
@@ -244,7 +287,7 @@ export function GenerateFromTemplateDialog({
 
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-              Cancel
+              {savedName ? "Done" : "Cancel"}
             </Button>
             {templates.length > 0 && (
               <>
@@ -257,7 +300,7 @@ export function GenerateFromTemplateDialog({
                   {copied ? <Check /> : <Copy />}
                   {copied ? "Copied" : "Copy text"}
                 </Button>
-                {canUpload && (
+                {canUpload && !savedName && (
                   <Button
                     type="button"
                     disabled={!preview?.ok || previewPending || savePending}

@@ -24,31 +24,35 @@ import { requireUser } from "@/lib/current-user";
 
 export default async function TemplatesSettingsPage() {
   await requireUser();
-  const [templates, { isAdmin, granted }, tz] = await Promise.all([
-    prisma.documentTemplate.findMany({
-      orderBy: [{ isActive: "desc" }, { category: "asc" }, { name: "asc" }],
-      select: {
-        id: true,
-        name: true,
-        category: true,
-        description: true,
-        body: true,
-        isActive: true,
-        updatedAt: true,
-        createdBy: { select: { name: true } },
-      },
-    }),
+  const [{ isAdmin, granted }, tz] = await Promise.all([
     getCurrentUserPermissions(),
     getCurrentUserTimeZone(),
   ]);
-
   const can = (key: string): boolean => isAdmin || granted.has(key);
+  const canEdit = can("documents.template.edit");
+
+  // Bodies run up to 50k chars each and only the edit dialog reads
+  // them, so don't ship them to viewers who can't open it.
+  const templates = await prisma.documentTemplate.findMany({
+    orderBy: [{ isActive: "desc" }, { category: "asc" }, { name: "asc" }],
+    select: {
+      id: true,
+      name: true,
+      category: true,
+      description: true,
+      body: canEdit,
+      isActive: true,
+      updatedAt: true,
+      createdBy: { select: { name: true } },
+    },
+  });
+
   const items: TemplateListItem[] = templates.map((t) => ({
     id: t.id,
     name: t.name,
     category: t.category,
     description: t.description,
-    body: t.body,
+    body: t.body ?? "",
     isActive: t.isActive,
     updatedAtLabel: formatDate(t.updatedAt, "medium", tz),
     createdByName: t.createdBy?.name ?? null,
@@ -72,7 +76,7 @@ export default async function TemplatesSettingsPage() {
       <TemplateLibrary
         templates={items}
         canCreate={can("documents.template.create")}
-        canEdit={can("documents.template.edit")}
+        canEdit={canEdit}
         canDelete={can("documents.template.delete")}
       />
     </div>

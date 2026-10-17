@@ -44,6 +44,8 @@ import {
   MAX_TEMPLATE_NAME,
   TEMPLATE_CATEGORIES,
   TEMPLATE_CATEGORY_LABEL,
+  isTemplateCategory,
+  templateCategoryLabel,
   templateFormInitialState,
   type TemplateCategory,
   type TemplateFormState,
@@ -181,6 +183,16 @@ export function TemplateEditorDialog({
                 }
                 className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
               >
+                {/* A row whose category isn't in the curated list
+                    (imported / SQL-inserted) keeps its own value —
+                    otherwise the controlled select falls back to the
+                    first option and a body-typo fix silently moves
+                    the template into "Demand letters". */}
+                {!isTemplateCategory(category) && (
+                  <option value={category}>
+                    {templateCategoryLabel(category)}
+                  </option>
+                )}
                 {TEMPLATE_CATEGORIES.map((c) => (
                   <option key={c} value={c}>
                     {TEMPLATE_CATEGORY_LABEL[c]}
@@ -239,6 +251,10 @@ export function TemplateEditorDialog({
               required
               value={body}
               onChange={(e) => setBody(e.target.value)}
+              // A hidden (Preview mode) required field can't show the
+              // browser's validation bubble and silently cancels the
+              // submit — bring the textarea back so it can.
+              onInvalid={() => setPreviewing(false)}
               rows={12}
               placeholder={
                 "Dear {{client.name}},\n\nRe: {{matter.name}}, No. {{matter.caseNumber}}\n\n…\n\n{{user.name}}\n{{firm.name}}"
@@ -318,6 +334,7 @@ function ModeButton({
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
         "px-2.5 h-7 text-2xs font-medium transition-colors",
         active

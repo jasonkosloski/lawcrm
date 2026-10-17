@@ -25,8 +25,10 @@ const ctx: MergeContext = {
     stage: "Discovery",
     court: "D. Colorado · Hon. L. Martinez",
     opposingParty: "City of Aurora",
-    incidentDate: new Date(Date.UTC(2025, 0, 10, 12)), // Jan 10, 2025 noon UTC
-    solDate: new Date(Date.UTC(2027, 0, 10, 12)),
+    // Date-only values are stored at UTC midnight (ADR-012) — the
+    // fixture must match, or the west-of-UTC day-shift bug is hidden.
+    incidentDate: new Date("2025-01-10"),
+    solDate: new Date("2027-01-10"),
   },
   client: {
     name: "Maria Alvarez",
@@ -114,11 +116,59 @@ describe("mergeTemplate", () => {
 
   test("non-token braces and empty bodies pass through untouched", () => {
     expect(mergeTemplate("", ctx).text).toBe("");
-    // `{{ not a key }}` has spaces inside the identifier — not a
-    // token, stays literal and is NOT reported.
-    const res = mergeTemplate("{{ not a key }} and { single }", ctx);
-    expect(res.text).toBe("{{ not a key }} and { single }");
+    // Single braces are not tokens at all.
+    const res = mergeTemplate("{ single } and {not} either", ctx);
+    expect(res.text).toBe("{ single } and {not} either");
     expect(res.unresolved).toEqual([]);
+  });
+
+  test("malformed tokens (hyphen / space) stay literal AND are reported", () => {
+    const res = mergeTemplate(
+      "Dear {{client-name}}, {{ client name }} and {{client-name}} again; {{matter.name}}",
+      ctx
+    );
+    expect(res.text).toBe(
+      "Dear {{client-name}}, {{ client name }} and {{client-name}} again; Alvarez v. City of Aurora"
+    );
+    expect(res.unresolved).toEqual(["client-name", "client name"]);
+    expect(res.missing).toEqual([]);
+  });
+
+  test("a resolved value that looks like a token is not re-reported", () => {
+    const tricky: MergeContext = {
+      ...ctx,
+      client: { ...ctx.client!, name: "{{x-y}}" },
+    };
+    const res = mergeTemplate("{{client.name}}", tricky);
+    expect(res.text).toBe("{{x-y}}");
+    expect(res.unresolved).toEqual([]);
+  });
+});
+
+describe("date-only fields (ADR-012)", () => {
+  // The bug only reproduces west of UTC, so pin the zone-independent
+  // contract: whatever zone the user is in, the stored UTC-midnight
+  // calendar date is what prints.
+  test.each(["America/Denver", "Pacific/Honolulu", "UTC", "Asia/Tokyo", null])(
+    "incident/SOL dates print on the stored calendar day in %s",
+    (timeZone) => {
+      const res = mergeTemplate(
+        "{{matter.incidentDate}} | {{matter.solDate}}",
+        { ...ctx, timeZone }
+      );
+      expect(res.text).toBe("January 10, 2025 | January 10, 2027");
+    }
+  );
+
+  test("{{today}} still follows the user's zone (it is a real instant)", () => {
+    // 2026-04-16 03:00Z is Apr 15 9 PM in Denver, Apr 16 in Tokyo.
+    const late = { ...ctx, today: new Date("2026-04-16T03:00:00Z") };
+    expect(
+      mergeTemplate("{{today}}", { ...late, timeZone: "America/Denver" }).text
+    ).toBe("April 15, 2026");
+    expect(
+      mergeTemplate("{{today}}", { ...late, timeZone: "Asia/Tokyo" }).text
+    ).toBe("April 16, 2026");
   });
 });
 

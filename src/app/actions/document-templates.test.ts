@@ -33,7 +33,7 @@ vi.mock("@/lib/file-storage", () => ({
 import { requirePermission } from "@/lib/permission-check";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentFirm } from "@/lib/firm";
-import { storeFile } from "@/lib/file-storage";
+import { deleteFile, storeFile } from "@/lib/file-storage";
 import { prisma } from "@/lib/prisma";
 import {
   createDocumentTemplate,
@@ -215,6 +215,36 @@ describe("library CRUD", () => {
     expect(miss.status).toBe("error");
   });
 
+  test("update keeps an existing non-curated category but refuses to move to a new unknown one", async () => {
+    const legacy = await prisma.documentTemplate.create({
+      data: {
+        name: "Imported memo",
+        category: "intake",
+        body: "old",
+        createdById: userId,
+      },
+      select: { id: true },
+    });
+    const kept = await updateDocumentTemplate(
+      legacy.id,
+      templateFormInitialState,
+      buildForm({ category: "intake", body: "typo fixed" })
+    );
+    expect(kept.status).toBe("ok");
+    const row = await prisma.documentTemplate.findUniqueOrThrow({
+      where: { id: legacy.id },
+    });
+    expect(row.category).toBe("intake");
+    expect(row.body).toBe("typo fixed");
+
+    const moved = await updateDocumentTemplate(
+      legacy.id,
+      templateFormInitialState,
+      buildForm({ category: "other-unknown" })
+    );
+    expect(moved.status).toBe("error");
+  });
+
   test("archive flips isActive off, restore flips it back", async () => {
     const t = await seedTemplate();
     expect((await setDocumentTemplateActive(t.id, false)).ok).toBe(true);
@@ -332,6 +362,120 @@ describe("generate", () => {
     });
 
     expect(storeFile).not.toHaveBeenCalled();
+    expect(await prisma.document.count()).toBe(0);
+  });
+});
+
+describe("matter dates (ADR-012 date-only)", () => {
+  test("incident + SOL dates stored at UTC midnight print on the stored day for a Denver user", async () => {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { timeZone: "America/Denver" },
+    });
+    await prisma.matter.update({
+      where: { id: matterId },
+      data: {
+        incidentDate: new Date("2025-01-10"),
+        statuteOfLimitationsDate: new Date("2027-01-10"),
+      },
+    });
+    const t = await seedTemplate({
+      body: "On {{matter.incidentDate}} ... runs {{matter.solDate}}",
+    });
+
+    const preview = await previewDocumentFromTemplate(t.id, matterId);
+    expect(preview.ok).toBe(true);
+    if (!preview.ok) return;
+    expect(preview.text).toBe(
+      "On January 10, 2025 ... runs January 10, 2027"
+    );
+
+    await generateDocumentFromTemplate(t.id, matterId);
+    const file = vi.mocked(storeFile).mock.calls[0]![0];
+    expect(await file.text()).toBe(
+      "On January 10, 2025 ... runs January 10, 2027"
+    );
+  });
+});
+
+describe("audit log", () => {
+  const firmEntries = () =>
+    prisma.activityLog.findMany({
+      where: { matterId: null, type: "document" },
+      orderBy: { timestamp: "asc" },
+    });
+
+  test("create, update, archive, restore and delete each write a firm-scope entry", async () => {
+    await createDocumentTemplate(templateFormInitialState, buildForm());
+    const t = await prisma.documentTemplate.findFirstOrThrow();
+
+    await updateDocumentTemplate(
+      t.id,
+      templateFormInitialState,
+      buildForm({ name: "Demand letter v2", body: "{{today}}" })
+    );
+    await setDocumentTemplateActive(t.id, false);
+    await setDocumentTemplateActive(t.id, true);
+    await deleteDocumentTemplate(t.id);
+
+    const rows = await firmEntries();
+    expect(rows.map((r) => r.title)).toEqual([
+      'Template "Demand letter" created',
+      'Template "Demand letter v2" updated',
+      'Template "Demand letter v2" archived',
+      'Template "Demand letter v2" restored',
+      'Template "Demand letter v2" deleted',
+    ]);
+    expect(rows.every((r) => r.userId === userId)).toBe(true);
+    // Old -> new on the small fields; the body is never copied in.
+    expect(rows[1]!.detail).toContain(
+      'name "Demand letter" -> "Demand letter v2"'
+    );
+    expect(rows[1]!.detail).toContain("body changed");
+    expect(rows[1]!.detail).not.toContain("{{today}}");
+  });
+
+  test("a no-op archive (already archived) writes nothing", async () => {
+    const t = await seedTemplate({ isActive: false });
+    await setDocumentTemplateActive(t.id, false);
+    expect(await firmEntries()).toHaveLength(0);
+  });
+
+  test("a rejected save writes no entry", async () => {
+    await createDocumentTemplate(
+      templateFormInitialState,
+      buildForm({ category: "nonsense" })
+    );
+    expect(await firmEntries()).toHaveLength(0);
+  });
+});
+
+describe("generate failure handling", () => {
+  test("a storage failure returns {ok:false} with a generic message and writes no row", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(storeFile).mockRejectedValueOnce(
+      new Error("BlobError: 503 at https://secret.internal/path")
+    );
+    const t = await seedTemplate();
+    const res = await generateDocumentFromTemplate(t.id, matterId);
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.error).not.toContain("secret.internal");
+    expect(await prisma.document.count()).toBe(0);
+    expect(deleteFile).not.toHaveBeenCalled();
+  });
+
+  test("a failed Document insert removes the already-stored file", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(deleteFile).mockResolvedValue(undefined);
+    const t = await seedTemplate();
+    const createSpy = vi
+      .spyOn(prisma.document, "create")
+      .mockRejectedValueOnce(new Error("FK violation"));
+    const res = await generateDocumentFromTemplate(t.id, matterId);
+    createSpy.mockRestore();
+    expect(res.ok).toBe(false);
+    expect(deleteFile).toHaveBeenCalledWith("uploads/generated-key.md");
     expect(await prisma.document.count()).toBe(0);
   });
 });

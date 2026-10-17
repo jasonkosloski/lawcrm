@@ -17,10 +17,11 @@
  *     client's address should be.
  *   - Unknown token ({{typo.field}}) → left in the output exactly
  *     as written AND reported in `unresolved`, so the UI can warn
- *     before anyone files the thing.
+ *     before anyone files the thing. Malformed tokens ({{client-name}},
+ *     {{client name}}) are treated the same way.
  */
 
-import { formatDate } from "@/lib/format-date";
+import { formatDate, formatDateOnly } from "@/lib/format-date";
 
 // ── Context ────────────────────────────────────────────────────────────
 
@@ -93,9 +94,18 @@ export type MergeField = {
   resolve: (ctx: MergeContext) => string | null;
 };
 
-/** Dates render "long" ("April 15, 2026") — letter-appropriate. */
-const date = (d: Date | null, ctx: MergeContext): string | null =>
-  d ? formatDate(d, "long", ctx.timeZone) : null;
+/** Real instants (today) render "long" ("April 15, 2026") in the
+ *  generating user's zone — letter-appropriate. */
+const instantDate = (d: Date, ctx: MergeContext): string =>
+  formatDate(d, "long", ctx.timeZone);
+
+/** Date-only values (Matter incidentDate / statuteOfLimitationsDate)
+ *  are calendar dates stored at UTC midnight (ADR-012). They are read
+ *  on the UTC day grid and NEVER shifted into the user's zone — doing
+ *  so renders them a day early for every user west of UTC, which in a
+ *  letter or pleading is a wrong incident date / limitations date. */
+const calendarDate = (d: Date | null): string | null =>
+  d ? formatDateOnly(d, "long") : null;
 
 /** Normalize "present but blank" to null so it takes the visible
  *  missing-placeholder path instead of merging an invisible "". */
@@ -153,14 +163,14 @@ export const MERGE_FIELDS: readonly MergeField[] = [
     label: "Incident date",
     description: "Date the cause of action accrued.",
     group: "Matter",
-    resolve: (ctx) => date(ctx.matter.incidentDate, ctx),
+    resolve: (ctx) => calendarDate(ctx.matter.incidentDate),
   },
   {
     key: "matter.solDate",
     label: "SOL date",
     description: "Statute-of-limitations deadline.",
     group: "Matter",
-    resolve: (ctx) => date(ctx.matter.solDate, ctx),
+    resolve: (ctx) => calendarDate(ctx.matter.solDate),
   },
 
   // ── Client ──
@@ -252,7 +262,7 @@ export const MERGE_FIELDS: readonly MergeField[] = [
     description:
       'Generation date, e.g. "April 15, 2026" (your time zone).',
     group: "General",
-    resolve: (ctx) => formatDate(ctx.today, "long", ctx.timeZone),
+    resolve: (ctx) => instantDate(ctx.today, ctx),
   },
 ];
 
@@ -279,9 +289,14 @@ export type MergeResult = {
   missing: string[];
 };
 
-/** Matches `{{ key }}` tokens — dotted alphanumeric keys, optional
- *  inner whitespace. Anything else between braces is left alone. */
-const TOKEN_RE = /\{\{\s*([A-Za-z0-9_.]+)\s*\}\}/g;
+/** Matches any short `{{ ... }}` span (no nested braces). The inner
+ *  text is trimmed and checked against KEY_RE below; a span that is
+ *  not a well-formed key ({{client-name}}, {{client name}}) is still
+ *  reported as unresolved rather than silently shipping literally. */
+const TOKEN_RE = /\{\{([^{}]{0,80})\}\}/g;
+
+/** A well-formed field key: dotted alphanumeric. */
+const KEY_RE = /^[A-Za-z0-9_.]+$/;
 
 /**
  * Render a template body against a context. Every token outcome is
@@ -297,8 +312,9 @@ export function mergeTemplate(
   const seenUnresolved = new Set<string>();
   const seenMissing = new Set<string>();
 
-  const text = body.replace(TOKEN_RE, (token, key: string) => {
-    const field = FIELD_BY_KEY.get(key);
+  const text = body.replace(TOKEN_RE, (token, inner: string) => {
+    const key = inner.trim();
+    const field = KEY_RE.test(key) ? FIELD_BY_KEY.get(key) : undefined;
     if (!field) {
       if (!seenUnresolved.has(key)) {
         seenUnresolved.add(key);
@@ -336,8 +352,9 @@ export const SAMPLE_MERGE_CONTEXT: MergeContext = {
     stage: "Discovery (sample)",
     court: "Sample District Court · Hon. A. Example",
     opposingParty: "Example Insurance Co.",
-    incidentDate: new Date(2025, 5, 1, 12), // June 1, 2025
-    solDate: new Date(2027, 5, 1, 12), // June 1, 2027
+    // Date-only values live at UTC midnight (ADR-012).
+    incidentDate: new Date(Date.UTC(2025, 5, 1)), // June 1, 2025
+    solDate: new Date(Date.UTC(2027, 5, 1)), // June 1, 2027
   },
   client: {
     name: "Sam Sample (sample client)",
@@ -356,8 +373,8 @@ export const SAMPLE_MERGE_CONTEXT: MergeContext = {
     email: "info@yourfirm.example",
   },
   user: { name: "You (preview)" },
-  // Fixed date so the preview is stable; local-noon avoids TZ edge
-  // flips in whatever zone the browser runs.
-  today: new Date(2026, 3, 15, 12), // April 15, 2026
+  // Fixed instant so the preview is stable; UTC noon keeps the day
+  // the same in any zone the browser runs.
+  today: new Date(Date.UTC(2026, 3, 15, 12)), // April 15, 2026
   timeZone: null,
 };
