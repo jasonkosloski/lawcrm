@@ -181,6 +181,8 @@ describe("matter activity — settlement / expense amounts are permission-gated"
       // Unrelated filing + other types must always survive.
       { type: "filing", title: "Complaint filed" },
       { type: "note", title: "Note added" },
+      // Trust ledger movement: billing.view.
+      { type: "deposit", title: "Trust deposit · $5000.00" },
     ];
     await prisma.activityLog.createMany({
       data: rows.map((r) => ({ matterId, userId, ...r })),
@@ -188,7 +190,11 @@ describe("matter activity — settlement / expense amounts are permission-gated"
   });
 
   const titles = async (
-    access: { canViewSettlement?: boolean; canViewExpense?: boolean },
+    access: {
+      canViewSettlement?: boolean;
+      canViewExpense?: boolean;
+      canViewBilling?: boolean;
+    },
     types?: string[]
   ) =>
     (await getMatterActivity(matterId, { ...access, types }))
@@ -228,10 +234,29 @@ describe("matter activity — settlement / expense amounts are permission-gated"
     ).toEqual({ filing: 3, note: 1 });
   });
 
-  test("holding both keys shows everything", async () => {
+  test("billing.view alone reveals trust deposit rows and nothing else money-bearing", async () => {
+    expect(await titles({ canViewBilling: true })).toEqual([
+      "Complaint filed",
+      "Note added",
+      "Trust deposit · $5000.00",
+    ]);
+    expect(await titles({}, ["deposit"])).toEqual([]);
+    expect(await titles({ canViewBilling: true }, ["deposit"])).toEqual([
+      "Trust deposit · $5000.00",
+    ]);
     expect(
-      await titles({ canViewSettlement: true, canViewExpense: true })
-    ).toHaveLength(6);
+      await getMatterActivityTypeCounts(matterId, { canViewBilling: true })
+    ).toEqual({ deposit: 1, filing: 1, note: 1 });
+  });
+
+  test("holding all three keys shows everything", async () => {
+    expect(
+      await titles({
+        canViewSettlement: true,
+        canViewExpense: true,
+        canViewBilling: true,
+      })
+    ).toHaveLength(7);
   });
 
   test("hiding follows the titles the expense actions actually write", async () => {

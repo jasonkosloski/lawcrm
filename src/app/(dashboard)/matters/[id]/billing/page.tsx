@@ -79,9 +79,12 @@ import {
   type MatterSettlement,
 } from "@/lib/queries/settlements";
 import { getCurrentFirm } from "@/lib/firm";
-import { getCurrentUserId, requireUser } from "@/lib/current-user";
+import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
-import { currentUserHasPermission } from "@/lib/permission-check";
+import {
+  currentUserHasPermission,
+  requirePermission,
+} from "@/lib/permission-check";
 import {
   invoiceStatusLabel,
   INVOICE_PAYMENT_SOURCE_LABEL,
@@ -134,7 +137,10 @@ export default async function MatterBillingPage({
   params,
   searchParams,
 }: PageProps<"/matters/[id]/billing">) {
-  await requireUser();
+  // `billing.view` gates the whole tab (invoices, payments, trust
+  // ledger). Without it the viewer is bounced to the dashboard; the
+  // tab link is hidden in the layout too.
+  await requirePermission("billing.view");
   const { id } = await params;
   const sp = await searchParams;
   const rawInvoice = Array.isArray(sp.invoice) ? sp.invoice[0] : sp.invoice;

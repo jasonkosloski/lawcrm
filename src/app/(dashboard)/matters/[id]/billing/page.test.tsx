@@ -33,6 +33,7 @@ vi.mock("@/lib/current-user", () => ({
 }));
 vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn(),
+  requirePermission: vi.fn(async () => "user_1"),
 }));
 
 // Leaf client components — they carry their own hooks / server-action
@@ -106,8 +107,11 @@ vi.mock("@/components/matters/settlement/settlement-lien-form", () => ({
 
 import { getMatterBilling } from "@/lib/queries/billing";
 import { getMatterSettlement } from "@/lib/queries/settlements";
-import { currentUserHasPermission } from "@/lib/permission-check";
-import { getCurrentUserId, requireUser } from "@/lib/current-user";
+import {
+  currentUserHasPermission,
+  requirePermission,
+} from "@/lib/permission-check";
+import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentFirm } from "@/lib/firm";
 import { getInvoiceById } from "@/lib/queries/billing";
 import { getUnbilledExpenseSummary } from "@/lib/queries/billing-expenses";
@@ -289,8 +293,10 @@ describe("MatterBillingPage — matters.settlement.view gate", () => {
 });
 
 describe("MatterBillingPage — session guard", () => {
-  test("unauthenticated: requireUser redirects before any query runs", async () => {
-    vi.mocked(requireUser).mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
+  test("without billing.view the page redirects before any query runs", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(
+      new Error("NEXT_REDIRECT")
+    );
     await expect(
       MatterBillingPage({
         params: Promise.resolve({ id: "m1" }),
@@ -303,6 +309,14 @@ describe("MatterBillingPage — session guard", () => {
     expect(getCurrentFirm).not.toHaveBeenCalled();
     expect(getCurrentUserId).not.toHaveBeenCalled();
     expect(currentUserHasPermission).not.toHaveBeenCalled();
+    expect(requirePermission).toHaveBeenCalledWith("billing.view");
+  });
+
+  test("a billing.view holder gets the page (guard asked for exactly billing.view)", async () => {
+    grant();
+    await renderPage();
+    expect(requirePermission).toHaveBeenCalledWith("billing.view");
+    expect(getMatterBilling).toHaveBeenCalled();
   });
 });
 

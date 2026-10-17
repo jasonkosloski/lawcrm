@@ -77,11 +77,13 @@ describe("MatterTimelinePage — session + money gating", () => {
       expect.objectContaining({
         canViewSettlement: false,
         canViewExpense: false,
+        canViewBilling: false,
       })
     );
     expect(getMatterActivityTypeCounts).toHaveBeenCalledWith("m1", {
       canViewSettlement: false,
       canViewExpense: false,
+      canViewBilling: false,
     });
   });
 
@@ -94,6 +96,20 @@ describe("MatterTimelinePage — session + money gating", () => {
     expect(getMatterActivityTypeCounts).toHaveBeenCalledWith("m1", {
       canViewSettlement: false,
       canViewExpense: true,
+      canViewBilling: false,
+    });
+  });
+
+  it("billing.view (trust deposit rows) is resolved on its own", async () => {
+    vi.mocked(requireUser).mockResolvedValue("u1");
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (key: string) => key === "billing.view"
+    );
+    await renderTimeline();
+    expect(getMatterActivityTypeCounts).toHaveBeenCalledWith("m1", {
+      canViewSettlement: false,
+      canViewExpense: false,
+      canViewBilling: true,
     });
   });
 });

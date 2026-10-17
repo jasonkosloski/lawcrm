@@ -151,6 +151,12 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
     label: "Billing",
     permissions: [
       {
+        key: "billing.view",
+        label: "View billing, trust ledger and invoices",
+        description:
+          "See a matter's Billing tab (invoices, payments, trust ledger and balance), print invoices, the invoice preview, the dashboard trust figure and trust deposit rows in activity feeds. Viewing only - every billing action keeps its own key.",
+      },
+      {
         key: "billing.generate_invoice",
         label: "Generate invoice from WIP",
         description:

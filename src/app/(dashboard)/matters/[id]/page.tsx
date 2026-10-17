@@ -68,6 +68,7 @@ export default async function MatterOverviewPage({
     timeSummary,
     clientRows,
     canEditMatter,
+    canViewBilling,
   ] = await Promise.all([
     getMatterById(id),
     getMatterDeadlines(id, { tz, openOnly: true, limit: 4 }),
@@ -105,6 +106,7 @@ export default async function MatterOverviewPage({
       orderBy: { createdAt: "asc" },
     }),
     currentUserHasPermission("matters.edit"),
+    currentUserHasPermission("billing.view"),
   ]);
   if (!matter) notFound();
 
@@ -188,16 +190,20 @@ export default async function MatterOverviewPage({
                 <Fact label="Trial" value={formatDateOnly(matter.trialDate)} />
                 <Fact label="Opposing party" value={matter.opposingParty} />
                 <Fact label="Opposing firm" value={matter.opposingFirm} />
-                <Fact
-                  label="Trust balance"
-                  value={formatMoney(matter.trustBalance)}
-                  mono
-                />
-                <Fact
-                  label="WIP"
-                  value={formatMoney(timeSummary.unbilledAmount)}
-                  mono
-                />
+                {canViewBilling && (
+                  <>
+                    <Fact
+                      label="Trust balance"
+                      value={formatMoney(matter.trustBalance)}
+                      mono
+                    />
+                    <Fact
+                      label="WIP"
+                      value={formatMoney(timeSummary.unbilledAmount)}
+                      mono
+                    />
+                  </>
+                )}
                 {matter.description && (
                   <div className="col-span-2 pt-2 border-t border-line">
                     <dt className="text-ink-4 mb-1">Summary</dt>

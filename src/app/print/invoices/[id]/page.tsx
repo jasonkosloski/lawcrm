@@ -18,12 +18,11 @@
  * browsers default the Save-as-PDF filename to document.title, so
  * without it every PDF would be named after the app.
  *
- * Auth: requires a signed-in user (`requireUser`, first statement —
+ * Auth: requires `billing.view` (`requirePermission`, first statement —
  * this route sits outside the (dashboard) layout, so the page must
  * authenticate itself; `generateMetadata` authenticates too, before
- * it reads the invoice). There is no billing view permission key and
- * no matter-team check: any signed-in staff member can print any
- * invoice by id, same as the matter Billing tab. `getInvoiceById`
+ * it reads the invoice). Gated by `billing.view` (the same key as the
+ * matter Billing tab); there is no matter-team check yet.  `getInvoiceById`
  * returns null for missing ids; we 404 in that case. Firm scoping
  * is not enforced (single-tenant today).
  */
@@ -35,7 +34,7 @@ import { InvoicePreview } from "@/components/matters/billing/invoice-preview";
 import { PrintToolbar } from "@/components/matters/billing/print-toolbar";
 import { getCurrentFirm } from "@/lib/firm";
 import { getInvoiceById } from "@/lib/queries/billing";
-import { requireUser } from "@/lib/current-user";
+import { requirePermission } from "@/lib/permission-check";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 
 // The page and generateMetadata both need the invoice; cache() makes
@@ -47,7 +46,7 @@ export async function generateMetadata({
 }: {
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
-  await requireUser();
+  await requirePermission("billing.view");
   const { id } = await params;
   const invoice = await loadInvoice(id);
   return {
@@ -64,7 +63,7 @@ export default async function PrintInvoicePage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ autoprint?: string }>;
 }) {
-  await requireUser();
+  await requirePermission("billing.view");
   const [{ id }, sp, firm, timeZone] = await Promise.all([
     params,
     searchParams,

@@ -1424,7 +1424,7 @@ export type ActivityRow = {
 /// load-more / paginated viewer.
 export const MATTER_ACTIVITY_LIMIT = 200;
 
-/** What the viewer may see of money-bearing activity rows. Both
+/** What the viewer may see of money-bearing activity rows. All
  *  default to false (hidden) so a caller that forgets to resolve the
  *  permissions fails closed. */
 export type ActivityMoneyAccess = {
@@ -1434,6 +1434,9 @@ export type ActivityMoneyAccess = {
   /** Holds matters.expense.view — expense rows (logged as type
    *  "filing", title prefix "Expense ") carry amounts + descriptions. */
   canViewExpense?: boolean;
+  /** Holds billing.view - trust deposit / disbursement rows (type
+   *  "deposit") carry amounts and ledger movement. */
+  canViewBilling?: boolean;
 };
 
 /** Prisma AND-clauses that hide the rows a viewer may not see.
@@ -1443,6 +1446,9 @@ export function activityMoneyFilters(
   access: ActivityMoneyAccess
 ): Prisma.ActivityLogWhereInput[] {
   const clauses: Prisma.ActivityLogWhereInput[] = [];
+  if (!access.canViewBilling) {
+    clauses.push({ type: { not: "deposit" } });
+  }
   if (!access.canViewSettlement) {
     clauses.push({ type: { not: "settlement" } });
   }

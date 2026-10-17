@@ -135,11 +135,14 @@ export default async function MatterTimelinePage({
   // and time tabs gate the same numbers the same way). Rows are
   // omitted entirely rather than redacted, and the pill counts use
   // the same filter so they never hint at hidden rows.
-  const [canViewSettlement, canViewExpense] = await Promise.all([
-    currentUserHasPermission("matters.settlement.view"),
-    currentUserHasPermission("matters.expense.view"),
-  ]);
-  const access = { canViewSettlement, canViewExpense };
+  const [canViewSettlement, canViewExpense, canViewBilling] =
+    await Promise.all([
+      currentUserHasPermission("matters.settlement.view"),
+      currentUserHasPermission("matters.expense.view"),
+      // Trust deposit rows ("deposit" type) need billing.view.
+      currentUserHasPermission("billing.view"),
+    ]);
+  const access = { canViewSettlement, canViewExpense, canViewBilling };
 
   // The existence check runs alongside the data reads (the cached
   // getMatterById is shared with the layout) instead of ahead of them.

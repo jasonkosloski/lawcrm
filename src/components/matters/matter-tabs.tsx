@@ -35,14 +35,24 @@ const TABS = [
   { slug: "billing", label: "Billing" },
 ] as const;
 
-export function MatterTabs({ matterId }: { matterId: string }) {
+export function MatterTabs({
+  matterId,
+  canViewBilling = true,
+}: {
+  matterId: string;
+  /** `billing.view` - the Billing tab link is hidden without it
+   *  (the page itself is gated too). Defaults true for callers that
+   *  predate the key. */
+  canViewBilling?: boolean;
+}) {
   const pathname = usePathname();
+  const tabs = canViewBilling ? TABS : TABS.filter((t) => t.slug !== "billing");
   const base = `/matters/${matterId}`;
 
   // `undefined` when on a non-tab sub-route (e.g. /edit) so no tab
   // erroneously appears active. Falling back to "" would light up
   // Overview since its slug is "".
-  const activeSlug = TABS.find((t) => {
+  const activeSlug = tabs.find((t) => {
     if (t.slug === "") return pathname === base;
     return pathname.startsWith(`${base}/${t.slug}`);
   })?.slug;
@@ -53,7 +63,7 @@ export function MatterTabs({ matterId }: { matterId: string }) {
           a phone, so we let the user swipe through them. The active
           tab is anchored visually by its border-bottom. */}
       <nav className="flex gap-1 flex-1 overflow-x-auto scrollbar-thin -mb-px">
-        {TABS.map((t) => {
+        {tabs.map((t) => {
           const href = t.slug ? `${base}/${t.slug}` : base;
           const active = t.slug === activeSlug;
           return (

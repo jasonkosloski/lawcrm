@@ -63,7 +63,7 @@ export type DashboardKpis = {
   hoursToday: number;
   hoursGoal: number;
   /** Firm-wide trust total. `null` when the viewer lacks `reports.view`
-   *  (firm-wide financials are "gated separately from the personal
+   *  or `billing.view` (firm-wide financials are "gated separately from the personal
    *  dashboard") - the page omits the tile. */
   trustBalance: number | null;
   trustMatterCount: number | null;
@@ -71,7 +71,13 @@ export type DashboardKpis = {
 
 export async function getDashboardKpis(tz: string): Promise<DashboardKpis> {
   const userId = await getCurrentUserId();
-  const canViewFinancials = await currentUserHasPermission("reports.view");
+  // Firm-wide trust needs BOTH the firm-financials key and the
+  // billing/trust ledger view key.
+  const [canViewReports, canViewBilling] = await Promise.all([
+    currentUserHasPermission("reports.view"),
+    currentUserHasPermission("billing.view"),
+  ]);
+  const canViewFinancials = canViewReports && canViewBilling;
   const today = todayKey(tz);
   const [openMatters, mattersThisWeek, unreadEmail, flaggedEmail, hoursAgg, trustAgg, goals] =
     await Promise.all([
@@ -115,7 +121,7 @@ export async function getDashboardKpis(tz: string): Promise<DashboardKpis> {
         where: { userId, date: dateOnlyRange(today, today) },
         _sum: { hours: true },
       }),
-      // Firm-wide trust total: skipped entirely without reports.view.
+      // Firm-wide trust total: skipped entirely without reports.view + billing.view.
       canViewFinancials
         ? prisma.matter.aggregate({
             where: { trustBalance: { gt: 0 } },
@@ -277,11 +283,16 @@ export async function getRecentActivity(
   tz: string,
   limit = 5
 ): Promise<ActivityItem[]> {
-  const [canViewSettlements, canViewExpenses, canViewFirmActivity] =
-    await Promise.all([
+  const [
+    canViewSettlements,
+    canViewExpenses,
+    canViewFirmActivity,
+    canViewBilling,
+  ] = await Promise.all([
       currentUserHasPermission("matters.settlement.view"),
       currentUserHasPermission("matters.expense.view"),
       currentUserHasPermission("firm.view_activity"),
+      currentUserHasPermission("billing.view"),
     ]);
   const entries = await prisma.activityLog.findMany({
     where: {
@@ -294,6 +305,8 @@ export async function getRecentActivity(
         // Settlement rows carry gross amounts + lienholders: same key
         // that gates the settlement UI.
         ...(canViewSettlements ? [] : [{ type: { not: "settlement" } }]),
+        // Trust deposit rows: billing.view.
+        ...(canViewBilling ? [] : [{ type: { not: "deposit" } }]),
         // Expense rows (type "filing", "Expense logged . $X . desc")
         // carry amounts + descriptions: gated by matters.expense.view.
         ...(canViewExpenses

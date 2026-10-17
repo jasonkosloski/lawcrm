@@ -34,6 +34,16 @@ describe("MatterTabs", () => {
     expect(active()).toBe("Deadlines");
   });
 
+  test("the Billing tab link is hidden without billing.view and shown with it", () => {
+    pathname = "/matters/m1";
+    const { unmount } = render(<MatterTabs matterId="m1" canViewBilling={false} />);
+    expect(screen.queryByRole("link", { name: "Billing" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Time & expenses" })).toBeTruthy();
+    unmount();
+    render(<MatterTabs matterId="m1" canViewBilling />);
+    expect(screen.getByRole("link", { name: "Billing" })).toBeTruthy();
+  });
+
   test("a non-tab sub-route (edit) activates nothing", () => {
     pathname = "/matters/m1/edit";
     render(<MatterTabs matterId="m1" />);

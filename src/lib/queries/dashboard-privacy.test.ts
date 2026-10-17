@@ -265,8 +265,29 @@ describe("firm-wide financials require reports.view", () => {
     expect(kpis.trustMatterCount).toBeNull();
   });
 
-  test("reports.view holder gets pulse + trust total", async () => {
+  test("reports.view without billing.view: pulse yes, trust total no", async () => {
     await grant(userId, "reports.view");
+    await prisma.matter.update({
+      where: { id: matterId },
+      data: { trustBalance: 5000 },
+    });
+    expect(await getFirmPulse(DENVER)).not.toBeNull();
+    const kpis = await getDashboardKpis(DENVER);
+    expect(kpis.trustBalance).toBeNull();
+    expect(kpis.trustMatterCount).toBeNull();
+  });
+
+  test("billing.view without reports.view: still no trust total", async () => {
+    await grant(userId, "billing.view");
+    await prisma.matter.update({
+      where: { id: matterId },
+      data: { trustBalance: 5000 },
+    });
+    expect((await getDashboardKpis(DENVER)).trustBalance).toBeNull();
+  });
+
+  test("reports.view + billing.view holder gets pulse + trust total", async () => {
+    await grant(userId, "reports.view", "billing.view");
     await prisma.matter.update({
       where: { id: matterId },
       data: { trustBalance: 5000 },
@@ -335,6 +356,13 @@ describe("getRecentActivity - permission-gated rows", () => {
           title: 'Revoked "Void invoices" from Jane Doe',
           timestamp: t(4),
         },
+        {
+          userId,
+          matterId,
+          type: "deposit",
+          title: "Trust deposit · $5000.00",
+          timestamp: t(5),
+        },
       ],
     });
   });
@@ -352,6 +380,14 @@ describe("getRecentActivity - permission-gated rows", () => {
     ]);
   });
 
+  test("billing.view unlocks only trust deposit rows", async () => {
+    await grant(userId, "billing.view");
+    expect((await getRecentActivity(DENVER, 10)).map((i) => i.title)).toEqual([
+      "Added a note",
+      "Trust deposit · $5000.00",
+    ]);
+  });
+
   test("expense.view + firm.view_activity unlock expense and firm-scope rows", async () => {
     await grant(userId, "matters.expense.view", "firm.view_activity");
     expect((await getRecentActivity(DENVER, 10)).map((i) => i.title)).toEqual([
@@ -363,6 +399,6 @@ describe("getRecentActivity - permission-gated rows", () => {
 
   test("admin sees everything", async () => {
     await makeAdmin(userId);
-    expect(await getRecentActivity(DENVER, 10)).toHaveLength(4);
+    expect(await getRecentActivity(DENVER, 10)).toHaveLength(5);
   });
 });

@@ -1,7 +1,7 @@
 /**
  * Print invoice route.
  *
- *  - Session guard: when `requireUser` redirects, the page and
+ *  - Permission guard: when `requirePermission("billing.view")` redirects, the page and
  *    `generateMetadata` reject before any invoice / firm / zone read.
  *  - 404 for a missing invoice.
  *  - Document title "Invoice <number>" (the Save-as-PDF filename) and
@@ -18,7 +18,7 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/lib/queries/billing", () => ({ getInvoiceById: vi.fn() }));
 vi.mock("@/lib/firm", () => ({ getCurrentFirm: vi.fn() }));
-vi.mock("@/lib/current-user", () => ({ requireUser: vi.fn() }));
+vi.mock("@/lib/permission-check", () => ({ requirePermission: vi.fn() }));
 vi.mock("@/lib/current-user-tz", () => ({ getCurrentUserTimeZone: vi.fn() }));
 vi.mock("@/components/matters/billing/print-toolbar", () => ({
   PrintToolbar: () => null,
@@ -29,7 +29,7 @@ vi.mock("@/components/matters/billing/invoice-preview", () => ({
 
 import { getInvoiceById } from "@/lib/queries/billing";
 import { getCurrentFirm } from "@/lib/firm";
-import { requireUser } from "@/lib/current-user";
+import { requirePermission } from "@/lib/permission-check";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import PrintInvoicePage, { generateMetadata } from "./page";
 
@@ -37,7 +37,7 @@ const params = Promise.resolve({ id: "inv_1" });
 const searchParams = Promise.resolve({ autoprint: "1" });
 
 beforeEach(() => {
-  vi.mocked(requireUser).mockReset().mockResolvedValue("user_1");
+  vi.mocked(requirePermission).mockReset().mockResolvedValue("user_1");
   vi.mocked(getInvoiceById).mockReset();
   vi.mocked(getCurrentFirm).mockReset().mockResolvedValue({} as never);
   vi.mocked(getCurrentUserTimeZone)
@@ -45,19 +45,20 @@ beforeEach(() => {
     .mockResolvedValue("America/Denver");
 });
 
-describe("print invoice page — session guard", () => {
-  test("unauthenticated: requireUser redirects before any read", async () => {
-    vi.mocked(requireUser).mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
+describe("print invoice page — permission guard", () => {
+  test("without billing.view: the guard redirects before any read", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
     await expect(
       PrintInvoicePage({ params, searchParams })
     ).rejects.toThrow("NEXT_REDIRECT");
     expect(getInvoiceById).not.toHaveBeenCalled();
     expect(getCurrentFirm).not.toHaveBeenCalled();
     expect(getCurrentUserTimeZone).not.toHaveBeenCalled();
+    expect(requirePermission).toHaveBeenCalledWith("billing.view");
   });
 
-  test("generateMetadata authenticates before reading the invoice", async () => {
-    vi.mocked(requireUser).mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
+  test("generateMetadata is gated by billing.view before reading the invoice", async () => {
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
     await expect(generateMetadata({ params })).rejects.toThrow("NEXT_REDIRECT");
     expect(getInvoiceById).not.toHaveBeenCalled();
   });
