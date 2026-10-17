@@ -12,7 +12,7 @@ vi.mock("@/app/actions/matters", () => ({
 }));
 
 import { updateMatterStage } from "@/app/actions/matters";
-import { StageChanger, type StageOption } from "./stage-changer";
+import { StageChanger, stepperSteps, type StageOption } from "./stage-changer";
 
 const mockedUpdate = vi.mocked(updateMatterStage);
 
@@ -191,5 +191,50 @@ describe("StageChanger — archived current stage (F786)", () => {
     expect(screen.getByText(/Currently in/).textContent).toContain(
       "a stage that is no longer listed"
     );
+  });
+});
+
+describe("stepper — several terminal stages collapse into one end dot", () => {
+  const criminal: StageOption[] = [
+    { id: "a", name: "Arraignment", order: 1, isTerminal: false },
+    { id: "b", name: "Discovery", order: 2, isTerminal: false },
+    { id: "d", name: "Dismissed", order: 3, isTerminal: true },
+    { id: "c", name: "Convicted", order: 4, isTerminal: true },
+    { id: "q", name: "Acquitted", order: 5, isTerminal: true },
+  ];
+
+  test("open matter: one 'Closed' end step listing the outcomes", () => {
+    const { steps, currentIndex } = stepperSteps(criminal, "b");
+    expect(steps.map((s) => s.label)).toEqual(["Arraignment", "Discovery", "Closed"]);
+    expect(steps[2].title).toBe("Ends as: Dismissed / Convicted / Acquitted");
+    expect(currentIndex).toBe(1);
+  });
+
+  test("closed matter: the end step shows the actual outcome and is current", () => {
+    const { steps, currentIndex } = stepperSteps(criminal, "q");
+    expect(steps.map((s) => s.label)).toEqual(["Arraignment", "Discovery", "Acquitted"]);
+    expect(currentIndex).toBe(2);
+  });
+
+  test("a single terminal stage renders exactly as configured", () => {
+    const { steps } = stepperSteps(stages, "s1");
+    expect(steps.map((s) => s.label)).toEqual(["Intake", "Discovery", "Closed"]);
+    expect(steps[2].key).toBe("s3");
+  });
+
+  test("renders three dots and counts remaining steps on the collapsed stepper", () => {
+    render(<StageChanger matterId="m1" stages={criminal} currentStageId="a" canEdit={false} />);
+    expect(document.querySelectorAll('[title]').length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByTitle("Ends as: Dismissed / Convicted / Acquitted")).toBeInTheDocument();
+    expect(screen.queryByText("Convicted")).toBeNull();
+    expect(screen.getByText(/2 stages\s+remaining/)).toBeInTheDocument();
+  });
+
+  test("the Change stage menu still offers every outcome", async () => {
+    render(<StageChanger matterId="m1" stages={criminal} currentStageId="b" canEdit />);
+    fireEvent.click(screen.getByRole("button", { name: /change stage/i }));
+    for (const name of ["Dismissed", "Convicted", "Acquitted"]) {
+      expect(await screen.findByText(name)).toBeInTheDocument();
+    }
   });
 });

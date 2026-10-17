@@ -55,6 +55,65 @@ export type StageOption = {
   isActive?: boolean;
 };
 
+/** One dot on the stepper. Usually a stage; several terminal stages
+ *  collapse into one combined end step. */
+export type StepperStep = {
+  key: string;
+  label: string;
+  /** Hover text (the outcomes, for a combined step). */
+  title: string;
+  isTerminal: boolean;
+  isArchived: boolean;
+};
+
+/** Label for the combined end step while the matter is still open. */
+export const COMBINED_TERMINAL_LABEL = "Closed";
+
+/**
+ * The stepper's dots. When an area has two or more terminal stages
+ * (e.g. Dismissed / Convicted / Acquitted), they collapse into ONE
+ * final step so the graphic doesn't sprawl: labelled with the actual
+ * outcome once the matter is in one of them, otherwise "Closed"
+ * (hover lists the outcomes). The Change-stage menu still lists every
+ * stage. One terminal stage (or none) renders exactly as configured.
+ */
+export function stepperSteps(
+  stages: readonly StageOption[],
+  currentStageId: string
+): { steps: StepperStep[]; currentIndex: number } {
+  const terminal = stages.filter((s) => s.isTerminal);
+  const asStep = (s: StageOption): StepperStep => ({
+    key: s.id,
+    label: s.name,
+    title: s.name,
+    isTerminal: s.isTerminal,
+    isArchived: s.isActive === false,
+  });
+  if (terminal.length < 2) {
+    return {
+      steps: stages.map(asStep),
+      currentIndex: stages.findIndex((s) => s.id === currentStageId),
+    };
+  }
+  const open = stages.filter((s) => !s.isTerminal);
+  const currentTerminal = terminal.find((s) => s.id === currentStageId);
+  const steps: StepperStep[] = [
+    ...open.map(asStep),
+    {
+      key: "__terminal__",
+      label: currentTerminal?.name ?? COMBINED_TERMINAL_LABEL,
+      title: `Ends as: ${terminal.map((s) => s.name).join(" / ")}`,
+      isTerminal: true,
+      isArchived: currentTerminal?.isActive === false,
+    },
+  ];
+  const openIndex = open.findIndex((s) => s.id === currentStageId);
+  return {
+    steps,
+    currentIndex: currentTerminal ? steps.length - 1 : openIndex,
+  };
+}
+
 export function StageChanger({
   matterId,
   stages,
@@ -74,8 +133,10 @@ export function StageChanger({
   const currentIndex = stages.findIndex((s) => s.id === optimisticStageId);
   const currentStage = stages[currentIndex];
   const isTerminalCurrent = currentStage?.isTerminal ?? false;
-  const stagesRemaining =
-    currentIndex >= 0 ? stages.length - 1 - currentIndex : 0;
+  // The stepper may collapse several terminal stages into one dot; the
+  // remaining-count follows what the user sees.
+  const { steps, currentIndex: stepIndex } = stepperSteps(stages, optimisticStageId);
+  const stagesRemaining = stepIndex >= 0 ? steps.length - 1 - stepIndex : 0;
 
   const transitionTo = (nextId: string) => {
     if (nextId === optimisticStageId) {
@@ -211,17 +272,17 @@ export function StageChanger({
       {/* ── Horizontal stepper ─────────────────────────────────────── */}
       <div className="px-1">
         <div className="flex items-start">
-          {stages.map((stage, idx) => {
-            const isCurrent = idx === currentIndex;
-            const isPassed = currentIndex >= 0 && idx < currentIndex;
-            const connectorFilled = idx < currentIndex;
+          {steps.map((step, idx) => {
+            const isCurrent = idx === stepIndex;
+            const isPassed = stepIndex >= 0 && idx < stepIndex;
+            const connectorFilled = idx < stepIndex;
 
             return (
               <div
-                key={stage.id}
+                key={step.key}
                 className="relative flex-1 flex flex-col items-center min-w-0"
               >
-                {idx < stages.length - 1 && (
+                {idx < steps.length - 1 && (
                   <div
                     className={cn(
                       "absolute top-[5px] left-1/2 w-full h-[2px]",
@@ -242,7 +303,7 @@ export function StageChanger({
                         : "bg-white border-2 border-line"
                   )}
                   aria-current={isCurrent ? "step" : undefined}
-                  title={stage.name}
+                  title={step.title}
                 />
 
                 <div
@@ -257,8 +318,8 @@ export function StageChanger({
                         : "text-ink-4"
                   )}
                 >
-                  {stage.name}
-                  {stage.isActive === false && " (archived)"}
+                  {step.label}
+                  {step.isArchived && " (archived)"}
                 </div>
               </div>
             );
