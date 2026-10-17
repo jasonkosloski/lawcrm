@@ -2,8 +2,7 @@
  * Calendar event server actions — create, update, move, delete.
  *
  * Edit happens inline in the event detail modal on /calendar (the old
- * full-page /calendar/events/[eventId]/edit form is orphaned — nothing
- * links to it, and it posts the legacy attendee shape). Delete fires
+ * full-page edit route was removed). Delete fires
  * from the modal footer with a confirm. Move is the calendar's
  * drag-and-drop reschedule (narrow fast-path edit: schedule fields
  * only).
@@ -53,7 +52,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma, type Tx } from "@/lib/prisma";
 import { getCurrentFirm } from "@/lib/firm";
@@ -808,28 +806,6 @@ export async function deleteCalendarEvent(
 
   revalidateForEvent(event.matterId);
   return { ok: true, matterId: event.matterId };
-}
-
-/**
- * Delete-and-redirect helper — after the event is gone, send the user
- * to the calendar (or back to the matter's events tab if there was
- * one). A refused or failed delete RETURNS `{ ok: false, error }` for
- * the caller to show; success redirects (and never returns).
- *
- * The event modal should prefer `deleteCalendarEvent` + closing itself:
- * this redirect drops the calendar's `?view=` / `?d=` state.
- */
-export async function deleteCalendarEventAndRedirect(
-  eventId: string
-): Promise<{ ok: false; error: string } | void> {
-  const result = await deleteCalendarEvent(eventId);
-  if (!result.ok) {
-    return { ok: false, error: result.error ?? "Couldn't delete the event." };
-  }
-  if (result.matterId) {
-    redirect(`/matters/${result.matterId}/events`);
-  }
-  redirect("/calendar");
 }
 
 // ── Standalone create (calendar page's "+ New event") ─────────────────

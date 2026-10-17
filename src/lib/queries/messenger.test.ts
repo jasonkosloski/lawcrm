@@ -22,7 +22,6 @@ import {
   listMessengerItemsForMatter,
   listMessengerThreads,
   listMessengerThreadsForLead,
-  listMessengerThreadsForPhone,
   normalizePhone,
 } from "@/lib/queries/messenger";
 import {
@@ -415,17 +414,6 @@ describe("lead Communication tab thread lookup", () => {
     ).toEqual([]);
   });
 
-  test("listMessengerThreadsForPhone normalizes then exact-matches", async () => {
-    await prisma.messengerThread.create({
-      data: {
-        accountId,
-        contactPhone: "+13035550182",
-        lastItemAt: new Date("2026-06-10T10:00:00Z"),
-      },
-    });
-    expect(await listMessengerThreadsForPhone("(303) 555-0182")).toHaveLength(1);
-    expect(await listMessengerThreadsForPhone("not a phone")).toEqual([]);
-  });
 });
 
 describe("getMessengerThread", () => {

@@ -246,19 +246,6 @@ export function normalizePhone(raw: string | null | undefined): string | null {
 }
 
 /**
- * Threads scoped to a phone number. The input is normalized and then
- * EXACT-matched against stored `contactPhone` values (E.164) - there
- * is no digit-only fallback for non-normalized stored numbers.
- */
-export async function listMessengerThreadsForPhone(
-  phone: string
-): Promise<MessengerThreadRow[]> {
-  const normalized = normalizePhone(phone);
-  if (!normalized) return [];
-  return listMessengerThreads({ contactPhone: normalized });
-}
-
-/**
  * Threads for a lead's contact - used by the lead Communication tab.
  * Matches threads resolved to the contact (`contactId`, which is what
  * "Log call" sets whatever number was typed) OR sitting on any of the

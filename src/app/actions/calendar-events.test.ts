@@ -59,7 +59,6 @@ import { prisma } from "@/lib/prisma";
 import {
   createCalendarEvent,
   deleteCalendarEvent,
-  deleteCalendarEventAndRedirect,
   moveCalendarEvent,
   updateCalendarEvent,
 } from "@/app/actions/calendar-events";
@@ -2770,24 +2769,6 @@ describe("createCalendarEvent on a matter", () => {
     const res = await createCalendarEvent(createCalendarEventInitialState, form());
     expect(res.status).toBe("error");
     expect(res.errors?.matterId?.[0]).toMatch(/open matter/i);
-  });
-});
-
-// ── Delete-and-redirect helper ─────────────────────────────────────────
-
-describe("deleteCalendarEventAndRedirect", () => {
-  test("a refused delete RETURNS the error instead of silently doing nothing", async () => {
-    vi.mocked(currentUserHasPermission).mockResolvedValue(false);
-    const other = await seedUser({ firmId, email: "other@firm.com" });
-    mockedGetCurrentUser.mockResolvedValue(other.userId);
-    const res = await deleteCalendarEventAndRedirect(eventId);
-    expect(res).toEqual({
-      ok: false,
-      error: "You don't have permission to delete this event.",
-    });
-    expect(
-      await prisma.calendarEvent.findUnique({ where: { id: eventId } })
-    ).not.toBeNull();
   });
 });
 

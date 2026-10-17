@@ -10,15 +10,11 @@ import {
   buildCalendarHref,
   calendarDayInTz,
   eventDayKeys,
-  eventHeightPx,
-  eventTopPx,
   filterCalendarItems,
   formatHourLabel,
   HOURS,
-  HOUR_HEIGHT_PX,
   isWeekend,
   layoutOverlappingEvents,
-  nowOffsetPx,
   parseCalendarParams,
   stepCalendarFocal,
   toDateParam,
@@ -392,56 +388,6 @@ describe("HOURS / formatHourLabel", () => {
   });
 });
 
-describe("eventTopPx / eventHeightPx", () => {
-  // 6am is the grid's first hour. An event at 6:00 starts at 0px.
-  test("event at the first hour anchors at 0px", () => {
-    const start = new Date("2026-04-15T06:00:00");
-    expect(eventTopPx(start)).toBe(0);
-  });
-
-  test("event at 7:30 is offset 1.5 hours into the grid", () => {
-    const start = new Date("2026-04-15T07:30:00");
-    expect(eventTopPx(start)).toBe(1.5 * HOUR_HEIGHT_PX);
-  });
-
-  test("event height is hours × HOUR_HEIGHT_PX (-2 for cosmetic gap)", () => {
-    const start = new Date("2026-04-15T09:00:00");
-    const end = new Date("2026-04-15T10:30:00");
-    expect(eventHeightPx(start, end)).toBe(1.5 * HOUR_HEIGHT_PX - 2);
-  });
-
-  test("zero-duration / negative duration enforces the 24px minimum", () => {
-    const ts = new Date("2026-04-15T09:00:00");
-    expect(eventHeightPx(ts, ts)).toBe(24);
-    // Even a backwards range gets the floor (not negative height).
-    expect(eventHeightPx(new Date("2026-04-15T10:00:00"), ts)).toBe(24);
-  });
-});
-
-describe("nowOffsetPx", () => {
-  const dayStart = new Date("2026-04-15T00:00:00");
-
-  test("'now' inside the grid on the same day returns the offset", () => {
-    const now = new Date("2026-04-15T08:30:00");
-    expect(nowOffsetPx(now, dayStart)).toBe(2.5 * HOUR_HEIGHT_PX);
-  });
-
-  test("'now' on a different calendar day returns null", () => {
-    const now = new Date("2026-04-16T08:30:00");
-    expect(nowOffsetPx(now, dayStart)).toBeNull();
-  });
-
-  test("'now' before the grid's first hour returns null", () => {
-    const now = new Date("2026-04-15T05:00:00");
-    expect(nowOffsetPx(now, dayStart)).toBeNull();
-  });
-
-  test("'now' after the grid's last hour returns null", () => {
-    const now = new Date("2026-04-15T23:00:00");
-    expect(nowOffsetPx(now, dayStart)).toBeNull();
-  });
-});
-
 // ── layoutOverlappingEvents ──────────────────────────────────────────────
 
 const ev = (
@@ -584,47 +530,6 @@ describe("parseCalendarParams — impossible dates", () => {
   test("an impossible date no longer crashes the range helpers", () => {
     const { focal } = parseCalendarParams({ d: "2026-02-30", view: "day" }, TZ, NOW);
     expect(() => calendarDayInTz(focal, TZ)).not.toThrow();
-  });
-});
-
-describe("eventTopPx / nowOffsetPx with the viewer's zone", () => {
-  // 9:00 AM MDT = 15:00Z. Without tz the answer depends on the host
-  // zone (UTC server: the 3 pm slot; Denver browser: the 9 am slot).
-  const nineAmDenver = new Date("2026-06-10T15:00:00Z");
-
-  test("eventTopPx(start, tz) positions by the viewer's wall clock on any host", () => {
-    expect(eventTopPx(nineAmDenver, "America/Denver")).toBe(
-      (9 - HOURS[0]!) * HOUR_HEIGHT_PX
-    );
-    // Same instant for a Tokyo viewer is midnight the next day (00:00),
-    // above the 6 am grid start -> negative top, not the Denver slot.
-    expect(eventTopPx(nineAmDenver, "Asia/Tokyo")).toBe(
-      (0 - HOURS[0]!) * HOUR_HEIGHT_PX
-    );
-  });
-
-  test("eventTopPx handles half hours in the viewer's zone", () => {
-    expect(eventTopPx(new Date("2026-06-10T15:30:00Z"), "America/Denver")).toBe(
-      (9.5 - HOURS[0]!) * HOUR_HEIGHT_PX
-    );
-  });
-
-  test("nowOffsetPx(now, day, tz): the day is matched on the viewer's calendar date", () => {
-    // Noon-UTC convention for a calendar day (calendarWeekInTz().days).
-    const june10 = new Date("2026-06-10T12:00:00Z");
-    const june11 = new Date("2026-06-11T12:00:00Z");
-    // 9:00 PM MDT on Jun 10 is 03:00Z Jun 11: still Jun 10 for Denver.
-    const now = new Date("2026-06-11T03:00:00Z");
-    expect(nowOffsetPx(now, june10, "America/Denver")).toBe(
-      (21 - HOURS[0]!) * HOUR_HEIGHT_PX
-    );
-    expect(nowOffsetPx(now, june11, "America/Denver")).toBeNull();
-  });
-
-  test("nowOffsetPx(now, day, tz) is null outside the visible hours", () => {
-    const june10 = new Date("2026-06-10T12:00:00Z");
-    const threeAmDenver = new Date("2026-06-10T09:00:00Z");
-    expect(nowOffsetPx(threeAmDenver, june10, "America/Denver")).toBeNull();
   });
 });
 

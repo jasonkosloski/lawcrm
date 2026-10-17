@@ -17,16 +17,12 @@
 
 import { HOUR_HEIGHT_PX, HOURS } from "@/lib/calendar-utils";
 import {
-  addDaysToKey,
   dateKeyInTz,
-  dateOnlyKey,
   daysBetweenKeys,
-  parseDateOnly,
   parseWallClock,
   toWallClockInput,
   type DayKey,
 } from "@/lib/format-date";
-import type { CalendarItem } from "@/lib/queries/calendar";
 import type { CalendarEventDragData } from "./event-drag";
 
 export const GRID_START_HOUR = HOURS[0]!;
@@ -173,32 +169,6 @@ export function computeTimedDrop(
   return { isAllDay: false, start, end };
 }
 
-/**
- * New schedule for dropping a chip on the all-day row of `dayKey`, or
- * null for a no-op. All values are date-only (UTC midnight).
- *
- * An all-day chip keeps its span: a Jul 6-8 trial dragged to Jul 13
- * becomes Jul 13-15 (shift by whole calendar days — never raw ms).
- * A timed chip becomes a single all-day on the drop date.
- */
-export function computeAllDayDrop(
-  data: Pick<CalendarEventDragData, "isAllDay" | "startTimeIso" | "endTimeIso">,
-  dayKey: DayKey
-): Schedule | null {
-  const start = parseDateOnly(dayKey);
-  if (!start) return null;
-  if (data.isAllDay) {
-    const originalStartKey = dateOnlyKey(new Date(data.startTimeIso));
-    const delta = daysBetweenKeys(originalStartKey, dayKey);
-    if (delta === 0) return null;
-    const originalEndKey = dateOnlyKey(new Date(data.endTimeIso));
-    const end = parseDateOnly(addDaysToKey(originalEndKey, delta));
-    if (!end) return null;
-    return { isAllDay: true, start, end };
-  }
-  return { isAllDay: true, start, end: start };
-}
-
 /** Lowest start a top-edge resize may reach: the grid's first hour on
  *  the event's day — unless the event already starts above the grid,
  *  in which case it may not be pulled any earlier than it is. */
@@ -224,17 +194,4 @@ export function clampEndToGrid(
   const gridEnd = instantAtGridMinutes(key, GRID_MINUTES, tz);
   const max = originalEnd.getTime() > gridEnd.getTime() ? originalEnd : gridEnd;
   return proposed.getTime() > max.getTime() ? max : proposed;
-}
-
-/**
- * The calendar-day key (`YYYY-MM-DD`) a grid item belongs to.
- * All-day events and deadlines are date-only values (UTC midnight,
- * ADR-012) and are read in UTC; running them through the viewer's zone
- * puts them a day early west of UTC. Timed events are instants and
- * bucket by the viewer's PROFILE zone.
- */
-export function itemDayKey(item: CalendarItem, tz: string): DayKey {
-  if (item.kind === "deadline") return dateOnlyKey(item.dueDate);
-  if (item.isAllDay) return dateOnlyKey(item.startTime);
-  return dateKeyInTz(item.startTime, tz);
 }

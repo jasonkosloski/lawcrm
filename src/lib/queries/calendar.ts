@@ -488,31 +488,3 @@ export async function getEventNotes(eventId: string): Promise<EventNote[]> {
     matterId: n.matterId,
   }));
 }
-
-/** Summary counts for the top-bar crumb. Same matching rules as
- *  `getCalendarItems` (overlap for events, day keys for deadlines). */
-export async function getCalendarSummary(
-  rangeStart: Date,
-  rangeEnd: Date,
-  /** The viewer's zone; resolved from the session when omitted. */
-  tzArg?: string
-): Promise<{
-  events: number;
-  deadlines: number;
-  criticalDeadlines: number;
-}> {
-  const tz = tzArg ?? (await getCurrentUserTimeZone());
-  const days = dayBoundsOf(rangeStart, rangeEnd, tz);
-  const [events, deadlines, critical] = await Promise.all([
-    prisma.calendarEvent.count({
-      where: eventsInRangeWhere(rangeStart, rangeEnd, tz),
-    }),
-    prisma.deadline.count({
-      where: { dueDate: days, status: "open" },
-    }),
-    prisma.deadline.count({
-      where: { dueDate: days, status: "open", kind: "critical" },
-    }),
-  ]);
-  return { events, deadlines, criticalDeadlines: critical };
-}

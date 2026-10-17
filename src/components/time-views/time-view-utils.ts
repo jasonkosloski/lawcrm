@@ -16,10 +16,7 @@
 
 import { format, isValid, parseISO, startOfDay } from "date-fns";
 import { dateKeyInTz, dateOnlyKey } from "@/lib/format-date";
-import {
-  TIME_ENTRY_SOURCE_LABEL,
-  timeEntrySourceLabel,
-} from "@/lib/time-entry-constants";
+import { timeEntrySourceLabel } from "@/lib/time-entry-constants";
 
 export type TimeView = "week" | "day";
 export const DEFAULT_TIME_VIEW: TimeView = "week";
@@ -84,11 +81,6 @@ export function buildTimeHref(
  * so this is exact in every server zone.
  */
 export const dayKeyFromNoonUtc = (d: Date): string => dateOnlyKey(d);
-
-/** Human label for a TimeEntry.source value on the Captured lane
- *  (one shared map - see TIME_ENTRY_SOURCE_LABEL). */
-export const TIME_SOURCE_LABEL: Record<string, string> =
-  TIME_ENTRY_SOURCE_LABEL;
 
 export const timeSourceLabel = (source: string): string =>
   timeEntrySourceLabel(source);

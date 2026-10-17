@@ -33,7 +33,6 @@ import { dateOnlyKey, instantInTz } from "@/lib/format-date";
 import {
   getCalendarEventById,
   getCalendarItems,
-  getCalendarSummary,
 } from "@/lib/queries/calendar";
 import {
   getMatterDeadlines,
@@ -515,7 +514,7 @@ describe("event labels on sibling matter tabs — same Busy rule", () => {
 // (Denver midnight = 06:00Z), so filtering them by that range put every
 // due date one day early for anyone west of UTC.
 
-describe("getCalendarItems / getCalendarSummary — date-only values and overlap", () => {
+describe("getCalendarItems — date-only values and overlap", () => {
   const DENVER = "America/Denver";
   /** Denver local day/week bounds as the page builds them. */
   const dayRange = (y: number, m: number, d: number, tz = DENVER) => ({
@@ -592,9 +591,7 @@ describe("getCalendarItems / getCalendarSummary — date-only values and overlap
       },
     });
     const { start, end } = dayRange(2026, 4, 13);
-    const summary = await getCalendarSummary(start, end, DENVER);
-    expect(summary.deadlines).toBe(2);
-    expect(summary.criticalDeadlines).toBe(1);
+    expect((await getCalendarItems(start, end, DENVER)).length).toBe(2);
   });
 
   test("an all-day event stored at UTC midnight shows on its own day view", async () => {
@@ -652,9 +649,6 @@ describe("getCalendarItems / getCalendarSummary — date-only values and overlap
     expect(
       (await getCalendarItems(week.start, week.end, DENVER)).length
     ).toBe(1);
-    expect((await getCalendarSummary(week.start, week.end, DENVER)).events).toBe(
-      1
-    );
   });
 
   test("a timed event that started before the range and runs into it is included", async () => {

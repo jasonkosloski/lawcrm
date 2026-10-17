@@ -1,11 +1,12 @@
 # Pre-commit gate. Checks, in order, fail-fast:
 #   1. tsc — catch type errors before they hit the diff.
-#   2. vitest — the whole suite, unit + component + Postgres-backed
+#   2. eslint — `npm run lint`, zero warnings allowed.
+#   3. vitest — the whole suite, unit + component + Postgres-backed
 #      integration tests. It needs the Docker test database
 #      (`docker compose -f docker-compose.test.yml up -d`) and takes
 #      about a minute and a half, so run `npm test` while you work
 #      rather than discovering failures here.
-#   3. migration drift — ONLY when prisma/schema.prisma or
+#   4. migration drift — ONLY when prisma/schema.prisma or
 #      prisma/migrations is staged: apply every migration to a scratch
 #      database and diff it against schema.prisma (ADR-016). Catches a
 #      schema edit committed without its migration.

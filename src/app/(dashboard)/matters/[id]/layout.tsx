@@ -3,7 +3,7 @@
  *
  * Header + tab bar + optional Create dock around every matter detail
  * tab. Fetches the matter once here so each tab doesn't re-fetch the
- * header data, and wraps everything in `MatterCreateStackProvider` so
+ * header data, and wraps everything in `CreateStackProvider` so
  * a stack of Create panels can coexist and persist across tab
  * navigation within the matter.
  *

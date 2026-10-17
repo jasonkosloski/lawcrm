@@ -6,13 +6,11 @@
 
 import { describe, expect, test } from "vitest";
 import { HOUR_HEIGHT_PX } from "@/lib/calendar-utils";
-import { parseDateOnly } from "@/lib/format-date";
 import type { CalendarEventDragData } from "./event-drag";
 import {
   chipBox,
   clampEndToGrid,
   clampStartToGrid,
-  computeAllDayDrop,
   computeTimedDrop,
   formatTimeShort,
   GRID_HEIGHT_PX,
@@ -212,65 +210,6 @@ describe("snap + timed drop", () => {
     expect(
       computeTimedDrop(drag({}), 3 * HOUR_HEIGHT_PX, "2026-07-08", TZ)
     ).not.toBeNull();
-  });
-});
-
-describe("all-day drop (date-only, UTC midnight)", () => {
-  const allDay = (start: string, end: string) => ({
-    isAllDay: true,
-    startTimeIso: parseDateOnly(start)!.toISOString(),
-    endTimeIso: parseDateOnly(end)!.toISOString(),
-  });
-
-  test("a single all-day moves to the drop date's UTC midnight", () => {
-    const s = computeAllDayDrop(allDay("2026-07-06", "2026-07-06"), "2026-07-13")!;
-    expect(s.isAllDay).toBe(true);
-    expect(s.start.toISOString()).toBe("2026-07-13T00:00:00.000Z");
-    expect(s.end.toISOString()).toBe("2026-07-13T00:00:00.000Z");
-  });
-
-  test("a multi-day all-day keeps its span (Jul 6-8 -> Jul 13-15)", () => {
-    const s = computeAllDayDrop(allDay("2026-07-06", "2026-07-08"), "2026-07-13")!;
-    expect(s.start.toISOString()).toBe("2026-07-13T00:00:00.000Z");
-    expect(s.end.toISOString()).toBe("2026-07-15T00:00:00.000Z");
-  });
-
-  test("shifting backwards across a month boundary keeps the span", () => {
-    const s = computeAllDayDrop(allDay("2026-08-02", "2026-08-04"), "2026-07-30")!;
-    expect(s.start.toISOString()).toBe("2026-07-30T00:00:00.000Z");
-    expect(s.end.toISOString()).toBe("2026-08-01T00:00:00.000Z");
-  });
-
-  test("dropping on the chip's own date is a no-op", () => {
-    expect(
-      computeAllDayDrop(allDay("2026-07-06", "2026-07-08"), "2026-07-06")
-    ).toBeNull();
-  });
-
-  test("a legacy browser-midnight row (06:00Z) still reads as its UTC day", () => {
-    const s = computeAllDayDrop(
-      {
-        isAllDay: true,
-        startTimeIso: "2026-07-06T06:00:00.000Z",
-        endTimeIso: "2026-07-06T06:00:00.000Z",
-      },
-      "2026-07-06"
-    );
-    expect(s).toBeNull();
-  });
-
-  test("a timed chip becomes a single all-day on the drop date", () => {
-    const s = computeAllDayDrop(
-      {
-        isAllDay: false,
-        startTimeIso: iso("2026-07-07T15:00:00Z"),
-        endTimeIso: iso("2026-07-07T16:00:00Z"),
-      },
-      "2026-07-09"
-    )!;
-    expect(s.isAllDay).toBe(true);
-    expect(s.start.toISOString()).toBe("2026-07-09T00:00:00.000Z");
-    expect(s.end.toISOString()).toBe("2026-07-09T00:00:00.000Z");
   });
 });
 

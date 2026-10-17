@@ -222,54 +222,6 @@ export function formatHourLabel(hour: number): string {
  *  UTC server render and the browser, so a tz-less chip is positioned
  *  differently on each (and a 9:00 MDT event lands in the 3 pm slot on
  *  the server). */
-function fractionalHour(d: Date, tz?: string | null): number {
-  if (!tz) return d.getHours() + d.getMinutes() / 60;
-  const [h, m] = toWallClockInput(d, tz).slice(11).split(":").map(Number) as [
-    number,
-    number,
-  ];
-  return h + m / 60;
-}
-
-/** Position an event's top offset (in px) within the hour grid. Pass
- *  the viewer's zone (`useUserTimeZone()`) so server render and
- *  hydration agree. */
-export function eventTopPx(start: Date, tz?: string | null): number {
-  const h = fractionalHour(start, tz);
-  const from = HOURS[0];
-  return (h - from) * HOUR_HEIGHT_PX;
-}
-
-/** Height of an event block in px (min 24 for visibility). */
-export function eventHeightPx(start: Date, end: Date): number {
-  const hours = (end.getTime() - start.getTime()) / (60 * 60 * 1000);
-  return Math.max(24, hours * HOUR_HEIGHT_PX - 2);
-}
-
-/** Top offset (px) of the "now" line within the hour grid, or null if
- *  `now` is not on `day` or is outside the visible hour range.
- *
- *  With `tz`, `day` is the views' noon-UTC calendar day and "is `now`
- *  on it" means the viewer's calendar date (`dateKeyInTz`) equals the
- *  day's UTC date. Without `tz` both are compared in the runtime zone
- *  (legacy — differs between server render and browser). */
-export function nowOffsetPx(
-  now: Date,
-  day: Date,
-  tz?: string | null
-): number | null {
-  if (tz) {
-    if (dateKeyInTz(now, tz) !== dateOnlyKey(day)) return null;
-  } else if (now.toDateString() !== day.toDateString()) {
-    return null;
-  }
-  const h = fractionalHour(now, tz);
-  const from = HOURS[0];
-  const to = HOURS[HOURS.length - 1] + 1;
-  if (h < from || h > to) return null;
-  return (h - from) * HOUR_HEIGHT_PX;
-}
-
 // ── Overlap layout ─────────────────────────────────────────────────────
 //
 // When timed events overlap on the same day, the standard calendar

@@ -21,20 +21,6 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-import {
-  getNotificationsBell,
-  type NotificationsBell,
-} from "@/lib/queries/notifications";
-
-/** Fetch the current user's bell state. Wraps the query so the
- *  client bell component can self-poll without a separate API
- *  route. (Known trade-off: Server Actions run one at a time per
- *  client, so a poll can briefly queue a user's mutation behind it —
- *  moving this to a GET route handler is a follow-up that needs the
- *  bell component changed.) */
-export async function fetchBellState(): Promise<NotificationsBell> {
-  return getNotificationsBell();
-}
 
 export async function markNotificationRead(
   notificationId: string
