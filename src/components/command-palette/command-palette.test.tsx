@@ -305,8 +305,7 @@ describe("CommandPalette — create-new actions", () => {
     expect(await screen.findByText("New matter")).toBeInTheDocument();
     expect(screen.getByText("New contact")).toBeInTheDocument();
     expect(screen.getByText("New event")).toBeInTheDocument();
-    // The intake form is still a placeholder page: no dead-end row.
-    expect(screen.queryByText("New intake / lead")).not.toBeInTheDocument();
+    expect(screen.getByText("New intake / lead")).toBeInTheDocument();
   });
 
   test("selecting 'New matter' navigates to /matters/new and closes", async () => {

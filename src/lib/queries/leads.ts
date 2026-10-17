@@ -147,6 +147,27 @@ export async function listLeads(
   }));
 }
 
+/**
+ * Intake queue order: active leads first, then closed history (input
+ * order kept — listLeads returns newest first). Among active leads,
+ * UNSCORED ones lead (newest first): nothing computes scores yet, so a
+ * fresh intake — the thing most in need of triage — would otherwise
+ * sink below every scored lead. Then scored leads, highest first.
+ */
+export function sortIntakeQueue<T extends { isActive: boolean; score: number | null }>(
+  leads: readonly T[]
+): T[] {
+  return [...leads].sort((a, b) => {
+    if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+    if (!a.isActive) return 0;
+    if (a.score === null || b.score === null) {
+      if (a.score === b.score) return 0;
+      return a.score === null ? -1 : 1;
+    }
+    return b.score - a.score;
+  });
+}
+
 export type LeadDetail = Awaited<ReturnType<typeof getLeadById>>;
 
 // Wrapped in React `cache()` so the lead [id] layout and the active tab

@@ -23,6 +23,7 @@ import {
   getLeadSummary,
   leadAgeDays,
   listLeads,
+  sortIntakeQueue,
   statuteDaysRemaining,
 } from "@/lib/queries/leads";
 import { resetDb } from "@/test/integration-helpers";
@@ -165,5 +166,29 @@ describe("getLeadSummary", () => {
     expect(s.conflictCount).toBe(2);
     expect(s.activeCount).toBe(3);
     expect(s.convertedCount).toBe(1);
+  });
+});
+
+describe("sortIntakeQueue", () => {
+  const row = (id: string, isActive: boolean, score: number | null) => ({ id, isActive, score });
+
+  test("active before closed; unscored (fresh) active leads first, newest-first order kept; then score desc", () => {
+    // Input is newest-first, as listLeads returns it.
+    const out = sortIntakeQueue([
+      row("closed-new", false, 90),
+      row("fresh-1", true, null),
+      row("scored-40", true, 40),
+      row("fresh-2", true, null),
+      row("scored-85", true, 85),
+      row("closed-old", false, null),
+    ]);
+    expect(out.map((r) => r.id)).toEqual([
+      "fresh-1",
+      "fresh-2",
+      "scored-85",
+      "scored-40",
+      "closed-new",
+      "closed-old",
+    ]);
   });
 });

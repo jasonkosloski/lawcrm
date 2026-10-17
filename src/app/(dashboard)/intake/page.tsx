@@ -32,6 +32,8 @@ import {
   type LeadListRow,
 } from "@/lib/queries/leads";
 import { requireUser } from "@/lib/current-user";
+import { currentUserHasPermission } from "@/lib/permission-check";
+import { sortIntakeQueue } from "@/lib/queries/leads";
 import { describeStatuteRemaining } from "@/lib/lead-statute";
 
 const ASSESSMENT_LABEL: Record<string, string> = {
@@ -172,18 +174,12 @@ function AssessmentBadges({ row }: { row: LeadListRow }) {
 
 export default async function IntakePage() {
   await requireUser();
-  const [leads, summary] = await Promise.all([listLeads(), getLeadSummary()]);
-
-  // Sort: active leads first (score desc), then inactive (by createdAt desc).
-  const sorted = [...leads].sort((a, b) => {
-    if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
-    if (a.isActive) {
-      const aScore = a.score ?? -1;
-      const bScore = b.score ?? -1;
-      return bScore - aScore;
-    }
-    return 0;
-  });
+  const [leads, summary, canCreate] = await Promise.all([
+    listLeads(),
+    getLeadSummary(),
+    currentUserHasPermission("intake.create"),
+  ]);
+  const sorted = sortIntakeQueue(leads);
 
   const crumbBits = [
     `${summary.activeCount} active`,
@@ -198,10 +194,12 @@ export default async function IntakePage() {
         title="Intake"
         crumbs={crumbBits.join(" · ")}
         actions={
-          <Button size="sm" render={<Link href="/intake/new" />}>
-            <Plus />
-            New intake
-          </Button>
+          canCreate && (
+            <Button size="sm" render={<Link href="/intake/new" />}>
+              <Plus />
+              New intake
+            </Button>
+          )
         }
       />
 

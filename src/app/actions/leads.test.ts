@@ -47,7 +47,7 @@ vi.mock("@/lib/permission-check", () => ({
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
-import { convertLeadToMatter, declineLead } from "@/app/actions/leads";
+import { convertLeadToMatter, createLead, declineLead } from "@/app/actions/leads";
 import {
   resetDb,
   seedFirm,
@@ -872,5 +872,112 @@ describe("convertLeadToMatter — vs. decline", () => {
       select: { stage: true, declineReason: true },
     });
     expect(lead).toEqual({ stage: "converted", declineReason: null });
+  });
+});
+
+// ── createLead (New intake form) ────────────────────────────────────────
+
+describe("createLead", () => {
+  // Typed loosely on purpose: the form posts whatever fields it has.
+  const intakeForm = (fields: Record<string, string>) => {
+    const fd = new FormData();
+    for (const [k, v] of Object.entries(fields)) fd.set(k, v);
+    return fd;
+  };
+  const submit = (fields: Record<string, string>) =>
+    createLead({ status: "idle" }, intakeForm(fields));
+
+  test("new person: creates a client contact (with primary phone), the lead, and runs the conflict check", async () => {
+    await expect(
+      submit({
+        name: "Dana Reyes",
+        email: "Dana@Example.com",
+        phone: "303-555-0142",
+        source: "referral",
+        sourceDetail: "referred by Fox",
+        summary: "Excessive force at traffic stop",
+        dateOfIncident: "2026-09-30",
+        location: "Denver",
+        priorCounsel: "on",
+      })
+    ).rejects.toThrow(/^REDIRECT:\/intake\//);
+    expect(vi.mocked(requirePermission)).toHaveBeenCalledWith("intake.create");
+
+    const lead = await prisma.lead.findFirstOrThrow({ include: { contact: { include: { phones: true } } } });
+    expect(lead).toMatchObject({
+      name: "Dana Reyes",
+      email: "dana@example.com",
+      source: "referral",
+      priorCounsel: true,
+      stage: "new",
+    });
+    expect(lead.dateOfIncident?.toISOString()).toBe("2026-09-30T00:00:00.000Z");
+    expect(lead.contact).toMatchObject({ type: "client", email: "dana@example.com" });
+    expect(lead.contact?.phones.map((p) => [p.number, p.isPrimary])).toEqual([["303-555-0142", true]]);
+    // Conflict check ran on save.
+    expect(lead.conflictCheck).toBe("clear");
+    expect(lead.conflictCheckedAt).not.toBeNull();
+    const log = await prisma.activityLog.findFirstOrThrow({ where: { userId } });
+    expect(log.title).toBe("New intake: Dana Reyes");
+    expect(log.detail).toMatch(/new contact · conflict check clear/);
+  });
+
+  test("picked existing contact: links it, creates no new contact", async () => {
+    const existing = await prisma.contact.create({
+      data: { name: "Repeat Caller", type: "witness", email: "repeat@example.com" },
+    });
+    await expect(submit({ contactId: existing.id, source: "phone" })).rejects.toThrow(/^REDIRECT:/);
+    expect(await prisma.contact.count()).toBe(1);
+    const lead = await prisma.lead.findFirstOrThrow();
+    expect(lead).toMatchObject({ contactId: existing.id, name: "Repeat Caller", email: "repeat@example.com" });
+    // The lead's own contact never matches itself → still "clear".
+    expect(lead.conflictCheck).toBe("clear");
+  });
+
+  test("typed email matching an active contact links to it (case-insensitive)", async () => {
+    const existing = await prisma.contact.create({
+      data: { name: "Pat Moore", type: "client", email: "pat@example.com" },
+    });
+    await expect(submit({ name: "Patricia Moore", email: "PAT@example.com" })).rejects.toThrow(/^REDIRECT:/);
+    expect(await prisma.contact.count()).toBe(1);
+    expect((await prisma.lead.findFirstOrThrow()).contactId).toBe(existing.id);
+  });
+
+  test("never links to an inactive or merged contact", async () => {
+    await prisma.contact.create({
+      data: { name: "Old Record", type: "client", email: "gone@example.com", isActive: false },
+    });
+    await expect(submit({ name: "New Record", email: "gone@example.com" })).rejects.toThrow(/^REDIRECT:/);
+    expect(await prisma.contact.count()).toBe(2);
+    const lead = await prisma.lead.findFirstOrThrow({ include: { contact: true } });
+    expect(lead.contact?.name).toBe("New Record");
+  });
+
+  test("flags a conflict when the person is opposing counsel on a matter", async () => {
+    await prisma.contact.create({
+      data: { name: "Opposing Firm Person", type: "opposing_counsel", email: "opp@lawfirm.com" },
+    });
+    await expect(submit({ name: "Opposing Firm Person" })).rejects.toThrow(/^REDIRECT:/);
+    const lead = await prisma.lead.findFirstOrThrow();
+    expect(lead.conflictCheck).not.toBe("clear");
+  });
+
+  test("validation keeps the draft and writes nothing", async () => {
+    const noName = await submit({ email: "x@example.com", summary: "draft text" });
+    expect(noName.status).toBe("error");
+    expect(noName.errors?.name).toBeTruthy();
+    expect(noName.values?.summary).toBe("draft text");
+
+    const badDate = await submit({ name: "A Person", dateOfIncident: "2026-02-30" });
+    expect(badDate.errors?.dateOfIncident).toEqual(["Enter a valid date"]);
+
+    const badEmail = await submit({ name: "A Person", email: "not-an-email" });
+    expect(badEmail.errors?.email).toBeTruthy();
+
+    const stale = await submit({ contactId: "missing-contact" });
+    expect(stale.errors?.name?.[0]).toMatch(/no longer available/);
+
+    expect(await prisma.lead.count()).toBe(0);
+    expect(await prisma.contact.count()).toBe(0);
   });
 });

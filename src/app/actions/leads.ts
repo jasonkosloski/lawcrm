@@ -1,5 +1,11 @@
 /**
- * Lead intake server actions — convert and decline.
+ * Lead intake server actions — create, convert and decline.
+ *
+ *   - createLead: the New intake form. Links the person to an existing
+ *     Contact (picked in the form, or matched by email) or creates
+ *     one, writes the Lead, and runs the conflict matcher immediately
+ *     so a conflict surfaces before anyone invests time. Gated by
+ *     intake.create.
  *
  * v1 keeps both flows minimal:
  *   - convertLeadToMatter: create a Matter from the lead's basic
@@ -36,14 +42,16 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { computeSolDate, SOL_SOURCE_TYPE, toSolPeriod } from "@/lib/sol";
-import { dateOnlyKey } from "@/lib/format-date";
+import { dateOnlyKey, parseDateOnly } from "@/lib/format-date";
+import { runConflictMatcher } from "@/lib/conflict-check";
+import type { NewIntakeFormState } from "@/lib/new-intake-form";
 import { applyAutoDefaults, describeDefaults } from "@/lib/automations/apply";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import type {
   ConvertLeadFormState,
   DeclineLeadFormState,
 } from "@/lib/lead-conversion-form";
-import type { LeadStage } from "@/lib/constants/lead-stage";
+import { LEAD_SOURCES, type LeadStage } from "@/lib/constants/lead-stage";
 
 // Stage writes/compares below are typed against the centralized
 // LeadStage union (src/lib/constants/lead-stage.ts) so a typo can't
@@ -65,6 +73,142 @@ const DECLINE_AFTER_CONVERT_ERROR =
 class LeadClaimLostError extends Error {}
 
 // ── Convert ─────────────────────────────────────────────────────────────
+
+// ── Create (New intake form) ────────────────────────────────────────────
+
+const optionalText = (max: number) =>
+  z.string().trim().max(max).optional().or(z.literal(""));
+
+const createLeadSchema = z
+  .object({
+    /** Existing Contact to link; "" = create (or email-match) one. */
+    contactId: z.string().trim().optional().or(z.literal("")),
+    name: z.string().trim().max(200).optional().or(z.literal("")),
+    email: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .email("Enter a valid email")
+      .max(200)
+      .optional()
+      .or(z.literal("")),
+    phone: optionalText(40),
+    source: z.enum(LEAD_SOURCES).optional().or(z.literal("")),
+    sourceDetail: optionalText(200),
+    summary: optionalText(4000),
+    location: optionalText(200),
+    dateOfIncident: z.string().trim().optional().or(z.literal("")),
+    injuries: optionalText(2000),
+    priorCounsel: z.literal("on").optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (!v.contactId && !v.name) {
+      ctx.addIssue({ code: "custom", path: ["name"], message: "Enter the person's name" });
+    }
+  });
+
+/**
+ * New intake. Resolves the person to a Contact — the one picked in
+ * the form, else an active contact with the same email (so a repeat
+ * caller becomes one record, the same rule conversion relies on),
+ * else a new "client" Contact — then writes the Lead and runs the
+ * conflict matcher before redirecting to it.
+ */
+export async function createLead(
+  _prev: NewIntakeFormState,
+  formData: FormData
+): Promise<NewIntakeFormState> {
+  const actorId = await requirePermission("intake.create");
+  const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
+  const parsed = createLeadSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { status: "error", errors: parsed.error.flatten().fieldErrors, values: raw };
+  }
+  const d = parsed.data;
+
+  let dateOfIncident: Date | null = null;
+  if (d.dateOfIncident) {
+    dateOfIncident = parseDateOnly(d.dateOfIncident);
+    if (!dateOfIncident) {
+      return { status: "error", errors: { dateOfIncident: ["Enter a valid date"] }, values: raw };
+    }
+  }
+
+  const contactSelect = { id: true, name: true, email: true, phone: true, organization: true } as const;
+  const activeContact = { isActive: true, mergedIntoId: null } as const;
+  let contact = d.contactId
+    ? await prisma.contact.findFirst({ where: { id: d.contactId, ...activeContact }, select: contactSelect })
+    : null;
+  if (d.contactId && !contact) {
+    return { status: "error", errors: { name: ["That contact is no longer available — search again"] }, values: raw };
+  }
+  if (!contact && d.email) {
+    contact = await prisma.contact.findFirst({
+      where: { email: { equals: d.email, mode: "insensitive" }, ...activeContact },
+      orderBy: { createdAt: "asc" },
+      select: contactSelect,
+    });
+  }
+
+  const lead = await prisma.$transaction(async (tx) => {
+    const person =
+      contact ??
+      (await tx.contact.create({
+        data: {
+          name: d.name!,
+          email: d.email || null,
+          phone: d.phone || null, // denormalized — mirrors the primary ContactPhone
+          type: "client",
+          ...(d.phone
+            ? { phones: { create: { label: "Primary", number: d.phone, isPrimary: true, order: 0 } } }
+            : {}),
+        },
+        select: contactSelect,
+      }));
+    return tx.lead.create({
+      data: {
+        contactId: person.id,
+        // Legacy mirrors (Lead.name/email/phone) — prefer the contact.
+        name: person.name,
+        email: person.email,
+        phone: person.phone,
+        source: d.source || null,
+        sourceDetail: d.sourceDetail || null,
+        summary: d.summary || null,
+        location: d.location || null,
+        dateOfIncident,
+        injuries: d.injuries || null,
+        priorCounsel: d.priorCounsel === "on",
+      },
+      select: { id: true, name: true, contactId: true, contact: { select: contactSelect } },
+    });
+  });
+
+  // Conflict check on save — the same matcher (and self-match rule)
+  // as the conflict-check card's "Run check".
+  const conflict = await runConflictMatcher({
+    name: lead.contact?.name ?? lead.name,
+    email: lead.contact?.email ?? null,
+    organization: lead.contact?.organization ?? null,
+    ownContactId: lead.contactId,
+  });
+  await prisma.lead.update({
+    where: { id: lead.id },
+    data: { conflictCheck: conflict.severity, conflictCheckedAt: new Date() },
+  });
+
+  await logActivity({
+    matterId: null,
+    userId: actorId,
+    type: "filing",
+    title: `New intake: ${lead.name}`,
+    detail: `lead ${lead.id}: ${contact ? "linked to existing contact" : "new contact"} · conflict check ${conflict.severity}`,
+  });
+
+  revalidatePath("/intake");
+  revalidatePath("/", "layout"); // sidebar "active leads" badge
+  redirect(`/intake/${lead.id}`);
+}
 
 const convertSchema = z.object({
   practiceAreaId: z.string().trim().min(1, "Practice area is required"),

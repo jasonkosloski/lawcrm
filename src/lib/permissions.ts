@@ -133,6 +133,12 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
     label: "Intake",
     permissions: [
       {
+        key: "intake.create",
+        label: "Add new intakes",
+        description:
+          "Record a new inquiry from the New intake form: the person (linked to an existing contact or created), how they found the firm, and the incident. A conflict check runs automatically on save.",
+      },
+      {
         key: "intake.conflict_check.run",
         label: "Run conflict checks",
         description:

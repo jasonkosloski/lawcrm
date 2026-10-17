@@ -60,6 +60,16 @@ export const LEAD_STAGE_LABEL: Record<LeadStage, string> = {
   declined: "Declined",
 };
 
+/** Where an inquiry came from — Lead.source vocabulary. */
+export const LEAD_SOURCES = [
+  "phone",
+  "web",
+  "referral",
+  "walk_in",
+  "court_appointment",
+] as const;
+export type LeadSource = (typeof LEAD_SOURCES)[number];
+
 export const LEAD_SOURCE_LABEL: Record<string, string> = {
   web: "Web form",
   referral: "Referral",

@@ -31,8 +31,7 @@ defects, but some things are still PARTIAL or unbuilt:
   `docs/DECISIONS.md`).
 - **Invoice email delivery is logged-only** (audit titles say "not
   emailed"); nothing is actually sent to the client.
-- **`/intake/new` is a placeholder** (no intake add form and no
-  intake add permission key yet). `updateExpense` exists server-side
+- `updateExpense` exists server-side
   with no UI. Note edit UI (`updateNote`) and "Add note" on a
   deadline (`addNoteToDeadline`) have no UI caller.
 
@@ -790,8 +789,8 @@ end-to-end" milestone — schema, action, query, UI all wired.
 > **Scope note:** Like the matter-detail tabs, each intake feature
 > is a substantial area. Iterative depth per feature is expected.
 
-- [x] **Intake queue — v1 list** — Sortable table; active leads first by score desc. Lists every open lead (closed history capped at 200); the statute column is a live countdown; Decline / Convert buttons depend on role.
-- [ ] **New intake form (`/intake/new`)** — Placeholder page only ("Intake form coming"). Needs contact fields, case summary, source, initial stage, conflict check and lead scoring, plus an intake add permission key.
+- [x] **Intake queue — v1 list** — Sortable table; active leads first — unscored (fresh) leads newest-first, then scored leads by score desc (`sortIntakeQueue`; nothing computes scores yet, so new intakes would otherwise sink). Lists every open lead (closed history capped at 200); the statute column is a live countdown; Decline / Convert buttons depend on role.
+- [x] **New intake form (`/intake/new`)** — Shipped 2026-10-17. `createLead` (gated by the new `intake.create`; the queue's "New intake" button and the ⌘K "New intake / lead" row are back). Person: type-ahead over active, unmerged contacts links a repeat caller to their existing record; otherwise a typed email that matches an active contact (case-insensitive) links to it — the form says so before save — else a new `client` contact (+ primary ContactPhone) is created. Inquiry: source + detail, summary, incident date (date-only, ADR-012), location, injuries, prior counsel. The conflict matcher runs on save (same self-match rule as the card's "Run check") and the result is stored; activity-logged; lands on the lead page. Still open: lead scoring (no score is computed — see "Lead scoring — deep dive"), phone-number matching (stored phones aren't normalised), initial stage / intake-coordinator assignment.
 - [x] **Lead detail — v1 page** — Case summary, assessment bars (liability + damages), contact card, intake meta, conflict-check card, converted-matter link.
 - [x] **Lead detail — tab structure + Communication tab** — Overview + Communication. Communication tab is contact-scoped (joined `Lead.contact`) and surfaces email threads + SMS/call/voicemail threads. Picks up Contact edits automatically.
 - [x] **Lead → Contact integration** — Every lead hangs off a first-class Contact via `Lead.contactId`. Conversion reuses the existing Contact instead of creating fresh.

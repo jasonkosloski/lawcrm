@@ -16,9 +16,6 @@
  *   confirmation ("Replace running timer?") exists yet, and the
  *   palette doesn't know whether a timer is running (PaletteData
  *   doesn't carry it). Revisit once the confirm UI exists.
- * - "New intake / lead" — /intake/new is still a placeholder page
- *   with no form, so offering it would be a dead end. Re-add once
- *   the intake form ships.
  *
  * Shape matches NavDestination so these rows reuse the palette's
  * nav-row rendering AND resolve from localStorage recents through
@@ -37,6 +34,13 @@ export const CREATE_ACTIONS: NavDestination[] = [
     keywords: "create add open case matter",
     href: "/matters/new",
     icon: "filePlus",
+  },
+  {
+    id: "create:intake",
+    label: "New intake / lead",
+    keywords: "create add lead prospect inquiry intake caller",
+    href: "/intake/new",
+    icon: "inbox",
   },
   {
     id: "create:event",
