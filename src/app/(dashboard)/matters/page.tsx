@@ -24,6 +24,7 @@ import {
   listMatters,
 } from "@/lib/queries/matters";
 import { requireUser } from "@/lib/current-user";
+import { currentUserHasPermission } from "@/lib/permission-check";
 
 export default async function MattersListPage({
   searchParams,
@@ -32,8 +33,14 @@ export default async function MattersListPage({
   const sp = await searchParams;
   const { filter, sort, view } = parseMattersParams(sp);
 
-  const [matters, options, totalCount, firmOpenCount, firmClosedCount] =
-    await Promise.all([
+  const [
+    matters,
+    options,
+    totalCount,
+    firmOpenCount,
+    firmClosedCount,
+    canCreateMatter,
+  ] = await Promise.all([
       listMatters(filter, sort),
       getMattersFilterOptions(),
       // Denominator for "showing N of M" — a DB-side count honoring
@@ -51,6 +58,9 @@ export default async function MattersListPage({
       prisma.matter.count({
         where: { isArchived: false, stage: { isTerminal: true } },
       }),
+      // Same key createMatter / the New matter page enforce — hide the
+      // button instead of offering a form that bounces to "/".
+      currentUserHasPermission("matters.create"),
     ]);
 
   return (
@@ -59,13 +69,12 @@ export default async function MattersListPage({
         title="All matters"
         crumbs={`${firmOpenCount} open · ${firmClosedCount} closed/settled`}
         actions={
-          <Button
-            size="sm"
-            render={<Link href="/matters/new" />}
-          >
-            <Plus />
-            New matter
-          </Button>
+          canCreateMatter ? (
+            <Button size="sm" render={<Link href="/matters/new" />}>
+              <Plus />
+              New matter
+            </Button>
+          ) : undefined
         }
       />
 

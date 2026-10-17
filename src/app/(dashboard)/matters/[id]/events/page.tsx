@@ -12,6 +12,8 @@ import { CalendarDays } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/current-user";
+import { currentUserHasPermission } from "@/lib/permission-check";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { Card } from "@/components/ui/card";
 import { EventDetailModal } from "@/components/calendar/event-detail-modal";
 import { EventComposer } from "@/components/matters/captures/event-composer";
@@ -40,9 +42,13 @@ export default async function MatterEventsPage({
   const requestedEventId =
     typeof rawEventParam === "string" ? rawEventParam : null;
 
-  const [matter, events] = await Promise.all([
+  const tz = await getCurrentUserTimeZone();
+  const [matter, events, canCreateEvent] = await Promise.all([
     getMatterById(id),
-    getMatterEvents(id),
+    getMatterEvents(id, { tz }),
+    // The composer's action requires events.create and redirects
+    // denied users to "/" (discarding the form) — don't offer it.
+    currentUserHasPermission("events.create"),
   ]);
 
   if (!matter) notFound();
@@ -74,13 +80,13 @@ export default async function MatterEventsPage({
 
   return (
     <div className="p-5 flex flex-col gap-5">
-      <EventComposer matterId={id} />
+      {canCreateEvent && <EventComposer matterId={id} />}
 
       {events.length === 0 ? (
         <EmptyState
           icon={CalendarDays}
           title="No events yet"
-          description="Schedule one above."
+          description={canCreateEvent ? "Schedule one above." : undefined}
           className="py-6"
         />
       ) : null}

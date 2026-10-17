@@ -1,0 +1,245 @@
+/**
+ * Matter Overview tab — what the page feeds its cards.
+ *
+ * Pins: live WIP (not the never-written Matter.wipAmount column),
+ * calendar-day deadline/task labels ("today", never "0d late"),
+ * date-only facts that don't shift a day, the pinned-note stamp in the
+ * viewer's zone, and the narrow preview queries (no whole-matter
+ * loads to render a handful of rows).
+ */
+
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+
+vi.mock("@/lib/current-user", () => ({
+  requireUser: vi.fn(async () => "user_1"),
+}));
+vi.mock("@/lib/current-user-tz", () => ({
+  getCurrentUserTimeZone: vi.fn(async () => "America/Denver"),
+}));
+vi.mock("@/lib/permission-check", () => ({
+  currentUserHasPermission: vi.fn(async () => true),
+}));
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    matterContact: { findMany: vi.fn(async () => []) },
+    matterStage: { findMany: vi.fn(async () => []) },
+  },
+}));
+vi.mock("@/lib/queries/matters", () => ({ getMatterById: vi.fn() }));
+vi.mock("@/lib/queries/matter-detail", () => ({
+  getMatterDeadlines: vi.fn(async () => []),
+  getMatterTasks: vi.fn(async () => []),
+  getMatterNotes: vi.fn(async () => []),
+  getMatterTimeSummary: vi.fn(async () => ({
+    totalHours: 0,
+    billableHours: 0,
+    unbilledAmount: 0,
+    billedAmount: 0,
+  })),
+}));
+vi.mock("next/navigation", () => ({
+  notFound: vi.fn(() => {
+    throw new Error("NEXT_NOT_FOUND");
+  }),
+}));
+vi.mock("next/link", () => ({
+  default: (props: React.ComponentProps<"a">) => <a {...props} />,
+}));
+vi.mock("@/components/matters/stage-changer", () => ({
+  StageChanger: () => null,
+}));
+vi.mock("@/components/matters/statute-of-limitations-card", () => ({
+  StatuteOfLimitationsCard: () => null,
+}));
+vi.mock("@/components/ui/email-link", () => ({ EmailLink: () => null }));
+
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
+import { getMatterById } from "@/lib/queries/matters";
+import {
+  getMatterDeadlines,
+  getMatterNotes,
+  getMatterTasks,
+  getMatterTimeSummary,
+} from "@/lib/queries/matter-detail";
+import type {
+  DeadlineRow,
+  NoteRow,
+  TaskRow,
+} from "@/lib/queries/matter-detail";
+import MatterOverviewPage from "./page";
+
+const matter = {
+  id: "m1",
+  name: "Smith v. Jones",
+  practiceAreaId: "pa1",
+  practiceAreaHasStatuteOfLimitations: false,
+  clientId: null,
+  court: "D. Colo.",
+  caseNumber: "26-cv-1",
+  // Date-only values (UTC midnight).
+  filedDate: new Date("2026-04-15T00:00:00Z"),
+  trialDate: new Date("2027-01-05T00:00:00Z"),
+  opposingParty: null,
+  opposingFirm: null,
+  trustBalance: 1234.5,
+  // The never-written column — must NOT be what the page shows.
+  wipAmount: 99999,
+  description: null,
+  teamMembers: [],
+} as unknown as NonNullable<Awaited<ReturnType<typeof getMatterById>>>;
+
+const deadline = (over: Partial<DeadlineRow>): DeadlineRow => ({
+  id: "d",
+  title: "Deadline",
+  dueDate: new Date("2026-04-27T00:00:00Z"),
+  daysUntil: 0,
+  isOverdue: false,
+  kind: "manual",
+  sourceType: null,
+  sourceRef: null,
+  description: null,
+  status: "open",
+  ownerName: null,
+  ownerInitials: null,
+  spawnedFrom: null,
+  attachedNotes: [],
+  ...over,
+});
+
+const task = (over: Partial<TaskRow>): TaskRow => ({
+  id: "t",
+  title: "Task",
+  description: null,
+  priority: "normal",
+  status: "open",
+  dueDate: null,
+  daysUntilDue: null,
+  ownerId: null,
+  ownerName: null,
+  ownerInitials: null,
+  createdAt: new Date("2026-04-01T00:00:00Z"),
+  spawnedFrom: null,
+  attachedNotes: [],
+  ...over,
+});
+
+const renderPage = async () =>
+  render(
+    await MatterOverviewPage({
+      params: Promise.resolve({ id: "m1" }),
+    } as Parameters<typeof MatterOverviewPage>[0])
+  );
+
+beforeEach(() => {
+  vi.mocked(getMatterById).mockResolvedValue(matter);
+  vi.mocked(getMatterDeadlines).mockResolvedValue([]);
+  vi.mocked(getMatterTasks).mockResolvedValue([]);
+  vi.mocked(getMatterNotes).mockResolvedValue([]);
+  vi.mocked(getMatterTimeSummary).mockResolvedValue({
+    totalHours: 0,
+    billableHours: 0,
+    unbilledAmount: 0,
+    billedAmount: 0,
+  });
+});
+afterEach(() => {
+  vi.clearAllMocks();
+});
+
+describe("MatterOverviewPage", () => {
+  test("WIP is the live unbilled figure, in dollars and cents", async () => {
+    vi.mocked(getMatterTimeSummary).mockResolvedValue({
+      totalHours: 10,
+      billableHours: 10,
+      unbilledAmount: 12000.5,
+      billedAmount: 0,
+    });
+    await renderPage();
+    expect(screen.getByText("$12,000.50")).toBeTruthy();
+    expect(screen.queryByText(/99,999/)).toBeNull();
+    // Trust balance keeps its cents too (was "$1,234.5").
+    expect(screen.getByText("$1,234.50")).toBeTruthy();
+  });
+
+  test("date-only facts show the stored calendar day", async () => {
+    await renderPage();
+    expect(screen.getByText("Apr 15, 2026")).toBeTruthy();
+    expect(screen.getByText("Jan 5, 2027")).toBeTruthy();
+  });
+
+  test("deadlines due today read 'today', not '0d late'; overdue and future keep their counts", async () => {
+    vi.mocked(getMatterDeadlines).mockResolvedValue([
+      deadline({ id: "a", title: "Due today", daysUntil: 0 }),
+      deadline({ id: "b", title: "Missed", daysUntil: -2, isOverdue: true }),
+      deadline({ id: "c", title: "Later", daysUntil: 5 }),
+    ]);
+    await renderPage();
+    expect(screen.getByText("today")).toBeTruthy();
+    expect(screen.getByText("2d late")).toBeTruthy();
+    expect(screen.getByText("5d")).toBeTruthy();
+    expect(screen.queryByText("0d late")).toBeNull();
+  });
+
+  test("tasks due today read 'today'; far-off tasks show a short date", async () => {
+    vi.mocked(getMatterTasks).mockResolvedValue([
+      task({
+        id: "a",
+        title: "Due today",
+        dueDate: new Date("2026-04-27T00:00:00Z"),
+        daysUntilDue: 0,
+      }),
+      task({
+        id: "b",
+        title: "Far off",
+        dueDate: new Date("2026-06-15T00:00:00Z"),
+        daysUntilDue: 49,
+      }),
+    ]);
+    await renderPage();
+    expect(screen.getByText("today")).toBeTruthy();
+    // Date-only: Jun 15 in every zone (a local formatter west of UTC
+    // would print Jun 14).
+    expect(screen.getByText("Jun 15")).toBeTruthy();
+  });
+
+  test("a pinned note's stamp uses the viewer's zone, not the server's", async () => {
+    vi.mocked(getMatterNotes).mockResolvedValue([
+      {
+        id: "n1",
+        authorName: "Ann",
+        // 01:00Z Oct 16 = 7 PM Oct 15 in Denver.
+        createdAt: new Date("2026-10-16T01:00:00Z"),
+        content: "<p>Remember</p>",
+        isPinned: true,
+      } as unknown as NoteRow,
+    ]);
+    await renderPage();
+    expect(screen.getByText(/Oct 15, 2026/)).toBeTruthy();
+
+    vi.mocked(getCurrentUserTimeZone).mockResolvedValueOnce("UTC");
+    document.body.innerHTML = "";
+    await renderPage();
+    expect(screen.getByText(/Oct 16, 2026/)).toBeTruthy();
+  });
+
+  test("loads only what the cards render (open + limited, pinned only)", async () => {
+    await renderPage();
+    expect(getMatterDeadlines).toHaveBeenCalledWith("m1", {
+      tz: "America/Denver",
+      openOnly: true,
+      limit: 4,
+    });
+    expect(getMatterTasks).toHaveBeenCalledWith("m1", {
+      tz: "America/Denver",
+      openOnly: true,
+      limit: 5,
+    });
+    expect(getMatterNotes).toHaveBeenCalledWith("m1", { pinnedOnly: true });
+  });
+
+  test("a missing matter 404s", async () => {
+    vi.mocked(getMatterById).mockResolvedValue(null as never);
+    await expect(renderPage()).rejects.toThrow("NEXT_NOT_FOUND");
+  });
+});

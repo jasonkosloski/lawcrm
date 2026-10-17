@@ -18,10 +18,12 @@ import { StageChanger } from "@/components/matters/stage-changer";
 import { StatuteOfLimitationsCard } from "@/components/matters/statute-of-limitations-card";
 import { EmailLink } from "@/components/ui/email-link";
 import { formatPhone } from "@/lib/format-phone";
-// Centralized date formatting — default "medium" matches the "Apr 15,
-// 2026" this page always used. Filed/trial are date-only values
-// (server-local midnight), so no TZ override.
-import { formatDate } from "@/lib/format-date";
+// Filed / trial / task due dates are date-only (formatDateOnly never
+// shifts the day); the pinned-note timestamp is an instant and renders
+// in the viewer's profile zone (ADR-012).
+import { formatDate, formatDateOnly } from "@/lib/format-date";
+import { formatMoney } from "@/lib/format-money";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { prisma } from "@/lib/prisma";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { getMatterById } from "@/lib/queries/matters";
@@ -29,6 +31,7 @@ import {
   getMatterDeadlines,
   getMatterNotes,
   getMatterTasks,
+  getMatterTimeSummary,
 } from "@/lib/queries/matter-detail";
 import { requireUser } from "@/lib/current-user";
 
@@ -40,53 +43,76 @@ const ROLE_LABEL: Record<string, string> = {
   of_counsel: "Of counsel",
 };
 
-const formatMoney = (n: number): string => `$${n.toLocaleString("en-US")}`;
+/** "3d" / "today" / "2d late" for a whole-day distance from today. */
+function dayDistanceLabel(days: number): string {
+  if (days < 0) return `${Math.abs(days)}d late`;
+  if (days === 0) return "today";
+  return `${days}d`;
+}
 
 export default async function MatterOverviewPage({
   params,
 }: PageProps<"/matters/[id]">) {
   await requireUser();
   const { id } = await params;
-  const matter = await getMatterById(id);
-  if (!matter) notFound();
+  const tz = await getCurrentUserTimeZone();
 
-  const [deadlines, tasks, notes, stageOptions, clientRows, canEditMatter] =
-    await Promise.all([
-      getMatterDeadlines(id),
-      getMatterTasks(id),
-      getMatterNotes(id),
-      prisma.matterStage.findMany({
-        where: { practiceAreaId: matter.practiceAreaId, isActive: true },
-        orderBy: { order: "asc" },
-        select: { id: true, name: true, order: true, isTerminal: true },
-      }),
-      // All client-category parties on this matter (primary + any
-      // co-clients). Ordered primary-first via contactId match below.
-      prisma.matterContact.findMany({
-        where: { matterId: id, category: "client" },
-        include: {
-          contact: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              organization: true,
-              phones: {
-                orderBy: [{ isPrimary: "desc" }, { order: "asc" }],
-                select: {
-                  id: true,
-                  label: true,
-                  number: true,
-                  isPrimary: true,
-                },
+  // Everything runs as one wave: the previews are narrow queries (only
+  // the rows the cards render), and the stage list chains onto the
+  // matter fetch instead of waiting for it before anything else starts.
+  const [
+    matter,
+    deadlines,
+    tasks,
+    pinnedNotes,
+    timeSummary,
+    clientRows,
+    canEditMatter,
+  ] = await Promise.all([
+    getMatterById(id),
+    getMatterDeadlines(id, { tz, openOnly: true, limit: 4 }),
+    getMatterTasks(id, { tz, openOnly: true, limit: 5 }),
+    // Every pinned note shows on the overview — the lawyer expressly
+    // chose them as the "always-visible reference items" for this
+    // case. Un-pinned notes live on the Notes tab (one click away).
+    getMatterNotes(id, { pinnedOnly: true }),
+    // Live WIP — the same unbilled-time figure the Billing tab shows.
+    // (Matter.wipAmount is never written by any action.)
+    getMatterTimeSummary(id),
+    // All client-category parties on this matter (primary + any
+    // co-clients). Ordered primary-first via contactId match below.
+    prisma.matterContact.findMany({
+      where: { matterId: id, category: "client" },
+      include: {
+        contact: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            organization: true,
+            phones: {
+              orderBy: [{ isPrimary: "desc" }, { order: "asc" }],
+              select: {
+                id: true,
+                label: true,
+                number: true,
+                isPrimary: true,
               },
             },
           },
         },
-        orderBy: { createdAt: "asc" },
-      }),
-      currentUserHasPermission("matters.edit"),
-    ]);
+      },
+      orderBy: { createdAt: "asc" },
+    }),
+    currentUserHasPermission("matters.edit"),
+  ]);
+  if (!matter) notFound();
+
+  const stageOptions = await prisma.matterStage.findMany({
+    where: { practiceAreaId: matter.practiceAreaId, isActive: true },
+    orderBy: { order: "asc" },
+    select: { id: true, name: true, order: true, isTerminal: true },
+  });
 
   // Pin the primary client (Matter.clientId) to the top of the list.
   const clients = [...clientRows].sort(
@@ -95,20 +121,8 @@ export default async function MatterOverviewPage({
       (a.contact.id === matter.clientId ? 1 : 0)
   );
 
-  const upcomingDeadlines = deadlines
-    .filter((d) => d.status === "open")
-    .slice(0, 4);
-  const openTasks = tasks
-    .filter((t) => t.status === "open" || t.status === "in_progress")
-    .slice(0, 5);
-  // Every pinned note shows on the overview — the lawyer expressly
-  // chose them as the "always-visible reference items" for this
-  // case. Older behavior fell back to the most-recent note when
-  // nothing was pinned; that's been dropped because (a) the Notes
-  // tab is one click away, (b) showing un-pinned content here
-  // turned the overview into a stale-feed surface, and (c) the
-  // empty state encourages the lawyer to pin the note that matters.
-  const pinnedNotes = notes.filter((n) => n.isPinned);
+  const upcomingDeadlines = deadlines;
+  const openTasks = tasks;
 
   return (
     <div className="p-3 sm:p-5">
@@ -157,8 +171,8 @@ export default async function MatterOverviewPage({
               <dl className="grid grid-cols-2 gap-y-3 gap-x-6 text-xs">
                 <Fact label="Court" value={matter.court} />
                 <Fact label="Case number" value={matter.caseNumber} mono />
-                <Fact label="Filed" value={formatDate(matter.filedDate)} />
-                <Fact label="Trial" value={formatDate(matter.trialDate)} />
+                <Fact label="Filed" value={formatDateOnly(matter.filedDate)} />
+                <Fact label="Trial" value={formatDateOnly(matter.trialDate)} />
                 <Fact label="Opposing party" value={matter.opposingParty} />
                 <Fact label="Opposing firm" value={matter.opposingFirm} />
                 <Fact
@@ -168,7 +182,7 @@ export default async function MatterOverviewPage({
                 />
                 <Fact
                   label="WIP"
-                  value={formatMoney(matter.wipAmount)}
+                  value={formatMoney(timeSummary.unbilledAmount)}
                   mono
                 />
                 {matter.description && (
@@ -184,8 +198,9 @@ export default async function MatterOverviewPage({
           </Card>
 
           {/* Pinned notes — every pinned note for this matter,
-              stacked. Content is sanitized server-side at write
-              time (see notes.ts → DOMPurify), so dangerouslySetInnerHTML
+              stacked. Content is sanitized by sanitizeUserHtml
+              (sanitize-html, src/lib/sanitize-html.ts) at write time and
+              again when getMatterNotes reads it, so dangerouslySetInnerHTML
               is safe and lets the rich-text composer's markup
               actually render instead of leaking <p>/<ul>/etc. as
               literal text. Plain-text seed notes pass through fine
@@ -234,7 +249,7 @@ export default async function MatterOverviewPage({
                         href={`/matters/${matter.id}/notes#note-${note.id}`}
                         className="font-mono text-ink-4 hover:text-brand-700 hover:underline"
                       >
-                        {formatDate(note.createdAt)} →
+                        {formatDate(note.createdAt, "medium", tz)} →
                       </Link>
                     </div>
                     <div
@@ -299,11 +314,9 @@ export default async function MatterOverviewPage({
                       </span>
                       <span className="text-2xs font-mono text-ink-4 w-14 text-right shrink-0">
                         {t.daysUntilDue !== null && t.daysUntilDue <= 7
-                          ? t.daysUntilDue < 0
-                            ? `${Math.abs(t.daysUntilDue)}d late`
-                            : `${t.daysUntilDue}d`
+                          ? dayDistanceLabel(t.daysUntilDue)
                           : t.dueDate
-                            ? formatDate(t.dueDate, "short")
+                            ? formatDateOnly(t.dueDate, "short")
                             : "—"}
                       </span>
                       {t.ownerInitials && (
@@ -474,9 +487,7 @@ export default async function MatterOverviewPage({
                               : "bg-paper-2 text-ink-3 border-line")
                         }
                       >
-                        {d.isOverdue
-                          ? `${Math.abs(d.daysUntil)}d late`
-                          : `${d.daysUntil}d`}
+                        {dayDistanceLabel(d.daysUntil)}
                       </span>
                     </li>
                   ))}

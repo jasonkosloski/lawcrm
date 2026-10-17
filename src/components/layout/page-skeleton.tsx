@@ -19,9 +19,24 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export function PageSkeleton({
   variant = "detail",
+  withTopBar = true,
 }: {
   variant?: "tiles" | "table" | "detail" | "grid";
+  /** Render the fake TopBar and own the scroll container. Pass false
+   *  when the skeleton fills the content slot of a layout that already
+   *  renders the real header (e.g. a matter tab), so the header isn't
+   *  doubled and scroll containers don't nest. */
+  withTopBar?: boolean;
 }) {
+  const body = (
+    <>
+      {variant === "tiles" && <TilesBody />}
+      {variant === "table" && <TableBody />}
+      {variant === "detail" && <DetailBody />}
+      {variant === "grid" && <GridBody />}
+    </>
+  );
+  if (!withTopBar) return <div className="p-5">{body}</div>;
   return (
     <>
       {/* TopBar skeleton */}
@@ -36,12 +51,7 @@ export function PageSkeleton({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-5">
-        {variant === "tiles" && <TilesBody />}
-        {variant === "table" && <TableBody />}
-        {variant === "detail" && <DetailBody />}
-        {variant === "grid" && <GridBody />}
-      </div>
+      <div className="flex-1 overflow-y-auto p-5">{body}</div>
     </>
   );
 }

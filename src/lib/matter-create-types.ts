@@ -176,3 +176,18 @@ export function findMatterCreateEntry(
 ): MatterCreateEntry | undefined {
   return MATTER_CREATE_ENTRIES.find((e) => e.type === type);
 }
+
+/** Permission key each Create-dock panel's server action enforces.
+ *  The matter layout resolves these so the "+ Create" menu only lists
+ *  what the viewer can actually submit (a denied action redirects to
+ *  "/" and throws away whatever was typed). */
+export const MATTER_CREATE_PERMISSION: Record<MatterCreateType, string> = {
+  time: "time_entries.create",
+  note: "notes.create",
+  task: "tasks.create",
+  deadline: "deadlines.create",
+  party: "parties.create",
+  document: "documents.upload",
+  event: "events.create",
+  invoice: "billing.generate_invoice",
+};

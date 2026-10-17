@@ -26,6 +26,12 @@ import { render, screen } from "@testing-library/react";
 vi.mock("@/lib/current-user", () => ({
   requireUser: vi.fn(async () => "user_1"),
 }));
+vi.mock("@/lib/current-user-tz", () => ({
+  getCurrentUserTimeZone: vi.fn(async () => "America/Denver"),
+}));
+vi.mock("@/lib/permission-check", () => ({
+  currentUserHasPermission: vi.fn(async () => true),
+}));
 vi.mock("@/lib/queries/matters", () => ({
   getMatterById: vi.fn(),
 }));
@@ -46,12 +52,13 @@ vi.mock("@/components/calendar/event-detail-modal", () => ({
   ),
 }));
 vi.mock("@/components/matters/captures/event-composer", () => ({
-  EventComposer: () => null,
+  EventComposer: () => <div data-testid="event-composer" />,
 }));
 vi.mock("@/components/matters/events/event-row-expandable", () => ({
   EventRowExpandable: () => <li data-testid="event-row" />,
 }));
 
+import { currentUserHasPermission } from "@/lib/permission-check";
 import { getMatterById } from "@/lib/queries/matters";
 import { getMatterEvents } from "@/lib/queries/matter-detail";
 import {
@@ -118,6 +125,29 @@ const renderPage = async (eventParam?: string) => {
 
 afterEach(() => {
   vi.clearAllMocks();
+});
+
+describe("MatterEventsPage — events.create gate", () => {
+  test("viewer with events.create sees the composer", async () => {
+    vi.mocked(currentUserHasPermission).mockResolvedValue(true);
+    await renderPage();
+    expect(currentUserHasPermission).toHaveBeenCalledWith("events.create");
+    expect(screen.getByTestId("event-composer")).toBeTruthy();
+  });
+
+  test("viewer without it never gets a form that would bounce to / and eat their input", async () => {
+    vi.mocked(currentUserHasPermission).mockResolvedValue(false);
+    await renderPage();
+    expect(screen.queryByTestId("event-composer")).toBeNull();
+    // The list itself still renders for read-only viewers.
+    expect(screen.getAllByTestId("event-row")).toHaveLength(1);
+  });
+
+  test("the viewer's zone is passed to the query for the upcoming split", async () => {
+    vi.mocked(currentUserHasPermission).mockResolvedValue(true);
+    await renderPage();
+    expect(getMatterEvents).toHaveBeenCalledWith("m1", { tz: "America/Denver" });
+  });
 });
 
 describe("MatterEventsPage — ?event= matter-ownership guard", () => {

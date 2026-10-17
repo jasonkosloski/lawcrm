@@ -15,12 +15,17 @@
  *      row-by-row JS accumulation).
  */
 
-import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 // matter-detail.ts imports getCurrentUserId (for the Notes tab's
 // read-tracking); stub it so the auth chain (next-auth → next/server)
 // doesn't have to load. The time queries under test never call it.
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
+// The deadline / task / event queries resolve the viewer's zone for
+// their calendar-day math; the real resolver is `server-only`.
+vi.mock("@/lib/current-user-tz", () => ({
+  getCurrentUserTimeZone: vi.fn(async () => "America/Denver"),
+}));
 
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -32,15 +37,22 @@ import {
 import {
   getMatterActivity,
   getMatterActivityTypeCounts,
+  getMatterDeadlines,
+  getMatterEvents,
   getMatterNotes,
+  getMatterParties,
+  getMatterTasks,
   getMatterTimeEntries,
   getMatterTimeSummary,
 } from "@/lib/queries/matter-detail";
 import { getCurrentUserId } from "@/lib/current-user";
 import {
   resetDb,
+  seedCalendarEvent,
+  seedContact,
   seedFirm,
   seedMatter,
+  seedMatterContact,
   seedPracticeArea,
   seedUser,
 } from "@/test/integration-helpers";
@@ -255,5 +267,322 @@ describe("getMatterNotes - render-time re-sanitization", () => {
     const notes = await getMatterNotes(matterId);
     expect(notes).toHaveLength(1);
     expect(notes[0].content).toBe("<p>pwn</p>");
+  });
+});
+
+describe("getMatterTimeSummary — written-off entries", () => {
+  test("written_off is in neither bucket; WIP statuses stay unbilled; billed stays billed", async () => {
+    await seedEntry({ hours: 2, amount: 600, status: "written_off" });
+    await seedEntry({ hours: 1, amount: 300, status: "draft" });
+    await seedEntry({ hours: 1, amount: 300, status: "submitted" });
+    await seedEntry({ hours: 1, amount: 300, status: "billable" });
+    await seedEntry({ hours: 1, amount: 300, status: "billed" });
+
+    const summary = await getMatterTimeSummary(matterId);
+    // Hours still count (the work happened)…
+    expect(summary.totalHours).toBe(6);
+    expect(summary.billableHours).toBe(6);
+    // …but a write-off is no longer "WIP to invoice".
+    expect(summary.unbilledAmount).toBe(900);
+    expect(summary.billedAmount).toBe(300);
+  });
+});
+
+describe("deadlines / tasks — calendar-day math in the viewer's zone", () => {
+  // 2026-04-28T02:00Z is 8 PM on Apr 27 in Denver (MDT): the viewer's
+  // "today" is Apr 27 even though the UTC clock already says Apr 28.
+  const EVENING_DENVER = new Date("2026-04-28T02:00:00.000Z");
+
+  beforeEach(() => {
+    vi.mocked(getCurrentUserId).mockResolvedValue(userId);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(EVENING_DENVER);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const dl = (title: string, due: string, status = "open") =>
+    prisma.deadline.create({
+      data: {
+        matterId,
+        title,
+        status,
+        dueDate: new Date(`${due}T00:00:00.000Z`),
+      },
+    });
+
+  test("a deadline due today is 0 days away and NOT overdue (no '0d late')", async () => {
+    await dl("Due today", "2026-04-27");
+    const [d] = await getMatterDeadlines(matterId);
+    expect(d.daysUntil).toBe(0);
+    expect(d.isOverdue).toBe(false);
+  });
+
+  test("yesterday is 1 day late; tomorrow is 1 day away", async () => {
+    await dl("Yesterday", "2026-04-26");
+    await dl("Tomorrow", "2026-04-28");
+    const byTitle = Object.fromEntries(
+      (await getMatterDeadlines(matterId)).map((d) => [d.title, d])
+    );
+    expect(byTitle["Yesterday"].daysUntil).toBe(-1);
+    expect(byTitle["Yesterday"].isOverdue).toBe(true);
+    expect(byTitle["Tomorrow"].daysUntil).toBe(1);
+    expect(byTitle["Tomorrow"].isOverdue).toBe(false);
+  });
+
+  test("a completed past deadline is never flagged overdue", async () => {
+    await dl("Done", "2026-04-01", "completed");
+    const [d] = await getMatterDeadlines(matterId);
+    expect(d.isOverdue).toBe(false);
+  });
+
+  test("an explicit tz overrides the session zone", async () => {
+    await dl("Due Apr 28", "2026-04-28");
+    // In UTC it is already Apr 28, so the deadline is due today.
+    const [d] = await getMatterDeadlines(matterId, { tz: "UTC" });
+    expect(d.daysUntil).toBe(0);
+  });
+
+  test("open deadlines sort before completed / waived ones, each by due date", async () => {
+    await dl("Old completed", "2026-01-10", "completed");
+    await dl("Late open", "2026-09-01");
+    await dl("Soon open", "2026-05-01");
+    await dl("Old waived", "2026-02-10", "waived");
+    const rows = await getMatterDeadlines(matterId);
+    expect(rows.map((r) => r.title)).toEqual([
+      "Soon open",
+      "Late open",
+      "Old completed",
+      "Old waived",
+    ]);
+  });
+
+  test("openOnly + limit returns just the next open rows (Overview preview)", async () => {
+    await dl("Done", "2026-01-10", "completed");
+    for (const [i, due] of ["2026-05-01", "2026-05-02", "2026-05-03"].entries()) {
+      await dl(`Open ${i}`, due);
+    }
+    const rows = await getMatterDeadlines(matterId, { openOnly: true, limit: 2 });
+    expect(rows.map((r) => r.title)).toEqual(["Open 0", "Open 1"]);
+  });
+
+  test("tasks use the same day math", async () => {
+    await prisma.task.createMany({
+      data: [
+        { matterId, title: "Today", dueDate: new Date("2026-04-27T00:00:00Z") },
+        { matterId, title: "Tomorrow", dueDate: new Date("2026-04-28T00:00:00Z") },
+        { matterId, title: "Overdue", dueDate: new Date("2026-04-25T00:00:00Z") },
+        { matterId, title: "Undated" },
+      ],
+    });
+    const byTitle = Object.fromEntries(
+      (await getMatterTasks(matterId)).map((t) => [t.title, t.daysUntilDue])
+    );
+    expect(byTitle).toEqual({
+      Today: 0,
+      Tomorrow: 1,
+      Overdue: -2,
+      Undated: null,
+    });
+  });
+
+  test("tasks openOnly drops done / cancelled rows", async () => {
+    await prisma.task.createMany({
+      data: [
+        { matterId, title: "A", status: "open" },
+        { matterId, title: "B", status: "in_progress" },
+        { matterId, title: "C", status: "done" },
+      ],
+    });
+    const rows = await getMatterTasks(matterId, { openOnly: true });
+    expect(rows.map((r) => r.title).sort()).toEqual(["A", "B"]);
+  });
+});
+
+describe("getMatterEvents — upcoming split", () => {
+  beforeEach(() => {
+    vi.mocked(getCurrentUserId).mockResolvedValue(userId);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    // 8 PM Apr 27 in Denver.
+    vi.setSystemTime(new Date("2026-04-28T02:00:00.000Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test("an all-day event on the viewer's today is upcoming, yesterday's is past", async () => {
+    await seedCalendarEvent({
+      createdById: userId,
+      matterId,
+      title: "All day today",
+      isAllDay: true,
+      startTime: new Date("2026-04-27T00:00:00Z"),
+      endTime: new Date("2026-04-27T00:00:00Z"),
+    });
+    await seedCalendarEvent({
+      createdById: userId,
+      matterId,
+      title: "All day yesterday",
+      isAllDay: true,
+      startTime: new Date("2026-04-26T00:00:00Z"),
+      endTime: new Date("2026-04-26T00:00:00Z"),
+    });
+    await seedCalendarEvent({
+      createdById: userId,
+      matterId,
+      title: "Ended an hour ago",
+      startTime: new Date("2026-04-28T00:00:00Z"),
+      endTime: new Date("2026-04-28T01:00:00Z"),
+    });
+    await seedCalendarEvent({
+      createdById: userId,
+      matterId,
+      title: "Later tonight",
+      startTime: new Date("2026-04-28T03:00:00Z"),
+      endTime: new Date("2026-04-28T04:00:00Z"),
+    });
+    const flags = Object.fromEntries(
+      (await getMatterEvents(matterId)).map((e) => [e.title, e.isUpcoming])
+    );
+    expect(flags).toEqual({
+      "All day today": true,
+      "All day yesterday": false,
+      "Ended an hour ago": false,
+      "Later tonight": true,
+    });
+  });
+});
+
+describe("getMatterParties — representation falls back only without a linked contact", () => {
+  test("a linked rep contact's cleared organization is not resurrected from the legacy mirror", async () => {
+    const { contactId: partyId } = await seedContact({
+      name: "Opposing Party",
+      type: "opposing_party",
+    });
+    const { contactId: repId } = await seedContact({
+      name: "Sonia Steele",
+      type: "opposing_counsel",
+      organization: null,
+    });
+    const { matterContactId } = await seedMatterContact({
+      matterId,
+      contactId: partyId,
+      category: "opposing",
+    });
+    await prisma.matterContact.update({
+      where: { id: matterContactId },
+      data: {
+        isRepresented: true,
+        representationContactId: repId,
+        representationName: "Old Name",
+        representationFirm: "Steele & Marsh",
+        representationEmail: "old@example.com",
+        representationPhone: "555-0100",
+      },
+    });
+    const [row] = await getMatterParties(matterId);
+    expect(row.representationName).toBe("Sonia Steele");
+    expect(row.representationFirm).toBeNull();
+    expect(row.representationEmail).toBeNull();
+    expect(row.representationPhone).toBeNull();
+  });
+
+  test("without a linked contact the legacy text columns still show", async () => {
+    const { contactId: partyId } = await seedContact({
+      name: "Opposing Party",
+      type: "opposing_party",
+    });
+    const { matterContactId } = await seedMatterContact({
+      matterId,
+      contactId: partyId,
+      category: "opposing",
+    });
+    await prisma.matterContact.update({
+      where: { id: matterContactId },
+      data: { isRepresented: true, representationFirm: "Steele & Marsh" },
+    });
+    const [row] = await getMatterParties(matterId);
+    expect(row.representationFirm).toBe("Steele & Marsh");
+  });
+});
+
+describe("getMatterNotes — labels and pinned filter", () => {
+  beforeEach(() => {
+    vi.mocked(getCurrentUserId).mockResolvedValue(userId);
+  });
+
+  test("a reply's parent label decodes entities (no '&amp;')", async () => {
+    const parent = await prisma.note.create({
+      data: {
+        matterId,
+        authorId: userId,
+        content: "<p>Call w/ Smith &amp; Jones</p>",
+      },
+    });
+    await prisma.note.create({
+      data: {
+        matterId,
+        authorId: userId,
+        content: "<p>reply</p>",
+        parentNoteId: parent.id,
+      },
+    });
+    const reply = (await getMatterNotes(matterId)).find(
+      (n) => n.parentNoteId === parent.id
+    );
+    expect(reply?.link).toMatchObject({
+      kind: "parent",
+      label: "Call w/ Smith & Jones",
+    });
+  });
+
+  test("pinnedOnly returns just the pinned notes", async () => {
+    await prisma.note.create({
+      data: { matterId, authorId: userId, content: "<p>pinned</p>", isPinned: true },
+    });
+    await prisma.note.create({
+      data: { matterId, authorId: userId, content: "<p>plain</p>" },
+    });
+    const rows = await getMatterNotes(matterId, { pinnedOnly: true });
+    expect(rows.map((r) => r.content)).toEqual(["<p>pinned</p>"]);
+    expect(await getMatterNotes(matterId)).toHaveLength(2);
+  });
+});
+
+describe("getMatterTimeEntries — event source chip", () => {
+  test("time logged on an event shows a 'From event' chip, Busy-scrubbed for non-team viewers", async () => {
+    const { eventId } = await seedCalendarEvent({
+      createdById: userId,
+      matterId,
+      title: "Privileged strategy call",
+    });
+    await prisma.timeEntry.create({
+      data: {
+        matterId,
+        userId,
+        date: new Date("2026-06-15T00:00:00Z"),
+        hours: 1,
+        activity: "Call",
+        calendarEventId: eventId,
+      },
+    });
+
+    // The matter lead (team member + creator) sees the real title.
+    vi.mocked(getCurrentUserId).mockResolvedValue(userId);
+    const [seen] = await getMatterTimeEntries(matterId);
+    expect(seen.spawnedFrom).toEqual({
+      kind: "event",
+      id: eventId,
+      label: "Privileged strategy call",
+    });
+
+    // A firm member who is neither creator, attendee nor on the team
+    // gets "Busy".
+    const { id: firmId } = await prisma.firm.findFirstOrThrow({ select: { id: true } });
+    const { userId: outsiderId } = await seedUser({ firmId });
+    vi.mocked(getCurrentUserId).mockResolvedValue(outsiderId);
+    const [scrubbed] = await getMatterTimeEntries(matterId);
+    expect(scrubbed.spawnedFrom?.label).toBe("Busy");
   });
 });

@@ -8,8 +8,11 @@
  * grant). The Timeline is the audit-trail surface for the matter.
  *
  * Filters via URL `?type=…` so links/back-button work. Pills:
- *   All · Filings · Communications · Deadlines · Tasks · Notes ·
- *   Time · Financial · System
+ *   All · Case activity · Communications · Deadlines · Tasks · Notes ·
+ *   Time · Financial · Events · Documents · Evidence
+ *   ("Case activity" is the ActivityLog `filing` type: stage moves,
+ *   team changes, invoice and expense transitions, lead declines. The
+ *   URL key stays `filings` so shared links keep working.)
  *
  * Each pill maps to one or more `ActivityLog.type` values — see
  * the FILTER_BUCKETS map below for the canonical groupings. The
@@ -46,13 +49,14 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
-import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import {
+  MATTER_ACTIVITY_LIMIT,
   getMatterActivity,
   getMatterActivityTypeCounts,
 } from "@/lib/queries/matter-detail";
+import { getMatterById } from "@/lib/queries/matters";
 
 const ACTIVITY_ICONS: Record<string, LucideIcon> = {
   gavel: Gavel,
@@ -77,7 +81,7 @@ const FILTER_BUCKETS: Record<
   { label: string; types: readonly string[] }
 > = {
   all: { label: "All", types: [] },
-  filings: { label: "Filings", types: ["filing"] },
+  filings: { label: "Case activity", types: ["filing"] },
   communications: { label: "Communications", types: ["email", "call"] },
   deadlines: { label: "Deadlines", types: ["deadline"] },
   tasks: { label: "Tasks", types: ["task", "task_complete"] },
@@ -88,6 +92,8 @@ const FILTER_BUCKETS: Record<
     types: ["deposit", "settlement"],
   },
   events: { label: "Events", types: ["event"] },
+  documents: { label: "Documents", types: ["document"] },
+  evidence: { label: "Evidence", types: ["evidence"] },
 };
 
 const PILL_ORDER = [
@@ -100,6 +106,8 @@ const PILL_ORDER = [
   "time",
   "financial",
   "events",
+  "documents",
+  "evidence",
 ] as const;
 
 // Date rendering routes through the centralized formatter so
@@ -114,8 +122,12 @@ export default async function MatterTimelinePage({
   const { id } = await params;
   const sp = await searchParams;
   const rawType = Array.isArray(sp.type) ? sp.type[0] : sp.type;
+  // Own-property check: `in` also matches prototype keys
+  // ("constructor", "toString"), which would crash on bucket.types.
   const filterKey =
-    typeof rawType === "string" && rawType in FILTER_BUCKETS ? rawType : "all";
+    typeof rawType === "string" && Object.hasOwn(FILTER_BUCKETS, rawType)
+      ? rawType
+      : "all";
   const bucket = FILTER_BUCKETS[filterKey];
 
   // Settlement + expense rows carry amounts in their titles; show
@@ -129,13 +141,10 @@ export default async function MatterTimelinePage({
   ]);
   const access = { canViewSettlement, canViewExpense };
 
-  const matter = await prisma.matter.findUnique({
-    where: { id },
-    select: { id: true },
-  });
-  if (!matter) notFound();
-
-  const [rows, counts, tz] = await Promise.all([
+  // The existence check runs alongside the data reads (the cached
+  // getMatterById is shared with the layout) instead of ahead of them.
+  const [matter, rows, counts, tz] = await Promise.all([
+    getMatterById(id),
     getMatterActivity(id, {
       types: bucket.types.length > 0 ? bucket.types : undefined,
       ...access,
@@ -143,6 +152,7 @@ export default async function MatterTimelinePage({
     getMatterActivityTypeCounts(id, access),
     getCurrentUserTimeZone(),
   ]);
+  if (!matter) notFound();
 
   const totalCount = Object.values(counts).reduce((s, n) => s + n, 0);
 
@@ -208,7 +218,7 @@ export default async function MatterTimelinePage({
           <CardContent className="py-10 text-center text-xs text-ink-4">
             {filterKey === "all"
               ? "No activity recorded on this matter yet. Notes, tasks, deadlines, time entries, calendar events, document uploads, billing transitions, stage changes, and team adjustments will all show up here."
-              : `No ${FILTER_BUCKETS[filterKey].label.toLowerCase()} activity yet on this matter.`}
+              : `Nothing under “${FILTER_BUCKETS[filterKey].label}” yet on this matter.`}
           </CardContent>
         </Card>
       ) : (
@@ -263,10 +273,10 @@ export default async function MatterTimelinePage({
         </Card>
       )}
 
-      {rows.length > 0 && rows.length === 200 && (
+      {rows.length > 0 && rows.length === MATTER_ACTIVITY_LIMIT && (
         <div className="text-2xs text-ink-4 text-center">
-          Showing the most recent 200 events. Older entries land in
-          the future archive view.
+          Showing the most recent {MATTER_ACTIVITY_LIMIT} events. Older
+          entries land in the future archive view.
         </div>
       )}
     </div>

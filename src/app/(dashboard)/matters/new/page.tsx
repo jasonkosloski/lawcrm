@@ -47,7 +47,6 @@ export default async function NewMatterPage() {
         name: true,
         organization: true,
         city: true,
-        state: true,
       },
       orderBy: { name: "asc" },
     }),

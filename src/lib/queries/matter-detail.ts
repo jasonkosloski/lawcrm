@@ -14,7 +14,28 @@ import { canViewEventDetails } from "@/lib/calendar-visibility";
 import { EXPENSE_ACTIVITY_TITLE_PREFIX } from "@/lib/expense-activity";
 import { REACTION_EMOJIS } from "@/lib/note-constants";
 import { sanitizeUserHtml } from "@/lib/sanitize-html";
+import { TIME_ENTRY_WIP_STATUSES } from "@/lib/constants/time-entry-status";
+import { dateOnlyKey, daysBetweenKeys, todayKey } from "@/lib/format-date";
+import { formatPhone } from "@/lib/format-phone";
+import { htmlToText } from "@/lib/html-to-text";
 import type { EventNote, EventTimeEntry } from "@/lib/queries/calendar";
+
+/** The viewer's time zone, resolved lazily so callers that already
+ *  know it (or never need it) don't pull the server-only resolver
+ *  into their import graph. Date-only "days until" math needs the
+ *  viewer's calendar day (ADR-012). */
+async function resolveTz(tz?: string): Promise<string> {
+  if (tz) return tz;
+  const { getCurrentUserTimeZone } = await import("@/lib/current-user-tz");
+  return getCurrentUserTimeZone();
+}
+
+/** Whole calendar days from the viewer's today to a date-only value
+ *  (0 = today, negative = past). Never compares against an instant —
+ *  a deadline due today is not "late" until the day is over. */
+function daysUntilDueDate(dueDate: Date, tz: string): number {
+  return daysBetweenKeys(todayKey(tz), dateOnlyKey(dueDate));
+}
 
 // ── Event references from other tabs ─────────────────────────────────────
 //
@@ -181,11 +202,23 @@ export async function getMatterParties(matterId: string): Promise<PartyRow[]> {
     // Prefer the joined Contact when present so contact-page edits
     // flow through automatically; fall back to the legacy text
     // columns for rows we haven't backfilled yet.
+    // The FK decides: when a rep Contact is linked, its fields are
+    // the truth even where they have since been cleared — falling
+    // back field-by-field would resurrect stale mirrored text (the
+    // legacy columns are written once, at save time).
     const repFromContact = r.representationContact;
-    const repName = repFromContact?.name ?? r.representationName;
-    const repFirm = repFromContact?.organization ?? r.representationFirm;
-    const repEmail = repFromContact?.email ?? r.representationEmail;
-    const repPhone = repFromContact?.phone ?? r.representationPhone;
+    const repName = repFromContact
+      ? repFromContact.name
+      : r.representationName;
+    const repFirm = repFromContact
+      ? repFromContact.organization
+      : r.representationFirm;
+    const repEmail = repFromContact
+      ? repFromContact.email
+      : r.representationEmail;
+    const repPhone = repFromContact
+      ? repFromContact.phone
+      : r.representationPhone;
 
     return {
       id: r.id,
@@ -234,12 +267,29 @@ export type DeadlineRow = {
   attachedNotes: AttachedNotePreview[];
 };
 
+/** Options shared by the deadline / task list queries. */
+export type MatterListOptions = {
+  /** Viewer's IANA zone for the "days until" math. Resolved from the
+   *  session when omitted. */
+  tz?: string;
+  /** Only rows still needing action (deadlines: open; tasks: open +
+   *  in_progress). The Overview preview uses this with `limit`. */
+  openOnly?: boolean;
+  /** Cap on rows returned (applied after the open-only filter). */
+  limit?: number;
+};
+
 export async function getMatterDeadlines(
-  matterId: string
+  matterId: string,
+  options: MatterListOptions = {}
 ): Promise<DeadlineRow[]> {
-  const viewerId = await getCurrentUserId();
+  const [viewerId, tz] = await Promise.all([
+    getCurrentUserId(),
+    resolveTz(options.tz),
+  ]);
   const rows = await prisma.deadline.findMany({
-    where: { matterId },
+    where: { matterId, ...(options.openOnly ? { status: "open" } : {}) },
+    take: options.limit,
     include: {
       owner: { select: { name: true, initials: true } },
       parentNote: { select: { id: true, content: true } },
@@ -270,18 +320,21 @@ export async function getMatterDeadlines(
         orderBy: { createdAt: "asc" },
       },
     },
-    orderBy: [{ status: "asc" }, { dueDate: "asc" }],
+    // Status is NOT a DB sort key: alphabetically "completed" < "open",
+    // which would bury live deadlines under history. Order by date here
+    // and float the open ones in JS below.
+    orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
   });
-  const now = Date.now();
-  return rows.map((d) => {
-    const diffMs = d.dueDate.getTime() - now;
-    const daysUntil = Math.ceil(diffMs / (24 * 60 * 60 * 1000));
+  const shaped = rows.map((d) => {
+    // dueDate is date-only: compare calendar days in the viewer's zone,
+    // not instants (a deadline due today is "0d", never "0d late").
+    const daysUntil = daysUntilDueDate(d.dueDate, tz);
     return {
       id: d.id,
       title: d.title,
       dueDate: d.dueDate,
       daysUntil,
-      isOverdue: d.status === "open" && diffMs < 0,
+      isOverdue: d.status === "open" && daysUntil < 0,
       kind: d.kind,
       sourceType: d.sourceType,
       sourceRef: d.sourceRef,
@@ -306,6 +359,12 @@ export async function getMatterDeadlines(
       })),
     };
   });
+  // Open deadlines first, then completed / waived history, each by due
+  // date (the page header's promise). Array#sort is stable, so the
+  // due-date order from the query survives within each group.
+  return shaped.sort(
+    (a, b) => Number(a.status !== "open") - Number(b.status !== "open")
+  );
 }
 
 // ── Tasks ────────────────────────────────────────────────────────────────
@@ -362,10 +421,22 @@ export type AttachedNotePreview = {
   createdAt: Date;
 };
 
-export async function getMatterTasks(matterId: string): Promise<TaskRow[]> {
-  const viewerId = await getCurrentUserId();
+export async function getMatterTasks(
+  matterId: string,
+  options: MatterListOptions = {}
+): Promise<TaskRow[]> {
+  const [viewerId, tz] = await Promise.all([
+    getCurrentUserId(),
+    resolveTz(options.tz),
+  ]);
   const rows = await prisma.task.findMany({
-    where: { matterId },
+    where: {
+      matterId,
+      ...(options.openOnly
+        ? { status: { in: ["open", "in_progress"] } }
+        : {}),
+    },
+    take: options.limit,
     include: {
       owner: { select: { name: true, initials: true } },
       // Spawn-source includes — at most one of these is populated per
@@ -403,7 +474,6 @@ export async function getMatterTasks(matterId: string): Promise<TaskRow[]> {
     },
     orderBy: [{ status: "asc" }, { sortOrder: "asc" }, { createdAt: "desc" }],
   });
-  const now = Date.now();
   return rows.map((t) => ({
     id: t.id,
     title: t.title,
@@ -411,9 +481,8 @@ export async function getMatterTasks(matterId: string): Promise<TaskRow[]> {
     priority: t.priority,
     status: t.status,
     dueDate: t.dueDate,
-    daysUntilDue: t.dueDate
-      ? Math.ceil((t.dueDate.getTime() - now) / (24 * 60 * 60 * 1000))
-      : null,
+    // Date-only due date: calendar-day distance in the viewer's zone.
+    daysUntilDue: t.dueDate ? daysUntilDueDate(t.dueDate, tz) : null,
     ownerId: t.ownerId,
     ownerName: t.owner?.name ?? null,
     ownerInitials: t.owner?.initials ?? null,
@@ -581,36 +650,29 @@ function truncate(s: string, n: number): string {
   return s.length <= n ? s : `${s.slice(0, n - 1)}…`;
 }
 
+/** Single-line plain text of stored note HTML. Entities are decoded
+ *  ("Smith &amp; Jones" -> "Smith & Jones") because React escapes the
+ *  label again when it renders. */
 function plainTextFromHtml(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return htmlToText(html).replace(/\s+/g, " ").trim();
 }
 
-/** Local copy of the messenger phone formatter used by the messenger
- *  components — kept inline here so this query module doesn't need
- *  to depend on a UI util just for the link-chip label. */
+/** Chip label for a phone number: formatted, or a placeholder. */
 function prettyPhoneForLink(p: string): string {
-  const digits = p.replace(/\D/g, "");
-  if (digits.length === 11 && digits.startsWith("1")) {
-    return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
-  }
-  if (digits.length === 10) {
-    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-  }
-  return p || "Unknown number";
+  return formatPhone(p) || "Unknown number";
 }
 
 function capitalizeKind(k: string): string {
   return k.charAt(0).toUpperCase() + k.slice(1);
 }
 
-export async function getMatterNotes(matterId: string): Promise<NoteRow[]> {
+export async function getMatterNotes(
+  matterId: string,
+  options: { pinnedOnly?: boolean } = {}
+): Promise<NoteRow[]> {
   const userId = await getCurrentUserId();
   const rows = await prisma.note.findMany({
-    where: { matterId },
+    where: { matterId, ...(options.pinnedOnly ? { isPinned: true } : {}) },
     include: {
       author: { select: { name: true, initials: true } },
       parent: { select: { id: true, content: true } },
@@ -679,9 +741,9 @@ export async function getMatterNotes(matterId: string): Promise<NoteRow[]> {
         },
       },
     },
-    // Replies sort by creation so the thread reads top-down. Top-level
-    // notes use the pinned-first / most-recent ordering; the UI does
-    // the thread grouping after fetch.
+    // Pinned first, then creation order (oldest first) so a reply
+    // thread reads top-down; the UI groups threads after fetch and
+    // reverses the top-level notes itself.
     orderBy: [{ isPinned: "desc" }, { createdAt: "asc" }],
   });
 
@@ -807,9 +869,9 @@ export type TimeEntryRow = {
   userName: string;
   userInitials: string;
   invoiceId: string | null;
-  /** Where this entry was logged from. Today only the "note" kind
-   *  fires for time entries (email + messenger sources don't spawn
-   *  time entries — the user's working session goes there directly).
+  /** Where this entry was logged from: a note, an email message, a
+   *  messenger item, a task, a deadline or a calendar event (event
+   *  titles are scrubbed to "Busy" for viewers who can't see them).
    *  Same field shape as TaskRow / DeadlineRow for chip-render reuse. */
   spawnedFrom: EntitySource | null;
   attachedNotes: AttachedNotePreview[];
@@ -835,6 +897,7 @@ export async function getMatterTimeEntries(
   matterId: string,
   options: { limit?: number } = {}
 ): Promise<TimeEntryRow[]> {
+  const viewerId = await getCurrentUserId();
   const rows = await prisma.timeEntry.findMany({
     where: { matterId },
     take: options.limit ?? MATTER_TIME_ENTRIES_LIMIT,
@@ -843,6 +906,9 @@ export async function getMatterTimeEntries(
       parentNote: { select: { id: true, content: true } },
       parentTask: { select: { id: true, title: true } },
       parentDeadline: { select: { id: true, title: true } },
+      // Time logged from the Events tab (calendarEventId) — the chip
+      // label obeys the same Busy rule as every other event reference.
+      event: { select: EVENT_REF_SELECT },
       // Per-individual-comm sources: time entries logged on a
       // single email message or messenger item. Resolved into the
       // existing email/message EntitySource kinds for chip render.
@@ -908,6 +974,7 @@ export async function getMatterTimeEntries(
           }
         : null,
       messenger: e.messengerItem,
+      event: scrubEventRef(e.event, viewerId),
       task: e.parentTask,
       deadline: e.parentDeadline,
     }),
@@ -951,8 +1018,12 @@ export async function getMatterTimeSummary(
       // the running totals — one rounding per bucket is irrelevant;
       // the canonical money lives in the Decimal column.
       const amount = g._sum.amount?.toNumber() ?? 0;
+      // Same WIP set the Billing tab uses; written-off entries are in
+      // neither bucket. ("billed" = attached to an invoice, draft or
+      // sent.)
       if (g.status === "billed") billedAmount += amount;
-      else unbilledAmount += amount;
+      else if ((TIME_ENTRY_WIP_STATUSES as readonly string[]).includes(g.status))
+        unbilledAmount += amount;
     }
   }
   return { totalHours, billableHours, unbilledAmount, billedAmount };
@@ -990,9 +1061,14 @@ export type MatterEventRow = {
 };
 
 export async function getMatterEvents(
-  matterId: string
+  matterId: string,
+  options: { tz?: string } = {}
 ): Promise<MatterEventRow[]> {
-  const viewerId = await getCurrentUserId();
+  const [viewerId, tz] = await Promise.all([
+    getCurrentUserId(),
+    resolveTz(options.tz),
+  ]);
+  const today = todayKey(tz);
   const rows = await prisma.calendarEvent.findMany({
     where: { matterId },
     include: {
@@ -1022,6 +1098,11 @@ export async function getMatterEvents(
     orderBy: { startTime: "asc" },
   });
   const now = Date.now();
+  // Timed events are instants (compare to now). All-day events are
+  // date-only — still upcoming through the whole of their last day in
+  // the viewer's zone, not "past" from 00:00 UTC of that day.
+  const isUpcomingEvent = (e: { isAllDay: boolean; endTime: Date }): boolean =>
+    e.isAllDay ? dateOnlyKey(e.endTime) >= today : e.endTime.getTime() >= now;
   return rows.map((e): MatterEventRow => {
     const canSee = canViewEventDetails({
       viewerId,
@@ -1052,7 +1133,7 @@ export async function getMatterEvents(
         zoomUrl: null,
         color: "var(--color-ink-3)",
         attendeeCount: 0,
-        isUpcoming: e.endTime.getTime() >= now,
+        isUpcoming: isUpcomingEvent(e),
         viewerCanSeeDetails: false,
         notes: [],
         timeEntries: [],
@@ -1070,7 +1151,7 @@ export async function getMatterEvents(
       zoomUrl: e.zoomUrl,
       color: e.matter?.color ?? e.color ?? "var(--color-ink-3)",
       attendeeCount: e._count.attendees,
-      isUpcoming: e.endTime.getTime() >= now,
+      isUpcoming: isUpcomingEvent(e),
       viewerCanSeeDetails: true,
       notes: e.notes.map((n) => ({
         id: n.id,
@@ -1165,16 +1246,6 @@ async function shapeDocumentRows(
   }));
 }
 
-export async function getMatterDocuments(
-  matterId: string
-): Promise<DocumentRow[]> {
-  const rows = await prisma.document.findMany({
-    where: { matterId },
-    orderBy: [{ createdAt: "desc" }],
-  });
-  return shapeDocumentRows(rows);
-}
-
 /** Documents directly inside one folder of the matter's tree
  *  (`folderId: null` = the matter root), ordered by name. The
  *  browser shows one folder at a time — this is its file list. */
@@ -1256,7 +1327,7 @@ export type ExpenseSummary = {
    *  billable / billed state). Useful for an "expenses to date" KPI. */
   totalAmount: number;
   /** Sum of billable + un-invoiced rows — the candidate set the next
-   *  invoice will pull from. Mirrors `wipAmount` semantics. */
+   *  invoice will pull from. */
   billableUnbilledAmount: number;
 };
 
@@ -1343,7 +1414,7 @@ export type ActivityRow = {
 /// Cap how many rows the timeline page pulls in one shot. Matters
 /// that age past this number need to switch to the eventual
 /// load-more / paginated viewer.
-const MATTER_ACTIVITY_LIMIT = 200;
+export const MATTER_ACTIVITY_LIMIT = 200;
 
 /** What the viewer may see of money-bearing activity rows. Both
  *  default to false (hidden) so a caller that forgets to resolve the

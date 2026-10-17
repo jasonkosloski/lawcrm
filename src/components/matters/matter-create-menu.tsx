@@ -38,6 +38,7 @@ import {
   MATTER_CREATE_ENTRIES,
   type MatterCreateEntry,
   type MatterCreateGroup,
+  type MatterCreateType,
 } from "@/lib/matter-create-types";
 import { useCreateStack } from "@/components/create-stack/create-stack-provider";
 
@@ -66,14 +67,24 @@ const GROUP_ORDER: MatterCreateGroup[] = [
   "bill",
 ];
 
-export function MatterCreateMenu() {
+export function MatterCreateMenu({
+  allowedTypes,
+}: {
+  /** Entries the viewer may create (resolved server-side from the
+   *  permission each panel's action enforces). Omitted = all. */
+  allowedTypes?: readonly MatterCreateType[];
+} = {}) {
   const { open } = useCreateStack();
 
   const byGroup = new Map<MatterCreateGroup, MatterCreateEntry[]>();
   for (const e of MATTER_CREATE_ENTRIES) {
+    if (allowedTypes && !allowedTypes.includes(e.type)) continue;
     if (!byGroup.has(e.group)) byGroup.set(e.group, []);
     byGroup.get(e.group)!.push(e);
   }
+
+  // Nothing creatable for this viewer — no empty dropdown.
+  if (byGroup.size === 0) return null;
 
   return (
     <DropdownMenu>

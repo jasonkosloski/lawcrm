@@ -20,14 +20,18 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/current-user-tz", () => ({
   getCurrentUserTimeZone: vi.fn(async () => "America/Denver"),
 }));
-vi.mock("@/lib/prisma", () => ({
-  prisma: {
-    matter: { findUnique: vi.fn(async () => ({ id: "m1" })) },
-  },
+vi.mock("@/lib/queries/matters", () => ({
+  getMatterById: vi.fn(async () => ({ id: "m1" })),
 }));
 vi.mock("@/lib/queries/matter-detail", () => ({
+  MATTER_ACTIVITY_LIMIT: 200,
   getMatterActivity: vi.fn(async () => []),
   getMatterActivityTypeCounts: vi.fn(async () => ({})),
+}));
+vi.mock("next/navigation", () => ({
+  notFound: vi.fn(() => {
+    throw new Error("NEXT_NOT_FOUND");
+  }),
 }));
 vi.mock("@/lib/current-user", () => ({ requireUser: vi.fn() }));
 vi.mock("@/lib/permission-check", () => ({
@@ -40,12 +44,13 @@ import {
   getMatterActivity,
   getMatterActivityTypeCounts,
 } from "@/lib/queries/matter-detail";
+import { getMatterById } from "@/lib/queries/matters";
 import MatterTimelinePage, { groupByDay } from "./page";
 
-const renderTimeline = () =>
+const renderTimeline = (sp: Record<string, string | string[]> = {}) =>
   MatterTimelinePage({
     params: Promise.resolve({ id: "m1" }),
-    searchParams: Promise.resolve({}),
+    searchParams: Promise.resolve(sp),
   } as Parameters<typeof MatterTimelinePage>[0]);
 
 describe("MatterTimelinePage — session + money gating", () => {
@@ -90,6 +95,57 @@ describe("MatterTimelinePage — session + money gating", () => {
       canViewSettlement: false,
       canViewExpense: true,
     });
+  });
+});
+
+describe("MatterTimelinePage — ?type= filter", () => {
+  afterEach(() => {
+    vi.mocked(requireUser).mockReset();
+    vi.mocked(currentUserHasPermission).mockReset();
+    vi.mocked(getMatterActivity).mockClear();
+    vi.mocked(getMatterById).mockClear();
+  });
+
+  const typesPassed = (): readonly string[] | undefined =>
+    (vi.mocked(getMatterActivity).mock.calls[0][1] as { types?: string[] })
+      .types;
+
+  it.each(["constructor", "toString", "__proto__", "hasOwnProperty"])(
+    "prototype key ?type=%s falls back to All instead of crashing",
+    async (key) => {
+      vi.mocked(requireUser).mockResolvedValue("u1");
+      vi.mocked(currentUserHasPermission).mockResolvedValue(true);
+      await renderTimeline({ type: key });
+      expect(typesPassed()).toBeUndefined();
+    }
+  );
+
+  it("an unknown ?type= falls back to All", async () => {
+    vi.mocked(requireUser).mockResolvedValue("u1");
+    vi.mocked(currentUserHasPermission).mockResolvedValue(true);
+    await renderTimeline({ type: "nope" });
+    expect(typesPassed()).toBeUndefined();
+  });
+
+  it("known buckets filter, including the Documents and Evidence pills", async () => {
+    vi.mocked(requireUser).mockResolvedValue("u1");
+    vi.mocked(currentUserHasPermission).mockResolvedValue(true);
+    await renderTimeline({ type: "documents" });
+    expect(typesPassed()).toEqual(["document"]);
+    vi.mocked(getMatterActivity).mockClear();
+    await renderTimeline({ type: "evidence" });
+    expect(typesPassed()).toEqual(["evidence"]);
+    vi.mocked(getMatterActivity).mockClear();
+    // The URL key stays `filings` so old shared links keep working.
+    await renderTimeline({ type: "filings" });
+    expect(typesPassed()).toEqual(["filing"]);
+  });
+
+  it("404s a missing matter", async () => {
+    vi.mocked(requireUser).mockResolvedValue("u1");
+    vi.mocked(currentUserHasPermission).mockResolvedValue(true);
+    vi.mocked(getMatterById).mockResolvedValueOnce(null as never);
+    await expect(renderTimeline()).rejects.toThrow("NEXT_NOT_FOUND");
   });
 });
 

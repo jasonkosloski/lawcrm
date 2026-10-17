@@ -14,6 +14,7 @@
 
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { currentUserHasPermission } from "@/lib/permission-check";
 import {
   countMatters,
   listMatters,
@@ -27,6 +28,9 @@ import MattersListPage from "./page";
 vi.mock("@/lib/current-user", () => ({
   requireUser: vi.fn(async () => "user_1"),
 }));
+vi.mock("@/lib/permission-check", () => ({
+  currentUserHasPermission: vi.fn(async () => true),
+}));
 vi.mock("@/lib/prisma", () => ({
   prisma: { matter: { count: vi.fn().mockResolvedValue(0) } },
 }));
@@ -39,7 +43,18 @@ vi.mock("next/link", () => ({
   default: (props: React.ComponentProps<"a">) => <a {...props} />,
 }));
 vi.mock("@/components/layout/topbar", () => ({
-  TopBar: ({ title }: { title: string }) => <div>{title}</div>,
+  TopBar: ({
+    title,
+    actions,
+  }: {
+    title: string;
+    actions?: React.ReactNode;
+  }) => (
+    <div>
+      {title}
+      {actions}
+    </div>
+  ),
 }));
 vi.mock("@/components/ui/button", () => ({
   Button: ({ children }: { children?: React.ReactNode }) => (
@@ -85,6 +100,26 @@ beforeEach(() => {
     stages: [],
     feeStructures: [],
     leads: [],
+  });
+});
+
+describe("New matter button — matters.create gate", () => {
+  beforeEach(() => {
+    listMattersMock.mockResolvedValue([]);
+    countMattersMock.mockResolvedValue(0);
+  });
+
+  test("shown to a viewer holding matters.create", async () => {
+    vi.mocked(currentUserHasPermission).mockResolvedValue(true);
+    await renderPage({});
+    expect(currentUserHasPermission).toHaveBeenCalledWith("matters.create");
+    expect(screen.getByText("New matter")).toBeTruthy();
+  });
+
+  test("hidden from a viewer without it (the form would bounce them to /)", async () => {
+    vi.mocked(currentUserHasPermission).mockResolvedValue(false);
+    await renderPage({});
+    expect(screen.queryByText("New matter")).toBeNull();
   });
 });
 

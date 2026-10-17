@@ -57,7 +57,6 @@ type ClientOption = {
   name: string;
   organization: string | null;
   city: string | null;
-  state: string | null;
 };
 
 export type AreaOption = {

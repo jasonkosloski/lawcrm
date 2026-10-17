@@ -30,6 +30,10 @@ import { CreateDock } from "@/components/create-stack/create-dock";
 import { CreateStackProvider } from "@/components/create-stack/create-stack-provider";
 import { getMatterById } from "@/lib/queries/matters";
 import { currentUserHasPermission } from "@/lib/permission-check";
+import {
+  MATTER_CREATE_ENTRIES,
+  MATTER_CREATE_PERMISSION,
+} from "@/lib/matter-create-types";
 import { requireUser } from "@/lib/current-user";
 
 const FEE_LABEL: Record<string, string> = {
@@ -46,12 +50,26 @@ export default async function MatterDetailLayout({
 }: LayoutProps<"/matters/[id]">) {
   await requireUser();
   const { id } = await params;
-  const [matter, canEditMatter, canManageTeam] = await Promise.all([
-    getMatterById(id),
-    currentUserHasPermission("matters.edit"),
-    currentUserHasPermission("matters.manage_team"),
-  ]);
+  const [matter, canEditMatter, canManageTeam, createFlags] =
+    await Promise.all([
+      getMatterById(id),
+      currentUserHasPermission("matters.edit"),
+      currentUserHasPermission("matters.manage_team"),
+      // Per-entity create keys for the "+ Create" menu (cached per
+      // request, so this is a handful of Set lookups).
+      Promise.all(
+        MATTER_CREATE_ENTRIES.map(async (e) => ({
+          type: e.type,
+          allowed: await currentUserHasPermission(
+            MATTER_CREATE_PERMISSION[e.type]
+          ),
+        }))
+      ),
+    ]);
   if (!matter) notFound();
+  const allowedCreateTypes = createFlags
+    .filter((f) => f.allowed)
+    .map((f) => f.type);
 
   // Active lead only — a former lead shouldn't drive the metadata
   // strip (it'd display a wrong attribution and confuse reads).
@@ -97,7 +115,7 @@ export default async function MatterDetailLayout({
               matterId={matter.id}
               initialPinned={matter.isPinnedByCurrentUser}
             />
-            <MatterCreateMenu />
+            <MatterCreateMenu allowedTypes={allowedCreateTypes} />
           </>
         }
       />
