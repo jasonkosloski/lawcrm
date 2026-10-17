@@ -50,15 +50,23 @@ export async function GET(request: Request): Promise<Response> {
     return Response.json({
       ok: true,
       accounts: results.length,
-      synced: results.filter((r) => r.ok).length,
+      // "skipped" passes (another sync held the account, reconnect
+      // required, deactivated owner) did not sync anything.
+      synced: results.filter((r) => r.ok && r.mode !== "skipped").length,
+      // Poisoned threads skipped this sweep (ids are in the error log
+      // and each account's syncError note).
+      failedThreads: results.reduce((n, r) => n + (r.failedThreads ?? 0), 0),
       // Account ids only — no email addresses in cron logs.
-      results: results.map(({ accountId, ok, mode, threadsSynced, error }) => ({
-        accountId,
-        ok,
-        mode,
-        threadsSynced,
-        ...(error ? { error } : {}),
-      })),
+      results: results.map(
+        ({ accountId, ok, mode, threadsSynced, failedThreads, error }) => ({
+          accountId,
+          ok,
+          mode,
+          threadsSynced,
+          ...(failedThreads ? { failedThreads } : {}),
+          ...(error ? { error } : {}),
+        })
+      ),
       calendar: calendar.map(
         ({ accountId, ok, mode, imported, updated, deletedEvents, unlinked, error }) => ({
           accountId,

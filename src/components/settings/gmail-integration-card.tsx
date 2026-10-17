@@ -58,6 +58,10 @@ const ERROR_COPY: Record<string, string> = {
     "Google didn't complete the authorization. Try connecting again.",
   userinfo:
     "Connected to Google, but the mailbox address couldn't be read. Try connecting again.",
+  scope:
+    "Gmail permissions were not granted, so nothing was connected. Try again and leave every Gmail permission ticked on Google's screen.",
+  save:
+    "Connected to Google, but saving the account failed. Try connecting again in a moment.",
   not_configured:
     "The Google integration isn't configured on this deployment yet.",
 };

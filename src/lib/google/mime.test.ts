@@ -309,8 +309,7 @@ describe("buildMimeMessage", () => {
   });
 
   test("generated boundary (no override) never collides with part content", () => {
-    const { boundary: _drop, ...rest } = baseInput();
-    const msg = buildMimeMessage(rest);
+    const msg = buildMimeMessage(baseInput({ boundary: undefined }));
     const boundary = /boundary="([^"]+)"/.exec(msg)?.[1] ?? "";
     expect(boundary).toMatch(/^=_lawcrm_/);
     // Exactly 2 opening delimiters + 1 terminator.

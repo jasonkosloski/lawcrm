@@ -32,6 +32,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { logActivity } from "@/lib/activity-log";
 import { revokeGoogleToken } from "@/lib/google/oauth";
 import { parseAccessTokenEnvelope } from "@/lib/google/gmail-client";
 
@@ -43,7 +44,12 @@ export async function disconnectEmailAccount(
   // Ownership gate — id + userId, so this both authorizes and loads.
   const account = await prisma.emailAccount.findFirst({
     where: { id: accountId, userId },
-    select: { id: true, accessToken: true, refreshToken: true },
+    select: {
+      id: true,
+      emailAddress: true,
+      accessToken: true,
+      refreshToken: true,
+    },
   });
   if (!account) {
     return { ok: false, error: "Email account not found." };
@@ -68,6 +74,15 @@ export async function disconnectEmailAccount(
       syncStatus: "disconnected",
       syncError: null,
     },
+  });
+
+  // Audit trail — severing a mailbox ends sync, writeback and send
+  // for it. Firm-wide "Security" row (type "auth"); no token material.
+  await logActivity({
+    matterId: null,
+    userId,
+    type: "auth",
+    title: `Disconnected Gmail account ${account.emailAddress}`,
   });
 
   revalidatePath("/settings/integrations");

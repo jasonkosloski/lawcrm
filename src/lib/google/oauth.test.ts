@@ -15,7 +15,9 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  GMAIL_MODIFY_SCOPE,
   GMAIL_SCOPES,
+  GMAIL_SEND_SCOPE,
   GOOGLE_TOKEN_ENDPOINT,
   GoogleOAuthError,
   buildGoogleAuthUrl,
@@ -23,6 +25,7 @@ import {
   exchangeCodeForTokens,
   fetchGoogleUserInfo,
   googleIntegrationConfigured,
+  hasGmailScopes,
   refreshGoogleAccessToken,
   resolveGoogleRedirectUri,
   revokeGoogleToken,
@@ -239,5 +242,39 @@ describe("token endpoint calls (fetch mocked)", () => {
       vi.fn().mockResolvedValue(new Response("", { status: 200 }))
     );
     await expect(revokeGoogleToken("tok")).resolves.toBe(true);
+  });
+});
+
+describe("hasGmailScopes", () => {
+  it("requires BOTH gmail.modify and gmail.send (granular consent can drop either)", () => {
+    expect(hasGmailScopes(GMAIL_SCOPES.join(" "))).toBe(true);
+    expect(hasGmailScopes(null)).toBe(false);
+    expect(hasGmailScopes("openid email")).toBe(false);
+    expect(hasGmailScopes(`openid ${GMAIL_MODIFY_SCOPE}`)).toBe(false);
+    expect(hasGmailScopes(`openid ${GMAIL_SEND_SCOPE}`)).toBe(false);
+    expect(hasGmailScopes(`${GMAIL_MODIFY_SCOPE}   ${GMAIL_SEND_SCOPE}`)).toBe(
+      true
+    );
+  });
+});
+
+describe("OAuth endpoint calls carry a timeout signal", () => {
+  it("token, userinfo and revoke calls abort instead of hanging forever", async () => {
+    const signals: Array<AbortSignal | null | undefined> = [];
+    const fetchMock = vi.fn(
+      async (...args: [RequestInfo | URL, RequestInit?]) => {
+        signals.push(args[1]?.signal);
+        return new Response(
+          JSON.stringify({ access_token: "a", expires_in: 3599, email: "x@y.z" }),
+          { status: 200 }
+        );
+      }
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await refreshGoogleAccessToken("rt");
+    await fetchGoogleUserInfo("tok");
+    await revokeGoogleToken("tok");
+    expect(signals).toHaveLength(3);
+    for (const signal of signals) expect(signal).toBeInstanceOf(AbortSignal);
   });
 });

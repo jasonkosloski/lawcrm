@@ -87,6 +87,14 @@ function assertGoogleApiUrl(url: string): void {
   }
 }
 
+/** Per-request ceiling for Google API calls. Sync loops run accounts
+ *  one after another inside one function invocation, so a hung
+ *  socket must fail (transient, retried next pass) instead of
+ *  stalling every other mailbox until the platform kills the run.
+ *  Generous: large `format=full` threads and attachment fetches are
+ *  slow but bounded. */
+export const GOOGLE_FETCH_TIMEOUT_MS = 60_000;
+
 /** Refresh this long before nominal expiry — covers clock skew and
  *  the lifetime of one long Gmail API call. */
 const EXPIRY_SKEW_MS = 120_000;
@@ -197,7 +205,8 @@ export async function getGmailAccessToken(
   if (!account.refreshToken) {
     // No refresh token = disconnected (or a pre-flow row). Not a
     // Google-side failure, so persist the reconnect hint only if
-    // there was something that LOOKED connected.
+    // there was something that LOOKED connected (markReconnectRequired
+    // leaves a deliberately disconnected row alone).
     await markReconnectRequired(accountId);
     throw new GmailAuthError(RECONNECT_MESSAGE, accountId);
   }
@@ -231,9 +240,12 @@ export async function getGmailAccessToken(
 }
 
 async function markReconnectRequired(accountId: string): Promise<void> {
-  // updateMany: no throw if the row vanished mid-flight.
+  // updateMany: no throw if the row vanished mid-flight. A row the
+  // user deliberately DISCONNECTED stays "disconnected" — a stale
+  // tab firing a sync/backfill at it must not relabel it as a
+  // revoked-authorization error (the throw still stops the caller).
   await prisma.emailAccount.updateMany({
-    where: { id: accountId },
+    where: { id: accountId, syncStatus: { not: "disconnected" } },
     data: { syncStatus: "error", syncError: RECONNECT_MESSAGE },
   });
 }
@@ -269,7 +281,11 @@ export async function gmailFetch(
   const call = async (token: string): Promise<Response> => {
     const headers = new Headers(init?.headers);
     headers.set("authorization", `Bearer ${token}`);
-    return fetch(url, { ...init, headers });
+    return fetch(url, {
+      ...init,
+      headers,
+      signal: init?.signal ?? AbortSignal.timeout(GOOGLE_FETCH_TIMEOUT_MS),
+    });
   };
 
   const first = await call(await getGmailAccessToken(accountId));

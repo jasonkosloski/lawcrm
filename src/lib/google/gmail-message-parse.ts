@@ -269,6 +269,29 @@ function findPartWithData(
   return null;
 }
 
+/** The `charset` parameter of a part's Content-Type header, or null
+ *  when the part declares none (callers then assume UTF-8). */
+function partCharset(part: GmailMessagePart): string | null {
+  const ct = part.headers?.find(
+    (h) => h.name.toLowerCase() === "content-type"
+  )?.value;
+  if (!ct) return null;
+  const m = /charset\s*=\s*(?:"([^"]+)"|([^\s;]+))/i.exec(ct);
+  const charset = (m?.[1] ?? m?.[2])?.trim();
+  return charset ? charset : null;
+}
+
+/** Decode a part's inline body bytes in the charset the part
+ *  declares. Gmail hands over `body.data` as the part's raw bytes
+ *  (after transfer-decoding) WITHOUT transcoding, so a
+ *  windows-1252 / ISO-8859-1 / ISO-2022-JP part read as UTF-8 comes
+ *  out as replacement characters. Absent or unknown charset → UTF-8. */
+function decodePartBody(part: GmailMessagePart): string {
+  const bytes = Buffer.from(part.body?.data ?? "", "base64url");
+  const charset = partCharset(part);
+  return charset ? decodeCharset(bytes, charset) : bytes.toString("utf8");
+}
+
 /**
  * Extract the display body from a message payload as UNSANITIZED
  * HTML. Preference order:
@@ -282,9 +305,9 @@ function findPartWithData(
  */
 export function extractBodyHtml(payload: GmailMessagePart | undefined): string {
   const html = findPartWithData(payload, "text/html");
-  if (html?.body?.data) return decodeBase64Url(html.body.data);
+  if (html?.body?.data) return decodePartBody(html);
   const plain = findPartWithData(payload, "text/plain");
-  if (plain?.body?.data) return textToHtml(decodeBase64Url(plain.body.data));
+  if (plain?.body?.data) return textToHtml(decodePartBody(plain));
   return "";
 }
 

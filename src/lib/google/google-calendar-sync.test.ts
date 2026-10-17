@@ -1011,3 +1011,58 @@ describe("deactivated owners (F071/F348)", () => {
     expect(results.map((r) => r.accountId)).toEqual([accountId]);
   });
 });
+
+describe("all-day events are date-only (ADR-012, F695/F941)", () => {
+  it("imports a multi-day all-day event at exact UTC midnights across a DST change", async () => {
+    const accountId = await seedAccount();
+    mockedFetch.mockResolvedValueOnce(
+      listResponse({
+        items: [
+          gEvent({
+            id: "g-allday",
+            summary: "CLE conference",
+            start: { date: "2026-03-08" },
+            end: { date: "2026-03-10" }, // exclusive
+          }),
+        ],
+        nextSyncToken: "st-d",
+      })
+    );
+    await pullCalendarForAccount(accountId);
+    const event = await prisma.calendarEvent.findFirstOrThrow({
+      where: { title: "CLE conference" },
+    });
+    expect(event.isAllDay).toBe(true);
+    expect(event.startTime.toISOString()).toBe("2026-03-08T00:00:00.000Z");
+    expect(event.endTime.toISOString()).toBe("2026-03-09T00:00:00.000Z");
+  });
+});
+
+describe("concurrent import race (F728)", () => {
+  it("a Google-born event already imported by an overlapping pull is not a failure", async () => {
+    const accountId = await seedAccount();
+    mockedFetch.mockImplementation(async () =>
+      listResponse({
+        items: [gEvent({ id: "g-race", summary: "Raced" })],
+        nextSyncToken: "st-r",
+      })
+    );
+    // Simulate the winner: the mapping lookup (first findUnique in
+    // applyGoogleEvent) misses even though the other pass has since
+    // created the import, so this pass's create trips the unique.
+    await pullCalendarForAccount(accountId);
+    expect(await prisma.calendarEvent.count({ where: { title: "Raced" } })).toBe(1);
+
+    const spy = vi
+      .spyOn(prisma.calendarEventSync, "findUnique")
+      .mockResolvedValueOnce(null);
+    const res = await pullCalendarForAccount(accountId);
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+
+    expect(res.ok).toBe(true);
+    expect(res.failed).toBe(0);
+    expect(res.imported).toBe(0);
+    expect(await prisma.calendarEvent.count({ where: { title: "Raced" } })).toBe(1);
+  });
+});

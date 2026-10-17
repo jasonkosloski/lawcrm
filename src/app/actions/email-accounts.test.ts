@@ -72,7 +72,8 @@ afterEach(() => {
 
 function stubRevoke(response: () => Promise<Response>) {
   const fetchMock = vi.fn(
-    async (input: RequestInfo | URL, _init?: RequestInit) => {
+    async (...args: [input: RequestInfo | URL, init?: RequestInit]) => {
+      const [input] = args;
       expect(String(input)).toBe(GOOGLE_REVOKE_ENDPOINT);
       return response();
     }
@@ -111,6 +112,13 @@ describe("disconnectEmailAccount", () => {
 
     // Threads are firm records — they survive the disconnect.
     expect(await prisma.emailThread.count({ where: { accountId } })).toBe(1);
+
+    // Audited as a firm-wide security row — address only, no tokens.
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { userId: ownerId, type: "auth" },
+    });
+    expect(log.title).toBe("Disconnected Gmail account owner@gmail.com");
+    expect(JSON.stringify(log)).not.toMatch(/1\/\/refresh|ya29/);
   });
 
   it("non-owner: 'not found', row untouched — even for a firm colleague", async () => {

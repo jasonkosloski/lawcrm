@@ -26,6 +26,13 @@
  *  - **No attendees, ever.** eventToGoogleResource never emits
  *    them — see calendar-shared.ts for why (Google auto-emails
  *    invites on the owner's behalf).
+ *  - **Idempotent insert.** The POST carries a deterministic
+ *    Google event id derived from the CRM event id
+ *    (`googleEventIdFor`). If Google created the event but the
+ *    mapping write then failed (or two first pushes raced), the
+ *    retry gets a 409 "already exists" and PATCHes that same id
+ *    (`status: confirmed`, which also revives a copy cancelled at
+ *    Google) instead of minting a duplicate.
  *  - **Insert vs patch by mapping.** No CalendarEventSync row for
  *    the chosen account → POST (insert) and record the mapping.
  *    Row exists → PATCH events/{googleEventId}. This is also how a
@@ -68,6 +75,7 @@ import { GmailAuthError, gmailFetch } from "@/lib/google/gmail-client";
 import {
   CALENDAR_API_BASE,
   eventToGoogleResource,
+  googleEventIdFor,
   hasCalendarScope,
 } from "@/lib/google/calendar-shared";
 
@@ -197,10 +205,24 @@ export async function pushEventToGoogle(eventId: string): Promise<void> {
         return;
       }
     } else {
+      // Client-supplied deterministic id → the insert is idempotent
+      // (see the module docstring). 409 = that id already exists on
+      // Google (a previous insert whose mapping write was lost, a
+      // concurrent first push, or a copy cancelled there): adopt it
+      // with a PATCH instead of creating a second copy.
+      const googleId = googleEventIdFor(eventId);
       res = await gmailFetch(target.id, insertUrl("primary"), {
         ...init,
+        body: JSON.stringify({ ...resource, id: googleId }),
         method: "POST",
       });
+      if (res.status === 409) {
+        res = await gmailFetch(target.id, eventUrl("primary", googleId), {
+          ...init,
+          body: JSON.stringify({ ...resource, status: "confirmed" }),
+          method: "PATCH",
+        });
+      }
     }
     if (!res.ok) {
       throw new CalendarPushError(

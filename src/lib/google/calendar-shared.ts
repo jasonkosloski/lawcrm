@@ -22,6 +22,7 @@
  */
 
 import { stripNul } from "@/lib/google/strip-nul";
+import { addDaysToKey, dateOnlyKey, parseDateOnly } from "@/lib/format-date";
 
 export const CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3";
 
@@ -62,23 +63,31 @@ export type CrmEventFields = {
   isAllDay: boolean;
 };
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** "YYYY-MM-DD" of a Date's LOCAL calendar day — all-day events
- *  follow the repo's date-only convention (local midnight, see
- *  ADR-012), so local components are the intended day. */
-function localDateKey(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-/** Parse a Google all-day "date" (YYYY-MM-DD) to local midnight —
- *  same convention as parseLocalDate. */
-function parseGoogleDate(key: string): Date {
-  const [y, m, d] = key.split("-").map(Number) as [number, number, number];
-  return new Date(y, m - 1, d);
+/**
+ * Deterministic Google event id for a CRM event, used on INSERT so a
+ * retried/lost insert is idempotent (Google answers 409 for an id
+ * that already exists instead of minting a duplicate). Google ids
+ * must be 5-1024 chars of lowercase base32hex (a-v, 0-9); a CRM id
+ * (cuid: a-z0-9) is not itself valid (w-z), so the id's UTF-8 bytes
+ * are base32hex-encoded (no padding).
+ */
+export function googleEventIdFor(crmEventId: string): string {
+  const alphabet = "0123456789abcdefghijklmnopqrstuv";
+  let bits = 0;
+  let value = 0;
+  let out = "";
+  for (const byte of Buffer.from(crmEventId, "utf8")) {
+    value = (value << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      out += alphabet[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+    value &= (1 << bits) - 1;
+  }
+  if (bits > 0) out += alphabet[(value << (5 - bits)) & 31];
+  // Google's minimum is 5 characters; any real CRM id is far longer.
+  return out.padEnd(5, "0");
 }
 
 /**
@@ -86,8 +95,11 @@ function parseGoogleDate(key: string): Date {
  *
  * All-day mapping: Google's all-day `end.date` is EXCLUSIVE (a
  * one-day event on the 5th is start 5th / end 6th). The CRM stores
- * all-day events as local-midnight instants on the day(s) they
- * cover with an INCLUSIVE end, so push adds a day.
+ * all-day events as date-only values (UTC midnight, ADR-012) on the
+ * day(s) they cover with an INCLUSIVE end, so push adds a day — in
+ * day-key arithmetic, which has no DST days. Rows written before
+ * ADR-012 was revised sit at server-local midnight; those still
+ * read as the right UTC day.
  */
 export function eventToGoogleResource(
   event: CrmEventFields & { id: string; zoomUrl?: string | null }
@@ -113,12 +125,10 @@ export function eventToGoogleResource(
     description: descriptionParts.join("\n\n"),
     location: event.location ?? "",
     start: event.isAllDay
-      ? { date: localDateKey(event.startTime) }
+      ? { date: dateOnlyKey(event.startTime) }
       : { dateTime: event.startTime.toISOString() },
     end: event.isAllDay
-      ? {
-          date: localDateKey(new Date(event.endTime.getTime() + DAY_MS)),
-        }
+      ? { date: addDaysToKey(dateOnlyKey(event.endTime), 1) }
       : { dateTime: event.endTime.toISOString() },
     extendedProperties: { private: { [LAWCRM_MARKER_KEY]: event.id } },
   };
@@ -130,7 +140,8 @@ export function eventToGoogleResource(
  * missing times = malformed).
  *
  * All-day: Google's exclusive end.date maps back to the CRM's
- * inclusive end (minus one day), both at local midnight.
+ * inclusive end (minus one day), both date-only (UTC midnight).
+ * A malformed `date` makes the resource unmappable (null).
  */
 export function googleEventToCrmFields(
   g: GoogleEventResource
@@ -143,8 +154,14 @@ export function googleEventToCrmFields(
   let startTime: Date;
   let endTime: Date;
   if (isAllDay) {
-    startTime = parseGoogleDate(g.start!.date!);
-    endTime = new Date(parseGoogleDate(g.end!.date!).getTime() - DAY_MS);
+    const start = parseDateOnly(g.start!.date!);
+    const endExclusive = g.end?.date ? parseDateOnly(g.end.date) : null;
+    if (!start || !endExclusive) return null;
+    const inclusiveEnd = parseDateOnly(
+      addDaysToKey(dateOnlyKey(endExclusive), -1)
+    );
+    startTime = start;
+    endTime = inclusiveEnd ?? start;
     if (endTime.getTime() < startTime.getTime()) endTime = startTime;
   } else {
     startTime = new Date(startRaw);

@@ -108,6 +108,31 @@ describe("GET /api/email-sync", () => {
     expect(mockedCalendarPull).toHaveBeenCalledOnce();
   });
 
+  it("does not count skipped passes as synced, and reports skipped-thread counts", async () => {
+    process.env.CRON_SECRET = "s3cret";
+    mockedSync.mockResolvedValue([
+      {
+        accountId: "acc1",
+        emailAddress: "a@gmail.com",
+        ok: true,
+        mode: "incremental",
+        threadsSynced: 2,
+        failedThreads: 1,
+      },
+      {
+        accountId: "acc2",
+        emailAddress: "b@gmail.com",
+        ok: true,
+        mode: "skipped",
+        threadsSynced: 0,
+      },
+    ]);
+    const body = await (await GET(request("Bearer s3cret"))).json();
+    expect(body).toMatchObject({ accounts: 2, synced: 1, failedThreads: 1 });
+    expect(body.results[0]).toMatchObject({ accountId: "acc1", failedThreads: 1 });
+    expect(body.results[1]).not.toHaveProperty("failedThreads");
+  });
+
   it("a wholesale calendar-pull failure never fails the mail sweep", async () => {
     process.env.CRON_SECRET = "s3cret";
     mockedCalendarPull.mockRejectedValue(new Error("calendar infra down"));

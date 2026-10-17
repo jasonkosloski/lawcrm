@@ -3,6 +3,7 @@ import {
   CALENDAR_EVENTS_SCOPE,
   LAWCRM_MARKER_KEY,
   eventToGoogleResource,
+  googleEventIdFor,
   googleEventToCrmFields,
   hasCalendarScope,
   lawcrmIdOf,
@@ -54,13 +55,46 @@ describe("eventToGoogleResource", () => {
   test("all-day event uses date fields with EXCLUSIVE end (+1 day)", () => {
     const g = eventToGoogleResource({
       ...base,
-      // Local midnights per the repo's date-only convention.
-      startTime: new Date(2026, 7, 10),
-      endTime: new Date(2026, 7, 10),
+      // UTC midnights per the date-only convention (ADR-012).
+      startTime: new Date("2026-08-10T00:00:00.000Z"),
+      endTime: new Date("2026-08-10T00:00:00.000Z"),
       isAllDay: true,
     });
     expect(g.start).toEqual({ date: "2026-08-10" });
     expect(g.end).toEqual({ date: "2026-08-11" });
+  });
+
+  test("all-day push reads the stored UTC day on any server zone, incl. legacy Denver-midnight rows and DST days (F695/F941)", () => {
+    // Fall-back day (25 h in Denver): local-getter / +24h math gave
+    // end.date == start.date (a zero-length event Google rejects).
+    const fallBack = eventToGoogleResource({
+      ...base,
+      startTime: new Date("2026-11-01T00:00:00.000Z"),
+      endTime: new Date("2026-11-01T00:00:00.000Z"),
+      isAllDay: true,
+    });
+    expect(fallBack.start).toEqual({ date: "2026-11-01" });
+    expect(fallBack.end).toEqual({ date: "2026-11-02" });
+
+    // Legacy row written by parseLocalDate on a Denver laptop: local
+    // midnight = 06:00Z/07:00Z, still the right UTC day.
+    const legacy = eventToGoogleResource({
+      ...base,
+      startTime: new Date("2026-03-08T07:00:00.000Z"),
+      endTime: new Date("2026-03-09T06:00:00.000Z"),
+      isAllDay: true,
+    });
+    expect(legacy.start).toEqual({ date: "2026-03-08" });
+    expect(legacy.end).toEqual({ date: "2026-03-10" });
+
+    // Month / year rollover.
+    const rollover = eventToGoogleResource({
+      ...base,
+      startTime: new Date("2026-12-31T00:00:00.000Z"),
+      endTime: new Date("2026-12-31T00:00:00.000Z"),
+      isAllDay: true,
+    });
+    expect(rollover.end).toEqual({ date: "2027-01-01" });
   });
 
   test("zoom URL folds into the description; empty description/location are sent as '' so a PATCH clears them", () => {
@@ -137,8 +171,59 @@ describe("googleEventToCrmFields", () => {
       end: { date: "2026-08-12" }, // exclusive → covers 10th + 11th
     })!;
     expect(fields.isAllDay).toBe(true);
-    expect(fields.startTime.getTime()).toBe(new Date(2026, 7, 10).getTime());
-    expect(fields.endTime.getTime()).toBe(new Date(2026, 7, 11).getTime());
+    expect(fields.startTime.toISOString()).toBe("2026-08-10T00:00:00.000Z");
+    expect(fields.endTime.toISOString()).toBe("2026-08-11T00:00:00.000Z");
+  });
+
+  test("all-day pull across DST transitions stays on exact UTC-midnight days (F695/F941)", () => {
+    // Spring-forward: a 2-day event 03-08..03-09 (exclusive end 03-10).
+    const spring = googleEventToCrmFields({
+      summary: "x",
+      start: { date: "2026-03-08" },
+      end: { date: "2026-03-10" },
+    })!;
+    expect(spring.startTime.toISOString()).toBe("2026-03-08T00:00:00.000Z");
+    expect(spring.endTime.toISOString()).toBe("2026-03-09T00:00:00.000Z");
+    // Fall-back day, single day.
+    const fall = googleEventToCrmFields({
+      summary: "x",
+      start: { date: "2026-11-01" },
+      end: { date: "2026-11-02" },
+    })!;
+    expect(fall.startTime.toISOString()).toBe("2026-11-01T00:00:00.000Z");
+    expect(fall.endTime.toISOString()).toBe("2026-11-01T00:00:00.000Z");
+  });
+
+  test("all-day push -> pull round-trips the same days", () => {
+    const pushed = eventToGoogleResource({
+      id: "e",
+      title: "t",
+      description: null,
+      location: null,
+      startTime: new Date("2026-11-01T00:00:00.000Z"),
+      endTime: new Date("2026-11-03T00:00:00.000Z"),
+      isAllDay: true,
+    });
+    const back = googleEventToCrmFields(pushed)!;
+    expect(back.startTime.toISOString()).toBe("2026-11-01T00:00:00.000Z");
+    expect(back.endTime.toISOString()).toBe("2026-11-03T00:00:00.000Z");
+  });
+
+  test("a malformed all-day date makes the resource unmappable instead of an Invalid Date", () => {
+    expect(
+      googleEventToCrmFields({
+        summary: "x",
+        start: { date: "2026-02-31" },
+        end: { date: "2026-03-01" },
+      })
+    ).toBeNull();
+    expect(
+      googleEventToCrmFields({
+        summary: "x",
+        start: { date: "garbage" },
+        end: { date: "2026-03-01" },
+      })
+    ).toBeNull();
   });
 
   test("single all-day day never produces end < start", () => {
@@ -165,6 +250,22 @@ describe("googleEventToCrmFields", () => {
         end: { dateTime: "2026-08-10T16:00:00Z" },
       })
     ).toBeNull();
+  });
+});
+
+describe("googleEventIdFor", () => {
+  test("is deterministic, lowercase base32hex (a-v0-9) and 5-1024 chars", () => {
+    const id = googleEventIdFor("cmgx7k2a90000abcdwxyz12345");
+    expect(id).toBe(googleEventIdFor("cmgx7k2a90000abcdwxyz12345"));
+    expect(id).toMatch(/^[a-v0-9]{5,1024}$/);
+    expect(googleEventIdFor("a")).toMatch(/^[a-v0-9]{5,}$/);
+  });
+  test("distinct CRM ids map to distinct Google ids (incl. the w-z characters base32hex lacks)", () => {
+    expect(googleEventIdFor("abcxyz")).not.toBe(googleEventIdFor("abcxyw"));
+  });
+  test("matches the RFC 4648 base32hex vector for 'foobar'", () => {
+    // RFC 4648 test vector: BASE32-HEX("foobar") = CPNMUOJ1E8======
+    expect(googleEventIdFor("foobar")).toBe("cpnmuoj1e8");
   });
 });
 

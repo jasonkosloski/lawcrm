@@ -41,6 +41,68 @@ describe("decodeBase64Url", () => {
   });
 });
 
+describe("extractBodyHtml — part charsets (F256)", () => {
+  const part = (
+    mimeType: string,
+    bytes: Buffer,
+    contentType?: string
+  ): GmailMessagePart => ({
+    mimeType,
+    ...(contentType
+      ? { headers: [{ name: "Content-Type", value: contentType }] }
+      : {}),
+    body: { data: bytes.toString("base64url") },
+  });
+
+  it("decodes a windows-1252 text/plain part (café, smart quotes, §)", () => {
+    // 0xE9 = é, 0x93/0x94 = curly quotes, 0xA7 = § in windows-1252.
+    const bytes = Buffer.from([
+      0x63, 0x61, 0x66, 0xe9, 0x20, 0x93, 0x71, 0x94, 0x20, 0xa7, 0x20, 0x31,
+    ]);
+    const html = extractBodyHtml(
+      part("text/plain", bytes, 'text/plain; charset="windows-1252"')
+    );
+    expect(html).toBe("<p>café \u201cq\u201d § 1</p>");
+    expect(html).not.toContain("\ufffd");
+  });
+
+  it("decodes an ISO-8859-1 text/html part (header name matched case-insensitively)", () => {
+    const bytes = Buffer.from("<p>Se\xf1or</p>", "latin1");
+    const html = extractBodyHtml({
+      mimeType: "text/html",
+      headers: [{ name: "content-TYPE", value: "text/html; Charset=ISO-8859-1" }],
+      body: { data: bytes.toString("base64url") },
+    });
+    expect(html).toBe("<p>Señor</p>");
+  });
+
+  it("keeps UTF-8 as the default with no header, a utf-8 header, or an unknown charset", () => {
+    const utf8 = Buffer.from("<p>José ✓</p>", "utf8");
+    expect(extractBodyHtml(part("text/html", utf8))).toBe("<p>José ✓</p>");
+    expect(
+      extractBodyHtml(part("text/html", utf8, "text/html; charset=utf-8"))
+    ).toBe("<p>José ✓</p>");
+    // Unknown charset label: decodeCharset falls back to UTF-8.
+    expect(
+      extractBodyHtml(part("text/html", utf8, "text/html; charset=x-bogus-9"))
+    ).toBe("<p>José ✓</p>");
+  });
+
+  it("reads the charset from a nested part inside multipart/alternative", () => {
+    const payload: GmailMessagePart = {
+      mimeType: "multipart/alternative",
+      parts: [
+        part(
+          "text/plain",
+          Buffer.from("caf\xe9", "latin1"),
+          "text/plain; charset=iso-8859-1"
+        ),
+      ],
+    };
+    expect(extractBodyHtml(payload)).toBe("<p>café</p>");
+  });
+});
+
 describe("decodeMimeWords", () => {
   it("decodes a UTF-8 B-encoded word", () => {
     expect(

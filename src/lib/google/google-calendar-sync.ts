@@ -543,28 +543,37 @@ async function applyGoogleEvent(
   // Unmarked + unmapped = Google-born → import as a personal event.
   // DIRECT prisma create (not createCalendarEvent) — see the echo-
   // safety note in the module docstring.
-  await prisma.calendarEvent.create({
-    data: {
-      createdById: account.userId,
-      visibility: "default",
-      type: "meeting",
-      matterId: null,
-      title: fields.title,
-      description: fields.description,
-      location: fields.location,
-      startTime: fields.startTime,
-      endTime: fields.endTime,
-      isAllDay: fields.isAllDay,
-      googleSyncs: {
-        create: {
-          accountId: account.id,
-          googleEventId: item.id,
-          googleUpdatedAt,
+  try {
+    await prisma.calendarEvent.create({
+      data: {
+        createdById: account.userId,
+        visibility: "default",
+        type: "meeting",
+        matterId: null,
+        title: fields.title,
+        description: fields.description,
+        location: fields.location,
+        startTime: fields.startTime,
+        endTime: fields.endTime,
+        isAllDay: fields.isAllDay,
+        googleSyncs: {
+          create: {
+            accountId: account.id,
+            googleEventId: item.id,
+            googleUpdatedAt,
+          },
         },
       },
-    },
-  });
-  counters.imported++;
+    });
+    counters.imported++;
+  } catch (err) {
+    // Two overlapping pulls (cron vs "Sync now") both saw this Google
+    // event unmapped; the loser trips @@unique([accountId,
+    // googleEventId]) and the nested create rolled back whole — so
+    // the winner's row is the import. Not a failure.
+    if ((err as { code?: string } | null)?.code === "P2002") return;
+    throw err;
+  }
 }
 
 /** Overwrite the CRM row from Google ONLY when Google's `updated`

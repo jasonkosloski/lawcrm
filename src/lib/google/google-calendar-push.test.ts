@@ -33,6 +33,7 @@ import {
   CALENDAR_API_BASE,
   CALENDAR_EVENTS_SCOPE,
   LAWCRM_MARKER_KEY,
+  googleEventIdFor,
 } from "@/lib/google/calendar-shared";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 import {
@@ -288,6 +289,49 @@ describe("pushEventToGoogle — insert vs patch + mapping upsert", () => {
     expect(mapping.googleCalendarId).toBe("primary");
     expect(mapping.googleUpdatedAt?.toISOString()).toBe(
       "2026-08-02T09:30:00.000Z"
+    );
+  });
+
+  test("insert sends a deterministic Google event id (idempotent create, F698)", async () => {
+    await seedGoogleAccount();
+    const eventId = await seedEvent();
+    mockedFetch.mockResolvedValue(googleOk());
+
+    await pushEventToGoogle(eventId);
+
+    const init = mockedFetch.mock.calls[0][2];
+    const body = JSON.parse(String(init?.body));
+    expect(body.id).toBe(googleEventIdFor(eventId));
+    expect(body.id).toMatch(/^[a-v0-9]{5,}$/);
+  });
+
+  test("insert hitting 409 (earlier insert whose mapping write was lost) PATCHes that same id instead of duplicating (F698)", async () => {
+    const accountId = await seedGoogleAccount();
+    const eventId = await seedEvent();
+    const googleId = googleEventIdFor(eventId);
+    mockedFetch
+      .mockResolvedValueOnce(new Response("{}", { status: 409 }))
+      .mockResolvedValueOnce(
+        googleOk({ id: googleId, updated: "2026-08-04T10:00:00.000Z" })
+      );
+
+    await pushEventToGoogle(eventId);
+
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    const [, patchUrl, patchInit] = mockedFetch.mock.calls[1];
+    expect(patchUrl).toBe(
+      `${CALENDAR_API_BASE}/calendars/primary/events/${googleId}`
+    );
+    expect(patchInit?.method).toBe("PATCH");
+    // status:confirmed revives a copy cancelled at Google.
+    expect(JSON.parse(String(patchInit?.body)).status).toBe("confirmed");
+
+    const mapping = await prisma.calendarEventSync.findUniqueOrThrow({
+      where: { eventId_accountId: { eventId, accountId } },
+    });
+    expect(mapping.googleEventId).toBe(googleId);
+    expect(mapping.googleUpdatedAt?.toISOString()).toBe(
+      "2026-08-04T10:00:00.000Z"
     );
   });
 

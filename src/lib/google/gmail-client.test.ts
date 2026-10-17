@@ -214,11 +214,29 @@ describe("getGmailAccessToken", () => {
     expect(row.syncError).toBeNull();
   });
 
-  it("no refresh token (disconnected row): marks reconnect-required and throws", async () => {
+  it("no refresh token on a DISCONNECTED row: throws but stays disconnected (F691)", async () => {
     const accountId = await seedAccount({
       accessToken: null,
       refreshToken: null,
       syncStatus: "disconnected",
+    });
+    await expect(getGmailAccessToken(accountId)).rejects.toBeInstanceOf(
+      GmailAuthError
+    );
+    const row = await prisma.emailAccount.findUniqueOrThrow({
+      where: { id: accountId },
+    });
+    // A stale tab hitting a disconnected mailbox must not relabel it
+    // as a revoked-authorization error.
+    expect(row.syncStatus).toBe("disconnected");
+    expect(row.syncError).toBeNull();
+  });
+
+  it("no refresh token on a row that LOOKED connected: marks reconnect-required and throws", async () => {
+    const accountId = await seedAccount({
+      accessToken: null,
+      refreshToken: null,
+      syncStatus: "connected",
     });
     await expect(getGmailAccessToken(accountId)).rejects.toBeInstanceOf(
       GmailAuthError
@@ -260,6 +278,27 @@ describe("gmailFetch", () => {
     );
     expect(res.status).toBe(200);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives every request a timeout signal so a hung socket cannot stall the sweep (F728)", async () => {
+    let seen: AbortSignal | null | undefined;
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      seen = init?.signal;
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const accountId = await seedAccount({
+      accessToken: fresh(),
+      refreshToken: "1//rt",
+    });
+    await gmailFetch(accountId, "/users/me/profile");
+    expect(seen).toBeInstanceOf(AbortSignal);
+    expect(seen?.aborted).toBe(false);
+
+    // A caller-supplied signal wins.
+    const own = new AbortController();
+    await gmailFetch(accountId, "/users/me/profile", { signal: own.signal });
+    expect(seen).toBe(own.signal);
   });
 
   it("retries exactly once after a forced refresh on 401", async () => {

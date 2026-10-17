@@ -57,6 +57,19 @@
  *     bytes are stripped from every persisted string; one thread whose
  *     import throws is logged + skipped (surfaced via syncError) so it
  *     can't wedge the mailbox. Deactivated owners' accounts don't sync.
+ *   - SPAM / TRASH: history.list reports changes on every label, so an
+ *     incremental pass sees junk the full sync's thread list hides. A
+ *     thread whose every message is SPAM/TRASH is never IMPORTED, and an
+ *     already-local one is kept (filed mail is a firm record) but forced
+ *     read + archived so it can't inflate unread counts. A restore
+ *     (labelsAdded INBOX) arrives as a history record and imports
+ *     normally.
+ *   - Per-account claim: `syncEmailAccount` claims the account with a
+ *     compare-and-set on syncStatus (a stale claim expires after
+ *     `SYNC_CLAIM_STALE_MS`), so the cron, "Sync now", the page kick and
+ *     a long first import don't run the same mailbox twice; the loser
+ *     returns mode "skipped". Message inserts also tolerate the unique
+ *     race (P2002 → update) for the backfill, which isn't claimed.
  *
  * Idempotency: threads upsert on the (accountId, externalId) unique,
  * messages on (threadId, externalId) — re-running any sync is safe.
@@ -142,6 +155,10 @@ export const BACKFILL_MAX_THREADS = 200;
  *  catch-up must close the whole gap, since "Load older emails" only
  *  walks BELOW the oldest local thread and can never reach it. */
 export const CATCHUP_MAX_THREADS = 1000;
+/** A "syncing" claim older than this is treated as a crashed run and
+ *  may be re-claimed. Above the 300 s function ceiling so a live run
+ *  is never stolen from. */
+export const SYNC_CLAIM_STALE_MS = 10 * 60 * 1000;
 /** Gmail history.list page size (500 is the API max). */
 const HISTORY_PAGE_SIZE = 500;
 /** Gmail threads.list page size during a full sync. */
@@ -164,10 +181,15 @@ export type AccountSyncResult = {
   emailAddress: string;
   ok: boolean;
   /** "skipped" = never completed a pass (pre-skipped reconnect-
-   *  required account, or a transient failure caught by a wrapper). */
+   *  required account, a transient failure caught by a wrapper, or
+   *  another sync already holds the account — `ok` stays true then). */
   mode: "incremental" | "full" | "skipped";
   /** Threads written this pass (created or refreshed). */
   threadsSynced: number;
+  /** Threads whose import threw and were skipped this pass (ids are
+   *  logged at error level at the catch site and noted on syncError).
+   *  Surfaced so the cron response can report them. */
+  failedThreads?: number;
   error?: string;
 };
 
@@ -265,11 +287,25 @@ export async function syncEmailAccount(
       historyId: true,
       lastSyncAt: true,
       syncStatus: true,
+      refreshToken: true,
       user: { select: { isActive: true } },
     },
   });
   if (!account) {
     throw new GmailSyncError("Email account not found.");
+  }
+  if (!account.refreshToken) {
+    // Disconnected (credentials cleared): nothing to sync with, and
+    // the deliberate "disconnected" status must survive — never claim,
+    // never relabel it.
+    return {
+      accountId,
+      emailAddress: account.emailAddress,
+      ok: false,
+      mode: "skipped",
+      threadsSynced: 0,
+      error: "Mailbox is disconnected.",
+    };
   }
   if (!account.user.isActive) {
     // A deactivated member's mailbox stops syncing everywhere (cron
@@ -286,10 +322,35 @@ export async function syncEmailAccount(
   }
   const priorStatus =
     account.syncStatus === "syncing" ? "connected" : account.syncStatus;
-  await prisma.emailAccount.update({
-    where: { id: accountId },
+  // Claim the account atomically. Another pass already syncing it
+  // (cron vs "Sync now" vs the page kick) means this one has nothing
+  // to add — the second pass would redo the same work and race the
+  // message inserts. A claim older than SYNC_CLAIM_STALE_MS is a
+  // crashed run and is taken over. The claim also requires a refresh
+  // token and a non-"disconnected" status, so a disconnect landing
+  // between the caller's account listing and this claim is not
+  // stomped back to "syncing".
+  const claim = await prisma.emailAccount.updateMany({
+    where: {
+      id: accountId,
+      refreshToken: { not: null },
+      syncStatus: { not: "disconnected" },
+      OR: [
+        { syncStatus: { not: "syncing" } },
+        { updatedAt: { lt: new Date(Date.now() - SYNC_CLAIM_STALE_MS) } },
+      ],
+    },
     data: { syncStatus: "syncing" },
   });
+  if (claim.count === 0) {
+    return {
+      accountId,
+      emailAddress: account.emailAddress,
+      ok: true,
+      mode: "skipped",
+      threadsSynced: 0,
+    };
+  }
 
   let mode: "incremental" | "full" = account.historyId
     ? "incremental"
@@ -327,8 +388,14 @@ export async function syncEmailAccount(
     const threadsIndexed = await prisma.emailThread.count({
       where: { accountId },
     });
-    await prisma.emailAccount.update({
-      where: { id: accountId },
+    // Guarded: a disconnect during a long pass (token cleared, status
+    // "disconnected") must not be resurrected as "connected".
+    await prisma.emailAccount.updateMany({
+      where: {
+        id: accountId,
+        refreshToken: { not: null },
+        syncStatus: { not: "disconnected" },
+      },
       data: {
         syncStatus: "connected",
         // Skipped threads and a truncated catch-up stay visible
@@ -352,13 +419,15 @@ export async function syncEmailAccount(
       ok: true,
       mode,
       threadsSynced: outcome.threadsSynced,
+      failedThreads: outcome.failedThreads,
     };
   } catch (err) {
     if (err instanceof GmailAuthError) {
       // Reconnect required — gmail-client usually already flipped the
-      // account; make it unconditional (belt + braces) and STOP.
+      // account; make it unconditional (belt + braces) and STOP. Never
+      // relabel a deliberately disconnected mailbox.
       await prisma.emailAccount.updateMany({
-        where: { id: accountId },
+        where: { id: accountId, syncStatus: { not: "disconnected" } },
         data: { syncStatus: "error", syncError: err.message },
       });
       return {
@@ -375,7 +444,7 @@ export async function syncEmailAccount(
     const message =
       err instanceof Error && err.message ? err.message : "Sync failed.";
     await prisma.emailAccount.updateMany({
-      where: { id: accountId },
+      where: { id: accountId, syncStatus: { not: "disconnected" } },
       data: { syncStatus: priorStatus, syncError: `Last sync failed: ${message}` },
     });
     throw err;
@@ -677,8 +746,10 @@ export async function backfillEmailAccount(
     return await finishBackfill(account, threadsSynced, before);
   } catch (err) {
     if (err instanceof GmailAuthError) {
+      // Never relabel a deliberately disconnected mailbox (a
+      // disconnect can land mid-pass).
       await prisma.emailAccount.updateMany({
-        where: { id: accountId },
+        where: { id: accountId, syncStatus: { not: "disconnected" } },
         data: { syncStatus: "error", syncError: err.message },
       });
       return {
@@ -782,7 +853,13 @@ async function isThreadUnchanged(
   });
   if (!local) return false;
   const lastMs = Math.max(...messages.map((m) => Number(m.internalDate ?? 0)));
-  const flags = threadFlags(messages);
+  // Mirror upsertThread's junk handling so a junk-forced-read local
+  // copy doesn't re-fetch on every catch-up pass.
+  const isJunk = (m: GmailMessage): boolean =>
+    (m.labelIds ?? []).some((l) => l === "SPAM" || l === "TRASH");
+  const flags = messages.every(isJunk)
+    ? { ...threadFlags(messages), isRead: true, isArchived: true }
+    : threadFlags(messages.filter((m) => !isJunk(m)));
   return (
     local.messageCount === messages.length &&
     local.lastMessageAt.getTime() === lastMs &&
@@ -901,6 +978,20 @@ export async function upsertThread(
   const first = messages[0];
   const last = messages[messages.length - 1];
 
+  // SPAM / TRASH: see the module docstring. A junk-only thread with no
+  // local copy is not imported at all; a local one is kept but forced
+  // read + archived below. Junk messages never drive the unread flag.
+  const isJunk = (m: GmailMessage): boolean =>
+    (m.labelIds ?? []).some((l) => l === "SPAM" || l === "TRASH");
+  const junkOnly = messages.every(isJunk);
+  if (junkOnly) {
+    const known = await prisma.emailThread.findUnique({
+      where: { accountId_externalId: { accountId, externalId: gthread.id } },
+      select: { id: true },
+    });
+    if (!known) return false;
+  }
+
   const subject =
     stripNul(decodeMimeWords(headerValue(first.payload, "Subject") ?? "")).trim() ||
     "(no subject)";
@@ -917,7 +1008,9 @@ export async function upsertThread(
     if (!known) return false;
   }
 
-  const flags = threadFlags(messages);
+  const flags = junkOnly
+    ? { ...threadFlags(messages), isRead: true, isArchived: true }
+    : threadFlags(messages.filter((m) => !isJunk(m)));
   const parsed = messages.map(parseGmailMessage);
   const hasAttachments = parsed.some((p) => p.attachments.length > 0);
 
@@ -965,6 +1058,20 @@ export async function upsertThread(
     });
   }
 
+  // One lookup for the whole thread instead of a findUnique per
+  // message (the pool is a single connection).
+  const existingByExternalId = new Map(
+    (
+      await prisma.emailMessage.findMany({
+        where: {
+          threadId: thread.id,
+          externalId: { in: parsed.map((p) => p.externalId) },
+        },
+        select: { id: true, externalId: true },
+      })
+    ).map((row) => [row.externalId, row.id] as const)
+  );
+
   for (const p of parsed) {
     // SANITIZE AT WRITE TIME — the only path into EmailMessage.body.
     const body = stripNul(sanitizeEmailHtml(p.bodyHtmlRaw));
@@ -977,22 +1084,21 @@ export async function upsertThread(
       body,
       sentAt: p.sentAt,
     };
-    const existing = await prisma.emailMessage.findUnique({
-      where: {
-        threadId_externalId: { threadId: thread.id, externalId: p.externalId },
-      },
-      select: { id: true },
-    });
-    if (existing) {
-      // Provider fields refresh; isPrivileged (app-owned) and the
-      // attachment rows (a later download writes a real fileUrl we
-      // must not clobber — Gmail attachments are immutable anyway)
-      // are left alone.
-      await prisma.emailMessage.update({
-        where: { id: existing.id },
+    // Provider fields refresh; isPrivileged (app-owned) and the
+    // attachment rows (a later download writes a real fileUrl we
+    // must not clobber — Gmail attachments are immutable anyway)
+    // are left alone.
+    const refresh = (id: string) =>
+      prisma.emailMessage.update({
+        where: { id },
         data: providerMessageFields,
       });
-    } else {
+    const existingId = existingByExternalId.get(p.externalId);
+    if (existingId) {
+      await refresh(existingId);
+      continue;
+    }
+    try {
       await prisma.emailMessage.create({
         data: {
           threadId: thread.id,
@@ -1011,6 +1117,22 @@ export async function upsertThread(
           },
         },
       });
+    } catch (err) {
+      // A concurrent pass (backfill, or a stolen stale claim) created
+      // this message between our lookup and insert: the nested create
+      // rolled back whole, so converge on the winner's row.
+      if ((err as { code?: string } | null)?.code !== "P2002") throw err;
+      const winner = await prisma.emailMessage.findUnique({
+        where: {
+          threadId_externalId: {
+            threadId: thread.id,
+            externalId: p.externalId,
+          },
+        },
+        select: { id: true },
+      });
+      if (!winner) throw err;
+      await refresh(winner.id);
     }
   }
   return true;
@@ -1090,7 +1212,11 @@ export async function syncAllEmailAccounts(): Promise<AccountSyncResult[]> {
     // is the admin lever (see actions/email-accounts.ts).
     where: { user: { isActive: true }, refreshToken: { not: null } },
     select: CONNECTED_ACCOUNT_SELECT,
-    orderBy: { createdAt: "asc" },
+    // Least-recently-synced first (never-synced first): when the sweep
+    // is cut off by the function ceiling, the accounts that were
+    // reached last time go last this time, so one heavy mailbox can't
+    // starve the others every tick.
+    orderBy: [{ lastSyncAt: { sort: "asc", nulls: "first" } }, { createdAt: "asc" }],
   });
   return syncAccounts(accounts);
 }

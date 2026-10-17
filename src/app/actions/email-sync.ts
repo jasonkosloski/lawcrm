@@ -31,6 +31,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { toUserMessage } from "@/lib/user-facing-error";
 import {
   backfillEmailAccount,
   syncEmailAccountsForUser,
@@ -88,10 +89,19 @@ export async function backfillMyEmailAccount(accountId: string): Promise<{
   // accountId (or a bogus one) reads as not-found.
   const account = await prisma.emailAccount.findFirst({
     where: { id: accountId, userId },
-    select: { id: true },
+    select: { id: true, refreshToken: true },
   });
   if (!account) {
     return { ok: false, threadsSynced: 0, error: "Email account not found." };
+  }
+  // A mailbox disconnected in another tab: refuse before touching
+  // Google (the token layer would otherwise flag it as revoked).
+  if (!account.refreshToken) {
+    return {
+      ok: false,
+      threadsSynced: 0,
+      error: "This mailbox is disconnected. Reconnect it to load older emails.",
+    };
   }
 
   try {
@@ -112,8 +122,13 @@ export async function backfillMyEmailAccount(accountId: string): Promise<{
     return {
       ok: false,
       threadsSynced: 0,
-      error:
-        err instanceof Error && err.message ? err.message : "Backfill failed.",
+      // Generic copy to the client; the engine already noted the
+      // cause on the account's syncError and the log has the detail.
+      error: toUserMessage(
+        err,
+        "Backfill failed. Try again in a few minutes.",
+        "email-sync backfill"
+      ),
     };
   }
 }

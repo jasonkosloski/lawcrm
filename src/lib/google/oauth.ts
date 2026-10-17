@@ -47,13 +47,33 @@ export const GOOGLE_REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke";
  *  the calendar scope joined this list lack it in
  *  `EmailAccount.grantedScopes`; features gate on
  *  `hasCalendarScope` and prompt to reconnect. */
+export const GMAIL_MODIFY_SCOPE =
+  "https://www.googleapis.com/auth/gmail.modify";
+export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+
 export const GMAIL_SCOPES = [
   "openid",
   "email",
-  "https://www.googleapis.com/auth/gmail.modify",
-  "https://www.googleapis.com/auth/gmail.send",
+  GMAIL_MODIFY_SCOPE,
+  GMAIL_SEND_SCOPE,
   CALENDAR_EVENTS_SCOPE,
 ] as const;
+
+/** True when a granted-scope string carries BOTH Gmail scopes the
+ *  CRM needs (read/label sync and send). Google's granular consent
+ *  lets the user untick either box on the consent screen; a
+ *  mailbox missing one would show "Connected" and then fail every
+ *  sync/send with a bare 403. */
+export function hasGmailScopes(grantedScopes: string | null): boolean {
+  if (!grantedScopes) return false;
+  const granted = new Set(grantedScopes.split(/\s+/));
+  return granted.has(GMAIL_MODIFY_SCOPE) && granted.has(GMAIL_SEND_SCOPE);
+}
+
+/** Ceiling for each call to a Google OAuth endpoint, so a hung
+ *  socket fails (and is retried by the next pass) instead of
+ *  stalling a whole sync sweep. */
+const OAUTH_FETCH_TIMEOUT_MS = 30_000;
 
 /** Nonce cookie for the state double-submit. Path-scoped to the
  *  google integration routes — no other request needs to carry it. */
@@ -194,6 +214,7 @@ async function tokenEndpointCall(
 ): Promise<GoogleTokenResponse> {
   const response = await fetch(GOOGLE_TOKEN_ENDPOINT, {
     method: "POST",
+    signal: AbortSignal.timeout(OAUTH_FETCH_TIMEOUT_MS),
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       client_id: requireEnv("GOOGLE_CLIENT_ID"),
@@ -257,6 +278,7 @@ export async function fetchGoogleUserInfo(
   accessToken: string
 ): Promise<{ email: string | null }> {
   const response = await fetch(GOOGLE_USERINFO_ENDPOINT, {
+    signal: AbortSignal.timeout(OAUTH_FETCH_TIMEOUT_MS),
     headers: { authorization: `Bearer ${accessToken}` },
   });
   if (!response.ok) {
@@ -277,6 +299,7 @@ export async function revokeGoogleToken(token: string): Promise<boolean> {
   try {
     const response = await fetch(GOOGLE_REVOKE_ENDPOINT, {
       method: "POST",
+      signal: AbortSignal.timeout(OAUTH_FETCH_TIMEOUT_MS),
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ token }),
     });

@@ -46,6 +46,9 @@ export function SyncNowButton() {
         const res = await syncMyEmailAccounts();
         if (res.results.length === 0) {
           showNote({ tone: "error", text: "No mailbox connected" });
+        } else if (res.ok && res.results.every((r) => r.mode === "skipped")) {
+          // Another sync already holds every account: nothing ran.
+          showNote({ tone: "ok", text: "Sync already in progress" });
         } else if (res.ok) {
           const threads = res.results.reduce(
             (sum, r) => sum + r.threadsSynced,

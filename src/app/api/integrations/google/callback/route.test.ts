@@ -310,6 +310,91 @@ describe("GET /api/integrations/google/callback", () => {
     expect(await prisma.emailAccount.count()).toBe(0);
   });
 
+  it("refuses a grant that lacks the Gmail scopes (granular consent) and does not touch an existing working row (F694)", async () => {
+    const existing = await prisma.emailAccount.create({
+      data: {
+        userId,
+        emailAddress: "jason.k@gmail.com",
+        refreshToken: "1//old-refresh",
+        grantedScopes: GRANTED_SCOPE_STRING,
+        syncStatus: "connected",
+      },
+    });
+    stubGoogle({
+      token: () =>
+        new Response(
+          JSON.stringify({
+            access_token: "ya29.partial",
+            expires_in: 3599,
+            refresh_token: "1//new-refresh",
+            // Calendar only: the user unticked both Gmail boxes.
+            scope:
+              "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/calendar.events",
+          }),
+          { status: 200 }
+        ),
+    });
+    const { state, nonce } = createOAuthState();
+    const res = await GET(makeCallbackRequest({ code: "c", state, nonce }));
+    expect(settingsRedirect(res).get("error")).toBe("scope");
+    expect(res.headers.get("set-cookie")).toContain("google_oauth_state=;");
+
+    const row = await prisma.emailAccount.findUniqueOrThrow({
+      where: { id: existing.id },
+    });
+    expect(row.refreshToken).toBe("1//old-refresh");
+    expect(row.grantedScopes).toBe(GRANTED_SCOPE_STRING);
+    expect(row.accessToken).toBeNull();
+  });
+
+  it("refuses a first connect missing only gmail.send", async () => {
+    stubGoogle({
+      token: () =>
+        new Response(
+          JSON.stringify({
+            access_token: "ya29.nosend",
+            expires_in: 3599,
+            refresh_token: "1//rt",
+            scope: "openid email https://www.googleapis.com/auth/gmail.modify",
+          }),
+          { status: 200 }
+        ),
+    });
+    const { state, nonce } = createOAuthState();
+    const res = await GET(makeCallbackRequest({ code: "c", state, nonce }));
+    expect(settingsRedirect(res).get("error")).toBe("scope");
+    expect(await prisma.emailAccount.count()).toBe(0);
+  });
+
+  it("a database failure while saving redirects with ?error=save (cookie cleared) instead of a raw 500 (F693)", async () => {
+    stubGoogle();
+    const upsertSpy = vi
+      .spyOn(prisma.emailAccount, "upsert")
+      .mockRejectedValueOnce(new Error("connection terminated unexpectedly"));
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { state, nonce } = createOAuthState();
+    const res = await GET(makeCallbackRequest({ code: "c", state, nonce }));
+    expect(settingsRedirect(res).get("error")).toBe("save");
+    expect(res.headers.get("set-cookie")).toContain("google_oauth_state=;");
+    // The log carries the error class only — never the message/tokens.
+    expect(JSON.stringify(errSpy.mock.calls)).not.toMatch(/ya29|1\/\/refresh/);
+
+    upsertSpy.mockRestore();
+    errSpy.mockRestore();
+  });
+
+  it("audits a successful connect as a firm-wide security row without token material", async () => {
+    stubGoogle();
+    const { state, nonce } = createOAuthState();
+    await GET(makeCallbackRequest({ code: "c", state, nonce }));
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { userId, type: "auth" },
+    });
+    expect(log.title).toBe("Connected Gmail account jason.k@gmail.com");
+    expect(JSON.stringify(log)).not.toMatch(/ya29|refresh/);
+  });
+
   it("redirects to /login when the session died mid-flow", async () => {
     stubGoogle();
     mockedAuth.mockResolvedValue(null as never);

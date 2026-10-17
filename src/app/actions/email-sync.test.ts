@@ -184,6 +184,22 @@ describe("syncMyEmailAccounts", () => {
     expect(res.calendar[0]).toMatchObject({ ok: false });
   });
 
+  it("an account another pass is already syncing reports skipped with zero threads (no false 'synced N')", async () => {
+    const mine = await seedAccount(userId, "me@gmail.com");
+    await prisma.emailAccount.update({
+      where: { id: mine },
+      data: { syncStatus: "syncing" },
+    });
+    const res = await syncMyEmailAccounts();
+    expect(res.results).toHaveLength(1);
+    expect(res.results[0]).toMatchObject({
+      accountId: mine,
+      mode: "skipped",
+      threadsSynced: 0,
+    });
+    expect(mockedFetch).not.toHaveBeenCalled();
+  });
+
   it("surfaces per-account failures without throwing (ok:false in results)", async () => {
     await seedAccount(userId, "me@gmail.com");
     mockedFetch.mockRejectedValue(new Error("Gmail is down"));
@@ -275,11 +291,33 @@ describe("backfillMyEmailAccount", () => {
     expect(mockedRevalidate).not.toHaveBeenCalled();
   });
 
-  it("catches transient engine failures into {ok:false, error}", async () => {
+  it("catches transient engine failures into {ok:false} with GENERIC copy (no raw error text)", async () => {
     const accountId = await seedAnchoredMailbox(userId);
-    mockedFetch.mockRejectedValue(new Error("Gmail is down"));
+    mockedFetch.mockRejectedValue(new Error("connect ECONNREFUSED 10.0.0.1:443"));
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const res = await backfillMyEmailAccount(accountId);
-    expect(res).toMatchObject({ ok: false, error: "Gmail is down" });
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/backfill failed/i);
+    expect(res.error).not.toMatch(/ECONNREFUSED/);
+    errSpy.mockRestore();
+  });
+
+  it("a mailbox disconnected in another tab is refused without touching Google or its status (F691)", async () => {
+    const accountId = await seedAnchoredMailbox(userId);
+    await prisma.emailAccount.update({
+      where: { id: accountId },
+      data: { accessToken: null, refreshToken: null, syncStatus: "disconnected" },
+    });
+
+    const res = await backfillMyEmailAccount(accountId);
+    expect(res).toMatchObject({ ok: false, threadsSynced: 0 });
+    expect(res.error).toMatch(/disconnected/i);
+    expect(mockedFetch).not.toHaveBeenCalled();
+    const row = await prisma.emailAccount.findUniqueOrThrow({
+      where: { id: accountId },
+    });
+    expect(row.syncStatus).toBe("disconnected");
+    expect(row.syncError).toBeNull();
   });
 });
