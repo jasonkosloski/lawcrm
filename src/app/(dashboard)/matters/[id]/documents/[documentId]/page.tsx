@@ -310,6 +310,7 @@ async function renderBody(
           src={downloadHref}
           name={doc.name}
           initialPage={review.initialPage}
+          initialQuote={review.initialQuote}
           {...shared}
         />
       );

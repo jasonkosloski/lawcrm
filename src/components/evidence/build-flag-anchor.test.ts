@@ -45,6 +45,19 @@ describe("buildFlagAnchor — time", () => {
 });
 
 describe("buildFlagAnchor — page", () => {
+  test("a quote selected on a page rides with the page", () => {
+    expect(buildFlagAnchor("page", text({ pageText: "4", quoteText: "  red light " }), false)).toEqual({
+      ok: true,
+      anchor: { pageNumber: 4, quote: "red light" },
+    });
+  });
+
+  test("a quote without its page is an error, not a silent whole-document flag", () => {
+    const res = buildFlagAnchor("page", text({ pageText: "", quoteText: "red light" }), false);
+    expect(res.ok).toBe(false);
+    expect(res.ok === false && res.error).toMatch(/needs the page/i);
+  });
+
   test("blank page means a whole-document flag on create", () => {
     expect(buildFlagAnchor("page", text({ pageText: "  " }), false)).toEqual({
       ok: true,

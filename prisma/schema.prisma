@@ -878,7 +878,8 @@ model FlaggedMoment {
   /// (app-enforced in the action layer). All nullable: an
   /// anchorless flag annotates the document as a whole.
   ///   media (audio/video): timeSeconds (+ optional endSeconds span)
-  ///   pdf:                 pageNumber (native viewer opens #page=N)
+  ///   pdf:                 pageNumber, optionally + quote (text
+  ///     selected on that page in the built-in pdf.js viewer)
   ///   rendered text (docx/txt/csv): quote — captured selection,
   ///     scroll-to-highlight on the render
   timeSeconds Float? /// Media position, seconds from start

@@ -1,0 +1,77 @@
+/*
+ * pdf.js text layer — the transparent, selectable text that sits over
+ * each rendered page canvas in the built-in PDF viewer
+ * (pdf-document-viewer.tsx). The subset of pdfjs-dist's
+ * web/pdf_viewer.css the TextLayer class needs, scoped under
+ * `.lc-pdf` so none of pdf.js's global viewer styles leak in. The
+ * page wrapper sets --total-scale-factor (and the rounding vars that
+ * setLayerDimensions reads).
+ */
+
+.lc-pdf .textLayer {
+  position: absolute;
+  text-align: initial;
+  inset: 0;
+  overflow: clip;
+  opacity: 1;
+  line-height: 1;
+  letter-spacing: normal;
+  word-spacing: normal;
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  caret-color: CanvasText;
+  z-index: 0;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+
+.lc-pdf .textLayer :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+  user-select: text;
+}
+
+.lc-pdf .textLayer > :not(.markedContent),
+.lc-pdf .textLayer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+
+.lc-pdf .textLayer .markedContent {
+  display: contents;
+}
+
+.lc-pdf .textLayer span[role="img"] {
+  user-select: none;
+  cursor: default;
+}
+
+.lc-pdf .textLayer ::selection {
+  background: rgba(0 0 255 / 0.25);
+  background: color-mix(in srgb, AccentColor, transparent 50%);
+  color: transparent;
+}
+
+.lc-pdf .textLayer br::selection {
+  background: transparent;
+}
+
+/* Every flagged passage on a rendered page (persistent, subtle) and
+   the one just clicked in the flags rail (strong, temporary). Painted
+   with the CSS Custom Highlight API — no DOM changes to the layer. */
+::highlight(pdf-flagged) {
+  background-color: rgba(250, 204, 21, 0.28);
+}
+::highlight(pdf-flag-focus) {
+  background-color: rgba(250, 204, 21, 0.65);
+}

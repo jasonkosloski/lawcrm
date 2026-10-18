@@ -8,7 +8,8 @@
  *
  *   media (audio/video)  — `timeSeconds` point or
  *                          `timeSeconds`–`endSeconds` span
- *   pdf                  — `pageNumber` (1-based)
+ *   pdf                  — `pageNumber` (1-based), optionally plus the
+ *                          `quote` selected on that page
  *   rendered text        — `quote` (captured selection),
  *   (docx/text/csv)        relocated by scroll-to-highlight
  *   everything viewable  — anchorless: flags the document as a whole
@@ -115,10 +116,11 @@ const flagSchema = z
       .max(500, "Keep the note under 500 characters"),
   })
   .superRefine((val, ctx) => {
+    // A quote rides WITH a page on PDFs (text selected on that page),
+    // so page + quote counts as one anchor; time + anything doesn't.
     const kinds = [
       val.timeSeconds !== undefined,
-      val.pageNumber !== undefined,
-      val.quote !== undefined,
+      val.pageNumber !== undefined || val.quote !== undefined,
     ].filter(Boolean).length;
     if (kinds > 1) {
       ctx.addIssue({
@@ -276,7 +278,9 @@ function createTitle(
     case "time":
       return `Moment flagged at ${flagAnchorLabel(anchor)}`;
     case "page":
-      return `Page ${anchor.pageNumber} flagged`;
+      return anchor.quote
+        ? `Passage flagged: ${flagAnchorLabel(anchor)}`
+        : `Page ${anchor.pageNumber} flagged`;
     case "quote":
       return `Passage flagged: ${flagAnchorLabel(anchor)}`;
     case "document":

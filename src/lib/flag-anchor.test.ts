@@ -46,6 +46,10 @@ describe("flagAnchorLabel", () => {
   test("page anchors", () => {
     expect(flagAnchorLabel({ timeSeconds: null, pageNumber: 12 })).toBe("p. 12");
     expect(flagAnchorLabel({ timeSeconds: null, pageNumber: 1 })).toBe("p. 1");
+    // A passage selected on a PDF page: page wins the kind, the quote rides along.
+    const passage = { timeSeconds: null, pageNumber: 4, quote: "the light was red" };
+    expect(flagAnchorKind(passage)).toBe("page");
+    expect(flagAnchorLabel(passage)).toBe("p. 4 · “the light was red”");
   });
 
   test("short quotes render whole, in curly quotes", () => {

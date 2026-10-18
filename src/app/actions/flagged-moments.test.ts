@@ -206,6 +206,30 @@ describe("createFlaggedMoment — anchor × renderer fit", () => {
     expect(log?.title).toBe("Page 12 flagged");
   });
 
+  test("PDF takes page + quote (text selected on that page)", async () => {
+    const res = await createFlaggedMoment(pdfDocId, {
+      ...noteOnly,
+      pageNumber: 4,
+      quote: "  the light was red  ",
+    });
+    expect(res.ok).toBe(true);
+    const row = await prisma.flaggedMoment.findUnique({ where: { id: res.id! } });
+    expect(row).toMatchObject({ pageNumber: 4, quote: "the light was red", timeSeconds: null });
+    const log = await prisma.activityLog.findFirst({
+      where: { matterId, type: "evidence" },
+    });
+    expect(log?.title).toBe("Passage flagged: p. 4 · “the light was red”");
+  });
+
+  test("page + quote is PDF-only; time + quote is never valid", async () => {
+    const onDocx = await createFlaggedMoment(docxDocId, { ...noteOnly, pageNumber: 2, quote: "x" });
+    expect(onDocx.ok).toBe(false);
+    const timeQuote = await createFlaggedMoment(videoDocId, { ...noteOnly, timeSeconds: 5, quote: "x" });
+    expect(timeQuote.ok).toBe(false);
+    expect(timeQuote.error).toMatch(/at most one anchor/i);
+    expect(await prisma.flaggedMoment.count()).toBe(0);
+  });
+
   test("rendered text (docx) takes a quote anchor, trimmed", async () => {
     const res = await createFlaggedMoment(docxDocId, {
       ...noteOnly,
@@ -737,5 +761,28 @@ describe("updateFlaggedMoment — audit trail (F997)", () => {
         where: { matterId, title: { startsWith: "Flag edited" } },
       })
     ).toBe(0);
+  });
+});
+
+describe("updateFlaggedMoment — PDF passages", () => {
+  test("a page flag can gain, change or drop its quote (still a page flag)", async () => {
+    const { flagId } = await seedFlaggedMoment({
+      documentId: pdfDocId,
+      flaggedById: userId,
+      timeSeconds: null,
+      pageNumber: 3,
+    });
+    const added = await updateFlaggedMoment(flagId, { ...noteOnly, pageNumber: 3, quote: "added" });
+    expect(added.ok).toBe(true);
+    expect(await prisma.flaggedMoment.findUnique({ where: { id: flagId } })).toMatchObject({
+      pageNumber: 3,
+      quote: "added",
+    });
+    const dropped = await updateFlaggedMoment(flagId, { ...noteOnly, pageNumber: 5 });
+    expect(dropped.ok).toBe(true);
+    expect(await prisma.flaggedMoment.findUnique({ where: { id: flagId } })).toMatchObject({
+      pageNumber: 5,
+      quote: null,
+    });
   });
 });

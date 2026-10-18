@@ -7,7 +7,9 @@
  * `src/app/actions/flagged-moments.ts`):
  *
  *   time  — `timeSeconds` (+ optional `endSeconds` span), audio/video
- *   page  — `pageNumber` (1-based), PDFs
+ *   page  — `pageNumber` (1-based), PDFs — optionally WITH a `quote`
+ *           (text selected on that page in the built-in viewer; the
+ *           page disambiguates a phrase that repeats across pages)
  *   quote — `quote` (captured selection), rendered docx/text/csv
  *
  * All three null = an anchorless flag on the document as a whole
@@ -61,12 +63,22 @@ export function flagAnchorKind(flag: FlagAnchorFields): FlagAnchorKind {
   return "document";
 }
 
+/** “first 40 chars…” */
+function quoteSnippet(quote: string): string {
+  const q = quote.trim();
+  const snippet =
+    q.length > QUOTE_SNIPPET_CHARS
+      ? `${q.slice(0, QUOTE_SNIPPET_CHARS - 1).trimEnd()}…`
+      : q;
+  return `“${snippet}”`;
+}
+
 /**
  * Human label for a flag's anchor — the one notation shared by the
  * moments rail, the Evidence tab, and activity-log titles:
  *
  *   time  → "1:15" / "1:15–2:30"  (formatMediaSpan)
- *   page  → "p. 12"
+ *   page  → "p. 12" / "p. 12 · “first 40 chars…”" (with a quote)
  *   quote → "“first 40 chars…”"
  *   none  → "Document"
  */
@@ -75,15 +87,11 @@ export function flagAnchorLabel(flag: FlagAnchorFields): string {
     case "time":
       return formatMediaSpan(flag.timeSeconds as number, flag.endSeconds);
     case "page":
-      return `p. ${flag.pageNumber}`;
-    case "quote": {
-      const q = (flag.quote as string).trim();
-      const snippet =
-        q.length > QUOTE_SNIPPET_CHARS
-          ? `${q.slice(0, QUOTE_SNIPPET_CHARS - 1).trimEnd()}…`
-          : q;
-      return `“${snippet}”`;
-    }
+      return flag.quote
+        ? `p. ${flag.pageNumber} · ${quoteSnippet(flag.quote)}`
+        : `p. ${flag.pageNumber}`;
+    case "quote":
+      return quoteSnippet(flag.quote as string);
     case "document":
       return "Document";
   }

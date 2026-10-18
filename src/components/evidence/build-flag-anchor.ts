@@ -62,6 +62,14 @@ export function buildFlagAnchor(
     }
     case "page": {
       const trimmed = text.pageText.trim();
+      // Text selected in the PDF viewer rides with its page.
+      const quote = text.quoteText.trim().slice(0, MAX_QUOTE_CHARS);
+      if (trimmed === "" && quote !== "") {
+        return {
+          ok: false,
+          error: "A quoted passage needs the page it's on",
+        };
+      }
       if (trimmed === "") {
         // Create: blank page = flag the whole document. Edit: the
         // kind is locked server-side, so require a page.
@@ -81,7 +89,10 @@ export function buildFlagAnchor(
           error: `Page must be between 1 and ${MAX_PDF_PAGE}`,
         };
       }
-      return { ok: true, anchor: { pageNumber } };
+      return {
+        ok: true,
+        anchor: quote ? { pageNumber, quote } : { pageNumber },
+      };
     }
     case "quote": {
       const quote = text.quoteText.trim();

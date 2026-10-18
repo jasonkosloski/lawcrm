@@ -5,9 +5,9 @@
  *   time  — mm:ss start (+ optional span end), prefilled from the
  *           player's currentTime; "set to current time" clock
  *           buttons when the parent supplies `getCurrentTime`
- *   page  — a page-number input (blank on create = flag the whole
- *           document; the PDF plugin exposes no "current page" to
- *           prefill from — see PdfReview)
+ *   page  — a page-number input, prefilled with the PDF viewer's
+ *           current page (blank on create = flag the whole document),
+ *           plus the quoted text when the flag came from a selection
  *   quote — the captured selection, editable (trim + 500 cap happens
  *           server-side too)
  *   document — no anchor fields, just category + note
@@ -71,7 +71,13 @@ export type ComposerFlag = {
 /** What the renderer adapter captured for a NEW flag. */
 export type ComposerAnchor =
   | { kind: "time"; timeSeconds: number }
-  | { kind: "page"; pageNumber: number | null }
+  | {
+      kind: "page";
+      pageNumber: number | null;
+      /** Text selected on that page in the built-in PDF viewer. */
+      quote?: string;
+      hint?: string;
+    }
   | {
       kind: "quote";
       quote: string;
@@ -108,7 +114,9 @@ function seedAnchorText(
     pageText = String(createAnchor.pageNumber);
   const quoteText =
     editing?.quote ??
-    (createAnchor?.kind === "quote" ? createAnchor.quote : "");
+    (createAnchor?.kind === "quote" || createAnchor?.kind === "page"
+      ? (createAnchor.quote ?? "")
+      : "");
   return { timeText, endText, pageText, quoteText };
 }
 
@@ -259,15 +267,24 @@ export function FlagComposer({
   };
 
   const quoteHint =
-    !editing && createAnchor?.kind === "quote" ? createAnchor.hint : undefined;
+    !editing && (createAnchor?.kind === "quote" || createAnchor?.kind === "page")
+      ? createAnchor.hint
+      : undefined;
+  // PDF flags show the quote box only when they carry a passage (a
+  // selection, or an existing flag's quote) — page-only flags stay
+  // page-only.
+  const showQuote =
+    kind === "quote" ||
+    (kind === "page" &&
+      (editing ? editing.quote != null : createAnchor?.kind === "page" && !!createAnchor.quote));
 
   return (
     <div className="rounded-lg border border-line bg-paper-2 p-3">
       <div className="mb-2 text-xs font-semibold text-ink">
-        {editing ? "Edit flag" : HEADING[kind]}
+        {editing ? "Edit flag" : showQuote ? HEADING.quote : HEADING[kind]}
       </div>
 
-      {kind === "quote" && (
+      {showQuote && (
         <div className="mb-2 flex flex-col gap-1">
           <label
             htmlFor={`${uid}-quote`}
