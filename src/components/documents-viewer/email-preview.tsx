@@ -6,17 +6,32 @@
  * reuses the thread reader's `email-body` styles. Text is real DOM
  * text, so TextReview's quote flags work on it.
  *
- * Attachments are listed by name and size only; opening one means
- * downloading the email and opening it in a mail client (follow-up:
- * extract attachments into the matter's documents).
+ * Attachment chips open the attachment's own document once the email's
+ * attachments have been extracted (ADR-043) — `attachmentDocIds[i]` is
+ * the document made from attachment i. Before that they're plain
+ * labels, and `headerAction` carries the "Add attachments" button.
  */
 
+import Link from "next/link";
 import { Paperclip } from "lucide-react";
 import type { EmailPreview as EmailData } from "@/lib/office-preview";
 import { formatDate } from "@/lib/format-date";
 import { formatFileSize } from "@/lib/document-display";
 
-export function EmailPreview({ email, tz }: { email: EmailData; tz: string }) {
+export function EmailPreview({
+  email,
+  tz,
+  matterId,
+  attachmentDocIds = {},
+  headerAction,
+}: {
+  email: EmailData;
+  tz: string;
+  matterId?: string;
+  /** Attachment index → the document extracted from it. */
+  attachmentDocIds?: Record<number, string>;
+  headerAction?: React.ReactNode;
+}) {
   const rows: [string, string][] = [
     ["From", email.from],
     ["To", email.to.join(", ")],
@@ -38,18 +53,36 @@ export function EmailPreview({ email, tz }: { email: EmailData; tz: string }) {
         </dl>
         {email.attachments.length > 0 && (
           <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Attachments">
-            {email.attachments.map((a, i) => (
-              <li
-                key={i}
-                className="inline-flex items-center gap-1 rounded-md border border-line bg-white px-2 py-0.5 text-2xs text-ink-3"
-              >
-                <Paperclip className="h-3 w-3" aria-hidden />
-                {a.name}
-                {a.size !== null && <span className="text-ink-4">· {formatFileSize(a.size)}</span>}
-              </li>
-            ))}
+            {email.attachments.map((a, i) => {
+              const docId = attachmentDocIds[i];
+              const body = (
+                <>
+                  <Paperclip className="h-3 w-3" aria-hidden />
+                  {a.name}
+                  {a.size !== null && <span className="text-ink-4">· {formatFileSize(a.size)}</span>}
+                </>
+              );
+              return (
+                <li key={i}>
+                  {docId && matterId ? (
+                    <Link
+                      href={`/matters/${matterId}/documents/${docId}`}
+                      title={`Open ${a.name}`}
+                      className="inline-flex items-center gap-1 rounded-md border border-line bg-white px-2 py-0.5 text-2xs text-brand-700 hover:border-brand-300 hover:underline"
+                    >
+                      {body}
+                    </Link>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 rounded-md border border-line bg-white px-2 py-0.5 text-2xs text-ink-3">
+                      {body}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
+        {headerAction && <div className="mt-2">{headerAction}</div>}
       </div>
       {email.html ? (
         <div

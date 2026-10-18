@@ -33,8 +33,16 @@ export type ViewerDocument = {
   uploadedByName: string | null;
   uploadedByInitials: string | null;
   createdAt: Date;
+  /** The email this file was extracted from (ADR-043), if any. */
+  parent: { id: string; name: string } | null;
+  /** Email only: its extracted attachments by position, so the
+   *  attachment chips can open them; null = not extracted yet. */
+  attachmentDocs: { id: string; attachmentIndex: number | null }[] | null;
+  /** Other folders the document is also filed in (DocumentLinks). */
+  alsoIn: { linkId: string; folderId: string | null; folderName: string }[];
   /** Neighbor ids in the same folder, ordered by name (asc, id
-   *  tiebreak). Null at the ends of the folder. */
+   *  tiebreak). Null at the ends of the folder. An attachment's
+   *  neighbors are its email's other attachments. */
   prevId: string | null;
   nextId: string | null;
 };
@@ -61,6 +69,14 @@ export async function getDocumentForViewer(
       folder: { select: { name: true } },
       uploadedBy: true,
       createdAt: true,
+      parentDocumentId: true,
+      attachmentsExtractedAt: true,
+      parentDocument: { select: { id: true, name: true } },
+      attachments: { select: { id: true, attachmentIndex: true }, orderBy: { attachmentIndex: "asc" } },
+      links: {
+        select: { id: true, folderId: true, folder: { select: { name: true } } },
+        orderBy: { createdAt: "asc" },
+      },
     },
   });
   if (!doc) return null;
@@ -73,7 +89,7 @@ export async function getDocumentForViewer(
   // comparison and the ORDER BY run in Postgres under the same
   // collation, so they agree. `folderId: null` matches the matter
   // root (Prisma turns the null into IS NULL).
-  const folderScope = { matterId, folderId: doc.folderId };
+  const folderScope = { matterId, folderId: doc.folderId, parentDocumentId: doc.parentDocumentId };
   const [uploader, prev, next] = await Promise.all([
     doc.uploadedBy
       ? prisma.user.findUnique({
@@ -123,6 +139,13 @@ export async function getDocumentForViewer(
     uploadedByName: uploader?.name ?? null,
     uploadedByInitials: uploader?.initials ?? null,
     createdAt: doc.createdAt,
+    parent: doc.parentDocument,
+    attachmentDocs: doc.attachmentsExtractedAt ? doc.attachments : null,
+    alsoIn: doc.links.map((l) => ({
+      linkId: l.id,
+      folderId: l.folderId,
+      folderName: l.folder?.name ?? "All documents",
+    })),
     prevId,
     nextId,
   };
@@ -134,7 +157,14 @@ export type FileTreeDocument = {
   name: string;
   folderId: string | null;
   contentType: string | null;
+  /** Set on an email's extracted attachment: it shows under the email. */
+  parentDocumentId: string | null;
+  attachmentIndex: number | null;
 };
+
+/** A document also filed in a folder (DocumentLink) — shown there as a
+ *  link to the same document. */
+export type FileTreeLink = { id: string; documentId: string; folderId: string | null };
 
 /** Cap on files loaded into the viewer's tree in one go. A discovery
  *  production can hold many thousands of files; past this the tree
@@ -152,21 +182,44 @@ export const FILE_TREE_MAX_DOCUMENTS = 3000;
 export async function getViewerFileTree(
   matterId: string,
   currentFolderId: string | null
-): Promise<{ documents: FileTreeDocument[]; complete: boolean }> {
-  const select = { id: true, name: true, folderId: true, contentType: true } as const;
+): Promise<{ documents: FileTreeDocument[]; links: FileTreeLink[]; complete: boolean }> {
+  const select = {
+    id: true,
+    name: true,
+    folderId: true,
+    contentType: true,
+    parentDocumentId: true,
+    attachmentIndex: true,
+  } as const;
   const orderBy = [{ name: "asc" as const }, { id: "asc" as const }];
-  const all = await prisma.document.findMany({
-    where: { matterId },
+  const linkSelect = { id: true, documentId: true, folderId: true } as const;
+  const [all, links] = await Promise.all([
+    prisma.document.findMany({
+      where: { matterId },
+      select,
+      orderBy,
+      take: FILE_TREE_MAX_DOCUMENTS + 1,
+    }),
+    prisma.documentLink.findMany({
+      where: { matterId },
+      select: linkSelect,
+      take: FILE_TREE_MAX_DOCUMENTS + 1,
+    }),
+  ]);
+  if (all.length <= FILE_TREE_MAX_DOCUMENTS && links.length <= FILE_TREE_MAX_DOCUMENTS) {
+    return { documents: all, links, complete: true };
+  }
+  // Too many to list: just the folder the reader is working through
+  // (its files, their attachments, and documents also filed there).
+  const [current, currentLinks] = await Promise.all([
+    prisma.document.findMany({ where: { matterId, folderId: currentFolderId }, select, orderBy }),
+    prisma.documentLink.findMany({ where: { matterId, folderId: currentFolderId }, select: linkSelect }),
+  ]);
+  const have = new Set(current.map((d) => d.id));
+  const linkedDocs = await prisma.document.findMany({
+    where: { id: { in: currentLinks.map((l) => l.documentId).filter((id) => !have.has(id)) } },
     select,
     orderBy,
-    take: FILE_TREE_MAX_DOCUMENTS + 1,
   });
-  if (all.length <= FILE_TREE_MAX_DOCUMENTS) return { documents: all, complete: true };
-  // Too many to list: just the folder the reader is working through.
-  const current = await prisma.document.findMany({
-    where: { matterId, folderId: currentFolderId },
-    select,
-    orderBy,
-  });
-  return { documents: current, complete: false };
+  return { documents: [...current, ...linkedDocs], links: currentLinks, complete: false };
 }

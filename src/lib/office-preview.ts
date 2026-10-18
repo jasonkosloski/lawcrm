@@ -229,14 +229,30 @@ export function inlineCidImages(
   return { html: out, used };
 }
 
+/** One attachment's bytes, at the same index as in EmailPreview.attachments. */
+export type EmailFile = { name: string; mimeType: string | null; content: Uint8Array };
+
+type ParsedEmail = { email: EmailPreview; files: () => EmailFile[] };
+
+const toBytes = (c: ArrayBuffer | Uint8Array | string): Uint8Array =>
+  typeof c === "string" ? new TextEncoder().encode(c) : c instanceof Uint8Array ? c : new Uint8Array(c);
+
 export async function parseEml(buffer: Buffer): Promise<EmailPreview> {
+  return (await parseEmlFull(buffer)).email;
+}
+
+async function parseEmlFull(buffer: Buffer): Promise<ParsedEmail> {
   const mail = await PostalMime.parse(buffer, { attachmentEncoding: "arraybuffer" });
   const inlined = mail.html
     ? inlineCidImages(mail.html, mail.attachments)
     : { html: undefined, used: new Set<string>() };
   const shownInBody = (cid: string | undefined) =>
     !!cid && inlined.used.has(cid.replace(/^<|>$/g, "").trim().toLowerCase());
-  return {
+  // Parts shown in the body (cid images) aren't separate attachments.
+  const listed = mail.attachments.filter(
+    (a) => !shownInBody(a.contentId) && (a.disposition !== "inline" || !a.contentId)
+  );
+  const email: EmailPreview = {
     subject: mail.subject?.trim() || "(no subject)",
     from: addressList(mail.from)[0] ?? "",
     to: addressList(mail.to),
@@ -244,16 +260,27 @@ export async function parseEml(buffer: Buffer): Promise<EmailPreview> {
     date: isoOrNull(mail.date),
     html: safeHtml(inlined.html),
     text: mail.text ?? "",
-    attachments: mail.attachments
-      // Parts shown in the body (cid images) aren't separate attachments.
-      .filter((a) => !shownInBody(a.contentId) && (a.disposition !== "inline" || !a.contentId))
-      .map((a) => ({ name: a.filename || "(unnamed attachment)", size: byteSize(a.content) })),
+    attachments: listed.map((a) => ({ name: a.filename || "(unnamed attachment)", size: byteSize(a.content) })),
+  };
+  return {
+    email,
+    files: () =>
+      listed.map((a, i) => ({
+        name: email.attachments[i].name,
+        mimeType: a.mimeType || null,
+        content: toBytes(a.content),
+      })),
   };
 }
 
 export function parseMsg(buffer: Buffer): EmailPreview {
+  return parseMsgFull(buffer).email;
+}
+
+function parseMsgFull(buffer: Buffer): ParsedEmail {
   const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
-  const data = new MsgReader(view).getFileData();
+  const reader = new MsgReader(view);
+  const data = reader.getFileData();
   if (data.error) throw new Error(data.error);
   const recipients = data.recipients ?? [];
   const who = (type: "to" | "cc") =>
@@ -263,7 +290,8 @@ export function parseMsg(buffer: Buffer): EmailPreview {
       .filter(Boolean);
   const html =
     data.bodyHtml ?? (data.html ? new TextDecoder().decode(data.html) : undefined);
-  return {
+  const listed = (data.attachments ?? []).filter((a) => !a.attachmentHidden);
+  const email: EmailPreview = {
     subject: data.subject?.trim() || "(no subject)",
     from: mailbox(data.senderName, data.senderSmtpAddress || data.senderEmail),
     to: who("to"),
@@ -271,10 +299,33 @@ export function parseMsg(buffer: Buffer): EmailPreview {
     date: isoOrNull(data.clientSubmitTime || data.messageDeliveryTime || data.creationTime),
     html: safeHtml(html),
     text: data.body ?? "",
-    attachments: (data.attachments ?? [])
-      .filter((a) => !a.attachmentHidden)
-      .map((a) => ({ name: a.fileName || a.name || "(unnamed attachment)", size: a.contentLength ?? null })),
+    attachments: listed.map((a) => ({
+      name: a.fileName || a.name || "(unnamed attachment)",
+      size: a.contentLength ?? null,
+    })),
   };
+  return {
+    email,
+    files: () =>
+      listed.map((a, i) => {
+        const att = reader.getAttachment(a);
+        return {
+          name: email.attachments[i].name,
+          mimeType: a.attachMimeTag || null,
+          content: att.content ?? new Uint8Array(),
+        };
+      }),
+  };
+}
+
+/**
+ * An email's attachments as files, index-aligned with the preview's
+ * attachment list (so chip i opens the document extracted from file i).
+ * Throws on an unreadable email; the caller decides what that means.
+ */
+export async function readEmailFiles(buffer: Buffer, kind: "eml" | "msg"): Promise<EmailFile[]> {
+  const parsed = kind === "eml" ? await parseEmlFull(buffer) : parseMsgFull(buffer);
+  return parsed.files();
 }
 
 export async function renderStoredEmail(key: string, kind: "eml" | "msg"): Promise<EmailPreviewResult> {

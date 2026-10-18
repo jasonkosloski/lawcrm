@@ -1,0 +1,156 @@
+/**
+ * Delete prompt for a document that has email attachments (ADR-043).
+ *
+ * Attachments that are also filed in another folder ("saved") always
+ * stay where they're filed — the prompt just says so. Attachments that
+ * exist only under the email are listed, and the user picks whether
+ * they go with the email (default) or stay in the folder as ordinary
+ * documents. The choice is sent to `deleteDocument` explicitly; the
+ * server refuses to guess.
+ */
+
+"use client";
+
+import { useState, useTransition } from "react";
+import { Paperclip, Trash2, TriangleAlert } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
+import { deleteDocument, type AttachmentChoice } from "@/app/actions/documents";
+
+export function DeleteDocumentDialog({
+  open,
+  onOpenChange,
+  documentId,
+  name,
+  unsavedAttachments,
+  savedAttachments,
+  alsoInCount,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  documentId: string;
+  name: string;
+  /** Attachments filed nowhere but under this email. */
+  unsavedAttachments: string[];
+  /** Attachments also filed in another folder — they stay there. */
+  savedAttachments: string[];
+  /** Other folders this document itself is filed in. */
+  alsoInCount: number;
+}) {
+  const [choice, setChoice] = useState<AttachmentChoice>("delete");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) {
+      setChoice("delete");
+      setError(null);
+    }
+  }
+
+  const submit = () => {
+    setError(null);
+    startTransition(async () => {
+      const res = await deleteDocument(documentId, unsavedAttachments.length ? { attachments: choice } : {});
+      if (res.ok) onOpenChange(false);
+      else setError(res.error ?? "Couldn't delete the document.");
+    });
+  };
+
+  const n = unsavedAttachments.length;
+  const option = (value: AttachmentChoice, label: string, hint: string) => (
+    <label
+      className={cn(
+        "flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-xs",
+        choice === value ? "border-brand-300 bg-brand-soft" : "border-line bg-white"
+      )}
+    >
+      <input
+        type="radio"
+        name="attachment-choice"
+        value={value}
+        checked={choice === value}
+        onChange={() => setChoice(value)}
+        className="mt-0.5"
+      />
+      <span>
+        <span className="block font-medium text-ink">{label}</span>
+        <span className="block text-2xs text-ink-3">{hint}</span>
+      </span>
+    </label>
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Delete “{name}”?</DialogTitle>
+          <DialogDescription>
+            This can&apos;t be undone — the file is removed from the matter and from storage
+            {alsoInCount > 0
+              ? `, including the ${alsoInCount} other folder${alsoInCount === 1 ? "" : "s"} it's filed in`
+              : ""}
+            .
+          </DialogDescription>
+        </DialogHeader>
+
+        {n > 0 && (
+          <div className="flex flex-col gap-2">
+            <div className="text-xs text-ink-2">
+              {n === 1 ? "This attachment isn't" : `These ${n} attachments aren't`} filed anywhere else:
+            </div>
+            <ul className="flex max-h-32 flex-col gap-0.5 overflow-y-auto rounded-md border border-line bg-paper-2 p-2">
+              {unsavedAttachments.map((a, i) => (
+                <li key={i} className="flex items-center gap-1.5 text-2xs text-ink-2">
+                  <Paperclip className="h-3 w-3 shrink-0 text-ink-4" aria-hidden />
+                  <span className="truncate">{a}</span>
+                </li>
+              ))}
+            </ul>
+            {option("delete", n === 1 ? "Delete it with the email" : "Delete them with the email", "Removed along with the email.")}
+            {option("keep", n === 1 ? "Keep it in this folder" : "Keep them in this folder", "They stay as ordinary documents, with their flags.")}
+          </div>
+        )}
+
+        {savedAttachments.length > 0 && (
+          <div className="text-2xs text-ink-3">
+            {savedAttachments.length === 1
+              ? `“${savedAttachments[0]}” is also filed in another folder and stays there.`
+              : `${savedAttachments.length} attachments are also filed in other folders and stay there.`}
+          </div>
+        )}
+
+        {error && (
+          <div className="flex items-start gap-2 rounded-md border border-warn-border bg-warn-soft px-3 py-2 text-2xs text-warn">
+            <TriangleAlert size={12} className="mt-px shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <DialogFooter>
+          <button type="button" onClick={() => onOpenChange(false)} className="px-2 text-2xs text-ink-3 hover:text-ink-2">
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={pending}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-danger px-3 text-xs font-medium text-white hover:opacity-90 disabled:opacity-60"
+          >
+            <Trash2 size={12} />
+            {pending ? "Deleting…" : "Delete"}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

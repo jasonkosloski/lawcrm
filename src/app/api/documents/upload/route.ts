@@ -67,6 +67,7 @@ import { prisma } from "@/lib/prisma";
 import { canAccessMatter } from "@/lib/matter-access";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
+import { extractIfEmail } from "@/lib/email-attachment-extract";
 import {
   FileTooLargeError,
   activeStorageDriver,
@@ -165,7 +166,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     );
   }
 
-  let documents: { id: string; name: string }[];
+  let documents: { id: string; name: string; contentType: string | null }[];
   try {
     // One transaction so a mid-batch DB failure can't leave half the
     // rows behind while the caller sees a 500.
@@ -191,7 +192,7 @@ export async function POST(req: NextRequest): Promise<Response> {
             fileSize: f.size,
             uploadedBy: userId,
           },
-          select: { id: true, name: true },
+          select: { id: true, name: true, contentType: true },
         })
       )
     );
@@ -216,6 +217,10 @@ export async function POST(req: NextRequest): Promise<Response> {
       .join(", ")
       .slice(0, 500),
   });
+
+  // Emails: their attachments become documents under them (ADR-043).
+  // Best-effort — the upload itself has succeeded either way.
+  for (const d of documents) await extractIfEmail(d, userId);
 
   revalidatePath(`/matters/${result.matterId}/documents`);
   revalidatePath(`/matters/${result.matterId}`);

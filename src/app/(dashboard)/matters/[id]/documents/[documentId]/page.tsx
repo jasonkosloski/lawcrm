@@ -39,7 +39,11 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { getDocumentForViewer, getViewerFileTree } from "@/lib/queries/document-viewer";
 import { getMatterDocumentFolders } from "@/lib/queries/matter-detail";
-import { buildFolderTree } from "@/lib/folder-tree";
+import { buildFolderTree, flattenFolderTree } from "@/lib/folder-tree";
+import {
+  DocumentPlacement,
+  ExtractAttachmentsButton,
+} from "@/components/documents-viewer/document-placement";
 import { DocumentFileTree } from "@/components/documents-viewer/document-file-tree";
 import { getDocumentFlaggedMoments } from "@/lib/queries/evidence";
 import { getCurrentUserId, requireUser } from "@/lib/current-user";
@@ -88,15 +92,28 @@ export default async function DocumentViewerPage({
   await requireUser();
   const { id, documentId } = await params;
   await assertMatterAccess(id);
-  const [doc, tz, folders] = await Promise.all([
+  const [doc, tz, folders, canOrganize, canUpload] = await Promise.all([
     getDocumentForViewer(id, documentId),
     getCurrentUserTimeZone(),
     getMatterDocumentFolders(id),
+    currentUserHasPermission("documents.organize"),
+    currentUserHasPermission("documents.upload"),
   ]);
   if (!doc) notFound();
   // Left-hand file tree: the matter's folders + files (lightweight).
   const fileTree = await getViewerFileTree(id, doc.folderId);
   const folderTree = buildFolderTree(folders);
+  // Email chips → the documents extracted from them (ADR-043).
+  const emailExtras: EmailExtras = {
+    matterId: id,
+    attachmentDocIds: Object.fromEntries(
+      (doc.attachmentDocs ?? [])
+        .filter((a) => a.attachmentIndex !== null)
+        .map((a) => [a.attachmentIndex as number, a.id])
+    ),
+    // Older uploads: offer to extract now.
+    canExtract: doc.attachmentDocs === null && canUpload,
+  };
 
   const sp = await searchParams;
   // ?t=SECONDS — the original media deep-link format, still honored.
@@ -163,7 +180,7 @@ export default async function DocumentViewerPage({
 
   const body =
     renderer && review ? (
-      await renderBody(doc.fileUrl!, renderer, doc, downloadHref, review, tz)
+      await renderBody(doc.fileUrl!, renderer, doc, downloadHref, review, tz, emailExtras)
     ) : (
       <ViewerFallbackCard
         title="No file attached"
@@ -180,6 +197,8 @@ export default async function DocumentViewerPage({
         complete={fileTree.complete}
         currentId={doc.id}
         currentFolderId={doc.folderId}
+        currentParentId={doc.parent?.id ?? null}
+        links={fileTree.links}
       />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
         {/* ── Breadcrumb ─────────────────────────────────────────────── */}
@@ -224,6 +243,18 @@ export default async function DocumentViewerPage({
                     : ""}{" "}
                 {formatDate(doc.createdAt, "medium", tz)}
               </span>
+            </div>
+            <div className="mt-1">
+              <DocumentPlacement
+                matterId={id}
+                documentId={doc.id}
+                name={doc.name}
+                folderId={doc.folderId}
+                parent={doc.parent}
+                alsoIn={doc.alsoIn}
+                folders={flattenFolderTree(folderTree)}
+                canOrganize={canOrganize}
+              />
             </div>
           </div>
 
@@ -295,6 +326,14 @@ function NeighborLink({
   );
 }
 
+/** Email-only extras for the email body (ADR-043). */
+type EmailExtras = {
+  matterId: string;
+  attachmentDocIds: Record<number, string>;
+  /** Not extracted yet and the viewer may upload → show the button. */
+  canExtract: boolean;
+};
+
 /** Everything the review adapters need beyond src/name — assembled
  *  by the page for every renderer that has stored bytes. The
  *  initial* fields carry the resolved ?flag= / ?t= deep link; each
@@ -322,7 +361,8 @@ async function renderBody(
   doc: { id: string; name: string; contentType: string | null; fileSize: number | null },
   downloadHref: string,
   review: ReviewData,
-  tz: string
+  tz: string,
+  emailExtras: EmailExtras
 ): Promise<React.ReactNode> {
   const failureCard = (reason: string) => (
     <DocumentReview {...shared}>
@@ -466,7 +506,17 @@ async function renderBody(
       if (!result.ok) return failureCard(result.reason);
       return (
         <TextReview initialQuote={review.initialQuote} {...shared}>
-          <EmailPreview email={result.email} tz={tz} />
+          <EmailPreview
+            email={result.email}
+            tz={tz}
+            matterId={emailExtras.matterId}
+            attachmentDocIds={emailExtras.attachmentDocIds}
+            headerAction={
+              emailExtras.canExtract && result.email.attachments.length > 0 ? (
+                <ExtractAttachmentsButton documentId={doc.id} count={result.email.attachments.length} />
+              ) : undefined
+            }
+          />
         </TextReview>
       );
     }

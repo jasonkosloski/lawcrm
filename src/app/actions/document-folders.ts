@@ -262,6 +262,22 @@ export async function deleteFolder(id: string): Promise<FolderActionResult> {
       where: { folderId: folder.id },
       data: { folderId: folder.parentId },
     });
+    // Extra-folder links (ADR-043) move up with the folder's documents.
+    // One that would duplicate a place the document already is (a link
+    // there, or the document itself) is dropped instead.
+    const links = await tx.documentLink.findMany({
+      where: { folderId: folder.id },
+      select: { id: true, documentId: true, document: { select: { folderId: true, parentDocumentId: true } } },
+    });
+    for (const link of links) {
+      const there =
+        (!link.document.parentDocumentId && link.document.folderId === folder.parentId) ||
+        (await tx.documentLink.count({
+          where: { documentId: link.documentId, folderId: folder.parentId },
+        })) > 0;
+      if (there) await tx.documentLink.delete({ where: { id: link.id } });
+      else await tx.documentLink.update({ where: { id: link.id }, data: { folderId: folder.parentId } });
+    }
     await tx.documentFolder.delete({ where: { id: folder.id } });
 
     return {
@@ -312,10 +328,18 @@ export async function moveDocuments(
 
   const docs = await prisma.document.findMany({
     where: { id: { in: ids } },
-    select: { id: true, matterId: true },
+    select: { id: true, matterId: true, parentDocumentId: true },
   });
   if (docs.length !== ids.length) {
     return { ok: false, error: "Some documents were not found." };
+  }
+  // An email's attachments live under the email (and move with it);
+  // putting one somewhere else is "Also file in…", not a move.
+  if (docs.some((d) => d.parentDocumentId)) {
+    return {
+      ok: false,
+      error: "Email attachments move with their email. Use “Also file in…” to add one to another folder.",
+    };
   }
   const matterIds = new Set(docs.map((d) => d.matterId));
   for (const mid of matterIds) await assertMatterAccess(mid);
@@ -338,8 +362,9 @@ export async function moveDocuments(
     folderName = folder.name;
   }
 
+  // The emails' attachments come along (they share the email's folder).
   await prisma.document.updateMany({
-    where: { id: { in: ids } },
+    where: { OR: [{ id: { in: ids } }, { parentDocumentId: { in: ids } }] },
     data: { folderId },
   });
 

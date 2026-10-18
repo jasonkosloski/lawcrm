@@ -274,7 +274,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         key: "documents.upload",
         label: "Upload documents",
         description:
-          "Attach files to a matter via the Documents tab. Uploaders can always delete their own uploads.",
+          "Attach files to a matter via the Documents tab (an uploaded email's attachments are added as documents too). Uploaders can always delete their own uploads.",
       },
       {
         key: "documents.delete_any",
@@ -304,7 +304,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         key: "documents.organize",
         label: "Move documents between folders",
         description:
-          "Re-file documents within a matter's folder tree. Distinct from upload/delete — organizing is often delegated to staff who shouldn't remove records.",
+          "Re-file documents within a matter's folder tree, and file a document in additional folders (\"Also file in…\" — the same document, no copy) or remove it from one. Distinct from upload/delete — organizing is often delegated to staff who shouldn't remove records.",
       },
       {
         key: "documents.template.create",

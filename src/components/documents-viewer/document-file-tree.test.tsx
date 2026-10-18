@@ -15,6 +15,7 @@ vi.mock("next/link", () => ({
 
 import { DocumentFileTree } from "./document-file-tree";
 import type { FolderNode } from "@/lib/folder-tree";
+import type { FileTreeDocument } from "@/lib/queries/document-viewer";
 
 const TREE: FolderNode[] = [
   {
@@ -26,11 +27,21 @@ const TREE: FolderNode[] = [
   { id: "med", name: "Medical", parentId: null, children: [] },
 ];
 
-const DOCS = [
-  { id: "d1", name: "Retainer.pdf", folderId: null, contentType: "application/pdf" },
-  { id: "d2", name: "Police report.pdf", folderId: "disc", contentType: "application/pdf" },
-  { id: "d3", name: "cam-01.mp4", folderId: "body", contentType: "video/mp4" },
-  { id: "d4", name: "ER records.pdf", folderId: "med", contentType: "application/pdf" },
+const doc = (id: string, name: string, folderId: string | null, contentType: string, over: Partial<FileTreeDocument> = {}): FileTreeDocument => ({
+  id,
+  name,
+  folderId,
+  contentType,
+  parentDocumentId: null,
+  attachmentIndex: null,
+  ...over,
+});
+
+const DOCS: FileTreeDocument[] = [
+  doc("d1", "Retainer.pdf", null, "application/pdf"),
+  doc("d2", "Police report.pdf", "disc", "application/pdf"),
+  doc("d3", "cam-01.mp4", "body", "video/mp4"),
+  doc("d4", "ER records.pdf", "med", "application/pdf"),
 ];
 
 function renderTree(over: Partial<React.ComponentProps<typeof DocumentFileTree>> = {}) {
@@ -107,5 +118,46 @@ describe("DocumentFileTree", () => {
       "/matters/m1/documents?folder=med"
     );
     expect(screen.getByText(/too many files to list here/)).toBeInTheDocument();
+  });
+
+  test("an email's attachments nest under it; opening one opens its email", () => {
+    const docs = [
+      ...DOCS,
+      doc("e1", "Incident email.eml", "disc", "message/rfc822"),
+      doc("a1", "report.pdf", "disc", "application/pdf", { parentDocumentId: "e1", attachmentIndex: 0 }),
+      doc("a2", "timeline.csv", "disc", "text/csv", { parentDocumentId: "e1", attachmentIndex: 1 }),
+    ];
+    renderTree({ documents: docs, currentId: "a2", currentFolderId: "disc", currentParentId: "e1" });
+    const toggle = screen.getByRole("button", { name: "Hide attachments of Incident email.eml" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("link", { name: /timeline\.csv/ })).toHaveAttribute("aria-current", "page");
+    // Attachments aren't listed loose in the folder.
+    expect(screen.getAllByRole("link", { name: "report.pdf" })).toHaveLength(1);
+    fireEvent.click(toggle);
+    expect(screen.queryByText("report.pdf")).toBeNull();
+  });
+
+  test("a document also filed in another folder shows there as a link to it", () => {
+    renderTree({ links: [{ id: "l1", documentId: "d2", folderId: "med" }], currentId: "d1", currentFolderId: null });
+    fireEvent.click(screen.getByRole("button", { name: /Medical/ }));
+    const inMedical = screen.getByRole("button", { name: /Medical/ }).closest("li")!;
+    const link = within(inMedical).getByRole("link", { name: /Police report\.pdf/ });
+    expect(link).toHaveAttribute("href", "/matters/m1/documents/d2");
+    expect(link).toHaveAttribute("title", "Police report.pdf (also filed here)");
+    // Folder count includes it.
+    expect(within(screen.getByRole("button", { name: /Medical/ })).getByText("2")).toBeInTheDocument();
+  });
+
+  test("the filter finds attachments inside an email", () => {
+    const docs = [
+      ...DOCS,
+      doc("e1", "Incident email.eml", null, "message/rfc822"),
+      doc("a1", "dispatch-log.pdf", null, "application/pdf", { parentDocumentId: "e1", attachmentIndex: 0 }),
+    ];
+    renderTree({ documents: docs });
+    fireEvent.change(screen.getByLabelText("Filter files"), { target: { value: "dispatch" } });
+    expect(screen.getByRole("link", { name: /Incident email\.eml/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /dispatch-log\.pdf/ })).toBeInTheDocument();
+    expect(screen.queryByText("Retainer.pdf")).toBeNull();
   });
 });

@@ -36,6 +36,9 @@ export function MoveToFolderDialog({
   folders,
   disabledIds,
   currentFolderId,
+  alreadyIn = [],
+  submitLabel = "Move",
+  pendingLabel = "Moving…",
   onMove,
 }: {
   open: boolean;
@@ -46,8 +49,15 @@ export function MoveToFolderDialog({
   folders: FlatFolder[];
   /** Unpickable targets (the moving folder + its descendants). */
   disabledIds?: string[];
-  /** Where the item lives now — shown as "current", not pickable. */
-  currentFolderId: string | null;
+  /** Where the item lives now — shown as "current", not pickable.
+   *  `undefined` = it has no folder of its own here (an email
+   *  attachment, which lives under its email). */
+  currentFolderId: string | null | undefined;
+  /** Other folders the item is already filed in (links) — shown as
+   *  "already filed", not pickable. */
+  alreadyIn?: (string | null)[];
+  submitLabel?: string;
+  pendingLabel?: string;
   onMove: (
     folderId: string | null
   ) => Promise<{ ok: boolean; error?: string }>;
@@ -86,12 +96,13 @@ export function MoveToFolderDialog({
     isDisabled: boolean
   ) => {
     const isCurrent = id === currentFolderId;
+    const isFiled = !isCurrent && alreadyIn.includes(id);
     const isPicked = target !== undefined && target === id;
     return (
       <button
         key={id ?? "__root__"}
         type="button"
-        disabled={isDisabled || isCurrent || pending}
+        disabled={isDisabled || isCurrent || isFiled || pending}
         // Selection state for assistive tech (colour alone isn't enough).
         aria-pressed={isPicked}
         onClick={() => setTarget(id)}
@@ -100,16 +111,16 @@ export function MoveToFolderDialog({
           isPicked
             ? "bg-brand-soft text-brand-700 font-medium"
             : "text-ink-2 hover:bg-paper-2",
-          (isDisabled || isCurrent) &&
+          (isDisabled || isCurrent || isFiled) &&
             "opacity-45 cursor-not-allowed hover:bg-transparent"
         )}
         style={{ paddingLeft: `${8 + (depth - 1) * 16}px` }}
       >
         <Folder size={13} className="shrink-0 text-ink-4" />
         <span className="truncate">{label}</span>
-        {isCurrent && (
+        {(isCurrent || isFiled) && (
           <span className="ml-auto shrink-0 text-2xs font-mono text-ink-4">
-            current
+            {isCurrent ? "current" : "already filed"}
           </span>
         )}
       </button>
@@ -157,7 +168,7 @@ export function MoveToFolderDialog({
             )}
           >
             <FolderInput size={12} />
-            {pending ? "Moving…" : "Move"}
+            {pending ? pendingLabel : submitLabel}
           </button>
         </DialogFooter>
       </DialogContent>

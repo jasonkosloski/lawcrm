@@ -196,7 +196,14 @@ describe("getViewerFileTree — the viewer's left-hand file list", () => {
     const { documents, complete } = await getViewerFileTree(matterId, null);
     expect(complete).toBe(true);
     expect(documents.map((d) => d.name)).toEqual(["a-retainer.pdf", "b-report.pdf"]);
-    expect(Object.keys(documents[0]).sort()).toEqual(["contentType", "folderId", "id", "name"]);
+    expect(Object.keys(documents[0]).sort()).toEqual([
+      "attachmentIndex",
+      "contentType",
+      "folderId",
+      "id",
+      "name",
+      "parentDocumentId",
+    ]);
     expect(documents[1].folderId).toBe(folder.id);
   });
 

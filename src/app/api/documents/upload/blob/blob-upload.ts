@@ -47,6 +47,7 @@ import { prisma } from "@/lib/prisma";
 import { canAccessMatter } from "@/lib/matter-access";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
+import { extractIfEmail } from "@/lib/email-attachment-extract";
 import { DOCUMENT_CATEGORIES, type DocumentCategory } from "@/lib/document-form";
 import { isValidStorageKey } from "@/lib/storage/storage-key";
 import { BLOB_CACHE_MAX_AGE_SECONDS } from "@/lib/storage/blob-driver";
@@ -279,8 +280,9 @@ export const onUploadCompleted: NonNullable<
     });
 
   let filedAtRoot = Boolean(t.folderId) && folderId === null;
+  let created: { id: string; name: string; contentType: string | null };
   try {
-    await create(folderId);
+    created = await create(folderId);
   } catch (err) {
     if (!isForeignKeyError(err)) throw err;
     // Raced a delete between the checks above and the insert.
@@ -292,7 +294,7 @@ export const onUploadCompleted: NonNullable<
       await removeOrphan();
       return;
     }
-    await create(null);
+    created = await create(null);
     filedAtRoot = true;
   }
 
@@ -310,6 +312,10 @@ export const onUploadCompleted: NonNullable<
       : t.name
     ).slice(0, 500),
   });
+
+  // Emails: their attachments become documents under them (ADR-043).
+  // Best-effort; never fails the callback.
+  await extractIfEmail(created, t.userId);
 
   // The row exists now: a failure here must not fail the callback
   // (Vercel would retry and the guard above would just no-op).

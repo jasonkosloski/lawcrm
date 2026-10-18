@@ -922,3 +922,23 @@ These are not ADRs: each needs a human call, and when it is made it becomes an A
 - (-) Spreadsheets show values only (no formatting, formulas or charts); email attachments are listed, not opened
 - (-) TIFF/HEIC flags are anchorless for now (page/region tagging deferred); heic-to is LGPL (loaded unmodified as a separate module)
 
+## ADR-043: Email attachments become documents; documents can be filed in several folders
+
+**Date:** 2026-10-18
+**Status:** Accepted
+
+**Context:** Emails uploaded as evidence (.eml/.msg) carry the files that matter — reports, photos, spreadsheets — but those were only names on a chip. To review or flag one, someone had to download the email, extract it by hand and upload it again, and a document that belonged in two places (e.g. an exhibit that is also correspondence) had to be uploaded twice, splitting its flags and notes.
+
+**Decision:**
+- **Extract on upload.** After an email document is created (both upload transports), each listed attachment becomes its own Document (`src/lib/email-attachment-extract.ts`): stored under its own key, `parentDocumentId` = the email, `attachmentIndex` = its position (so the viewer's chips open it), the email's folder and category, `source: "email_attachment"`. Images embedded in the body (cid:) aren't attachments. Extraction is idempotent (atomic claim on `attachmentsExtractedAt`), rolls back fully on failure, and is best-effort — the upload itself never fails because of it. Older emails get an "Add attachments to documents" button (`documents.upload`).
+- **Attachments live under their email.** They share its folder and move with it; moving one directly is refused. Trees and the Documents tab show them nested under the email.
+- **Links, not copies.** "Also file in…" adds a `DocumentLink`: the same document (one file, one set of flags and notes) appears in another folder. Removing a link never touches the document; deleting the document removes it everywhere. Gated by `documents.organize`, like moving.
+- **Deleting an email** (the user's rule): attachments filed elsewhere stay where they were filed (their first link becomes their home); attachments filed nowhere else are named in the delete prompt with an explicit choice — delete with the email (default) or keep in the folder. The server refuses to guess.
+- Deleting a folder moves its links up a level with its documents, dropping any that would duplicate a place the document already is.
+
+**Trade-offs:**
+- (+) No re-uploads: every attachment is reviewable and flaggable where it arrived, and a document can sit in every folder it belongs to
+- (+) Flags and notes stay in one place however many folders show the document
+- (-) Attachment bytes are stored twice (inside the email and as their own file); emails over 25 MB and attachments past 100 per email aren't extracted
+- (-) Outlook .msg embedded (cid) images still show as blocked in the body; nested emails inside emails are extracted as files, not expanded
+

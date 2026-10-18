@@ -31,6 +31,7 @@ import {
   Folder,
   FolderOpen,
   Image as ImageIcon,
+  Link2,
   Mail,
   PanelLeftClose,
   PanelLeftOpen,
@@ -41,8 +42,15 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FolderNode } from "@/lib/folder-tree";
-import { ROOT_KEY, ancestorChain, filesByFolder, filterTree } from "@/lib/file-tree";
-import type { FileTreeDocument } from "@/lib/queries/document-viewer";
+import {
+  ROOT_KEY,
+  ancestorChain,
+  attachmentsByEmail,
+  filesByFolder,
+  filterTree,
+  linkedByFolder,
+} from "@/lib/file-tree";
+import type { FileTreeDocument, FileTreeLink } from "@/lib/queries/document-viewer";
 import { resolveDocumentRenderer, type DocumentRenderer } from "./resolve-renderer";
 
 const FOLDER_RENDER_CAP = 200;
@@ -97,31 +105,58 @@ export function DocumentFileTree({
   matterId,
   tree,
   documents,
+  links = [],
   complete,
   currentId,
   currentFolderId,
+  currentParentId = null,
 }: {
   matterId: string;
   tree: FolderNode[];
   documents: FileTreeDocument[];
+  /** Documents also filed in other folders (shown there as links). */
+  links?: FileTreeLink[];
   /** False when the matter is over the load cap: only the current
    *  folder's files are in `documents`. */
   complete: boolean;
   currentId: string;
   currentFolderId: string | null;
+  /** The current document's email, when it's an attachment. */
+  currentParentId?: string | null;
 }) {
   const byFolder = useMemo(() => filesByFolder(documents), [documents]);
+  const attachments = useMemo(() => attachmentsByEmail(documents), [documents]);
+  const linked = useMemo(() => linkedByFolder(links, documents), [links, documents]);
   const [query, setQuery] = useState("");
-  const filtered = useMemo(() => filterTree(tree, byFolder, query), [tree, byFolder, query]);
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(ancestorChain(tree, currentFolderId)));
+  const filtered = useMemo(
+    () => filterTree(tree, byFolder, query, attachments, linked),
+    [tree, byFolder, query, attachments, linked]
+  );
+  // Folder ids, plus `doc:<emailId>` for emails opened to show attachments.
+  const [expanded, setExpanded] = useState<Set<string>>(
+    () =>
+      new Set([
+        ...ancestorChain(tree, currentFolderId),
+        ...(currentParentId ? [`doc:${currentParentId}`] : []),
+        `doc:${currentId}`,
+      ])
+  );
   const [showAll, setShowAll] = useState<Set<string>>(new Set());
   const collapsed = useSyncExternalStore(subscribeCollapsed, readCollapsed, () => false);
 
   // Navigating to a document in another folder opens that folder's chain.
-  const [seenFolder, setSeenFolder] = useState(currentFolderId);
-  if (seenFolder !== currentFolderId) {
-    setSeenFolder(currentFolderId);
-    setExpanded((s) => new Set([...s, ...ancestorChain(tree, currentFolderId)]));
+  const [seenDoc, setSeenDoc] = useState(currentId);
+  if (seenDoc !== currentId) {
+    setSeenDoc(currentId);
+    setExpanded(
+      (s) =>
+        new Set([
+          ...s,
+          ...ancestorChain(tree, currentFolderId),
+          ...(currentParentId ? [`doc:${currentParentId}`] : []),
+          `doc:${currentId}`,
+        ])
+    );
   }
 
   const toggleCollapsed = () => writeCollapsed(!collapsed);
@@ -155,38 +190,63 @@ export function DocumentFileTree({
     );
   }
 
-  const fileRow = (doc: FileTreeDocument, depth: number) => {
-    const Icon = ICON[resolveDocumentRenderer(doc.contentType, doc.name)];
+  const fileRow = (doc: FileTreeDocument, depth: number, viaLink = false): React.ReactNode => {
+    const Icon = viaLink ? Link2 : ICON[resolveDocumentRenderer(doc.contentType, doc.name)];
     const isCurrent = doc.id === currentId;
+    let kids = attachments.get(doc.id) ?? [];
+    if (filtered) kids = kids.filter((k) => filtered.files.has(k.id));
+    const open = kids.length > 0 && (filtered ? true : expanded.has(`doc:${doc.id}`));
     return (
-      <li key={doc.id}>
-        <Link
-          ref={isCurrent ? currentRef : undefined}
-          href={`/matters/${matterId}/documents/${doc.id}`}
-          aria-current={isCurrent ? "page" : undefined}
-          title={doc.name}
-          style={{ paddingLeft: 8 + depth * 12 }}
-          className={cn(
-            "flex items-center gap-1.5 rounded-md py-1 pr-2 text-xs",
-            isCurrent ? "bg-brand-soft font-medium text-brand-700" : "text-ink-2 hover:bg-paper-2 hover:text-ink"
+      <li key={`${viaLink ? "link" : "doc"}-${doc.id}`}>
+        <div className="flex items-center" style={{ paddingLeft: depth * 12 }}>
+          {kids.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => toggle(`doc:${doc.id}`)}
+              aria-expanded={open}
+              aria-label={`${open ? "Hide" : "Show"} attachments of ${doc.name}`}
+              className="inline-flex h-5 w-4 shrink-0 items-center justify-center text-ink-4 hover:text-ink"
+            >
+              {open ? <ChevronDown className="h-3 w-3" aria-hidden /> : <ChevronRight className="h-3 w-3" aria-hidden />}
+            </button>
+          ) : (
+            <span className="w-4 shrink-0" aria-hidden />
           )}
-        >
-          <Icon className="h-3.5 w-3.5 shrink-0 text-ink-4" aria-hidden />
-          <span className="truncate">{doc.name}</span>
-        </Link>
+          <Link
+            // The highlighted row the tree scrolls to is the document's
+            // own entry, not a link to it elsewhere.
+            ref={isCurrent && !viaLink ? currentRef : undefined}
+            href={`/matters/${matterId}/documents/${doc.id}`}
+            aria-current={isCurrent ? "page" : undefined}
+            title={viaLink ? `${doc.name} (also filed here)` : doc.name}
+            className={cn(
+              "flex min-w-0 flex-1 items-center gap-1.5 rounded-md py-1 pl-1 pr-2 text-xs",
+              isCurrent ? "bg-brand-soft font-medium text-brand-700" : "text-ink-2 hover:bg-paper-2 hover:text-ink"
+            )}
+          >
+            <Icon className="h-3.5 w-3.5 shrink-0 text-ink-4" aria-hidden />
+            <span className="truncate">{doc.name}</span>
+          </Link>
+        </div>
+        {open && <ul>{kids.map((k) => fileRow(k, depth + 1))}</ul>}
       </li>
     );
   };
 
   const filesIn = (key: string, depth: number) => {
     let files = byFolder.get(key) ?? [];
-    if (filtered) files = files.filter((f) => filtered.files.has(f.id));
-    if (files.length === 0) return null;
+    let linkedHere = linked.get(key) ?? [];
+    if (filtered) {
+      files = files.filter((f) => filtered.files.has(f.id));
+      linkedHere = linkedHere.filter((f) => filtered.files.has(f.id));
+    }
+    if (files.length === 0 && linkedHere.length === 0) return null;
     const capped = !filtered && !showAll.has(key) && files.length > FOLDER_RENDER_CAP;
     const shown = capped ? files.slice(0, FOLDER_RENDER_CAP) : files;
     return (
       <>
         {shown.map((f) => fileRow(f, depth))}
+        {linkedHere.map((f) => fileRow(f, depth, true))}
         {capped && (
           <li>
             <button
@@ -207,7 +267,9 @@ export function DocumentFileTree({
     if (filtered && !filtered.folders.has(node.id)) return null;
     const open = filtered ? true : expanded.has(node.id);
     const listsFiles = complete || node.id === currentFolderId;
-    const count = listsFiles ? (byFolder.get(node.id)?.length ?? 0) : null;
+    const count = listsFiles
+      ? (byFolder.get(node.id)?.length ?? 0) + (linked.get(node.id)?.length ?? 0)
+      : null;
     return (
       <li key={node.id}>
         <button

@@ -133,8 +133,11 @@ describe("deleteDocument audit + storage ordering", () => {
     });
     expect(log.title).toBe("Document deleted");
     expect(log.matterId).toBe(matterId);
+    // Layout-level: the Documents tab AND every viewer page under it
+    // (each shows the matter's file tree).
     expect(revalidatePath).toHaveBeenCalledWith(
-      `/matters/${matterId}/documents`
+      `/matters/${matterId}/documents`,
+      "layout"
     );
   });
 

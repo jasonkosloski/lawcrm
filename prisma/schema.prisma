@@ -512,6 +512,7 @@ model Matter {
   teamMembers             MatterTeamMember[]
   contacts                MatterContact[]
   documents               Document[]
+  documentLinks           DocumentLink[]
   evidence                Evidence[]
   deadlines               Deadline[]
   timeEntries             TimeEntry[]
@@ -794,25 +795,42 @@ model Lead {
 
 /// A document associated with a matter — filings, contracts, correspondence, etc.
 model Document {
-  id          String   @id @default(cuid())
-  matterId    String
-  name        String /// Filename or display title
-  category    String   @default("other") /// filing | pleading | correspondence | contract | intake | discovery | expert_report | evidence | vendor | archive | other
-  source      String? /// ECF | email | scan | upload | generated | vendor
-  fileUrl     String? /// Storage URL or local path
-  contentType String? /// MIME type, e.g. "application/pdf"
-  fileSize    Int? /// Size in bytes
-  status      String   @default("active") /// active | filed | received | review | archived
-  uploadedBy  String? /// User ID who uploaded
+  id                     String    @id @default(cuid())
+  matterId               String
+  name                   String /// Filename or display title
+  category               String    @default("other") /// filing | pleading | correspondence | contract | intake | discovery | expert_report | evidence | vendor | archive | other
+  source                 String? /// ECF | email | email_attachment | scan | upload | generated | vendor
+  fileUrl                String? /// Storage URL or local path
+  contentType            String? /// MIME type, e.g. "application/pdf"
+  fileSize               Int? /// Size in bytes
+  status                 String    @default("active") /// active | filed | received | review | archived
+  uploadedBy             String? /// User ID who uploaded
   /// Folder within the matter's file tree. Null = matter root.
   /// SetNull is the backstop — the folder-delete action re-parents
   /// contents explicitly; files must never vanish with a folder.
-  folderId    String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  folderId               String?
+  /// Set on a file extracted from an uploaded email (.eml/.msg): the
+  /// email document it came from. Such a file lives UNDER its email in
+  /// the tree (it shares the email's folderId, and moves with it) and
+  /// is reached elsewhere through DocumentLinks. SetNull is the
+  /// backstop — deleting an email decides each attachment's fate
+  /// explicitly (src/app/actions/documents.ts).
+  parentDocumentId       String?
+  /// Position in the email's attachment list (0-based), so the email
+  /// viewer's attachment chips open the right file.
+  attachmentIndex        Int?
+  /// When this email's attachments were extracted into documents.
+  /// Null = not yet (older uploads, or extraction failed).
+  attachmentsExtractedAt DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   matter             Matter          @relation(fields: [matterId], references: [id], onDelete: Cascade)
   folder             DocumentFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  parentDocument     Document?       @relation("EmailAttachments", fields: [parentDocumentId], references: [id], onDelete: SetNull)
+  attachments        Document[]      @relation("EmailAttachments")
+  /// Extra places this document is filed (beyond its own folder).
+  links              DocumentLink[]
   flaggedMoments     FlaggedMoment[]
   /// Expenses that point at this document as their receipt. SetNull
   /// on the FK in Expense — deleting the receipt doesn't lose the
@@ -822,7 +840,32 @@ model Document {
   @@index([matterId])
   @@index([category])
   @@index([folderId])
+  @@index([parentDocumentId])
   @@map("documents")
+}
+
+/// An extra place a document is filed: the same document (one file,
+/// one set of flags and notes) shown in another folder of its matter.
+/// Removing a link never touches the document. folderId null = the
+/// matter root. One link per (document, folder) — app-enforced, since
+/// Postgres unique indexes treat NULL folders as distinct.
+model DocumentLink {
+  id          String   @id @default(cuid())
+  documentId  String
+  matterId    String
+  folderId    String?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  document Document        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  matter   Matter          @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  /// Cascade is the backstop — the folder-delete action re-parents
+  /// links explicitly, like documents.
+  folder   DocumentFolder? @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, folderId])
+  @@index([matterId, folderId])
+  @@map("document_links")
 }
 
 // =============================================================================
@@ -2203,6 +2246,7 @@ model DocumentFolder {
   parent    DocumentFolder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
   children  DocumentFolder[] @relation("FolderTree")
   documents Document[]
+  links     DocumentLink[]
 
   @@index([matterId, parentId])
   @@map("document_folders")

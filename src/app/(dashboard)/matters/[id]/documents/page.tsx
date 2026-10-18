@@ -22,7 +22,7 @@
  */
 
 import Link from "next/link";
-import { ChevronRight, FileText, Folder } from "lucide-react";
+import { ChevronRight, FileText, Folder, Link2, Mail, Paperclip } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/table";
 import { UploadDocumentForm } from "@/components/matters/documents/upload-document-form";
 import { DocumentRowActions } from "@/components/matters/documents/document-row-actions";
+import { getFolderListing, type ListingRow } from "@/lib/queries/document-listing";
 import { FolderRowActions } from "@/components/matters/documents/folder-row-actions";
 import { FolderTree } from "@/components/matters/documents/folder-tree";
 import { MultiFileUpload } from "@/components/matters/documents/multi-file-upload";
@@ -54,7 +55,6 @@ import {
 } from "@/lib/folder-tree";
 import {
   getFolderDocumentCounts,
-  getFolderDocuments,
   getMatterDocumentFolders,
 } from "@/lib/queries/matter-detail";
 import {
@@ -121,7 +121,7 @@ export default async function MatterDocumentsPage({
     rawFolder && folders.some((f) => f.id === rawFolder) ? rawFolder : null;
   // Second round trip on purpose: the file list must be scoped to the
   // VALIDATED folder id, which needs the folder rows first.
-  const documents = await getFolderDocuments(id, selectedId);
+  const listing = await getFolderListing(id, selectedId);
 
   const tree = buildFolderTree(folders);
   const flat = flattenFolderTree(tree);
@@ -134,7 +134,73 @@ export default async function MatterDocumentsPage({
     selectedId !== null && folderDepth(folders, selectedId) >= MAX_FOLDER_DEPTH;
 
   const basePath = `/matters/${id}/documents`;
-  const isEmpty = subfolders.length === 0 && documents.length === 0;
+  const isEmpty =
+    subfolders.length === 0 && listing.documents.length === 0 && listing.linked.length === 0;
+
+  /** One document row: an ordinary file, an email's attachment
+   *  (indented under it), or a document also filed here (a link). */
+  const docRow = (
+    d: ListingRow,
+    kind: "own" | "attachment" | "linked",
+    extra: { linkId?: string; homeName?: string; attachments?: ListingRow[] } = {}
+  ) => {
+    const status = documentStatusMeta(d.status);
+    const canDelete = canDeleteAny || d.uploadedBy === currentUserId;
+    const Icon = kind === "attachment" ? Paperclip : kind === "linked" ? Link2 : d.isEmail ? Mail : FileText;
+    const elsewhere = d.alsoIn.length - (kind === "linked" ? 1 : 0);
+    return (
+      <TableRow key={`${kind}-${extra.linkId ?? d.id}`}>
+        <TableCell className={kind === "attachment" ? "pl-10 font-medium text-ink" : "pl-4 font-medium text-ink"}>
+          <Link
+            href={`${basePath}/${d.id}`}
+            className="inline-flex items-center gap-2 hover:text-brand-700 hover:underline"
+            title="Open document"
+          >
+            <Icon size={14} className="shrink-0 text-ink-4" />
+            {d.name}
+          </Link>
+          {kind === "linked" && extra.homeName && (
+            <div className="pl-[22px] text-2xs font-normal text-ink-4">Also filed here · lives in {extra.homeName}</div>
+          )}
+          {elsewhere > 0 && kind !== "linked" && (
+            <div
+              className="pl-[22px] text-2xs font-normal text-ink-4"
+              title={d.alsoIn.map((f) => f.folderName).join(", ")}
+            >
+              Also in {elsewhere === 1 ? d.alsoIn[0].folderName : `${elsewhere} other folders`}
+            </div>
+          )}
+        </TableCell>
+        <TableCell className="text-2xs font-mono text-ink-4">{documentCategoryLabel(d.category)}</TableCell>
+        <TableCell>
+          <span className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full border ${status.className}`}>
+            {status.label}
+          </span>
+        </TableCell>
+        <TableCell className="text-2xs font-mono text-ink-3">{formatFileSize(d.fileSize)}</TableCell>
+        <TableCell className="text-2xs font-mono text-ink-3">
+          <span title={d.uploaderName ?? undefined}>{d.uploaderInitials ?? "—"}</span>
+        </TableCell>
+        <TableCell className="text-xs text-ink-3">{formatDate(d.createdAt, "medium", tz)}</TableCell>
+        <TableCell className="pr-4 text-right">
+          <DocumentRowActions
+            documentId={d.id}
+            name={d.name}
+            canDelete={canDelete}
+            hasFile={d.hasFile}
+            canMove={canOrganize}
+            folders={flat}
+            currentFolderId={d.folderId}
+            isAttachment={d.parentDocumentId !== null}
+            alsoInFolderIds={d.alsoIn.map((f) => f.folderId)}
+            linkId={extra.linkId}
+            unsavedAttachments={(extra.attachments ?? []).filter((a) => a.alsoIn.length === 0).map((a) => a.name)}
+            savedAttachments={(extra.attachments ?? []).filter((a) => a.alsoIn.length > 0).map((a) => a.name)}
+          />
+        </TableCell>
+      </TableRow>
+    );
+  };
 
   return (
     <div className="p-5 flex flex-col lg:flex-row gap-5 items-start">
@@ -287,60 +353,11 @@ export default async function MatterDocumentsPage({
                     </TableRow>
                   );
                 })}
-                {documents.map((d) => {
-                  const status = documentStatusMeta(d.status);
-                  const canDelete =
-                    canDeleteAny || d.uploadedBy === currentUserId;
-                  return (
-                    <TableRow key={d.id}>
-                      <TableCell className="pl-4 font-medium text-ink">
-                        <Link
-                          href={`${basePath}/${d.id}`}
-                          className="inline-flex items-center gap-2 hover:text-brand-700 hover:underline"
-                          title="Open document"
-                        >
-                          <FileText
-                            size={14}
-                            className="shrink-0 text-ink-4"
-                          />
-                          {d.name}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-2xs font-mono text-ink-4">
-                        {documentCategoryLabel(d.category)}
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full border ${status.className}`}
-                        >
-                          {status.label}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-2xs font-mono text-ink-3">
-                        {formatFileSize(d.fileSize)}
-                      </TableCell>
-                      <TableCell className="text-2xs font-mono text-ink-3">
-                        <span title={d.uploaderName ?? undefined}>
-                          {d.uploaderInitials ?? "—"}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-xs text-ink-3">
-                        {formatDate(d.createdAt, "medium", tz)}
-                      </TableCell>
-                      <TableCell className="pr-4 text-right">
-                        <DocumentRowActions
-                          documentId={d.id}
-                          name={d.name}
-                          canDelete={canDelete}
-                          hasFile={d.hasFile}
-                          canMove={canOrganize}
-                          folders={flat}
-                          currentFolderId={d.folderId}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                {listing.documents.map((d) => [
+                  docRow(d, "own", { attachments: d.attachments }),
+                  ...d.attachments.map((a) => docRow(a, "attachment")),
+                ])}
+                {listing.linked.map((d) => docRow(d, "linked", { linkId: d.linkId, homeName: d.homeName }))}
               </TableBody>
             </Table>
           </Card>

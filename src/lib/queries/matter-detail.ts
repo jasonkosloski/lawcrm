@@ -1218,12 +1218,14 @@ export type DocumentRow = {
   uploaderName: string | null;
   /** Folder within the matter's file tree; null = matter root. */
   folderId: string | null;
+  /** The email this file was extracted from (ADR-043), else null. */
+  parentDocumentId: string | null;
   createdAt: Date;
 };
 
 /** Batch-resolve uploader initials + names (one query, no N+1) and
  *  shape raw Document rows into DocumentRow. */
-async function shapeDocumentRows(
+export async function shapeDocumentRows(
   rows: Awaited<ReturnType<typeof prisma.document.findMany>>
 ): Promise<DocumentRow[]> {
   const uploaderIds = [
@@ -1253,22 +1255,9 @@ async function shapeDocumentRows(
       : null,
     uploaderName: d.uploadedBy ? byUser.get(d.uploadedBy)?.name ?? null : null,
     folderId: d.folderId,
+    parentDocumentId: d.parentDocumentId,
     createdAt: d.createdAt,
   }));
-}
-
-/** Documents directly inside one folder of the matter's tree
- *  (`folderId: null` = the matter root), ordered by name. The
- *  browser shows one folder at a time — this is its file list. */
-export async function getFolderDocuments(
-  matterId: string,
-  folderId: string | null
-): Promise<DocumentRow[]> {
-  const rows = await prisma.document.findMany({
-    where: { matterId, folderId },
-    orderBy: [{ name: "asc" }],
-  });
-  return shapeDocumentRows(rows);
 }
 
 /** The matter's whole folder tree as FLAT rows in ONE query — tree
@@ -1292,16 +1281,25 @@ export async function getMatterDocumentFolders(
 export async function getFolderDocumentCounts(
   matterId: string
 ): Promise<{ counts: Record<string, number>; rootCount: number }> {
-  const grouped = await prisma.document.groupBy({
-    by: ["folderId"],
-    where: { matterId },
-    _count: { _all: true },
-  });
+  // Entries a folder shows: its own documents (an email counts once —
+  // its attachments list under it) plus documents also filed there.
+  const [grouped, linked] = await Promise.all([
+    prisma.document.groupBy({
+      by: ["folderId"],
+      where: { matterId, parentDocumentId: null },
+      _count: { _all: true },
+    }),
+    prisma.documentLink.groupBy({
+      by: ["folderId"],
+      where: { matterId },
+      _count: { _all: true },
+    }),
+  ]);
   const counts: Record<string, number> = {};
   let rootCount = 0;
-  for (const g of grouped) {
-    if (g.folderId === null) rootCount = g._count._all;
-    else counts[g.folderId] = g._count._all;
+  for (const g of [...grouped, ...linked]) {
+    if (g.folderId === null) rootCount += g._count._all;
+    else counts[g.folderId] = (counts[g.folderId] ?? 0) + g._count._all;
   }
   return { counts, rootCount };
 }

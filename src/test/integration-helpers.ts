@@ -79,6 +79,7 @@ export const TABLES_IN_DELETE_ORDER = [
   "evidence_syncs",
   "flagged_moments",
   "evidence",
+  "document_links",
   "documents",
   "document_folders",
   // Template library rows reference users (createdById); drop
