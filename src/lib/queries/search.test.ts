@@ -296,6 +296,26 @@ describe("globalSearch — documents", () => {
       context: "Intake · Test Lead",
     });
   });
+
+  test("TEAM mode: a restricted viewer still finds lead documents but not a hidden matter's", async () => {
+    await prisma.firm.updateMany({ data: { matterVisibility: "TEAM" } });
+    const { leadId } = await seedLead({ name: "Test Lead" });
+    const leadDoc = await prisma.document.create({
+      data: { leadId, name: "Quokkaprint intake form.pdf" },
+      select: { id: true },
+    });
+    await prisma.document.create({
+      data: { matterId: otherMatterId, name: "Quokkaprint secret.pdf" },
+    });
+    const g = groupOf(await globalSearch("quokkaprint"), "document")!;
+    expect(g.total).toBe(1);
+    expect(g.hits).toHaveLength(1);
+    expect(g.hits[0]).toMatchObject({
+      id: leadDoc.id,
+      href: `/intake/${leadId}/documents/${leadDoc.id}`,
+      context: "Intake · Test Lead",
+    });
+  });
 });
 
 describe("globalSearch — tasks", () => {
