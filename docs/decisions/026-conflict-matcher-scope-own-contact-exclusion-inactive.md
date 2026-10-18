@@ -9,7 +9,7 @@
 - The candidate's own Contact (`ownContactId`, from `Lead.contactId`) is skipped by the soft "already in the directory" warnings. The hard tier still considers it: if the person is also an opposing-side party on an active matter, that is a real conflict.
 - Contacts that are deactivated but still parties on non-archived matters stay in the hard tier. Only contacts merged away (`mergedIntoId` set; their rows moved to the survivor) are excluded. The soft warn still applies to active contacts only.
 - Conflict-check audit entries identify the lead: the title carries the name, the detail begins `lead {id}:` (older rows keep the nameless title).
-- **`Contact.conflictStatus` is a manual flag only.** `setContactConflictStatus` writes it and merge carries it over, but the matcher never reads it. Whether it should feed the matcher is an open product decision (see Open decisions).
+- **A manually flagged contact is a hard hit** (amended 2026-10-18). `Contact.conflictStatus = "flagged"` (set by `setContactConflictStatus`, carried over by merge) makes any email/name/organization match on that contact a `contact_flagged` conflict. This includes the candidate's own contact and inactive contacts: the flag is the firm saying "do not take this person on". `override` and `clear` add nothing.
 
 **Trade-offs:**
 - (+) A genuinely clean lead can be cleared; a deactivated adverse party can't hide a conflict

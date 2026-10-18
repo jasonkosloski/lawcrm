@@ -15,6 +15,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vi
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import { runConflictMatcher } from "@/lib/conflict-check";
+import { prisma } from "@/lib/prisma";
 import {
   resetDb,
   seedContact,
@@ -644,5 +645,78 @@ describe("runConflictMatcher — opposing counsel (representation)", () => {
     const other = result.matches.find((m) => m.contactId !== used.contactId);
     expect(other?.severity).toBe("warn");
     expect(result.severity).toBe("conflict");
+  });
+});
+
+describe("runConflictMatcher — manually flagged contacts", () => {
+  async function flag(contactId: string) {
+    await prisma.contact.update({
+      where: { id: contactId },
+      data: { conflictStatus: "flagged" },
+    });
+  }
+
+  test("a flagged contact matched by name is a conflict, not a warn", async () => {
+    const c = await seedContact({ name: "Rex Flagged", email: null, type: "witness" });
+    await flag(c.contactId);
+    const result = await runConflictMatcher({
+      name: "rex  flagged",
+      email: null,
+      organization: null,
+    });
+    expect(result.severity).toBe("conflict");
+    const hit = result.matches.find((m) => m.kind === "contact_flagged")!;
+    expect(hit).toMatchObject({ matchedField: "name", contactId: c.contactId });
+  });
+
+  test("matched by email or organization too; inactive still counts", async () => {
+    const c = await seedContact({
+      name: "Someone Else",
+      email: "flag@example.com",
+      organization: "Flag Corp",
+      type: "witness",
+    });
+    await flag(c.contactId);
+    await prisma.contact.update({ where: { id: c.contactId }, data: { isActive: false } });
+
+    const byEmail = await runConflictMatcher({
+      name: null,
+      email: "FLAG@example.com",
+      organization: null,
+    });
+    expect(byEmail.matches.find((m) => m.kind === "contact_flagged")?.matchedField).toBe("email");
+
+    const byOrg = await runConflictMatcher({
+      name: null,
+      email: null,
+      organization: "flag corp",
+    });
+    expect(byOrg.severity).toBe("conflict");
+  });
+
+  test("the lead's own contact, when flagged, is a conflict", async () => {
+    const own = await seedContact({ name: "Own Flagged", email: null, type: "client" });
+    await flag(own.contactId);
+    const result = await runConflictMatcher({
+      name: "Own Flagged",
+      email: null,
+      organization: null,
+      ownContactId: own.contactId,
+    });
+    expect(result.severity).toBe("conflict");
+  });
+
+  test("override and clear statuses don't add a hard hit", async () => {
+    const c = await seedContact({ name: "Was Flagged", email: null, type: "witness" });
+    await prisma.contact.update({
+      where: { id: c.contactId },
+      data: { conflictStatus: "override" },
+    });
+    const result = await runConflictMatcher({
+      name: "Was Flagged",
+      email: null,
+      organization: null,
+    });
+    expect(result.severity).toBe("warn");
   });
 });

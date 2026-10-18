@@ -40,7 +40,10 @@ export type ConflictMatchKind =
   | "contact_email"
   | "contact_name"
   | "matter_opposing_party"
-  | "matter_opposing_firm";
+  | "matter_opposing_firm"
+  /** A contact someone manually flagged as a conflict
+   *  (`Contact.conflictStatus = "flagged"`). Always hard. */
+  | "contact_flagged";
 
 export type ConflictMatch = {
   kind: ConflictMatchKind;
@@ -384,6 +387,41 @@ export async function runConflictMatcher(
       });
       seenContactIds.add(c.id);
     }
+  }
+
+  // ── Manually flagged contacts (hard) ──────────────────────────
+  // A user marked this person/org as a conflict on the contact page.
+  // Any identity hit on a flagged contact is a conflict, including the
+  // candidate's own contact (ADR-026 amendment): the flag is the firm
+  // saying "do not take this person on", and that is exactly the lead.
+  // Inactive contacts count; merged-away ones carried their flag to
+  // the survivor.
+  const identity = [
+    ...(emailKey ? [{ email: { equals: emailKey, mode: "insensitive" as const } }] : []),
+    ...(nameKey ? [{ name: { equals: nameKey, mode: "insensitive" as const } }] : []),
+    ...(orgKey
+      ? [{ organization: { equals: orgKey, mode: "insensitive" as const } }]
+      : []),
+  ];
+  const flagged = await prisma.contact.findMany({
+    where: { mergedIntoId: null, conflictStatus: "flagged", OR: identity },
+    select: { id: true, name: true, email: true, organization: true, isActive: true },
+    orderBy: { name: "asc" },
+  });
+  for (const c of flagged) {
+    const matchedField =
+      emailKey && normalize(c.email) === emailKey
+        ? "email"
+        : nameKey && normalize(c.name) === nameKey
+          ? "name"
+          : "organization";
+    matches.push({
+      kind: "contact_flagged",
+      severity: "conflict",
+      matchedField,
+      description: `${c.name}${c.isActive ? "" : " (inactive)"} — flagged as a conflict on their contact record`,
+      contactId: c.id,
+    });
   }
 
   return { severity: summarizeMatchSeverity(matches), matches };
