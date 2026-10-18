@@ -219,10 +219,21 @@ export async function renameFolder(
     };
   }
 
-  await prisma.documentFolder.update({
-    where: { id: folder.id },
+  // Conditional write: a folder stamped as generated since the read above
+  // is still refused (count 0 with the row present means protected).
+  const renamed = await prisma.documentFolder.updateMany({
+    where: { id: folder.id, systemKind: null },
     data: { name: valid.name },
   });
+  if (renamed.count === 0) {
+    const still = await prisma.documentFolder.findUnique({
+      where: { id: folder.id },
+      select: { id: true },
+    });
+    return still
+      ? { ok: false, error: PROTECTED_FOLDER_ERROR }
+      : { ok: false, error: "Folder not found." };
+  }
 
   await logActivity({
     matterId: folder.matterId,
@@ -277,13 +288,13 @@ export async function deleteFolder(id: string): Promise<FolderActionResult> {
     const folder = await tx.documentFolder.findUniqueOrThrow({
       where: { id },
       select: {
-      id: true,
-      matterId: true,
-      leadId: true,
-      parentId: true,
-      name: true,
-      systemKind: true,
-    },
+        id: true,
+        matterId: true,
+        leadId: true,
+        parentId: true,
+        name: true,
+        systemKind: true,
+      },
     });
     const folders: FolderRecord[] = await tx.documentFolder.findMany({
       where: scopeWhere(scopeOf(folder)),

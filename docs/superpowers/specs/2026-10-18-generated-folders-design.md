@@ -78,3 +78,10 @@ Changelog entry in SCHEMA_NOTES, an ADR (generated folders carry their source; p
 ## Out of scope
 
 Making other features' folders generated (for example email-attachment extraction), and admin override to unprotect.
+
+## Notes from final review
+
+- Known limit: once a scope has had a request, Records Requests (and Investigation above it) stay protected even when empty.
+- Tree rail and viewer file tree show a protected icon only (a link cannot nest in the row link); Documents list rows show the linked badge.
+- An unstamped "Records Requests" folder under Investigation is adopted (stamped) by name, deliberately.
+- Resolution looks up a stamped `records_root` scope-wide before Investigation, so renaming or moving Investigation creates no second tree.

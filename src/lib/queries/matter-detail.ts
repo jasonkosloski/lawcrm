@@ -1316,13 +1316,34 @@ export async function shapeDocumentRows(
 export async function getDocumentFolders(
   scope: RecordScope
 ): Promise<
-  { id: string; parentId: string | null; name: string; order: number }[]
+  {
+    id: string;
+    parentId: string | null;
+    name: string;
+    order: number;
+    systemKind: string | null;
+    recordsRequestId: string | null;
+    /** Subject of the owning records request, for the badge tooltip. */
+    sourceTitle: string | null;
+  }[]
 > {
-  return prisma.documentFolder.findMany({
+  const rows = await prisma.documentFolder.findMany({
     where: scopeWhere(scope),
-    select: { id: true, parentId: true, name: true, order: true },
+    select: {
+      id: true,
+      parentId: true,
+      name: true,
+      order: true,
+      systemKind: true,
+      recordsRequestId: true,
+      recordsRequest: { select: { subject: true } },
+    },
     orderBy: [{ order: "asc" }, { name: "asc" }],
   });
+  return rows.map(({ recordsRequest, ...f }) => ({
+    ...f,
+    sourceTitle: recordsRequest?.subject ?? null,
+  }));
 }
 
 /** Direct (non-recursive) document count per folder in one groupBy.

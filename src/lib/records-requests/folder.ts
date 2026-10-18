@@ -244,13 +244,25 @@ export async function resolveRecordsFolder(
   await lockRecordsRequest(tx, request.id);
   await lockScopeFolders(tx, scope);
 
-  const investigationId = await findOrCreateChild(
-    tx,
-    where,
-    null,
-    RECORDS_INVESTIGATION_FOLDER_NAME,
-  );
-  const rootId = await resolveRecordsRoot(tx, where, investigationId);
+  // A stamped root wins wherever it now lives: Investigation is an
+  // ordinary folder and may have been renamed or moved since.
+  const stampedRoot = await tx.documentFolder.findFirst({
+    where: { ...where, systemKind: "records_root" },
+    select: { id: true },
+    orderBy: { createdAt: "asc" },
+  });
+  let rootId: string;
+  if (stampedRoot) {
+    rootId = stampedRoot.id;
+  } else {
+    const investigationId = await findOrCreateChild(
+      tx,
+      where,
+      null,
+      RECORDS_INVESTIGATION_FOLDER_NAME,
+    );
+    rootId = await resolveRecordsRoot(tx, where, investigationId);
+  }
 
   const linked = await tx.documentFolder.findFirst({
     where: { ...where, recordsRequestId: request.id, systemKind: "records_request" },

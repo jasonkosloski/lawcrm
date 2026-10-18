@@ -19,7 +19,7 @@ vi.mock("@/lib/permission-check", () => ({
 }));
 vi.mock("@/lib/file-storage", () => ({ activeStorageDriver: () => "local" }));
 vi.mock("@/lib/queries/matter-detail", () => ({
-  getDocumentFolders: vi.fn(async () => []),
+  getDocumentFolders: vi.fn(async (): Promise<unknown[]> => []),
   getFolderDocumentCounts: vi.fn(async () => ({ counts: {}, rootCount: 0 })),
 }));
 vi.mock("@/lib/queries/document-listing", () => ({
@@ -44,6 +44,7 @@ vi.mock("@/components/templates/generate-from-template-dialog", () => ({
 }));
 
 import { currentUserHasPermission } from "@/lib/permission-check";
+import { getDocumentFolders } from "@/lib/queries/matter-detail";
 import { getFolderListing } from "@/lib/queries/document-listing";
 import { DocumentsBrowser } from "./documents-browser";
 
@@ -91,5 +92,17 @@ describe("DocumentsBrowser", () => {
     for (const id of ["multi-upload", "upload-form", "new-folder", "generate"]) {
       expect(screen.queryByTestId(id)).toBeNull();
     }
+  });
+
+  test("a generated folder's row carries the source badge", async () => {
+    grant(ALL);
+    vi.mocked(getDocumentFolders).mockResolvedValueOnce([
+      { id: "g1", parentId: null, name: "Dr. Smith", order: 0, systemKind: "records_request", recordsRequestId: "r1", sourceTitle: "Dr. Smith — Medical" },
+      { id: "o1", parentId: null, name: "Plain", order: 1, systemKind: null, recordsRequestId: null, sourceTitle: null },
+    ]);
+    await renderBrowser();
+    const badges = screen.getAllByRole("link", { name: /Records request/ });
+    expect(badges).toHaveLength(1);
+    expect(badges[0]).toHaveAttribute("href", "/intake/lead_1/records/r1");
   });
 });

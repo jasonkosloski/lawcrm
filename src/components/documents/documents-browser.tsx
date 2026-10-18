@@ -41,6 +41,8 @@ import {
   type ListingAttachment,
   type ListingRow,
 } from "@/lib/queries/document-listing";
+import { isProtectedFolder } from "@/lib/records-requests/folder-kinds";
+import { FolderSourceBadge } from "@/components/documents/folder-source-badge";
 import { FolderRowActions } from "@/components/matters/documents/folder-row-actions";
 import { FolderTree } from "@/components/matters/documents/folder-tree";
 import { MultiFileUpload } from "@/components/matters/documents/multi-file-upload";
@@ -136,6 +138,16 @@ export async function DocumentsBrowser({
   const selectedName =
     crumbs.length > 0 ? crumbs[crumbs.length - 1]!.name : null;
   // Query orders by (order, name); filter preserves it.
+  // Ids that have a protected folder somewhere below them.
+  const protectedAncestors = new Set<string>();
+  for (const f of folders) {
+    if (!isProtectedFolder(f)) continue;
+    let cur = f.parentId;
+    while (cur && !protectedAncestors.has(cur)) {
+      protectedAncestors.add(cur);
+      cur = folders.find((x) => x.id === cur)?.parentId ?? null;
+    }
+  }
   const subfolders = folders.filter((f) => f.parentId === selectedId);
   const atDepthCap =
     selectedId !== null && folderDepth(folders, selectedId) >= MAX_FOLDER_DEPTH;
@@ -321,6 +333,7 @@ export async function DocumentsBrowser({
                             </span>
                           )}
                         </Link>
+                        <FolderSourceBadge folder={folder} scope={scope} />
                       </TableCell>
                       <TableCell className="text-2xs font-mono text-ink-4">
                         Folder
@@ -338,6 +351,10 @@ export async function DocumentsBrowser({
                           canEdit={canFolderEdit}
                           canDelete={canFolderDelete}
                           canOrganize={canOrganize}
+                          isProtected={isProtectedFolder(folder)}
+                          hasProtectedDescendant={protectedAncestors.has(
+                            folder.id
+                          )}
                         />
                       </TableCell>
                     </TableRow>

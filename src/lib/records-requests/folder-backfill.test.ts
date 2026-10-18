@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { prisma } from "@/lib/prisma";
+import { linkRecordsFoldersUnder } from "@/lib/records-requests/folder";
 import {
   resetDb,
   seedContact,
@@ -121,5 +122,56 @@ describe("generated folders backfill", () => {
 
     await runBackfill();
     expect(await kinds()).toEqual(first);
+  });
+
+  describe("equal document counts", () => {
+    async function seedTie() {
+      const { contactId } = await seedContact({ name: "Memorial Hospital" });
+      const mk = (adHocTypeName: string, createdAt: Date) =>
+        prisma.recordsRequest.create({
+          data: {
+            matterId,
+            custodianContactId: contactId,
+            adHocTypeName,
+            subject: "s",
+            createdAt,
+          },
+          select: { id: true },
+        });
+      // Created late first so insertion order can't decide the winner.
+      const late = await mk("Late", new Date("2030-01-01"));
+      const early = await mk("Early", new Date("2020-01-01"));
+      const inv = (await seedDocumentFolder({ matterId, name: "Investigation" })).folderId;
+      const root = (await seedDocumentFolder({ matterId, name: "Records Requests", parentId: inv })).folderId;
+      const req = (await seedDocumentFolder({ matterId, name: "Shared", parentId: root })).folderId;
+      const sub = (await seedDocumentFolder({ matterId, name: "Request documents", parentId: req })).folderId;
+      for (const [folderId, rid] of [
+        [req, late.id],
+        [sub, early.id],
+      ] as const) {
+        const { documentId } = await seedDocument({ matterId, folderId });
+        await prisma.document.update({
+          where: { id: documentId },
+          data: { recordsRequestId: rid },
+        });
+      }
+      return { early, req, sub, root };
+    }
+
+    test("SQL backfill: a 1-vs-1 tie goes to the earliest request", async () => {
+      const { early, req, sub } = await seedTie();
+      await runBackfill();
+      const k = await kinds();
+      expect(k.get(req)).toMatchObject({ systemKind: "records_request", recordsRequestId: early.id });
+      expect(k.get(sub)).toMatchObject({ recordsRequestId: early.id });
+    });
+
+    test("linkRecordsFoldersUnder: a 1-vs-1 tie goes to the earliest request", async () => {
+      const { early, req, sub, root } = await seedTie();
+      await prisma.$transaction((tx) => linkRecordsFoldersUnder(tx, { matterId }, root));
+      const k = await kinds();
+      expect(k.get(req)).toMatchObject({ systemKind: "records_request", recordsRequestId: early.id });
+      expect(k.get(sub)).toMatchObject({ recordsRequestId: early.id });
+    });
   });
 });

@@ -24,6 +24,9 @@ export type FolderRecord = {
    *  records-requests/folder-kinds.ts. Optional so callers that don't
    *  need it keep their shape. */
   systemKind?: string | null;
+  recordsRequestId?: string | null;
+  /** Owning request's subject (badge tooltip). */
+  sourceTitle?: string | null;
 };
 
 /** Nested node for the tree rail. Serializable (plain arrays) so a
@@ -33,6 +36,9 @@ export type FolderNode = {
   parentId: string | null;
   name: string;
   children: FolderNode[];
+  systemKind?: string | null;
+  recordsRequestId?: string | null;
+  sourceTitle?: string | null;
 };
 
 /** Flattened tree entry — depth drives picker indentation. Depth is
@@ -67,7 +73,15 @@ export function buildFolderTree(rows: FolderRecord[]): FolderNode[] {
   const byId = new Map<string, FolderNode>(
     rows.map((r) => [
       r.id,
-      { id: r.id, parentId: r.parentId, name: r.name, children: [] },
+      {
+        id: r.id,
+        parentId: r.parentId,
+        name: r.name,
+        children: [],
+        systemKind: r.systemKind ?? null,
+        recordsRequestId: r.recordsRequestId ?? null,
+        sourceTitle: r.sourceTitle ?? null,
+      },
     ])
   );
   const roots: FolderNode[] = [];

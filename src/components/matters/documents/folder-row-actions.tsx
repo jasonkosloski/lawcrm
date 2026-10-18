@@ -56,6 +56,8 @@ export function FolderRowActions({
   canEdit,
   canDelete,
   canOrganize,
+  isProtected = false,
+  hasProtectedDescendant = false,
 }: {
   folderId: string;
   name: string;
@@ -66,6 +68,10 @@ export function FolderRowActions({
   canEdit: boolean;
   canDelete: boolean;
   canOrganize: boolean;
+  /** System-generated folder: no rename, move or delete. */
+  isProtected?: boolean;
+  /** Holds a protected folder below it: can't be deleted. */
+  hasProtectedDescendant?: boolean;
 }) {
   const [renameOpen, setRenameOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
@@ -83,7 +89,10 @@ export function FolderRowActions({
     }
   }
 
-  if (!canEdit && !canDelete && !canOrganize) return null;
+  const showRename = canEdit && !isProtected;
+  const showMove = canOrganize && !isProtected;
+  const showDelete = canDelete && !isProtected && !hasProtectedDescendant;
+  if (!showRename && !showMove && !showDelete) return null;
 
   const submitRename = () => {
     setRenameError(null);
@@ -130,21 +139,21 @@ export function FolderRowActions({
           }
         />
         <DropdownMenuContent align="end" className="min-w-44">
-          {canEdit && (
+          {showRename && (
             <DropdownMenuItem onClick={() => setRenameOpen(true)}>
               <Pencil />
               Rename
             </DropdownMenuItem>
           )}
-          {canOrganize && (
+          {showMove && (
             <DropdownMenuItem onClick={() => setMoveOpen(true)}>
               <FolderInput />
               Move to…
             </DropdownMenuItem>
           )}
-          {canDelete && (
+          {showDelete && (
             <>
-              {(canEdit || canOrganize) && <DropdownMenuSeparator />}
+              {(showRename || showMove) && <DropdownMenuSeparator />}
               <DropdownMenuItem variant="destructive" onClick={onDelete}>
                 <Trash2 />
                 Delete

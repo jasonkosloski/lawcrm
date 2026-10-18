@@ -198,6 +198,52 @@ describe("resolveRecordsFolder", () => {
     expect(await prisma.documentFolder.count({ where: { matterId } })).toBe(before);
   });
 
+  test("renaming Investigation does not spawn a second tree", async () => {
+    const r = await mkRequest();
+    const id = await prisma.$transaction((tx) => resolveRecordsFolder(tx, args(r.id)));
+    const f = await prisma.documentFolder.findUniqueOrThrow({
+      where: { id },
+      include: { parent: true },
+    });
+    await prisma.documentFolder.update({
+      where: { id: f.parent!.parentId! },
+      data: { name: "Case work" },
+    });
+    const before = await prisma.documentFolder.count({ where: { matterId } });
+    expect(await prisma.$transaction((tx) => resolveRecordsFolder(tx, args(r.id)))).toBe(id);
+    const r2 = await mkRequest();
+    const id2 = await prisma.$transaction((tx) => resolveRecordsFolder(tx, args(r2.id)));
+    const f2 = await prisma.documentFolder.findUniqueOrThrow({ where: { id: id2 } });
+    expect(f2.parentId).toBe(f.parentId);
+    expect(await prisma.documentFolder.count({ where: { matterId } })).toBe(before + 1);
+    expect(
+      await prisma.documentFolder.count({ where: { matterId, systemKind: "records_root" } })
+    ).toBe(1);
+  });
+
+  test("moving Investigation under another folder does not spawn a second tree", async () => {
+    const r = await mkRequest();
+    const id = await prisma.$transaction((tx) => resolveRecordsFolder(tx, args(r.id)));
+    const f = await prisma.documentFolder.findUniqueOrThrow({
+      where: { id },
+      include: { parent: true },
+    });
+    const other = await seedDocumentFolder({ matterId, name: "Archive" });
+    await prisma.documentFolder.update({
+      where: { id: f.parent!.parentId! },
+      data: { parentId: other.folderId },
+    });
+    const before = await prisma.documentFolder.count({ where: { matterId } });
+    const r2 = await mkRequest();
+    const id2 = await prisma.$transaction((tx) => resolveRecordsFolder(tx, args(r2.id)));
+    const f2 = await prisma.documentFolder.findUniqueOrThrow({ where: { id: id2 } });
+    expect(f2.parentId).toBe(f.parentId);
+    expect(await prisma.documentFolder.count({ where: { matterId } })).toBe(before + 1);
+    expect(
+      await prisma.documentFolder.count({ where: { matterId, name: "Investigation" } })
+    ).toBe(1);
+  });
+
   test("an existing Records Requests folder found by name is stamped records_root", async () => {
     const inv = await seedDocumentFolder({ matterId, name: "Investigation" });
     const root = await seedDocumentFolder({

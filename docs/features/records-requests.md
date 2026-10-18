@@ -23,6 +23,7 @@ Deferred ideas (none scheduled, all P2):
   - **Detail page:** each request has its own page (`.../records/[requestId]`); old `?request=` links are not redirected. Shared due badge module (`dueBadge`).
   - **Elsewhere:** conversion carries requests forward; contact merge re-points requests where the contact is custodian; a "Records to chase" dashboard card (viewer's overdue or due-within-7-days) and global search cover them.
   - Permissions: `records.view/create/edit/delete`, `records.types.manage` (see `src/lib/permissions.ts`); matter requests sit behind `assertMatterAccess`.
+  - **Generated folders (2026-10-18):** request folders carry a `systemKind` and a link to their request, show a "Records request" badge linking back, and cannot be renamed, moved or deleted (nor can their ancestors be deleted); deleting the request unprotects them (ADR-048).
 
 ## Notes
 - Business days skip Saturdays and Sundays only; due dates are always editable. `computeResponseDue` lives in `src/lib/records-requests/due-date.ts` (calendar days: sent + N; business days: day 1 is the first weekday after sending).

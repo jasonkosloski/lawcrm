@@ -425,6 +425,15 @@ values as the profile-zone wall clock and all-day values as date-only keys
 (`src/lib/event-schedule.ts`, `components/calendar/grid-time.ts`,
 `bucket-items.ts`); bucket multi-day events with `eventDayKeys`.
 
+### Generated-folder badge
+
+System-generated folders (`DocumentFolder.systemKind`) show
+`FolderSourceBadge` (`components/documents/folder-source-badge.tsx`): a small
+rounded chip with a clipboard icon linking to the source record. It renders
+nothing for ordinary folders. Tree rails are already links, so they show only
+an icon (no nested link). Hide menu items the server would refuse
+(`isProtected`, `hasProtectedDescendant` on `FolderRowActions`).
+
 ### Other conventions
 
 - Client-visible redirect targets go through `safeRedirectPath`

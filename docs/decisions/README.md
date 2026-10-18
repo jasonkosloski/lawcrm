@@ -66,3 +66,4 @@ ADR true to the code are appended in place and dated.
 | [045](045-intake-tasks-and-events-reuse-task-and.md) | Intake tasks and events reuse Task and CalendarEvent, scoped to a lead until conversion |  |
 | [046](046-intake-documents-share-document-and-documentfolder-scoped.md) | Intake documents share Document and DocumentFolder, scoped to a lead until conversion |  |
 | [047](047-records-requests-are-a-dedicated-model-with.md) | Records requests are a dedicated model with a rolling follow-up task |  |
+| [048](048-generated-folders-carry-their-source-and-are-protected.md) | Generated folders carry their source and are protected |  |
