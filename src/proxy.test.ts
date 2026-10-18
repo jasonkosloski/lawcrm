@@ -70,6 +70,11 @@ describe("proxy auth gate", () => {
     expect(res.headers.has("location")).toBe(false);
   });
 
+  it("lets CSP violation reports through without a cookie (exact path only)", () => {
+    expect(proxy(makeRequest("/api/csp-report")).status).toBe(200);
+    expect(proxy(makeRequest("/api/csp-reports")).status).toBe(307);
+  });
+
   it("keeps lookalike paths of machine endpoints behind the gate", () => {
     for (const path of ["/api/email-sync-admin", "/api/documents/upload"]) {
       const res = proxy(makeRequest(path));

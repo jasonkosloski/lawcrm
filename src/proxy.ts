@@ -25,6 +25,8 @@
  *   - SELF_AUTHENTICATED_PATHS — cron + blob-callback endpoints that
  *     carry their own credential instead of a cookie
  *   - Static assets (Next handles via the matcher exclusion below)
+ *   - /api/csp-report — browsers post CSP violation reports without
+ *     a reliable cookie (the login page reports too); it only logs
  *   - /api/documents/upload is excluded by the matcher (see below); the
  *     route does its own session + permission check and answers JSON 401
  */
@@ -39,7 +41,7 @@ const SESSION_COOKIE_NAMES = [
   "__Secure-authjs.session-token",
 ];
 
-const PUBLIC_PATH_PREFIXES = ["/login", "/api/auth"];
+const PUBLIC_PATH_PREFIXES = ["/login", "/api/auth", "/api/csp-report"];
 
 /**
  * Endpoints called by machines that never carry a session cookie —

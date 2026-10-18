@@ -91,6 +91,20 @@ describe("next.config headers()", () => {
     }
   });
 
+  it("ships a report-only CSP on every path, framing allowed only for the file routes", async () => {
+    const all = await rules();
+    const csp = (path: string) =>
+      header(matching(all, path)[0], "Content-Security-Policy-Report-Only") ?? "";
+    for (const path of NOT_FRAMED) {
+      expect(csp(path), path).toContain("frame-ancestors 'none'");
+      expect(csp(path)).toContain("report-uri /api/csp-report");
+      expect(csp(path)).toContain("object-src 'none'");
+    }
+    for (const path of FRAMED) {
+      expect(csp(path), path).toContain("frame-ancestors 'self'");
+    }
+  });
+
   it("hides the framework banner", () => {
     expect(nextConfig.poweredByHeader).toBe(false);
   });
