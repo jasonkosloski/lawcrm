@@ -853,8 +853,8 @@ model Document {
   updatedAt              DateTime        @updatedAt
   recordsRequest         RecordsRequest? @relation("RecordsRequestDocuments", fields: [recordsRequestId], references: [id], onDelete: SetNull)
 
-  matter             Matter?         @relation(fields: [matterId], references: [id], onDelete: Cascade)
-  lead               Lead?           @relation("LeadDocuments", fields: [leadId], references: [id], onDelete: Cascade)
+  matter             Matter?         @relation(fields: [matterId], references: [id], onDelete: Restrict)
+  lead               Lead?           @relation("LeadDocuments", fields: [leadId], references: [id], onDelete: Restrict)
   folder             DocumentFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
   parentDocument     Document?       @relation("EmailAttachments", fields: [parentDocumentId], references: [id], onDelete: SetNull)
   attachments        Document[]      @relation("EmailAttachments")
@@ -1241,11 +1241,11 @@ model TimeEntry {
   emailMessageId  String?
   messengerItemId String?
 
-  matter         Matter?        @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  matter         Matter?        @relation(fields: [matterId], references: [id], onDelete: Restrict)
   /// Cascade mirrors the matter side: deleting a lead deletes its
   /// intake time (conversion re-homes entries BEFORE the lead would
   /// ever be removed, and declined leads are kept, not deleted).
-  lead           Lead?          @relation("LeadTimeEntries", fields: [leadId], references: [id], onDelete: Cascade)
+  lead           Lead?          @relation("LeadTimeEntries", fields: [leadId], references: [id], onDelete: Restrict)
   user           User           @relation(fields: [userId], references: [id])
   invoice        Invoice?       @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   notes          Note[]         @relation("TimeEntryNotes")
@@ -1341,7 +1341,7 @@ model Expense {
   updatedAt         DateTime        @updatedAt
   recordsRequest    RecordsRequest?
 
-  matter          Matter    @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  matter          Matter    @relation(fields: [matterId], references: [id], onDelete: Restrict)
   invoice         Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   receiptDocument Document? @relation(fields: [receiptDocumentId], references: [id], onDelete: SetNull)
 
@@ -1370,7 +1370,7 @@ model Invoice {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  matter           Matter             @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  matter           Matter             @relation(fields: [matterId], references: [id], onDelete: Restrict)
   lineItems        TimeEntry[]
   /// Expenses billed on this invoice. Same shape as time entries
   /// — the invoice generation flow bundles billable + un-invoiced
@@ -1462,7 +1462,7 @@ model TrustTransaction {
   invoiceId   String?
   createdAt   DateTime @default(now())
 
-  matter         Matter          @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  matter         Matter          @relation(fields: [matterId], references: [id], onDelete: Restrict)
   invoice        Invoice?        @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   /// The InvoicePayment row this trust txn produced (when it was
   /// created via Pay from trust). Lets the ledger surface "applied
@@ -1492,7 +1492,7 @@ model Settlement {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  matter    Matter               @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  matter    Matter               @relation(fields: [matterId], references: [id], onDelete: Restrict)
   liens     SettlementLien[]
   approvals SettlementApproval[]
 
