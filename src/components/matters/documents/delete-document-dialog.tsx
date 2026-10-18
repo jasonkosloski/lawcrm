@@ -1,10 +1,10 @@
 /**
  * Delete prompt for a document that has email attachments (ADR-043).
  *
- * Attachments that are also filed in another folder ("saved") always
- * stay where they're filed — the prompt just says so. Attachments that
- * exist only under the email are listed, and the user picks whether
- * they go with the email (default) or stay in the folder as ordinary
+ * Attachments that have been copied to another folder ("saved") live on
+ * as those copies — the prompt just says so. Attachments that exist
+ * only under the email are listed, and the user picks whether they go
+ * with the email (default) or stay in the folder as ordinary
  * documents. The choice is sent to `deleteDocument` explicitly; the
  * server refuses to guess.
  */
@@ -31,18 +31,15 @@ export function DeleteDocumentDialog({
   name,
   unsavedAttachments,
   savedAttachments,
-  alsoInCount,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   documentId: string;
   name: string;
-  /** Attachments filed nowhere but under this email. */
+  /** Attachments with no copy anywhere else. */
   unsavedAttachments: string[];
-  /** Attachments also filed in another folder — they stay there. */
+  /** Attachments copied to another folder — the copies stay. */
   savedAttachments: string[];
-  /** Other folders this document itself is filed in. */
-  alsoInCount: number;
 }) {
   const [choice, setChoice] = useState<AttachmentChoice>("delete");
   const [error, setError] = useState<string | null>(null);
@@ -95,18 +92,14 @@ export function DeleteDocumentDialog({
         <DialogHeader>
           <DialogTitle>Delete “{name}”?</DialogTitle>
           <DialogDescription>
-            This can&apos;t be undone — the file is removed from the matter and from storage
-            {alsoInCount > 0
-              ? `, including the ${alsoInCount} other folder${alsoInCount === 1 ? "" : "s"} it's filed in`
-              : ""}
-            .
+            This can&apos;t be undone. Copies in other folders are separate documents and aren&apos;t affected.
           </DialogDescription>
         </DialogHeader>
 
         {n > 0 && (
           <div className="flex flex-col gap-2">
             <div className="text-xs text-ink-2">
-              {n === 1 ? "This attachment isn't" : `These ${n} attachments aren't`} filed anywhere else:
+              {n === 1 ? "This attachment hasn't" : `These ${n} attachments haven't`} been copied anywhere else:
             </div>
             <ul className="flex max-h-32 flex-col gap-0.5 overflow-y-auto rounded-md border border-line bg-paper-2 p-2">
               {unsavedAttachments.map((a, i) => (
@@ -124,8 +117,8 @@ export function DeleteDocumentDialog({
         {savedAttachments.length > 0 && (
           <div className="text-2xs text-ink-3">
             {savedAttachments.length === 1
-              ? `“${savedAttachments[0]}” is also filed in another folder and stays there.`
-              : `${savedAttachments.length} attachments are also filed in other folders and stay there.`}
+              ? `“${savedAttachments[0]}” has a copy in another folder — that copy stays.`
+              : `${savedAttachments.length} attachments have copies in other folders — those copies stay.`}
           </div>
         )}
 

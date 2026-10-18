@@ -1,18 +1,20 @@
 /**
- * Email attachments as documents + extra folder links (ADR-043),
- * against the test DB with in-memory storage.
+ * Email attachments as documents + "Copy to…" (ADR-043), against the
+ * test DB with in-memory storage.
  *
  * Pinned:
  *   - extraction: one document per listed attachment (inline cid
  *     images excluded), under the email, index-aligned, idempotent;
  *     a failure stores nothing and can be retried
- *   - deleting an email: attachments filed elsewhere stay there (their
- *     first link becomes their home); the rest are deleted or kept per
- *     the prompt; with no choice the server refuses
- *   - links: add (validated, no duplicates), remove (document stays)
+ *   - copies: an independent document sharing the stored file (no new
+ *     upload); copying an email copies its attachments; deleting either
+ *     side keeps the bytes while the other still uses them
+ *   - deleting an email: attachments with a copy elsewhere live on as
+ *     that copy; the rest are deleted or kept per the prompt; with no
+ *     choice the server refuses
  *   - moving an email carries its attachments; moving an attachment is
- *     refused; deleting a folder moves its links up (dropping dupes)
- *   - the folder listing nests attachments and shows links
+ *     refused
+ *   - the folder listing nests attachments and reports their copies
  */
 
 import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
@@ -40,13 +42,8 @@ vi.mock("@/lib/file-storage", () => ({
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
-import {
-  addDocumentLink,
-  deleteDocument,
-  extractAttachments,
-  removeDocumentLink,
-} from "@/app/actions/documents";
-import { deleteFolder, moveDocuments } from "@/app/actions/document-folders";
+import { copyDocumentToFolder, deleteDocument, extractAttachments } from "@/app/actions/documents";
+import { moveDocuments } from "@/app/actions/document-folders";
 import { extractEmailAttachments } from "@/lib/email-attachment-extract";
 import { getFolderListing } from "@/lib/queries/document-listing";
 import {
@@ -198,19 +195,31 @@ describe("deleting an email with attachments", () => {
     expect(await prisma.document.count({ where: { id: emailId } })).toBe(1);
   });
 
-  test("attachments filed elsewhere stay there; the rest go with the email", async () => {
+  test("an attachment copied elsewhere lives on as its copy; the rest go with the email", async () => {
     const exhibits = await seedDocumentFolder({ matterId, name: "Exhibits" });
     const { emailId, report, timeline } = await extracted();
-    expect(await addDocumentLink(report.id, exhibits.folderId)).toEqual({ ok: true });
+    const copy = await copyDocumentToFolder(report.id, exhibits.folderId);
+    expect(copy.ok).toBe(true);
 
     expect(await deleteDocument(emailId, { attachments: "delete" })).toEqual({ ok: true });
-    const kept = await prisma.document.findUnique({ where: { id: report.id } });
-    // Its link became its home; no link left pointing at the same place.
-    expect(kept).toMatchObject({ folderId: exhibits.folderId, parentDocumentId: null, attachmentIndex: null });
-    expect(await prisma.documentLink.count({ where: { documentId: report.id } })).toBe(0);
-    expect(await prisma.document.count({ where: { id: timeline.id } })).toBe(0);
-    expect(store.has(timeline.fileUrl!)).toBe(false);
+    expect(await prisma.document.count({ where: { parentDocumentId: emailId } })).toBe(0);
+    expect(await prisma.document.findUnique({ where: { id: copy.id! } })).toMatchObject({
+      folderId: exhibits.folderId,
+      parentDocumentId: null,
+      fileUrl: report.fileUrl,
+    });
+    // The copy still uses the report's bytes; the timeline's are gone.
     expect(store.has(report.fileUrl!)).toBe(true);
+    expect(store.has(timeline.fileUrl!)).toBe(false);
+  });
+
+  test("when every attachment has a copy, there's no choice to make", async () => {
+    const exhibits = await seedDocumentFolder({ matterId, name: "Exhibits" });
+    const { emailId, report, timeline } = await extracted();
+    await copyDocumentToFolder(report.id, exhibits.folderId);
+    await copyDocumentToFolder(timeline.id, exhibits.folderId);
+    expect(await deleteDocument(emailId)).toEqual({ ok: true });
+    expect(await prisma.document.count({ where: { folderId: exhibits.folderId } })).toBe(2);
   });
 
   test("“keep” leaves unsaved attachments in the email's folder as ordinary documents", async () => {
@@ -222,24 +231,42 @@ describe("deleting an email with attachments", () => {
   });
 });
 
-describe("extra folder links", () => {
-  test("add and remove; the document itself never moves or goes away", async () => {
+describe("Copy to…", () => {
+  test("an independent document that shares the stored file", async () => {
     const a = await seedDocumentFolder({ matterId, name: "A" });
     const b = await seedDocumentFolder({ matterId, name: "B" });
+    store.set("k__brief.pdf", Buffer.from("%PDF brief"));
     const doc = await prisma.document.create({
-      data: { matterId, folderId: a.folderId, name: "brief.pdf", uploadedBy: userId },
+      data: { matterId, folderId: a.folderId, name: "brief.pdf", fileUrl: "k__brief.pdf", contentType: "application/pdf", fileSize: 10, status: "review", uploadedBy: userId },
       select: { id: true },
     });
-    expect(await addDocumentLink(doc.id, b.folderId)).toEqual({ ok: true });
-    expect(await addDocumentLink(doc.id, b.folderId)).toMatchObject({ ok: false, error: expect.stringMatching(/already/) });
-    expect(await addDocumentLink(doc.id, a.folderId)).toMatchObject({ ok: false, error: expect.stringMatching(/already in/) });
-    expect(await addDocumentLink(doc.id, null)).toEqual({ ok: true }); // the matter root
-    expect(await addDocumentLink(doc.id, null)).toMatchObject({ ok: false });
+    const res = await copyDocumentToFolder(doc.id, b.folderId);
+    expect(res.ok).toBe(true);
+    const copy = await prisma.document.findUnique({ where: { id: res.id! } });
+    expect(copy).toMatchObject({ folderId: b.folderId, name: "brief.pdf", fileUrl: "k__brief.pdf", status: "review", parentDocumentId: null });
+    expect(store.size).toBe(1); // nothing stored again
 
-    const links = await prisma.documentLink.findMany({ where: { documentId: doc.id } });
-    expect(links).toHaveLength(2);
-    expect(await removeDocumentLink(links[0].id)).toEqual({ ok: true });
-    expect(await prisma.document.findUnique({ where: { id: doc.id } })).toMatchObject({ folderId: a.folderId });
+    // Its own thing: renaming one doesn't touch the other…
+    await prisma.document.update({ where: { id: copy!.id }, data: { name: "Exhibit 4.pdf" } });
+    expect(await prisma.document.findUnique({ where: { id: doc.id } })).toMatchObject({ name: "brief.pdf" });
+    // …and deleting the original keeps the bytes the copy still uses.
+    expect(await deleteDocument(doc.id)).toEqual({ ok: true });
+    expect(store.has("k__brief.pdf")).toBe(true);
+    expect(await deleteDocument(copy!.id)).toEqual({ ok: true });
+    expect(store.has("k__brief.pdf")).toBe(false);
+  });
+
+  test("copying an email copies its attachments with it", async () => {
+    const dest = await seedDocumentFolder({ matterId, name: "Dest" });
+    const emailId = await seedEmail();
+    await extractEmailAttachments(emailId, userId);
+    const res = await copyDocumentToFolder(emailId, dest.folderId);
+    const kids = await attachmentsOf(res.id!);
+    expect(kids.map((k) => [k.name, k.attachmentIndex, k.folderId])).toEqual([
+      ["report.pdf", 0, dest.folderId],
+      ["timeline.csv", 1, dest.folderId],
+    ]);
+    expect((await prisma.document.findUnique({ where: { id: res.id! } }))?.attachmentsExtractedAt).not.toBeNull();
   });
 
   test("a folder from another matter is refused", async () => {
@@ -247,7 +274,7 @@ describe("extra folder links", () => {
     const other = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId });
     const foreign = await seedDocumentFolder({ matterId: other.matterId, name: "Theirs" });
     const doc = await prisma.document.create({ data: { matterId, name: "x.pdf" }, select: { id: true } });
-    expect(await addDocumentLink(doc.id, foreign.folderId)).toMatchObject({ ok: false, error: expect.stringMatching(/not found/) });
+    expect(await copyDocumentToFolder(doc.id, foreign.folderId)).toMatchObject({ ok: false, error: expect.stringMatching(/not found/) });
   });
 });
 
@@ -257,42 +284,27 @@ describe("folders, moves and attachments", () => {
     const emailId = await seedEmail();
     await extractEmailAttachments(emailId, userId);
     const [report] = await attachmentsOf(emailId);
-    expect(await moveDocuments([report.id], dest.folderId)).toMatchObject({ ok: false, error: expect.stringMatching(/Also file in/) });
+    expect(await moveDocuments([report.id], dest.folderId)).toMatchObject({ ok: false, error: expect.stringMatching(/Copy to/) });
     expect(await moveDocuments([emailId], dest.folderId)).toEqual({ ok: true });
     expect((await attachmentsOf(emailId)).every((k) => k.folderId === dest.folderId)).toBe(true);
-  });
-
-  test("deleting a folder moves its links up, dropping ones that would duplicate", async () => {
-    const parent = await seedDocumentFolder({ matterId, name: "Parent" });
-    const child = await seedDocumentFolder({ matterId, name: "Child", parentId: parent.folderId });
-    const lives = await prisma.document.create({ data: { matterId, folderId: parent.folderId, name: "p.pdf" }, select: { id: true } });
-    const other = await prisma.document.create({ data: { matterId, name: "o.pdf" }, select: { id: true } });
-    await addDocumentLink(lives.id, child.folderId); // would duplicate its home once moved up
-    await addDocumentLink(other.id, child.folderId);
-    expect(await deleteFolder(child.folderId)).toEqual({ ok: true });
-    const links = await prisma.documentLink.findMany({});
-    expect(links.map((l) => [l.documentId, l.folderId])).toEqual([[other.id, parent.folderId]]);
   });
 });
 
 describe("getFolderListing", () => {
-  test("nests attachments under their email and lists links with their home", async () => {
+  test("nests attachments under their email and reports where they've been copied", async () => {
     const exhibits = await seedDocumentFolder({ matterId, name: "Exhibits" });
     const emailId = await seedEmail();
     await extractEmailAttachments(emailId, userId);
     const [report] = await attachmentsOf(emailId);
-    await addDocumentLink(report.id, exhibits.folderId);
+    await copyDocumentToFolder(report.id, exhibits.folderId);
 
     const root = await getFolderListing(matterId, null);
     expect(root.documents.map((d) => d.name)).toEqual(["Incident email.eml"]);
     expect(root.documents[0].isEmail).toBe(true);
     expect(root.documents[0].attachments.map((a) => a.name)).toEqual(["report.pdf", "timeline.csv"]);
-    expect(root.documents[0].attachments[0].alsoIn.map((f) => f.folderName)).toEqual(["Exhibits"]);
+    expect(root.documents[0].attachments.map((a) => a.copiedTo)).toEqual([["Exhibits"], []]);
 
     const inExhibits = await getFolderListing(matterId, exhibits.folderId);
-    expect(inExhibits.documents).toEqual([]);
-    expect(inExhibits.linked.map((l) => [l.name, l.homeName])).toEqual([
-      ["report.pdf", "Incident email.eml (attachment)"],
-    ]);
+    expect(inExhibits.documents.map((d) => d.name)).toEqual(["report.pdf"]);
   });
 });

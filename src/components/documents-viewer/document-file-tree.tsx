@@ -31,7 +31,6 @@ import {
   Folder,
   FolderOpen,
   Image as ImageIcon,
-  Link2,
   Mail,
   PanelLeftClose,
   PanelLeftOpen,
@@ -48,9 +47,8 @@ import {
   attachmentsByEmail,
   filesByFolder,
   filterTree,
-  linkedByFolder,
 } from "@/lib/file-tree";
-import type { FileTreeDocument, FileTreeLink } from "@/lib/queries/document-viewer";
+import type { FileTreeDocument } from "@/lib/queries/document-viewer";
 import { resolveDocumentRenderer, type DocumentRenderer } from "./resolve-renderer";
 
 const FOLDER_RENDER_CAP = 200;
@@ -105,7 +103,6 @@ export function DocumentFileTree({
   matterId,
   tree,
   documents,
-  links = [],
   complete,
   currentId,
   currentFolderId,
@@ -114,8 +111,6 @@ export function DocumentFileTree({
   matterId: string;
   tree: FolderNode[];
   documents: FileTreeDocument[];
-  /** Documents also filed in other folders (shown there as links). */
-  links?: FileTreeLink[];
   /** False when the matter is over the load cap: only the current
    *  folder's files are in `documents`. */
   complete: boolean;
@@ -126,11 +121,10 @@ export function DocumentFileTree({
 }) {
   const byFolder = useMemo(() => filesByFolder(documents), [documents]);
   const attachments = useMemo(() => attachmentsByEmail(documents), [documents]);
-  const linked = useMemo(() => linkedByFolder(links, documents), [links, documents]);
   const [query, setQuery] = useState("");
   const filtered = useMemo(
-    () => filterTree(tree, byFolder, query, attachments, linked),
-    [tree, byFolder, query, attachments, linked]
+    () => filterTree(tree, byFolder, query, attachments),
+    [tree, byFolder, query, attachments]
   );
   // Folder ids, plus `doc:<emailId>` for emails opened to show attachments.
   const [expanded, setExpanded] = useState<Set<string>>(
@@ -190,14 +184,14 @@ export function DocumentFileTree({
     );
   }
 
-  const fileRow = (doc: FileTreeDocument, depth: number, viaLink = false): React.ReactNode => {
-    const Icon = viaLink ? Link2 : ICON[resolveDocumentRenderer(doc.contentType, doc.name)];
+  const fileRow = (doc: FileTreeDocument, depth: number): React.ReactNode => {
+    const Icon = ICON[resolveDocumentRenderer(doc.contentType, doc.name)];
     const isCurrent = doc.id === currentId;
     let kids = attachments.get(doc.id) ?? [];
     if (filtered) kids = kids.filter((k) => filtered.files.has(k.id));
     const open = kids.length > 0 && (filtered ? true : expanded.has(`doc:${doc.id}`));
     return (
-      <li key={`${viaLink ? "link" : "doc"}-${doc.id}`}>
+      <li key={doc.id}>
         <div className="flex items-center" style={{ paddingLeft: depth * 12 }}>
           {kids.length > 0 ? (
             <button
@@ -213,12 +207,10 @@ export function DocumentFileTree({
             <span className="w-4 shrink-0" aria-hidden />
           )}
           <Link
-            // The highlighted row the tree scrolls to is the document's
-            // own entry, not a link to it elsewhere.
-            ref={isCurrent && !viaLink ? currentRef : undefined}
+            ref={isCurrent ? currentRef : undefined}
             href={`/matters/${matterId}/documents/${doc.id}`}
             aria-current={isCurrent ? "page" : undefined}
-            title={viaLink ? `${doc.name} (also filed here)` : doc.name}
+            title={doc.name}
             className={cn(
               "flex min-w-0 flex-1 items-center gap-1.5 rounded-md py-1 pl-1 pr-2 text-xs",
               isCurrent ? "bg-brand-soft font-medium text-brand-700" : "text-ink-2 hover:bg-paper-2 hover:text-ink"
@@ -235,18 +227,13 @@ export function DocumentFileTree({
 
   const filesIn = (key: string, depth: number) => {
     let files = byFolder.get(key) ?? [];
-    let linkedHere = linked.get(key) ?? [];
-    if (filtered) {
-      files = files.filter((f) => filtered.files.has(f.id));
-      linkedHere = linkedHere.filter((f) => filtered.files.has(f.id));
-    }
-    if (files.length === 0 && linkedHere.length === 0) return null;
+    if (filtered) files = files.filter((f) => filtered.files.has(f.id));
+    if (files.length === 0) return null;
     const capped = !filtered && !showAll.has(key) && files.length > FOLDER_RENDER_CAP;
     const shown = capped ? files.slice(0, FOLDER_RENDER_CAP) : files;
     return (
       <>
         {shown.map((f) => fileRow(f, depth))}
-        {linkedHere.map((f) => fileRow(f, depth, true))}
         {capped && (
           <li>
             <button
@@ -267,9 +254,7 @@ export function DocumentFileTree({
     if (filtered && !filtered.folders.has(node.id)) return null;
     const open = filtered ? true : expanded.has(node.id);
     const listsFiles = complete || node.id === currentFolderId;
-    const count = listsFiles
-      ? (byFolder.get(node.id)?.length ?? 0) + (linked.get(node.id)?.length ?? 0)
-      : null;
+    const count = listsFiles ? (byFolder.get(node.id)?.length ?? 0) : null;
     return (
       <li key={node.id}>
         <button

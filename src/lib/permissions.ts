@@ -304,7 +304,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         key: "documents.organize",
         label: "Move documents between folders",
         description:
-          "Re-file documents within a matter's folder tree, and file a document in additional folders (\"Also file in…\" — the same document, no copy) or remove it from one. Distinct from upload/delete — organizing is often delegated to staff who shouldn't remove records.",
+          "Re-file documents within a matter's folder tree, and copy a document to another folder (\"Copy to…\" — an independent document that shares the stored file). Distinct from upload/delete — organizing is often delegated to staff who shouldn't remove records.",
       },
       {
         key: "documents.template.create",

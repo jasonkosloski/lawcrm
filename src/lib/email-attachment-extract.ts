@@ -6,7 +6,7 @@
  * email's folder, `attachmentIndex` = its position in the email's
  * attachment list (so the viewer's chips open it). It's then a real
  * document — viewable, flaggable, and fileable in other folders
- * through DocumentLinks — without anyone uploading it again.
+ * with "Copy to…" — without anyone uploading it again.
  *
  * Runs automatically after an email upload (both upload transports)
  * and from the email viewer's "Add attachments to documents" button

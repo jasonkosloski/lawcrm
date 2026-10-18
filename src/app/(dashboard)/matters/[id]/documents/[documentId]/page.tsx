@@ -198,7 +198,6 @@ export default async function DocumentViewerPage({
         currentId={doc.id}
         currentFolderId={doc.folderId}
         currentParentId={doc.parent?.id ?? null}
-        links={fileTree.links}
       />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
         {/* ── Breadcrumb ─────────────────────────────────────────────── */}
@@ -249,9 +248,7 @@ export default async function DocumentViewerPage({
                 matterId={id}
                 documentId={doc.id}
                 name={doc.name}
-                folderId={doc.folderId}
                 parent={doc.parent}
-                alsoIn={doc.alsoIn}
                 folders={flattenFolderTree(folderTree)}
                 canOrganize={canOrganize}
               />

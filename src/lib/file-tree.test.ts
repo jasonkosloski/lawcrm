@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { FolderNode } from "@/lib/folder-tree";
-import { ROOT_KEY, ancestorChain, attachmentsByEmail, filesByFolder, filterTree, linkedByFolder, nameMatches } from "./file-tree";
+import { ROOT_KEY, ancestorChain, attachmentsByEmail, filesByFolder, filterTree, nameMatches } from "./file-tree";
 
 const node = (id: string, name: string, parentId: string | null, children: FolderNode[] = []): FolderNode => ({
   id,
@@ -82,7 +82,7 @@ describe("filterTree", () => {
   });
 });
 
-describe("email attachments and links", () => {
+describe("email attachments", () => {
   const files = [
     { id: "e1", name: "Incident.eml", folderId: "disc" },
     { id: "a2", name: "timeline.csv", folderId: "disc", parentDocumentId: "e1", attachmentIndex: 1 },
@@ -95,17 +95,9 @@ describe("email attachments and links", () => {
     expect(attachmentsByEmail(files).get("e1")?.map((f) => f.id)).toEqual(["a1", "a2"]);
   });
 
-  test("links list the same document in another folder", () => {
-    const linked = linkedByFolder([{ documentId: "a1", folderId: "med" }, { documentId: "gone", folderId: "med" }], files);
-    expect(linked.get("med")?.map((f) => f.id)).toEqual(["a1"]);
-  });
-
-  test("the filter shows an email when an attachment matches, and links in their folder", () => {
-    const byFolder = filesByFolder(files);
-    const r = filterTree(TREE, byFolder, "timeline", attachmentsByEmail(files), new Map())!;
+  test("the filter shows an email when an attachment matches", () => {
+    const r = filterTree(TREE, filesByFolder(files), "timeline", attachmentsByEmail(files))!;
     expect([...r.files].sort()).toEqual(["a2", "e1"]);
     expect(r.folders.has("disc")).toBe(true);
-    const viaLink = filterTree(TREE, byFolder, "brief", new Map(), linkedByFolder([{ documentId: "x", folderId: "med" }], files))!;
-    expect(viaLink.folders.has("med")).toBe(true);
   });
 });

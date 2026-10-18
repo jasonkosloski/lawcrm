@@ -1,7 +1,8 @@
 /**
  * DeleteDocumentDialog — deleting an email that has attachments
- * (ADR-043): unsaved attachments are listed with a delete/keep choice
- * that's sent explicitly; saved ones are noted as staying put.
+ * (ADR-043): attachments with no copy elsewhere are listed with a
+ * delete/keep choice that's sent explicitly; copied ones are noted as
+ * living on in their copies.
  */
 
 import { describe, expect, test, vi } from "vitest";
@@ -22,7 +23,6 @@ function renderDialog(over: Partial<React.ComponentProps<typeof DeleteDocumentDi
       name="Incident email.eml"
       unsavedAttachments={["timeline.csv", "photo.jpg"]}
       savedAttachments={["report.pdf"]}
-      alsoInCount={0}
       {...over}
     />
   );
@@ -32,9 +32,9 @@ function renderDialog(over: Partial<React.ComponentProps<typeof DeleteDocumentDi
 describe("DeleteDocumentDialog", () => {
   test("lists unsaved attachments and says saved ones stay", () => {
     renderDialog();
-    expect(screen.getByText(/These 2 attachments aren't filed anywhere else/)).toBeInTheDocument();
+    expect(screen.getByText(/These 2 attachments haven't been copied anywhere else/)).toBeInTheDocument();
     expect(screen.getByText("timeline.csv")).toBeInTheDocument();
-    expect(screen.getByText(/“report\.pdf” is also filed in another folder and stays there/)).toBeInTheDocument();
+    expect(screen.getByText(/“report\.pdf” has a copy in another folder — that copy stays/)).toBeInTheDocument();
     expect(screen.getByLabelText(/Delete them with the email/)).toBeChecked();
   });
 

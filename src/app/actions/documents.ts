@@ -1,6 +1,6 @@
 /**
  * Document server actions — delete, email-attachment extraction, and
- * extra folder links (ADR-043).
+ * "Copy to…" (ADR-043).
  *
  * Uploads do NOT go through a server action: Next caps action bodies
  * at 1 MB by default, and the documents tab handles files up to
@@ -43,9 +43,9 @@ function revalidateDocuments(matterId: string) {
   revalidatePath(`/matters/${matterId}`);
 }
 
-/** What to do with an email's attachments that aren't filed anywhere
- *  else when the email is deleted (attachments that ARE filed elsewhere
- *  always stay there). */
+/** What to do with an email's attachments that have no copy anywhere
+ *  else when the email is deleted (a copy made with "Copy to…" is its
+ *  own document and always stays). */
 export type AttachmentChoice = "delete" | "keep";
 
 export async function deleteDocument(
@@ -66,27 +66,24 @@ export async function deleteDocument(
   });
   if (!doc) return { ok: false, error: "Document not found." };
 
-  // An email's extracted attachments (ADR-043). Ones also filed in
-  // another folder stay there; the rest go with the email or stay in
-  // its folder, as the user chose in the delete prompt.
+  // An email's extracted attachments (ADR-043). One that's been copied
+  // elsewhere ("saved") lives on as that copy, so it goes with the
+  // email; the rest go with it or stay in its folder, as the user chose
+  // in the delete prompt.
   const attachments = await prisma.document.findMany({
     where: { parentDocumentId: doc.id },
-    select: {
-      id: true,
-      name: true,
-      fileUrl: true,
-      links: { select: { id: true, folderId: true }, orderBy: { createdAt: "asc" } },
-    },
+    select: { id: true, name: true, fileUrl: true },
   });
-  const unsaved = attachments.filter((a) => a.links.length === 0);
-  const saved = attachments.filter((a) => a.links.length > 0);
+  const copied = await savedAttachmentIds(doc.id, attachments);
+  const unsaved = attachments.filter((a) => !copied.has(a.id));
+  const saved = attachments.filter((a) => copied.has(a.id));
   if (unsaved.length > 0 && !opts.attachments) {
     return {
       ok: false,
       error: "Choose whether to delete this email's attachments or keep them.",
     };
   }
-  const deletingAttachments = opts.attachments === "delete" ? unsaved : [];
+  const deletingAttachments = opts.attachments === "keep" ? saved : attachments;
 
   // Original uploader OR anyone holding `documents.delete_any`
   // (admin always does). Defense against accidental deletion by
@@ -128,22 +125,14 @@ export async function deleteDocument(
   }
 
   await prisma.$transaction(async (tx) => {
-    // Filed elsewhere: its first extra location becomes its home.
-    for (const a of saved) {
-      const [home] = a.links;
-      await tx.document.update({
-        where: { id: a.id },
-        data: { parentDocumentId: null, attachmentIndex: null, folderId: home.folderId },
-      });
-      await tx.documentLink.delete({ where: { id: home.id } });
-    }
     if (opts.attachments === "keep") {
       // Stay in the email's folder as ordinary documents.
       await tx.document.updateMany({
         where: { id: { in: unsaved.map((a) => a.id) } },
         data: { parentDocumentId: null, attachmentIndex: null },
       });
-    } else if (deletingAttachments.length > 0) {
+    }
+    if (deletingAttachments.length > 0) {
       await tx.document.deleteMany({ where: { id: { in: deletingAttachments.map((a) => a.id) } } });
     }
     await tx.document.delete({ where: { id: doc.id } });
@@ -167,7 +156,7 @@ export async function deleteDocument(
         ? `${unsaved.length} attachment${unsaved.length === 1 ? "" : "s"} kept in the folder`
         : null,
       saved.length > 0
-        ? `${saved.length} attachment${saved.length === 1 ? "" : "s"} kept where filed`
+        ? `${saved.length} attachment${saved.length === 1 ? "" : "s"} still copied elsewhere`
         : null,
     ]
       .filter(Boolean)
@@ -215,19 +204,70 @@ export async function extractAttachments(
   return { ok: true, created: res.created };
 }
 
-// ── Extra folder links ────────────────────────────────────────────────
+/** Attachments of `emailId` that have a copy outside the email: another
+ *  document (not the email or one of its attachments) sharing the stored
+ *  file. Copies share bytes, so the file key identifies them. */
+async function savedAttachmentIds(
+  emailId: string,
+  attachments: { id: string; fileUrl: string | null }[]
+): Promise<Set<string>> {
+  const keys = attachments.map((a) => a.fileUrl).filter((k): k is string => !!k);
+  if (keys.length === 0) return new Set();
+  const others = await prisma.document.findMany({
+    where: {
+      fileUrl: { in: keys },
+      id: { notIn: [emailId, ...attachments.map((a) => a.id)] },
+      OR: [{ parentDocumentId: null }, { parentDocumentId: { not: emailId } }],
+    },
+    select: { fileUrl: true },
+  });
+  const copiedKeys = new Set(others.map((o) => o.fileUrl));
+  return new Set(attachments.filter((a) => a.fileUrl && copiedKeys.has(a.fileUrl)).map((a) => a.id));
+}
 
-/** File a document in one more folder of its matter (`null` = the
- *  matter root) — the same document, no new copy. */
-export async function addDocumentLink(
+// ── Copy to… ──────────────────────────────────────────────────────────
+
+/**
+ * Copy a document into a folder of its matter (`null` = the matter
+ * root). The copy is its own document — its own name, folder, status,
+ * flags and notes from here on — but shares the stored file, so nothing
+ * is uploaded or stored again (deleting either one keeps the bytes
+ * while the other still uses them). Copying an email copies its
+ * extracted attachments with it.
+ */
+export async function copyDocumentToFolder(
   documentId: string,
   folderId: string | null
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; id?: string }> {
   const userId = await requirePermission("documents.organize");
   await assertChildMatterAccess("document", documentId);
   const doc = await prisma.document.findUnique({
     where: { id: documentId },
-    select: { id: true, matterId: true, name: true, folderId: true, parentDocumentId: true },
+    select: {
+      id: true,
+      matterId: true,
+      name: true,
+      category: true,
+      source: true,
+      fileUrl: true,
+      contentType: true,
+      fileSize: true,
+      status: true,
+      attachmentsExtractedAt: true,
+      attachments: {
+        select: {
+          name: true,
+          category: true,
+          source: true,
+          fileUrl: true,
+          contentType: true,
+          fileSize: true,
+          status: true,
+          attachmentIndex: true,
+        },
+        orderBy: { attachmentIndex: "asc" },
+      },
+    },
   });
   if (!doc) return { ok: false, error: "Document not found." };
 
@@ -240,46 +280,49 @@ export async function addDocumentLink(
     if (!folder) return { ok: false, error: "Folder not found in this matter." };
     folderName = `"${folder.name}"`;
   }
-  // Already shown there as itself (an attachment's home is under its
-  // email, so a link in the email's folder is still a new place).
-  if (!doc.parentDocumentId && doc.folderId === folderId) {
-    return { ok: false, error: "The document is already in that folder." };
-  }
-  const existing = await prisma.documentLink.findFirst({ where: { documentId, folderId } });
-  if (existing) return { ok: false, error: "The document is already filed in that folder." };
 
-  await prisma.documentLink.create({
-    data: { documentId, matterId: doc.matterId, folderId, createdById: userId },
+  const copy = await prisma.$transaction(async (tx) => {
+    const created = await tx.document.create({
+      data: {
+        matterId: doc.matterId,
+        folderId,
+        name: doc.name,
+        category: doc.category,
+        source: doc.source,
+        fileUrl: doc.fileUrl,
+        contentType: doc.contentType,
+        fileSize: doc.fileSize,
+        status: doc.status,
+        uploadedBy: userId,
+        attachmentsExtractedAt: doc.attachmentsExtractedAt ? new Date() : null,
+      },
+      select: { id: true },
+    });
+    if (doc.attachments.length > 0) {
+      await tx.document.createMany({
+        data: doc.attachments.map((a) => ({
+          ...a,
+          matterId: doc.matterId,
+          folderId,
+          parentDocumentId: created.id,
+          uploadedBy: userId,
+        })),
+      });
+    }
+    return created;
   });
+
   await logActivity({
     matterId: doc.matterId,
     userId,
     type: "document",
-    title: "Document also filed",
-    detail: `${doc.name} → ${folderName}`,
+    title: "Document copied",
+    detail: `${doc.name} → ${folderName}${
+      doc.attachments.length > 0
+        ? ` (with ${doc.attachments.length} attachment${doc.attachments.length === 1 ? "" : "s"})`
+        : ""
+    }`,
   });
   revalidateDocuments(doc.matterId);
-  return { ok: true };
-}
-
-/** Take a document out of one of its extra folders. The document (and
- *  its other places) are untouched. */
-export async function removeDocumentLink(linkId: string): Promise<{ ok: boolean; error?: string }> {
-  const userId = await requirePermission("documents.organize");
-  const link = await prisma.documentLink.findUnique({
-    where: { id: linkId },
-    select: { id: true, documentId: true, matterId: true, document: { select: { name: true } }, folder: { select: { name: true } } },
-  });
-  if (!link) return { ok: false, error: "That folder link is already gone." };
-  await assertChildMatterAccess("document", link.documentId);
-  await prisma.documentLink.delete({ where: { id: link.id } });
-  await logActivity({
-    matterId: link.matterId,
-    userId,
-    type: "document",
-    title: "Document removed from a folder",
-    detail: `${link.document.name} — no longer in ${link.folder ? `"${link.folder.name}"` : "the matter root"}`,
-  });
-  revalidateDocuments(link.matterId);
-  return { ok: true };
+  return { ok: true, id: copy.id };
 }

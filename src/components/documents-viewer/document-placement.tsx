@@ -1,10 +1,8 @@
 /**
- * Where this document is filed, in the viewer's header (ADR-043):
+ * The viewer header's placement line (ADR-043):
  *   - "Attachment of <email>" for a file extracted from an email,
- *   - "Also in" chips for the other folders it's filed in (each with a
- *     remove button for documents.organize holders — removing a place
- *     never deletes the document),
- *   - "Also file in…" to add it to one more folder.
+ *   - "Copy to…" (documents.organize): an independent copy in another
+ *     folder — its own document from then on, sharing the stored file.
  * Plus ExtractAttachmentsButton for emails uploaded before attachments
  * were extracted automatically.
  */
@@ -13,43 +11,34 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { FolderPlus, Paperclip, X } from "lucide-react";
-import { addDocumentLink, extractAttachments, removeDocumentLink } from "@/app/actions/documents";
+import { useRouter } from "next/navigation";
+import { Copy, Paperclip } from "lucide-react";
+import { copyDocumentToFolder, extractAttachments } from "@/app/actions/documents";
 import { MoveToFolderDialog } from "@/components/matters/documents/move-to-folder-dialog";
 import type { FlatFolder } from "@/lib/folder-tree";
+
+export const COPY_DESCRIPTION =
+  "Makes a separate copy in that folder — its own document, with its own name, flags and notes. The file isn't uploaded again.";
 
 export function DocumentPlacement({
   matterId,
   documentId,
   name,
-  folderId,
   parent,
-  alsoIn,
   folders,
   canOrganize,
 }: {
   matterId: string;
   documentId: string;
   name: string;
-  folderId: string | null;
   parent: { id: string; name: string } | null;
-  alsoIn: { linkId: string; folderId: string | null; folderName: string }[];
   folders: FlatFolder[];
   canOrganize: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
-  if (!parent && alsoIn.length === 0 && !canOrganize) return null;
-
-  const remove = (linkId: string) => {
-    setError(null);
-    startTransition(async () => {
-      const res = await removeDocumentLink(linkId);
-      if (!res.ok) setError(res.error ?? "Couldn't remove it from that folder.");
-    });
-  };
+  if (!parent && !canOrganize) return null;
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 text-2xs text-ink-4">
@@ -62,64 +51,32 @@ export function DocumentPlacement({
           </Link>
         </span>
       )}
-      {alsoIn.length > 0 && (
-        <span className="inline-flex flex-wrap items-center gap-1">
-          {parent && <span aria-hidden>·</span>}
-          Also in
-          {alsoIn.map((f) => (
-            <span
-              key={f.linkId}
-              className="inline-flex items-center gap-0.5 rounded-full border border-line bg-white py-0.5 pl-2 pr-1 text-ink-3"
-            >
-              <Link
-                href={f.folderId ? `/matters/${matterId}/documents?folder=${f.folderId}` : `/matters/${matterId}/documents`}
-                className="hover:text-brand-700"
-              >
-                {f.folderName}
-              </Link>
-              {canOrganize && (
-                <button
-                  type="button"
-                  onClick={() => remove(f.linkId)}
-                  disabled={pending}
-                  aria-label={`Remove from ${f.folderName}`}
-                  title={`Remove from ${f.folderName} (the document stays)`}
-                  className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-ink-4 hover:bg-paper-2 hover:text-ink"
-                >
-                  <X className="h-2.5 w-2.5" aria-hidden />
-                </button>
-              )}
-            </span>
-          ))}
-        </span>
-      )}
       {canOrganize && (
         <button
           type="button"
           onClick={() => setOpen(true)}
           className="inline-flex items-center gap-1 rounded-md border border-line bg-white px-1.5 py-0.5 text-ink-3 hover:border-brand-300 hover:text-brand-700"
         >
-          <FolderPlus className="h-3 w-3" aria-hidden />
-          Also file in…
+          <Copy className="h-3 w-3" aria-hidden />
+          Copy to…
         </button>
-      )}
-      {error && (
-        <span role="alert" className="text-warn">
-          {error}
-        </span>
       )}
       {canOrganize && (
         <MoveToFolderDialog
           open={open}
           onOpenChange={setOpen}
-          title={`Also file "${name}" in…`}
-          description="The same document will also appear in that folder — one file, one set of flags. Removing it from a folder never deletes it."
+          title={`Copy "${name}" to…`}
+          description={COPY_DESCRIPTION}
           folders={folders}
-          currentFolderId={parent ? undefined : folderId}
-          alreadyIn={alsoIn.map((f) => f.folderId)}
-          submitLabel="File here"
-          pendingLabel="Filing…"
-          onMove={(target) => addDocumentLink(documentId, target)}
+          currentFolderId={undefined}
+          submitLabel="Copy here"
+          pendingLabel="Copying…"
+          onMove={async (target) => {
+            const res = await copyDocumentToFolder(documentId, target);
+            // Open the new copy — it's its own document from here on.
+            if (res.ok && res.id) router.push(`/matters/${matterId}/documents/${res.id}`);
+            return res;
+          }}
         />
       )}
     </div>

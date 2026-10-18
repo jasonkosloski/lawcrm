@@ -22,7 +22,7 @@
  */
 
 import Link from "next/link";
-import { ChevronRight, FileText, Folder, Link2, Mail, Paperclip } from "lucide-react";
+import { ChevronRight, FileText, Folder, Mail, Paperclip } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -34,7 +34,11 @@ import {
 } from "@/components/ui/table";
 import { UploadDocumentForm } from "@/components/matters/documents/upload-document-form";
 import { DocumentRowActions } from "@/components/matters/documents/document-row-actions";
-import { getFolderListing, type ListingRow } from "@/lib/queries/document-listing";
+import {
+  getFolderListing,
+  type ListingAttachment,
+  type ListingRow,
+} from "@/lib/queries/document-listing";
 import { FolderRowActions } from "@/components/matters/documents/folder-row-actions";
 import { FolderTree } from "@/components/matters/documents/folder-tree";
 import { MultiFileUpload } from "@/components/matters/documents/multi-file-upload";
@@ -134,22 +138,16 @@ export default async function MatterDocumentsPage({
     selectedId !== null && folderDepth(folders, selectedId) >= MAX_FOLDER_DEPTH;
 
   const basePath = `/matters/${id}/documents`;
-  const isEmpty =
-    subfolders.length === 0 && listing.documents.length === 0 && listing.linked.length === 0;
+  const isEmpty = subfolders.length === 0 && listing.documents.length === 0;
 
-  /** One document row: an ordinary file, an email's attachment
-   *  (indented under it), or a document also filed here (a link). */
-  const docRow = (
-    d: ListingRow,
-    kind: "own" | "attachment" | "linked",
-    extra: { linkId?: string; homeName?: string; attachments?: ListingRow[] } = {}
-  ) => {
+  /** One document row: an ordinary file, or an email's attachment
+   *  (indented under it). */
+  const docRow = (d: ListingRow, kind: "own" | "attachment", attachments: ListingAttachment[] = []) => {
     const status = documentStatusMeta(d.status);
     const canDelete = canDeleteAny || d.uploadedBy === currentUserId;
-    const Icon = kind === "attachment" ? Paperclip : kind === "linked" ? Link2 : d.isEmail ? Mail : FileText;
-    const elsewhere = d.alsoIn.length - (kind === "linked" ? 1 : 0);
+    const Icon = kind === "attachment" ? Paperclip : d.isEmail ? Mail : FileText;
     return (
-      <TableRow key={`${kind}-${extra.linkId ?? d.id}`}>
+      <TableRow key={d.id}>
         <TableCell className={kind === "attachment" ? "pl-10 font-medium text-ink" : "pl-4 font-medium text-ink"}>
           <Link
             href={`${basePath}/${d.id}`}
@@ -159,17 +157,6 @@ export default async function MatterDocumentsPage({
             <Icon size={14} className="shrink-0 text-ink-4" />
             {d.name}
           </Link>
-          {kind === "linked" && extra.homeName && (
-            <div className="pl-[22px] text-2xs font-normal text-ink-4">Also filed here · lives in {extra.homeName}</div>
-          )}
-          {elsewhere > 0 && kind !== "linked" && (
-            <div
-              className="pl-[22px] text-2xs font-normal text-ink-4"
-              title={d.alsoIn.map((f) => f.folderName).join(", ")}
-            >
-              Also in {elsewhere === 1 ? d.alsoIn[0].folderName : `${elsewhere} other folders`}
-            </div>
-          )}
         </TableCell>
         <TableCell className="text-2xs font-mono text-ink-4">{documentCategoryLabel(d.category)}</TableCell>
         <TableCell>
@@ -192,10 +179,8 @@ export default async function MatterDocumentsPage({
             folders={flat}
             currentFolderId={d.folderId}
             isAttachment={d.parentDocumentId !== null}
-            alsoInFolderIds={d.alsoIn.map((f) => f.folderId)}
-            linkId={extra.linkId}
-            unsavedAttachments={(extra.attachments ?? []).filter((a) => a.alsoIn.length === 0).map((a) => a.name)}
-            savedAttachments={(extra.attachments ?? []).filter((a) => a.alsoIn.length > 0).map((a) => a.name)}
+            unsavedAttachments={attachments.filter((a) => a.copiedTo.length === 0).map((a) => a.name)}
+            savedAttachments={attachments.filter((a) => a.copiedTo.length > 0).map((a) => a.name)}
           />
         </TableCell>
       </TableRow>
@@ -354,10 +339,9 @@ export default async function MatterDocumentsPage({
                   );
                 })}
                 {listing.documents.map((d) => [
-                  docRow(d, "own", { attachments: d.attachments }),
+                  docRow(d, "own", d.attachments),
                   ...d.attachments.map((a) => docRow(a, "attachment")),
                 ])}
-                {listing.linked.map((d) => docRow(d, "linked", { linkId: d.linkId, homeName: d.homeName }))}
               </TableBody>
             </Table>
           </Card>

@@ -1281,25 +1281,17 @@ export async function getMatterDocumentFolders(
 export async function getFolderDocumentCounts(
   matterId: string
 ): Promise<{ counts: Record<string, number>; rootCount: number }> {
-  // Entries a folder shows: its own documents (an email counts once —
-  // its attachments list under it) plus documents also filed there.
-  const [grouped, linked] = await Promise.all([
-    prisma.document.groupBy({
-      by: ["folderId"],
-      where: { matterId, parentDocumentId: null },
-      _count: { _all: true },
-    }),
-    prisma.documentLink.groupBy({
-      by: ["folderId"],
-      where: { matterId },
-      _count: { _all: true },
-    }),
-  ]);
+  // An email counts once — its attachments list under it.
+  const grouped = await prisma.document.groupBy({
+    by: ["folderId"],
+    where: { matterId, parentDocumentId: null },
+    _count: { _all: true },
+  });
   const counts: Record<string, number> = {};
   let rootCount = 0;
-  for (const g of [...grouped, ...linked]) {
-    if (g.folderId === null) rootCount += g._count._all;
-    else counts[g.folderId] = (counts[g.folderId] ?? 0) + g._count._all;
+  for (const g of grouped) {
+    if (g.folderId === null) rootCount = g._count._all;
+    else counts[g.folderId] = g._count._all;
   }
   return { counts, rootCount };
 }

@@ -137,17 +137,6 @@ describe("DocumentFileTree", () => {
     expect(screen.queryByText("report.pdf")).toBeNull();
   });
 
-  test("a document also filed in another folder shows there as a link to it", () => {
-    renderTree({ links: [{ id: "l1", documentId: "d2", folderId: "med" }], currentId: "d1", currentFolderId: null });
-    fireEvent.click(screen.getByRole("button", { name: /Medical/ }));
-    const inMedical = screen.getByRole("button", { name: /Medical/ }).closest("li")!;
-    const link = within(inMedical).getByRole("link", { name: /Police report\.pdf/ });
-    expect(link).toHaveAttribute("href", "/matters/m1/documents/d2");
-    expect(link).toHaveAttribute("title", "Police report.pdf (also filed here)");
-    // Folder count includes it.
-    expect(within(screen.getByRole("button", { name: /Medical/ })).getByText("2")).toBeInTheDocument();
-  });
-
   test("the filter finds attachments inside an email", () => {
     const docs = [
       ...DOCS,

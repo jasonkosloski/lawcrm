@@ -38,8 +38,6 @@ export type ViewerDocument = {
   /** Email only: its extracted attachments by position, so the
    *  attachment chips can open them; null = not extracted yet. */
   attachmentDocs: { id: string; attachmentIndex: number | null }[] | null;
-  /** Other folders the document is also filed in (DocumentLinks). */
-  alsoIn: { linkId: string; folderId: string | null; folderName: string }[];
   /** Neighbor ids in the same folder, ordered by name (asc, id
    *  tiebreak). Null at the ends of the folder. An attachment's
    *  neighbors are its email's other attachments. */
@@ -73,10 +71,6 @@ export async function getDocumentForViewer(
       attachmentsExtractedAt: true,
       parentDocument: { select: { id: true, name: true } },
       attachments: { select: { id: true, attachmentIndex: true }, orderBy: { attachmentIndex: "asc" } },
-      links: {
-        select: { id: true, folderId: true, folder: { select: { name: true } } },
-        orderBy: { createdAt: "asc" },
-      },
     },
   });
   if (!doc) return null;
@@ -141,11 +135,6 @@ export async function getDocumentForViewer(
     createdAt: doc.createdAt,
     parent: doc.parentDocument,
     attachmentDocs: doc.attachmentsExtractedAt ? doc.attachments : null,
-    alsoIn: doc.links.map((l) => ({
-      linkId: l.id,
-      folderId: l.folderId,
-      folderName: l.folder?.name ?? "All documents",
-    })),
     prevId,
     nextId,
   };
@@ -162,9 +151,6 @@ export type FileTreeDocument = {
   attachmentIndex: number | null;
 };
 
-/** A document also filed in a folder (DocumentLink) — shown there as a
- *  link to the same document. */
-export type FileTreeLink = { id: string; documentId: string; folderId: string | null };
 
 /** Cap on files loaded into the viewer's tree in one go. A discovery
  *  production can hold many thousands of files; past this the tree
@@ -182,7 +168,7 @@ export const FILE_TREE_MAX_DOCUMENTS = 3000;
 export async function getViewerFileTree(
   matterId: string,
   currentFolderId: string | null
-): Promise<{ documents: FileTreeDocument[]; links: FileTreeLink[]; complete: boolean }> {
+): Promise<{ documents: FileTreeDocument[]; complete: boolean }> {
   const select = {
     id: true,
     name: true,
@@ -192,34 +178,19 @@ export async function getViewerFileTree(
     attachmentIndex: true,
   } as const;
   const orderBy = [{ name: "asc" as const }, { id: "asc" as const }];
-  const linkSelect = { id: true, documentId: true, folderId: true } as const;
-  const [all, links] = await Promise.all([
-    prisma.document.findMany({
-      where: { matterId },
-      select,
-      orderBy,
-      take: FILE_TREE_MAX_DOCUMENTS + 1,
-    }),
-    prisma.documentLink.findMany({
-      where: { matterId },
-      select: linkSelect,
-      take: FILE_TREE_MAX_DOCUMENTS + 1,
-    }),
-  ]);
-  if (all.length <= FILE_TREE_MAX_DOCUMENTS && links.length <= FILE_TREE_MAX_DOCUMENTS) {
-    return { documents: all, links, complete: true };
-  }
+  const all = await prisma.document.findMany({
+    where: { matterId },
+    select,
+    orderBy,
+    take: FILE_TREE_MAX_DOCUMENTS + 1,
+  });
+  if (all.length <= FILE_TREE_MAX_DOCUMENTS) return { documents: all, complete: true };
   // Too many to list: just the folder the reader is working through
-  // (its files, their attachments, and documents also filed there).
-  const [current, currentLinks] = await Promise.all([
-    prisma.document.findMany({ where: { matterId, folderId: currentFolderId }, select, orderBy }),
-    prisma.documentLink.findMany({ where: { matterId, folderId: currentFolderId }, select: linkSelect }),
-  ]);
-  const have = new Set(current.map((d) => d.id));
-  const linkedDocs = await prisma.document.findMany({
-    where: { id: { in: currentLinks.map((l) => l.documentId).filter((id) => !have.has(id)) } },
+  // (its files and their attachments).
+  const current = await prisma.document.findMany({
+    where: { matterId, folderId: currentFolderId },
     select,
     orderBy,
   });
-  return { documents: [...current, ...linkedDocs], links: currentLinks, complete: false };
+  return { documents: current, complete: false };
 }

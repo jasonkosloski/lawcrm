@@ -48,25 +48,6 @@ export function attachmentsByEmail<F extends TreeFile & { attachmentIndex?: numb
   return out;
 }
 
-/** Documents also filed in each folder (via links), by folder key. */
-export function linkedByFolder<F extends TreeFile>(
-  links: { documentId: string; folderId: string | null }[],
-  files: F[]
-): Map<string, F[]> {
-  const byId = new Map(files.map((f) => [f.id, f]));
-  const out = new Map<string, F[]>();
-  for (const l of links) {
-    const f = byId.get(l.documentId);
-    if (!f) continue;
-    const key = l.folderId ?? ROOT_KEY;
-    const list = out.get(key);
-    if (list) list.push(f);
-    else out.set(key, [f]);
-  }
-  for (const list of out.values()) list.sort((a, b) => a.name.localeCompare(b.name));
-  return out;
-}
-
 /** Ids of `folderId` and every folder above it — what starts expanded so
  *  the current document is visible. Empty for the root. */
 export function ancestorChain(tree: FolderNode[], folderId: string | null): string[] {
@@ -102,9 +83,7 @@ export function filterTree<F extends TreeFile>(
   byFolder: Map<string, F[]>,
   query: string,
   /** Email id → its attachments; an email shows when one matches. */
-  attachments: Map<string, F[]> = new Map(),
-  /** Folder key → documents also filed there (links). */
-  linked: Map<string, F[]> = new Map()
+  attachments: Map<string, F[]> = new Map()
 ): { files: Set<string>; folders: Set<string> } | null {
   if (query.trim() === "") return null;
   const files = new Set<string>();
@@ -123,11 +102,11 @@ export function filterTree<F extends TreeFile>(
     }
     return any;
   };
-  scan([...(byFolder.get(ROOT_KEY) ?? []), ...(linked.get(ROOT_KEY) ?? [])], false);
+  scan(byFolder.get(ROOT_KEY) ?? [], false);
   const visit = (node: FolderNode, ancestorMatched: boolean): boolean => {
     const selfMatched = ancestorMatched || nameMatches(node.name, query);
     let any = selfMatched;
-    if (scan([...(byFolder.get(node.id) ?? []), ...(linked.get(node.id) ?? [])], selfMatched)) any = true;
+    if (scan(byFolder.get(node.id) ?? [], selfMatched)) any = true;
     for (const child of node.children) if (visit(child, selfMatched)) any = true;
     if (any) folders.add(node.id);
     return any;

@@ -5,23 +5,16 @@
  * as an attachment — only when the row has a file) + "Move to…"
  * (documents.organize — re-files the document via the shared folder
  * picker; not offered for email attachments, which live under their
- * email) + "Also file in…" (documents.organize — the same document in
- * one more folder, ADR-043) + "Remove from this folder" on a row that
- * is such a link + Delete (uploader or documents.delete_any holder;
- * emails with attachments get a prompt about them).
+ * email) + "Copy to…" (documents.organize — an independent copy in
+ * another folder that shares the stored file, ADR-043) + Delete
+ * (uploader or documents.delete_any holder; emails with attachments
+ * get a prompt about them).
  */
 
 "use client";
 
 import { useState, useTransition } from "react";
-import {
-  Download,
-  FolderInput,
-  FolderMinus,
-  FolderPlus,
-  MoreHorizontal,
-  Trash2,
-} from "lucide-react";
+import { Copy, Download, FolderInput, MoreHorizontal, Trash2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,7 +22,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { addDocumentLink, deleteDocument, removeDocumentLink } from "@/app/actions/documents";
+import { copyDocumentToFolder, deleteDocument } from "@/app/actions/documents";
+import { COPY_DESCRIPTION } from "@/components/documents-viewer/document-placement";
 import { moveDocuments } from "@/app/actions/document-folders";
 import type { FlatFolder } from "@/lib/folder-tree";
 import { MoveToFolderDialog } from "./move-to-folder-dialog";
@@ -46,7 +40,7 @@ export function DocumentRowActions({
   /** True when the row has a file blob — hides Download otherwise
    *  (seeded rows without bytes). */
   hasFile = true,
-  /** `documents.organize` flag — shows "Move to…" / "Also file in…". */
+  /** `documents.organize` flag — shows "Move to…" / "Copy to…". */
   canMove = false,
   /** Flattened folder tree for the pickers. */
   folders = [],
@@ -54,12 +48,7 @@ export function DocumentRowActions({
   currentFolderId = null,
   /** An email attachment: it lives under its email, so no "Move to…". */
   isAttachment = false,
-  /** Other folders it's already filed in (its links). */
-  alsoInFolderIds = [],
-  /** Set when this row IS one of those links — offers "Remove from
-   *  this folder" (the document itself stays). */
-  linkId,
-  /** For an email: attachments filed nowhere else / also filed elsewhere. */
+  /** For an email: attachments with no copy elsewhere / with one. */
   unsavedAttachments = [],
   savedAttachments = [],
 }: {
@@ -71,8 +60,6 @@ export function DocumentRowActions({
   folders?: FlatFolder[];
   currentFolderId?: string | null;
   isAttachment?: boolean;
-  alsoInFolderIds?: (string | null)[];
-  linkId?: string;
   unsavedAttachments?: string[];
   savedAttachments?: string[];
 }) {
@@ -87,12 +74,9 @@ export function DocumentRowActions({
       setDeleteOpen(true);
       return;
     }
-    const elsewhere = alsoInFolderIds.length;
     if (
       !confirm(
-        `Delete "${name}"?\n\nThis can't be undone — the file is removed from the matter and from storage${
-          elsewhere > 0 ? `, including the ${elsewhere} other folder${elsewhere === 1 ? "" : "s"} it's filed in` : ""
-        }.`
+        `Delete "${name}"?\n\nThis can't be undone. Copies of it in other folders are separate documents and aren't affected.`
       )
     ) {
       return;
@@ -105,16 +89,8 @@ export function DocumentRowActions({
     });
   };
 
-  const onRemoveLink = () => {
-    if (!linkId) return;
-    startTransition(async () => {
-      const result = await removeDocumentLink(linkId);
-      if (!result.ok) alert(result.error ?? "Couldn't remove it from this folder.");
-    });
-  };
-
   if (!hasFile && !canMove && !canDelete) return null;
-  const canRelocate = canMove && !isAttachment && !linkId;
+  const canRelocate = canMove && !isAttachment;
 
   return (
     <>
@@ -153,14 +129,8 @@ export function DocumentRowActions({
           )}
           {canMove && (
             <DropdownMenuItem onClick={() => setFileOpen(true)}>
-              <FolderPlus />
-              Also file in…
-            </DropdownMenuItem>
-          )}
-          {canMove && linkId && (
-            <DropdownMenuItem onClick={onRemoveLink}>
-              <FolderMinus />
-              Remove from this folder
+              <Copy />
+              Copy to…
             </DropdownMenuItem>
           )}
           {canDelete && (
@@ -168,7 +138,7 @@ export function DocumentRowActions({
               {(hasFile || canMove) && <DropdownMenuSeparator />}
               <DropdownMenuItem variant="destructive" onClick={onDelete}>
                 <Trash2 />
-                {linkId ? "Delete everywhere" : "Delete"}
+                Delete
               </DropdownMenuItem>
             </>
           )}
@@ -190,14 +160,13 @@ export function DocumentRowActions({
         <MoveToFolderDialog
           open={fileOpen}
           onOpenChange={setFileOpen}
-          title={`Also file "${name}" in…`}
-          description="The same document will also appear in that folder — one file, one set of flags. Removing it from a folder never deletes it."
+          title={`Copy "${name}" to…`}
+          description={COPY_DESCRIPTION}
           folders={folders}
-          currentFolderId={isAttachment ? undefined : currentFolderId}
-          alreadyIn={alsoInFolderIds}
-          submitLabel="File here"
-          pendingLabel="Filing…"
-          onMove={(target) => addDocumentLink(documentId, target)}
+          currentFolderId={undefined}
+          submitLabel="Copy here"
+          pendingLabel="Copying…"
+          onMove={(target) => copyDocumentToFolder(documentId, target)}
         />
       )}
       {hasAttachments && (
@@ -208,7 +177,6 @@ export function DocumentRowActions({
           name={name}
           unsavedAttachments={unsavedAttachments}
           savedAttachments={savedAttachments}
-          alsoInCount={alsoInFolderIds.length}
         />
       )}
     </>

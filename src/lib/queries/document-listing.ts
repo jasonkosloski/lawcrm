@@ -1,108 +1,85 @@
 /**
- * One folder's entries for the Documents tab (ADR-043):
- *   - documents that live in the folder (top level only),
- *   - each email's extracted attachments, nested under it,
- *   - documents that live elsewhere but are ALSO filed here
- *     (DocumentLink), shown as links to the same document,
- * plus, for every document listed, the other folders it's filed in
- * (its links), so rows can say "also in …" and offer "remove from
- * this folder".
+ * One folder's entries for the Documents tab (ADR-043): the documents
+ * that live in the folder (top level only), each email's extracted
+ * attachments nested under it, and — for each attachment — where copies
+ * of it live ("Copy to…" makes independent documents that share the
+ * stored file), so deleting the email can say which are saved elsewhere.
  */
 
 import { prisma } from "@/lib/prisma";
 import { shapeDocumentRows, type DocumentRow } from "@/lib/queries/matter-detail";
 import { emailKindOf } from "@/lib/email-attachment-extract";
 
-/** Another folder a document is filed in (one of its DocumentLinks). */
-export type FiledIn = { linkId: string; folderId: string | null; folderName: string };
-
 export type ListingRow = DocumentRow & {
   isEmail: boolean;
   /** Email whose attachments haven't been extracted yet. */
   attachmentsPending: boolean;
-  alsoIn: FiledIn[];
+};
+
+export type ListingAttachment = ListingRow & {
+  /** Folders holding a copy of this attachment (empty = not saved
+   *  anywhere else). */
+  copiedTo: string[];
 };
 
 export type FolderListing = {
-  documents: (ListingRow & { attachments: ListingRow[] })[];
-  /** Documents filed here via a link; `linkId` removes just this place. */
-  linked: (ListingRow & { linkId: string; homeName: string })[];
+  documents: (ListingRow & { attachments: ListingAttachment[] })[];
 };
 
 const ROOT_NAME = "All documents";
 
 export async function getFolderListing(matterId: string, folderId: string | null): Promise<FolderListing> {
-  const [own, links] = await Promise.all([
-    prisma.document.findMany({
-      where: { matterId, folderId, parentDocumentId: null },
-      orderBy: [{ name: "asc" }, { id: "asc" }],
-    }),
-    prisma.documentLink.findMany({
-      where: { matterId, folderId },
-      select: { id: true, documentId: true },
-    }),
-  ]);
+  const own = await prisma.document.findMany({
+    where: { matterId, folderId, parentDocumentId: null },
+    orderBy: [{ name: "asc" }, { id: "asc" }],
+  });
   const attachments = own.length
     ? await prisma.document.findMany({
         where: { parentDocumentId: { in: own.map((d) => d.id) } },
         orderBy: [{ attachmentIndex: "asc" }, { name: "asc" }],
       })
     : [];
-  const linkedDocs = links.length
-    ? await prisma.document.findMany({
-        where: { id: { in: links.map((l) => l.documentId) }, matterId },
-        orderBy: [{ name: "asc" }, { id: "asc" }],
-      })
-    : [];
 
-  const all = [...own, ...attachments, ...linkedDocs];
-  const ids = [...new Set(all.map((d) => d.id))];
-  // Every other place each listed document is filed, with names.
-  const [allLinks, folders, parents] = await Promise.all([
-    prisma.documentLink.findMany({
-      where: { documentId: { in: ids } },
-      select: { id: true, documentId: true, folderId: true },
-      orderBy: { createdAt: "asc" },
-    }),
+  // Copies of each attachment: other documents sharing its stored file,
+  // outside the email it belongs to.
+  const keys = attachments.map((a) => a.fileUrl).filter((k): k is string => !!k);
+  const [copies, folders] = await Promise.all([
+    keys.length
+      ? prisma.document.findMany({
+          where: { matterId, fileUrl: { in: keys } },
+          select: { id: true, fileUrl: true, folderId: true, parentDocumentId: true },
+        })
+      : Promise.resolve([]),
     prisma.documentFolder.findMany({ where: { matterId }, select: { id: true, name: true } }),
-    prisma.document.findMany({
-      where: { id: { in: linkedDocs.map((d) => d.parentDocumentId).filter((v): v is string => !!v) } },
-      select: { id: true, name: true },
-    }),
   ]);
   const folderName = (id: string | null) =>
     id === null ? ROOT_NAME : (folders.find((f) => f.id === id)?.name ?? "a folder");
-  const shaped = new Map((await shapeDocumentRows(all)).map((r) => [r.id, r]));
-  const raw = new Map(all.map((d) => [d.id, d]));
+  const copiedTo = (a: (typeof attachments)[number]) => [
+    ...new Set(
+      copies
+        .filter(
+          (c) =>
+            c.fileUrl === a.fileUrl &&
+            c.id !== a.id &&
+            c.id !== a.parentDocumentId &&
+            c.parentDocumentId !== a.parentDocumentId
+        )
+        .map((c) => folderName(c.folderId))
+    ),
+  ];
 
-  const row = (id: string): ListingRow => {
-    const d = raw.get(id)!;
-    return {
-      ...shaped.get(id)!,
-      isEmail: emailKindOf(d.contentType, d.name) !== null,
-      attachmentsPending: emailKindOf(d.contentType, d.name) !== null && d.attachmentsExtractedAt === null,
-      alsoIn: allLinks
-        .filter((l) => l.documentId === id)
-        .map((l) => ({ linkId: l.id, folderId: l.folderId, folderName: folderName(l.folderId) })),
-    };
+  const shaped = new Map((await shapeDocumentRows([...own, ...attachments])).map((r) => [r.id, r]));
+  const row = (d: (typeof own)[number]): ListingRow => {
+    const isEmail = emailKindOf(d.contentType, d.name) !== null;
+    return { ...shaped.get(d.id)!, isEmail, attachmentsPending: isEmail && d.attachmentsExtractedAt === null };
   };
 
   return {
     documents: own.map((d) => ({
-      ...row(d.id),
-      attachments: attachments.filter((a) => a.parentDocumentId === d.id).map((a) => row(a.id)),
+      ...row(d),
+      attachments: attachments
+        .filter((a) => a.parentDocumentId === d.id)
+        .map((a) => ({ ...row(a), copiedTo: copiedTo(a) })),
     })),
-    linked: links
-      .filter((l) => raw.has(l.documentId))
-      .sort((a, b) => raw.get(a.documentId)!.name.localeCompare(raw.get(b.documentId)!.name))
-      .map((l) => {
-        const d = raw.get(l.documentId)!;
-        const parent = parents.find((p) => p.id === d.parentDocumentId);
-        return {
-          ...row(d.id),
-          linkId: l.id,
-          homeName: parent ? `${parent.name} (attachment)` : folderName(d.folderId),
-        };
-      }),
   };
 }
