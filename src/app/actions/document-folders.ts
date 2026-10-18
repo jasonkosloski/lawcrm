@@ -45,6 +45,7 @@ import {
 } from "@/lib/record-scope";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
+import { isProtectedFolder } from "@/lib/records-requests/folder-kinds";
 import {
   MAX_FOLDER_DEPTH,
   MOVE_DOCUMENTS_BATCH_CAP,
@@ -60,6 +61,11 @@ export type FolderActionResult =
   | { ok: false; error: string };
 
 const MAX_FOLDER_NAME_LENGTH = 120;
+
+const PROTECTED_FOLDER_ERROR =
+  "This folder is managed by its records request and can't be renamed, moved or deleted.";
+const PROTECTED_ANCESTOR_ERROR =
+  "This folder contains folders managed by records requests, so it can't be deleted.";
 
 /** Trimmed 1..120-char name, or an error string. */
 function validateName(raw: string): { name: string } | { error: string } {
@@ -78,7 +84,7 @@ function validateName(raw: string): { name: string } | { error: string } {
 function fetchScopeFolders(scope: RecordScope): Promise<FolderRecord[]> {
   return prisma.documentFolder.findMany({
     where: scopeWhere(scope),
-    select: { id: true, parentId: true, name: true, order: true },
+    select: { id: true, parentId: true, name: true, order: true, systemKind: true },
   });
 }
 
@@ -187,9 +193,19 @@ export async function renameFolder(
 
   const folder = await prisma.documentFolder.findUnique({
     where: { id },
-    select: { id: true, matterId: true, leadId: true, parentId: true, name: true },
+    select: {
+      id: true,
+      matterId: true,
+      leadId: true,
+      parentId: true,
+      name: true,
+      systemKind: true,
+    },
   });
   if (!folder) return { ok: false, error: "Folder not found." };
+  if (isProtectedFolder(folder)) {
+    return { ok: false, error: PROTECTED_FOLDER_ERROR };
+  }
   if (folder.name === valid.name) return { ok: true, folderId: folder.id };
 
   const folders = await fetchScopeFolders(scopeOf(folder));
@@ -220,6 +236,19 @@ export async function renameFolder(
   return { ok: true, folderId: folder.id };
 }
 
+type DeleteOutcome = {
+  folder: {
+    id: string;
+    matterId: string | null;
+    leadId: string | null;
+    parentId: string | null;
+    name: string;
+  };
+  parentName: string | null;
+  childCount: number;
+  docsMoved: number;
+};
+
 // ── deleteFolder ─────────────────────────────────────────────────────────
 
 /**
@@ -235,7 +264,7 @@ export async function deleteFolder(id: string): Promise<FolderActionResult> {
   const userId = await requirePermission("documents.folder.delete");
   await assertChildMatterAccess("documentFolder", id);
 
-  const outcome = await prisma.$transaction(async (tx) => {
+  const outcome = await prisma.$transaction(async (tx): Promise<DeleteOutcome | { error: string } | null> => {
     // Lock the folder row FIRST. A concurrent child create/move into
     // this folder takes a FOR KEY SHARE lock on it (FK check) and so
     // waits for us; once we commit, its insert fails its FK cleanly
@@ -247,12 +276,32 @@ export async function deleteFolder(id: string): Promise<FolderActionResult> {
 
     const folder = await tx.documentFolder.findUniqueOrThrow({
       where: { id },
-      select: { id: true, matterId: true, leadId: true, parentId: true, name: true },
+      select: {
+      id: true,
+      matterId: true,
+      leadId: true,
+      parentId: true,
+      name: true,
+      systemKind: true,
+    },
     });
     const folders: FolderRecord[] = await tx.documentFolder.findMany({
       where: scopeWhere(scopeOf(folder)),
-      select: { id: true, parentId: true, name: true, order: true },
+      select: { id: true, parentId: true, name: true, order: true, systemKind: true },
     });
+    if (isProtectedFolder(folder)) {
+      return { error: PROTECTED_FOLDER_ERROR };
+    }
+    const descendants = collectDescendantIds(folders, folder.id);
+    if (
+      folders.some(
+        (f) =>
+          descendants.has(f.id) &&
+          isProtectedFolder({ systemKind: f.systemKind ?? null })
+      )
+    ) {
+      return { error: PROTECTED_ANCESTOR_ERROR };
+    }
     const children = siblingsOf(folders, folder.id);
     // Names occupied at the destination once this folder is gone — its
     // own name frees up, so exclude it alongside the moving children.
@@ -288,6 +337,7 @@ export async function deleteFolder(id: string): Promise<FolderActionResult> {
     };
   });
   if (!outcome) return { ok: false, error: "Folder not found." };
+  if ("error" in outcome) return { ok: false, error: outcome.error };
 
   const { folder, parentName, childCount, docsMoved } = outcome;
   await logActivity({
@@ -416,9 +466,19 @@ export async function moveFolder(
 
   const folder = await prisma.documentFolder.findUnique({
     where: { id },
-    select: { id: true, matterId: true, leadId: true, parentId: true, name: true },
+    select: {
+      id: true,
+      matterId: true,
+      leadId: true,
+      parentId: true,
+      name: true,
+      systemKind: true,
+    },
   });
   if (!folder) return { ok: false, error: "Folder not found." };
+  if (isProtectedFolder(folder)) {
+    return { ok: false, error: PROTECTED_FOLDER_ERROR };
+  }
   if (newParentId === folder.id) {
     return { ok: false, error: "A folder can't be moved into itself." };
   }
@@ -448,9 +508,12 @@ export async function moveFolder(
 
       const current = await tx.documentFolder.findUnique({
         where: { id: folder.id },
-        select: { parentId: true, name: true },
+        select: { parentId: true, name: true, systemKind: true },
       });
       if (!current) return { ok: false, error: "Folder not found." };
+      if (isProtectedFolder(current)) {
+        return { ok: false, error: PROTECTED_FOLDER_ERROR };
+      }
       if (newParentId === current.parentId) {
         // A concurrent move already put it there.
         return { ok: true, destName: null, noop: true };
@@ -458,7 +521,7 @@ export async function moveFolder(
 
       const folders: FolderRecord[] = await tx.documentFolder.findMany({
         where: scopeWhere(folderScope),
-        select: { id: true, parentId: true, name: true, order: true },
+        select: { id: true, parentId: true, name: true, order: true, systemKind: true },
       });
 
       let destName: string | null = null;

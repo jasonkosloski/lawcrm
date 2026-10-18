@@ -51,6 +51,7 @@ import { requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { convertLeadToMatter, createLead, declineLead } from "@/app/actions/leads";
 import { saveRecordsFee } from "@/app/actions/records-requests";
+import { renameFolder } from "@/app/actions/document-folders";
 import {
   resetDb,
   seedFirm,
@@ -599,6 +600,48 @@ describe("convertLeadToMatter — intake notes roll-forward", () => {
       select: { title: true },
     });
     expect(log.title).toBe("2 intake documents carried forward");
+  });
+
+  test("a protected records-request folder keeps its kind and link on the matter and stays protected", async () => {
+    const { areaId, stageId } = await seedArea({});
+    const { leadId } = await seedIntakeLead();
+    const c = await prisma.contact.create({
+      data: { name: "St. Mary's", type: "medical_provider" },
+      select: { id: true },
+    });
+    const req = await prisma.recordsRequest.create({
+      data: {
+        leadId,
+        custodianContactId: c.id,
+        adHocTypeName: "Billing",
+        subject: "Bills",
+        status: "sent",
+        ownerId: userId,
+      },
+    });
+    const folder = await prisma.documentFolder.create({
+      data: {
+        leadId,
+        name: "Bills",
+        systemKind: "records_request",
+        recordsRequestId: req.id,
+      },
+    });
+
+    await expect(
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+    ).rejects.toThrow(/^REDIRECT:\/matters\//);
+
+    const after = await prisma.documentFolder.findUniqueOrThrow({ where: { id: folder.id } });
+    expect(after.matterId).not.toBeNull();
+    expect(after.leadId).toBeNull();
+    expect(after.systemKind).toBe("records_request");
+    expect(after.recordsRequestId).toBe(req.id);
+    const res = await renameFolder(folder.id, "Renamed");
+    expect(res.ok).toBe(false);
+    expect(
+      (await prisma.documentFolder.findUniqueOrThrow({ where: { id: folder.id } })).name
+    ).toBe("Bills");
   });
 
   test("no intake notes → no notes roll-forward log", async () => {

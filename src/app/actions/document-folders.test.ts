@@ -716,3 +716,70 @@ describe("lead-scoped folders", () => {
     expect(vi.mocked(revalidatePath)).toHaveBeenCalledWith(`/intake/${leadId}/documents`);
   });
 });
+
+// ── generated (records-request) folders are protected ───────────────────
+
+const PROTECTED_MSG =
+  "This folder is managed by its records request and can't be renamed, moved or deleted.";
+const ANCESTOR_MSG =
+  "This folder contains folders managed by records requests, so it can't be deleted.";
+const KINDS = [
+  "records_root",
+  "records_request",
+  "records_request_docs",
+  "records_responsive_docs",
+] as const;
+
+describe("protected generated folders", () => {
+  test.each(KINDS)("rename, move and delete are refused for %s", async (kind) => {
+    const { folderId: other } = await seedDocumentFolder({ matterId, name: "Other" });
+    const { folderId } = await seedDocumentFolder({ matterId, name: "Gen" });
+    await prisma.documentFolder.update({
+      where: { id: folderId },
+      data: { systemKind: kind },
+    });
+    expect(await renameFolder(folderId, "New")).toEqual({ ok: false, error: PROTECTED_MSG });
+    expect(await moveFolder(folderId, other)).toEqual({ ok: false, error: PROTECTED_MSG });
+    expect(await deleteFolder(folderId)).toEqual({ ok: false, error: PROTECTED_MSG });
+    const row = await prisma.documentFolder.findUniqueOrThrow({ where: { id: folderId } });
+    expect(row).toMatchObject({ name: "Gen", parentId: null, systemKind: kind });
+  });
+
+  test("deleting an ancestor of a protected folder is refused; an ordinary tree still deletes", async () => {
+    const inv = await seedDocumentFolder({ matterId, name: "Investigation" });
+    const root = await seedDocumentFolder({ matterId, name: "Records Requests", parentId: inv.folderId });
+    const req = await seedDocumentFolder({ matterId, name: "Req", parentId: root.folderId });
+    await prisma.documentFolder.updateMany({
+      where: { id: { in: [root.folderId, req.folderId] } },
+      data: { systemKind: "records_request" },
+    });
+    // Even a plain middle folder above a protected one is refused.
+    const mid = await seedDocumentFolder({ matterId, name: "Mid" });
+    const deep = await seedDocumentFolder({ matterId, name: "Deep", parentId: mid.folderId });
+    const gen = await seedDocumentFolder({ matterId, name: "Gen", parentId: deep.folderId });
+    await prisma.documentFolder.update({
+      where: { id: gen.folderId },
+      data: { systemKind: "records_request_docs" },
+    });
+    expect(await deleteFolder(inv.folderId)).toEqual({ ok: false, error: ANCESTOR_MSG });
+    expect(await deleteFolder(mid.folderId)).toEqual({ ok: false, error: ANCESTOR_MSG });
+    expect(await prisma.documentFolder.count({ where: { matterId } })).toBe(6);
+
+    const a = await seedDocumentFolder({ matterId, name: "A" });
+    await seedDocumentFolder({ matterId, name: "B", parentId: a.folderId });
+    expect((await deleteFolder(a.folderId)).ok).toBe(true);
+  });
+
+  test("an ordinary folder can be moved into a protected one", async () => {
+    const { folderId: gen } = await seedDocumentFolder({ matterId, name: "Gen" });
+    await prisma.documentFolder.update({
+      where: { id: gen },
+      data: { systemKind: "records_request" },
+    });
+    const { folderId } = await seedDocumentFolder({ matterId, name: "Mine" });
+    expect((await moveFolder(folderId, gen)).ok).toBe(true);
+    expect(
+      (await prisma.documentFolder.findUniqueOrThrow({ where: { id: folderId } })).parentId
+    ).toBe(gen);
+  });
+});

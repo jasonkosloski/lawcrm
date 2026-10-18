@@ -20,6 +20,10 @@ export type FolderRecord = {
   parentId: string | null;
   name: string;
   order: number;
+  /** Set on system-generated folders (records requests); see
+   *  records-requests/folder-kinds.ts. Optional so callers that don't
+   *  need it keep their shape. */
+  systemKind?: string | null;
 };
 
 /** Nested node for the tree rail. Serializable (plain arrays) so a
