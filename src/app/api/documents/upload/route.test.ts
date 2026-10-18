@@ -788,4 +788,21 @@ describe("POST /api/documents/upload — records requests", () => {
     expect(data.recordsRequestId).toBeUndefined();
     expect(data.recordsRequestRole).toBeUndefined();
   });
+
+  test("a recordsRequestId after the first file part -> 400, nothing stored", async () => {
+    wireHappyMocks();
+    mockedReq.mockResolvedValue({ id: "rr1" } as never);
+    const fd = new FormData();
+    fd.append("matterId", "m1");
+    fd.append("files", new File(["x"], "a.pdf"));
+    fd.append("recordsRequestId", "rr1");
+    const res = await POST(await makeRequest(fd));
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe(
+      "recordsRequestId must precede file parts in the form data."
+    );
+    expect(mockedCreate).not.toHaveBeenCalled();
+    // Either never stored, or stored and cleaned up.
+    expect(mockedDelete.mock.calls.length).toBe(mockedStore.mock.calls.length);
+  });
 });

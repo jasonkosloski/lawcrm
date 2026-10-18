@@ -35,7 +35,10 @@ import { assertScopeAccess, assertScopeWritable, revalidateDocumentScope } from 
 import { scopeWhere, type RecordScope } from "@/lib/record-scope";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentFirm } from "@/lib/firm";
-import { requirePermission } from "@/lib/permission-check";
+import {
+  currentUserHasPermission,
+  requirePermission,
+} from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { deleteFile, storeFile } from "@/lib/file-storage";
 import { toUserMessage } from "@/lib/user-facing-error";
@@ -494,6 +497,16 @@ export async function previewDocumentFromTemplate(
   opts?: { recordsRequestId?: string }
 ): Promise<TemplatePreviewResult> {
   await assertScopeAccess(scope);
+  // The merged text exposes custodian + request details.
+  if (
+    opts?.recordsRequestId &&
+    !(await currentUserHasPermission("records.view"))
+  ) {
+    return {
+      ok: false,
+      error: "You don't have permission to view records requests.",
+    };
+  }
   const request = opts?.recordsRequestId
     ? await loadRecordsRequest(scope, opts.recordsRequestId)
     : null;

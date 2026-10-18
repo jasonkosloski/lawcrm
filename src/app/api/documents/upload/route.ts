@@ -500,6 +500,7 @@ async function parseAndStore(
   let target: Target | null = null;
   let failure: UploadFailure | null = null;
   let chain: Promise<void> = Promise.resolve();
+  let sawFilePart = false;
 
   await new Promise<void>((resolve) => {
     let settled = false;
@@ -516,6 +517,15 @@ async function parseAndStore(
     };
 
     bb.on("field", (name, value) => {
+      if (name === "recordsRequestId" && sawFilePart && value.trim()) {
+        // Target validation already ran on the earlier fields; a late
+        // id would otherwise be silently ignored (untagged upload).
+        fail({
+          status: 400,
+          error: "recordsRequestId must precede file parts in the form data.",
+        });
+        return;
+      }
       if (
         name === "matterId" ||
         name === "leadId" ||
@@ -529,6 +539,7 @@ async function parseAndStore(
     });
 
     bb.on("file", (name, stream, info) => {
+      sawFilePart = true;
       chain = chain.then(async () => {
         if (failure) {
           stream.resume();

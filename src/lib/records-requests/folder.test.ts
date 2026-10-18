@@ -4,7 +4,7 @@
 
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { prisma } from "@/lib/prisma";
-import { resolveRecordsFolder } from "@/lib/records-requests/folder";
+import { resolveRecordsFolder, resolveRecordsUpload } from "@/lib/records-requests/folder";
 import {
   resetDb,
   seedContact,
@@ -13,6 +13,7 @@ import {
   seedMatter,
   seedPracticeArea,
   seedFirm,
+  seedLead,
   seedUser,
 } from "@/test/integration-helpers";
 
@@ -100,5 +101,100 @@ describe("resolveRecordsFolder", () => {
     });
     const again2 = await prisma.$transaction((tx) => resolveRecordsFolder(tx, args(r2.id)));
     expect(again2).toBe(f2);
+  });
+});
+
+describe("resolveRecordsUpload", () => {
+  const M = () => ({ kind: "matter" as const, matterId });
+
+  test("in-scope request: tagged and filed in the request folder", async () => {
+    const r = await mkRequest();
+    const tag = await prisma.$transaction((tx) =>
+      resolveRecordsUpload(tx, r.id, M(), null)
+    );
+    expect(tag).toMatchObject({
+      recordsRequestId: r.id,
+      recordsRequestRole: "received_records",
+    });
+    const f = await prisma.documentFolder.findUniqueOrThrow({
+      where: { id: tag!.folderId },
+    });
+    expect(f.name).toBe("Memorial Hospital — CORA");
+  });
+
+  test("a request from another scope -> null", async () => {
+    const { leadId } = await seedLead();
+    const r = await prisma.recordsRequest.create({
+      data: {
+        leadId,
+        custodianContactId: custodianId,
+        adHocTypeName: "CORA",
+        subject: "s",
+      },
+      select: { id: true },
+    });
+    const tag = await prisma.$transaction((tx) =>
+      resolveRecordsUpload(tx, r.id, M(), null)
+    );
+    expect(tag).toBeNull();
+    expect(await prisma.documentFolder.count({ where: { matterId } })).toBe(0);
+  });
+
+  test("an explicit folderId is kept and no records folder is created", async () => {
+    const r = await mkRequest();
+    const { folderId } = await seedDocumentFolder({ matterId, name: "Mine" });
+    const tag = await prisma.$transaction((tx) =>
+      resolveRecordsUpload(tx, r.id, M(), folderId)
+    );
+    expect(tag?.folderId).toBe(folderId);
+    expect(await prisma.documentFolder.count({ where: { matterId } })).toBe(1);
+  });
+
+  test("a null folderId falls back to resolveRecordsFolder", async () => {
+    const r = await mkRequest();
+    const direct = await prisma.$transaction((tx) => resolveRecordsFolder(tx, args(r.id)));
+    const tag = await prisma.$transaction((tx) =>
+      resolveRecordsUpload(tx, r.id, M(), null)
+    );
+    expect(tag?.folderId).toBe(direct);
+  });
+
+  test("lead request re-homed by conversion: tagged under the matter scope, not the lead scope", async () => {
+    const { leadId } = await seedLead();
+    const r = await prisma.recordsRequest.create({
+      data: {
+        leadId,
+        custodianContactId: custodianId,
+        adHocTypeName: "CORA",
+        subject: "s",
+      },
+      select: { id: true },
+    });
+    await prisma.recordsRequest.update({
+      where: { id: r.id },
+      data: { matterId, leadId: null },
+    });
+    const tag = await prisma.$transaction((tx) =>
+      resolveRecordsUpload(tx, r.id, M(), null)
+    );
+    expect(tag?.recordsRequestId).toBe(r.id);
+    const f = await prisma.documentFolder.findUniqueOrThrow({
+      where: { id: tag!.folderId },
+    });
+    expect(f.matterId).toBe(matterId);
+    // The stale lead scope no longer matches.
+    const stale = await prisma.$transaction((tx) =>
+      resolveRecordsUpload(tx, r.id, { kind: "lead", leadId }, null)
+    );
+    expect(stale).toBeNull();
+  });
+
+  test("deleted request -> null, so the upload files untagged", async () => {
+    const r = await mkRequest();
+    await prisma.recordsRequest.delete({ where: { id: r.id } });
+    const tag = await prisma.$transaction((tx) =>
+      resolveRecordsUpload(tx, r.id, M(), null)
+    );
+    expect(tag).toBeNull();
   });
 });

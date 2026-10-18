@@ -30,7 +30,10 @@ vi.mock("@/lib/file-storage", () => ({
   deleteFile: vi.fn(),
 }));
 
-import { requirePermission } from "@/lib/permission-check";
+import {
+  currentUserHasPermission,
+  requirePermission,
+} from "@/lib/permission-check";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentFirm } from "@/lib/firm";
 import { deleteFile, storeFile } from "@/lib/file-storage";
@@ -626,5 +629,19 @@ describe("records request letters", () => {
     expect(res).toMatchObject({ ok: true, missing: ["custodian.name"] });
     await generateDocumentFromTemplate(t.id, M);
     expect(requirePermission).not.toHaveBeenCalledWith("records.edit");
+  });
+
+  test("preview with a request needs records.view", async () => {
+    const t = await seedTemplate({ body: "{{custodian.name}}" });
+    const r = await seedRecordsRequest();
+    vi.mocked(currentUserHasPermission).mockResolvedValueOnce(false);
+    const res = await previewDocumentFromTemplate(t.id, M, {
+      recordsRequestId: r.id,
+    });
+    expect(res).toEqual({
+      ok: false,
+      error: "You don't have permission to view records requests.",
+    });
+    expect(currentUserHasPermission).toHaveBeenCalledWith("records.view");
   });
 });
