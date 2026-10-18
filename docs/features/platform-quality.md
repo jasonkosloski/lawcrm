@@ -6,7 +6,6 @@ Related: [ADR-011](../decisions/011-oauth-tokens-encrypt-at-rest-via-a.md), [ADR
 ## Open work
 - [ ] **Inconsistent button sizes** (P2) — across cards / tables / forms. Define a per-context size convention and sweep once.
 - [ ] **Server-side email validation** (P2) — contact / party / calendar-attendee schemas do not validate email server-side (finding F987, open follow-up from the sanitization audit).
-- [ ] **Remove the `react-day-picker` dependency** (P2) — the vendored `ui/calendar.tsx` primitive was deleted but the package is still listed in `package.json`.
 - [ ] **Opportunistic sweeps still ongoing** (P2) — hand-rolled empty states (calendar day/week, time views, reports cards, settings) -> `<EmptyState>`; remaining ternary plurals -> `plural()`; remaining component-level status literals -> central label maps. Migrate as files are touched.
 
 ## Shipped
