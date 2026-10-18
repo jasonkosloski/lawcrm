@@ -123,6 +123,37 @@ function encodePathname(pathname: string): string {
 }
 
 /**
+ * `presignUrl` with a working check for non-ASCII pathnames.
+ *
+ * @vercel/blob (2.8.2, latest at time of writing) decodes the delegation
+ * token's payload with `atob` when it exists, which it does in Node.
+ * `atob` yields a Latin-1 string, so a pathname with any non-ASCII
+ * character (é, emoji, the U+202F that macOS puts before "PM" in
+ * screenshot names) comes back mangled ("â¯"). The SDK's own scope
+ * check then throws "Blob path does not match the signed token scope"
+ * and the file can't be viewed or downloaded. The signature itself is
+ * computed correctly over the real UTF-8 pathname; only that client-side
+ * comparison is wrong.
+ *
+ * The SDK reads the payload synchronously, before its first `await`, so
+ * swapping in a UTF-8 decoding `atob` for the duration of the call
+ * (restored in `finally`, before any other code can run) fixes the check
+ * without widening the token's scope or touching anything else. Remove
+ * once the SDK decodes the payload as UTF-8
+ * (blob-driver.presign.test.ts pins the behavior with a raw-UTF-8
+ * token, as the live API issues them).
+ */
+function presignUrlUtf8(...args: Parameters<typeof presignUrl>): ReturnType<typeof presignUrl> {
+  const nativeAtob = globalThis.atob;
+  globalThis.atob = (data: string) => Buffer.from(data, "base64").toString("utf8");
+  try {
+    return presignUrl(...args);
+  } finally {
+    globalThis.atob = nativeAtob;
+  }
+}
+
+/**
  * Short-lived presigned GET URL for one stored blob. `download`
  * appends the CDN's `download=1` (Content-Disposition: attachment);
  * like the SDK's own `cache=0`, it's outside the signed payload, so
@@ -140,7 +171,7 @@ export async function signedBlobUrl(
     operations: ["get"],
     validUntil,
   });
-  const { presignedUrl } = await presignUrl(token, {
+  const { presignedUrl } = await presignUrlUtf8(token, {
     operation: "get",
     pathname,
     validUntil,

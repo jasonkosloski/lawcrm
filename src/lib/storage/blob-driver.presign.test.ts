@@ -31,8 +31,12 @@ function b64url(s: string): string {
 }
 
 /** Stub issueSignedToken the way the Blob API answers: a delegation
- *  token whose payload carries the scope the SDK checks. */
-function stubToken() {
+ *  token whose payload carries the scope the SDK checks. `encoding`
+ *  says how non-ASCII pathname characters travel in the payload JSON:
+ *  "raw" — UTF-8 bytes, which is what the live API sends (a macOS
+ *  screenshot name, "…5.07.24 PM.png" with U+202F before "PM", failed
+ *  in production this way); "escaped" — \uXXXX escapes. Both must work. */
+function stubToken(encoding: "raw" | "escaped" = "raw") {
   vi.mocked(issueSignedToken).mockImplementation(async (opts) => {
     const payload = {
       storeId: `store_${STORE_ID}`,
@@ -40,13 +44,14 @@ function stubToken() {
       operations: opts?.operations,
       validUntil: opts?.validUntil,
     };
-    // The SDK decodes the payload with atob (latin-1), so non-ASCII
-    // characters must travel as JSON \uXXXX escapes (what a conforming
-    // issuer emits); model that here.
-    const json = JSON.stringify(payload).replace(
-      /[\u0080-￿]/g,
-      (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`
-    );
+    const raw = JSON.stringify(payload);
+    const json =
+      encoding === "raw"
+        ? raw
+        : raw.replace(
+            /[\u0080-\uffff]/g,
+            (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`
+          );
     return {
       delegationToken: `${b64url(json)}.sig`,
       clientSigningToken: SIGNING_TOKEN,
@@ -95,6 +100,7 @@ describe.each([
   ["percent-escape lookalike", `${RAND}__a%20b%23c.pdf`],
   ["ampersand and plus", `${RAND}__Smith & Sons + Co.pdf`],
   ["unicode", `${RAND}__résumé — 履歴書 🙂.pdf`],
+  ["macOS screenshot (U+202F before PM)", `${RAND}__Screenshot 2026-09-18 at 5.07.24\u202fPM.png`],
   ["all together", `${RAND}__#1 100% (final)? a&b=c;d.pdf`],
 ])("signedBlobUrl with a %s name", (_label, key) => {
   test("the URL requests exactly the stored pathname, with no fragment", async () => {
@@ -136,6 +142,20 @@ describe.each([
 });
 
 describe("signedBlobUrl robustness", () => {
+  test("non-ASCII names also sign when the issuer escapes them", async () => {
+    stubToken("escaped");
+    const key = `${RAND}__résumé — 履歴書 🙂.pdf`;
+    const url = new URL(await signedBlobUrl(storedUrl(key)));
+    expect(url.searchParams.get("vercel-blob-signature")).toBe(expectedSignature(key));
+  });
+
+  test("the global atob is left exactly as it was", async () => {
+    const before = globalThis.atob;
+    await signedBlobUrl(storedUrl(`${RAND}__résumé.pdf`));
+    expect(globalThis.atob).toBe(before);
+    expect(atob(btoa("é"))).toBe("é"); // still the latin-1 builtin
+  });
+
   test("a stored URL with an invalid percent escape does not throw", async () => {
     // e.g. a literal '%' that was never encoded: decodeURIComponent
     // would throw a URIError; the path falls back to the raw form.
