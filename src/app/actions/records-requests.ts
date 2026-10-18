@@ -16,7 +16,12 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requirePermission } from "@/lib/permission-check";
+import { Prisma } from "@/generated/prisma/client";
+import {
+  currentUserHasPermission,
+  requirePermission,
+} from "@/lib/permission-check";
+import { roundMoney } from "@/lib/money";
 import { logActivity } from "@/lib/activity-log";
 import { assertScopeAccess, assertScopeWritable } from "@/lib/scope-access";
 import {
@@ -549,4 +554,138 @@ export async function deleteRecordsRequest(
   });
   revalidateForScope(scope);
   return { ok: true };
+}
+
+const MONEY_RE = /^\d+(\.\d{1,2})?$/;
+
+/** Blank = null; otherwise a non-negative amount with at most 2 decimals. */
+function moneyField(
+  value: string | undefined,
+  key: string,
+  errors: Errors
+): Prisma.Decimal | null {
+  const v = (value ?? "").trim().replace(/[$,]/g, "");
+  if (!v) return null;
+  if (!MONEY_RE.test(v)) {
+    errors[key] = ["Enter a non-negative amount with at most 2 decimals"];
+    return null;
+  }
+  return roundMoney(v);
+}
+
+/** Save the fee fields. On a matter, an amount plus a paid date becomes
+ *  (or updates) a billable "records" Expense linked by expenseId. On a
+ *  lead the fields are stored only. */
+export async function saveRecordsFee(
+  id: string,
+  _prev: RecordsRequestFormState,
+  fd: FormData
+): Promise<RecordsRequestFormState> {
+  await requirePermission("records.edit");
+  const values = rawValues(fd);
+  const fail = (msg: string, key = "_form"): RecordsRequestFormState => ({
+    status: "error",
+    errors: { [key]: [msg] },
+    values,
+  });
+  const row = await prisma.recordsRequest.findUnique({
+    where: { id },
+    select: { matterId: true, leadId: true, subject: true },
+  });
+  if (!row) return fail("Request no longer exists");
+  const scope = scopeOf(row);
+  const userId = await assertScopeAccess(scope);
+  const readOnly = await assertScopeWritable(scope);
+  if (readOnly) return fail(readOnly);
+
+  const errors: Errors = {};
+  const feeEstimate = moneyField(values.feeEstimate, "feeEstimate", errors);
+  const feeAmount = moneyField(values.feeAmount, "feeAmount", errors);
+  const feePaidAt = dateField(values.feePaidAt || "", "feePaidAt", "paid date", errors) ?? null;
+  if (feePaidAt && !feeAmount && !errors.feeAmount) {
+    errors.feePaidAt = ["Enter the fee amount before a paid date"];
+  }
+  if (Object.keys(errors).length > 0) {
+    return { status: "error", errors, values };
+  }
+
+  const makesExpense = scope.kind === "matter" && !!feeAmount && !!feePaidAt;
+
+  const result = await prisma.$transaction(
+    async (tx): Promise<string | null> => {
+      await lockRecordsRequest(tx, id);
+      const cur = await tx.recordsRequest.findUnique({
+        where: { id },
+        select: {
+          expenseId: true,
+          adHocTypeName: true,
+          custodian: { select: { name: true } },
+          type: { select: { name: true } },
+        },
+      });
+      if (!cur) return "Request no longer exists";
+
+      let expenseId = cur.expenseId;
+      if (makesExpense) {
+        const description = `Records \u2014 ${cur.custodian.name} (${
+          cur.type?.name ?? cur.adHocTypeName ?? "records"
+        })`;
+        if (expenseId) {
+          if (!(await currentUserHasPermission("matters.expense.edit"))) {
+            return "You don't have permission to edit expenses.";
+          }
+          const w = await tx.expense.updateMany({
+            where: { id: expenseId, invoiceId: null },
+            data: { amount: feeAmount!, date: feePaidAt!, description },
+          });
+          if (w.count === 0) {
+            const e = await tx.expense.findUnique({
+              where: { id: expenseId },
+              select: { invoiceId: true },
+            });
+            if (e?.invoiceId) {
+              return "This fee is on an invoice and can't be changed.";
+            }
+            expenseId = null; // expense was deleted: make a fresh one
+          }
+        }
+        if (!expenseId) {
+          if (!(await currentUserHasPermission("matters.expense.create"))) {
+            return "You don't have permission to add expenses.";
+          }
+          const e = await tx.expense.create({
+            data: {
+              matterId: row.matterId!,
+              loggedBy: userId,
+              date: feePaidAt!,
+              description,
+              category: "records",
+              amount: feeAmount!,
+              billable: true,
+            },
+            select: { id: true },
+          });
+          expenseId = e.id;
+        }
+      }
+
+      await tx.recordsRequest.update({
+        where: { id },
+        data: { feeEstimate, feeAmount, feePaidAt, expenseId },
+      });
+      return null;
+    }
+  );
+  if (result) return fail(result);
+
+  await logActivity({
+    matterId: row.matterId,
+    userId,
+    type: "records",
+    title: "Records fee updated",
+    detail: row.subject,
+  });
+  revalidateForScope(scope);
+  if (row.matterId) revalidatePath(`/matters/${row.matterId}/time`);
+  return { status: "ok" };
 }

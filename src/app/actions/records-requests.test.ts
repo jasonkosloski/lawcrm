@@ -26,13 +26,14 @@ vi.mock("@/lib/permission-check", () => ({
 
 import { assertMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
-import { requirePermission } from "@/lib/permission-check";
+import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import {
   createRecordsRequest,
   deleteRecordsRequest,
   logRecordsFollowUp,
   markRecordsRequestSent,
+  saveRecordsFee,
   setRecordsRequestStatus,
   updateRecordsRequest,
 } from "@/app/actions/records-requests";
@@ -577,5 +578,124 @@ describe("task completion hook", () => {
         where: { recordsRequestId: r.id, status: "open" },
       })
     ).toBe(1);
+  });
+});
+
+describe("saveRecordsFee", () => {
+  async function feeRequest() {
+    const c = (await seedContact({ name: "Memorial Hospital" })).contactId;
+    const t = await prisma.recordsRequestType.create({
+      data: { name: "Medical (HIPAA)", followUpDays: 7 },
+    });
+    return seedRequest({ custodianContactId: c, typeId: t.id });
+  }
+  const fee = (o: Record<string, string>) => fd(o);
+
+  test("matter fee with amount + paid date creates a billable Expense", async () => {
+    const r = await feeRequest();
+    const res = await saveRecordsFee(
+      r.id,
+      IDLE,
+      fee({ feeEstimate: "40", feeAmount: "25.00", feePaidAt: "2026-10-20" })
+    );
+    expect(res.status).toBe("ok");
+    const row = await prisma.recordsRequest.findUniqueOrThrow({
+      where: { id: r.id },
+      include: { expense: true },
+    });
+    expect(row.expenseId).not.toBeNull();
+    expect(row.expense).toMatchObject({
+      matterId,
+      category: "records",
+      billable: true,
+      description: "Records \u2014 Memorial Hospital (Medical (HIPAA))",
+    });
+    expect(row.expense!.amount.toString()).toBe("25");
+    expect(row.expense!.date.toISOString().slice(0, 10)).toBe("2026-10-20");
+    expect(row.feeEstimate!.toString()).toBe("40");
+  });
+
+  test("editing the amount updates the same Expense", async () => {
+    const r = await feeRequest();
+    const f = { feeAmount: "25.00", feePaidAt: "2026-10-20" };
+    await saveRecordsFee(r.id, IDLE, fee(f));
+    const first = await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } });
+    await saveRecordsFee(r.id, IDLE, fee({ ...f, feeAmount: "30.00" }));
+    const after = await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } });
+    expect(after.expenseId).toBe(first.expenseId);
+    expect(await prisma.expense.count()).toBe(1);
+    const e = await prisma.expense.findUniqueOrThrow({ where: { id: after.expenseId! } });
+    expect(e.amount.toString()).toBe("30");
+  });
+
+  test("an invoiced Expense is not changed", async () => {
+    const r = await feeRequest();
+    const f = { feeAmount: "25.00", feePaidAt: "2026-10-20" };
+    await saveRecordsFee(r.id, IDLE, fee(f));
+    const cur = await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } });
+    const inv = await prisma.invoice.create({
+      data: {
+        matterId,
+        invoiceNumber: "INV-T5",
+        issueDate: new Date("2026-10-21T00:00:00Z"),
+        dueDate: new Date("2026-11-21T00:00:00Z"),
+      } as never,
+    });
+    await prisma.expense.update({
+      where: { id: cur.expenseId! },
+      data: { invoiceId: inv.id },
+    });
+    const res = await saveRecordsFee(r.id, IDLE, fee({ ...f, feeAmount: "30.00" }));
+    expect(res.errors?._form?.[0]).toBe(
+      "This fee is on an invoice and can't be changed."
+    );
+    const e = await prisma.expense.findUniqueOrThrow({ where: { id: cur.expenseId! } });
+    expect(e.amount.toString()).toBe("25");
+    const after = await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } });
+    expect(after.feeAmount!.toString()).toBe("25");
+  });
+
+  test("a lead fee is stored without an Expense or expense permission", async () => {
+    const { leadId } = await seedLead();
+    const r = await seedRequest({ matterId: null, leadId });
+    vi.mocked(currentUserHasPermission).mockResolvedValue(false);
+    const res = await saveRecordsFee(
+      r.id,
+      IDLE,
+      fee({ feeAmount: "25", feePaidAt: "2026-10-20" })
+    );
+    vi.mocked(currentUserHasPermission).mockResolvedValue(true);
+    expect(res.status).toBe("ok");
+    const row = await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } });
+    expect(row.expenseId).toBeNull();
+    expect(row.feeAmount!.toString()).toBe("25");
+    expect(await prisma.expense.count()).toBe(0);
+  });
+
+  test("missing matters.expense.create saves nothing", async () => {
+    const r = await feeRequest();
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (k: string) => k !== "matters.expense.create"
+    );
+    const res = await saveRecordsFee(
+      r.id,
+      IDLE,
+      fee({ feeAmount: "25", feePaidAt: "2026-10-20" })
+    );
+    vi.mocked(currentUserHasPermission).mockResolvedValue(true);
+    expect(res.errors?._form?.[0]).toBe("You don't have permission to add expenses.");
+    const row = await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } });
+    expect(row.feeAmount).toBeNull();
+    expect(await prisma.expense.count()).toBe(0);
+  });
+
+  test("validates amounts and requires an amount for a paid date", async () => {
+    const r = await feeRequest();
+    const bad = await saveRecordsFee(r.id, IDLE, fee({ feeAmount: "-1" }));
+    expect(bad.errors?.feeAmount).toBeDefined();
+    const dec = await saveRecordsFee(r.id, IDLE, fee({ feeEstimate: "1.234" }));
+    expect(dec.errors?.feeEstimate).toBeDefined();
+    const paid = await saveRecordsFee(r.id, IDLE, fee({ feePaidAt: "2026-10-20" }));
+    expect(paid.errors?.feePaidAt).toBeDefined();
   });
 });
