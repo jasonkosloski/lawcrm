@@ -3,7 +3,8 @@
  * status / delete, plus the rolling follow-up task they keep in step.
  */
 
-import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
+import { setTaskStatus } from "@/app/actions/tasks";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/matter-access", () => ({
@@ -30,6 +31,8 @@ import { prisma } from "@/lib/prisma";
 import {
   createRecordsRequest,
   deleteRecordsRequest,
+  logRecordsFollowUp,
+  markRecordsRequestSent,
   setRecordsRequestStatus,
   updateRecordsRequest,
 } from "@/app/actions/records-requests";
@@ -405,5 +408,159 @@ describe("concurrency and reopen", () => {
       where: { recordsRequestId: r.id, status: "open" },
     });
     expect(task.dueDate?.getTime()).toBe(expected.getTime());
+  });
+});
+
+describe("markRecordsRequestSent", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test("computes due date from the type period and opens one follow-up task", async () => {
+    const cora = await prisma.recordsRequestType.create({
+      data: {
+        name: "CORA",
+        followUpDays: 7,
+        responseAmount: 3,
+        responseUnit: "BUSINESS_DAYS",
+      },
+    });
+    const r = await seedRequest({
+      typeId: cora.id,
+      status: "draft",
+      nextFollowUpDate: null,
+    });
+    const res = await markRecordsRequestSent(
+      r.id,
+      IDLE,
+      fd({ sentAt: "2026-10-16" })
+    );
+    expect(res.status).toBe("ok");
+    expect(requirePermission).toHaveBeenCalledWith("records.edit");
+    const after = await prisma.recordsRequest.findUniqueOrThrow({
+      where: { id: r.id },
+    });
+    expect(after.status).toBe("sent");
+    expect(after.responseDueDate?.toISOString().slice(0, 10)).toBe("2026-10-21");
+    expect(after.nextFollowUpDate?.toISOString().slice(0, 10)).toBe(
+      "2026-10-23"
+    );
+    const tasks = await prisma.task.findMany({
+      where: { recordsRequestId: r.id, status: "open" },
+    });
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0].title).toBe("Follow up: Mercy Hospital — CORA");
+    expect(tasks[0].ownerId).toBe(userId);
+  });
+
+  test("ad hoc with no due date leaves responseDueDate null", async () => {
+    const r = await seedRequest({
+      typeId: null,
+      adHocTypeName: "Police report",
+      status: "draft",
+      nextFollowUpDate: null,
+    });
+    await markRecordsRequestSent(r.id, IDLE, fd({ sentAt: "2026-10-16" }));
+    const after = await prisma.recordsRequest.findUniqueOrThrow({
+      where: { id: r.id },
+    });
+    expect(after.responseDueDate).toBeNull();
+    expect(after.nextFollowUpDate?.toISOString().slice(0, 10)).toBe(
+      "2026-10-23"
+    );
+  });
+
+  test("rejects a request that is not a draft", async () => {
+    const r = await seedRequest({ status: "sent" });
+    const res = await markRecordsRequestSent(r.id, IDLE, fd({}));
+    expect(res.status).toBe("error");
+    expect(res.errors?._form?.[0]).toMatch(/draft/i);
+  });
+});
+
+describe("logRecordsFollowUp", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test("logs, closes the old task and opens one new task a week out", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-25T18:00:00Z"));
+    const r = await seedRequest();
+    await prisma.$transaction((tx) => openFollowUpTask(tx, r.id));
+    const old = await prisma.task.findFirstOrThrow({
+      where: { recordsRequestId: r.id },
+    });
+    const res = await logRecordsFollowUp(r.id, IDLE, fd({ note: "Called" }));
+    expect(res.status).toBe("ok");
+    expect(await prisma.recordsRequestFollowUp.count()).toBe(1);
+    expect(
+      (await prisma.task.findUniqueOrThrow({ where: { id: old.id } })).status
+    ).toBe("done");
+    const open = await prisma.task.findMany({
+      where: { recordsRequestId: r.id, status: "open" },
+    });
+    expect(open).toHaveLength(1);
+    expect(open[0].dueDate?.toISOString().slice(0, 10)).toBe("2026-11-01");
+  });
+});
+
+describe("task completion hook", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test("setTaskStatus done on the follow-up task rolls it", async () => {
+    const r = await seedRequest();
+    await prisma.$transaction((tx) => openFollowUpTask(tx, r.id));
+    const old = await prisma.task.findFirstOrThrow({
+      where: { recordsRequestId: r.id },
+    });
+    await setTaskStatus(old.id, "done");
+    expect(await prisma.recordsRequestFollowUp.count()).toBe(1);
+    const open = await prisma.task.findMany({
+      where: { recordsRequestId: r.id, status: "open" },
+    });
+    expect(open).toHaveLength(1);
+    expect(open[0].id).not.toBe(old.id);
+  });
+
+  test("completed request: finishing a reopened task spawns nothing", async () => {
+    const r = await seedRequest();
+    await prisma.$transaction((tx) => openFollowUpTask(tx, r.id));
+    await setRecordsRequestStatus(r.id, "complete");
+    const t = await prisma.task.findFirstOrThrow({
+      where: { recordsRequestId: r.id },
+    });
+    await setTaskStatus(t.id, "open");
+    await setTaskStatus(t.id, "done");
+    expect(
+      await prisma.task.count({
+        where: {
+          recordsRequestId: r.id,
+          status: { in: ["open", "in_progress"] },
+        },
+      })
+    ).toBe(0);
+    expect(await prisma.recordsRequestFollowUp.count()).toBe(0);
+  });
+
+  test("open request: done -> open -> done leaves exactly one open task", async () => {
+    const r = await seedRequest();
+    await prisma.$transaction((tx) => openFollowUpTask(tx, r.id));
+    const t = await prisma.task.findFirstOrThrow({
+      where: { recordsRequestId: r.id },
+    });
+    await setTaskStatus(t.id, "done");
+    await setTaskStatus(t.id, "open");
+    await setTaskStatus(t.id, "done");
+    expect(
+      await prisma.task.count({
+        where: {
+          recordsRequestId: r.id,
+          status: { in: ["open", "in_progress"] },
+        },
+      })
+    ).toBe(1);
   });
 });

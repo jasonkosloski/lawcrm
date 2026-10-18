@@ -44,7 +44,10 @@ import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { isAssignableUser, notifyTaskAssigned } from "@/lib/task-assignment";
 import { dateOnlyKey, parseDateOnly } from "@/lib/format-date";
-import { optionalScopeOf, scopePaths } from "@/lib/record-scope";
+import { optionalScopeOf, scopeOf, scopePaths } from "@/lib/record-scope";
+import { rollFollowUp } from "@/lib/records-requests/follow-up";
+import { todayKey } from "@/lib/format-date";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 
 const STALE_MESSAGE =
   "This task was changed by someone else since you opened it. Close this dialog and reopen it to see the latest, then re-apply your edit.";
@@ -52,6 +55,32 @@ const STALE_MESSAGE =
 /** Path-revalidate every surface that displays this task: its
  *  matter's or intake lead's Tasks tab + overview (firm-wide tasks
  *  have neither) and the dashboard. */
+/** Completing a records-request follow-up task rolls the chase (log +
+ *  next task) in the caller's transaction. Returns true when it rolled
+ *  so the caller can revalidate the request's records paths. */
+async function rollOnFollowUpDone(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  task: { recordsRequestId: string | null },
+  actorId: string,
+  today: string,
+): Promise<boolean> {
+  if (!task.recordsRequestId) return false;
+  return rollFollowUp(tx, task.recordsRequestId, {
+    actorId,
+    note: "Follow-up task completed",
+    today,
+  });
+}
+
+async function revalidateRequestPaths(requestId: string): Promise<void> {
+  const req = await prisma.recordsRequest.findUnique({
+    where: { id: requestId },
+    select: { matterId: true, leadId: true },
+  });
+  if (!req) return;
+  for (const path of scopePaths(scopeOf(req), "records")) revalidatePath(path);
+}
+
 function revalidateForTask(task: {
   matterId: string | null;
   leadId: string | null;
@@ -66,7 +95,7 @@ function revalidateForTask(task: {
 
 export async function setTaskStatus(
   taskId: string,
-  status: TaskStatus
+  status: TaskStatus,
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("tasks.edit");
   await assertChildMatterAccess("task", taskId);
@@ -76,7 +105,13 @@ export async function setTaskStatus(
 
   const task = await prisma.task.findUnique({
     where: { id: taskId },
-    select: { matterId: true, leadId: true, status: true, title: true },
+    select: {
+      matterId: true,
+      leadId: true,
+      status: true,
+      title: true,
+      recordsRequestId: true,
+    },
   });
   if (!task) return { ok: false, error: "Task not found" };
 
@@ -86,19 +121,28 @@ export async function setTaskStatus(
   const isComplete = isTaskClosed(status);
   const wasComplete = isTaskClosed(task.status);
 
-  await prisma.task.update({
-    where: { id: taskId },
-    data: {
-      status,
-      completedAt: isComplete
-        ? wasComplete
-          ? undefined // already completed — don't overwrite the original timestamp
-          : new Date()
-        : null,
-    },
+  const completing = status === "done" && task.status !== "done";
+  const actorId = completing ? await getCurrentUserId() : "";
+  const today = completing ? todayKey(await getCurrentUserTimeZone()) : "";
+  const rolled = await prisma.$transaction(async (tx) => {
+    await tx.task.update({
+      where: { id: taskId },
+      data: {
+        status,
+        completedAt: isComplete
+          ? wasComplete
+            ? undefined // already completed — don't overwrite the original timestamp
+            : new Date()
+          : null,
+      },
+    });
+    return completing ? rollOnFollowUpDone(tx, task, actorId, today) : false;
   });
 
   revalidateForTask(task);
+  if (rolled && task.recordsRequestId) {
+    await revalidateRequestPaths(task.recordsRequestId);
+  }
 
   // Activity log only for completed/reopened transitions — minor
   // status nudges (open → in_progress) aren't worth dashboard space.
@@ -133,7 +177,7 @@ export async function setTaskStatus(
  *  didn't actually change. */
 export async function setTaskOwner(
   taskId: string,
-  ownerId: string | null
+  ownerId: string | null,
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("tasks.edit");
   await assertChildMatterAccess("task", taskId);
@@ -174,7 +218,7 @@ export async function setTaskOwner(
 // ── Delete ──────────────────────────────────────────────────────────────
 
 export async function deleteTask(
-  taskId: string
+  taskId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("tasks.delete");
   await assertChildMatterAccess("task", taskId);
@@ -225,7 +269,7 @@ const updateTaskSchema = z.object({
 export async function updateTask(
   taskId: string,
   _prev: UpdateTaskFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<UpdateTaskFormState> {
   await requirePermission("tasks.edit");
   await assertChildMatterAccess("task", taskId);
@@ -263,6 +307,7 @@ export async function updateTask(
       priority: true,
       description: true,
       updatedAt: true,
+      recordsRequestId: true,
     },
   });
   if (!task) {
@@ -307,22 +352,28 @@ export async function updateTask(
   const isComplete = isTaskClosed(newStatus);
   const wasComplete = isTaskClosed(task.status);
 
-  const write = await prisma.task.updateMany({
-    where: expected ? { id: taskId, updatedAt: expected } : { id: taskId },
-    data: {
-      title: parsed.data.title,
-      description: parsed.data.description || null,
-      dueDate,
-      priority: parsed.data.priority,
-      status: newStatus,
-      // undefined = Prisma skips the column (owner untouched).
-      ownerId: ownerChanged ? nextOwnerId : undefined,
-      completedAt: isComplete
-        ? wasComplete
-          ? undefined
-          : new Date()
-        : null,
-    },
+  const completing = newStatus === "done" && task.status !== "done";
+  const rollToday = completing ? todayKey(await getCurrentUserTimeZone()) : "";
+  const actor = await getCurrentUserId();
+  let rolled = false;
+  const write = await prisma.$transaction(async (tx) => {
+    const w = await tx.task.updateMany({
+      where: expected ? { id: taskId, updatedAt: expected } : { id: taskId },
+      data: {
+        title: parsed.data.title,
+        description: parsed.data.description || null,
+        dueDate,
+        priority: parsed.data.priority,
+        status: newStatus,
+        // undefined = Prisma skips the column (owner untouched).
+        ownerId: ownerChanged ? nextOwnerId : undefined,
+        completedAt: isComplete ? (wasComplete ? undefined : new Date()) : null,
+      },
+    });
+    if (w.count > 0 && completing) {
+      rolled = await rollOnFollowUpDone(tx, task, actor, rollToday);
+    }
+    return w;
   });
 
   if (write.count === 0) {
@@ -367,6 +418,9 @@ export async function updateTask(
   }
 
   revalidateForTask(task);
+  if (rolled && task.recordsRequestId) {
+    await revalidateRequestPaths(task.recordsRequestId);
+  }
 
   // Same assignment-notification rules as setTaskOwner — only when
   // the owner actually changed, never on self-assign / unassign.

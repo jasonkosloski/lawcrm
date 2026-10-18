@@ -24,7 +24,7 @@ import {
   scopePaths,
   type RecordScope,
 } from "@/lib/record-scope";
-import { addCalendarDays } from "@/lib/records-requests/due-date";
+import { addCalendarDays, computeResponseDue } from "@/lib/records-requests/due-date";
 import { isAssignableUser } from "@/lib/task-assignment";
 import { parseDateOnly, todayKey } from "@/lib/format-date";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
@@ -38,6 +38,7 @@ import {
   cancelFollowUpTasks,
   lockRecordsRequest,
   openFollowUpTask,
+  rollFollowUp,
   syncFollowUpTaskOwner,
 } from "@/lib/records-requests/follow-up";
 import type { RecordsRequestFormState } from "@/lib/records-requests/form";
@@ -288,6 +289,137 @@ export async function updateRecordsRequest(
     type: "records",
     title: "Records request updated",
     detail: p.subject,
+  });
+  revalidateForScope(scope);
+  return { status: "ok" };
+}
+
+/** Send a draft: stamps sentAt, derives the response due date from the
+ *  type's statutory period (else the posted/ad hoc value), schedules the
+ *  first chase and opens the follow-up task. */
+export async function markRecordsRequestSent(
+  id: string,
+  _prev: RecordsRequestFormState,
+  fd: FormData
+): Promise<RecordsRequestFormState> {
+  await requirePermission("records.edit");
+  const values = rawValues(fd);
+  const fail = (msg: string, key = "_form"): RecordsRequestFormState => ({
+    status: "error",
+    errors: { [key]: [msg] },
+    values,
+  });
+  const row = await prisma.recordsRequest.findUnique({
+    where: { id },
+    select: { matterId: true, leadId: true, subject: true },
+  });
+  if (!row) return fail("Request no longer exists");
+  const scope = scopeOf(row);
+  const userId = await assertScopeAccess(scope);
+  const readOnly = await assertScopeWritable(scope);
+  if (readOnly) return fail(readOnly);
+
+  const errors: Errors = {};
+  const todayKeyStr = todayKey(await getCurrentUserTimeZone());
+  const sentAt = parseDateOnly(values.sentAt || todayKeyStr);
+  if (!sentAt) return fail("Invalid sent date", "sentAt");
+  const postedDue = dateField(
+    values.responseDueDate,
+    "responseDueDate",
+    "due date",
+    errors
+  );
+  if (Object.keys(errors).length > 0) {
+    return { status: "error", errors, values };
+  }
+
+  const result = await prisma.$transaction(
+    async (tx): Promise<string | null> => {
+      await lockRecordsRequest(tx, id);
+      const cur = await tx.recordsRequest.findUnique({
+        where: { id },
+        select: {
+          status: true,
+          type: {
+            select: {
+              followUpDays: true,
+              responseAmount: true,
+              responseUnit: true,
+            },
+          },
+        },
+      });
+      if (!cur) return "Request no longer exists";
+      if (cur.status !== "draft") {
+        return "Only a draft request can be marked sent.";
+      }
+      const t = cur.type;
+      const dueDate =
+        t?.responseAmount != null && t.responseUnit
+          ? computeResponseDue(sentAt, t.responseAmount, t.responseUnit)
+          : (postedDue ?? null);
+      await tx.recordsRequest.update({
+        where: { id },
+        data: {
+          status: "sent",
+          sentAt,
+          responseDueDate: dueDate,
+          nextFollowUpDate: addCalendarDays(sentAt, t?.followUpDays ?? 7),
+        },
+      });
+      await openFollowUpTask(tx, id);
+      return null;
+    }
+  );
+  if (result) return fail(result);
+
+  await logActivity({
+    matterId: row.matterId,
+    userId,
+    type: "records",
+    title: "Records request sent",
+    detail: row.subject,
+  });
+  revalidateForScope(scope);
+  return { status: "ok" };
+}
+
+/** Log a manual follow-up: closes the open task and schedules the next. */
+export async function logRecordsFollowUp(
+  id: string,
+  _prev: RecordsRequestFormState,
+  fd: FormData
+): Promise<RecordsRequestFormState> {
+  await requirePermission("records.edit");
+  const values = rawValues(fd);
+  const fail = (msg: string): RecordsRequestFormState => ({
+    status: "error",
+    errors: { _form: [msg] },
+    values,
+  });
+  const note = (values.note ?? "").trim().slice(0, 2000) || null;
+  const row = await prisma.recordsRequest.findUnique({
+    where: { id },
+    select: { matterId: true, leadId: true, subject: true },
+  });
+  if (!row) return fail("Request no longer exists");
+  const scope = scopeOf(row);
+  const userId = await assertScopeAccess(scope);
+  const readOnly = await assertScopeWritable(scope);
+  if (readOnly) return fail(readOnly);
+
+  const today = todayKey(await getCurrentUserTimeZone());
+  const rolled = await prisma.$transaction((tx) =>
+    rollFollowUp(tx, id, { actorId: userId, note, today })
+  );
+  if (!rolled) return fail("This request is not open.");
+
+  await logActivity({
+    matterId: row.matterId,
+    userId,
+    type: "records",
+    title: "Records follow-up logged",
+    detail: row.subject,
   });
   revalidateForScope(scope);
   return { status: "ok" };

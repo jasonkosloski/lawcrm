@@ -25,6 +25,9 @@ import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vi
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
+vi.mock("@/lib/current-user-tz", () => ({
+  getCurrentUserTimeZone: vi.fn(async () => "America/Denver"),
+}));
 vi.mock("@/lib/permission-check", () => ({
   // Action-logic tests assume the user passes the gate. Gate
   // behavior itself is covered in `permission-check.integration.test.ts`;
@@ -729,5 +732,38 @@ describe("updateTask - stale form guard (F521)", () => {
     const id = await seedTask({ title: "Original" });
     const res = await updateTask(id, updateTaskInitialState, form());
     expect(res.status).toBe("ok");
+  });
+});
+
+describe("records follow-up task hook", () => {
+  test("updateTask moving a follow-up task to done rolls the request", async () => {
+    const contact = await prisma.contact.create({
+      data: { name: "Mercy Hospital", type: "person" } as never,
+    });
+    const req = await prisma.recordsRequest.create({
+      data: {
+        matterId,
+        custodianContactId: contact.id,
+        adHocTypeName: "Chart",
+        subject: "Chart",
+        status: "sent",
+        ownerId: userId,
+        nextFollowUpDate: new Date("2026-10-25T00:00:00Z"),
+      },
+    });
+    const task = await prisma.task.create({
+      data: { matterId, title: "Follow up", recordsRequestId: req.id },
+    });
+    const fd = new FormData();
+    fd.set("title", "Follow up");
+    fd.set("status", "done");
+    const res = await updateTask(task.id, updateTaskInitialState, fd);
+    expect(res.status).toBe("ok");
+    expect(await prisma.recordsRequestFollowUp.count()).toBe(1);
+    expect(
+      await prisma.task.count({
+        where: { recordsRequestId: req.id, status: "open" },
+      })
+    ).toBe(1);
   });
 });
