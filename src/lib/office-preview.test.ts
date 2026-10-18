@@ -32,6 +32,7 @@ import {
   SPREADSHEET_MAX_COLS,
   SPREADSHEET_MAX_ROWS,
   formatCell,
+  inlineCidImages,
   parseMsg,
   renderStoredEmail,
   renderStoredSpreadsheet,
@@ -188,6 +189,55 @@ describe("renderStoredEmail — .eml", () => {
     files.set("e", Buffer.from(EML));
     sizes.set("e", EMAIL_MAX_BYTES + 1);
     expect(await renderStoredEmail("e", "eml")).toMatchObject({ ok: false, reason: expect.stringMatching(/larger than/i) });
+  });
+});
+
+const PNG_1PX = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64"
+);
+
+const EML_WITH_LOGO = [
+  "From: Records <records@pd.example>",
+  "To: counsel@firm.example",
+  "Subject: Logo test",
+  "MIME-Version: 1.0",
+  'Content-Type: multipart/related; boundary="r1"',
+  "",
+  "--r1",
+  "Content-Type: text/html; charset=utf-8",
+  "",
+  '<p>Report attached.</p><img src="cid:seal@pd" alt="seal"><img src="https://t.example/p.gif">',
+  "--r1",
+  "Content-Type: image/png",
+  "Content-ID: <seal@pd>",
+  'Content-Disposition: attachment; filename="seal.png"',
+  "Content-Transfer-Encoding: base64",
+  "",
+  PNG_1PX.toString("base64"),
+  "--r1--",
+  "",
+].join("\r\n");
+
+describe("embedded (cid:) images", () => {
+  test("render inline as data: URIs and aren't listed as attachments; remote images stay blocked", async () => {
+    files.set("e", Buffer.from(EML_WITH_LOGO));
+    const res = await renderStoredEmail("e", "eml");
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.email.html).toContain(`src="data:image/png;base64,${PNG_1PX.toString("base64")}"`);
+    expect(res.email.html).not.toContain("cid:");
+    expect(res.email.html).not.toContain("t.example");
+    expect(res.email.attachments).toEqual([]);
+  });
+
+  test("only raster types are inlined (no SVG), and unknown cids are left alone", () => {
+    const svg = new TextEncoder().encode("<svg/>").buffer as ArrayBuffer;
+    const { html, used } = inlineCidImages('<img src="cid:a"><img src="cid:missing">', [
+      { contentId: "<a>", mimeType: "image/svg+xml", content: svg },
+    ]);
+    expect(html).toBe('<img src="cid:a"><img src="cid:missing">');
+    expect(used.size).toBe(0);
   });
 });
 

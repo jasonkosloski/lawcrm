@@ -13,7 +13,8 @@
  *            Both become one EmailPreview: headers, a body sanitized
  *            with the hostile-mail profile (`sanitizeEmailHtml`, which
  *            also blocks remote tracking images), and the attachment
- *            list. Attachments are listed, not opened.
+ *            list. Embedded (cid:) images in .eml bodies render inline
+ *            as data: URIs. Attachments are listed, not opened.
  *
  * Productions from opposing parties are untrusted: zip-based files go
  * through `checkZipBounds` before anything inflates them.
@@ -190,18 +191,62 @@ function byteSize(content: ArrayBuffer | string | Uint8Array | undefined): numbe
   return content.byteLength;
 }
 
+/** Raster types an embedded (cid:) image may be inlined as. No SVG:
+ *  it's a document format, not just pixels. */
+const INLINE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+/** Total bytes of embedded images inlined into one body. */
+export const EMAIL_INLINE_IMAGES_MAX_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Point `cid:` image references (logos, signatures, pasted pictures
+ * that travel inside the message) at data: URIs built from their MIME
+ * parts, so they render. They're part of the file, so there's no
+ * network fetch or tracking involved (remote images stay blocked by
+ * the sanitizer). Returns the rewritten HTML and the content ids used,
+ * so those parts aren't also listed as attachments.
+ */
+export function inlineCidImages(
+  html: string,
+  parts: { contentId?: string; mimeType: string; content: ArrayBuffer | Uint8Array | string }[]
+): { html: string; used: Set<string> } {
+  const byCid = new Map<string, { mimeType: string; content: ArrayBuffer | Uint8Array }>();
+  for (const p of parts) {
+    const cid = p.contentId?.replace(/^<|>$/g, "").trim();
+    if (cid && INLINE_IMAGE_TYPES.has(p.mimeType.toLowerCase()) && typeof p.content !== "string") {
+      byCid.set(cid.toLowerCase(), { mimeType: p.mimeType.toLowerCase(), content: p.content });
+    }
+  }
+  const used = new Set<string>();
+  let budget = EMAIL_INLINE_IMAGES_MAX_BYTES;
+  const out = html.replace(/(["'])cid:([^"']+)\1/gi, (match, quote: string, raw: string) => {
+    const cid = raw.trim().toLowerCase();
+    const part = byCid.get(cid);
+    if (!part || part.content.byteLength > budget) return match;
+    budget -= part.content.byteLength;
+    used.add(cid);
+    return `${quote}data:${part.mimeType};base64,${Buffer.from(part.content instanceof Uint8Array ? part.content : new Uint8Array(part.content)).toString("base64")}${quote}`;
+  });
+  return { html: out, used };
+}
+
 export async function parseEml(buffer: Buffer): Promise<EmailPreview> {
   const mail = await PostalMime.parse(buffer, { attachmentEncoding: "arraybuffer" });
+  const inlined = mail.html
+    ? inlineCidImages(mail.html, mail.attachments)
+    : { html: undefined, used: new Set<string>() };
+  const shownInBody = (cid: string | undefined) =>
+    !!cid && inlined.used.has(cid.replace(/^<|>$/g, "").trim().toLowerCase());
   return {
     subject: mail.subject?.trim() || "(no subject)",
     from: addressList(mail.from)[0] ?? "",
     to: addressList(mail.to),
     cc: addressList(mail.cc),
     date: isoOrNull(mail.date),
-    html: safeHtml(mail.html),
+    html: safeHtml(inlined.html),
     text: mail.text ?? "",
     attachments: mail.attachments
-      .filter((a) => a.disposition !== "inline" || !a.contentId)
+      // Parts shown in the body (cid images) aren't separate attachments.
+      .filter((a) => !shownInBody(a.contentId) && (a.disposition !== "inline" || !a.contentId))
       .map((a) => ({ name: a.filename || "(unnamed attachment)", size: byteSize(a.content) })),
   };
 }
