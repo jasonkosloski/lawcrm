@@ -299,7 +299,7 @@ export async function getMyRecordsToChase(tz: string): Promise<RecordsChaseItem[
       id: r.id,
       subject: r.subject,
       custodianName: r.custodian.name,
-      href: `${base}/records?request=${r.id}`,
+      href: `${base}/records/${r.id}`,
       label,
       context: r.matter?.name ?? (r.lead ? `Intake \u00b7 ${r.lead.name}` : "Intake"),
       overdue,

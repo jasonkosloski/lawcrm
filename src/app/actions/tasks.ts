@@ -44,7 +44,12 @@ import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { isAssignableUser, notifyTaskAssigned } from "@/lib/task-assignment";
 import { dateOnlyKey, parseDateOnly, todayKey } from "@/lib/format-date";
-import { optionalScopeOf, scopeOf, scopePaths } from "@/lib/record-scope";
+import {
+  optionalScopeOf,
+  scopeOf,
+  scopePaths,
+  scopeRequestPagePattern,
+} from "@/lib/record-scope";
 import {
   checkFollowUpReopen,
   lockRecordsRequest,
@@ -76,7 +81,9 @@ async function revalidateRequestPaths(requestId: string): Promise<void> {
     select: { matterId: true, leadId: true },
   });
   if (!req) return;
-  for (const path of scopePaths(scopeOf(req), "records")) revalidatePath(path);
+  const reqScope = scopeOf(req);
+  for (const path of scopePaths(reqScope, "records")) revalidatePath(path);
+  revalidatePath(scopeRequestPagePattern(reqScope), "page");
 }
 
 /** Path-revalidate every surface that displays this task: its

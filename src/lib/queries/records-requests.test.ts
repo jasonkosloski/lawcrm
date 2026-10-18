@@ -204,10 +204,10 @@ describe("getMyRecordsToChase", () => {
     ]);
     expect(items[0]).toMatchObject({
       custodianName: "St. Mary's",
-      href: `/matters/${matterId}/records?request=${items[0].id}`,
+      href: `/matters/${matterId}/records/${items[0].id}`,
     });
     expect(items[3].context).toBe("Intake \u00b7 Test Lead");
-    expect(items[3].href).toBe(`/intake/${leadId}/records?request=${items[3].id}`);
+    expect(items[3].href).toBe(`/intake/${leadId}/records/${items[3].id}`);
     expect(collectKeys(items).filter((k) => /fee/i.test(k))).toEqual([]);
   });
 });

@@ -957,7 +957,7 @@ export async function globalSearch(
               makeSnippet(r.subject, q) ??
               makeSnippet(r.description, q) ??
               makeSnippet(r.custodian.name, q),
-            href: `${base}/records?request=${r.id}`,
+            href: `${base}/records/${r.id}`,
             context:
               r.matter?.name ?? (r.lead ? `Intake \u00b7 ${r.lead.name}` : "Intake"),
           },

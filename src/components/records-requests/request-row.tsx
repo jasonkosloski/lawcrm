@@ -1,6 +1,5 @@
 /**
- * One row of the Records tab: a link that opens the detail panel via
- * `?request=<id>`.
+ * One row of the Records tab: a link to the request's detail page.
  */
 
 import Link from "next/link";
@@ -34,8 +33,7 @@ export function RequestRow({
   return (
     <li>
       <Link
-        href={`${scopeBasePath(scope)}/records?request=${row.id}`}
-        scroll={false}
+        href={`${scopeBasePath(scope)}/records/${row.id}`}
         className="flex items-center gap-3 px-4 py-2.5 hover:bg-brand-tint transition-colors"
       >
         <div className="flex-1 min-w-0">

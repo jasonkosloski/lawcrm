@@ -1,8 +1,7 @@
 /**
  * Records tab body, shared by the matter and intake routes: the new
- * request composer, requests grouped by status, and (when `?request=`
- * names a request in THIS scope) the detail panel. A stale or foreign
- * id opens nothing. The page has already enforced `records.view`.
+ * request composer and requests grouped by status. Each row links to the
+ * request's own page. The page has already enforced `records.view`.
  */
 
 import { ClipboardList } from "lucide-react";
@@ -10,30 +9,25 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { Card } from "@/components/ui/card";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
-import { activeStorageDriver } from "@/lib/file-storage";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
-import { scopeWhere, type RecordScope } from "@/lib/record-scope";
+import { type RecordScope } from "@/lib/record-scope";
 import {
   RECORDS_REQUEST_STATUSES,
   RECORDS_STATUS_LABEL,
 } from "@/lib/records-requests/status";
 import {
-  getRecordsRequestDetail,
   getRecordsRequests,
   listRecordsRequestTypes,
 } from "@/lib/queries/records-requests";
 import { NewRequestComposer } from "./new-request-composer";
-import { RequestDetailPanel } from "./request-detail-panel";
 import { RequestRow } from "./request-row";
 
 export async function RecordsTab({
   scope,
-  requestParam,
   writable,
 }: {
   scope: RecordScope;
-  requestParam: string | null;
   /** False on a converted lead: its requests moved to the matter. */
   writable: boolean;
 }) {
@@ -42,35 +36,17 @@ export async function RecordsTab({
   // A lead has no expenses, so records.view (already enforced) suffices.
   const includeFees =
     scope.kind === "lead" || (await currentUserHasPermission("matters.expense.view"));
-  const [
-    rows,
-    detail,
-    canCreate,
-    canEdit,
-    canDelete,
-    canUpload,
-    canExpense,
-    canContact,
-    types,
-  ] = await Promise.all([
+  const [rows, canCreate, canContact, types] = await Promise.all([
     getRecordsRequests(scope, tz, { includeFees }),
-    requestParam
-      ? getRecordsRequestDetail(scope, requestParam, { includeFees })
-      : null,
     currentUserHasPermission("records.create"),
-    currentUserHasPermission("records.edit"),
-    currentUserHasPermission("records.delete"),
-    currentUserHasPermission("documents.upload"),
-    currentUserHasPermission("matters.expense.create"),
     currentUserHasPermission("contacts.create"),
     listRecordsRequestTypes({ activeOnly: true }),
   ]);
 
   const showComposer = writable && canCreate;
-  const needsUsers = showComposer || (detail !== null && canEdit && writable);
 
-  const [users, currentUserId, templates, linkable] = await Promise.all([
-    needsUsers
+  const [users, currentUserId] = await Promise.all([
+    showComposer
       ? prisma.user.findMany({
           where: { isActive: true },
           orderBy: [{ name: "asc" }, { id: "asc" }],
@@ -78,21 +54,6 @@ export async function RecordsTab({
         })
       : [],
     showComposer ? getCurrentUserId() : "",
-    detail && canEdit && writable
-      ? prisma.documentTemplate.findMany({
-          where: { isActive: true },
-          orderBy: [{ category: "asc" }, { name: "asc" }],
-          select: { id: true, name: true, category: true, description: true },
-        })
-      : [],
-    detail && canEdit && writable
-      ? prisma.document.findMany({
-          where: { ...scopeWhere(scope), recordsRequestId: null },
-          orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-          take: 100,
-          select: { id: true, name: true },
-        })
-      : [],
   ]);
 
   const typeOptions = types.map((t) => ({ id: t.id, name: t.name }));
@@ -139,29 +100,6 @@ export async function RecordsTab({
           </Card>
         </section>
       ))}
-
-      {detail && (
-        <RequestDetailPanel
-          key={detail.id}
-          detail={detail}
-          scope={scope}
-          types={typeOptions}
-          users={users}
-          templates={templates}
-          defaultTemplateId={
-            types.find((t) => t.id === detail.typeId)?.defaultTemplateId ?? null
-          }
-          storageDriver={activeStorageDriver()}
-          linkableDocuments={linkable}
-          can={{
-            edit: canEdit,
-            delete: canDelete,
-            upload: canUpload,
-            fee: canEdit && (scope.kind === "lead" || (canExpense && includeFees)),
-          }}
-          writable={writable}
-        />
-      )}
     </div>
   );
 }

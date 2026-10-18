@@ -36,6 +36,6 @@ describe("dueBadge", () => {
 describe("RequestRow", () => {
   test("links to the panel on the scope's records tab", () => {
     render(<ul><RequestRow row={row()} scope={{ kind: "lead", leadId: "l1" }} /></ul>);
-    expect(screen.getByRole("link").getAttribute("href")).toBe("/intake/l1/records?request=r1");
+    expect(screen.getByRole("link").getAttribute("href")).toBe("/intake/l1/records/r1");
   });
 });

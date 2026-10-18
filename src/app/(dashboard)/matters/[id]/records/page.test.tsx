@@ -36,11 +36,8 @@ function tab(node: ReactNode): React.ReactElement<Record<string, unknown>> {
   throw new Error("RecordsTab not found");
 }
 
-const call = (sp: Record<string, string | string[]> = {}) =>
-  MatterRecordsPage({
-    params: Promise.resolve({ id: "m1" }),
-    searchParams: Promise.resolve(sp),
-  } as never);
+const call = () =>
+  MatterRecordsPage({ params: Promise.resolve({ id: "m1" }) } as never);
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -52,21 +49,13 @@ describe("MatterRecordsPage", () => {
     expect(assertMatterAccess).toHaveBeenCalledWith("m1");
   });
 
-  test("renders the tab with the matter scope and the ?request= param", async () => {
+  test("renders the tab with the matter scope", async () => {
     has.mockResolvedValue(true);
-    const e = tab(await call({ request: "r9" }));
+    const e = tab(await call());
     expect(e.props).toMatchObject({
       scope: { kind: "matter", matterId: "m1" },
-      requestParam: "r9",
       writable: true,
     });
-  });
-
-  test("a missing or array ?request= is normalised", async () => {
-    has.mockResolvedValue(true);
-    const none = tab(await call());
-    expect(none.props.requestParam).toBeNull();
-    const arr = tab(await call({ request: ["a", "b"] }));
-    expect(arr.props.requestParam).toBe("a");
+    expect(e.props).not.toHaveProperty("requestParam");
   });
 });

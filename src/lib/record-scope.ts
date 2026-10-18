@@ -76,6 +76,13 @@ export function scopePaths(scope: RecordScope | null, tab: string): string[] {
   return [`${base}/${tab}`, base];
 }
 
+/** Route pattern of the scope's request detail pages
+ *  (`.../records/[requestId]`): revalidate with type "page" to refresh
+ *  every request page of the scope. */
+export function scopeRequestPagePattern(scope: RecordScope): string {
+  return `${scopeBasePath(scope)}/records/[requestId]`;
+}
+
 /** Refusal text when a document / folder operation would cross scopes
  *  (matter <-> intake lead, or between two different records). */
 export const SAME_SCOPE_ERROR =

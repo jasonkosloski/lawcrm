@@ -501,8 +501,8 @@ Email results are scoped to the viewer's OWN mailbox. No
   state, or reopens (restarting the chase). Template letters and
   uploads file under `Records/{custodian} — {type}`; a fee creates an
   Expense on matters (on leads, at conversion). Custodians can be
-  quick-created from the composer. The detail panel is URL-driven
-  (`?request=`). Conversion carries requests forward; merging two
+  quick-created from the composer. Each request has its own detail page
+  (`.../records/[requestId]`; old `?request=` links are not redirected). Conversion carries requests forward; merging two
   contacts re-points requests where they are the custodian; a "records to chase" dashboard card and
   global search cover them. Business days skip weekends only. See
   ADR-047 and `docs/superpowers/specs/2026-10-18-records-requests-design.md`.

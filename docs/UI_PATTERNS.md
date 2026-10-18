@@ -171,19 +171,25 @@ and viewer bodies are the server components `DocumentsBrowser` and
 and intake routes; hrefs come from `scopeBasePath`, uploads send
 `leadId` for a lead, and a converted lead's tab is read-only. The Records tab
 (`src/components/records-requests/`) takes a scope too; see the request
-detail panel pattern below.
+detail page pattern below.
 
-### URL-driven request detail panel (Records tab)
+### Request detail page (Records tab)
 
-The Records tab opens a request's detail panel from `?request=<id>`
-(`src/components/records-requests/request-detail-panel.tsx`); closing
-removes the param with `router.replace(..., { scroll: false })`. Rows link
-to the param, so a request is deep-linkable and back/forward works. The
-panel is keyed by request id so state resets between requests, traps
-focus, and shows the follow-up log plus sent/received dates. Fee data is
-only sent to the client when the viewer is allowed to see it. The Records
-tab takes a `RecordScope` like the other scoped tabs, so the same
-components serve matters and intake leads.
+A records request opens on its own page nested under the tab:
+`/matters/[id]/records/[requestId]` and `/intake/[id]/records/[requestId]`
+(the matter/lead layout keeps the tabs; Records stays highlighted). Rows
+link there with a plain `Link`, so a request is deep-linkable and back/forward
+works. The route pages own auth (`requireUser`, the matter wall on matters,
+`records.view`); the shared server component
+`src/components/records-requests/request-detail-page.tsx` loads the request
+(scoped: a foreign or missing id 404s) and the editing lookups, then renders
+the client `request-detail.tsx`. Layout: header (back link, subject,
+custodian and type, status chip, due badge, status actions and delete), then
+two columns on lg+ (main: letters, received records, follow-ups; side:
+details and fee), stacked below. Delete navigates back to the list. Fee data
+is only sent to the client when the viewer is allowed to see it. A converted
+lead's page shows the banner to the matter's Records tab and is read-only.
+Old `?request=<id>` links are not redirected.
 
 ### In-Tab Channel Toggle (Communication tabs)
 ```

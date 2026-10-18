@@ -37,6 +37,7 @@ describe("revalidateDocumentScope", () => {
     expect(revalidatePath.mock.calls).toEqual([
       ["/intake/l1/documents", "layout"],
       ["/intake/l1"],
+      ["/intake/l1/records/[requestId]", "page"],
       ["/intake/l1/documents/d1"],
     ]);
     expect(JSON.stringify(revalidatePath.mock.calls)).not.toContain("null");
@@ -47,6 +48,7 @@ describe("revalidateDocumentScope", () => {
     expect(revalidatePath.mock.calls).toEqual([
       ["/matters/m1/documents", "layout"],
       ["/matters/m1"],
+      ["/matters/m1/records/[requestId]", "page"],
     ]);
   });
 });

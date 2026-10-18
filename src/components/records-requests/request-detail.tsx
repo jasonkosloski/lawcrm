@@ -1,7 +1,8 @@
 /**
- * Records request detail panel. Modal shell in the idiom of
- * src/components/calendar/event-detail-modal.tsx, driven by
- * `?request=<id>` and closed by removing that param.
+ * Records request detail page body (client). Rendered by the request
+ * page under the Records tab (`.../records/[requestId]`): header with
+ * the status actions, a main column (letter, received records,
+ * follow-ups) and a side column (details, fee).
  *
  * History is the follow-up log (newest first) plus the sent / received
  * dates: a per-request ActivityLog feed would need a request FK on
@@ -15,16 +16,10 @@
 
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useTransition,
-  type ReactNode,
-} from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { FileText, Trash2, X } from "lucide-react";
+import { useState, useTransition, type ReactNode } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, FileText, Trash2, X } from "lucide-react";
 import {
   deleteRecordsRequest,
   linkRecordsDocuments,
@@ -41,7 +36,7 @@ import {
   type TemplateOption,
 } from "@/components/templates/generate-from-template-dialog";
 import { dateOnlyKey, formatDateOnly } from "@/lib/format-date";
-import type { RecordScope } from "@/lib/record-scope";
+import { scopeBasePath, type RecordScope } from "@/lib/record-scope";
 import type { StorageDriver } from "@/lib/storage/storage-key";
 import {
   recordsRequestInitialState,
@@ -54,10 +49,11 @@ import {
   isRecordsRequestOpen,
 } from "@/lib/records-requests/status";
 import type { RecordsRequestDetail } from "@/lib/queries/records-requests";
+import { dueBadge } from "./request-row";
 import { cn } from "@/lib/utils";
 import type { TypeOption, UserOption } from "./new-request-composer";
 
-export type PanelPermissions = {
+export type RequestDetailPermissions = {
   /** records.edit */
   edit: boolean;
   /** records.delete */
@@ -138,7 +134,7 @@ function Section({
   );
 }
 
-export function RequestDetailPanel({
+export function RequestDetail({
   detail,
   scope,
   types,
@@ -149,6 +145,7 @@ export function RequestDetailPanel({
   linkableDocuments,
   can,
   writable,
+  daysUntilDue = null,
 }: {
   detail: RecordsRequestDetail;
   scope: RecordScope;
@@ -160,71 +157,14 @@ export function RequestDetailPanel({
   storageDriver: StorageDriver;
   /** Scope documents not already on this request, for "Link existing". */
   linkableDocuments: { id: string; name: string }[];
-  can: PanelPermissions;
+  can: RequestDetailPermissions;
   /** False on a converted lead: nothing is editable. */
   writable: boolean;
+  /** Days to the response due date in the viewer's zone (list-row badge). */
+  daysUntilDue?: number | null;
 }) {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const dialogRef = useRef<HTMLDivElement>(null);
-
-  const close = useCallback(() => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("request");
-    const qs = params.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }, [pathname, router, searchParams]);
-
-  useEffect(() => {
-    const opener = document.activeElement as HTMLElement | null;
-    dialogRef.current?.focus();
-    return () => {
-      if (opener && opener !== document.body && document.contains(opener)) {
-        opener.focus();
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented) return;
-      const t = e.target instanceof HTMLElement ? e.target : null;
-      // Escape inside a field only leaves the field.
-      if (t && t.matches("input, textarea, select")) {
-        t.blur();
-        return;
-      }
-      close();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [close]);
-
-  const trapTab = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== "Tab") return;
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    const items = Array.from(
-      dialog.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled])'
-      )
-    ).filter((el) => el.tabIndex >= 0);
-    if (items.length === 0) {
-      e.preventDefault();
-      return;
-    }
-    const first = items[0]!;
-    const last = items[items.length - 1]!;
-    const active = document.activeElement;
-    if (e.shiftKey && (active === first || active === dialog)) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && active === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  };
+  const recordsHref = `${scopeBasePath(scope)}/records`;
 
   const canEdit = can.edit && writable;
   const isOpen = isRecordsRequestOpen(detail.status);
@@ -268,7 +208,7 @@ export function RequestDetailPanel({
     setDeleteError(null);
     startDelete(async () => {
       const res = await deleteRecordsRequest(detail.id);
-      if (res.ok) close();
+      if (res.ok) router.push(recordsHref);
       else setDeleteError(res.error ?? "Couldn't delete the request.");
     });
   };
@@ -338,113 +278,282 @@ export function RequestDetailPanel({
       </ul>
     );
 
+  const badge = dueBadge({ status: detail.status, daysUntilDue });
+
+  const deleteControl = can.delete && writable && (
+    <div className="flex flex-col items-end gap-1">
+      {confirmDelete ? (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-ink-2">
+            Delete this request and its follow-ups?
+          </span>
+          <button
+            type="button"
+            disabled={deletePending}
+            onClick={onDelete}
+            className="h-8 px-3 rounded-md bg-warn text-white text-xs font-medium disabled:opacity-50"
+          >
+            Confirm delete
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(false)}
+            className="text-xs text-ink-3 hover:text-ink"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setConfirmDelete(true)}
+          className="inline-flex items-center gap-1.5 text-xs text-warn hover:underline w-fit"
+        >
+          <Trash2 size={12} />
+          Delete request
+        </button>
+      )}
+      {deleteError && <div className="text-2xs text-warn">{deleteError}</div>}
+    </div>
+  );
+
   return (
-    <div className="contents">
-      <button
-        type="button"
-        aria-label="Close request"
-        tabIndex={-1}
-        onClick={close}
-        className="fixed inset-0 z-40 bg-black/25 backdrop-blur-sm cursor-default"
-      />
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={detail.subject}
-        tabIndex={-1}
-        onKeyDown={trapTab}
-        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[min(94vw,640px)] max-h-[88vh] rounded-xl shadow-2xl ring-1 ring-black/5 border border-line bg-white flex flex-col overflow-hidden outline-none"
-      >
-        <div className="flex items-start gap-3 px-5 pt-4 pb-3 border-b border-line">
-          <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-semibold text-ink truncate">
-              {detail.subject}
-            </h2>
-            <p className="text-2xs text-ink-3 truncate">
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-3">
+        <Link
+          href={recordsHref}
+          className="inline-flex items-center gap-1.5 text-xs text-ink-3 hover:text-brand-700 w-fit"
+        >
+          <ArrowLeft size={13} />
+          Records requests
+        </Link>
+        <div className="flex flex-wrap items-start gap-3">
+          <div className="flex-1 min-w-64">
+            <h1 className="text-lg font-semibold text-ink">{detail.subject}</h1>
+            <p className="text-xs text-ink-3">
               {detail.custodianName} · {detail.typeName}
             </p>
           </div>
           <span className="inline-block text-2xs font-medium px-2 py-0.5 rounded-full border bg-paper-2 text-ink-3 border-line shrink-0">
             {RECORDS_STATUS_LABEL[detail.status]}
           </span>
-          <button
-            type="button"
-            onClick={close}
-            aria-label="Close"
-            className="text-ink-4 hover:text-ink-2"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
-        <div className="overflow-y-auto px-5 py-4 flex flex-col gap-4">
-          {/* Dates at a glance (also the status history). */}
-          <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-            {(
-              [
-                ["Sent", detail.sentAt],
-                ["Response due", detail.responseDueDate],
-                ["Next follow-up", detail.nextFollowUpDate],
-                ["Received", detail.receivedAt],
-              ] as const
-            ).map(([k, v]) => (
-              <div key={k} className="flex flex-col">
-                <dt className={label}>{k}</dt>
-                <dd className="text-ink">{v ? formatDateOnly(v) : "—"}</dd>
-              </div>
-            ))}
-          </dl>
-
-          {canEdit && isDraft && (
-            <form onSubmit={sent.submit} className="flex flex-wrap items-end gap-3">
-              <div className="flex flex-col gap-1">
-                <label htmlFor="rr-sent-on" className={label}>
-                  Sent on
-                </label>
-                <input id="rr-sent-on" name="sentAt" type="date" className={field} />
-                <FieldError state={sent.state} name="sentAt" />
-              </div>
-              {!detail.typeId && (
-                <div className="flex flex-col gap-1">
-                  <label htmlFor="rr-sent-due" className={label}>
-                    Response due
-                  </label>
-                  <input
-                    id="rr-sent-due"
-                    name="responseDueDate"
-                    type="date"
-                    defaultValue={key(detail.responseDueDate)}
-                    className={field}
-                  />
-                  <FieldError state={sent.state} name="responseDueDate" />
-                </div>
+          {badge && (
+            <span
+              className={cn(
+                "inline-block text-2xs font-medium px-2 py-0.5 rounded-full border shrink-0",
+                badge.overdue
+                  ? "bg-warn-soft text-warn border-warn-border"
+                  : "bg-paper-2 text-ink-3 border-line"
               )}
-              <button type="submit" disabled={sent.pending} className={primaryBtn}>
-                Mark sent
-              </button>
-              <FormMessage state={sent.state} />
-            </form>
+            >
+              {badge.text}
+            </span>
           )}
+          <div className="flex flex-col items-end gap-2 ml-auto">
+            {canEdit && isDraft && (
+              <form onSubmit={sent.submit} className="flex flex-wrap items-end gap-3">
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="rr-sent-on" className={label}>
+                    Sent on
+                  </label>
+                  <input id="rr-sent-on" name="sentAt" type="date" className={field} />
+                  <FieldError state={sent.state} name="sentAt" />
+                </div>
+                {!detail.typeId && (
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor="rr-sent-due" className={label}>
+                      Response due
+                    </label>
+                    <input
+                      id="rr-sent-due"
+                      name="responseDueDate"
+                      type="date"
+                      defaultValue={key(detail.responseDueDate)}
+                      className={field}
+                    />
+                    <FieldError state={sent.state} name="responseDueDate" />
+                  </div>
+                )}
+                <button type="submit" disabled={sent.pending} className={primaryBtn}>
+                  Mark sent
+                </button>
+                <FormMessage state={sent.state} />
+              </form>
+            )}
+            {canEdit && !isDraft && nextStatuses.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={label}>{isOpen ? "Move to" : "Reopen as"}</span>
+                {nextStatuses.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    disabled={statusPending}
+                    onClick={() => setStatus(s)}
+                    className={outlineBtn}
+                  >
+                    {RECORDS_STATUS_LABEL[s]}
+                  </button>
+                ))}
+              </div>
+            )}
+            {statusError && <div className="text-2xs text-warn">{statusError}</div>}
+            {deleteControl}
+          </div>
+        </div>
+      </div>
 
-          {canEdit && !isDraft && nextStatuses.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={label}>{isOpen ? "Move to" : "Reopen as"}</span>
-              {nextStatuses.map((s) => (
+      {/* Dates at a glance (also the status history). */}
+      <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+        {(
+          [
+            ["Sent", detail.sentAt],
+            ["Response due", detail.responseDueDate],
+            ["Next follow-up", detail.nextFollowUpDate],
+            ["Received", detail.receivedAt],
+          ] as const
+        ).map(([k, v]) => (
+          <div key={k} className="flex flex-col">
+            <dt className={label}>{k}</dt>
+            <dd className="text-ink">{v ? formatDateOnly(v) : "—"}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+        <div className="flex flex-col gap-4 min-w-0">
+          <Section title="Letter and received records">
+            <div className="flex flex-col gap-1">
+              <span className={label}>Request letters</span>
+              {docList(letters, "No letter yet.")}
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className={label}>Received records</span>
+              {docList(received, "Nothing received yet.")}
+            </div>
+            <div className="flex flex-wrap items-start gap-2">
+              {canEdit && (
+                <GenerateFromTemplateDialog
+                  scope={scope}
+                  templates={templates}
+                  canUpload={can.upload}
+                  recordsRequestId={detail.id}
+                  defaultTemplateId={defaultTemplateId}
+                  triggerLabel="Generate letter"
+                />
+              )}
+              {can.upload && writable && (
+                <MultiFileUpload
+                  scope={scope}
+                  folderId={null}
+                  folderName={null}
+                  storageDriver={storageDriver}
+                  recordsRequestId={detail.id}
+                  onUploaded={() => setOfferMark(true)}
+                />
+              )}
+            </div>
+            {linkError && linkableDocuments.length === 0 && (
+              <div className="text-2xs text-warn">{linkError}</div>
+            )}
+            {canEdit && linkableDocuments.length > 0 && (
+              <details className="rounded-md border border-line px-2.5 py-1.5">
+                <summary className="text-xs text-ink-3 cursor-pointer">
+                  Link existing documents
+                </summary>
+                <ul className="mt-2 flex flex-col gap-1 max-h-40 overflow-y-auto">
+                  {linkableDocuments.map((d) => (
+                    <li key={d.id}>
+                      <label className="flex items-center gap-2 text-xs text-ink-2">
+                        <input
+                          type="checkbox"
+                          checked={picked.includes(d.id)}
+                          onChange={(e) =>
+                            setPicked((p) =>
+                              e.target.checked
+                                ? [...p, d.id]
+                                : p.filter((x) => x !== d.id)
+                            )
+                          }
+                        />
+                        {d.name}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
                 <button
-                  key={s}
+                  type="button"
+                  disabled={linkPending || picked.length === 0}
+                  onClick={onLink}
+                  className={cn(outlineBtn, "mt-2")}
+                >
+                  Link selected
+                </button>
+                {linkError && <div className="text-2xs text-warn mt-1">{linkError}</div>}
+              </details>
+            )}
+            {showMarks && (
+              <div className="flex flex-wrap items-center gap-2 rounded-md border border-line bg-paper-2/40 px-3 py-2">
+                <span className="text-xs text-ink-3">Records came in?</span>
+                {detail.status !== "partial" && (
+                  <button
+                    type="button"
+                    disabled={statusPending}
+                    onClick={() => setStatus("partial")}
+                    className={outlineBtn}
+                  >
+                    Mark partial
+                  </button>
+                )}
+                <button
                   type="button"
                   disabled={statusPending}
-                  onClick={() => setStatus(s)}
+                  onClick={() => setStatus("complete")}
                   className={outlineBtn}
                 >
-                  {RECORDS_STATUS_LABEL[s]}
+                  Mark complete
                 </button>
-              ))}
-            </div>
-          )}
-          {statusError && <div className="text-2xs text-warn">{statusError}</div>}
+              </div>
+            )}
+          </Section>
 
+          <Section title="Follow-ups">
+            {detail.followUps.length === 0 ? (
+              <p className="text-2xs text-ink-4">No follow-ups logged yet.</p>
+            ) : (
+              <ul className="flex flex-col gap-1.5">
+                {detail.followUps.map((f) => (
+                  <li key={f.id} className="text-xs text-ink-2">
+                    <span className="font-mono text-2xs text-ink-4">
+                      {formatDateOnly(f.occurredAt)}
+                    </span>{" "}
+                    <span className="text-ink-3">{f.userName}</span>
+                    {f.note ? ` — ${f.note}` : ""}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {canEdit && isOpen && !isDraft && (
+              <form onSubmit={followUp.submit} className="flex flex-wrap items-end gap-2">
+                <div className="flex flex-col gap-1 flex-1 min-w-48">
+                  <label htmlFor="rr-fu-note" className={label}>Note</label>
+                  <input
+                    id="rr-fu-note"
+                    name="note"
+                    type="text"
+                    maxLength={2000}
+                    placeholder="Called records dept., promised by Friday"
+                    className={field}
+                  />
+                </div>
+                <button type="submit" disabled={followUp.pending} className={outlineBtn}>
+                  Log follow-up
+                </button>
+                <FormMessage state={followUp.state} />
+              </form>
+            )}
+          </Section>
+        </div>
+        <div className="flex flex-col gap-4 min-w-0">
           <Section title="Details">
             {canEdit ? (
               <form
@@ -566,138 +675,6 @@ export function RequestDetailPanel({
             )}
           </Section>
 
-          <Section title="Follow-ups">
-            {detail.followUps.length === 0 ? (
-              <p className="text-2xs text-ink-4">No follow-ups logged yet.</p>
-            ) : (
-              <ul className="flex flex-col gap-1.5">
-                {detail.followUps.map((f) => (
-                  <li key={f.id} className="text-xs text-ink-2">
-                    <span className="font-mono text-2xs text-ink-4">
-                      {formatDateOnly(f.occurredAt)}
-                    </span>{" "}
-                    <span className="text-ink-3">{f.userName}</span>
-                    {f.note ? ` — ${f.note}` : ""}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {canEdit && isOpen && !isDraft && (
-              <form onSubmit={followUp.submit} className="flex flex-wrap items-end gap-2">
-                <div className="flex flex-col gap-1 flex-1 min-w-48">
-                  <label htmlFor="rr-fu-note" className={label}>Note</label>
-                  <input
-                    id="rr-fu-note"
-                    name="note"
-                    type="text"
-                    maxLength={2000}
-                    placeholder="Called records dept., promised by Friday"
-                    className={field}
-                  />
-                </div>
-                <button type="submit" disabled={followUp.pending} className={outlineBtn}>
-                  Log follow-up
-                </button>
-                <FormMessage state={followUp.state} />
-              </form>
-            )}
-          </Section>
-
-          <Section title="Documents">
-            <div className="flex flex-col gap-1">
-              <span className={label}>Request letters</span>
-              {docList(letters, "No letter yet.")}
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className={label}>Received records</span>
-              {docList(received, "Nothing received yet.")}
-            </div>
-            <div className="flex flex-wrap items-start gap-2">
-              {canEdit && (
-                <GenerateFromTemplateDialog
-                  scope={scope}
-                  templates={templates}
-                  canUpload={can.upload}
-                  recordsRequestId={detail.id}
-                  defaultTemplateId={defaultTemplateId}
-                  triggerLabel="Generate letter"
-                />
-              )}
-              {can.upload && writable && (
-                <MultiFileUpload
-                  scope={scope}
-                  folderId={null}
-                  folderName={null}
-                  storageDriver={storageDriver}
-                  recordsRequestId={detail.id}
-                  onUploaded={() => setOfferMark(true)}
-                />
-              )}
-            </div>
-            {linkError && linkableDocuments.length === 0 && (
-              <div className="text-2xs text-warn">{linkError}</div>
-            )}
-            {canEdit && linkableDocuments.length > 0 && (
-              <details className="rounded-md border border-line px-2.5 py-1.5">
-                <summary className="text-xs text-ink-3 cursor-pointer">
-                  Link existing documents
-                </summary>
-                <ul className="mt-2 flex flex-col gap-1 max-h-40 overflow-y-auto">
-                  {linkableDocuments.map((d) => (
-                    <li key={d.id}>
-                      <label className="flex items-center gap-2 text-xs text-ink-2">
-                        <input
-                          type="checkbox"
-                          checked={picked.includes(d.id)}
-                          onChange={(e) =>
-                            setPicked((p) =>
-                              e.target.checked
-                                ? [...p, d.id]
-                                : p.filter((x) => x !== d.id)
-                            )
-                          }
-                        />
-                        {d.name}
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  type="button"
-                  disabled={linkPending || picked.length === 0}
-                  onClick={onLink}
-                  className={cn(outlineBtn, "mt-2")}
-                >
-                  Link selected
-                </button>
-                {linkError && <div className="text-2xs text-warn mt-1">{linkError}</div>}
-              </details>
-            )}
-            {showMarks && (
-              <div className="flex flex-wrap items-center gap-2 rounded-md border border-line bg-paper-2/40 px-3 py-2">
-                <span className="text-xs text-ink-3">Records came in?</span>
-                {detail.status !== "partial" && (
-                  <button
-                    type="button"
-                    disabled={statusPending}
-                    onClick={() => setStatus("partial")}
-                    className={outlineBtn}
-                  >
-                    Mark partial
-                  </button>
-                )}
-                <button
-                  type="button"
-                  disabled={statusPending}
-                  onClick={() => setStatus("complete")}
-                  className={outlineBtn}
-                >
-                  Mark complete
-                </button>
-              </div>
-            )}
-          </Section>
-
           {can.fee && writable && (
             <Section title="Fee">
               <form key={`fee-${detail.updatedAt}`} onSubmit={fee.submit} className="flex flex-wrap items-end gap-3">
@@ -746,43 +723,6 @@ export function RequestDetailPanel({
                 </p>
               )}
             </Section>
-          )}
-
-          {can.delete && writable && (
-            <div className="border-t border-line pt-3 flex flex-col gap-2">
-              {confirmDelete ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-ink-2">
-                    Delete this request and its follow-ups?
-                  </span>
-                  <button
-                    type="button"
-                    disabled={deletePending}
-                    onClick={onDelete}
-                    className="h-8 px-3 rounded-md bg-warn text-white text-xs font-medium disabled:opacity-50"
-                  >
-                    Confirm delete
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmDelete(false)}
-                    className="text-xs text-ink-3 hover:text-ink"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setConfirmDelete(true)}
-                  className="inline-flex items-center gap-1.5 text-xs text-warn hover:underline w-fit"
-                >
-                  <Trash2 size={12} />
-                  Delete request
-                </button>
-              )}
-              {deleteError && <div className="text-2xs text-warn">{deleteError}</div>}
-            </div>
           )}
         </div>
       </div>

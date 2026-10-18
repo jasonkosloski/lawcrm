@@ -1,6 +1,6 @@
 /**
- * RecordsTab (server component): composer gating, status grouping and
- * the panel guard (a foreign ?request= id opens nothing).
+ * RecordsTab (server component): composer gating and status grouping.
+ * The request detail lives on its own page now, so the tab loads none.
  */
 import { isValidElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
@@ -21,21 +21,15 @@ vi.mock("@/lib/prisma", () => ({
 }));
 vi.mock("@/lib/queries/records-requests", () => ({
   getRecordsRequests: vi.fn(),
-  getRecordsRequestDetail: vi.fn(),
   listRecordsRequestTypes: vi.fn(async () => []),
 }));
 vi.mock("./new-request-composer", () => ({ NewRequestComposer: () => null }));
-vi.mock("./request-detail-panel", () => ({ RequestDetailPanel: () => null }));
 vi.mock("./request-row", () => ({ RequestRow: () => null }));
 
 import { currentUserHasPermission } from "@/lib/permission-check";
-import {
-  getRecordsRequestDetail,
-  getRecordsRequests,
-} from "@/lib/queries/records-requests";
+import { getRecordsRequests } from "@/lib/queries/records-requests";
 import { RecordsTab } from "./records-tab";
 import { NewRequestComposer } from "./new-request-composer";
-import { RequestDetailPanel } from "./request-detail-panel";
 import { RequestRow } from "./request-row";
 
 function findAll(node: ReactNode, type: unknown, out: unknown[] = []) {
@@ -53,7 +47,6 @@ const row = (id: string, status: string) => ({ id, status });
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(currentUserHasPermission).mockResolvedValue(true);
-  vi.mocked(getRecordsRequestDetail).mockResolvedValue(null);
   vi.mocked(getRecordsRequests).mockResolvedValue([
     row("a", "complete"),
     row("b", "draft"),
@@ -63,71 +56,47 @@ beforeEach(() => {
 
 describe("RecordsTab", () => {
   test("groups rows in status order and renders every row", async () => {
-    const el = await RecordsTab({ scope: SCOPE, requestParam: null, writable: true });
+    const el = await RecordsTab({ scope: SCOPE, writable: true });
     const rows = findAll(el, RequestRow) as { props: { row: { id: string } } }[];
     expect(rows.map((r) => r.props.row.id)).toEqual(["b", "c", "a"]);
   });
 
   test("composer needs writable and records.create", async () => {
-    const on = await RecordsTab({ scope: SCOPE, requestParam: null, writable: true });
+    const on = await RecordsTab({ scope: SCOPE, writable: true });
     expect(findAll(on, NewRequestComposer)).toHaveLength(1);
-    const ro = await RecordsTab({ scope: SCOPE, requestParam: null, writable: false });
+    const ro = await RecordsTab({ scope: SCOPE, writable: false });
     expect(findAll(ro, NewRequestComposer)).toHaveLength(0);
     vi.mocked(currentUserHasPermission).mockImplementation(
       async (k: string) => k !== "records.create"
     );
-    const denied = await RecordsTab({ scope: SCOPE, requestParam: null, writable: true });
+    const denied = await RecordsTab({ scope: SCOPE, writable: true });
     expect(findAll(denied, NewRequestComposer)).toHaveLength(0);
   });
 
-  test("a foreign ?request= id opens no panel; a known one does", async () => {
-    const none = await RecordsTab({ scope: SCOPE, requestParam: "foreign", writable: true });
-    expect(getRecordsRequestDetail).toHaveBeenCalledWith(SCOPE, "foreign", { includeFees: true });
-    expect(findAll(none, RequestDetailPanel)).toHaveLength(0);
-    vi.mocked(getRecordsRequestDetail).mockResolvedValue({ id: "a", typeId: null } as never);
-    const open = await RecordsTab({ scope: SCOPE, requestParam: "a", writable: true });
-    expect(findAll(open, RequestDetailPanel)).toHaveLength(1);
-  });
-
-  test("lead scope shows the fee section without matters.expense.create", async () => {
-    vi.mocked(getRecordsRequestDetail).mockResolvedValue({ id: "a", typeId: null } as never);
-    vi.mocked(currentUserHasPermission).mockImplementation(
-      async (k: string) => k !== "matters.expense.create"
-    );
-    const lead = await RecordsTab({
-      scope: { kind: "lead", leadId: "l1" },
-      requestParam: "a",
-      writable: true,
-    });
-    const [panel] = findAll(lead, RequestDetailPanel) as { props: { can: { fee: boolean } } }[];
-    expect(panel.props.can.fee).toBe(true);
-    const matter = await RecordsTab({ scope: SCOPE, requestParam: "a", writable: true });
-    const [mp] = findAll(matter, RequestDetailPanel) as { props: { can: { fee: boolean } } }[];
-    expect(mp.props.can.fee).toBe(false);
+  test("loads only the list: no per-request detail or lookups", async () => {
+    const { prisma } = await import("@/lib/prisma");
+    await RecordsTab({ scope: SCOPE, writable: false });
+    expect(prisma.documentTemplate.findMany).not.toHaveBeenCalled();
+    expect(prisma.document.findMany).not.toHaveBeenCalled();
   });
 
   test("matter fees are requested only with matters.expense.view", async () => {
     vi.mocked(currentUserHasPermission).mockImplementation(
       async (k: string) => k !== "matters.expense.view"
     );
-    await RecordsTab({ scope: SCOPE, requestParam: "a", writable: true });
+    await RecordsTab({ scope: SCOPE, writable: true });
     expect(getRecordsRequests).toHaveBeenLastCalledWith(SCOPE, "America/Denver", { includeFees: false });
-    expect(getRecordsRequestDetail).toHaveBeenLastCalledWith(SCOPE, "a", { includeFees: false });
     vi.mocked(currentUserHasPermission).mockResolvedValue(true);
-    await RecordsTab({ scope: SCOPE, requestParam: "a", writable: true });
+    await RecordsTab({ scope: SCOPE, writable: true });
     expect(getRecordsRequests).toHaveBeenLastCalledWith(SCOPE, "America/Denver", { includeFees: true });
-    expect(getRecordsRequestDetail).toHaveBeenLastCalledWith(SCOPE, "a", { includeFees: true });
   });
 
-  test("a lead always includes fees; the panel is keyed by request id", async () => {
+  test("a lead always includes fees", async () => {
     vi.mocked(currentUserHasPermission).mockImplementation(
       async (k: string) => k !== "matters.expense.view"
     );
-    vi.mocked(getRecordsRequestDetail).mockResolvedValue({ id: "a", typeId: null } as never);
     const lead = { kind: "lead", leadId: "l1" } as const;
-    const el = await RecordsTab({ scope: lead, requestParam: "a", writable: true });
-    expect(getRecordsRequestDetail).toHaveBeenLastCalledWith(lead, "a", { includeFees: true });
-    const [panel] = findAll(el, RequestDetailPanel) as { key: string }[];
-    expect(panel.key).toBe("a");
+    await RecordsTab({ scope: lead, writable: true });
+    expect(getRecordsRequests).toHaveBeenLastCalledWith(lead, "America/Denver", { includeFees: true });
   });
 });

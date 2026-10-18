@@ -970,7 +970,7 @@ describe("records requests search", () => {
     expect(g.hits[0]).toMatchObject({
       id,
       title: "Itemized bills",
-      href: `/intake/${leadId}/records?request=${id}`,
+      href: `/intake/${leadId}/records/${id}`,
       context: "Intake \u00b7 Test Lead",
     });
     expect(

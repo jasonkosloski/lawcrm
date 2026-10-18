@@ -14,11 +14,9 @@ import { prisma } from "@/lib/prisma";
 
 export default async function LeadRecordsPage({
   params,
-  searchParams,
 }: PageProps<"/intake/[id]/records">) {
   await requireUser();
   const { id } = await params;
-  const sp = await searchParams;
   const [lead, canView] = await Promise.all([
     prisma.lead.findUnique({
       where: { id },
@@ -28,7 +26,6 @@ export default async function LeadRecordsPage({
   ]);
   if (!lead || !canView) notFound();
   const isConverted = lead.stage === "converted";
-  const raw = Array.isArray(sp.request) ? sp.request[0] : sp.request;
 
   return (
     <div className="p-5 flex flex-col gap-5">
@@ -51,7 +48,6 @@ export default async function LeadRecordsPage({
       )}
       <RecordsTab
         scope={{ kind: "lead", leadId: id }}
-        requestParam={typeof raw === "string" ? raw : null}
         writable={!isConverted}
       />
     </div>

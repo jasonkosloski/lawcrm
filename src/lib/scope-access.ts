@@ -3,7 +3,12 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { assertMatterAccess } from "@/lib/matter-access";
-import { scopeBasePath, scopePaths, type RecordScope } from "@/lib/record-scope";
+import {
+  scopeBasePath,
+  scopePaths,
+  scopeRequestPagePattern,
+  type RecordScope,
+} from "@/lib/record-scope";
 
 /**
  * Access guard for a record scope (documents / folders that belong to
@@ -48,6 +53,8 @@ export function revalidateDocumentScope(
   const [tab, base] = scopePaths(scope, "documents");
   revalidatePath(tab, "layout");
   revalidatePath(base);
+  // Records-request pages list their linked / generated documents.
+  revalidatePath(scopeRequestPagePattern(scope), "page");
   if (documentId) {
     revalidatePath(`${scopeBasePath(scope)}/documents/${documentId}`);
   }

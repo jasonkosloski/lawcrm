@@ -30,11 +30,8 @@ import LeadRecordsPage from "./page";
 
 const has = vi.mocked(currentUserHasPermission);
 
-const call = (sp: Record<string, string> = {}) =>
-  LeadRecordsPage({
-    params: Promise.resolve({ id: "l1" }),
-    searchParams: Promise.resolve(sp),
-  } as never);
+const call = () =>
+  LeadRecordsPage({ params: Promise.resolve({ id: "l1" }) } as never);
 
 function findAll(node: ReactNode, type: unknown, out: unknown[] = []) {
   if (Array.isArray(node)) node.forEach((n) => findAll(n, type, out));
@@ -68,12 +65,11 @@ describe("LeadRecordsPage", () => {
 
   test("an open lead gets a writable tab on the lead scope", async () => {
     findUnique.mockResolvedValue({ stage: "new", convertedMatterId: null });
-    const el = await call({ request: "r1" });
+    const el = await call();
     const tabs = findAll(el, RecordsTab) as React.ReactElement<Record<string, unknown>>[];
     expect(tabs).toHaveLength(1);
     expect(tabs[0].props).toMatchObject({
       scope: { kind: "lead", leadId: "l1" },
-      requestParam: "r1",
       writable: true,
     });
     expect(hrefs(el)).toEqual([]);

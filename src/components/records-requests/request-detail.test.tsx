@@ -1,7 +1,7 @@
 /**
- * RequestDetailPanel: Mark sent posts the send action; destructive and
+ * RequestDetail: Mark sent posts the send action; destructive and
  * edit controls follow the viewer's permissions; after an upload the
- * panel offers (never auto-applies) Mark partial / Mark complete.
+ * page offers (never auto-applies) Mark partial / Mark complete.
  */
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -9,10 +9,9 @@ import userEvent from "@testing-library/user-event";
 
 const replace = vi.fn();
 const refresh = vi.fn();
+const push = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace, refresh, push: vi.fn() }),
-  usePathname: () => "/matters/m1/records",
-  useSearchParams: () => new URLSearchParams("request=r1"),
+  useRouter: () => ({ replace, refresh, push }),
 }));
 
 const sentMock = vi.fn();
@@ -40,7 +39,7 @@ vi.mock("@/components/templates/generate-from-template-dialog", () => ({
   GenerateFromTemplateDialog: () => <div data-testid="generate" />,
 }));
 
-import { RequestDetailPanel } from "./request-detail-panel";
+import { RequestDetail } from "./request-detail";
 import type { RecordsRequestDetail } from "@/lib/queries/records-requests";
 
 function detail(over: Partial<RecordsRequestDetail> = {}): RecordsRequestDetail {
@@ -75,13 +74,14 @@ function detail(over: Partial<RecordsRequestDetail> = {}): RecordsRequestDetail 
 
 const CAN = { edit: true, delete: true, upload: true, fee: true };
 
-function renderPanel(
+function renderDetail(
   d: RecordsRequestDetail,
   can: Partial<typeof CAN> = {},
-  writable = true
+  writable = true,
+  daysUntilDue: number | null = null
 ) {
   return render(
-    <RequestDetailPanel
+    <RequestDetail
       detail={d}
       scope={{ kind: "matter", matterId: "m1" }}
       types={[{ id: "t1", name: "Medical records" }]}
@@ -92,6 +92,7 @@ function renderPanel(
       linkableDocuments={[]}
       can={{ ...CAN, ...can }}
       writable={writable}
+      daysUntilDue={daysUntilDue}
     />
   );
 }
@@ -103,10 +104,10 @@ beforeEach(() => {
   deleteMock.mockResolvedValue({ ok: true });
 });
 
-describe("RequestDetailPanel", () => {
+describe("RequestDetail", () => {
   test("Mark sent posts markRecordsRequestSent with the dates", async () => {
     const user = userEvent.setup();
-    renderPanel(detail());
+    renderDetail(detail());
     await user.type(screen.getByLabelText("Sent on"), "2026-10-17");
     await user.click(screen.getByRole("button", { name: "Mark sent" }));
     await waitFor(() => expect(sentMock).toHaveBeenCalledTimes(1));
@@ -116,15 +117,15 @@ describe("RequestDetailPanel", () => {
   });
 
   test("delete is hidden without records.delete and shown with it", () => {
-    const { unmount } = renderPanel(detail(), { delete: false });
+    const { unmount } = renderDetail(detail(), { delete: false });
     expect(screen.queryByRole("button", { name: /delete request/i })).toBeNull();
     unmount();
-    renderPanel(detail());
+    renderDetail(detail());
     expect(screen.getByRole("button", { name: /delete request/i })).toBeInTheDocument();
   });
 
   test("read-only viewers see no edit, send, upload or fee controls", () => {
-    renderPanel(detail(), { edit: false, upload: false, fee: false, delete: false });
+    renderDetail(detail(), { edit: false, upload: false, fee: false, delete: false });
     expect(screen.queryByRole("button", { name: "Mark sent" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
     expect(screen.queryByText(/mock-upload/)).toBeNull();
@@ -132,7 +133,7 @@ describe("RequestDetailPanel", () => {
   });
 
   test("a converted lead (not writable) hides every mutation", () => {
-    renderPanel(detail(), {}, false);
+    renderDetail(detail(), {}, false);
     expect(screen.queryByRole("button", { name: "Mark sent" })).toBeNull();
     expect(screen.queryByRole("button", { name: /delete request/i })).toBeNull();
     expect(screen.queryByText(/mock-upload/)).toBeNull();
@@ -140,7 +141,7 @@ describe("RequestDetailPanel", () => {
 
   test("after an upload, Mark complete appears and posts the status", async () => {
     const user = userEvent.setup();
-    renderPanel(detail({ status: "sent", sentAt: new Date("2026-10-10T00:00:00Z") }));
+    renderDetail(detail({ status: "sent", sentAt: new Date("2026-10-10T00:00:00Z") }));
     expect(screen.queryByRole("button", { name: "Mark complete" })).toBeNull();
     await user.click(screen.getByText(/mock-upload r1/));
     expect(statusMock).not.toHaveBeenCalled();
@@ -151,7 +152,7 @@ describe("RequestDetailPanel", () => {
 
   test("no inline marks when the request is already terminal", async () => {
     const user = userEvent.setup();
-    renderPanel(detail({ status: "complete" }));
+    renderDetail(detail({ status: "complete" }));
     await user.click(screen.getByText(/mock-upload r1/));
     expect(screen.queryByRole("button", { name: "Mark complete" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Mark partial" })).toBeNull();
@@ -159,7 +160,7 @@ describe("RequestDetailPanel", () => {
 
   test("a draft hides Log follow-up and the post-upload marks", async () => {
     const user = userEvent.setup();
-    renderPanel(detail({ status: "draft" }));
+    renderDetail(detail({ status: "draft" }));
     expect(screen.queryByRole("button", { name: "Log follow-up" })).toBeNull();
     await user.click(screen.getByText(/mock-upload r1/));
     expect(screen.queryByRole("button", { name: "Mark partial" })).toBeNull();
@@ -167,49 +168,73 @@ describe("RequestDetailPanel", () => {
   });
 
   test("a sent request shows Log follow-up", () => {
-    renderPanel(detail({ status: "sent", sentAt: new Date("2026-10-10T00:00:00Z") }));
+    renderDetail(detail({ status: "sent", sentAt: new Date("2026-10-10T00:00:00Z") }));
     expect(screen.getByRole("button", { name: "Log follow-up" })).toBeInTheDocument();
   });
 
   test("a never-sent closed request reopens only as a draft", () => {
-    renderPanel(detail({ status: "withdrawn", sentAt: null }));
+    renderDetail(detail({ status: "withdrawn", sentAt: null }));
     expect(screen.getByRole("button", { name: "Draft" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Sent" })).toBeNull();
   });
 
   test("a sent closed request reopens to sent-or-later, never draft", () => {
-    renderPanel(detail({ status: "complete", sentAt: new Date("2026-10-10T00:00:00Z") }));
+    renderDetail(detail({ status: "complete", sentAt: new Date("2026-10-10T00:00:00Z") }));
     expect(screen.getByRole("button", { name: "Sent" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Draft" })).toBeNull();
   });
 
   test("the fee section is hidden when can.fee is false", () => {
-    renderPanel(detail(), { fee: false });
+    renderDetail(detail(), { fee: false });
     expect(screen.queryByLabelText("Fee paid on")).toBeNull();
   });
 
-  test("Tab wraps focus between the first and last control", async () => {
-    const user = userEvent.setup();
-    renderPanel(detail());
-    const dialog = screen.getByRole("dialog");
-    const focusables = Array.from(
-      dialog.querySelectorAll<HTMLElement>("a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled])")
+  test("is a page, not a modal, with a back link to the records list", () => {
+    renderDetail(detail());
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("heading", { level: 1, name: "ER chart" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /records requests/i }).getAttribute("href")
+    ).toBe("/matters/m1/records");
+  });
+
+  test("shows the due badge from daysUntilDue, hidden once closed", () => {
+    const { unmount } = renderDetail(
+      detail({ status: "sent", sentAt: new Date("2026-10-10T00:00:00Z") }),
+      {},
+      true,
+      -2
     );
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
-    last.focus();
-    await user.tab();
-    expect(document.activeElement).toBe(first);
-    first.focus();
-    await user.tab({ shift: true });
-    expect(document.activeElement).toBe(last);
+    expect(screen.getByText("2d overdue")).toBeInTheDocument();
+    unmount();
+    renderDetail(detail({ status: "complete" }), {}, true, -2);
+    expect(screen.queryByText("2d overdue")).toBeNull();
+  });
+
+  test("a successful delete navigates to the records list", async () => {
+    const user = userEvent.setup();
+    renderDetail(detail());
+    await user.click(screen.getByRole("button", { name: /delete request/i }));
+    await user.click(screen.getByRole("button", { name: "Confirm delete" }));
+    await waitFor(() => expect(deleteMock).toHaveBeenCalledWith("r1"));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/matters/m1/records"));
+  });
+
+  test("a failed delete stays put and shows the error", async () => {
+    deleteMock.mockResolvedValue({ ok: false, error: "Nope." });
+    const user = userEvent.setup();
+    renderDetail(detail());
+    await user.click(screen.getByRole("button", { name: /delete request/i }));
+    await user.click(screen.getByRole("button", { name: "Confirm delete" }));
+    expect(await screen.findByText("Nope.")).toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
   });
 
   test("a failed unlink is surfaced", async () => {
     const { unlinkRecordsDocument } = await import("@/app/actions/records-requests");
     vi.mocked(unlinkRecordsDocument).mockResolvedValueOnce({ ok: false });
     const user = userEvent.setup();
-    renderPanel(
+    renderDetail(
       detail({ documents: [{ id: "d1", name: "Letter.md", role: "request_letter", href: "/x" }] })
     );
     await user.click(screen.getByRole("button", { name: "Unlink Letter.md" }));

@@ -34,6 +34,7 @@ import {
   SAME_SCOPE_ERROR,
   scopeOf,
   scopePaths,
+  scopeRequestPagePattern,
   scopeWhere,
   type RecordScope,
 } from "@/lib/record-scope";
@@ -57,10 +58,11 @@ import {
 import type { RecordsRequestFormState } from "@/lib/records-requests/form";
 
 const STALE_MESSAGE =
-  "This request was changed by someone else since you opened it. Close this dialog and reopen it to see the latest, then re-apply your edit.";
+  "This request was changed by someone else since you opened it. Reload the page to see the latest, then re-apply your edit.";
 
 function revalidateForScope(scope: RecordScope): void {
   for (const path of scopePaths(scope, "records")) revalidatePath(path);
+  revalidatePath(scopeRequestPagePattern(scope), "page");
   revalidatePath("/");
 }
 
