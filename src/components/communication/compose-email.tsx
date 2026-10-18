@@ -38,7 +38,7 @@ import {
   SelectField,
   TextField,
 } from "@/components/matters/captures/primary-fields";
-import { RichTextEditor } from "@/components/shared/rich-text-editor";
+import { RichTextEditor } from "@/components/shared/rich-text-editor-lazy";
 import { parseAddressList } from "@/lib/google/mime";
 import { htmlToText } from "@/lib/html-to-text";
 import { getEmailSignature } from "@/lib/email-signature";

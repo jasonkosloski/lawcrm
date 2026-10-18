@@ -9,4 +9,4 @@
  * behavior.
  */
 
-export { RichTextEditor as NoteEditor } from "@/components/shared/rich-text-editor";
+export { RichTextEditor as NoteEditor } from "@/components/shared/rich-text-editor-lazy";
