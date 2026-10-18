@@ -27,7 +27,10 @@
 # it a habit.
 npm run precommit || exit 1
 
-staged_src=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^src/.*\.(ts|tsx)$')
+# `|| true`: husky runs this with `sh -e`, and grep exits 1 when nothing
+# matches — without it, a commit with no src/ .ts(x) files staged (e.g.
+# a package.json-only change) silently died here after lint.
+staged_src=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^src/.*\.(ts|tsx)$' || true)
 if [ -n "$staged_src" ]; then
   # Split on newlines only and disable globbing: Next route dirs
   # contain [brackets] and (parens).
