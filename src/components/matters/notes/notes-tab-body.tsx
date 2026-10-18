@@ -24,6 +24,7 @@ import {
   type NoteType,
 } from "@/lib/note-constants";
 import { noteToPlainText } from "@/lib/note-text";
+import type { NoteScope } from "@/lib/note-scope";
 import {
   buildTrees,
   countNodes,
@@ -38,11 +39,12 @@ type NoteNode = GenericNoteNode<NoteCardNote>;
 
 export function NotesTabBody({
   notes,
-  matterId,
+  scope,
   access,
 }: {
   notes: NoteCardNote[];
-  matterId: string;
+  /** The matter or lead these notes belong to. */
+  scope: NoteScope;
   /** Viewer's permissions, resolved on the server; gates every
    *  control on the cards below. */
   access: NoteAccess;
@@ -70,7 +72,7 @@ export function NotesTabBody({
     // Notes identity is stable per page render; no need to re-fire
     // on unrelated state changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matterId]);
+  }, [scope.kind === "matter" ? scope.matterId : scope.leadId]);
 
   const toggleType = (t: NoteType) => {
     setTypeFilter((prev) => {
@@ -222,7 +224,9 @@ export function NotesTabBody({
           <CardContent className="p-6 text-center text-xs text-ink-4">
             {anyActive
               ? "No notes match these filters."
-              : "No notes on this matter yet — write the first one above."}
+              : scope.kind === "matter"
+                ? "No notes on this matter yet — write the first one above."
+                : "No intake notes yet."}
           </CardContent>
         </Card>
       ) : (
@@ -231,7 +235,7 @@ export function NotesTabBody({
             <ThreadView
               key={tree.note.id}
               node={tree}
-              matterId={matterId}
+              scope={scope}
               access={access}
               depth={0}
             />
@@ -251,12 +255,12 @@ const MAX_INDENT_DEPTH = 6;
 
 function ThreadView({
   node,
-  matterId,
+  scope,
   access,
   depth,
 }: {
   node: NoteNode;
-  matterId: string;
+  scope: NoteScope;
   access: NoteAccess;
   depth: number;
 }) {
@@ -288,7 +292,7 @@ function ThreadView({
     <div className="flex flex-col gap-2">
       <NoteCard
         note={node.note}
-        matterId={matterId}
+        scope={scope}
         access={access}
         isReply={depth > 0}
       />
@@ -345,7 +349,7 @@ function ThreadView({
                 <ThreadView
                   key={child.note.id}
                   node={child}
-                  matterId={matterId}
+                  scope={scope}
                   access={access}
                   depth={depth + 1}
                 />

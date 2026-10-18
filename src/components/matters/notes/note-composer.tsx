@@ -13,6 +13,11 @@
  * returned a validation error, which would wipe what the user typed.
  * The result is read in the handler, so a save resets the composer
  * right there and a failure leaves everything in place.
+ *
+ * `scope` picks the write: a matter note (createNote, captures
+ * allowed) or an intake note on a lead (createLeadNote — the page
+ * passes no capture kinds, since tasks/deadlines/events need a
+ * matter).
  */
 
 "use client";
@@ -21,7 +26,7 @@ import { useState, useTransition } from "react";
 import { Pin, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
-import { createNote } from "@/app/actions/notes";
+import { createLeadNote, createNote } from "@/app/actions/notes";
 import {
   NOTE_TYPE_LABEL,
   NOTE_TYPES,
@@ -30,15 +35,16 @@ import {
   type NoteCapture,
   type NoteFormState,
 } from "@/lib/note-constants";
+import type { NoteScope } from "@/lib/note-scope";
 import { NoteEditor } from "./note-editor";
 import { CaptureStack } from "@/components/matters/captures/capture-stack";
 
 export function NoteComposer({
-  matterId,
+  scope,
   canPin = false,
   allowedKinds,
 }: {
-  matterId: string;
+  scope: NoteScope;
   /** Whether the viewer holds `notes.pin`. The Pin toggle is hidden
    *  without it — createNote rejects a pinned note from anyone who
    *  lacks the key. Defaults to false (hidden) so a caller that
@@ -77,7 +83,10 @@ export function NoteComposer({
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     startTransition(async () => {
-      const res = await createNote(matterId, noteInitialState, fd);
+      const res =
+        scope.kind === "matter"
+          ? await createNote(scope.matterId, noteInitialState, fd)
+          : await createLeadNote(scope.leadId, noteInitialState, fd);
       if (res.status === "ok") reset();
       else setState(res);
     });
@@ -115,7 +124,9 @@ export function NoteComposer({
               )}
             >
               <Plus size={14} />
-              Write a note for this matter…
+              {scope.kind === "matter"
+                ? "Write a note for this matter…"
+                : "Write an intake note…"}
             </button>
           ) : (
             <>

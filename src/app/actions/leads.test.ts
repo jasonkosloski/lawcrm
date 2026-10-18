@@ -17,6 +17,8 @@
  *     cleared — the exactly-one-of scope invariant holds), hours /
  *     amounts are untouched, and the roll-forward is activity-logged
  *     on the matter.
+ *   - conversion rolls intake notes forward the same way (threads
+ *     and reactions intact).
  *
  * The permission gate itself is stubbed (its resolution logic is
  * covered elsewhere); we assert the actions *invoke* it with the
@@ -458,6 +460,76 @@ describe("convertLeadToMatter — intake time roll-forward", () => {
     expect(
       await prisma.timeEntry.count({ where: { matterId: existingMatter.id } })
     ).toBe(1);
+  });
+});
+
+describe("convertLeadToMatter — intake notes roll-forward", () => {
+  test("re-homes lead notes onto the new matter with threads and reactions intact", async () => {
+    const { areaId, stageId } = await seedArea({});
+    const { leadId } = await seedIntakeLead();
+    const otherLead = await prisma.lead.create({
+      data: { name: "Other Lead" },
+      select: { id: true },
+    });
+    const root = await prisma.note.create({
+      data: { leadId, authorId: userId, content: "<p>Screening call</p>" },
+      select: { id: true },
+    });
+    await prisma.note.create({
+      data: {
+        leadId,
+        authorId: userId,
+        content: "<p>Follow-up</p>",
+        parentNoteId: root.id,
+      },
+    });
+    await prisma.noteReaction.create({
+      data: { userId, noteId: root.id, emoji: "👍" },
+    });
+    await prisma.note.create({
+      data: { leadId: otherLead.id, authorId: userId, content: "<p>X</p>" },
+    });
+
+    await expect(
+      convertLeadToMatter(
+        leadId,
+        { status: "idle" },
+        convertForm({ areaId, stageId })
+      )
+    ).rejects.toThrow(/^REDIRECT:\/matters\//);
+
+    const matter = await prisma.matter.findFirstOrThrow({ select: { id: true } });
+    const moved = await prisma.note.findMany({
+      where: { matterId: matter.id },
+      select: { id: true, leadId: true, parentNoteId: true },
+    });
+    // Both notes moved (exactly-one-of scope holds), the reply still
+    // threads under its root, and the reaction rode along.
+    expect(moved).toHaveLength(2);
+    for (const n of moved) expect(n.leadId).toBeNull();
+    expect(moved.find((n) => n.id !== root.id)!.parentNoteId).toBe(root.id);
+    expect(await prisma.noteReaction.count({ where: { noteId: root.id } })).toBe(1);
+    // The other lead's note stayed lead-scoped.
+    expect(await prisma.note.count({ where: { leadId: otherLead.id } })).toBe(1);
+
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { matterId: matter.id, type: "note" },
+      select: { title: true },
+    });
+    expect(log.title).toBe("2 intake notes carried forward");
+  });
+
+  test("no intake notes → no notes roll-forward log", async () => {
+    const { areaId, stageId } = await seedArea({});
+    const { leadId } = await seedIntakeLead();
+    await expect(
+      convertLeadToMatter(
+        leadId,
+        { status: "idle" },
+        convertForm({ areaId, stageId })
+      )
+    ).rejects.toThrow(/^REDIRECT:/);
+    expect(await prisma.activityLog.count({ where: { type: "note" } })).toBe(0);
   });
 });
 

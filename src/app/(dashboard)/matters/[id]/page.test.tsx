@@ -229,7 +229,7 @@ describe("MatterOverviewPage", () => {
     expect(screen.getByTestId("notes-body")).toBeTruthy();
     const props = vi.mocked(NotesTabBody).mock.calls.at(-1)![0];
     expect(props.notes).toBe(notes);
-    expect(props.matterId).toBe("m1");
+    expect(props.scope).toEqual({ kind: "matter", matterId: "m1" });
     expect(props.access).toMatchObject({ userId: "u1", canCreateNote: true });
   });
 

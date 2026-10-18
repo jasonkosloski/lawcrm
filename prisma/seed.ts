@@ -2628,7 +2628,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
     select: { id: true, matterId: true },
   });
   let replyRollupCount = 0;
-  if (rootNoteForReply) {
+  if (rootNoteForReply?.matterId) {
     const reply = await prisma.note.create({
       data: {
         matterId: rootNoteForReply.matterId,

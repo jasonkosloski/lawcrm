@@ -781,6 +781,9 @@ model Lead {
   /// Intake time logged before conversion — re-homed onto the new
   /// matter when the lead converts. See TimeEntry.leadId.
   timeEntries TimeEntry[] @relation("LeadTimeEntries")
+  /// Intake notes written before conversion — re-homed onto the new
+  /// matter when the lead converts. See Note.leadId.
+  notes       Note[]      @relation("LeadNotes")
 
   @@index([stage])
   @@index([score])
@@ -1857,9 +1860,19 @@ model Task {
 // =============================================================================
 
 /// A note on a matter — strategy memos, research notes, internal chatter.
+/// Also written on a Lead during intake (`leadId`).
 model Note {
   id        String   @id @default(cuid())
-  matterId  String
+  /// Nullable since 2026-10-18: intake notes attach to a Lead via
+  /// `leadId` before a Matter exists. App-enforced invariant (same as
+  /// TimeEntry): EXACTLY ONE of (matterId, leadId) is set. Lead
+  /// conversion re-homes lead notes onto the new matter (leadId
+  /// cleared, matterId set). Lead notes carry none of the matter-only
+  /// links below (event / task / deadline / time / email / message)
+  /// and no attached tasks, deadlines or time entries.
+  matterId  String?
+  /// Intake note on a Lead. See the matterId invariant comment.
+  leadId    String?
   authorId  String
   content   String /// Rich text content (stored as HTML or Markdown)
   type      String   @default("note") /// note | strategy | chatter | memo
@@ -1887,7 +1900,8 @@ model Note {
   emailThreadId   String?
   messengerItemId String?
 
-  matter        Matter         @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  matter        Matter?        @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  lead          Lead?          @relation("LeadNotes", fields: [leadId], references: [id], onDelete: Cascade)
   author        User           @relation(fields: [authorId], references: [id])
   parent        Note?          @relation("NoteReplies", fields: [parentNoteId], references: [id], onDelete: Cascade)
   replies       Note[]         @relation("NoteReplies")
@@ -1909,6 +1923,7 @@ model Note {
   attachedTimeEntries TimeEntry[] @relation("NoteAttachedTimeEntries")
 
   @@index([matterId])
+  @@index([leadId])
   @@index([parentNoteId])
   @@index([calendarEventId])
   @@index([taskId])

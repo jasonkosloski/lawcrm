@@ -430,8 +430,10 @@ export type EventNote = {
   authorInitials: string;
   createdAt: Date;
   /** Matter the note belongs to — needed so delete/pin server actions
-   *  can revalidate the right paths from the modal. */
-  matterId: string;
+   *  can revalidate the right paths from the modal. Nullable only
+   *  because Note.matterId is (intake notes, which are never
+   *  event-linked); event notes always carry a matter. */
+  matterId: string | null;
 };
 
 /** Shape used by the event detail modal's time entries section. */

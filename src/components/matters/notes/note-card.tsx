@@ -9,6 +9,9 @@
  * Controls are gated by the viewer's `access` (resolved on the server,
  * see `getNoteAccess`): a control the viewer can't use is hidden
  * rather than shown and bounced to the dashboard on click.
+ *
+ * On an intake (lead) note the matter-only features are hidden:
+ * attached tasks / deadlines / time and Convert to task.
  */
 
 "use client";
@@ -62,6 +65,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ConvertNoteToTaskDialog } from "@/components/conversions/convert-dialogs";
 import { EditNoteDialog } from "./edit-note-dialog";
+import type { NoteScope } from "@/lib/note-scope";
 
 export type NoteCardNote = {
   id: string;
@@ -85,7 +89,7 @@ export type NoteCardNote = {
 
 export function NoteCard({
   note,
-  matterId,
+  scope,
   access,
   /** True when this card is rendered as a reply inside a thread — the
    *  parent groups control spacing + the connector line, so the card
@@ -93,7 +97,7 @@ export function NoteCard({
   isReply,
 }: {
   note: NoteCardNote;
-  matterId: string;
+  scope: NoteScope;
   /** Required so a new caller can't forget to gate the controls. */
   access: NoteAccess;
   isReply?: boolean;
@@ -105,6 +109,9 @@ export function NoteCard({
   const canDelete = isAuthor || access.canDeleteAnyNote;
   // Same rule updateNote enforces: authors always, others need notes.edit_any.
   const canEdit = isAuthor || access.canEditAnyNote;
+  // Tasks and attachments need a matter; intake notes don't offer them.
+  const matterId = scope.kind === "matter" ? scope.matterId : null;
+  const canConvert = matterId !== null && access.canCreateTask;
   const [pending, startTransition] = useTransition();
   const [replyOpen, setReplyOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
@@ -204,7 +211,7 @@ export function NoteCard({
               </span>
             )
           )}
-          {(canEdit || access.canCreateTask || canDelete) && (
+          {(canEdit || canConvert || canDelete) && (
             <DropdownMenu>
               <DropdownMenuTrigger
                 aria-label="Note actions"
@@ -220,13 +227,13 @@ export function NoteCard({
                     Edit note
                   </DropdownMenuItem>
                 )}
-                {access.canCreateTask && (
+                {canConvert && (
                   <DropdownMenuItem onClick={() => setConvertOpen(true)}>
                     <ArrowRight size={13} />
                     Convert to task
                   </DropdownMenuItem>
                 )}
-                {(canEdit || access.canCreateTask) && canDelete && <DropdownMenuSeparator />}
+                {(canEdit || canConvert) && canDelete && <DropdownMenuSeparator />}
                 {canDelete && (
                   <DropdownMenuItem variant="destructive" onClick={onDelete}>
                     <Trash2 size={13} />
@@ -261,14 +268,16 @@ export function NoteCard({
             so any note can spawn captures — replies that are part of
             a back-and-forth conversation often produce the actionable
             follow-ups that need this. */}
-        <NoteAttachmentsSection
-          noteId={note.id}
-          matterId={matterId}
-          tasks={note.attachedTasks}
-          deadlines={note.attachedDeadlines}
-          timeEntries={note.attachedTimeEntries}
-          access={access}
-        />
+        {matterId !== null && (
+          <NoteAttachmentsSection
+            noteId={note.id}
+            matterId={matterId}
+            tasks={note.attachedTasks}
+            deadlines={note.attachedDeadlines}
+            timeEntries={note.attachedTimeEntries}
+            access={access}
+          />
+        )}
 
         {/* Reactions bar — above the reply divider so quick reacts
             are visually separated from the reply action. */}
@@ -281,7 +290,7 @@ export function NoteCard({
           <div className="mt-2 pt-2 border-t border-line">
             {replyOpen ? (
               <ReplyComposer
-                matterId={matterId}
+                scope={scope}
                 parentNoteId={note.id}
                 access={access}
                 onDone={() => setReplyOpen(false)}
@@ -306,13 +315,15 @@ export function NoteCard({
         onOpenChange={setEditOpen}
         note={{ id: note.id, type: note.type, content: note.content }}
       />
-      <ConvertNoteToTaskDialog
-      open={convertOpen}
-      onOpenChange={setConvertOpen}
-      noteId={note.id}
-      defaultTitle={convertTitleDefault}
-      defaultDescription={convertDescriptionDefault}
-    />
+      {canConvert && (
+        <ConvertNoteToTaskDialog
+          open={convertOpen}
+          onOpenChange={setConvertOpen}
+          noteId={note.id}
+          defaultTitle={convertTitleDefault}
+          defaultDescription={convertDescriptionDefault}
+        />
+      )}
     </>
   );
 }
@@ -325,7 +336,8 @@ function LinkChip({
   tz,
 }: {
   link: NoteLink;
-  matterId: string;
+  /** Null on an intake note — its only link kind is a parent reply. */
+  matterId: string | null;
   /** Viewer's profile zone - the event start is an instant. */
   tz: string;
 }) {
@@ -383,7 +395,7 @@ function LinkChip({
     </span>
   );
 
-  if (link.kind === "event") {
+  if (link.kind === "event" && matterId) {
     return (
       <Link
         href={`/matters/${matterId}/events?event=${link.id}`}
@@ -403,7 +415,7 @@ function LinkChip({
       </a>
     );
   }
-  if (link.kind === "email") {
+  if (link.kind === "email" && matterId) {
     // Drop into the matter's Communication tab with the source thread
     // selected — closes the loop on "where did this note come from?"
     return (

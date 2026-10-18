@@ -447,6 +447,19 @@ Email results are scoped to the viewer's OWN mailbox. No
   lead-scoped EXPENSES (`Expense.matterId` is still required;
   `Expense.leadId` remains an unwired placeholder) + their
   conversion roll-forward.
+- [x] **Intake notes (`/intake/[id]/notes`).** Shipped 2026-10-18
+  (ADR-044; `Note.leadId` + nullable `matterId`, exactly-one-of —
+  see SCHEMA_NOTES). New Notes tab on the lead detail page: the
+  matter Notes components (composer, threaded list, search / type /
+  pinned filters, pin, edit, delete, replies, reactions, read
+  state), switched from a `matterId` prop to a `NoteScope`. Posts
+  through `createLeadNote` (`notes.create`, + `notes.pin` when
+  pinned; refuses converted leads). Matter-only features are hidden
+  on lead notes: captures, attached tasks / deadlines / time,
+  Convert to task. Conversion carries every note (with its thread
+  and reactions) onto the new matter; a converted lead's tab links
+  to the matter's notes. Global search finds intake notes. Activity
+  rows for lead notes are firm-wide and carry no note text.
 - [x] **Status / priority / role values are scattered string
   literals.** Shipped 2026-07-07: `src/lib/constants/` is the
   canonical client-safe home — per-domain files (task-status,

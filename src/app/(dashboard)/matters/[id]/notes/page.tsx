@@ -40,7 +40,7 @@ export default async function MatterNotesPage({
     <div className="p-5 flex flex-col gap-4">
       {access.canCreateNote && (
         <NoteComposer
-          matterId={id}
+          scope={{ kind: "matter", matterId: id }}
           canPin={access.canPin}
           allowedKinds={allowedCaptureKinds(access, [
             "task",
@@ -50,7 +50,7 @@ export default async function MatterNotesPage({
           ])}
         />
       )}
-      <NotesTabBody notes={notes} matterId={id} access={access} />
+      <NotesTabBody notes={notes} scope={{ kind: "matter", matterId: id }} access={access} />
     </div>
   );
 }

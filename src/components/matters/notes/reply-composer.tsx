@@ -15,6 +15,9 @@
  *   - No pin (replies inherit thread context, pinning a reply alone
  *     would orphan it from its parent)
  *
+ * On an intake (lead) note the reply posts through createLeadNote
+ * and offers no captures — those need a matter.
+ *
  * Submit is dispatched by hand (see NoteComposer): a failed save keeps
  * the typed reply, and success is handled in the handler.
  */
@@ -23,7 +26,7 @@
 
 import { useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
-import { createNote } from "@/app/actions/notes";
+import { createLeadNote, createNote } from "@/app/actions/notes";
 import {
   allowedCaptureKinds,
   noteInitialState,
@@ -31,16 +34,17 @@ import {
   type NoteCapture,
   type NoteFormState,
 } from "@/lib/note-constants";
+import type { NoteScope } from "@/lib/note-scope";
 import { NoteEditor } from "./note-editor";
 import { CaptureStack } from "@/components/matters/captures/capture-stack";
 
 export function ReplyComposer({
-  matterId,
+  scope,
   parentNoteId,
   access,
   onDone,
 }: {
-  matterId: string;
+  scope: NoteScope;
   parentNoteId: string;
   /** Viewer's permissions - narrows the capture kinds offered. */
   access: NoteAccess;
@@ -58,7 +62,10 @@ export function ReplyComposer({
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     startTransition(async () => {
-      const res = await createNote(matterId, noteInitialState, fd);
+      const res =
+        scope.kind === "matter"
+          ? await createNote(scope.matterId, noteInitialState, fd)
+          : await createLeadNote(scope.leadId, noteInitialState, fd);
       // The parent collapses (unmounts) this form on success, so
       // there is no local state left to reset.
       if (res.status === "ok") onDone();
@@ -94,7 +101,11 @@ export function ReplyComposer({
         captures={captures}
         onChange={setCaptures}
         errors={attachmentErrors}
-        allowedKinds={allowedCaptureKinds(access, ["task", "deadline", "time"])}
+        allowedKinds={
+          scope.kind === "matter"
+            ? allowedCaptureKinds(access, ["task", "deadline", "time"])
+            : []
+        }
       />
 
       <div className="flex items-center justify-end gap-2">

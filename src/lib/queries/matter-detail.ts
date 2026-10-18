@@ -675,9 +675,24 @@ export async function getMatterNotes(
   matterId: string,
   options: { pinnedOnly?: boolean } = {}
 ): Promise<NoteRow[]> {
+  return getNoteRows({
+    matterId,
+    ...(options.pinnedOnly ? { isPinned: true } : {}),
+  });
+}
+
+/** Intake notes on a lead (/intake/[id]/notes) — same row shape as
+ *  matter notes. Lead notes carry no entity links or attachments, so
+ *  `link` is only ever a parent reply link and the attached lists are
+ *  empty. */
+export async function getLeadNotes(leadId: string): Promise<NoteRow[]> {
+  return getNoteRows({ leadId });
+}
+
+async function getNoteRows(where: Prisma.NoteWhereInput): Promise<NoteRow[]> {
   const userId = await getCurrentUserId();
   const rows = await prisma.note.findMany({
-    where: { matterId, ...(options.pinnedOnly ? { isPinned: true } : {}) },
+    where,
     include: {
       author: { select: { name: true, initials: true } },
       parent: { select: { id: true, content: true } },

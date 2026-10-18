@@ -84,19 +84,19 @@ async function expand() {
 
 describe("NoteComposer pin toggle", () => {
   test("hidden by default (fails closed)", async () => {
-    render(<NoteComposer matterId="m1" />);
+    render(<NoteComposer scope={{ kind: "matter", matterId: "m1" }} />);
     await expand();
     expect(screen.queryByRole("button", { name: /^pin$/i })).toBeNull();
   });
 
   test("hidden when the viewer lacks notes.pin", async () => {
-    render(<NoteComposer matterId="m1" canPin={false} />);
+    render(<NoteComposer scope={{ kind: "matter", matterId: "m1" }} canPin={false} />);
     await expand();
     expect(screen.queryByRole("button", { name: /^pin$/i })).toBeNull();
   });
 
   test("shown for notes.pin holders", async () => {
-    render(<NoteComposer matterId="m1" canPin />);
+    render(<NoteComposer scope={{ kind: "matter", matterId: "m1" }} canPin />);
     await expand();
     expect(screen.getByRole("button", { name: /^pin$/i })).toBeTruthy();
   });
@@ -104,7 +104,7 @@ describe("NoteComposer pin toggle", () => {
 
 describe("NoteComposer capture kinds", () => {
   test("passes the viewer's allowed kinds to the stack", async () => {
-    render(<NoteComposer matterId="m1" allowedKinds={["task", "time"]} />);
+    render(<NoteComposer scope={{ kind: "matter", matterId: "m1" }} allowedKinds={["task", "time"]} />);
     await expand();
     expect(screen.getByTestId("stack").dataset.kinds).toBe("task,time");
   });
@@ -112,7 +112,7 @@ describe("NoteComposer capture kinds", () => {
 
 describe("NoteComposer type pills", () => {
   test("expose the selected type with aria-pressed", async () => {
-    render(<NoteComposer matterId="m1" />);
+    render(<NoteComposer scope={{ kind: "matter", matterId: "m1" }} />);
     const user = await expand();
     expect(screen.getByRole("button", { name: "Note" })).toHaveAttribute(
       "aria-pressed",
@@ -132,7 +132,7 @@ describe("NoteComposer type pills", () => {
 
 describe("NoteComposer Cancel", () => {
   test("resets type, pin and queued captures - none leak into the next note", async () => {
-    render(<NoteComposer matterId="m1" canPin />);
+    render(<NoteComposer scope={{ kind: "matter", matterId: "m1" }} canPin />);
     const user = await expand();
 
     await user.type(screen.getByTestId("editor"), "draft");
@@ -161,7 +161,7 @@ describe("NoteComposer Cancel", () => {
 
 describe("NoteComposer submit", () => {
   test("posts content, type, pin and captures; resets and collapses on success", async () => {
-    render(<NoteComposer matterId="m9" canPin />);
+    render(<NoteComposer scope={{ kind: "matter", matterId: "m9" }} canPin />);
     const user = await expand();
     await user.type(screen.getByTestId("editor"), "<p>Hello</p>");
     await user.click(screen.getByRole("button", { name: "Memo" }));
@@ -188,7 +188,7 @@ describe("NoteComposer submit", () => {
       status: "error",
       errors: { content: ["You don't have permission to log time."] },
     });
-    render(<NoteComposer matterId="m1" />);
+    render(<NoteComposer scope={{ kind: "matter", matterId: "m1" }} />);
     const user = await expand();
     await user.type(screen.getByTestId("editor"), "important memo");
     await user.click(screen.getByRole("button", { name: /save note/i }));
@@ -207,7 +207,7 @@ describe("NoteComposer submit", () => {
       status: "error",
       errors: { content: ["Nope"] },
     });
-    render(<NoteComposer matterId="m1" />);
+    render(<NoteComposer scope={{ kind: "matter", matterId: "m1" }} />);
     const user = await expand();
     await user.type(screen.getByTestId("editor"), "x");
     await user.click(screen.getByRole("button", { name: /save note/i }));

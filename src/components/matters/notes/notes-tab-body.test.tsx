@@ -45,7 +45,7 @@ describe("NotesTabBody search", () => {
     const user = userEvent.setup();
     render(
       <NotesTabBody
-        matterId="m1"
+        scope={{ kind: "matter", matterId: "m1" }}
         access={NO_NOTE_ACCESS}
         notes={[
           note("a", "<p>Call Smith &amp; Jones tomorrow</p>"),
@@ -62,7 +62,7 @@ describe("NotesTabBody search", () => {
     const user = userEvent.setup();
     render(
       <NotesTabBody
-        matterId="m1"
+        scope={{ kind: "matter", matterId: "m1" }}
         access={NO_NOTE_ACCESS}
         notes={[note("a", "<p>if x &lt; 5 then stop</p>")]}
       />
@@ -75,7 +75,7 @@ describe("NotesTabBody search", () => {
     const user = userEvent.setup();
     render(
       <NotesTabBody
-        matterId="m1"
+        scope={{ kind: "matter", matterId: "m1" }}
         access={NO_NOTE_ACCESS}
         notes={[note("a", "<p>x</p>")]}
       />

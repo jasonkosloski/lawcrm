@@ -405,7 +405,12 @@ export async function globalSearch(
     // hits are found. `total` is the SQL count minus the markup-only
     // rows we scanned: exact when the scan reached the end, an upper
     // bound otherwise — gone once FTS indexes the stripped text.
-    const where = { ...accessRel, OR: ciHtml.map((c) => ({ content: c })) };
+    // Note.matter is optional (intake notes hang off a Lead), so the
+    // optional-relation clause: lead notes stay visible, matter notes
+    // must be on an accessible matter.
+    const where = {
+      AND: [...accessOpt, { OR: ciHtml.map((c) => ({ content: c })) }],
+    };
     const total = await prisma.note.count({ where });
     const hits: SearchHit[] = [];
     let markupOnly = 0;
@@ -417,6 +422,8 @@ export async function globalSearch(
           content: true,
           matterId: true,
           matter: { select: { name: true } },
+          leadId: true,
+          lead: { select: { name: true } },
         },
         orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
         skip: page * NOTE_SCAN_PAGE,
@@ -434,8 +441,16 @@ export async function globalSearch(
           id: n.id,
           title: clip(text),
           snippet: makeSnippet(text, q),
-          href: `/matters/${n.matterId}/notes`,
-          context: n.matter.name,
+          // Intake notes route to the lead's Notes tab (time-entry
+          // hits above use the same fallback chain).
+          href: n.matterId
+            ? `/matters/${n.matterId}/notes`
+            : n.leadId
+              ? `/intake/${n.leadId}/notes`
+              : `/search`,
+          context:
+            n.matter?.name ??
+            (n.lead ? `Intake · ${n.lead.name}` : "Intake"),
         });
       }
       if (hits.length >= take || rows.length < NOTE_SCAN_PAGE) break;

@@ -18,7 +18,8 @@
  *     create path in matters.ts. Intake time entries logged on the
  *     lead (TimeEntry.leadId) are re-homed onto the new matter inside
  *     the same transaction (matterId set, leadId cleared) and the
- *     roll-forward is activity-logged on the matter.
+ *     roll-forward is activity-logged on the matter. Intake notes
+ *     (Note.leadId) re-home the same way, threads and reactions intact.
  *   - declineLead: capture an optional reason, mark stage "declined".
  *     Gated by intake.decline + written to the ActivityLog, matching
  *     the conflict-check siblings — declining removes a lead from the
@@ -476,6 +477,13 @@ export async function convertLeadToMatter(
       where: { leadId },
       data: { matterId: matter.id, leadId: null },
     });
+    // Intake notes roll forward the same way (Lead→Note cascades
+    // too). Replies, reads and reactions key off the note id, so
+    // threads arrive on the matter's Notes tab intact.
+    const carriedNotes = await tx.note.updateMany({
+      where: { leadId },
+      data: { matterId: matter.id, leadId: null },
+    });
 
     // Mark lead converted so it leaves the active intake queue.
     await tx.lead.update({
@@ -497,7 +505,12 @@ export async function convertLeadToMatter(
       tz,
     });
 
-    return { matterId: matter.id, carriedCount: carried.count, defaults };
+    return {
+      matterId: matter.id,
+      carriedCount: carried.count,
+      carriedNoteCount: carriedNotes.count,
+      defaults,
+    };
   }).catch((err: unknown) => {
     // Lost the claim race — surfaced below as a form error. Anything
     // else is a real failure and must propagate.
@@ -519,7 +532,7 @@ export async function convertLeadToMatter(
     return { status: "error", errors: { _form: [message] } };
   }
 
-  const { matterId, carriedCount, defaults } = result;
+  const { matterId, carriedCount, carriedNoteCount, defaults } = result;
 
   // The matter's timeline starts with where it came from.
   await logActivity({
@@ -564,6 +577,15 @@ export async function convertLeadToMatter(
       type: "time_entry",
       title: `${carriedCount} intake time ${carriedCount === 1 ? "entry" : "entries"} carried forward`,
       detail: `Logged on the lead before conversion · ${lead.name}`,
+    });
+  }
+  if (carriedNoteCount > 0) {
+    await logActivity({
+      matterId,
+      userId,
+      type: "note",
+      title: `${carriedNoteCount} intake ${carriedNoteCount === 1 ? "note" : "notes"} carried forward`,
+      detail: `Written on the lead before conversion · ${lead.name}`,
     });
   }
 

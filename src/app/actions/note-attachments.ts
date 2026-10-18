@@ -48,7 +48,8 @@ import {
 import { CAPTURE_KIND_LABEL, type CaptureKind } from "@/lib/note-constants";
 
 /** Resolve the matter the note belongs to. Used by every attach
- *  action since attached children inherit the note's matter. Throws
+ *  action since attached children inherit the note's matter. Null
+ *  for a missing note or an intake (lead) note. Throws
  *  through to the form-state error path so the UI can recover. */
 async function resolveNoteMatter(noteId: string): Promise<{
   matterId: string;
@@ -57,7 +58,9 @@ async function resolveNoteMatter(noteId: string): Promise<{
     where: { id: noteId },
     select: { matterId: true },
   });
-  if (!note) return null;
+  // Intake (lead) notes have no matter, so nothing can attach to them
+  // — reported the same as a missing note; the lead UI never offers it.
+  if (!note?.matterId) return null;
   return { matterId: note.matterId };
 }
 

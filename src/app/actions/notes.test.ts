@@ -18,6 +18,12 @@
  *     accumulate orphans. Evidence for the "NoteRead table will
  *     grow unbounded" roadmap entry being covered by the schema.
  *
+ *   - createLeadNote (intake notes): writes a lead-scoped note
+ *     (leadId set, matterId null), threads replies only under the
+ *     same lead, refuses captures / entity links, pins only with
+ *     notes.pin, and refuses a converted lead. Pin / edit / delete /
+ *     react work on lead notes and revalidate the intake surfaces.
+ *
  * Auth + permission gates are stubbed; the gate itself is covered in
  * `permission-check.integration.test.ts`.
  */
@@ -57,7 +63,9 @@ import {
 } from "@/lib/permission-check";
 import { pushEventToGoogle } from "@/lib/google/google-calendar-push";
 import { prisma } from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
 import {
+  createLeadNote,
   createNote,
   deleteNote,
   markMatterNotesRead,
@@ -69,6 +77,7 @@ import { noteInitialState } from "@/lib/note-constants";
 import {
   resetDb,
   seedFirm,
+  seedLead,
   seedMatter,
   seedPracticeArea,
   seedUser,
@@ -778,5 +787,194 @@ describe("toggleNoteReaction", () => {
     expect(
       await prisma.noteReaction.count({ where: { noteId, userId } })
     ).toBeLessThanOrEqual(1);
+  });
+});
+
+// ── Intake (lead) notes ─────────────────────────────────────────────────
+
+describe("createLeadNote", () => {
+  test("writes a lead-scoped note the author has read, and revalidates intake", async () => {
+    const { leadId } = await seedLead();
+    const res = await createLeadNote(
+      leadId,
+      noteInitialState,
+      noteForm({ type: "strategy" })
+    );
+    expect(res.status).toBe("ok");
+    expect(vi.mocked(requirePermission)).toHaveBeenCalledWith("notes.create");
+    const note = await prisma.note.findFirstOrThrow({
+      include: { reads: true },
+    });
+    expect(note.leadId).toBe(leadId);
+    expect(note.matterId).toBeNull();
+    expect(note.type).toBe("strategy");
+    expect(note.reads.map((r) => r.userId)).toEqual([userId]);
+    expect(vi.mocked(revalidatePath)).toHaveBeenCalledWith(
+      `/intake/${leadId}/notes`
+    );
+    // Firm-wide activity row with no note text (no matter team to
+    // scope the feed to).
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { type: "note" },
+    });
+    expect(log.matterId).toBeNull();
+    expect(log.title).toBe("Intake note added");
+    expect(log.detail).toBeNull();
+  });
+
+  test("a reply threads only under a note on the same lead", async () => {
+    const { leadId } = await seedLead();
+    const { leadId: otherLeadId } = await seedLead({ name: "Other" });
+    const parent = await prisma.note.create({
+      data: { leadId, authorId: userId, content: "<p>Root</p>" },
+      select: { id: true },
+    });
+    const elsewhere = await prisma.note.create({
+      data: { leadId: otherLeadId, authorId: userId, content: "<p>X</p>" },
+      select: { id: true },
+    });
+    const matterNote = await seedNote();
+
+    for (const bad of [elsewhere.id, matterNote, "ghost"]) {
+      const res = await createLeadNote(
+        leadId,
+        noteInitialState,
+        noteForm({ parentNoteId: bad })
+      );
+      expect(res.status).toBe("error");
+      expect(res.errors?.content?.[0]).toMatch(/parent note not found/i);
+    }
+
+    const ok = await createLeadNote(
+      leadId,
+      noteInitialState,
+      noteForm({ parentNoteId: parent.id })
+    );
+    expect(ok.status).toBe("ok");
+    expect(
+      await prisma.note.count({ where: { parentNoteId: parent.id, leadId } })
+    ).toBe(1);
+  });
+
+  test("a matter note can't reply to a lead note", async () => {
+    const { leadId } = await seedLead();
+    const leadNote = await prisma.note.create({
+      data: { leadId, authorId: userId, content: "<p>Root</p>" },
+      select: { id: true },
+    });
+    const res = await createNote(
+      matterId,
+      noteInitialState,
+      noteForm({ parentNoteId: leadNote.id })
+    );
+    expect(res.status).toBe("error");
+  });
+
+  test("captures and entity links are refused, nothing written", async () => {
+    const { leadId } = await seedLead();
+    const withCapture = await createLeadNote(
+      leadId,
+      noteInitialState,
+      noteForm({
+        attachments: JSON.stringify([
+          { tempId: "t1", kind: "task", title: "Call back" },
+        ]),
+      })
+    );
+    expect(withCapture.status).toBe("error");
+    const withLink = await createLeadNote(
+      leadId,
+      noteInitialState,
+      noteForm({ taskId: await seedTaskOn(matterId) })
+    );
+    expect(withLink.status).toBe("error");
+    expect(await prisma.note.count()).toBe(0);
+    expect(await prisma.task.count()).toBe(1); // only the seeded one
+  });
+
+  test("pinning needs notes.pin", async () => {
+    const { leadId } = await seedLead();
+    denyPermissions("notes.pin");
+    const denied = await createLeadNote(
+      leadId,
+      noteInitialState,
+      noteForm({ isPinned: "on" })
+    );
+    expect(denied.status).toBe("error");
+    expect(denied.errors?.content?.[0]).toMatch(/pin notes/i);
+    expect(await prisma.note.count()).toBe(0);
+
+    vi.mocked(requirePermission).mockReset().mockResolvedValue("test-user");
+    vi.mocked(currentUserHasPermission).mockReset().mockResolvedValue(true);
+    const ok = await createLeadNote(
+      leadId,
+      noteInitialState,
+      noteForm({ isPinned: "on" })
+    );
+    expect(ok.status).toBe("ok");
+    expect((await prisma.note.findFirstOrThrow()).isPinned).toBe(true);
+  });
+
+  test("empty content, a missing lead, and a converted lead are form errors", async () => {
+    const { leadId } = await seedLead();
+    const empty = await createLeadNote(
+      leadId,
+      noteInitialState,
+      noteForm({ content: "<p></p>" })
+    );
+    expect(empty.errors?.content?.[0]).toMatch(/can't be empty/i);
+
+    const missing = await createLeadNote("ghost", noteInitialState, noteForm({}));
+    expect(missing.errors?.content?.[0]).toMatch(/no longer exists/i);
+
+    await prisma.lead.update({
+      where: { id: leadId },
+      data: { stage: "converted" },
+    });
+    const converted = await createLeadNote(leadId, noteInitialState, noteForm({}));
+    expect(converted.errors?.content?.[0]).toMatch(/already converted/i);
+    expect(await prisma.note.count()).toBe(0);
+  });
+});
+
+describe("lead notes — pin / edit / react / read / delete", () => {
+  test("every follow-up action works on a lead note and revalidates intake", async () => {
+    const { leadId } = await seedLead();
+    const { id: noteId } = await prisma.note.create({
+      data: { leadId, authorId: userId, content: "<p>Intake call</p>" },
+      select: { id: true },
+    });
+    const intakePath = `/intake/${leadId}/notes`;
+
+    expect((await toggleNotePin(noteId)).ok).toBe(true);
+    expect(
+      (await prisma.note.findUniqueOrThrow({ where: { id: noteId } })).isPinned
+    ).toBe(true);
+
+    expect(
+      (await updateNote(noteId, noteInitialState, noteForm({ content: "<p>Edited</p>" })))
+        .status
+    ).toBe("ok");
+    expect(
+      (await prisma.note.findUniqueOrThrow({ where: { id: noteId } })).content
+    ).toBe("<p>Edited</p>");
+
+    expect((await toggleNoteReaction(noteId, "👍")).ok).toBe(true);
+    expect((await markMatterNotesRead([noteId])).ok).toBe(true);
+    expect(await prisma.noteRead.count({ where: { noteId } })).toBe(1);
+
+    expect((await deleteNote(noteId)).ok).toBe(true);
+    expect(await prisma.note.count()).toBe(0);
+
+    const paths = vi.mocked(revalidatePath).mock.calls.map((c) => c[0]);
+    expect(paths.filter((p) => p === intakePath)).toHaveLength(4);
+    expect(paths.some((p) => p.startsWith("/matters/"))).toBe(false);
+    // No note text leaks into the firm-wide activity rows.
+    const logs = await prisma.activityLog.findMany({ where: { type: "note" } });
+    expect(logs.length).toBeGreaterThan(0);
+    for (const l of logs) {
+      expect(l.matterId).toBeNull();
+      expect(l.detail).toBeNull();
+    }
   });
 });

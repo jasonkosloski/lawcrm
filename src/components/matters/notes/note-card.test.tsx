@@ -61,6 +61,7 @@ vi.mock("@/components/conversions/convert-dialogs", () => ({
 import { deleteNote, toggleNotePin, updateNote } from "@/app/actions/notes";
 import { UserTimeZoneProvider } from "@/components/user-time-zone";
 import { NO_NOTE_ACCESS, type NoteAccess } from "@/lib/note-constants";
+import type { NoteScope } from "@/lib/note-scope";
 import { NoteCard, type NoteCardNote } from "./note-card";
 
 const FULL: NoteAccess = {
@@ -97,10 +98,14 @@ const note = (over: Partial<NoteCardNote> = {}): NoteCardNote => ({
   ...over,
 });
 
-function renderCard(n: NoteCardNote, access: NoteAccess) {
+function renderCard(
+  n: NoteCardNote,
+  access: NoteAccess,
+  scope: NoteScope = { kind: "matter", matterId: "m1" }
+) {
   return render(
     <UserTimeZoneProvider timeZone="America/Denver">
-      <NoteCard note={n} matterId="m1" access={access} />
+      <NoteCard note={n} scope={scope} access={access} />
     </UserTimeZoneProvider>
   );
 }
@@ -177,6 +182,30 @@ describe("NoteCard gating", () => {
     unmount();
     renderCard(note(), { ...FULL, canCreateNote: false });
     expect(screen.queryByRole("button", { name: /^reply$/i })).toBeNull();
+  });
+});
+
+describe("NoteCard on an intake (lead) note", () => {
+  test("hides the matter-only features: attachments and Convert to task", async () => {
+    const user = userEvent.setup();
+    renderCard(note(), FULL, { kind: "lead", leadId: "l1" });
+    expect(screen.queryByTestId("attachments")).toBeNull();
+    expect(screen.queryByTestId("convert")).toBeNull();
+    await user.click(screen.getByRole("button", { name: /note actions/i }));
+    expect(await screen.findByText("Edit note")).toBeInTheDocument();
+    expect(screen.queryByText("Convert to task")).toBeNull();
+    // Pin and reply still work on intake notes.
+    expect(screen.getByRole("button", { name: /pin note/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^reply$/i })).toBeInTheDocument();
+  });
+
+  test("a viewer whose only extra key is tasks.create gets no menu on someone else's lead note", () => {
+    renderCard(
+      note({ authorId: "other" }),
+      { ...NO_NOTE_ACCESS, userId: "me", canCreateTask: true },
+      { kind: "lead", leadId: "l1" }
+    );
+    expect(screen.queryByRole("button", { name: /note actions/i })).toBeNull();
   });
 });
 

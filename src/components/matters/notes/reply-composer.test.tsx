@@ -13,9 +13,14 @@ import { NO_NOTE_ACCESS, type NoteFormState } from "@/lib/note-constants";
 const createNote = vi.fn<
   (matterId: string, prev: NoteFormState, fd: FormData) => Promise<NoteFormState>
 >();
+const createLeadNote = vi.fn<
+  (leadId: string, prev: NoteFormState, fd: FormData) => Promise<NoteFormState>
+>();
 vi.mock("@/app/actions/notes", () => ({
   createNote: (matterId: string, prev: NoteFormState, fd: FormData) =>
     createNote(matterId, prev, fd),
+  createLeadNote: (leadId: string, prev: NoteFormState, fd: FormData) =>
+    createLeadNote(leadId, prev, fd),
 }));
 vi.mock("./note-editor", () => ({
   NoteEditor: ({ onChange }: { onChange: (html: string) => void }) => (
@@ -44,13 +49,15 @@ const access = {
 beforeEach(() => {
   createNote.mockReset();
   createNote.mockResolvedValue({ status: "ok" });
+  createLeadNote.mockReset();
+  createLeadNote.mockResolvedValue({ status: "ok" });
 });
 
 describe("ReplyComposer", () => {
   test("offers only the actionable kinds the viewer may create", () => {
     render(
       <ReplyComposer
-        matterId="m1"
+        scope={{ kind: "matter", matterId: "m1" }}
         parentNoteId="p1"
         access={access}
         onDone={vi.fn()}
@@ -65,7 +72,7 @@ describe("ReplyComposer", () => {
     const user = userEvent.setup();
     render(
       <ReplyComposer
-        matterId="m7"
+        scope={{ kind: "matter", matterId: "m7" }}
         parentNoteId="p1"
         access={access}
         onDone={onDone}
@@ -89,7 +96,7 @@ describe("ReplyComposer", () => {
     const user = userEvent.setup();
     render(
       <ReplyComposer
-        matterId="m1"
+        scope={{ kind: "matter", matterId: "m1" }}
         parentNoteId="p1"
         access={access}
         onDone={onDone}
@@ -104,5 +111,26 @@ describe("ReplyComposer", () => {
     expect((screen.getByTestId("editor") as HTMLTextAreaElement).value).toBe(
       "my reply"
     );
+  });
+
+  test("on an intake note: posts through createLeadNote and offers no captures", async () => {
+    const onDone = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <ReplyComposer
+        scope={{ kind: "lead", leadId: "l3" }}
+        parentNoteId="p1"
+        access={access}
+        onDone={onDone}
+      />
+    );
+    expect(screen.getByTestId("stack").dataset.kinds).toBe("");
+    await user.type(screen.getByTestId("editor"), "called back");
+    await user.click(screen.getByRole("button", { name: /^reply$/i }));
+    await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
+    expect(createNote).not.toHaveBeenCalled();
+    const [leadId, , fd] = createLeadNote.mock.calls[0];
+    expect(leadId).toBe("l3");
+    expect(fd.get("parentNoteId")).toBe("p1");
   });
 });

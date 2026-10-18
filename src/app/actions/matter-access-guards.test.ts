@@ -34,6 +34,8 @@ const ALLOWLIST: Record<string, string> = {
     "Creates a brand-new matter (nothing exists to be walled off); the creator is added to its team.",
   "leads.ts:convertLeadToMatter":
     "Always creates a NEW matter from a lead; it never attaches to an existing one.",
+  "notes.ts:createLeadNote":
+    "Writes a lead-scoped note (no matter). It reads taskId / deadlineId / etc. only to refuse them, and a reply's parent must be on the same lead.",
   "contacts.ts:mergeContacts":
     "Firm-wide contact directory operation (contacts.merge); re-points party rows across matters by contact id, not a matter-scoped write.",
   "email-send.ts:sendEmail":

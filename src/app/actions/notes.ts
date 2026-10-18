@@ -8,11 +8,18 @@
  * The sanitized string is what actually hits the database, so reads
  * can render it with dangerouslySetInnerHTML without re-sanitizing.
  *
+ * Scope: a note belongs to EXACTLY ONE of a matter or a lead (see
+ * src/lib/note-scope.ts). `createNote` writes matter notes,
+ * `createLeadNote` intake notes; every other action works on either
+ * scope and revalidates the matching surface.
+ *
  * Auth:
  *   - createNote: `notes.create`, PLUS the create key of every
  *     capture kind it carries (tasks/events/deadlines/time_entries
  *     .create) and `notes.pin` when the note or a sibling note is
  *     pinned — all checked before any write
+ *   - createLeadNote: `notes.create` (+ `notes.pin` when pinned). No
+ *     captures — tasks, deadlines and events need a matter
  *   - toggleNotePin: `notes.pin` (no author bypass — pinning is a
  *     firm-wide signal, usually reserved for case leads)
  *   - deleteNote: author bypass + `notes.delete_any` for crossing
@@ -32,7 +39,11 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma, type Tx } from "@/lib/prisma";
-import { assertChildMatterAccess, assertMatterAccess } from "@/lib/matter-access";
+import {
+  assertChildMatterAccess,
+  assertMatterAccess,
+  assertOptionalMatterAccess,
+} from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 import {
   currentUserHasPermission,
@@ -56,6 +67,12 @@ import {
 } from "@/lib/note-captures";
 import { noteToPlainText } from "@/lib/note-text";
 import { logActivity } from "@/lib/activity-log";
+import {
+  notePathsToRevalidate,
+  noteScopeOf,
+  type NoteScope,
+} from "@/lib/note-scope";
+import type { LeadStage } from "@/lib/constants/lead-stage";
 import {
   isEffectivelyEmpty,
   sanitizeUserHtml as sanitize,
@@ -82,6 +99,23 @@ const noteSchema = z.object({
 // Capture schemas + types live in src/lib/capture-schemas.ts so both
 // this action and the Task/Event/Deadline/Time composers' actions
 // can share a single parse + validation path.
+
+// Typed against the centralized LeadStage union (time-entries.ts
+// pattern) so a typo can't let post-conversion intake notes through.
+const CONVERTED = "converted" satisfies LeadStage;
+
+function revalidateNoteScope(
+  scope: NoteScope,
+  opts: { calendarEventId?: string | null } = {}
+): void {
+  for (const path of notePathsToRevalidate(scope, opts)) revalidatePath(path);
+}
+
+/** Activity-log matterId for a note: lead notes have no matter, so
+ *  their rows are firm-wide (like intake time). */
+function activityMatterId(scope: NoteScope): string | null {
+  return scope.kind === "matter" ? scope.matterId : null;
+}
 
 /** Short plain-text preview of note HTML for activity-log entries
  *  (entities decoded, so "Smith &amp; Jones" reads "Smith & Jones"). */
@@ -326,6 +360,137 @@ export async function createNote(
   return { status: "ok" };
 }
 
+/** Intake note on a lead (/intake/[id]/notes). Same content / type /
+ *  pin / reply fields as createNote, but no captures: tasks,
+ *  deadlines and events need a matter. Refused once the lead has
+ *  converted — its notes moved to the matter, so write there. */
+export async function createLeadNote(
+  leadId: string,
+  _prev: NoteFormState,
+  formData: FormData
+): Promise<NoteFormState> {
+  await requirePermission("notes.create");
+  const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
+  const parsed = noteSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      status: "error",
+      errors: parsed.error.flatten().fieldErrors,
+      values: raw,
+    };
+  }
+
+  const clean = sanitize(parsed.data.content);
+  if (isEffectivelyEmpty(clean)) {
+    return {
+      status: "error",
+      errors: { content: ["Note can't be empty"] },
+      values: raw,
+    };
+  }
+
+  // The composer never sends captures or entity links for a lead; a
+  // request that does is refused rather than silently dropping them.
+  const d = parsed.data;
+  if (
+    d.attachments !== "[]" ||
+    d.calendarEventId ||
+    d.taskId ||
+    d.deadlineId ||
+    d.timeEntryId
+  ) {
+    return {
+      status: "error",
+      errors: {
+        content: [
+          "Intake notes can't carry tasks, deadlines, events or time — add those once the lead is a matter.",
+        ],
+      },
+      values: raw,
+    };
+  }
+
+  const pinRequested = d.isPinned === "on";
+  if (pinRequested && !(await currentUserHasPermission("notes.pin"))) {
+    return {
+      status: "error",
+      errors: {
+        content: ["You don't have permission to pin notes. Turn off Pin and try again."],
+      },
+      values: raw,
+    };
+  }
+  if (pinRequested) await requirePermission("notes.pin");
+
+  const lead = await prisma.lead.findUnique({
+    where: { id: leadId },
+    select: { id: true, stage: true },
+  });
+  if (!lead) {
+    return {
+      status: "error",
+      errors: { content: ["Lead no longer exists"] },
+      values: raw,
+    };
+  }
+  if (lead.stage === CONVERTED) {
+    return {
+      status: "error",
+      errors: {
+        content: [
+          "Lead is already converted — its notes moved to the matter. Write this note there.",
+        ],
+      },
+      values: raw,
+    };
+  }
+
+  // A reply must thread under a note on this same lead.
+  if (d.parentNoteId) {
+    const parent = await prisma.note.findUnique({
+      where: { id: d.parentNoteId },
+      select: { leadId: true },
+    });
+    if (!parent || parent.leadId !== leadId) {
+      return {
+        status: "error",
+        errors: { content: ["Parent note not found on this lead"] },
+        values: raw,
+      };
+    }
+  }
+
+  const currentUserId = await getCurrentUserId();
+  await prisma.$transaction(async (tx) => {
+    const created = await tx.note.create({
+      data: {
+        leadId,
+        authorId: currentUserId,
+        content: clean,
+        type: d.type,
+        isPinned: pinRequested,
+        parentNoteId: d.parentNoteId || null,
+      },
+      select: { id: true },
+    });
+    await tx.noteRead.create({
+      data: { userId: currentUserId, noteId: created.id },
+    });
+  });
+
+  revalidateNoteScope({ kind: "lead", leadId });
+  // Lead-scoped: no matter to hang the row on, and no matter team to
+  // scope the feed to — so no note text in the detail (intake-time
+  // pattern).
+  await logActivity({
+    matterId: null,
+    userId: currentUserId,
+    type: "note",
+    title: d.parentNoteId ? "Intake reply added" : "Intake note added",
+  });
+  return { status: "ok" };
+}
+
 // ── Toggle pin ──────────────────────────────────────────────────────────
 
 export async function toggleNotePin(
@@ -339,29 +504,27 @@ export async function toggleNotePin(
       id: true,
       isPinned: true,
       matterId: true,
+      leadId: true,
       calendarEventId: true,
       content: true,
     },
   });
   if (!note) return { ok: false, error: "Note not found" };
+  const scope = noteScopeOf(note);
 
   await prisma.note.update({
     where: { id: noteId },
     data: { isPinned: !note.isPinned },
   });
 
-  revalidatePath(`/matters/${note.matterId}/notes`);
-  revalidatePath(`/matters/${note.matterId}`);
-  if (note.calendarEventId) {
-    revalidatePath(`/matters/${note.matterId}/events`);
-    revalidatePath(`/calendar`);
-  }
+  revalidateNoteScope(scope, note);
   await logActivity({
-    matterId: note.matterId,
+    matterId: activityMatterId(scope),
     userId: actorId,
     type: "note",
     title: note.isPinned ? "Note unpinned" : "Note pinned",
-    detail: notePreview(note.content),
+    // Lead notes stay out of the firm-wide feed's text (see createLeadNote).
+    detail: scope.kind === "matter" ? notePreview(note.content) : null,
   });
   return { ok: true };
 }
@@ -398,11 +561,13 @@ export async function deleteNote(
       id: true,
       authorId: true,
       matterId: true,
+      leadId: true,
       calendarEventId: true,
       content: true,
     },
   });
   if (!note) return { ok: false, error: "Note not found" };
+  const scope = noteScopeOf(note);
 
   // Author can always delete their own; otherwise gate.
   const actorId = await getCurrentUserId();
@@ -437,19 +602,16 @@ export async function deleteNote(
     };
   }
 
-  revalidatePath(`/matters/${note.matterId}/notes`);
-  revalidatePath(`/matters/${note.matterId}`);
-  if (note.calendarEventId) {
-    revalidatePath(`/matters/${note.matterId}/events`);
-    revalidatePath(`/calendar`);
-  }
+  revalidateNoteScope(scope, note);
   await logActivity({
-    matterId: note.matterId,
+    matterId: activityMatterId(scope),
     userId: actorId,
     type: "note",
     title: "Note deleted",
     detail:
-      outcome.replyCount > 0
+      scope.kind === "lead"
+        ? null
+        : outcome.replyCount > 0
         ? `${notePreview(note.content)} (+ ${outcome.replyCount} ${outcome.replyCount === 1 ? "reply" : "replies"})`
         : notePreview(note.content),
   });
@@ -485,7 +647,7 @@ export async function updateNote(
   await assertChildMatterAccess("note", noteId);
   const note = await prisma.note.findUnique({
     where: { id: noteId },
-    select: { authorId: true, matterId: true },
+    select: { authorId: true, matterId: true, leadId: true },
   });
   if (!note) {
     return {
@@ -513,14 +675,14 @@ export async function updateNote(
     },
   });
 
-  revalidatePath(`/matters/${note.matterId}/notes`);
-  revalidatePath(`/matters/${note.matterId}`);
+  const scope = noteScopeOf(note);
+  revalidateNoteScope(scope);
   await logActivity({
-    matterId: note.matterId,
+    matterId: activityMatterId(scope),
     userId: actorId,
     type: "note",
     title: "Note edited",
-    detail: notePreview(clean),
+    detail: scope.kind === "matter" ? notePreview(clean) : null,
   });
   return { status: "ok" };
 }
@@ -544,8 +706,9 @@ export async function markMatterNotesRead(
     where: { id: { in: noteIds } },
     select: { id: true, matterId: true },
   });
+  // Lead notes (null matterId) carry no matter-team restriction.
   for (const mid of new Set(existing.map((n) => n.matterId))) {
-    await assertMatterAccess(mid);
+    await assertOptionalMatterAccess(mid);
   }
   const validIds = existing.map((n) => n.id);
   if (validIds.length === 0) return { ok: true };
@@ -578,7 +741,7 @@ export async function toggleNoteReaction(
   await assertChildMatterAccess("note", noteId);
   const note = await prisma.note.findUnique({
     where: { id: noteId },
-    select: { id: true, matterId: true, calendarEventId: true },
+    select: { id: true, matterId: true, leadId: true, calendarEventId: true },
   });
   if (!note) return { ok: false, error: "Note not found" };
 
@@ -594,11 +757,6 @@ export async function toggleNoteReaction(
     await prisma.noteReaction.createMany({ data: [key], skipDuplicates: true });
   }
 
-  revalidatePath(`/matters/${note.matterId}/notes`);
-  revalidatePath(`/matters/${note.matterId}`);
-  if (note.calendarEventId) {
-    revalidatePath(`/matters/${note.matterId}/events`);
-    revalidatePath(`/calendar`);
-  }
+  revalidateNoteScope(noteScopeOf(note), note);
   return { ok: true };
 }

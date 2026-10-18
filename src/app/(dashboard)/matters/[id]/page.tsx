@@ -247,7 +247,7 @@ export default async function MatterOverviewPage({
             <CardContent className="px-4 pb-4 flex flex-col gap-4">
               {noteAccess.canCreateNote && (
                 <NoteComposer
-                  matterId={matter.id}
+                  scope={{ kind: "matter", matterId: matter.id }}
                   canPin={noteAccess.canPin}
                   allowedKinds={allowedCaptureKinds(noteAccess, [
                     "task",
@@ -257,7 +257,7 @@ export default async function MatterOverviewPage({
                   ])}
                 />
               )}
-              <NotesTabBody notes={notes} matterId={matter.id} access={noteAccess} />
+              <NotesTabBody notes={notes} scope={{ kind: "matter", matterId: matter.id }} access={noteAccess} />
             </CardContent>
           </Card>
 

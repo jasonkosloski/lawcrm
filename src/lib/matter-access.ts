@@ -101,8 +101,8 @@ export async function matterAccessWhere(
 
 /**
  * The same restriction for a child model that has a REQUIRED `matter`
- * relation (Note, Document, Deadline, Invoice, ...):
- * `prisma.note.findMany({ where: { ...(await childAccess(uid)) } })`.
+ * relation (Document, Deadline, Invoice, ...):
+ * `prisma.document.findMany({ where: { ...(await childAccess(uid)) } })`.
  * `{}` when unrestricted.
  */
 export async function matterRelationAccessWhere(
@@ -113,7 +113,7 @@ export async function matterRelationAccessWhere(
 }
 
 /**
- * For children whose `matter` relation is OPTIONAL (TimeEntry, Task,
+ * For children whose `matter` relation is OPTIONAL (TimeEntry, Note, Task,
  * CalendarEvent, EmailThread, ActivityLog, Notification): rows with
  * no matter stay visible, matter-linked rows must be accessible.
  * Returns a where-fragment to AND into the child's `where`
