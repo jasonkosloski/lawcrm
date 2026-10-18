@@ -82,7 +82,7 @@ describe("RecordsTab", () => {
 
   test("a foreign ?request= id opens no panel; a known one does", async () => {
     const none = await RecordsTab({ scope: SCOPE, requestParam: "foreign", writable: true });
-    expect(getRecordsRequestDetail).toHaveBeenCalledWith(SCOPE, "foreign");
+    expect(getRecordsRequestDetail).toHaveBeenCalledWith(SCOPE, "foreign", { includeFees: true });
     expect(findAll(none, RequestDetailPanel)).toHaveLength(0);
     vi.mocked(getRecordsRequestDetail).mockResolvedValue({ id: "a", typeId: null } as never);
     const open = await RecordsTab({ scope: SCOPE, requestParam: "a", writable: true });
@@ -104,5 +104,30 @@ describe("RecordsTab", () => {
     const matter = await RecordsTab({ scope: SCOPE, requestParam: "a", writable: true });
     const [mp] = findAll(matter, RequestDetailPanel) as { props: { can: { fee: boolean } } }[];
     expect(mp.props.can.fee).toBe(false);
+  });
+
+  test("matter fees are requested only with matters.expense.view", async () => {
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (k: string) => k !== "matters.expense.view"
+    );
+    await RecordsTab({ scope: SCOPE, requestParam: "a", writable: true });
+    expect(getRecordsRequests).toHaveBeenLastCalledWith(SCOPE, "America/Denver", { includeFees: false });
+    expect(getRecordsRequestDetail).toHaveBeenLastCalledWith(SCOPE, "a", { includeFees: false });
+    vi.mocked(currentUserHasPermission).mockResolvedValue(true);
+    await RecordsTab({ scope: SCOPE, requestParam: "a", writable: true });
+    expect(getRecordsRequests).toHaveBeenLastCalledWith(SCOPE, "America/Denver", { includeFees: true });
+    expect(getRecordsRequestDetail).toHaveBeenLastCalledWith(SCOPE, "a", { includeFees: true });
+  });
+
+  test("a lead always includes fees; the panel is keyed by request id", async () => {
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (k: string) => k !== "matters.expense.view"
+    );
+    vi.mocked(getRecordsRequestDetail).mockResolvedValue({ id: "a", typeId: null } as never);
+    const lead = { kind: "lead", leadId: "l1" } as const;
+    const el = await RecordsTab({ scope: lead, requestParam: "a", writable: true });
+    expect(getRecordsRequestDetail).toHaveBeenLastCalledWith(lead, "a", { includeFees: true });
+    const [panel] = findAll(el, RequestDetailPanel) as { key: string }[];
+    expect(panel.key).toBe("a");
   });
 });

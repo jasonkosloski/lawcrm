@@ -74,7 +74,7 @@ describe("getRecordsRequests", () => {
       status: "complete",
       responseDueDate: new Date("2026-10-01T00:00:00Z"),
     });
-    const rows = await getRecordsRequests(M, TZ);
+    const rows = await getRecordsRequests(M, TZ, { includeFees: true });
     const by = Object.fromEntries(rows.map((r) => [r.subject, r]));
     expect(by.late.daysUntilDue).toBe(-3);
     expect(by.late.isOverdue).toBe(true);
@@ -100,7 +100,8 @@ describe("getRecordsRequests", () => {
         data: { recordsRequestId: r.id, recordsRequestRole: role },
       });
     }
-    const rows = await getRecordsRequests(M, TZ);
+    const rows = await getRecordsRequests(M, TZ, { includeFees: true });
+    expect((await getRecordsRequests(M, TZ))[0].feeAmount).toBeNull();
     expect(rows.map((x) => x.subject)).toEqual(["Bills"]);
     expect(rows[0].letterCount).toBe(1);
     expect(rows[0].recordsCount).toBe(2);
@@ -127,5 +128,13 @@ describe("getRecordsRequestDetail", () => {
     const d = await getRecordsRequestDetail(M, r.id);
     expect(d?.followUps.map((f) => f.note)).toEqual(["n1", "n0"]);
     expect(d?.expenseLocked).toBe(false);
+  });
+
+  test("fee fields are nulled unless includeFees", async () => {
+    const r = await req({ feeAmount: "5.00", feeEstimate: "9.00", feePaidAt: new Date("2026-10-01T00:00:00Z") });
+    const hidden = await getRecordsRequestDetail(M, r.id);
+    expect([hidden?.feeAmount, hidden?.feeEstimate, hidden?.feePaidAt]).toEqual([null, null, null]);
+    const shown = await getRecordsRequestDetail(M, r.id, { includeFees: true });
+    expect([shown?.feeAmount, shown?.feeEstimate]).toEqual(["5.00", "9.00"]);
   });
 });

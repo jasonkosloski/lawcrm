@@ -161,4 +161,32 @@ describe("RequestDetailPanel", () => {
     renderPanel(detail(), { fee: false });
     expect(screen.queryByLabelText("Fee paid on")).toBeNull();
   });
+
+  test("Tab wraps focus between the first and last control", async () => {
+    const user = userEvent.setup();
+    renderPanel(detail());
+    const dialog = screen.getByRole("dialog");
+    const focusables = Array.from(
+      dialog.querySelectorAll<HTMLElement>("a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled])")
+    );
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    last.focus();
+    await user.tab();
+    expect(document.activeElement).toBe(first);
+    first.focus();
+    await user.tab({ shift: true });
+    expect(document.activeElement).toBe(last);
+  });
+
+  test("a failed unlink is surfaced", async () => {
+    const { unlinkRecordsDocument } = await import("@/app/actions/records-requests");
+    vi.mocked(unlinkRecordsDocument).mockResolvedValueOnce({ ok: false });
+    const user = userEvent.setup();
+    renderPanel(
+      detail({ documents: [{ id: "d1", name: "Letter.md", role: "request_letter", href: "/x" }] })
+    );
+    await user.click(screen.getByRole("button", { name: "Unlink Letter.md" }));
+    expect(await screen.findByText("Couldn't unlink the document.")).toBeInTheDocument();
+  });
 });

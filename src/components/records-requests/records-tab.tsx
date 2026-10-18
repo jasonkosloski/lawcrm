@@ -38,6 +38,10 @@ export async function RecordsTab({
   writable: boolean;
 }) {
   const tz = await getCurrentUserTimeZone();
+  // Matter fees are expense data: visible only with matters.expense.view.
+  // A lead has no expenses, so records.view (already enforced) suffices.
+  const includeFees =
+    scope.kind === "lead" || (await currentUserHasPermission("matters.expense.view"));
   const [
     rows,
     detail,
@@ -49,8 +53,10 @@ export async function RecordsTab({
     canContact,
     types,
   ] = await Promise.all([
-    getRecordsRequests(scope, tz),
-    requestParam ? getRecordsRequestDetail(scope, requestParam) : null,
+    getRecordsRequests(scope, tz, { includeFees }),
+    requestParam
+      ? getRecordsRequestDetail(scope, requestParam, { includeFees })
+      : null,
     currentUserHasPermission("records.create"),
     currentUserHasPermission("records.edit"),
     currentUserHasPermission("records.delete"),
@@ -136,6 +142,7 @@ export async function RecordsTab({
 
       {detail && (
         <RequestDetailPanel
+          key={detail.id}
           detail={detail}
           scope={scope}
           types={typeOptions}
@@ -150,7 +157,7 @@ export async function RecordsTab({
             edit: canEdit,
             delete: canDelete,
             upload: canUpload,
-            fee: canEdit && (scope.kind === "lead" || canExpense),
+            fee: canEdit && (scope.kind === "lead" || (canExpense && includeFees)),
           }}
           writable={writable}
         />

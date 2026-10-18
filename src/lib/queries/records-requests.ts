@@ -74,7 +74,9 @@ const REQUEST_STATUS_SET = new Set<string>(RECORDS_REQUEST_STATUSES);
 /** Every request in the scope, newest first. */
 export async function getRecordsRequests(
   scope: RecordScope,
-  tz: string
+  tz: string,
+  /** Fee values leave the server only when the viewer may see them. */
+  opts: { includeFees?: boolean } = {}
 ): Promise<RecordsRequestRow[]> {
   const rows = await prisma.recordsRequest.findMany({
     where: scopeWhere(scope),
@@ -106,7 +108,7 @@ export async function getRecordsRequests(
     nextFollowUpDate: r.nextFollowUpDate,
     daysUntilDue: r.responseDueDate ? daysUntilDateOnly(r.responseDueDate, tz) : null,
     isOverdue: isRecordsRequestOverdue(r, today),
-    feeAmount: r.feeAmount ? r.feeAmount.toFixed(2) : null,
+    feeAmount: opts.includeFees && r.feeAmount ? r.feeAmount.toFixed(2) : null,
     letterCount: r.documents.filter((d) => d.recordsRequestRole === "request_letter").length,
     recordsCount: r.documents.filter((d) => d.recordsRequestRole === "received_records").length,
     ownerInitials: r.owner?.initials ?? null,
@@ -150,8 +152,11 @@ export type RecordsRequestDetail = {
 /** One request with its history; null when the id isn't in the scope. */
 export async function getRecordsRequestDetail(
   scope: RecordScope,
-  id: string
+  id: string,
+  /** Fee values leave the server only when the viewer may see them. */
+  opts: { includeFees?: boolean } = {}
 ): Promise<RecordsRequestDetail | null> {
+  const fees = opts.includeFees === true;
   const r = await prisma.recordsRequest.findFirst({
     where: { id, ...scopeWhere(scope) },
     include: {
@@ -189,10 +194,10 @@ export async function getRecordsRequestDetail(
     nextFollowUpDate: r.nextFollowUpDate,
     ownerId: r.ownerId,
     ownerName: r.owner?.name ?? null,
-    feeEstimate: r.feeEstimate ? r.feeEstimate.toFixed(2) : null,
-    feeAmount: r.feeAmount ? r.feeAmount.toFixed(2) : null,
-    feePaidAt: r.feePaidAt,
-    expenseLocked: !!r.expense?.invoiceId,
+    feeEstimate: fees && r.feeEstimate ? r.feeEstimate.toFixed(2) : null,
+    feeAmount: fees && r.feeAmount ? r.feeAmount.toFixed(2) : null,
+    feePaidAt: fees ? r.feePaidAt : null,
+    expenseLocked: fees && !!r.expense?.invoiceId,
     followUps: r.followUps.map((f) => ({
       id: f.id,
       occurredAt: f.occurredAt,

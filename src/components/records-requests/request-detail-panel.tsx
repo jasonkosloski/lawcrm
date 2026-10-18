@@ -201,6 +201,31 @@ export function RequestDetailPanel({
     return () => document.removeEventListener("keydown", onKey);
   }, [close]);
 
+  const trapTab = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Tab") return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const items = Array.from(
+      dialog.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled])'
+      )
+    ).filter((el) => el.tabIndex >= 0);
+    if (items.length === 0) {
+      e.preventDefault();
+      return;
+    }
+    const first = items[0]!;
+    const last = items[items.length - 1]!;
+    const active = document.activeElement;
+    if (e.shiftKey && (active === first || active === dialog)) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+
   const canEdit = can.edit && writable;
   const isOpen = isRecordsRequestOpen(detail.status);
   const isDraft = detail.status === "draft";
@@ -264,8 +289,10 @@ export function RequestDetailPanel({
     });
   };
   const onUnlink = (documentId: string) => {
+    setLinkError(null);
     startLink(async () => {
-      await unlinkRecordsDocument(documentId);
+      const res = await unlinkRecordsDocument(documentId);
+      if (!res.ok) setLinkError("Couldn't unlink the document.");
     });
   };
 
@@ -323,6 +350,7 @@ export function RequestDetailPanel({
         aria-modal="true"
         aria-label={detail.subject}
         tabIndex={-1}
+        onKeyDown={trapTab}
         className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[min(94vw,640px)] max-h-[88vh] rounded-xl shadow-2xl ring-1 ring-black/5 border border-line bg-white flex flex-col overflow-hidden outline-none"
       >
         <div className="flex items-start gap-3 px-5 pt-4 pb-3 border-b border-line">
@@ -603,6 +631,9 @@ export function RequestDetailPanel({
                 />
               )}
             </div>
+            {linkError && linkableDocuments.length === 0 && (
+              <div className="text-2xs text-warn">{linkError}</div>
+            )}
             {canEdit && linkableDocuments.length > 0 && (
               <details className="rounded-md border border-line px-2.5 py-1.5">
                 <summary className="text-xs text-ink-3 cursor-pointer">
