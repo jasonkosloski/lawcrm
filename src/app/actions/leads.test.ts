@@ -50,6 +50,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { convertLeadToMatter, createLead, declineLead } from "@/app/actions/leads";
+import { saveRecordsFee } from "@/app/actions/records-requests";
 import {
   resetDb,
   seedFirm,
@@ -696,6 +697,29 @@ describe("convertLeadToMatter — intake records requests", () => {
     ).map((l) => l.title);
     expect(titles).toContain("3 intake records requests carried forward");
     expect(titles).toContain("1 records fee added as an expense");
+  });
+
+  test("a lead fee saved concurrently with conversion never leaves a paid fee without an Expense", async () => {
+    const { areaId, stageId } = await seedArea({});
+    const { leadId } = await seedIntakeLead();
+    const req = await seedReq(leadId);
+    const fee = new FormData();
+    fee.set("feeAmount", "25.00");
+    fee.set("feePaidAt", "2026-10-20");
+    const results = await Promise.allSettled([
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
+      saveRecordsFee(req.id, { status: "idle" }, fee),
+    ]);
+    const conv = results[0];
+    expect(conv.status).toBe("rejected");
+    expect(String((conv as PromiseRejectedResult).reason)).toMatch(/^Error: REDIRECT:/);
+    expect(results[1].status).toBe("fulfilled");
+    const after = await prisma.recordsRequest.findUniqueOrThrow({ where: { id: req.id } });
+    expect(after.leadId).toBeNull();
+    expect(after.matterId).not.toBeNull();
+    expect(after.feeAmount?.toFixed(2)).toBe("25.00");
+    expect(after.expenseId).not.toBeNull();
+    expect(await prisma.expense.count()).toBe(1);
   });
 
   test("singular log and no logs when there is nothing to carry", async () => {

@@ -374,6 +374,13 @@ export async function convertLeadToMatter(
     });
     if (claimed.count === 0) throw new LeadClaimLostError();
 
+    // Lock the lead's records requests BEFORE re-homing tasks/documents
+    // (request rows first, then task rows: the order every records
+    // helper uses) and before reading them for fee booking. A lead fee
+    // save in flight either commits first (and is booked below) or waits
+    // and then sees the request on the matter.
+    await tx.$queryRaw`SELECT id FROM "records_requests" WHERE "leadId" = ${leadId} FOR UPDATE`;
+
     // Every lead is attached to a Contact (Lead.contactId) — same
     // shape as Matter.clientId. The Patel-style "find by email"
     // dance lives in the create-lead flow now (so prior intakes for

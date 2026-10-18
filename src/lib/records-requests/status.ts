@@ -2,8 +2,9 @@
  * Records request status rules. Pure, client-safe (no Prisma imports).
  *
  * Order matters: a non-terminal status may only move forward to a later
- * non-terminal status, and may close to any terminal status. A terminal
- * status may reopen to any non-terminal status.
+ * non-terminal status, and may close to any terminal status. A draft
+ * leaves only by being sent. A terminal status may reopen to draft (if
+ * never sent) or to a sent-or-later status (if sent).
  */
 
 export const RECORDS_REQUEST_STATUSES = [
@@ -53,6 +54,10 @@ export type RecordsTransitionResult =
 export function checkRecordsTransition(
   from: RecordsRequestStatus,
   to: RecordsRequestStatus,
+  /** `hasSentAt` matters only for reopening a terminal request
+   *  (default true): a never-sent request reopens only to draft, a sent
+   *  one only to a sent-or-later status. */
+  opts: { hasSentAt?: boolean } = {},
 ): RecordsTransitionResult {
   if (from === to) return { ok: false };
 
@@ -62,7 +67,17 @@ export function checkRecordsTransition(
   if (fromTerminal) {
     // Terminal -> terminal is rejected; terminal -> open is a reopen.
     if (toTerminal) return { ok: false };
+    const hasSentAt = opts.hasSentAt ?? true;
+    if (hasSentAt === (to === "draft")) return { ok: false };
     return { ok: true, reopen: true };
+  }
+
+  // A draft leaves only by being sent, or closed as denied/withdrawn
+  // (never "complete": nothing was requested yet).
+  if (from === "draft") {
+    return to === "sent" || to === "denied" || to === "withdrawn"
+      ? { ok: true, reopen: false }
+      : { ok: false };
   }
 
   // Non-terminal -> terminal: any close is allowed.

@@ -70,6 +70,15 @@ async function req(over: Record<string, unknown> = {}) {
   });
 }
 
+/** Every object key, recursively (so assertions never scan random cuids). */
+function collectKeys(v: unknown): string[] {
+  if (Array.isArray(v)) return v.flatMap(collectKeys);
+  if (v && typeof v === "object" && !(v instanceof Date)) {
+    return Object.entries(v).flatMap(([k, x]) => [k, ...collectKeys(x)]);
+  }
+  return [];
+}
+
 describe("getRecordsRequests", () => {
   test("shapes rows: due days, overdue flag, ad hoc type name, owner initials", async () => {
     await req({ subject: "late", responseDueDate: new Date("2026-10-15T00:00:00Z") });
@@ -199,6 +208,6 @@ describe("getMyRecordsToChase", () => {
     });
     expect(items[3].context).toBe("Intake \u00b7 Test Lead");
     expect(items[3].href).toBe(`/intake/${leadId}/records?request=${items[3].id}`);
-    expect(JSON.stringify(items)).not.toMatch(/fee/i);
+    expect(collectKeys(items).filter((k) => /fee/i.test(k))).toEqual([]);
   });
 });

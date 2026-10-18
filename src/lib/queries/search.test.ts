@@ -93,6 +93,15 @@ beforeEach(async () => {
 
 // ── Pure helpers ────────────────────────────────────────────────────────
 
+/** Every object key, recursively (so assertions never scan random cuids). */
+function collectKeys(v: unknown): string[] {
+  if (Array.isArray(v)) return v.flatMap(collectKeys);
+  if (v && typeof v === "object" && !(v instanceof Date)) {
+    return Object.entries(v).flatMap(([k, x]) => [k, ...collectKeys(x)]);
+  }
+  return [];
+}
+
 describe("stripHtmlTags", () => {
   test("strips tags, decodes entities, collapses whitespace", () => {
     expect(
@@ -964,7 +973,9 @@ describe("records requests search", () => {
       href: `/intake/${leadId}/records?request=${id}`,
       context: "Intake \u00b7 Test Lead",
     });
-    expect(JSON.stringify(g)).not.toContain("42");
+    expect(
+      collectKeys(g).filter((k) => /fee/i.test(k)),
+    ).toEqual([]);
   });
 
   test("no records group without records.view", async () => {

@@ -296,15 +296,18 @@ export function RequestDetailPanel({
     });
   };
 
+  // Drafts leave via Mark sent (or by closing); a closed request reopens
+  // to draft if it was never sent, else to a sent-or-later status.
   const nextStatuses = RECORDS_REQUEST_STATUSES.filter((s) => {
-    if (s === "draft" || s === "sent") return !isOpen && s === "sent";
-    const t = checkRecordsTransition(detail.status, s);
-    return t.ok;
+    if (isDraft) return false;
+    return checkRecordsTransition(detail.status, s, {
+      hasSentAt: detail.sentAt != null,
+    }).ok;
   });
 
   const letters = detail.documents.filter((d) => d.role === "request_letter");
   const received = detail.documents.filter((d) => d.role !== "request_letter");
-  const showMarks = offerMark && canEdit && isOpen;
+  const showMarks = offerMark && canEdit && isOpen && !isDraft;
 
   const docList = (rows: typeof letters, empty: string) =>
     rows.length === 0 ? (
@@ -579,7 +582,7 @@ export function RequestDetailPanel({
                 ))}
               </ul>
             )}
-            {canEdit && isOpen && (
+            {canEdit && isOpen && !isDraft && (
               <form onSubmit={followUp.submit} className="flex flex-wrap items-end gap-2">
                 <div className="flex flex-col gap-1 flex-1 min-w-48">
                   <label htmlFor="rr-fu-note" className={label}>Note</label>

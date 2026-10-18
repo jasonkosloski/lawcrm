@@ -45,7 +45,11 @@ import { logActivity } from "@/lib/activity-log";
 import { isAssignableUser, notifyTaskAssigned } from "@/lib/task-assignment";
 import { dateOnlyKey, parseDateOnly, todayKey } from "@/lib/format-date";
 import { optionalScopeOf, scopeOf, scopePaths } from "@/lib/record-scope";
-import { rollFollowUp } from "@/lib/records-requests/follow-up";
+import {
+  checkFollowUpReopen,
+  lockRecordsRequest,
+  rollFollowUp,
+} from "@/lib/records-requests/follow-up";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 
 const STALE_MESSAGE =
@@ -121,29 +125,47 @@ export async function setTaskStatus(
   const completing = status === "done" && task.status !== "done";
   const actorId = completing ? await getCurrentUserId() : "";
   const today = completing ? todayKey(await getCurrentUserTimeZone()) : "";
-  const rolled = await prisma.$transaction(async (tx) => {
-    const data = {
-      status,
-      completedAt: isComplete
-        ? wasComplete
-          ? undefined // already completed — don't overwrite the original timestamp
-          : new Date()
-        : null,
-    };
-    if (completing && task.recordsRequestId) {
-      // Conditional write: of two concurrent "done" clicks only one
-      // flips the row, so only one rolls the follow-up.
-      const w = await tx.task.updateMany({
-        where: { id: taskId, status: { not: "done" } },
-        data,
-      });
-      return w.count > 0
-        ? rollOnFollowUpDone(tx, task, actorId, today)
-        : false;
+  const reopening = wasComplete && !isComplete;
+  const outcome = await prisma.$transaction(
+    async (tx): Promise<{ rolled: boolean; error?: string }> => {
+      const data = {
+        status,
+        completedAt: isComplete
+          ? wasComplete
+            ? undefined // already completed — don't overwrite the original timestamp
+            : new Date()
+          : null,
+      };
+      if (task.recordsRequestId) {
+        // Request row first, task rows second (the order every records
+        // helper uses) so concurrent flows cannot deadlock.
+        if (reopening) {
+          const err = await checkFollowUpReopen(tx, task.recordsRequestId, taskId);
+          if (err) return { rolled: false, error: err };
+        } else {
+          await lockRecordsRequest(tx, task.recordsRequestId);
+        }
+      }
+      if (completing && task.recordsRequestId) {
+        // Conditional write: of two concurrent "done" clicks only one
+        // flips the row, so only one rolls the follow-up.
+        const w = await tx.task.updateMany({
+          where: { id: taskId, status: { not: "done" } },
+          data,
+        });
+        return {
+          rolled:
+            w.count > 0
+              ? await rollOnFollowUpDone(tx, task, actorId, today)
+              : false,
+        };
+      }
+      await tx.task.update({ where: { id: taskId }, data });
+      return { rolled: false };
     }
-    await tx.task.update({ where: { id: taskId }, data });
-    return false;
-  });
+  );
+  if (outcome.error) return { ok: false, error: outcome.error };
+  const rolled = outcome.rolled;
 
   revalidateForTask(task);
   if (rolled && task.recordsRequestId) {
@@ -362,7 +384,18 @@ export async function updateTask(
   const rollToday = completing ? todayKey(await getCurrentUserTimeZone()) : "";
   const actor = await getCurrentUserId();
   let rolled = false;
+  let reopenError: string | null = null;
+  const reopening = wasComplete && !isComplete;
   const write = await prisma.$transaction(async (tx) => {
+    if (task.recordsRequestId) {
+      // Request row first, task rows second (see setTaskStatus).
+      if (reopening) {
+        reopenError = await checkFollowUpReopen(tx, task.recordsRequestId, taskId);
+        if (reopenError) return { count: -1 };
+      } else {
+        await lockRecordsRequest(tx, task.recordsRequestId);
+      }
+    }
     const w = await tx.task.updateMany({
       where: {
         id: taskId,
@@ -389,6 +422,9 @@ export async function updateTask(
     return w;
   });
 
+  if (reopenError) {
+    return { status: "error", errors: { _form: [reopenError] } };
+  }
   if (write.count === 0) {
     revalidateForTask(task);
     return { status: "error", errors: { _form: [STALE_MESSAGE] } };

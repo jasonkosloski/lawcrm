@@ -22,8 +22,41 @@ export async function lockRecordsRequest(
   await tx.$queryRaw`SELECT id FROM "records_requests" WHERE id = ${requestId} FOR UPDATE`;
 }
 
+export const FOLLOW_UP_RESCHEDULED_ERROR =
+  "This follow-up was already rescheduled \u2014 use the open follow-up task instead.";
+export const REQUEST_CLOSED_ERROR =
+  "This records request is closed \u2014 reopen the request first.";
+
+/**
+ * Guard for moving a follow-up task back out of done/cancelled. Locks the
+ * request FIRST (request-before-task lock order), then returns an error
+ * when the request is closed or another follow-up task is already open;
+ * null when the reopen is allowed. A missing request imposes no limit.
+ */
+export async function checkFollowUpReopen(
+  tx: Tx,
+  requestId: string,
+  taskId: string
+): Promise<string | null> {
+  await lockRecordsRequest(tx, requestId);
+  const r = await tx.recordsRequest.findUnique({
+    where: { id: requestId },
+    select: { status: true },
+  });
+  if (!r) return null;
+  if (!isRecordsRequestOpen(r.status)) return REQUEST_CLOSED_ERROR;
+  const others = await tx.task.count({
+    where: {
+      recordsRequestId: requestId,
+      id: { not: taskId },
+      status: { in: OPEN_TASK_STATUSES },
+    },
+  });
+  return others > 0 ? FOLLOW_UP_RESCHEDULED_ERROR : null;
+}
+
 /** Create the follow-up task unless one is already open (or the
- *  request is missing / closed). */
+ *  request is missing, a draft, or closed). Drafts are not chased. */
 export async function openFollowUpTask(
   tx: Tx,
   requestId: string
@@ -42,7 +75,7 @@ export async function openFollowUpTask(
       type: { select: { name: true } },
     },
   });
-  if (!r || !isRecordsRequestOpen(r.status)) return;
+  if (!r || r.status === "draft" || !isRecordsRequestOpen(r.status)) return;
   const existing = await tx.task.count({
     where: { recordsRequestId: requestId, status: { in: OPEN_TASK_STATUSES } },
   });
@@ -75,7 +108,7 @@ export async function cancelFollowUpTasks(
 /**
  * Log a follow-up, finish the open task, schedule the next chase
  * (today + the type's interval) and open a fresh task. Returns false
- * (doing nothing) when the request is not open.
+ * (doing nothing) when the request is a draft or not open.
  */
 export async function rollFollowUp(
   tx: Tx,
@@ -87,7 +120,9 @@ export async function rollFollowUp(
     where: { id: requestId },
     select: { status: true, type: { select: { followUpDays: true } } },
   });
-  if (!r || !isRecordsRequestOpen(r.status)) return false;
+  if (!r || r.status === "draft" || !isRecordsRequestOpen(r.status)) {
+    return false;
+  }
   const todayDate = parseDateOnly(opts.today);
   if (!todayDate) throw new Error(`Invalid date key: ${opts.today}`);
 

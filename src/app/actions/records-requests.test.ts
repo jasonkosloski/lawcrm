@@ -4,7 +4,8 @@
  */
 
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
-import { setTaskStatus } from "@/app/actions/tasks";
+import { setTaskStatus, updateTask } from "@/app/actions/tasks";
+import { updateTaskInitialState } from "@/lib/task-form";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/matter-access", () => ({
@@ -301,13 +302,96 @@ describe("setRecordsRequestStatus", () => {
   });
 
   test("complete -> sent logs a reopen", async () => {
-    const r = await seedRequest({ status: "complete", nextFollowUpDate: null });
+    const r = await seedRequest({ status: "complete", nextFollowUpDate: null, sentAt: new Date("2026-10-01T00:00:00Z") });
     const res = await setRecordsRequestStatus(r.id, "sent");
     expect(res.ok).toBe(true);
     const log = await prisma.activityLog.findFirst({
       where: { type: "records", title: "Records request reopened" },
     });
     expect(log).not.toBeNull();
+  });
+});
+
+describe("draft and reopen constraints", () => {
+  const SENT_AT = new Date("2026-10-01T00:00:00Z");
+
+  test("a draft cannot skip to acknowledged / partial / complete", async () => {
+    for (const to of ["acknowledged", "partial", "complete"] as const) {
+      const r = await seedRequest({ status: "draft", nextFollowUpDate: null });
+      const res = await setRecordsRequestStatus(r.id, to);
+      expect(res).toEqual({ ok: false, error: "Use Mark sent to send a request." });
+      expect(
+        (await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } })).status
+      ).toBe("draft");
+    }
+  });
+
+  test("a draft can be withdrawn without any task", async () => {
+    const r = await seedRequest({ status: "draft", nextFollowUpDate: null });
+    const res = await setRecordsRequestStatus(r.id, "withdrawn");
+    expect(res.ok).toBe(true);
+    expect(await prisma.task.count({ where: { recordsRequestId: r.id } })).toBe(0);
+  });
+
+  test("openFollowUpTask and rollFollowUp do nothing for a draft", async () => {
+    const r = await seedRequest({ status: "draft", nextFollowUpDate: null });
+    await prisma.$transaction((tx) => openFollowUpTask(tx, r.id));
+    expect(await prisma.task.count({ where: { recordsRequestId: r.id } })).toBe(0);
+    const rolled = await prisma.$transaction((tx) =>
+      rollFollowUp(tx, r.id, { actorId: userId, note: null, today: "2026-10-18" })
+    );
+    expect(rolled).toBe(false);
+    expect(await prisma.recordsRequestFollowUp.count()).toBe(0);
+  });
+
+  test("logRecordsFollowUp on a draft is refused", async () => {
+    const r = await seedRequest({ status: "draft", nextFollowUpDate: null });
+    const res = await logRecordsFollowUp(r.id, IDLE, fd({ note: "x" }));
+    expect(res.status).toBe("error");
+    expect(res.errors?._form?.[0]).toBe("Send the request before logging follow-ups.");
+    expect(await prisma.recordsRequestFollowUp.count()).toBe(0);
+  });
+
+  test("a never-sent terminal request reopens only to draft, with no task", async () => {
+    const r = await seedRequest({ status: "withdrawn", nextFollowUpDate: null, sentAt: null });
+    const bad = await setRecordsRequestStatus(r.id, "sent");
+    expect(bad.ok).toBe(false);
+    expect(bad.error).toBeTruthy();
+    const ok = await setRecordsRequestStatus(r.id, "draft");
+    expect(ok.ok).toBe(true);
+    const after = await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } });
+    expect(after.status).toBe("draft");
+    expect(after.nextFollowUpDate).toBeNull();
+    expect(await prisma.task.count({ where: { recordsRequestId: r.id } })).toBe(0);
+  });
+
+  test("a sent terminal request never reopens to draft", async () => {
+    const r = await seedRequest({ status: "complete", nextFollowUpDate: null, sentAt: SENT_AT });
+    const bad = await setRecordsRequestStatus(r.id, "draft");
+    expect(bad.ok).toBe(false);
+    const ok = await setRecordsRequestStatus(r.id, "partial");
+    expect(ok.ok).toBe(true);
+    expect(
+      await prisma.task.count({ where: { recordsRequestId: r.id, status: "open" } })
+    ).toBe(1);
+  });
+
+  test("markRecordsRequestSent re-dates an already-open follow-up task", async () => {
+    const r = await seedRequest({ status: "draft", nextFollowUpDate: null });
+    await prisma.task.create({
+      data: {
+        matterId,
+        recordsRequestId: r.id,
+        title: "Stray",
+        dueDate: new Date("2026-01-01T00:00:00Z"),
+      },
+    });
+    await markRecordsRequestSent(r.id, IDLE, fd({ sentAt: "2026-10-16" }));
+    const open = await prisma.task.findMany({
+      where: { recordsRequestId: r.id, status: "open" },
+    });
+    expect(open).toHaveLength(1);
+    expect(open[0].dueDate?.toISOString().slice(0, 10)).toBe("2026-10-23");
   });
 });
 
@@ -381,7 +465,7 @@ describe("concurrency and reopen", () => {
   });
 
   test("concurrent reopen: one wins, one open task", async () => {
-    const r = await seedRequest({ status: "complete", nextFollowUpDate: null });
+    const r = await seedRequest({ status: "complete", nextFollowUpDate: null, sentAt: new Date("2026-10-01T00:00:00Z") });
     const res = await Promise.all([
       setRecordsRequestStatus(r.id, "sent"),
       setRecordsRequestStatus(r.id, "sent"),
@@ -396,7 +480,7 @@ describe("concurrency and reopen", () => {
   });
 
   test("reopen restarts the chase at today + interval", async () => {
-    const r = await seedRequest({ status: "complete", nextFollowUpDate: null });
+    const r = await seedRequest({ status: "complete", nextFollowUpDate: null, sentAt: new Date("2026-10-01T00:00:00Z") });
     const today = new Date().toLocaleDateString("en-CA", {
       timeZone: "America/Denver",
     });
@@ -529,41 +613,99 @@ describe("task completion hook", () => {
     expect(open[0].id).not.toBe(old.id);
   });
 
-  test("completed request: finishing a reopened task spawns nothing", async () => {
+  test("reopening a cancelled follow-up on a closed request is refused", async () => {
     const r = await seedRequest();
     await prisma.$transaction((tx) => openFollowUpTask(tx, r.id));
     await setRecordsRequestStatus(r.id, "complete");
     const t = await prisma.task.findFirstOrThrow({
       where: { recordsRequestId: r.id },
     });
-    await setTaskStatus(t.id, "open");
-    await setTaskStatus(t.id, "done");
+    expect(t.status).toBe("cancelled");
+    const res = await setTaskStatus(t.id, "open");
+    expect(res).toEqual({
+      ok: false,
+      error: "This records request is closed \u2014 reopen the request first.",
+    });
     expect(
-      await prisma.task.count({
-        where: {
-          recordsRequestId: r.id,
-          status: { in: ["open", "in_progress"] },
-        },
-      })
-    ).toBe(0);
+      (await prisma.task.findUniqueOrThrow({ where: { id: t.id } })).status
+    ).toBe("cancelled");
     expect(await prisma.recordsRequestFollowUp.count()).toBe(0);
   });
 
-  test("open request: done -> open -> done leaves exactly one open task", async () => {
+  test("reopening a rolled follow-up while the new one is open is refused", async () => {
     const r = await seedRequest();
     await prisma.$transaction((tx) => openFollowUpTask(tx, r.id));
     const t = await prisma.task.findFirstOrThrow({
       where: { recordsRequestId: r.id },
     });
     await setTaskStatus(t.id, "done");
-    await setTaskStatus(t.id, "open");
+    const openCount = () =>
+      prisma.task.count({
+        where: { recordsRequestId: r.id, status: { in: ["open", "in_progress"] } },
+      });
+    expect(await openCount()).toBe(1); // middle state: the rolled task
+    const res = await setTaskStatus(t.id, "open");
+    expect(res).toEqual({
+      ok: false,
+      error:
+        "This follow-up was already rescheduled \u2014 use the open follow-up task instead.",
+    });
+    expect(
+      (await prisma.task.findUniqueOrThrow({ where: { id: t.id } })).status
+    ).toBe("done");
+    expect(await openCount()).toBe(1);
+    expect(await prisma.recordsRequestFollowUp.count()).toBe(1);
+  });
+
+  test("updateTask refuses the same reopen with the same text", async () => {
+    const r = await seedRequest();
+    await prisma.$transaction((tx) => openFollowUpTask(tx, r.id));
+    const t = await prisma.task.findFirstOrThrow({
+      where: { recordsRequestId: r.id },
+    });
     await setTaskStatus(t.id, "done");
+    const res = await updateTask(
+      t.id,
+      updateTaskInitialState,
+      fd({ title: t.title, priority: "normal", status: "open" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?._form?.[0]).toBe(
+      "This follow-up was already rescheduled \u2014 use the open follow-up task instead."
+    );
+    expect(
+      (await prisma.task.findUniqueOrThrow({ where: { id: t.id } })).status
+    ).toBe("done");
+  });
+
+  test("a follow-up cancelled by hand can be reopened when none is open", async () => {
+    const r = await seedRequest();
+    await prisma.$transaction((tx) => openFollowUpTask(tx, r.id));
+    const t = await prisma.task.findFirstOrThrow({
+      where: { recordsRequestId: r.id },
+    });
+    await setTaskStatus(t.id, "cancelled");
+    const res = await setTaskStatus(t.id, "open");
+    expect(res.ok).toBe(true);
+    expect(
+      await prisma.task.count({ where: { recordsRequestId: r.id, status: "open" } })
+    ).toBe(1);
+  });
+
+  test("a concurrent task done and logged follow-up both finish with one open task", async () => {
+    const r = await seedRequest();
+    await prisma.$transaction((tx) => openFollowUpTask(tx, r.id));
+    const t = await prisma.task.findFirstOrThrow({
+      where: { recordsRequestId: r.id },
+    });
+    const results = await Promise.allSettled([
+      setTaskStatus(t.id, "done"),
+      logRecordsFollowUp(r.id, IDLE, fd({ note: "Called" })),
+    ]);
+    expect(results.map((x) => x.status)).toEqual(["fulfilled", "fulfilled"]);
     expect(
       await prisma.task.count({
-        where: {
-          recordsRequestId: r.id,
-          status: { in: ["open", "in_progress"] },
-        },
+        where: { recordsRequestId: r.id, status: { in: ["open", "in_progress"] } },
       })
     ).toBe(1);
   });
@@ -673,6 +815,22 @@ describe("saveRecordsFee", () => {
     expect(row.expenseId).toBeNull();
     expect(row.feeAmount!.toString()).toBe("25");
     expect(await prisma.expense.count()).toBe(0);
+  });
+
+  test("a matter fee needs matters.expense.view", async () => {
+    const r = await feeRequest();
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (k: string) => k !== "matters.expense.view"
+    );
+    const res = await saveRecordsFee(
+      r.id,
+      IDLE,
+      fee({ feeEstimate: "10" })
+    );
+    vi.mocked(currentUserHasPermission).mockResolvedValue(true);
+    expect(res.errors?._form?.[0]).toBe("You don't have permission to view expenses.");
+    const row = await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } });
+    expect(row.feeEstimate).toBeNull();
   });
 
   test("missing matters.expense.create saves nothing", async () => {
@@ -808,6 +966,26 @@ describe("linkRecordsDocuments / unlinkRecordsDocument", () => {
     await linkRecordsDocuments(r.id, [documentId]);
     const doc = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
     expect(doc.recordsRequestRole).toBe("request_letter");
+  });
+
+  test("a document already linked to another request refuses the whole batch", async () => {
+    const r = await seedRequest();
+    const other = await seedRequest({ subject: "Other" });
+    const a = await seedDocument({ matterId });
+    const b = await seedDocument({ matterId });
+    await prisma.document.update({
+      where: { id: b.documentId },
+      data: { recordsRequestId: other.id, recordsRequestRole: "received_records" },
+    });
+    const res = await linkRecordsDocuments(r.id, [a.documentId, b.documentId]);
+    expect(res).toEqual({
+      ok: false,
+      error: "Some documents are already linked to another request.",
+    });
+    const da = await prisma.document.findUniqueOrThrow({ where: { id: a.documentId } });
+    const db = await prisma.document.findUniqueOrThrow({ where: { id: b.documentId } });
+    expect(da.recordsRequestId).toBeNull();
+    expect(db.recordsRequestId).toBe(other.id);
   });
 
   test("unlink clears both columns and keeps the document", async () => {

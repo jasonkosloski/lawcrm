@@ -39,7 +39,31 @@ describe("isRecordsRequestOpen", () => {
 
 describe("checkRecordsTransition", () => {
   it("allows moving forward between non-terminal statuses", () => {
-    expect(checkRecordsTransition("draft", "partial")).toEqual({ ok: true, reopen: false });
+    expect(checkRecordsTransition("sent", "partial")).toEqual({ ok: true, reopen: false });
+  });
+
+  it("lets a draft leave only by sending or by closing denied/withdrawn", () => {
+    expect(checkRecordsTransition("draft", "sent")).toEqual({ ok: true, reopen: false });
+    expect(checkRecordsTransition("draft", "denied")).toEqual({ ok: true, reopen: false });
+    expect(checkRecordsTransition("draft", "withdrawn")).toEqual({ ok: true, reopen: false });
+    for (const to of ["acknowledged", "partial", "complete"] as const) {
+      expect(checkRecordsTransition("draft", to)).toEqual({ ok: false });
+    }
+  });
+
+  it("reopens a never-sent terminal request only to draft", () => {
+    const never = { hasSentAt: false };
+    expect(checkRecordsTransition("withdrawn", "draft", never)).toEqual({ ok: true, reopen: true });
+    for (const to of ["sent", "acknowledged", "partial"] as const) {
+      expect(checkRecordsTransition("withdrawn", to, never)).toEqual({ ok: false });
+    }
+  });
+
+  it("reopens a sent terminal request only to a sent-or-later open status", () => {
+    const sent = { hasSentAt: true };
+    expect(checkRecordsTransition("complete", "draft", sent)).toEqual({ ok: false });
+    expect(checkRecordsTransition("complete", "partial", sent)).toEqual({ ok: true, reopen: true });
+    expect(checkRecordsTransition("denied", "acknowledged", sent)).toEqual({ ok: true, reopen: true });
   });
 
   it("rejects moving backwards between non-terminal statuses", () => {

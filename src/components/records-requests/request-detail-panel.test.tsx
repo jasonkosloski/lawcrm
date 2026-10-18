@@ -157,6 +157,32 @@ describe("RequestDetailPanel", () => {
     expect(screen.queryByRole("button", { name: "Mark partial" })).toBeNull();
   });
 
+  test("a draft hides Log follow-up and the post-upload marks", async () => {
+    const user = userEvent.setup();
+    renderPanel(detail({ status: "draft" }));
+    expect(screen.queryByRole("button", { name: "Log follow-up" })).toBeNull();
+    await user.click(screen.getByText(/mock-upload r1/));
+    expect(screen.queryByRole("button", { name: "Mark partial" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Mark complete" })).toBeNull();
+  });
+
+  test("a sent request shows Log follow-up", () => {
+    renderPanel(detail({ status: "sent", sentAt: new Date("2026-10-10T00:00:00Z") }));
+    expect(screen.getByRole("button", { name: "Log follow-up" })).toBeInTheDocument();
+  });
+
+  test("a never-sent closed request reopens only as a draft", () => {
+    renderPanel(detail({ status: "withdrawn", sentAt: null }));
+    expect(screen.getByRole("button", { name: "Draft" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sent" })).toBeNull();
+  });
+
+  test("a sent closed request reopens to sent-or-later, never draft", () => {
+    renderPanel(detail({ status: "complete", sentAt: new Date("2026-10-10T00:00:00Z") }));
+    expect(screen.getByRole("button", { name: "Sent" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Draft" })).toBeNull();
+  });
+
   test("the fee section is hidden when can.fee is false", () => {
     renderPanel(detail(), { fee: false });
     expect(screen.queryByLabelText("Fee paid on")).toBeNull();

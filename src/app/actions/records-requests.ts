@@ -34,6 +34,7 @@ import {
   SAME_SCOPE_ERROR,
   scopeOf,
   scopePaths,
+  scopeWhere,
   type RecordScope,
 } from "@/lib/record-scope";
 import { addCalendarDays, computeResponseDue } from "@/lib/records-requests/due-date";
@@ -379,7 +380,13 @@ export async function markRecordsRequestSent(
           nextFollowUpDate: addCalendarDays(sentAt, t?.followUpDays ?? 7),
         },
       });
+      const nextFollowUpDate = addCalendarDays(sentAt, t?.followUpDays ?? 7);
       await openFollowUpTask(tx, id);
+      // Defensive: a task that already existed keeps the new chase date.
+      await tx.task.updateMany({
+        where: { recordsRequestId: id, status: { in: ["open", "in_progress"] } },
+        data: { dueDate: nextFollowUpDate },
+      });
       return null;
     }
   );
@@ -412,13 +419,16 @@ export async function logRecordsFollowUp(
   const note = (values.note ?? "").trim().slice(0, 2000) || null;
   const row = await prisma.recordsRequest.findUnique({
     where: { id },
-    select: { matterId: true, leadId: true, subject: true },
+    select: { matterId: true, leadId: true, subject: true, status: true },
   });
   if (!row) return fail("Request no longer exists");
   const scope = scopeOf(row);
   const userId = await assertScopeAccess(scope);
   const readOnly = await assertScopeWritable(scope);
   if (readOnly) return fail(readOnly);
+  if (row.status === "draft") {
+    return fail("Send the request before logging follow-ups.");
+  }
 
   const today = todayKey(await getCurrentUserTimeZone());
   const rolled = await prisma.$transaction((tx) =>
@@ -435,6 +445,22 @@ export async function logRecordsFollowUp(
   });
   revalidateForScope(scope);
   return { status: "ok" };
+}
+
+/** Why a status change was refused (reopen targets depend on sentAt). */
+function reopenRefusal(
+  from: RecordsRequestStatus,
+  to: RecordsRequestStatus,
+  hasSentAt: boolean
+): string {
+  const fromClosed = (RECORDS_TERMINAL_STATUSES as readonly string[]).includes(from);
+  const toClosed = (RECORDS_TERMINAL_STATUSES as readonly string[]).includes(to);
+  if (fromClosed && !toClosed) {
+    return hasSentAt
+      ? "A request that was sent can only be reopened as sent, acknowledged or partially received."
+      : "A request that was never sent can only be reopened as a draft.";
+  }
+  return `Can't change a request from ${from} to ${to}.`;
 }
 
 export async function setRecordsRequestStatus(
@@ -468,18 +494,24 @@ export async function setRecordsRequestStatus(
       await lockRecordsRequest(tx, id);
       const cur = await tx.recordsRequest.findUnique({
         where: { id },
-        select: { status: true, type: { select: { followUpDays: true } } },
+        select: {
+          status: true,
+          sentAt: true,
+          type: { select: { followUpDays: true } },
+        },
       });
       if (!cur) return { ok: false, error: "Request not found" };
       const from = cur.status as RecordsRequestStatus;
-      if (from === "draft" && status === "sent") {
+      if (from === "draft" && status !== "denied" && status !== "withdrawn") {
         return { ok: false, error: "Use Mark sent to send a request." };
       }
-      const t = checkRecordsTransition(from, status);
+      const t = checkRecordsTransition(from, status, {
+        hasSentAt: cur.sentAt !== null,
+      });
       if (!t.ok) {
         return {
           ok: false,
-          error: `Can't change a request from ${from} to ${status}.`,
+          error: reopenRefusal(from, status, cur.sentAt !== null),
         };
       }
       const write = await tx.recordsRequest.updateMany({
@@ -493,7 +525,7 @@ export async function setRecordsRequestStatus(
               }
             : {}),
           // A reopened request was cleared at close; restart the chase.
-          ...(t.reopen && today
+          ...(t.reopen && today && status !== "draft"
             ? {
                 nextFollowUpDate: addCalendarDays(
                   today,
@@ -511,7 +543,7 @@ export async function setRecordsRequestStatus(
         };
       }
       if (toTerminal) await cancelFollowUpTasks(tx, id);
-      else if (t.reopen) await openFollowUpTask(tx, id);
+      else if (t.reopen && status !== "draft") await openFollowUpTask(tx, id);
       return { ok: true, from, reopen: t.reopen };
     }
   );
@@ -616,22 +648,34 @@ export async function saveRecordsFee(
     return { status: "error", errors, values };
   }
 
-  const makesExpense =
-    scope.kind === "matter" && feeMakesExpense(feeAmount, feePaidAt);
-
   const result = await prisma.$transaction(
-    async (tx): Promise<string | null> => {
+    async (tx): Promise<{ error: string | null; matterId: string | null }> => {
       await lockRecordsRequest(tx, id);
+      // Scope and expense-ness come from the row as it stands AFTER the
+      // lock: a conversion that committed first moved it onto a matter.
       const cur = await tx.recordsRequest.findUnique({
         where: { id },
         select: {
+          matterId: true,
+          leadId: true,
           expenseId: true,
           adHocTypeName: true,
           custodian: { select: { name: true } },
           type: { select: { name: true } },
         },
       });
-      if (!cur) return "Request no longer exists";
+      const fail2 = (error: string) => ({ error, matterId: cur?.matterId ?? null });
+      if (!cur) return { error: "Request no longer exists", matterId: null };
+      const curScope = scopeOf(cur);
+      if (curScope.kind !== scope.kind) await assertScopeAccess(curScope);
+      if (
+        curScope.kind === "matter" &&
+        !(await currentUserHasPermission("matters.expense.view"))
+      ) {
+        return fail2("You don't have permission to view expenses.");
+      }
+      const makesExpense =
+        curScope.kind === "matter" && feeMakesExpense(feeAmount, feePaidAt);
 
       let expenseId = cur.expenseId;
       const linked = expenseId
@@ -641,7 +685,7 @@ export async function saveRecordsFee(
           })
         : null;
       if (linked && !makesExpense) {
-        return "This fee is recorded as an expense on the matter \u2014 edit or delete it on the Time & expenses tab.";
+        return fail2("This fee is recorded as an expense on the matter \u2014 edit or delete it on the Time & expenses tab.");
       }
       if (makesExpense) {
         const description = recordsFeeDescription({
@@ -656,17 +700,17 @@ export async function saveRecordsFee(
             linked.description !== description;
           if (differs) {
             if (linked.invoiceId) {
-              return "This fee is on an invoice and can't be changed.";
+              return fail2("This fee is on an invoice and can't be changed.");
             }
             if (!(await currentUserHasPermission("matters.expense.edit"))) {
-              return "You don't have permission to edit expenses.";
+              return fail2("You don't have permission to edit expenses.");
             }
             const w = await tx.expense.updateMany({
               where: { id: expenseId!, invoiceId: null },
               data: { amount: feeAmount!, date: feePaidAt!, description },
             });
             if (w.count === 0) {
-              return "This fee is on an invoice and can't be changed.";
+              return fail2("This fee is on an invoice and can't be changed.");
             }
           }
         } else {
@@ -674,11 +718,11 @@ export async function saveRecordsFee(
         }
         if (!expenseId) {
           if (!(await currentUserHasPermission("matters.expense.create"))) {
-            return "You don't have permission to add expenses.";
+            return fail2("You don't have permission to add expenses.");
           }
           const e = await tx.expense.create({
             data: recordsFeeExpenseData({
-              matterId: row.matterId!,
+              matterId: cur.matterId!,
               loggedBy: userId,
               feePaidAt: feePaidAt!,
               feeAmount: feeAmount!,
@@ -694,24 +738,30 @@ export async function saveRecordsFee(
         where: { id },
         data: { feeEstimate, feeAmount, feePaidAt, expenseId },
       });
-      return null;
+      return { error: null, matterId: cur.matterId };
     }
   );
-  if (result) return fail(result);
+  if (result.error) return fail(result.error);
 
   await logActivity({
-    matterId: row.matterId,
+    matterId: result.matterId,
     userId,
     type: "records",
     title: "Records fee updated",
     detail: row.subject,
   });
   revalidateForScope(scope);
-  if (row.matterId) revalidatePath(`/matters/${row.matterId}/time`);
+  if (result.matterId) {
+    revalidateForScope({ kind: "matter", matterId: result.matterId });
+    revalidatePath(`/matters/${result.matterId}/time`);
+  }
   return { status: "ok" };
 }
 
 const LINK_BATCH_CAP = 200;
+const LINK_CONFLICT_ERROR = "Some documents are already linked to another request.";
+
+class LinkConflictError extends Error {}
 
 /** Revalidate the Documents tab alongside the Records tab. */
 function revalidateRecordsAndDocuments(scope: RecordScope): void {
@@ -742,38 +792,58 @@ export async function linkRecordsDocuments(
   const readOnly = await assertScopeWritable(scope);
   if (readOnly) return { ok: false, error: readOnly };
 
-  const docs = await prisma.document.findMany({
-    where: { id: { in: ids } },
-    select: {
-      id: true,
-      matterId: true,
-      leadId: true,
-      recordsRequestId: true,
-      recordsRequestRole: true,
-    },
-  });
-  if (docs.length !== ids.length) {
-    return { ok: false, error: "Document not found" };
-  }
-  const sameScope = (d: { matterId: string | null; leadId: string | null }) =>
-    scope.kind === "matter"
-      ? d.matterId === scope.matterId && d.leadId === null
-      : d.leadId === scope.leadId && d.matterId === null;
-  if (!docs.every(sameScope)) return { ok: false, error: SAME_SCOPE_ERROR };
-
-  await prisma.document.updateMany({
-    where: {
-      id: {
-        in: docs
-          .filter(
-            (d) =>
-              !(d.recordsRequestId === id && d.recordsRequestRole === "request_letter")
-          )
-          .map((d) => d.id),
+  // Scope check and write in one transaction, so a document cannot be
+  // claimed by another request (or moved) between the two.
+  const outcome = await prisma.$transaction(async (tx) => {
+    await lockRecordsRequest(tx, id);
+    const docs = await tx.document.findMany({
+      where: { id: { in: ids } },
+      select: {
+        id: true,
+        matterId: true,
+        leadId: true,
+        recordsRequestId: true,
+        recordsRequestRole: true,
       },
-    },
-    data: { recordsRequestId: id, recordsRequestRole: "received_records" },
+    });
+    if (docs.length !== ids.length) {
+      return { ok: false as const, error: "Document not found" };
+    }
+    const sameScope = (d: { matterId: string | null; leadId: string | null }) =>
+      scope.kind === "matter"
+        ? d.matterId === scope.matterId && d.leadId === null
+        : d.leadId === scope.leadId && d.matterId === null;
+    if (!docs.every(sameScope)) {
+      return { ok: false as const, error: SAME_SCOPE_ERROR };
+    }
+    // Already this request's own letter keeps its role; documents held
+    // by a different request are never stolen.
+    const toTag = docs
+      .filter(
+        (d) =>
+          !(d.recordsRequestId === id && d.recordsRequestRole === "request_letter")
+      )
+      .map((d) => d.id);
+    const written = await tx.document.updateMany({
+      where: {
+        id: { in: toTag },
+        ...scopeWhere(scope),
+        OR: [{ recordsRequestId: null }, { recordsRequestId: id }],
+      },
+      data: { recordsRequestId: id, recordsRequestRole: "received_records" },
+    });
+    if (written.count !== toTag.length) {
+      // Roll back: nothing is tagged on a partial claim.
+      throw new LinkConflictError();
+    }
+    return { ok: true as const };
+  }).catch((err: unknown) => {
+    if (err instanceof LinkConflictError) {
+      return { ok: false as const, error: LINK_CONFLICT_ERROR };
+    }
+    throw err;
   });
+  if (!outcome.ok) return { ok: false, error: outcome.error };
 
   await logActivity({
     matterId: row.matterId,
