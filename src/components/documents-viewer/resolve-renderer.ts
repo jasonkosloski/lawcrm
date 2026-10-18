@@ -12,15 +12,15 @@
  *      downloads frequently arrive typeless.
  *   3. `unsupported` → the download-CTA fallback card.
  *
- * The inline renderers (pdf / image / video / audio) lean on the
+ * The browser-native renderers (image / video / audio) lean on the
  * download route's INLINE_SAFE_TYPES allowlist
  * (`src/app/api/documents/[id]/download/route.ts`) — keep the two
- * lists in the same universe. text / csv / docx don't: those are
- * read + converted server-side by the page, so the route's
- * disposition never comes into play. The one inline renderer that
- * DOES depend on that disposition is pdf (an iframe — an attachment
- * response downloads instead of rendering), so pdf resolves from the
- * stored type only, never from the extension.
+ * lists in the same universe. Everything else never depends on the
+ * route's disposition: pdf / docx / tiff / heic are fetched and
+ * decoded by our own client code (pdf.js, docx-preview, utif,
+ * heic-to), and text / csv / spreadsheet / eml / msg are read and
+ * converted server-side by the page. Those can therefore resolve
+ * from the extension as well as the stored type.
  */
 
 export type DocumentRenderer =
@@ -31,6 +31,11 @@ export type DocumentRenderer =
   | "text"
   | "csv"
   | "docx"
+  | "spreadsheet"
+  | "eml"
+  | "msg"
+  | "tiff"
+  | "heic"
   | "doc_legacy"
   | "unsupported";
 
@@ -55,6 +60,12 @@ const TYPE_MAP: Record<string, DocumentRenderer> = {
   "audio/ogg": "audio",
   "text/csv": "csv",
   [DOCX_TYPE]: "docx",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "spreadsheet",
+  "message/rfc822": "eml",
+  "application/vnd.ms-outlook": "msg",
+  "image/tiff": "tiff",
+  "image/heic": "heic",
+  "image/heif": "heic",
   "application/msword": "doc_legacy",
 };
 
@@ -90,6 +101,14 @@ const EXTENSION_MAP: Record<string, DocumentRenderer> = {
   md: "text",
   csv: "csv",
   docx: "docx",
+  pdf: "pdf",
+  xlsx: "spreadsheet",
+  eml: "eml",
+  msg: "msg",
+  tif: "tiff",
+  tiff: "tiff",
+  heic: "heic",
+  heif: "heic",
   doc: "doc_legacy",
 };
 

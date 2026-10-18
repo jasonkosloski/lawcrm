@@ -177,7 +177,11 @@ const RENDERER_ANCHOR_KIND: Partial<Record<DocumentRenderer, FlagAnchorKind>> =
     docx: "quote",
     text: "quote",
     csv: "quote",
-    // image / doc_legacy / unsupported: anchorless only.
+    // Rendered as text in the page, so selections quote like Word.
+    spreadsheet: "quote",
+    eml: "quote",
+    msg: "quote",
+    // image / tiff / heic / doc_legacy / unsupported: anchorless only.
   };
 
 /** null = the anchor fits this document; string = user-facing error. */

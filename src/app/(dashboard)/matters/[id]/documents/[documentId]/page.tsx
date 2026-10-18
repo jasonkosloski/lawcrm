@@ -54,6 +54,10 @@ import { ViewerFallbackCard } from "@/components/documents-viewer/fallback-card"
 import { ImageViewer } from "@/components/documents-viewer/image-viewer";
 import { MediaReview } from "@/components/evidence/media-review";
 import { PdfReview } from "@/components/evidence/pdf-review";
+import { SpreadsheetPreview } from "@/components/documents-viewer/spreadsheet-preview";
+import { EmailPreview } from "@/components/documents-viewer/email-preview";
+import { HeicViewer, TiffViewer } from "@/components/documents-viewer/converted-image-viewer";
+import { renderStoredEmail, renderStoredSpreadsheet } from "@/lib/office-preview";
 import { TextReview } from "@/components/evidence/text-review";
 import { DocumentReview } from "@/components/evidence/document-review";
 import type { RailMoment } from "@/components/evidence/moments-rail";
@@ -150,7 +154,7 @@ export default async function DocumentViewerPage({
 
   const body =
     renderer && review ? (
-      await renderBody(doc.fileUrl!, renderer, doc, downloadHref, review)
+      await renderBody(doc.fileUrl!, renderer, doc, downloadHref, review, tz)
     ) : (
       <ViewerFallbackCard
         title="No file attached"
@@ -292,8 +296,19 @@ async function renderBody(
   renderer: ReturnType<typeof resolveDocumentRenderer>,
   doc: { id: string; name: string; contentType: string | null; fileSize: number | null },
   downloadHref: string,
-  review: ReviewData
+  review: ReviewData,
+  tz: string
 ): Promise<React.ReactNode> {
+  const failureCard = (reason: string) => (
+    <DocumentReview {...shared}>
+      <ViewerFallbackCard
+        title="Preview unavailable"
+        detail={reason}
+        downloadHref={downloadHref}
+        downloadName={doc.name}
+      />
+    </DocumentReview>
+  );
   const shared = {
     documentId: doc.id,
     moments: review.moments,
@@ -410,6 +425,37 @@ async function renderBody(
         </TextReview>
       );
     }
+    case "spreadsheet": {
+      const result = await renderStoredSpreadsheet(fileUrl);
+      if (!result.ok) return failureCard(result.reason);
+      return (
+        <TextReview initialQuote={review.initialQuote} {...shared}>
+          <SpreadsheetPreview sheets={result.sheets} hiddenSheets={result.hiddenSheets} />
+        </TextReview>
+      );
+    }
+    case "eml":
+    case "msg": {
+      const result = await renderStoredEmail(fileUrl, renderer);
+      if (!result.ok) return failureCard(result.reason);
+      return (
+        <TextReview initialQuote={review.initialQuote} {...shared}>
+          <EmailPreview email={result.email} tz={tz} />
+        </TextReview>
+      );
+    }
+    case "tiff":
+      return (
+        <DocumentReview {...shared}>
+          <TiffViewer src={downloadHref} name={doc.name} />
+        </DocumentReview>
+      );
+    case "heic":
+      return (
+        <DocumentReview {...shared}>
+          <HeicViewer src={downloadHref} name={doc.name} />
+        </DocumentReview>
+      );
     case "doc_legacy":
       return (
         <DocumentReview {...shared}>

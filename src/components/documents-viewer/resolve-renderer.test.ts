@@ -2,7 +2,7 @@
  * contentType × extension matrix for the viewer's renderer switch.
  * Pure function — this test pins the exact routing so a change to
  * the matrix (or to the download route's inline allowlist that the
- * pdf/image/video/audio renderers depend on) is a deliberate,
+ * image/video/audio renderers depend on) is a deliberate,
  * test-updating act.
  */
 
@@ -84,6 +84,14 @@ describe("resolveDocumentRenderer — extension fallback", () => {
     ["phone-records.csv", "csv"],
     ["demand-letter.docx", "docx"],
     ["old-pleading.doc", "doc_legacy"],
+    ["phone-bill.XLSX", "spreadsheet"],
+    ["client-email.eml", "eml"],
+    ["outlook-export.msg", "msg"],
+    ["scan.tif", "tiff"],
+    ["production.TIFF", "tiff"],
+    ["IMG_0042.HEIC", "heic"],
+    ["IMG_0043.heif", "heic"],
+    ["scan.pdf", "pdf"],
   ];
   test.each(cases)("null type + %s → %s", (name, expected) => {
     expect(resolveDocumentRenderer(null, name)).toBe(expected);
@@ -106,19 +114,25 @@ describe("resolveDocumentRenderer — extension fallback", () => {
     );
   });
 
-  test("PDFs resolve from the stored type only (F999): the iframe would download otherwise", () => {
-    // The download route serves a null / octet-stream / x-pdf row as
-    // an attachment, so previewing it in an iframe downloads the
-    // file. These get the download card instead.
-    expect(resolveDocumentRenderer(null, "scan.pdf")).toBe("unsupported");
+  test("typeless / mistyped PDFs preview too — pdf.js fetches the bytes itself", () => {
+    // The download route still serves these as attachments, but the
+    // built-in viewer fetches the bytes, so disposition doesn't matter
+    // (was F999's download-card rule in the iframe era).
+    expect(resolveDocumentRenderer(null, "scan.pdf")).toBe("pdf");
+    expect(resolveDocumentRenderer("application/octet-stream", "scan.pdf")).toBe("pdf");
+    expect(resolveDocumentRenderer("application/x-pdf", "scan.pdf")).toBe("pdf");
+  });
+
+  test("the new types resolve from their MIME types", () => {
     expect(
-      resolveDocumentRenderer("application/octet-stream", "scan.pdf")
-    ).toBe("unsupported");
-    expect(resolveDocumentRenderer("application/x-pdf", "scan.pdf")).toBe(
-      "unsupported"
-    );
-    // The correctly typed row still previews.
-    expect(resolveDocumentRenderer("application/pdf", "scan.pdf")).toBe("pdf");
+      resolveDocumentRenderer("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "x")
+    ).toBe("spreadsheet");
+    expect(resolveDocumentRenderer("message/rfc822", "x")).toBe("eml");
+    expect(resolveDocumentRenderer("application/vnd.ms-outlook", "x")).toBe("msg");
+    expect(resolveDocumentRenderer("image/tiff", "x")).toBe("tiff");
+    expect(resolveDocumentRenderer("image/heic", "x")).toBe("heic");
+    // Legacy .xls stays a download card.
+    expect(resolveDocumentRenderer("application/vnd.ms-excel", "old.xls")).toBe("unsupported");
   });
 
   test("known content type wins over a contradicting extension", () => {
@@ -136,13 +150,9 @@ describe("resolveDocumentRenderer — unsupported", () => {
     expect(resolveDocumentRenderer(null, "trailing-dot.")).toBe("unsupported");
   });
 
-  test("spreadsheets / archives are download-only", () => {
-    expect(
-      resolveDocumentRenderer(
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "billing.xlsx"
-      )
-    ).toBe("unsupported");
+  test("legacy spreadsheets / archives / slides are download-only", () => {
+    expect(resolveDocumentRenderer("application/vnd.ms-excel", "billing.xls")).toBe("unsupported");
+    expect(resolveDocumentRenderer(null, "deck.pptx")).toBe("unsupported");
     expect(resolveDocumentRenderer("application/zip", "production.zip")).toBe(
       "unsupported"
     );

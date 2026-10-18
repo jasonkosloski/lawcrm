@@ -30,6 +30,8 @@ import {
   Film,
   Flag,
   Image as ImageIcon,
+  Mail,
+  Sheet,
   Table,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -59,6 +61,11 @@ const RENDERER_ICON: Record<DocumentRenderer, LucideIcon> = {
   text: FileText,
   csv: Table,
   image: ImageIcon,
+  tiff: ImageIcon,
+  heic: ImageIcon,
+  spreadsheet: Sheet,
+  eml: Mail,
+  msg: Mail,
   doc_legacy: File,
   unsupported: File,
 };
@@ -72,6 +79,11 @@ const RENDERER_LABEL: Record<DocumentRenderer, string> = {
   text: "text",
   csv: "CSV",
   image: "image",
+  tiff: "TIFF",
+  heic: "photo (HEIC)",
+  spreadsheet: "Excel",
+  eml: "email",
+  msg: "Outlook email",
   doc_legacy: "Word (.doc)",
   unsupported: "file",
 };

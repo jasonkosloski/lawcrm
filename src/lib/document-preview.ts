@@ -126,7 +126,7 @@ export type DocxPreviewResult =
 /** Buffer a stored file into memory, bounded by `maxBytes` (bytes
  *  past the cap are never read). Works on both drivers — blob keys
  *  go through an authenticated, ranged read of the private store. */
-async function readStoredBytes(
+export async function readStoredBytes(
   key: string,
   maxBytes: number,
   /** Size already probed by the caller — skips a second stat (one
