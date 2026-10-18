@@ -33,7 +33,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import JSZip from "jszip";
-import { DocxPreviewRenderer } from "./docx-preview-renderer";
+import { DocxPreviewRenderer, docxFitZoom } from "./docx-preview-renderer";
 import { VIEWER_CONTENT_READY_EVENT } from "./content-ready-event";
 
 // ── OOXML fixture builders (real zip, real docx-preview) ───────────────
@@ -290,5 +290,25 @@ describe("DocxPreviewRenderer — fallback chain", () => {
     await waitFor(() =>
       expect(screen.getByTestId("mammoth-fallback")).toBeInTheDocument()
     );
+  });
+});
+
+describe("docxFitZoom", () => {
+  test("shrinks a Letter page to a phone-width shell", () => {
+    // 816px page (8.5in) into a 390px phone less 32px wrapper padding.
+    expect(docxFitZoom(358, 816)).toBeCloseTo(358 / 816);
+  });
+
+  test("never enlarges a page past its real size", () => {
+    expect(docxFitZoom(1400, 816)).toBe(1);
+  });
+
+  test("holds a readable floor instead of shrinking to nothing", () => {
+    expect(docxFitZoom(100, 1056)).toBe(0.3);
+  });
+
+  test("is 1 while either width is unmeasured", () => {
+    expect(docxFitZoom(0, 816)).toBe(1);
+    expect(docxFitZoom(358, 0)).toBe(1);
   });
 });

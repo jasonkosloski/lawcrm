@@ -39,6 +39,16 @@
  * docx-preview's tab-stop math measures the live DOM, so the
  * container must stay laid out (never display:none) while
  * `renderAsync` runs.
+ *
+ * Fit to width: pages keep their real dimensions (8.5in ≈ 816px), so
+ * on a phone or a narrow pane they'd overflow the scroll shell. Each
+ * page section gets CSS `zoom` (layout-affecting, unlike transform,
+ * so scroll extents and text selection stay true) to shrink it to the
+ * available width — never enlarged past 100%. The zoom is applied
+ * only AFTER docx-preview's deferred tab-stop pass, because that pass
+ * measures getBoundingClientRect deltas and converts them to points
+ * assuming an unscaled page; the skeleton stays up until then so the
+ * reader never sees the page jump from full size to fitted.
  */
 
 "use client";
@@ -83,7 +93,31 @@ const WRAPPER_RESTYLE = [
   "[&_.docx-wrapper]:bg-transparent",
   "[&_.docx-wrapper]:p-4",
   "sm:[&_.docx-wrapper]:p-8",
+  // docx-preview centers pages with `align-items: center`, which
+  // pushes a page wider than the shell past its LEFT edge where it
+  // can't be scrolled to. Safe-center falls back to start alignment
+  // on overflow (e.g. a landscape section on a phone at the zoom floor).
+  "[&_.docx-wrapper]:items-center-safe",
+  // Fit-to-width — see the component header.
+  "[&_section.docx]:[zoom:var(--docx-fit,1)]",
 ].join(" ");
+
+/** docx-preview runs its tab-stop pass in a 500ms timeout scheduled
+ *  during renderDocument. Timers with an equal-or-shorter delay fire
+ *  in registration order, so waiting at least as long after render
+ *  guarantees the pass has run before pages are zoomed. */
+const TAB_STOP_SETTLE_MS = 550;
+
+/** Smallest fit zoom — below this text is unreadable and the reader
+ *  is better off panning a safe-centered page. */
+const MIN_FIT_ZOOM = 0.3;
+
+/** Zoom that fits a page of `pageWidth` px into `availableWidth` px.
+ *  Shrinks only; 1 when either width is unmeasured. */
+export function docxFitZoom(availableWidth: number, pageWidth: number): number {
+  if (availableWidth <= 0 || pageWidth <= 0) return 1;
+  return Math.min(1, Math.max(MIN_FIT_ZOOM, availableWidth / pageWidth));
+}
 
 /** Client-side preview ceiling — mirrors `DOCX_MAX_BYTES` in
  *  `src/lib/document-preview.ts` (25 MB; that module imports mammoth
@@ -111,7 +145,12 @@ export function DocxPreviewRenderer({
   const rootRef = useRef<HTMLDivElement | null>(null);
   /** renderAsync target — must exist and stay laid out from mount. */
   const pagesRef = useRef<HTMLDivElement | null>(null);
+  const shellRef = useRef<HTMLDivElement | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
+  /** Widest page's natural (unzoomed) width, measured once after the
+   *  tab-stop pass; 0 until then. */
+  const [pageWidth, setPageWidth] = useState(0);
+  const [fitZoom, setFitZoom] = useState(1);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -160,6 +199,12 @@ export function DocxPreviewRenderer({
         for (const node of nodes) staging.appendChild(node);
         sanitizeRenderedDocx(staging);
         container.replaceChildren(...Array.from(staging.childNodes));
+        await new Promise((resolve) => setTimeout(resolve, TAB_STOP_SETTLE_MS));
+        if (cancelled) return;
+        const sections = container.querySelectorAll<HTMLElement>("section.docx");
+        setPageWidth(
+          Math.max(0, ...Array.from(sections, (section) => section.offsetWidth))
+        );
         setPhase("rendered");
       } catch (error) {
         if (cancelled) return;
@@ -185,6 +230,26 @@ export function DocxPreviewRenderer({
     };
   }, [src, name]);
 
+  // Track the shell width so the fit follows rotation and pane resizes.
+  // The wrapper's padding sits outside the zoomed sections, so it is
+  // subtracted at its real size.
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (phase !== "rendered" || !shell || pageWidth <= 0) return;
+    const update = () => {
+      const wrapper = shell.querySelector<HTMLElement>(".docx-wrapper");
+      const style = wrapper ? getComputedStyle(wrapper) : null;
+      const padding = style
+        ? parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)
+        : 0;
+      setFitZoom(docxFitZoom(shell.clientWidth - padding, pageWidth));
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(shell);
+    return () => ro.disconnect();
+  }, [phase, pageWidth]);
+
   // Tell quote-relocation listeners the walkable text has settled —
   // fired once per outcome transition, after the commit that mounted
   // the final content (render or fallback).
@@ -199,7 +264,9 @@ export function DocxPreviewRenderer({
         fallback
       ) : (
         <div
+          ref={shellRef}
           className={`scrollbar-thin relative min-h-0 flex-1 overflow-auto rounded-lg border border-line bg-paper-2 ${WRAPPER_RESTYLE}`}
+          style={{ "--docx-fit": fitZoom } as React.CSSProperties}
         >
           {/* Render target — kept mounted and measurable during
               renderAsync (tab-stop math needs live layout). */}
