@@ -63,6 +63,7 @@ export type ComposerFlag = {
   timeSeconds: number | null;
   endSeconds: number | null;
   pageNumber: number | null;
+  endPageNumber: number | null;
   quote: string | null;
   category: string;
   description: string;
@@ -74,6 +75,8 @@ export type ComposerAnchor =
   | {
       kind: "page";
       pageNumber: number | null;
+      /** Last page when the selection ran across pages. */
+      endPageNumber?: number | null;
       /** Text selected on that page in the built-in PDF viewer. */
       quote?: string;
       hint?: string;
@@ -112,12 +115,16 @@ function seedAnchorText(
   if (editing?.pageNumber != null) pageText = String(editing.pageNumber);
   else if (!editing && createAnchor?.kind === "page" && createAnchor.pageNumber)
     pageText = String(createAnchor.pageNumber);
+  let endPageText = "";
+  if (editing?.endPageNumber != null) endPageText = String(editing.endPageNumber);
+  else if (!editing && createAnchor?.kind === "page" && createAnchor.endPageNumber)
+    endPageText = String(createAnchor.endPageNumber);
   const quoteText =
     editing?.quote ??
     (createAnchor?.kind === "quote" || createAnchor?.kind === "page"
       ? (createAnchor.quote ?? "")
       : "");
-  return { timeText, endText, pageText, quoteText };
+  return { timeText, endText, pageText, endPageText, quoteText };
 }
 
 export function FlagComposer({
@@ -329,6 +336,25 @@ export function FlagComposer({
               inputMode="numeric"
               value={fields.pageText}
               onChange={(e) => setField("pageText", e.target.value)}
+              placeholder="—"
+              className="h-7 w-20 rounded-md border border-line bg-white px-2 font-mono text-xs text-ink focus:border-brand-300 focus:outline-none"
+            />
+          </div>
+        )}
+        {kind === "page" && (
+          <div className="flex flex-col gap-1">
+            <label
+              htmlFor={`${uid}-end-page`}
+              className="text-2xs uppercase tracking-wider text-ink-4"
+            >
+              To page (optional)
+            </label>
+            <input
+              id={`${uid}-end-page`}
+              type="text"
+              inputMode="numeric"
+              value={fields.endPageText ?? ""}
+              onChange={(e) => setField("endPageText", e.target.value)}
               placeholder="—"
               className="h-7 w-20 rounded-md border border-line bg-white px-2 font-mono text-xs text-ink focus:border-brand-300 focus:outline-none"
             />

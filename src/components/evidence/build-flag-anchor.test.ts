@@ -52,6 +52,32 @@ describe("buildFlagAnchor — page", () => {
     });
   });
 
+  test("an optional last page makes a span; same/blank last page means one page", () => {
+    expect(buildFlagAnchor("page", text({ pageText: "4", endPageText: "6" }), false)).toEqual({
+      ok: true,
+      anchor: { pageNumber: 4, endPageNumber: 6 },
+    });
+    expect(buildFlagAnchor("page", text({ pageText: "4", endPageText: "4" }), false)).toEqual({
+      ok: true,
+      anchor: { pageNumber: 4 },
+    });
+    expect(buildFlagAnchor("page", text({ pageText: "4", endPageText: " " }), false)).toEqual({
+      ok: true,
+      anchor: { pageNumber: 4 },
+    });
+  });
+
+  test.each([
+    ["before the first", { pageText: "6", endPageText: "4" }, /before the first/i],
+    ["not a number", { pageText: "6", endPageText: "x" }, /whole number/i],
+    ["too long", { pageText: "1", endPageText: "40" }, /at most 25 pages/i],
+    ["no first page", { pageText: "", endPageText: "3" }, /needs its first page/i],
+  ])("span errors: last page %s", (_label, fields, msg) => {
+    const res = buildFlagAnchor("page", text(fields), false);
+    expect(res.ok).toBe(false);
+    expect(res.ok === false && res.error).toMatch(msg);
+  });
+
   test("a quote without its page is an error, not a silent whole-document flag", () => {
     const res = buildFlagAnchor("page", text({ pageText: "", quoteText: "red light" }), false);
     expect(res.ok).toBe(false);

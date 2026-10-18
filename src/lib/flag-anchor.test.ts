@@ -50,6 +50,9 @@ describe("flagAnchorLabel", () => {
     const passage = { timeSeconds: null, pageNumber: 4, quote: "the light was red" };
     expect(flagAnchorKind(passage)).toBe("page");
     expect(flagAnchorLabel(passage)).toBe("p. 4 · “the light was red”");
+    // Spans across a page break.
+    expect(flagAnchorLabel({ timeSeconds: null, pageNumber: 4, endPageNumber: 6 })).toBe("pp. 4–6");
+    expect(flagAnchorLabel({ ...passage, endPageNumber: 5 })).toBe("pp. 4–5 · “the light was red”");
   });
 
   test("short quotes render whole, in curly quotes", () => {

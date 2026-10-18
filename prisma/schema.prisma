@@ -871,26 +871,28 @@ model Evidence {
 /// float seconds (precise seek); `endSeconds` null = point moment,
 /// set = span.
 model FlaggedMoment {
-  id          String   @id @default(cuid())
-  documentId  String?
-  evidenceId  String?
+  id            String   @id @default(cuid())
+  documentId    String?
+  evidenceId    String?
   /// Anchor — AT MOST ONE kind, matched to the document type
   /// (app-enforced in the action layer). All nullable: an
   /// anchorless flag annotates the document as a whole.
   ///   media (audio/video): timeSeconds (+ optional endSeconds span)
-  ///   pdf:                 pageNumber, optionally + quote (text
-  ///     selected on that page in the built-in pdf.js viewer)
+  ///   pdf:                 pageNumber (+ optional endPageNumber span),
+  ///     optionally + quote (text selected in the built-in pdf.js
+  ///     viewer, which may run across the span's pages)
   ///   rendered text (docx/txt/csv): quote — captured selection,
   ///     scroll-to-highlight on the render
-  timeSeconds Float? /// Media position, seconds from start
-  endSeconds  Float? /// Media span end — null for a point moment
-  pageNumber  Int? /// PDF page (1-based)
-  quote       String? /// Selected text anchor for rendered documents
-  description String
-  category    String /// critical | emphasis | anomaly | miranda | use_of_force | contradiction
-  flaggedById String /// User who flagged this moment
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  timeSeconds   Float? /// Media position, seconds from start
+  endSeconds    Float? /// Media span end — null for a point moment
+  pageNumber    Int? /// PDF page (1-based)
+  endPageNumber Int? /// PDF span end page — null for a single page
+  quote         String? /// Selected text anchor for rendered documents
+  description   String
+  category      String /// critical | emphasis | anomaly | miranda | use_of_force | contradiction
+  flaggedById   String /// User who flagged this moment
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   document  Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
   evidence  Evidence? @relation(fields: [evidenceId], references: [id], onDelete: Cascade)

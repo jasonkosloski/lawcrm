@@ -18,6 +18,7 @@ import type { FlagInput } from "@/app/actions/flagged-moments";
 import { parseMediaTime } from "@/lib/media-time";
 import {
   MAX_PDF_PAGE,
+  MAX_PDF_PAGE_SPAN,
   MAX_QUOTE_CHARS,
   type FlagAnchorKind,
 } from "@/lib/flag-anchor";
@@ -26,6 +27,8 @@ export type FlagAnchorText = {
   timeText: string;
   endText: string;
   pageText: string;
+  /** Optional last page of a span (blank = single page). */
+  endPageText?: string;
   quoteText: string;
 };
 
@@ -64,6 +67,9 @@ export function buildFlagAnchor(
       const trimmed = text.pageText.trim();
       // Text selected in the PDF viewer rides with its page.
       const quote = text.quoteText.trim().slice(0, MAX_QUOTE_CHARS);
+      if (trimmed === "" && (text.endPageText ?? "").trim() !== "") {
+        return { ok: false, error: "A page span needs its first page" };
+      }
       if (trimmed === "" && quote !== "") {
         return {
           ok: false,
@@ -89,9 +95,30 @@ export function buildFlagAnchor(
           error: `Page must be between 1 and ${MAX_PDF_PAGE}`,
         };
       }
+      const endTrimmed = (text.endPageText ?? "").trim();
+      let endPageNumber: number | undefined;
+      if (endTrimmed !== "" && endTrimmed !== trimmed) {
+        if (!/^\d+$/.test(endTrimmed)) {
+          return { ok: false, error: "The last page must be a whole number (or blank)" };
+        }
+        endPageNumber = Number(endTrimmed);
+        if (endPageNumber < pageNumber) {
+          return { ok: false, error: "The last page can't be before the first" };
+        }
+        if (endPageNumber > MAX_PDF_PAGE) {
+          return { ok: false, error: `Page must be between 1 and ${MAX_PDF_PAGE}` };
+        }
+        if (endPageNumber - pageNumber + 1 > MAX_PDF_PAGE_SPAN) {
+          return { ok: false, error: `A flag can span at most ${MAX_PDF_PAGE_SPAN} pages` };
+        }
+      }
       return {
         ok: true,
-        anchor: quote ? { pageNumber, quote } : { pageNumber },
+        anchor: {
+          pageNumber,
+          ...(endPageNumber !== undefined ? { endPageNumber } : {}),
+          ...(quote ? { quote } : {}),
+        },
       };
     }
     case "quote": {

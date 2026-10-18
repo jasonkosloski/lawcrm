@@ -37,6 +37,7 @@ export type FlaggedMomentRow = {
   timeSeconds: number | null;
   endSeconds: number | null;
   pageNumber: number | null;
+  endPageNumber: number | null;
   quote: string | null;
   category: string;
   description: string;
@@ -62,6 +63,7 @@ const FLAG_SELECT = {
   timeSeconds: true,
   endSeconds: true,
   pageNumber: true,
+  endPageNumber: true,
   quote: true,
   category: true,
   description: true,
@@ -86,6 +88,7 @@ type FlagRecord = {
   timeSeconds: number | null;
   endSeconds: number | null;
   pageNumber: number | null;
+  endPageNumber: number | null;
   quote: string | null;
   category: string;
   description: string;
@@ -102,6 +105,7 @@ function shapeRow(row: FlagRecord): FlaggedMomentRow {
     timeSeconds: row.timeSeconds,
     endSeconds: row.endSeconds,
     pageNumber: row.pageNumber,
+    endPageNumber: row.endPageNumber,
     quote: row.quote,
     category: row.category,
     description: row.description,

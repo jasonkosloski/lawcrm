@@ -548,10 +548,13 @@ Email results are scoped to the viewer's OWN mailbox. No
   (mm:ss editing via `src/lib/media-time.ts`, optional span end,
   set-to-current-time affordance); clicking a flag seeks.
   **PDF** (built-in pdf.js viewer since 2026-10-18, ADR-041) —
-  selecting text on a page raises "Flag selection" → a page + quote
-  flag (the page disambiguates phrases that repeat across pages; the
-  composer warns when the passage repeats on its page); "Flag this
-  page" prefills the current page for page-only flags. Clicking a
+  selecting text raises "Flag selection" → a page + quote flag; a
+  selection that runs across a page break becomes a page span
+  (`pp. 4–5`, up to 25 pages) + quote, relocated and highlighted
+  across the break (the pages disambiguate repeated phrases; the
+  composer warns when the passage repeats within them). "Flag this
+  page" prefills the current page; an optional "To page" makes a
+  page-range flag (an exhibit, a section) without a quote. Clicking a
   flag scrolls to the page and highlights the passage; every flagged
   passage on a visible page keeps a soft persistent highlight.
   Scanned PDFs with no text layer can only take page flags until OCR

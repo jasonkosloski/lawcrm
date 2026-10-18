@@ -80,6 +80,11 @@ export type PdfViewerHandle = {
   /** The page's rendered text layer, scrolling to it first if needed.
    *  null if the page doesn't exist or didn't render in time. */
   pageTextLayer(page: number): Promise<HTMLElement | null>;
+  /** Text layers for pages `from`..`to` (a passage running across a
+   *  page break). Keeps the whole span rendered — even pages outside
+   *  the scroll window — until the next span request, and scrolls to
+   *  `from`. Entries are null for pages that didn't render in time. */
+  pageTextLayers(from: number, to: number): Promise<(HTMLElement | null)[]>;
   /** The page under the reading line. */
   currentPage(): number;
 };
@@ -122,6 +127,8 @@ export function PdfDocumentViewer({
   const [containerWidth, setContainerWidth] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [range, setRange] = useState<{ first: number; last: number }>({ first: 1, last: 1 });
+  /** A span the parent asked for — rendered regardless of scroll. */
+  const [pinned, setPinned] = useState<{ first: number; last: number } | null>(null);
   const [current, setCurrent] = useState(1);
   const [jumpText, setJumpText] = useState<string | null>(null);
 
@@ -299,6 +306,25 @@ export function PdfDocumentViewer({
     [numPages, pageTops, syncFromScroll]
   );
 
+  /** Resolve with `page`'s text layer once it's rendered (or null
+   *  after a timeout). Doesn't scroll. */
+  const waitForLayer = useCallback((page: number): Promise<HTMLElement | null> => {
+    const ready = layersRef.current.get(page);
+    if (ready) return Promise.resolve(ready);
+    return new Promise<HTMLElement | null>((resolve) => {
+      const list = waitersRef.current.get(page) ?? [];
+      let done = false;
+      const finish = (el: HTMLElement | null) => {
+        if (done) return;
+        done = true;
+        resolve(el);
+      };
+      list.push(finish);
+      waitersRef.current.set(page, list);
+      setTimeout(() => finish(null), TEXT_LAYER_WAIT_MS);
+    });
+  }, []);
+
   useImperativeHandle(
     ref,
     () => ({
@@ -306,24 +332,20 @@ export function PdfDocumentViewer({
       currentPage: () => current,
       pageTextLayer(page: number) {
         if (page < 1 || page > numPages) return Promise.resolve(null);
-        const ready = layersRef.current.get(page);
-        if (ready) return Promise.resolve(ready);
-        goToPage(page);
-        return new Promise<HTMLElement | null>((resolve) => {
-          const list = waitersRef.current.get(page) ?? [];
-          let done = false;
-          const finish = (el: HTMLElement | null) => {
-            if (done) return;
-            done = true;
-            resolve(el);
-          };
-          list.push(finish);
-          waitersRef.current.set(page, list);
-          setTimeout(() => finish(null), TEXT_LAYER_WAIT_MS);
-        });
+        if (!layersRef.current.has(page)) goToPage(page);
+        return waitForLayer(page);
+      },
+      pageTextLayers(from: number, to: number) {
+        const first = Math.max(1, from);
+        const last = Math.min(numPages, to);
+        if (last < first) return Promise.resolve([]);
+        setPinned({ first, last });
+        goToPage(first);
+        const pages = Array.from({ length: last - first + 1 }, (_, i) => first + i);
+        return Promise.all(pages.map(waitForLayer));
       },
     }),
-    [goToPage, current, numPages]
+    [goToPage, current, numPages, waitForLayer]
   );
 
   const readyFired = useRef(false);
@@ -455,7 +477,10 @@ export function PdfDocumentViewer({
                   scale={scale}
                   width={size.w}
                   height={size.h}
-                  active={page >= range.first && page <= range.last}
+                  active={
+                    (page >= range.first && page <= range.last) ||
+                    (pinned !== null && page >= pinned.first && page <= pinned.last)
+                  }
                   onSize={handlePageSize}
                   onTextLayer={handleLayer}
                 />
@@ -551,7 +576,10 @@ const PdfPage = memo(function PdfPage({
   return (
     <div
       data-page-number={pageNumber}
-      className="relative shrink-0 bg-white shadow-sm ring-1 ring-line"
+      // The corner page number is CSS-generated content, not DOM text:
+      // a selection (or highlight) running across a page break must
+      // not pick it up as part of the quoted passage.
+      className="relative shrink-0 bg-white shadow-sm ring-1 ring-line after:pointer-events-none after:absolute after:bottom-1 after:right-2 after:font-mono after:text-[10px] after:text-ink-4/70 after:content-[attr(data-page-number)]"
       style={
         {
           width,
@@ -569,9 +597,6 @@ const PdfPage = memo(function PdfPage({
           Page {pageNumber} couldn&apos;t be rendered.
         </div>
       )}
-      <span className="pointer-events-none absolute bottom-1 right-2 select-none font-mono text-[10px] text-ink-4/70" aria-hidden>
-        {pageNumber}
-      </span>
     </div>
   );
 });

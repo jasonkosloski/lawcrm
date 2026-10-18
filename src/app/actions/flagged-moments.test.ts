@@ -42,6 +42,7 @@ vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
 }));
 
+import { MAX_QUOTE_CHARS } from "@/lib/flag-anchor";
 import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
@@ -221,6 +222,38 @@ describe("createFlaggedMoment — anchor × renderer fit", () => {
     expect(log?.title).toBe("Passage flagged: p. 4 · “the light was red”");
   });
 
+  test("PDF takes a page span, with or without a quote", async () => {
+    const span = await createFlaggedMoment(pdfDocId, { ...noteOnly, pageNumber: 4, endPageNumber: 6 });
+    expect(span.ok).toBe(true);
+    expect(await prisma.flaggedMoment.findUnique({ where: { id: span.id! } })).toMatchObject({
+      pageNumber: 4,
+      endPageNumber: 6,
+      quote: null,
+    });
+    const passage = await createFlaggedMoment(pdfDocId, {
+      ...noteOnly,
+      pageNumber: 9,
+      endPageNumber: 10,
+      quote: "the driver accelerated",
+    });
+    expect(passage.ok).toBe(true);
+    const titles = (await prisma.activityLog.findMany({ where: { matterId, type: "evidence" } })).map((l) => l.title);
+    expect(titles).toEqual(
+      expect.arrayContaining(["Pages 4–6 flagged", "Passage flagged: pp. 9–10 · “the driver accelerated”"])
+    );
+  });
+
+  test.each([
+    ["no start page", { endPageNumber: 3 }, /needs a start page/i],
+    ["end before start", { pageNumber: 5, endPageNumber: 5 }, /after its first/i],
+    ["too long a span", { pageNumber: 1, endPageNumber: 100 }, /at most 25 pages/i],
+  ])("page spans: rejects %s", async (_label, anchor, msg) => {
+    const res = await createFlaggedMoment(pdfDocId, { ...noteOnly, ...anchor });
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(msg);
+    expect(await prisma.flaggedMoment.count()).toBe(0);
+  });
+
   test("page + quote is PDF-only; time + quote is never valid", async () => {
     const onDocx = await createFlaggedMoment(docxDocId, { ...noteOnly, pageNumber: 2, quote: "x" });
     expect(onDocx.ok).toBe(false);
@@ -344,7 +377,7 @@ describe("createFlaggedMoment — validation", () => {
   test.each([
     [{ quote: "" }, /empty/i],
     [{ quote: "   " }, /empty/i], // trims to nothing
-    [{ quote: "q".repeat(501) }, /500/],
+    [{ quote: "q".repeat(MAX_QUOTE_CHARS + 1) }, new RegExp(String(MAX_QUOTE_CHARS))],
   ])("rejects quote anchor %o", async (patch, msg) => {
     const res = await createFlaggedMoment(docxDocId, { ...noteOnly, ...patch });
     expect(res.ok).toBe(false);

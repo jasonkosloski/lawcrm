@@ -7,7 +7,8 @@
  * `src/app/actions/flagged-moments.ts`):
  *
  *   time  — `timeSeconds` (+ optional `endSeconds` span), audio/video
- *   page  — `pageNumber` (1-based), PDFs — optionally WITH a `quote`
+ *   page  — `pageNumber` (1-based, + optional `endPageNumber` span),
+ *           PDFs — optionally WITH a `quote`
  *           (text selected on that page in the built-in viewer; the
  *           page disambiguates a phrase that repeats across pages)
  *   quote — `quote` (captured selection), rendered docx/text/csv
@@ -29,9 +30,13 @@ import { formatMediaSpan } from "@/lib/media-time";
  *  bounds obvious typos ("page 200026"). */
 export const MAX_PDF_PAGE = 20000;
 
-/** Quote anchors cap at the description length — a "quote" longer
- *  than this is a selection mistake, not an anchor. */
-export const MAX_QUOTE_CHARS = 500;
+/** Longest page span one flag may cover (an exhibit, a passage
+ *  running over a page break). Longer ranges are a mis-entry. */
+export const MAX_PDF_PAGE_SPAN = 25;
+
+/** Quote anchors cap here — roomy enough for a passage that runs
+ *  across a page break; much longer is a selection mistake. */
+export const MAX_QUOTE_CHARS = 2000;
 
 /** Label snippet length for quote anchors. */
 const QUOTE_SNIPPET_CHARS = 40;
@@ -50,6 +55,7 @@ export type FlagAnchorFields = {
   timeSeconds: number | null;
   endSeconds?: number | null;
   pageNumber?: number | null;
+  endPageNumber?: number | null;
   quote?: string | null;
 };
 
@@ -78,7 +84,8 @@ function quoteSnippet(quote: string): string {
  * moments rail, the Evidence tab, and activity-log titles:
  *
  *   time  → "1:15" / "1:15–2:30"  (formatMediaSpan)
- *   page  → "p. 12" / "p. 12 · “first 40 chars…”" (with a quote)
+ *   page  → "p. 12" / "pp. 12–13" (span), + " · “first 40 chars…”"
+ *           when the flag carries a quote
  *   quote → "“first 40 chars…”"
  *   none  → "Document"
  */
@@ -86,10 +93,13 @@ export function flagAnchorLabel(flag: FlagAnchorFields): string {
   switch (flagAnchorKind(flag)) {
     case "time":
       return formatMediaSpan(flag.timeSeconds as number, flag.endSeconds);
-    case "page":
-      return flag.quote
-        ? `p. ${flag.pageNumber} · ${quoteSnippet(flag.quote)}`
-        : `p. ${flag.pageNumber}`;
+    case "page": {
+      const pages =
+        flag.endPageNumber != null && flag.endPageNumber > (flag.pageNumber as number)
+          ? `pp. ${flag.pageNumber}–${flag.endPageNumber}`
+          : `p. ${flag.pageNumber}`;
+      return flag.quote ? `${pages} · ${quoteSnippet(flag.quote)}` : pages;
+    }
     case "quote":
       return quoteSnippet(flag.quote as string);
     case "document":

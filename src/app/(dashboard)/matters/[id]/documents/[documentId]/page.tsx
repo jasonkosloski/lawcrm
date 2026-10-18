@@ -136,12 +136,14 @@ export default async function DocumentViewerPage({
       canDeleteAny,
       initialSeconds: linked?.timeSeconds ?? tSeconds,
       initialPage: linked?.pageNumber ?? null,
+      initialEndPage: linked?.endPageNumber ?? null,
       initialQuote: linked?.quote ?? null,
       moments: flags.map((f) => ({
         id: f.id,
         timeSeconds: f.timeSeconds,
         endSeconds: f.endSeconds,
         pageNumber: f.pageNumber,
+        endPageNumber: f.endPageNumber,
         quote: f.quote,
         category: f.category,
         description: f.description,
@@ -282,6 +284,7 @@ type ReviewData = {
   canDeleteAny: boolean;
   initialSeconds: number | null;
   initialPage: number | null;
+  initialEndPage: number | null;
   initialQuote: string | null;
   moments: RailMoment[];
 };
@@ -326,6 +329,7 @@ async function renderBody(
           name={doc.name}
           initialPage={review.initialPage}
           initialQuote={review.initialQuote}
+          initialEndPage={review.initialEndPage}
           {...shared}
         />
       );

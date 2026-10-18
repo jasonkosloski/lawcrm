@@ -58,6 +58,7 @@ import { FLAG_CATEGORIES } from "@/lib/constants/flag-category";
 import { MAX_MEDIA_SECONDS } from "@/lib/media-time";
 import {
   MAX_PDF_PAGE,
+  MAX_PDF_PAGE_SPAN,
   MAX_QUOTE_CHARS,
   flagAnchorKind,
   flagAnchorLabel,
@@ -102,6 +103,12 @@ const flagSchema = z
       .min(1, "Pages start at 1")
       .max(MAX_PDF_PAGE, `Page can't exceed ${MAX_PDF_PAGE}`)
       .optional(),
+    endPageNumber: z
+      .number()
+      .int("End page must be a whole number")
+      .min(1, "Pages start at 1")
+      .max(MAX_PDF_PAGE, `Page can't exceed ${MAX_PDF_PAGE}`)
+      .optional(),
     quote: z
       .string()
       .trim()
@@ -128,6 +135,19 @@ const flagSchema = z
         message:
           "A flag carries at most one anchor kind — time, page, or quote",
       });
+    }
+    if (val.endPageNumber !== undefined) {
+      if (val.pageNumber === undefined) {
+        ctx.addIssue({ code: "custom", path: ["endPageNumber"], message: "A page span needs a start page" });
+      } else if (val.endPageNumber <= val.pageNumber) {
+        ctx.addIssue({ code: "custom", path: ["endPageNumber"], message: "The span's last page must be after its first" });
+      } else if (val.endPageNumber - val.pageNumber + 1 > MAX_PDF_PAGE_SPAN) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["endPageNumber"],
+          message: `A flag can span at most ${MAX_PDF_PAGE_SPAN} pages`,
+        });
+      }
     }
     if (val.endSeconds !== undefined && val.timeSeconds === undefined) {
       ctx.addIssue({
@@ -210,6 +230,7 @@ function anchorData(data: ParsedFlag) {
     timeSeconds: data.timeSeconds ?? null,
     endSeconds: data.endSeconds ?? null,
     pageNumber: data.pageNumber ?? null,
+    endPageNumber: data.endPageNumber ?? null,
     quote: data.quote ?? null,
   };
 }
@@ -275,6 +296,7 @@ function createTitle(
     timeSeconds: number | null;
     endSeconds: number | null;
     pageNumber: number | null;
+    endPageNumber: number | null;
     quote: string | null;
   }
 ): string {
@@ -284,7 +306,9 @@ function createTitle(
     case "page":
       return anchor.quote
         ? `Passage flagged: ${flagAnchorLabel(anchor)}`
-        : `Page ${anchor.pageNumber} flagged`;
+        : anchor.endPageNumber != null
+          ? `Pages ${anchor.pageNumber}–${anchor.endPageNumber} flagged`
+          : `Page ${anchor.pageNumber} flagged`;
     case "quote":
       return `Passage flagged: ${flagAnchorLabel(anchor)}`;
     case "document":
@@ -314,6 +338,7 @@ export async function updateFlaggedMoment(
       timeSeconds: true,
       endSeconds: true,
       pageNumber: true,
+      endPageNumber: true,
       quote: true,
       description: true,
       category: true,
@@ -403,6 +428,7 @@ export async function deleteFlaggedMoment(
       timeSeconds: true,
       endSeconds: true,
       pageNumber: true,
+      endPageNumber: true,
       quote: true,
       flaggedById: true,
       document: { select: { id: true, matterId: true, name: true } },
@@ -457,6 +483,7 @@ function editDetail(
     timeSeconds: number | null;
     endSeconds: number | null;
     pageNumber: number | null;
+    endPageNumber: number | null;
     quote: string | null;
     description: string;
     category: string;
@@ -467,6 +494,7 @@ function editDetail(
     timeSeconds: number | null;
     endSeconds: number | null;
     pageNumber: number | null;
+    endPageNumber: number | null;
     quote: string | null;
   }
 ): string {

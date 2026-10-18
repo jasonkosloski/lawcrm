@@ -24,14 +24,18 @@ import type { RailMoment } from "./moments-rail";
 const handle = {
   goToPage: vi.fn(),
   currentPage: vi.fn(() => 2),
-  pageTextLayer: vi.fn(async (page: number) =>
-    document.querySelector<HTMLElement>(`[data-page-number="${page}"] .textLayer`)
+  pageTextLayer: vi.fn(async (page: number) => layerOf(page)),
+  pageTextLayers: vi.fn(async (from: number, to: number) =>
+    Array.from({ length: to - from + 1 }, (_, i) => layerOf(from + i))
   ),
 };
+const layerOf = (page: number) =>
+  document.querySelector<HTMLElement>(`[data-page-number="${page}"] .textLayer`);
 
 const PAGES: Record<number, string[]> = {
   1: ["Deposition of Officer Smith", "Where were you that night?"],
-  2: ["Exhibit 4: bodycam footage", "The light was red.", "The light was red."],
+  2: ["Exhibit 4: bodycam footage", "The light was red.", "The light was red.", "Q. And then the driver"],
+  3: ["accelerated through the intersection?", "A. Yes."],
 };
 
 vi.mock("@/components/documents-viewer/pdf-document-viewer", async () => {
@@ -100,6 +104,7 @@ const moment = (over: Partial<RailMoment>): RailMoment => ({
   timeSeconds: null,
   endSeconds: null,
   pageNumber: null,
+  endPageNumber: null,
   quote: null,
   category: "emphasis",
   description: "note",
@@ -131,11 +136,14 @@ afterEach(() => {
   window.getSelection()?.removeAllRanges();
 });
 
-/** Select the text of one span and announce it like a browser would. */
-function selectSpan(text: string, nth = 0) {
+/** Select from the start of one span to the end of another (default:
+ *  the same span) and announce it like a browser would. */
+function selectSpan(text: string, nth = 0, endText?: string) {
   const span = screen.getAllByText(text)[nth];
+  const end = endText ? screen.getByText(endText) : span;
   const range = document.createRange();
-  range.selectNodeContents(span);
+  range.setStart(span.firstChild!, 0);
+  range.setEnd(end.firstChild!, end.textContent!.length);
   const sel = window.getSelection()!;
   sel.removeAllRanges();
   sel.addRange(range);
@@ -159,6 +167,16 @@ describe("PdfReview — capture", () => {
     );
   });
 
+  test("a selection across a page break becomes a page span + quote", async () => {
+    render(<PdfReview {...BASE} moments={[]} />);
+    selectSpan("Q. And then the driver", 0, "accelerated through the intersection?");
+    fireEvent.click(screen.getByRole("button", { name: "Flag selection" }));
+    await waitFor(() => expect(lastAnchor?.kind).toBe("page"));
+    expect(lastAnchor).toMatchObject({ pageNumber: 2, endPageNumber: 3, hint: undefined });
+    expect(lastAnchor && "quote" in lastAnchor && lastAnchor.quote).toMatch(/driver\s*accelerated/);
+    expect(handle.pageTextLayers).toHaveBeenCalledWith(2, 3);
+  });
+
   test("a passage that repeats on its page carries a heads-up", async () => {
     render(<PdfReview {...BASE} moments={[]} />);
     selectSpan("The light was red.", 1);
@@ -166,6 +184,7 @@ describe("PdfReview — capture", () => {
     await waitFor(() => expect(lastAnchor?.kind).toBe("page"));
     expect(lastAnchor).toMatchObject({ pageNumber: 2, quote: "The light was red." });
     expect(lastAnchor && "hint" in lastAnchor && lastAnchor.hint).toMatch(/appears 2 times on page 2/);
+    expect(lastAnchor).not.toHaveProperty("endPageNumber");
   });
 
   test("“Flag this page” prefills the page under the reading line", () => {
@@ -188,7 +207,20 @@ describe("PdfReview — navigate", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "go p" }));
     await waitFor(() => expect(scrollSpy).toHaveBeenCalled());
-    expect(handle.pageTextLayer).toHaveBeenCalledWith(2);
+    expect(handle.pageTextLayers).toHaveBeenCalledWith(2, 2);
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  test("a passage flag spanning pages is found across the page break", async () => {
+    render(
+      <PdfReview
+        {...BASE}
+        moments={[moment({ id: "x", pageNumber: 2, endPageNumber: 3, quote: "the driver accelerated through" })]}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "go x" }));
+    await waitFor(() => expect(scrollSpy).toHaveBeenCalled());
+    expect(handle.pageTextLayers).toHaveBeenCalledWith(2, 3);
     expect(screen.queryByRole("status")).toBeNull();
   });
 
@@ -205,12 +237,12 @@ describe("PdfReview — navigate", () => {
     render(<PdfReview {...BASE} moments={[moment({ id: "pg", pageNumber: 1 })]} />);
     fireEvent.click(screen.getByRole("button", { name: "go pg" }));
     expect(handle.goToPage).toHaveBeenCalledWith(1);
-    expect(handle.pageTextLayer).not.toHaveBeenCalled();
+    expect(handle.pageTextLayers).not.toHaveBeenCalled();
   });
 
   test("a ?flag= deep link focuses its passage once the PDF is ready", async () => {
-    render(<PdfReview {...BASE} initialPage={2} initialQuote="Exhibit 4" moments={[]} />);
+    render(<PdfReview {...BASE} initialPage={2} initialEndPage={3} initialQuote="driver accelerated" moments={[]} />);
     await waitFor(() => expect(scrollSpy).toHaveBeenCalled());
-    expect(handle.pageTextLayer).toHaveBeenCalledWith(2);
+    expect(handle.pageTextLayers).toHaveBeenCalledWith(2, 3);
   });
 });

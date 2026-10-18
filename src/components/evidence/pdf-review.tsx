@@ -3,16 +3,18 @@
  * pdf.js viewer (PdfDocumentViewer).
  *
  * Capture, two ways:
- *   - Select text on a page → a floating "Flag selection" button →
- *     a PAGE + QUOTE flag (the page the selection starts on, plus the
- *     selected text). The page disambiguates a phrase that appears on
- *     several pages; the composer warns when the passage repeats on
- *     that page, or can't be found again.
+ *   - Select text → a floating "Flag selection" button → a PAGE + QUOTE
+ *     flag: the page the selection starts on, the last page it reaches
+ *     when it runs across a page break (`endPageNumber`, up to
+ *     MAX_PDF_PAGE_SPAN pages), and the selected text. The pages
+ *     disambiguate a phrase that appears elsewhere; the composer warns
+ *     when the passage repeats within them, or can't be found again.
  *   - "Flag this page" → a page-only flag, prefilled with the page
  *     under the reading line (blank the page = whole document).
  *
  * Navigate: a flag with a quote scrolls to its page, relocates the
- * passage in that page's text layer (`locateQuote` — the same
+ * passage across its pages' text layers (the viewer keeps the whole
+ * span rendered) (`locateQuote` — the same
  * whitespace/case-insensitive matcher the Word viewer uses) and
  * highlights it; a page-only flag just scrolls to the page. A passage
  * that no longer matches says so instead of failing silently.
@@ -32,7 +34,7 @@ import {
   PdfDocumentViewer,
   type PdfViewerHandle,
 } from "@/components/documents-viewer/pdf-document-viewer";
-import { MAX_QUOTE_CHARS } from "@/lib/flag-anchor";
+import { MAX_PDF_PAGE_SPAN, MAX_QUOTE_CHARS } from "@/lib/flag-anchor";
 import { countQuoteOccurrences, locateQuote } from "@/lib/quote-locate";
 import { ReviewPanel } from "./review-panel";
 import type { ComposerAnchor } from "./flag-composer";
@@ -45,18 +47,22 @@ const FOCUS_MS = 3500;
 const hasHighlightApi = () =>
   typeof Highlight !== "undefined" && typeof CSS !== "undefined" && !!CSS.highlights;
 
-/** Text nodes of one page's text layer, in reading order. */
-function textNodes(layer: HTMLElement): Text[] {
-  const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT);
+/** Text nodes of the given pages' text layers, in reading order
+ *  (one layer, or a span's layers first page to last). */
+function textNodes(layers: HTMLElement | HTMLElement[]): Text[] {
   const nodes: Text[] = [];
-  let node: Node | null;
-  while ((node = walker.nextNode())) nodes.push(node as Text);
+  for (const layer of Array.isArray(layers) ? layers : [layers]) {
+    const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT);
+    let node: Node | null;
+    while ((node = walker.nextNode())) nodes.push(node as Text);
+  }
   return nodes;
 }
 
-/** A DOM Range over `quote` within one page's layer, or null. */
-function quoteRange(layer: HTMLElement, quote: string): Range | null {
-  const nodes = textNodes(layer);
+/** A DOM Range over `quote` within the layers, or null. A range may
+ *  start on one page and end on the next. */
+function quoteRange(layers: HTMLElement | HTMLElement[], quote: string): Range | null {
+  const nodes = textNodes(layers);
   const loc = locateQuote(
     nodes.map((n) => n.data),
     quote
@@ -70,6 +76,28 @@ function quoteRange(layer: HTMLElement, quote: string): Range | null {
   } catch {
     return null;
   }
+}
+
+/** First..last page a selection touches. The ends usually sit inside
+ *  a page; when one lands in the gap between pages, fall back to the
+ *  page wrappers the range crosses. */
+function selectionPages(root: HTMLElement, range: Range): { first: number; last: number } | null {
+  let first = pageOfNode(range.startContainer);
+  let last = pageOfNode(range.endContainer);
+  if (first === null || last === null) {
+    const crossed = [...root.querySelectorAll<HTMLElement>("[data-page-number]")]
+      .filter((el) => range.intersectsNode(el))
+      .map((el) => Number(el.dataset.pageNumber));
+    if (crossed.length === 0) return null;
+    first ??= Math.min(...crossed);
+    last ??= Math.max(...crossed);
+  }
+  return first <= last ? { first, last } : { first: last, last: first };
+}
+
+/** All non-null, or null — a span's passage needs every page's text. */
+function allLayers(layers: (HTMLElement | null)[]): HTMLElement[] | null {
+  return layers.every((l): l is HTMLElement => l !== null) ? layers : null;
 }
 
 /** The 1-based page a DOM node sits on, from its page wrapper. */
@@ -86,6 +114,7 @@ export function PdfReview({
   documentId,
   initialPage,
   initialQuote = null,
+  initialEndPage = null,
   moments,
   currentUserId,
   canCreate,
@@ -97,8 +126,10 @@ export function PdfReview({
   documentId: string;
   /** From the page's ?flag= deep link — open at this page… */
   initialPage: number | null;
-  /** …and highlight this passage on it. */
+  /** …and highlight this passage on it… */
   initialQuote?: string | null;
+  /** …which may run on to this page. */
+  initialEndPage?: number | null;
   moments: RailMoment[];
   currentUserId: string;
   canCreate: boolean;
@@ -111,6 +142,8 @@ export function PdfReview({
   const [selection, setSelection] = useState<{
     quote: string;
     page: number;
+    /** Last page the selection reaches (== page when it doesn't cross). */
+    endPage: number;
     top: number;
     left: number;
   } | null>(null);
@@ -136,8 +169,8 @@ export function PdfReview({
       return;
     }
     const range = sel.getRangeAt(0);
-    const page = pageOfNode(range.startContainer);
-    if (!root.contains(range.commonAncestorContainer) || page === null) {
+    const pages = root.contains(range.commonAncestorContainer) ? selectionPages(root, range) : null;
+    if (pages === null) {
       setSelection(null);
       return;
     }
@@ -150,7 +183,8 @@ export function PdfReview({
     const wrap = root.getBoundingClientRect();
     setSelection({
       quote,
-      page,
+      page: pages.first,
+      endPage: pages.last,
       top: rect.bottom - wrap.top + 6,
       left: Math.max(0, Math.min(rect.left - wrap.left, wrap.width - 140)),
     });
@@ -171,40 +205,54 @@ export function PdfReview({
   const flagSelection = async () => {
     if (!selection) return;
     const { quote, page } = selection;
+    let endPage = selection.endPage;
     setSelection(null);
     window.getSelection()?.removeAllRanges();
     let hint: string | undefined;
-    const layer = await viewerRef.current?.pageTextLayer(page);
-    if (layer) {
-      const chunks = textNodes(layer).map((n) => n.data);
+    if (endPage - page + 1 > MAX_PDF_PAGE_SPAN) {
+      endPage = page + MAX_PDF_PAGE_SPAN - 1;
+      hint = `Heads up: a flag can span at most ${MAX_PDF_PAGE_SPAN} pages, so this one stops at page ${endPage}.`;
+    }
+    const where = endPage > page ? `pages ${page}–${endPage}` : `page ${page}`;
+    const layers = allLayers((await viewerRef.current?.pageTextLayers(page, endPage)) ?? []);
+    if (layers && !hint) {
+      const chunks = textNodes(layers).map((n) => n.data);
       if (locateQuote(chunks, quote) === null) {
         hint =
-          "Heads up: this selection can't be found again on the page (it may run onto the next page), so the flag will jump to the page but may not highlight it. Try selecting within one page.";
+          "Heads up: this selection can't be found again in the text, so the flag will jump to the page but may not highlight it.";
       } else {
         const count = countQuoteOccurrences(chunks, quote);
         if (count > 1) {
-          hint = `Heads up: this text appears ${count} times on page ${page} — clicking the flag will highlight the first one. Select a longer passage to avoid that.`;
+          hint = `Heads up: this text appears ${count} times on ${where} — clicking the flag will highlight the first one. Select a longer passage to avoid that.`;
         }
       }
     }
-    setComposerAnchor({ kind: "page", pageNumber: page, quote, hint });
+    setComposerAnchor({
+      kind: "page",
+      pageNumber: page,
+      ...(endPage > page ? { endPageNumber: endPage } : {}),
+      quote,
+      hint,
+    });
   };
 
   // ── Navigate: page (+ passage) → scroll + highlight ────────────────
   const focusPassage = useCallback(
-    async (page: number, quote: string) => {
+    async (page: number, endPage: number | null, quote: string) => {
       const viewer = viewerRef.current;
       if (!viewer) return;
-      const layer = await viewer.pageTextLayer(page);
-      const range = layer ? quoteRange(layer, quote) : null;
+      const last = endPage !== null && endPage > page ? endPage : page;
+      const layers = allLayers(await viewer.pageTextLayers(page, last));
+      const range = layers ? quoteRange(layers, quote) : null;
       if (!range) {
         viewer.goToPage(page);
+        const where = last > page ? `pages ${page}–${last}` : `page ${page}`;
         showNotice(
-          `Passage not found on page ${page} — it's shown at the page instead. The flagged text may span pages or not be selectable text (e.g. a scan).`
+          `Passage not found on ${where} — it's shown at the page instead. The flagged text may not be selectable text (e.g. a scan).`
         );
         return;
       }
-      (range.startContainer.parentElement ?? layer)?.scrollIntoView({ block: "center" });
+      range.startContainer.parentElement?.scrollIntoView({ block: "center" });
       if (focusTimer.current) clearTimeout(focusTimer.current);
       if (hasHighlightApi()) {
         CSS.highlights.set(FOCUS_HIGHLIGHT, new Highlight(range));
@@ -224,16 +272,16 @@ export function PdfReview({
 
   const navigate = (m: RailMoment) => {
     if (m.pageNumber === null) return;
-    if (m.quote) void focusPassage(m.pageNumber, m.quote);
+    if (m.quote) void focusPassage(m.pageNumber, m.endPageNumber, m.quote);
     else viewerRef.current?.goToPage(m.pageNumber);
   };
 
   // ?flag= deep link, once the document has laid out.
   const onReady = useCallback(() => {
     if (initialPage === null) return;
-    if (initialQuote) void focusPassage(initialPage, initialQuote);
+    if (initialQuote) void focusPassage(initialPage, initialEndPage, initialQuote);
     else viewerRef.current?.goToPage(initialPage);
-  }, [initialPage, initialQuote, focusPassage]);
+  }, [initialPage, initialEndPage, initialQuote, focusPassage]);
 
   // ── Persistent marks on every flagged passage ──────────────────────
   const layersRef = useRef(new Map<number, HTMLElement>());
@@ -243,8 +291,12 @@ export function PdfReview({
     const ranges: Range[] = [];
     for (const m of momentsRef.current) {
       if (m.pageNumber === null || !m.quote) continue;
-      const layer = layersRef.current.get(m.pageNumber);
-      const r = layer ? quoteRange(layer, m.quote) : null;
+      // Every page of the flag's span must be rendered to find it.
+      const last = m.endPageNumber != null && m.endPageNumber > m.pageNumber ? m.endPageNumber : m.pageNumber;
+      const layers = allLayers(
+        Array.from({ length: last - m.pageNumber + 1 }, (_, i) => layersRef.current.get(m.pageNumber! + i) ?? null)
+      );
+      const r = layers ? quoteRange(layers, m.quote) : null;
       if (r) ranges.push(r);
     }
     if (ranges.length) CSS.highlights.set(FLAGGED_HIGHLIGHT, new Highlight(...ranges));
