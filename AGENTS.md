@@ -31,20 +31,52 @@ Risk triggers (any one means Full):
 - Data moving between records (lead → matter conversion, merges)
 - Expected to take more than a day
 
-Testing, permissions, and docs rules below apply at every tier.
+Everything below applies at every tier.
+
+# Commands and environment
+
+- Every test run (even pure unit tests) needs the Docker test DB:
+  `docker compose -f docker-compose.test.yml up -d` (Postgres on :5433).
+- Schema change: edit `prisma/schema.prisma`, then
+  `npx prisma migrate dev --name <change>` and `npm run check:migrations`.
+  Never point a Prisma command at production.
+- Other Claude sessions often work in this checkout at the same time and
+  share the git index. Commit in one step with an explicit pathspec
+  (`git commit -m "…" -- <paths>`), never leave files staged, and don't
+  commit files you didn't touch.
+
+# Invariants
+
+Rules that review rounds keep catching. Each links to its ADR.
+
+- **Matter/lead scope:** anything on a matter or lead goes through
+  `src/lib/matter-access.ts` (`assertMatterAccess`, `matterAccessWhere`)
+  or `src/lib/scope-access.ts` (`assertScopeAccess`). Never query by
+  `matterId` alone; ethical walls depend on it
+  ([ADR-039](docs/decisions/039-matter-team-access-ethical-walls.md)).
+- **Every page authenticates itself;** layouts are not auth gates. Guards
+  redirect by throwing, so never wrap them in try/catch
+  ([ADR-028](docs/decisions/028-layouts-are-not-auth-gates-every-page.md)).
+- **Gate data on the server, not just in the UI:** e.g. fee/billing data
+  needs `billing.view` in the query or action
+  ([ADR-038](docs/decisions/038-billing-view-gates-the-billing-read-surface.md)).
+- **Money** is `DECIMAL(14,2)`, rounded per line with `roundMoney`
+  (`src/lib/money.ts`)
+  ([ADR-024](docs/decisions/024-invoice-line-items-are-draft-only-money.md),
+  [ADR-036](docs/decisions/036-money-is-decimal-14-2-one-settlement.md)).
+- **Dates:** date-only values are UTC-midnight calendar dates; instants
+  display in the user's profile zone
+  ([ADR-012](docs/decisions/012-date-only-values-are-utc-midnight-calendar.md)).
+- **Document bytes never go through server actions**
+  ([ADR-034](docs/decisions/034-document-bytes-never-travel-through-server-actions.md)).
 
 # Testing is non-optional
 
-Every new feature ships with at least one test. The pre-commit hook
-(`.husky/pre-commit`) runs typecheck, lint, and only the tests
-related to staged `src/` files, and blocks the commit on failure.
-Run the full `npm test` before pushing; CI runs it on every push.
-See **`docs/TESTING.md`** for the full discipline — what to test, what NOT to test, file conventions,
-running commands. The framework is Vitest; tests live alongside
-their source as `*.test.ts`.
-
-If you're adding logic and don't write a test, you're leaving
-broken work for the next session. Don't.
+Every new feature ships with at least one test (Vitest, `*.test.ts(x)`
+beside the source). The pre-commit hook (`.husky/pre-commit`) runs
+typecheck, lint, and only the tests related to staged `src/` files.
+Run the full `npm test` before pushing; CI runs it on every push. See
+**`docs/TESTING.md`** for the discipline.
 
 # Permissions are non-optional
 
@@ -58,10 +90,10 @@ read-side flags via `currentUserHasPermission(...)`. See
 # Mutations are server actions
 
 All create/update/delete goes through server actions in
-`src/app/actions/[resource].ts` — permission-gated, activity-logged,
+`src/app/actions/[resource].ts`: permission-gated, logged with
+`logActivity` / `logActivityTx` (`src/lib/activity-log.ts`), and
 `revalidatePath` for invalidation. Do NOT add API routes for
-mutations, and do NOT use React Query mutations (the package is
-installed but unused; older docs describing that pattern were wrong).
+mutations, and do NOT use React Query mutations (installed but unused).
 Reads happen in server components via direct Prisma queries. See
 **`docs/ARCHITECTURE.md`** for the full picture.
 
