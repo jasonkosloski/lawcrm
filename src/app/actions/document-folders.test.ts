@@ -340,6 +340,58 @@ describe("deleteFolder", () => {
   });
 });
 
+describe("deleteFolder (lead scope)", () => {
+  test("only considers that lead's folders; other leads untouched", async () => {
+    const a = await prisma.lead.create({ data: { name: "Lead A" } });
+    const b = await prisma.lead.create({ data: { name: "Lead B" } });
+    const mk = (leadId: string, name: string, parentId: string | null = null) =>
+      prisma.documentFolder.create({ data: { leadId, name, parentId } });
+    // Lead A: root "Same" + parent "P" with child "Same" (collides at A's root).
+    const aSame = await mk(a.id, "Same");
+    const aParent = await mk(a.id, "P");
+    const aChild = await mk(a.id, "Same", aParent.id);
+    // Lead B: parent "P" with child "Same" (no collision in B's own scope).
+    const bParent = await mk(b.id, "P");
+    const bChild = await mk(b.id, "Same", bParent.id);
+
+    const res = await deleteFolder(aParent.id);
+    expect(res.ok).toBe(true);
+
+    const movedChild = await prisma.documentFolder.findUniqueOrThrow({
+      where: { id: aChild.id },
+    });
+    expect(movedChild.parentId).toBeNull();
+    expect(movedChild.leadId).toBe(a.id);
+    // Collides only with lead A's own root "Same", so it is renamed.
+    expect(movedChild.name).not.toBe("Same");
+    expect((await prisma.documentFolder.findUnique({ where: { id: aSame.id } }))?.name).toBe("Same");
+
+    const bAfter = await prisma.documentFolder.findMany({
+      where: { leadId: b.id },
+      orderBy: { name: "asc" },
+    });
+    expect(bAfter.map((f) => [f.id, f.name, f.parentId])).toEqual([
+      [bParent.id, "P", null],
+      [bChild.id, "Same", bParent.id],
+    ]);
+  });
+
+  test("a lead folder's child with no same-scope collision keeps its name", async () => {
+    const a = await prisma.lead.create({ data: { name: "Lead A" } });
+    const b = await prisma.lead.create({ data: { name: "Lead B" } });
+    // Lead B has a root "Same"; lead A's re-parented child must not collide with it.
+    await prisma.documentFolder.create({ data: { leadId: b.id, name: "Same" } });
+    const p = await prisma.documentFolder.create({ data: { leadId: a.id, name: "P" } });
+    const c = await prisma.documentFolder.create({
+      data: { leadId: a.id, name: "Same", parentId: p.id },
+    });
+    await deleteFolder(p.id);
+    const moved = await prisma.documentFolder.findUniqueOrThrow({ where: { id: c.id } });
+    expect(moved.name).toBe("Same");
+    expect(moved.parentId).toBeNull();
+  });
+});
+
 describe("moveDocuments", () => {
   test("moves a batch into a folder and back to the root; one activity row", async () => {
     const { folderId } = await seedDocumentFolder({ matterId, name: "Filed" });

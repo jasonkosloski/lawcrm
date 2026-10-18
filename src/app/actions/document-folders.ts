@@ -241,7 +241,7 @@ export async function deleteFolder(id: string): Promise<FolderActionResult> {
       select: { id: true, matterId: true, leadId: true, parentId: true, name: true },
     });
     const folders: FolderRecord[] = await tx.documentFolder.findMany({
-      where: { matterId: folder.matterId },
+      where: scopeWhere(scopeOf(folder)),
       select: { id: true, parentId: true, name: true, order: true },
     });
     const children = siblingsOf(folders, folder.id);
