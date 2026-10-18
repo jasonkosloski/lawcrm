@@ -24,3 +24,23 @@ describe("ImageViewer", () => {
     expect(screen.getByAltText("Scene photo.jpg")).toBeInTheDocument();
   });
 });
+
+describe("ImageViewer — sizing", () => {
+  test("fit mode sizes the image against the pane, not a percentage chain", () => {
+    // Regression: max-h-full inside the flex column never resolved, so a
+    // tall photo scaled to the width and was cropped top and bottom.
+    render(<ImageViewer src="/big.png" name="big.png" />);
+    const img = screen.getByAltText("big.png");
+    expect(img).toHaveClass("h-full", "w-full", "object-contain");
+    expect(img.parentElement).toHaveClass("absolute");
+    expect(img.parentElement?.parentElement).toHaveClass("relative", "overflow-hidden");
+  });
+
+  test("zoomed mode shows the real size inside a scrolling pane", async () => {
+    render(<ImageViewer src="/big.png" name="big.png" />);
+    await userEvent.click(screen.getByRole("button", { name: /zoom big\.png/i }));
+    const img = screen.getByAltText("big.png");
+    expect(img).toHaveClass("max-w-none");
+    expect(img.closest(".overflow-auto")).not.toBeNull();
+  });
+});
