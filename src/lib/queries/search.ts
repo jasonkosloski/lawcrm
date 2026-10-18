@@ -482,16 +482,33 @@ export async function globalSearch(
     return {
       type: "document",
       total,
-      hits: rows.map((d) => ({
-        type: "document",
-        id: d.id,
-        title: d.name,
-        snippet: null,
-        // The viewer route, not the tab root: the Documents tab lists
-        // one folder at a time, so a file in a subfolder isn't there.
-        href: `${scopeBasePath(scopeOf(d))}/documents/${d.id}`,
-        context: d.matter?.name ?? (d.lead ? `Intake · ${d.lead.name}` : "Intake"),
-      })),
+      hits: rows.flatMap((d) => {
+        // One malformed row (neither/both scope ids) must not fail the
+        // whole global search — skip it and say so.
+        let base: string;
+        try {
+          base = scopeBasePath(scopeOf(d));
+        } catch (err) {
+          console.warn("[search] skipping document with no derivable scope", {
+            id: d.id,
+            err,
+          });
+          return [];
+        }
+        return [
+          {
+            type: "document" as const,
+            id: d.id,
+            title: d.name,
+            snippet: null,
+            // The viewer route, not the tab root: the Documents tab lists
+            // one folder at a time, so a file in a subfolder isn't there.
+            href: `${base}/documents/${d.id}`,
+            context:
+              d.matter?.name ?? (d.lead ? `Intake · ${d.lead.name}` : "Intake"),
+          },
+        ];
+      }),
     };
   };
 

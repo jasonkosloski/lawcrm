@@ -69,6 +69,26 @@ describe("rehomeLeadDocuments", () => {
     expect(doc.folderId).toBe(child.id);
   });
 
+  test("counts only top-level documents but re-homes extracted attachments too", async () => {
+    const email = await prisma.document.create({
+      data: { leadId, name: "mail.eml" },
+    });
+    const att1 = await prisma.document.create({
+      data: { leadId, name: "a1.pdf", parentDocumentId: email.id },
+    });
+    const att2 = await prisma.document.create({
+      data: { leadId, name: "a2.pdf", parentDocumentId: email.id },
+    });
+
+    expect(await run()).toBe(1);
+
+    for (const id of [email.id, att1.id, att2.id]) {
+      const d = await prisma.document.findUniqueOrThrow({ where: { id } });
+      expect(d.matterId).toBe(matterId);
+      expect(d.leadId).toBeNull();
+    }
+  });
+
   test("returns 0 when the lead has nothing", async () => {
     expect(await run()).toBe(0);
   });

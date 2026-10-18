@@ -7,7 +7,8 @@ import { nextAvailableFolderName } from "@/lib/folder-tree";
  * exactly-one-of scope invariant holds). Only ROOT lead folders can
  * collide with the matter's existing root folders; a collision gets a
  * "(n)" suffix. Nested folders keep their parent. Returns the number
- * of documents moved.
+ * of top-level documents moved (extracted email attachments move too
+ * but are not counted).
  */
 export async function rehomeLeadDocuments(
   tx: Tx,
@@ -37,9 +38,15 @@ export async function rehomeLeadDocuments(
     where: { leadId },
     data: { matterId, leadId: null },
   });
-  const docs = await tx.document.updateMany({
+  // Count top-level documents only: an email's extracted attachments
+  // (parentDocumentId set) move too, but "N documents carried forward"
+  // should match what the user uploaded.
+  const topLevel = await tx.document.count({
+    where: { leadId, parentDocumentId: null },
+  });
+  await tx.document.updateMany({
     where: { leadId },
     data: { matterId, leadId: null },
   });
-  return docs.count;
+  return topLevel;
 }

@@ -518,8 +518,8 @@ export async function convertLeadToMatter(
       tz,
     });
 
-    // Intake documents + folders roll forward last, so a root-folder name
-    // an automation default created is seen and the lead folder is
+    // Intake documents + folders roll forward last. Defensive: in case the
+    // new matter already has root folders, a colliding lead folder is
     // suffixed rather than duplicated.
     const carriedDocumentCount = await rehomeLeadDocuments(tx, leadId, matter.id);
 

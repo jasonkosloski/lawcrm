@@ -297,6 +297,19 @@ describe("globalSearch — documents", () => {
     });
   });
 
+  test("a malformed document row (no scope) is skipped, not fatal to the whole search", async () => {
+    await prisma.document.create({ data: { name: "Quokkaorphan.pdf" } });
+    const good = await prisma.document.create({
+      data: { matterId, name: "Quokkagood.pdf" },
+      select: { id: true },
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const res = await globalSearch("quokka");
+    warn.mockRestore();
+    const g = groupOf(res, "document")!;
+    expect(g.hits.map((h) => h.id)).toEqual([good.id]);
+  });
+
   test("TEAM mode: a restricted viewer still finds lead documents but not a hidden matter's", async () => {
     await prisma.firm.updateMany({ data: { matterVisibility: "TEAM" } });
     const { leadId } = await seedLead({ name: "Test Lead" });

@@ -993,7 +993,7 @@ These are not ADRs: each needs a human call, and when it is made it becomes an A
 **Decision:**
 - **Same tables, exactly-one scope.** `Document.leadId` and `DocumentFolder.leadId` were added and `matterId` made nullable on both. Exactly one of (matterId, leadId) is set on each row, and a folder and its documents share a scope. `RecordScope` helpers in `src/lib/record-scope.ts` (`scopeOf`, `scopeWhere`, `scopeBasePath`) and `src/lib/scope-access.ts` (`assertScopeAccess`, `assertScopeWritable`, `revalidateDocumentScope`) are the single place scope is resolved.
 - **Upload routes accept `leadId`.** The streaming and blob upload routes take `leadId` in place of `matterId`; the viewer, listing and download resolve the row's scope rather than assuming a matter.
-- **No matter wall on lead documents.** A lead has no team, so any signed-in user holding the `documents.*` keys can reach them. Matter documents keep the matter wall.
+- **No matter wall on lead documents.** A lead has no team, so any signed-in user can view and download lead documents (same as the intake pages); the `documents.*` write keys gate upload, organize and delete. Matter documents keep the matter wall.
 - **Converted leads are read-only.** Writes to a converted lead's documents and folders are refused; the tab links to the matter.
 - **Conversion re-homes, not copies.** `rehomeLeadDocuments` (`src/lib/lead-documents.ts`) moves folders and documents onto the matter inside the convert transaction. A root folder whose name collides with an existing matter root folder gets a "(n)" suffix.
 - **Search lists intake documents** labelled "Intake · {lead}", linking to the intake viewer.
