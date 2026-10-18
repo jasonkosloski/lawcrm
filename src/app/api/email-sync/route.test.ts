@@ -133,14 +133,54 @@ describe("GET /api/email-sync", () => {
     expect(body.results[1]).not.toHaveProperty("failedThreads");
   });
 
-  it("a wholesale calendar-pull failure never fails the mail sweep", async () => {
+  it("a wholesale calendar-pull failure still runs the mail sweep but reports the run as failed", async () => {
     process.env.CRON_SECRET = "s3cret";
     mockedCalendarPull.mockRejectedValue(new Error("calendar infra down"));
     const res = await GET(request("Bearer s3cret"));
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(500);
     const body = await res.json();
-    expect(body).toMatchObject({ ok: true, accounts: 1, synced: 1 });
+    expect(body).toMatchObject({ ok: false, calendarCrashed: true, accounts: 1, synced: 1 });
     expect(body.calendar).toEqual([]);
+  });
+
+  it("a throwing mailbox pass fails the run; a reconnect-required skip does not", async () => {
+    process.env.CRON_SECRET = "s3cret";
+    const skip = {
+      accountId: "acc2",
+      emailAddress: "b@gmail.com",
+      ok: false,
+      mode: "skipped" as const,
+      threadsSynced: 0,
+      error: "Reconnect required.",
+    };
+    mockedSync.mockResolvedValue([skip]);
+    expect((await GET(request("Bearer s3cret"))).status).toBe(200);
+
+    mockedSync.mockResolvedValue([{ ...skip, transient: true, error: "ETIMEDOUT" }]);
+    const res = await GET(request("Bearer s3cret"));
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({ ok: false, transientFailures: 1, accounts: 1 });
+  });
+
+  it("a throwing calendar pass fails the run", async () => {
+    process.env.CRON_SECRET = "s3cret";
+    mockedCalendarPull.mockResolvedValue([
+      {
+        accountId: "acc1",
+        emailAddress: "me@gmail.com",
+        ok: false,
+        mode: "skipped",
+        imported: 0,
+        updated: 0,
+        deletedEvents: 0,
+        unlinked: 0,
+        transient: true,
+        error: "503",
+      },
+    ]);
+    const res = await GET(request("Bearer s3cret"));
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({ transientFailures: 1 });
   });
 
   it("500s (without leaking the error) when the sweep itself throws", async () => {

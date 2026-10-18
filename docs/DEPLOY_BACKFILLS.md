@@ -15,8 +15,8 @@ fixed going forward; this repairs existing rows.
 **Required deploy step** (after the code deploy, against the target DB):
 
 ```
-DATABASE_URL=<target> npx tsx scripts/backfill-client-matter-contacts.ts --dry-run
-DATABASE_URL=<target> npx tsx scripts/backfill-client-matter-contacts.ts
+DATABASE_URL=<target> npx tsx --conditions=react-server scripts/backfill-client-matter-contacts.ts --dry-run
+DATABASE_URL=<target> npx tsx --conditions=react-server scripts/backfill-client-matter-contacts.ts
 ```
 
 Logic lives in `src/lib/backfill-client-party-rows.ts` (tested). Only

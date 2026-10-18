@@ -55,6 +55,18 @@ jobs:
         run: npm run typecheck
       - if: matrix.shard == 1
         run: npm run lint
+      # Migration chain must reproduce schema.prisma exactly (ADR-016);
+      # the pre-commit hook only runs this when prisma/ is staged.
+      - if: matrix.shard == 1 && matrix.tz == 'UTC'
+        run: npm run check:migrations
+      # Build catches what typecheck can't (route segment config,
+      # server/client boundary, server-only leaks). Pages are dynamic,
+      # so the placeholder URL is never connected to.
+      - if: matrix.shard == 1 && matrix.tz == 'UTC'
+        run: npx next build
+        env:
+          DATABASE_URL: postgresql://build:build@localhost:5432/build
+          AUTH_SECRET: ci-build-only-not-a-secret
       # Vitest globalSetup pushes the schema and clones per-worker
       # databases; no docker CLI or Prisma agent-consent variable needed.
       - run: npm test -- --shard=${{ matrix.shard }}/2

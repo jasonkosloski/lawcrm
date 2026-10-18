@@ -93,7 +93,7 @@ All create/update/delete goes through server actions in
 `src/app/actions/[resource].ts`: permission-gated, logged with
 `logActivity` / `logActivityTx` (`src/lib/activity-log.ts`), and
 `revalidatePath` for invalidation. Do NOT add API routes for
-mutations, and do NOT use React Query mutations (installed but unused).
+mutations, and do NOT add React Query.
 Reads happen in server components via direct Prisma queries. See
 **`docs/ARCHITECTURE.md`** for the full picture.
 

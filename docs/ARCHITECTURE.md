@@ -17,8 +17,6 @@ _If the folder tree or data-flow section stops matching the code, fix it here._
 | Testing | Vitest + happy-dom | See [TESTING.md](./TESTING.md) |
 | Fonts | Inter / JetBrains Mono / Fraunces | Per design handoff — UI / metadata / display |
 
-> `@tanstack/react-query` (and its devtools) and `react-day-picker` are still listed in `package.json` but nothing imports them: the React Query provider and the calendar primitive were deleted, and `src/components/providers.tsx` is a passthrough. They can be uninstalled (lockfile regeneration pending). Don't reach for React Query; reads are server components and mutations are server actions.
-
 ## Folder Structure
 
 ```

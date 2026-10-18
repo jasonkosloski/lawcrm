@@ -10,13 +10,18 @@
  * Syncs EVERY connected email account across all users — no session
  * involved; each account syncs into its own user's mailbox. Per-
  * account failures are isolated inside `syncAllEmailAccounts` (one
- * revoked mailbox never blocks the firm), so this handler only
- * 500s on infrastructure-level failures.
+ * revoked mailbox never blocks the firm).
  *
  * The Google Calendar pull piggybacks the same sweep for calendar-
  * scoped accounts (`pullCalendarForAllAccounts` — per-account
  * isolation inside, plus a catch here so even a wholesale calendar
- * failure never blocks the mail sweep or fails the request).
+ * failure never blocks the mail sweep).
+ *
+ * Status: 200 only when nothing failed. A throwing mailbox/calendar
+ * pass or a wholesale calendar failure still finishes the sweep but
+ * answers 500 with the full summary, so Vercel shows the cron run as
+ * failed instead of a silent green. Reconnect-required and other
+ * deliberate skips are not failures (the user has to act there).
  */
 
 import { isAuthorizedCron } from "@/lib/cron-auth";
@@ -41,14 +46,29 @@ export async function GET(request: Request): Promise<Response> {
     const results = await syncAllEmailAccounts();
 
     let calendar: CalendarPullResult[] = [];
+    let calendarCrashed = false;
     try {
       calendar = await pullCalendarForAllAccounts();
     } catch (err) {
+      calendarCrashed = true;
       console.error("[email-sync] calendar pull failed", err);
     }
 
+    const transientFailures =
+      results.filter((r) => r.transient).length +
+      calendar.filter((c) => c.transient).length;
+    const ok = transientFailures === 0 && !calendarCrashed;
+    if (!ok) {
+      console.error("[email-sync] sweep finished with failures", {
+        transientFailures,
+        calendarCrashed,
+      });
+    }
+
     return Response.json({
-      ok: true,
+      ok,
+      transientFailures,
+      calendarCrashed,
       accounts: results.length,
       // "skipped" passes (another sync held the account, reconnect
       // required, deactivated owner) did not sync anything.
@@ -79,7 +99,7 @@ export async function GET(request: Request): Promise<Response> {
           ...(error ? { error } : {}),
         })
       ),
-    });
+    }, { status: ok ? 200 : 500 });
   } catch (err) {
     console.error("[email-sync] sweep failed", err);
     return Response.json({ ok: false, error: "Sync failed" }, { status: 500 });

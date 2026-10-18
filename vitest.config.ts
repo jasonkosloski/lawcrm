@@ -105,6 +105,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // Tests run outside the react-server condition; resolve the
+      // marker to its no-op build (src/lib/prisma.ts imports it).
+      "server-only": path.resolve(__dirname, "node_modules/server-only/empty.js"),
     },
   },
 });

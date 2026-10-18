@@ -190,6 +190,9 @@ export type AccountSyncResult = {
    *  logged at error level at the catch site and noted on syncError).
    *  Surfaced so the cron response can report them. */
   failedThreads?: number;
+  /** The pass threw (not a reconnect/skip decision) — the cron
+   *  route reports these as a failed run so they get noticed. */
+  transient?: true;
   error?: string;
 };
 
@@ -1185,6 +1188,7 @@ async function syncAccounts(
         ok: false,
         mode: "skipped",
         threadsSynced: 0,
+        transient: true,
         error:
           err instanceof Error && err.message ? err.message : "Sync failed.",
       });

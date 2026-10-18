@@ -158,6 +158,9 @@ export type CalendarPullResult = {
   /** Items whose import threw and were skipped (poison-item
    *  isolation); surfaced on the account's syncError too. */
   failed?: number;
+  /** The pull threw (not a reconnect/skip decision) — reported by
+   *  the cron route as a failed run. */
+  transient?: true;
   error?: string;
 };
 
@@ -301,7 +304,7 @@ export async function pullCalendarForAccount(
 function emptyResult(
   account: { id: string; emailAddress: string },
   mode: CalendarPullResult["mode"],
-  rest: { ok: boolean; error?: string }
+  rest: { ok: boolean; error?: string; transient?: true }
 ): CalendarPullResult {
   return {
     accountId: account.id,
@@ -670,6 +673,7 @@ async function pullAccounts(
       results.push(
         emptyResult(account, "skipped", {
           ok: false,
+          transient: true,
           error:
             err instanceof Error && err.message
               ? err.message

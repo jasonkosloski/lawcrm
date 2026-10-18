@@ -37,6 +37,10 @@
  * @see https://www.prisma.io/docs/orm/overview/databases/postgresql
  */
 
+// Any client-component import of the DB is a build error, not a
+// runtime surprise. Scripts run under tsx need
+// `--conditions=react-server` (see docs/DEPLOY_BACKFILLS.md).
+import "server-only";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma/client";
 import { emailTokenEncryption } from "@/lib/email-token-encryption";

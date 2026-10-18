@@ -45,6 +45,7 @@ const BLOB_URL =
 function clearStorageEnv() {
   vi.stubEnv("STORAGE_DRIVER", "");
   vi.stubEnv("BLOB_READ_WRITE_TOKEN", "");
+  vi.stubEnv("VERCEL", "");
 }
 
 afterEach(() => {
@@ -88,6 +89,27 @@ describe("activeStorageDriver — env matrix", () => {
     clearStorageEnv();
     vi.stubEnv("STORAGE_DRIVER", "s3");
     expect(() => activeStorageDriver()).toThrow(/Unknown STORAGE_DRIVER/);
+  });
+
+  test("on Vercel without a token, local is refused (ephemeral disk)", () => {
+    clearStorageEnv();
+    vi.stubEnv("VERCEL", "1");
+    expect(() => activeStorageDriver()).toThrow(/not allowed on Vercel/);
+  });
+
+  test("on Vercel, an explicit STORAGE_DRIVER=local is refused too", () => {
+    clearStorageEnv();
+    vi.stubEnv("VERCEL", "1");
+    vi.stubEnv("BLOB_READ_WRITE_TOKEN", "vercel_blob_rw_test_secret");
+    vi.stubEnv("STORAGE_DRIVER", "local");
+    expect(() => activeStorageDriver()).toThrow(/not allowed on Vercel/);
+  });
+
+  test("on Vercel with a token → vercel-blob", () => {
+    clearStorageEnv();
+    vi.stubEnv("VERCEL", "1");
+    vi.stubEnv("BLOB_READ_WRITE_TOKEN", "vercel_blob_rw_test_secret");
+    expect(activeStorageDriver()).toBe("vercel-blob");
   });
 });
 

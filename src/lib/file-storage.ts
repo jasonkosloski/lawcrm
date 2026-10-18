@@ -70,6 +70,7 @@ export { signedBlobUrl };
  *      silently falling back to disk would lose prod uploads).
  *   2. BLOB_READ_WRITE_TOKEN present → "vercel-blob".
  *   3. Otherwise "local".
+ *   On Vercel (`VERCEL` set) a resolved "local" throws instead.
  *
  * Read per-call (not at module load) so env changes in tests — and
  * Vercel's runtime-injected token — are always honored.
@@ -87,9 +88,23 @@ export function activeStorageDriver(): StorageDriver {
         'STORAGE_DRIVER="vercel-blob" requires BLOB_READ_WRITE_TOKEN to be set.'
       );
     }
-    return explicit;
+    return refuseLocalOnVercel(explicit);
   }
-  return process.env.BLOB_READ_WRITE_TOKEN ? "vercel-blob" : "local";
+  return refuseLocalOnVercel(
+    process.env.BLOB_READ_WRITE_TOKEN ? "vercel-blob" : "local"
+  );
+}
+
+/** Vercel's disk is ephemeral: a `local` write there "succeeds" and
+ *  the file is gone on the next cold start. A missing/rotated blob
+ *  token must fail the upload, not lose it. */
+function refuseLocalOnVercel(driver: StorageDriver): StorageDriver {
+  if (driver === "local" && process.env.VERCEL) {
+    throw new Error(
+      "Local file storage is not allowed on Vercel — set BLOB_READ_WRITE_TOKEN."
+    );
+  }
+  return driver;
 }
 
 /** Persist an uploaded `File` and return what the DB needs to store
