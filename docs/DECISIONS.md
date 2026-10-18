@@ -1021,6 +1021,8 @@ These are not ADRs: each needs a human call, and when it is made it becomes an A
 - **Follow-up tasks are exempt from `tasks.create`.** An exception to ADR-025: they are a side effect of `records.*` actions, not a user creating a task.
 - **Fee to Expense.** On matters the fee creates an Expense immediately; on leads it is created at conversion. A $0 fee never creates one; clearing a fee while an Expense is linked is refused; an invoiced Expense locks the fee. Fee visibility on matters requires `matters.expense.view` (lead fees show with `records.view`); editing needs `records.edit` plus `matters.expense.create/edit` on matters.
 - **Letters and uploads** live in the folder `Records/{custodian} — {type}`; ownership is inferred from the folder's tagged documents. `recordsRequestId` must precede file parts in an upload (400 otherwise).
+- **Custodian quick-create** (`createCustodianContact`, medical_provider or government, non-redirecting) needs `records.create` + `contacts.create`.
+- **Upload edge cases.** Previewing a letter for a request needs `records.view`. A lead upload rerouted to the converted matter keeps the file and drops the records tag only if the request no longer matches.
 - **Business days skip weekends only** (no holiday calendar). Seeded types are editable starting points, not legal advice.
 
 **Trade-offs:**
