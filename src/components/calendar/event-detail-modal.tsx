@@ -28,47 +28,24 @@
 
 "use client";
 
-import { EventPrivateToggle } from "@/components/calendar/event-private-toggle";
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useTransition,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type ReactNode,
-} from "react";
+import { useCallback, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import {
-  formatDate,
-  formatDateOnly,
-  parseDateOnly,
-  parseWallClock,
-} from "@/lib/format-date";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import {
-  dateOnly,
   normalizeVideoUrl,
-  toScheduleInput,
   toScheduleWire,
   videoHref,
-  withDefaultEnd,
-  withDefaultStart,
 } from "@/lib/event-schedule";
 import {
   ArrowRight,
   Calendar,
-  Check,
-  Eye,
   Link as LinkIcon,
   MapPin,
   Trash2,
-  Users,
   Video,
   X,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import {
   deleteCalendarEvent,
   updateCalendarEvent,
@@ -78,13 +55,7 @@ import {
   EVENT_TYPES,
   EVENT_TYPE_LABEL,
 } from "@/lib/constants/calendar-event-type";
-import { EmailLink } from "@/components/ui/email-link";
-import {
-  ATTENDEE_STATUS_LABEL,
-  AttendeePicker,
-  serializeAttendees,
-  type EditableAttendee,
-} from "./attendee-picker";
+import { serializeAttendees } from "./attendee-picker";
 import type {
   CalendarEventDetail,
   EventNote,
@@ -92,6 +63,24 @@ import type {
 } from "@/lib/queries/calendar";
 import { EventNotesSection } from "./event-notes-section";
 import { EventTimeEntriesSection } from "./event-time-entries-section";
+import {
+  Row,
+  describeSchedule,
+  buildInitialState,
+  type EventEditState,
+} from "./event-detail-helpers";
+import { ModalShell } from "./event-modal-shell";
+import {
+  InlineText,
+  InlineTextarea,
+  InlineSelect,
+  InlineTimeEditor,
+} from "./event-inline-editors";
+import {
+  BusyEventView,
+  EventVisibilityRow,
+  EventAttendeesSection,
+} from "./event-detail-sections";
 
 // Settable event-type labels are centralized; "deadline" is the
 // calendar's pseudo-event for projected deadlines (display-only,
@@ -100,63 +89,6 @@ const TYPE_LABEL: Record<string, string> = {
   ...EVENT_TYPE_LABEL,
   deadline: "Deadline",
 };
-
-// ── Editor state ────────────────────────────────────────────────────────
-
-// `EditableAttendee` + the attendee list editor live in
-// ./attendee-picker.tsx (shared with the standalone create form).
-
-/** All fields the inline editor manages. Mirrors the action's
- *  schema: when a single field commits, we still build a full
- *  FormData from this state because the action is a whole-row
- *  update. */
-type EventEditState = {
-  title: string;
-  type: string;
-  isAllDay: boolean;
-  /** Always stored as datetime-local format ("YYYY-MM-DDTHH:mm")
-   *  even when isAllDay (then "YYYY-MM-DDT00:00" — the date half
-   *  is the date-only value) — FormData branches on the flag at
-   *  submission time. Timed values are wall-clock in the user's
-   *  profile zone. */
-  startTime: string;
-  endTime: string;
-  location: string;
-  zoomUrl: string;
-  description: string;
-  attendees: EditableAttendee[];
-  /** Per-event visibility override. "default" applies the
-   *  resolver's standard rules; "show_details" makes this event
-   *  publicly visible in full. */
-  visibility: string;
-};
-
-const buildInitialState = (
-  event: CalendarEventDetail,
-  tz: string
-): EventEditState => ({
-  title: event.title,
-  type: event.type,
-  isAllDay: event.isAllDay,
-  startTime: toScheduleInput(event.startTime, event.isAllDay, tz),
-  endTime: toScheduleInput(event.endTime, event.isAllDay, tz),
-  location: event.location ?? "",
-  zoomUrl: event.zoomUrl ?? "",
-  description: event.description ?? "",
-  visibility: event.visibility,
-  attendees: event.attendees.map((a) => ({
-    kind: a.userId ? "user" : a.contactId ? "contact" : "new",
-    attendeeId: a.id,
-    userId: a.userId,
-    contactId: a.contactId,
-    name: a.name,
-    email: a.email ?? "",
-    initials: a.userInitials,
-    jobTitle: a.userJobTitle,
-    contactType: a.contactType,
-    status: a.status,
-  })),
-});
 
 // ── Modal ───────────────────────────────────────────────────────────────
 
@@ -330,44 +262,11 @@ function EventDetailModalInner({
   // predictable but no detail leaks.
   if (!event.viewerCanSeeDetails) {
     return (
-      <ModalShell label="Busy" widthClass="w-[min(92vw,400px)]" onClose={close}>
-        <div className="contents">
-          <header className="flex items-start gap-3 px-5 pt-5 pb-4 border-b border-line">
-            <div className="w-1 self-stretch rounded-full shrink-0 bg-ink-3" />
-            <div className="flex-1 min-w-0">
-              <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 mb-1">
-                Busy
-              </div>
-              <h2 className="text-lg font-display font-medium text-ink leading-tight">
-                Unavailable
-              </h2>
-            </div>
-            <button
-              type="button"
-              onClick={close}
-              aria-label="Close"
-              className="p-1 rounded-md text-ink-3 hover:bg-muted hover:text-ink-2 shrink-0"
-            >
-              <X size={16} />
-            </button>
-          </header>
-          <div className="px-5 py-4 flex flex-col gap-2">
-            <div className="flex items-start gap-3 text-xs text-ink">
-              <Calendar size={14} className="text-ink-3 mt-0.5 shrink-0" />
-              <div className="flex flex-col leading-tight">
-                <span className="font-medium">{dateLabel}</span>
-                <span className="text-2xs text-ink-3 font-mono">
-                  {startsAndEnds}
-                </span>
-              </div>
-            </div>
-            <p className="text-2xs text-ink-4 leading-relaxed mt-1">
-              You don&apos;t have access to this event&apos;s details.
-              Ask the creator or a matter team member to share more.
-            </p>
-          </div>
-        </div>
-      </ModalShell>
+      <BusyEventView
+        dateLabel={dateLabel}
+        startsAndEnds={startsAndEnds}
+        close={close}
+      />
     );
   }
 
@@ -580,39 +479,7 @@ function EventDetailModalInner({
               is the explicit hide (creator only, ADR-037) and
               wins over both the profile default and show-details. */}
           {canEdit && (
-            <Row icon={<Eye size={14} />}>
-              <label className="inline-flex items-center gap-2 text-xs text-ink-2 select-none">
-                <input
-                  type="checkbox"
-                  checked={committed.visibility === "show_details"}
-                  onChange={(e) =>
-                    commit({
-                      visibility: e.target.checked
-                        ? "show_details"
-                        : "default",
-                    })
-                  }
-                  className="h-3.5 w-3.5 rounded border-line"
-                />
-                <span>
-                  Show details to everyone in the firm
-                  <span className="text-2xs text-ink-4 ml-1.5">
-                    (off: attendees + matter team always see
-                    details; everyone else follows the
-                    creator&apos;s profile default — usually
-                    &ldquo;Busy&rdquo;)
-                  </span>
-                </span>
-              </label>
-            <div className="mt-2">
-                <EventPrivateToggle
-                  checked={committed.visibility === "private"}
-                  onChange={(next) =>
-                    commit({ visibility: next ? "private" : "default" })
-                  }
-                />
-              </div>
-            </Row>
+            <EventVisibilityRow committed={committed} commit={commit} />
           )}
 
           {/* Description */}
@@ -638,45 +505,12 @@ function EventDetailModalInner({
           )}
 
           {/* Attendees */}
-          {(canEdit || committed.attendees.length > 0) && (
-            <div className="pt-3 border-t border-line">
-              <div className="flex items-center gap-2 text-2xs font-mono uppercase tracking-wider text-ink-4 mb-2">
-                <Users size={11} />
-                {committed.attendees.length} attendee
-                {committed.attendees.length === 1 ? "" : "s"}
-              </div>
-              {canEdit ? (
-                <AttendeePicker
-                  value={committed.attendees}
-                  onCommit={(next) => commit({ attendees: next })}
-                />
-              ) : (
-                <ul className="flex flex-col gap-1.5">
-                  {event.attendees.map((a) => (
-                    <li
-                      key={a.id}
-                      className="flex items-center justify-between text-xs"
-                    >
-                      <div className="flex flex-col leading-tight">
-                        <span className="text-ink">{a.name}</span>
-                        {a.email && (
-                          <EmailLink
-                            email={a.email}
-                            className="text-2xs text-ink-4 font-mono"
-                          />
-                        )}
-                      </div>
-                      {a.status !== "accepted" && (
-                        <span className="text-2xs text-ink-3">
-                          {ATTENDEE_STATUS_LABEL[a.status] ?? a.status}
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
+          <EventAttendeesSection
+            canEdit={canEdit}
+            committed={committed}
+            event={event}
+            commit={commit}
+          />
 
           {/* Notes attached to this event. data-modal-composer: an
               Escape inside these drafts only blurs the field, so a
@@ -739,664 +573,5 @@ function EventDetailModalInner({
         </footer>
       </div>
     </ModalShell>
-  );
-}
-
-// ── Layout helpers ──────────────────────────────────────────────────────
-
-function Row({
-  icon,
-  children,
-}: {
-  icon: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex items-start gap-3">
-      <span className="text-ink-3 pt-0.5 shrink-0">{icon}</span>
-      <div className="flex-1 min-w-0">{children}</div>
-    </div>
-  );
-}
-
-/** Date heading + range line for the read-only / collapsed time row.
- *  All-day boundaries are date-only (UTC read); timed ones are the
- *  committed wall-clock strings in `tz` converted back to instants so
- *  the output is the same on the server render and after hydration. */
-function describeSchedule(
-  c: EventEditState,
-  event: CalendarEventDetail,
-  tz: string
-): { dateLabel: string; startsAndEnds: string } {
-  if (c.isAllDay) {
-    const start = parseDateOnly(dateOnly(c.startTime));
-    const end = parseDateOnly(dateOnly(c.endTime));
-    const multiDay = dateOnly(c.startTime) !== dateOnly(c.endTime);
-    return {
-      dateLabel: formatDateOnly(start, "full_long"),
-      startsAndEnds:
-        multiDay && end
-          ? `All day · through ${formatDateOnly(end, "medium")}`
-          : "All day",
-    };
-  }
-  const start = parseWallClock(c.startTime, tz) ?? event.startTime;
-  const end = parseWallClock(c.endTime, tz) ?? event.endTime;
-  const sameDay = dateOnly(c.startTime) === dateOnly(c.endTime);
-  return {
-    dateLabel: formatDate(start, "full_long", tz),
-    startsAndEnds: sameDay
-      ? `${formatDate(start, "time", tz)} – ${formatDate(end, "time", tz)}`
-      : `${formatDate(start, "datetime", tz)} – ${formatDate(end, "datetime", tz)}`,
-  };
-}
-
-// ── Dialog shell ────────────────────────────────────────────────────────
-
-const FOCUSABLE =
-  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [contenteditable="true"]';
-
-const EDITABLE = 'input, textarea, select, [contenteditable="true"]';
-
-/** Backdrop + role=dialog container shared by the full and Busy
- *  views. Handles what a real modal must: focus moves into the dialog
- *  on open, Tab is trapped inside it, focus returns to the opener on
- *  close, and Escape closes it, without swallowing an Escape aimed at
- *  something else (a docked composer's field) and without discarding a
- *  half-typed note (inside `[data-modal-composer]` the first Escape
- *  just blurs). */
-function ModalShell({
-  label,
-  widthClass,
-  onClose,
-  children,
-}: {
-  label: string;
-  widthClass: string;
-  onClose: () => void;
-  children: ReactNode;
-}) {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const dialogRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const opener = document.activeElement as HTMLElement | null;
-    dialogRef.current?.focus();
-    return () => {
-      if (opener && opener !== document.body && document.contains(opener)) {
-        opener.focus();
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    // Listens on `document`, not `window`, so handling Escape here
-    // (stopPropagation) keeps it from also reaching other window-level
-    // Escape handlers such as the create dock's.
-    const handler = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented) return;
-      const target = e.target instanceof Element ? e.target : null;
-      const onPage =
-        !target || target === document.body || target === document.documentElement;
-      const inside = !!target && !!rootRef.current?.contains(target);
-      // Focus is somewhere else on the page (e.g. a docked composer):
-      // that surface owns this Escape.
-      if (!inside && !onPage) return;
-      e.preventDefault();
-      e.stopPropagation();
-      if (inside && target.closest("[data-modal-composer]") && target.matches(EDITABLE)) {
-        (target as HTMLElement).blur();
-        return;
-      }
-      onClose();
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
-
-  const trapTab = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== "Tab") return;
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    const items = Array.from(
-      dialog.querySelectorAll<HTMLElement>(FOCUSABLE)
-    ).filter((el) => !el.hasAttribute("disabled") && el.tabIndex >= 0);
-    if (items.length === 0) {
-      e.preventDefault();
-      return;
-    }
-    const first = items[0]!;
-    const last = items[items.length - 1]!;
-    const active = document.activeElement;
-    if (e.shiftKey && (active === first || active === dialog)) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && active === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  };
-
-  return (
-    <div ref={rootRef} className="contents">
-      <button
-        type="button"
-        aria-label="Close event"
-        tabIndex={-1}
-        onClick={onClose}
-        className="fixed inset-0 z-40 bg-black/25 backdrop-blur-sm cursor-default animate-in fade-in duration-100"
-      />
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={label}
-        tabIndex={-1}
-        onKeyDown={trapTab}
-        className={cn(
-          "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 rounded-xl shadow-2xl ring-1 ring-black/5 border border-line bg-white flex flex-col overflow-hidden outline-none animate-in zoom-in-95 fade-in duration-100",
-          widthClass
-        )}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
-
-// ── Inline editors ─────────────────────────────────────────────────────
-
-const cellHover =
-  "rounded-sm px-1 -mx-1 hover:bg-paper-2 cursor-text transition-colors";
-const inputBase =
-  "rounded-sm px-1 -mx-1 border border-brand-300 bg-white text-ink outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200";
-
-/** Single-line inline text editor. View → click → input → blur/Enter
- *  commits. Renders a placeholder + dimmed copy when empty. The
- *  `renderDisplay` override lets callers (zoom URL row) swap a
- *  styled link for the plain string in view mode. */
-function InlineText({
-  value,
-  placeholder,
-  onCommit,
-  required = false,
-  maxLength,
-  ariaLabel,
-  className,
-  renderDisplay,
-}: {
-  value: string;
-  placeholder?: string;
-  /** Return false to reject the value and keep the editor open. */
-  onCommit: (v: string) => void | boolean;
-  required?: boolean;
-  maxLength?: number;
-  ariaLabel: string;
-  className?: string;
-  renderDisplay?: (value: string) => ReactNode;
-}) {
-  // The input mounts fresh each time editing starts, so its
-  // `defaultValue` is always the current `value`; there is no
-  // separate draft to keep in sync.
-  const [editing, setEditing] = useState(false);
-
-  const commit = (raw: string) => {
-    const next = raw;
-    if (next === value) {
-      setEditing(false);
-      return;
-    }
-    if (required && next.trim().length === 0) {
-      // Required field can't be cleared. Revert silently.
-      setEditing(false);
-      return;
-    }
-    if (onCommit(next) === false) return;
-    setEditing(false);
-  };
-
-  if (editing) {
-    return (
-      <input
-        type="text"
-        autoFocus
-        defaultValue={value}
-        maxLength={maxLength}
-        aria-label={ariaLabel}
-        onBlur={(e) => commit(e.currentTarget.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            commit(e.currentTarget.value);
-          } else if (e.key === "Escape") {
-            e.preventDefault();
-            // Escape here means "cancel this edit" — stop it
-            // before the modal's window handler closes the
-            // whole modal.
-            e.stopPropagation();
-            setEditing(false);
-          }
-        }}
-        className={cn(inputBase, "w-full text-xs", className)}
-      />
-    );
-  }
-
-  if (value === "" && !required) {
-    // Empty optional field renders a "+ add ..." placeholder
-    // button so the click target is obvious.
-    return (
-      <button
-        type="button"
-        onClick={() => setEditing(true)}
-        aria-label={`Edit ${ariaLabel}`}
-        className="text-xs text-ink-4 italic hover:text-ink-3 transition-colors"
-      >
-        {placeholder ?? "+ add"}
-      </button>
-    );
-  }
-
-  if (renderDisplay) {
-    // Caller provided a custom view — wrap it in a clickable
-    // span. The custom display itself can swallow clicks (e.g.,
-    // the zoom-link href) via stopPropagation.
-    return (
-      <span
-        role="button"
-        tabIndex={0}
-        onClick={() => setEditing(true)}
-        onKeyDown={(e) => {
-          // A key pressed on a link INSIDE the display (the video
-          // link) must reach that link, not open the editor.
-          if (e.target !== e.currentTarget) return;
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            setEditing(true);
-          }
-        }}
-        className={cn(cellHover, "inline-block max-w-full")}
-      >
-        {renderDisplay(value)}
-      </span>
-    );
-  }
-
-  return (
-    <span
-      role="button"
-      tabIndex={0}
-      onClick={() => setEditing(true)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          setEditing(true);
-        }
-      }}
-      className={cn(cellHover, "inline-block max-w-full text-xs text-ink", className)}
-    >
-      {value}
-    </span>
-  );
-}
-
-/** Multi-line inline textarea. Renders the value as wrapped text
- *  in view mode; click → grows to a textarea with auto-focus +
- *  auto-select. Enter inserts a newline; Cmd/Ctrl+Enter commits. */
-function InlineTextarea({
-  value,
-  placeholder,
-  onCommit,
-  maxLength,
-  ariaLabel,
-}: {
-  value: string;
-  placeholder?: string;
-  onCommit: (v: string) => void;
-  maxLength?: number;
-  ariaLabel: string;
-}) {
-  const [editing, setEditing] = useState(false);
-
-  const commit = (raw: string) => {
-    if (raw === value) {
-      setEditing(false);
-      return;
-    }
-    onCommit(raw);
-    setEditing(false);
-  };
-
-  if (editing) {
-    return (
-      <textarea
-        autoFocus
-        defaultValue={value}
-        rows={4}
-        maxLength={maxLength}
-        aria-label={ariaLabel}
-        onBlur={(e) => commit(e.currentTarget.value)}
-        onKeyDown={(e) => {
-          if (
-            e.key === "Enter" &&
-            (e.metaKey || e.ctrlKey)
-          ) {
-            e.preventDefault();
-            commit(e.currentTarget.value);
-          } else if (e.key === "Escape") {
-            e.preventDefault();
-            // Cancel the edit only — don't let the Escape
-            // bubble to the modal's close handler.
-            e.stopPropagation();
-            setEditing(false);
-          }
-        }}
-        className={cn(
-          inputBase,
-          "w-full text-xs resize-y leading-relaxed"
-        )}
-      />
-    );
-  }
-
-  if (!value) {
-    return (
-      <button
-        type="button"
-        onClick={() => setEditing(true)}
-        aria-label={`Edit ${ariaLabel}`}
-        className="text-xs text-ink-4 italic hover:text-ink-3 transition-colors"
-      >
-        {placeholder ?? "+ add"}
-      </button>
-    );
-  }
-
-  return (
-    <p
-      role="button"
-      tabIndex={0}
-      onClick={() => setEditing(true)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          setEditing(true);
-        }
-      }}
-      className={cn(
-        cellHover,
-        "text-xs text-ink leading-relaxed whitespace-pre-wrap"
-      )}
-    >
-      {value}
-    </p>
-  );
-}
-
-/** Tiny native <select>-style inline picker. Click to flip into
- *  a select; picking an option with the mouse commits + closes;
- *  Escape cancels. Arrow keys only MOVE the highlighted option
- *  (some browsers fire `change` on every arrow press of a closed
- *  select, which would save a neighbour on the first keystroke);
- *  the keyboard choice commits on Enter or blur. */
-function InlineSelect({
-  value,
-  options,
-  onCommit,
-  ariaLabel,
-}: {
-  value: string;
-  options: Array<{ value: string; label: string }>;
-  onCommit: (v: string) => void;
-  ariaLabel: string;
-}) {
-  const [editing, setEditing] = useState(false);
-  // Option chosen with the keyboard, waiting for Enter / blur.
-  const [pending, setPending] = useState<string | null>(null);
-  const viaKeys = useRef(false);
-  // Set once the picker has been resolved (committed or cancelled) so
-  // a blur fired by the select unmounting can't commit a stale choice.
-  const settled = useRef(false);
-
-  const finish = (next: string | null) => {
-    if (settled.current) return;
-    settled.current = true;
-    setEditing(false);
-    setPending(null);
-    viaKeys.current = false;
-    if (next !== null && next !== value) onCommit(next);
-  };
-
-  if (editing) {
-    return (
-      <select
-        autoFocus
-        defaultValue={value}
-        aria-label={ariaLabel}
-        onPointerDown={() => {
-          viaKeys.current = false;
-        }}
-        onChange={(e) => {
-          const next = e.currentTarget.value;
-          if (viaKeys.current) {
-            setPending(next);
-            return;
-          }
-          finish(next);
-        }}
-        onBlur={() => finish(pending)}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") {
-            e.preventDefault();
-            // Cancel the picker only — don't let the Escape
-            // bubble to the modal's close handler.
-            e.stopPropagation();
-            finish(null);
-          } else if (e.key === "Enter") {
-            e.preventDefault();
-            finish(e.currentTarget.value);
-          } else if (
-            e.key === "ArrowUp" ||
-            e.key === "ArrowDown" ||
-            e.key === "Home" ||
-            e.key === "End" ||
-            e.key === "PageUp" ||
-            e.key === "PageDown"
-          ) {
-            viaKeys.current = true;
-          }
-        }}
-        className={cn(inputBase, "text-2xs font-mono uppercase tracking-wider")}
-      >
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    );
-  }
-
-  const label = options.find((o) => o.value === value)?.label ?? value;
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        settled.current = false;
-        setEditing(true);
-      }}
-      aria-label={`Edit ${ariaLabel}`}
-      className={cn(cellHover, "uppercase tracking-wider")}
-    >
-      {label}
-    </button>
-  );
-}
-
-/** Time + all-day editor. View mode shows the same date/range
- *  text as before; click expands an inline form with the all-day
- *  toggle + start/end inputs + Save/Cancel. Save commits all
- *  three at once (the action's whole-row update needs them
- *  together so end-after-start stays consistent). */
-function InlineTimeEditor({
-  isAllDay,
-  startTime,
-  endTime,
-  onCommit,
-  displayDate,
-  displayRange,
-}: {
-  isAllDay: boolean;
-  startTime: string;
-  endTime: string;
-  onCommit: (changes: {
-    isAllDay?: boolean;
-    startTime?: string;
-    endTime?: string;
-  }) => void;
-  displayDate: string;
-  displayRange: string;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draftIsAllDay, setDraftIsAllDay] = useState(isAllDay);
-  const [draftStart, setDraftStart] = useState(startTime);
-  const [draftEnd, setDraftEnd] = useState(endTime);
-
-  // Seed the working copy from the current props every time the
-  // editor opens (the modal also remounts per event id, so a draft
-  // can never leak onto another event).
-  const open = () => {
-    setDraftIsAllDay(isAllDay);
-    setDraftStart(startTime);
-    setDraftEnd(endTime);
-    setEditing(true);
-  };
-
-  if (!editing) {
-    return (
-      <button
-        type="button"
-        onClick={open}
-        aria-label="Edit date and time"
-        className={cn(cellHover, "flex flex-col leading-tight text-left")}
-      >
-        <span className="text-xs text-ink font-medium">{displayDate}</span>
-        <span className="text-2xs text-ink-3 font-mono">{displayRange}</span>
-      </button>
-    );
-  }
-
-  const save = () => {
-    if (
-      draftIsAllDay === isAllDay &&
-      draftStart === startTime &&
-      draftEnd === endTime
-    ) {
-      // Nothing changed: close without a pointless write.
-      setEditing(false);
-      return;
-    }
-    const changes: {
-      isAllDay?: boolean;
-      startTime?: string;
-      endTime?: string;
-    } = {};
-    if (draftIsAllDay !== isAllDay) changes.isAllDay = draftIsAllDay;
-    // Always send start/end too — the editor may have toggled
-    // all-day without changing the strings, but the action
-    // needs them together to validate end >= start under the
-    // current isAllDay flag.
-    changes.startTime = draftStart;
-    changes.endTime = draftEnd;
-    setEditing(false);
-    onCommit(changes);
-  };
-
-  const cancel = () => {
-    setEditing(false);
-  };
-
-  return (
-    <div
-      className="flex flex-col gap-2 w-full"
-      onKeyDown={(e) => {
-        if (e.key === "Escape") {
-          // Cancel the edit only; the modal stays open and the draft
-          // is dropped deliberately, not by a stray close.
-          e.preventDefault();
-          e.stopPropagation();
-          cancel();
-        }
-      }}
-    >
-      <label className="inline-flex items-center gap-2 text-2xs text-ink-3 select-none">
-        <input
-          type="checkbox"
-          checked={draftIsAllDay}
-          onChange={(e) => {
-            const next = e.target.checked;
-            setDraftIsAllDay(next);
-            if (!next) {
-              // Re-toggling to timed: if the times are at midnight
-              // (the all-day default), reseed to 9–10am so the
-              // user doesn't get confusing 00:00 inputs.
-              setDraftStart((v) => withDefaultStart(v));
-              setDraftEnd((v) => withDefaultEnd(v));
-            }
-          }}
-          className="h-3.5 w-3.5 rounded border-line"
-        />
-        All day
-      </label>
-
-      <div className="grid grid-cols-2 gap-2">
-        <label className="flex flex-col gap-0.5 text-2xs text-ink-3">
-          {draftIsAllDay ? "Start date" : "Starts"}
-          <input
-            type={draftIsAllDay ? "date" : "datetime-local"}
-            value={
-              draftIsAllDay ? dateOnly(draftStart) : draftStart
-            }
-            onChange={(e) =>
-              setDraftStart(
-                draftIsAllDay ? `${e.target.value}T00:00` : e.target.value
-              )
-            }
-            className="h-8 px-2 rounded-md border border-line text-xs text-ink bg-white font-mono"
-          />
-        </label>
-        <label className="flex flex-col gap-0.5 text-2xs text-ink-3">
-          {draftIsAllDay ? "End date" : "Ends"}
-          <input
-            type={draftIsAllDay ? "date" : "datetime-local"}
-            value={draftIsAllDay ? dateOnly(draftEnd) : draftEnd}
-            onChange={(e) =>
-              setDraftEnd(
-                draftIsAllDay ? `${e.target.value}T00:00` : e.target.value
-              )
-            }
-            className="h-8 px-2 rounded-md border border-line text-xs text-ink bg-white font-mono"
-          />
-        </label>
-      </div>
-
-      <div className="flex items-center gap-2 mt-1">
-        <button
-          type="button"
-          onClick={save}
-          className="inline-flex items-center gap-1 text-2xs font-medium px-2 h-6 rounded-md bg-brand-500 text-white hover:bg-brand-600"
-        >
-          <Check size={11} />
-          Save
-        </button>
-        <button
-          type="button"
-          onClick={cancel}
-          className="text-2xs text-ink-3 hover:text-ink"
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
   );
 }
