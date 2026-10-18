@@ -64,7 +64,7 @@ Per-surface rules:
 ### Other read-side gates (filtered per viewer inside the query; ADR-021)
 
 - **Events tab / event labels**: `canViewEventDetails` (visibility), not a key; unseen events are "Busy".
-- **Timeline**: settlement rows need `matters.settlement.view`, expense rows `matters.expense.view`, trust `deposit` rows `billing.view`; without them rows are omitted, not redacted (`activityMoneyFilters`, `src/lib/queries/matter-detail.ts`).
+- **Timeline**: settlement rows need `matters.settlement.view`, expense rows `matters.expense.view`, trust `deposit` rows `billing.view`; without them rows are omitted, not redacted (`activityMoneyFilters`, `src/lib/queries/matter-detail/activity.ts`).
 - **Billing**: `billing.view` gates the matter Billing tab (page guard redirects to `/`; tab link hidden), `/print/invoices/[id]` and its metadata, and the Overview Trust balance / WIP facts (ADR-038). The migration granted it to every role already holding a `billing.*` or `trust.*` key.
 - **Dashboard**: Firm pulse needs `reports.view`; the Trust balance KPI needs `reports.view` AND `billing.view`. Recent activity omits settlement rows without `matters.settlement.view`, trust deposit rows without `billing.view`, `Expense ...` rows without `matters.expense.view`, and firm-scope (`matterId` null) rows without `firm.view_activity`. Pinned by `src/lib/queries/dashboard-privacy.test.ts`.
 - **Evidence flags**: `edit_any` rewrites of another reviewer's flag are audited.
