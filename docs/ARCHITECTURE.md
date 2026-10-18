@@ -59,12 +59,16 @@ src/
 ├── components/
 │   ├── layout/               # App shell, sidebar, topbar
 │   ├── shared/               # Reusable business components (matter-picker, etc.)
+│   ├── documents/            # DocumentsBrowser + DocumentViewerBody, shared by
+│   │                         #   matter and intake (lead) Documents routes
 │   ├── ui/                   # shadcn primitives (button, card, dialog, etc.)
 │   └── <feature>/            # Feature folders: matters, calendar, communication,
 │                             #   contacts, intake, notes, tasks, settings, …
 ├── hooks/                    # Custom React hooks
 ├── lib/                      # Business logic, form schemas/helpers, permissions,
-│                             #   activity log, token encryption, prisma client
+│                             #   activity log, token encryption, prisma client,
+│                             #   record-scope.ts + scope-access.ts (matter-or-lead
+│                             #   scope resolution and access checks for documents)
 ├── test/                     # Shared test setup/utilities
 ├── types/                    # Shared TypeScript types
 └── generated/                # Auto-generated (Prisma client) — gitignored

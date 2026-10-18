@@ -489,6 +489,8 @@ Email results are scoped to the viewer's OWN mailbox. No
   `src/lib/lead-documents.ts`): folders + documents re-home onto the
   matter in the convert transaction; a root folder whose name collides
   gets a "(n)" suffix; logged as "N intake documents carried forward".
+  Global search lists intake documents as "Intake · {lead}" linking to
+  the intake viewer. Cross-scope copy / move is refused. See ADR-046.
 - [x] **Status / priority / role values are scattered string
   literals.** Shipped 2026-07-07: `src/lib/constants/` is the
   canonical client-safe home — per-domain files (task-status,

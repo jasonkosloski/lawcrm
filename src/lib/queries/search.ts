@@ -462,7 +462,7 @@ export async function globalSearch(
   const searchDocuments = async (): Promise<SearchGroup> => {
     // Document has no description column (the schema is the truth
     // here) — name is the only text field worth matching.
-    const where = { ...accessRel, name: ci };
+    const where = { AND: [...accessOpt], name: ci };
     const [rows, total] = await Promise.all([
       prisma.document.findMany({
         where,

@@ -982,3 +982,25 @@ These are not ADRs: each needs a human call, and when it is made it becomes an A
 - (-) Teammates who aren't attendees see an intake event as Busy until the lead converts
 - (-) Intake notes can't yet capture a task or event from their composer
 
+
+## ADR-046: Intake documents share Document and DocumentFolder, scoped to a lead until conversion
+
+**Date:** 2026-10-18
+**Status:** Accepted
+
+**Context:** After intake notes (ADR-044) and tasks/events (ADR-045), intake needed documents (retainers, ID scans, generated letters) before a matter exists, carried onto the matter when the lead converts.
+
+**Decision:**
+- **Same tables, exactly-one scope.** `Document.leadId` and `DocumentFolder.leadId` were added and `matterId` made nullable on both. Exactly one of (matterId, leadId) is set on each row, and a folder and its documents share a scope. `RecordScope` helpers in `src/lib/record-scope.ts` (`scopeOf`, `scopeWhere`, `scopeBasePath`) and `src/lib/scope-access.ts` (`assertScopeAccess`, `assertScopeWritable`, `revalidateDocumentScope`) are the single place scope is resolved.
+- **Upload routes accept `leadId`.** The streaming and blob upload routes take `leadId` in place of `matterId`; the viewer, listing and download resolve the row's scope rather than assuming a matter.
+- **No matter wall on lead documents.** A lead has no team, so any signed-in user holding the `documents.*` keys can reach them. Matter documents keep the matter wall.
+- **Converted leads are read-only.** Writes to a converted lead's documents and folders are refused; the tab links to the matter.
+- **Conversion re-homes, not copies.** `rehomeLeadDocuments` (`src/lib/lead-documents.ts`) moves folders and documents onto the matter inside the convert transaction. A root folder whose name collides with an existing matter root folder gets a "(n)" suffix.
+- **Search lists intake documents** labelled "Intake · {lead}", linking to the intake viewer.
+
+**Trade-offs:**
+- (+) One document system; the viewer, flags, email extraction and copies work unchanged
+- (+) Conversion moves rows; no files are copied
+- (-) Every reader of `Document.matterId` has to handle null
+- (-) Copy and move across scopes are refused; there is no lead-to-matter copy
+- (-) A streaming upload to a lead that converts mid-request can land on the lead (known, minor)

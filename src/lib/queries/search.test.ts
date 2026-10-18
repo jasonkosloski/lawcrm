@@ -281,6 +281,21 @@ describe("globalSearch — documents", () => {
       context: "Alvarez v. City of Aurora",
     });
   });
+
+  test("finds an intake lead's document with the lead viewer href and Intake context", async () => {
+    const { leadId } = await seedLead({ name: "Test Lead" });
+    const doc = await prisma.document.create({
+      data: { leadId, name: "Zebrafoil retainer draft.pdf" },
+      select: { id: true },
+    });
+    const res = await globalSearch("zebrafoil");
+    const g = groupOf(res, "document")!;
+    expect(g.hits[0]).toMatchObject({
+      id: doc.id,
+      href: `/intake/${leadId}/documents/${doc.id}`,
+      context: "Intake · Test Lead",
+    });
+  });
 });
 
 describe("globalSearch — tasks", () => {

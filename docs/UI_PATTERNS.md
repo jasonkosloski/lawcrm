@@ -151,7 +151,8 @@ header use `<PageSkeleton withTopBar={false} />`.
 
 ### Matter or intake scope (`RecordScope`)
 
-The note, task and event composers and the notes list take a `scope`
+The note, task and event composers, the notes list and the documents
+browser take a `scope`
 (`src/lib/record-scope.ts`) — `{ kind: "matter", matterId }` or
 `{ kind: "lead", leadId }` — instead of a bare `matterId`. The scope picks
 the server action (`createNote` / `createLeadNote`, `createTaskWithCaptures`
@@ -164,7 +165,11 @@ status-grouped task list is `TaskListByStatus`
 intake Tasks tabs (`matterId={null}` on a lead). Intake tabs (Overview,
 Notes, Tasks, Events, Documents, Communication, Time & expenses) live in
 `src/components/intake/intake-tabs.tsx`; a converted lead's tabs show a
-banner linking to the matter instead of a composer.
+banner linking to the matter instead of a composer. The Documents tab
+and viewer bodies are the server components `DocumentsBrowser` and
+`DocumentViewerBody` (`src/components/documents/`), shared by the matter
+and intake routes; hrefs come from `scopeBasePath`, uploads send
+`leadId` for a lead, and a converted lead's tab is read-only.
 
 ### In-Tab Channel Toggle (Communication tabs)
 ```
