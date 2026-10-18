@@ -164,6 +164,24 @@ describe("ConvertLeadButton — server errors and live props", () => {
     expect(await screen.findByText(message)).toBeInTheDocument();
   });
 
+  test("possible conflicts reveal a review tick that gates the resubmit", async () => {
+    const user = userEvent.setup();
+    vi.mocked(convertLeadToMatter).mockResolvedValue({
+      status: "error",
+      conflictWarnings: 2,
+    });
+    renderButton();
+    await openDialog(user);
+    await user.click(screen.getByRole("button", { name: /^convert$/i }));
+    const tick = await screen.findByRole("checkbox", { name: /2 possible conflicts/i });
+    expect(screen.getByRole("button", { name: /^convert$/i })).toBeDisabled();
+
+    await user.click(tick);
+    await user.click(screen.getByRole("button", { name: /^convert$/i }));
+    const fd = vi.mocked(convertLeadToMatter).mock.calls.at(-1)![2] as FormData;
+    expect(fd.get("conflictWarningsReviewed")).toBe("true");
+  });
+
   test("a server error keeps what the user typed", async () => {
     const user = userEvent.setup();
     vi.mocked(convertLeadToMatter).mockResolvedValue({

@@ -14,6 +14,10 @@ export type ConvertLeadFormState = {
       string[]
     >
   >;
+  /** Set when the live conflict check came back "warn" and the form
+   *  did not acknowledge it: the dialog shows a review tick for this
+   *  many possible conflicts and the user resubmits. */
+  conflictWarnings?: number;
 };
 
 export const convertLeadInitialState: ConvertLeadFormState = { status: "idle" };

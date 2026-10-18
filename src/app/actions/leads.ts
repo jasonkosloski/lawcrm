@@ -69,6 +69,8 @@ const DECLINED = "declined" satisfies LeadStage;
 
 const ALREADY_CONVERTED_ERROR = "Lead is already converted to a matter.";
 const ALREADY_DECLINED_ERROR = "Lead is already declined.";
+const CONFLICT_BLOCKS_CONVERSION_ERROR =
+  "The conflict check found a conflict. Resolve it, or have someone authorized record an override on the lead's Overview, before converting.";
 const DECLINED_BEFORE_CONVERT_ERROR =
   "This lead was declined. Reopen it before converting.";
 const DECLINE_AFTER_CONVERT_ERROR =
@@ -334,6 +336,47 @@ export async function convertLeadToMatter(
       errors: { stageId: ["Stage is no longer active"] },
     };
   }
+
+  // Conflict gate (ADR-050). Re-run the matcher NOW rather than trust
+  // the stored status: a contact flagged or a party added since the
+  // last check must still stop the conversion. A recorded override
+  // (justified, intake.conflict_check.override) stands, exactly as a
+  // re-run of the check keeps it. Messages carry counts only; match
+  // details can name restricted matters.
+  const identity = lead.contactId
+    ? await prisma.contact.findUnique({
+        where: { id: lead.contactId },
+        select: { name: true, email: true, organization: true },
+      })
+    : null;
+  const conflict = await runConflictMatcher({
+    name: identity?.name ?? lead.name,
+    email: identity?.email ?? lead.email,
+    organization: identity?.organization ?? null,
+    ownContactId: lead.contactId,
+  });
+  const overridden = lead.conflictCheck === "override";
+  if (!overridden && conflict.severity !== lead.conflictCheck) {
+    await prisma.lead.update({
+      where: { id: leadId },
+      data: { conflictCheck: conflict.severity, conflictCheckedAt: new Date() },
+    });
+  }
+  if (!overridden && conflict.severity === "conflict") {
+    return {
+      status: "error",
+      errors: { _form: [CONFLICT_BLOCKS_CONVERSION_ERROR] },
+    };
+  }
+  const warningsReviewed = raw.conflictWarningsReviewed === "true";
+  if (!overridden && conflict.severity === "warn" && !warningsReviewed) {
+    return { status: "error", conflictWarnings: conflict.matches.length };
+  }
+  const conflictOutcome = overridden
+    ? "override"
+    : conflict.severity === "warn"
+      ? "warn (reviewed)"
+      : "clear";
 
   const [userId, tz] = await Promise.all([
     getCurrentUserId(),
@@ -642,17 +685,20 @@ export async function convertLeadToMatter(
     });
   }
 
-  // Conversion is not blocked on the conflict check (policy decision
-  // pending), so make the gap reviewable: a lead converted while its
-  // check was never run, flagged, or still unresolved says so on the
-  // matter's timeline. "clear" and "override" (justified) stay silent.
-  if (lead.conflictCheck !== "clear" && lead.conflictCheck !== "override") {
+  // The conflict outcome the conversion passed on, on the matter's
+  // timeline. A plain "clear" stays silent; a reviewed warning or a
+  // standing override is what compliance review asks about.
+  if (conflictOutcome !== "clear") {
     await logActivity({
       matterId,
       userId,
       type: "automation",
-      title: `Converted with conflict check: ${lead.conflictCheck}`,
-      detail: `lead ${leadId}: ${lead.name} — no override recorded`,
+      title: `Converted with conflict check: ${conflictOutcome}`,
+      detail: `lead ${leadId}: ${lead.name} — ${
+        overridden
+          ? "authorized override on the lead"
+          : `${conflict.matches.length} possible conflict${conflict.matches.length === 1 ? "" : "s"} acknowledged`
+      }`,
     });
   }
 

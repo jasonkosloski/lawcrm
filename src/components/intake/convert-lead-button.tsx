@@ -7,6 +7,11 @@
  * `convertLeadToMatter` server action which creates Matter + Contact
  * + team assignment + pin in one transaction and redirects to the
  * new matter.
+ *
+ * Conflict gate (ADR-050): the action re-runs the conflict check. A
+ * conflict comes back as a form error; possible conflicts ("warn")
+ * come back as `conflictWarnings`, which reveals a review tick that
+ * must be checked before the resubmit converts.
  */
 
 "use client";
@@ -78,6 +83,7 @@ export function ConvertLeadButton({
     firstNonTerminalStage(areas[0])?.id ?? ""
   );
   const [feeStructure, setFeeStructure] = useState("contingent");
+  const [warningsReviewed, setWarningsReviewed] = useState(false);
 
   // Seed every field from the CURRENT props each time the dialog opens
   // (done in the open handler, not an effect keyed on the props: a
@@ -89,6 +95,7 @@ export function ConvertLeadButton({
     setAreaId(areas[0]?.id ?? "");
     setStageId(firstNonTerminalStage(areas[0])?.id ?? "");
     setFeeStructure("contingent");
+    setWarningsReviewed(false);
   };
   const handleOpenChange = (next: boolean) => {
     if (next) seedFields();
@@ -186,6 +193,28 @@ export function ConvertLeadButton({
                   {fieldError}
                 </div>
               )}
+              {state.conflictWarnings !== undefined && (
+                <label className="flex items-start gap-2 text-xs text-ink px-3 py-2 rounded-md bg-warn-soft border border-warn-border cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={warningsReviewed}
+                    onChange={(e) => setWarningsReviewed(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    The conflict check found {state.conflictWarnings} possible{" "}
+                    {state.conflictWarnings === 1 ? "conflict" : "conflicts"}{" "}
+                    (shown on the lead&apos;s Overview). I&apos;ve reviewed{" "}
+                    {state.conflictWarnings === 1 ? "it" : "them"} and they
+                    don&apos;t prevent taking this matter.
+                  </span>
+                </label>
+              )}
+              <input
+                type="hidden"
+                name="conflictWarningsReviewed"
+                value={warningsReviewed ? "true" : ""}
+              />
               {formError && (
                 <div className="text-xs text-warn px-3 py-2 rounded-md bg-warn-soft border border-warn-border">
                   {formError}
@@ -204,7 +233,11 @@ export function ConvertLeadButton({
             </Button>
             <Button
               type="submit"
-              disabled={isPending || areas.length === 0}
+              disabled={
+                isPending ||
+                areas.length === 0 ||
+                (state.conflictWarnings !== undefined && !warningsReviewed)
+              }
             >
               {isPending ? "Converting…" : "Convert"}
             </Button>

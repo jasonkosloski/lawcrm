@@ -67,3 +67,4 @@ ADR true to the code are appended in place and dated.
 | [046](046-intake-documents-share-document-and-documentfolder-scoped.md) | Intake documents share Document and DocumentFolder, scoped to a lead until conversion |  |
 | [047](047-records-requests-are-a-dedicated-model-with.md) | Records requests are a dedicated model with a rolling follow-up task |  |
 | [048](048-generated-folders-carry-their-source-and-are-protected.md) | Generated folders carry their source and are protected |  |
+| [050](050-lead-conversion-re-runs-the-conflict-check.md) | Lead conversion re-runs the conflict check and refuses a live conflict |  |

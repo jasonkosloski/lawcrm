@@ -833,44 +833,84 @@ describe("convertLeadToMatter — automatic defaults (ADR-019)", () => {
 
 // ── Conflict-check audit on conversion (F267) ───────────────────────────
 
-describe("convertLeadToMatter — conflict-check audit", () => {
+describe("convertLeadToMatter — conflict gate (ADR-050)", () => {
   const conversionTitles = async (): Promise<string[]> =>
     (await prisma.activityLog.findMany({ orderBy: { timestamp: "asc" } })).map(
       (l) => l.title
     );
+  /** A directory contact sharing the lead's name ("Priya Patel"). */
+  const seedNamesake = (conflictStatus = "clear") =>
+    prisma.contact.create({
+      data: { name: "Priya Patel", type: "witness", conflictStatus },
+    });
 
-  test.each(["pending", "warn", "conflict"])(
-    "a lead converted with conflict check '%s' leaves a reviewable timeline entry",
-    async (status) => {
-      const { areaId, stageId } = await seedArea({});
-      const { leadId } = await seedIntakeLead({ conflictCheck: status });
-      await expect(
-        convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
-      ).rejects.toThrow(/^REDIRECT:/);
-      expect(await conversionTitles()).toContain(
-        `Converted with conflict check: ${status}`
-      );
-      const row = await prisma.activityLog.findFirstOrThrow({
-        where: { title: `Converted with conflict check: ${status}` },
-      });
-      expect(row.matterId).not.toBeNull();
-      expect(row.detail).toContain(leadId);
-    }
-  );
+  test("a clear live check converts and adds no conflict entry", async () => {
+    const { areaId, stageId } = await seedArea({});
+    // A stale stored status doesn't matter: the live check decides.
+    const { leadId } = await seedIntakeLead({ conflictCheck: "pending" });
+    await expect(
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+    ).rejects.toThrow(/^REDIRECT:/);
+    expect(
+      (await conversionTitles()).some((t) => t.startsWith("Converted with conflict check"))
+    ).toBe(false);
+  });
 
-  test.each(["clear", "override"])(
-    "a lead whose check is '%s' adds no conflict entry",
-    async (status) => {
-      const { areaId, stageId } = await seedArea({});
-      const { leadId } = await seedIntakeLead({ conflictCheck: status });
-      await expect(
-        convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
-      ).rejects.toThrow(/^REDIRECT:/);
-      expect(
-        (await conversionTitles()).some((t) => t.startsWith("Converted with conflict check"))
-      ).toBe(false);
-    }
-  );
+  test("a live conflict blocks conversion even when the stored check says clear", async () => {
+    const { areaId, stageId } = await seedArea({});
+    const { leadId } = await seedIntakeLead({ conflictCheck: "clear" });
+    await seedNamesake("flagged");
+    const res = await convertLeadToMatter(
+      leadId,
+      { status: "idle" },
+      convertForm({ areaId, stageId })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?._form?.[0]).toMatch(/found a conflict/);
+    const lead = await prisma.lead.findUniqueOrThrow({ where: { id: leadId } });
+    expect(lead.stage).toBe("new");
+    expect(lead.conflictCheck).toBe("conflict");
+    expect(await prisma.matter.count()).toBe(0);
+  });
+
+  test("possible conflicts need the review tick; with it, conversion goes through and is logged", async () => {
+    const { areaId, stageId } = await seedArea({});
+    const { leadId } = await seedIntakeLead();
+    await seedNamesake();
+
+    const first = await convertLeadToMatter(
+      leadId,
+      { status: "idle" },
+      convertForm({ areaId, stageId })
+    );
+    expect(first).toEqual({ status: "error", conflictWarnings: 1 });
+    expect(await prisma.matter.count()).toBe(0);
+
+    const fd = convertForm({ areaId, stageId });
+    fd.set("conflictWarningsReviewed", "true");
+    await expect(
+      convertLeadToMatter(leadId, { status: "idle" }, fd)
+    ).rejects.toThrow(/^REDIRECT:/);
+    const row = await prisma.activityLog.findFirstOrThrow({
+      where: { title: "Converted with conflict check: warn (reviewed)" },
+    });
+    expect(row.matterId).not.toBeNull();
+    expect(row.detail).toContain(leadId);
+    expect(row.detail).toContain("1 possible conflict acknowledged");
+  });
+
+  test("a recorded override converts despite a live conflict, and says so", async () => {
+    const { areaId, stageId } = await seedArea({});
+    const { leadId } = await seedIntakeLead({ conflictCheck: "override" });
+    await seedNamesake("flagged");
+    await expect(
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+    ).rejects.toThrow(/^REDIRECT:/);
+    expect(await conversionTitles()).toContain("Converted with conflict check: override");
+    // The override is not overwritten by the live result.
+    const lead = await prisma.lead.findUniqueOrThrow({ where: { id: leadId } });
+    expect(lead.conflictCheck).toBe("override");
+  });
 });
 
 // ── Audit labelling + date-only description ─────────────────────────────
