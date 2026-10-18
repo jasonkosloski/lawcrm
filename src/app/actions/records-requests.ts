@@ -584,6 +584,11 @@ export async function deleteRecordsRequest(
       where: { recordsRequestId: id },
       data: { recordsRequestId: null, recordsRequestRole: null },
     });
+    // Generated folders become ordinary, user-managed folders.
+    await tx.documentFolder.updateMany({
+      where: { recordsRequestId: id },
+      data: { systemKind: null, recordsRequestId: null },
+    });
     await tx.recordsRequest.delete({ where: { id } });
   });
 

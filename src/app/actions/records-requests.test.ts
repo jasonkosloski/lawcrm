@@ -42,6 +42,7 @@ import {
   unlinkRecordsDocument,
   updateRecordsRequest,
 } from "@/app/actions/records-requests";
+import { resolveRecordsRoleFolder } from "@/lib/records-requests/folder";
 import { openFollowUpTask, rollFollowUp } from "@/lib/records-requests/follow-up";
 import { SAME_SCOPE_ERROR, type RecordScope } from "@/lib/record-scope";
 import type { RecordsRequestFormState } from "@/lib/records-requests/form";
@@ -418,6 +419,34 @@ describe("deleteRecordsRequest", () => {
     });
     expect(doc.recordsRequestId).toBeNull();
     expect(doc.recordsRequestRole).toBeNull();
+  });
+
+  test("generated folders are unprotected and keep their documents", async () => {
+    const r = await seedRequest();
+    const folderId = await prisma.$transaction((tx) =>
+      resolveRecordsRoleFolder(
+        tx,
+        {
+          id: r.id,
+          matterId,
+          leadId: null,
+          custodianName: "Memorial Hospital",
+          typeName: "CORA",
+        },
+        "received_records"
+      )
+    );
+    const { documentId } = await seedDocument({ matterId, folderId });
+    await deleteRecordsRequest(r.id);
+    const folders = await prisma.documentFolder.findMany({ where: { matterId } });
+    const linked = folders.filter((f) => f.name !== "Investigation" && f.name !== "Records Requests");
+    expect(linked).toHaveLength(2);
+    for (const f of linked) {
+      expect(f.systemKind).toBeNull();
+      expect(f.recordsRequestId).toBeNull();
+    }
+    expect(folders.find((f) => f.name === "Records Requests")?.systemKind).toBe("records_root");
+    expect(await prisma.document.count({ where: { id: documentId } })).toBe(1);
   });
 
   test("never revalidates the request page being viewed", async () => {

@@ -7,11 +7,10 @@
  * the caller's transaction, so a failed document write never leaves an
  * empty folder behind.
  *
- * "Whose folder is it?" has no schema column: a child folder belongs to
- * a request when it holds one of that request's documents. A child that
- * holds another request's documents is claimed and forces a " (2)"
- * suffix; an empty (or untagged-only) child with the right name is
- * reused, so resolving twice yields the same folder.
+ * "Whose folder is it?" is answered by `DocumentFolder.recordsRequestId`
+ * + `systemKind` (set when the folder is created); a renamed folder is
+ * still found. Rows with a non-null `systemKind` are protected from
+ * rename / move / delete elsewhere.
  */
 
 import type { Tx } from "@/lib/prisma";
@@ -24,6 +23,7 @@ import {
   recordsFolderName,
 } from "@/lib/records-requests/folder-name";
 import { lockRecordsRequest } from "@/lib/records-requests/follow-up";
+import { kindForRole } from "@/lib/records-requests/folder-kinds";
 import {
   RECORDS_DOC_ROLES,
   RECORDS_ROLE_INFO,
@@ -90,15 +90,30 @@ async function resolveRecordsRoot(
   where: ScopeWhere,
   investigationId: string,
 ): Promise<string> {
+  const stamped = await tx.documentFolder.findFirst({
+    where: { ...where, parentId: investigationId, systemKind: "records_root" },
+    select: { id: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (stamped) return stamped.id;
+
   const existing = await tx.documentFolder.findFirst({
     where: {
       ...where,
       parentId: investigationId,
       name: { equals: RECORDS_ROOT_FOLDER_NAME, mode: "insensitive" },
     },
-    select: { id: true },
+    select: { id: true, systemKind: true },
   });
-  if (existing) return existing.id;
+  if (existing) {
+    if (existing.systemKind !== "records_root") {
+      await tx.documentFolder.update({
+        where: { id: existing.id },
+        data: { systemKind: "records_root" },
+      });
+    }
+    return existing.id;
+  }
 
   const legacy = await tx.documentFolder.findFirst({
     where: {
@@ -140,13 +155,26 @@ async function resolveRecordsRoot(
           parentId: investigationId,
           name: RECORDS_ROOT_FOLDER_NAME,
           order: siblings,
+          systemKind: "records_root",
         },
       });
       return legacy.id;
     }
   }
 
-  return findOrCreateChild(tx, where, investigationId, RECORDS_ROOT_FOLDER_NAME);
+  const created = await tx.documentFolder.create({
+    data: {
+      ...where,
+      parentId: investigationId,
+      name: RECORDS_ROOT_FOLDER_NAME,
+      order: await tx.documentFolder.count({
+        where: { ...where, parentId: investigationId },
+      }),
+      systemKind: "records_root",
+    },
+    select: { id: true },
+  });
+  return created.id;
 }
 
 export async function resolveRecordsFolder(
@@ -166,63 +194,29 @@ export async function resolveRecordsFolder(
   );
   const rootId = await resolveRecordsRoot(tx, where, investigationId);
 
-  const base = recordsFolderName(request.custodianName, request.typeName);
-  const baseLower = base.toLowerCase();
-  const children = await tx.documentFolder.findMany({
-    where: { ...where, parentId: rootId },
-    select: { id: true, name: true },
+  const linked = await tx.documentFolder.findFirst({
+    where: { ...where, recordsRequestId: request.id, systemKind: "records_request" },
+    select: { id: true },
     orderBy: { createdAt: "asc" },
   });
+  if (linked) return linked.id;
 
-  // Folders this request could be using: the base name or "base (n)".
-  const variant = new RegExp(
-    `^${baseLower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}( \\(\\d+\\))?$`,
-  );
-  const candidates = children.filter((c) => variant.test(c.name.toLowerCase()));
-  if (candidates.length > 0) {
-    // Tagged documents count toward the candidate itself and toward its
-    // two role subfolders (a request whose files all live in subfolders
-    // still owns its folder).
-    const subs = await tx.documentFolder.findMany({
-      where: {
-        ...where,
-        parentId: { in: candidates.map((c) => c.id) },
-        name: {
-          in: RECORDS_DOC_ROLES.map((r) => RECORDS_ROLE_INFO[r].folderName),
-        },
-      },
-      select: { id: true, parentId: true },
-    });
-    const owner = new Map<string, string>(); // folder id -> candidate id
-    for (const c of candidates) owner.set(c.id, c.id);
-    for (const s of subs) if (s.parentId) owner.set(s.id, s.parentId);
-    const tagged = await tx.document.findMany({
-      where: {
-        folderId: { in: [...owner.keys()] },
-        recordsRequestId: { not: null },
-      },
-      select: { folderId: true, recordsRequestId: true },
-    });
-    const own = new Set<string>();
-    const claimed = new Set<string>();
-    for (const d of tagged) {
-      const cand = d.folderId ? owner.get(d.folderId) : undefined;
-      if (!cand) continue;
-      (d.recordsRequestId === request.id ? own : claimed).add(cand);
-    }
-    const mine = candidates.find((c) => own.has(c.id));
-    if (mine) return mine.id;
-    const free = candidates.find((c) => !claimed.has(c.id));
-    if (free) return free.id;
-  }
-
+  const children = await tx.documentFolder.findMany({
+    where: { ...where, parentId: rootId },
+    select: { name: true },
+  });
   const taken = new Set(children.map((c) => c.name.toLowerCase()));
   const created = await tx.documentFolder.create({
     data: {
       ...where,
       parentId: rootId,
-      name: nextAvailableFolderName(base, taken),
+      name: nextAvailableFolderName(
+        recordsFolderName(request.custodianName, request.typeName),
+        taken,
+      ),
       order: children.length,
+      systemKind: "records_request",
+      recordsRequestId: request.id,
     },
     select: { id: true },
   });
@@ -244,13 +238,12 @@ export async function resolveRecordsRoleFolder(
   const where = scopeWhere(scopeFromRequest(request));
   const children = await tx.documentFolder.findMany({
     where: { ...where, parentId },
-    select: { id: true, name: true },
+    select: { id: true, systemKind: true },
     orderBy: { createdAt: "asc" },
   });
   const ids = {} as Record<RecordsDocRole, string>;
   for (const r of RECORDS_DOC_ROLES) {
-    const n = RECORDS_ROLE_INFO[r].folderName.toLowerCase();
-    const found = children.find((c) => c.name.toLowerCase() === n);
+    const found = children.find((c) => c.systemKind === kindForRole(r));
     if (found) ids[r] = found.id;
   }
   const flat = await tx.document.findMany({
@@ -272,6 +265,8 @@ export async function resolveRecordsRoleFolder(
         parentId,
         name: RECORDS_ROLE_INFO[r].folderName,
         order: order++,
+        systemKind: kindForRole(r),
+        recordsRequestId: request.id,
       },
       select: { id: true },
     });

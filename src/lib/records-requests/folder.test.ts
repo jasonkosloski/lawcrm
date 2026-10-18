@@ -96,6 +96,10 @@ describe("resolveRecordsFolder", () => {
       parentId: legacy.folderId,
     });
     const r = await mkRequest();
+    await prisma.documentFolder.update({
+      where: { id: reqFolder.folderId },
+      data: { systemKind: "records_request", recordsRequestId: r.id },
+    });
     await prisma.document.update({
       where: {
         id: (await seedDocument({ matterId, folderId: reqFolder.folderId })).documentId,
@@ -110,6 +114,7 @@ describe("resolveRecordsFolder", () => {
     });
     expect(moved.name).toBe("Records Requests");
     expect(moved.parent?.name).toBe("Investigation");
+    expect(moved.systemKind).toBe("records_root");
   });
 
   test("a root Records folder with no request files is left alone", async () => {
@@ -128,27 +133,68 @@ describe("resolveRecordsFolder", () => {
     expect(f.parent?.name).toBe("Records Requests");
   });
 
-  test("a child claimed by another request gets (2); the own folder is reused", async () => {
+  test("same custodian and type: second request gets (2), each linked to its own request", async () => {
     const r1 = await mkRequest();
     const r2 = await mkRequest();
     const f1 = await prisma.$transaction((tx) => resolveRecordsFolder(tx, args(r1.id)));
-    await prisma.document.update({
-      where: { id: (await seedDocument({ matterId, folderId: f1 })).documentId },
-      data: { recordsRequestId: r1.id, recordsRequestRole: "received_records" },
-    });
     const f2 = await prisma.$transaction((tx) => resolveRecordsFolder(tx, args(r2.id)));
     expect(f2).not.toBe(f1);
+    const first = await prisma.documentFolder.findUniqueOrThrow({ where: { id: f1 } });
     const second = await prisma.documentFolder.findUniqueOrThrow({ where: { id: f2 } });
-    expect(second.name).toBe("Memorial Hospital — CORA (2)");
-    // Each request keeps resolving to its own folder.
-    const again1 = await prisma.$transaction((tx) => resolveRecordsFolder(tx, args(r1.id)));
-    expect(again1).toBe(f1);
-    await prisma.document.update({
-      where: { id: (await seedDocument({ matterId, folderId: f2 })).documentId },
-      data: { recordsRequestId: r2.id, recordsRequestRole: "received_records" },
+    expect(first).toMatchObject({ name: "Memorial Hospital — CORA", recordsRequestId: r1.id });
+    expect(second).toMatchObject({
+      name: "Memorial Hospital — CORA (2)",
+      recordsRequestId: r2.id,
     });
-    const again2 = await prisma.$transaction((tx) => resolveRecordsFolder(tx, args(r2.id)));
-    expect(again2).toBe(f2);
+    expect(await prisma.$transaction((tx) => resolveRecordsFolder(tx, args(r1.id)))).toBe(f1);
+    expect(await prisma.$transaction((tx) => resolveRecordsFolder(tx, args(r2.id)))).toBe(f2);
+  });
+
+  test("created folders carry kinds and links", async () => {
+    const r = await mkRequest();
+    const id = await prisma.$transaction((tx) => resolveRecordsFolder(tx, args(r.id)));
+    const f = await prisma.documentFolder.findUniqueOrThrow({
+      where: { id },
+      include: { parent: true },
+    });
+    expect(f).toMatchObject({ systemKind: "records_request", recordsRequestId: r.id });
+    expect(f.parent?.systemKind).toBe("records_root");
+    const letter = await prisma.$transaction((tx) =>
+      resolveRecordsRoleFolder(tx, args(r.id), "request_letter")
+    );
+    const resp = await prisma.$transaction((tx) =>
+      resolveRecordsRoleFolder(tx, args(r.id), "received_records")
+    );
+    expect(
+      await prisma.documentFolder.findUniqueOrThrow({ where: { id: letter } })
+    ).toMatchObject({ systemKind: "records_request_docs", recordsRequestId: r.id });
+    expect(
+      await prisma.documentFolder.findUniqueOrThrow({ where: { id: resp } })
+    ).toMatchObject({ systemKind: "records_responsive_docs", recordsRequestId: r.id });
+  });
+
+  test("a renamed linked folder is returned as is; nothing new is created", async () => {
+    const r = await mkRequest();
+    const id = await prisma.$transaction((tx) => resolveRecordsFolder(tx, args(r.id)));
+    await prisma.documentFolder.update({ where: { id }, data: { name: "Old name" } });
+    const before = await prisma.documentFolder.count({ where: { matterId } });
+    expect(await prisma.$transaction((tx) => resolveRecordsFolder(tx, args(r.id)))).toBe(id);
+    expect(await prisma.documentFolder.count({ where: { matterId } })).toBe(before);
+  });
+
+  test("an existing Records Requests folder found by name is stamped records_root", async () => {
+    const inv = await seedDocumentFolder({ matterId, name: "Investigation" });
+    const root = await seedDocumentFolder({
+      matterId,
+      name: "Records Requests",
+      parentId: inv.folderId,
+    });
+    const r = await mkRequest();
+    await prisma.$transaction((tx) => resolveRecordsFolder(tx, args(r.id)));
+    const stamped = await prisma.documentFolder.findUniqueOrThrow({
+      where: { id: root.folderId },
+    });
+    expect(stamped.systemKind).toBe("records_root");
   });
 });
 
@@ -169,22 +215,6 @@ describe("resolveRecordsRoleFolder", () => {
     expect(fb).toMatchObject({ name: "Responsive documents", parentId: parent });
     // Investigation + Records Requests + request folder + 2 subfolders.
     expect(await prisma.documentFolder.count({ where: { matterId } })).toBe(5);
-  });
-
-  test("ownership inference counts tagged documents inside the subfolders", async () => {
-    const r1 = await mkRequest();
-    const r2 = await mkRequest();
-    const sub = await role(r1.id, "received_records");
-    await prisma.document.update({
-      where: { id: (await seedDocument({ matterId, folderId: sub })).documentId },
-      data: { recordsRequestId: r1.id, recordsRequestRole: "received_records" },
-    });
-    const parent1 = await prisma.$transaction((tx) => resolveRecordsFolder(tx, args(r1.id)));
-    const parent2 = await prisma.$transaction((tx) => resolveRecordsFolder(tx, args(r2.id)));
-    expect(parent2).not.toBe(parent1);
-    const f2 = await prisma.documentFolder.findUniqueOrThrow({ where: { id: parent2 } });
-    expect(f2.name).toBe("Memorial Hospital — CORA (2)");
-    expect(await role(r1.id, "received_records")).toBe(sub);
   });
 
   test("tidy moves this request's flat documents by role and leaves role-null ones", async () => {
