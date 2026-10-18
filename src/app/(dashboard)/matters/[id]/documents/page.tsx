@@ -393,7 +393,7 @@ function DocumentComposerRow({
         </div>
       )}
       <GenerateFromTemplateDialog
-        matterId={matterId}
+        scope={{ kind: "matter", matterId }}
         templates={templates}
         canUpload={canUpload}
       />

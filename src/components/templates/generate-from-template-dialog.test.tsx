@@ -59,12 +59,12 @@ describe("GenerateFromTemplateDialog", () => {
     );
     const user = userEvent.setup();
     render(
-      <GenerateFromTemplateDialog matterId="m1" templates={TEMPLATES} canUpload />
+      <GenerateFromTemplateDialog scope={{ kind: "matter", matterId: "m1" }} templates={TEMPLATES} canUpload />
     );
     await openAndPick(user);
 
     expect(await screen.findByText("Dear Maria Alvarez,")).toBeInTheDocument();
-    expect(previewMock).toHaveBeenCalledWith("t1", "m1");
+    expect(previewMock).toHaveBeenCalledWith("t1", { kind: "matter", matterId: "m1" });
     expect(screen.getByText(/Not on file for this matter/)).toHaveTextContent(
       "client.phone"
     );
@@ -76,7 +76,7 @@ describe("GenerateFromTemplateDialog", () => {
   it("groups non-curated categories under their raw label", async () => {
     const user = userEvent.setup();
     render(
-      <GenerateFromTemplateDialog matterId="m1" templates={TEMPLATES} canUpload />
+      <GenerateFromTemplateDialog scope={{ kind: "matter", matterId: "m1" }} templates={TEMPLATES} canUpload />
     );
     await user.click(
       screen.getByRole("button", { name: /generate from template/i })
@@ -90,7 +90,7 @@ describe("GenerateFromTemplateDialog", () => {
     const user = userEvent.setup();
     render(
       <GenerateFromTemplateDialog
-        matterId="m1"
+        scope={{ kind: "matter", matterId: "m1" }}
         templates={TEMPLATES}
         canUpload={false}
       />
@@ -108,7 +108,7 @@ describe("GenerateFromTemplateDialog", () => {
     generateMock.mockResolvedValue({ ok: false, error: "Storage is down." });
     const user = userEvent.setup();
     render(
-      <GenerateFromTemplateDialog matterId="m1" templates={TEMPLATES} canUpload />
+      <GenerateFromTemplateDialog scope={{ kind: "matter", matterId: "m1" }} templates={TEMPLATES} canUpload />
     );
     await openAndPick(user);
     await screen.findByText("Dear Maria Alvarez,");
@@ -129,7 +129,7 @@ describe("GenerateFromTemplateDialog", () => {
     });
     const user = userEvent.setup();
     render(
-      <GenerateFromTemplateDialog matterId="m1" templates={TEMPLATES} canUpload />
+      <GenerateFromTemplateDialog scope={{ kind: "matter", matterId: "m1" }} templates={TEMPLATES} canUpload />
     );
     await openAndPick(user);
     await screen.findByText("Dear Maria Alvarez,");
@@ -149,7 +149,7 @@ describe("GenerateFromTemplateDialog", () => {
     previewMock.mockResolvedValue(okPreview());
     const user = userEvent.setup();
     render(
-      <GenerateFromTemplateDialog matterId="m1" templates={TEMPLATES} canUpload />
+      <GenerateFromTemplateDialog scope={{ kind: "matter", matterId: "m1" }} templates={TEMPLATES} canUpload />
     );
     await openAndPick(user);
     await screen.findByText("Dear Maria Alvarez,");
@@ -171,7 +171,7 @@ describe("GenerateFromTemplateDialog", () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     const user = userEvent.setup();
     render(
-      <GenerateFromTemplateDialog matterId="m1" templates={TEMPLATES} canUpload />
+      <GenerateFromTemplateDialog scope={{ kind: "matter", matterId: "m1" }} templates={TEMPLATES} canUpload />
     );
     await openAndPick(user);
     await screen.findByText("Dear Maria Alvarez,");
@@ -190,7 +190,7 @@ describe("GenerateFromTemplateDialog", () => {
     generateMock.mockResolvedValue({ ok: false, error: "Storage is down." });
     const user = userEvent.setup();
     render(
-      <GenerateFromTemplateDialog matterId="m1" templates={TEMPLATES} canUpload />
+      <GenerateFromTemplateDialog scope={{ kind: "matter", matterId: "m1" }} templates={TEMPLATES} canUpload />
     );
     await openAndPick(user);
     await screen.findByText("Dear Maria Alvarez,");

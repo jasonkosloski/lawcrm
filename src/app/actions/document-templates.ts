@@ -31,7 +31,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { assertMatterAccess } from "@/lib/matter-access";
+import { assertScopeAccess, assertScopeWritable, revalidateDocumentScope } from "@/lib/scope-access";
+import { scopeWhere, type RecordScope } from "@/lib/record-scope";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentFirm } from "@/lib/firm";
 import { requirePermission } from "@/lib/permission-check";
@@ -263,65 +264,123 @@ export async function deleteDocumentTemplate(
 
 // ── Generation ─────────────────────────────────────────────────────────
 
-/** Build the real MergeContext for a matter: matter + client contact
- *  + current firm + generating user. Null when the matter is gone. */
-async function resolveMergeContext(matterId: string): Promise<{
+/** Compose a contact's single-line mailing address. */
+function composeContactAddress(c: {
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+}): string | null {
+  return (
+    [c.address, composeCityStateZip(c.city, c.state, c.zip)]
+      .filter(Boolean)
+      .join(", ") || null
+  );
+}
+
+/** Build the real MergeContext for a record scope. Matter: matter +
+ *  client contact. Lead: matter fields are all null (name = the lead's
+ *  display name); client = the lead's contact, falling back to the
+ *  legacy name/email/phone columns. Firm + generating user + today
+ *  are shared. Null when the record is gone. */
+async function resolveMergeContext(scope: RecordScope): Promise<{
   ctx: MergeContext;
   matterName: string;
 } | null> {
   const userId = await getCurrentUserId();
-  const [matter, firm, user] = await Promise.all([
-    prisma.matter.findUnique({
-      where: { id: matterId },
-      select: {
-        name: true,
-        caseNumber: true,
-        court: true,
-        opposingParty: true,
-        incidentDate: true,
-        statuteOfLimitationsDate: true,
-        practiceArea: { select: { name: true } },
-        stage: { select: { name: true } },
-        client: {
-          select: {
-            name: true,
-            email: true,
-            phone: true,
-            address: true,
-            city: true,
-            state: true,
-            zip: true,
-          },
-        },
-      },
-    }),
+  const contactSelect = {
+    name: true,
+    email: true,
+    phone: true,
+    address: true,
+    city: true,
+    state: true,
+    zip: true,
+  } as const;
+  const [record, firm, user] = await Promise.all([
+    scope.kind === "matter"
+      ? prisma.matter
+          .findUnique({
+            where: { id: scope.matterId },
+            select: {
+              name: true,
+              caseNumber: true,
+              court: true,
+              opposingParty: true,
+              incidentDate: true,
+              statuteOfLimitationsDate: true,
+              practiceArea: { select: { name: true } },
+              stage: { select: { name: true } },
+              client: { select: contactSelect },
+            },
+          })
+          .then((m) => ({ kind: "matter" as const, m }))
+      : prisma.lead
+          .findUnique({
+            where: { id: scope.leadId },
+            select: {
+              name: true,
+              email: true,
+              phone: true,
+              contact: { select: contactSelect },
+            },
+          })
+          .then((l) => ({ kind: "lead" as const, l })),
     getCurrentFirm(),
     prisma.user.findUnique({
       where: { id: userId },
       select: { name: true, timeZone: true },
     }),
   ]);
+
+  const firmCtx = {
+    name: firm.name,
+    addressLine1: firm.addressLine1,
+    addressLine2: firm.addressLine2,
+    city: firm.city,
+    state: firm.state,
+    zip: firm.zip,
+    phone: firm.phone,
+    email: firm.email,
+  };
+  const shared = {
+    firm: firmCtx,
+    user: { name: user?.name ?? null },
+    today: new Date(),
+    timeZone: user?.timeZone ?? null,
+  };
+
+  if (record.kind === "lead") {
+    const lead = record.l;
+    if (!lead) return null;
+    const c = lead.contact;
+    const displayName = c?.name ?? lead.name;
+    return {
+      matterName: displayName,
+      ctx: {
+        matter: {
+          name: displayName,
+          caseNumber: null,
+          practiceArea: null,
+          stage: null,
+          court: null,
+          opposingParty: null,
+          incidentDate: null,
+          solDate: null,
+        },
+        client: {
+          name: displayName,
+          email: c?.email ?? lead.email,
+          phone: c?.phone ?? lead.phone,
+          address: c ? composeContactAddress(c) : null,
+        },
+        ...shared,
+      },
+    };
+  }
+
+  const matter = record.m;
   if (!matter) return null;
-
-  const client = matter.client
-    ? {
-        name: matter.client.name,
-        email: matter.client.email,
-        phone: matter.client.phone,
-        address:
-          [
-            matter.client.address,
-            composeCityStateZip(
-              matter.client.city,
-              matter.client.state,
-              matter.client.zip
-            ),
-          ]
-            .filter(Boolean)
-            .join(", ") || null,
-      }
-    : null;
-
   return {
     matterName: matter.name,
     ctx: {
@@ -335,20 +394,15 @@ async function resolveMergeContext(matterId: string): Promise<{
         incidentDate: matter.incidentDate,
         solDate: matter.statuteOfLimitationsDate,
       },
-      client,
-      firm: {
-        name: firm.name,
-        addressLine1: firm.addressLine1,
-        addressLine2: firm.addressLine2,
-        city: firm.city,
-        state: firm.state,
-        zip: firm.zip,
-        phone: firm.phone,
-        email: firm.email,
-      },
-      user: { name: user?.name ?? null },
-      today: new Date(),
-      timeZone: user?.timeZone ?? null,
+      client: matter.client
+        ? {
+            name: matter.client.name,
+            email: matter.client.email,
+            phone: matter.client.phone,
+            address: composeContactAddress(matter.client),
+          }
+        : null,
+      ...shared,
     },
   };
 }
@@ -372,9 +426,9 @@ export type TemplatePreviewResult =
  */
 export async function previewDocumentFromTemplate(
   templateId: string,
-  matterId: string
+  scope: RecordScope
 ): Promise<TemplatePreviewResult> {
-  await assertMatterAccess(matterId);
+  await assertScopeAccess(scope);
   const template = await prisma.documentTemplate.findUnique({
     where: { id: templateId },
     select: { name: true, body: true, isActive: true },
@@ -383,8 +437,8 @@ export async function previewDocumentFromTemplate(
     return { ok: false, error: "Template not found or archived." };
   }
 
-  const resolved = await resolveMergeContext(matterId);
-  if (!resolved) return { ok: false, error: "Matter not found." };
+  const resolved = await resolveMergeContext(scope);
+  if (!resolved) return { ok: false, error: "Record not found." };
 
   const merged = mergeTemplate(template.body, resolved.ctx);
   return {
@@ -418,10 +472,12 @@ export type GenerateDocumentResult =
  */
 export async function generateDocumentFromTemplate(
   templateId: string,
-  matterId: string
+  scope: RecordScope
 ): Promise<GenerateDocumentResult> {
   const userId = await requirePermission("documents.upload");
-  await assertMatterAccess(matterId);
+  await assertScopeAccess(scope);
+  const readOnly = await assertScopeWritable(scope);
+  if (readOnly) return { ok: false, error: readOnly };
 
   const template = await prisma.documentTemplate.findUnique({
     where: { id: templateId },
@@ -431,8 +487,8 @@ export async function generateDocumentFromTemplate(
     return { ok: false, error: "Template not found or archived." };
   }
 
-  const resolved = await resolveMergeContext(matterId);
-  if (!resolved) return { ok: false, error: "Matter not found." };
+  const resolved = await resolveMergeContext(scope);
+  if (!resolved) return { ok: false, error: "Record not found." };
 
   const merged = mergeTemplate(template.body, resolved.ctx);
 
@@ -469,7 +525,7 @@ export async function generateDocumentFromTemplate(
   try {
     doc = await prisma.document.create({
       data: {
-        matterId,
+        ...scopeWhere(scope),
         name: documentName,
         category: documentCategoryForTemplate(template.category),
         source: "generated",
@@ -494,15 +550,14 @@ export async function generateDocumentFromTemplate(
   }
 
   await logActivity({
-    matterId,
+    matterId: scope.kind === "matter" ? scope.matterId : null,
     userId,
     type: "document",
     title: "Document generated from template",
     detail: `${documentName} (from "${template.name}")`,
   });
 
-  revalidatePath(`/matters/${matterId}/documents`);
-  revalidatePath(`/matters/${matterId}`);
+  revalidateDocumentScope(scope);
   return {
     ok: true,
     documentId: doc.id,

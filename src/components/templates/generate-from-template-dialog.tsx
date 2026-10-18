@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { RecordScope } from "@/lib/record-scope";
 import { templateCategoryLabel } from "@/lib/template-constants";
 import {
   generateDocumentFromTemplate,
@@ -43,11 +44,11 @@ export type TemplateOption = {
 };
 
 export function GenerateFromTemplateDialog({
-  matterId,
+  scope,
   templates,
   canUpload,
 }: {
-  matterId: string;
+  scope: RecordScope;
   /** Active templates only — the picker never offers archived ones. */
   templates: TemplateOption[];
   /** Whether the viewer holds `documents.upload` (gates the save
@@ -91,7 +92,7 @@ export function GenerateFromTemplateDialog({
     setCopyError(false);
     if (!id) return;
     startPreview(async () => {
-      const res = await previewDocumentFromTemplate(id, matterId);
+      const res = await previewDocumentFromTemplate(id, scope);
       setPreview(res);
     });
   };
@@ -117,7 +118,7 @@ export function GenerateFromTemplateDialog({
     if (!templateId) return;
     setSaveError(null);
     startSave(async () => {
-      const res = await generateDocumentFromTemplate(templateId, matterId);
+      const res = await generateDocumentFromTemplate(templateId, scope);
       if (res.ok) {
         // The action revalidated the documents route. The document is
         // filed at the matter root, which is invisible if a subfolder
@@ -161,7 +162,7 @@ export function GenerateFromTemplateDialog({
           <DialogHeader>
             <DialogTitle>Generate from template</DialogTitle>
             <DialogDescription>
-              Merge fields fill in from this matter, its client, and your
+              Merge fields fill in from this {scope.kind === "lead" ? "intake" : "matter"}, its client, and your
               firm. Review the preview, then save it to the Documents tab
               or copy the text.
             </DialogDescription>
@@ -209,7 +210,7 @@ export function GenerateFromTemplateDialog({
 
               {previewPending && (
                 <div className="px-3 py-6 rounded-md border border-line bg-paper-2/40 text-xs text-ink-4 text-center">
-                  Merging matter data…
+                  Merging {scope.kind === "lead" ? "intake" : "matter"} data…
                 </div>
               )}
 
@@ -228,7 +229,7 @@ export function GenerateFromTemplateDialog({
                       <div className="flex flex-col gap-0.5">
                         {warnings.missing.length > 0 && (
                           <span>
-                            Not on file for this matter:{" "}
+                            Not on file for this {scope.kind === "lead" ? "intake" : "matter"}:{" "}
                             {warnings.missing.join(", ")} — visible
                             placeholders are left in the text.
                           </span>

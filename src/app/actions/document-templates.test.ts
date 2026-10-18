@@ -47,6 +47,7 @@ import { templateFormInitialState } from "@/lib/template-constants";
 import {
   resetDb,
   seedContact,
+  seedLead,
   seedFirm,
   seedMatter,
   seedPracticeArea,
@@ -55,6 +56,7 @@ import {
 
 let userId: string;
 let matterId: string;
+let M: { kind: "matter"; matterId: string };
 
 const FIRM_PROFILE = {
   id: "firm-1",
@@ -100,6 +102,7 @@ beforeEach(async () => {
     name: "Alvarez v. City of Aurora",
   });
   matterId = m.matterId;
+  M = { kind: "matter", matterId };
   await prisma.matter.update({
     where: { id: matterId },
     data: { clientId: contactId, caseNumber: "2026-CV-00481" },
@@ -158,11 +161,11 @@ describe("permission gates", () => {
 
   test("generate asks for documents.upload; preview asks for nothing", async () => {
     const t = await seedTemplate();
-    await generateDocumentFromTemplate(t.id, matterId);
+    await generateDocumentFromTemplate(t.id, M);
     expect(requirePermission).toHaveBeenCalledWith("documents.upload");
 
     vi.mocked(requirePermission).mockClear();
-    const res = await previewDocumentFromTemplate(t.id, matterId);
+    const res = await previewDocumentFromTemplate(t.id, M);
     expect(res.ok).toBe(true);
     // Preview is deliberately ungated — session only (see the
     // action file header for the preview/generate split).
@@ -279,7 +282,7 @@ describe("preview", () => {
       body:
         "Dear {{client.name}} ({{client.phone}}), re {{matter.name}} in {{matter.court}}. {{made.up}}",
     });
-    const res = await previewDocumentFromTemplate(t.id, matterId);
+    const res = await previewDocumentFromTemplate(t.id, M);
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.text).toContain("Dear Maria Alvarez");
@@ -297,7 +300,7 @@ describe("preview", () => {
 
   test("archived template refuses to preview", async () => {
     const t = await seedTemplate({ isActive: false });
-    const res = await previewDocumentFromTemplate(t.id, matterId);
+    const res = await previewDocumentFromTemplate(t.id, M);
     expect(res).toEqual({
       ok: false,
       error: "Template not found or archived.",
@@ -308,7 +311,7 @@ describe("preview", () => {
 describe("generate", () => {
   test("stores merged text and creates the Document row + activity", async () => {
     const t = await seedTemplate();
-    const res = await generateDocumentFromTemplate(t.id, matterId);
+    const res = await generateDocumentFromTemplate(t.id, M);
     expect(res.ok).toBe(true);
     if (!res.ok) return;
 
@@ -342,7 +345,7 @@ describe("generate", () => {
 
   test("reports missing fields on the result without blocking the save", async () => {
     const t = await seedTemplate({ body: "SOL: {{matter.solDate}}" });
-    const res = await generateDocumentFromTemplate(t.id, matterId);
+    const res = await generateDocumentFromTemplate(t.id, M);
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.missing).toEqual(["matter.solDate"]);
@@ -352,12 +355,12 @@ describe("generate", () => {
   test("unknown matter / archived template error without writing", async () => {
     const t = await seedTemplate();
     // Unknown == hidden: the matter wall answers with notFound().
-    await expect(generateDocumentFromTemplate(t.id, "nope")).rejects.toThrow(
+    await expect(generateDocumentFromTemplate(t.id, { kind: "matter", matterId: "nope" })).rejects.toThrow(
       /NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/
     );
 
     const archived = await seedTemplate({ isActive: false });
-    const res = await generateDocumentFromTemplate(archived.id, matterId);
+    const res = await generateDocumentFromTemplate(archived.id, M);
     expect(res).toEqual({
       ok: false,
       error: "Template not found or archived.",
@@ -385,14 +388,14 @@ describe("matter dates (ADR-012 date-only)", () => {
       body: "On {{matter.incidentDate}} ... runs {{matter.solDate}}",
     });
 
-    const preview = await previewDocumentFromTemplate(t.id, matterId);
+    const preview = await previewDocumentFromTemplate(t.id, M);
     expect(preview.ok).toBe(true);
     if (!preview.ok) return;
     expect(preview.text).toBe(
       "On January 10, 2025 ... runs January 10, 2027"
     );
 
-    await generateDocumentFromTemplate(t.id, matterId);
+    await generateDocumentFromTemplate(t.id, M);
     const file = vi.mocked(storeFile).mock.calls[0]![0];
     expect(await file.text()).toBe(
       "On January 10, 2025 ... runs January 10, 2027"
@@ -459,7 +462,7 @@ describe("generate failure handling", () => {
       new Error("BlobError: 503 at https://secret.internal/path")
     );
     const t = await seedTemplate();
-    const res = await generateDocumentFromTemplate(t.id, matterId);
+    const res = await generateDocumentFromTemplate(t.id, M);
     expect(res.ok).toBe(false);
     if (res.ok) return;
     expect(res.error).not.toContain("secret.internal");
@@ -474,10 +477,67 @@ describe("generate failure handling", () => {
     const createSpy = vi
       .spyOn(prisma.document, "create")
       .mockRejectedValueOnce(new Error("FK violation"));
-    const res = await generateDocumentFromTemplate(t.id, matterId);
+    const res = await generateDocumentFromTemplate(t.id, M);
     createSpy.mockRestore();
     expect(res.ok).toBe(false);
     expect(deleteFile).toHaveBeenCalledWith("uploads/generated-key.md");
+    expect(await prisma.document.count()).toBe(0);
+  });
+});
+
+describe("generate on a lead", () => {
+  test("creates a lead-scoped Document with client from the lead contact and matter fields not on file", async () => {
+    const { contactId } = await seedContact({
+      name: "Pat Prospect",
+      email: "pat@example.com",
+    });
+    const { leadId } = await seedLead({ name: "Legacy Name", contactId });
+    const t = await seedTemplate({
+      body: "Dear {{client.name}}, re {{matter.caseNumber}}.",
+    });
+    const scope = { kind: "lead", leadId } as const;
+
+    const prev = await previewDocumentFromTemplate(t.id, scope);
+    expect(prev.ok).toBe(true);
+
+    const res = await generateDocumentFromTemplate(t.id, scope);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.missing).toEqual(["matter.caseNumber"]);
+
+    const file = vi.mocked(storeFile).mock.calls[0]![0];
+    const text = await file.text();
+    expect(text).toContain("Dear Pat Prospect");
+    expect(text).toContain("not on file");
+
+    const doc = await prisma.document.findFirstOrThrow({ where: { leadId } });
+    expect(doc.matterId).toBeNull();
+    expect(doc.id).toBe(res.documentId);
+  });
+
+  test("falls back to the legacy lead columns without a contact", async () => {
+    const { leadId } = await seedLead({ name: "Solo Lead" });
+    const t = await seedTemplate({ body: "{{client.name}} / {{matter.name}}" });
+    const res = await previewDocumentFromTemplate(t.id, {
+      kind: "lead",
+      leadId,
+    });
+    expect(res.ok && res.text).toBe("Solo Lead / Solo Lead");
+  });
+
+  test("refuses a converted lead without writing", async () => {
+    const { leadId } = await seedLead({ name: "Done" });
+    await prisma.lead.update({ where: { id: leadId }, data: { stage: "converted" } });
+    const t = await seedTemplate();
+    const res = await generateDocumentFromTemplate(t.id, {
+      kind: "lead",
+      leadId,
+    });
+    expect(res).toEqual({
+      ok: false,
+      error: "This lead is already converted — add this on the matter instead.",
+    });
+    expect(storeFile).not.toHaveBeenCalled();
     expect(await prisma.document.count()).toBe(0);
   });
 });
