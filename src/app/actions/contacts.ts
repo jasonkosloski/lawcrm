@@ -900,8 +900,8 @@ export async function deleteContact(
   });
   if (!c) return { ok: false, error: "Contact not found" };
 
-  // A contact who is the client of an open matter (or has a live
-  // intake) would vanish from the directory, pickers and attendee
+  // A contact who is the client of / a party on an open matter (or
+  // has a live intake) would vanish from the directory, pickers and attendee
   // search while Matter.clientId still points at them.
   const blocked = (await findDeactivationBlockers([c]))[0];
   if (blocked) return { ok: false, error: blocked };
@@ -934,17 +934,31 @@ const CLOSED_LEAD_STAGES = ["converted", "declined"];
 
 /**
  * One message per contact that must not be deactivated yet: the client
- * of a non-archived matter, or the subject of a live (not converted /
- * declined) lead. Empty when everything is free to deactivate.
+ * of a non-archived matter, a party (or a party's counsel) on one, or
+ * the subject of a live (not converted / declined) lead. Empty when
+ * everything is free to deactivate. Party rows block outright: a
+ * deactivated party drops out of pickers and attendee search while the
+ * matter still lists them, and the user who deactivates rarely knows
+ * the contact is on a live case.
  */
 async function findDeactivationBlockers(
   contacts: Array<{ id: string; name: string }>
 ): Promise<string[]> {
   const ids = contacts.map((c) => c.id);
-  const [matters, leads] = await Promise.all([
+  const [matters, parties, leads] = await Promise.all([
     prisma.matter.findMany({
       where: { clientId: { in: ids }, isArchived: false },
-      select: { clientId: true },
+      select: { id: true, clientId: true },
+    }),
+    prisma.matterContact.findMany({
+      where: {
+        matter: { isArchived: false },
+        OR: [
+          { contactId: { in: ids } },
+          { representationContactId: { in: ids } },
+        ],
+      },
+      select: { matterId: true, contactId: true, representationContactId: true },
     }),
     prisma.lead.findMany({
       where: { contactId: { in: ids }, stage: { notIn: CLOSED_LEAD_STAGES } },
@@ -958,17 +972,34 @@ async function findDeactivationBlockers(
   };
   const matterCounts = tally(matters.map((m) => m.clientId));
   const leadCounts = tally(leads.map((l) => l.contactId));
+  // Distinct open matters per contact where they sit as a party or as
+  // counsel, not counting matters they are already the client of (the
+  // client's own party row would double-count).
+  const clientMatters = new Set(matters.map((m) => `${m.clientId}:${m.id}`));
+  const partyMatters = new Map<string, Set<string>>();
+  for (const p of parties) {
+    for (const id of [p.contactId, p.representationContactId]) {
+      if (!id || !ids.includes(id) || clientMatters.has(`${id}:${p.matterId}`)) continue;
+      const set = partyMatters.get(id) ?? new Set<string>();
+      set.add(p.matterId);
+      partyMatters.set(id, set);
+    }
+  }
   const messages: string[] = [];
   for (const c of contacts) {
     const parts: string[] = [];
     const nm = matterCounts.get(c.id) ?? 0;
+    const np = partyMatters.get(c.id)?.size ?? 0;
     const nl = leadCounts.get(c.id) ?? 0;
     if (nm > 0) parts.push(`the client of ${nm} open matter${nm === 1 ? "" : "s"}`);
+    if (np > 0) parts.push(`a party on ${np} open matter${np === 1 ? "" : "s"}`);
     if (nl > 0) parts.push(`on ${nl} active lead${nl === 1 ? "" : "s"}`);
     if (parts.length > 0) {
-      messages.push(
-        `"${c.name}" is ${parts.join(" and ")} — archive or reassign ${nm + nl === 1 ? "it" : "them"} before deactivating`
-      );
+      const fix =
+        np > 0 && nm === 0 && nl === 0
+          ? "remove them from the matter's Parties tab or archive the matter"
+          : `archive or reassign ${nm + np + nl === 1 ? "it" : "them"}`;
+      messages.push(`"${c.name}" is ${parts.join(" and ")} — ${fix} before deactivating`);
     }
   }
   return messages;

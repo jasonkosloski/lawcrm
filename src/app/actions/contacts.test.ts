@@ -1576,6 +1576,58 @@ describe("deleteContact / bulkDeactivateContacts guard", () => {
     expect((await deleteContact(contactId)).ok).toBe(true);
   });
 
+  async function partyOnMatter(opts: { isArchived: boolean; asCounsel?: boolean }) {
+    const { areaId, stageId } = await seedPracticeArea();
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    await prisma.matter.update({
+      where: { id: matterId },
+      data: { isArchived: opts.isArchived },
+    });
+    const { contactId } = await seedContact({ name: "Olive Opposing" });
+    const { contactId: other } = await seedContact({ name: "Someone Else" });
+    await prisma.matterContact.create({
+      data: opts.asCounsel
+        ? { matterId, contactId: other, category: "opposing", representationContactId: contactId }
+        : { matterId, contactId, category: "opposing" },
+    });
+    return contactId;
+  }
+
+  test("refuses to deactivate a party on an open matter, and says how to fix it", async () => {
+    const contactId = await partyOnMatter({ isArchived: false });
+    const res = await deleteContact(contactId);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/Olive Opposing.*a party on 1 open matter.*Parties tab/);
+    expect(
+      (await prisma.contact.findUniqueOrThrow({ where: { id: contactId } })).isActive
+    ).toBe(true);
+  });
+
+  test("counsel on an open matter blocks too", async () => {
+    const counsel = await partyOnMatter({ isArchived: false, asCounsel: true });
+    expect((await deleteContact(counsel)).error).toMatch(/a party on 1 open matter/);
+  });
+
+  test("a party on an archived matter does not block", async () => {
+    const party = await partyOnMatter({ isArchived: true });
+    expect((await deleteContact(party)).ok).toBe(true);
+  });
+
+  test("the client's own party row isn't double-counted", async () => {
+    const contactId = await clientOfMatter(false);
+    const matter = await prisma.matter.findFirstOrThrow({ where: { clientId: contactId } });
+    await prisma.matterContact.create({
+      data: { matterId: matter.id, contactId, category: "client" },
+    });
+    const res = await deleteContact(contactId);
+    expect(res.error).toMatch(/client of 1 open matter/);
+    expect(res.error).not.toMatch(/a party on/);
+  });
+
   test("bulk deactivate is all-or-nothing and names the blocked contact", async () => {
     const blockedId = await clientOfMatter(false);
     const { contactId: freeId } = await seedContact({ name: "Free Person" });

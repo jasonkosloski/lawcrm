@@ -4,7 +4,6 @@ Lead queue, new-intake form, lead detail with Overview / Time / Notes / Tasks / 
 Related: [ADR-044](../decisions/044-intake-notes-share-the-note-table-scoped.md), [ADR-045](../decisions/045-intake-tasks-and-events-reuse-task-and.md), [ADR-046](../decisions/046-intake-documents-share-document-and-documentfolder-scoped.md), [ADR-019](../decisions/019-deadline-rules-task-lists-as-firm-libraries.md), [ADR-026](../decisions/026-conflict-matcher-scope-own-contact-exclusion-inactive.md), [records-requests.md](records-requests.md)
 
 ## Open work
-- [ ] **Warn when deactivating a contact who is still a party on an active matter** (P1, priority inferred) — the matcher covers it, the deactivation UI is silent.
 - [ ] **Lead scoring — deep dive** (P2) — score composition, liability/damages factor breakdown, recompute on field changes. Nothing computes scores yet.
 - [ ] **Intake queue — split-view reader pane** (P2) — lead list left, detail right (alternative to separate routes).
 - [ ] **New intake form leftovers** (P2) — phone-number matching (stored phones aren't normalised), initial stage, intake-coordinator assignment.

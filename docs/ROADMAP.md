@@ -25,7 +25,6 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 
 - [~] **Notification delivery channels**: email/SMS/push fan-out from `createNotification`; per-matter preferences. → [notifications](features/notifications.md)
 - [~] **Phone / SMS / voicemail**: manual call logging shipped; SMS send and voicemail transcription need providers. → [calls](features/communication-calls.md)
-- [ ] **Warn when deactivating a contact still on an active matter**: deactivation is silent. → [intake](features/intake.md)
 - [~] **`/matters/new` v2**: name pattern, case location, multi-team, conflict pre-save, retainer, drafts. → [matters](features/matters.md)
 - [ ] **Calendar: recurring events**: blocked on an RRULE data-model ADR (series vs materialized). → [calendar](features/calendar.md)
 - [ ] **Email: attachments on send**: receive side shipped. → [email](features/communication-email.md)
