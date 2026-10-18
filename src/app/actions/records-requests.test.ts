@@ -563,4 +563,19 @@ describe("task completion hook", () => {
       })
     ).toBe(1);
   });
+
+  test("two concurrent done calls roll only once", async () => {
+    const r = await seedRequest();
+    await prisma.$transaction((tx) => openFollowUpTask(tx, r.id));
+    const t = await prisma.task.findFirstOrThrow({
+      where: { recordsRequestId: r.id },
+    });
+    await Promise.all([setTaskStatus(t.id, "done"), setTaskStatus(t.id, "done")]);
+    expect(await prisma.recordsRequestFollowUp.count()).toBe(1);
+    expect(
+      await prisma.task.count({
+        where: { recordsRequestId: r.id, status: "open" },
+      })
+    ).toBe(1);
+  });
 });

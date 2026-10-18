@@ -43,21 +43,15 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { isAssignableUser, notifyTaskAssigned } from "@/lib/task-assignment";
-import { dateOnlyKey, parseDateOnly } from "@/lib/format-date";
+import { dateOnlyKey, parseDateOnly, todayKey } from "@/lib/format-date";
 import { optionalScopeOf, scopeOf, scopePaths } from "@/lib/record-scope";
 import { rollFollowUp } from "@/lib/records-requests/follow-up";
-import { todayKey } from "@/lib/format-date";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 
 const STALE_MESSAGE =
   "This task was changed by someone else since you opened it. Close this dialog and reopen it to see the latest, then re-apply your edit.";
 
-/** Path-revalidate every surface that displays this task: its
- *  matter's or intake lead's Tasks tab + overview (firm-wide tasks
- *  have neither) and the dashboard. */
-/** Completing a records-request follow-up task rolls the chase (log +
- *  next task) in the caller's transaction. Returns true when it rolled
- *  so the caller can revalidate the request's records paths. */
+/** Roll the records-request chase when its follow-up task completes; true if it rolled. */
 async function rollOnFollowUpDone(
   tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
   task: { recordsRequestId: string | null },
@@ -81,6 +75,9 @@ async function revalidateRequestPaths(requestId: string): Promise<void> {
   for (const path of scopePaths(scopeOf(req), "records")) revalidatePath(path);
 }
 
+/** Path-revalidate every surface that displays this task: its
+ *  matter's or intake lead's Tasks tab + overview (firm-wide tasks
+ *  have neither) and the dashboard. */
 function revalidateForTask(task: {
   matterId: string | null;
   leadId: string | null;
@@ -125,18 +122,27 @@ export async function setTaskStatus(
   const actorId = completing ? await getCurrentUserId() : "";
   const today = completing ? todayKey(await getCurrentUserTimeZone()) : "";
   const rolled = await prisma.$transaction(async (tx) => {
-    await tx.task.update({
-      where: { id: taskId },
-      data: {
-        status,
-        completedAt: isComplete
-          ? wasComplete
-            ? undefined // already completed — don't overwrite the original timestamp
-            : new Date()
-          : null,
-      },
-    });
-    return completing ? rollOnFollowUpDone(tx, task, actorId, today) : false;
+    const data = {
+      status,
+      completedAt: isComplete
+        ? wasComplete
+          ? undefined // already completed — don't overwrite the original timestamp
+          : new Date()
+        : null,
+    };
+    if (completing && task.recordsRequestId) {
+      // Conditional write: of two concurrent "done" clicks only one
+      // flips the row, so only one rolls the follow-up.
+      const w = await tx.task.updateMany({
+        where: { id: taskId, status: { not: "done" } },
+        data,
+      });
+      return w.count > 0
+        ? rollOnFollowUpDone(tx, task, actorId, today)
+        : false;
+    }
+    await tx.task.update({ where: { id: taskId }, data });
+    return false;
   });
 
   revalidateForTask(task);
@@ -358,7 +364,14 @@ export async function updateTask(
   let rolled = false;
   const write = await prisma.$transaction(async (tx) => {
     const w = await tx.task.updateMany({
-      where: expected ? { id: taskId, updatedAt: expected } : { id: taskId },
+      where: {
+        id: taskId,
+        ...(expected ? { updatedAt: expected } : {}),
+        // Follow-up completion: only the write that flips it rolls.
+        ...(completing && task.recordsRequestId
+          ? { status: { not: "done" } }
+          : {}),
+      },
       data: {
         title: parsed.data.title,
         description: parsed.data.description || null,
