@@ -265,7 +265,12 @@ export function DocxPreviewRenderer({
       ) : (
         <div
           ref={shellRef}
-          className={`scrollbar-thin relative min-h-0 flex-1 overflow-auto rounded-lg border border-line bg-paper-2 ${WRAPPER_RESTYLE}`}
+          className={`scrollbar-thin relative min-h-0 flex-1 overflow-auto rounded-lg border border-line bg-paper-2 ${WRAPPER_RESTYLE} ${
+            // Below lg the shell sizes to its content (see
+            // DocumentViewerBody), and the render target is empty
+            // while loading — hold room for the skeleton overlay.
+            phase === "loading" ? "min-h-[420px]" : ""
+          }`}
           style={{ "--docx-fit": fitZoom } as React.CSSProperties}
         >
           {/* Render target — kept mounted and measurable during

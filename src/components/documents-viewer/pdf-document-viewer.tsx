@@ -400,7 +400,7 @@ export function PdfDocumentViewer({
     "inline-flex h-7 w-7 items-center justify-center rounded-md border border-line bg-white text-ink-3 transition-colors hover:border-brand-300 hover:text-brand-700 disabled:opacity-40";
 
   return (
-    <div className="lc-pdf flex min-h-0 flex-1 flex-col gap-2">
+    <div className="lc-pdf flex min-h-0 flex-1 flex-col gap-2 max-lg:h-[80dvh] max-lg:flex-none">
       <div className="flex flex-wrap items-center gap-2 text-xs text-ink-3">
         <div className="flex items-center gap-1">
           <button type="button" className={toolButton} disabled={!doc || current <= 1} onClick={() => goToPage(current - 1)} aria-label="Previous page">

@@ -192,8 +192,15 @@ export async function DocumentViewerBody({
       />
     );
 
+  // Height: pinned to the pane on lg+ (document and flags rail side by
+  // side, each scrolling on its own). Below lg the rail stacks under
+  // the document, so pinning would squeeze the document into whatever
+  // the chrome and rail leave over — instead the body grows with its
+  // content and the layout's scroller scrolls the whole page.
+  // Renderers that need a fixed box of their own (the PDF viewer
+  // virtualizes against its scrollTop) set a viewport height below lg.
   return (
-    <div className="flex h-full min-h-0 gap-4 p-5 animate-page-enter">
+    <div className="flex min-h-full gap-4 p-5 animate-page-enter lg:h-full lg:min-h-0">
       <DocumentFileTree
         scope={scope}
         tree={folderTree}
