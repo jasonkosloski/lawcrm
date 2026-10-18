@@ -19,6 +19,16 @@ import {
   recordsFolderName,
 } from "@/lib/records-requests/folder-name";
 import { lockRecordsRequest } from "@/lib/records-requests/follow-up";
+import {
+  RECORDS_DOC_ROLES,
+  RECORDS_ROLE_INFO,
+  type RecordsDocRole,
+} from "@/lib/records-requests/roles";
+
+export {
+  RECORDS_REQUEST_DOCS_FOLDER,
+  RECORDS_RESPONSIVE_DOCS_FOLDER,
+} from "@/lib/records-requests/roles";
 
 export type RecordsFolderRequest = {
   id: string;
@@ -43,7 +53,7 @@ async function lockScopeFolders(tx: Tx, scope: RecordScope): Promise<void> {
 
 export async function resolveRecordsFolder(
   tx: Tx,
-  request: RecordsFolderRequest
+  request: RecordsFolderRequest,
 ): Promise<string> {
   const scope = scopeFromRequest(request);
   const where = scopeWhere(scope);
@@ -80,13 +90,29 @@ export async function resolveRecordsFolder(
 
   // Folders this request could be using: the base name or "base (n)".
   const variant = new RegExp(
-    `^${baseLower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}( \\(\\d+\\))?$`
+    `^${baseLower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}( \\(\\d+\\))?$`,
   );
   const candidates = children.filter((c) => variant.test(c.name.toLowerCase()));
   if (candidates.length > 0) {
+    // Tagged documents count toward the candidate itself and toward its
+    // two role subfolders (a request whose files all live in subfolders
+    // still owns its folder).
+    const subs = await tx.documentFolder.findMany({
+      where: {
+        ...where,
+        parentId: { in: candidates.map((c) => c.id) },
+        name: {
+          in: RECORDS_DOC_ROLES.map((r) => RECORDS_ROLE_INFO[r].folderName),
+        },
+      },
+      select: { id: true, parentId: true },
+    });
+    const owner = new Map<string, string>(); // folder id -> candidate id
+    for (const c of candidates) owner.set(c.id, c.id);
+    for (const s of subs) if (s.parentId) owner.set(s.id, s.parentId);
     const tagged = await tx.document.findMany({
       where: {
-        folderId: { in: candidates.map((c) => c.id) },
+        folderId: { in: [...owner.keys()] },
         recordsRequestId: { not: null },
       },
       select: { folderId: true, recordsRequestId: true },
@@ -94,8 +120,9 @@ export async function resolveRecordsFolder(
     const own = new Set<string>();
     const claimed = new Set<string>();
     for (const d of tagged) {
-      if (!d.folderId) continue;
-      (d.recordsRequestId === request.id ? own : claimed).add(d.folderId);
+      const cand = d.folderId ? owner.get(d.folderId) : undefined;
+      if (!cand) continue;
+      (d.recordsRequestId === request.id ? own : claimed).add(cand);
     }
     const mine = candidates.find((c) => own.has(c.id));
     if (mine) return mine.id;
@@ -117,6 +144,67 @@ export async function resolveRecordsFolder(
 }
 
 /**
+ * The request folder's fixed child for `role` (found-or-created, case-
+ * insensitive). Also tidies: this request's documents sitting directly in
+ * the request folder move into the subfolder matching their role (role
+ * null stays put). Idempotent.
+ */
+export async function resolveRecordsRoleFolder(
+  tx: Tx,
+  request: RecordsFolderRequest,
+  role: RecordsDocRole,
+): Promise<string> {
+  const parentId = await resolveRecordsFolder(tx, request);
+  const where = scopeWhere(scopeFromRequest(request));
+  const children = await tx.documentFolder.findMany({
+    where: { ...where, parentId },
+    select: { id: true, name: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const ids = {} as Record<RecordsDocRole, string>;
+  for (const r of RECORDS_DOC_ROLES) {
+    const n = RECORDS_ROLE_INFO[r].folderName.toLowerCase();
+    const found = children.find((c) => c.name.toLowerCase() === n);
+    if (found) ids[r] = found.id;
+  }
+  const flat = await tx.document.findMany({
+    where: {
+      folderId: parentId,
+      recordsRequestId: request.id,
+      recordsRequestRole: { in: [...RECORDS_DOC_ROLES] },
+    },
+    select: { id: true, recordsRequestRole: true },
+  });
+  const needed = new Set<RecordsDocRole>([role]);
+  for (const d of flat) needed.add(d.recordsRequestRole as RecordsDocRole);
+  let order = children.length;
+  for (const r of RECORDS_DOC_ROLES) {
+    if (!needed.has(r) || ids[r]) continue;
+    const created = await tx.documentFolder.create({
+      data: {
+        ...where,
+        parentId,
+        name: RECORDS_ROLE_INFO[r].folderName,
+        order: order++,
+      },
+      select: { id: true },
+    });
+    ids[r] = created.id;
+  }
+  for (const r of RECORDS_DOC_ROLES) {
+    const moving = flat
+      .filter((d) => d.recordsRequestRole === r)
+      .map((d) => d.id);
+    if (moving.length === 0) continue;
+    await tx.document.updateMany({
+      where: { id: { in: moving } },
+      data: { folderId: ids[r] },
+    });
+  }
+  return ids[role];
+}
+
+/**
  * Re-check a records request against the FINAL scope of an upload and
  * work out the folder + tags for the new document. Returns null when
  * the request no longer belongs to `scope` (deleted, or re-homed
@@ -127,11 +215,12 @@ export async function resolveRecordsUpload(
   tx: Tx,
   requestId: string,
   scope: RecordScope,
-  folderId: string | null
+  folderId: string | null,
+  role: RecordsDocRole = "received_records",
 ): Promise<{
   folderId: string;
   recordsRequestId: string;
-  recordsRequestRole: "received_records";
+  recordsRequestRole: RecordsDocRole;
 } | null> {
   const r = await tx.recordsRequest.findFirst({
     where: { id: requestId, ...scopeWhere(scope) },
@@ -147,16 +236,20 @@ export async function resolveRecordsUpload(
   if (!r) return null;
   const resolved =
     folderId ??
-    (await resolveRecordsFolder(tx, {
-      id: r.id,
-      matterId: r.matterId,
-      leadId: r.leadId,
-      custodianName: r.custodian.name,
-      typeName: r.type?.name ?? r.adHocTypeName ?? "Records",
-    }));
+    (await resolveRecordsRoleFolder(
+      tx,
+      {
+        id: r.id,
+        matterId: r.matterId,
+        leadId: r.leadId,
+        custodianName: r.custodian.name,
+        typeName: r.type?.name ?? r.adHocTypeName ?? "Records",
+      },
+      role,
+    ));
   return {
     folderId: resolved,
     recordsRequestId: r.id,
-    recordsRequestRole: "received_records",
+    recordsRequestRole: role,
   };
 }

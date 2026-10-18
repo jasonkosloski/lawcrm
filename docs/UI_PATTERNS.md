@@ -185,7 +185,7 @@ works. The route pages own auth (`requireUser`, the matter wall on matters,
 (scoped: a foreign or missing id 404s) and the editing lookups, then renders
 the client `request-detail.tsx`. Layout: header (back link, subject,
 custodian and type, status chip, due badge, status actions and delete), then
-two columns on lg+ (main: letters, received records, follow-ups; side:
+two columns on lg+ (main: request documents (Generate letter lives here), responsive documents (the Mark partial/complete offer lives here), follow-ups; side:
 details and fee), stacked below. Delete navigates back to the list. Fee data
 is only sent to the client when the viewer is allowed to see it. A converted
 lead's page shows the banner to the matter's Records tab and is read-only.

@@ -708,6 +708,34 @@ describe("records requests", () => {
     expect(tp.recordsRequestId).toBe("rr1");
   });
 
+  test("token: recordsRole round-trips in the signed payload; omitted -> received_records", async () => {
+    wireHappyGates();
+    mockedReq.mockResolvedValue({ id: "rr1" } as never);
+    const withRole = await onBeforeGenerateToken(
+      KEY,
+      JSON.stringify({ ...JSON.parse(RR_PAYLOAD), recordsRole: "request_letter" }),
+      false
+    );
+    expect(
+      JSON.parse((withRole as { tokenPayload: string }).tokenPayload).recordsRole
+    ).toBe("request_letter");
+    const without = await onBeforeGenerateToken(KEY, RR_PAYLOAD, false);
+    expect(
+      JSON.parse((without as { tokenPayload: string }).tokenPayload).recordsRole
+    ).toBe("received_records");
+  });
+
+  test("token: an invalid recordsRole -> 400, no token issued", async () => {
+    wireHappyGates();
+    mockedReq.mockResolvedValue({ id: "rr1" } as never);
+    const err = await tokenError(
+      KEY,
+      JSON.stringify({ ...JSON.parse(RR_PAYLOAD), recordsRole: "bogus" })
+    );
+    expect(err.status).toBe(400);
+    expect(err.message).toBe("Invalid records document kind.");
+  });
+
   test("token: no recordsRequestId leaves the payload and lookups untouched", async () => {
     wireHappyGates();
     const res = await onBeforeGenerateToken(KEY, PAYLOAD, false);
@@ -757,11 +785,29 @@ describe("records requests", () => {
         "rr1",
         { kind: "matter", matterId: "m1" },
         null,
+        "received_records",
       ]);
       const data = mockedCreate.mock.calls[0]![0].data as Record<string, unknown>;
       expect(data.recordsRequestId).toBe("rr1");
       expect(data.recordsRequestRole).toBe("received_records");
       expect(data.folderId).toBe("recfold");
+    });
+
+    test("completion passes the signed recordsRole to the resolver and tags the doc", async () => {
+      wire();
+      mockedResolve.mockResolvedValue({ ...TAGGED, recordsRequestRole: "request_letter" });
+      await onUploadCompleted({
+        blob: BLOB,
+        tokenPayload: JSON.stringify({
+          ...base,
+          matterId: "m1",
+          folderId: null,
+          recordsRole: "request_letter",
+        }),
+      });
+      expect(mockedResolve.mock.calls[0]![4]).toBe("request_letter");
+      const data = mockedCreate.mock.calls[0]![0].data as Record<string, unknown>;
+      expect(data.recordsRequestRole).toBe("request_letter");
     });
 
     test("lead converted mid-upload: request re-checked against the matter scope", async () => {

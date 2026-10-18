@@ -48,6 +48,7 @@ import type { RecordsRequestFormState } from "@/lib/records-requests/form";
 import {
   resetDb,
   seedContact,
+  seedDocumentFolder,
   seedDocument,
   seedFirm,
   seedLead,
@@ -936,7 +937,7 @@ describe("linkRecordsDocuments / unlinkRecordsDocument", () => {
   test("links same-scope documents as received_records, gated on records.edit", async () => {
     const r = await seedRequest();
     const { documentId } = await seedDocument({ matterId });
-    const res = await linkRecordsDocuments(r.id, [documentId]);
+    const res = await linkRecordsDocuments(r.id, [documentId], "received_records");
     expect(res).toEqual({ ok: true });
     expect(requirePermission).toHaveBeenCalledWith("records.edit");
     const doc = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
@@ -951,7 +952,7 @@ describe("linkRecordsDocuments / unlinkRecordsDocument", () => {
       data: { leadId, name: "x.pdf", category: "other", source: "upload" },
       select: { id: true },
     });
-    const res = await linkRecordsDocuments(r.id, [leadDoc.id]);
+    const res = await linkRecordsDocuments(r.id, [leadDoc.id], "received_records");
     expect(res).toEqual({ ok: false, error: SAME_SCOPE_ERROR });
     const doc = await prisma.document.findUniqueOrThrow({ where: { id: leadDoc.id } });
     expect(doc.recordsRequestId).toBeNull();
@@ -960,22 +961,50 @@ describe("linkRecordsDocuments / unlinkRecordsDocument", () => {
   test("a missing document id refuses the whole batch", async () => {
     const r = await seedRequest();
     const { documentId } = await seedDocument({ matterId });
-    const res = await linkRecordsDocuments(r.id, [documentId, "nope"]);
+    const res = await linkRecordsDocuments(r.id, [documentId, "nope"], "received_records");
     expect(res.ok).toBe(false);
     const doc = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
     expect(doc.recordsRequestId).toBeNull();
   });
 
-  test("linking does not demote the request's own letter", async () => {
+  test("links with the request_letter role", async () => {
     const r = await seedRequest();
     const { documentId } = await seedDocument({ matterId });
+    expect(await linkRecordsDocuments(r.id, [documentId], "request_letter")).toEqual({
+      ok: true,
+    });
+    const doc = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
+    expect(doc.recordsRequestId).toBe(r.id);
+    expect(doc.recordsRequestRole).toBe("request_letter");
+  });
+
+  test("re-linking a document on this request with the other role switches the role, without moving it", async () => {
+    const r = await seedRequest();
+    const { folderId } = await seedDocumentFolder({ matterId, name: "Somewhere" });
+    const { documentId } = await seedDocument({ matterId, folderId });
     await prisma.document.update({
       where: { id: documentId },
       data: { recordsRequestId: r.id, recordsRequestRole: "request_letter" },
     });
-    await linkRecordsDocuments(r.id, [documentId]);
+    expect(await linkRecordsDocuments(r.id, [documentId], "received_records")).toEqual({
+      ok: true,
+    });
     const doc = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
-    expect(doc.recordsRequestRole).toBe("request_letter");
+    expect(doc.recordsRequestRole).toBe("received_records");
+    expect(doc.folderId).toBe(folderId);
+  });
+
+  test("an invalid role is refused and nothing is tagged", async () => {
+    const r = await seedRequest();
+    const { documentId } = await seedDocument({ matterId });
+    const res = await linkRecordsDocuments(
+      r.id,
+      [documentId],
+      "bogus" as unknown as "request_letter"
+    );
+    expect(res).toEqual({ ok: false, error: "Invalid records document kind." });
+    const doc = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
+    expect(doc.recordsRequestId).toBeNull();
   });
 
   test("a document already linked to another request refuses the whole batch", async () => {
@@ -987,7 +1016,7 @@ describe("linkRecordsDocuments / unlinkRecordsDocument", () => {
       where: { id: b.documentId },
       data: { recordsRequestId: other.id, recordsRequestRole: "received_records" },
     });
-    const res = await linkRecordsDocuments(r.id, [a.documentId, b.documentId]);
+    const res = await linkRecordsDocuments(r.id, [a.documentId, b.documentId], "received_records");
     expect(res).toEqual({
       ok: false,
       error: "Some documents are already linked to another request.",
@@ -1001,7 +1030,7 @@ describe("linkRecordsDocuments / unlinkRecordsDocument", () => {
   test("unlink clears both columns and keeps the document", async () => {
     const r = await seedRequest();
     const { documentId } = await seedDocument({ matterId });
-    await linkRecordsDocuments(r.id, [documentId]);
+    await linkRecordsDocuments(r.id, [documentId], "received_records");
     const res = await unlinkRecordsDocument(documentId);
     expect(res).toEqual({ ok: true });
     expect(requirePermission).toHaveBeenCalledWith("records.edit");

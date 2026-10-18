@@ -47,6 +47,7 @@
 
 "use client";
 
+import type { RecordsDocRole } from "@/lib/records-requests/roles";
 import { scopeWhere, type RecordScope } from "@/lib/record-scope";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -97,6 +98,7 @@ export function MultiFileUpload({
   folderName,
   storageDriver,
   recordsRequestId,
+  recordsRole,
   onUploaded,
 }: {
   scope: RecordScope;
@@ -110,6 +112,8 @@ export function MultiFileUpload({
   storageDriver?: StorageDriver;
   /** Tag every uploaded file as received records on this request. */
   recordsRequestId?: string;
+  /** Which records section the files belong to (with recordsRequestId). */
+  recordsRole?: RecordsDocRole;
   /** Called once a batch finishes uploading (before the refresh settles). */
   onUploaded?: () => void;
 }) {
@@ -167,6 +171,7 @@ export function MultiFileUpload({
     else fd.append("leadId", scope.leadId);
     if (folderId) fd.append("folderId", folderId);
     if (recordsRequestId) fd.append("recordsRequestId", recordsRequestId);
+    if (recordsRequestId && recordsRole) fd.append("recordsRole", recordsRole);
     for (const f of files) fd.append("files", f, f.name);
 
     const xhr = new XMLHttpRequest();
@@ -242,6 +247,7 @@ export function MultiFileUpload({
             ...scopeWhere(scope),
             folderId,
             ...(recordsRequestId ? { recordsRequestId } : {}),
+            ...(recordsRequestId && recordsRole ? { recordsRole } : {}),
             name: f.name,
           }),
           // Chunked-parallel transfer with per-part retries — the

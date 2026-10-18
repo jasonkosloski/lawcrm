@@ -4,7 +4,7 @@
  * page offers (never auto-applies) Mark partial / Mark complete.
  */
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const replace = vi.fn();
@@ -29,9 +29,13 @@ vi.mock("@/app/actions/records-requests", () => ({
   unlinkRecordsDocument: vi.fn(async () => ({ ok: true })),
 }));
 vi.mock("@/components/matters/documents/multi-file-upload", () => ({
-  MultiFileUpload: (p: { recordsRequestId?: string; onUploaded?: () => void }) => (
+  MultiFileUpload: (p: {
+    recordsRequestId?: string;
+    recordsRole?: string;
+    onUploaded?: () => void;
+  }) => (
     <button type="button" onClick={() => p.onUploaded?.()}>
-      mock-upload {p.recordsRequestId}
+      mock-upload {p.recordsRole} {p.recordsRequestId}
     </button>
   ),
 }));
@@ -143,17 +147,96 @@ describe("RequestDetail", () => {
     const user = userEvent.setup();
     renderDetail(detail({ status: "sent", sentAt: new Date("2026-10-10T00:00:00Z") }));
     expect(screen.queryByRole("button", { name: "Mark complete" })).toBeNull();
-    await user.click(screen.getByText(/mock-upload r1/));
+    await user.click(screen.getByText("mock-upload received_records r1"));
     expect(statusMock).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Mark partial" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Mark complete" }));
     await waitFor(() => expect(statusMock).toHaveBeenCalledWith("r1", "complete"));
   });
 
+  test("uploads pass the matching recordsRole, one per section", () => {
+    renderDetail(detail());
+    expect(screen.getByText("mock-upload request_letter r1")).toBeInTheDocument();
+    expect(screen.getByText("mock-upload received_records r1")).toBeInTheDocument();
+  });
+
+  test("Generate letter appears only inside Request documents", () => {
+    renderDetail(detail());
+    const generate = screen.getByTestId("generate");
+    const reqSection = screen.getByRole("heading", { name: "Request documents" }).closest("section");
+    const respSection = screen
+      .getByRole("heading", { name: "Responsive documents" })
+      .closest("section");
+    expect(reqSection).toContainElement(generate);
+    expect(respSection).not.toContainElement(generate);
+  });
+
+  test("a request-document upload does not offer Mark partial / complete", async () => {
+    const user = userEvent.setup();
+    renderDetail(detail({ status: "sent", sentAt: new Date("2026-10-10T00:00:00Z") }));
+    await user.click(screen.getByText("mock-upload request_letter r1"));
+    expect(screen.queryByRole("button", { name: "Mark complete" })).toBeNull();
+  });
+
+  test("documents are listed under their role's section", () => {
+    renderDetail(
+      detail({
+        documents: [
+          { id: "d1", name: "Letter.md", role: "request_letter", href: "/x" },
+          { id: "d2", name: "Chart.pdf", role: "received_records", href: "/y" },
+        ],
+      })
+    );
+    const reqSection = screen.getByRole("heading", { name: "Request documents" }).closest("section");
+    const respSection = screen
+      .getByRole("heading", { name: "Responsive documents" })
+      .closest("section");
+    expect(reqSection).toHaveTextContent("Letter.md");
+    expect(reqSection).not.toHaveTextContent("Chart.pdf");
+    expect(respSection).toHaveTextContent("Chart.pdf");
+  });
+
+  test("linking existing documents passes the section's role; marks only for responsive", async () => {
+    const { linkRecordsDocuments } = await import("@/app/actions/records-requests");
+    const user = userEvent.setup();
+    render(
+      <RequestDetail
+        detail={detail({ status: "sent", sentAt: new Date("2026-10-10T00:00:00Z") })}
+        scope={{ kind: "matter", matterId: "m1" }}
+        types={[{ id: "t1", name: "Medical records" }]}
+        users={[{ id: "u1", name: "Me" }]}
+        templates={[]}
+        defaultTemplateId={null}
+        storageDriver="local"
+        linkableDocuments={[{ id: "x1", name: "Old.pdf" }]}
+        can={CAN}
+        writable
+      />
+    );
+    const reqSection = screen.getByRole("heading", { name: "Request documents" }).closest("section")!;
+    const respSection = screen
+      .getByRole("heading", { name: "Responsive documents" })
+      .closest("section")!;
+    await user.click(within(reqSection).getByText("Link existing documents"));
+    await user.click(within(reqSection).getByRole("checkbox", { name: "Old.pdf" }));
+    await user.click(within(reqSection).getByRole("button", { name: "Link selected" }));
+    await waitFor(() =>
+      expect(linkRecordsDocuments).toHaveBeenCalledWith("r1", ["x1"], "request_letter")
+    );
+    expect(screen.queryByRole("button", { name: "Mark complete" })).toBeNull();
+    await user.click(within(respSection).getByText("Link existing documents"));
+    await user.click(within(respSection).getByRole("checkbox", { name: "Old.pdf" }));
+    await user.click(within(respSection).getByRole("button", { name: "Link selected" }));
+    await waitFor(() =>
+      expect(linkRecordsDocuments).toHaveBeenLastCalledWith("r1", ["x1"], "received_records")
+    );
+    expect(await screen.findByRole("button", { name: "Mark complete" })).toBeInTheDocument();
+  });
+
   test("no inline marks when the request is already terminal", async () => {
     const user = userEvent.setup();
     renderDetail(detail({ status: "complete" }));
-    await user.click(screen.getByText(/mock-upload r1/));
+    await user.click(screen.getByText("mock-upload received_records r1"));
     expect(screen.queryByRole("button", { name: "Mark complete" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Mark partial" })).toBeNull();
   });
@@ -162,7 +245,7 @@ describe("RequestDetail", () => {
     const user = userEvent.setup();
     renderDetail(detail({ status: "draft" }));
     expect(screen.queryByRole("button", { name: "Log follow-up" })).toBeNull();
-    await user.click(screen.getByText(/mock-upload r1/));
+    await user.click(screen.getByText("mock-upload received_records r1"));
     expect(screen.queryByRole("button", { name: "Mark partial" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Mark complete" })).toBeNull();
   });

@@ -29,6 +29,10 @@
  *                 same matter or lead; needs `records.edit`); files
  *                 default into Records/<custodian — type>. MUST
  *                 precede any file part
+ *     - recordsRole string, optional — "request_letter" or
+ *                 "received_records" (default); picks the Request /
+ *                 Responsive documents subfolder and the tag. Anything
+ *                 else is a 400. MUST precede any file part
  *     - category  string, optional — one of DOCUMENT_CATEGORIES;
  *                 defaults to "discovery" (batch uploads)
  *     - name      string, optional — display-name override, applied
@@ -81,6 +85,10 @@ import {
 } from "@/lib/scope-access";
 import { resolveLeadUploadTarget } from "@/lib/lead-documents";
 import { resolveRecordsUpload } from "@/lib/records-requests/folder";
+import {
+  isRecordsDocRole,
+  type RecordsDocRole,
+} from "@/lib/records-requests/roles";
 import { extractIfEmail } from "@/lib/email-attachment-extract";
 import {
   FileTooLargeError,
@@ -119,6 +127,7 @@ type ParseResult =
       scope: RecordScope;
       folderId: string | null;
       recordsRequestId: string | null;
+      recordsRole: RecordsDocRole;
       category: DocumentCategory;
       displayName: string;
       files: StoredUpload[];
@@ -246,7 +255,8 @@ export async function POST(req: NextRequest): Promise<Response> {
               tx,
               result.recordsRequestId,
               target.scope,
-              target.folderId
+              target.folderId,
+              result.recordsRole
             )
           : null;
         const dropped = Boolean(result.recordsRequestId) && !tag;
@@ -284,7 +294,8 @@ export async function POST(req: NextRequest): Promise<Response> {
           tx,
           requestId,
           matterScope,
-          result.folderId
+          result.folderId,
+          result.recordsRole
         );
         recordsTagDropped = !tag;
         const docs = [];
@@ -347,6 +358,7 @@ type Target = {
   scope: RecordScope;
   folderId: string | null;
   recordsRequestId: string | null;
+  recordsRole: RecordsDocRole;
   category: DocumentCategory;
   displayName: string;
 };
@@ -360,6 +372,7 @@ async function resolveTarget(
     leadId?: string;
     folderId?: string;
     recordsRequestId?: string;
+    recordsRole?: string;
     category?: string;
     name?: string;
   }
@@ -371,6 +384,13 @@ async function resolveTarget(
   if (!meta) {
     return { status: 400, error: "Invalid document name or category." };
   }
+  const roleField = fields.recordsRole?.trim();
+  if (roleField && !isRecordsDocRole(roleField)) {
+    return { status: 400, error: "Invalid records document kind." };
+  }
+  const recordsRole: RecordsDocRole = isRecordsDocRole(roleField)
+    ? roleField
+    : "received_records";
   const matterId = fields.matterId?.trim();
   const leadId = fields.leadId?.trim();
   if ((matterId && leadId) || (!matterId && !leadId)) {
@@ -441,6 +461,7 @@ async function resolveTarget(
     scope,
     folderId: folderId || null,
     recordsRequestId,
+    recordsRole,
     category: meta.category,
     displayName: meta.name,
   };
@@ -494,6 +515,7 @@ async function parseAndStore(
     leadId?: string;
     folderId?: string;
     recordsRequestId?: string;
+    recordsRole?: string;
     category?: string;
     name?: string;
   } = {};
@@ -526,11 +548,19 @@ async function parseAndStore(
         });
         return;
       }
+      if (name === "recordsRole" && sawFilePart && value.trim()) {
+        fail({
+          status: 400,
+          error: "recordsRole must precede file parts in the form data.",
+        });
+        return;
+      }
       if (
         name === "matterId" ||
         name === "leadId" ||
         name === "folderId" ||
         name === "recordsRequestId" ||
+        name === "recordsRole" ||
         name === "category" ||
         name === "name"
       ) {
@@ -671,6 +701,7 @@ async function parseAndStore(
     scope: t.scope,
     folderId: t.folderId,
     recordsRequestId: t.recordsRequestId,
+    recordsRole: t.recordsRole,
     category: t.category,
     displayName: t.displayName,
     files: stored,

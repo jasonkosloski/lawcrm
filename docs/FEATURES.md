@@ -499,7 +499,8 @@ Email results are scoped to the viewer's OWN mailbox. No
   settings). Each open request has one rolling auto-created follow-up
   task that rolls on completion; status moves forward, to a terminal
   state, or reopens (restarting the chase). Template letters and
-  uploads file under `Records/{custodian} — {type}`; a fee creates an
+  uploads file under `Records/{custodian} — {type}/Request documents` or
+  `/Responsive documents` (the page has a section and upload area for each); a fee creates an
   Expense on matters (on leads, at conversion). Custodians can be
   quick-created from the composer. Each request has its own detail page
   (`.../records/[requestId]`; old `?request=` links are not redirected). Conversion carries requests forward; merging two

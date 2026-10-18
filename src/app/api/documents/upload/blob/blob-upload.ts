@@ -59,6 +59,10 @@ import {
 import { isValidStorageKey } from "@/lib/storage/storage-key";
 import { resolveLeadUploadTarget } from "@/lib/lead-documents";
 import { resolveRecordsUpload } from "@/lib/records-requests/folder";
+import {
+  isRecordsDocRole,
+  type RecordsDocRole,
+} from "@/lib/records-requests/roles";
 import { BLOB_CACHE_MAX_AGE_SECONDS } from "@/lib/storage/blob-driver";
 import {
   MAX_MEDIA_UPLOAD_BYTES,
@@ -92,6 +96,9 @@ const clientPayloadSchema = z
     /** Tag the file as received records of this request (must be in
      *  the same scope; needs records.edit). */
     recordsRequestId: z.string().min(1).nullish(),
+    /** Which records section the file belongs to; validated against
+     *  RECORDS_DOC_ROLES below (default received_records). */
+    recordsRole: z.string().nullish(),
     /** Document display name: the original filename, or the composer's
      *  override. The pathname
      *  is the sanitized/truncated KEY; this preserves what the user
@@ -121,6 +128,7 @@ type TokenPayload = {
   leadId?: string;
   folderId: string | null;
   recordsRequestId?: string | null;
+  recordsRole?: RecordsDocRole;
   name: string;
   category: DocumentCategory;
   contentType: string;
@@ -155,6 +163,17 @@ export const onBeforeGenerateToken: HandleUploadOptions["onBeforeGenerateToken"]
     } catch {
       throw new UploadTokenError(400, "Invalid upload payload.");
     }
+
+    if (
+      payload.recordsRole != null &&
+      payload.recordsRole !== "" &&
+      !isRecordsDocRole(payload.recordsRole)
+    ) {
+      throw new UploadTokenError(400, "Invalid records document kind.");
+    }
+    const recordsRole: RecordsDocRole = isRecordsDocRole(payload.recordsRole)
+      ? payload.recordsRole
+      : "received_records";
 
     // Same target validation as the streaming route's resolveTarget.
     let scope: RecordScope;
@@ -227,7 +246,7 @@ export const onBeforeGenerateToken: HandleUploadOptions["onBeforeGenerateToken"]
     const tokenPayload: TokenPayload = {
       ...scopeWhere(scope),
       folderId,
-      ...(recordsRequestId ? { recordsRequestId } : {}),
+      ...(recordsRequestId ? { recordsRequestId, recordsRole } : {}),
       name: payload.name,
       category: payload.category ?? "discovery",
       contentType,
@@ -326,7 +345,8 @@ export const onUploadCompleted: NonNullable<
       tx,
       t.recordsRequestId,
       target,
-      targetFolderId
+      targetFolderId,
+      t.recordsRole ?? "received_records"
     );
     recordsTagDropped = !tag;
     return tag;

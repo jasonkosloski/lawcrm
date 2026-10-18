@@ -574,7 +574,7 @@ describe("records request letters", () => {
     });
   }
 
-  test("generate files the letter into Records/<custodian — type> with the request_letter role", async () => {
+  test("generate files the letter into Records/<custodian — type>/Request documents with the request_letter role", async () => {
     const t = await seedTemplate({
       body: "To {{custodian.name}} ({{custodian.address}}) re {{request.subject}} from {{request.dateRangeStart}}",
     });
@@ -589,8 +589,13 @@ describe("records request letters", () => {
       include: { folder: { include: { parent: true } } },
     });
     expect(doc.recordsRequestRole).toBe("request_letter");
-    expect(doc.folder?.name).toBe("Memorial Hospital — CORA");
-    expect(doc.folder?.parent?.name).toBe("Records");
+    expect(doc.folder?.name).toBe("Request documents");
+    expect(doc.folder?.parent?.name).toBe("Memorial Hospital — CORA");
+    const request = await prisma.documentFolder.findUniqueOrThrow({
+      where: { id: doc.folder!.parentId! },
+      include: { parent: true },
+    });
+    expect(request.parent?.name).toBe("Records");
     const file = vi.mocked(storeFile).mock.calls.at(-1)![0] as File;
     expect(await file.text()).toBe(
       "To Memorial Hospital (1 Hospital Way, Denver, CO 80202) re Chart 2024 from January 5, 2024"

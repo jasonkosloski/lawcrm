@@ -1,8 +1,8 @@
 /**
  * Records request detail page body (client). Rendered by the request
  * page under the Records tab (`.../records/[requestId]`): header with
- * the status actions, a main column (letter, received records,
- * follow-ups) and a side column (details, fee).
+ * the status actions, a main column (request documents, responsive
+ * documents, follow-ups) and a side column (details, fee).
  *
  * History is the follow-up log (newest first) plus the sent / received
  * dates: a per-request ActivityLog feed would need a request FK on
@@ -48,6 +48,10 @@ import {
   checkRecordsTransition,
   isRecordsRequestOpen,
 } from "@/lib/records-requests/status";
+import {
+  RECORDS_ROLE_INFO,
+  type RecordsDocRole,
+} from "@/lib/records-requests/roles";
 import { dueBadge } from "@/lib/records-requests/due-badge";
 import type { RecordsRequestDetail } from "@/lib/queries/records-requests";
 import { cn } from "@/lib/utils";
@@ -213,26 +217,36 @@ export function RequestDetail({
     });
   };
 
-  const [picked, setPicked] = useState<string[]>([]);
-  const [linkError, setLinkError] = useState<string | null>(null);
+  const [picked, setPicked] = useState<Record<RecordsDocRole, string[]>>({
+    request_letter: [],
+    received_records: [],
+  });
+  const [linkError, setLinkError] = useState<{
+    role: RecordsDocRole;
+    message: string;
+  } | null>(null);
   const [linkPending, startLink] = useTransition();
-  const onLink = () => {
+  const onLink = (role: RecordsDocRole) => {
     setLinkError(null);
     startLink(async () => {
-      const res = await linkRecordsDocuments(detail.id, picked);
+      const res = await linkRecordsDocuments(detail.id, picked[role], role);
       if (res.ok) {
-        setPicked([]);
-        setOfferMark(true);
+        setPicked((p) => ({ ...p, [role]: [] }));
+        // Only responsive documents suggest a status change.
+        if (role === "received_records") setOfferMark(true);
       } else {
-        setLinkError(res.error ?? "Couldn't link the documents.");
+        setLinkError({
+          role,
+          message: res.error ?? "Couldn't link the documents.",
+        });
       }
     });
   };
-  const onUnlink = (documentId: string) => {
+  const onUnlink = (documentId: string, role: RecordsDocRole) => {
     setLinkError(null);
     startLink(async () => {
       const res = await unlinkRecordsDocument(documentId);
-      if (!res.ok) setLinkError("Couldn't unlink the document.");
+      if (!res.ok) setLinkError({ role, message: "Couldn't unlink the document." });
     });
   };
 
@@ -246,10 +260,11 @@ export function RequestDetail({
   });
 
   const letters = detail.documents.filter((d) => d.role === "request_letter");
+  // Untagged-role documents (legacy) show under responsive, as before.
   const received = detail.documents.filter((d) => d.role !== "request_letter");
   const showMarks = offerMark && canEdit && isOpen && !isDraft;
 
-  const docList = (rows: typeof letters, empty: string) =>
+  const docList = (rows: typeof letters, empty: string, role: RecordsDocRole) =>
     rows.length === 0 ? (
       <p className="text-2xs text-ink-4">{empty}</p>
     ) : (
@@ -266,7 +281,7 @@ export function RequestDetail({
             {canEdit && (
               <button
                 type="button"
-                onClick={() => onUnlink(d.id)}
+                onClick={() => onUnlink(d.id, role)}
                 aria-label={`Unlink ${d.name}`}
                 className="ml-auto text-ink-4 hover:text-warn"
               >
@@ -277,6 +292,55 @@ export function RequestDetail({
         ))}
       </ul>
     );
+
+  const linkPanel = (role: RecordsDocRole) => {
+    const err = linkError?.role === role ? linkError.message : null;
+    const sel = picked[role];
+    return (
+      <>
+        {err && linkableDocuments.length === 0 && (
+          <div className="text-2xs text-warn">{err}</div>
+        )}
+        {canEdit && linkableDocuments.length > 0 && (
+          <details className="rounded-md border border-line px-2.5 py-1.5">
+            <summary className="text-xs text-ink-3 cursor-pointer">
+              Link existing documents
+            </summary>
+            <ul className="mt-2 flex flex-col gap-1 max-h-40 overflow-y-auto">
+              {linkableDocuments.map((d) => (
+                <li key={d.id}>
+                  <label className="flex items-center gap-2 text-xs text-ink-2">
+                    <input
+                      type="checkbox"
+                      checked={sel.includes(d.id)}
+                      onChange={(e) =>
+                        setPicked((p) => ({
+                          ...p,
+                          [role]: e.target.checked
+                            ? [...p[role], d.id]
+                            : p[role].filter((x) => x !== d.id),
+                        }))
+                      }
+                    />
+                    {d.name}
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              disabled={linkPending || sel.length === 0}
+              onClick={() => onLink(role)}
+              className={cn(outlineBtn, "mt-2")}
+            >
+              Link selected
+            </button>
+            {err && <div className="text-2xs text-warn mt-1">{err}</div>}
+          </details>
+        )}
+      </>
+    );
+  };
 
   const badge = dueBadge({ status: detail.status, daysUntilDue });
 
@@ -421,15 +485,8 @@ export function RequestDetail({
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
         <div className="flex flex-col gap-4 min-w-0">
-          <Section title="Letter and received records">
-            <div className="flex flex-col gap-1">
-              <span className={label}>Request letters</span>
-              {docList(letters, "No letter yet.")}
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className={label}>Received records</span>
-              {docList(received, "Nothing received yet.")}
-            </div>
+          <Section title={RECORDS_ROLE_INFO.request_letter.label}>
+            {docList(letters, "No request documents yet.", "request_letter")}
             <div className="flex flex-wrap items-start gap-2">
               {canEdit && (
                 <GenerateFromTemplateDialog
@@ -448,49 +505,29 @@ export function RequestDetail({
                   folderName={null}
                   storageDriver={storageDriver}
                   recordsRequestId={detail.id}
+                  recordsRole="request_letter"
+                />
+              )}
+            </div>
+            {linkPanel("request_letter")}
+          </Section>
+
+          <Section title={RECORDS_ROLE_INFO.received_records.label}>
+            {docList(received, "No responsive documents yet.", "received_records")}
+            <div className="flex flex-wrap items-start gap-2">
+              {can.upload && writable && (
+                <MultiFileUpload
+                  scope={scope}
+                  folderId={null}
+                  folderName={null}
+                  storageDriver={storageDriver}
+                  recordsRequestId={detail.id}
+                  recordsRole="received_records"
                   onUploaded={() => setOfferMark(true)}
                 />
               )}
             </div>
-            {linkError && linkableDocuments.length === 0 && (
-              <div className="text-2xs text-warn">{linkError}</div>
-            )}
-            {canEdit && linkableDocuments.length > 0 && (
-              <details className="rounded-md border border-line px-2.5 py-1.5">
-                <summary className="text-xs text-ink-3 cursor-pointer">
-                  Link existing documents
-                </summary>
-                <ul className="mt-2 flex flex-col gap-1 max-h-40 overflow-y-auto">
-                  {linkableDocuments.map((d) => (
-                    <li key={d.id}>
-                      <label className="flex items-center gap-2 text-xs text-ink-2">
-                        <input
-                          type="checkbox"
-                          checked={picked.includes(d.id)}
-                          onChange={(e) =>
-                            setPicked((p) =>
-                              e.target.checked
-                                ? [...p, d.id]
-                                : p.filter((x) => x !== d.id)
-                            )
-                          }
-                        />
-                        {d.name}
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  type="button"
-                  disabled={linkPending || picked.length === 0}
-                  onClick={onLink}
-                  className={cn(outlineBtn, "mt-2")}
-                >
-                  Link selected
-                </button>
-                {linkError && <div className="text-2xs text-warn mt-1">{linkError}</div>}
-              </details>
-            )}
+            {linkPanel("received_records")}
             {showMarks && (
               <div className="flex flex-wrap items-center gap-2 rounded-md border border-line bg-paper-2/40 px-3 py-2">
                 <span className="text-xs text-ink-3">Records came in?</span>

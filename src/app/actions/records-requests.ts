@@ -56,6 +56,7 @@ import {
   syncFollowUpTaskOwner,
 } from "@/lib/records-requests/follow-up";
 import type { RecordsRequestFormState } from "@/lib/records-requests/form";
+import { isRecordsDocRole, type RecordsDocRole } from "@/lib/records-requests/roles";
 
 const STALE_MESSAGE =
   "This request was changed by someone else since you opened it. Reload the page to see the latest, then re-apply your edit.";
@@ -774,14 +775,19 @@ function revalidateRecordsAndDocuments(scope: RecordScope): void {
   for (const path of scopePaths(scope, "documents")) revalidatePath(path);
 }
 
-/** Attach existing documents to a request as received records.
- *  Documents must share the request's scope. A document that is already
- *  this request's own letter keeps its role. */
+/** Attach existing documents to a request under `role` (request
+ *  document or responsive document). Documents must share the request's
+ *  scope. Re-linking a document already on THIS request with the other
+ *  role switches its role. Never moves files. */
 export async function linkRecordsDocuments(
   id: string,
-  documentIds: string[]
+  documentIds: string[],
+  role: RecordsDocRole
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("records.edit");
+  if (!isRecordsDocRole(role)) {
+    return { ok: false, error: "Invalid records document kind." };
+  }
   const ids = [...new Set(documentIds)];
   if (ids.length === 0) return { ok: false, error: "Select at least one document." };
   if (ids.length > LINK_BATCH_CAP) {
@@ -821,13 +827,10 @@ export async function linkRecordsDocuments(
     if (!docs.every(sameScope)) {
       return { ok: false as const, error: SAME_SCOPE_ERROR };
     }
-    // Already this request's own letter keeps its role; documents held
-    // by a different request are never stolen.
+    // Already this request's own document with this role needs no
+    // write; documents held by a different request are never stolen.
     const toTag = docs
-      .filter(
-        (d) =>
-          !(d.recordsRequestId === id && d.recordsRequestRole === "request_letter")
-      )
+      .filter((d) => !(d.recordsRequestId === id && d.recordsRequestRole === role))
       .map((d) => d.id);
     const written = await tx.document.updateMany({
       where: {
@@ -835,7 +838,7 @@ export async function linkRecordsDocuments(
         ...scopeWhere(scope),
         OR: [{ recordsRequestId: null }, { recordsRequestId: id }],
       },
-      data: { recordsRequestId: id, recordsRequestRole: "received_records" },
+      data: { recordsRequestId: id, recordsRequestRole: role },
     });
     if (written.count !== toTag.length) {
       // Roll back: nothing is tagged on a partial claim.

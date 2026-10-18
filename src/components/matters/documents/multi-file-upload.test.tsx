@@ -69,7 +69,11 @@ let driver: "local" | "vercel-blob" | undefined;
 
 let scopeUnderTest: RecordScope = { kind: "matter", matterId: "m1" };
 
-let extraProps: { recordsRequestId?: string; onUploaded?: () => void } = {};
+let extraProps: {
+  recordsRequestId?: string;
+  recordsRole?: "request_letter" | "received_records";
+  onUploaded?: () => void;
+} = {};
 
 async function pickFiles(files: File[]) {
   const user = userEvent.setup({ applyAccept: false });
@@ -105,6 +109,34 @@ describe("records request tag", () => {
     expect(fd.get("recordsRequestId")).toBe("rr1");
     StubXHR.instances[0].onload?.();
     expect(extraProps.onUploaded).toHaveBeenCalledTimes(1);
+  });
+
+  test("recordsRole follows recordsRequestId in the multipart (local) and rides the blob payload", async () => {
+    extraProps = { recordsRequestId: "rr1", recordsRole: "request_letter" };
+    driver = "local";
+    await pickFiles([new File(["pdf"], "rec.pdf")]);
+    await waitFor(() => expect(StubXHR.instances).toHaveLength(1));
+    const fd = StubXHR.instances[0].sent as FormData;
+    expect([...fd.keys()]).toEqual([
+      "matterId",
+      "folderId",
+      "recordsRequestId",
+      "recordsRole",
+      "files",
+    ]);
+    expect(fd.get("recordsRole")).toBe("request_letter");
+  });
+
+  test("blob driver carries recordsRole in the client payload", async () => {
+    extraProps = { recordsRequestId: "rr1", recordsRole: "received_records" };
+    driver = "vercel-blob";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedUpload.mockResolvedValue({ url: "https://s/x" } as any);
+    await pickFiles([new File(["a"], "a.pdf", { type: "application/pdf" })]);
+    await waitFor(() => expect(mockedUpload).toHaveBeenCalledTimes(1));
+    expect(
+      JSON.parse(mockedUpload.mock.calls[0][2].clientPayload as string).recordsRole
+    ).toBe("received_records");
   });
 
   test("blob driver carries it in the client payload and reports completion", async () => {

@@ -43,7 +43,7 @@ import { logActivity } from "@/lib/activity-log";
 import { deleteFile, storeFile } from "@/lib/file-storage";
 import { toUserMessage } from "@/lib/user-facing-error";
 import { formatDate } from "@/lib/format-date";
-import { resolveRecordsFolder } from "@/lib/records-requests/folder";
+import { resolveRecordsRoleFolder } from "@/lib/records-requests/folder";
 import {
   composeCityStateZip,
   mergeTemplate,
@@ -628,13 +628,17 @@ export async function generateDocumentFromTemplate(
     };
     doc = request
       ? await prisma.$transaction(async (tx) => {
-          const folderId = await resolveRecordsFolder(tx, {
-            id: request.id,
-            matterId: request.matterId,
-            leadId: request.leadId,
-            custodianName: request.custodian.name,
-            typeName: request.type?.name ?? request.adHocTypeName ?? "Records",
-          });
+          const folderId = await resolveRecordsRoleFolder(
+            tx,
+            {
+              id: request.id,
+              matterId: request.matterId,
+              leadId: request.leadId,
+              custodianName: request.custodian.name,
+              typeName: request.type?.name ?? request.adHocTypeName ?? "Records",
+            },
+            "request_letter"
+          );
           return tx.document.create({
             data: {
               ...data,

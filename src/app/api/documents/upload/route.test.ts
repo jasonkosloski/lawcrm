@@ -681,7 +681,8 @@ describe("POST /api/documents/upload — records requests", () => {
       expect.anything(),
       "rr1",
       { kind: "matter", matterId: "m1" },
-      null
+      null,
+      "received_records"
     );
     const data = mockedCreate.mock.calls[0]![0].data as Record<string, unknown>;
     expect(data.recordsRequestId).toBe("rr1");
@@ -803,6 +804,70 @@ describe("POST /api/documents/upload — records requests", () => {
     );
     expect(mockedCreate).not.toHaveBeenCalled();
     // Either never stored, or stored and cleaned up.
+    expect(mockedDelete.mock.calls.length).toBe(mockedStore.mock.calls.length);
+  });
+
+  test("recordsRole routes to the resolver and tags the document", async () => {
+    wireHappyMocks();
+    mockedReq.mockResolvedValue({ id: "rr1" } as never);
+    mockedResolve.mockResolvedValue({ ...TAGGED, recordsRequestRole: "request_letter" });
+    const res = await POST(
+      await makeRequest(
+        fdWith({ matterId: "m1", recordsRequestId: "rr1", recordsRole: "request_letter" }, [
+          { name: "a.pdf" },
+        ])
+      )
+    );
+    expect(res.status).toBe(200);
+    expect(mockedResolve.mock.calls[0]![4]).toBe("request_letter");
+    const data = mockedCreate.mock.calls[0]![0].data as Record<string, unknown>;
+    expect(data.recordsRequestRole).toBe("request_letter");
+  });
+
+  test("an invalid recordsRole -> 400 before any byte, nothing stored", async () => {
+    wireHappyMocks();
+    mockedReq.mockResolvedValue({ id: "rr1" } as never);
+    const res = await POST(
+      await makeRequest(
+        fdWith({ matterId: "m1", recordsRequestId: "rr1", recordsRole: "bogus" }, [
+          { name: "a.pdf" },
+        ])
+      )
+    );
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe(
+      "Invalid records document kind."
+    );
+    expect(mockedStore).not.toHaveBeenCalled();
+    expect(mockedCreate).not.toHaveBeenCalled();
+  });
+
+  test("an omitted recordsRole defaults to received_records", async () => {
+    wireHappyMocks();
+    mockedReq.mockResolvedValue({ id: "rr1" } as never);
+    mockedResolve.mockResolvedValue(TAGGED);
+    await POST(
+      await makeRequest(
+        fdWith({ matterId: "m1", recordsRequestId: "rr1" }, [{ name: "a.pdf" }])
+      )
+    );
+    expect(mockedResolve.mock.calls[0]![4]).toBe("received_records");
+  });
+
+  test("a recordsRole after the first file part -> 400, nothing stored", async () => {
+    wireHappyMocks();
+    mockedReq.mockResolvedValue({ id: "rr1" } as never);
+    const fd = new FormData();
+    fd.append("matterId", "m1");
+    fd.append("recordsRequestId", "rr1");
+    fd.append("files", new File(["x"], "a.pdf"));
+    fd.append("recordsRole", "request_letter");
+    const res = await POST(await makeRequest(fd));
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe(
+      "recordsRole must precede file parts in the form data."
+    );
+    expect(mockedCreate).not.toHaveBeenCalled();
     expect(mockedDelete.mock.calls.length).toBe(mockedStore.mock.calls.length);
   });
 });
