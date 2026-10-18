@@ -75,12 +75,15 @@ export function ContactsTable({
   rows,
   canEdit,
   canDelete,
+  canExport,
 }: {
   rows: ContactListRow[];
   /** contacts.edit — shows the bulk "Set type…" control. */
   canEdit: boolean;
   /** contacts.delete — shows the bulk "Deactivate" control. */
   canDelete: boolean;
+  /** contacts.export — shows the bulk "Export CSV" control. */
+  canExport: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -205,15 +208,17 @@ export function ContactsTable({
                     ))}
                   </select>
                 )}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={runExport}
-                  disabled={pending}
-                >
-                  <Download />
-                  Export CSV
-                </Button>
+                {canExport && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={runExport}
+                    disabled={pending}
+                  >
+                    <Download />
+                    Export CSV
+                  </Button>
+                )}
                 {canDelete && (
                   <Button
                     size="sm"

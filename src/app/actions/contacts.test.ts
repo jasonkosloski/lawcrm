@@ -21,7 +21,7 @@
  *   - bulk ops: all-or-nothing id validation + the batch-size cap,
  *     bulkSetContactType (one updateMany + ONE summary audit row),
  *     bulkDeactivateContacts (soft-delete semantics of the single
- *     path), exportContactsCsv (session-only — no contacts.* gate —
+ *     path), exportContactsCsv (contacts.export gate,
  *     escaping, address folding, active column, audit row)
  */
 
@@ -31,6 +31,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("@/lib/permission-check", () => ({
   requirePermission: vi.fn(),
+  requirePermissionResult: vi.fn(),
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
 }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
@@ -40,8 +41,10 @@ vi.mock("@/lib/current-user-tz", () => ({
 }));
 
 import { redirect } from "next/navigation";
-import { requirePermission } from "@/lib/permission-check";
-import { getCurrentUserId } from "@/lib/current-user";
+import {
+  requirePermission,
+  requirePermissionResult,
+} from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import {
   bulkDeactivateContacts,
@@ -106,8 +109,7 @@ beforeEach(async () => {
   // Gate passes by default; it returns the actor id like the real
   // implementation so the audit-log writes can chain it.
   mockedRequirePermission.mockResolvedValue(userId);
-  // exportContactsCsv is session-gated only — resolve to the actor.
-  vi.mocked(getCurrentUserId).mockResolvedValue(userId);
+  vi.mocked(requirePermissionResult).mockResolvedValue({ ok: true, userId });
 });
 
 // ── Permission gates ────────────────────────────────────────────────────
@@ -148,14 +150,23 @@ describe("permission gates", () => {
     );
   });
 
-  test("exportContactsCsv is session-gated only — no contacts.* key", async () => {
+  test("exportContactsCsv needs contacts.export", async () => {
     const { contactId } = await seedContact();
-    mockedRequirePermission.mockClear();
 
     const res = await exportContactsCsv([contactId]);
     expect(res.ok).toBe(true);
-    expect(getCurrentUserId).toHaveBeenCalled();
-    expect(mockedRequirePermission).not.toHaveBeenCalled();
+    expect(requirePermissionResult).toHaveBeenLastCalledWith("contacts.export");
+
+    vi.mocked(requirePermissionResult).mockResolvedValueOnce({
+      ok: false,
+      error: "denied",
+    });
+    expect(await exportContactsCsv([contactId])).toEqual({
+      ok: false,
+      error: "denied",
+    });
+    // Only the allowed export was audited.
+    expect(await prisma.activityLog.count()).toBe(1);
   });
 
   // requirePermission redirects ungranted users — simulate the throw

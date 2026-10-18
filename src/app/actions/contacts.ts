@@ -19,7 +19,8 @@
  * reactivateContact), and `contacts.merge` (mergeContacts,
  * searchMergeCandidatesAction). Admins short-circuit; other
  * roles need explicit grants via the matrix. `exportContactsCsv`
- * mutates nothing, so it only requires a signed-in session.
+ * mutates nothing but bulk-exports the directory, so it needs
+ * `contacts.export`.
  *
  * Deactivating (single or bulk) is refused for the client of an open
  * matter or the subject of a live lead; a deactivated contact can be
@@ -32,8 +33,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requirePermission } from "@/lib/permission-check";
-import { getCurrentUserId } from "@/lib/current-user";
+import {
+  requirePermission,
+  requirePermissionResult,
+} from "@/lib/permission-check";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { todayKey } from "@/lib/format-date";
 import { buildCsv } from "@/lib/csv";
@@ -1185,10 +1188,10 @@ export async function bulkDeactivateContacts(
 }
 
 /**
- * CSV export of the selected contacts. Read-only, so it isn't gated
- * on a contacts.* key — any signed-in user who can see the directory
- * can export it (`getCurrentUserId` bounces signed-out callers).
- * The export IS recorded in the firm activity log: for a law firm,
+ * CSV export of the selected contacts. Gated on `contacts.export`:
+ * seeing one contact at a time is open to the firm, pulling the
+ * whole client list out of the app is not. The export IS recorded
+ * in the firm activity log: for a law firm,
  * "who pulled the contact list" is audit-worthy even without a
  * mutation. Address folds address/city/state/zip into one column.
  */
@@ -1197,7 +1200,9 @@ export async function exportContactsCsv(
 ): Promise<
   { ok: true; csv: string; filename: string } | { ok: false; error: string }
 > {
-  const userId = await getCurrentUserId();
+  const gate = await requirePermissionResult("contacts.export");
+  if (!gate.ok) return gate;
+  const { userId } = gate;
 
   const loaded = await loadBulkContacts(contactIds, { requireActive: false });
   if (!loaded.ok) return loaded;

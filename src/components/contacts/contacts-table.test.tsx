@@ -11,7 +11,7 @@
  *     wires the ids to `bulkDeactivateContacts`;
  *   - Export CSV wires the ids to `exportContactsCsv` and funnels the
  *     result through a blob download (no permission flag needed);
- *   - permission flags: canEdit/canDelete hide their controls while
+ *   - permission flags: canEdit/canDelete/canExport hide their controls while
  *     Export stays;
  *   - the BULK_CONTACT_LIMIT guard swaps the actions for a trim note
  *     when the selection is over the cap.
@@ -79,7 +79,7 @@ const rows = [row({ id: "c1", name: "Alpha" }), row({ id: "c2", name: "Beta" })]
 
 function renderTable(props?: Partial<Parameters<typeof ContactsTable>[0]>) {
   return render(
-    <ContactsTable rows={rows} canEdit canDelete {...props} />
+    <ContactsTable rows={rows} canEdit canDelete canExport {...props} />
   );
 }
 
@@ -270,12 +270,22 @@ describe("ContactsTable — permissions + cap", () => {
     ).not.toBeInTheDocument();
   });
 
+  test("canExport=false hides Export CSV", async () => {
+    const user = userEvent.setup();
+    renderTable({ canExport: false });
+
+    await user.click(screen.getByRole("checkbox", { name: "Select Alpha" }));
+    expect(
+      screen.queryByRole("button", { name: /Export CSV/ })
+    ).not.toBeInTheDocument();
+  });
+
   test("over the batch cap: actions swap for a trim note", async () => {
     const many = Array.from({ length: BULK_CONTACT_LIMIT + 1 }, (_, i) =>
       row({ id: `c${i}`, name: `Contact ${i}` })
     );
     const user = userEvent.setup();
-    render(<ContactsTable rows={many} canEdit canDelete />);
+    render(<ContactsTable rows={many} canEdit canDelete canExport />);
 
     await user.click(
       screen.getByRole("checkbox", { name: "Select all contacts" })

@@ -354,6 +354,12 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         description:
           "Combine two contact records — every matter link, thread, note, and lead is re-pointed to the survivor and the duplicate is deactivated. Hard to undo; delegate carefully.",
       },
+      {
+        key: "contacts.export",
+        label: "Export contacts",
+        description:
+          "Download selected contacts (names, emails, phones, organizations) as a CSV from the contacts list. Bulk export of the client list — grant narrowly.",
+      },
     ],
   },
   {

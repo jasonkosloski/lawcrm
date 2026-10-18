@@ -78,7 +78,7 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 - [~] **Settings: Integrations**: Westlaw, e-sign, IOLTA bank feed, PACER. → [settings-admin](features/settings-admin.md)
 
 **Tech debt**
-- [ ] **Gate reads that only have session guards**: contacts CSV export, palette data, attendee search, template preview. → [issue](issues/ungated-reads.md)
+- [ ] **Gate reads that only have session guards**: template preview (contacts export now needs `contacts.export`). → [issue](issues/ungated-reads.md)
 - [ ] **Does `Contact.conflictStatus` feed the conflict matcher?** Needs a product call. → [issue](issues/conflict-status-not-in-matcher.md)
 - [ ] **Server-side email validation** on contact/party/attendee schemas. → [platform-quality](features/platform-quality.md)
 - [ ] **Button size convention + one sweep** → [platform-quality](features/platform-quality.md)

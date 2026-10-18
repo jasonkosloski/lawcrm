@@ -32,7 +32,7 @@ export default async function ContactsPage({
   const q = typeof sp.q === "string" ? sp.q : undefined;
   const type = typeof sp.type === "string" ? sp.type : undefined;
 
-  const [rows, typeCounts, canCreate, canEdit, canDelete] = await Promise.all([
+  const [rows, typeCounts, canCreate, canEdit, canDelete, canExport] = await Promise.all([
     listContacts({ search: q, type }),
     getContactTypeCounts(),
     currentUserHasPermission("contacts.create"),
@@ -40,6 +40,7 @@ export default async function ContactsPage({
     // The server actions re-gate; these just decide what to render.
     currentUserHasPermission("contacts.edit"),
     currentUserHasPermission("contacts.delete"),
+    currentUserHasPermission("contacts.export"),
   ]);
 
   const totalActive = Object.values(typeCounts).reduce((a, b) => a + b, 0);
@@ -184,7 +185,12 @@ export default async function ContactsPage({
               bulk-action bar (set type / export CSV / deactivate).
               Selection is plain client state — not in the URL. */}
           <div className="hidden md:block">
-            <ContactsTable rows={rows} canEdit={canEdit} canDelete={canDelete} />
+            <ContactsTable
+              rows={rows}
+              canEdit={canEdit}
+              canDelete={canDelete}
+              canExport={canExport}
+            />
           </div>
           </>
         )}
