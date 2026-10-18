@@ -30,7 +30,11 @@ import {
 import { globalSearch } from "@/lib/queries/search";
 import { getPaletteData } from "@/lib/queries/command-palette";
 import { getSidebarData } from "@/lib/queries/sidebar";
-import { getNotificationsFeed } from "@/lib/queries/notifications";
+import {
+  HIDDEN_MATTER_NOTIFICATION_TITLE,
+  getNotificationsBell,
+  getNotificationsFeed,
+} from "@/lib/queries/notifications";
 import { listMessengerThreads } from "@/lib/queries/messenger";
 import { EMPTY_FILTER } from "@/lib/matters-filters";
 import {
@@ -242,18 +246,50 @@ describe("TEAM mode — palette, sidebar, notifications, messenger", () => {
     expect(side.pinnedMatters.map((p) => p.name)).toEqual(["Alpha Matter zebra"]);
   });
 
-  test("notification feed drops the hidden matter's name", async () => {
+  test("notification feed redacts a hidden matter's name, title, body and link", async () => {
     await prisma.notification.create({
       data: {
         userId: alice,
         type: "matter",
-        title: "Something happened",
+        title: "Added to Bravo Matter as Paralegal",
+        body: "Bravo Matter · $1,200.00",
+        link: `/matters/${bravoId}`,
         matterId: bravoId,
       },
     });
+    await prisma.notification.create({
+      data: {
+        userId: alice,
+        type: "matter",
+        title: "Visible one",
+        body: "kept",
+        matterId: alphaId,
+      },
+    });
     const feed = await getNotificationsFeed(1);
-    expect(feed.rows).toHaveLength(1);
-    expect(feed.rows[0].matterName).toBeNull();
+    const hidden = feed.rows.find((r) => r.matterId === bravoId)!;
+    expect(hidden).toMatchObject({
+      title: HIDDEN_MATTER_NOTIFICATION_TITLE,
+      body: null,
+      link: null,
+      matterName: null,
+    });
+    expect(JSON.stringify(feed.rows)).not.toContain("Bravo");
+    const shown = feed.rows.find((r) => r.matterId === alphaId)!;
+    expect(shown).toMatchObject({ title: "Visible one", body: "kept" });
+  });
+
+  test("notification bell redacts hidden-matter text too", async () => {
+    await prisma.notification.create({
+      data: {
+        userId: alice,
+        type: "matter",
+        title: "Payment on Bravo Matter",
+        matterId: bravoId,
+      },
+    });
+    const bell = await getNotificationsBell();
+    expect(bell.recent[0].title).toBe(HIDDEN_MATTER_NOTIFICATION_TITLE);
   });
 
   test("messenger threads default-routed to a hidden matter are hidden", async () => {

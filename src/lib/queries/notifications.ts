@@ -41,6 +41,43 @@ export type NotificationsBell = {
 };
 
 const RECENT_CAP = 20;
+
+/** Shown in place of a notification whose matter the reader can no
+ *  longer see (walled off after it was sent). Title/body were
+ *  rendered at write time and can carry the matter name, amounts or
+ *  task titles, so all of it goes — not just `matterName`. */
+export const HIDDEN_MATTER_NOTIFICATION_TITLE =
+  "Update on a matter you no longer have access to";
+
+type NotificationDbRow = {
+  id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  matterId: string | null;
+  matter: { name: string } | null;
+  createdAt: Date;
+};
+
+function toRow(
+  r: NotificationDbRow,
+  visible: Set<string>,
+  isRead: boolean
+): NotificationRow {
+  const hidden = r.matterId !== null && !visible.has(r.matterId);
+  return {
+    id: r.id,
+    type: r.type,
+    title: hidden ? HIDDEN_MATTER_NOTIFICATION_TITLE : r.title,
+    body: hidden ? null : r.body,
+    link: hidden ? null : r.link,
+    matterId: r.matterId,
+    matterName: hidden ? null : (r.matter?.name ?? null),
+    isRead,
+    createdAt: r.createdAt,
+  };
+}
 const READ_TAIL = 5;
 
 /** createdAt of the user's newest notification — read BEFORE the
@@ -81,20 +118,9 @@ export async function getNotificationsBell(): Promise<NotificationsBell> {
     userId,
     [...unread, ...recentRead].flatMap((r) => (r.matterId ? [r.matterId] : []))
   );
+  // Hidden matter: the notification exists, its contents do not leak.
   const map = (rows: typeof unread, isRead: boolean): NotificationRow[] =>
-    rows.map((r) => ({
-      id: r.id,
-      type: r.type,
-      title: r.title,
-      body: r.body,
-      link: r.link,
-      matterId: r.matterId,
-      // Hidden matter: the notification exists, its name does not leak.
-      matterName:
-        r.matterId && !visible.has(r.matterId) ? null : (r.matter?.name ?? null),
-      isRead,
-      createdAt: r.createdAt,
-    }));
+    rows.map((r) => toRow(r, visible, isRead));
 
   return {
     asOf,
@@ -160,18 +186,7 @@ export async function getNotificationsFeed(
   );
 
   return {
-    rows: rows.map((r) => ({
-      id: r.id,
-      type: r.type,
-      title: r.title,
-      body: r.body,
-      link: r.link,
-      matterId: r.matterId,
-      matterName:
-        r.matterId && !visible.has(r.matterId) ? null : (r.matter?.name ?? null),
-      isRead: r.readAt !== null,
-      createdAt: r.createdAt,
-    })),
+    rows: rows.map((r) => toRow(r, visible, r.readAt !== null)),
     page: safePage,
     pageCount,
     total,
