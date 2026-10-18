@@ -561,7 +561,11 @@ export type MyTaskItem = {
   /** Negative when overdue, 0 today, positive when in the future, null if no due date. */
   daysUntilDue: number | null;
   matterId: string | null;
+  /** Context line: the matter's name, "Intake · {lead}" for an intake
+   *  task, null for a firm-wide task. */
   matterName: string | null;
+  /** Set for an intake task (Task.leadId) — links to the lead's tab. */
+  leadId: string | null;
 };
 
 /** Tasks bucketed by due date for the dashboard card. */
@@ -621,6 +625,8 @@ export async function getMyOpenTasks(tz: string): Promise<MyTasksGrouped> {
         createdAt: true,
         matterId: true,
         matter: { select: { name: true } },
+        leadId: true,
+        lead: { select: { name: true } },
       },
     }),
     prisma.task.count({ where }),
@@ -662,7 +668,10 @@ export async function getMyOpenTasks(tz: string): Promise<MyTasksGrouped> {
       // Calendar days from the viewer's today to the date-only due date.
       daysUntilDue: t.dueDate ? daysUntilDateOnly(t.dueDate, tz) : null,
       matterId: t.matterId,
-      matterName: t.matter?.name ?? null,
+      // Intake tasks carry their lead as the context line.
+      matterName:
+        t.matter?.name ?? (t.lead ? `Intake · ${t.lead.name}` : null),
+      leadId: t.leadId,
     };
 
     const bucket =

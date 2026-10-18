@@ -27,6 +27,8 @@ const mocks = vi.hoisted(() => ({
   event: vi.fn(),
   deadline: vi.fn(),
   time: vi.fn(),
+  leadTask: vi.fn(),
+  leadEvent: vi.fn(),
 }));
 
 vi.mock("@/app/actions/captures", () => ({
@@ -34,6 +36,8 @@ vi.mock("@/app/actions/captures", () => ({
   createEventWithCaptures: mocks.event,
   createDeadlineWithCaptures: mocks.deadline,
   createTimeEntryWithCaptures: mocks.time,
+  createLeadTask: mocks.leadTask,
+  createLeadEvent: mocks.leadEvent,
 }));
 
 import { TaskComposer } from "./task-composer";
@@ -89,7 +93,7 @@ describe("zone-aware defaults", () => {
     });
     render(
       <UserTimeZoneProvider timeZone="America/Denver">
-        <EventComposer matterId="m1" />
+        <EventComposer scope={{ kind: "matter", matterId: "m1" }} />
       </UserTimeZoneProvider>
     );
     await user.click(screen.getByRole("button", { name: /schedule an event/i }));
@@ -111,7 +115,7 @@ describe("zone-aware defaults", () => {
     render(
       <UserTimeZoneProvider timeZone="America/Denver">
         <TaskComposer
-          matterId="m1"
+          scope={{ kind: "matter", matterId: "m1" }}
           assignees={assignees}
           currentUserId="u1"
         />
@@ -130,7 +134,7 @@ describe("sibling kinds follow the viewer's permissions", () => {
     const user = setupUser();
     render(
       <TaskComposer
-        matterId="m1"
+        scope={{ kind: "matter", matterId: "m1" }}
         assignees={assignees}
         currentUserId="u1"
         siblingKinds={["time", "note_sibling"]}
@@ -167,7 +171,7 @@ describe("validation errors", () => {
     }));
     const user = setupUser();
     render(
-      <TaskComposer matterId="m1" assignees={assignees} currentUserId="u1" />
+      <TaskComposer scope={{ kind: "matter", matterId: "m1" }} assignees={assignees} currentUserId="u1" />
     );
     await user.click(screen.getByRole("button", { name: /add a task/i }));
     await user.type(screen.getByPlaceholderText("Task title"), "Serve subpoena");
@@ -198,7 +202,7 @@ describe("validation errors", () => {
     }));
     const user = setupUser();
 
-    const ev = render(<EventComposer matterId="m1" />);
+    const ev = render(<EventComposer scope={{ kind: "matter", matterId: "m1" }} />);
     await user.click(screen.getByRole("button", { name: /schedule an event/i }));
     await user.type(screen.getByPlaceholderText(/event title/i), "Hearing");
     await user.click(screen.getByRole("button", { name: /save event/i }));
@@ -234,7 +238,7 @@ describe("reset and collapse after a successful save", () => {
   test("works twice in a row and clears the fields", async () => {
     const user = setupUser();
     render(
-      <TaskComposer matterId="m1" assignees={assignees} currentUserId="u1" />
+      <TaskComposer scope={{ kind: "matter", matterId: "m1" }} assignees={assignees} currentUserId="u1" />
     );
     for (let round = 1; round <= 2; round++) {
       await user.click(screen.getByRole("button", { name: /add a task/i }));
@@ -255,7 +259,7 @@ describe("reset and collapse after a successful save", () => {
 describe("accessible names", () => {
   test("selects in the composers and the stack are named", async () => {
     const user = setupUser();
-    render(<EventComposer matterId="m1" />);
+    render(<EventComposer scope={{ kind: "matter", matterId: "m1" }} />);
     await user.click(screen.getByRole("button", { name: /schedule an event/i }));
     expect(
       screen.getByRole("combobox", { name: "Event type" })
@@ -266,5 +270,43 @@ describe("accessible names", () => {
     expect(
       screen.getByRole("combobox", { name: "Deadline kind" })
     ).toBeInTheDocument();
+  });
+});
+
+describe("intake (lead) scope", () => {
+  test("the task composer posts to createLeadTask with the lead id, offering no siblings", async () => {
+    mocks.leadTask.mockImplementation(async () => ({ status: "ok" as const }));
+    const user = setupUser();
+    render(
+      <TaskComposer
+        scope={{ kind: "lead", leadId: "l1" }}
+        assignees={assignees}
+        currentUserId="u1"
+        siblingKinds={[]}
+      />
+    );
+    await user.click(screen.getByRole("button", { name: /add a task/i }));
+    expect(screen.queryByText(/also capture/i)).toBeNull();
+    await user.type(screen.getByPlaceholderText("Task title"), "Call back");
+    await user.click(screen.getByRole("button", { name: /save task/i }));
+    await waitFor(() => expect(mocks.leadTask).toHaveBeenCalledTimes(1));
+    expect(mocks.leadTask.mock.calls[0][0]).toBe("l1");
+    expect(mocks.task).not.toHaveBeenCalled();
+  });
+
+  test("the event composer posts to createLeadEvent with the lead id", async () => {
+    mocks.leadEvent.mockImplementation(async () => ({ status: "ok" as const }));
+    const user = setupUser();
+    render(
+      <UserTimeZoneProvider timeZone="America/Denver">
+        <EventComposer scope={{ kind: "lead", leadId: "l2" }} siblingKinds={[]} />
+      </UserTimeZoneProvider>
+    );
+    await user.click(screen.getByRole("button", { name: /schedule an event/i }));
+    await user.type(screen.getByPlaceholderText(/^event title/i), "Consultation");
+    await user.click(screen.getByRole("button", { name: /save event/i }));
+    await waitFor(() => expect(mocks.leadEvent).toHaveBeenCalledTimes(1));
+    expect(mocks.leadEvent.mock.calls[0][0]).toBe("l2");
+    expect(mocks.event).not.toHaveBeenCalled();
   });
 });

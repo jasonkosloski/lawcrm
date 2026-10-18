@@ -82,7 +82,7 @@ export default async function MatterEventsPage({
 
   return (
     <div className="p-5 flex flex-col gap-5">
-      {canCreateEvent && <EventComposer matterId={id} />}
+      {canCreateEvent && <EventComposer scope={{ kind: "matter", matterId: id }} />}
 
       {events.length === 0 ? (
         <EmptyState

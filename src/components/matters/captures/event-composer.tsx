@@ -5,6 +5,10 @@
  * computed in the user's PROFILE zone and the server reads what is
  * posted in that same zone (ADR-012), so a 9:00 AM hearing is stored
  * as 9:00 AM for the user, whatever zone the browser or server is in.
+ *
+ * `scope` picks the write: a matter event (createEventWithCaptures) or
+ * an intake event on a lead (createLeadEvent, no siblings — the page
+ * passes `siblingKinds={[]}`).
  */
 
 "use client";
@@ -12,7 +16,11 @@
 import { EventPrivateToggle } from "@/components/calendar/event-private-toggle";
 import { useState } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
-import { createEventWithCaptures } from "@/app/actions/captures";
+import {
+  createEventWithCaptures,
+  createLeadEvent,
+} from "@/app/actions/captures";
+import type { RecordScope } from "@/lib/record-scope";
 import {
   captureInitialState,
   type CaptureFormState,
@@ -41,11 +49,12 @@ const SIBLING_KINDS: CaptureKind[] = [
 ];
 
 export function EventComposer({
-  matterId,
+  scope,
   siblingKinds,
   canPin,
 }: {
-  matterId: string;
+  /** The matter or intake lead the event goes on. */
+  scope: RecordScope;
   /** Sibling kinds the viewer may add (page-resolved from their
    *  create permissions); omitted = all. */
   siblingKinds?: CaptureKind[];
@@ -54,7 +63,10 @@ export function EventComposer({
 }) {
   const tz = useUserTimeZone();
   const [expanded, setExpanded] = useState(false);
-  const action = createEventWithCaptures.bind(null, matterId);
+  const action =
+    scope.kind === "matter"
+      ? createEventWithCaptures.bind(null, scope.matterId)
+      : createLeadEvent.bind(null, scope.leadId);
   // Wrapped useActionState: masks state left over from a previous
   // expand, so a failed attempt's field/attachment errors don't
   // reappear when the composer is re-expanded. See

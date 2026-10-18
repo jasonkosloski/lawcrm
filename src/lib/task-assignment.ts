@@ -41,22 +41,41 @@ export async function notifyTaskAssigned(opts: {
   actorId: string;
   taskTitle: string;
   matterId: string | null;
+  /** Set for an intake task (Task.leadId) — the ping links to the
+   *  lead's Tasks tab instead of the dashboard. */
+  leadId?: string | null;
 }): Promise<void> {
-  const { ownerId, actorId, taskTitle, matterId } = opts;
+  const { ownerId, actorId, taskTitle, matterId, leadId } = opts;
   if (!ownerId || ownerId === actorId) return;
 
-  const matter = matterId
-    ? await prisma.matter.findUnique({
-        where: { id: matterId },
-        select: { name: true },
-      })
-    : null;
+  const [matter, lead] = await Promise.all([
+    matterId
+      ? prisma.matter.findUnique({
+          where: { id: matterId },
+          select: { name: true },
+        })
+      : null,
+    !matterId && leadId
+      ? prisma.lead.findUnique({
+          where: { id: leadId },
+          select: { name: true },
+        })
+      : null,
+  ]);
   await createNotification({
     userId: ownerId,
     type: "task_assigned",
     title: `Task assigned: ${taskTitle}`,
-    body: matter ? matter.name : "Firm-wide task",
-    link: matterId ? `/matters/${matterId}/tasks` : "/",
+    body: matter
+      ? matter.name
+      : lead
+        ? `Intake · ${lead.name}`
+        : "Firm-wide task",
+    link: matterId
+      ? `/matters/${matterId}/tasks`
+      : lead && leadId
+        ? `/intake/${leadId}/tasks`
+        : "/",
     matterId,
   });
 }

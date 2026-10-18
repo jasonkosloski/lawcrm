@@ -48,6 +48,7 @@ export function DashboardTaskRow({
   title,
   priority,
   matterId,
+  leadId = null,
   matterName,
   daysUntilDue,
   dueLabel,
@@ -58,6 +59,8 @@ export function DashboardTaskRow({
   title: string;
   priority: string;
   matterId: string | null;
+  /** Intake task: the row links to the lead's Tasks tab. */
+  leadId?: string | null;
   matterName: string | null;
   daysUntilDue: number | null;
   /** Pre-formatted "due in 3d" / "Apr 28" / "—" string from the
@@ -96,9 +99,11 @@ export function DashboardTaskRow({
           )}
           title={`${priority} priority`}
         />
-        {matterId ? (
+        {matterId || leadId ? (
           <Link
-            href={`/matters/${matterId}/tasks`}
+            href={
+              matterId ? `/matters/${matterId}/tasks` : `/intake/${leadId}/tasks`
+            }
             className="flex-1 min-w-0 flex items-center gap-3"
           >
             {titleNode}

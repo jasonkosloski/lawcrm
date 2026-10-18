@@ -7,6 +7,10 @@
  * or a quick-capture note). Save writes the task + siblings in one
  * transaction via createTaskWithCaptures.
  *
+ * `scope` picks the write: a matter task (createTaskWithCaptures) or
+ * an intake task on a lead (createLeadTask, no siblings — the page
+ * passes `siblingKinds={[]}`).
+ *
  * Assignee defaults to the CURRENT user (the pre-picker behavior);
  * picking someone else notifies them on create (actor-exclusion —
  * see notifyTaskAssigned). "Unassigned" posts `ownerId=""`.
@@ -16,7 +20,11 @@
 
 import { useState } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
-import { createTaskWithCaptures } from "@/app/actions/captures";
+import {
+  createLeadTask,
+  createTaskWithCaptures,
+} from "@/app/actions/captures";
+import type { RecordScope } from "@/lib/record-scope";
 import {
   captureInitialState,
   type CaptureFormState,
@@ -47,13 +55,14 @@ const SIBLING_KINDS: CaptureKind[] = [
 ];
 
 export function TaskComposer({
-  matterId,
+  scope,
   assignees,
   currentUserId,
   siblingKinds,
   canPin,
 }: {
-  matterId: string;
+  /** The matter or intake lead the task goes on. */
+  scope: RecordScope;
   /** Active firm users for the assignee picker. */
   assignees: AssigneeOption[];
   /** The viewer — the picker's default selection (self-assign). */
@@ -65,7 +74,10 @@ export function TaskComposer({
   canPin?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const action = createTaskWithCaptures.bind(null, matterId);
+  const action =
+    scope.kind === "matter"
+      ? createTaskWithCaptures.bind(null, scope.matterId)
+      : createLeadTask.bind(null, scope.leadId);
   // Wrapped useActionState: masks state left over from a previous
   // expand, so a failed attempt's field/attachment errors don't
   // reappear when the composer is re-expanded. See

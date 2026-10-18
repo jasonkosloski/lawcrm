@@ -104,6 +104,7 @@ const eventDetail = (
   zoomUrl: null,
   color: "var(--color-ink-3)",
   matter: null,
+  lead: null,
   attendees: [],
   viewerCanSeeDetails: true,
   visibility: "default",

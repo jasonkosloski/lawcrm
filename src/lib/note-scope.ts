@@ -12,9 +12,11 @@
  * captures, attached tasks / deadlines / time, Convert to task).
  */
 
-export type NoteScope =
-  | { kind: "matter"; matterId: string }
-  | { kind: "lead"; leadId: string };
+import type { RecordScope } from "@/lib/record-scope";
+
+/** Same shape as tasks' and events' scope (src/lib/record-scope.ts);
+ *  for notes, null is never valid. */
+export type NoteScope = RecordScope;
 
 /** The scope of a stored note row. Throws on a both / neither row —
  *  a breach is a programming error, not user input. */

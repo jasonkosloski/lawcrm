@@ -7,8 +7,9 @@
  * once a task exists the lifecycle here is simpler — no captures, no
  * sanitization, just plain field updates.
  *
- * Every mutation revalidates the matter tasks tab, the matter overview
- * (which previews open tasks), and the dashboard "Your tasks" card.
+ * Every mutation revalidates the task's Tasks tab + overview — its
+ * matter's, or its intake lead's (`Task.leadId`, see
+ * src/lib/record-scope.ts) — and the dashboard "Your tasks" card.
  *
  * Notifications: every owner-setting path (`setTaskOwner`,
  * `updateTask`, and the create path in `captures.ts`, which has its
@@ -43,15 +44,20 @@ import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { isAssignableUser, notifyTaskAssigned } from "@/lib/task-assignment";
 import { dateOnlyKey, parseDateOnly } from "@/lib/format-date";
+import { optionalScopeOf, scopePaths } from "@/lib/record-scope";
 
 const STALE_MESSAGE =
   "This task was changed by someone else since you opened it. Close this dialog and reopen it to see the latest, then re-apply your edit.";
 
-/** Path-revalidate every surface that displays this task. */
-function revalidateForTask(matterId: string | null): void {
-  if (matterId) {
-    revalidatePath(`/matters/${matterId}/tasks`);
-    revalidatePath(`/matters/${matterId}`);
+/** Path-revalidate every surface that displays this task: its
+ *  matter's or intake lead's Tasks tab + overview (firm-wide tasks
+ *  have neither) and the dashboard. */
+function revalidateForTask(task: {
+  matterId: string | null;
+  leadId: string | null;
+}): void {
+  for (const path of scopePaths(optionalScopeOf(task), "tasks")) {
+    revalidatePath(path);
   }
   revalidatePath("/"); // dashboard "Your tasks" card
 }
@@ -70,7 +76,7 @@ export async function setTaskStatus(
 
   const task = await prisma.task.findUnique({
     where: { id: taskId },
-    select: { matterId: true, status: true, title: true },
+    select: { matterId: true, leadId: true, status: true, title: true },
   });
   if (!task) return { ok: false, error: "Task not found" };
 
@@ -92,7 +98,7 @@ export async function setTaskStatus(
     },
   });
 
-  revalidateForTask(task.matterId);
+  revalidateForTask(task);
 
   // Activity log only for completed/reopened transitions — minor
   // status nudges (open → in_progress) aren't worth dashboard space.
@@ -135,7 +141,7 @@ export async function setTaskOwner(
 
   const task = await prisma.task.findUnique({
     where: { id: taskId },
-    select: { matterId: true, ownerId: true, title: true },
+    select: { matterId: true, leadId: true, ownerId: true, title: true },
   });
   if (!task) return { ok: false, error: "Task not found" };
   if (task.ownerId === ownerId) return { ok: true }; // no-op — don't re-notify
@@ -149,7 +155,7 @@ export async function setTaskOwner(
     data: { ownerId },
   });
 
-  revalidateForTask(task.matterId);
+  revalidateForTask(task);
 
   // Tell the new owner — the helper applies the actor-exclusion +
   // unassign rules. Fire-and-forget: a failed notification write
@@ -159,6 +165,7 @@ export async function setTaskOwner(
     actorId,
     taskTitle: task.title,
     matterId: task.matterId,
+    leadId: task.leadId,
   });
 
   return { ok: true };
@@ -174,7 +181,7 @@ export async function deleteTask(
   const userId = await getCurrentUserId();
   const task = await prisma.task.findUnique({
     where: { id: taskId },
-    select: { matterId: true, title: true, dueDate: true },
+    select: { matterId: true, leadId: true, title: true, dueDate: true },
   });
   if (!task) return { ok: false, error: "Task not found" };
 
@@ -191,7 +198,7 @@ export async function deleteTask(
       : task.title,
   });
 
-  revalidateForTask(task.matterId);
+  revalidateForTask(task);
   return { ok: true };
 }
 
@@ -248,6 +255,7 @@ export async function updateTask(
     where: { id: taskId },
     select: {
       matterId: true,
+      leadId: true,
       status: true,
       ownerId: true,
       title: true,
@@ -274,7 +282,7 @@ export async function updateTask(
     (Number.isNaN(expected.getTime()) ||
       expected.getTime() !== task.updatedAt.getTime())
   ) {
-    revalidateForTask(task.matterId);
+    revalidateForTask(task);
     return { status: "error", errors: { _form: [STALE_MESSAGE] } };
   }
 
@@ -318,7 +326,7 @@ export async function updateTask(
   });
 
   if (write.count === 0) {
-    revalidateForTask(task.matterId);
+    revalidateForTask(task);
     return { status: "error", errors: { _form: [STALE_MESSAGE] } };
   }
 
@@ -358,7 +366,7 @@ export async function updateTask(
     });
   }
 
-  revalidateForTask(task.matterId);
+  revalidateForTask(task);
 
   // Same assignment-notification rules as setTaskOwner — only when
   // the owner actually changed, never on self-assign / unassign.
@@ -368,6 +376,7 @@ export async function updateTask(
       actorId: userId,
       taskTitle: parsed.data.title,
       matterId: task.matterId,
+      leadId: task.leadId,
     });
   }
 

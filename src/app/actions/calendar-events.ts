@@ -58,6 +58,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { optionalScopeOf, scopePaths } from "@/lib/record-scope";
 import { z } from "zod";
 import { prisma, type Tx } from "@/lib/prisma";
 import { getCurrentFirm } from "@/lib/firm";
@@ -112,12 +113,16 @@ function viewerMayTouchEvent(
   return viewerMayTouchLoadedEvent(viewerId, event, true);
 }
 
-function revalidateForEvent(matterId: string | null): void {
+/** Calendar + dashboard, plus the event's matter or intake lead
+ *  Events tab + overview (personal events have neither). */
+function revalidateForEvent(event: {
+  matterId: string | null;
+  leadId: string | null;
+}): void {
   revalidatePath("/calendar");
   revalidatePath("/"); // dashboard "Today's agenda"
-  if (matterId) {
-    revalidatePath(`/matters/${matterId}/events`);
-    revalidatePath(`/matters/${matterId}`);
+  for (const path of scopePaths(optionalScopeOf(event), "events")) {
+    revalidatePath(path);
   }
 }
 
@@ -582,6 +587,7 @@ export async function updateCalendarEvent(
     where: { id: eventId },
     select: {
       matterId: true,
+      leadId: true,
       createdById: true,
       title: true,
       visibility: true,
@@ -757,7 +763,7 @@ export async function updateCalendarEvent(
     });
   }
 
-  revalidateForEvent(event.matterId);
+  revalidateForEvent(event);
   return { status: "ok" };
 }
 
@@ -773,6 +779,7 @@ export async function deleteCalendarEvent(
     where: { id: eventId },
     select: {
       matterId: true,
+      leadId: true,
       createdById: true,
       title: true,
       visibility: true,
@@ -841,7 +848,7 @@ export async function deleteCalendarEvent(
     });
   }
 
-  revalidateForEvent(event.matterId);
+  revalidateForEvent(event);
   return { ok: true, matterId: event.matterId };
 }
 
@@ -1028,7 +1035,7 @@ export async function createCalendarEvent(
 
   // Calendar refreshes via revalidate so the newly-created
   // event shows up on the next render.
-  revalidateForEvent(matterId);
+  revalidateForEvent({ matterId, leadId: null });
   return { status: "ok", eventId: created.id };
 }
 
@@ -1128,6 +1135,7 @@ export async function moveCalendarEvent(
     where: { id: eventId },
     select: {
       matterId: true,
+      leadId: true,
       createdById: true,
       title: true,
       visibility: true,
@@ -1214,6 +1222,6 @@ export async function moveCalendarEvent(
     });
   }
 
-  revalidateForEvent(event.matterId);
+  revalidateForEvent(event);
   return { ok: true };
 }

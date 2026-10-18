@@ -559,6 +559,17 @@ function EventDetailModalInner({
               </Link>
             </Row>
           )}
+          {event.lead && (
+            <Row icon={<LinkIcon size={14} />}>
+              <Link
+                href={`/intake/${event.lead.id}`}
+                className="flex items-center gap-2 text-xs text-ink hover:text-brand-700"
+              >
+                <span className="text-2xs text-ink-4 shrink-0">Intake ·</span>
+                <span className="font-medium truncate">{event.lead.name}</span>
+              </Link>
+            </Row>
+          )}
 
           {/* Visibility toggle — editor-only. "default" lets the
               resolver decide: creator, attendees and the matter
@@ -713,6 +724,15 @@ function EventDetailModalInner({
               className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 h-7 rounded-md bg-brand-500 text-white hover:bg-brand-600 transition-colors"
             >
               Open matter
+              <ArrowRight size={13} />
+            </Link>
+          )}
+          {event.lead && (
+            <Link
+              href={`/intake/${event.lead.id}/events`}
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 h-7 rounded-md bg-brand-500 text-white hover:bg-brand-600 transition-colors"
+            >
+              Open intake
               <ArrowRight size={13} />
             </Link>
           )}

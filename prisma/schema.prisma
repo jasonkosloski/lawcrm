@@ -780,10 +780,15 @@ model Lead {
 
   /// Intake time logged before conversion — re-homed onto the new
   /// matter when the lead converts. See TimeEntry.leadId.
-  timeEntries TimeEntry[] @relation("LeadTimeEntries")
+  timeEntries TimeEntry[]     @relation("LeadTimeEntries")
   /// Intake notes written before conversion — re-homed onto the new
   /// matter when the lead converts. See Note.leadId.
-  notes       Note[]      @relation("LeadNotes")
+  notes       Note[]          @relation("LeadNotes")
+  /// Intake tasks and events (consultations, follow-up calls) —
+  /// re-homed onto the new matter when the lead converts. See
+  /// Task.leadId / CalendarEvent.leadId.
+  tasks       Task[]          @relation("LeadTasks")
+  events      CalendarEvent[] @relation("LeadEvents")
 
   @@index([stage])
   @@index([score])
@@ -1063,6 +1068,12 @@ model NoteReaction {
 model CalendarEvent {
   id          String   @id @default(cuid())
   matterId    String?
+  /// Intake event on a Lead (consultation, intake call; since
+  /// 2026-10-18). App-enforced: AT MOST ONE of (matterId, leadId) —
+  /// neither = personal event. A lead has no team, so visibility and
+  /// edit rights follow the personal-event rules. Lead conversion
+  /// re-homes lead events onto the new matter (leadId cleared).
+  leadId      String?
   /// Who created the event. Used for audit + the "you can
   /// always see your own events" branch of the visibility
   /// resolver. Nullable so legacy rows from before this column
@@ -1091,6 +1102,9 @@ model CalendarEvent {
   updatedAt   DateTime @updatedAt
 
   matter           Matter?             @relation(fields: [matterId], references: [id], onDelete: SetNull)
+  /// SetNull like the matter side: losing the lead leaves a personal
+  /// event (it may be synced to Google) rather than deleting it.
+  lead             Lead?               @relation("LeadEvents", fields: [leadId], references: [id], onDelete: SetNull)
   createdBy        User?               @relation("UserCreatedEvents", fields: [createdById], references: [id], onDelete: SetNull)
   attendees        CalendarAttendee[]
   notes            Note[]              @relation("CalendarEventNotes")
@@ -1101,6 +1115,7 @@ model CalendarEvent {
 
   @@index([startTime])
   @@index([matterId])
+  @@index([leadId])
   @@index([createdById, startTime])
   @@map("calendar_events")
 }
@@ -1802,6 +1817,10 @@ model MessengerItem {
 model Task {
   id              String    @id @default(cuid())
   matterId        String? /// Null for firm-wide tasks
+  /// Intake task on a Lead (since 2026-10-18). App-enforced: AT MOST
+  /// ONE of (matterId, leadId) — neither = firm-wide. Lead conversion
+  /// re-homes lead tasks onto the new matter (leadId cleared).
+  leadId          String?
   title           String
   description     String?
   priority        String    @default("normal") /// low | normal | high | urgent
@@ -1830,6 +1849,7 @@ model Task {
   updatedAt       DateTime  @updatedAt
 
   matter             Matter?        @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  lead               Lead?          @relation("LeadTasks", fields: [leadId], references: [id], onDelete: Cascade)
   owner              User?          @relation("TaskOwner", fields: [ownerId], references: [id])
   notes              Note[]         @relation("TaskNotes")
   parentNote         Note?          @relation("NoteAttachedTasks", fields: [noteId], references: [id], onDelete: SetNull)
@@ -1844,6 +1864,7 @@ model Task {
   taskList           TaskList?      @relation(fields: [taskListId], references: [id], onDelete: SetNull)
 
   @@index([matterId])
+  @@index([leadId])
   @@index([status])
   @@index([ownerId])
   @@index([noteId])

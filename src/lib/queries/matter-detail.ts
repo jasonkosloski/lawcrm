@@ -428,13 +428,30 @@ export async function getMatterTasks(
   matterId: string,
   options: MatterListOptions = {}
 ): Promise<TaskRow[]> {
+  return getTaskRows({ matterId }, options);
+}
+
+/** Intake tasks on a lead (/intake/[id]/tasks) — same row shape as
+ *  matter tasks. Lead tasks have no spawn source or attached notes,
+ *  so those come back empty. */
+export async function getLeadTasks(
+  leadId: string,
+  options: MatterListOptions = {}
+): Promise<TaskRow[]> {
+  return getTaskRows({ leadId }, options);
+}
+
+async function getTaskRows(
+  scopeWhere: Prisma.TaskWhereInput,
+  options: MatterListOptions
+): Promise<TaskRow[]> {
   const [viewerId, tz] = await Promise.all([
     getCurrentUserId(),
     resolveTz(options.tz),
   ]);
   const rows = await prisma.task.findMany({
     where: {
-      matterId,
+      ...scopeWhere,
       ...(options.openOnly
         ? { status: { in: ["open", "in_progress"] } }
         : {}),
@@ -1090,13 +1107,30 @@ export async function getMatterEvents(
   matterId: string,
   options: { tz?: string } = {}
 ): Promise<MatterEventRow[]> {
+  return getEventRows({ matterId }, options);
+}
+
+/** Intake events on a lead (/intake/[id]/events). Same row shape and
+ *  visibility rules as matter events; with no matter team, only the
+ *  creator, attendees and `show_details` events show in full. */
+export async function getLeadEvents(
+  leadId: string,
+  options: { tz?: string } = {}
+): Promise<MatterEventRow[]> {
+  return getEventRows({ leadId }, options);
+}
+
+async function getEventRows(
+  where: Prisma.CalendarEventWhereInput,
+  options: { tz?: string }
+): Promise<MatterEventRow[]> {
   const [viewerId, tz] = await Promise.all([
     getCurrentUserId(),
     resolveTz(options.tz),
   ]);
   const today = todayKey(tz);
   const rows = await prisma.calendarEvent.findMany({
-    where: { matterId },
+    where,
     include: {
       matter: {
         select: {

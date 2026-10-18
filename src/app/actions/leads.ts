@@ -19,7 +19,8 @@
  *     lead (TimeEntry.leadId) are re-homed onto the new matter inside
  *     the same transaction (matterId set, leadId cleared) and the
  *     roll-forward is activity-logged on the matter. Intake notes
- *     (Note.leadId) re-home the same way, threads and reactions intact.
+ *     (Note.leadId), tasks (Task.leadId) and events
+ *     (CalendarEvent.leadId) re-home the same way.
  *   - declineLead: capture an optional reason, mark stage "declined".
  *     Gated by intake.decline + written to the ActivityLog, matching
  *     the conflict-check siblings — declining removes a lead from the
@@ -484,6 +485,17 @@ export async function convertLeadToMatter(
       where: { leadId },
       data: { matterId: matter.id, leadId: null },
     });
+    // Intake tasks and events too. An event moves under the matter's
+    // visibility rules from here on (the team now sees its details);
+    // its attendees stay as they were.
+    const carriedTasks = await tx.task.updateMany({
+      where: { leadId },
+      data: { matterId: matter.id, leadId: null },
+    });
+    const carriedEvents = await tx.calendarEvent.updateMany({
+      where: { leadId },
+      data: { matterId: matter.id, leadId: null },
+    });
 
     // Mark lead converted so it leaves the active intake queue.
     await tx.lead.update({
@@ -509,6 +521,8 @@ export async function convertLeadToMatter(
       matterId: matter.id,
       carriedCount: carried.count,
       carriedNoteCount: carriedNotes.count,
+      carriedTaskCount: carriedTasks.count,
+      carriedEventCount: carriedEvents.count,
       defaults,
     };
   }).catch((err: unknown) => {
@@ -532,7 +546,14 @@ export async function convertLeadToMatter(
     return { status: "error", errors: { _form: [message] } };
   }
 
-  const { matterId, carriedCount, carriedNoteCount, defaults } = result;
+  const {
+    matterId,
+    carriedCount,
+    carriedNoteCount,
+    carriedTaskCount,
+    carriedEventCount,
+    defaults,
+  } = result;
 
   // The matter's timeline starts with where it came from.
   await logActivity({
@@ -587,6 +608,25 @@ export async function convertLeadToMatter(
       title: `${carriedNoteCount} intake ${carriedNoteCount === 1 ? "note" : "notes"} carried forward`,
       detail: `Written on the lead before conversion · ${lead.name}`,
     });
+  }
+  if (carriedTaskCount > 0) {
+    await logActivity({
+      matterId,
+      userId,
+      type: "task",
+      title: `${carriedTaskCount} intake ${carriedTaskCount === 1 ? "task" : "tasks"} carried forward`,
+      detail: `Added on the lead before conversion · ${lead.name}`,
+    });
+  }
+  if (carriedEventCount > 0) {
+    await logActivity({
+      matterId,
+      userId,
+      type: "event",
+      title: `${carriedEventCount} intake ${carriedEventCount === 1 ? "event" : "events"} carried forward`,
+      detail: `Scheduled on the lead before conversion · ${lead.name}`,
+    });
+    revalidatePath("/calendar");
   }
 
   // Revalidate everything that displays leads or matters.

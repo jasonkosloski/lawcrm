@@ -541,6 +541,7 @@ function TaskGroup({
             title={t.title}
             priority={t.priority}
             matterId={t.matterId}
+            leadId={t.leadId}
             matterName={t.matterName}
             daysUntilDue={t.daysUntilDue}
             dueLabel={formatTaskDue(t)}

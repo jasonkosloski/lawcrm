@@ -149,6 +149,23 @@ has no contextual Add button; creation lives in the header Create menu and each
 tab's own composer. Loading skeletons nested under a layout that renders its own
 header use `<PageSkeleton withTopBar={false} />`.
 
+### Matter or intake scope (`RecordScope`)
+
+The note, task and event composers and the notes list take a `scope`
+(`src/lib/record-scope.ts`) — `{ kind: "matter", matterId }` or
+`{ kind: "lead", leadId }` — instead of a bare `matterId`. The scope picks
+the server action (`createNote` / `createLeadNote`, `createTaskWithCaptures`
+/ `createLeadTask`, `createEventWithCaptures` / `createLeadEvent`), and on a
+lead the matter-only affordances are hidden: sibling captures (pages pass
+`siblingKinds={[]}` / `allowedKinds={[]}`), attached tasks / deadlines /
+time, Convert to task / deadline, log time and add note on a task. The
+status-grouped task list is `TaskListByStatus`
+(`src/components/tasks/task-list-by-status.tsx`), shared by the matter and
+intake Tasks tabs (`matterId={null}` on a lead). Intake tabs (Overview,
+Notes, Tasks, Events, Communication, Time & expenses) live in
+`src/components/intake/intake-tabs.tsx`; a converted lead's tabs show a
+banner linking to the matter instead of a composer.
+
 ### In-Tab Channel Toggle (Communication tabs)
 ```
 Segmented control, same visual idiom as the matters Table/Kanban toggle

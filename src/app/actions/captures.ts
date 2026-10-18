@@ -18,6 +18,9 @@
  * notes.pin). Siblings do NOT inherit the primary's gate — denying
  * time_entries.create closes every time-logging entry point
  * (ADR-013). Admins short-circuit either way.
+ *
+ * `createLeadTask` / `createLeadEvent` are the intake-lead primaries
+ * (same gates, no siblings) — see the section at the end.
  */
 
 "use server";
@@ -59,6 +62,8 @@ import { isAssignableUser, notifyTaskAssigned } from "@/lib/task-assignment";
 import { isKnownUtbmsCode } from "@/lib/time-entry-constants";
 import { getEffectiveCalendarDefaults } from "@/lib/calendar-defaults";
 import { textareaToHtml } from "@/lib/text-to-html";
+import { scopePaths } from "@/lib/record-scope";
+import type { LeadStage } from "@/lib/constants/lead-stage";
 
 // ── Shared helpers ──────────────────────────────────────────────────────
 
@@ -728,6 +733,192 @@ export async function createTimeEntryWithCaptures(
     type: "time_entry",
     title: `Time logged · ${parsed.data.hours}h`,
     detail: parsed.data.activity,
+  });
+  return { status: "ok" };
+}
+
+// ── Intake (lead) primaries ─────────────────────────────────────────────
+//
+// Task and event on an intake lead (Task.leadId / CalendarEvent.leadId,
+// see src/lib/record-scope.ts) — the /intake/[id]/tasks and /events
+// composers. Same fields, gates and validation as the matter
+// primaries above, but no sibling captures: a lead has no matter for
+// deadlines, time or notes to land on. Refused once the lead has
+// converted — its tasks and events moved to the matter.
+
+const LEAD_CONVERTED = "converted" satisfies LeadStage;
+
+/** Form-level error for a lead that can't take new records, or null. */
+async function leadWriteError(
+  leadId: string
+): Promise<Record<string, string[]> | null> {
+  const lead = await prisma.lead.findUnique({
+    where: { id: leadId },
+    select: { stage: true },
+  });
+  if (!lead) return { _form: ["This lead no longer exists. Reload the page."] };
+  if (lead.stage === LEAD_CONVERTED) {
+    return {
+      _form: [
+        "This lead is already converted — add this on the matter instead.",
+      ],
+    };
+  }
+  return null;
+}
+
+/** The lead composers never send siblings; refuse rather than drop. */
+const NO_LEAD_CAPTURES: Record<string, string[]> = {
+  _form: [
+    "Intake tasks and events can't carry other items — add those once the lead is a matter.",
+  ],
+};
+
+function revalidateLead(leadId: string, tab: "tasks" | "events"): void {
+  for (const path of scopePaths({ kind: "lead", leadId }, tab)) {
+    revalidatePath(path);
+  }
+  revalidatePath("/"); // dashboard "Your tasks" / "Today's agenda"
+  if (tab === "events") revalidatePath("/calendar");
+}
+
+export async function createLeadTask(
+  leadId: string,
+  _prev: CaptureFormState,
+  formData: FormData
+): Promise<CaptureFormState> {
+  await requirePermission("tasks.create");
+  const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
+  const parsed = taskSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      status: "error",
+      errors: parsed.error.flatten().fieldErrors,
+      values: raw,
+    };
+  }
+  if (parsed.data.attachments !== "[]") {
+    return { status: "error", errors: NO_LEAD_CAPTURES, values: raw };
+  }
+
+  const dueDate = parsed.data.dueDate
+    ? parseDateOnly(parsed.data.dueDate)
+    : null;
+  if (parsed.data.dueDate && !dueDate) {
+    return {
+      status: "error",
+      errors: { dueDate: ["Invalid due date"] },
+      values: raw,
+    };
+  }
+
+  const leadError = await leadWriteError(leadId);
+  if (leadError) return { status: "error", errors: leadError, values: raw };
+  const userId = await getCurrentUserId();
+
+  // Same assignee tri-state as createTaskWithCaptures.
+  const ownerId =
+    parsed.data.ownerId === undefined
+      ? userId
+      : parsed.data.ownerId === ""
+        ? null
+        : parsed.data.ownerId;
+  if (ownerId && ownerId !== userId && !(await isAssignableUser(ownerId))) {
+    return {
+      status: "error",
+      errors: { ownerId: ["Assignee not found or inactive"] },
+      values: raw,
+    };
+  }
+
+  await prisma.task.create({
+    data: {
+      leadId,
+      title: parsed.data.title,
+      description: parsed.data.description || null,
+      priority: parsed.data.priority,
+      dueDate,
+      ownerId,
+    },
+  });
+
+  revalidateLead(leadId, "tasks");
+  // Lead-scoped: no matter to hang the row on (like firm-wide tasks).
+  await logActivity({
+    matterId: null,
+    userId,
+    type: "task",
+    title: "Intake task added",
+    detail: parsed.data.title,
+  });
+  await notifyTaskAssigned({
+    ownerId,
+    actorId: userId,
+    taskTitle: parsed.data.title,
+    matterId: null,
+    leadId,
+  });
+  return { status: "ok" };
+}
+
+export async function createLeadEvent(
+  leadId: string,
+  _prev: CaptureFormState,
+  formData: FormData
+): Promise<CaptureFormState> {
+  await requirePermission("events.create");
+  const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
+  const parsed = eventSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      status: "error",
+      errors: parsed.error.flatten().fieldErrors,
+      values: raw,
+    };
+  }
+  if (parsed.data.attachments !== "[]") {
+    return { status: "error", errors: NO_LEAD_CAPTURES, values: raw };
+  }
+
+  const leadError = await leadWriteError(leadId);
+  if (leadError) return { status: "error", errors: leadError, values: raw };
+  const userId = await getCurrentUserId();
+  const tz = await getCurrentUserTimeZone();
+
+  const eventId = await prisma.$transaction(async (tx) => {
+    const event = await tx.calendarEvent.create({
+      data: {
+        leadId,
+        createdById: userId,
+        title: parsed.data.title,
+        type: parsed.data.type,
+        // Wall-clock time in the creator's zone (schema-validated).
+        startTime: parseWallClock(parsed.data.startTime, tz)!,
+        endTime: parseWallClock(parsed.data.endTime, tz)!,
+        location: parsed.data.location || null,
+        description: parsed.data.description || null,
+        visibility: parsed.data.visibility,
+      },
+      select: { id: true },
+    });
+    // A lead has no team: the creator is the only default attendee.
+    await addDefaultEventAttendees(tx, {
+      eventId: event.id,
+      matterId: null,
+      userId,
+      autoAddTeam: false,
+    });
+    return event.id;
+  });
+
+  await pushCreatedEvents([eventId]);
+  revalidateLead(leadId, "events");
+  await logActivity({
+    matterId: null,
+    userId,
+    type: "event",
+    title: "Intake event scheduled",
+    detail: auditEventTitle(parsed.data.visibility, parsed.data.title),
   });
   return { status: "ok" };
 }

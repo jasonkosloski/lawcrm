@@ -460,6 +460,21 @@ Email results are scoped to the viewer's OWN mailbox. No
   and reactions) onto the new matter; a converted lead's tab links
   to the matter's notes. Global search finds intake notes. Activity
   rows for lead notes are firm-wide and carry no note text.
+- [x] **Intake tasks and events (`/intake/[id]/tasks`, `/events`).**
+  Shipped 2026-10-18 (ADR-045; `Task.leadId` + `CalendarEvent.leadId`,
+  at-most-one with matterId — see SCHEMA_NOTES). Two new lead tabs on
+  the matter components: `TaskComposer` / `EventComposer` take a
+  `RecordScope` and post through `createLeadTask` / `createLeadEvent`
+  (`tasks.create` / `events.create`; no sibling captures; refuse
+  converted leads). The status-grouped task list moved into
+  `TaskListByStatus`, shared by both Tasks tabs; lead rows hide log
+  time / add note / convert to deadline. Lead events are compact rows
+  opening the event modal via `?event=`; they get the creator as the
+  only default attendee and follow personal-event visibility and edit
+  rules. Conversion carries both onto the new matter. Dashboard "Your
+  tasks", the calendar, search and the assignment notification show
+  "Intake · {lead}" and link to the intake tabs. Not yet: capturing a
+  task or event from an intake note's composer.
 - [x] **Status / priority / role values are scattered string
   literals.** Shipped 2026-07-07: `src/lib/constants/` is the
   canonical client-safe home — per-domain files (task-status,

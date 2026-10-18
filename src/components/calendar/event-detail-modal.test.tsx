@@ -105,6 +105,7 @@ function makeEvent(
     zoomUrl: null,
     color: "#336699",
     matter: null,
+    lead: null,
     attendees: [],
     viewerCanSeeDetails: true,
     visibility: "default",

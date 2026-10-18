@@ -505,6 +505,7 @@ export async function globalSearch(
           title: true,
           description: true,
           matter: { select: { id: true, name: true } },
+          lead: { select: { id: true, name: true } },
         },
         orderBy: { updatedAt: "desc" },
         take,
@@ -522,8 +523,14 @@ export async function globalSearch(
         // Firm-wide tasks (no matter) have no page that lists them
         // (the dashboard card shows only the viewer's own open
         // tasks), so the hit is rendered unlinked.
-        href: t.matter ? `/matters/${t.matter.id}/tasks` : null,
-        context: t.matter?.name ?? "Firm-wide",
+        // Intake tasks link to the lead's Tasks tab.
+        href: t.matter
+          ? `/matters/${t.matter.id}/tasks`
+          : t.lead
+            ? `/intake/${t.lead.id}/tasks`
+            : null,
+        context:
+          t.matter?.name ?? (t.lead ? `Intake · ${t.lead.name}` : "Firm-wide"),
       })),
     };
   };
@@ -591,6 +598,7 @@ export async function globalSearch(
             },
           },
         },
+        lead: { select: { name: true } },
         createdBy: { select: { defaultEventVisibility: true } },
         attendees: { select: { userId: true } },
       },
@@ -621,7 +629,8 @@ export async function globalSearch(
         snippet: makeSnippet(e.description, q) ?? makeSnippet(e.location, q),
         // ?event= drives the calendar's URL-driven detail modal.
         href: `/calendar?event=${e.id}`,
-        context: e.matter?.name ?? null,
+        context:
+          e.matter?.name ?? (e.lead ? `Intake · ${e.lead.name}` : null),
       })),
     };
   };

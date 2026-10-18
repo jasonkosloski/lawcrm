@@ -32,7 +32,9 @@ export async function addDefaultEventAttendees(
   tx: Tx,
   args: {
     eventId: string;
-    matterId: string;
+    /** Null for an event with no matter team (an intake event on a
+     *  lead): only the creator is added. */
+    matterId: string | null;
     userId: string;
     autoAddTeam: boolean;
   }
@@ -52,7 +54,7 @@ export async function addDefaultEventAttendees(
     select: { name: true, email: true },
   });
   let creatorAlreadyAdded = false;
-  if (autoAddTeam) {
+  if (autoAddTeam && matterId) {
     const team = await tx.matterTeamMember.findMany({
       where: { matterId, removedAt: null },
       select: { user: { select: { id: true, name: true, email: true } } },

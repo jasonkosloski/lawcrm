@@ -148,6 +148,7 @@ export async function getCalendarItems(
             },
           },
         },
+        lead: { select: { name: true } },
         createdBy: { select: { defaultEventVisibility: true } },
         // Full attendee list — small in practice (< 10 typical),
         // and needed for both the chip's "with:" line AND the
@@ -233,7 +234,9 @@ export async function getCalendarItems(
     location: e.location,
     color: e.matter?.color ?? e.color ?? "var(--color-ink-3)",
     matterId: e.matter?.id ?? null,
-    matterName: e.matter?.name ?? null,
+    // Intake events show their lead as the context line.
+    matterName:
+      e.matter?.name ?? (e.lead ? `Intake · ${e.lead.name}` : null),
     attendeeCount: e.attendees.length,
     attendeeNames: e.attendees.slice(0, 3).map((a) => a.name),
     viewerCanSeeDetails: true,
@@ -272,6 +275,9 @@ export type CalendarEventDetail = {
   zoomUrl: string | null;
   color: string;
   matter: { id: string; name: string; area: string; color: string } | null;
+  /** The intake lead an intake event is on (CalendarEvent.leadId);
+   *  null otherwise, and on a Busy shell. */
+  lead: { id: string; name: string } | null;
   attendees: Array<{
     id: string;
     name: string;
@@ -320,6 +326,7 @@ export async function getCalendarEventById(
           },
         },
       },
+      lead: { select: { id: true, name: true } },
       createdBy: { select: { defaultEventVisibility: true } },
       attendees: {
         include: {
@@ -371,6 +378,7 @@ export async function getCalendarEventById(
       zoomUrl: null,
       color: "var(--color-ink-3)",
       matter: null,
+      lead: null,
       attendees: [],
       viewerCanSeeDetails: false,
       visibility: e.visibility,
@@ -396,6 +404,7 @@ export async function getCalendarEventById(
           area: e.matter.practiceArea.name,
         }
       : null,
+    lead: e.lead,
     attendees: e.attendees.map((a) => ({
       id: a.id,
       name: a.name,

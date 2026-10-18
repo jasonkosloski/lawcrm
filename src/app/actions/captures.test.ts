@@ -52,16 +52,21 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
+import { revalidatePath } from "next/cache";
 import {
   createDeadlineWithCaptures,
   createEventWithCaptures,
+  createLeadEvent,
+  createLeadTask,
   createTaskWithCaptures,
   createTimeEntryWithCaptures,
 } from "@/app/actions/captures";
+import { deleteTask, setTaskStatus } from "@/app/actions/tasks";
 import { captureInitialState } from "@/lib/capture-schemas";
 import {
   resetDb,
   seedFirm,
+  seedLead,
   seedMatter,
   seedPracticeArea,
   seedUser,
@@ -470,5 +475,127 @@ describe("createTimeEntryWithCaptures", () => {
     expect(res.status).toBe("error");
     expect(res.attachmentErrors?.x?.title?.[0]).toBeTruthy();
     expect(await prisma.timeEntry.count()).toBe(0);
+  });
+});
+
+// ── Intake (lead) primaries ─────────────────────────────────────────────
+
+const leadEventForm = (overrides: Record<string, string> = {}): FormData => {
+  const fd = new FormData();
+  fd.set("title", "Intake consultation");
+  fd.set("type", "intake");
+  fd.set("startTime", "2026-11-02T10:00");
+  fd.set("endTime", "2026-11-02T11:00");
+  for (const [k, v] of Object.entries(overrides)) fd.set(k, v);
+  return fd;
+};
+
+describe("createLeadTask", () => {
+  test("writes a lead-scoped task, gated on tasks.create, and revalidates intake", async () => {
+    const { leadId } = await seedLead({ name: "Pat Prospect" });
+    const res = await createLeadTask(leadId, captureInitialState, taskForm());
+    expect(res.status).toBe("ok");
+    expect(vi.mocked(requirePermission)).toHaveBeenCalledWith("tasks.create");
+    const task = await prisma.task.findFirstOrThrow();
+    expect(task.leadId).toBe(leadId);
+    expect(task.matterId).toBeNull();
+    expect(task.ownerId).toBe(userId);
+    const paths = vi.mocked(revalidatePath).mock.calls.map((c) => c[0]);
+    expect(paths).toContain(`/intake/${leadId}/tasks`);
+  });
+
+  test("assigning someone else pings them with a link to the intake tab", async () => {
+    const { leadId } = await seedLead({ name: "Pat Prospect" });
+    const other = await seedUser({ firmId, email: "lead-assign@example.com" });
+    await createLeadTask(
+      leadId,
+      captureInitialState,
+      taskForm({ ownerId: other.userId })
+    );
+    const n = await prisma.notification.findFirstOrThrow({
+      where: { userId: other.userId },
+    });
+    expect(n.link).toBe(`/intake/${leadId}/tasks`);
+    expect(n.body).toBe("Intake · Pat Prospect");
+  });
+
+  test("refuses siblings, a missing lead and a converted lead", async () => {
+    const { leadId } = await seedLead();
+    const withSibling = await createLeadTask(
+      leadId,
+      captureInitialState,
+      taskForm({
+        attachments: JSON.stringify([
+          { tempId: "t1", kind: "deadline", title: "x", dueDate: "2026-11-01" },
+        ]),
+      })
+    );
+    expect(withSibling.status).toBe("error");
+    expect(
+      (await createLeadTask("ghost", captureInitialState, taskForm())).errors
+        ?._form?.[0]
+    ).toMatch(/no longer exists/i);
+    await prisma.lead.update({ where: { id: leadId }, data: { stage: "converted" } });
+    expect(
+      (await createLeadTask(leadId, captureInitialState, taskForm())).errors
+        ?._form?.[0]
+    ).toMatch(/already converted/i);
+    expect(await prisma.task.count()).toBe(0);
+  });
+
+  test("status toggle and delete revalidate the intake tab, never a matter path", async () => {
+    const { leadId } = await seedLead();
+    const { id: taskId } = await prisma.task.create({
+      data: { leadId, title: "Request police report" },
+      select: { id: true },
+    });
+    vi.mocked(revalidatePath).mockClear();
+    expect((await setTaskStatus(taskId, "done")).ok).toBe(true);
+    expect((await deleteTask(taskId)).ok).toBe(true);
+    const paths = vi.mocked(revalidatePath).mock.calls.map((c) => c[0]);
+    expect(paths.filter((p) => p === `/intake/${leadId}/tasks`)).toHaveLength(2);
+    expect(paths.some((p) => p.startsWith("/matters/"))).toBe(false);
+  });
+});
+
+describe("createLeadEvent", () => {
+  test("writes a lead-scoped event with the creator as its only attendee, pushed to Google", async () => {
+    const { pushEventToGoogle } = await import("@/lib/google/google-calendar-push");
+    const { leadId } = await seedLead();
+    const res = await createLeadEvent(leadId, captureInitialState, leadEventForm());
+    expect(res.status).toBe("ok");
+    expect(vi.mocked(requirePermission)).toHaveBeenCalledWith("events.create");
+    const ev = await prisma.calendarEvent.findFirstOrThrow({
+      include: { attendees: true },
+    });
+    expect(ev.leadId).toBe(leadId);
+    expect(ev.matterId).toBeNull();
+    expect(ev.createdById).toBe(userId);
+    expect(ev.attendees.map((a) => a.userId)).toEqual([userId]);
+    // Wall-clock time in the creator's zone (UTC here).
+    expect(ev.startTime.toISOString()).toBe("2026-11-02T10:00:00.000Z");
+    expect(vi.mocked(pushEventToGoogle)).toHaveBeenCalledWith(ev.id);
+    const paths = vi.mocked(revalidatePath).mock.calls.map((c) => c[0]);
+    expect(paths).toEqual(
+      expect.arrayContaining([`/intake/${leadId}/events`, "/calendar"])
+    );
+  });
+
+  test("refuses siblings and a converted lead", async () => {
+    const { leadId } = await seedLead();
+    const withSibling = await createLeadEvent(
+      leadId,
+      captureInitialState,
+      leadEventForm({
+        attachments: JSON.stringify([
+          { tempId: "t1", kind: "task", title: "Prep", priority: "normal" },
+        ]),
+      })
+    );
+    expect(withSibling.status).toBe("error");
+    await prisma.lead.update({ where: { id: leadId }, data: { stage: "converted" } });
+    const converted = await createLeadEvent(leadId, captureInitialState, leadEventForm());
+    expect(converted.errors?._form?.[0]).toMatch(/already converted/i);
+    expect(await prisma.calendarEvent.count()).toBe(0);
   });
 });

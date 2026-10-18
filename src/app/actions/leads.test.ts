@@ -519,6 +519,53 @@ describe("convertLeadToMatter — intake notes roll-forward", () => {
     expect(log.title).toBe("2 intake notes carried forward");
   });
 
+  test("re-homes lead tasks and events onto the new matter", async () => {
+    const { areaId, stageId } = await seedArea({});
+    const { leadId } = await seedIntakeLead();
+    await prisma.task.create({ data: { leadId, title: "Call back" } });
+    await prisma.task.create({ data: { leadId, title: "Request records" } });
+    await prisma.calendarEvent.create({
+      data: {
+        leadId,
+        createdById: userId,
+        title: "Consultation",
+        startTime: new Date("2026-11-02T10:00:00Z"),
+        endTime: new Date("2026-11-02T11:00:00Z"),
+      },
+    });
+    const firmWide = await prisma.task.create({
+      data: { title: "Firm-wide" },
+      select: { id: true },
+    });
+
+    await expect(
+      convertLeadToMatter(
+        leadId,
+        { status: "idle" },
+        convertForm({ areaId, stageId })
+      )
+    ).rejects.toThrow(/^REDIRECT:\/matters\//);
+
+    const matter = await prisma.matter.findFirstOrThrow({ select: { id: true } });
+    expect(await prisma.task.count({ where: { matterId: matter.id, leadId: null } })).toBe(2);
+    expect(await prisma.calendarEvent.count({ where: { matterId: matter.id, leadId: null } })).toBe(1);
+    expect(await prisma.task.count({ where: { leadId } })).toBe(0);
+    expect(await prisma.calendarEvent.count({ where: { leadId } })).toBe(0);
+    // A firm-wide task is untouched.
+    expect(
+      (await prisma.task.findUniqueOrThrow({ where: { id: firmWide.id } })).matterId
+    ).toBeNull();
+
+    const titles = (
+      await prisma.activityLog.findMany({
+        where: { matterId: matter.id },
+        select: { title: true },
+      })
+    ).map((l) => l.title);
+    expect(titles).toContain("2 intake tasks carried forward");
+    expect(titles).toContain("1 intake event carried forward");
+  });
+
   test("no intake notes → no notes roll-forward log", async () => {
     const { areaId, stageId } = await seedArea({});
     const { leadId } = await seedIntakeLead();
