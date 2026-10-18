@@ -152,7 +152,7 @@ async function itemAccessWhere(
   return { OR: [{ matterId: null }, { matter: access }] };
 }
 
-/** Inbox page size — no pager yet (see FEATURES.md). */
+/** Inbox page size — no pager yet (see docs/features/communication-email.md). */
 const THREAD_LIST_LIMIT = 200;
 
 /**

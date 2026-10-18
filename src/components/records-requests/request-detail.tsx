@@ -53,6 +53,10 @@ import {
   type RecordsDocRole,
 } from "@/lib/records-requests/roles";
 import { dueBadge } from "@/lib/records-requests/due-badge";
+import {
+  dueCountdownLabel,
+  sentAgoLabel,
+} from "@/lib/records-requests/date-labels";
 import type { RecordsRequestDetail } from "@/lib/queries/records-requests";
 import { cn } from "@/lib/utils";
 import type { TypeOption, UserOption } from "./new-request-composer";
@@ -150,6 +154,8 @@ export function RequestDetail({
   can,
   writable,
   daysUntilDue = null,
+  daysSinceSent = null,
+  deadlineRule = null,
 }: {
   detail: RecordsRequestDetail;
   scope: RecordScope;
@@ -166,6 +172,10 @@ export function RequestDetail({
   writable: boolean;
   /** Days to the response due date in the viewer's zone (list-row badge). */
   daysUntilDue?: number | null;
+  /** Whole days since the request was sent, in the viewer's zone. */
+  daysSinceSent?: number | null;
+  /** How the due date was set: "3 business days after sending", or null. */
+  deadlineRule?: string | null;
 }) {
   const router = useRouter();
   const recordsHref = `${scopeBasePath(scope)}/records`;
@@ -466,22 +476,18 @@ export function RequestDetail({
         </div>
       </div>
 
-      {/* Dates at a glance (also the status history). */}
-      <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-        {(
-          [
-            ["Sent", detail.sentAt],
-            ["Response due", detail.responseDueDate],
-            ["Next follow-up", detail.nextFollowUpDate],
-            ["Received", detail.receivedAt],
-          ] as const
-        ).map(([k, v]) => (
-          <div key={k} className="flex flex-col">
-            <dt className={label}>{k}</dt>
-            <dd className="text-ink">{v ? formatDateOnly(v) : "—"}</dd>
-          </div>
-        ))}
-      </dl>
+      {/* Dates at a glance (also the status history): when it went out
+          and when the answer is due are the two that matter most. */}
+      <DateSummary
+        sentAt={detail.sentAt}
+        responseDueDate={detail.responseDueDate}
+        nextFollowUpDate={detail.nextFollowUpDate}
+        receivedAt={detail.receivedAt}
+        daysSinceSent={daysSinceSent}
+        daysUntilDue={isOpen ? daysUntilDue : null}
+        deadlineRule={deadlineRule}
+        isDraft={isDraft}
+      />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
         <div className="flex flex-col gap-4 min-w-0">
@@ -764,5 +770,121 @@ export function RequestDetail({
         </div>
       </div>
     </div>
+  );
+}
+
+function DateSummary({
+  sentAt,
+  responseDueDate,
+  nextFollowUpDate,
+  receivedAt,
+  daysSinceSent,
+  daysUntilDue,
+  deadlineRule,
+  isDraft,
+}: {
+  sentAt: Date | null;
+  responseDueDate: Date | null;
+  nextFollowUpDate: Date | null;
+  receivedAt: Date | null;
+  daysSinceSent: number | null;
+  /** Null once the request is closed: no countdown on a finished request. */
+  daysUntilDue: number | null;
+  deadlineRule: string | null;
+  isDraft: boolean;
+}) {
+  const countdown = daysUntilDue === null ? null : dueCountdownLabel(daysUntilDue);
+  return (
+    <section
+      aria-label="Key dates"
+      className="rounded-lg border border-line bg-white p-4 flex flex-col gap-4"
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="flex flex-col gap-1" data-testid="sent-tile">
+          <span className="text-2xs font-semibold uppercase tracking-wider text-ink-3">
+            Sent
+          </span>
+          {sentAt ? (
+            <>
+              <span className="text-xl font-semibold text-ink">
+                {formatDateOnly(sentAt, "medium")}
+              </span>
+              {daysSinceSent !== null && (
+                <span className="text-xs text-ink-3">{sentAgoLabel(daysSinceSent)}</span>
+              )}
+            </>
+          ) : (
+            <>
+              <span className="text-xl font-semibold text-ink-4">Not sent yet</span>
+              {isDraft && (
+                <span className="text-xs text-ink-3">
+                  Mark it sent to start the response clock.
+                </span>
+              )}
+            </>
+          )}
+        </div>
+        <div
+          className={cn(
+            "flex flex-col gap-1 rounded-md -m-2 p-2",
+            countdown?.overdue && "bg-warn-soft"
+          )}
+          data-testid="due-tile"
+        >
+          <span className="text-2xs font-semibold uppercase tracking-wider text-ink-3">
+            Response due
+          </span>
+          {responseDueDate ? (
+            <>
+              <span
+                className={cn(
+                  "text-xl font-semibold",
+                  countdown?.overdue ? "text-warn" : "text-ink"
+                )}
+              >
+                {formatDateOnly(responseDueDate, "medium")}
+              </span>
+              {countdown && (
+                <span
+                  className={cn(
+                    "text-xs font-medium",
+                    countdown.overdue ? "text-warn" : "text-ink-2"
+                  )}
+                >
+                  {countdown.text}
+                </span>
+              )}
+              <span className="text-2xs text-ink-4">
+                {deadlineRule ?? "Set manually"}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="text-xl font-semibold text-ink-4">
+                {isDraft ? "Set when sent" : "No deadline"}
+              </span>
+              {!isDraft && (
+                <span className="text-xs text-ink-3">
+                  This request type has no statutory response period.
+                </span>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+      <dl className="grid grid-cols-2 gap-3 border-t border-line pt-3 text-xs">
+        {(
+          [
+            ["Next follow-up", nextFollowUpDate],
+            ["Received", receivedAt],
+          ] as const
+        ).map(([k, v]) => (
+          <div key={k} className="flex flex-col">
+            <dt className="text-2xs font-semibold uppercase tracking-wider text-ink-3">{k}</dt>
+            <dd className="text-ink">{v ? formatDateOnly(v) : "—"}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }

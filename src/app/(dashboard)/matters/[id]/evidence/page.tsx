@@ -18,7 +18,7 @@
  * Flag creation lives in the viewer (you flag while reviewing);
  * this page is the cross-document review index. Transcripts, OCR,
  * and EvidenceSync multi-track alignment are queued follow-ups
- * (FEATURES.md).
+ * (docs/features/evidence-review.md).
  */
 
 import Link from "next/link";

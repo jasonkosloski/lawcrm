@@ -22,7 +22,7 @@ export function VideoPlayer({
   return (
     <div className="flex flex-1 items-center justify-center rounded-lg border border-line bg-black/95 p-2">
       {/* Captions arrive with the transcript follow-up (see
-          FEATURES.md); discovery media has none at upload time. */}
+          docs/features/documents.md); discovery media has none at upload time. */}
       <video
         ref={mediaRef}
         src={src}

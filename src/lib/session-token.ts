@@ -6,7 +6,7 @@
  * Runs on sign-in AND on every request that reads the session:
  *   1. The user must still exist and be active — otherwise `userId`
  *      is stripped and downstream guards treat the session as
- *      signed out (stale-JWT defense, see docs/AUTH_PLAN.md).
+ *      signed out (stale-JWT defense, see docs/features/auth.md).
  *   2. Password fingerprint (ADR-017): stamped at sign-in and when a
  *      server action calls `unstable_update({ pwv })` (trigger
  *      "update" — the change-password flow re-stamps its own

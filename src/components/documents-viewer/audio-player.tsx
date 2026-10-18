@@ -57,7 +57,7 @@ export function AudioPlayer({
           <AudioLines className="h-4 w-4 text-ink-3" aria-hidden />
           <span className="truncate">{name}</span>
         </div>
-        {/* Transcript support is a queued follow-up (FEATURES.md);
+        {/* Transcript support is a queued follow-up (docs/features/documents.md);
             recordings have no caption track at upload time. */}
         <audio
           ref={setRefs}

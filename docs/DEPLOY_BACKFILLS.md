@@ -27,7 +27,7 @@ are touched; inserts use `skipDuplicates`, so re-running does nothing.
 
 # Deploy steps: Batch 4 migration `20261017120000_quality_sweep`
 
-A schema migration (not a backfill). Run it once per environment, **production last**, after deploying the matching code (the code reads the new columns, so the order is: migrate first, then the app, or both in the same window; the old app version keeps working against the new schema because nothing was dropped). Details and rationale: `docs/SCHEMA_NOTES.md` (2026-10-17 changelog row), ADR-035 to ADR-038 in `docs/DECISIONS.md`.
+A schema migration (not a backfill). Run it once per environment, **production last**, after deploying the matching code (the code reads the new columns, so the order is: migrate first, then the app, or both in the same window; the old app version keeps working against the new schema because nothing was dropped). Rationale: ADR-035 to ADR-038 in `decisions/`, and `SCHEMA_NOTES.md`.
 
 ## 1. Pre-check: duplicate settlements (read-only)
 

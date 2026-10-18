@@ -12,7 +12,7 @@
  *
  * Errors fed to this boundary include any thrown server-component
  * fetch (e.g. a Prisma query), so this is the safety net for the
- * "page 500s with a stack trace" failure mode flagged in FEATURES.md.
+ * "page 500s with a stack trace" failure mode flagged in docs/features/app-shell.md.
  * "Try again" uses `retry()` (re-fetch + re-render), not `reset()`.
  */
 

@@ -140,56 +140,15 @@ Inactive: text-ink-3
 Tab content fills remaining height with overflow-y-auto
 ```
 
-Implementation: `src/components/matters/matter-tabs.tsx` — client component
-reading `usePathname()` to pick the active tab. The tab list is the `TABS`
-constant in that file (Overview, Timeline, Events, Communication, Documents,
-Evidence, Parties, Deadlines, Tasks, Notes, Time & expenses, Billing). Overview
-is the base route (`/matters/[id]`); other tabs are nested routes. The tab bar
-has no contextual Add button; creation lives in the header Create menu and each
-tab's own composer. Loading skeletons nested under a layout that renders its own
-header use `<PageSkeleton withTopBar={false} />`.
+Implementation: `src/components/matters/matter-tabs.tsx` (client, `usePathname()` picks the active tab; list is the `TABS` constant). Overview is the base route; other tabs are nested routes. No contextual Add button on the bar; creation lives in the header Create menu and each tab's own composer. Loading skeletons nested under a layout that renders its own header use `<PageSkeleton withTopBar={false} />`.
 
 ### Matter or intake scope (`RecordScope`)
 
-The note, task and event composers, the notes list and the documents
-browser take a `scope`
-(`src/lib/record-scope.ts`) — `{ kind: "matter", matterId }` or
-`{ kind: "lead", leadId }` — instead of a bare `matterId`. The scope picks
-the server action (`createNote` / `createLeadNote`, `createTaskWithCaptures`
-/ `createLeadTask`, `createEventWithCaptures` / `createLeadEvent`), and on a
-lead the matter-only affordances are hidden: sibling captures (pages pass
-`siblingKinds={[]}` / `allowedKinds={[]}`), attached tasks / deadlines /
-time, Convert to task / deadline, log time and add note on a task. The
-status-grouped task list is `TaskListByStatus`
-(`src/components/tasks/task-list-by-status.tsx`), shared by the matter and
-intake Tasks tabs (`matterId={null}` on a lead). Intake tabs (Overview,
-Notes, Tasks, Events, Documents, Communication, Time & expenses) live in
-`src/components/intake/intake-tabs.tsx`; a converted lead's tabs show a
-banner linking to the matter instead of a composer. The Documents tab
-and viewer bodies are the server components `DocumentsBrowser` and
-`DocumentViewerBody` (`src/components/documents/`), shared by the matter
-and intake routes; hrefs come from `scopeBasePath`, uploads send
-`leadId` for a lead, and a converted lead's tab is read-only. The Records tab
-(`src/components/records-requests/`) takes a scope too; see the request
-detail page pattern below.
+Composers, the notes list, the documents browser and the Records tab take a `scope` (`src/lib/record-scope.ts`: `{ kind: "matter", matterId }` or `{ kind: "lead", leadId }`) instead of a bare `matterId`. The scope picks the server action (`createNote` / `createLeadNote`, `createTaskWithCaptures` / `createLeadTask`, `createEventWithCaptures` / `createLeadEvent`). On a lead the matter-only affordances are hidden: sibling captures (pages pass `siblingKinds={[]}` / `allowedKinds={[]}`), attached tasks/deadlines/time, Convert to task/deadline, log time and add note on a task. Shared server components serve both routes: `TaskListByStatus` (`src/components/tasks/task-list-by-status.tsx`, `matterId={null}` on a lead), `DocumentsBrowser` / `DocumentViewerBody` (`src/components/documents/`; hrefs from `scopeBasePath`, uploads send `leadId` for a lead). Intake tabs live in `src/components/intake/intake-tabs.tsx`. A converted lead's tabs show a banner linking to the matter instead of a composer and are read-only. Data model: `SCHEMA_NOTES.md` scope pattern.
 
 ### Request detail page (Records tab)
 
-A records request opens on its own page nested under the tab:
-`/matters/[id]/records/[requestId]` and `/intake/[id]/records/[requestId]`
-(the matter/lead layout keeps the tabs; Records stays highlighted). Rows
-link there with a plain `Link`, so a request is deep-linkable and back/forward
-works. The route pages own auth (`requireUser`, the matter wall on matters,
-`records.view`); the shared server component
-`src/components/records-requests/request-detail-page.tsx` loads the request
-(scoped: a foreign or missing id 404s) and the editing lookups, then renders
-the client `request-detail.tsx`. Layout: header (back link, subject,
-custodian and type, status chip, due badge, status actions and delete), then
-two columns on lg+ (main: request documents (Generate letter lives here), responsive documents (the Mark partial/complete offer lives here), follow-ups; side:
-details and fee), stacked below. Delete navigates back to the list. Fee data
-is only sent to the client when the viewer is allowed to see it. A converted
-lead's page shows the banner to the matter's Records tab and is read-only.
-Old `?request=<id>` links are not redirected.
+A detail view that needs deep-linking and back/forward gets its own nested route rather than a modal: `/matters/[id]/records/[requestId]` and `/intake/[id]/records/[requestId]` (the layout keeps the tabs; Records stays highlighted); rows link with a plain `Link`. The route pages own auth (`requireUser`, the matter wall, `records.view`); the shared server component `src/components/records-requests/request-detail-page.tsx` loads the scoped record (a foreign or missing id 404s) and renders the client `request-detail.tsx`. Layout: header, then two columns on lg+ (main / side), stacked below. Data the viewer may not see (fees) is not sent to the client at all. Delete navigates back to the list.
 
 ### In-Tab Channel Toggle (Communication tabs)
 ```
@@ -255,16 +214,7 @@ centralised in `src/lib/matters-filters.ts`.
 Global ⌘K/Ctrl+K palette built on `cmdk` via shadcn's `Command` primitives.
 Opens from anywhere; also triggered by the sidebar and topbar ⌘K buttons.
 
-**Architecture:**
-- `CommandPaletteProvider` (client) owns the open state and registers the
-  global keyboard shortcut. Mounted inside `AppShell` so every
-  authenticated page is within its scope.
-- `useCommandPalette()` hook exposes `open`, `openPalette`,
-  `closePalette`, `togglePalette`. Any client component can trigger the
-  palette via this.
-- Data fetched per-open via the `getPaletteData` server action
-  (`src/lib/queries/command-palette.ts`). Small cost; cmdk filters in
-  memory.
+**Architecture:** `CommandPaletteProvider` (client, mounted in `AppShell`) owns open state and the global shortcut; `useCommandPalette()` (`open`, `openPalette`, `closePalette`, `togglePalette`) lets any client component trigger it. Data is fetched per open via the `getPaletteData` server action (`src/lib/queries/command-palette.ts`); cmdk filters in memory.
 
 **Sections (order matters — shown top-down):**
 1. Contextual (e.g. Pin/Unpin this matter, only when on a matter page)
@@ -303,42 +253,11 @@ without losing either in progress.
 
 **Architecture:**
 
-1. `CreateStackProvider` (client) is mounted inside a layout that
-   should host the stack — `matters/[id]/layout.tsx` for the matter
-   detail surface, directly on `calendar/page.tsx` for the calendar.
-   It holds `panels: CreatePanel[]` + `focusedId` in React state.
-   Next.js layouts don't remount on child route changes, so the
-   provider — and everything in it — survives navigation within
-   its subtree.
-2. `useCreateStack()` exposes `open(type)`, `close(id)`, `focus(id)`,
-   and `setExpanded(id, bool)`.
-   Triggers (header Create dropdown, empty-state CTA, "+ New event" on
-   calendar) call `open(type)` —
-   URL params are not involved.
-3. The provider takes an optional `context` prop (color + label +
-   sublabel) that drives the expanded-mode context strip inside the
-   modal. Matter detail passes the matter's color/name/case number;
-   calendar passes nothing (no per-matter context since an event
-   might be firm-wide). This is how one generic stack serves both
-   contexts.
-4. `CreateDock` (`src/components/create-stack/create-dock.tsx`) renders the current focused panel (docked
-   right-rail or expanded modal). Non-focused open panels render as
-   compact chips **inside the focused panel's chrome, right below
-   its header** (under an "Also open" label). Keeping chips adjacent
-   to the active panel — instead of floating in the viewport corner
-   — means they're always in the user's line of sight and never
-   overlap the active panel's own controls. The "Also open" strip
-   only renders when there are 2+ open panels; a single panel keeps
-   the chrome quiet.
-5. **Every open panel's body stays mounted.** `CreateDock` renders
-   one `PanelBody` per open panel, keyed by panel id, inside a single
-   persistent shell; only the focused body is visible (the others
-   are `hidden`). Each body's own React state IS its draft, so it
-   survives expand/collapse and focus switches, and no two panels
-   ever share one form instance. The provider holds only panel
-   metadata (id, type, expanded) and the focus pointer, never form
-   values. Don't move a body into a conditional JSX branch or key it
-   by anything but panel id — that remounts it and drops the draft.
+1. `CreateStackProvider` (client) is mounted inside a layout that hosts the stack (`matters/[id]/layout.tsx`; directly on `calendar/page.tsx`). It holds `panels: CreatePanel[]` + `focusedId` in React state. Next.js layouts don't remount on child route changes, so the stack survives navigation within its subtree.
+2. `useCreateStack()` exposes `open(type)`, `close(id)`, `focus(id)`, `setExpanded(id, bool)`. Triggers (header Create dropdown, empty-state CTA, "+ New event") call `open(type)`; URL params are not involved.
+3. Optional `context` prop (color + label + sublabel) drives the expanded-mode context strip. Matter detail passes the matter's; calendar passes nothing (an event might be firm-wide).
+4. `CreateDock` (`src/components/create-stack/create-dock.tsx`) renders the focused panel (docked right-rail or expanded modal). Non-focused panels render as compact chips inside the focused panel's chrome, right below its header (under "Also open", only when 2+ panels are open): always in the user's line of sight and never overlapping the active panel's controls.
+5. **Every open panel's body stays mounted.** `CreateDock` renders one `PanelBody` per open panel, keyed by panel id, inside a single persistent shell; only the focused body is visible (others `hidden`). Each body's own React state IS its draft, so it survives expand/collapse and focus switches, and no two panels share a form instance. The provider holds only panel metadata (id, type, expanded) and the focus pointer, never form values. Don't move a body into a conditional JSX branch or key it by anything but panel id: that remounts it and drops the draft.
 
 **Focus semantics:**
 
@@ -365,16 +284,9 @@ a time entry is confusing and risks losing content. The entry point
 determines the type; to switch, close the panel and open the new
 type (the original stays in its current state as a chip).
 
-**When to reach for this pattern:** any "do something without losing
-context" flow where multiple simultaneous drafts are plausible.
-Contrast with a modal dialog (blocks interaction, one at a time) or
-a full-page route (loses context entirely).
+**Use it** for any "do something without losing context" flow where multiple simultaneous drafts are plausible (a modal blocks and is one at a time; a full-page route loses context).
 
-**Deferred:** deep-linking to a specific panel state via URL.
-Previous iteration used `?create=<type>` but the multi-panel model
-doesn't serialize cleanly into query params. If sharing a "start me
-in this create state" link becomes important, add it back as a
-seed-on-mount behavior.
+**Deferred:** deep-linking to a panel state (`?create=<type>` doesn't serialize a multi-panel model; add back as seed-on-mount if needed).
 
 ### Settings Section Layout
 
@@ -531,7 +443,7 @@ values as the profile-zone wall clock and all-day values as date-only keys
 - Shared form helpers: `components/matters/form-primitives.tsx` `Field` wires
   `aria-invalid`/`aria-describedby` to its control; settings forms use the shared
   settings `Field` and `FormErrorBanner`; the client typeahead is an ARIA
-  combobox (`parties/party-pickers.tsx`).
+  combobox (`matters/parties/party-pickers.tsx`).
 - Event modal: focus moves in on open, Tab is trapped, focus is restored, Escape
   layers via a document-level handler that stops propagation; remounts per event
   id; `[data-modal-composer]` blurs first.
@@ -549,22 +461,7 @@ values as the profile-zone wall clock and all-day values as date-only keys
   with `new FormData(form, submitter)`. Show the panel only for the value it
   was computed for (track the submitted value; editing it again drops the
   stale list), and hide the plain Save while it's up.
-- Multi-connection-pool lock tests: see TESTING.md.
 
-## Adding a matter-scoped page or action (matter access)
+## Adding a matter-scoped page or action
 
-Every page under `matters/[id]` (and any page or route reached with a matter or child id) must restrict itself, ADR-039:
-
-```ts
-export default async function Page({ params }) {
-  await requireUser();                       // first await stays the session guard
-  const { id } = await params;
-  await assertMatterAccess(id);              // 404 when hidden
-  ...
-}
-```
-
-- Server actions: `requirePermission(key)` first, then `assertMatterAccess(matterId)` or `assertChildMatterAccess("note", noteId)` BEFORE any write.
-- Lists/aggregates: spread `matterAccessWhere(userId)` into a Matter query, `matterRelationAccessWhere(userId)` into a child with a required matter, `optionalMatterAccessWhere` for nullable matters.
-- Never return a 403 or a "no access" message; hidden looks missing. Show calendar items on hidden matters as Busy.
-- `page-guards.test.ts` and `matter-access-guards.test.ts` fail the build if you forget; justify exceptions in their allowlists.
+Every page under `matters/[id]` (and any page or route reached with a matter or child id) must restrict itself (ADR-039): `await requireUser()` stays the first await, then `await assertMatterAccess(id)` (404 when hidden). Actions: `requirePermission(key)` first, then `assertMatterAccess` / `assertChildMatterAccess(kind, id)` BEFORE any write; list queries spread the `matterAccessWhere` family. Never return 403 or a "no access" message (hidden looks missing); show calendar items on hidden matters as Busy. Full helper table and enforcement tests: `PERMISSIONS.md` (Matter access); `page-guards.test.ts` and `matter-access-guards.test.ts` fail the build if you forget.

@@ -33,7 +33,7 @@
  * (the age bound rides the list call as `q=newer_than:Nd`, the
  * count bound stops pagination). The cap keeps a first connect from
  * ingesting a decade of mail; it's a product decision documented in
- * docs/FEATURES.md, deliberately NOT recorded in `syncError` (a
+ * docs/features/communication-email.md, deliberately NOT recorded in `syncError` (a
  * benign cap is not an error). Older mail is fetched on demand via
  * `backfillEmailAccount` (below), one capped window per call.
  *

@@ -8,13 +8,38 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
+# Match the process to the risk
+
+Pick the tier by what a mistake would cost, not by how big the
+change looks. State the tier in one line at the start of the task
+(e.g. "Tier: Light — no schema/money/permissions"); the user can
+bump it up or down. This overrides skills that default to the full
+brainstorm → spec → plan → subagent flow for all creative work.
+
+| Tier | When | Process |
+|---|---|---|
+| **Just do it** | Copy, styling, layout, an obvious bug, a contained change to one or two files | Edit, run related tests, commit. No spec, plan, or subagents. |
+| **Light** | A real feature with none of the risk triggers below | 5–10 bullet plan in chat for the user to OK, build inline, one `/code-review` at the end. No spec/plan files. |
+| **Full** | Any risk trigger | Brainstorm → spec → plan → subagents, reviewing once per phase rather than after every task. |
+
+Risk triggers (any one means Full):
+
+- Schema or migration change
+- Money: trust accounting, invoices, fees, expenses
+- Permissions, or scope/visibility rules
+- Concurrency or locking (two actions racing)
+- Data moving between records (lead → matter conversion, merges)
+- Expected to take more than a day
+
+Testing, permissions, and docs rules below apply at every tier.
+
 # Testing is non-optional
 
 Every new feature ships with at least one test. The pre-commit hook
 (`.husky/pre-commit`) runs typecheck, lint, and only the tests
 related to staged `src/` files, and blocks the commit on failure.
-Run the full `npm test` before pushing; CI runs it on every push. See **`docs/TESTING.md`** for the full
-discipline — what to test, what NOT to test, file conventions,
+Run the full `npm test` before pushing; CI runs it on every push.
+See **`docs/TESTING.md`** for the full discipline — what to test, what NOT to test, file conventions,
 running commands. The framework is Vitest; tests live alongside
 their source as `*.test.ts`.
 
@@ -42,15 +67,28 @@ Reads happen in server components via direct Prisma queries. See
 
 # Docs are non-optional
 
-`docs/` is living documentation (index at `docs/README.md`), updated
-as part of the change that makes it stale — not as a follow-up chore:
+`docs/` is living documentation (map at `docs/README.md`), updated in
+the same commit as the change that makes it stale. Code and tests say
+what the app does and git says what changed when; docs hold only what
+neither can: what's next, why, and how we work.
 
-- Schema change → entry in `docs/SCHEMA_NOTES.md` (models table + changelog)
-- Architectural choice → ADR in `docs/DECISIONS.md`
-- Feature started/shipped/descoped → status in `docs/FEATURES.md`
-- New reusable UI pattern → `docs/UI_PATTERNS.md`
-- Folder structure or data-flow change → `docs/ARCHITECTURE.md`
+**Read only what the task needs:** `docs/ROADMAP.md` for priorities,
+the one `docs/features/<area>.md` you're working in, and the specific
+ADRs it links. Don't load whole folders.
 
-Don't hand-duplicate what code already declares (permission key
-lists, test counts, coverage thresholds) — point at the source file
-instead.
+| When you… | Update |
+|---|---|
+| Start, ship, descope, or reprioritize work | `docs/features/<area>.md` (detail) **and** its line in `docs/ROADMAP.md` |
+| Make a choice a future session might undo without knowing why | New ADR in `docs/decisions/` + its row in `decisions/README.md` |
+| Find a problem too big for a roadmap line | `docs/issues/<slug>.md`; delete it when fixed |
+| Change the schema | `docs/SCHEMA_NOTES.md`, only if there's a non-obvious invariant or trade-off |
+| Add a reusable UI pattern / change structure or data flow | `docs/UI_PATTERNS.md` / `docs/ARCHITECTURE.md` |
+
+Keep it lean:
+- ROADMAP lines are one line each; detail lives in the feature file.
+- Feature files describe end state, not history; aim under ~15KB.
+- Don't log what code, tests, or git already record: no changelogs,
+  no copies of permission keys, model lists, or test counts.
+- Specs and plans in `docs/superpowers/` are working files: fold
+  anything lasting into the feature file or an ADR, then delete them
+  in the commit that finishes the feature.

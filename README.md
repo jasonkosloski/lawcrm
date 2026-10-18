@@ -44,7 +44,7 @@ overwrites data and resets every user's password. Watch out for
 `vercel env pull` / `vercel link`: they write Development variables
 into `.env.local`, which Next.js loads *over* `.env`. Schema changes ship as migrations
 (`npx prisma migrate dev --name <change>`) — see ADR-016 in
-`docs/DECISIONS.md`. Auth is email + password; there is no self-service sign-up. Seed
+`docs/decisions/`. Auth is email + password; there is no self-service sign-up. Seed
 the demo users (or have an admin invite one), then log in at `/login`.
 
 ## Environment

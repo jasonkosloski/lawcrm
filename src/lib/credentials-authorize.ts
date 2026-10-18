@@ -33,7 +33,7 @@
  *   - Timing: unknown / inactive / passwordless / locked accounts
  *     burn one dummy argon2 verify so response time doesn't reveal
  *     whether an email has an account.
- *   - Availability trade-off (F129, ACCEPTED RISK — docs/DECISIONS.md
+ *   - Availability trade-off (F129, ACCEPTED RISK — docs/decisions/020
  *     ADR-020): the lock is per account, not per IP, so anyone who
  *     knows an email can hold that account locked by failing 5 times
  *     per window — including EVERY admin, who are also the people who

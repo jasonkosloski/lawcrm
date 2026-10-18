@@ -108,7 +108,7 @@ export default async function TeamSettingsPage() {
           <div className="text-[10px] text-ink-4 leading-relaxed">
             Invites generate a one-time password you deliver to the new
             member. Email-based invites land when we wire delivery
-            (Phase 2 of <span className="font-mono">docs/AUTH_PLAN.md</span>).
+            (Phase 2 of <span className="font-mono">docs/features/auth.md</span>).
           </div>
         </div>
       )}

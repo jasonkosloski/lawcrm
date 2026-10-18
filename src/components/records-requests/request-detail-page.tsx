@@ -17,6 +17,7 @@ import {
   getRecordsRequestDetail,
   listRecordsRequestTypes,
 } from "@/lib/queries/records-requests";
+import { responsePeriodLabel } from "@/lib/records-requests/date-labels";
 import { RequestDetail } from "./request-detail";
 
 export async function RequestDetailPage({
@@ -44,6 +45,13 @@ export async function RequestDetailPage({
       listRecordsRequestTypes({ activeOnly: true }),
     ]);
   if (!detail) notFound();
+
+  // The rule behind a computed due date (archived/ad hoc types → none).
+  const type = types.find((t) => t.id === detail.typeId);
+  const deadlineRule =
+    type?.responseAmount && type.responseUnit
+      ? responsePeriodLabel(type.responseAmount, type.responseUnit)
+      : null;
 
   const editable = canEdit && writable;
   const [users, templates, linkable] = await Promise.all([
@@ -94,6 +102,8 @@ export async function RequestDetailPage({
       daysUntilDue={
         detail.responseDueDate ? daysUntilDateOnly(detail.responseDueDate, tz) : null
       }
+      daysSinceSent={detail.sentAt ? -daysUntilDateOnly(detail.sentAt, tz) : null}
+      deadlineRule={deadlineRule}
     />
   );
 }

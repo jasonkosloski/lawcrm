@@ -1,7 +1,7 @@
 /**
  * Manual call logging.
  *
- * "Log a call" v1 from FEATURES.md P1 — phone work happens off-app
+ * "Log a call" v1 from docs/features/communication-calls.md — phone work happens off-app
  * today (personal cell, desk phone), so this records the fact of a
  * call after it happened: who, direction, outcome, duration, summary,
  * optional matter filing.

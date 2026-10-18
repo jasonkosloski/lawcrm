@@ -24,7 +24,7 @@
  *
  * Recurrence is deliberately absent — it needs an RRULE
  * data-model decision (schema change) and is tracked in
- * FEATURES.md as the remaining piece of event-create v2.
+ * docs/features/calendar.md as the remaining piece of event-create v2.
  */
 
 "use client";

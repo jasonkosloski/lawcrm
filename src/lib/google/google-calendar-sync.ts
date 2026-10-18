@@ -81,7 +81,7 @@
  * personal event that was deleted in Google lingers in the CRM until
  * someone removes it there. If product wants Google-born cleanup it
  * needs an origin flag on CalendarEvent (open item in
- * docs/FEATURES.md); `deletedEvents` stays in the result shape (always
+ * docs/features/google-calendar-sync.md); `deletedEvents` stays in the result shape (always
  * 0) so the cron response is stable.
  *
  * Failure semantics per account (gmail-sync's discipline):

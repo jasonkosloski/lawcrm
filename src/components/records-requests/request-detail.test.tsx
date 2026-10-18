@@ -323,4 +323,81 @@ describe("RequestDetail", () => {
     await user.click(screen.getByRole("button", { name: "Unlink Letter.md" }));
     expect(await screen.findByText("Couldn't unlink the document.")).toBeInTheDocument();
   });
+
+  describe("key dates", () => {
+    function renderDates(
+      d: RecordsRequestDetail,
+      extra: { daysUntilDue?: number | null; daysSinceSent?: number | null; deadlineRule?: string | null }
+    ) {
+      return render(
+        <RequestDetail
+          detail={d}
+          scope={{ kind: "matter", matterId: "m1" }}
+          types={[{ id: "t1", name: "Medical records" }]}
+          users={[{ id: "u1", name: "Me" }]}
+          templates={[]}
+          defaultTemplateId={null}
+          storageDriver="local"
+          linkableDocuments={[]}
+          can={CAN}
+          writable
+          daysUntilDue={extra.daysUntilDue ?? null}
+          daysSinceSent={extra.daysSinceSent ?? null}
+          deadlineRule={extra.deadlineRule ?? null}
+        />
+      );
+    }
+
+    test("a sent request shows the sent date, how long ago, the due date, countdown and rule", () => {
+      renderDates(
+        detail({
+          status: "sent",
+          sentAt: new Date("2026-10-16T00:00:00Z"),
+          responseDueDate: new Date("2026-10-21T00:00:00Z"),
+        }),
+        { daysSinceSent: 2, daysUntilDue: 3, deadlineRule: "3 business days after sending" }
+      );
+      const sent = screen.getByTestId("sent-tile");
+      expect(sent).toHaveTextContent("Oct 16, 2026");
+      expect(sent).toHaveTextContent("2 days ago");
+      const due = screen.getByTestId("due-tile");
+      expect(due).toHaveTextContent("Oct 21, 2026");
+      expect(due).toHaveTextContent("3 days left");
+      expect(due).toHaveTextContent("3 business days after sending");
+    });
+
+    test("an overdue request says so in the due tile", () => {
+      renderDates(
+        detail({
+          status: "acknowledged",
+          sentAt: new Date("2026-10-01T00:00:00Z"),
+          responseDueDate: new Date("2026-10-06T00:00:00Z"),
+        }),
+        { daysSinceSent: 17, daysUntilDue: -12 }
+      );
+      const due = screen.getByTestId("due-tile");
+      expect(due).toHaveTextContent("12 days overdue");
+      expect(due).toHaveTextContent("Set manually");
+    });
+
+    test("a draft explains the clock hasn't started", () => {
+      renderDates(detail(), {});
+      expect(screen.getByTestId("sent-tile")).toHaveTextContent("Not sent yet");
+      expect(screen.getByTestId("due-tile")).toHaveTextContent("Set when sent");
+    });
+
+    test("a closed request shows no countdown", () => {
+      renderDates(
+        detail({
+          status: "complete",
+          sentAt: new Date("2026-10-01T00:00:00Z"),
+          responseDueDate: new Date("2026-10-06T00:00:00Z"),
+          receivedAt: new Date("2026-10-05T00:00:00Z"),
+        }),
+        { daysUntilDue: -12 }
+      );
+      expect(screen.getByTestId("due-tile")).not.toHaveTextContent("overdue");
+    });
+  });
 });
+

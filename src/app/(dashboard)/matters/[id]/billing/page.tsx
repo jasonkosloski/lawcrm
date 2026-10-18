@@ -16,7 +16,7 @@
  * view is deep-linkable + back-button-honest, matching the email
  * + calendar URL patterns.
  *
- * What's deferred (intentionally — see docs/FEATURES.md):
+ * What's deferred (intentionally — see docs/features/time-and-billing.md):
  *   - Real email delivery of invoices (send is logged-only today)
  *   - Settlement distribution waterfall
  *   - Tax calculation (taxAmount stays 0)

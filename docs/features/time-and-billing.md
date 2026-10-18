@@ -1,0 +1,31 @@
+# Time & Billing
+
+Time tracking (week view, day reconciliation, timer widget, UTBMS-coded entries) plus the matter Billing tab (invoices, trust, payments), settlement waterfall, and matter expenses. Invoice email delivery is not wired (logged-only), and the firm-level billing settings page is not built.
+Related: [ADR-013](../decisions/013-timer-sessions-are-pre-entries-ungated-to.md), [ADR-024](../decisions/024-invoice-line-items-are-draft-only-money.md), [ADR-030](../decisions/030-settlement-status-follows-the-approval-chain-amounts.md), [ADR-036](../decisions/036-money-is-decimal-14-2-one-settlement.md), [ADR-038](../decisions/038-billing-view-gates-the-billing-read-surface.md), [ADR-021](../decisions/021-matter-tabs-honour-calendar-visibility-and-money.md), [PERMISSIONS.md](../PERMISSIONS.md)
+
+## Open work
+- [ ] **Settings — Billing & rates** (P2) — Default hourly rate, UTBMS code library, invoice templates, payment terms.
+- [ ] **Invoice email delivery** — "Send invoice" only records intent (audit titles say "not emailed"); no actual send.
+- [ ] **`updateExpense` UI** — action exists server-side; the edit dialog is not built.
+- [ ] **Time follow-ups** — auto-capture from activity; idle-detection prompts; admin/manager user picker on `/time` (own permission key; today current-user only); read-only reconciliation lanes could become editable.
+- [ ] **Palette "Start timer" row** — now safe to add since `startTimer` returns `already_running` instead of replacing.
+
+## Shipped
+### Time
+- [x] **Time tracking — week view** (2026-07-07) — `/time` (sidebar "Time"), URL-driven, timezone-correct (user-tz date keys). One row per day, horizontal hour bars segmented per matter in matter color (billable solid, non-billable dimmed), day + week totals, matter legend. Current-user only.
+- [x] **Time entry modal** (2026-07-07) — All composers (Time-tab TimeComposer, log-time-on-entity, edit, stop-timer) share `DurationFields` (decimal hours OR start–end computed client-side into `hours`) and `UtbmsCodeSelect` (A100 activity + L100 litigation task catalogs in `src/lib/time-entry-constants.ts`, server-validated wherever written). Narrative + billable/no-charge/privileged toggles. The edit dialog does not offer the Billed status. Create/edit/status/delete are activity-logged (edits log date/billable/no-charge changes). Time tab rows show the UTBMS chip (label on hover) and a "Timer" provenance marker; header shows "latest N of M" when capped at 200.
+- [x] **Timer widget** (2026-07-07) — Floating bottom-right pill in AppShell. Idle = "Timer" start; running = client-side ticking from `TimerSession.startedAt` (no polling), matter name, mid-run matter/activity re-point panel, two-step discard, Stop → prefilled StopTimerDialog (elapsed rounded UP to the quarter hour `TIME_ENTRY_INCREMENT_HOURS`, min one increment; matter REQUIRED; `source: "timer"`). `src/app/actions/timer.ts`: start/update/discard need no permission (a timer is a pre-entry, ADR-013); `stopTimer` gates on `time_entries.create`. `startTimer` returns `code: "already_running"` unless `replace: true`.
+- [x] **Time reconciliation** (2026-07-07) — `/time?view=day`: Logged lane (manual), Captured lane (source != manual; via-Email/Timer/Calendar chips), live Timer lane (read-only, today only; widget owns interaction), and a day-total bar vs `Firm.dailyHoursGoal` (`getFirmGoals()`, editable on /settings/firm). Read-only v1; entries link to the matter Time tab.
+
+### Billing
+- [x] **Matter Billing tab (v1)** — Gated by `billing.view` for the whole tab, the print route and Overview trust/WIP facts (ADR-038). Three-card KPI strip (WIP, Trust, Outstanding AR) + invoices table + WIP entries + trust ledger + matter-level Received-payments ledger. WIP includes billable expenses.
+  - **Generate invoice from WIP** — auto YYYY-NNN numbering, 30-day terms. **Bundle as internal record** for contingency/pro-bono closes (`kind="internal_record"`, born paid, excluded from AR).
+  - **State machine** — draft → approved → sent → partial → paid; void only with no payments; drafts deletable. Invoice `notes` is client-facing (printed on invoice + PDF) and labelled so.
+  - **Send invoice** dialog (channel + recipient + optional trust application) — logged-only (see Open work). **Apply trust** shortcut for outstanding-balance + trust-funded matters. **Record payment** (check/ACH/cash/card/other/trust) with default-checked "Send updated invoice to client"; **Trust** method needs `billing.apply_trust`. Trust composer prevents overdraw.
+  - **Line-item editing** (pencil on Services rows) — DRAFT invoices only (ADR-024; approved/sent are void-and-regenerate); needs `billing.generate_invoice` plus author-or-`time_entries.edit_any`; amounts rounded to cents; activity-logged.
+  - Letterhead-style preview pane; **PDF export** via chrome-free `/print/invoices/[id]?autoprint=1` (titled "Invoice <number>", waits for fonts).
+- [x] **Settlement waterfall (v1)** — Card on the Billing tab. Composer: gross / firm fee % / advanced costs / status (pending → approved → disbursed → closed; status follows the approval chain, ADR-030). Lien composer with negotiated/effective amounts (strikethrough on original); lien negotiate/edit/delete shipped (`SettlementLienList`). 4-step approval chain (Client release / Liens / Partner sign-off / Trust reconciliation); auto-promote to approved when all approved. Permissions `matters.settlement.{view,edit,manage_liens,approve}`. One settlement per matter (unique index, ADR-036). Timeline omits settlement rows unless viewer has `matters.settlement.view` (ADR-021).
+- [x] **Matter expenses (v1)** — First-class `Expense` model; composer + table on the Time & Expenses tab. Permissions `matters.expense.{view,create,edit,delete}`; edit/delete refused once billed. `generateInvoiceFromWip` and `bundleAsInternalRecord` sweep both time and billable expenses. Receipt picker linked via `Expense.receiptDocumentId`; cross-matter isolation enforced server-side.
+
+## Notes
+- Money columns are `DECIMAL(14,2)` (ADR-036, Quality sweep Batch 4, migration `20261017120000_quality_sweep`; run steps in `docs/DEPLOY_BACKFILLS.md`). Billing read surface gated by `billing.view` (ADR-038). The rest of Batch 4 (SOL periods, indexes, `Firm.matterVisibility`, private events) is documented under matters / calendar.

@@ -1,6 +1,6 @@
 # Architecture
 
-_Last reviewed: 2026-10-17. If the folder tree or data-flow section stops matching the code, fix it here — this doc has drifted before._
+_If the folder tree or data-flow section stops matching the code, fix it here._
 
 ## Tech Stack
 
@@ -12,7 +12,7 @@ _Last reviewed: 2026-10-17. If the folder tree or data-flow section stops matchi
 | Mutations | Server actions (`src/app/actions/`) | Permission-gated, audit-logged, `revalidatePath` for cache invalidation |
 | ORM | Prisma 7 | Type-safe queries, migration system, great DX |
 | Database | PostgreSQL everywhere | Prisma Postgres (Vercel integration) — separate `lawcrm-dev` database for local dev, production database for prod; tests use a dockerized Postgres (`docker-compose.test.yml`, port 5433) |
-| Auth | Auth.js v5 + argon2id | Credentials provider, JWT sessions; see [AUTH_PLAN.md](./AUTH_PLAN.md) |
+| Auth | Auth.js v5 + argon2id | Credentials provider, JWT sessions; see [features/auth.md](./features/auth.md) |
 | File storage | Driver facade: local disk (dev) / Vercel Blob (prod) | `src/lib/file-storage.ts` + `src/lib/storage/`; prod uploads go client-direct, serving 302s to the blob CDN — ADR-015 |
 | Testing | Vitest + happy-dom | See [TESTING.md](./TESTING.md) |
 | Fonts | Inter / JetBrains Mono / Fraunces | Per design handoff — UI / metadata / display |
@@ -33,18 +33,17 @@ src/
 │   │   ├── page.tsx          # Today/Dashboard
 │   │   ├── matters/          # List, new, and [id] detail with tab sub-routes:
 │   │   │                     #   billing, communication, deadlines, documents, edit,
-│   │   │                     #   events, notes, parties, tasks, time, timeline
-│   │   ├── intake/           # Lead intake queue + [id] detail (communication, time)
+│   │   │                     #   events, evidence, notes, parties, records, tasks, time, timeline
+│   │   ├── intake/           # Lead intake queue + [id] detail with its own tab routes
 │   │   ├── contacts/         # Contact directory + [id] detail
 │   │   ├── calendar/         # Calendar views + events/new (events are edited in the
 │   │   │                     #   modal; there is no standalone edit route)
 │   │   ├── communication/    # Unified inbox (email + messenger)
 │   │   └── settings/         # firm, team, roles, practice-areas, billing,
 │   │                         #   integrations, notifications, activity, security, profile
-│   ├── actions/              # ★ ALL mutations live here — ~34 "use server" modules
+│   ├── actions/              # ★ ALL mutations live here — one "use server" module per resource
 │   │                         #   (matters, billing, tasks, notes, calls, settlements, …)
-│   │                         #   records-requests.ts + records-request-types.ts (records requests)
-│   ├── api/                  # Sanctioned route handlers ONLY: auth handler,
+│   │   ├── api/                  # Sanctioned route handlers ONLY: auth handler,
 │   │                         #   document download (streams local / 302s blob),
 │   │                         #   streaming upload (local driver), blob upload
 │   │                         #   token+callback, Google OAuth redirect legs
@@ -62,8 +61,7 @@ src/
 │   ├── shared/               # Reusable business components (matter-picker, etc.)
 │   ├── documents/            # DocumentsBrowser + DocumentViewerBody, shared by
 │   │                         #   matter and intake (lead) Documents routes
-│   ├── records-requests/     # Records tab, composer, URL-driven detail panel,
-│   │                         #   type editor (matter + intake Records tabs)
+│   ├── records-requests/     # Records tab, composer, request detail page, type editor
 │   ├── ui/                   # shadcn primitives (button, card, dialog, etc.)
 │   └── <feature>/            # Feature folders: matters, calendar, communication,
 │                             #   contacts, intake, notes, tasks, settings, …
@@ -71,10 +69,8 @@ src/
 ├── lib/                      # Business logic, form schemas/helpers, permissions,
 │                             #   activity log, token encryption, prisma client,
 │                             #   record-scope.ts + scope-access.ts (matter-or-lead
-│                             #   scope resolution and access checks for documents)
-│                             #   records-requests/ (status machine, due dates, follow-up
-│                             #   task rolling, fee→Expense, folder naming);
-│                             #   queries/records-requests.ts (reads)
+│                             #   scope resolution and access checks),
+│                             #   records-requests/ (domain logic)
 ├── test/                     # Shared test setup/utilities
 ├── types/                    # Shared TypeScript types
 └── generated/                # Auto-generated (Prisma client) — gitignored
@@ -125,7 +121,7 @@ error follow the React 19 patterns in [UI_PATTERNS.md](./UI_PATTERNS.md).
   uncached `loadCurrentFirm` / `loadFirmGoals` only inside actions that mutate
   those rows and whose page re-renders in the same request.
 - `src/lib/prisma.ts` sizes the pg pool at 5 per instance (override with
-  `DATABASE_POOL_MAX`); tests run a smaller pool (see TESTING.md).
+  `DATABASE_POOL_MAX`, ADR-032); tests run a smaller pool (see TESTING.md).
 - `UserFacingError` / `toUserMessage` (`src/lib/user-facing-error.ts`): actions
   throw `UserFacingError` for messages meant for users; anything else is logged
   server-side and the client sees a generic message.
@@ -144,24 +140,13 @@ error follow the React 19 patterns in [UI_PATTERNS.md](./UI_PATTERNS.md).
   (password fingerprint, ADR-017). Sign-in lockout is a reserve/settle under a
   per-email Postgres advisory lock (ADR-020); redirects after login go through the
   strict `safeRedirectPath` (`src/lib/safe-redirect.ts`).
-- **Page guards**: layouts are not auth gates (not re-run on partial navigations);
-  every `page.tsx`/`layout.tsx` calls `requireUser()` (or a stronger guard) as its
-  first `await`, enforced by `src/app/page-guards.test.ts` (ADR-028).
+- **Page guards**: layouts are not auth gates; every `page.tsx`/`layout.tsx` calls a guard as its first `await` (ADR-028). See [PERMISSIONS.md](./PERMISSIONS.md).
 - **Cron endpoints** (`/api/email-sync`, `/api/notification-sweep`) authenticate
   with `isAuthorizedCron` (`src/lib/cron-auth.ts`, constant-time compare, fails
   closed; `CRON_SECRET` is required in production) and are listed in the proxy's
   self-authenticated paths (pinned by `src/vercel-config.test.ts`). Response
   security headers are set in `next.config.ts`.
-- **Matter access (ethical walls, ADR-039)**: a matter and everything attached
-  is visible to its active team, holders of `matters.view_all` (Admin implicit),
-  or everyone while `Firm.matterVisibility` is `FIRM` (default). Hidden == 404.
-  Reads add `matterAccessWhere(userId)`; pages/actions call
-  `assertMatterAccess` / `assertChildMatterAccess` (`src/lib/matter-access.ts`);
-  static tests enforce both. Email stays mailbox-personal
-  (`visibleEmailThreadWhere`). See [PERMISSIONS.md](./PERMISSIONS.md).
-- **Permissions**: granular keys in `src/lib/permissions.ts`, enforced in every
-  server action via `requirePermission(...)` and in read paths via
-  `currentUserHasPermission(...)`. Full model in [PERMISSIONS.md](./PERMISSIONS.md).
+- **Matter access (ethical walls, ADR-039) and permissions**: hidden == 404; reads add `matterAccessWhere(userId)`, pages/actions assert (`src/lib/matter-access.ts`); granular keys in `src/lib/permissions.ts` via `requirePermission` / `currentUserHasPermission`. Full model in [PERMISSIONS.md](./PERMISSIONS.md).
 - **Token encryption at rest**: OAuth tokens on `EmailAccount` / `MessengerAccount`
   are transparently encrypted/decrypted by a Prisma client extension
   (`src/lib/email-token-crypto.ts`, `src/lib/email-token-encryption.ts`). See ADR-011.
@@ -175,13 +160,7 @@ error follow the React 19 patterns in [UI_PATTERNS.md](./UI_PATTERNS.md).
   pure date planning in `deadline-plan.ts`, transactional apply in `apply.ts`),
   applied on demand from a matter or automatically on `matter_created` via
   AutoApply defaults (ADR-019).
-- **Captures / notes**: a note or primary capture may create sibling records
-  (task / event / deadline / time / note). Each kind is gated by its own create
-  key, computed up front by `src/lib/capture-permissions.ts` and enforced with
-  `requirePermissions` (ADR-025). Events minted this way share
-  `src/lib/calendar-default-attendees.ts` (default attendees, min-firm-attendee
-  invariant) with the calendar create path and are pushed to Google Calendar
-  after commit.
+- **Captures / notes**: sibling records are each gated by their own create key (PERMISSIONS.md, ADR-025). Events minted this way share `src/lib/calendar-default-attendees.ts` (default attendees, min-firm-attendee invariant) with the calendar create path and are pushed to Google Calendar after commit.
 - **Audit log**: `logActivity` (best-effort) and `logActivityTx(tx, …)` (inside the
   caller's transaction, for governance and money events) in
   `src/lib/activity-log.ts`; `logAuditEntry` (`src/lib/audit-entry.ts`) records
@@ -233,7 +212,7 @@ Pointers only; read the file headers for behavior.
 
 ## Related docs
 
-[FEATURES.md](./FEATURES.md) — roadmap/status · [SCHEMA_NOTES.md](./SCHEMA_NOTES.md) — data model ·
+[ROADMAP.md](./ROADMAP.md) — roadmap/status · [SCHEMA_NOTES.md](./SCHEMA_NOTES.md) — data model ·
 [PERMISSIONS.md](./PERMISSIONS.md) — RBAC · [TESTING.md](./TESTING.md) — test discipline ·
-[DECISIONS.md](./DECISIONS.md) — ADRs · [UI_PATTERNS.md](./UI_PATTERNS.md) — component conventions ·
-[AUTH_PLAN.md](./AUTH_PLAN.md) — auth phases
+[decisions/](./decisions/README.md) — ADRs · [UI_PATTERNS.md](./UI_PATTERNS.md) — component conventions ·
+[features/](./features/) — per-area behaviour (auth: [features/auth.md](./features/auth.md))

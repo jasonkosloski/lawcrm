@@ -14,7 +14,7 @@
  * per-column: each card belongs to a fixed column (main / right rail —
  * see DASHBOARD_CARD_COLUMNS) and moves only within it. `order` is still
  * stored as ONE flat array so column membership can change later without
- * a prefs migration. Drag + resize (v3) is tracked in docs/FEATURES.md.
+ * a prefs migration. Drag + resize (v3) is tracked in docs/features/app-shell.md.
  */
 
 /** Stable identifier for each toggleable surface on the dashboard. */
