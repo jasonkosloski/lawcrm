@@ -52,12 +52,13 @@ export default async function MatterDetailLayout({
   await requireUser();
   const { id } = await params;
   await assertMatterAccess(id);
-  const [matter, canEditMatter, canManageTeam, canViewBilling, createFlags] =
+  const [matter, canEditMatter, canManageTeam, canViewBilling, canViewRecords, createFlags] =
     await Promise.all([
       getMatterById(id),
       currentUserHasPermission("matters.edit"),
       currentUserHasPermission("matters.manage_team"),
       currentUserHasPermission("billing.view"),
+      currentUserHasPermission("records.view"),
       // Per-entity create keys for the "+ Create" menu (cached per
       // request, so this is a handful of Set lookups).
       Promise.all(
@@ -157,7 +158,11 @@ export default async function MatterDetailLayout({
         )}
       </div>
 
-      <MatterTabs matterId={matter.id} canViewBilling={canViewBilling} />
+      <MatterTabs
+        matterId={matter.id}
+        canViewBilling={canViewBilling}
+        canViewRecords={canViewRecords}
+      />
 
       <div className="flex-1 flex min-h-0">
         <div className="flex-1 overflow-y-auto min-w-0">{children}</div>

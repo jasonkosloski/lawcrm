@@ -96,6 +96,8 @@ export function MultiFileUpload({
   folderId,
   folderName,
   storageDriver,
+  recordsRequestId,
+  onUploaded,
 }: {
   scope: RecordScope;
   /** Upload destination — the currently browsed folder (null = root). */
@@ -106,6 +108,10 @@ export function MultiFileUpload({
    *  server. Defaults to local so nothing breaks if a callsite
    *  hasn't been plumbed yet. */
   storageDriver?: StorageDriver;
+  /** Tag every uploaded file as received records on this request. */
+  recordsRequestId?: string;
+  /** Called once a batch finishes uploading (before the refresh settles). */
+  onUploaded?: () => void;
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -160,6 +166,7 @@ export function MultiFileUpload({
     if (scope.kind === "matter") fd.append("matterId", scope.matterId);
     else fd.append("leadId", scope.leadId);
     if (folderId) fd.append("folderId", folderId);
+    if (recordsRequestId) fd.append("recordsRequestId", recordsRequestId);
     for (const f of files) fd.append("files", f, f.name);
 
     const xhr = new XMLHttpRequest();
@@ -175,6 +182,7 @@ export function MultiFileUpload({
       if (xhr.status === 200) {
         reset();
         router.refresh();
+        onUploaded?.();
       } else {
         let message = `Upload failed (HTTP ${xhr.status}).`;
         try {
@@ -233,6 +241,7 @@ export function MultiFileUpload({
           clientPayload: JSON.stringify({
             ...scopeWhere(scope),
             folderId,
+            ...(recordsRequestId ? { recordsRequestId } : {}),
             name: f.name,
           }),
           // Chunked-parallel transfer with per-part retries — the
@@ -254,6 +263,7 @@ export function MultiFileUpload({
       // wins) and once more shortly after (catches the stragglers).
       router.refresh();
       refreshTimerRef.current = setTimeout(() => router.refresh(), 2000);
+      onUploaded?.();
     } catch (err) {
       cancelRef.current = null;
       reset();

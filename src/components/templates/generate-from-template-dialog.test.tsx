@@ -229,4 +229,50 @@ describe("GenerateFromTemplateDialog", () => {
     expect(screen.queryByText("Storage is down.")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Template")).toHaveValue("");
   });
+
+  it("with a records request: preselects the default template and passes the request id", async () => {
+    previewMock.mockResolvedValue(okPreview());
+    generateMock.mockResolvedValue({ ok: true, documentName: "Letter.md" });
+    const user = userEvent.setup();
+    render(
+      <GenerateFromTemplateDialog
+        scope={{ kind: "matter", matterId: "m1" }}
+        templates={TEMPLATES}
+        canUpload
+        recordsRequestId="rr1"
+        defaultTemplateId="t2"
+        triggerLabel="Generate letter"
+      />
+    );
+    await user.click(screen.getByRole("button", { name: "Generate letter" }));
+    expect(await screen.findByText("Dear Maria Alvarez,")).toBeInTheDocument();
+    expect(screen.getByLabelText("Template")).toHaveValue("t2");
+    expect(previewMock).toHaveBeenCalledWith(
+      "t2",
+      { kind: "matter", matterId: "m1" },
+      { recordsRequestId: "rr1" }
+    );
+    await user.click(screen.getByRole("button", { name: /save to documents/i }));
+    await screen.findByText("Letter.md");
+    expect(generateMock).toHaveBeenCalledWith(
+      "t2",
+      { kind: "matter", matterId: "m1" },
+      { recordsRequestId: "rr1" }
+    );
+  });
+
+  it("ignores a default template that is no longer offered", async () => {
+    const user = userEvent.setup();
+    render(
+      <GenerateFromTemplateDialog
+        scope={{ kind: "matter", matterId: "m1" }}
+        templates={TEMPLATES}
+        canUpload
+        defaultTemplateId="gone"
+      />
+    );
+    await user.click(screen.getByRole("button", { name: /generate from template/i }));
+    expect(screen.getByLabelText("Template")).toHaveValue("");
+    expect(previewMock).not.toHaveBeenCalled();
+  });
 });

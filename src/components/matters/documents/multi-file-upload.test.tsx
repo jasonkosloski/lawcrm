@@ -69,10 +69,13 @@ let driver: "local" | "vercel-blob" | undefined;
 
 let scopeUnderTest: RecordScope = { kind: "matter", matterId: "m1" };
 
+let extraProps: { recordsRequestId?: string; onUploaded?: () => void } = {};
+
 async function pickFiles(files: File[]) {
   const user = userEvent.setup({ applyAccept: false });
   render(
     <MultiFileUpload
+      {...extraProps}
       scope={scopeUnderTest}
       folderId="fold1"
       folderName="Discovery"
@@ -84,6 +87,41 @@ async function pickFiles(files: File[]) {
   ) as HTMLInputElement;
   await user.upload(input, files);
 }
+
+describe("records request tag", () => {
+  beforeEach(() => {
+    extraProps = { recordsRequestId: "rr1", onUploaded: vi.fn() };
+  });
+  afterEach(() => {
+    extraProps = {};
+  });
+
+  test("local driver appends recordsRequestId before the file part", async () => {
+    driver = "local";
+    await pickFiles([new File(["pdf"], "rec.pdf")]);
+    await waitFor(() => expect(StubXHR.instances).toHaveLength(1));
+    const fd = StubXHR.instances[0].sent as FormData;
+    expect([...fd.keys()]).toEqual(["matterId", "folderId", "recordsRequestId", "files"]);
+    expect(fd.get("recordsRequestId")).toBe("rr1");
+    StubXHR.instances[0].onload?.();
+    expect(extraProps.onUploaded).toHaveBeenCalledTimes(1);
+  });
+
+  test("blob driver carries it in the client payload and reports completion", async () => {
+    driver = "vercel-blob";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedUpload.mockResolvedValue({ url: "https://s/x" } as any);
+    await pickFiles([new File(["a"], "a.pdf", { type: "application/pdf" })]);
+    await waitFor(() => expect(mockedUpload).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(mockedUpload.mock.calls[0][2].clientPayload as string)).toEqual({
+      matterId: "m1",
+      folderId: "fold1",
+      recordsRequestId: "rr1",
+      name: "a.pdf",
+    });
+    await waitFor(() => expect(extraProps.onUploaded).toHaveBeenCalledTimes(1));
+  });
+});
 
 describe("lead scope", () => {
   test("local driver appends leadId (before the file part) and no matterId", async () => {

@@ -29,6 +29,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import {
+  createCustodianContact,
   createRecordsRequest,
   deleteRecordsRequest,
   linkRecordsDocuments,
@@ -819,5 +820,25 @@ describe("linkRecordsDocuments / unlinkRecordsDocument", () => {
     const doc = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
     expect(doc.recordsRequestId).toBeNull();
     expect(doc.recordsRequestRole).toBeNull();
+  });
+});
+
+describe("createCustodianContact", () => {
+  test("creates a medical_provider or government contact without redirecting", async () => {
+    const a = await createCustodianContact("  Mercy Hospital ", "medical_provider");
+    expect(a).toMatchObject({ ok: true, name: "Mercy Hospital" });
+    const b = await createCustodianContact("City PD", "government");
+    expect(b.ok).toBe(true);
+    if (a.ok) {
+      const row = await prisma.contact.findUniqueOrThrow({ where: { id: a.id } });
+      expect(row.type).toBe("medical_provider");
+    }
+    expect(requirePermission).toHaveBeenCalledWith("records.create");
+    expect(requirePermission).toHaveBeenCalledWith("contacts.create");
+  });
+
+  test("rejects other types and blank names", async () => {
+    expect((await createCustodianContact("X", "client")).ok).toBe(false);
+    expect((await createCustodianContact("   ", "government")).ok).toBe(false);
   });
 });

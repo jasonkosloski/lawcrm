@@ -23,6 +23,7 @@ import {
 } from "@/lib/permission-check";
 import { roundMoney } from "@/lib/money";
 import { logActivity } from "@/lib/activity-log";
+import { getCurrentUserId } from "@/lib/current-user";
 import { assertScopeAccess, assertScopeWritable } from "@/lib/scope-access";
 import {
   SAME_SCOPE_ERROR,
@@ -808,4 +809,37 @@ export async function unlinkRecordsDocument(
   });
   revalidateRecordsAndDocuments(scope);
   return { ok: true };
+}
+
+/** Custodian types the request composer may quick-create. */
+const CUSTODIAN_QUICK_TYPES = ["medical_provider", "government"] as const;
+
+/** Quick-create a custodian from the request composer. Unlike
+ *  `createContact` it does not redirect, so the typed request survives.
+ *  Needs both `records.create` and `contacts.create`. */
+export async function createCustodianContact(
+  name: string,
+  type: string
+): Promise<
+  { ok: true; id: string; name: string } | { ok: false; error: string }
+> {
+  await requirePermission("records.create");
+  await requirePermission("contacts.create");
+  const trimmed = typeof name === "string" ? name.trim() : "";
+  if (!trimmed) return { ok: false, error: "Enter the custodian's name." };
+  if (trimmed.length > 200) return { ok: false, error: "That name is too long." };
+  if (!(CUSTODIAN_QUICK_TYPES as readonly string[]).includes(type)) {
+    return { ok: false, error: "Pick medical provider or government." };
+  }
+  const userId = await getCurrentUserId();
+  const owner = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { firmId: true },
+  });
+  const created = await prisma.contact.create({
+    data: { firmId: owner?.firmId ?? null, name: trimmed, type },
+    select: { id: true, name: true },
+  });
+  revalidatePath("/contacts");
+  return { ok: true, id: created.id, name: created.name };
 }

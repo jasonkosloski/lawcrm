@@ -26,6 +26,7 @@ const TABS = [
   { slug: "events", label: "Events" },
   { slug: "communication", label: "Communication" },
   { slug: "documents", label: "Documents" },
+  { slug: "records", label: "Records" },
   { slug: "evidence", label: "Evidence" },
   { slug: "parties", label: "Parties" },
   { slug: "deadlines", label: "Deadlines" },
@@ -38,15 +39,23 @@ const TABS = [
 export function MatterTabs({
   matterId,
   canViewBilling = true,
+  canViewRecords = true,
 }: {
   matterId: string;
   /** `billing.view` - the Billing tab link is hidden without it
    *  (the page itself is gated too). Defaults true for callers that
    *  predate the key. */
   canViewBilling?: boolean;
+  /** `records.view` - the Records tab link is hidden without it
+   *  (the page itself is gated too). */
+  canViewRecords?: boolean;
 }) {
   const pathname = usePathname();
-  const tabs = canViewBilling ? TABS : TABS.filter((t) => t.slug !== "billing");
+  const tabs = TABS.filter(
+    (t) =>
+      (canViewBilling || t.slug !== "billing") &&
+      (canViewRecords || t.slug !== "records")
+  );
   const base = `/matters/${matterId}`;
 
   // `undefined` when on a non-tab sub-route (e.g. /edit) so no tab

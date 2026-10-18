@@ -19,18 +19,27 @@ const TABS = [
   { slug: "tasks", label: "Tasks" },
   { slug: "events", label: "Events" },
   { slug: "documents", label: "Documents" },
+  { slug: "records", label: "Records" },
   { slug: "communication", label: "Communication" },
   { slug: "time", label: "Time & expenses" },
 ] as const;
 
-export function IntakeTabs({ leadId }: { leadId: string }) {
+export function IntakeTabs({
+  leadId,
+  canViewRecords = true,
+}: {
+  leadId: string;
+  /** `records.view` - the Records tab link is hidden without it. */
+  canViewRecords?: boolean;
+}) {
   const pathname = usePathname();
   const base = `/intake/${leadId}`;
+  const tabs = canViewRecords ? TABS : TABS.filter((t) => t.slug !== "records");
 
   return (
     <div className="flex items-center border-b border-line px-5">
       <nav className="flex gap-1 flex-1">
-        {TABS.map((t) => {
+        {tabs.map((t) => {
           const href = t.slug ? `${base}/${t.slug}` : base;
           const active = t.slug
             ? pathname.startsWith(`${base}/${t.slug}`)

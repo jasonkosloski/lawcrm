@@ -53,11 +53,12 @@ export default async function LeadDetailLayout({
   // server actions still gate, but a refused click just bounces to "/"
   // after the user has typed into the dialog. Convert creates a Matter
   // (matters.create); Decline has its own key.
-  const [lead, areas, canConvert, canDecline] = await Promise.all([
+  const [lead, areas, canConvert, canDecline, canViewRecords] = await Promise.all([
     getLeadById(id),
     getPracticeAreaOptions(),
     currentUserHasPermission("matters.create"),
     currentUserHasPermission("intake.decline"),
+    currentUserHasPermission("records.view"),
   ]);
   if (!lead) notFound();
 
@@ -102,7 +103,7 @@ export default async function LeadDetailLayout({
         }
       />
 
-      <IntakeTabs leadId={lead.id} />
+      <IntakeTabs leadId={lead.id} canViewRecords={canViewRecords} />
 
       <div className="flex-1 overflow-y-auto animate-page-enter">
         {children}

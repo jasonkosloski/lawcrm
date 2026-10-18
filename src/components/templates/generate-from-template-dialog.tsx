@@ -47,6 +47,9 @@ export function GenerateFromTemplateDialog({
   scope,
   templates,
   canUpload,
+  recordsRequestId,
+  defaultTemplateId,
+  triggerLabel = "Generate from template",
 }: {
   scope: RecordScope;
   /** Active templates only — the picker never offers archived ones. */
@@ -54,7 +57,13 @@ export function GenerateFromTemplateDialog({
   /** Whether the viewer holds `documents.upload` (gates the save
    *  affordance; preview + copy stay available to everyone). */
   canUpload: boolean;
+  /** Merge against, and file the saved letter on, this records request. */
+  recordsRequestId?: string;
+  /** Template to preselect (and preview) on open, when still offered. */
+  defaultTemplateId?: string | null;
+  triggerLabel?: string;
 }) {
+  const opts = recordsRequestId ? { recordsRequestId } : undefined;
   const [open, setOpen] = useState(false);
   const [templateId, setTemplateId] = useState("");
   const noun = scope.kind === "lead" ? "intake" : "matter";
@@ -68,22 +77,6 @@ export function GenerateFromTemplateDialog({
   const [previewPending, startPreview] = useTransition();
   const [savePending, startSave] = useTransition();
 
-  // Reset per open so a stale preview never flashes — render-phase
-  // reset (React's "adjusting state when a prop changes" pattern)
-  // instead of an effect.
-  const [prevOpen, setPrevOpen] = useState(open);
-  if (open !== prevOpen) {
-    setPrevOpen(open);
-    if (open) {
-      setTemplateId("");
-      setPreview(null);
-      setCopied(false);
-      setCopyError(false);
-      setSaveError(null);
-      setSavedName(null);
-    }
-  }
-
   const onPick = (id: string) => {
     setTemplateId(id);
     setPreview(null);
@@ -93,9 +86,26 @@ export function GenerateFromTemplateDialog({
     setCopyError(false);
     if (!id) return;
     startPreview(async () => {
-      const res = await previewDocumentFromTemplate(id, scope);
+      const res = await (opts
+        ? previewDocumentFromTemplate(id, scope, opts)
+        : previewDocumentFromTemplate(id, scope));
       setPreview(res);
     });
+  };
+
+  // Reset per open so a stale preview never flashes; a request's
+  // default template is preselected and previewed straight away.
+  const openDialog = () => {
+    setTemplateId("");
+    setPreview(null);
+    setCopied(false);
+    setCopyError(false);
+    setSaveError(null);
+    setSavedName(null);
+    setOpen(true);
+    if (defaultTemplateId && templates.some((t) => t.id === defaultTemplateId)) {
+      onPick(defaultTemplateId);
+    }
   };
 
   const onCopy = async () => {
@@ -119,7 +129,9 @@ export function GenerateFromTemplateDialog({
     if (!templateId) return;
     setSaveError(null);
     startSave(async () => {
-      const res = await generateDocumentFromTemplate(templateId, scope);
+      const res = await (opts
+        ? generateDocumentFromTemplate(templateId, scope, opts)
+        : generateDocumentFromTemplate(templateId, scope));
       if (res.ok) {
         // The action revalidated the documents route. The document is
         // filed at the root, which is invisible if a subfolder
@@ -147,7 +159,7 @@ export function GenerateFromTemplateDialog({
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={openDialog}
         className={cn(
           "inline-flex items-center gap-2 h-9 px-3 text-xs",
           "rounded-md border border-dashed border-line bg-white",
@@ -155,7 +167,7 @@ export function GenerateFromTemplateDialog({
         )}
       >
         <Sparkles size={13} />
-        Generate from template
+        {triggerLabel}
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>

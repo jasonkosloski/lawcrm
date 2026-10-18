@@ -44,6 +44,17 @@ describe("MatterTabs", () => {
     expect(screen.getByRole("link", { name: "Billing" })).toBeTruthy();
   });
 
+  test("the Records tab follows Documents and is hidden without records.view", () => {
+    pathname = "/matters/m1/records";
+    const { unmount } = render(<MatterTabs matterId="m1" />);
+    const labels = screen.getAllByRole("link").map((l) => l.textContent);
+    expect(labels.indexOf("Records")).toBe(labels.indexOf("Documents") + 1);
+    expect(active()).toBe("Records");
+    unmount();
+    render(<MatterTabs matterId="m1" canViewRecords={false} />);
+    expect(screen.queryByRole("link", { name: "Records" })).toBeNull();
+  });
+
   test("a non-tab sub-route (edit) activates nothing", () => {
     pathname = "/matters/m1/edit";
     render(<MatterTabs matterId="m1" />);
