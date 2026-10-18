@@ -698,4 +698,65 @@ describe("saveRecordsFee", () => {
     const paid = await saveRecordsFee(r.id, IDLE, fee({ feePaidAt: "2026-10-20" }));
     expect(paid.errors?.feePaidAt).toBeDefined();
   });
+
+  const CLEAR_MSG =
+    "This fee is recorded as an expense on the matter \u2014 edit or delete it on the Time & expenses tab.";
+
+  test("clearing the fee while an Expense is linked is refused", async () => {
+    const r = await feeRequest();
+    await saveRecordsFee(r.id, IDLE, fee({ feeAmount: "25", feePaidAt: "2026-10-20" }));
+    for (const f of [{ feeAmount: "25" }, {}] as Record<string, string>[]) {
+      const res = await saveRecordsFee(r.id, IDLE, fee(f));
+      expect(res.errors?._form?.[0]).toBe(CLEAR_MSG);
+    }
+    const row = await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } });
+    expect(row.feeAmount!.toString()).toBe("25");
+    expect(row.feePaidAt).not.toBeNull();
+    expect((await prisma.expense.findUniqueOrThrow({ where: { id: row.expenseId! } })).amount.toString()).toBe("25");
+  });
+
+  test("invoiced Expense with cleared fields is refused unchanged", async () => {
+    const r = await feeRequest();
+    await saveRecordsFee(r.id, IDLE, fee({ feeAmount: "25", feePaidAt: "2026-10-20" }));
+    const cur = await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } });
+    const inv = await prisma.invoice.create({
+      data: {
+        matterId,
+        invoiceNumber: "INV-T5B",
+        issueDate: new Date("2026-10-21T00:00:00Z"),
+        dueDate: new Date("2026-11-21T00:00:00Z"),
+      } as never,
+    });
+    await prisma.expense.update({ where: { id: cur.expenseId! }, data: { invoiceId: inv.id } });
+    const res = await saveRecordsFee(r.id, IDLE, fee({}));
+    expect(res.status).toBe("error");
+    const after = await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } });
+    expect(after.feeAmount!.toString()).toBe("25");
+  });
+
+  test("estimate-only change needs no expense.edit permission", async () => {
+    const r = await feeRequest();
+    const f = { feeAmount: "25", feePaidAt: "2026-10-20" };
+    await saveRecordsFee(r.id, IDLE, fee(f));
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (k: string) => k !== "matters.expense.edit"
+    );
+    const res = await saveRecordsFee(r.id, IDLE, fee({ ...f, feeEstimate: "50" }));
+    vi.mocked(currentUserHasPermission).mockResolvedValue(true);
+    expect(res.status).toBe("ok");
+    const row = await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } });
+    expect(row.feeEstimate!.toString()).toBe("50");
+    expect((await prisma.expense.findUniqueOrThrow({ where: { id: row.expenseId! } })).amount.toString()).toBe("25");
+  });
+
+  test("a zero fee never creates an Expense", async () => {
+    const r = await feeRequest();
+    const res = await saveRecordsFee(r.id, IDLE, fee({ feeAmount: "0", feePaidAt: "2026-10-20" }));
+    expect(res.status).toBe("ok");
+    const row = await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } });
+    expect(row.expenseId).toBeNull();
+    expect(row.feeAmount!.toString()).toBe("0");
+    expect(row.feePaidAt).not.toBeNull();
+    expect(await prisma.expense.count()).toBe(0);
+  });
 });

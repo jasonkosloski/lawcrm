@@ -609,7 +609,8 @@ export async function saveRecordsFee(
     return { status: "error", errors, values };
   }
 
-  const makesExpense = scope.kind === "matter" && !!feeAmount && !!feePaidAt;
+  const makesExpense =
+    scope.kind === "matter" && !!feeAmount && feeAmount.gt(0) && !!feePaidAt;
 
   const result = await prisma.$transaction(
     async (tx): Promise<string | null> => {
@@ -626,28 +627,41 @@ export async function saveRecordsFee(
       if (!cur) return "Request no longer exists";
 
       let expenseId = cur.expenseId;
+      const linked = expenseId
+        ? await tx.expense.findUnique({
+            where: { id: expenseId },
+            select: { amount: true, date: true, description: true, invoiceId: true },
+          })
+        : null;
+      if (linked && !makesExpense) {
+        return "This fee is recorded as an expense on the matter \u2014 edit or delete it on the Time & expenses tab.";
+      }
       if (makesExpense) {
         const description = `Records \u2014 ${cur.custodian.name} (${
           cur.type?.name ?? cur.adHocTypeName ?? "records"
         })`;
-        if (expenseId) {
-          if (!(await currentUserHasPermission("matters.expense.edit"))) {
-            return "You don't have permission to edit expenses.";
-          }
-          const w = await tx.expense.updateMany({
-            where: { id: expenseId, invoiceId: null },
-            data: { amount: feeAmount!, date: feePaidAt!, description },
-          });
-          if (w.count === 0) {
-            const e = await tx.expense.findUnique({
-              where: { id: expenseId },
-              select: { invoiceId: true },
-            });
-            if (e?.invoiceId) {
+        if (linked) {
+          const differs =
+            !linked.amount.equals(feeAmount!) ||
+            linked.date.getTime() !== feePaidAt!.getTime() ||
+            linked.description !== description;
+          if (differs) {
+            if (linked.invoiceId) {
               return "This fee is on an invoice and can't be changed.";
             }
-            expenseId = null; // expense was deleted: make a fresh one
+            if (!(await currentUserHasPermission("matters.expense.edit"))) {
+              return "You don't have permission to edit expenses.";
+            }
+            const w = await tx.expense.updateMany({
+              where: { id: expenseId!, invoiceId: null },
+              data: { amount: feeAmount!, date: feePaidAt!, description },
+            });
+            if (w.count === 0) {
+              return "This fee is on an invoice and can't be changed.";
+            }
           }
+        } else {
+          expenseId = null;
         }
         if (!expenseId) {
           if (!(await currentUserHasPermission("matters.expense.create"))) {
