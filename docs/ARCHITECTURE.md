@@ -201,7 +201,11 @@ Pointers only; read the file headers for behavior.
 ## Key Conventions
 
 - **Mutations** are server actions in `src/app/actions/[resource].ts`, gated by
-  `requirePermission`, tested alongside as `[resource].test.ts`
+  `requirePermission`, tested alongside as `[resource].test.ts`. A resource
+  too big for one file becomes a folder (`actions/billing/`): one
+  "use server" file per area, plain shared helpers in `helpers.ts`, and an
+  `index.ts` barrel (no directive) so callers and `vi.mock` paths still
+  use `@/app/actions/billing`
 - **Page components** are thin — they compose layout + data, delegate rendering to components
 - **Business logic** stays in `lib/` functions, not in components or actions;
   form schemas/helpers live in `lib/` so they're unit-testable
