@@ -16,10 +16,12 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { scopeWhere, type RecordScope } from "@/lib/record-scope";
 
 export type ViewerDocument = {
   id: string;
-  matterId: string;
+  matterId: string | null;
+  leadId: string | null;
   name: string;
   category: string;
   source: string | null;
@@ -46,16 +48,17 @@ export type ViewerDocument = {
 };
 
 export async function getDocumentForViewer(
-  matterId: string,
+  scope: RecordScope,
   documentId: string
 ): Promise<ViewerDocument | null> {
   const doc = await prisma.document.findFirst({
-    // matterId in the where clause is the matter-mismatch guard —
-    // a valid documentId under the wrong matter URL is a miss.
-    where: { id: documentId, matterId },
+    // The scope in the where clause is the mismatch guard — a valid
+    // documentId under the wrong matter / lead URL is a miss.
+    where: { id: documentId, ...scopeWhere(scope) },
     select: {
       id: true,
       matterId: true,
+      leadId: true,
       name: true,
       category: true,
       source: true,
@@ -83,7 +86,7 @@ export async function getDocumentForViewer(
   // comparison and the ORDER BY run in Postgres under the same
   // collation, so they agree. `folderId: null` matches the matter
   // root (Prisma turns the null into IS NULL).
-  const folderScope = { matterId, folderId: doc.folderId, parentDocumentId: doc.parentDocumentId };
+  const folderScope = { ...scopeWhere(scope), folderId: doc.folderId, parentDocumentId: doc.parentDocumentId };
   const [uploader, prev, next] = await Promise.all([
     doc.uploadedBy
       ? prisma.user.findUnique({
@@ -120,7 +123,8 @@ export async function getDocumentForViewer(
 
   return {
     id: doc.id,
-    matterId,
+    matterId: doc.matterId,
+    leadId: doc.leadId,
     name: doc.name,
     category: doc.category,
     source: doc.source,
@@ -166,7 +170,7 @@ export const FILE_TREE_MAX_DOCUMENTS = 3000;
  * only the current folder's files are returned.
  */
 export async function getViewerFileTree(
-  matterId: string,
+  scope: RecordScope,
   currentFolderId: string | null
 ): Promise<{ documents: FileTreeDocument[]; complete: boolean }> {
   const select = {
@@ -179,7 +183,7 @@ export async function getViewerFileTree(
   } as const;
   const orderBy = [{ name: "asc" as const }, { id: "asc" as const }];
   const all = await prisma.document.findMany({
-    where: { matterId },
+    where: scopeWhere(scope),
     select,
     orderBy,
     take: FILE_TREE_MAX_DOCUMENTS + 1,
@@ -188,7 +192,7 @@ export async function getViewerFileTree(
   // Too many to list: just the folder the reader is working through
   // (its files and their attachments).
   const current = await prisma.document.findMany({
-    where: { matterId, folderId: currentFolderId },
+    where: { ...scopeWhere(scope), folderId: currentFolderId },
     select,
     orderBy,
   });

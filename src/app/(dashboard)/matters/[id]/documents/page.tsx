@@ -59,7 +59,7 @@ import {
 } from "@/lib/folder-tree";
 import {
   getFolderDocumentCounts,
-  getMatterDocumentFolders,
+  getDocumentFolders,
 } from "@/lib/queries/matter-detail";
 import {
   documentCategoryLabel,
@@ -91,8 +91,8 @@ export default async function MatterDocumentsPage({
     templates,
     tz,
   ] = await Promise.all([
-    getMatterDocumentFolders(id),
-    getFolderDocumentCounts(id),
+    getDocumentFolders({ kind: "matter", matterId: id }),
+    getFolderDocumentCounts({ kind: "matter", matterId: id }),
     getCurrentUserId(),
     currentUserHasPermission("documents.delete_any"),
     // Gates uploads (multi + composer) and the generate dialog's
@@ -125,7 +125,7 @@ export default async function MatterDocumentsPage({
     rawFolder && folders.some((f) => f.id === rawFolder) ? rawFolder : null;
   // Second round trip on purpose: the file list must be scoped to the
   // VALIDATED folder id, which needs the folder rows first.
-  const listing = await getFolderListing(id, selectedId);
+  const listing = await getFolderListing({ kind: "matter", matterId: id }, selectedId);
 
   const tree = buildFolderTree(folders);
   const flat = flattenFolderTree(tree);

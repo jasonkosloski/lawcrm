@@ -41,6 +41,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { getDocumentFolders } from "@/lib/queries/matter-detail";
 import { assertMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
@@ -201,9 +202,6 @@ export async function listMatterFolders(
 ): Promise<FlatFolder[]> {
   await getCurrentUserId();
   await assertMatterAccess(matterId);
-  const rows = await prisma.documentFolder.findMany({
-    where: { matterId },
-    select: { id: true, parentId: true, name: true, order: true },
-  });
+  const rows = await getDocumentFolders({ kind: "matter", matterId });
   return flattenFolderTree(buildFolderTree(rows));
 }

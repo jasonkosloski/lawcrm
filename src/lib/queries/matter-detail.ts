@@ -7,6 +7,7 @@
  * are more complex aggregations and live elsewhere.
  */
 
+import { scopeWhere, type RecordScope } from "@/lib/record-scope";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
@@ -1312,13 +1313,13 @@ export async function shapeDocumentRows(
 /** The matter's whole folder tree as FLAT rows in ONE query — tree
  *  building (nesting, breadcrumbs, depth math) happens in JS via
  *  src/lib/folder-tree.ts. */
-export async function getMatterDocumentFolders(
-  matterId: string
+export async function getDocumentFolders(
+  scope: RecordScope
 ): Promise<
   { id: string; parentId: string | null; name: string; order: number }[]
 > {
   return prisma.documentFolder.findMany({
-    where: { matterId },
+    where: scopeWhere(scope),
     select: { id: true, parentId: true, name: true, order: true },
     orderBy: [{ order: "asc" }, { name: "asc" }],
   });
@@ -1328,12 +1329,12 @@ export async function getMatterDocumentFolders(
  *  The root's count lives under the `root` key (groupBy can't key a
  *  Record on null). Drives the count badges on the tree rail. */
 export async function getFolderDocumentCounts(
-  matterId: string
+  scope: RecordScope
 ): Promise<{ counts: Record<string, number>; rootCount: number }> {
   // An email counts once — its attachments list under it.
   const grouped = await prisma.document.groupBy({
     by: ["folderId"],
-    where: { matterId, parentDocumentId: null },
+    where: { ...scopeWhere(scope), parentDocumentId: null },
     _count: { _all: true },
   });
   const counts: Record<string, number> = {};

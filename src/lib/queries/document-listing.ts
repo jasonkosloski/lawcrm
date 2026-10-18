@@ -7,6 +7,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { scopeWhere, type RecordScope } from "@/lib/record-scope";
 import { shapeDocumentRows, type DocumentRow } from "@/lib/queries/matter-detail";
 import { emailKindOf } from "@/lib/email-attachment-extract";
 
@@ -28,9 +29,9 @@ export type FolderListing = {
 
 const ROOT_NAME = "All documents";
 
-export async function getFolderListing(matterId: string, folderId: string | null): Promise<FolderListing> {
+export async function getFolderListing(scope: RecordScope, folderId: string | null): Promise<FolderListing> {
   const own = await prisma.document.findMany({
-    where: { matterId, folderId, parentDocumentId: null },
+    where: { ...scopeWhere(scope), folderId, parentDocumentId: null },
     orderBy: [{ name: "asc" }, { id: "asc" }],
   });
   const attachments = own.length
@@ -46,11 +47,11 @@ export async function getFolderListing(matterId: string, folderId: string | null
   const [copies, folders] = await Promise.all([
     keys.length
       ? prisma.document.findMany({
-          where: { matterId, fileUrl: { in: keys } },
+          where: { ...scopeWhere(scope), fileUrl: { in: keys } },
           select: { id: true, fileUrl: true, folderId: true, parentDocumentId: true },
         })
       : Promise.resolve([]),
-    prisma.documentFolder.findMany({ where: { matterId }, select: { id: true, name: true } }),
+    prisma.documentFolder.findMany({ where: scopeWhere(scope), select: { id: true, name: true } }),
   ]);
   const folderName = (id: string | null) =>
     id === null ? ROOT_NAME : (folders.find((f) => f.id === id)?.name ?? "a folder");

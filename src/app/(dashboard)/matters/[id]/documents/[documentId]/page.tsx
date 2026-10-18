@@ -38,7 +38,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { getDocumentForViewer, getViewerFileTree } from "@/lib/queries/document-viewer";
-import { getMatterDocumentFolders } from "@/lib/queries/matter-detail";
+import { getDocumentFolders } from "@/lib/queries/matter-detail";
 import { buildFolderTree, flattenFolderTree } from "@/lib/folder-tree";
 import {
   DocumentPlacement,
@@ -93,15 +93,15 @@ export default async function DocumentViewerPage({
   const { id, documentId } = await params;
   await assertMatterAccess(id);
   const [doc, tz, folders, canOrganize, canUpload] = await Promise.all([
-    getDocumentForViewer(id, documentId),
+    getDocumentForViewer({ kind: "matter", matterId: id }, documentId),
     getCurrentUserTimeZone(),
-    getMatterDocumentFolders(id),
+    getDocumentFolders({ kind: "matter", matterId: id }),
     currentUserHasPermission("documents.organize"),
     currentUserHasPermission("documents.upload"),
   ]);
   if (!doc) notFound();
   // Left-hand file tree: the matter's folders + files (lightweight).
-  const fileTree = await getViewerFileTree(id, doc.folderId);
+  const fileTree = await getViewerFileTree({ kind: "matter", matterId: id }, doc.folderId);
   const folderTree = buildFolderTree(folders);
   // Email chips → the documents extracted from them (ADR-043).
   const emailExtras: EmailExtras = {

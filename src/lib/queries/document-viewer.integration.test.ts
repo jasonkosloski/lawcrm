@@ -13,11 +13,13 @@ import {
   resetDb,
   seedFirm,
   seedMatter,
+  seedLead,
   seedPracticeArea,
   seedUser,
 } from "@/test/integration-helpers";
 import { FILE_TREE_MAX_DOCUMENTS, getDocumentForViewer, getViewerFileTree } from "./document-viewer";
 
+const M = (matterId: string) => ({ kind: "matter" as const, matterId });
 let matterId: string;
 let userId: string;
 
@@ -64,7 +66,7 @@ async function seedDoc(opts: {
 describe("getDocumentForViewer — matter scoping", () => {
   test("document under its own matter resolves", async () => {
     const docId = await seedDoc({ name: "complaint.pdf", uploadedBy: userId });
-    const result = await getDocumentForViewer(matterId, docId);
+    const result = await getDocumentForViewer(M(matterId), docId);
     expect(result).not.toBeNull();
     expect(result!.name).toBe("complaint.pdf");
     expect(result!.uploadedByName).toBe("Ann Attorney");
@@ -81,11 +83,11 @@ describe("getDocumentForViewer — matter scoping", () => {
     });
     const docId = await seedDoc({ name: "secret.pdf" });
     // Real doc, wrong matter in the URL — must not leak.
-    expect(await getDocumentForViewer(other.matterId, docId)).toBeNull();
+    expect(await getDocumentForViewer(M(other.matterId), docId)).toBeNull();
   });
 
   test("unknown documentId → null", async () => {
-    expect(await getDocumentForViewer(matterId, "does-not-exist")).toBeNull();
+    expect(await getDocumentForViewer(M(matterId), "does-not-exist")).toBeNull();
   });
 });
 
@@ -102,15 +104,15 @@ describe("getDocumentForViewer — prev/next within the folder", () => {
     // Same matter, different location — must NOT appear in the walk.
     await seedDoc({ name: "aa-root-doc.pdf", folderId: null });
 
-    const first = await getDocumentForViewer(matterId, a);
+    const first = await getDocumentForViewer(M(matterId), a);
     expect(first!.prevId).toBeNull();
     expect(first!.nextId).toBe(b);
 
-    const middle = await getDocumentForViewer(matterId, b);
+    const middle = await getDocumentForViewer(M(matterId), b);
     expect(middle!.prevId).toBe(a);
     expect(middle!.nextId).toBe(c);
 
-    const last = await getDocumentForViewer(matterId, c);
+    const last = await getDocumentForViewer(M(matterId), c);
     expect(last!.prevId).toBe(b);
     expect(last!.nextId).toBeNull();
   });
@@ -124,7 +126,7 @@ describe("getDocumentForViewer — prev/next within the folder", () => {
     const r1 = await seedDoc({ name: "root-1.pdf", folderId: null });
     const r2 = await seedDoc({ name: "root-2.pdf", folderId: null });
 
-    const result = await getDocumentForViewer(matterId, r1);
+    const result = await getDocumentForViewer(M(matterId), r1);
     expect(result!.prevId).toBeNull();
     expect(result!.nextId).toBe(r2);
   });
@@ -135,11 +137,11 @@ describe("getDocumentForViewer — prev/next within the folder", () => {
       await seedDoc({ name: "scan.pdf" }),
       await seedDoc({ name: "scan.pdf" }),
     ].sort();
-    const mid = await getDocumentForViewer(matterId, ids[1]);
+    const mid = await getDocumentForViewer(M(matterId), ids[1]);
     expect(mid!.prevId).toBe(ids[0]);
     expect(mid!.nextId).toBe(ids[2]);
-    expect((await getDocumentForViewer(matterId, ids[0]))!.prevId).toBeNull();
-    expect((await getDocumentForViewer(matterId, ids[2]))!.nextId).toBeNull();
+    expect((await getDocumentForViewer(M(matterId), ids[0]))!.prevId).toBeNull();
+    expect((await getDocumentForViewer(M(matterId), ids[2]))!.nextId).toBeNull();
   });
 
   test("the keyset walk agrees with the database ORDER BY for mixed-case and punctuated names (F848/F1008)", async () => {
@@ -152,7 +154,7 @@ describe("getDocumentForViewer — prev/next within the folder", () => {
       select: { id: true },
     });
     for (let i = 0; i < ordered.length; i++) {
-      const v = await getDocumentForViewer(matterId, ordered[i].id);
+      const v = await getDocumentForViewer(M(matterId), ordered[i].id);
       expect(v!.prevId).toBe(i > 0 ? ordered[i - 1].id : null);
       expect(v!.nextId).toBe(i < ordered.length - 1 ? ordered[i + 1].id : null);
     }
@@ -162,7 +164,7 @@ describe("getDocumentForViewer — prev/next within the folder", () => {
     const a = await seedDoc({ name: "a.pdf" });
     await seedDoc({ name: "b.pdf" });
     const spy = vi.spyOn(prisma.document, "findMany");
-    await getDocumentForViewer(matterId, a);
+    await getDocumentForViewer(M(matterId), a);
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
   });
@@ -173,12 +175,12 @@ describe("getDocumentForViewer — prev/next within the folder", () => {
       select: { id: true },
     });
     const docId = await seedDoc({ name: "cam1.mp4", folderId: folder.id });
-    const result = await getDocumentForViewer(matterId, docId);
+    const result = await getDocumentForViewer(M(matterId), docId);
     expect(result!.folderId).toBe(folder.id);
     expect(result!.folderName).toBe("Bodycam");
 
     const rootDoc = await seedDoc({ name: "root.pdf", folderId: null });
-    const rootResult = await getDocumentForViewer(matterId, rootDoc);
+    const rootResult = await getDocumentForViewer(M(matterId), rootDoc);
     expect(rootResult!.folderId).toBeNull();
     expect(rootResult!.folderName).toBeNull();
   });
@@ -193,7 +195,7 @@ describe("getViewerFileTree — the viewer's left-hand file list", () => {
     const other = await seedMatter({ practiceAreaId: area.areaId, stageId: area.stageId, leadUserId: userId });
     await seedDoc({ matterId: other.matterId, name: "other-matter.pdf" });
 
-    const { documents, complete } = await getViewerFileTree(matterId, null);
+    const { documents, complete } = await getViewerFileTree(M(matterId), null);
     expect(complete).toBe(true);
     expect(documents.map((d) => d.name)).toEqual(["a-retainer.pdf", "b-report.pdf"]);
     expect(Object.keys(documents[0]).sort()).toEqual([
@@ -218,12 +220,32 @@ describe("getViewerFileTree — the viewer's left-hand file list", () => {
     });
     await seedDoc({ name: "root-note.pdf" });
 
-    const inRoot = await getViewerFileTree(matterId, null);
+    const inRoot = await getViewerFileTree(M(matterId), null);
     expect(inRoot.complete).toBe(false);
     expect(inRoot.documents.map((d) => d.name)).toEqual(["root-note.pdf"]);
 
-    const inProduction = await getViewerFileTree(matterId, folder.id);
+    const inProduction = await getViewerFileTree(M(matterId), folder.id);
     expect(inProduction.complete).toBe(false);
     expect(inProduction.documents).toHaveLength(FILE_TREE_MAX_DOCUMENTS + 1);
+  });
+});
+
+describe("lead scope", () => {
+  test("a matter document is null under a lead scope and vice versa", async () => {
+    const { leadId } = await seedLead();
+    const matterDoc = await seedDoc({ name: "m.pdf" });
+    const leadDoc = (
+      await prisma.document.create({
+        data: { leadId, name: "l.pdf", contentType: "application/pdf", fileUrl: "key-l", fileSize: 1 },
+        select: { id: true },
+      })
+    ).id;
+    expect(await getDocumentForViewer({ kind: "lead", leadId }, matterDoc)).toBeNull();
+    expect(await getDocumentForViewer(M(matterId), leadDoc)).toBeNull();
+    const ok = await getDocumentForViewer({ kind: "lead", leadId }, leadDoc);
+    expect(ok?.id).toBe(leadDoc);
+    expect(ok?.leadId).toBe(leadId);
+    const tree = await getViewerFileTree({ kind: "lead", leadId }, null);
+    expect(tree.documents.map((d) => d.id)).toEqual([leadDoc]);
   });
 });

@@ -45,6 +45,7 @@ import { prisma } from "@/lib/prisma";
 import { copyDocumentToFolder, deleteDocument, extractAttachments } from "@/app/actions/documents";
 import { moveDocuments } from "@/app/actions/document-folders";
 import { extractEmailAttachments } from "@/lib/email-attachment-extract";
+import { getDocumentFolders, getFolderDocumentCounts } from "@/lib/queries/matter-detail";
 import { getFolderListing } from "@/lib/queries/document-listing";
 import {
   resetDb,
@@ -299,13 +300,13 @@ describe("getFolderListing", () => {
     const [report] = await attachmentsOf(emailId);
     await copyDocumentToFolder(report.id, exhibits.folderId);
 
-    const root = await getFolderListing(matterId, null);
+    const root = await getFolderListing({ kind: "matter", matterId }, null);
     expect(root.documents.map((d) => d.name)).toEqual(["Incident email.eml"]);
     expect(root.documents[0].isEmail).toBe(true);
     expect(root.documents[0].attachments.map((a) => a.name)).toEqual(["report.pdf", "timeline.csv"]);
     expect(root.documents[0].attachments.map((a) => a.copiedTo)).toEqual([["Exhibits"], []]);
 
-    const inExhibits = await getFolderListing(matterId, exhibits.folderId);
+    const inExhibits = await getFolderListing({ kind: "matter", matterId }, exhibits.folderId);
     expect(inExhibits.documents.map((d) => d.name)).toEqual(["report.pdf"]);
   });
 });
@@ -327,6 +328,19 @@ describe("lead (intake) scope", () => {
     const kids = await attachmentsOf(emailId);
     expect(kids).toHaveLength(2);
     expect(kids.every((k) => k.leadId === leadId && k.matterId === null)).toBe(true);
+  });
+
+  test("lead listing and folder queries return only that lead's rows", async () => {
+    const { leadId } = await seedLead();
+    await seedEmail(); // a matter root document
+    await leadEmail(leadId);
+    await prisma.documentFolder.create({ data: { leadId, name: "LF" }, select: { id: true } });
+    const listing = await getFolderListing({ kind: "lead", leadId }, null);
+    expect(listing.documents.map((d) => d.name)).toEqual(["Lead email.eml"]);
+    const folders = await getDocumentFolders({ kind: "lead", leadId });
+    expect(folders.map((f) => f.name)).toEqual(["LF"]);
+    const { rootCount } = await getFolderDocumentCounts({ kind: "lead", leadId });
+    expect(rootCount).toBe(1);
   });
 
   test("copying a lead document into a matter folder is refused", async () => {

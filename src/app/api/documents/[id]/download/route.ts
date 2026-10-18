@@ -5,11 +5,14 @@
  * belongs to a firm), looks the document up by id, then streams the
  * bytes from the storage adapter.
  *
- * ACCESS MODEL: an authenticated firm user can read a document by id
- * when they can access its matter (`canAccessMatter`, ADR-039 matter-
- * team walls: team member, matters.view_all, or the firm in FIRM
- * mode). A document on a hidden matter 404s exactly like a missing
- * one. There is still NO firm scoping (Matter has no firmId;
+ * ACCESS MODEL: a document belongs to exactly one scope (`scopeOf`).
+ * A MATTER document is readable when the user can access its matter
+ * (`canAccessMatter`, ADR-039 matter-team walls: team member,
+ * matters.view_all, or the firm in FIRM mode); on a hidden matter it
+ * 404s exactly like a missing one. An intake LEAD document has no
+ * matter wall — any signed-in firm user can read it, like the intake
+ * pages themselves. A row with neither / both ids is malformed and is
+ * never served (404). There is still NO firm scoping (Matter has no firmId;
  * single-tenant today).
  *
  * Supports single-range HTTP Range requests (`bytes=...`) so the
@@ -38,6 +41,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessMatter } from "@/lib/matter-access";
+import { scopeOf } from "@/lib/record-scope";
 import {
   isBlobKey,
   openReadStream,
@@ -73,7 +77,15 @@ async function canReadDocument(
   userId: string,
   doc: { matterId: string | null; leadId: string | null }
 ): Promise<boolean> {
-  return doc.matterId ? canAccessMatter(userId, doc.matterId) : true;
+  let scope;
+  try {
+    scope = scopeOf(doc);
+  } catch {
+    return false; // malformed scope: deny rather than serve
+  }
+  return scope.kind === "matter"
+    ? canAccessMatter(userId, scope.matterId)
+    : true;
 }
 
 export async function GET(

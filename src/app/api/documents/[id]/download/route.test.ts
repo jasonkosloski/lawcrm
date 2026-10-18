@@ -66,7 +66,7 @@ afterEach(() => {
  *  start/end) so 206 slice assertions are meaningful. */
 async function download(
   contentType: string | null,
-  opts?: { bytes?: string; range?: string; query?: string }
+  opts?: { bytes?: string; range?: string; query?: string; matterId?: string | null; leadId?: string | null }
 ): Promise<Response> {
   const bytes = Buffer.from(opts?.bytes ?? "data");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -75,8 +75,8 @@ async function download(
   mockedFindUser.mockResolvedValue({ firmId: "f1" } as any);
   mockedFindDoc.mockResolvedValue({
     id: "d1",
-    matterId: "m1",
-    leadId: null,
+    matterId: opts && "matterId" in opts ? opts.matterId : opts?.leadId ? null : "m1",
+    leadId: opts?.leadId ?? null,
     name: "exhibit A.bin",
     contentType,
     fileUrl: "key__exhibit-A.bin",
@@ -284,6 +284,8 @@ describe("GET /api/documents/[id]/download — blob-stored documents (302)", () 
     mockedFindUser.mockResolvedValue({ firmId: "f1" } as any);
     mockedFindDoc.mockResolvedValue({
       id: "d1",
+      matterId: "m1",
+      leadId: null,
       name: "clip.mp4",
       contentType,
       fileUrl: BLOB_URL,
@@ -366,6 +368,8 @@ describe("GET /api/documents/[id]/download — local streaming lifecycle", () =>
     mockedFindUser.mockResolvedValue({ firmId: "f1" } as any);
     mockedFindDoc.mockResolvedValue({
       id: "d1",
+      matterId: "m1",
+      leadId: null,
       name: "big.mp4",
       contentType: "video/mp4",
       fileUrl: "key__big.mp4",
@@ -420,6 +424,20 @@ describe("GET /api/documents/[id]/download - matter wall", () => {
   test("a document on a matter the user can't access is a 404, never a 403", async () => {
     vi.mocked(canAccessMatter).mockResolvedValueOnce(false);
     const res = await download("application/pdf");
+    expect(res.status).toBe(404);
+    expect(mockedOpen).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/documents/[id]/download - lead scope", () => {
+  test("a lead document streams for a signed-in user without a matter check", async () => {
+    const res = await download("application/pdf", { leadId: "l1" });
+    expect(res.status).toBe(200);
+    expect(canAccessMatter).not.toHaveBeenCalled();
+  });
+
+  test("a row with neither scope id is never served", async () => {
+    const res = await download("application/pdf", { matterId: null });
     expect(res.status).toBe(404);
     expect(mockedOpen).not.toHaveBeenCalled();
   });
