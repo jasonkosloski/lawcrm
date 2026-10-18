@@ -357,8 +357,10 @@ export async function convertLeadToMatter(
   });
   const overridden = lead.conflictCheck === "override";
   if (!overridden && conflict.severity !== lead.conflictCheck) {
-    await prisma.lead.update({
-      where: { id: leadId },
+    // Conditional on the status we read, so an override recorded
+    // meanwhile in another tab is never overwritten.
+    await prisma.lead.updateMany({
+      where: { id: leadId, conflictCheck: lead.conflictCheck },
       data: { conflictCheck: conflict.severity, conflictCheckedAt: new Date() },
     });
   }
