@@ -78,7 +78,7 @@ export function RecordPaymentDialog({
    *  the method dropdown when > 0. Server runs the four-leg trust
    *  op when source=trust. */
   trustBalance: number;
-  /** Drives the "Send updated invoice" checkbox at the bottom of
+  /** Drives the "Client needs an updated invoice" checkbox at the bottom of
    *  the dialog. When null the checkbox is shown disabled with a
    *  "no email on file" hint so the lawyer knows why they can't
    *  notify. */
@@ -400,11 +400,11 @@ function RecordPaymentForm({
         />
         <div>
           <div className="text-ink font-medium">
-            Send updated invoice to client
+            Client needs an updated invoice
           </div>
           <div className="text-2xs text-ink-4 mt-0.5">
             {clientEmail
-              ? `Emails a refreshed copy reflecting this payment to ${clientEmail}. (Logged-only for now.)`
+              ? `Logs that ${clientEmail} should get a refreshed copy reflecting this payment. Nothing is emailed — send it yourself.`
               : "No email on file for the client — add one on the client record to enable this."}
           </div>
         </div>

@@ -7,7 +7,7 @@
  * next step:
  *
  *   draft     → Approve            (one-click, no dialog)
- *   approved  → Send invoice…       (dialog: method / recipient /
+ *   approved  → Mark as sent…       (dialog: method / recipient /
  *                                    optional apply-trust)
  *   sent      → Record payment…     (dialog: amount / method incl.
  *                                    trust / reference / memo)
@@ -220,10 +220,10 @@ export function InvoiceActionBar({
           onClick={() => setSendOpen(true)}
           disabled={pending}
           className={primaryButtonClass}
-          title="Send this invoice to the client."
+          title="Record that you sent this invoice to the client (nothing is emailed from here)."
         >
           <Send size={11} />
-          Send invoice
+          Mark as sent
         </button>
       )}
 

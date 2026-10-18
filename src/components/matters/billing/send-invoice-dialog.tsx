@@ -1,14 +1,14 @@
 /**
- * Send Invoice Dialog
+ * Mark-as-Sent Dialog (sendInvoice)
  *
- * Captures the channel + recipient + optional trust application,
- * then transitions an approved invoice to "sent" via sendInvoice.
+ * NOTHING is emailed from here (docs/issues/invoice-email-not-sent.md).
+ * The lawyer delivers the invoice themselves; this records how and to
+ * whom, plus an optional trust application, and transitions an
+ * approved invoice to "sent". The copy says so plainly so nobody
+ * assumes the client received it.
  *
  * Channels:
- *   - Email: today; recipient pre-fills from client.email and is
- *     editable. The actual SMTP send isn't wired up yet — sending
- *     is just logged. When Gmail integration lands the action will
- *     fire the real message before transitioning.
+ *   - Email: recipient pre-fills from client.email and is editable.
  *   - US mail: visible-but-disabled with a "coming soon" hint so
  *     the firm can see the option exists without being able to
  *     half-use it. Server-side rejects mail too as defense-in-
@@ -108,11 +108,11 @@ export function SendInvoiceDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Send invoice {invoiceNumber}</DialogTitle>
+          <DialogTitle>Mark invoice {invoiceNumber} as sent</DialogTitle>
           <DialogDescription>
-            Records the send event and transitions the invoice to sent.
-            Actual delivery isn&apos;t wired up yet — for now this just
-            logs the activity.
+            Nothing is emailed from here. Send the invoice to the client
+            yourself (print or save it as a PDF), then record how and to
+            whom you sent it.
           </DialogDescription>
         </DialogHeader>
 
@@ -205,7 +205,7 @@ function SendInvoiceForm({
           id={`${ids}-method`}
           className="text-2xs font-mono uppercase tracking-wider text-ink-4"
         >
-          Send via <span className="text-warn">*</span>
+          Sent via <span className="text-warn">*</span>
         </span>
         <input type="hidden" name="method" value={method} />
         <div
@@ -227,7 +227,7 @@ function SendInvoiceForm({
             <Mail size={14} />
             <div className="text-left">
               <div className="font-medium">Email</div>
-              <div className="text-2xs text-ink-4">Logged-only for now</div>
+              <div className="text-2xs text-ink-4">You emailed it</div>
             </div>
           </button>
           <button
@@ -252,7 +252,7 @@ function SendInvoiceForm({
           htmlFor={`${ids}-recipient`}
           className="text-2xs font-mono uppercase tracking-wider text-ink-4"
         >
-          {method === "email" ? "Email recipient" : "Mailing address"}{" "}
+          {method === "email" ? "Sent to (email)" : "Mailing address"}{" "}
           <span className="text-warn">*</span>
         </label>
         <input
@@ -379,12 +379,12 @@ function SendInvoiceForm({
           }
         >
           {isPending
-            ? "Sending…"
+            ? "Saving…"
             : willMarkPaid
-              ? "Send + mark paid from trust"
+              ? "Mark sent + paid from trust"
               : applyTrust && trustValid
-                ? "Send + apply trust"
-                : "Send invoice"}
+                ? "Mark sent + apply trust"
+                : "Mark as sent"}
         </Button>
       </DialogFooter>
     </form>

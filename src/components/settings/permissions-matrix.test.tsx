@@ -220,7 +220,7 @@ describe("PermissionsMatrix — toggling cells", () => {
       name: `Manage team members for Billing manager`,
     });
     const cellB = screen.getByRole("checkbox", {
-      name: `Send invoices for Billing manager`,
+      name: `Mark invoices sent for Billing manager`,
     });
 
     await user.click(cellA);
@@ -339,7 +339,7 @@ describe("PermissionsMatrix — error revert", () => {
     render(<PermissionsMatrix roles={ROLES} grants={{}} canEdit viewerIsAdmin />);
 
     const cell = screen.getByRole("checkbox", {
-      name: `${ANOTHER_KEY === "billing.send_invoice" ? "Send invoices" : ANOTHER_KEY} for Billing manager`,
+      name: `${ANOTHER_KEY === "billing.send_invoice" ? "Mark invoices sent" : ANOTHER_KEY} for Billing manager`,
     });
     await user.click(cell);
 

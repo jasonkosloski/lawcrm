@@ -64,7 +64,7 @@ export function ApplyTrustDialog({
   invoiceNumber: string;
   invoiceBalance: number;
   trustBalance: number;
-  /** Drives the "Send updated invoice" checkbox at the bottom of
+  /** Drives the "Client needs an updated invoice" checkbox at the bottom of
    *  the dialog. Disabled with a hint when null. */
   clientEmail: string | null;
 }) {
@@ -313,11 +313,11 @@ function ApplyTrustForm({
         />
         <div>
           <div className="text-ink font-medium">
-            Send updated invoice to client
+            Client needs an updated invoice
           </div>
           <div className="text-2xs text-ink-4 mt-0.5">
             {clientEmail
-              ? `Emails a refreshed copy reflecting the trust application to ${clientEmail}. (Logged-only for now.)`
+              ? `Logs that ${clientEmail} should get a refreshed copy reflecting the trust application. Nothing is emailed — send it yourself.`
               : "No email on file for the client — add one on the client record to enable this."}
           </div>
         </div>

@@ -182,9 +182,9 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       },
       {
         key: "billing.send_invoice",
-        label: "Send invoices",
+        label: "Mark invoices sent",
         description:
-          "Transition an approved invoice to sent — actual delivery is logged today; the gate stays the same when real email lands.",
+          "Record that an approved invoice was sent and move it to sent. Nothing is emailed from the app yet; the gate stays the same when real email lands.",
       },
       {
         key: "billing.delete_draft",

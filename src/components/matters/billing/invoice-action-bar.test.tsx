@@ -110,11 +110,11 @@ describe("InvoiceActionBar — per-action permission gating", () => {
     expect(button(/more invoice actions/i)).not.toBeInTheDocument();
   });
 
-  test("approved: Send needs billing.send_invoice", () => {
+  test("approved: Mark as sent needs billing.send_invoice", () => {
     const { rerender } = render(
       <InvoiceActionBar {...baseProps} currentStatus="approved" canVoid />
     );
-    expect(button(/send invoice/i)).not.toBeInTheDocument();
+    expect(button(/mark as sent/i)).not.toBeInTheDocument();
     rerender(
       <InvoiceActionBar
         {...baseProps}
@@ -122,7 +122,7 @@ describe("InvoiceActionBar — per-action permission gating", () => {
         canSendInvoice
       />
     );
-    expect(button(/send invoice/i)).toBeInTheDocument();
+    expect(button(/mark as sent/i)).toBeInTheDocument();
   });
 
   test("void is hidden without billing.void_invoice", () => {
@@ -166,25 +166,25 @@ describe("InvoiceActionBar — status x kind x balance matrix (all permissions h
       name: "client draft",
       props: { currentStatus: "draft" },
       shown: [/^approve$/i, /more invoice actions/i],
-      hidden: [/send invoice/i, /record payment/i, /mark recorded/i],
+      hidden: [/mark as sent/i, /record payment/i, /mark recorded/i],
     },
     {
       name: "client approved",
       props: { currentStatus: "approved" },
-      shown: [/send invoice/i, /more invoice actions/i],
+      shown: [/mark as sent/i, /more invoice actions/i],
       hidden: [/^approve$/i, /record payment/i],
     },
     {
       name: "client sent with a balance",
       props: { currentStatus: "sent" },
       shown: [/record payment/i, /more invoice actions/i],
-      hidden: [/^approve$/i, /send invoice/i],
+      hidden: [/^approve$/i, /mark as sent/i],
     },
     {
       name: "client partial with a balance (no void: payment recorded)",
       props: { currentStatus: "partial", paidAmount: 100 },
       shown: [/record payment/i],
-      hidden: [/more invoice actions/i, /send invoice/i],
+      hidden: [/more invoice actions/i, /mark as sent/i],
     },
     {
       name: "client sent with zero balance",
@@ -208,7 +208,7 @@ describe("InvoiceActionBar — status x kind x balance matrix (all permissions h
       name: "internal record draft",
       props: { kind: "internal_record", currentStatus: "draft" },
       shown: [/mark recorded/i, /more invoice actions/i],
-      hidden: [/^approve$/i, /send invoice/i, /record payment/i],
+      hidden: [/^approve$/i, /mark as sent/i, /record payment/i],
     },
     {
       name: "internal record paid (voidable only)",

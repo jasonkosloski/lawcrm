@@ -5,7 +5,7 @@ Related: [ADR-013](../decisions/013-timer-sessions-are-pre-entries-ungated-to.md
 
 ## Open work
 - [ ] **Settings — Billing & rates** (P2) — Default hourly rate, UTBMS code library, invoice templates, payment terms.
-- [ ] **Invoice email delivery** — "Send invoice" only records intent (audit titles say "not emailed"); no actual send.
+- [ ] **Invoice email delivery** — not built. The UI says so: the action is "Mark as sent" (the user delivers the invoice themselves and records method + recipient), and the payment/trust dialogs offer "Client needs an updated invoice", which only logs. Needs a server-side invoice PDF first.
 - [ ] **`updateExpense` UI** — action exists server-side; the edit dialog is not built.
 - [ ] **Time follow-ups** — auto-capture from activity; idle-detection prompts; admin/manager user picker on `/time` (own permission key; today current-user only); read-only reconciliation lanes could become editable.
 - [ ] **Palette "Start timer" row** — now safe to add since `startTimer` returns `already_running` instead of replacing.

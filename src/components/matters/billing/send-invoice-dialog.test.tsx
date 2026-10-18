@@ -44,10 +44,10 @@ describe("SendInvoiceDialog", () => {
     const onOpenChange = vi.fn();
     render(<SendInvoiceDialog {...baseProps} open onOpenChange={onOpenChange} />);
 
-    expect(screen.getByLabelText(/email recipient/i)).toHaveValue(
+    expect(screen.getByLabelText(/sent to \(email\)/i)).toHaveValue(
       "client@example.com"
     );
-    await user.click(screen.getByRole("button", { name: /^send invoice$/i }));
+    await user.click(screen.getByRole("button", { name: /^mark as sent$/i }));
 
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(mockedAction.mock.calls[0][0]).toBe("inv1");
@@ -113,7 +113,7 @@ describe("SendInvoiceDialog", () => {
     const amount = screen.getByLabelText(/^amount/i) as HTMLInputElement;
     expect(amount.value).toBe("500.00");
     await user.click(
-      screen.getByRole("button", { name: /send \+ apply trust/i })
+      screen.getByRole("button", { name: /mark sent \+ apply trust/i })
     );
     await waitFor(() => expect(mockedAction).toHaveBeenCalledOnce());
     const fd = mockedAction.mock.calls[0][2] as FormData;
@@ -143,7 +143,7 @@ describe("SendInvoiceDialog", () => {
     await user.type(amount, "4,500");
     expect(screen.getByText(/capped at \$4,000\.00/i)).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /send invoice|send \+/i })
+      screen.getByRole("button", { name: /mark as sent|mark sent \+/i })
     ).toBeDisabled();
   });
 
@@ -163,7 +163,7 @@ describe("SendInvoiceDialog", () => {
     await user.type(amount, "lots");
     expect(screen.getByText("Enter a valid amount.")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /send invoice|send \+/i })
+      screen.getByRole("button", { name: /mark as sent|mark sent \+/i })
     ).toBeDisabled();
   });
 
@@ -180,7 +180,7 @@ describe("SendInvoiceDialog", () => {
     );
     await user.click(trustCheckbox()!);
     expect(
-      screen.getByRole("button", { name: /send \+ mark paid from trust/i })
+      screen.getByRole("button", { name: /mark sent \+ paid from trust/i })
     ).toBeEnabled();
   });
 
@@ -191,13 +191,13 @@ describe("SendInvoiceDialog", () => {
       error: "Invoice changed.",
     }));
     render(<SendInvoiceDialog {...baseProps} open onOpenChange={vi.fn()} />);
-    const recipient = screen.getByLabelText(/email recipient/i);
+    const recipient = screen.getByLabelText(/sent to \(email\)/i);
     await user.clear(recipient);
     await user.type(recipient, "other@example.com");
-    await user.click(screen.getByRole("button", { name: /^send invoice$/i }));
+    await user.click(screen.getByRole("button", { name: /^mark as sent$/i }));
 
     expect(await screen.findByText("Invoice changed.")).toBeInTheDocument();
-    expect(screen.getByLabelText(/email recipient/i)).toHaveValue(
+    expect(screen.getByLabelText(/sent to \(email\)/i)).toHaveValue(
       "other@example.com"
     );
   });
