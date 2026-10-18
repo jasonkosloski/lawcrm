@@ -1,0 +1,360 @@
+/**
+ * Integration tests for the records-request actions: create / update /
+ * status / delete, plus the rolling follow-up task they keep in step.
+ */
+
+import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
+
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@/lib/matter-access", () => ({
+  assertMatterAccess: vi.fn(async () => "test-user"),
+  assertOptionalMatterAccess: vi.fn(async () => "test-user"),
+  assertChildMatterAccess: vi.fn(async () => null),
+  canAccessMatter: vi.fn(async () => true),
+}));
+vi.mock("@/lib/current-user", () => ({
+  getCurrentUserId: vi.fn(async () => "test-user"),
+}));
+vi.mock("@/lib/current-user-tz", () => ({
+  getCurrentUserTimeZone: vi.fn(async () => "America/Denver"),
+}));
+vi.mock("@/lib/permission-check", () => ({
+  requirePermission: vi.fn(),
+  currentUserHasPermission: vi.fn().mockResolvedValue(true),
+}));
+
+import { assertMatterAccess } from "@/lib/matter-access";
+import { getCurrentUserId } from "@/lib/current-user";
+import { requirePermission } from "@/lib/permission-check";
+import { prisma } from "@/lib/prisma";
+import {
+  createRecordsRequest,
+  deleteRecordsRequest,
+  setRecordsRequestStatus,
+  updateRecordsRequest,
+} from "@/app/actions/records-requests";
+import { openFollowUpTask, rollFollowUp } from "@/lib/records-requests/follow-up";
+import type { RecordScope } from "@/lib/record-scope";
+import type { RecordsRequestFormState } from "@/lib/records-requests/form";
+import {
+  resetDb,
+  seedContact,
+  seedDocument,
+  seedFirm,
+  seedLead,
+  seedMatter,
+  seedPracticeArea,
+  seedUser,
+} from "@/test/integration-helpers";
+
+const IDLE: RecordsRequestFormState = { status: "idle" };
+
+let userId: string;
+let matterId: string;
+let M: RecordScope;
+let custodianId: string;
+let typeId: string;
+
+function fd(o: Record<string, string>): FormData {
+  const f = new FormData();
+  for (const [k, v] of Object.entries(o)) f.set(k, v);
+  return f;
+}
+
+async function seedRequest(over: Record<string, unknown> = {}) {
+  return prisma.recordsRequest.create({
+    data: {
+      matterId,
+      custodianContactId: custodianId,
+      typeId,
+      subject: "Medical records",
+      status: "sent",
+      ownerId: userId,
+      nextFollowUpDate: new Date("2026-10-25T00:00:00Z"),
+      ...over,
+    },
+  });
+}
+
+beforeAll(() => {
+  expect(process.env.DATABASE_URL).toMatch(/lawcrm_test/);
+});
+
+beforeEach(async () => {
+  await resetDb();
+  vi.clearAllMocks();
+  const { firmId } = await seedFirm();
+  const u = await seedUser({ firmId, name: "Test Attorney" });
+  userId = u.userId;
+  vi.mocked(requirePermission).mockResolvedValue(userId);
+  vi.mocked(assertMatterAccess).mockResolvedValue(userId);
+  vi.mocked(getCurrentUserId).mockResolvedValue(userId);
+  const { areaId, stageId } = await seedPracticeArea();
+  const m = await seedMatter({
+    practiceAreaId: areaId,
+    stageId,
+    leadUserId: userId,
+    name: "Alvarez v. City",
+  });
+  matterId = m.matterId;
+  M = { kind: "matter", matterId };
+  custodianId = (await seedContact({ name: "Mercy Hospital" })).contactId;
+  typeId = (
+    await prisma.recordsRequestType.create({
+      data: { name: "Medical records", followUpDays: 7 },
+    })
+  ).id;
+});
+
+describe("createRecordsRequest", () => {
+  test("creates a draft on a matter, gated on records.create", async () => {
+    const res = await createRecordsRequest(
+      M,
+      IDLE,
+      fd({
+        custodianContactId: custodianId,
+        typeId,
+        subject: "Chart 2024",
+      })
+    );
+    expect(res.status).toBe("ok");
+    expect(requirePermission).toHaveBeenCalledWith("records.create");
+    const row = await prisma.recordsRequest.findFirstOrThrow();
+    expect(row.matterId).toBe(matterId);
+    expect(row.leadId).toBeNull();
+    expect(row.status).toBe("draft");
+    expect(row.ownerId).toBe(userId);
+    expect(row.createdById).toBe(userId);
+  });
+
+  test("creates on a lead", async () => {
+    const { leadId } = await seedLead();
+    const res = await createRecordsRequest(
+      { kind: "lead", leadId },
+      IDLE,
+      fd({ custodianContactId: custodianId, typeId, subject: "Chart" })
+    );
+    expect(res.status).toBe("ok");
+    const row = await prisma.recordsRequest.findFirstOrThrow();
+    expect(row.leadId).toBe(leadId);
+    expect(row.matterId).toBeNull();
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { type: "records" },
+    });
+    expect(log.matterId).toBeNull();
+  });
+
+  test("ad hoc without a name is a field error", async () => {
+    const res = await createRecordsRequest(
+      M,
+      IDLE,
+      fd({ custodianContactId: custodianId, typeId: "", subject: "x" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.adHocTypeName).toBeDefined();
+    expect(await prisma.recordsRequest.count()).toBe(0);
+  });
+
+  test("ad hoc with a name and manual due date saves", async () => {
+    const res = await createRecordsRequest(
+      M,
+      IDLE,
+      fd({
+        custodianContactId: custodianId,
+        typeId: "",
+        adHocTypeName: "Body cam",
+        subject: "Footage",
+        responseDueDate: "2026-11-01",
+      })
+    );
+    expect(res.status).toBe("ok");
+    const row = await prisma.recordsRequest.findFirstOrThrow();
+    expect(row.typeId).toBeNull();
+    expect(row.adHocTypeName).toBe("Body cam");
+    expect(row.responseDueDate?.toISOString().slice(0, 10)).toBe("2026-11-01");
+  });
+
+  test("refuses a converted lead", async () => {
+    const { leadId } = await seedLead();
+    await prisma.lead.update({ where: { id: leadId }, data: { stage: "converted" } });
+    const res = await createRecordsRequest(
+      { kind: "lead", leadId },
+      IDLE,
+      fd({ custodianContactId: custodianId, typeId, subject: "x" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?._form?.[0]).toMatch(/already converted/);
+    expect(await prisma.recordsRequest.count()).toBe(0);
+  });
+});
+
+describe("updateRecordsRequest", () => {
+  const base = () => ({
+    custodianContactId: custodianId,
+    typeId,
+    subject: "Medical records",
+  });
+
+  test("owner change re-assigns the open follow-up task", async () => {
+    const other = await seedUser({
+      firmId: (await prisma.firm.findFirstOrThrow()).id,
+      name: "Other",
+      email: "other@x.test",
+    });
+    const r = await seedRequest();
+    await prisma.$transaction((tx) => openFollowUpTask(tx, r.id));
+    const res = await updateRecordsRequest(
+      r.id,
+      IDLE,
+      fd({ ...base(), ownerId: other.userId })
+    );
+    expect(res.status).toBe("ok");
+    expect(requirePermission).toHaveBeenCalledWith("records.edit");
+    const task = await prisma.task.findFirstOrThrow({
+      where: { recordsRequestId: r.id },
+    });
+    expect(task.ownerId).toBe(other.userId);
+  });
+
+  test("changing the type never recomputes responseDueDate", async () => {
+    const t2 = await prisma.recordsRequestType.create({
+      data: {
+        name: "Police report",
+        responseAmount: 3,
+        responseUnit: "CALENDAR_DAYS",
+      },
+    });
+    const r = await seedRequest({
+      responseDueDate: new Date("2026-10-21T00:00:00Z"),
+    });
+    const res = await updateRecordsRequest(
+      r.id,
+      IDLE,
+      fd({ ...base(), typeId: t2.id, responseDueDate: "2026-10-21" })
+    );
+    expect(res.status).toBe("ok");
+    const after = await prisma.recordsRequest.findUniqueOrThrow({
+      where: { id: r.id },
+    });
+    expect(after.typeId).toBe(t2.id);
+    expect(after.responseDueDate?.toISOString().slice(0, 10)).toBe(
+      "2026-10-21"
+    );
+  });
+
+  test("stale expectedUpdatedAt is a _form error", async () => {
+    const r = await seedRequest();
+    const res = await updateRecordsRequest(
+      r.id,
+      IDLE,
+      fd({
+        ...base(),
+        expectedUpdatedAt: new Date(r.updatedAt.getTime() - 5000).toISOString(),
+        subject: "Changed",
+      })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?._form).toBeDefined();
+    const after = await prisma.recordsRequest.findUniqueOrThrow({
+      where: { id: r.id },
+    });
+    expect(after.subject).toBe("Medical records");
+  });
+});
+
+describe("setRecordsRequestStatus", () => {
+  test("partial -> sent is refused", async () => {
+    const r = await seedRequest({ status: "partial" });
+    const res = await setRecordsRequestStatus(r.id, "sent");
+    expect(res.ok).toBe(false);
+  });
+
+  test("draft -> sent must use Mark sent", async () => {
+    const r = await seedRequest({ status: "draft" });
+    const res = await setRecordsRequestStatus(r.id, "sent");
+    expect(res).toEqual({ ok: false, error: "Use Mark sent to send a request." });
+  });
+
+  test("complete cancels the task, clears next follow-up, sets receivedAt", async () => {
+    const r = await seedRequest();
+    await prisma.$transaction((tx) => openFollowUpTask(tx, r.id));
+    const res = await setRecordsRequestStatus(r.id, "complete");
+    expect(res.ok).toBe(true);
+    const after = await prisma.recordsRequest.findUniqueOrThrow({
+      where: { id: r.id },
+    });
+    expect(after.status).toBe("complete");
+    expect(after.nextFollowUpDate).toBeNull();
+    expect(after.receivedAt).not.toBeNull();
+    const task = await prisma.task.findFirstOrThrow({
+      where: { recordsRequestId: r.id },
+    });
+    expect(task.status).toBe("cancelled");
+    expect(task.completedAt).not.toBeNull();
+  });
+
+  test("complete -> sent logs a reopen", async () => {
+    const r = await seedRequest({ status: "complete", nextFollowUpDate: null });
+    const res = await setRecordsRequestStatus(r.id, "sent");
+    expect(res.ok).toBe(true);
+    const log = await prisma.activityLog.findFirst({
+      where: { type: "records", title: "Records request reopened" },
+    });
+    expect(log).not.toBeNull();
+  });
+});
+
+describe("deleteRecordsRequest", () => {
+  test("cancels the task and detaches documents, clearing their role", async () => {
+    const r = await seedRequest();
+    await prisma.$transaction((tx) => openFollowUpTask(tx, r.id));
+    const { documentId } = await seedDocument({ matterId });
+    await prisma.document.update({
+      where: { id: documentId },
+      data: { recordsRequestId: r.id, recordsRequestRole: "received_records" },
+    });
+    const res = await deleteRecordsRequest(r.id);
+    expect(res.ok).toBe(true);
+    expect(requirePermission).toHaveBeenCalledWith("records.delete");
+    expect(await prisma.recordsRequest.count()).toBe(0);
+    const task = await prisma.task.findFirstOrThrow({});
+    expect(task.status).toBe("cancelled");
+    expect(task.recordsRequestId).toBeNull();
+    const doc = await prisma.document.findUniqueOrThrow({
+      where: { id: documentId },
+    });
+    expect(doc.recordsRequestId).toBeNull();
+    expect(doc.recordsRequestRole).toBeNull();
+  });
+});
+
+describe("rollFollowUp", () => {
+  test("logs, completes the old task, schedules next chase and opens a new task", async () => {
+    const r = await seedRequest();
+    await prisma.$transaction((tx) => openFollowUpTask(tx, r.id));
+    const rolled = await prisma.$transaction((tx) =>
+      rollFollowUp(tx, r.id, { actorId: userId, note: "Called", today: "2026-10-18" })
+    );
+    expect(rolled).toBe(true);
+    const after = await prisma.recordsRequest.findUniqueOrThrow({
+      where: { id: r.id },
+    });
+    expect(after.nextFollowUpDate?.toISOString().slice(0, 10)).toBe("2026-10-25");
+    const tasks = await prisma.task.findMany({
+      where: { recordsRequestId: r.id },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(tasks.map((t) => t.status)).toEqual(["done", "open"]);
+    expect(tasks[1].title).toBe("Follow up: Mercy Hospital — Medical records");
+    expect(await prisma.recordsRequestFollowUp.count()).toBe(1);
+  });
+
+  test("no-op on a closed request", async () => {
+    const r = await seedRequest({ status: "complete" });
+    const rolled = await prisma.$transaction((tx) =>
+      rollFollowUp(tx, r.id, { actorId: userId, note: null, today: "2026-10-18" })
+    );
+    expect(rolled).toBe(false);
+    expect(await prisma.recordsRequestFollowUp.count()).toBe(0);
+  });
+});

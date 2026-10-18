@@ -38,6 +38,7 @@ export type ActivityType =
   | "deposit"
   | "automation"
   | "document"
+  | "records"
   /** Sign-in / password events (src/lib/auth-events.ts writes most of
    *  them). Firm-wide, shown under "Security" on /settings/activity,
    *  excluded from the dashboard feed. */
@@ -117,6 +118,8 @@ function defaultIconFor(type: ActivityType): string {
     case "document":
     case "filing":
       return "document";
+    case "records":
+      return "document";
     case "auth":
       return "shield";
     default:
@@ -144,6 +147,8 @@ function defaultSourceFor(type: ActivityType): string {
     case "document":
     case "filing":
       return "Documents";
+    case "records":
+      return "Records";
     case "auth":
       return "Security";
     default:

@@ -20,7 +20,7 @@ export const ACTIVITY_FILTER_BUCKETS: Record<
   all: { label: "All", types: [] },
   filings: { label: "Filings", types: ["filing"] },
   communications: { label: "Communications", types: ["email", "call"] },
-  documents: { label: "Documents", types: ["document"] },
+  documents: { label: "Documents", types: ["document", "records"] },
   evidence: { label: "Evidence", types: ["evidence"] },
   deadlines: { label: "Deadlines", types: ["deadline"] },
   tasks: { label: "Tasks", types: ["task", "task_complete"] },
