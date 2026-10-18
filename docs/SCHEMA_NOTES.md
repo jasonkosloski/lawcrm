@@ -88,6 +88,7 @@ Only non-obvious facts; anything not listed is as `schema.prisma` reads.
 
 **Records requests** (feature notes in `features/`)
 - **RecordsRequestType**: firm-configured; migration seeded four starter types (Medical (HIPAA) 30 calendar days, CORA 3 business days, Police report 3 business days, Employment 30 calendar days; follow-up every 7 days; editable/deletable, not legal advice). **RecordsRequest**: custodian FK Restrict; type, owner, expense and document/task links SetNull; matter/lead Cascade; fee columns `Decimal(14,2)`; dates date-only UTC midnight. **RecordsRequestFollowUp**: Cascade history log.
+- **DocumentFolder.systemKind / recordsRequestId** (migration `20261018200000_generated_folders`): `systemKind` is a free string (`records_root`, `records_request`, `records_request_docs`, `records_responsive_docs`; constants in `src/lib/records-requests/folder-kinds.ts`); null = ordinary folder, non-null = protected (no rename/move/delete). `recordsRequestId` (SetNull, indexed) is set on the three request-level kinds. Investigation never gets a kind. The migration backfills legacy folders: only folders holding tagged documents are marked (most tagged documents wins, ties to the earliest request); untagged folders are left alone.
 
 **Batch 4 data fixes worth knowing** (migration `20261017120000_quality_sweep`): `UNIQUE settlements(matterId)` was added behind a guard that aborts the deploy, deleting nothing, if any matter had 2+ settlements; `billing.view` was granted to every role holding any `billing.*` or `trust.*` key (ADR-038).
 

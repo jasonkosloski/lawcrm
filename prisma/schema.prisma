@@ -2273,27 +2273,35 @@ model SavedSearch {
 /// Deleting a folder re-parents its contents to the folder's parent
 /// (never silently deletes files) — enforced in the action layer.
 model DocumentFolder {
-  id          String   @id @default(cuid())
+  id               String   @id @default(cuid())
   /// EXACTLY ONE of matterId / leadId is set (app-enforced; see
   /// scopeOf in src/lib/record-scope.ts). A folder and its documents
   /// share a scope; lead folders re-home on conversion.
-  matterId    String?
-  leadId      String?
-  parentId    String?
-  name        String
-  order       Int      @default(0)
-  createdById String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  matterId         String?
+  leadId           String?
+  parentId         String?
+  name             String
+  order            Int      @default(0)
+  createdById      String?
+  /// Non-null = system-generated and protected (no rename / move /
+  /// delete). Values: src/lib/records-requests/folder-kinds.ts.
+  systemKind       String?
+  /// The records request a generated folder belongs to (SetNull; the
+  /// request's delete action also clears systemKind).
+  recordsRequestId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  matter    Matter?          @relation(fields: [matterId], references: [id], onDelete: Cascade)
-  lead      Lead?            @relation("LeadDocumentFolders", fields: [leadId], references: [id], onDelete: Cascade)
-  parent    DocumentFolder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
-  children  DocumentFolder[] @relation("FolderTree")
-  documents Document[]
+  matter         Matter?          @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  lead           Lead?            @relation("LeadDocumentFolders", fields: [leadId], references: [id], onDelete: Cascade)
+  parent         DocumentFolder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children       DocumentFolder[] @relation("FolderTree")
+  documents      Document[]
+  recordsRequest RecordsRequest?  @relation("RecordsRequestFolders", fields: [recordsRequestId], references: [id], onDelete: SetNull)
 
   @@index([matterId, parentId])
   @@index([leadId, parentId])
+  @@index([recordsRequestId])
   @@map("document_folders")
 }
 
@@ -2410,6 +2418,7 @@ model RecordsRequest {
   followUps RecordsRequestFollowUp[]
   documents Document[]               @relation("RecordsRequestDocuments")
   tasks     Task[]                   @relation("RecordsRequestTasks")
+  folders   DocumentFolder[]         @relation("RecordsRequestFolders")
 
   @@index([matterId])
   @@index([leadId])
