@@ -6,21 +6,10 @@ import Link from "next/link";
 import { FileText, Inbox } from "lucide-react";
 import { formatDateOnly } from "@/lib/format-date";
 import { scopeBasePath, type RecordScope } from "@/lib/record-scope";
+import { dueBadge } from "@/lib/records-requests/due-badge";
 import { isRecordsRequestOpen } from "@/lib/records-requests/status";
 import type { RecordsRequestRow } from "@/lib/queries/records-requests";
 import { cn } from "@/lib/utils";
-
-/** Due label for an open request with a response due date; null otherwise. */
-export function dueBadge(
-  r: Pick<RecordsRequestRow, "status" | "daysUntilDue">
-): { text: string; overdue: boolean } | null {
-  if (r.daysUntilDue === null || !isRecordsRequestOpen(r.status)) return null;
-  if (r.daysUntilDue < 0) {
-    return { text: `${-r.daysUntilDue}d overdue`, overdue: true };
-  }
-  if (r.daysUntilDue === 0) return { text: "Due today", overdue: false };
-  return { text: `${r.daysUntilDue}d left`, overdue: false };
-}
 
 export function RequestRow({
   row,

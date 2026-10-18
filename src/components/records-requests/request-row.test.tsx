@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { dueBadge, RequestRow } from "./request-row";
+import { dueBadge } from "@/lib/records-requests/due-badge";
+import { RequestRow } from "./request-row";
 import type { RecordsRequestRow } from "@/lib/queries/records-requests";
 
 const row = (o: Partial<RecordsRequestRow> = {}): RecordsRequestRow => ({

@@ -48,8 +48,8 @@ import {
   checkRecordsTransition,
   isRecordsRequestOpen,
 } from "@/lib/records-requests/status";
+import { dueBadge } from "@/lib/records-requests/due-badge";
 import type { RecordsRequestDetail } from "@/lib/queries/records-requests";
-import { dueBadge } from "./request-row";
 import { cn } from "@/lib/utils";
 import type { TypeOption, UserOption } from "./new-request-composer";
 

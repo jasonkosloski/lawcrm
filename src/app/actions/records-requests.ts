@@ -593,7 +593,10 @@ export async function deleteRecordsRequest(
     title: "Records request deleted",
     detail: row.subject,
   });
-  revalidateForScope(scope);
+  // List paths only: revalidating the request page being viewed would
+  // re-render it as a 404 before the client navigates back to the list.
+  for (const path of scopePaths(scope, "records")) revalidatePath(path);
+  revalidatePath("/");
   return { ok: true };
 }
 

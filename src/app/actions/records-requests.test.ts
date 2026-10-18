@@ -7,6 +7,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vi
 import { setTaskStatus, updateTask } from "@/app/actions/tasks";
 import { updateTaskInitialState } from "@/lib/task-form";
 
+import { revalidatePath } from "next/cache";
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/matter-access", () => ({
   assertMatterAccess: vi.fn(async () => "test-user"),
@@ -416,6 +417,15 @@ describe("deleteRecordsRequest", () => {
     });
     expect(doc.recordsRequestId).toBeNull();
     expect(doc.recordsRequestRole).toBeNull();
+  });
+
+  test("never revalidates the request page being viewed", async () => {
+    const r = await seedRequest();
+    vi.mocked(revalidatePath).mockClear();
+    await deleteRecordsRequest(r.id);
+    const calls = vi.mocked(revalidatePath).mock.calls;
+    expect(calls.map((c) => c[0])).toContain(`/matters/${matterId}/records`);
+    expect(calls.some((c) => String(c[0]).includes("[requestId]"))).toBe(false);
   });
 });
 
