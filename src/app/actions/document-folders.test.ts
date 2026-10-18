@@ -43,12 +43,15 @@ import {
   moveFolder,
   renameFolder,
 } from "@/app/actions/document-folders";
+import type { RecordScope } from "@/lib/record-scope";
+import { revalidatePath } from "next/cache";
 import { MOVE_DOCUMENTS_BATCH_CAP } from "@/lib/folder-tree";
 import {
   resetDb,
   seedDocument,
   seedDocumentFolder,
   seedFirm,
+  seedLead,
   seedMatter,
   seedPracticeArea,
   seedUser,
@@ -56,6 +59,7 @@ import {
 
 let userId: string;
 let matterId: string;
+let M: RecordScope;
 let otherMatterId: string;
 
 beforeAll(() => {
@@ -78,6 +82,7 @@ beforeEach(async () => {
     name: "Alvarez v. City of Aurora",
   });
   matterId = m.matterId;
+  M = { kind: "matter", matterId };
   const other = await seedMatter({
     practiceAreaId: areaId,
     stageId,
@@ -92,7 +97,7 @@ const activityRows = () =>
 
 describe("permission gates", () => {
   test("each action asks for its own key", async () => {
-    await createFolder(matterId, null, "Discovery");
+    await createFolder(M, null, "Discovery");
     expect(requirePermission).toHaveBeenLastCalledWith(
       "documents.folder.create"
     );
@@ -119,11 +124,11 @@ describe("permission gates", () => {
 
 describe("createFolder", () => {
   test("creates at root and under a parent, appending sibling order", async () => {
-    const root = await createFolder(matterId, null, "Discovery");
+    const root = await createFolder(M, null, "Discovery");
     expect(root.ok).toBe(true);
     if (!root.ok) return;
 
-    const child = await createFolder(matterId, root.folderId!, "Production 1");
+    const child = await createFolder(M, root.folderId!, "Production 1");
     expect(child.ok).toBe(true);
 
     const rows = await prisma.documentFolder.findMany({
@@ -134,7 +139,7 @@ describe("createFolder", () => {
     expect(rows[1]!.parentId).toBe(root.folderId);
     expect(rows[1]!.matterId).toBe(matterId);
 
-    const second = await createFolder(matterId, null, "Correspondence");
+    const second = await createFolder(M, null, "Correspondence");
     expect(second.ok).toBe(true);
     const created = await prisma.documentFolder.findFirstOrThrow({
       where: { name: "Correspondence" },
@@ -144,8 +149,8 @@ describe("createFolder", () => {
   });
 
   test("refuses a case-insensitive sibling duplicate — same name ok in another branch", async () => {
-    await createFolder(matterId, null, "Exhibits");
-    const dup = await createFolder(matterId, null, "EXHIBITS");
+    await createFolder(M, null, "Exhibits");
+    const dup = await createFolder(M, null, "EXHIBITS");
     expect(dup).toEqual({
       ok: false,
       error: 'A folder named "EXHIBITS" already exists here.',
@@ -153,23 +158,23 @@ describe("createFolder", () => {
 
     // Same name is fine under a different parent.
     const { folderId } = await seedDocumentFolder({ matterId, name: "Depo" });
-    const nested = await createFolder(matterId, folderId, "Exhibits");
+    const nested = await createFolder(M, folderId, "Exhibits");
     expect(nested.ok).toBe(true);
   });
 
   test("validates the name: empty and >120 chars refused", async () => {
-    expect((await createFolder(matterId, null, "   ")).ok).toBe(false);
-    expect((await createFolder(matterId, null, "x".repeat(121))).ok).toBe(
+    expect((await createFolder(M, null, "   ")).ok).toBe(false);
+    expect((await createFolder(M, null, "x".repeat(121))).ok).toBe(
       false
     );
     // Boundary: exactly 120 is fine (and trimmed).
-    expect((await createFolder(matterId, null, ` ${"x".repeat(120)} `)).ok).toBe(
+    expect((await createFolder(M, null, ` ${"x".repeat(120)} `)).ok).toBe(
       true
     );
   });
 
   test("refuses an unknown matter and a parent from another matter", async () => {
-    expect(await createFolder("nope", null, "F")).toEqual({
+    expect(await createFolder({ kind: "matter", matterId: "nope" }, null, "F")).toEqual({
       ok: false,
       error: "Matter not found.",
     });
@@ -178,7 +183,7 @@ describe("createFolder", () => {
       matterId: otherMatterId,
       name: "Foreign",
     });
-    expect(await createFolder(matterId, foreign.folderId, "F")).toEqual({
+    expect(await createFolder(M, foreign.folderId, "F")).toEqual({
       ok: false,
       error: "Parent folder not found in this matter.",
     });
@@ -187,12 +192,12 @@ describe("createFolder", () => {
   test("enforces the 8-level depth cap", async () => {
     let parentId: string | null = null;
     for (let depth = 1; depth <= 8; depth++) {
-      const res = await createFolder(matterId, parentId, `Level ${depth}`);
+      const res = await createFolder(M, parentId, `Level ${depth}`);
       expect(res.ok).toBe(true);
       if (!res.ok) return;
       parentId = res.folderId!;
     }
-    const ninth = await createFolder(matterId, parentId, "Level 9");
+    const ninth = await createFolder(M, parentId, "Level 9");
     expect(ninth).toEqual({
       ok: false,
       error: "Folders can only nest 8 levels deep.",
@@ -200,7 +205,7 @@ describe("createFolder", () => {
   });
 
   test("writes one activity summary row", async () => {
-    await createFolder(matterId, null, "Discovery");
+    await createFolder(M, null, "Discovery");
     const rows = await activityRows();
     expect(rows).toHaveLength(1);
     expect(rows[0]!.title).toBe("Folder created");
@@ -615,5 +620,99 @@ describe("concurrency", () => {
     // Exactly one of them still sits at the root: the tree is
     // reachable from a root.
     expect(rows.filter((r) => r.parentId === null)).toHaveLength(1);
+  });
+});
+
+describe("lead-scoped folders", () => {
+  const CONVERTED = "This lead is already converted — add this on the matter instead.";
+
+  test("createFolder on a lead stores leadId, null matterId, revalidates intake", async () => {
+    const { leadId } = await seedLead();
+    const res = await createFolder({ kind: "lead", leadId }, null, "Medical");
+    expect(res.ok).toBe(true);
+    const row = await prisma.documentFolder.findUniqueOrThrow({
+      where: { id: res.ok ? res.folderId! : "" },
+    });
+    expect(row.leadId).toBe(leadId);
+    expect(row.matterId).toBeNull();
+    expect(vi.mocked(revalidatePath)).toHaveBeenCalledWith(
+      `/intake/${leadId}/documents`
+    );
+  });
+
+  test("createFolder on a converted lead is refused", async () => {
+    const { leadId } = await seedLead();
+    await prisma.lead.update({ where: { id: leadId }, data: { stage: "converted" } });
+    expect(await createFolder({ kind: "lead", leadId }, null, "X")).toEqual({
+      ok: false,
+      error: CONVERTED,
+    });
+    expect(await prisma.documentFolder.count({ where: { leadId } })).toBe(0);
+  });
+
+  test("createFolder refuses a parent belonging to a matter", async () => {
+    const { leadId } = await seedLead();
+    const foreign = await seedDocumentFolder({ matterId, name: "MF" });
+    const res = await createFolder({ kind: "lead", leadId }, foreign.folderId, "X");
+    expect(res.ok).toBe(false);
+  });
+
+  test("moving a lead document into a matter folder is refused", async () => {
+    const { leadId } = await seedLead();
+    const mf = await seedDocumentFolder({ matterId, name: "MF" });
+    const doc = await prisma.document.create({
+      data: { leadId, name: "L.pdf", category: "other", source: "upload" },
+    });
+    const res = await moveDocuments([doc.id], mf.folderId);
+    expect(res).toEqual({
+      ok: false,
+      error: "Documents and folders can only move within the same matter or intake.",
+    });
+    expect(
+      (await prisma.document.findUniqueOrThrow({ where: { id: doc.id } })).folderId
+    ).toBeNull();
+  });
+
+  test("moveDocuments refuses a batch spanning scopes", async () => {
+    const { leadId } = await seedLead();
+    const a = await prisma.document.create({
+      data: { leadId, name: "L.pdf", category: "other", source: "upload" },
+    });
+    const b = await seedDocument({ matterId, name: "M.pdf" });
+    const res = await moveDocuments([a.id, b.documentId], null);
+    expect(res.ok).toBe(false);
+  });
+
+  test("moving a lead folder under a matter folder is refused", async () => {
+    const { leadId } = await seedLead();
+    const lf = await prisma.documentFolder.create({ data: { leadId, name: "LF" } });
+    const mf = await seedDocumentFolder({ matterId, name: "MF" });
+    const res = await moveFolder(lf.id, mf.folderId);
+    expect(res.ok).toBe(false);
+    expect(
+      (await prisma.documentFolder.findUniqueOrThrow({ where: { id: lf.id } })).parentId
+    ).toBeNull();
+  });
+
+  test("moveFolder works within a lead (locks by leadId) and revalidates intake", async () => {
+    const { leadId } = await seedLead();
+    const a = await prisma.documentFolder.create({ data: { leadId, name: "A" } });
+    const b = await prisma.documentFolder.create({ data: { leadId, name: "B" } });
+    const res = await moveFolder(a.id, b.id);
+    expect(res.ok).toBe(true);
+    expect(
+      (await prisma.documentFolder.findUniqueOrThrow({ where: { id: a.id } })).parentId
+    ).toBe(b.id);
+    expect(vi.mocked(revalidatePath)).toHaveBeenCalledWith(`/intake/${leadId}/documents`);
+  });
+
+  test("rename and delete a lead folder revalidate intake paths", async () => {
+    const { leadId } = await seedLead();
+    const f = await prisma.documentFolder.create({ data: { leadId, name: "Old" } });
+    expect((await renameFolder(f.id, "New")).ok).toBe(true);
+    expect((await prisma.documentFolder.findUniqueOrThrow({ where: { id: f.id } })).name).toBe("New");
+    expect((await deleteFolder(f.id)).ok).toBe(true);
+    expect(await prisma.documentFolder.count({ where: { leadId } })).toBe(0);
+    expect(vi.mocked(revalidatePath)).toHaveBeenCalledWith(`/intake/${leadId}/documents`);
   });
 });

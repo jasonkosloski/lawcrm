@@ -17,7 +17,7 @@
  *     collides with a destination sibling is renamed with a
  *     " (2)"-style suffix ("Exhibits" → "Exhibits (2)", then "(3)"…);
  *     documents are never renamed (no uniqueness constraint on them).
- *   - Moves (documents and folders) stay inside ONE matter — a target
+ *   - Moves (documents and folders) stay inside ONE matter or intake — a target
  *     folder from another matter is refused, and a folder can't move
  *     under itself or its own descendant.
  *
@@ -34,8 +34,8 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { assertChildMatterAccess, assertMatterAccess } from "@/lib/matter-access";
-import { assertScopeAccess } from "@/lib/scope-access";
+import { assertChildMatterAccess } from "@/lib/matter-access";
+import { assertScopeAccess, assertScopeWritable } from "@/lib/scope-access";
 import {
   scopeBasePath,
   scopeOf,
@@ -59,6 +59,8 @@ export type FolderActionResult =
   | { ok: false; error: string };
 
 const MAX_FOLDER_NAME_LENGTH = 120;
+const SAME_SCOPE_ERROR =
+  "Documents and folders can only move within the same matter or intake.";
 
 /** Trimmed 1..120-char name, or an error string. */
 function validateName(raw: string): { name: string } | { error: string } {
@@ -101,29 +103,37 @@ const nextOrder = (siblings: FolderRecord[]): number =>
 // ── createFolder ─────────────────────────────────────────────────────────
 
 export async function createFolder(
-  matterId: string,
+  scope: RecordScope,
   parentId: string | null,
   name: string
 ): Promise<FolderActionResult> {
   const userId = await requirePermission("documents.folder.create");
-  await assertMatterAccess(matterId);
+  await assertScopeAccess(scope);
 
   const valid = validateName(name);
   if ("error" in valid) return { ok: false, error: valid.error };
 
-  const matter = await prisma.matter.findUnique({
-    where: { id: matterId },
-    select: { id: true },
-  });
-  if (!matter) return { ok: false, error: "Matter not found." };
+  const readOnly = await assertScopeWritable(scope);
+  if (readOnly) return { ok: false, error: readOnly };
 
-  const folders = await fetchScopeFolders({ kind: "matter", matterId });
+  if (scope.kind === "matter") {
+    const matter = await prisma.matter.findUnique({
+      where: { id: scope.matterId },
+      select: { id: true },
+    });
+    if (!matter) return { ok: false, error: "Matter not found." };
+  }
+
+  const folders = await fetchScopeFolders(scope);
 
   if (parentId) {
-    // Scoped membership check — a parent from another matter must not
-    // graft this matter's tree onto it.
+    // Scoped membership check — a parent from another matter / intake
+    // must not graft this tree onto it.
     if (!folders.some((f) => f.id === parentId)) {
-      return { ok: false, error: "Parent folder not found in this matter." };
+      return {
+        ok: false,
+        error: `Parent folder not found in this ${scope.kind === "matter" ? "matter" : "intake"}.`,
+      };
     }
     if (folderDepth(folders, parentId) >= MAX_FOLDER_DEPTH) {
       return {
@@ -143,7 +153,7 @@ export async function createFolder(
 
   const created = await prisma.documentFolder.create({
     data: {
-      matterId,
+      ...scopeWhere(scope),
       parentId,
       name: valid.name,
       order: nextOrder(siblings),
@@ -153,14 +163,14 @@ export async function createFolder(
   });
 
   await logActivity({
-    matterId,
+    matterId: scope.kind === "matter" ? scope.matterId : null,
     userId,
     type: "document",
     title: "Folder created",
     detail: valid.name,
   });
 
-  revalidatePath(`/matters/${matterId}/documents`);
+  revalidatePath(`${scopeBasePath(scope)}/documents`);
   return { ok: true, folderId: created.id };
 }
 
@@ -298,7 +308,7 @@ export async function deleteFolder(id: string): Promise<FolderActionResult> {
 /**
  * Re-file documents into a folder (or the matter root when
  * `folderId` is null). Every document AND the target folder must
- * belong to one matter; the batch caps at MOVE_DOCUMENTS_BATCH_CAP.
+ * belong to one matter or intake; the batch caps at MOVE_DOCUMENTS_BATCH_CAP.
  */
 export async function moveDocuments(
   documentIds: string[],
@@ -339,9 +349,7 @@ export async function moveDocuments(
     })
   );
   for (const s of scopes.values()) await assertScopeAccess(s);
-  if (scopes.size > 1) {
-    return { ok: false, error: "Documents must all belong to one matter." };
-  }
+  if (scopes.size > 1) return { ok: false, error: SAME_SCOPE_ERROR };
   const scope = [...scopes.values()][0]!;
   const matterId = scope.kind === "matter" ? scope.matterId : null;
 
@@ -354,7 +362,21 @@ export async function moveDocuments(
       select: { id: true, name: true },
     });
     if (!folder) {
-      return { ok: false, error: "Folder not found in this matter." };
+      // A folder that exists under the OTHER kind of scope gets the
+      // cross-scope message; anything else keeps the matter wording.
+      const other = await prisma.documentFolder.findUnique({
+        where: { id: folderId },
+        select: { matterId: true },
+      });
+      const crossKind = other && (other.matterId === null) !== (scope.kind === "lead");
+      return {
+        ok: false,
+        error: crossKind
+          ? SAME_SCOPE_ERROR
+          : scope.kind === "lead"
+            ? "Folder not found in this intake."
+            : "Folder not found in this matter.",
+      };
     }
     folderName = folder.name;
   }
@@ -446,7 +468,10 @@ export async function moveFolder(
         if (!dest) {
           return {
             ok: false,
-            error: "Destination folder not found in this matter.",
+            error:
+              folderScope.kind === "lead"
+                ? SAME_SCOPE_ERROR
+                : "Destination folder not found in this matter.",
           };
         }
         destName = dest.name;

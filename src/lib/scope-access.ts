@@ -34,7 +34,7 @@ export async function assertScopeWritable(
     select: { stage: true },
   });
   if (lead?.stage === "converted") {
-    return "Lead is already converted — its documents moved to the matter. Work with them there.";
+    return "This lead is already converted — add this on the matter instead.";
   }
   return null;
 }

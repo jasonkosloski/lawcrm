@@ -167,7 +167,7 @@ describe("outsider (not on the matter team) is walled off", () => {
   test("document actions: delete, folder create, move -> not found", async () => {
     const { documentId } = await seedDocument({ matterId, uploadedBy: member });
     await expect(deleteDocument(documentId)).rejects.toThrow("NEXT_NOT_FOUND");
-    await expect(createFolder(matterId, null, "Wall")).rejects.toThrow(
+    await expect(createFolder({ kind: "matter", matterId }, null, "Wall")).rejects.toThrow(
       "NEXT_NOT_FOUND"
     );
     await expect(moveDocuments([documentId], null)).rejects.toThrow(
@@ -202,7 +202,7 @@ describe("team member (and FIRM-mode firms) keep working", () => {
     expect(te.status).toBe("ok");
     expect(await prisma.timeEntry.count()).toBe(1);
 
-    const folder = await createFolder(matterId, null, "Pleadings");
+    const folder = await createFolder({ kind: "matter", matterId }, null, "Pleadings");
     expect(folder.ok).toBe(true);
   });
 

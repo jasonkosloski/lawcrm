@@ -49,7 +49,7 @@ export function NewFolderButton({
   const submit = () => {
     setError(null);
     startTransition(async () => {
-      const res = await createFolder(matterId, parentId, name);
+      const res = await createFolder({ kind: "matter", matterId }, parentId, name);
       if (res.ok) setOpen(false);
       else setError(res.error);
     });
