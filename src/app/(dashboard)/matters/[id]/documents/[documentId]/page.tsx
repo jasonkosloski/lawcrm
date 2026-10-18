@@ -252,7 +252,12 @@ export default async function DocumentViewerPage({
         </div>
 
         {/* ── Body ───────────────────────────────────────────────────── */}
-        <div className="flex min-h-0 flex-1 flex-col">{body}</div>
+        {/* Keyed by document: moving between files in the tree is a
+            client-side navigation, and without a fresh mount the viewer
+            would carry the last file's state (zoom, errors, selection). */}
+        <div key={doc.id} className="flex min-h-0 flex-1 flex-col">
+          {body}
+        </div>
       </div>
     </div>
   );

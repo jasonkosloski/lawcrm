@@ -58,6 +58,13 @@ type PdfJs = typeof import("pdfjs-dist");
 
 let pdfjsPromise: Promise<PdfJs> | null = null;
 
+/** The previous document's teardown. Every document shares one pdf.js
+ *  worker (GlobalWorkerOptions.workerPort), and pdf.js refuses to start
+ *  a load while that worker is still being torn down ("PDFWorker.create
+ *  - the worker is being destroyed"). Switching straight from one PDF to
+ *  another hit exactly that, so each load waits for the last destroy. */
+let pendingDestroy: Promise<void> = Promise.resolve();
+
 /** pdf.js + its worker, loaded once per tab on first use (never during
  *  SSR — pdf.js needs DOM APIs). The worker is bundled by
  *  `new Worker(new URL(...))`, which Turbopack resolves. */
@@ -141,6 +148,7 @@ export function PdfDocumentViewer({
     (async () => {
       try {
         const lib = await loadPdfJs();
+        await pendingDestroy;
         if (cancelled) return;
         task = lib.getDocument({ url: src });
         const loaded = await task.promise;
@@ -158,7 +166,10 @@ export function PdfDocumentViewer({
     })();
     return () => {
       cancelled = true;
-      void task?.destroy();
+      if (task) {
+        const destroying = task.destroy().catch(() => {});
+        pendingDestroy = pendingDestroy.then(() => destroying);
+      }
     };
   }, [src]);
 
