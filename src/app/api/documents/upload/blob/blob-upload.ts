@@ -38,7 +38,6 @@
  * function, so the two can never disagree.
  */
 
-import { revalidatePath } from "next/cache";
 import { del, head } from "@vercel/blob";
 import type { HandleUploadOptions } from "@vercel/blob/client";
 import { z } from "zod";
@@ -47,13 +46,23 @@ import { prisma } from "@/lib/prisma";
 import { canAccessMatter } from "@/lib/matter-access";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
+import { scopeWhere, type RecordScope } from "@/lib/record-scope";
+import {
+  assertScopeWritable,
+  revalidateDocumentScope,
+} from "@/lib/scope-access";
 import { extractIfEmail } from "@/lib/email-attachment-extract";
-import { DOCUMENT_CATEGORIES, type DocumentCategory } from "@/lib/document-form";
+import {
+  DOCUMENT_CATEGORIES,
+  type DocumentCategory,
+} from "@/lib/document-form";
 import { isValidStorageKey } from "@/lib/storage/storage-key";
 import { BLOB_CACHE_MAX_AGE_SECONDS } from "@/lib/storage/blob-driver";
 import {
   MAX_MEDIA_UPLOAD_BYTES,
   MAX_STANDARD_UPLOAD_BYTES,
+  UPLOAD_FOLDER_SCOPE_ERROR,
+  UPLOAD_SCOPE_REQUIRED_ERROR,
   contentTypeForFilename,
   isMediaType,
 } from "../upload-config";
@@ -71,18 +80,24 @@ export class UploadTokenError extends Error {
 
 /** What the browser sends alongside the token request. Same target
  *  contract as the streaming route's form fields. */
-const clientPayloadSchema = z.object({
-  matterId: z.string().min(1),
-  folderId: z.string().min(1).nullish(),
-  /** Document display name: the original filename, or the composer's
-   *  override. The pathname
-   *  is the sanitized/truncated KEY; this preserves what the user
-   *  actually called the file. */
-  name: z.string().trim().min(1).max(255),
-  /** Single-file composer's category; batch uploads omit it
-   *  (→ "discovery", same default as the streaming route). */
-  category: z.enum(DOCUMENT_CATEGORIES).optional(),
-});
+const clientPayloadSchema = z
+  .object({
+    /** Exactly one of matterId / leadId (refined below). */
+    matterId: z.string().min(1).optional(),
+    leadId: z.string().min(1).optional(),
+    folderId: z.string().min(1).nullish(),
+    /** Document display name: the original filename, or the composer's
+     *  override. The pathname
+     *  is the sanitized/truncated KEY; this preserves what the user
+     *  actually called the file. */
+    name: z.string().trim().min(1).max(255),
+    /** Single-file composer's category; batch uploads omit it
+     *  (→ "discovery", same default as the streaming route). */
+    category: z.enum(DOCUMENT_CATEGORIES).optional(),
+  })
+  .refine((p) => Boolean(p.matterId) !== Boolean(p.leadId), {
+    message: UPLOAD_SCOPE_REQUIRED_ERROR,
+  });
 
 /** Token lifetimes. The SDK default is ONE hour, fixed at mint time
  *  and reused for every multipart part, so a 2 GiB recording on an
@@ -95,7 +110,9 @@ const MEDIA_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
  *  signed into the client token by `handleUpload`, so the uploader
  *  can't tamper with it. */
 type TokenPayload = {
-  matterId: string;
+  /** Exactly one of matterId / leadId is set. */
+  matterId?: string;
+  leadId?: string;
   folderId: string | null;
   name: string;
   category: DocumentCategory;
@@ -113,7 +130,7 @@ export const onBeforeGenerateToken: HandleUploadOptions["onBeforeGenerateToken"]
     if (!allowed) {
       throw new UploadTokenError(
         403,
-        "You don't have permission to upload documents."
+        "You don't have permission to upload documents.",
       );
     }
 
@@ -133,26 +150,44 @@ export const onBeforeGenerateToken: HandleUploadOptions["onBeforeGenerateToken"]
     }
 
     // Same target validation as the streaming route's resolveTarget.
-    // TODO (multi-tenant): scope by firmId once Matter carries one.
-    const matter = await prisma.matter.findUnique({
-      where: { id: payload.matterId },
-      select: { id: true },
-    });
-    // Matter wall: hidden == missing, before any token is issued.
-    if (!matter || !(await canAccessMatter(session.user.id, payload.matterId))) {
-      throw new UploadTokenError(404, "Matter not found.");
+    let scope: RecordScope;
+    if (payload.matterId) {
+      // TODO (multi-tenant): scope by firmId once Matter carries one.
+      const matter = await prisma.matter.findUnique({
+        where: { id: payload.matterId },
+        select: { id: true },
+      });
+      // Matter wall: hidden == missing, before any token is issued.
+      if (
+        !matter ||
+        !(await canAccessMatter(session.user.id, payload.matterId))
+      ) {
+        throw new UploadTokenError(404, "Matter not found.");
+      }
+      scope = { kind: "matter", matterId: payload.matterId };
+    } else if (payload.leadId) {
+      const lead = await prisma.lead.findUnique({
+        where: { id: payload.leadId },
+        select: { id: true },
+      });
+      if (!lead) throw new UploadTokenError(404, "Lead not found.");
+      scope = { kind: "lead", leadId: lead.id };
+      const readOnly = await assertScopeWritable(scope);
+      if (readOnly) throw new UploadTokenError(409, readOnly);
+    } else {
+      throw new UploadTokenError(400, UPLOAD_SCOPE_REQUIRED_ERROR);
     }
 
     const folderId = payload.folderId ?? null;
     if (folderId) {
-      // Scoped find — a folderId from a *different* matter must not
-      // let files leak into that matter's tree.
+      // Scoped find — a folderId from a *different* matter or lead
+      // must not let files leak into that tree.
       const folder = await prisma.documentFolder.findFirst({
-        where: { id: folderId, matterId: payload.matterId },
+        where: { id: folderId, ...scopeWhere(scope) },
         select: { id: true },
       });
       if (!folder) {
-        throw new UploadTokenError(400, "Folder not found in this matter.");
+        throw new UploadTokenError(400, UPLOAD_FOLDER_SCOPE_ERROR);
       }
     }
 
@@ -166,7 +201,7 @@ export const onBeforeGenerateToken: HandleUploadOptions["onBeforeGenerateToken"]
       : MAX_STANDARD_UPLOAD_BYTES;
 
     const tokenPayload: TokenPayload = {
-      matterId: payload.matterId,
+      ...scopeWhere(scope),
       folderId,
       name: payload.name,
       category: payload.category ?? "discovery",
@@ -234,26 +269,54 @@ export const onUploadCompleted: NonNullable<
     return;
   }
 
-  const removeOrphan = async () => {
-    console.error("[blob-upload] matter vanished during upload; blob removed", {
-      matterId: t.matterId,
+  // Exactly one of matterId / leadId — we wrote it, but fail loud on
+  // a payload that breaks the invariant rather than guess a scope.
+  let scope: RecordScope;
+  if (t.matterId && !t.leadId) {
+    scope = { kind: "matter", matterId: t.matterId };
+  } else if (t.leadId && !t.matterId) {
+    scope = { kind: "lead", leadId: t.leadId };
+  } else {
+    throw new Error("Upload token payload must carry exactly one scope.");
+  }
+
+  const removeOrphan = async (why: string) => {
+    console.error(`[blob-upload] ${why}; blob removed`, {
+      ...scopeWhere(scope),
     });
     await del(blob.url).catch(() => {});
   };
 
-  const matter = await prisma.matter.findUnique({
-    where: { id: t.matterId },
-    select: { id: true },
-  });
-  if (!matter) {
-    await removeOrphan();
-    return;
+  if (scope.kind === "matter") {
+    const matter = await prisma.matter.findUnique({
+      where: { id: scope.matterId },
+      select: { id: true },
+    });
+    if (!matter) {
+      await removeOrphan("matter vanished during upload");
+      return;
+    }
+  } else {
+    const lead = await prisma.lead.findUnique({
+      where: { id: scope.leadId },
+      select: { id: true },
+    });
+    if (!lead) {
+      await removeOrphan("lead vanished during upload");
+      return;
+    }
+    // Converted mid-upload: its records already moved to the matter,
+    // so a row filed here would be stranded on a read-only lead.
+    if (await assertScopeWritable(scope)) {
+      await removeOrphan("lead converted during upload");
+      return;
+    }
   }
 
   let folderId = t.folderId;
   if (folderId) {
     const folder = await prisma.documentFolder.findFirst({
-      where: { id: folderId, matterId: t.matterId },
+      where: { id: folderId, ...scopeWhere(scope) },
       select: { id: true },
     });
     if (!folder) folderId = null;
@@ -262,7 +325,7 @@ export const onUploadCompleted: NonNullable<
   const create = (targetFolderId: string | null) =>
     prisma.document.create({
       data: {
-        matterId: t.matterId,
+        ...scopeWhere(scope),
         folderId: targetFolderId,
         name: t.name,
         // The composer picks a category; the multi-file uploader
@@ -286,12 +349,18 @@ export const onUploadCompleted: NonNullable<
   } catch (err) {
     if (!isForeignKeyError(err)) throw err;
     // Raced a delete between the checks above and the insert.
-    const stillThere = await prisma.matter.findUnique({
-      where: { id: t.matterId },
-      select: { id: true },
-    });
+    const stillThere =
+      scope.kind === "matter"
+        ? await prisma.matter.findUnique({
+            where: { id: scope.matterId },
+            select: { id: true },
+          })
+        : await prisma.lead.findUnique({
+            where: { id: scope.leadId },
+            select: { id: true },
+          });
     if (!stillThere) {
-      await removeOrphan();
+      await removeOrphan(`${scope.kind} vanished during upload`);
       return;
     }
     created = await create(null);
@@ -303,12 +372,12 @@ export const onUploadCompleted: NonNullable<
   // independent callback; there is no server-side batch to group.
   // Known trade-off (ADR-015): a 40-file production writes 40 rows.
   await logActivity({
-    matterId: t.matterId,
+    matterId: scope.kind === "matter" ? scope.matterId : null,
     userId: t.userId,
     type: "document",
     title: "Document uploaded",
     detail: (filedAtRoot
-      ? `${t.name} (target folder was deleted during the upload; filed at the matter root)`
+      ? `${t.name} (target folder was deleted during the upload; filed at the root)`
       : t.name
     ).slice(0, 500),
   });
@@ -320,8 +389,7 @@ export const onUploadCompleted: NonNullable<
   // The row exists now: a failure here must not fail the callback
   // (Vercel would retry and the guard above would just no-op).
   try {
-    revalidatePath(`/matters/${t.matterId}/documents`);
-    revalidatePath(`/matters/${t.matterId}`);
+    revalidateDocumentScope(scope);
   } catch (err) {
     console.error("[blob-upload] revalidate failed", err);
   }

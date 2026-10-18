@@ -30,6 +30,7 @@ vi.mock("@/lib/permission-check", () => ({
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     matter: { findUnique: vi.fn() },
+    lead: { findUnique: vi.fn() },
     documentFolder: { findFirst: vi.fn() },
     document: { create: vi.fn(), findFirst: vi.fn() },
   },
@@ -64,6 +65,7 @@ import {
 const mockedAuth = vi.mocked(auth);
 const mockedPerm = vi.mocked(currentUserHasPermission);
 const mockedMatter = vi.mocked(prisma.matter.findUnique);
+const mockedLead = vi.mocked(prisma.lead.findUnique);
 const mockedFolder = vi.mocked(prisma.documentFolder.findFirst);
 const mockedCreate = vi.mocked(prisma.document.create);
 const mockedDocFind = vi.mocked(prisma.document.findFirst);
@@ -107,6 +109,7 @@ afterEach(() => {
     mockedAuth,
     mockedPerm,
     mockedMatter,
+    mockedLead,
     mockedFolder,
     mockedCreate,
     mockedDocFind,
@@ -328,7 +331,10 @@ describe("onUploadCompleted", () => {
       },
     });
     expect(logActivity).toHaveBeenCalledTimes(1);
-    expect(revalidatePath).toHaveBeenCalledWith("/matters/m1/documents");
+    expect(revalidatePath).toHaveBeenCalledWith(
+      "/matters/m1/documents",
+      "layout"
+    );
     expect(revalidatePath).toHaveBeenCalledWith("/matters/m1");
   });
 
@@ -455,5 +461,139 @@ describe("onUploadCompleted", () => {
       }),
     });
     expect(mockedCreate.mock.calls[0][0].data.category).toBe("contract");
+  });
+});
+
+describe("lead scope — onBeforeGenerateToken", () => {
+  function wireLeadGates(stage = "new") {
+    wireHappyGates();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedLead.mockResolvedValue({ id: "l1", stage } as any);
+  }
+  const LEAD_PAYLOAD = JSON.stringify({
+    leadId: "l1",
+    folderId: "fold1",
+    name: "brief.pdf",
+  });
+
+  test("a lead target issues a token whose payload carries leadId only", async () => {
+    wireLeadGates();
+    const token = await onBeforeGenerateToken(KEY, LEAD_PAYLOAD, false);
+    const tp = JSON.parse(token.tokenPayload as string);
+    expect(tp.leadId).toBe("l1");
+    expect(tp.matterId).toBeUndefined();
+    expect(mockedMatter).not.toHaveBeenCalled();
+    expect(mockedFolder).toHaveBeenCalledWith({
+      where: { id: "fold1", leadId: "l1" },
+      select: { id: true },
+    });
+  });
+
+  test("both ids -> 400", async () => {
+    wireLeadGates();
+    const err = await tokenError(
+      KEY,
+      JSON.stringify({ matterId: "m1", leadId: "l1", name: "brief.pdf" })
+    );
+    expect(err.status).toBe(400);
+  });
+
+  test("neither id -> 400", async () => {
+    wireLeadGates();
+    const err = await tokenError(KEY, JSON.stringify({ name: "brief.pdf" }));
+    expect(err.status).toBe(400);
+  });
+
+  test("a folder from the other scope -> 400 with the scope-neutral copy", async () => {
+    wireLeadGates();
+    mockedFolder.mockResolvedValue(null);
+    const err = await tokenError(KEY, LEAD_PAYLOAD);
+    expect(err.status).toBe(400);
+    expect(err.message).toBe("Folder not found in this matter or intake.");
+  });
+
+  test("a converted lead -> 409", async () => {
+    wireLeadGates("converted");
+    const err = await tokenError(KEY, LEAD_PAYLOAD);
+    expect(err.status).toBe(409);
+    expect(err.message).toMatch(/already converted/);
+  });
+
+  test("an unknown lead -> 404 Lead not found.", async () => {
+    wireLeadGates();
+    mockedLead.mockResolvedValue(null);
+    const err = await tokenError(KEY, LEAD_PAYLOAD);
+    expect(err.status).toBe(404);
+    expect(err.message).toBe("Lead not found.");
+  });
+});
+
+describe("lead scope — onUploadCompleted", () => {
+  const KEY2 = KEY;
+  const BLOB2 = {
+    url: `https://abc123.public.blob.vercel-storage.com/${KEY2}`,
+    downloadUrl: "",
+    pathname: KEY2,
+    contentType: "application/pdf",
+    contentDisposition: "inline",
+    etag: "e1",
+  };
+  const LEAD_TP = JSON.stringify({
+    leadId: "l1",
+    folderId: "fold1",
+    name: "brief.pdf",
+    contentType: "application/pdf",
+    userId: "u1",
+  });
+
+  function wire(stage = "new") {
+    mockedDocFind.mockResolvedValue(null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedLead.mockResolvedValue({ id: "l1", stage } as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedFolder.mockResolvedValue({ id: "fold1" } as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedHead.mockResolvedValue({ size: 50 } as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedCreate.mockResolvedValue({ id: "d1" } as any);
+  }
+
+  test("creates the row with leadId, scoped folder, and intake revalidation", async () => {
+    wire();
+    await onUploadCompleted({ blob: BLOB2, tokenPayload: LEAD_TP });
+    const data = mockedCreate.mock.calls[0][0].data as Record<string, unknown>;
+    expect(data.leadId).toBe("l1");
+    expect(data.matterId).toBeUndefined();
+    expect(data.folderId).toBe("fold1");
+    expect(mockedFolder).toHaveBeenCalledWith({
+      where: { id: "fold1", leadId: "l1" },
+      select: { id: true },
+    });
+    expect(vi.mocked(logActivity).mock.calls[0][0].matterId).toBeNull();
+    const paths = vi.mocked(revalidatePath).mock.calls.map((c) => c[0]);
+    expect(paths).toContain("/intake/l1/documents");
+    expect(paths).toContain("/intake/l1");
+    expect(paths.some((p) => String(p).includes("null"))).toBe(false);
+  });
+
+  test("lead deleted mid-upload: orphan blob removed, no row", async () => {
+    wire();
+    mockedLead.mockResolvedValue(null);
+    mockedDel.mockResolvedValue(undefined);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    await onUploadCompleted({ blob: BLOB2, tokenPayload: LEAD_TP });
+    errSpy.mockRestore();
+    expect(mockedDel).toHaveBeenCalledWith(BLOB2.url);
+    expect(mockedCreate).not.toHaveBeenCalled();
+  });
+
+  test("lead converted mid-upload: blob removed, no row on the converted lead", async () => {
+    wire("converted");
+    mockedDel.mockResolvedValue(undefined);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    await onUploadCompleted({ blob: BLOB2, tokenPayload: LEAD_TP });
+    errSpy.mockRestore();
+    expect(mockedDel).toHaveBeenCalledWith(BLOB2.url);
+    expect(mockedCreate).not.toHaveBeenCalled();
   });
 });

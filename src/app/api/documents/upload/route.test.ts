@@ -29,6 +29,7 @@ vi.mock("@/lib/permission-check", () => ({
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     matter: { findUnique: vi.fn() },
+    lead: { findUnique: vi.fn() },
     documentFolder: { findFirst: vi.fn() },
     document: { create: vi.fn() },
     $transaction: vi.fn(),
@@ -54,6 +55,7 @@ import { auth } from "@/auth";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
+import { revalidatePath } from "next/cache";
 import {
   FileTooLargeError,
   deleteFile,
@@ -64,6 +66,7 @@ import { POST } from "./route";
 const mockedAuth = vi.mocked(auth);
 const mockedPerm = vi.mocked(currentUserHasPermission);
 const mockedMatter = vi.mocked(prisma.matter.findUnique);
+const mockedLead = vi.mocked(prisma.lead.findUnique);
 const mockedFolder = vi.mocked(prisma.documentFolder.findFirst);
 const mockedCreate = vi.mocked(prisma.document.create);
 const mockedTxn = vi.mocked(prisma.$transaction);
@@ -440,4 +443,112 @@ describe("POST /api/documents/upload — client abort mid-upload", () => {
     // ...and no Document row was written.
     expect(mockedTxn).not.toHaveBeenCalled();
   }, 3000);
+});
+
+describe("POST /api/documents/upload — intake lead scope", () => {
+  const BOTH_OR_NEITHER =
+    "Exactly one of matterId or leadId is required and must precede file parts in the form data.";
+
+  function wireLead(stage = "new") {
+    wireHappyMocks();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedLead.mockResolvedValue({ id: "l1", stage } as any);
+  }
+
+  test("a lead upload stores leadId (and no matterId) and revalidates intake paths", async () => {
+    wireLead();
+    const res = await POST(
+      await makeRequest(fdWith({ leadId: "l1" }, [{ name: "a.pdf" }]))
+    );
+    expect(res.status).toBe(200);
+    const data = mockedCreate.mock.calls[0]![0].data as Record<string, unknown>;
+    expect(data.leadId).toBe("l1");
+    expect(data.matterId).toBeUndefined();
+    expect(mockedMatter).not.toHaveBeenCalled();
+    const paths = vi.mocked(revalidatePath).mock.calls.map((c) => c[0]);
+    expect(paths).toContain("/intake/l1/documents");
+    expect(paths).toContain("/intake/l1");
+    expect(paths.some((p) => p.includes("null") || p.includes("undefined"))).toBe(
+      false
+    );
+    expect(vi.mocked(logActivity).mock.calls[0]![0].matterId).toBeNull();
+  });
+
+  test("a lead folder is looked up scoped by leadId", async () => {
+    wireLead();
+    await POST(
+      await makeRequest(
+        fdWith({ leadId: "l1", folderId: "fold1" }, [{ name: "a.pdf" }])
+      )
+    );
+    expect(mockedFolder).toHaveBeenCalledWith({
+      where: { id: "fold1", leadId: "l1" },
+      select: { id: true },
+    });
+  });
+
+  test("both ids -> 400, nothing stored", async () => {
+    wireLead();
+    const res = await POST(
+      await makeRequest(
+        fdWith({ matterId: "m1", leadId: "l1" }, [{ name: "a.pdf" }])
+      )
+    );
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe(
+      BOTH_OR_NEITHER
+    );
+    expect(mockedStore).not.toHaveBeenCalled();
+  });
+
+  test("neither id -> 400, nothing stored", async () => {
+    wireLead();
+    const res = await POST(await makeRequest(fdWith({}, [{ name: "a.pdf" }])));
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe(
+      BOTH_OR_NEITHER
+    );
+    expect(mockedStore).not.toHaveBeenCalled();
+  });
+
+  test("a folderId from another scope with a leadId -> 400 before any byte is stored", async () => {
+    wireLead();
+    mockedFolder.mockResolvedValue(null); // scoped lookup misses
+    const res = await POST(
+      await makeRequest(
+        fdWith({ leadId: "l1", folderId: "matter-folder" }, [{ name: "a.pdf" }])
+      )
+    );
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe(
+      "Folder not found in this matter or intake."
+    );
+    expect(mockedStore).not.toHaveBeenCalled();
+    expect(mockedTxn).not.toHaveBeenCalled();
+  });
+
+  test("a converted lead -> 409, nothing stored", async () => {
+    wireLead("converted");
+    const res = await POST(
+      await makeRequest(fdWith({ leadId: "l1" }, [{ name: "a.pdf" }]))
+    );
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: string }).error).toMatch(
+      /already converted/
+    );
+    expect(mockedStore).not.toHaveBeenCalled();
+  });
+
+  test("an unknown lead -> 404 Lead not found.", async () => {
+    wireLead();
+    mockedLead.mockResolvedValue(null);
+    const res = await POST(
+      await makeRequest(fdWith({ leadId: "ghost" }, [{ name: "a.pdf" }]))
+    );
+    expect(res.status).toBe(404);
+    expect(((await res.json()) as { error: string }).error).toBe(
+      "Lead not found."
+    );
+    expect(mockedStore).not.toHaveBeenCalled();
+  });
 });

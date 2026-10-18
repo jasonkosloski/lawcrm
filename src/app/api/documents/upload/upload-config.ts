@@ -137,3 +137,10 @@ export function isMediaType(contentType: string): boolean {
     contentType.startsWith("video/") || contentType.startsWith("audio/")
   );
 }
+
+/** Shared error copy for the two upload paths (streaming route +
+ *  blob token callback) so scope validation reads the same. */
+export const UPLOAD_SCOPE_REQUIRED_ERROR =
+  "Exactly one of matterId or leadId is required and must precede file parts in the form data.";
+export const UPLOAD_FOLDER_SCOPE_ERROR =
+  "Folder not found in this matter or intake.";

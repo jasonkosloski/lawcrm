@@ -19,8 +19,11 @@
  *
  * CONTRACT (the folder UI + viewer build against this):
  *   multipart/form-data fields, in append order:
- *     - matterId  string, required — MUST precede any file part
+ *     - matterId  string — exactly one of matterId / leadId is
+ *     - leadId    string   required (intake lead scope); MUST
+ *                 precede any file part
  *     - folderId  string, optional — must belong to the same matter
+ *                 or lead
  *     - category  string, optional — one of DOCUMENT_CATEGORIES;
  *                 defaults to "discovery" (batch uploads)
  *     - name      string, optional — display-name override, applied
@@ -61,12 +64,16 @@ import { Readable } from "node:stream";
 import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import busboy from "busboy";
 import { NextResponse, type NextRequest } from "next/server";
-import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessMatter } from "@/lib/matter-access";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
+import { scopeWhere, type RecordScope } from "@/lib/record-scope";
+import {
+  assertScopeWritable,
+  revalidateDocumentScope,
+} from "@/lib/scope-access";
 import { extractIfEmail } from "@/lib/email-attachment-extract";
 import {
   FileTooLargeError,
@@ -79,6 +86,8 @@ import {
   MAX_FILES_PER_BATCH,
   MAX_MEDIA_UPLOAD_BYTES,
   MAX_STANDARD_UPLOAD_BYTES,
+  UPLOAD_FOLDER_SCOPE_ERROR,
+  UPLOAD_SCOPE_REQUIRED_ERROR,
   capDocumentName,
   contentTypeForFilename,
   isMediaType,
@@ -99,7 +108,7 @@ type UploadFailure = { status: number; error: string };
 type ParseResult =
   | {
       ok: true;
-      matterId: string;
+      scope: RecordScope;
       folderId: string | null;
       category: DocumentCategory;
       displayName: string;
@@ -174,7 +183,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       result.files.map((f) =>
         prisma.document.create({
           data: {
-            matterId: result.matterId,
+            ...scopeWhere(result.scope),
             folderId: result.folderId,
             // A display-name override only makes sense for a single
             // file; batches keep each file's own name.
@@ -205,7 +214,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   // ONE activity entry per batch — a 40-file production must not
   // flood the recent-activity feed with 40 rows.
   await logActivity({
-    matterId: result.matterId,
+    matterId: result.scope.kind === "matter" ? result.scope.matterId : null,
     userId,
     type: "document",
     title:
@@ -222,14 +231,13 @@ export async function POST(req: NextRequest): Promise<Response> {
   // Best-effort — the upload itself has succeeded either way.
   for (const d of documents) await extractIfEmail(d, userId);
 
-  revalidatePath(`/matters/${result.matterId}/documents`);
-  revalidatePath(`/matters/${result.matterId}`);
+  revalidateDocumentScope(result.scope);
 
   return NextResponse.json({ documents });
 }
 
 type Target = {
-  matterId: string;
+  scope: RecordScope;
   folderId: string | null;
   category: DocumentCategory;
   displayName: string;
@@ -241,6 +249,7 @@ async function resolveTarget(
   userId: string,
   fields: {
     matterId?: string;
+    leadId?: string;
     folderId?: string;
     category?: string;
     name?: string;
@@ -254,39 +263,54 @@ async function resolveTarget(
     return { status: 400, error: "Invalid document name or category." };
   }
   const matterId = fields.matterId?.trim();
-  if (!matterId) {
-    return {
-      status: 400,
-      error:
-        "matterId is required and must precede file parts in the form data.",
-    };
+  const leadId = fields.leadId?.trim();
+  if ((matterId && leadId) || (!matterId && !leadId)) {
+    return { status: 400, error: UPLOAD_SCOPE_REQUIRED_ERROR };
   }
-  // TODO (multi-tenant): scope by firmId once Matter carries one
-  // (single-tenant today; see the download route's ACCESS MODEL).
-  const matter = await prisma.matter.findUnique({
-    where: { id: matterId },
-    select: { id: true },
-  });
-  // Matter wall: a hidden matter is "not found" (404), same as a
-  // missing one - checked before the first byte is written.
-  if (!matter || !(await canAccessMatter(userId, matterId))) {
-    return { status: 404, error: "Matter not found." };
+
+  let scope: RecordScope;
+  if (matterId) {
+    // TODO (multi-tenant): scope by firmId once Matter carries one
+    // (single-tenant today; see the download route's ACCESS MODEL).
+    const matter = await prisma.matter.findUnique({
+      where: { id: matterId },
+      select: { id: true },
+    });
+    // Matter wall: a hidden matter is "not found" (404), same as a
+    // missing one - checked before the first byte is written.
+    if (!matter || !(await canAccessMatter(userId, matterId))) {
+      return { status: 404, error: "Matter not found." };
+    }
+    scope = { kind: "matter", matterId };
+  } else if (leadId) {
+    // Intake is not matter-ACL'd; the lead only has to exist and be
+    // unconverted (its records moved to the matter on conversion).
+    const lead = await prisma.lead.findUnique({
+      where: { id: leadId },
+      select: { id: true },
+    });
+    if (!lead) return { status: 404, error: "Lead not found." };
+    scope = { kind: "lead", leadId: lead.id };
+    const readOnly = await assertScopeWritable(scope);
+    if (readOnly) return { status: 409, error: readOnly };
+  } else {
+    return { status: 400, error: UPLOAD_SCOPE_REQUIRED_ERROR };
   }
 
   const folderId = fields.folderId?.trim();
   if (folderId) {
-    // Scoped find — a folderId from a *different* matter must not
-    // let files leak into that matter's tree.
+    // Scoped find — a folderId from a *different* matter or lead
+    // must not let files leak into that tree.
     const folder = await prisma.documentFolder.findFirst({
-      where: { id: folderId, matterId },
+      where: { id: folderId, ...scopeWhere(scope) },
       select: { id: true },
     });
     if (!folder) {
-      return { status: 400, error: "Folder not found in this matter." };
+      return { status: 400, error: UPLOAD_FOLDER_SCOPE_ERROR };
     }
   }
   return {
-    matterId,
+    scope,
     folderId: folderId || null,
     category: meta.category,
     displayName: meta.name,
@@ -338,6 +362,7 @@ async function parseAndStore(
   const source = Readable.fromWeb(body);
   const fields: {
     matterId?: string;
+    leadId?: string;
     folderId?: string;
     category?: string;
     name?: string;
@@ -363,6 +388,7 @@ async function parseAndStore(
     bb.on("field", (name, value) => {
       if (
         name === "matterId" ||
+        name === "leadId" ||
         name === "folderId" ||
         name === "category" ||
         name === "name"
@@ -500,7 +526,7 @@ async function parseAndStore(
   const t = target as unknown as Target;
   return {
     ok: true,
-    matterId: t.matterId,
+    scope: t.scope,
     folderId: t.folderId,
     category: t.category,
     displayName: t.displayName,
