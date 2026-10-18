@@ -24,6 +24,7 @@ import {
   scopePaths,
   type RecordScope,
 } from "@/lib/record-scope";
+import { addCalendarDays } from "@/lib/records-requests/due-date";
 import { isAssignableUser } from "@/lib/task-assignment";
 import { parseDateOnly, todayKey } from "@/lib/format-date";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
@@ -35,6 +36,7 @@ import {
 } from "@/lib/records-requests/status";
 import {
   cancelFollowUpTasks,
+  lockRecordsRequest,
   openFollowUpTask,
   syncFollowUpTaskOwner,
 } from "@/lib/records-requests/follow-up";
@@ -307,42 +309,78 @@ export async function setRecordsRequestStatus(
   const scope = scopeOf(row);
   const userId = await assertScopeAccess(scope);
 
-  const from = row.status as RecordsRequestStatus;
-  if (from === "draft" && status === "sent") {
-    return { ok: false, error: "Use Mark sent to send a request." };
-  }
-  const t = checkRecordsTransition(from, status);
-  if (!t.ok) {
-    return { ok: false, error: `Can't change a request from ${from} to ${status}.` };
-  }
   const toTerminal = (RECORDS_TERMINAL_STATUSES as readonly string[]).includes(
     status
   );
   const today = parseDateOnly(todayKey(await getCurrentUserTimeZone()));
 
-  await prisma.$transaction(async (tx) => {
-    await tx.recordsRequest.update({
-      where: { id },
-      data: {
-        status,
-        ...(toTerminal
-          ? {
-              nextFollowUpDate: null,
-              ...(status === "complete" ? { receivedAt: today } : {}),
-            }
-          : {}),
-      },
-    });
-    if (toTerminal) await cancelFollowUpTasks(tx, id);
-    else if (t.reopen) await openFollowUpTask(tx, id);
-  });
+  const result = await prisma.$transaction(
+    async (
+      tx
+    ): Promise<
+      | { ok: true; from: RecordsRequestStatus; reopen: boolean }
+      | { ok: false; error: string }
+    > => {
+      await lockRecordsRequest(tx, id);
+      const cur = await tx.recordsRequest.findUnique({
+        where: { id },
+        select: { status: true, type: { select: { followUpDays: true } } },
+      });
+      if (!cur) return { ok: false, error: "Request not found" };
+      const from = cur.status as RecordsRequestStatus;
+      if (from === "draft" && status === "sent") {
+        return { ok: false, error: "Use Mark sent to send a request." };
+      }
+      const t = checkRecordsTransition(from, status);
+      if (!t.ok) {
+        return {
+          ok: false,
+          error: `Can't change a request from ${from} to ${status}.`,
+        };
+      }
+      const write = await tx.recordsRequest.updateMany({
+        where: { id, status: from },
+        data: {
+          status,
+          ...(toTerminal
+            ? {
+                nextFollowUpDate: null,
+                ...(status === "complete" ? { receivedAt: today } : {}),
+              }
+            : {}),
+          // A reopened request was cleared at close; restart the chase.
+          ...(t.reopen && today
+            ? {
+                nextFollowUpDate: addCalendarDays(
+                  today,
+                  cur.type?.followUpDays ?? 7
+                ),
+              }
+            : {}),
+        },
+      });
+      if (write.count === 0) {
+        return {
+          ok: false,
+          error:
+            "This request changed while you were updating it. Reload and try again.",
+        };
+      }
+      if (toTerminal) await cancelFollowUpTasks(tx, id);
+      else if (t.reopen) await openFollowUpTask(tx, id);
+      return { ok: true, from, reopen: t.reopen };
+    }
+  );
+  if (!result.ok) return result;
 
   await logActivity({
     matterId: row.matterId,
     userId,
     type: "records",
-    title: t.reopen ? "Records request reopened" : "Records request status changed",
-    detail: `${row.subject}: ${from} → ${status}`,
+    title: result.reopen
+      ? "Records request reopened"
+      : "Records request status changed",
+    detail: `${row.subject}: ${result.from} → ${status}`,
   });
   revalidateForScope(scope);
   return { ok: true };

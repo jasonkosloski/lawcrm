@@ -13,12 +13,22 @@ import { parseDateOnly } from "@/lib/format-date";
 const OPEN_TASK_STATUSES = ["open", "in_progress"];
 const DEFAULT_FOLLOW_UP_DAYS = 7;
 
+/** Row-lock the request for the rest of the caller's transaction so
+ *  concurrent read-then-write helpers serialize. */
+export async function lockRecordsRequest(
+  tx: Tx,
+  requestId: string
+): Promise<void> {
+  await tx.$queryRaw`SELECT id FROM "records_requests" WHERE id = ${requestId} FOR UPDATE`;
+}
+
 /** Create the follow-up task unless one is already open (or the
  *  request is missing / closed). */
 export async function openFollowUpTask(
   tx: Tx,
   requestId: string
 ): Promise<void> {
+  await lockRecordsRequest(tx, requestId);
   const r = await tx.recordsRequest.findUnique({
     where: { id: requestId },
     select: {
@@ -55,6 +65,7 @@ export async function cancelFollowUpTasks(
   tx: Tx,
   requestId: string
 ): Promise<void> {
+  await lockRecordsRequest(tx, requestId);
   await tx.task.updateMany({
     where: { recordsRequestId: requestId, status: { in: OPEN_TASK_STATUSES } },
     data: { status: "cancelled", completedAt: new Date() },
@@ -71,6 +82,7 @@ export async function rollFollowUp(
   requestId: string,
   opts: { actorId: string; note: string | null; today: string }
 ): Promise<boolean> {
+  await lockRecordsRequest(tx, requestId);
   const r = await tx.recordsRequest.findUnique({
     where: { id: requestId },
     select: { status: true, type: { select: { followUpDays: true } } },

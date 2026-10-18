@@ -358,3 +358,52 @@ describe("rollFollowUp", () => {
     expect(await prisma.recordsRequestFollowUp.count()).toBe(0);
   });
 });
+
+describe("concurrency and reopen", () => {
+  test("concurrent openFollowUpTask yields one open task", async () => {
+    const r = await seedRequest();
+    await Promise.all([
+      prisma.$transaction((tx) => openFollowUpTask(tx, r.id)),
+      prisma.$transaction((tx) => openFollowUpTask(tx, r.id)),
+    ]);
+    expect(
+      await prisma.task.count({
+        where: { recordsRequestId: r.id, status: "open" },
+      })
+    ).toBe(1);
+  });
+
+  test("concurrent reopen: one wins, one open task", async () => {
+    const r = await seedRequest({ status: "complete", nextFollowUpDate: null });
+    const res = await Promise.all([
+      setRecordsRequestStatus(r.id, "sent"),
+      setRecordsRequestStatus(r.id, "sent"),
+    ]);
+    expect(res.filter((x) => x.ok)).toHaveLength(1);
+    expect(res.filter((x) => !x.ok)).toHaveLength(1);
+    expect(
+      await prisma.task.count({
+        where: { recordsRequestId: r.id, status: "open" },
+      })
+    ).toBe(1);
+  });
+
+  test("reopen restarts the chase at today + interval", async () => {
+    const r = await seedRequest({ status: "complete", nextFollowUpDate: null });
+    const today = new Date().toLocaleDateString("en-CA", {
+      timeZone: "America/Denver",
+    });
+    const expected = new Date(
+      Date.parse(`${today}T00:00:00Z`) + 7 * 86400000
+    );
+    await setRecordsRequestStatus(r.id, "sent");
+    const after = await prisma.recordsRequest.findUniqueOrThrow({
+      where: { id: r.id },
+    });
+    expect(after.nextFollowUpDate?.getTime()).toBe(expected.getTime());
+    const task = await prisma.task.findFirstOrThrow({
+      where: { recordsRequestId: r.id, status: "open" },
+    });
+    expect(task.dueDate?.getTime()).toBe(expected.getTime());
+  });
+});
