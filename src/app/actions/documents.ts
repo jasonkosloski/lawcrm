@@ -30,7 +30,7 @@
 import { prisma } from "@/lib/prisma";
 import { assertChildMatterAccess } from "@/lib/matter-access";
 import { revalidateDocumentScope } from "@/lib/scope-access";
-import { scopeOf, scopeWhere } from "@/lib/record-scope";
+import { SAME_SCOPE_ERROR, scopeOf, scopeWhere } from "@/lib/record-scope";
 import { getCurrentUserId } from "@/lib/current-user";
 import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
@@ -271,20 +271,36 @@ export async function copyDocumentToFolder(
   });
   if (!doc) return { ok: false, error: "Document not found." };
 
-  let folderName = "the matter root";
+  const scope = scopeOf(doc);
+  let folderName = scope.kind === "lead" ? "the intake root" : "the matter root";
   if (folderId) {
+    const target = await prisma.documentFolder.findUnique({
+      where: { id: folderId },
+      select: { name: true, matterId: true, leadId: true },
+    });
+    if (!target) return { ok: false, error: "Folder not found." };
+    // A folder of the other kind (matter vs intake) is a scope breach;
+    // a different record of the same kind is simply not found here.
+    if (scopeOf(target).kind !== scope.kind) {
+      return { ok: false, error: SAME_SCOPE_ERROR };
+    }
     const folder = await prisma.documentFolder.findFirst({
-      where: { id: folderId, ...scopeWhere(scopeOf(doc)) },
+      where: { id: folderId, ...scopeWhere(scope) },
       select: { name: true },
     });
-    if (!folder) return { ok: false, error: "Folder not found in this matter." };
+    if (!folder) {
+      return {
+        ok: false,
+        error: `Folder not found in this ${scope.kind === "lead" ? "intake" : "matter"}.`,
+      };
+    }
     folderName = `"${folder.name}"`;
   }
 
   const copy = await prisma.$transaction(async (tx) => {
     const created = await tx.document.create({
       data: {
-        ...scopeWhere(scopeOf(doc)),
+        ...scopeWhere(scope),
         folderId,
         name: doc.name,
         category: doc.category,
@@ -302,7 +318,7 @@ export async function copyDocumentToFolder(
       await tx.document.createMany({
         data: doc.attachments.map((a) => ({
           ...a,
-          ...scopeWhere(scopeOf(doc)),
+          ...scopeWhere(scope),
           folderId,
           parentDocumentId: created.id,
           uploadedBy: userId,
@@ -323,6 +339,6 @@ export async function copyDocumentToFolder(
         : ""
     }`,
   });
-  revalidateDocumentScope(scopeOf(doc));
+  revalidateDocumentScope(scope);
   return { ok: true, id: copy.id };
 }

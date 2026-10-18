@@ -26,6 +26,7 @@ import { readStoredBytes } from "@/lib/document-preview";
 import { EMAIL_MAX_BYTES, readEmailFiles } from "@/lib/office-preview";
 import { resolveDocumentRenderer } from "@/components/documents-viewer/resolve-renderer";
 import { capDocumentName, contentTypeForFilename } from "@/app/api/documents/upload/upload-config";
+import { scopeOf, scopeWhere } from "@/lib/record-scope";
 import { logActivity } from "@/lib/activity-log";
 
 /** Attachments extracted per email; past this the rest stay inside
@@ -45,7 +46,7 @@ export function emailKindOf(contentType: string | null, name: string): "eml" | "
 export async function extractEmailAttachments(documentId: string, actorId: string): Promise<ExtractResult> {
   const email = await prisma.document.findUnique({
     where: { id: documentId },
-    select: { id: true, matterId: true, folderId: true, name: true, contentType: true, fileUrl: true, category: true },
+    select: { id: true, matterId: true, leadId: true, folderId: true, name: true, contentType: true, fileUrl: true, category: true },
   });
   if (!email?.fileUrl) return { ok: false, reason: "Email not found." };
   const kind = emailKindOf(email.contentType, email.name);
@@ -99,7 +100,7 @@ export async function extractEmailAttachments(documentId: string, actorId: strin
       rows.map((r) =>
         prisma.document.create({
           data: {
-            matterId: email.matterId,
+            ...scopeWhere(scopeOf(email)),
             folderId: email.folderId,
             parentDocumentId: email.id,
             attachmentIndex: r.index,

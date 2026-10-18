@@ -75,3 +75,8 @@ export function scopePaths(scope: RecordScope | null, tab: string): string[] {
   const base = scopeBasePath(scope);
   return [`${base}/${tab}`, base];
 }
+
+/** Refusal text when a document / folder operation would cross scopes
+ *  (matter <-> intake lead, or between two different records). */
+export const SAME_SCOPE_ERROR =
+  "Documents and folders can only move within the same matter or intake.";

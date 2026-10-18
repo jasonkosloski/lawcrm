@@ -34,6 +34,7 @@ import {
   seedDocument,
   seedFirm,
   seedFlaggedMoment,
+  seedLead,
   seedMatter,
   seedPracticeArea,
   seedUser,
@@ -211,5 +212,20 @@ describe("deleteDocument flagged moments", () => {
       where: { title: "Document deleted" },
     });
     expect(log.detail).toMatch(/1 flagged moment removed/);
+  });
+});
+
+describe("deleteDocument on a lead (intake) document", () => {
+  test("removes the row and revalidates the intake documents tab", async () => {
+    const { leadId } = await seedLead();
+    const doc = await prisma.document.create({
+      data: { leadId, name: "intake.pdf", uploadedBy: uploaderId },
+      select: { id: true },
+    });
+    expect(await deleteDocument(doc.id)).toEqual({ ok: true });
+    expect(await prisma.document.count({ where: { id: doc.id } })).toBe(0);
+    const paths = vi.mocked(revalidatePath).mock.calls.map((c) => String(c[0]));
+    expect(paths).toContain(`/intake/${leadId}/documents`);
+    expect(paths.some((p) => p.includes("null"))).toBe(false);
   });
 });

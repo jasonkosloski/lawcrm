@@ -50,6 +50,7 @@ import {
   resetDb,
   seedDocumentFolder,
   seedFirm,
+  seedLead,
   seedMatter,
   seedPracticeArea,
   seedUser,
@@ -306,5 +307,56 @@ describe("getFolderListing", () => {
 
     const inExhibits = await getFolderListing(matterId, exhibits.folderId);
     expect(inExhibits.documents.map((d) => d.name)).toEqual(["report.pdf"]);
+  });
+});
+
+describe("lead (intake) scope", () => {
+  async function leadEmail(leadId: string): Promise<string> {
+    store.set("k__lead.eml", Buffer.from(EML));
+    const doc = await prisma.document.create({
+      data: { leadId, name: "Lead email.eml", contentType: "message/rfc822", fileUrl: "k__lead.eml", fileSize: EML.length, uploadedBy: userId },
+      select: { id: true },
+    });
+    return doc.id;
+  }
+
+  test("extracted attachments inherit the lead scope", async () => {
+    const { leadId } = await seedLead();
+    const emailId = await leadEmail(leadId);
+    expect(await extractAttachments(emailId)).toEqual({ ok: true, created: 2 });
+    const kids = await attachmentsOf(emailId);
+    expect(kids).toHaveLength(2);
+    expect(kids.every((k) => k.leadId === leadId && k.matterId === null)).toBe(true);
+  });
+
+  test("copying a lead document into a matter folder is refused", async () => {
+    const { leadId } = await seedLead();
+    const folder = await seedDocumentFolder({ matterId, name: "M" });
+    const doc = await prisma.document.create({ data: { leadId, name: "x.pdf" }, select: { id: true } });
+    expect(await copyDocumentToFolder(doc.id, folder.folderId)).toEqual({
+      ok: false,
+      error: "Documents and folders can only move within the same matter or intake.",
+    });
+  });
+
+  test("copying a lead document into another lead folder works and keeps the lead", async () => {
+    const { leadId } = await seedLead();
+    const dest = await prisma.documentFolder.create({ data: { leadId, name: "Dest" }, select: { id: true } });
+    const doc = await prisma.document.create({ data: { leadId, name: "x.pdf" }, select: { id: true } });
+    const res = await copyDocumentToFolder(doc.id, dest.id);
+    expect(res.ok).toBe(true);
+    expect(await prisma.document.findUnique({ where: { id: res.id! } })).toMatchObject({
+      leadId,
+      matterId: null,
+      folderId: dest.id,
+    });
+  });
+
+  test("a folder of a different lead is not found", async () => {
+    const { leadId } = await seedLead();
+    const other = await seedLead({ name: "Other" });
+    const theirs = await prisma.documentFolder.create({ data: { leadId: other.leadId, name: "T" }, select: { id: true } });
+    const doc = await prisma.document.create({ data: { leadId, name: "x.pdf" }, select: { id: true } });
+    expect(await copyDocumentToFolder(doc.id, theirs.id)).toMatchObject({ ok: false, error: expect.stringMatching(/not found/) });
   });
 });

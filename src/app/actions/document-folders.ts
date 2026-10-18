@@ -40,6 +40,7 @@ import {
   scopeBasePath,
   scopeOf,
   scopeWhere,
+  SAME_SCOPE_ERROR,
   type RecordScope,
 } from "@/lib/record-scope";
 import { requirePermission } from "@/lib/permission-check";
@@ -59,8 +60,6 @@ export type FolderActionResult =
   | { ok: false; error: string };
 
 const MAX_FOLDER_NAME_LENGTH = 120;
-const SAME_SCOPE_ERROR =
-  "Documents and folders can only move within the same matter or intake.";
 
 /** Trimmed 1..120-char name, or an error string. */
 function validateName(raw: string): { name: string } | { error: string } {
