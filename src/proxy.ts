@@ -32,6 +32,7 @@
  */
 
 import { NextResponse, type NextRequest } from "next/server";
+import { CSP_HEADER, createNonce, pageCsp } from "@/lib/csp";
 
 /** Auth.js cookie name. The `__Secure-` prefix is added when running
  *  over HTTPS (production); dev uses the unprefixed name. We check
@@ -78,10 +79,23 @@ export function proxy(request: NextRequest) {
   // value — so the header can't be spoofed into an open-redirect vector.
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-pathname", pathname + request.nextUrl.search);
-  const passThrough = () =>
+
+  // Page CSP with a fresh nonce (src/lib/csp.ts). Next reads the nonce
+  // from the REQUEST header and stamps its scripts/styles; the response
+  // header is what the browser applies. API routes return JSON or files
+  // and get none here (the framed file routes get theirs in
+  // next.config.ts).
+  const csp = pathname.startsWith("/api/")
+    ? null
+    : pageCsp(createNonce(), { isDev: process.env.NODE_ENV === "development" });
+  if (csp) requestHeaders.set(CSP_HEADER, csp);
+  const passThrough = () => {
     // `request.headers` (not top-level `headers`) — top-level would set
     // RESPONSE headers, leaking to clients instead of reaching layouts.
-    NextResponse.next({ request: { headers: requestHeaders } });
+    const res = NextResponse.next({ request: { headers: requestHeaders } });
+    if (csp) res.headers.set(CSP_HEADER, csp);
+    return res;
+  };
 
   // Public routes always pass.
   if (isPublicPath(pathname) || SELF_AUTHENTICATED_PATHS.has(pathname)) {

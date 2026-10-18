@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { CSP_HEADER, fileRouteCsp } from "./src/lib/csp";
 
 /**
  * Baseline security response headers (F261/F392/F927/F442).
@@ -20,33 +21,11 @@ import type { NextConfig } from "next";
  * breaks the whole app. `frame-ancestors` is covered by X-Frame-Options,
  * and the two download routes already send their own `Content-Security-
  * Policy: sandbox`, which a global CSP header would have to merge with.
- * Rollout stage 1 (live): `Content-Security-Policy-Report-Only` with a
- * static policy that still allows inline script/style, reporting to
- * /api/csp-report (logged as `[csp-report]`). Watch the reports, then
- * tighten (nonces) and enforce.
+ * Rollout stage 2 (live): pages get a per-request nonce policy from
+ * src/proxy.ts (src/lib/csp.ts), report-only, reporting to
+ * /api/csp-report. Only the viewer-framed file routes get a static
+ * policy here; API JSON gets none.
  */
-/** Report-only CSP. `frame-ancestors` is 'none' everywhere except the
- *  viewer-framed file routes ('self'), mirroring X-Frame-Options. Blob
- *  storage is allowed for client-direct uploads and the download 302. */
-export function reportOnlyCsp(frameAncestors: "'none'" | "'self'"): string {
-  const blob = "https://*.blob.vercel-storage.com";
-  return [
-    "default-src 'self'",
-    "script-src 'self' 'unsafe-inline'",
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https:",
-    "font-src 'self' data:",
-    `connect-src 'self' ${blob} https://vercel.com`,
-    `frame-src 'self' blob: ${blob}`,
-    "worker-src 'self' blob:",
-    "object-src 'none'",
-    "base-uri 'self'",
-    "form-action 'self'",
-    `frame-ancestors ${frameAncestors}`,
-    "report-uri /api/csp-report",
-  ].join("; ");
-}
-
 export const SECURITY_HEADERS = [
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -78,8 +57,6 @@ export const FRAMEABLE_FILE_ROUTES = [
 export const NON_FRAMEABLE_SOURCE =
   "/:path((?!api/documents/[^/]+/download/?$|api/email-attachments/[^/]+/download/?$).*)";
 
-const CSP_REPORT_ONLY = "Content-Security-Policy-Report-Only";
-
 const nextConfig: NextConfig = {
   // Native modules Next.js's bundler must NOT try to trace and
   // rewrite. argon2 is a native addon (`.node` binary); when
@@ -98,17 +75,14 @@ const nextConfig: NextConfig = {
     return [
       {
         source: NON_FRAMEABLE_SOURCE,
-        headers: [
-          ...SECURITY_HEADERS,
-          { key: CSP_REPORT_ONLY, value: reportOnlyCsp("'none'") },
-        ],
+        headers: SECURITY_HEADERS,
       },
       ...FRAMEABLE_FILE_ROUTES.map((source) => ({
         source,
         headers: [
           ...SECURITY_HEADERS.filter((h) => h.key !== "X-Frame-Options"),
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
-          { key: CSP_REPORT_ONLY, value: reportOnlyCsp("'self'") },
+          { key: CSP_HEADER, value: fileRouteCsp() },
         ],
       })),
     ];

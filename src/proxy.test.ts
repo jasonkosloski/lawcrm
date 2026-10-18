@@ -172,3 +172,31 @@ describe("proxy matcher", () => {
     expect(re.test(path)).toBe(true);
   });
 });
+
+describe("proxy CSP nonce", () => {
+  const CSP = "content-security-policy-report-only";
+
+  it("gives each page request a fresh nonce, on both the request and the response", () => {
+    const cookie = "authjs.session-token=x";
+    const a = proxy(makeRequest("/matters", { cookie }));
+    const b = proxy(makeRequest("/matters", { cookie }));
+    const policyA = a.headers.get(CSP)!;
+    const nonceA = /'nonce-([^']+)'/.exec(policyA)![1];
+    const nonceB = /'nonce-([^']+)'/.exec(b.headers.get(CSP)!)![1];
+    expect(nonceA).not.toBe(nonceB);
+    expect(nonceA.length).toBeGreaterThanOrEqual(24);
+    // Next reads the nonce from the forwarded request header.
+    expect(forwardedHeader(a, CSP)).toBe(policyA);
+    expect(policyA).toContain("'strict-dynamic'");
+    expect(policyA).toContain("frame-ancestors 'none'");
+  });
+
+  it("covers the public login page too", () => {
+    expect(proxy(makeRequest("/login")).headers.get(CSP)).toContain("'nonce-");
+  });
+
+  it("API routes get no page policy", () => {
+    const res = proxy(makeRequest("/api/csp-report"));
+    expect(res.headers.get(CSP)).toBeNull();
+  });
+});

@@ -91,17 +91,14 @@ describe("next.config headers()", () => {
     }
   });
 
-  it("ships a report-only CSP on every path, framing allowed only for the file routes", async () => {
+  it("leaves page CSP to the proxy (nonces); only the framed file routes get a static one", async () => {
     const all = await rules();
     const csp = (path: string) =>
-      header(matching(all, path)[0], "Content-Security-Policy-Report-Only") ?? "";
-    for (const path of NOT_FRAMED) {
-      expect(csp(path), path).toContain("frame-ancestors 'none'");
-      expect(csp(path)).toContain("report-uri /api/csp-report");
-      expect(csp(path)).toContain("object-src 'none'");
-    }
+      header(matching(all, path)[0], "Content-Security-Policy-Report-Only");
+    for (const path of NOT_FRAMED) expect(csp(path), path).toBeUndefined();
     for (const path of FRAMED) {
       expect(csp(path), path).toContain("frame-ancestors 'self'");
+      expect(csp(path)).toContain("report-uri /api/csp-report");
     }
   });
 
