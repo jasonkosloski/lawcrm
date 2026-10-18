@@ -26,6 +26,7 @@ export const DASHBOARD_CARD_KEYS = [
   "activity",
   "deadlines",
   "pulse",
+  "records",
 ] as const;
 
 export type DashboardCardKey = (typeof DASHBOARD_CARD_KEYS)[number];
@@ -39,6 +40,7 @@ export const DASHBOARD_CARD_LABELS: Record<DashboardCardKey, string> = {
   activity: "Recent activity",
   deadlines: "Deadlines this week",
   pulse: "Firm pulse",
+  records: "Records to chase",
 };
 
 /**
@@ -57,6 +59,7 @@ export const DASHBOARD_CARD_COLUMNS: Record<DashboardCardKey, DashboardColumn> =
     activity: "main",
     deadlines: "rail",
     pulse: "rail",
+    records: "rail",
   };
 
 export type DashboardVisibility = Record<DashboardCardKey, boolean>;
@@ -69,6 +72,7 @@ const DEFAULT_VISIBILITY: DashboardVisibility = {
   activity: true,
   deadlines: true,
   pulse: true,
+  records: true,
 };
 
 /**

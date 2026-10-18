@@ -759,6 +759,11 @@ export async function mergeContacts(
         where: { clientId: loserId },
         data: { clientId: survivorId },
       });
+      // Restrict FK: without this a custodian merge would fail.
+      await tx.recordsRequest.updateMany({
+        where: { custodianContactId: loserId },
+        data: { custodianContactId: survivorId },
+      });
 
       // Phones: move the loser's rows over, dropping numbers the
       // survivor already has. Survivor keeps its primary; incoming

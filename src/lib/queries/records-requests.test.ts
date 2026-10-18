@@ -7,6 +7,7 @@
 import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
 import {
+  getMyRecordsToChase,
   getRecordsRequestDetail,
   getRecordsRequests,
 } from "@/lib/queries/records-requests";
@@ -21,6 +22,9 @@ import {
   seedPracticeArea,
   seedUser,
 } from "@/test/integration-helpers";
+
+vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
+import { getCurrentUserId } from "@/lib/current-user";
 
 const TZ = "America/Denver";
 let userId: string;
@@ -47,6 +51,7 @@ beforeEach(async () => {
     })
   ).matterId;
   M = { kind: "matter", matterId };
+  vi.mocked(getCurrentUserId).mockResolvedValue(userId);
   custodianId = (await seedContact({ name: "St. Mary's", type: "medical_provider" }))
     .contactId;
 });
@@ -136,5 +141,64 @@ describe("getRecordsRequestDetail", () => {
     expect([hidden?.feeAmount, hidden?.feeEstimate, hidden?.feePaidAt]).toEqual([null, null, null]);
     const shown = await getRecordsRequestDetail(M, r.id, { includeFees: true });
     expect([shown?.feeAmount, shown?.feeEstimate]).toEqual(["5.00", "9.00"]);
+  });
+});
+
+describe("getMyRecordsToChase", () => {
+  test("overdue first, then soonest follow-up; excludes closed, far-off and other owners", async () => {
+    const { leadId } = await seedLead({ name: "Test Lead" });
+    const other = (await seedUser({ firmId: (await prisma.firm.findFirstOrThrow()).id })).userId;
+    await req({
+      subject: "follow in 3d",
+      nextFollowUpDate: new Date("2026-10-21T00:00:00Z"),
+    });
+    await req({
+      subject: "overdue 2d",
+      responseDueDate: new Date("2026-10-16T00:00:00Z"),
+      nextFollowUpDate: new Date("2026-10-25T00:00:00Z"),
+    });
+    await req({
+      subject: "today",
+      nextFollowUpDate: new Date("2026-10-18T00:00:00Z"),
+    });
+    await req({
+      subject: "complete",
+      status: "complete",
+      responseDueDate: new Date("2026-10-01T00:00:00Z"),
+    });
+    await req({
+      subject: "far",
+      nextFollowUpDate: new Date("2026-11-30T00:00:00Z"),
+    });
+    await req({
+      subject: "theirs",
+      ownerId: other,
+      responseDueDate: new Date("2026-10-01T00:00:00Z"),
+    });
+    await prisma.recordsRequest.create({
+      data: {
+        leadId,
+        custodianContactId: custodianId,
+        adHocTypeName: "x",
+        subject: "intake one",
+        status: "sent",
+        ownerId: userId,
+        nextFollowUpDate: new Date("2026-10-22T00:00:00Z"),
+      },
+    });
+    const items = await getMyRecordsToChase(TZ);
+    expect(items.map((i) => [i.subject, i.label])).toEqual([
+      ["overdue 2d", "2d overdue"],
+      ["today", "Follow up today"],
+      ["follow in 3d", "Follow up in 3d"],
+      ["intake one", "Follow up in 4d"],
+    ]);
+    expect(items[0]).toMatchObject({
+      custodianName: "St. Mary's",
+      href: `/matters/${matterId}/records?request=${items[0].id}`,
+    });
+    expect(items[3].context).toBe("Intake \u00b7 Test Lead");
+    expect(items[3].href).toBe(`/intake/${leadId}/records?request=${items[3].id}`);
+    expect(JSON.stringify(items)).not.toMatch(/fee/i);
   });
 });

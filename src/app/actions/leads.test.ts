@@ -614,6 +614,103 @@ describe("convertLeadToMatter — intake notes roll-forward", () => {
   });
 });
 
+describe("convertLeadToMatter — intake records requests", () => {
+  async function seedReq(leadId: string, over: Record<string, unknown> = {}) {
+    const c = await prisma.contact.create({
+      data: { name: "St. Mary's", type: "medical_provider" },
+      select: { id: true },
+    });
+    return prisma.recordsRequest.create({
+      data: {
+        leadId,
+        custodianContactId: c.id,
+        adHocTypeName: "Billing",
+        subject: "Bills",
+        status: "sent",
+        ownerId: userId,
+        ...over,
+      },
+    });
+  }
+
+  test("carries requests, tasks and letters to the matter and books paid fees as expenses", async () => {
+    const { areaId, stageId } = await seedArea({});
+    const { leadId } = await seedIntakeLead();
+    const paid = await seedReq(leadId, {
+      feeAmount: "15.00",
+      feePaidAt: new Date("2026-10-10T00:00:00Z"),
+    });
+    const free = await seedReq(leadId, {
+      subject: "Zero",
+      feeAmount: "0.00",
+      feePaidAt: new Date("2026-10-10T00:00:00Z"),
+    });
+    const unpaid = await seedReq(leadId, { subject: "Unpaid", feeAmount: "9.00" });
+    const task = await prisma.task.create({
+      data: { leadId, title: "Follow up", recordsRequestId: paid.id },
+    });
+    const doc = await prisma.document.create({
+      data: {
+        leadId,
+        name: "letter.pdf",
+        recordsRequestId: paid.id,
+        recordsRequestRole: "request_letter",
+      },
+    });
+
+    await expect(
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+    ).rejects.toThrow(/^REDIRECT:\/matters\//);
+
+    const matter = await prisma.matter.findFirstOrThrow({ select: { id: true } });
+    const p = await prisma.recordsRequest.findUniqueOrThrow({ where: { id: paid.id } });
+    expect(p.matterId).toBe(matter.id);
+    expect(p.leadId).toBeNull();
+    expect(p.expenseId).not.toBeNull();
+    const exp = await prisma.expense.findUniqueOrThrow({ where: { id: p.expenseId! } });
+    expect(exp).toMatchObject({
+      matterId: matter.id,
+      category: "records",
+      billable: true,
+      loggedBy: userId,
+      description: "Records \u2014 St. Mary's (Billing)",
+    });
+    expect(exp.amount.toFixed(2)).toBe("15.00");
+    expect(exp.date.toISOString().slice(0, 10)).toBe("2026-10-10");
+    for (const id of [free.id, unpaid.id]) {
+      const r = await prisma.recordsRequest.findUniqueOrThrow({ where: { id } });
+      expect(r.matterId).toBe(matter.id);
+      expect(r.expenseId).toBeNull();
+    }
+    expect(await prisma.expense.count()).toBe(1);
+    expect((await prisma.task.findUniqueOrThrow({ where: { id: task.id } })).matterId).toBe(matter.id);
+    const d = await prisma.document.findUniqueOrThrow({ where: { id: doc.id } });
+    expect(d.matterId).toBe(matter.id);
+    expect(d.recordsRequestId).toBe(paid.id);
+
+    const titles = (
+      await prisma.activityLog.findMany({
+        where: { matterId: matter.id },
+        select: { title: true },
+      })
+    ).map((l) => l.title);
+    expect(titles).toContain("3 intake records requests carried forward");
+    expect(titles).toContain("1 records fee added as an expense");
+  });
+
+  test("singular log and no logs when there is nothing to carry", async () => {
+    const { areaId, stageId } = await seedArea({});
+    const { leadId } = await seedIntakeLead();
+    await seedReq(leadId);
+    await expect(
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+    ).rejects.toThrow(/^REDIRECT:/);
+    const titles = (await prisma.activityLog.findMany({ select: { title: true } })).map((l) => l.title);
+    expect(titles).toContain("1 intake records request carried forward");
+    expect(titles.some((t) => t.includes("records fee"))).toBe(false);
+  });
+});
+
 describe("convertLeadToMatter — automatic defaults (ADR-019)", () => {
   test("applies the area's defaults, owned by the converting attorney, and logs provenance", async () => {
     const { areaId, stageId } = await seedArea({ hasSol: true, periodDays: 730 });

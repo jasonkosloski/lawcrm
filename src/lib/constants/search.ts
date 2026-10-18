@@ -20,6 +20,7 @@ export const SEARCH_HIT_TYPES = [
   "email",
   "message",
   "time",
+  "records_request",
 ] as const;
 
 export type SearchHitType = (typeof SEARCH_HIT_TYPES)[number];

@@ -62,6 +62,7 @@ describe("DashboardCustomizePanel — rendering", () => {
       "Recent activity",
       "Deadlines this week",
       "Firm pulse",
+      "Records to chase",
     ]);
   });
 
@@ -90,12 +91,12 @@ describe("DashboardCustomizePanel — rendering", () => {
     expect(
       screen.getByRole("button", { name: "Move Recent activity down" })
     ).toBeDisabled();
-    // Rail: deadlines first, pulse last — edges independent of main.
+    // Rail: deadlines first, records last — edges independent of main.
     expect(
       screen.getByRole("button", { name: "Move Deadlines this week up" })
     ).toBeDisabled();
     expect(
-      screen.getByRole("button", { name: "Move Firm pulse down" })
+      screen.getByRole("button", { name: "Move Records to chase down" })
     ).toBeDisabled();
   });
 });
@@ -120,6 +121,7 @@ describe("DashboardCustomizePanel — reordering", () => {
         "activity",
         "deadlines",
         "pulse",
+        "records",
       ]);
     });
   });
@@ -141,6 +143,7 @@ describe("DashboardCustomizePanel — reordering", () => {
         "activity",
         "pulse",
         "deadlines",
+        "records",
       ]);
     });
     expect(labelTexts().slice(0, 5)).toEqual([

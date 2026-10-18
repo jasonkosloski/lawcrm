@@ -23,6 +23,15 @@ import {
   type DashboardCardKey,
 } from "./dashboard-prefs";
 
+describe("records card", () => {
+  test("is a right-rail card, labelled, and visible by default", () => {
+    expect(DASHBOARD_CARD_KEYS).toContain("records");
+    expect(DASHBOARD_CARD_LABELS.records).toBe("Records to chase");
+    expect(DASHBOARD_CARD_COLUMNS.records).toBe("rail");
+    expect(mergeVisibility(null).records).toBe(true);
+  });
+});
+
 describe("DASHBOARD_CARD_KEYS shape", () => {
   test("non-empty + every key has a label", () => {
     expect(DASHBOARD_CARD_KEYS.length).toBeGreaterThan(0);
@@ -265,7 +274,7 @@ describe("moveCardInColumn", () => {
   test("returns null at the column edges", () => {
     // First main card can't go up; last rail card can't go down.
     expect(moveCardInColumn(DEFAULT_ORDER, "kpis", "up")).toBeNull();
-    expect(moveCardInColumn(DEFAULT_ORDER, "pulse", "down")).toBeNull();
+    expect(moveCardInColumn(DEFAULT_ORDER, "records", "down")).toBeNull();
   });
 
   test("moving a main card never disturbs rail cards (and vice versa)", () => {

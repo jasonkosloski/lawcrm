@@ -48,6 +48,10 @@ import {
 } from "@/test/integration-helpers";
 
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
+vi.mock("@/lib/permission-check", () => ({
+  currentUserHasPermission: vi.fn().mockResolvedValue(true),
+}));
+import { currentUserHasPermission } from "@/lib/permission-check";
 const mockedGetUser = vi.mocked(getCurrentUserId);
 
 const marked = (s: string) => `${SNIPPET_MARK_START}${s}${SNIPPET_MARK_END}`;
@@ -931,5 +935,42 @@ describe("globalSearch — markup-only matches do not crowd out real hits", () =
     const g = groupOf(await globalSearch("center"), "email")!;
     expect(g.hits.map((h) => h.id)).toEqual([thread.id]);
     expect(g.hits[0].snippet).toContain(marked("center"));
+  });
+});
+
+describe("records requests search", () => {
+  async function seedIntakeRequest() {
+    const { leadId } = await seedLead({ name: "Test Lead" });
+    const { contactId } = await seedContact({ name: "Mercy Hospital" });
+    const r = await prisma.recordsRequest.create({
+      data: {
+        leadId,
+        custodianContactId: contactId,
+        adHocTypeName: "Billing",
+        subject: "Itemized bills",
+        feeAmount: "42.00",
+      },
+    });
+    return { leadId, id: r.id };
+  }
+
+  test("matches the custodian name; intake href and context; no fee data", async () => {
+    const { leadId, id } = await seedIntakeRequest();
+    const g = groupOf(await globalSearch("mercy"), "records_request")!;
+    expect(g.hits).toHaveLength(1);
+    expect(g.hits[0]).toMatchObject({
+      id,
+      title: "Itemized bills",
+      href: `/intake/${leadId}/records?request=${id}`,
+      context: "Intake \u00b7 Test Lead",
+    });
+    expect(JSON.stringify(g)).not.toContain("42");
+  });
+
+  test("no records group without records.view", async () => {
+    await seedIntakeRequest();
+    vi.mocked(currentUserHasPermission).mockResolvedValueOnce(false);
+    const res = await globalSearch("mercy");
+    expect(groupOf(res, "records_request")).toBeUndefined();
   });
 });

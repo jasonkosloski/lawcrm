@@ -525,6 +525,25 @@ describe("setContactConflictStatus", () => {
 // ── Merge ───────────────────────────────────────────────────────────────
 
 describe("mergeContacts", () => {
+  test("re-points records requests' custodian to the survivor", async () => {
+    const { areaId, stageId } = await seedPracticeArea();
+    const m = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId });
+    const { contactId: loserId } = await seedContact({ name: "Dup Hospital" });
+    const { contactId: survivorId } = await seedContact({ name: "Hospital" });
+    const r = await prisma.recordsRequest.create({
+      data: {
+        matterId: m.matterId,
+        custodianContactId: loserId,
+        adHocTypeName: "Billing",
+        subject: "Bills",
+      },
+    });
+    expect(await mergeContacts(loserId, survivorId)).toEqual({ ok: true });
+    expect(
+      (await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } })).custodianContactId
+    ).toBe(survivorId);
+  });
+
   test("re-points party rows and drops the loser's duplicates on unique collision", async () => {
     const { areaId, stageId } = await seedPracticeArea();
     const m1 = await seedMatter({

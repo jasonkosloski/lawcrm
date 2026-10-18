@@ -23,6 +23,8 @@ import { maybeRunDeadlineNotificationSweep } from "@/lib/notification-sweeps";
 import { formatDateOnly } from "@/lib/format-date";
 import { activityIcon } from "@/lib/activity-icons";
 import { cardsInColumn, type DashboardCardKey } from "@/lib/dashboard-prefs";
+import { currentUserHasPermission } from "@/lib/permission-check";
+import { getMyRecordsToChase } from "@/lib/queries/records-requests";
 import { getDashboardPrefs } from "@/lib/queries/dashboard-prefs";
 import { Briefcase, Clock, DollarSign, Mail } from "lucide-react";
 import {
@@ -77,7 +79,12 @@ export default async function DashboardPage() {
     hidden: 0,
   };
   const emptyDeadlines: DeadlinesCard = { items: [], overdueHidden: 0 };
-  const [kpis, agenda, activity, deadlines, pulse, myTasks, followUps] =
+  // Records card: only for viewers with records.view (the loader is
+  // skipped otherwise, and the card renders nothing).
+  const canViewRecords = show.records
+    ? await currentUserHasPermission("records.view")
+    : false;
+  const [kpis, agenda, activity, deadlines, pulse, myTasks, followUps, recordsToChase] =
     await Promise.all([
       show.kpis ? getDashboardKpis(tz) : Promise.resolve(null),
       show.agenda ? getTodayAgenda(tz) : Promise.resolve([]),
@@ -88,6 +95,7 @@ export default async function DashboardPage() {
       show.pulse ? getFirmPulse(tz) : Promise.resolve(null),
       show.tasks ? getMyOpenTasks(tz) : Promise.resolve(emptyTasks),
       show.followUps ? getFollowUpsDueToday(tz) : Promise.resolve([]),
+      canViewRecords ? getMyRecordsToChase(tz) : Promise.resolve([]),
     ]);
 
   const kpiTiles = !kpis
@@ -393,6 +401,54 @@ export default async function DashboardPage() {
                         +{deadlines.overdueHidden} more overdue
                       </div>
                     )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+    ),
+
+    // Records to chase (right rail) — viewer's overdue / due-soon requests.
+    // No fee data; renders nothing without records.view.
+    records: canViewRecords && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  Records to chase
+                  <span className="text-2xs font-mono font-normal text-ink-4">
+                    {recordsToChase.length}
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                {recordsToChase.length === 0 ? (
+                  <div className="py-3 text-xs text-ink-4">
+                    No records requests need a nudge this week.
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    {recordsToChase.map((r) => (
+                      <Link
+                        key={r.id}
+                        href={r.href}
+                        className="flex items-center gap-3 py-2 border-b border-line last:border-b-0 hover:bg-paper-2 -mx-2 px-2 rounded-sm transition-colors"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs text-ink truncate">{r.subject}</div>
+                          <div className="text-3xs font-mono uppercase tracking-wider text-ink-4 truncate">
+                            {r.custodianName} · {r.context}
+                          </div>
+                        </div>
+                        <span
+                          className={`text-2xs font-mono shrink-0 ${
+                            r.label.endsWith("overdue")
+                              ? "text-warn font-medium"
+                              : "text-ink-4"
+                          }`}
+                        >
+                          {r.label}
+                        </span>
+                      </Link>
+                    ))}
                   </div>
                 )}
               </CardContent>

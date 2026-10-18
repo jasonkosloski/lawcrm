@@ -5,6 +5,7 @@
 import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("@/lib/permission-check", () => ({
   requirePermission: vi.fn(async () => "test-user"),
   currentUserHasPermission: vi.fn().mockResolvedValue(true),

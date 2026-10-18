@@ -22,6 +22,11 @@ import {
   requirePermission,
 } from "@/lib/permission-check";
 import { roundMoney } from "@/lib/money";
+import {
+  feeMakesExpense,
+  recordsFeeDescription,
+  recordsFeeExpenseData,
+} from "@/lib/records-requests/fee-expense";
 import { logActivity } from "@/lib/activity-log";
 import { getCurrentUserId } from "@/lib/current-user";
 import { assertScopeAccess, assertScopeWritable } from "@/lib/scope-access";
@@ -612,7 +617,7 @@ export async function saveRecordsFee(
   }
 
   const makesExpense =
-    scope.kind === "matter" && !!feeAmount && feeAmount.gt(0) && !!feePaidAt;
+    scope.kind === "matter" && feeMakesExpense(feeAmount, feePaidAt);
 
   const result = await prisma.$transaction(
     async (tx): Promise<string | null> => {
@@ -639,9 +644,11 @@ export async function saveRecordsFee(
         return "This fee is recorded as an expense on the matter \u2014 edit or delete it on the Time & expenses tab.";
       }
       if (makesExpense) {
-        const description = `Records \u2014 ${cur.custodian.name} (${
-          cur.type?.name ?? cur.adHocTypeName ?? "records"
-        })`;
+        const description = recordsFeeDescription({
+          custodianName: cur.custodian.name,
+          typeName: cur.type?.name ?? null,
+          adHocTypeName: cur.adHocTypeName,
+        });
         if (linked) {
           const differs =
             !linked.amount.equals(feeAmount!) ||
@@ -670,15 +677,13 @@ export async function saveRecordsFee(
             return "You don't have permission to add expenses.";
           }
           const e = await tx.expense.create({
-            data: {
+            data: recordsFeeExpenseData({
               matterId: row.matterId!,
               loggedBy: userId,
-              date: feePaidAt!,
+              feePaidAt: feePaidAt!,
+              feeAmount: feeAmount!,
               description,
-              category: "records",
-              amount: feeAmount!,
-              billable: true,
-            },
+            }),
             select: { id: true },
           });
           expenseId = e.id;

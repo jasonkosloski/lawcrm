@@ -103,7 +103,7 @@ export default async function SearchPage({
               framed
               icon={Search}
               title="Search everything"
-              description="Matters, contacts, leads, notes, documents, tasks, deadlines, events, email, messages, and time entries."
+              description="Matters, contacts, leads, notes, documents, tasks, deadlines, events, email, messages, time entries, and records requests."
             />
           ) : !longEnough ? (
             <EmptyState

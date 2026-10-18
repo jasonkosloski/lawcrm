@@ -48,6 +48,11 @@ import { dateOnlyKey, parseDateOnly } from "@/lib/format-date";
 import { runConflictMatcher } from "@/lib/conflict-check";
 import type { NewIntakeFormState } from "@/lib/new-intake-form";
 import { rehomeLeadDocuments } from "@/lib/lead-documents";
+import {
+  feeMakesExpense,
+  recordsFeeDescription,
+  recordsFeeExpenseData,
+} from "@/lib/records-requests/fee-expense";
 import { applyAutoDefaults, describeDefaults } from "@/lib/automations/apply";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import type {
@@ -523,6 +528,51 @@ export async function convertLeadToMatter(
     // suffixed rather than duplicated.
     const carriedDocumentCount = await rehomeLeadDocuments(tx, leadId, matter.id);
 
+    // Records requests roll forward after tasks/documents (their follow-up
+    // tasks and letters already moved). The lead row is write-locked by
+    // the claim above, matching the uploads' lead-then-request lock order.
+    const requests = await tx.recordsRequest.findMany({
+      where: { leadId },
+      select: {
+        id: true,
+        feeAmount: true,
+        feePaidAt: true,
+        expenseId: true,
+        adHocTypeName: true,
+        custodian: { select: { name: true } },
+        type: { select: { name: true } },
+      },
+    });
+    await tx.recordsRequest.updateMany({
+      where: { leadId },
+      data: { matterId: matter.id, leadId: null },
+    });
+    let carriedRecordsFeeCount = 0;
+    for (const r of requests) {
+      if (r.expenseId || !r.feePaidAt || !feeMakesExpense(r.feeAmount, r.feePaidAt)) {
+        continue;
+      }
+      const e = await tx.expense.create({
+        data: recordsFeeExpenseData({
+          matterId: matter.id,
+          loggedBy: userId,
+          feePaidAt: r.feePaidAt,
+          feeAmount: r.feeAmount!,
+          description: recordsFeeDescription({
+            custodianName: r.custodian.name,
+            typeName: r.type?.name ?? null,
+            adHocTypeName: r.adHocTypeName,
+          }),
+        }),
+        select: { id: true },
+      });
+      await tx.recordsRequest.update({
+        where: { id: r.id },
+        data: { expenseId: e.id },
+      });
+      carriedRecordsFeeCount++;
+    }
+
     return {
       matterId: matter.id,
       carriedCount: carried.count,
@@ -530,6 +580,8 @@ export async function convertLeadToMatter(
       carriedTaskCount: carriedTasks.count,
       carriedEventCount: carriedEvents.count,
       carriedDocumentCount,
+      carriedRequestCount: requests.length,
+      carriedRecordsFeeCount,
       defaults,
     };
   }).catch((err: unknown) => {
@@ -560,6 +612,8 @@ export async function convertLeadToMatter(
     carriedTaskCount,
     carriedEventCount,
     carriedDocumentCount,
+    carriedRequestCount,
+    carriedRecordsFeeCount,
     defaults,
   } = result;
 
@@ -645,6 +699,26 @@ export async function convertLeadToMatter(
       detail: `Uploaded to the lead before conversion · ${lead.name}`,
     });
     revalidatePath(`/matters/${matterId}/documents`, "layout");
+  }
+  if (carriedRequestCount > 0) {
+    await logActivity({
+      matterId,
+      userId,
+      type: "records",
+      title: `${carriedRequestCount} intake records ${carriedRequestCount === 1 ? "request" : "requests"} carried forward`,
+      detail: `Created on the lead before conversion · ${lead.name}`,
+    });
+    revalidatePath(`/matters/${matterId}/records`);
+  }
+  if (carriedRecordsFeeCount > 0) {
+    await logActivity({
+      matterId,
+      userId,
+      type: "records",
+      title: `${carriedRecordsFeeCount} records ${carriedRecordsFeeCount === 1 ? "fee" : "fees"} added as ${carriedRecordsFeeCount === 1 ? "an expense" : "expenses"}`,
+      detail: `Paid on the lead before conversion · ${lead.name}`,
+    });
+    revalidatePath(`/matters/${matterId}/time`);
   }
 
   // Revalidate everything that displays leads or matters.

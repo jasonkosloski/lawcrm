@@ -4,10 +4,18 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { scopeBasePath, scopeWhere, type RecordScope } from "@/lib/record-scope";
-import { daysUntilDateOnly, todayKey } from "@/lib/format-date";
+import { getCurrentUserId } from "@/lib/current-user";
+import { optionalMatterAccessClause } from "@/lib/matter-access";
+import { scopeBasePath, scopeOf, scopeWhere, type RecordScope } from "@/lib/record-scope";
+import {
+  addDaysToKey,
+  daysUntilDateOnly,
+  parseDateOnly,
+  todayKey,
+} from "@/lib/format-date";
 import {
   RECORDS_REQUEST_STATUSES,
+  RECORDS_TERMINAL_STATUSES,
   isRecordsRequestOverdue,
   type RecordsRequestStatus,
 } from "@/lib/records-requests/status";
@@ -216,4 +224,100 @@ export async function getRecordsRequestDetail(
     })),
     updatedAt: r.updatedAt.toISOString(),
   };
+}
+
+// ── Dashboard: requests to chase ───────────────────────────────────────
+
+export type RecordsChaseItem = {
+  id: string;
+  subject: string;
+  custodianName: string;
+  href: string;
+  label: string;
+  context: string;
+};
+
+const CHASE_WINDOW_DAYS = 7;
+
+/** The viewer's open requests that are overdue or due for a follow-up
+ *  within a week. Fee data is deliberately not selected. */
+export async function getMyRecordsToChase(tz: string): Promise<RecordsChaseItem[]> {
+  const viewerId = await getCurrentUserId();
+  const today = todayKey(tz);
+  const todayStart = parseDateOnly(today)!;
+  const windowEnd = parseDateOnly(addDaysToKey(today, CHASE_WINDOW_DAYS + 1))!;
+  const accessOpt = await optionalMatterAccessClause(viewerId);
+  const rows = await prisma.recordsRequest.findMany({
+    where: {
+      AND: [
+        ...accessOpt,
+        {
+          ownerId: viewerId,
+          status: { notIn: [...RECORDS_TERMINAL_STATUSES] },
+          OR: [
+            { responseDueDate: { lt: todayStart } },
+            { nextFollowUpDate: { lt: windowEnd } },
+          ],
+        },
+      ],
+    },
+    select: {
+      id: true,
+      status: true,
+      subject: true,
+      matterId: true,
+      leadId: true,
+      responseDueDate: true,
+      nextFollowUpDate: true,
+      custodian: { select: { name: true } },
+      matter: { select: { name: true } },
+      lead: { select: { name: true } },
+    },
+  });
+  const items: Array<RecordsChaseItem & { overdue: boolean; sortKey: string }> = [];
+  for (const r of rows) {
+    if (!RECORDS_REQUEST_STATUSES.includes(r.status as RecordsRequestStatus)) continue;
+    let base: string;
+    try {
+      base = scopeBasePath(scopeOf(r));
+    } catch {
+      continue; // malformed scope: skip rather than fail the dashboard
+    }
+    const overdue = isRecordsRequestOverdue(r, today);
+    const dueKey = r.responseDueDate ? r.responseDueDate.toISOString().slice(0, 10) : null;
+    const fuKey = r.nextFollowUpDate ? r.nextFollowUpDate.toISOString().slice(0, 10) : null;
+    let label: string;
+    if (overdue) {
+      label = `${daysUntilDateOnly(r.responseDueDate!, tz) * -1}d overdue`;
+    } else if (r.nextFollowUpDate && fuKey! <= addDaysToKey(today, CHASE_WINDOW_DAYS)) {
+      const d = daysUntilDateOnly(r.nextFollowUpDate, tz);
+      label = d <= 0 ? "Follow up today" : `Follow up in ${d}d`;
+    } else {
+      continue; // matched only on a stale clause (e.g. not overdue, follow-up far off)
+    }
+    items.push({
+      id: r.id,
+      subject: r.subject,
+      custodianName: r.custodian.name,
+      href: `${base}/records?request=${r.id}`,
+      label,
+      context: r.matter?.name ?? (r.lead ? `Intake \u00b7 ${r.lead.name}` : "Intake"),
+      overdue,
+      sortKey: (overdue ? dueKey : fuKey) ?? "9999",
+    });
+  }
+  items.sort(
+    (a, b) =>
+      Number(b.overdue) - Number(a.overdue) ||
+      a.sortKey.localeCompare(b.sortKey) ||
+      a.id.localeCompare(b.id)
+  );
+  return items.map((i) => ({
+    id: i.id,
+    subject: i.subject,
+    custodianName: i.custodianName,
+    href: i.href,
+    label: i.label,
+    context: i.context,
+  }));
 }

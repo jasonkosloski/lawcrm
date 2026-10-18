@@ -55,6 +55,7 @@
 import { prisma } from "@/lib/prisma";
 import { scopeBasePath, scopeOf } from "@/lib/record-scope";
 import { getCurrentUserId } from "@/lib/current-user";
+import { currentUserHasPermission } from "@/lib/permission-check";
 import { visibleEmailThreadWhere } from "@/lib/email-visibility";
 import { canViewEventDetails } from "@/lib/calendar-visibility";
 import {
@@ -898,6 +899,73 @@ export async function globalSearch(
     };
   };
 
+  const searchRecordsRequests = async (): Promise<SearchGroup> => {
+    // Gated on records.view; fee fields are never selected.
+    if (!(await currentUserHasPermission("records.view"))) {
+      return { type: "records_request", total: 0, hits: [] };
+    }
+    const where = {
+      AND: [
+        ...accessOpt,
+        {
+          OR: [
+            { subject: ci },
+            { description: ci },
+            { custodian: { name: ci } },
+          ],
+        },
+      ],
+    };
+    const [rows, total] = await Promise.all([
+      prisma.recordsRequest.findMany({
+        where,
+        select: {
+          id: true,
+          subject: true,
+          description: true,
+          matterId: true,
+          leadId: true,
+          custodian: { select: { name: true } },
+          matter: { select: { name: true } },
+          lead: { select: { name: true } },
+        },
+        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+        take,
+      }),
+      prisma.recordsRequest.count({ where }),
+    ]);
+    return {
+      type: "records_request",
+      total,
+      hits: rows.flatMap((r) => {
+        let base: string;
+        try {
+          base = scopeBasePath(scopeOf(r));
+        } catch (err) {
+          console.warn("[search] skipping records request with no derivable scope", {
+            id: r.id,
+            err,
+          });
+          return [];
+        }
+        return [
+          {
+            type: "records_request" as const,
+            id: r.id,
+            title: r.subject,
+            snippet:
+              makeSnippet(r.subject, q) ??
+              makeSnippet(r.description, q) ??
+              makeSnippet(r.custodian.name, q),
+            href: `${base}/records?request=${r.id}`,
+            context:
+              r.matter?.name ?? (r.lead ? `Intake \u00b7 ${r.lead.name}` : "Intake"),
+          },
+        ];
+      }),
+    };
+  };
+
   const SEARCHERS: Record<SearchHitType, () => Promise<SearchGroup>> = {
     matter: searchMatters,
     contact: searchContacts,
@@ -910,6 +978,7 @@ export async function globalSearch(
     email: searchEmail,
     message: searchMessages,
     time: searchTime,
+    records_request: searchRecordsRequests,
   };
 
   // Every enabled type is issued together (on the one-connection

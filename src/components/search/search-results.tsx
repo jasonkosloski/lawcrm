@@ -16,6 +16,7 @@ import {
   CheckSquare,
   Clock,
   FileText,
+  FolderSearch,
   Gavel,
   Inbox,
   Mail,
@@ -49,6 +50,7 @@ export const TYPE_META: Record<
   email: { label: "Email", icon: Mail },
   message: { label: "Messages", icon: MessageSquare },
   time: { label: "Time entries", icon: Clock },
+  records_request: { label: "Records requests", icon: FolderSearch },
 };
 
 export function SearchResults({
