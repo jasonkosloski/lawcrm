@@ -642,6 +642,42 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       },
     ],
   },
+  {
+    id: "records",
+    label: "Records requests",
+    permissions: [
+      {
+        key: "records.view",
+        label: "View records requests",
+        description:
+          "See the Records tabs on matters and intake, the dashboard's Records to chase card, and records requests in global search.",
+      },
+      {
+        key: "records.create",
+        label: "Create records requests",
+        description:
+          "Start a new records request (custodian, type, subject, date range) on a matter or intake lead.",
+      },
+      {
+        key: "records.edit",
+        label: "Edit records requests",
+        description:
+          "Change a request's status, dates, owner and fields; log follow-ups; link or unlink received documents. Reopening a closed request also needs this.",
+      },
+      {
+        key: "records.delete",
+        label: "Delete records requests",
+        description:
+          "Delete a request. Its linked documents, follow-up tasks and expense are kept; only the links are cleared.",
+      },
+      {
+        key: "records.types.manage",
+        label: "Manage records request types",
+        description:
+          "Settings → Records request types: create, edit and archive the firm's request types (response period, follow-up interval, default letter template).",
+      },
+    ],
+  },
 ];
 
 /// Flat key list, derived from the categories. Used by the action

@@ -46,33 +46,33 @@ enum MatterVisibility {
 }
 
 model User {
-  id                     String    @id @default(cuid())
-  email                  String    @unique
+  id                      String                   @id @default(cuid())
+  email                   String                   @unique
   /// Argon2id-hashed password. Null means the user can't log in via
   /// the credentials provider — they must use a linked OAuth account
   /// (none of those wired yet) or the firm admin must invite them.
   /// Set by the seed for dev users; set by the future invite flow
   /// for production users.
-  passwordHash           String?
+  passwordHash            String?
   /// Auth.js standard field — set when the user verifies their email
   /// (or when an OAuth provider returns a verified email). Null for
   /// dev/seed users today; the verification flow that flips this is
   /// deferred to a later phase.
-  emailVerified          DateTime?
+  emailVerified           DateTime?
   /// Auth.js standard field — profile photo URL pulled from OAuth
   /// providers when wired. Mirrors avatarUrl for now (legacy).
-  image                  String?
-  name                   String
-  initials               String /// Two-letter initials for avatar display (e.g. "JM")
+  image                   String?
+  name                    String
+  initials                String /// Two-letter initials for avatar display (e.g. "JM")
   /// Display-only job title — Managing / Partner / Counsel /
   /// Paralegal / Investigator / Intake. Orthogonal to permission
   /// roles (see UserRole). Renamed from `role` once permission
   /// roles became first-class so the two concepts don't collide
   /// in code or UI.
-  jobTitle               String
-  avatarUrl              String? /// Optional profile photo URL
-  phone                  String?
-  barNumber              String? /// State bar number (attorneys only)
+  jobTitle                String
+  avatarUrl               String? /// Optional profile photo URL
+  phone                   String?
+  barNumber               String? /// State bar number (attorneys only)
   /// IANA time-zone name ("America/Denver", "America/New_York"
   /// etc). Drives date formatting on every page that renders a
   /// time — dashboard "today's agenda," deadlines countdown,
@@ -80,7 +80,7 @@ model User {
   /// since that's where the firm operates today; later we'll
   /// surface a picker on /settings/profile and infer a sensible
   /// default from the browser at invite time.
-  timeZone               String    @default("America/Denver")
+  timeZone                String                   @default("America/Denver")
   /// Default visibility for calendar events this user creates.
   /// `default` (the default-default — privacy first) applies
   /// the resolver's standard rules: only creator + attendees +
@@ -88,19 +88,21 @@ model User {
   /// `show_details` flips every event this user creates to
   /// publicly-visible-in-full unless overridden per-event. Set
   /// from /settings/profile.
-  defaultEventVisibility String    @default("default") /// default | show_details
-  isActive               Boolean   @default(true)
+  defaultEventVisibility  String                   @default("default") /// default | show_details
+  isActive                Boolean                  @default(true)
   /// FK to the firm this user belongs to. Nullable in the schema
   /// only because SQLite can't add a non-null column without a
   /// default; every code path treats it as required and the seed
   /// backfills every existing row. When we go multi-tenant this
   /// stays the canonical scoping column.
-  firmId                 String?
+  firmId                  String?
   /// Per-user dashboard preferences. Currently `{ visible: Record<cardKey, boolean> }`.
   /// Null = use defaults (everything visible). Shape may grow to include order, etc.
-  dashboardPrefs         Json?
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
+  dashboardPrefs          Json?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  ownedRecordsRequests    RecordsRequest[]         @relation("RecordsRequestOwner")
+  recordsRequestFollowUps RecordsRequestFollowUp[] @relation("RecordsRequestFollowUpUser")
 
   // Relationships
   matterAssignments     MatterTeamMember[]
@@ -505,8 +507,9 @@ model Matter {
   client   Contact? @relation("MatterClient", fields: [clientId], references: [id])
 
   // Opposing party
-  opposingParty String? /// Name of opposing party/counsel
-  opposingFirm  String? /// Opposing counsel's firm
+  opposingParty   String? /// Name of opposing party/counsel
+  opposingFirm    String? /// Opposing counsel's firm
+  recordsRequests RecordsRequest[]
 
   // Relationships
   teamMembers             MatterTeamMember[]
@@ -623,9 +626,10 @@ model Contact {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  firm         Firm?     @relation("FirmContacts", fields: [firmId], references: [id], onDelete: SetNull)
-  mergedInto   Contact?  @relation("ContactMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
-  mergedLosers Contact[] @relation("ContactMerge")
+  firm            Firm?            @relation("FirmContacts", fields: [firmId], references: [id], onDelete: SetNull)
+  mergedInto      Contact?         @relation("ContactMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedLosers    Contact[]        @relation("ContactMerge")
+  recordsRequests RecordsRequest[] @relation("RecordsRequestCustodian")
 
   // Relationships
   mattersAsClient     MatterContact[]
@@ -776,7 +780,8 @@ model Lead {
 
   /// SetNull (not Cascade) — losing the contact shouldn't blow away
   /// the lead row; it just falls back to the legacy text columns.
-  contact Contact? @relation("LeadContact", fields: [contactId], references: [id], onDelete: SetNull)
+  contact         Contact?         @relation("LeadContact", fields: [contactId], references: [id], onDelete: SetNull)
+  recordsRequests RecordsRequest[]
 
   /// Intake time logged before conversion — re-homed onto the new
   /// matter when the lead converts. See TimeEntry.leadId.
@@ -806,20 +811,25 @@ model Lead {
 
 /// A document associated with a matter — filings, contracts, correspondence, etc.
 model Document {
-  id                     String    @id @default(cuid())
+  id                     String          @id @default(cuid())
   /// EXACTLY ONE of matterId / leadId is set (app-enforced; see
   /// scopeOf in src/lib/record-scope.ts). An intake lead's documents
   /// re-home onto the new matter on conversion. A document shares its
   /// folder's scope.
   matterId               String?
   leadId                 String?
+  /// Set when this file belongs to a records request: the request letter
+  /// we generated, or records received back. SetNull: deleting the
+  /// request keeps the file. Role is request_letter | received_records.
+  recordsRequestId       String?
+  recordsRequestRole     String?
   name                   String /// Filename or display title
-  category               String    @default("other") /// filing | pleading | correspondence | contract | intake | discovery | expert_report | evidence | vendor | archive | other
+  category               String          @default("other") /// filing | pleading | correspondence | contract | intake | discovery | expert_report | evidence | vendor | archive | other
   source                 String? /// ECF | email | email_attachment | scan | upload | generated | vendor
   fileUrl                String? /// Storage URL or local path
   contentType            String? /// MIME type, e.g. "application/pdf"
   fileSize               Int? /// Size in bytes
-  status                 String    @default("active") /// active | filed | received | review | archived
+  status                 String          @default("active") /// active | filed | received | review | archived
   uploadedBy             String? /// User ID who uploaded
   /// Folder within the matter's file tree. Null = matter root.
   /// SetNull is the backstop — the folder-delete action re-parents
@@ -839,8 +849,9 @@ model Document {
   /// When this email's attachments were extracted into documents.
   /// Null = not yet (older uploads, or extraction failed).
   attachmentsExtractedAt DateTime?
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  recordsRequest         RecordsRequest? @relation("RecordsRequestDocuments", fields: [recordsRequestId], references: [id], onDelete: SetNull)
 
   matter             Matter?         @relation(fields: [matterId], references: [id], onDelete: Cascade)
   lead               Lead?           @relation("LeadDocuments", fields: [leadId], references: [id], onDelete: Cascade)
@@ -855,6 +866,7 @@ model Document {
 
   @@index([matterId])
   @@index([leadId])
+  @@index([recordsRequestId])
   @@index([category])
   @@index([folderId])
   @@index([parentDocumentId])
@@ -1294,7 +1306,7 @@ model TimeEntry {
 /// suffices for a small charge." Required-receipt policy belongs
 /// in firm settings down the road.
 model Expense {
-  id                String   @id @default(cuid())
+  id                String          @id @default(cuid())
   matterId          String
   /// Optional intake-time expenses. When a Lead converts to a
   /// Matter, expenses logged against the lead carry over via the
@@ -1314,10 +1326,10 @@ model Expense {
   /// expert | travel | deposition | medical_record | postage |
   /// records | research | other. String not enum so adding
   /// categories is data, not a migration.
-  category          String   @default("other")
-  amount            Decimal  @db.Decimal(14, 2) /// Always positive — sign is implied by `clientAdvanced`
-  billable          Boolean  @default(true)
-  clientAdvanced    Boolean  @default(false)
+  category          String          @default("other")
+  amount            Decimal         @db.Decimal(14, 2) /// Always positive — sign is implied by `clientAdvanced`
+  billable          Boolean         @default(true)
+  clientAdvanced    Boolean         @default(false)
   /// Set when this expense is included on an invoice. SetNull on
   /// invoice delete so the expense survives invoice purges.
   invoiceId         String?
@@ -1325,8 +1337,9 @@ model Expense {
   /// the receipt document doesn't lose the expense.
   receiptDocumentId String?
   notes             String? /// Free-text memo
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  recordsRequest    RecordsRequest?
 
   matter          Matter    @relation(fields: [matterId], references: [id], onDelete: Cascade)
   invoice         Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
@@ -1826,38 +1839,42 @@ model MessengerItem {
 
 /// A task or to-do item linked to a matter.
 model Task {
-  id              String    @id @default(cuid())
-  matterId        String? /// Null for firm-wide tasks
+  id               String          @id @default(cuid())
+  matterId         String? /// Null for firm-wide tasks
   /// Intake task on a Lead (since 2026-10-18). App-enforced: AT MOST
   /// ONE of (matterId, leadId) — neither = firm-wide. Lead conversion
   /// re-homes lead tasks onto the new matter (leadId cleared).
-  leadId          String?
-  title           String
-  description     String?
-  priority        String    @default("normal") /// low | normal | high | urgent
-  status          String    @default("open") /// open | in_progress | in_review | done | cancelled
-  dueDate         DateTime?
-  ownerId         String? /// Assigned team member
-  deadlineId      String? /// If spawned from a deadline (deadline → task sibling-capture)
+  leadId           String?
+  /// Follow-up task for a records request (at most one open per request).
+  /// SetNull: deleting the request keeps the task.
+  recordsRequestId String?
+  title            String
+  description      String?
+  priority         String          @default("normal") /// low | normal | high | urgent
+  status           String          @default("open") /// open | in_progress | in_review | done | cancelled
+  dueDate          DateTime?
+  ownerId          String? /// Assigned team member
+  deadlineId       String? /// If spawned from a deadline (deadline → task sibling-capture)
   /// If spawned alongside a calendar event (event → task sibling-capture).
   /// E.g. "task to prep witness questions for this hearing."
-  eventId         String?
+  eventId          String?
   /// When the task was created in the context of a specific note —
   /// the note becomes its parent and surfaces this task as an
   /// attached chip. Null for stand-alone tasks (the common case).
-  noteId          String?
+  noteId           String?
   /// Inbox-action sources: when this task was spawned from an
   /// email thread or a messenger item via the "Create task from
   /// this" affordance. Drives the "From email" / "From message"
   /// chip on the task card so users can navigate back to context.
-  emailThreadId   String?
-  messengerItemId String?
+  emailThreadId    String?
+  messengerItemId  String?
   /// Generated by applying this firm task list. Null otherwise.
-  taskListId      String?
-  sortOrder       Int       @default(0) /// For manual ordering within status groups
-  completedAt     DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  taskListId       String?
+  sortOrder        Int             @default(0) /// For manual ordering within status groups
+  completedAt      DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  recordsRequest   RecordsRequest? @relation("RecordsRequestTasks", fields: [recordsRequestId], references: [id], onDelete: SetNull)
 
   matter             Matter?        @relation(fields: [matterId], references: [id], onDelete: Cascade)
   lead               Lead?          @relation("LeadTasks", fields: [leadId], references: [id], onDelete: Cascade)
@@ -1876,6 +1893,7 @@ model Task {
 
   @@index([matterId])
   @@index([leadId])
+  @@index([recordsRequestId])
   @@index([status])
   @@index([ownerId])
   @@index([noteId])
@@ -2203,20 +2221,21 @@ model TimerSession {
 /// result or saves it as a matter Document through the normal
 /// file-storage path.
 model DocumentTemplate {
-  id          String   @id @default(cuid())
-  name        String
+  id                  String               @id @default(cuid())
+  name                String
   /// Free string so new categories are data, not a migration:
   /// demand_letter | discovery | retainer | correspondence |
   /// pleading | general.
-  category    String   @default("general")
-  description String?
-  body        String
+  category            String               @default("general")
+  description         String?
+  body                String
   /// Soft-archive — generation pickers hide inactive templates but
   /// history stays intact.
-  isActive    Boolean  @default(true)
-  createdById String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isActive            Boolean              @default(true)
+  createdById         String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  recordsRequestTypes RecordsRequestType[]
 
   createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
@@ -2308,4 +2327,111 @@ model CalendarEventSync {
   @@unique([accountId, googleEventId])
   @@index([accountId])
   @@map("calendar_event_syncs")
+}
+
+// =============================================================================
+// RECORDS REQUESTS
+// =============================================================================
+
+/// Calendar vs business days for a records request type's statutory
+/// response period.
+enum RecordsPeriodUnit {
+  CALENDAR_DAYS
+  BUSINESS_DAYS
+}
+
+/// Firm-configured kind of records request ("Medical (HIPAA)", "CORA").
+/// Starter rows are seeded by the migration; values are starting
+/// points, not legal advice.
+model RecordsRequestType {
+  id                String             @id @default(cuid())
+  name              String
+  /// Statutory response period. Null = no statutory period.
+  responseAmount    Int?
+  /// Required when responseAmount is set (app-enforced).
+  responseUnit      RecordsPeriodUnit?
+  /// Chase interval in days (1-90, app-enforced).
+  followUpDays      Int                @default(7)
+  defaultTemplateId String?
+  /// Archive hides the type from pickers; history stays intact.
+  isActive          Boolean            @default(true)
+  sortOrder         Int                @default(0)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  defaultTemplate DocumentTemplate? @relation(fields: [defaultTemplateId], references: [id], onDelete: SetNull)
+  requests        RecordsRequest[]
+
+  @@map("records_request_types")
+}
+
+/// A request for records from a custodian, on a matter or an intake
+/// lead. Date columns are date-only, stored at UTC midnight (ADR-012).
+model RecordsRequest {
+  id                 String    @id @default(cuid())
+  /// EXACTLY ONE of matterId / leadId is set (app-enforced; see
+  /// scopeOf in src/lib/record-scope.ts). Lead conversion re-homes
+  /// the request onto the new matter (leadId cleared).
+  matterId           String?
+  leadId             String?
+  /// Restrict: a contact with requests can't be hard-deleted; merge
+  /// re-points the requests.
+  custodianContactId String
+  /// Null = ad hoc request (adHocTypeName required, app-enforced).
+  typeId             String?
+  adHocTypeName      String?
+  subject            String
+  description        String?
+  dateRangeStart     DateTime?
+  dateRangeEnd       DateTime?
+  status             String    @default("draft") /// draft | sent | acknowledged | partial | complete | denied | withdrawn
+  sentAt             DateTime?
+  /// Computed on send from the type; manual for ad hoc; always editable.
+  responseDueDate    DateTime?
+  nextFollowUpDate   DateTime?
+  receivedAt         DateTime?
+  /// Follow-up tasks are assigned to the owner.
+  ownerId            String?
+  /// ADR-036 money.
+  feeEstimate        Decimal?  @db.Decimal(14, 2)
+  feeAmount          Decimal?  @db.Decimal(14, 2)
+  feePaidAt          DateTime?
+  expenseId          String?   @unique
+  createdById        String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  matter    Matter?                  @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  lead      Lead?                    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  custodian Contact                  @relation("RecordsRequestCustodian", fields: [custodianContactId], references: [id], onDelete: Restrict)
+  type      RecordsRequestType?      @relation(fields: [typeId], references: [id], onDelete: SetNull)
+  owner     User?                    @relation("RecordsRequestOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  expense   Expense?                 @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+  followUps RecordsRequestFollowUp[]
+  documents Document[]               @relation("RecordsRequestDocuments")
+  tasks     Task[]                   @relation("RecordsRequestTasks")
+
+  @@index([matterId])
+  @@index([leadId])
+  @@index([status])
+  @@index([ownerId])
+  @@index([status, nextFollowUpDate])
+  @@index([status, responseDueDate])
+  @@map("records_requests")
+}
+
+/// History log of follow-ups made on a records request.
+model RecordsRequestFollowUp {
+  id         String   @id @default(cuid())
+  requestId  String
+  userId     String
+  occurredAt DateTime
+  note       String?
+  createdAt  DateTime @default(now())
+
+  request RecordsRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  user    User           @relation("RecordsRequestFollowUpUser", fields: [userId], references: [id])
+
+  @@index([requestId])
+  @@map("records_request_follow_ups")
 }

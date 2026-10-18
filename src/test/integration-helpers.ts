@@ -35,6 +35,10 @@ function todayDateOnly(): Date {
  *  in sync with @@map() entries in `prisma/schema.prisma`;
  *  integration-helpers.test.ts fails when a table is missing. */
 export const TABLES_IN_DELETE_ORDER = [
+  // Records requests — before contacts (custodian Restrict), expenses, tasks, documents
+  "records_request_follow_ups",
+  "records_requests",
+  "records_request_types",
   // Settlement chain (children of Settlement)
   "settlement_approvals",
   "settlement_liens",
