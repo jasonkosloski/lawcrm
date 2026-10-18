@@ -566,6 +566,40 @@ describe("convertLeadToMatter — intake notes roll-forward", () => {
     expect(titles).toContain("1 intake event carried forward");
   });
 
+  test("re-homes lead folders and documents onto the new matter", async () => {
+    const { areaId, stageId } = await seedArea({});
+    const { leadId } = await seedIntakeLead();
+    const parent = await prisma.documentFolder.create({ data: { leadId, name: "Records" } });
+    const child = await prisma.documentFolder.create({
+      data: { leadId, name: "Sub", parentId: parent.id },
+    });
+    const nested = await prisma.document.create({
+      data: { leadId, name: "a.pdf", folderId: child.id },
+    });
+    await prisma.document.create({ data: { leadId, name: "b.pdf" } });
+
+    await expect(
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+    ).rejects.toThrow(/^REDIRECT:\/matters\//);
+
+    const matter = await prisma.matter.findFirstOrThrow({ select: { id: true } });
+    expect(await prisma.documentFolder.count({ where: { matterId: matter.id, leadId: null } })).toBe(2);
+    expect(await prisma.document.count({ where: { matterId: matter.id, leadId: null } })).toBe(2);
+    expect(await prisma.documentFolder.count({ where: { leadId } })).toBe(0);
+    expect(await prisma.document.count({ where: { leadId } })).toBe(0);
+    expect(
+      (await prisma.documentFolder.findUniqueOrThrow({ where: { id: child.id } })).parentId
+    ).toBe(parent.id);
+    expect(
+      (await prisma.document.findUniqueOrThrow({ where: { id: nested.id } })).folderId
+    ).toBe(child.id);
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { matterId: matter.id, title: { contains: "intake document" } },
+      select: { title: true },
+    });
+    expect(log.title).toBe("2 intake documents carried forward");
+  });
+
   test("no intake notes → no notes roll-forward log", async () => {
     const { areaId, stageId } = await seedArea({});
     const { leadId } = await seedIntakeLead();

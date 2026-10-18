@@ -47,6 +47,7 @@ import { computeSolDate, SOL_SOURCE_TYPE, toSolPeriod } from "@/lib/sol";
 import { dateOnlyKey, parseDateOnly } from "@/lib/format-date";
 import { runConflictMatcher } from "@/lib/conflict-check";
 import type { NewIntakeFormState } from "@/lib/new-intake-form";
+import { rehomeLeadDocuments } from "@/lib/lead-documents";
 import { applyAutoDefaults, describeDefaults } from "@/lib/automations/apply";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import type {
@@ -517,12 +518,18 @@ export async function convertLeadToMatter(
       tz,
     });
 
+    // Intake documents + folders roll forward last, so a root-folder name
+    // an automation default created is seen and the lead folder is
+    // suffixed rather than duplicated.
+    const carriedDocumentCount = await rehomeLeadDocuments(tx, leadId, matter.id);
+
     return {
       matterId: matter.id,
       carriedCount: carried.count,
       carriedNoteCount: carriedNotes.count,
       carriedTaskCount: carriedTasks.count,
       carriedEventCount: carriedEvents.count,
+      carriedDocumentCount,
       defaults,
     };
   }).catch((err: unknown) => {
@@ -552,6 +559,7 @@ export async function convertLeadToMatter(
     carriedNoteCount,
     carriedTaskCount,
     carriedEventCount,
+    carriedDocumentCount,
     defaults,
   } = result;
 
@@ -627,6 +635,16 @@ export async function convertLeadToMatter(
       detail: `Scheduled on the lead before conversion · ${lead.name}`,
     });
     revalidatePath("/calendar");
+  }
+  if (carriedDocumentCount > 0) {
+    await logActivity({
+      matterId,
+      userId,
+      type: "document",
+      title: `${carriedDocumentCount} intake ${carriedDocumentCount === 1 ? "document" : "documents"} carried forward`,
+      detail: `Uploaded to the lead before conversion · ${lead.name}`,
+    });
+    revalidatePath(`/matters/${matterId}/documents`, "layout");
   }
 
   // Revalidate everything that displays leads or matters.
