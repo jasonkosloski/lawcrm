@@ -58,11 +58,13 @@ import {
 } from "@/lib/document-form";
 import { isValidStorageKey } from "@/lib/storage/storage-key";
 import { resolveLeadUploadTarget } from "@/lib/lead-documents";
+import { resolveRecordsUpload } from "@/lib/records-requests/folder";
 import { BLOB_CACHE_MAX_AGE_SECONDS } from "@/lib/storage/blob-driver";
 import {
   MAX_MEDIA_UPLOAD_BYTES,
   MAX_STANDARD_UPLOAD_BYTES,
   UPLOAD_FOLDER_SCOPE_ERROR,
+  UPLOAD_RECORDS_REQUEST_SCOPE_ERROR,
   UPLOAD_SCOPE_REQUIRED_ERROR,
   contentTypeForFilename,
   isMediaType,
@@ -87,6 +89,9 @@ const clientPayloadSchema = z
     matterId: z.string().min(1).optional(),
     leadId: z.string().min(1).optional(),
     folderId: z.string().min(1).nullish(),
+    /** Tag the file as received records of this request (must be in
+     *  the same scope; needs records.edit). */
+    recordsRequestId: z.string().min(1).nullish(),
     /** Document display name: the original filename, or the composer's
      *  override. The pathname
      *  is the sanitized/truncated KEY; this preserves what the user
@@ -115,6 +120,7 @@ type TokenPayload = {
   matterId?: string;
   leadId?: string;
   folderId: string | null;
+  recordsRequestId?: string | null;
   name: string;
   category: DocumentCategory;
   contentType: string;
@@ -192,6 +198,23 @@ export const onBeforeGenerateToken: HandleUploadOptions["onBeforeGenerateToken"]
       }
     }
 
+    const recordsRequestId = payload.recordsRequestId ?? null;
+    if (recordsRequestId) {
+      if (!(await currentUserHasPermission("records.edit"))) {
+        throw new UploadTokenError(
+          403,
+          "You don't have permission to link documents to records requests.",
+        );
+      }
+      const request = await prisma.recordsRequest.findFirst({
+        where: { id: recordsRequestId, ...scopeWhere(scope) },
+        select: { id: true },
+      });
+      if (!request) {
+        throw new UploadTokenError(400, UPLOAD_RECORDS_REQUEST_SCOPE_ERROR);
+      }
+    }
+
     // Server-derived MIME from the key's extension — the same rule
     // (and the same function) as the streaming route. The token pins
     // the upload to exactly this type + this size cap; a client
@@ -204,6 +227,7 @@ export const onBeforeGenerateToken: HandleUploadOptions["onBeforeGenerateToken"]
     const tokenPayload: TokenPayload = {
       ...scopeWhere(scope),
       folderId,
+      ...(recordsRequestId ? { recordsRequestId } : {}),
       name: payload.name,
       category: payload.category ?? "discovery",
       contentType,
@@ -288,9 +312,39 @@ export const onUploadCompleted: NonNullable<
     await del(blob.url).catch(() => {});
   };
 
-  const dataFor = (target: RecordScope, targetFolderId: string | null) => ({
+  type RecordsTag = Awaited<ReturnType<typeof resolveRecordsUpload>>;
+  // Set when a records tag was requested but the request no longer
+  // matches the FINAL scope: the file is filed untagged, not failed.
+  let recordsTagDropped = false;
+  const resolveTag = async (
+    tx: Parameters<typeof resolveRecordsUpload>[0],
+    target: RecordScope,
+    targetFolderId: string | null
+  ): Promise<RecordsTag> => {
+    if (!t.recordsRequestId) return null;
+    const tag = await resolveRecordsUpload(
+      tx,
+      t.recordsRequestId,
+      target,
+      targetFolderId
+    );
+    recordsTagDropped = !tag;
+    return tag;
+  };
+
+  const dataFor = (
+    target: RecordScope,
+    targetFolderId: string | null,
+    tag: RecordsTag = null
+  ) => ({
     ...scopeWhere(target),
-    folderId: targetFolderId,
+    folderId: tag ? tag.folderId : targetFolderId,
+    ...(tag
+      ? {
+          recordsRequestId: tag.recordsRequestId,
+          recordsRequestRole: tag.recordsRequestRole,
+        }
+      : {}),
     name: t.name,
     // The composer picks a category; the multi-file uploader
     // sends none, and discovery productions are what it exists
@@ -328,8 +382,15 @@ export const onUploadCompleted: NonNullable<
       if (!folder) folderId = null;
     }
     filedAtRoot = Boolean(t.folderId) && folderId === null;
+    const createMatterDoc = (f: string | null) =>
+      t.recordsRequestId
+        ? prisma.$transaction(async (tx) => {
+            const tag = await resolveTag(tx, scope, f);
+            return tx.document.create({ data: dataFor(scope, f, tag) });
+          })
+        : prisma.document.create({ data: dataFor(scope, f) });
     try {
-      created = await prisma.document.create({ data: dataFor(scope, folderId) });
+      created = await createMatterDoc(folderId);
     } catch (err) {
       if (!isForeignKeyError(err)) throw err;
       // Raced a delete between the checks above and the insert.
@@ -341,7 +402,7 @@ export const onUploadCompleted: NonNullable<
         await removeOrphan("matter vanished during upload");
         return;
       }
-      created = await prisma.document.create({ data: dataFor(scope, null) });
+      created = await createMatterDoc(null);
       filedAtRoot = true;
     }
   } else {
@@ -365,8 +426,9 @@ export const onUploadCompleted: NonNullable<
           canAccessMatter
         );
         if (target.kind !== "filed") return target;
+        const tag = await resolveTag(tx, target.scope, target.folderId);
         const doc = await tx.document.create({
-          data: dataFor(target.scope, target.folderId),
+          data: dataFor(target.scope, target.folderId, tag),
         });
         return { ...target, doc };
       });
@@ -407,9 +469,13 @@ export const onUploadCompleted: NonNullable<
     userId: t.userId,
     type: "document",
     title: "Document uploaded",
-    detail: (filedAtRoot
-      ? `${t.name} (target folder was deleted during the upload; filed at the root)`
-      : t.name
+    detail: (
+      (filedAtRoot
+        ? `${t.name} (target folder was deleted during the upload; filed at the root)`
+        : t.name) +
+      (recordsTagDropped
+        ? " (records request no longer matched; filed without the records tag)"
+        : "")
     ).slice(0, 500),
   });
 

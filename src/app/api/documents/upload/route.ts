@@ -24,6 +24,11 @@
  *                 precede any file part
  *     - folderId  string, optional — must belong to the same matter
  *                 or lead
+ *     - recordsRequestId string, optional — tags the files as
+ *                 received records of that request (must belong to the
+ *                 same matter or lead; needs `records.edit`); files
+ *                 default into Records/<custodian — type>. MUST
+ *                 precede any file part
  *     - category  string, optional — one of DOCUMENT_CATEGORIES;
  *                 defaults to "discovery" (batch uploads)
  *     - name      string, optional — display-name override, applied
@@ -75,6 +80,7 @@ import {
   revalidateDocumentScope,
 } from "@/lib/scope-access";
 import { resolveLeadUploadTarget } from "@/lib/lead-documents";
+import { resolveRecordsUpload } from "@/lib/records-requests/folder";
 import { extractIfEmail } from "@/lib/email-attachment-extract";
 import {
   FileTooLargeError,
@@ -88,6 +94,7 @@ import {
   MAX_MEDIA_UPLOAD_BYTES,
   MAX_STANDARD_UPLOAD_BYTES,
   UPLOAD_FOLDER_SCOPE_ERROR,
+  UPLOAD_RECORDS_REQUEST_SCOPE_ERROR,
   UPLOAD_SCOPE_REQUIRED_ERROR,
   capDocumentName,
   contentTypeForFilename,
@@ -111,6 +118,7 @@ type ParseResult =
       ok: true;
       scope: RecordScope;
       folderId: string | null;
+      recordsRequestId: string | null;
       category: DocumentCategory;
       displayName: string;
       files: StoredUpload[];
@@ -178,13 +186,24 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   let documents: { id: string; name: string; contentType: string | null }[];
   let scope: RecordScope = result.scope;
+  // Set when a records tag was requested but the request no longer
+  // matches the final scope (e.g. re-homed by a lead conversion).
+  let recordsTagDropped = false;
+  type RecordsTag = Awaited<ReturnType<typeof resolveRecordsUpload>>;
   const rowData = (
     f: StoredUpload,
     target: RecordScope,
-    folderId: string | null
+    folderId: string | null,
+    tag: RecordsTag = null
   ) => ({
     ...scopeWhere(target),
-    folderId,
+    folderId: tag ? tag.folderId : folderId,
+    ...(tag
+      ? {
+          recordsRequestId: tag.recordsRequestId,
+          recordsRequestRole: tag.recordsRequestRole,
+        }
+      : {}),
     // A display-name override only makes sense for a single
     // file; batches keep each file's own name.
     name:
@@ -219,16 +238,28 @@ export async function POST(req: NextRequest): Promise<Response> {
           canAccessMatter
         );
         if (target.kind !== "filed") return target;
+        // Re-check the request against the FINAL scope: after a
+        // conversion it has been re-homed to the matter too. If it no
+        // longer matches, file untagged rather than fail the upload.
+        const tag = result.recordsRequestId
+          ? await resolveRecordsUpload(
+              tx,
+              result.recordsRequestId,
+              target.scope,
+              target.folderId
+            )
+          : null;
+        const dropped = Boolean(result.recordsRequestId) && !tag;
         const docs = [];
         for (const f of result.files) {
           docs.push(
             await tx.document.create({
-              data: rowData(f, target.scope, target.folderId),
+              data: rowData(f, target.scope, target.folderId, tag),
               select,
             })
           );
         }
-        return { ...target, docs };
+        return { ...target, docs, dropped };
       });
       if (outcome.kind !== "filed") {
         await Promise.all(result.files.map((f) => deleteFile(f.key)));
@@ -244,6 +275,29 @@ export async function POST(req: NextRequest): Promise<Response> {
       }
       scope = outcome.scope;
       documents = outcome.docs;
+      recordsTagDropped = outcome.dropped;
+    } else if (result.recordsRequestId) {
+      const requestId = result.recordsRequestId;
+      const matterScope = result.scope;
+      documents = await prisma.$transaction(async (tx) => {
+        const tag = await resolveRecordsUpload(
+          tx,
+          requestId,
+          matterScope,
+          result.folderId
+        );
+        recordsTagDropped = !tag;
+        const docs = [];
+        for (const f of result.files) {
+          docs.push(
+            await tx.document.create({
+              data: rowData(f, matterScope, result.folderId, tag),
+              select,
+            })
+          );
+        }
+        return docs;
+      });
     } else {
       // One transaction so a mid-batch DB failure can't leave half the
       // rows behind while the caller sees a 500.
@@ -272,10 +326,12 @@ export async function POST(req: NextRequest): Promise<Response> {
       documents.length === 1
         ? "Document uploaded"
         : `${documents.length} documents uploaded`,
-    detail: documents
-      .map((d) => d.name)
-      .join(", ")
-      .slice(0, 500),
+    detail: (
+      documents.map((d) => d.name).join(", ") +
+      (recordsTagDropped
+        ? " (records request no longer matched; filed without the records tag)"
+        : "")
+    ).slice(0, 500),
   });
 
   // Emails: their attachments become documents under them (ADR-043).
@@ -290,6 +346,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 type Target = {
   scope: RecordScope;
   folderId: string | null;
+  recordsRequestId: string | null;
   category: DocumentCategory;
   displayName: string;
 };
@@ -302,6 +359,7 @@ async function resolveTarget(
     matterId?: string;
     leadId?: string;
     folderId?: string;
+    recordsRequestId?: string;
     category?: string;
     name?: string;
   }
@@ -360,9 +418,29 @@ async function resolveTarget(
       return { status: 400, error: UPLOAD_FOLDER_SCOPE_ERROR };
     }
   }
+
+  // Linking to a records request: caller must be able to edit records
+  // and the request must live in THIS scope - checked before any byte.
+  const recordsRequestId = fields.recordsRequestId?.trim() || null;
+  if (recordsRequestId) {
+    if (!(await currentUserHasPermission("records.edit"))) {
+      return {
+        status: 403,
+        error: "You don't have permission to link documents to records requests.",
+      };
+    }
+    const request = await prisma.recordsRequest.findFirst({
+      where: { id: recordsRequestId, ...scopeWhere(scope) },
+      select: { id: true },
+    });
+    if (!request) {
+      return { status: 400, error: UPLOAD_RECORDS_REQUEST_SCOPE_ERROR };
+    }
+  }
   return {
     scope,
     folderId: folderId || null,
+    recordsRequestId,
     category: meta.category,
     displayName: meta.name,
   };
@@ -415,6 +493,7 @@ async function parseAndStore(
     matterId?: string;
     leadId?: string;
     folderId?: string;
+    recordsRequestId?: string;
     category?: string;
     name?: string;
   } = {};
@@ -441,6 +520,7 @@ async function parseAndStore(
         name === "matterId" ||
         name === "leadId" ||
         name === "folderId" ||
+        name === "recordsRequestId" ||
         name === "category" ||
         name === "name"
       ) {
@@ -579,6 +659,7 @@ async function parseAndStore(
     ok: true,
     scope: t.scope,
     folderId: t.folderId,
+    recordsRequestId: t.recordsRequestId,
     category: t.category,
     displayName: t.displayName,
     files: stored,

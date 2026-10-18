@@ -40,6 +40,7 @@ import { logActivity } from "@/lib/activity-log";
 import { deleteFile, storeFile } from "@/lib/file-storage";
 import { toUserMessage } from "@/lib/user-facing-error";
 import { formatDate } from "@/lib/format-date";
+import { resolveRecordsFolder } from "@/lib/records-requests/folder";
 import {
   composeCityStateZip,
   mergeTemplate,
@@ -278,12 +279,55 @@ function composeContactAddress(c: {
   );
 }
 
+const REQUEST_NOT_FOUND = "Records request not found.";
+
+const recordsRequestSelect = {
+  id: true,
+  matterId: true,
+  leadId: true,
+  subject: true,
+  description: true,
+  adHocTypeName: true,
+  dateRangeStart: true,
+  dateRangeEnd: true,
+  responseDueDate: true,
+  sentAt: true,
+  type: { select: { name: true } },
+  custodian: {
+    select: {
+      name: true,
+      organization: true,
+      email: true,
+      phone: true,
+      address: true,
+      city: true,
+      state: true,
+      zip: true,
+    },
+  },
+} as const;
+
+type LoadedRecordsRequest = NonNullable<
+  Awaited<ReturnType<typeof loadRecordsRequest>>
+>;
+
+/** The request, only if it belongs to `scope` (never trust a bare id). */
+function loadRecordsRequest(scope: RecordScope, id: string) {
+  return prisma.recordsRequest.findFirst({
+    where: { id, ...scopeWhere(scope) },
+    select: recordsRequestSelect,
+  });
+}
+
 /** Build the real MergeContext for a record scope. Matter: matter +
  *  client contact. Lead: matter fields are all null (name = the lead's
  *  display name); client = the lead's contact, falling back to the
  *  legacy name/email/phone columns. Firm + generating user + today
  *  are shared. Null when the record is gone. */
-async function resolveMergeContext(scope: RecordScope): Promise<{
+async function resolveMergeContext(
+  scope: RecordScope,
+  request: LoadedRecordsRequest | null = null
+): Promise<{
   ctx: MergeContext;
   matterName: string;
 } | null> {
@@ -346,6 +390,26 @@ async function resolveMergeContext(scope: RecordScope): Promise<{
   const shared = {
     firm: firmCtx,
     user: { name: user?.name ?? null },
+    request: request
+      ? {
+          subject: request.subject,
+          description: request.description,
+          type: request.type?.name ?? request.adHocTypeName,
+          dateRangeStart: request.dateRangeStart,
+          dateRangeEnd: request.dateRangeEnd,
+          responseDueDate: request.responseDueDate,
+          sentDate: request.sentAt,
+        }
+      : null,
+    custodian: request
+      ? {
+          name: request.custodian.name,
+          organization: request.custodian.organization,
+          address: composeContactAddress(request.custodian),
+          email: request.custodian.email,
+          phone: request.custodian.phone,
+        }
+      : null,
     today: new Date(),
     timeZone: user?.timeZone ?? null,
   };
@@ -426,9 +490,16 @@ export type TemplatePreviewResult =
  */
 export async function previewDocumentFromTemplate(
   templateId: string,
-  scope: RecordScope
+  scope: RecordScope,
+  opts?: { recordsRequestId?: string }
 ): Promise<TemplatePreviewResult> {
   await assertScopeAccess(scope);
+  const request = opts?.recordsRequestId
+    ? await loadRecordsRequest(scope, opts.recordsRequestId)
+    : null;
+  if (opts?.recordsRequestId && !request) {
+    return { ok: false, error: REQUEST_NOT_FOUND };
+  }
   const template = await prisma.documentTemplate.findUnique({
     where: { id: templateId },
     select: { name: true, body: true, isActive: true },
@@ -437,7 +508,7 @@ export async function previewDocumentFromTemplate(
     return { ok: false, error: "Template not found or archived." };
   }
 
-  const resolved = await resolveMergeContext(scope);
+  const resolved = await resolveMergeContext(scope, request);
   if (!resolved) return { ok: false, error: "Record not found." };
 
   const merged = mergeTemplate(template.body, resolved.ctx);
@@ -472,12 +543,21 @@ export type GenerateDocumentResult =
  */
 export async function generateDocumentFromTemplate(
   templateId: string,
-  scope: RecordScope
+  scope: RecordScope,
+  opts?: { recordsRequestId?: string }
 ): Promise<GenerateDocumentResult> {
   const userId = await requirePermission("documents.upload");
+  // Tagging a document to a records request is a records edit.
+  if (opts?.recordsRequestId) await requirePermission("records.edit");
   await assertScopeAccess(scope);
   const readOnly = await assertScopeWritable(scope);
   if (readOnly) return { ok: false, error: readOnly };
+  const request = opts?.recordsRequestId
+    ? await loadRecordsRequest(scope, opts.recordsRequestId)
+    : null;
+  if (opts?.recordsRequestId && !request) {
+    return { ok: false, error: REQUEST_NOT_FOUND };
+  }
 
   const template = await prisma.documentTemplate.findUnique({
     where: { id: templateId },
@@ -487,7 +567,7 @@ export async function generateDocumentFromTemplate(
     return { ok: false, error: "Template not found or archived." };
   }
 
-  const resolved = await resolveMergeContext(scope);
+  const resolved = await resolveMergeContext(scope, request);
   if (!resolved) return { ok: false, error: "Record not found." };
 
   const merged = mergeTemplate(template.body, resolved.ctx);
@@ -523,19 +603,36 @@ export async function generateDocumentFromTemplate(
 
   let doc: { id: string };
   try {
-    doc = await prisma.document.create({
-      data: {
-        ...scopeWhere(scope),
-        name: documentName,
-        category: documentCategoryForTemplate(template.category),
-        source: "generated",
-        fileUrl: stored.key,
-        contentType: stored.contentType,
-        fileSize: stored.size,
-        uploadedBy: userId,
-      },
-      select: { id: true },
-    });
+    const data = {
+      ...scopeWhere(scope),
+      name: documentName,
+      category: documentCategoryForTemplate(template.category),
+      source: "generated" as const,
+      fileUrl: stored.key,
+      contentType: stored.contentType,
+      fileSize: stored.size,
+      uploadedBy: userId,
+    };
+    doc = request
+      ? await prisma.$transaction(async (tx) => {
+          const folderId = await resolveRecordsFolder(tx, {
+            id: request.id,
+            matterId: request.matterId,
+            leadId: request.leadId,
+            custodianName: request.custodian.name,
+            typeName: request.type?.name ?? request.adHocTypeName ?? "Records",
+          });
+          return tx.document.create({
+            data: {
+              ...data,
+              folderId,
+              recordsRequestId: request.id,
+              recordsRequestRole: "request_letter",
+            },
+            select: { id: true },
+          });
+        })
+      : await prisma.document.create({ data, select: { id: true } });
   } catch (err) {
     // The file is already written; no row will ever point at it.
     await deleteFile(stored.key).catch(() => {});

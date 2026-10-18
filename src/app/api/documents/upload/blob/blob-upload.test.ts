@@ -33,12 +33,16 @@ vi.mock("@/lib/prisma", () => ({
     lead: { findUnique: vi.fn() },
     documentFolder: { findFirst: vi.fn() },
     document: { create: vi.fn(), findFirst: vi.fn() },
+    recordsRequest: { findFirst: vi.fn() },
     $transaction: vi.fn(),
     $queryRaw: vi.fn(),
   },
 }));
 vi.mock("@/lib/matter-access", () => ({
   canAccessMatter: vi.fn(async () => true),
+}));
+vi.mock("@/lib/records-requests/folder", () => ({
+  resolveRecordsUpload: vi.fn(),
 }));
 vi.mock("@/lib/activity-log", () => ({ logActivity: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -53,6 +57,7 @@ import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
 import { canAccessMatter } from "@/lib/matter-access";
+import { resolveRecordsUpload } from "@/lib/records-requests/folder";
 import { revalidatePath } from "next/cache";
 import {
   MAX_MEDIA_UPLOAD_BYTES,
@@ -653,5 +658,140 @@ describe("lead scope — onUploadCompleted", () => {
     errSpy.mockRestore();
     expect(mockedDel).toHaveBeenCalledWith(BLOB2.url);
     expect(mockedCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe("records requests", () => {
+  const mockedReq = vi.mocked(prisma.recordsRequest.findFirst);
+  const mockedResolve = vi.mocked(resolveRecordsUpload);
+  const RR_PAYLOAD = JSON.stringify({
+    matterId: "m1",
+    name: "brief.pdf",
+    recordsRequestId: "rr1",
+  });
+  const TAGGED = {
+    folderId: "recfold",
+    recordsRequestId: "rr1",
+    recordsRequestRole: "received_records",
+  } as const;
+
+  afterEach(() => {
+    mockedReq.mockReset();
+    mockedResolve.mockReset();
+  });
+
+  test("token: a request from another scope -> 400, no token issued", async () => {
+    wireHappyGates();
+    mockedReq.mockResolvedValue(null);
+    const err = await tokenError(KEY, RR_PAYLOAD);
+    expect(err.status).toBe(400);
+    expect(err.message).toBe("Records request not found in this matter or intake.");
+    expect(mockedReq).toHaveBeenCalledWith({
+      where: { id: "rr1", matterId: "m1" },
+      select: { id: true },
+    });
+  });
+
+  test("token: without records.edit -> 403", async () => {
+    wireHappyGates();
+    mockedPerm.mockImplementation(async (k) => k !== "records.edit");
+    mockedReq.mockResolvedValue({ id: "rr1" } as never);
+    const err = await tokenError(KEY, RR_PAYLOAD);
+    expect(err.status).toBe(403);
+  });
+
+  test("token: a valid request id round-trips in the signed payload", async () => {
+    wireHappyGates();
+    mockedReq.mockResolvedValue({ id: "rr1" } as never);
+    const res = await onBeforeGenerateToken(KEY, RR_PAYLOAD, false);
+    const tp = JSON.parse((res as { tokenPayload: string }).tokenPayload);
+    expect(tp.recordsRequestId).toBe("rr1");
+  });
+
+  test("token: no recordsRequestId leaves the payload and lookups untouched", async () => {
+    wireHappyGates();
+    const res = await onBeforeGenerateToken(KEY, PAYLOAD, false);
+    expect(mockedReq).not.toHaveBeenCalled();
+    const tp = JSON.parse((res as { tokenPayload: string }).tokenPayload);
+    expect(tp.recordsRequestId).toBeUndefined();
+  });
+
+  describe("completion", () => {
+    const BLOB = {
+      url: `https://abc123.public.blob.vercel-storage.com/${KEY}`,
+      downloadUrl: "",
+      pathname: KEY,
+      contentType: "application/pdf",
+      contentDisposition: "inline",
+      etag: "e1",
+    };
+    const base = {
+      name: "brief.pdf",
+      contentType: "application/pdf",
+      userId: "u1",
+      recordsRequestId: "rr1",
+    };
+
+    function wire(stage = "new", convertedMatterId: string | null = null) {
+      mockedDocFind.mockResolvedValue(null);
+      vi.mocked(prisma.$transaction).mockImplementation((async (
+        fn: (tx: unknown) => unknown
+      ) => fn(prisma)) as unknown as typeof prisma.$transaction);
+      vi.mocked(prisma.$queryRaw).mockResolvedValue([{ id: "l1" }] as never);
+      vi.mocked(canAccessMatter).mockResolvedValue(true);
+      mockedMatter.mockResolvedValue({ id: "m1" } as never);
+      mockedLead.mockResolvedValue({ id: "l1", stage, convertedMatterId } as never);
+      mockedFolder.mockResolvedValue({ id: "fold1" } as never);
+      mockedHead.mockResolvedValue({ size: 50 } as never);
+      mockedCreate.mockResolvedValue({ id: "d1" } as never);
+    }
+
+    test("matter: tags received_records and files in the request folder", async () => {
+      wire();
+      mockedResolve.mockResolvedValue(TAGGED);
+      await onUploadCompleted({
+        blob: BLOB,
+        tokenPayload: JSON.stringify({ ...base, matterId: "m1", folderId: null }),
+      });
+      expect(mockedResolve.mock.calls[0]!.slice(1)).toEqual([
+        "rr1",
+        { kind: "matter", matterId: "m1" },
+        null,
+      ]);
+      const data = mockedCreate.mock.calls[0]![0].data as Record<string, unknown>;
+      expect(data.recordsRequestId).toBe("rr1");
+      expect(data.recordsRequestRole).toBe("received_records");
+      expect(data.folderId).toBe("recfold");
+    });
+
+    test("lead converted mid-upload: request re-checked against the matter scope", async () => {
+      wire("converted", "m9");
+      mockedResolve.mockResolvedValue(TAGGED);
+      await onUploadCompleted({
+        blob: BLOB,
+        tokenPayload: JSON.stringify({ ...base, leadId: "l1", folderId: null }),
+      });
+      expect(mockedResolve.mock.calls[0]![2]).toEqual({
+        kind: "matter",
+        matterId: "m9",
+      });
+      const data = mockedCreate.mock.calls[0]![0].data as Record<string, unknown>;
+      expect(data.matterId).toBe("m9");
+      expect(data.recordsRequestId).toBe("rr1");
+    });
+
+    test("request no longer matches: filed untagged, blob kept, callback succeeds", async () => {
+      wire("converted", "m9");
+      mockedResolve.mockResolvedValue(null);
+      await onUploadCompleted({
+        blob: BLOB,
+        tokenPayload: JSON.stringify({ ...base, leadId: "l1", folderId: null }),
+      });
+      expect(mockedDel).not.toHaveBeenCalled();
+      const data = mockedCreate.mock.calls[0]![0].data as Record<string, unknown>;
+      expect(data.matterId).toBe("m9");
+      expect(data.recordsRequestId).toBeUndefined();
+      expect(data.recordsRequestRole).toBeUndefined();
+    });
   });
 });

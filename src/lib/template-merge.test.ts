@@ -47,9 +47,56 @@ const ctx: MergeContext = {
     email: "info@kosloskilaw.com",
   },
   user: { name: "Jason Kosloski" },
+  request: null,
+  custodian: null,
   today: new Date(Date.UTC(2026, 3, 15, 12)),
   timeZone: "America/Denver",
 };
+
+const recordsCtx: MergeContext = {
+  ...ctx,
+  request: {
+    subject: "Chart 2024",
+    description: "All charts and billing.",
+    type: "CORA",
+    dateRangeStart: new Date("2024-01-05"),
+    dateRangeEnd: null,
+    responseDueDate: new Date("2026-05-01"),
+    sentDate: new Date("2026-04-15"),
+  },
+  custodian: {
+    name: "Memorial Hospital",
+    organization: "Memorial Health",
+    address: "1 Hospital Way, Denver, CO 80202",
+    email: "records@memorial.example",
+    phone: "(303) 555-0111",
+  },
+};
+
+describe("records request merge fields", () => {
+  test("resolve from a request context (date-only fields on the UTC grid)", () => {
+    const { text, missing } = mergeTemplate(
+      "{{custodian.name}}|{{custodian.organization}}|{{custodian.address}}|{{custodian.email}}|{{custodian.phone}}|{{request.subject}}|{{request.description}}|{{request.type}}|{{request.dateRangeStart}}|{{request.responseDueDate}}|{{request.sentDate}}|{{request.dateRangeEnd}}",
+      recordsCtx
+    );
+    expect(text).toBe(
+      "Memorial Hospital|Memorial Health|1 Hospital Way, Denver, CO 80202|records@memorial.example|(303) 555-0111|Chart 2024|All charts and billing.|CORA|January 5, 2024|May 1, 2026|April 15, 2026|[request.dateRangeEnd — not on file]"
+    );
+    expect(missing).toEqual(["request.dateRangeEnd"]);
+  });
+
+  test("outside a request they render the not-on-file placeholder", () => {
+    const { text, missing, unresolved } = mergeTemplate(
+      "{{custodian.name}} {{request.subject}}",
+      ctx
+    );
+    expect(text).toBe(
+      "[custodian.name — not on file] [request.subject — not on file]"
+    );
+    expect(missing).toEqual(["custodian.name", "request.subject"]);
+    expect(unresolved).toEqual([]);
+  });
+});
 
 describe("mergeTemplate", () => {
   test("replaces known tokens with resolved values", () => {

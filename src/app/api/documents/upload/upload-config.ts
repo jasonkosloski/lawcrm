@@ -144,3 +144,5 @@ export const UPLOAD_SCOPE_REQUIRED_ERROR =
   "Exactly one of matterId or leadId is required and must precede file parts in the form data.";
 export const UPLOAD_FOLDER_SCOPE_ERROR =
   "Folder not found in this matter or intake.";
+export const UPLOAD_RECORDS_REQUEST_SCOPE_ERROR =
+  "Records request not found in this matter or intake.";

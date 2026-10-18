@@ -31,14 +31,16 @@ import { prisma } from "@/lib/prisma";
 import {
   createRecordsRequest,
   deleteRecordsRequest,
+  linkRecordsDocuments,
   logRecordsFollowUp,
   markRecordsRequestSent,
   saveRecordsFee,
   setRecordsRequestStatus,
+  unlinkRecordsDocument,
   updateRecordsRequest,
 } from "@/app/actions/records-requests";
 import { openFollowUpTask, rollFollowUp } from "@/lib/records-requests/follow-up";
-import type { RecordScope } from "@/lib/record-scope";
+import { SAME_SCOPE_ERROR, type RecordScope } from "@/lib/record-scope";
 import type { RecordsRequestFormState } from "@/lib/records-requests/form";
 import {
   resetDb,
@@ -758,5 +760,64 @@ describe("saveRecordsFee", () => {
     expect(row.feeAmount!.toString()).toBe("0");
     expect(row.feePaidAt).not.toBeNull();
     expect(await prisma.expense.count()).toBe(0);
+  });
+});
+
+describe("linkRecordsDocuments / unlinkRecordsDocument", () => {
+  test("links same-scope documents as received_records, gated on records.edit", async () => {
+    const r = await seedRequest();
+    const { documentId } = await seedDocument({ matterId });
+    const res = await linkRecordsDocuments(r.id, [documentId]);
+    expect(res).toEqual({ ok: true });
+    expect(requirePermission).toHaveBeenCalledWith("records.edit");
+    const doc = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
+    expect(doc.recordsRequestId).toBe(r.id);
+    expect(doc.recordsRequestRole).toBe("received_records");
+  });
+
+  test("a lead document cannot be linked to a matter request", async () => {
+    const r = await seedRequest();
+    const { leadId } = await seedLead();
+    const leadDoc = await prisma.document.create({
+      data: { leadId, name: "x.pdf", category: "other", source: "upload" },
+      select: { id: true },
+    });
+    const res = await linkRecordsDocuments(r.id, [leadDoc.id]);
+    expect(res).toEqual({ ok: false, error: SAME_SCOPE_ERROR });
+    const doc = await prisma.document.findUniqueOrThrow({ where: { id: leadDoc.id } });
+    expect(doc.recordsRequestId).toBeNull();
+  });
+
+  test("a missing document id refuses the whole batch", async () => {
+    const r = await seedRequest();
+    const { documentId } = await seedDocument({ matterId });
+    const res = await linkRecordsDocuments(r.id, [documentId, "nope"]);
+    expect(res.ok).toBe(false);
+    const doc = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
+    expect(doc.recordsRequestId).toBeNull();
+  });
+
+  test("linking does not demote the request's own letter", async () => {
+    const r = await seedRequest();
+    const { documentId } = await seedDocument({ matterId });
+    await prisma.document.update({
+      where: { id: documentId },
+      data: { recordsRequestId: r.id, recordsRequestRole: "request_letter" },
+    });
+    await linkRecordsDocuments(r.id, [documentId]);
+    const doc = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
+    expect(doc.recordsRequestRole).toBe("request_letter");
+  });
+
+  test("unlink clears both columns and keeps the document", async () => {
+    const r = await seedRequest();
+    const { documentId } = await seedDocument({ matterId });
+    await linkRecordsDocuments(r.id, [documentId]);
+    const res = await unlinkRecordsDocument(documentId);
+    expect(res).toEqual({ ok: true });
+    expect(requirePermission).toHaveBeenCalledWith("records.edit");
+    const doc = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
+    expect(doc.recordsRequestId).toBeNull();
+    expect(doc.recordsRequestRole).toBeNull();
   });
 });

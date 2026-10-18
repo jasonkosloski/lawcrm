@@ -541,3 +541,90 @@ describe("generate on a lead", () => {
     expect(await prisma.document.count()).toBe(0);
   });
 });
+
+describe("records request letters", () => {
+  async function seedRecordsRequest(over: { matterId?: string; leadId?: string } = {}) {
+    const custodian = await prisma.contact.create({
+      data: {
+        name: "Memorial Hospital",
+        type: "medical_provider",
+        organization: "Memorial Health",
+        email: "records@memorial.example",
+        address: "1 Hospital Way",
+        city: "Denver",
+        state: "CO",
+        zip: "80202",
+      },
+      select: { id: true },
+    });
+    const useLead = over.leadId !== undefined;
+    return prisma.recordsRequest.create({
+      data: {
+        matterId: useLead ? null : (over.matterId ?? matterId),
+        leadId: over.leadId ?? null,
+        custodianContactId: custodian.id,
+        adHocTypeName: "CORA",
+        subject: "Chart 2024",
+        dateRangeStart: new Date("2024-01-05T00:00:00Z"),
+      },
+      select: { id: true },
+    });
+  }
+
+  test("generate files the letter into Records/<custodian — type> with the request_letter role", async () => {
+    const t = await seedTemplate({
+      body: "To {{custodian.name}} ({{custodian.address}}) re {{request.subject}} from {{request.dateRangeStart}}",
+    });
+    const r = await seedRecordsRequest();
+    const res = await generateDocumentFromTemplate(t.id, M, {
+      recordsRequestId: r.id,
+    });
+    expect(res.ok).toBe(true);
+    expect(requirePermission).toHaveBeenCalledWith("records.edit");
+    const doc = await prisma.document.findFirstOrThrow({
+      where: { recordsRequestId: r.id },
+      include: { folder: { include: { parent: true } } },
+    });
+    expect(doc.recordsRequestRole).toBe("request_letter");
+    expect(doc.folder?.name).toBe("Memorial Hospital — CORA");
+    expect(doc.folder?.parent?.name).toBe("Records");
+    const file = vi.mocked(storeFile).mock.calls.at(-1)![0] as File;
+    expect(await file.text()).toBe(
+      "To Memorial Hospital (1 Hospital Way, Denver, CO 80202) re Chart 2024 from January 5, 2024"
+    );
+  });
+
+  test("preview merges the request fields without writing", async () => {
+    const t = await seedTemplate({ body: "{{custodian.name}} / {{request.type}}" });
+    const r = await seedRecordsRequest();
+    const res = await previewDocumentFromTemplate(t.id, M, {
+      recordsRequestId: r.id,
+    });
+    expect(res).toMatchObject({ ok: true, text: "Memorial Hospital / CORA" });
+    expect(await prisma.document.count()).toBe(0);
+  });
+
+  test("a request from another scope is refused (generate and preview)", async () => {
+    const t = await seedTemplate();
+    const { leadId } = await seedLead();
+    const foreign = await seedRecordsRequest({ leadId });
+    const gen = await generateDocumentFromTemplate(t.id, M, {
+      recordsRequestId: foreign.id,
+    });
+    expect(gen).toEqual({ ok: false, error: "Records request not found." });
+    const prev = await previewDocumentFromTemplate(t.id, M, {
+      recordsRequestId: foreign.id,
+    });
+    expect(prev).toEqual({ ok: false, error: "Records request not found." });
+    expect(await prisma.document.count()).toBe(0);
+    expect(storeFile).not.toHaveBeenCalled();
+  });
+
+  test("without a request the records fields render as not on file and no records.edit is asked", async () => {
+    const t = await seedTemplate({ body: "{{custodian.name}}" });
+    const res = await previewDocumentFromTemplate(t.id, M);
+    expect(res).toMatchObject({ ok: true, missing: ["custodian.name"] });
+    await generateDocumentFromTemplate(t.id, M);
+    expect(requirePermission).not.toHaveBeenCalledWith("records.edit");
+  });
+});

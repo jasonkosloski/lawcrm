@@ -25,6 +25,7 @@ import { roundMoney } from "@/lib/money";
 import { logActivity } from "@/lib/activity-log";
 import { assertScopeAccess, assertScopeWritable } from "@/lib/scope-access";
 import {
+  SAME_SCOPE_ERROR,
   scopeOf,
   scopePaths,
   type RecordScope,
@@ -702,4 +703,109 @@ export async function saveRecordsFee(
   revalidateForScope(scope);
   if (row.matterId) revalidatePath(`/matters/${row.matterId}/time`);
   return { status: "ok" };
+}
+
+const LINK_BATCH_CAP = 200;
+
+/** Revalidate the Documents tab alongside the Records tab. */
+function revalidateRecordsAndDocuments(scope: RecordScope): void {
+  revalidateForScope(scope);
+  for (const path of scopePaths(scope, "documents")) revalidatePath(path);
+}
+
+/** Attach existing documents to a request as received records.
+ *  Documents must share the request's scope. A document that is already
+ *  this request's own letter keeps its role. */
+export async function linkRecordsDocuments(
+  id: string,
+  documentIds: string[]
+): Promise<{ ok: boolean; error?: string }> {
+  await requirePermission("records.edit");
+  const ids = [...new Set(documentIds)];
+  if (ids.length === 0) return { ok: false, error: "Select at least one document." };
+  if (ids.length > LINK_BATCH_CAP) {
+    return { ok: false, error: `Link at most ${LINK_BATCH_CAP} documents at a time.` };
+  }
+  const row = await prisma.recordsRequest.findUnique({
+    where: { id },
+    select: { matterId: true, leadId: true, subject: true },
+  });
+  if (!row) return { ok: false, error: "Request not found" };
+  const scope = scopeOf(row);
+  const userId = await assertScopeAccess(scope);
+  const readOnly = await assertScopeWritable(scope);
+  if (readOnly) return { ok: false, error: readOnly };
+
+  const docs = await prisma.document.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      matterId: true,
+      leadId: true,
+      recordsRequestId: true,
+      recordsRequestRole: true,
+    },
+  });
+  if (docs.length !== ids.length) {
+    return { ok: false, error: "Document not found" };
+  }
+  const sameScope = (d: { matterId: string | null; leadId: string | null }) =>
+    scope.kind === "matter"
+      ? d.matterId === scope.matterId && d.leadId === null
+      : d.leadId === scope.leadId && d.matterId === null;
+  if (!docs.every(sameScope)) return { ok: false, error: SAME_SCOPE_ERROR };
+
+  await prisma.document.updateMany({
+    where: {
+      id: {
+        in: docs
+          .filter(
+            (d) =>
+              !(d.recordsRequestId === id && d.recordsRequestRole === "request_letter")
+          )
+          .map((d) => d.id),
+      },
+    },
+    data: { recordsRequestId: id, recordsRequestRole: "received_records" },
+  });
+
+  await logActivity({
+    matterId: row.matterId,
+    userId,
+    type: "records",
+    title: "Documents linked to records request",
+    detail: `${row.subject}: ${ids.length} document${ids.length === 1 ? "" : "s"}`,
+  });
+  revalidateRecordsAndDocuments(scope);
+  return { ok: true };
+}
+
+/** Detach a document from its request. Never deletes the document. */
+export async function unlinkRecordsDocument(
+  documentId: string
+): Promise<{ ok: boolean }> {
+  await requirePermission("records.edit");
+  const doc = await prisma.document.findUnique({
+    where: { id: documentId },
+    select: { matterId: true, leadId: true, name: true, recordsRequestId: true },
+  });
+  if (!doc) return { ok: false };
+  const scope = scopeOf(doc);
+  const userId = await assertScopeAccess(scope);
+  const readOnly = await assertScopeWritable(scope);
+  if (readOnly) return { ok: false };
+
+  await prisma.document.update({
+    where: { id: documentId },
+    data: { recordsRequestId: null, recordsRequestRole: null },
+  });
+  await logActivity({
+    matterId: doc.matterId,
+    userId,
+    type: "records",
+    title: "Document unlinked from records request",
+    detail: doc.name,
+  });
+  revalidateRecordsAndDocuments(scope);
+  return { ok: true };
 }

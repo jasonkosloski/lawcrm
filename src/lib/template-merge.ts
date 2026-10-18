@@ -61,6 +61,27 @@ export type MergeContext = {
   };
   /** The user generating the document. */
   user: { name: string | null };
+  /** The records request a letter is being generated for; null for
+   *  every other document. */
+  request: {
+    subject: string;
+    description: string | null;
+    /** Type name, or the ad hoc type name. */
+    type: string | null;
+    dateRangeStart: Date | null;
+    dateRangeEnd: Date | null;
+    responseDueDate: Date | null;
+    sentDate: Date | null;
+  } | null;
+  /** The request's custodian contact; null outside a request. */
+  custodian: {
+    name: string;
+    organization: string | null;
+    /** Composed single-line mailing address. */
+    address: string | null;
+    email: string | null;
+    phone: string | null;
+  } | null;
   /** "Now" for the {{today}} field — injectable for tests/previews. */
   today: Date;
   /** IANA zone the date fields format in; null = runtime local. */
@@ -81,7 +102,13 @@ export function composeCityStateZip(
 
 // ── Field catalog ──────────────────────────────────────────────────────
 
-export type MergeFieldGroup = "Matter" | "Client" | "Firm" | "General";
+export type MergeFieldGroup =
+  | "Matter"
+  | "Client"
+  | "Firm"
+  | "General"
+  | "Records request"
+  | "Custodian";
 
 export type MergeField = {
   /** Token key as written in template bodies: `{{matter.name}}`. */
@@ -248,6 +275,94 @@ export const MERGE_FIELDS: readonly MergeField[] = [
     resolve: (ctx) => text(ctx.firm.email),
   },
 
+  // ── Records request (null outside a request) ──
+  {
+    key: "request.subject",
+    label: "Request subject",
+    description: "Subject line of the records request.",
+    group: "Records request",
+    resolve: (ctx) => text(ctx.request?.subject),
+  },
+  {
+    key: "request.description",
+    label: "Request description",
+    description: "What is being requested.",
+    group: "Records request",
+    resolve: (ctx) => text(ctx.request?.description),
+  },
+  {
+    key: "request.type",
+    label: "Request type",
+    description: 'Type of records, e.g. "Medical records".',
+    group: "Records request",
+    resolve: (ctx) => text(ctx.request?.type),
+  },
+  {
+    key: "request.dateRangeStart",
+    label: "Records from",
+    description: "Start of the date range requested.",
+    group: "Records request",
+    resolve: (ctx) => calendarDate(ctx.request?.dateRangeStart ?? null),
+  },
+  {
+    key: "request.dateRangeEnd",
+    label: "Records through",
+    description: "End of the date range requested.",
+    group: "Records request",
+    resolve: (ctx) => calendarDate(ctx.request?.dateRangeEnd ?? null),
+  },
+  {
+    key: "request.responseDueDate",
+    label: "Response due date",
+    description: "Date the custodian's response is due.",
+    group: "Records request",
+    resolve: (ctx) => calendarDate(ctx.request?.responseDueDate ?? null),
+  },
+  {
+    key: "request.sentDate",
+    label: "Date sent",
+    description: "Date the request was sent.",
+    group: "Records request",
+    resolve: (ctx) => calendarDate(ctx.request?.sentDate ?? null),
+  },
+
+  // ── Custodian (null outside a request) ──
+  {
+    key: "custodian.name",
+    label: "Custodian name",
+    description: "The records custodian contact.",
+    group: "Custodian",
+    resolve: (ctx) => text(ctx.custodian?.name),
+  },
+  {
+    key: "custodian.organization",
+    label: "Custodian organization",
+    description: "Organization the custodian belongs to.",
+    group: "Custodian",
+    resolve: (ctx) => text(ctx.custodian?.organization),
+  },
+  {
+    key: "custodian.address",
+    label: "Custodian address",
+    description: "Custodian's mailing address on one line.",
+    group: "Custodian",
+    resolve: (ctx) => text(ctx.custodian?.address),
+  },
+  {
+    key: "custodian.email",
+    label: "Custodian email",
+    description: "Custodian's email address.",
+    group: "Custodian",
+    resolve: (ctx) => text(ctx.custodian?.email),
+  },
+  {
+    key: "custodian.phone",
+    label: "Custodian phone",
+    description: "Custodian's phone number.",
+    group: "Custodian",
+    resolve: (ctx) => text(ctx.custodian?.phone),
+  },
+
   // ── General ──
   {
     key: "user.name",
@@ -273,7 +388,14 @@ const FIELD_BY_KEY = new Map(MERGE_FIELDS.map((f) => [f.key, f]));
 export const MERGE_FIELD_GROUPS: ReadonlyArray<{
   group: MergeFieldGroup;
   fields: readonly MergeField[];
-}> = (["Matter", "Client", "Firm", "General"] as const).map((group) => ({
+}> = ([
+  "Matter",
+  "Client",
+  "Firm",
+  "General",
+  "Records request",
+  "Custodian",
+] as const).map((group) => ({
   group,
   fields: MERGE_FIELDS.filter((f) => f.group === group),
 }));
@@ -373,6 +495,22 @@ export const SAMPLE_MERGE_CONTEXT: MergeContext = {
     email: "info@yourfirm.example",
   },
   user: { name: "You (preview)" },
+  request: {
+    subject: "Sample records request",
+    description: "All charts and billing records (sample).",
+    type: "Medical records (sample)",
+    dateRangeStart: new Date(Date.UTC(2024, 0, 1)),
+    dateRangeEnd: new Date(Date.UTC(2025, 5, 1)),
+    responseDueDate: new Date(Date.UTC(2026, 4, 1)),
+    sentDate: new Date(Date.UTC(2026, 3, 1)),
+  },
+  custodian: {
+    name: "Sample Hospital (sample custodian)",
+    organization: "Sample Health System",
+    address: "789 Example Blvd, Sampletown, CO 80000",
+    email: "records@sample-hospital.example",
+    phone: "(555) 555-0123",
+  },
   // Fixed instant so the preview is stable; UTC noon keeps the day
   // the same in any zone the browser runs.
   today: new Date(Date.UTC(2026, 3, 15, 12)), // April 15, 2026
