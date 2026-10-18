@@ -127,3 +127,46 @@ export async function getDocumentForViewer(
     nextId,
   };
 }
+
+/** One file in the viewer's left-hand file tree. */
+export type FileTreeDocument = {
+  id: string;
+  name: string;
+  folderId: string | null;
+  contentType: string | null;
+};
+
+/** Cap on files loaded into the viewer's tree in one go. A discovery
+ *  production can hold many thousands of files; past this the tree
+ *  still lists every folder, but only the current folder's files —
+ *  other folders link to the Documents tab instead of showing a
+ *  misleading partial list. */
+export const FILE_TREE_MAX_DOCUMENTS = 3000;
+
+/**
+ * The matter's files for the viewer's file tree: lightweight columns
+ * only (no sizes, uploaders or storage keys), ordered by name. When the
+ * matter has more than FILE_TREE_MAX_DOCUMENTS, `complete` is false and
+ * only the current folder's files are returned.
+ */
+export async function getViewerFileTree(
+  matterId: string,
+  currentFolderId: string | null
+): Promise<{ documents: FileTreeDocument[]; complete: boolean }> {
+  const select = { id: true, name: true, folderId: true, contentType: true } as const;
+  const orderBy = [{ name: "asc" as const }, { id: "asc" as const }];
+  const all = await prisma.document.findMany({
+    where: { matterId },
+    select,
+    orderBy,
+    take: FILE_TREE_MAX_DOCUMENTS + 1,
+  });
+  if (all.length <= FILE_TREE_MAX_DOCUMENTS) return { documents: all, complete: true };
+  // Too many to list: just the folder the reader is working through.
+  const current = await prisma.document.findMany({
+    where: { matterId, folderId: currentFolderId },
+    select,
+    orderBy,
+  });
+  return { documents: current, complete: false };
+}

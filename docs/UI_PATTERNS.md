@@ -370,6 +370,12 @@ what's blocking it.
 - Thin custom scrollbar: 8px width, #c9ced4 thumb, transparent track
 - Apply `.scrollbar-thin` class to scrollable containers
 
+### Per-browser UI preferences (localStorage)
+- For small conveniences only (a collapsed rail, a remembered toggle), never data.
+- Read with `useSyncExternalStore(subscribe, readFromStorage, () => default)`: the server snapshot is the default, so there's no hydration mismatch and no setState-in-effect. Write with a helper that saves and dispatches a custom window event the subscriber listens to (plus `storage` for other tabs).
+- Wrap every storage read/write in try/catch: private mode or blocked site data must fall back to the default.
+- Example: the viewer file tree's collapsed state (`src/components/documents-viewer/document-file-tree.tsx`).
+
 ---
 
 ## Color Coding

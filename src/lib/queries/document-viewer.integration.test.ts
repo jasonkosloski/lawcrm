@@ -16,7 +16,7 @@ import {
   seedPracticeArea,
   seedUser,
 } from "@/test/integration-helpers";
-import { getDocumentForViewer } from "./document-viewer";
+import { FILE_TREE_MAX_DOCUMENTS, getDocumentForViewer, getViewerFileTree } from "./document-viewer";
 
 let matterId: string;
 let userId: string;
@@ -181,5 +181,42 @@ describe("getDocumentForViewer — prev/next within the folder", () => {
     const rootResult = await getDocumentForViewer(matterId, rootDoc);
     expect(rootResult!.folderId).toBeNull();
     expect(rootResult!.folderName).toBeNull();
+  });
+});
+
+describe("getViewerFileTree — the viewer's left-hand file list", () => {
+  test("this matter's files only, by name, lightweight columns", async () => {
+    const folder = await prisma.documentFolder.create({ data: { matterId, name: "Discovery" }, select: { id: true } });
+    await seedDoc({ name: "b-report.pdf", folderId: folder.id });
+    await seedDoc({ name: "a-retainer.pdf" });
+    const area = await seedPracticeArea({ name: "Elsewhere" });
+    const other = await seedMatter({ practiceAreaId: area.areaId, stageId: area.stageId, leadUserId: userId });
+    await seedDoc({ matterId: other.matterId, name: "other-matter.pdf" });
+
+    const { documents, complete } = await getViewerFileTree(matterId, null);
+    expect(complete).toBe(true);
+    expect(documents.map((d) => d.name)).toEqual(["a-retainer.pdf", "b-report.pdf"]);
+    expect(Object.keys(documents[0]).sort()).toEqual(["contentType", "folderId", "id", "name"]);
+    expect(documents[1].folderId).toBe(folder.id);
+  });
+
+  test("over the cap → only the current folder, flagged incomplete", async () => {
+    const folder = await prisma.documentFolder.create({ data: { matterId, name: "Production" }, select: { id: true } });
+    await prisma.document.createMany({
+      data: Array.from({ length: FILE_TREE_MAX_DOCUMENTS + 1 }, (_, i) => ({
+        matterId,
+        name: `bates-${String(i).padStart(5, "0")}.pdf`,
+        folderId: folder.id,
+      })),
+    });
+    await seedDoc({ name: "root-note.pdf" });
+
+    const inRoot = await getViewerFileTree(matterId, null);
+    expect(inRoot.complete).toBe(false);
+    expect(inRoot.documents.map((d) => d.name)).toEqual(["root-note.pdf"]);
+
+    const inProduction = await getViewerFileTree(matterId, folder.id);
+    expect(inProduction.complete).toBe(false);
+    expect(inProduction.documents).toHaveLength(FILE_TREE_MAX_DOCUMENTS + 1);
   });
 });

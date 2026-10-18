@@ -37,7 +37,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ChevronLeft, ChevronRight, Download } from "lucide-react";
-import { getDocumentForViewer } from "@/lib/queries/document-viewer";
+import { getDocumentForViewer, getViewerFileTree } from "@/lib/queries/document-viewer";
+import { getMatterDocumentFolders } from "@/lib/queries/matter-detail";
+import { buildFolderTree } from "@/lib/folder-tree";
+import { DocumentFileTree } from "@/components/documents-viewer/document-file-tree";
 import { getDocumentFlaggedMoments } from "@/lib/queries/evidence";
 import { getCurrentUserId, requireUser } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
@@ -85,11 +88,15 @@ export default async function DocumentViewerPage({
   await requireUser();
   const { id, documentId } = await params;
   await assertMatterAccess(id);
-  const [doc, tz] = await Promise.all([
+  const [doc, tz, folders] = await Promise.all([
     getDocumentForViewer(id, documentId),
     getCurrentUserTimeZone(),
+    getMatterDocumentFolders(id),
   ]);
   if (!doc) notFound();
+  // Left-hand file tree: the matter's folders + files (lightweight).
+  const fileTree = await getViewerFileTree(id, doc.folderId);
+  const folderTree = buildFolderTree(folders);
 
   const sp = await searchParams;
   // ?t=SECONDS — the original media deep-link format, still honored.
@@ -165,78 +172,88 @@ export default async function DocumentViewerPage({
     );
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 p-5 animate-page-enter">
-      {/* ── Breadcrumb ─────────────────────────────────────────────── */}
-      <div>
-        <Link
-          href={backHref}
-          className="inline-flex items-center gap-1.5 text-xs text-ink-3 hover:text-brand-700"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-          Documents
-          {doc.folderName && (
-            <span className="text-ink-4">/ {doc.folderName}</span>
-          )}
-        </Link>
-      </div>
+    <div className="flex h-full min-h-0 gap-4 p-5 animate-page-enter">
+      <DocumentFileTree
+        matterId={id}
+        tree={folderTree}
+        documents={fileTree.documents}
+        complete={fileTree.complete}
+        currentId={doc.id}
+        currentFolderId={doc.folderId}
+      />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+        {/* ── Breadcrumb ─────────────────────────────────────────────── */}
+        <div>
+          <Link
+            href={backHref}
+            className="inline-flex items-center gap-1.5 text-xs text-ink-3 hover:text-brand-700"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+            Documents
+            {doc.folderName && (
+              <span className="text-ink-4">/ {doc.folderName}</span>
+            )}
+          </Link>
+        </div>
 
-      {/* ── Viewer chrome ──────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h1 className="min-w-0 truncate text-sm font-semibold text-ink">
-              {doc.name}
-            </h1>
-            <span className="inline-block rounded-full border border-line bg-paper-2 px-2 py-0.5 text-2xs font-medium text-ink-3">
-              {documentCategoryLabel(doc.category)}
-            </span>
-            <span
-              className={`inline-block rounded-full border px-2 py-0.5 text-2xs font-medium ${status.className}`}
-            >
-              {status.label}
-            </span>
+        {/* ── Viewer chrome ──────────────────────────────────────────── */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <h1 className="min-w-0 truncate text-sm font-semibold text-ink">
+                {doc.name}
+              </h1>
+              <span className="inline-block rounded-full border border-line bg-paper-2 px-2 py-0.5 text-2xs font-medium text-ink-3">
+                {documentCategoryLabel(doc.category)}
+              </span>
+              <span
+                className={`inline-block rounded-full border px-2 py-0.5 text-2xs font-medium ${status.className}`}
+              >
+                {status.label}
+              </span>
+            </div>
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-2xs text-ink-4">
+              <span className="font-mono">{formatFileSize(doc.fileSize)}</span>
+              <span aria-hidden>·</span>
+              <span>
+                Uploaded
+                {doc.uploadedByName
+                  ? ` by ${doc.uploadedByName}`
+                  : doc.uploadedByInitials
+                    ? ` by ${doc.uploadedByInitials}`
+                    : ""}{" "}
+                {formatDate(doc.createdAt, "medium", tz)}
+              </span>
+            </div>
           </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-2xs text-ink-4">
-            <span className="font-mono">{formatFileSize(doc.fileSize)}</span>
-            <span aria-hidden>·</span>
-            <span>
-              Uploaded
-              {doc.uploadedByName
-                ? ` by ${doc.uploadedByName}`
-                : doc.uploadedByInitials
-                  ? ` by ${doc.uploadedByInitials}`
-                  : ""}{" "}
-              {formatDate(doc.createdAt, "medium", tz)}
-            </span>
+
+          <div className="flex items-center gap-1.5">
+            <NeighborLink
+              href={doc.prevId ? `/matters/${id}/documents/${doc.prevId}` : null}
+              label="Previous document in folder"
+              icon={<ChevronLeft className="h-4 w-4" aria-hidden />}
+            />
+            <NeighborLink
+              href={doc.nextId ? `/matters/${id}/documents/${doc.nextId}` : null}
+              label="Next document in folder"
+              icon={<ChevronRight className="h-4 w-4" aria-hidden />}
+            />
+            {doc.fileUrl && (
+              <a
+                href={`${downloadHref}?download=1`}
+                download={doc.name}
+                className="inline-flex h-7 items-center gap-1.5 rounded-md border border-line bg-white px-2.5 text-xs font-medium text-ink-2 transition-colors hover:border-brand-300 hover:text-brand-700"
+              >
+                <Download className="h-3.5 w-3.5" aria-hidden />
+                Download
+              </a>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
-          <NeighborLink
-            href={doc.prevId ? `/matters/${id}/documents/${doc.prevId}` : null}
-            label="Previous document in folder"
-            icon={<ChevronLeft className="h-4 w-4" aria-hidden />}
-          />
-          <NeighborLink
-            href={doc.nextId ? `/matters/${id}/documents/${doc.nextId}` : null}
-            label="Next document in folder"
-            icon={<ChevronRight className="h-4 w-4" aria-hidden />}
-          />
-          {doc.fileUrl && (
-            <a
-              href={`${downloadHref}?download=1`}
-              download={doc.name}
-              className="inline-flex h-7 items-center gap-1.5 rounded-md border border-line bg-white px-2.5 text-xs font-medium text-ink-2 transition-colors hover:border-brand-300 hover:text-brand-700"
-            >
-              <Download className="h-3.5 w-3.5" aria-hidden />
-              Download
-            </a>
-          )}
-        </div>
+        {/* ── Body ───────────────────────────────────────────────────── */}
+        <div className="flex min-h-0 flex-1 flex-col">{body}</div>
       </div>
-
-      {/* ── Body ───────────────────────────────────────────────────── */}
-      <div className="flex min-h-0 flex-1 flex-col">{body}</div>
     </div>
   );
 }
