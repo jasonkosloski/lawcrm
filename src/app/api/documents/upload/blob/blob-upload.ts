@@ -57,6 +57,7 @@ import {
   type DocumentCategory,
 } from "@/lib/document-form";
 import { isValidStorageKey } from "@/lib/storage/storage-key";
+import { resolveLeadUploadTarget } from "@/lib/lead-documents";
 import { BLOB_CACHE_MAX_AGE_SECONDS } from "@/lib/storage/blob-driver";
 import {
   MAX_MEDIA_UPLOAD_BYTES,
@@ -287,84 +288,114 @@ export const onUploadCompleted: NonNullable<
     await del(blob.url).catch(() => {});
   };
 
+  const dataFor = (target: RecordScope, targetFolderId: string | null) => ({
+    ...scopeWhere(target),
+    folderId: targetFolderId,
+    name: t.name,
+    // The composer picks a category; the multi-file uploader
+    // sends none, and discovery productions are what it exists
+    // for.
+    category: t.category ?? "discovery",
+    source: "upload" as const,
+    // Full blob URL — the key under the vercel-blob driver
+    // (storage-key.ts documents the mapping).
+    fileUrl: blob.url,
+    contentType: t.contentType,
+    fileSize: meta.size,
+    uploadedBy: t.userId,
+  });
+
+  let filedAtRoot = Boolean(t.folderId);
+  let created: { id: string; name: string; contentType: string | null };
+
   if (scope.kind === "matter") {
+    const matterId = scope.matterId;
     const matter = await prisma.matter.findUnique({
-      where: { id: scope.matterId },
+      where: { id: matterId },
       select: { id: true },
     });
     if (!matter) {
       await removeOrphan("matter vanished during upload");
       return;
     }
+
+    let folderId = t.folderId;
+    if (folderId) {
+      const folder = await prisma.documentFolder.findFirst({
+        where: { id: folderId, ...scopeWhere(scope) },
+        select: { id: true },
+      });
+      if (!folder) folderId = null;
+    }
+    filedAtRoot = Boolean(t.folderId) && folderId === null;
+    try {
+      created = await prisma.document.create({ data: dataFor(scope, folderId) });
+    } catch (err) {
+      if (!isForeignKeyError(err)) throw err;
+      // Raced a delete between the checks above and the insert.
+      const stillThere = await prisma.matter.findUnique({
+        where: { id: matterId },
+        select: { id: true },
+      });
+      if (!stillThere) {
+        await removeOrphan("matter vanished during upload");
+        return;
+      }
+      created = await prisma.document.create({ data: dataFor(scope, null) });
+      filedAtRoot = true;
+    }
   } else {
-    const lead = await prisma.lead.findUnique({
-      where: { id: scope.leadId },
-      select: { id: true },
-    });
-    if (!lead) {
+    // Lead scope: decide the scope and create in ONE transaction that
+    // holds a FOR SHARE lock on the lead row (see
+    // resolveLeadUploadTarget), so a conversion can't slip between
+    // the stage read and the insert. A lead converted mid-upload
+    // reroutes the file onto its matter instead of discarding it.
+    const leadId = scope.leadId;
+    type Filed =
+      | { kind: "filed"; scope: RecordScope; folderId: string | null; doc: typeof created }
+      | { kind: "gone" }
+      | { kind: "forbidden"; matterId: string };
+    const fileOnLead = (folder: string | null): Promise<Filed> =>
+      prisma.$transaction(async (tx) => {
+        const target = await resolveLeadUploadTarget(
+          tx,
+          leadId,
+          t.userId,
+          folder,
+          canAccessMatter
+        );
+        if (target.kind !== "filed") return target;
+        const doc = await tx.document.create({
+          data: dataFor(target.scope, target.folderId),
+        });
+        return { ...target, doc };
+      });
+
+    let filed: Filed;
+    try {
+      filed = await fileOnLead(t.folderId);
+    } catch (err) {
+      if (!isForeignKeyError(err)) throw err;
+      // The folder (or the lead) vanished between the lookup and the
+      // insert: retry at the root; a lead that is gone ends as "gone".
+      filed = await fileOnLead(null);
+    }
+    if (filed.kind === "gone") {
       await removeOrphan("lead vanished during upload");
       return;
     }
-    // Converted mid-upload: its records already moved to the matter,
-    // so a row filed here would be stranded on a read-only lead.
-    if (await assertScopeWritable(scope)) {
-      await removeOrphan("lead converted during upload");
+    if (filed.kind === "forbidden") {
+      // Converted, but the uploader can't see the new matter: filing
+      // the file there would leak it past the matter wall. Fail
+      // closed (and succeed the callback — a retry can't change it).
+      await removeOrphan(
+        `lead converted during upload to matter ${filed.matterId} the uploader cannot access`
+      );
       return;
     }
-  }
-
-  let folderId = t.folderId;
-  if (folderId) {
-    const folder = await prisma.documentFolder.findFirst({
-      where: { id: folderId, ...scopeWhere(scope) },
-      select: { id: true },
-    });
-    if (!folder) folderId = null;
-  }
-
-  const create = (targetFolderId: string | null) =>
-    prisma.document.create({
-      data: {
-        ...scopeWhere(scope),
-        folderId: targetFolderId,
-        name: t.name,
-        // The composer picks a category; the multi-file uploader
-        // sends none, and discovery productions are what it exists
-        // for.
-        category: t.category ?? "discovery",
-        source: "upload",
-        // Full blob URL — the key under the vercel-blob driver
-        // (storage-key.ts documents the mapping).
-        fileUrl: blob.url,
-        contentType: t.contentType,
-        fileSize: meta.size,
-        uploadedBy: t.userId,
-      },
-    });
-
-  let filedAtRoot = Boolean(t.folderId) && folderId === null;
-  let created: { id: string; name: string; contentType: string | null };
-  try {
-    created = await create(folderId);
-  } catch (err) {
-    if (!isForeignKeyError(err)) throw err;
-    // Raced a delete between the checks above and the insert.
-    const stillThere =
-      scope.kind === "matter"
-        ? await prisma.matter.findUnique({
-            where: { id: scope.matterId },
-            select: { id: true },
-          })
-        : await prisma.lead.findUnique({
-            where: { id: scope.leadId },
-            select: { id: true },
-          });
-    if (!stillThere) {
-      await removeOrphan(`${scope.kind} vanished during upload`);
-      return;
-    }
-    created = await create(null);
-    filedAtRoot = true;
+    scope = filed.scope;
+    created = filed.doc;
+    filedAtRoot = Boolean(t.folderId) && filed.folderId === null;
   }
 
   // One activity row PER FILE — unlike the streaming route's

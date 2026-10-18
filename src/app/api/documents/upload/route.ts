@@ -74,6 +74,7 @@ import {
   assertScopeWritable,
   revalidateDocumentScope,
 } from "@/lib/scope-access";
+import { resolveLeadUploadTarget } from "@/lib/lead-documents";
 import { extractIfEmail } from "@/lib/email-attachment-extract";
 import {
   FileTooLargeError,
@@ -176,35 +177,85 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   let documents: { id: string; name: string; contentType: string | null }[];
+  let scope: RecordScope = result.scope;
+  const rowData = (
+    f: StoredUpload,
+    target: RecordScope,
+    folderId: string | null
+  ) => ({
+    ...scopeWhere(target),
+    folderId,
+    // A display-name override only makes sense for a single
+    // file; batches keep each file's own name.
+    name:
+      result.files.length === 1 && result.displayName
+        ? capDocumentName(result.displayName)
+        : f.name,
+    // Default "discovery": the batch uploader exists for
+    // discovery productions; the single-file composer sends
+    // an explicit category.
+    category: result.category,
+    source: "upload" as const,
+    fileUrl: f.key,
+    contentType: f.contentType,
+    fileSize: f.size,
+    uploadedBy: userId,
+  });
+  const select = { id: true, name: true, contentType: true } as const;
   try {
-    // One transaction so a mid-batch DB failure can't leave half the
-    // rows behind while the caller sees a 500.
-    documents = await prisma.$transaction(
-      result.files.map((f) =>
-        prisma.document.create({
-          data: {
-            ...scopeWhere(result.scope),
-            folderId: result.folderId,
-            // A display-name override only makes sense for a single
-            // file; batches keep each file's own name.
-            name:
-              result.files.length === 1 && result.displayName
-                ? capDocumentName(result.displayName)
-                : f.name,
-            // Default "discovery": the batch uploader exists for
-            // discovery productions; the single-file composer sends
-            // an explicit category.
-            category: result.category,
-            source: "upload",
-            fileUrl: f.key,
-            contentType: f.contentType,
-            fileSize: f.size,
-            uploadedBy: userId,
-          },
-          select: { id: true, name: true, contentType: true },
-        })
-      )
-    );
+    if (result.scope.kind === "lead") {
+      // Lead scope: re-check the lead INSIDE the create transaction
+      // under a FOR SHARE lock (resolveLeadUploadTarget). If it
+      // converted while the bytes streamed, the files go onto its
+      // matter (folder falls back to the matter root) rather than
+      // being stranded on a read-only lead.
+      const leadId = result.scope.leadId;
+      const outcome = await prisma.$transaction(async (tx) => {
+        const target = await resolveLeadUploadTarget(
+          tx,
+          leadId,
+          userId,
+          result.folderId,
+          canAccessMatter
+        );
+        if (target.kind !== "filed") return target;
+        const docs = [];
+        for (const f of result.files) {
+          docs.push(
+            await tx.document.create({
+              data: rowData(f, target.scope, target.folderId),
+              select,
+            })
+          );
+        }
+        return { ...target, docs };
+      });
+      if (outcome.kind !== "filed") {
+        await Promise.all(result.files.map((f) => deleteFile(f.key)));
+        return outcome.kind === "gone"
+          ? NextResponse.json({ error: "Lead not found." }, { status: 404 })
+          : NextResponse.json(
+              {
+                error:
+                  "This lead was converted to a matter you don't have access to; the upload was discarded.",
+              },
+              { status: 403 }
+            );
+      }
+      scope = outcome.scope;
+      documents = outcome.docs;
+    } else {
+      // One transaction so a mid-batch DB failure can't leave half the
+      // rows behind while the caller sees a 500.
+      documents = await prisma.$transaction(
+        result.files.map((f) =>
+          prisma.document.create({
+            data: rowData(f, result.scope, result.folderId),
+            select,
+          })
+        )
+      );
+    }
   } catch (err) {
     // Bytes without rows are orphans — remove them before failing.
     await Promise.all(result.files.map((f) => deleteFile(f.key)));
@@ -214,7 +265,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   // ONE activity entry per batch — a 40-file production must not
   // flood the recent-activity feed with 40 rows.
   await logActivity({
-    matterId: result.scope.kind === "matter" ? result.scope.matterId : null,
+    matterId: scope.kind === "matter" ? scope.matterId : null,
     userId,
     type: "document",
     title:
@@ -231,7 +282,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   // Best-effort — the upload itself has succeeded either way.
   for (const d of documents) await extractIfEmail(d, userId);
 
-  revalidateDocumentScope(result.scope);
+  revalidateDocumentScope(scope);
 
   return NextResponse.json({ documents });
 }

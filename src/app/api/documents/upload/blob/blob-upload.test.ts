@@ -33,6 +33,8 @@ vi.mock("@/lib/prisma", () => ({
     lead: { findUnique: vi.fn() },
     documentFolder: { findFirst: vi.fn() },
     document: { create: vi.fn(), findFirst: vi.fn() },
+    $transaction: vi.fn(),
+    $queryRaw: vi.fn(),
   },
 }));
 vi.mock("@/lib/matter-access", () => ({
@@ -50,6 +52,7 @@ import { auth } from "@/auth";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
+import { canAccessMatter } from "@/lib/matter-access";
 import { revalidatePath } from "next/cache";
 import {
   MAX_MEDIA_UPLOAD_BYTES,
@@ -546,10 +549,17 @@ describe("lead scope — onUploadCompleted", () => {
     userId: "u1",
   });
 
-  function wire(stage = "new") {
+  function wire(stage = "new", convertedMatterId: string | null = null) {
     mockedDocFind.mockResolvedValue(null);
+    // The upload runs in an interactive transaction; the mock client
+    // doubles as the tx client.
+    vi.mocked(prisma.$transaction).mockImplementation((async (
+      fn: (tx: unknown) => unknown
+    ) => fn(prisma)) as unknown as typeof prisma.$transaction);
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([{ id: "l1" }] as never);
+    vi.mocked(canAccessMatter).mockResolvedValue(true);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mockedLead.mockResolvedValue({ id: "l1", stage } as any);
+    mockedLead.mockResolvedValue({ id: "l1", stage, convertedMatterId } as any);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockedFolder.mockResolvedValue({ id: "fold1" } as any);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -587,7 +597,55 @@ describe("lead scope — onUploadCompleted", () => {
     expect(mockedCreate).not.toHaveBeenCalled();
   });
 
-  test("lead converted mid-upload: blob removed, no row on the converted lead", async () => {
+  test("takes a FOR SHARE lock on the lead row before deciding scope", async () => {
+    wire();
+    await onUploadCompleted({ blob: BLOB2, tokenPayload: LEAD_TP });
+    const q = vi.mocked(prisma.$queryRaw).mock.calls[0]!;
+    // Tagged template: strings array + bound lead id, never interpolated.
+    expect((q[0] as unknown as string[]).join("?")).toMatch(/FOR SHARE/);
+    expect(q[1]).toBe("l1");
+  });
+
+  test("lead converted mid-upload: filed on the converted matter, blob kept", async () => {
+    wire("converted", "m9");
+    await onUploadCompleted({ blob: BLOB2, tokenPayload: LEAD_TP });
+    expect(mockedDel).not.toHaveBeenCalled();
+    const data = mockedCreate.mock.calls[0]![0].data as Record<string, unknown>;
+    expect(data.matterId).toBe("m9");
+    expect(data.leadId).toBeUndefined();
+    expect(data.folderId).toBe("fold1");
+    expect(mockedFolder).toHaveBeenCalledWith({
+      where: { id: "fold1", matterId: "m9" },
+      select: { id: true },
+    });
+    expect(vi.mocked(logActivity).mock.calls[0]![0].matterId).toBe("m9");
+    const paths = vi.mocked(revalidatePath).mock.calls.map((c) => c[0]);
+    expect(paths).toContain("/matters/m9/documents");
+  });
+
+  test("converted mid-upload and the folder no longer resolves: files at the matter root", async () => {
+    wire("converted", "m9");
+    mockedFolder.mockResolvedValue(null);
+    await onUploadCompleted({ blob: BLOB2, tokenPayload: LEAD_TP });
+    const data = mockedCreate.mock.calls[0]![0].data as Record<string, unknown>;
+    expect(data.matterId).toBe("m9");
+    expect(data.folderId).toBeNull();
+    expect(mockedDel).not.toHaveBeenCalled();
+  });
+
+  test("converted mid-upload but uploader cannot access the matter: fail closed, blob removed", async () => {
+    wire("converted", "m9");
+    vi.mocked(canAccessMatter).mockResolvedValue(false);
+    mockedDel.mockResolvedValue(undefined);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    await onUploadCompleted({ blob: BLOB2, tokenPayload: LEAD_TP });
+    errSpy.mockRestore();
+    expect(canAccessMatter).toHaveBeenCalledWith("u1", "m9");
+    expect(mockedDel).toHaveBeenCalledWith(BLOB2.url);
+    expect(mockedCreate).not.toHaveBeenCalled();
+  });
+
+  test("lead converted with no matter recorded: blob removed, no row", async () => {
     wire("converted");
     mockedDel.mockResolvedValue(undefined);
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});

@@ -7,7 +7,7 @@
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 
 import { prisma } from "@/lib/prisma";
-import { rehomeLeadDocuments } from "@/lib/lead-documents";
+import { rehomeLeadDocuments, resolveLeadUploadTarget } from "@/lib/lead-documents";
 import {
   resetDb,
   seedFirm,
@@ -110,5 +110,56 @@ describe("rehomeLeadDocuments", () => {
     expect(got.every((s) => /\(\d+\)$/.test(s))).toBe(true);
     // nested folder keeps its name
     expect((await prisma.documentFolder.findUniqueOrThrow({ where: { id: n.id } })).name).toBe("Medical");
+  });
+});
+
+describe("resolveLeadUploadTarget (real SQL, incl. the FOR SHARE lock)", () => {
+  const resolve = (
+    lid: string,
+    userId: string,
+    folderId: string | null,
+    allow = true
+  ) =>
+    prisma.$transaction((tx) =>
+      resolveLeadUploadTarget(tx, lid, userId, folderId, async () => allow)
+    );
+
+  test("an open lead files on the lead, keeping a lead folder", async () => {
+    const f = await prisma.documentFolder.create({ data: { leadId, name: "F" } });
+    expect(await resolve(leadId, "u", f.id)).toEqual({
+      kind: "filed",
+      scope: { kind: "lead", leadId },
+      folderId: f.id,
+    });
+  });
+
+  test("a missing lead is gone", async () => {
+    expect(await resolve("nope", "u", null)).toEqual({ kind: "gone" });
+  });
+
+  test("a converted lead reroutes to its matter; a re-homed folder keeps resolving, a stale one falls back to root", async () => {
+    const { userId } = await seedUser({ firmId: (await seedFirm()).firmId, email: "z@example.com" });
+    const f = await prisma.documentFolder.create({ data: { leadId, name: "F" } });
+    await prisma.$transaction(async (tx) => {
+      await rehomeLeadDocuments(tx, leadId, matterId);
+      await tx.lead.update({
+        where: { id: leadId },
+        data: { stage: "converted", convertedMatterId: matterId },
+      });
+    });
+    const got = await resolve(leadId, userId, f.id);
+    expect(got).toMatchObject({
+      kind: "filed",
+      scope: { kind: "matter", matterId },
+      folderId: f.id,
+    });
+    expect(await resolve(leadId, userId, "stale")).toMatchObject({
+      kind: "filed",
+      folderId: null,
+    });
+    expect(await resolve(leadId, userId, f.id, false)).toEqual({
+      kind: "forbidden",
+      matterId,
+    });
   });
 });

@@ -33,6 +33,7 @@ vi.mock("@/lib/prisma", () => ({
     documentFolder: { findFirst: vi.fn() },
     document: { create: vi.fn() },
     $transaction: vi.fn(),
+    $queryRaw: vi.fn(),
   },
 }));
 vi.mock("@/lib/matter-access", () => ({
@@ -55,6 +56,7 @@ import { auth } from "@/auth";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
+import { canAccessMatter } from "@/lib/matter-access";
 import { revalidatePath } from "next/cache";
 import {
   FileTooLargeError,
@@ -90,6 +92,7 @@ function wireHappyMocks() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   mockedAuth.mockResolvedValue({ user: { id: "u1" } } as any);
   mockedPerm.mockResolvedValue(true);
+  vi.mocked(canAccessMatter).mockResolvedValue(true);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   mockedMatter.mockResolvedValue({ id: "m1" } as any);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -112,8 +115,15 @@ function wireHappyMocks() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       })) as any
   );
-  mockedTxn.mockImplementation((async (ops: Promise<unknown>[]) =>
-    Promise.all(ops)) as unknown as typeof prisma.$transaction);
+  // Array form (matter scope) and interactive form (lead scope: the
+  // mock client doubles as the tx client).
+  mockedTxn.mockImplementation((async (
+    ops: Promise<unknown>[] | ((tx: unknown) => unknown)
+  ) =>
+    typeof ops === "function"
+      ? ops(prisma)
+      : Promise.all(ops)) as unknown as typeof prisma.$transaction);
+  vi.mocked(prisma.$queryRaw).mockResolvedValue([{ id: "l1" }] as never);
 }
 
 /**
@@ -525,6 +535,91 @@ describe("POST /api/documents/upload — intake lead scope", () => {
     );
     expect(mockedStore).not.toHaveBeenCalled();
     expect(mockedTxn).not.toHaveBeenCalled();
+  });
+
+  test("takes a FOR SHARE lock on the lead row inside the create transaction", async () => {
+    wireLead();
+    await POST(await makeRequest(fdWith({ leadId: "l1" }, [{ name: "a.pdf" }])));
+    const q = vi.mocked(prisma.$queryRaw).mock.calls[0]!;
+    expect((q[0] as unknown as string[]).join("?")).toMatch(/FOR SHARE/);
+    expect(q[1]).toBe("l1");
+  });
+
+  /** Lead is unconverted at resolveTarget, converted by the time the
+   *  create transaction re-reads it (the conversion landed while the
+   *  bytes streamed). */
+  function wireConvertedDuringUpload(matterId: string | null) {
+    wireHappyMocks();
+    // resolveTarget reads the lead twice (exists + writable check).
+    mockedLead.mockResolvedValueOnce({ id: "l1", stage: "new" } as never);
+    mockedLead.mockResolvedValueOnce({ id: "l1", stage: "new" } as never);
+    mockedLead.mockResolvedValue({
+      id: "l1",
+      stage: "converted",
+      convertedMatterId: matterId,
+    } as never);
+  }
+
+  test("lead converted during the upload: files onto the converted matter, bytes kept", async () => {
+    wireConvertedDuringUpload("m9");
+    const res = await POST(
+      await makeRequest(
+        fdWith({ leadId: "l1", folderId: "fold1" }, [{ name: "a.pdf" }])
+      )
+    );
+    expect(res.status).toBe(200);
+    const data = mockedCreate.mock.calls[0]![0].data as Record<string, unknown>;
+    expect(data.matterId).toBe("m9");
+    expect(data.leadId).toBeUndefined();
+    expect(data.folderId).toBe("fold1");
+    expect(mockedFolder).toHaveBeenLastCalledWith({
+      where: { id: "fold1", matterId: "m9" },
+      select: { id: true },
+    });
+    expect(mockedDelete).not.toHaveBeenCalled();
+    expect(vi.mocked(logActivity).mock.calls[0]![0].matterId).toBe("m9");
+    const paths = vi.mocked(revalidatePath).mock.calls.map((c) => c[0]);
+    expect(paths).toContain("/matters/m9/documents");
+  });
+
+  test("converted during the upload and the folder no longer resolves: matter root", async () => {
+    wireConvertedDuringUpload("m9");
+    mockedFolder
+      .mockResolvedValueOnce({ id: "fold1" } as never) // resolveTarget
+      .mockResolvedValue(null); // under the matter scope
+    const res = await POST(
+      await makeRequest(
+        fdWith({ leadId: "l1", folderId: "fold1" }, [{ name: "a.pdf" }])
+      )
+    );
+    expect(res.status).toBe(200);
+    const data = mockedCreate.mock.calls[0]![0].data as Record<string, unknown>;
+    expect(data.matterId).toBe("m9");
+    expect(data.folderId).toBeNull();
+  });
+
+  test("converted during the upload, uploader cannot access the matter: fail closed, bytes removed", async () => {
+    wireConvertedDuringUpload("m9");
+    vi.mocked(canAccessMatter).mockResolvedValue(false);
+    const res = await POST(
+      await makeRequest(fdWith({ leadId: "l1" }, [{ name: "a.pdf" }]))
+    );
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(mockedCreate).not.toHaveBeenCalled();
+    expect(mockedDelete).toHaveBeenCalledWith("key-a.pdf");
+  });
+
+  test("lead deleted during the upload: 404, bytes removed", async () => {
+    wireHappyMocks();
+    mockedLead.mockResolvedValueOnce({ id: "l1", stage: "new" } as never);
+    mockedLead.mockResolvedValueOnce({ id: "l1", stage: "new" } as never);
+    mockedLead.mockResolvedValue(null);
+    const res = await POST(
+      await makeRequest(fdWith({ leadId: "l1" }, [{ name: "a.pdf" }]))
+    );
+    expect(res.status).toBe(404);
+    expect(mockedCreate).not.toHaveBeenCalled();
+    expect(mockedDelete).toHaveBeenCalledWith("key-a.pdf");
   });
 
   test("a converted lead -> 409, nothing stored", async () => {

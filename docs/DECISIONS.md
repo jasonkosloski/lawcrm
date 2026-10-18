@@ -996,6 +996,7 @@ These are not ADRs: each needs a human call, and when it is made it becomes an A
 - **No matter wall on lead documents.** A lead has no team, so any signed-in user can view and download lead documents (same as the intake pages); the `documents.*` write keys gate upload, organize and delete. Matter documents keep the matter wall.
 - **Converted leads are read-only.** Writes to a converted lead's documents and folders are refused; the tab links to the matter.
 - **Conversion re-homes, not copies.** `rehomeLeadDocuments` (`src/lib/lead-documents.ts`) moves folders and documents onto the matter inside the convert transaction. A root folder whose name collides with an existing matter root folder gets a "(n)" suffix.
+- **Uploads survive a mid-upload conversion.** Both upload paths decide scope and insert in one transaction that takes `FOR SHARE` on the lead row (`resolveLeadUploadTarget`); a lead converted meanwhile reroutes the file onto its matter (folder falls back to the matter root). If the uploader can't access that matter the upload is discarded (fail closed).
 - **Search lists intake documents** labelled "Intake · {lead}", linking to the intake viewer.
 
 **Trade-offs:**
