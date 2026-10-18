@@ -11,8 +11,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 # Testing is non-optional
 
 Every new feature ships with at least one test. The pre-commit hook
-runs `npm run typecheck && npm test` on every commit and blocks
-the commit on failure. See **`docs/TESTING.md`** for the full
+(`.husky/pre-commit`) runs typecheck, lint, and only the tests
+related to staged `src/` files, and blocks the commit on failure.
+Run the full `npm test` before pushing; CI runs it on every push. See **`docs/TESTING.md`** for the full
 discipline — what to test, what NOT to test, file conventions,
 running commands. The framework is Vitest; tests live alongside
 their source as `*.test.ts`.
