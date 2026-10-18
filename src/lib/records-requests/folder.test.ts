@@ -60,28 +60,72 @@ const args = (id: string) => ({
 });
 
 describe("resolveRecordsFolder", () => {
-  test("creates Records/<custodian — type> and is idempotent", async () => {
+  test("creates Investigation/Records Requests/<custodian — type> and is idempotent", async () => {
     const r = await mkRequest();
     const a = await prisma.$transaction((tx) => resolveRecordsFolder(tx, args(r.id)));
     const b = await prisma.$transaction((tx) => resolveRecordsFolder(tx, args(r.id)));
     expect(b).toBe(a);
     const folder = await prisma.documentFolder.findUniqueOrThrow({
       where: { id: a },
-      include: { parent: true },
+      include: { parent: { include: { parent: true } } },
     });
     expect(folder.name).toBe("Memorial Hospital — CORA");
-    expect(folder.parent?.name).toBe("Records");
-    expect(folder.parent?.parentId).toBeNull();
-    expect(await prisma.documentFolder.count({ where: { matterId } })).toBe(2);
+    expect(folder.parent?.name).toBe("Records Requests");
+    expect(folder.parent?.parent?.name).toBe("Investigation");
+    expect(folder.parent?.parent?.parentId).toBeNull();
+    expect(await prisma.documentFolder.count({ where: { matterId } })).toBe(3);
   });
 
-  test("reuses a pre-existing root Records folder", async () => {
-    const root = await seedDocumentFolder({ matterId, name: "records" });
+  test("reuses a pre-existing root Investigation folder (any case)", async () => {
+    const inv = await seedDocumentFolder({ matterId, name: "investigation" });
     const r = await mkRequest();
     const id = await prisma.$transaction((tx) => resolveRecordsFolder(tx, args(r.id)));
-    const f = await prisma.documentFolder.findUniqueOrThrow({ where: { id } });
-    expect(f.parentId).toBe(root.folderId);
-    expect(await prisma.documentFolder.count({ where: { matterId } })).toBe(2);
+    const f = await prisma.documentFolder.findUniqueOrThrow({
+      where: { id },
+      include: { parent: true },
+    });
+    expect(f.parent?.parentId).toBe(inv.folderId);
+    expect(await prisma.documentFolder.count({ where: { matterId } })).toBe(3);
+  });
+
+  test("a legacy root Records folder holding request files moves under Investigation as Records Requests", async () => {
+    const legacy = await seedDocumentFolder({ matterId, name: "Records" });
+    const reqFolder = await seedDocumentFolder({
+      matterId,
+      name: "Memorial Hospital — CORA",
+      parentId: legacy.folderId,
+    });
+    const r = await mkRequest();
+    await prisma.document.update({
+      where: {
+        id: (await seedDocument({ matterId, folderId: reqFolder.folderId })).documentId,
+      },
+      data: { recordsRequestId: r.id, recordsRequestRole: "received_records" },
+    });
+    const id = await prisma.$transaction((tx) => resolveRecordsFolder(tx, args(r.id)));
+    expect(id).toBe(reqFolder.folderId);
+    const moved = await prisma.documentFolder.findUniqueOrThrow({
+      where: { id: legacy.folderId },
+      include: { parent: true },
+    });
+    expect(moved.name).toBe("Records Requests");
+    expect(moved.parent?.name).toBe("Investigation");
+  });
+
+  test("a root Records folder with no request files is left alone", async () => {
+    const own = await seedDocumentFolder({ matterId, name: "Records" });
+    const r = await mkRequest();
+    const id = await prisma.$transaction((tx) => resolveRecordsFolder(tx, args(r.id)));
+    const untouched = await prisma.documentFolder.findUniqueOrThrow({
+      where: { id: own.folderId },
+    });
+    expect(untouched.name).toBe("Records");
+    expect(untouched.parentId).toBeNull();
+    const f = await prisma.documentFolder.findUniqueOrThrow({
+      where: { id },
+      include: { parent: true },
+    });
+    expect(f.parent?.name).toBe("Records Requests");
   });
 
   test("a child claimed by another request gets (2); the own folder is reused", async () => {
@@ -123,8 +167,8 @@ describe("resolveRecordsRoleFolder", () => {
     const fb = await prisma.documentFolder.findUniqueOrThrow({ where: { id: b } });
     expect(fa).toMatchObject({ name: "Request documents", parentId: parent });
     expect(fb).toMatchObject({ name: "Responsive documents", parentId: parent });
-    // Records + request folder + 2 subfolders.
-    expect(await prisma.documentFolder.count({ where: { matterId } })).toBe(4);
+    // Investigation + Records Requests + request folder + 2 subfolders.
+    expect(await prisma.documentFolder.count({ where: { matterId } })).toBe(5);
   });
 
   test("ownership inference counts tagged documents inside the subfolders", async () => {

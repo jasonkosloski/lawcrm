@@ -27,7 +27,7 @@
  *     - recordsRequestId string, optional — tags the files as
  *                 received records of that request (must belong to the
  *                 same matter or lead; needs `records.edit`); files
- *                 default into Records/<custodian — type>. MUST
+ *                 default into Investigation/Records Requests/<custodian — type>. MUST
  *                 precede any file part
  *     - recordsRole string, optional — "request_letter" or
  *                 "received_records" (default); picks the Request /

@@ -574,7 +574,7 @@ describe("records request letters", () => {
     });
   }
 
-  test("generate files the letter into Records/<custodian — type>/Request documents with the request_letter role", async () => {
+  test("generate files the letter into Investigation/Records Requests/<custodian — type>/Request documents with the request_letter role", async () => {
     const t = await seedTemplate({
       body: "To {{custodian.name}} ({{custodian.address}}) re {{request.subject}} from {{request.dateRangeStart}}",
     });
@@ -595,7 +595,7 @@ describe("records request letters", () => {
       where: { id: doc.folder!.parentId! },
       include: { parent: true },
     });
-    expect(request.parent?.name).toBe("Records");
+    expect(request.parent?.name).toBe("Records Requests");
     const file = vi.mocked(storeFile).mock.calls.at(-1)![0] as File;
     expect(await file.text()).toBe(
       "To Memorial Hospital (1 Hospital Way, Denver, CO 80202) re Chart 2024 from January 5, 2024"

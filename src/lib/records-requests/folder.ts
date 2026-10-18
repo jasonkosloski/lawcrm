@@ -1,6 +1,9 @@
 /**
- * Where a records request's documents live: `Records/<custodian — type>`
- * in the request's matter or intake. Folders are found-or-created inside
+ * Where a records request's documents live:
+ * `Investigation/Records Requests/<custodian — type>` in the request's
+ * matter or intake (an existing root "Investigation" folder is reused).
+ * A legacy root "Records" folder that already holds request files is
+ * moved there and renamed on next use, so nothing is stranded. Folders are found-or-created inside
  * the caller's transaction, so a failed document write never leaves an
  * empty folder behind.
  *
@@ -15,6 +18,8 @@ import type { Tx } from "@/lib/prisma";
 import { nextAvailableFolderName } from "@/lib/folder-tree";
 import { scopeWhere, type RecordScope } from "@/lib/record-scope";
 import {
+  LEGACY_RECORDS_ROOT_FOLDER_NAME,
+  RECORDS_INVESTIGATION_FOLDER_NAME,
   RECORDS_ROOT_FOLDER_NAME,
   recordsFolderName,
 } from "@/lib/records-requests/folder-name";
@@ -45,10 +50,103 @@ function scopeFromRequest(r: RecordsFolderRequest): RecordScope {
 }
 
 /** Serialize root/child creation per scope so two requests resolving
- *  at once can't each create a "Records" root. */
+ *  at once can't each create the same parent folders. */
 async function lockScopeFolders(tx: Tx, scope: RecordScope): Promise<void> {
   const key = `records-folder:${scope.kind === "matter" ? scope.matterId : scope.leadId}`;
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+}
+
+type ScopeWhere = { matterId: string } | { leadId: string };
+
+/** The child of `parentId` named `name` (case-insensitive), created
+ *  at the end of its siblings when missing. */
+async function findOrCreateChild(
+  tx: Tx,
+  where: ScopeWhere,
+  parentId: string | null,
+  name: string,
+): Promise<string> {
+  const siblings = await tx.documentFolder.findMany({
+    where: { ...where, parentId },
+    select: { id: true, name: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const lower = name.toLowerCase();
+  const found = siblings.find((f) => f.name.toLowerCase() === lower);
+  if (found) return found.id;
+  const created = await tx.documentFolder.create({
+    data: { ...where, parentId, name, order: siblings.length },
+    select: { id: true },
+  });
+  return created.id;
+}
+
+/** `Investigation/Records Requests`, adopting a legacy root "Records"
+ *  folder (moved + renamed) when it already holds request files and no
+ *  "Records Requests" exists yet. A root "Records" with no request
+ *  files is someone's own folder and is left alone. */
+async function resolveRecordsRoot(
+  tx: Tx,
+  where: ScopeWhere,
+  investigationId: string,
+): Promise<string> {
+  const existing = await tx.documentFolder.findFirst({
+    where: {
+      ...where,
+      parentId: investigationId,
+      name: { equals: RECORDS_ROOT_FOLDER_NAME, mode: "insensitive" },
+    },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+
+  const legacy = await tx.documentFolder.findFirst({
+    where: {
+      ...where,
+      parentId: null,
+      name: { equals: LEGACY_RECORDS_ROOT_FOLDER_NAME, mode: "insensitive" },
+    },
+    select: { id: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (legacy) {
+    // Request folders sit two levels down at most (request folder, then
+    // its role subfolders).
+    const level1 = await tx.documentFolder.findMany({
+      where: { ...where, parentId: legacy.id },
+      select: { id: true },
+    });
+    const level2 = level1.length
+      ? await tx.documentFolder.findMany({
+          where: { ...where, parentId: { in: level1.map((f) => f.id) } },
+          select: { id: true },
+        })
+      : [];
+    const holdsRequestFiles =
+      level1.length > 0 &&
+      (await tx.document.count({
+        where: {
+          folderId: { in: [...level1, ...level2].map((f) => f.id) },
+          recordsRequestId: { not: null },
+        },
+      })) > 0;
+    if (holdsRequestFiles) {
+      const siblings = await tx.documentFolder.count({
+        where: { ...where, parentId: investigationId },
+      });
+      await tx.documentFolder.update({
+        where: { id: legacy.id },
+        data: {
+          parentId: investigationId,
+          name: RECORDS_ROOT_FOLDER_NAME,
+          order: siblings,
+        },
+      });
+      return legacy.id;
+    }
+  }
+
+  return findOrCreateChild(tx, where, investigationId, RECORDS_ROOT_FOLDER_NAME);
 }
 
 export async function resolveRecordsFolder(
@@ -60,25 +158,13 @@ export async function resolveRecordsFolder(
   await lockRecordsRequest(tx, request.id);
   await lockScopeFolders(tx, scope);
 
-  const roots = await tx.documentFolder.findMany({
-    where: { ...where, parentId: null },
-    select: { id: true, name: true },
-    orderBy: { createdAt: "asc" },
-  });
-  const rootName = RECORDS_ROOT_FOLDER_NAME.toLowerCase();
-  let rootId = roots.find((f) => f.name.toLowerCase() === rootName)?.id;
-  if (!rootId) {
-    const created = await tx.documentFolder.create({
-      data: {
-        ...where,
-        parentId: null,
-        name: RECORDS_ROOT_FOLDER_NAME,
-        order: roots.length,
-      },
-      select: { id: true },
-    });
-    rootId = created.id;
-  }
+  const investigationId = await findOrCreateChild(
+    tx,
+    where,
+    null,
+    RECORDS_INVESTIGATION_FOLDER_NAME,
+  );
+  const rootId = await resolveRecordsRoot(tx, where, investigationId);
 
   const base = recordsFolderName(request.custodianName, request.typeName);
   const baseLower = base.toLowerCase();
