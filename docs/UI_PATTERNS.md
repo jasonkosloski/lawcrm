@@ -169,7 +169,21 @@ banner linking to the matter instead of a composer. The Documents tab
 and viewer bodies are the server components `DocumentsBrowser` and
 `DocumentViewerBody` (`src/components/documents/`), shared by the matter
 and intake routes; hrefs come from `scopeBasePath`, uploads send
-`leadId` for a lead, and a converted lead's tab is read-only.
+`leadId` for a lead, and a converted lead's tab is read-only. The Records tab
+(`src/components/records-requests/`) takes a scope too; see the request
+detail panel pattern below.
+
+### URL-driven request detail panel (Records tab)
+
+The Records tab opens a request's detail panel from `?request=<id>`
+(`src/components/records-requests/request-detail-panel.tsx`); closing
+removes the param with `router.replace(..., { scroll: false })`. Rows link
+to the param, so a request is deep-linkable and back/forward works. The
+panel is keyed by request id so state resets between requests, traps
+focus, and shows the follow-up log plus sent/received dates. Fee data is
+only sent to the client when the viewer is allowed to see it. The Records
+tab takes a `RecordScope` like the other scoped tabs, so the same
+components serve matters and intake leads.
 
 ### In-Tab Channel Toggle (Communication tabs)
 ```

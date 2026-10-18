@@ -491,6 +491,21 @@ Email results are scoped to the viewer's OWN mailbox. No
   gets a "(n)" suffix; logged as "N intake documents carried forward".
   Global search lists intake documents as "Intake · {lead}" linking to
   the intake viewer. Cross-scope copy / move is refused. See ADR-046.
+- [x] **Records requests (matter and intake `/records` tabs).**
+  Shipped 2026-10-18. Requests to custodians (medical providers,
+  government) on a matter or intake lead, with firm-defined types
+  (statutory response period, chase interval, letter template; seeded
+  types are editable starting points, not legal advice; managed in
+  settings). Each open request has one rolling auto-created follow-up
+  task that rolls on completion; status moves forward, to a terminal
+  state, or reopens (restarting the chase). Template letters and
+  uploads file under `Records/{custodian} — {type}`; a fee creates an
+  Expense on matters (on leads, at conversion). Custodians can be
+  quick-created from the composer. The detail panel is URL-driven
+  (`?request=`). Conversion carries requests forward; leads and
+  matters can merge them; a "records to chase" dashboard card and
+  global search cover them. Business days skip weekends only. See
+  ADR-047 and `docs/superpowers/specs/2026-10-18-records-requests-design.md`.
 - [x] **Status / priority / role values are scattered string
   literals.** Shipped 2026-07-07: `src/lib/constants/` is the
   canonical client-safe home — per-domain files (task-status,

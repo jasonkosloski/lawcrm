@@ -43,6 +43,7 @@ src/
 │   │                         #   integrations, notifications, activity, security, profile
 │   ├── actions/              # ★ ALL mutations live here — ~34 "use server" modules
 │   │                         #   (matters, billing, tasks, notes, calls, settlements, …)
+│   │                         #   records-requests.ts + records-request-types.ts (records requests)
 │   ├── api/                  # Sanctioned route handlers ONLY: auth handler,
 │   │                         #   document download (streams local / 302s blob),
 │   │                         #   streaming upload (local driver), blob upload
@@ -61,6 +62,8 @@ src/
 │   ├── shared/               # Reusable business components (matter-picker, etc.)
 │   ├── documents/            # DocumentsBrowser + DocumentViewerBody, shared by
 │   │                         #   matter and intake (lead) Documents routes
+│   ├── records-requests/     # Records tab, composer, URL-driven detail panel,
+│   │                         #   type editor (matter + intake Records tabs)
 │   ├── ui/                   # shadcn primitives (button, card, dialog, etc.)
 │   └── <feature>/            # Feature folders: matters, calendar, communication,
 │                             #   contacts, intake, notes, tasks, settings, …
@@ -69,6 +72,9 @@ src/
 │                             #   activity log, token encryption, prisma client,
 │                             #   record-scope.ts + scope-access.ts (matter-or-lead
 │                             #   scope resolution and access checks for documents)
+│                             #   records-requests/ (status machine, due dates, follow-up
+│                             #   task rolling, fee→Expense, folder naming);
+│                             #   queries/records-requests.ts (reads)
 ├── test/                     # Shared test setup/utilities
 ├── types/                    # Shared TypeScript types
 └── generated/                # Auto-generated (Prisma client) — gitignored

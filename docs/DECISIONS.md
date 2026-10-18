@@ -1005,3 +1005,27 @@ These are not ADRs: each needs a human call, and when it is made it becomes an A
 - (-) Every reader of `Document.matterId` has to handle null
 - (-) Copy and move across scopes are refused; there is no lead-to-matter copy
 - (-) A streaming upload to a lead that converts mid-request can land on the lead (known, minor)
+
+## ADR-047: Records requests are a dedicated model with a rolling follow-up task
+
+**Date:** 2026-10-18
+**Status:** Accepted
+
+**Context:** Firms request records (medical, government, employment) from custodians on matters and intake leads, with statutory response periods, repeated chasing, template letters and fees. Intake was already tracking "request records" as ordinary tasks, which lost status, dates and fees.
+
+**Decision:**
+- **Dedicated models over task metadata or a generic engine.** `RecordsRequest` and a firm-defined `RecordsRequestType` (statutory response period, chase interval, letter template) hold status, custodian, dates and fee. Scope is exactly one of matter or lead, resolved through `RecordScope`; requests are carried forward when a lead converts.
+- **One rolling follow-up Task.** Each open request has a single auto-created follow-up task. Completing it rolls the next one (today + interval) in the same transaction, via the hook in `setTaskStatus` / `updateTask`, rather than pre-creating a chain. The helpers in `src/lib/records-requests/follow-up.ts` row-lock the request (`SELECT … FOR UPDATE`) and the roll is conditional, so concurrent "done" clicks roll once.
+- **Status machine.** Forward-only among non-terminal states; any non-terminal to terminal; terminal to non-terminal is a reopen (logged, restarts the chase at today + interval); same-to-same and terminal-to-terminal are rejected; draft to sent happens only through Mark sent (`src/lib/records-requests/status.ts`).
+- **History = follow-up log + dates.** The detail panel shows the follow-up log and sent/received dates. There is no per-request ActivityLog FK or feed; actions still write ActivityLog entries (type `records`, filed under the Documents bucket in filters).
+- **Follow-up tasks are exempt from `tasks.create`.** An exception to ADR-025: they are a side effect of `records.*` actions, not a user creating a task.
+- **Fee to Expense.** On matters the fee creates an Expense immediately; on leads it is created at conversion. A $0 fee never creates one; clearing a fee while an Expense is linked is refused; an invoiced Expense locks the fee. Fee visibility on matters requires `matters.expense.view` (lead fees show with `records.view`); editing needs `records.edit` plus `matters.expense.create/edit` on matters.
+- **Letters and uploads** live in the folder `Records/{custodian} — {type}`; ownership is inferred from the folder's tagged documents. `recordsRequestId` must precede file parts in an upload (400 otherwise).
+- **Business days skip weekends only** (no holiday calendar). Seeded types are editable starting points, not legal advice.
+
+**Trade-offs:**
+- (+) Status, dates and fees are queryable; the dashboard card and search are simple queries
+- (+) Exactly one open follow-up; no task pile-up and no cron
+- (-) Panel history is thinner than a full audit feed
+- (-) Weekend-only business days can be a day off around holidays
+- (-) The follow-up exemption is a second path that creates tasks outside `tasks.create`
