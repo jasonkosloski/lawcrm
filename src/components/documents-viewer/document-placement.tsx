@@ -9,6 +9,7 @@
 
 "use client";
 
+import { scopeBasePath, type RecordScope } from "@/lib/record-scope";
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -21,14 +22,14 @@ export const COPY_DESCRIPTION =
   "Makes a separate copy in that folder — its own document, with its own name, flags and notes. The file isn't uploaded again.";
 
 export function DocumentPlacement({
-  matterId,
+  scope,
   documentId,
   name,
   parent,
   folders,
   canOrganize,
 }: {
-  matterId: string;
+  scope: RecordScope;
   documentId: string;
   name: string;
   parent: { id: string; name: string } | null;
@@ -46,7 +47,7 @@ export function DocumentPlacement({
         <span className="inline-flex items-center gap-1">
           <Paperclip className="h-3 w-3" aria-hidden />
           Attachment of{" "}
-          <Link href={`/matters/${matterId}/documents/${parent.id}`} className="text-brand-700 hover:underline">
+          <Link href={`${scopeBasePath(scope)}/documents/${parent.id}`} className="text-brand-700 hover:underline">
             {parent.name}
           </Link>
         </span>
@@ -74,7 +75,7 @@ export function DocumentPlacement({
           onMove={async (target) => {
             const res = await copyDocumentToFolder(documentId, target);
             // Open the new copy — it's its own document from here on.
-            if (res.ok && res.id) router.push(`/matters/${matterId}/documents/${res.id}`);
+            if (res.ok && res.id) router.push(`${scopeBasePath(scope)}/documents/${res.id}`);
             return res;
           }}
         />

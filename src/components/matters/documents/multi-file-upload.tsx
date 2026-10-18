@@ -13,7 +13,7 @@
  * server actions can't take GB-scale bodies). Contract requirements
  * honored here:
  *
- *   - FIELD ORDER MATTERS: `matterId` (and optional `folderId`) are
+ *   - FIELD ORDER MATTERS: `matterId` / `leadId` (and optional `folderId`) are
  *     appended to the FormData BEFORE any `files` part — the route
  *     validates the target before the first file byte hits disk.
  *   - One or more file parts under the field name `files`.
@@ -47,6 +47,7 @@
 
 "use client";
 
+import { scopeWhere, type RecordScope } from "@/lib/record-scope";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { TriangleAlert, Upload, X } from "lucide-react";
@@ -91,12 +92,12 @@ const formatMiB = (bytes: number): string =>
   `${Math.floor(bytes / (1024 * 1024))} MiB`;
 
 export function MultiFileUpload({
-  matterId,
+  scope,
   folderId,
   folderName,
   storageDriver,
 }: {
-  matterId: string;
+  scope: RecordScope;
   /** Upload destination — the currently browsed folder (null = root). */
   folderId: string | null;
   /** Display name for the button tooltip. */
@@ -156,7 +157,8 @@ export function MultiFileUpload({
   const startXhrUpload = (files: File[]) => {
     // Field order per the route contract: target BEFORE file parts.
     const fd = new FormData();
-    fd.append("matterId", matterId);
+    if (scope.kind === "matter") fd.append("matterId", scope.matterId);
+    else fd.append("leadId", scope.leadId);
     if (folderId) fd.append("folderId", folderId);
     for (const f of files) fd.append("files", f, f.name);
 
@@ -229,7 +231,7 @@ export function MultiFileUpload({
           handleUploadUrl: "/api/documents/upload/blob",
           contentType: contentTypeForFilename(key),
           clientPayload: JSON.stringify({
-            matterId,
+            ...scopeWhere(scope),
             folderId,
             name: f.name,
           }),

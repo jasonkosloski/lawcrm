@@ -16,6 +16,7 @@
 
 "use client";
 
+import { scopeBasePath, type RecordScope } from "@/lib/record-scope";
 import { useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronRight, Files, Folder } from "lucide-react";
@@ -43,13 +44,13 @@ function collectAncestors(
 }
 
 export function FolderTree({
-  matterId,
+  scope,
   tree,
   counts,
   rootCount,
   selectedId,
 }: {
-  matterId: string;
+  scope: RecordScope;
   tree: FolderNode[];
   /** Direct (non-recursive) document count per folder id. */
   counts: Record<string, number>;
@@ -80,7 +81,7 @@ export function FolderTree({
     setExpanded(next);
   };
 
-  const basePath = `/matters/${matterId}/documents`;
+  const basePath = `${scopeBasePath(scope)}/documents`;
 
   const renderNode = (node: FolderNode, depth: number) => {
     const isSelected = node.id === selectedId;

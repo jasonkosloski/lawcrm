@@ -118,6 +118,27 @@ describe("GenerateFromTemplateDialog", () => {
     expect(screen.getByText("Dear Maria Alvarez,")).toBeInTheDocument();
   });
 
+  it("on a lead the save confirmation names the intake, not the matter", async () => {
+    previewMock.mockResolvedValue(okPreview());
+    generateMock.mockResolvedValue({
+      ok: true,
+      documentId: "d1",
+      documentName: "Demand letter.md",
+      unresolved: [],
+      missing: [],
+    });
+    const user = userEvent.setup();
+    render(
+      <GenerateFromTemplateDialog scope={{ kind: "lead", leadId: "l1" }} templates={TEMPLATES} canUpload />
+    );
+    await openAndPick(user);
+    await screen.findByText("Dear Maria Alvarez,");
+    await user.click(screen.getByRole("button", { name: /save to documents/i }));
+    const status = await screen.findByRole("status");
+    expect(status).toHaveTextContent(/intake's root list/);
+    expect(status).not.toHaveTextContent(/matter/);
+  });
+
   it("confirms a successful save by document name instead of closing silently", async () => {
     previewMock.mockResolvedValue(okPreview());
     generateMock.mockResolvedValue({

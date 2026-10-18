@@ -32,7 +32,7 @@ describe("FolderTree", () => {
     const user = userEvent.setup();
     render(
       <FolderTree
-        matterId="m1"
+        scope={{ kind: "matter", matterId: "m1" }}
         tree={[node("a", "Discovery", [node("b", "Production 1")])]}
         counts={{}}
         rootCount={0}
@@ -79,7 +79,7 @@ describe("MoveToFolderDialog", () => {
 describe("NewFolderButton", () => {
   test("the name input has an accessible name", async () => {
     const user = userEvent.setup();
-    render(<NewFolderButton matterId="m1" parentId={null} parentName={null} />);
+    render(<NewFolderButton scope={{ kind: "matter", matterId: "m1" }} parentId={null} parentName={null} />);
     await user.click(screen.getByRole("button", { name: /new folder/i }));
     expect(screen.getByRole("textbox", { name: "Folder name" })).toBeVisible();
   });

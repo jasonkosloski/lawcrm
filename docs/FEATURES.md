@@ -475,6 +475,16 @@ Email results are scoped to the viewer's OWN mailbox. No
   tasks", the calendar, search and the assignment notification show
   "Intake · {lead}" and link to the intake tabs. Not yet: capturing a
   task or event from an intake note's composer.
+- [x] **Intake Documents tab (`/intake/[id]/documents`, `/[documentId]`).**
+  Shipped 2026-10-18 (lead-scoped Documents/DocumentFolders). The matter
+  Documents page and viewer bodies moved into the shared server
+  components `DocumentsBrowser` / `DocumentViewerBody`
+  (`src/components/documents/`), which take a `RecordScope`; the folder
+  tree, uploaders, new-folder button and viewer chrome build hrefs with
+  `scopeBasePath` and send `leadId` instead of `matterId` for a lead.
+  Same `documents.*` keys; no matter wall on leads. A converted lead's
+  tab is read-only (no upload / new folder / generate) with a banner to
+  the matter's documents.
 - [x] **Status / priority / role values are scattered string
   literals.** Shipped 2026-07-07: `src/lib/constants/` is the
   canonical client-safe home — per-domain files (task-status,

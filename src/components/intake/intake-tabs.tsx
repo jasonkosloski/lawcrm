@@ -18,6 +18,7 @@ const TABS = [
   { slug: "notes", label: "Notes" },
   { slug: "tasks", label: "Tasks" },
   { slug: "events", label: "Events" },
+  { slug: "documents", label: "Documents" },
   { slug: "communication", label: "Communication" },
   { slug: "time", label: "Time & expenses" },
 ] as const;

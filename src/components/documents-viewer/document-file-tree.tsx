@@ -19,6 +19,7 @@
 
 "use client";
 
+import { scopeBasePath, type RecordScope } from "@/lib/record-scope";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import {
@@ -100,7 +101,7 @@ const ICON: Record<DocumentRenderer, LucideIcon> = {
 };
 
 export function DocumentFileTree({
-  matterId,
+  scope,
   tree,
   documents,
   complete,
@@ -108,7 +109,7 @@ export function DocumentFileTree({
   currentFolderId,
   currentParentId = null,
 }: {
-  matterId: string;
+  scope: RecordScope;
   tree: FolderNode[];
   documents: FileTreeDocument[];
   /** False when the matter is over the load cap: only the current
@@ -208,7 +209,7 @@ export function DocumentFileTree({
           )}
           <Link
             ref={isCurrent ? currentRef : undefined}
-            href={`/matters/${matterId}/documents/${doc.id}`}
+            href={`${scopeBasePath(scope)}/documents/${doc.id}`}
             aria-current={isCurrent ? "page" : undefined}
             title={doc.name}
             className={cn(
@@ -288,7 +289,7 @@ export function DocumentFileTree({
             ) : (
               <li>
                 <Link
-                  href={`/matters/${matterId}/documents?folder=${node.id}`}
+                  href={`${scopeBasePath(scope)}/documents?folder=${node.id}`}
                   style={{ paddingLeft: 8 + (depth + 1) * 12 }}
                   className="block py-1 text-2xs text-brand-700 hover:underline"
                 >
@@ -338,7 +339,7 @@ export function DocumentFileTree({
         {nothing && <div className="px-2 py-3 text-2xs text-ink-4">No files match “{query.trim()}”.</div>}
         {!complete && (
           <div className="mt-1 border-t border-line px-2 pt-2 text-2xs text-ink-4">
-            This matter has too many files to list here; open other folders in Documents.
+            There are too many files to list here; open other folders in Documents.
           </div>
         )}
       </nav>

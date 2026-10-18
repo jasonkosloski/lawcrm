@@ -13,6 +13,7 @@
  * guard that can save a user from watching a doomed 4GB upload.
  */
 
+import type { RecordScope } from "@/lib/record-scope";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -53,6 +54,7 @@ class StubXHR {
 }
 
 beforeEach(() => {
+  scopeUnderTest = { kind: "matter", matterId: "m1" };
   StubXHR.instances = [];
   vi.stubGlobal("XMLHttpRequest", StubXHR);
 });
@@ -65,11 +67,13 @@ afterEach(() => {
 // Driver under test — set per describe block before calling pickFiles.
 let driver: "local" | "vercel-blob" | undefined;
 
+let scopeUnderTest: RecordScope = { kind: "matter", matterId: "m1" };
+
 async function pickFiles(files: File[]) {
   const user = userEvent.setup({ applyAccept: false });
   render(
     <MultiFileUpload
-      matterId="m1"
+      scope={scopeUnderTest}
       folderId="fold1"
       folderName="Discovery"
       storageDriver={driver}
@@ -80,6 +84,34 @@ async function pickFiles(files: File[]) {
   ) as HTMLInputElement;
   await user.upload(input, files);
 }
+
+describe("lead scope", () => {
+  test("local driver appends leadId (before the file part) and no matterId", async () => {
+    driver = "local";
+    scopeUnderTest = { kind: "lead", leadId: "l1" };
+    await pickFiles([new File(["pdf"], "brief.pdf")]);
+    await waitFor(() => expect(StubXHR.instances).toHaveLength(1));
+    const fd = StubXHR.instances[0].sent as FormData;
+    expect([...fd.keys()]).toEqual(["leadId", "folderId", "files"]);
+    expect(fd.get("leadId")).toBe("l1");
+    expect(fd.has("matterId")).toBe(false);
+  });
+
+  test("blob driver sends leadId (and no matterId) in the client payload", async () => {
+    driver = "vercel-blob";
+    scopeUnderTest = { kind: "lead", leadId: "l1" };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedUpload.mockResolvedValue({ url: "https://s/x" } as any);
+    await pickFiles([new File(["a"], "a.pdf", { type: "application/pdf" })]);
+    await waitFor(() => expect(mockedUpload).toHaveBeenCalledTimes(1));
+    const opts = mockedUpload.mock.calls[0][2];
+    expect(JSON.parse(opts.clientPayload as string)).toEqual({
+      leadId: "l1",
+      folderId: "fold1",
+      name: "a.pdf",
+    });
+  });
+});
 
 describe("vercel-blob driver → client-direct upload()", () => {
   beforeEach(() => {

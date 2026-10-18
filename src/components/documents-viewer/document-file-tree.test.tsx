@@ -47,7 +47,7 @@ const DOCS: FileTreeDocument[] = [
 function renderTree(over: Partial<React.ComponentProps<typeof DocumentFileTree>> = {}) {
   return render(
     <DocumentFileTree
-      matterId="m1"
+      scope={{ kind: "matter", matterId: "m1" }}
       tree={TREE}
       documents={DOCS}
       complete
@@ -105,6 +105,14 @@ describe("DocumentFileTree", () => {
     expect(screen.getByRole("button", { name: "Show files" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Show files" }));
     expect(screen.getByLabelText("Filter files")).toBeInTheDocument();
+  });
+
+  test("a lead scope builds intake hrefs", () => {
+    renderTree({ scope: { kind: "lead", leadId: "l1" } });
+    expect(screen.getByRole("link", { name: /cam-01\.mp4/ })).toHaveAttribute(
+      "href",
+      "/intake/l1/documents/d3"
+    );
   });
 
   test("over the load cap, other folders link to the Documents tab", () => {

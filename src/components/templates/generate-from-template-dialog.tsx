@@ -57,12 +57,13 @@ export function GenerateFromTemplateDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [templateId, setTemplateId] = useState("");
+  const noun = scope.kind === "lead" ? "intake" : "matter";
   const [preview, setPreview] = useState<TemplatePreviewResult | null>(null);
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   // Name of the Document just saved - shown in place of silently
-  // closing, since the file lands at the matter's root list.
+  // closing, since the file lands at the root list.
   const [savedName, setSavedName] = useState<string | null>(null);
   const [previewPending, startPreview] = useTransition();
   const [savePending, startSave] = useTransition();
@@ -121,7 +122,7 @@ export function GenerateFromTemplateDialog({
       const res = await generateDocumentFromTemplate(templateId, scope);
       if (res.ok) {
         // The action revalidated the documents route. The document is
-        // filed at the matter root, which is invisible if a subfolder
+        // filed at the root, which is invisible if a subfolder
         // is open - so confirm by name instead of closing silently.
         setSavedName(res.documentName);
       } else {
@@ -162,7 +163,7 @@ export function GenerateFromTemplateDialog({
           <DialogHeader>
             <DialogTitle>Generate from template</DialogTitle>
             <DialogDescription>
-              Merge fields fill in from this {scope.kind === "lead" ? "intake" : "matter"}, its client, and your
+              Merge fields fill in from this {noun}, its client, and your
               firm. Review the preview, then save it to the Documents tab
               or copy the text.
             </DialogDescription>
@@ -210,7 +211,7 @@ export function GenerateFromTemplateDialog({
 
               {previewPending && (
                 <div className="px-3 py-6 rounded-md border border-line bg-paper-2/40 text-xs text-ink-4 text-center">
-                  Merging {scope.kind === "lead" ? "intake" : "matter"} data…
+                  Merging {noun} data…
                 </div>
               )}
 
@@ -229,7 +230,7 @@ export function GenerateFromTemplateDialog({
                       <div className="flex flex-col gap-0.5">
                         {warnings.missing.length > 0 && (
                           <span>
-                            Not on file for this {scope.kind === "lead" ? "intake" : "matter"}:{" "}
+                            Not on file for this {noun}:{" "}
                             {warnings.missing.join(", ")} — visible
                             placeholders are left in the text.
                           </span>
@@ -271,7 +272,7 @@ export function GenerateFromTemplateDialog({
                   <Check size={12} className="shrink-0 mt-px" />
                   <span>
                     Saved as <span className="font-medium">{savedName}</span>{" "}
-                    in All documents (the matter&apos;s root list — switch
+                    in All documents (the {noun}&apos;s root list — switch
                     folders to see it).
                   </span>
                 </div>

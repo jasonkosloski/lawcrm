@@ -8,6 +8,7 @@
 
 "use client";
 
+import type { RecordScope } from "@/lib/record-scope";
 import { useState, useTransition } from "react";
 import { FolderPlus, TriangleAlert } from "lucide-react";
 import {
@@ -22,11 +23,11 @@ import { cn } from "@/lib/utils";
 import { createFolder } from "@/app/actions/document-folders";
 
 export function NewFolderButton({
-  matterId,
+  scope,
   parentId,
   parentName,
 }: {
-  matterId: string;
+  scope: RecordScope;
   /** The currently browsed folder — null = matter root. */
   parentId: string | null;
   /** Display name for the dialog copy ("inside X"). */
@@ -49,7 +50,7 @@ export function NewFolderButton({
   const submit = () => {
     setError(null);
     startTransition(async () => {
-      const res = await createFolder({ kind: "matter", matterId }, parentId, name);
+      const res = await createFolder(scope, parentId, name);
       if (res.ok) setOpen(false);
       else setError(res.error);
     });

@@ -162,7 +162,7 @@ time, Convert to task / deadline, log time and add note on a task. The
 status-grouped task list is `TaskListByStatus`
 (`src/components/tasks/task-list-by-status.tsx`), shared by the matter and
 intake Tasks tabs (`matterId={null}` on a lead). Intake tabs (Overview,
-Notes, Tasks, Events, Communication, Time & expenses) live in
+Notes, Tasks, Events, Documents, Communication, Time & expenses) live in
 `src/components/intake/intake-tabs.tsx`; a converted lead's tabs show a
 banner linking to the matter instead of a composer.
 

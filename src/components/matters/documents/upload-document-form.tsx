@@ -28,6 +28,7 @@
 
 "use client";
 
+import { scopeWhere, type RecordScope } from "@/lib/record-scope";
 import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, TriangleAlert, Upload } from "lucide-react";
@@ -49,10 +50,10 @@ const MAX_MB = Math.round(MAX_DOCUMENT_BYTES / (1024 * 1024));
 const NETWORK_ERROR = "Upload failed - check your connection and try again.";
 
 export function UploadDocumentForm({
-  matterId,
+  scope,
   storageDriver,
 }: {
-  matterId: string;
+  scope: RecordScope;
   /** Which transport to use - from `activeStorageDriver()` on the
    *  server. Defaults to local. */
   storageDriver?: StorageDriver;
@@ -91,7 +92,8 @@ export function UploadDocumentForm({
   ) => {
     // Field order per the route contract: matterId before the file.
     const body = new FormData();
-    body.append("matterId", matterId);
+    if (scope.kind === "matter") body.append("matterId", scope.matterId);
+    else body.append("leadId", scope.leadId);
     if (meta.name) body.append("name", meta.name);
     body.append("category", meta.category);
     body.append("files", file, file.name);
@@ -123,7 +125,7 @@ export function UploadDocumentForm({
       handleUploadUrl: "/api/documents/upload/blob",
       contentType: contentTypeForFilename(key),
       clientPayload: JSON.stringify({
-        matterId,
+        ...scopeWhere(scope),
         folderId: null,
         name: meta.name || file.name,
         category: meta.category,

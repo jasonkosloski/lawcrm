@@ -12,6 +12,7 @@
  * labels, and `headerAction` carries the "Add attachments" button.
  */
 
+import { scopeBasePath, type RecordScope } from "@/lib/record-scope";
 import Link from "next/link";
 import { Paperclip } from "lucide-react";
 import type { EmailPreview as EmailData } from "@/lib/office-preview";
@@ -21,13 +22,13 @@ import { formatFileSize } from "@/lib/document-display";
 export function EmailPreview({
   email,
   tz,
-  matterId,
+  scope,
   attachmentDocIds = {},
   headerAction,
 }: {
   email: EmailData;
   tz: string;
-  matterId?: string;
+  scope?: RecordScope;
   /** Attachment index → the document extracted from it. */
   attachmentDocIds?: Record<number, string>;
   headerAction?: React.ReactNode;
@@ -64,9 +65,9 @@ export function EmailPreview({
               );
               return (
                 <li key={i}>
-                  {docId && matterId ? (
+                  {docId && scope ? (
                     <Link
-                      href={`/matters/${matterId}/documents/${docId}`}
+                      href={`${scopeBasePath(scope)}/documents/${docId}`}
                       title={`Open ${a.name}`}
                       className="inline-flex items-center gap-1 rounded-md border border-line bg-white px-2 py-0.5 text-2xs text-brand-700 hover:border-brand-300 hover:underline"
                     >

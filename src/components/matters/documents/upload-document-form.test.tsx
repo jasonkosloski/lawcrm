@@ -10,6 +10,7 @@
  * inline before any transport is touched.
  */
 
+import type { RecordScope } from "@/lib/record-scope";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -42,10 +43,11 @@ afterEach(() => {
 async function fill(
   driver: "local" | "vercel-blob" | undefined,
   file: File,
-  opts?: { name?: string; category?: string }
+  opts?: { name?: string; category?: string },
+  scope: RecordScope = { kind: "matter", matterId: "m1" }
 ) {
   const user = userEvent.setup({ applyAccept: false });
-  render(<UploadDocumentForm matterId="m1" storageDriver={driver} />);
+  render(<UploadDocumentForm scope={scope} storageDriver={driver} />);
   await user.click(screen.getByRole("button", { name: /upload document/i }));
   // Labels are programmatically associated (a11y).
   await user.upload(screen.getByLabelText(/^file/i), file);
@@ -59,6 +61,19 @@ async function fill(
 }
 
 describe("local driver → streaming route", () => {
+  test("a lead scope appends leadId (before the file) and no matterId", async () => {
+    await fill(
+      "local",
+      new File(["pdf"], "scan.pdf"),
+      { name: "Intake form", category: "pleading" },
+      { kind: "lead", leadId: "l1" }
+    );
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const fd = (fetchMock.mock.calls[0] as [string, RequestInit])[1].body as FormData;
+    expect([...fd.keys()]).toEqual(["leadId", "name", "category", "files"]);
+    expect(fd.has("matterId")).toBe(false);
+  });
+
   test("POSTs the file (not a server action) with name + category after matterId", async () => {
     await fill("local", new File(["pdf"], "scan.pdf"), {
       name: "Complaint",
