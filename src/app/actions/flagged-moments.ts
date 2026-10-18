@@ -48,6 +48,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { scopeBasePath, scopeOf, type RecordScope } from "@/lib/record-scope";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { assertChildMatterAccess, assertOptionalMatterAccess } from "@/lib/matter-access";
@@ -253,7 +254,7 @@ export async function createFlaggedMoment(
   // can't disagree about what kind of anchor a file takes.
   const doc = await prisma.document.findUnique({
     where: { id: documentId },
-    select: { id: true, matterId: true, name: true, contentType: true },
+    select: { id: true, matterId: true, leadId: true, name: true, contentType: true },
   });
   if (!doc) return { ok: false, error: "Document not found" };
   const renderer = resolveDocumentRenderer(doc.contentType, doc.name);
@@ -273,7 +274,7 @@ export async function createFlaggedMoment(
     select: { id: true },
   });
 
-  revalidateFlagSurfaces(doc.matterId, doc.id);
+  revalidateFlagSurfaces(scopeOf(doc), doc.id);
   await logActivity({
     matterId: doc.matterId,
     userId,
@@ -342,7 +343,7 @@ export async function updateFlaggedMoment(
       quote: true,
       description: true,
       category: true,
-      document: { select: { id: true, matterId: true, name: true } },
+      document: { select: { id: true, matterId: true, leadId: true, name: true } },
     },
   });
   if (!flag) return { ok: false, error: FLAG_NOT_FOUND };
@@ -383,13 +384,13 @@ export async function updateFlaggedMoment(
   // router.refresh()es after every mutation).
   if (count === 0) {
     if (flag.document) {
-      revalidateFlagSurfaces(flag.document.matterId, flag.document.id);
+      revalidateFlagSurfaces(scopeOf(flag.document), flag.document.id);
     }
     return { ok: false, error: FLAG_NOT_FOUND };
   }
 
   if (flag.document) {
-    revalidateFlagSurfaces(flag.document.matterId, flag.document.id);
+    revalidateFlagSurfaces(scopeOf(flag.document), flag.document.id);
     const crossOwner = flag.flaggedById !== actorId;
     // Old → new note text, bounded like the create entry. The
     // original flagger stays on the row, so for another reviewer's
@@ -431,7 +432,7 @@ export async function deleteFlaggedMoment(
       endPageNumber: true,
       quote: true,
       flaggedById: true,
-      document: { select: { id: true, matterId: true, name: true } },
+      document: { select: { id: true, matterId: true, leadId: true, name: true } },
     },
   });
   if (!flag) return { ok: false, error: FLAG_NOT_FOUND };
@@ -449,13 +450,13 @@ export async function deleteFlaggedMoment(
   // revalidate so the stale row leaves this user's rail.
   if (count === 0) {
     if (flag.document) {
-      revalidateFlagSurfaces(flag.document.matterId, flag.document.id);
+      revalidateFlagSurfaces(scopeOf(flag.document), flag.document.id);
     }
     return { ok: false, error: FLAG_NOT_FOUND };
   }
 
   if (flag.document) {
-    revalidateFlagSurfaces(flag.document.matterId, flag.document.id);
+    revalidateFlagSurfaces(scopeOf(flag.document), flag.document.id);
     const kind = flagAnchorKind(flag);
     await logActivity({
       matterId: flag.document.matterId,
@@ -512,7 +513,9 @@ function editDetail(
 
 /** Both read surfaces show flags: the full-page viewer's moments
  *  rail and the matter's Evidence review tab. */
-function revalidateFlagSurfaces(matterId: string, documentId: string): void {
-  revalidatePath(`/matters/${matterId}/documents/${documentId}`);
-  revalidatePath(`/matters/${matterId}/evidence`);
+function revalidateFlagSurfaces(scope: RecordScope, documentId: string): void {
+  revalidatePath(`${scopeBasePath(scope)}/documents/${documentId}`);
+  if (scope.kind === "matter") {
+    revalidatePath(`/matters/${scope.matterId}/evidence`);
+  }
 }

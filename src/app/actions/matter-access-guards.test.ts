@@ -23,7 +23,7 @@ const SCOPE_IDENT =
 const SCOPE_FORM_KEY = /\bget\(\s*["'`](?:matterId|matter_id|matter)["'`]\s*\)/;
 
 const ACCESS_CALL =
-  /\b(?:assertMatterAccess|assertOptionalMatterAccess|assertChildMatterAccess|assertMatterAccessResult|assertAnyMatterAccess|assertMattersAccess)\s*\(/;
+  /\b(?:assertMatterAccess|assertOptionalMatterAccess|assertChildMatterAccess|assertMatterAccessResult|assertAnyMatterAccess|assertMattersAccess|assertScopeAccess)\s*\(/;
 
 /**
  * "file.ts:functionName" -> reason. Keep tiny; every entry needs a

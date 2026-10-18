@@ -1,5 +1,11 @@
 import { describe, expect, test } from "vitest";
-import { optionalScopeOf, scopePaths } from "./record-scope";
+import {
+  optionalScopeOf,
+  scopeBasePath,
+  scopeOf,
+  scopePaths,
+  scopeWhere,
+} from "./record-scope";
 
 describe("optionalScopeOf", () => {
   test("matter, lead, and neither (firm-wide / personal)", () => {
@@ -32,5 +38,34 @@ describe("scopePaths", () => {
       "/intake/l1",
     ]);
     expect(scopePaths(null, "tasks")).toEqual([]);
+  });
+});
+
+describe("scopeOf", () => {
+  test("matter and lead shapes", () => {
+    expect(scopeOf({ matterId: "m1", leadId: null })).toEqual({
+      kind: "matter",
+      matterId: "m1",
+    });
+    expect(scopeOf({ matterId: null, leadId: "l1" })).toEqual({
+      kind: "lead",
+      leadId: "l1",
+    });
+  });
+
+  test("both set and neither set throw", () => {
+    expect(() => scopeOf({ matterId: "m1", leadId: "l1" })).toThrow(/both set/);
+    expect(() => scopeOf({ matterId: null, leadId: null })).toThrow(/neither/);
+  });
+});
+
+describe("scopeWhere / scopeBasePath", () => {
+  test("where clause and base path per kind", () => {
+    expect(scopeWhere({ kind: "lead", leadId: "l1" })).toEqual({ leadId: "l1" });
+    expect(scopeWhere({ kind: "matter", matterId: "m1" })).toEqual({
+      matterId: "m1",
+    });
+    expect(scopeBasePath({ kind: "lead", leadId: "l1" })).toBe("/intake/l1");
+    expect(scopeBasePath({ kind: "matter", matterId: "m1" })).toBe("/matters/m1");
   });
 });

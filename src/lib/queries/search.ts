@@ -53,6 +53,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { scopeBasePath, scopeOf } from "@/lib/record-scope";
 import { getCurrentUserId } from "@/lib/current-user";
 import { visibleEmailThreadWhere } from "@/lib/email-visibility";
 import { canViewEventDetails } from "@/lib/calendar-visibility";
@@ -469,7 +470,9 @@ export async function globalSearch(
           id: true,
           name: true,
           matterId: true,
+          leadId: true,
           matter: { select: { name: true } },
+          lead: { select: { name: true } },
         },
         orderBy: { updatedAt: "desc" },
         take,
@@ -486,8 +489,8 @@ export async function globalSearch(
         snippet: null,
         // The viewer route, not the tab root: the Documents tab lists
         // one folder at a time, so a file in a subfolder isn't there.
-        href: `/matters/${d.matterId}/documents/${d.id}`,
-        context: d.matter.name,
+        href: `${scopeBasePath(scopeOf(d))}/documents/${d.id}`,
+        context: d.matter?.name ?? (d.lead ? `Intake · ${d.lead.name}` : "Intake"),
       })),
     };
   };

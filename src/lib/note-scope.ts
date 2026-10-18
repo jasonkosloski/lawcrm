@@ -12,7 +12,7 @@
  * captures, attached tasks / deadlines / time, Convert to task).
  */
 
-import type { RecordScope } from "@/lib/record-scope";
+import { scopeOf, type RecordScope } from "@/lib/record-scope";
 
 /** Same shape as tasks' and events' scope (src/lib/record-scope.ts);
  *  for notes, null is never valid. */
@@ -24,16 +24,7 @@ export function noteScopeOf(row: {
   matterId: string | null;
   leadId: string | null;
 }): NoteScope {
-  if (row.matterId && row.leadId) {
-    throw new Error(
-      "Note scope invariant: matterId and leadId are both set — a note belongs to exactly one of a matter or a lead."
-    );
-  }
-  if (row.matterId) return { kind: "matter", matterId: row.matterId };
-  if (row.leadId) return { kind: "lead", leadId: row.leadId };
-  throw new Error(
-    "Note scope invariant: neither matterId nor leadId is set — a note must belong to a matter or a lead."
-  );
+  return scopeOf(row);
 }
 
 /** The Notes tab for this scope. */

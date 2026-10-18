@@ -120,7 +120,7 @@ export async function getDocumentForViewer(
 
   return {
     id: doc.id,
-    matterId: doc.matterId,
+    matterId,
     name: doc.name,
     category: doc.category,
     source: doc.source,

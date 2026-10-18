@@ -66,6 +66,16 @@ export const dynamic = "force-dynamic";
 // email-attachment download route so the two allowlists can never
 // drift.
 
+/** Matter documents follow the matter wall; an intake lead's
+ *  documents (no matter) are visible to any signed-in user, like the
+ *  intake pages themselves. */
+async function canReadDocument(
+  userId: string,
+  doc: { matterId: string | null; leadId: string | null }
+): Promise<boolean> {
+  return doc.matterId ? canAccessMatter(userId, doc.matterId) : true;
+}
+
 export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ id: string }> }
@@ -99,6 +109,7 @@ export async function GET(
       contentType: true,
       fileUrl: true,
       matterId: true,
+      leadId: true,
     },
   });
   // Matter wall: a document on a matter the user can't access is
@@ -106,7 +117,7 @@ export async function GET(
   if (
     !doc ||
     !doc.fileUrl ||
-    !(await canAccessMatter(session.user.id, doc.matterId))
+    !(await canReadDocument(session.user.id, doc))
   ) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

@@ -26,6 +26,9 @@ vi.mock("@/lib/matter-access", () => ({
   assertChildMatterAccess: vi.fn(async () => null),
   canAccessMatter: vi.fn(async () => true),
 }));
+vi.mock("@/lib/current-user", () => ({
+  getCurrentUserId: vi.fn(async () => "test-user"),
+}));
 vi.mock("@/lib/permission-check", () => ({
   requirePermission: vi.fn(),
   currentUserHasPermission: vi.fn().mockResolvedValue(true),

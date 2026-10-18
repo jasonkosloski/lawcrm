@@ -35,6 +35,13 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { assertChildMatterAccess, assertMatterAccess } from "@/lib/matter-access";
+import { assertScopeAccess } from "@/lib/scope-access";
+import {
+  scopeBasePath,
+  scopeOf,
+  scopeWhere,
+  type RecordScope,
+} from "@/lib/record-scope";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import {
@@ -67,9 +74,9 @@ function validateName(raw: string): { name: string } | { error: string } {
 
 /** All folders of a matter in one query — the depth / cycle /
  *  uniqueness math happens in JS over this list. */
-function fetchMatterFolders(matterId: string): Promise<FolderRecord[]> {
+function fetchScopeFolders(scope: RecordScope): Promise<FolderRecord[]> {
   return prisma.documentFolder.findMany({
-    where: { matterId },
+    where: scopeWhere(scope),
     select: { id: true, parentId: true, name: true, order: true },
   });
 }
@@ -110,7 +117,7 @@ export async function createFolder(
   });
   if (!matter) return { ok: false, error: "Matter not found." };
 
-  const folders = await fetchMatterFolders(matterId);
+  const folders = await fetchScopeFolders({ kind: "matter", matterId });
 
   if (parentId) {
     // Scoped membership check — a parent from another matter must not
@@ -171,12 +178,12 @@ export async function renameFolder(
 
   const folder = await prisma.documentFolder.findUnique({
     where: { id },
-    select: { id: true, matterId: true, parentId: true, name: true },
+    select: { id: true, matterId: true, leadId: true, parentId: true, name: true },
   });
   if (!folder) return { ok: false, error: "Folder not found." };
   if (folder.name === valid.name) return { ok: true, folderId: folder.id };
 
-  const folders = await fetchMatterFolders(folder.matterId);
+  const folders = await fetchScopeFolders(scopeOf(folder));
   // Excluding self allows a case-only rename ("exhibits" → "Exhibits").
   if (
     hasNameCollision(siblingsOf(folders, folder.parentId), valid.name, folder.id)
@@ -200,7 +207,7 @@ export async function renameFolder(
     detail: `${folder.name} → ${valid.name}`,
   });
 
-  revalidatePath(`/matters/${folder.matterId}/documents`);
+  revalidatePath(`${scopeBasePath(scopeOf(folder))}/documents`);
   return { ok: true, folderId: folder.id };
 }
 
@@ -231,7 +238,7 @@ export async function deleteFolder(id: string): Promise<FolderActionResult> {
 
     const folder = await tx.documentFolder.findUniqueOrThrow({
       where: { id },
-      select: { id: true, matterId: true, parentId: true, name: true },
+      select: { id: true, matterId: true, leadId: true, parentId: true, name: true },
     });
     const folders: FolderRecord[] = await tx.documentFolder.findMany({
       where: { matterId: folder.matterId },
@@ -282,7 +289,7 @@ export async function deleteFolder(id: string): Promise<FolderActionResult> {
     detail: `"${folder.name}" — ${childCount} subfolder(s) and ${docsMoved} document(s) moved to ${parentName ? `"${parentName}"` : "the matter root"}`,
   });
 
-  revalidatePath(`/matters/${folder.matterId}/documents`);
+  revalidatePath(`${scopeBasePath(scopeOf(folder))}/documents`);
   return { ok: true };
 }
 
@@ -312,7 +319,7 @@ export async function moveDocuments(
 
   const docs = await prisma.document.findMany({
     where: { id: { in: ids } },
-    select: { id: true, matterId: true, parentDocumentId: true },
+    select: { id: true, matterId: true, leadId: true, parentDocumentId: true },
   });
   if (docs.length !== ids.length) {
     return { ok: false, error: "Some documents were not found." };
@@ -325,19 +332,25 @@ export async function moveDocuments(
       error: "Email attachments move with their email. Use “Copy to…” to put a copy in another folder.",
     };
   }
-  const matterIds = new Set(docs.map((d) => d.matterId));
-  for (const mid of matterIds) await assertMatterAccess(mid);
-  if (matterIds.size > 1) {
+  const scopes = new Map(
+    docs.map((d) => {
+      const s = scopeOf(d);
+      return [scopeBasePath(s), s] as const;
+    })
+  );
+  for (const s of scopes.values()) await assertScopeAccess(s);
+  if (scopes.size > 1) {
     return { ok: false, error: "Documents must all belong to one matter." };
   }
-  const matterId = docs[0]!.matterId;
+  const scope = [...scopes.values()][0]!;
+  const matterId = scope.kind === "matter" ? scope.matterId : null;
 
   let folderName: string | null = null;
   if (folderId) {
     // Scoped find — a folder from another matter must not receive
     // this matter's documents.
     const folder = await prisma.documentFolder.findFirst({
-      where: { id: folderId, matterId },
+      where: { id: folderId, ...scopeWhere(scope) },
       select: { id: true, name: true },
     });
     if (!folder) {
@@ -360,7 +373,7 @@ export async function moveDocuments(
     detail: `→ ${folderName ? `"${folderName}"` : "the matter root"}`,
   });
 
-  revalidatePath(`/matters/${matterId}/documents`);
+  revalidatePath(`${scopeBasePath(scope)}/documents`);
   return { ok: true };
 }
 
@@ -382,7 +395,7 @@ export async function moveFolder(
 
   const folder = await prisma.documentFolder.findUnique({
     where: { id },
-    select: { id: true, matterId: true, parentId: true, name: true },
+    select: { id: true, matterId: true, leadId: true, parentId: true, name: true },
   });
   if (!folder) return { ok: false, error: "Folder not found." };
   if (newParentId === folder.id) {
@@ -401,9 +414,16 @@ export async function moveFolder(
       | { ok: true; destName: string | null; noop?: boolean }
       | { ok: false; error: string }
     > => {
-      await tx.$queryRaw`
-        SELECT id FROM document_folders
-        WHERE "matterId" = ${folder.matterId} FOR UPDATE`;
+      const folderScope = scopeOf(folder);
+      if (folderScope.kind === "matter") {
+        await tx.$queryRaw`
+          SELECT id FROM document_folders
+          WHERE "matterId" = ${folderScope.matterId} FOR UPDATE`;
+      } else {
+        await tx.$queryRaw`
+          SELECT id FROM document_folders
+          WHERE "leadId" = ${folderScope.leadId} FOR UPDATE`;
+      }
 
       const current = await tx.documentFolder.findUnique({
         where: { id: folder.id },
@@ -416,7 +436,7 @@ export async function moveFolder(
       }
 
       const folders: FolderRecord[] = await tx.documentFolder.findMany({
-        where: { matterId: folder.matterId },
+        where: scopeWhere(folderScope),
         select: { id: true, parentId: true, name: true, order: true },
       });
 
@@ -472,6 +492,6 @@ export async function moveFolder(
     detail: `"${folder.name}" → ${result.destName ? `"${result.destName}"` : "the matter root"}`,
   });
 
-  revalidatePath(`/matters/${folder.matterId}/documents`);
+  revalidatePath(`${scopeBasePath(scopeOf(folder))}/documents`);
   return { ok: true, folderId: folder.id };
 }

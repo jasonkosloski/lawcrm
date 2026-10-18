@@ -27,21 +27,16 @@
 
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { assertChildMatterAccess } from "@/lib/matter-access";
+import { revalidateDocumentScope } from "@/lib/scope-access";
+import { scopeOf, scopeWhere } from "@/lib/record-scope";
 import { getCurrentUserId } from "@/lib/current-user";
 import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { deleteFile } from "@/lib/file-storage";
 import { extractEmailAttachments } from "@/lib/email-attachment-extract";
 
-/** Refresh the Documents tab AND every document viewer page under it
- *  (each viewer shows the matter's file tree), plus the overview. */
-function revalidateDocuments(matterId: string) {
-  revalidatePath(`/matters/${matterId}/documents`, "layout");
-  revalidatePath(`/matters/${matterId}`);
-}
 
 /** What to do with an email's attachments that have no copy anywhere
  *  else when the email is deleted (a copy made with "Copy to…" is its
@@ -59,6 +54,7 @@ export async function deleteDocument(
     select: {
       id: true,
       matterId: true,
+      leadId: true,
       name: true,
       fileUrl: true,
       uploadedBy: true,
@@ -163,7 +159,7 @@ export async function deleteDocument(
       .join(" — "),
   });
 
-  revalidateDocuments(doc.matterId);
+  revalidateDocumentScope(scopeOf(doc));
 
   // Unlink the stored bytes — best-effort: the DB row is the source
   // of truth and a stray file is recoverable, an unlogged delete is
@@ -199,8 +195,11 @@ export async function extractAttachments(
   await assertChildMatterAccess("document", documentId);
   const res = await extractEmailAttachments(documentId, userId);
   if (!res.ok) return { ok: false, error: res.reason };
-  const doc = await prisma.document.findUnique({ where: { id: documentId }, select: { matterId: true } });
-  if (doc) revalidateDocuments(doc.matterId);
+  const doc = await prisma.document.findUnique({
+    where: { id: documentId },
+    select: { matterId: true, leadId: true },
+  });
+  if (doc) revalidateDocumentScope(scopeOf(doc));
   return { ok: true, created: res.created };
 }
 
@@ -246,6 +245,7 @@ export async function copyDocumentToFolder(
     select: {
       id: true,
       matterId: true,
+      leadId: true,
       name: true,
       category: true,
       source: true,
@@ -274,7 +274,7 @@ export async function copyDocumentToFolder(
   let folderName = "the matter root";
   if (folderId) {
     const folder = await prisma.documentFolder.findFirst({
-      where: { id: folderId, matterId: doc.matterId },
+      where: { id: folderId, ...scopeWhere(scopeOf(doc)) },
       select: { name: true },
     });
     if (!folder) return { ok: false, error: "Folder not found in this matter." };
@@ -284,7 +284,7 @@ export async function copyDocumentToFolder(
   const copy = await prisma.$transaction(async (tx) => {
     const created = await tx.document.create({
       data: {
-        matterId: doc.matterId,
+        ...scopeWhere(scopeOf(doc)),
         folderId,
         name: doc.name,
         category: doc.category,
@@ -302,7 +302,7 @@ export async function copyDocumentToFolder(
       await tx.document.createMany({
         data: doc.attachments.map((a) => ({
           ...a,
-          matterId: doc.matterId,
+          ...scopeWhere(scopeOf(doc)),
           folderId,
           parentDocumentId: created.id,
           uploadedBy: userId,
@@ -323,6 +323,6 @@ export async function copyDocumentToFolder(
         : ""
     }`,
   });
-  revalidateDocuments(doc.matterId);
+  revalidateDocumentScope(scopeOf(doc));
   return { ok: true, id: copy.id };
 }

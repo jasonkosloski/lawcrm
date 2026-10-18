@@ -75,6 +75,8 @@ async function download(
   mockedFindUser.mockResolvedValue({ firmId: "f1" } as any);
   mockedFindDoc.mockResolvedValue({
     id: "d1",
+    matterId: "m1",
+    leadId: null,
     name: "exhibit A.bin",
     contentType,
     fileUrl: "key__exhibit-A.bin",

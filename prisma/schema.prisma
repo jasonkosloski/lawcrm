@@ -780,15 +780,19 @@ model Lead {
 
   /// Intake time logged before conversion — re-homed onto the new
   /// matter when the lead converts. See TimeEntry.leadId.
-  timeEntries TimeEntry[]     @relation("LeadTimeEntries")
+  timeEntries     TimeEntry[]      @relation("LeadTimeEntries")
   /// Intake notes written before conversion — re-homed onto the new
   /// matter when the lead converts. See Note.leadId.
-  notes       Note[]          @relation("LeadNotes")
+  notes           Note[]           @relation("LeadNotes")
   /// Intake tasks and events (consultations, follow-up calls) —
   /// re-homed onto the new matter when the lead converts. See
   /// Task.leadId / CalendarEvent.leadId.
-  tasks       Task[]          @relation("LeadTasks")
-  events      CalendarEvent[] @relation("LeadEvents")
+  tasks           Task[]           @relation("LeadTasks")
+  events          CalendarEvent[]  @relation("LeadEvents")
+  /// Intake documents and folders — re-homed onto the new matter when
+  /// the lead converts. See Document.leadId / DocumentFolder.leadId.
+  documents       Document[]       @relation("LeadDocuments")
+  documentFolders DocumentFolder[] @relation("LeadDocumentFolders")
 
   @@index([stage])
   @@index([score])
@@ -803,7 +807,12 @@ model Lead {
 /// A document associated with a matter — filings, contracts, correspondence, etc.
 model Document {
   id                     String    @id @default(cuid())
-  matterId               String
+  /// EXACTLY ONE of matterId / leadId is set (app-enforced; see
+  /// scopeOf in src/lib/record-scope.ts). An intake lead's documents
+  /// re-home onto the new matter on conversion. A document shares its
+  /// folder's scope.
+  matterId               String?
+  leadId                 String?
   name                   String /// Filename or display title
   category               String    @default("other") /// filing | pleading | correspondence | contract | intake | discovery | expert_report | evidence | vendor | archive | other
   source                 String? /// ECF | email | email_attachment | scan | upload | generated | vendor
@@ -833,7 +842,8 @@ model Document {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  matter             Matter          @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  matter             Matter?         @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  lead               Lead?           @relation("LeadDocuments", fields: [leadId], references: [id], onDelete: Cascade)
   folder             DocumentFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
   parentDocument     Document?       @relation("EmailAttachments", fields: [parentDocumentId], references: [id], onDelete: SetNull)
   attachments        Document[]      @relation("EmailAttachments")
@@ -844,6 +854,7 @@ model Document {
   receiptForExpenses Expense[]
 
   @@index([matterId])
+  @@index([leadId])
   @@index([category])
   @@index([folderId])
   @@index([parentDocumentId])
@@ -2244,7 +2255,11 @@ model SavedSearch {
 /// (never silently deletes files) — enforced in the action layer.
 model DocumentFolder {
   id          String   @id @default(cuid())
-  matterId    String
+  /// EXACTLY ONE of matterId / leadId is set (app-enforced; see
+  /// scopeOf in src/lib/record-scope.ts). A folder and its documents
+  /// share a scope; lead folders re-home on conversion.
+  matterId    String?
+  leadId      String?
   parentId    String?
   name        String
   order       Int      @default(0)
@@ -2252,12 +2267,14 @@ model DocumentFolder {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  matter    Matter           @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  matter    Matter?          @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  lead      Lead?            @relation("LeadDocumentFolders", fields: [leadId], references: [id], onDelete: Cascade)
   parent    DocumentFolder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
   children  DocumentFolder[] @relation("FolderTree")
   documents Document[]
 
   @@index([matterId, parentId])
+  @@index([leadId, parentId])
   @@map("document_folders")
 }
 
