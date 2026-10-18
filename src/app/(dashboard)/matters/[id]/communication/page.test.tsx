@@ -106,7 +106,15 @@ const props = (sp: Record<string, string | string[]> = {}, id = "matter_1") =>
   }) as Parameters<typeof MatterCommunicationPage>[0];
 
 const listRow = (id: string) => ({ id }) as ThreadListRow;
-const detail = (id: string) => ({ id }) as ThreadDetail;
+const detail = (id: string, matterId: string | null = "matter_1") =>
+  ({ id, matter: matterId ? { id: matterId } : null }) as ThreadDetail;
+const pageOf = (rows: ThreadListRow[], page = 1, total = rows.length) => ({
+  rows,
+  page,
+  pageCount: Math.max(1, Math.ceil(total / 100)),
+  total,
+  pageSize: 100,
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -119,7 +127,7 @@ beforeEach(() => {
   } as Awaited<ReturnType<typeof prisma.matter.findUnique>>);
   mockedHasPermission.mockResolvedValue(true);
   mockedContacts.mockResolvedValue([{ id: "c1" } as ContactPickerOption]);
-  mockedThreads.mockResolvedValue([]);
+  mockedThreads.mockResolvedValue(pageOf([]));
   mockedFiling.mockResolvedValue([]);
   mockedThreadById.mockResolvedValue(null);
   mockedPhoneItems.mockResolvedValue([]);
@@ -130,8 +138,8 @@ describe("thread membership check (eager fetch, discard on miss)", () => {
     // Thread t2 exists and is readable by this user (it resolved),
     // but it is filed to some OTHER matter — the reader must stay
     // empty rather than surface it under matter_1.
-    mockedThreads.mockResolvedValue([listRow("t1")]);
-    mockedThreadById.mockResolvedValue(detail("t2"));
+    mockedThreads.mockResolvedValue(pageOf([listRow("t1")]));
+    mockedThreadById.mockResolvedValue(detail("t2", "matter_other"));
 
     render(await MatterCommunicationPage(props({ thread: "t2" })));
 
@@ -139,13 +147,31 @@ describe("thread membership check (eager fetch, discard on miss)", () => {
   });
 
   test("passes the fetched thread through when it belongs to the matter", async () => {
-    mockedThreads.mockResolvedValue([listRow("t1"), listRow("t2")]);
+    mockedThreads.mockResolvedValue(pageOf([listRow("t1"), listRow("t2")]));
     mockedThreadById.mockResolvedValue(detail("t2"));
 
     render(await MatterCommunicationPage(props({ thread: "t2" })));
 
     expect(mockedThreadById).toHaveBeenCalledWith("t2");
     expect(screen.getByTestId("embedded-inbox").dataset.selected).toBe("t2");
+  });
+
+  test("opens a thread on this matter even when it is off the current page", async () => {
+    // Page 2 of the list doesn't hold t9, but t9 is filed here.
+    mockedThreads.mockResolvedValue(pageOf([listRow("t1")], 2, 150));
+    mockedThreadById.mockResolvedValue(detail("t9"));
+
+    render(await MatterCommunicationPage(props({ thread: "t9", page: "2" })));
+
+    expect(screen.getByTestId("embedded-inbox").dataset.selected).toBe("t9");
+  });
+
+  test("discards an unfiled thread", async () => {
+    mockedThreadById.mockResolvedValue(detail("t3", null));
+
+    render(await MatterCommunicationPage(props({ thread: "t3" })));
+
+    expect(screen.getByTestId("embedded-inbox").dataset.selected).toBe("");
   });
 
   test("skips the thread fetch entirely when no ?thread is requested", async () => {
@@ -179,8 +205,14 @@ describe("per-channel fetch plumbing", () => {
     render(await MatterCommunicationPage(props()));
 
     expect(mockedPhoneItems).not.toHaveBeenCalled();
-    expect(mockedThreads).toHaveBeenCalledWith("matter_1");
+    expect(mockedThreads).toHaveBeenCalledWith("matter_1", 1);
     expect(mockedFiling).toHaveBeenCalled();
+  });
+
+  test("?page= reaches the thread query", async () => {
+    render(await MatterCommunicationPage(props({ page: "3" })));
+
+    expect(mockedThreads).toHaveBeenCalledWith("matter_1", 3);
   });
 
   test("phone channel never issues the email queries", async () => {

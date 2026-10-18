@@ -90,12 +90,24 @@ describe("listLeads", () => {
       })),
     });
 
-    const rows = await listLeads(new Date("2026-04-28T02:00:00Z"));
+    const { rows, closed, activeTruncated } = await listLeads(
+      new Date("2026-04-28T02:00:00Z")
+    );
     const found = rows.find((r) => r.id === old.id);
     expect(found).toBeDefined();
     expect(found!.isActive).toBe(true);
-    // Closed history stays bounded.
+    // Closed history is paged, not cut: page 1 holds one page and the
+    // metadata points at the rest.
     expect(rows.filter((r) => !r.isActive).length).toBe(200);
+    expect(closed).toMatchObject({ total: 205, pageCount: 2, page: 1 });
+    expect(activeTruncated).toBe(false);
+    // Page 2 is the remaining closed leads; active leads still lead it.
+    const p2 = await listLeads(new Date("2026-04-28T02:00:00Z"), 2);
+    const closed2 = p2.rows.filter((r) => !r.isActive);
+    expect(closed2).toHaveLength(5);
+    const seen = new Set(rows.map((r) => r.id));
+    expect(closed2.some((r) => seen.has(r.id))).toBe(false);
+    expect(p2.rows.some((r) => r.id === old.id)).toBe(true);
     // Agrees with the header's uncapped count.
     expect(rows.filter((r) => r.isActive).length).toBe(
       (await getLeadSummary()).activeCount
@@ -108,7 +120,7 @@ describe("listLeads", () => {
       createdAt: new Date("2026-04-20T18:00:00Z"),
       statuteWindow: 40,
     });
-    const rows = await listLeads(new Date("2026-04-28T02:00:00Z"));
+    const { rows } = await listLeads(new Date("2026-04-28T02:00:00Z"));
     const row = rows.find((r) => r.id === l.id)!;
     expect(row.statuteWindow).toBe(40); // raw snapshot untouched
     expect(row.statuteDaysRemaining).toBe(33);
@@ -117,7 +129,7 @@ describe("listLeads", () => {
 
   test("a lead without a statute window has no countdown", async () => {
     const l = await lead({ name: "No statute" });
-    const row = (await listLeads()).find((r) => r.id === l.id)!;
+    const row = (await listLeads()).rows.find((r) => r.id === l.id)!;
     expect(row.statuteDaysRemaining).toBeNull();
   });
 });

@@ -22,7 +22,10 @@ import {
   countMatters,
   getMattersFilterOptions,
   listMatters,
+  LIST_MATTERS_SCAN_LIMIT,
 } from "@/lib/queries/matters";
+import { hrefFromSearchParams, parsePageParam } from "@/lib/pagination";
+import { Pager, TruncationNotice } from "@/components/shared/pager";
 import { requireUser } from "@/lib/current-user";
 import { matterAccessWhere } from "@/lib/matter-access";
 import { currentUserHasPermission } from "@/lib/permission-check";
@@ -42,18 +45,18 @@ export default async function MattersListPage({
   const access = await matterAccessWhere(userId);
 
   const [
-    matters,
+    matterPage,
     options,
     totalCount,
     firmOpenCount,
     firmClosedCount,
     canCreateMatter,
   ] = await Promise.all([
-      listMatters(filter, sort),
+      listMatters(filter, sort, undefined, undefined, parsePageParam(sp.page)),
       getMattersFilterOptions(userId),
       // Denominator for "showing N of M" — a DB-side count with the
       // exact same filters as listMatters, text search included (both
-      // go through one buildWhere). Immune to LIST_MATTERS_CAP.
+      // go through one buildWhere). Immune to paging and the scan bound.
       countMatters(filter),
       // Firm-wide counts for the crumb — independent of the user's
       // current filter so the header keeps its reference point even
@@ -90,15 +93,25 @@ export default async function MattersListPage({
           options={options}
           view={view}
           showTrust={canViewTrust}
-          visibleCount={matters.length}
+          visibleCount={matterPage.rows.length}
           totalCount={totalCount}
         />
 
-        {view === "kanban" ? (
-          <MattersKanban matters={matters} showTrust={canViewTrust} />
-        ) : (
-          <MattersTable matters={matters} showTrust={canViewTrust} />
+        {matterPage.scanLimited && (
+          <TruncationNotice
+            shown={LIST_MATTERS_SCAN_LIMIT}
+            total={totalCount}
+            hint="Only the newest matches are sorted and paged — add a filter or search to reach older matters."
+          />
         )}
+
+        {view === "kanban" ? (
+          <MattersKanban matters={matterPage.rows} showTrust={canViewTrust} />
+        ) : (
+          <MattersTable matters={matterPage.rows} showTrust={canViewTrust} />
+        )}
+
+        <Pager {...matterPage} href={hrefFromSearchParams("/matters", sp)} />
       </div>
     </>
   );

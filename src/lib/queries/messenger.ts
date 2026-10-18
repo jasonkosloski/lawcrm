@@ -11,6 +11,7 @@
  */
 
 import type { Prisma } from "@/generated/prisma/client";
+import { paginate, type Page } from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { matterAccessWhere } from "@/lib/matter-access";
@@ -152,8 +153,8 @@ async function itemAccessWhere(
   return { OR: [{ matterId: null }, { matter: access }] };
 }
 
-/** Inbox page size — no pager yet (see docs/features/communication-email.md). */
-const THREAD_LIST_LIMIT = 200;
+/** Inbox page size (`?page=N`, see src/lib/pagination.ts). */
+export const MESSENGER_THREAD_PAGE_SIZE = 100;
 
 /**
  * Inbox: messenger threads ordered by last activity. Filters:
@@ -170,6 +171,7 @@ export async function listMessengerThreads({
   contactPhone,
   contactPhones,
   contactId,
+  page = 1,
 }: {
   filter?: "all" | "unread" | "unfiled" | "pinned";
   /** Exact-match (E.164) filter. */
@@ -178,7 +180,9 @@ export async function listMessengerThreads({
   contactPhones?: string[];
   /** Threads resolved to this contact, whatever number they use. */
   contactId?: string;
-} = {}): Promise<MessengerThreadRow[]> {
+  /** 1-based `?page=`; clamped into range. */
+  page?: number;
+} = {}): Promise<Page<MessengerThreadRow>> {
   const userId = await getCurrentUserId();
   const threadAccess = await threadAccessWhere(userId);
   const itemAccess = await itemAccessWhere(userId);
@@ -187,33 +191,57 @@ export async function listMessengerThreads({
   if (contactPhones?.length) scope.push({ contactPhone: { in: contactPhones } });
   if (contactId) scope.push({ contactId });
 
-  const threads = await prisma.messengerThread.findMany({
-    where: {
-      isArchived: false,
-      ...(filter === "unread" ? { unreadCount: { gt: 0 } } : {}),
-      ...(filter === "pinned" ? { isPinned: true } : {}),
-      ...(filter === "unfiled" ? UNFILED_THREAD_WHERE : {}),
-      AND: [threadAccess, ...(scope.length ? [{ OR: scope }] : [])],
-    },
-    orderBy: [{ isPinned: "desc" }, { lastItemAt: "desc" }],
-    take: THREAD_LIST_LIMIT,
-    include: {
-      contact: { select: { id: true, name: true, type: true } },
-      defaultMatter: { select: { id: true, name: true, color: true } },
-      items: {
-        where: itemAccess,
-        orderBy: { occurredAt: "desc" },
-        take: 1,
-        select: {
-          body: true,
-          kind: true,
-          direction: true,
-          callStatus: true,
-        },
+  const where: Prisma.MessengerThreadWhereInput = {
+    isArchived: false,
+    ...(filter === "unread" ? { unreadCount: { gt: 0 } } : {}),
+    ...(filter === "pinned" ? { isPinned: true } : {}),
+    ...(filter === "unfiled" ? UNFILED_THREAD_WHERE : {}),
+    AND: [threadAccess, ...(scope.length ? [{ OR: scope }] : [])],
+  };
+
+  return paginate(
+    page,
+    MESSENGER_THREAD_PAGE_SIZE,
+    () => prisma.messengerThread.count({ where }),
+    async ({ skip, take }) =>
+      toMessengerThreadRows(
+        await prisma.messengerThread.findMany({
+          where,
+          // `id` tiebreak keeps the order stable across pages.
+          orderBy: [{ isPinned: "desc" }, { lastItemAt: "desc" }, { id: "desc" }],
+          skip,
+          take,
+          include: messengerThreadListInclude(itemAccess),
+        })
+      )
+  );
+}
+
+function messengerThreadListInclude(
+  itemAccess: Prisma.MessengerItemWhereInput
+) {
+  return {
+    contact: { select: { id: true, name: true, type: true } },
+    defaultMatter: { select: { id: true, name: true, color: true } },
+    items: {
+      where: itemAccess,
+      orderBy: { occurredAt: "desc" as const },
+      take: 1,
+      select: {
+        body: true,
+        kind: true,
+        direction: true,
+        callStatus: true,
       },
     },
-  });
+  } satisfies Prisma.MessengerThreadInclude;
+}
 
+function toMessengerThreadRows(
+  threads: Prisma.MessengerThreadGetPayload<{
+    include: ReturnType<typeof messengerThreadListInclude>;
+  }>[]
+): MessengerThreadRow[] {
   return threads.map((t) => {
     const last = t.items[0];
     // Derive a sensible preview snippet for calls (no body).
@@ -293,10 +321,13 @@ export async function listMessengerThreadsForLead({
     ),
   ];
   if (!contactId && numbers.length === 0) return [];
-  return listMessengerThreads({
-    contactPhones: numbers,
-    contactId: contactId ?? undefined,
-  });
+  // One person's threads (one per number they use) never fill a page.
+  return (
+    await listMessengerThreads({
+      contactPhones: numbers,
+      contactId: contactId ?? undefined,
+    })
+  ).rows;
 }
 
 /** Counts for the mailbox rail on the messenger view. */

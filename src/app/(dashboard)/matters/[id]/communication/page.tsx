@@ -33,6 +33,7 @@ import { currentUserHasPermission } from "@/lib/permission-check";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { requireUser } from "@/lib/current-user";
 import { assertMatterAccess } from "@/lib/matter-access";
+import { parsePageParam } from "@/lib/pagination";
 
 export default async function MatterCommunicationPage({
   params,
@@ -77,7 +78,7 @@ export default async function MatterCommunicationPage({
       canLogCall ? listContactPickerOptions({ priorityMatterId: id }) : null
     ),
     channel === "phone" ? listMessengerItemsForMatter(id) : null,
-    channel === "email" ? listThreadsForMatter(id) : null,
+    channel === "email" ? listThreadsForMatter(id, parsePageParam(sp.page)) : null,
     channel === "email" ? getFilingMatterOptions() : null,
     channel === "email" && requestedThreadId
       ? getThreadById(requestedThreadId)
@@ -129,10 +130,11 @@ export default async function MatterCommunicationPage({
 
   // Only allow reading threads that are actually on this matter —
   // the eagerly-fetched thread is discarded when a pasted id points
-  // at another matter's mail.
-  const threadList = threads ?? [];
+  // at another matter's mail. Checked against the thread's own matter,
+  // not the current page, so a thread off this page still opens.
+  const threadList = threads?.rows ?? [];
   const selectedThread =
-    requestedThread && threadList.some((t) => t.id === requestedThread.id)
+    requestedThread && requestedThread.matter?.id === id
       ? requestedThread
       : null;
 
@@ -151,6 +153,7 @@ export default async function MatterCommunicationPage({
         emptyHint="Emails and text messages filed to this matter will appear here. File a thread from the main inbox or let auto-filing catch it."
         showMatterChip={false}
         tz={tz}
+        paging={threads ?? undefined}
       />
     </div>
   );

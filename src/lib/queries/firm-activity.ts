@@ -37,7 +37,8 @@ export type FirmActivityRow = {
   authorInitials: string | null;
 };
 
-const FIRM_ACTIVITY_LIMIT = 200;
+/** Row cap on the firm activity log; the page says so when it's hit. */
+export const FIRM_ACTIVITY_LIMIT = 200;
 
 export type FirmActivityFilter = {
   types?: readonly string[];

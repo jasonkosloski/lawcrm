@@ -28,6 +28,7 @@ import {
   listMessengerItemsForMatter,
   listMessengerThreads,
   listMessengerThreadsForLead,
+  MESSENGER_THREAD_PAGE_SIZE,
   normalizePhone,
 } from "@/lib/queries/messenger";
 import {
@@ -221,7 +222,9 @@ describe("listMessengerThreads — lastCallStatus + call preview", () => {
       occurredAt: "2026-06-10T10:00",
     });
 
-    const [row] = await listMessengerThreads();
+    const {
+      rows: [row],
+    } = await listMessengerThreads();
     expect(row.lastKind).toBe("call");
     expect(row.lastCallStatus).toBe("no_answer");
     // no_answer inbound with no body derives the missed preview too.
@@ -238,7 +241,9 @@ describe("listMessengerThreads — lastCallStatus + call preview", () => {
       occurredAt: "2026-06-10T10:00",
     });
 
-    const [row] = await listMessengerThreads();
+    const {
+      rows: [row],
+    } = await listMessengerThreads();
     expect(row.lastCallStatus).toBe("answered");
     expect(row.lastBody).toBe("Discussed settlement terms");
   });
@@ -253,7 +258,9 @@ describe("listMessengerThreads — lastCallStatus + call preview", () => {
       occurredAt: "2026-06-10T10:00",
     });
 
-    const [row] = await listMessengerThreads();
+    const {
+      rows: [row],
+    } = await listMessengerThreads();
     expect(row.lastKind).toBe("sms");
     expect(row.lastCallStatus).toBeNull();
   });
@@ -352,7 +359,7 @@ describe("listMessengerThreads filters + mailbox counts", () => {
 
     const counts = await getMessengerMailboxCounts();
     for (const f of ["all", "unread", "unfiled", "pinned"] as const) {
-      const rows = await listMessengerThreads({ filter: f });
+      const { rows } = await listMessengerThreads({ filter: f });
       expect(counts[f]).toBe(rows.length);
     }
     expect(counts).toEqual({ all: 5, unread: 1, unfiled: 3, pinned: 1 });
@@ -370,7 +377,7 @@ describe("listMessengerThreads filters + mailbox counts", () => {
     await seedItem({ threadId: bare, occurredAt: "2026-06-10T10:00" });
     const emptyThread = await seedThread({ phone: "+13035550012" });
 
-    const ids = (await listMessengerThreads({ filter: "unfiled" })).map(
+    const ids = (await listMessengerThreads({ filter: "unfiled" })).rows.map(
       (r) => r.id
     );
     expect(ids.sort()).toEqual([bare, emptyThread].sort());
@@ -471,5 +478,32 @@ describe("getMessengerThread", () => {
       { url: "https://x/y.png", contentType: "image/png", sizeBytes: undefined },
     ]);
     expect(detail?.items[1].mediaUrls).toEqual([]);
+  });
+});
+
+describe("listMessengerThreads paging (no silent truncation)", () => {
+  test("pages past MESSENGER_THREAD_PAGE_SIZE with an exact total", async () => {
+    const n = MESSENGER_THREAD_PAGE_SIZE + 3;
+    const base = Date.parse("2026-06-10T12:00:00Z");
+    await prisma.messengerThread.createMany({
+      data: Array.from({ length: n }, (_, i) => ({
+        accountId,
+        contactPhone: `+1303555${String(i).padStart(4, "0")}`,
+        lastItemAt: new Date(base - i * 60_000),
+      })),
+    });
+
+    const first = await listMessengerThreads();
+    expect(first).toMatchObject({ total: n, pageCount: 2, page: 1 });
+    expect(first.rows).toHaveLength(MESSENGER_THREAD_PAGE_SIZE);
+    expect(first.rows[0].contactPhone).toBe("+13035550000");
+
+    const second = await listMessengerThreads({ page: 2 });
+    expect(second.rows).toHaveLength(3);
+    const seen = new Set(first.rows.map((r) => r.id));
+    expect(second.rows.some((r) => seen.has(r.id))).toBe(false);
+
+    // Past the end clamps to the last page.
+    expect((await listMessengerThreads({ page: 50 })).page).toBe(2);
   });
 });

@@ -15,6 +15,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
+import { pageWindow } from "@/lib/pagination";
 import { filterAccessibleMatterIds } from "@/lib/matter-access";
 
 export type NotificationRow = {
@@ -164,11 +165,11 @@ export async function getNotificationsFeed(
     prisma.notification.count({ where: { userId, readAt: null } }),
   ]);
 
-  const pageCount = Math.max(1, Math.ceil(total / NOTIFICATIONS_PAGE_SIZE));
-  // Clamp junk / out-of-range ?page= values instead of 404ing.
-  const safePage = Math.min(
-    Math.max(1, Number.isFinite(page) ? Math.trunc(page) : 1),
-    pageCount
+  // Clamps junk / out-of-range ?page= values instead of 404ing.
+  const { page: safePage, pageCount, skip } = pageWindow(
+    total,
+    page,
+    NOTIFICATIONS_PAGE_SIZE
   );
 
   const rows = await prisma.notification.findMany({
@@ -176,7 +177,7 @@ export async function getNotificationsFeed(
     // `id` tiebreak keeps createMany-batched rows (same createdAt)
     // in a stable order across pages.
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    skip: (safePage - 1) * NOTIFICATIONS_PAGE_SIZE,
+    skip,
     take: NOTIFICATIONS_PAGE_SIZE,
     include: { matter: { select: { id: true, name: true } } },
   });

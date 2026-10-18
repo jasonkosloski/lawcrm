@@ -55,6 +55,7 @@ import { LogCallButton } from "@/components/communication/log-call-button";
 import { getCurrentUserId, requireUser } from "@/lib/current-user";
 import { maybeKickEmailSync } from "@/lib/google/gmail-sync";
 import { SyncNowButton } from "@/components/communication/sync-now-button";
+import { parsePageParam } from "@/lib/pagination";
 
 type View = "email" | "messages";
 
@@ -117,7 +118,7 @@ export default async function CommunicationPage({
       canLogCall,
       canEditCall,
       canDeleteCall,
-      threads,
+      threadPage,
       selectedThread,
       callContacts,
       callMatters,
@@ -129,7 +130,7 @@ export default async function CommunicationPage({
       canLogCallP,
       canEditCallP,
       currentUserHasPermission("communication.delete_call"),
-      listMessengerThreads({ filter }),
+      listMessengerThreads({ filter, page: parsePageParam(sp.page) }),
       threadId ? getMessengerThread(threadId) : Promise.resolve(null),
       canLogCallP.then((can) => (can ? listContactPickerOptions() : [])),
       // The matter option list feeds both the log-call composer and
@@ -166,7 +167,8 @@ export default async function CommunicationPage({
             />
           </MailboxDrawer>
           <MessengerThreadList
-            threads={threads}
+            threads={threadPage.rows}
+            paging={threadPage}
             filter={filter}
             // The thread that actually exists, not the raw URL param: a
             // stale / deleted ?thread= id would otherwise hide the list
@@ -220,7 +222,7 @@ export default async function CommunicationPage({
     emailCounts,
     messengerUnread,
     tz,
-    threads,
+    threadPage,
     selectedThread,
     pinnedMatters,
     filingOptions,
@@ -229,7 +231,7 @@ export default async function CommunicationPage({
     // The inactive tab only needs its unread badge.
     getMessengerUnreadCount(),
     getCurrentUserTimeZone(),
-    listThreads(filter, matterIdParam ?? undefined),
+    listThreads(filter, matterIdParam ?? undefined, parsePageParam(sp.page)),
     threadId ? getThreadById(threadId) : Promise.resolve(null),
     getCommunicationPinnedMatters(),
     // Open-matter list for the file-to-matter picker - only the
@@ -264,7 +266,8 @@ export default async function CommunicationPage({
           />
         </MailboxDrawer>
         <ThreadList
-          threads={threads}
+          threads={threadPage.rows}
+          paging={threadPage}
           filter={filter}
           matterId={matterIdParam}
           matterLabel={

@@ -37,6 +37,7 @@ import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import {
+  FIRM_ACTIVITY_LIMIT,
   getFirmActivity,
   listFirmActivityAuthors,
 } from "@/lib/queries/firm-activity";
@@ -290,9 +291,9 @@ export default async function FirmActivityPage({
         </Card>
       )}
 
-      {rows.length === 200 && (
+      {rows.length === FIRM_ACTIVITY_LIMIT && (
         <div className="text-2xs text-ink-4 text-center">
-          Showing the most recent 200 events. Narrow the filters to
+          Showing the most recent {FIRM_ACTIVITY_LIMIT} events. Narrow the filters to
           surface older entries.
         </div>
       )}

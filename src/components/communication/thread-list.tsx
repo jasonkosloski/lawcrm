@@ -29,10 +29,8 @@ import { DEFAULT_COMMUNICATION_FILTER } from "@/lib/communication-filter-default
 import { MailboxDrawerTrigger } from "./mailbox-drawer";
 import { ComposeEmailLauncher } from "./compose-email-launcher";
 import { ThreadRowActions } from "./thread-row-actions";
-
-/** listThreads' hard cap (`take: 500` in queries/communication.ts).
- *  A list this long is truncated, so the header says "500+". */
-export const THREAD_LIST_CAP = 500;
+import { Pager } from "@/components/shared/pager";
+import type { Page } from "@/lib/pagination";
 
 /** The filter the page falls back to when `?filter=` is absent
  *  (parseEmailFilter in communication/page.tsx; the rail's hrefFor
@@ -40,14 +38,31 @@ export const THREAD_LIST_CAP = 500;
  *  filter - including "all" - or opening a thread resets the list. */
 const DEFAULT_FILTER: CommunicationFilter = DEFAULT_COMMUNICATION_FILTER;
 
-export function rowHref(
-  threadId: string,
+/** The list URL for a filter / matter drilldown, without a thread
+ *  or page — the pager's base href. */
+export function listHref(
   filter: CommunicationFilter,
   matterId: string | null
 ): string {
   const params = new URLSearchParams();
   if (filter !== DEFAULT_FILTER) params.set("filter", filter);
   if (matterId) params.set("matter", matterId);
+  const qs = params.toString();
+  return qs ? `/communication?${qs}` : "/communication";
+}
+
+/** A row's href: the list URL plus `?thread=`, keeping `?page=` so
+ *  opening a thread on page 3 doesn't drop the list back to page 1. */
+export function rowHref(
+  threadId: string,
+  filter: CommunicationFilter,
+  matterId: string | null,
+  page = 1
+): string {
+  const params = new URLSearchParams();
+  if (filter !== DEFAULT_FILTER) params.set("filter", filter);
+  if (matterId) params.set("matter", matterId);
+  if (page > 1) params.set("page", String(page));
   params.set("thread", threadId);
   return `/communication?${params.toString()}`;
 }
@@ -94,6 +109,7 @@ export function ThreadList({
   matterLabel,
   selectedThreadId,
   tz = null,
+  paging,
 }: {
   threads: ThreadListRow[];
   filter: CommunicationFilter;
@@ -106,7 +122,10 @@ export function ThreadList({
   /** Viewer's IANA zone — anchors formatRelative's calendar-date
    *  fallback for threads older than ~30 days. */
   tz?: string | null;
+  /** listThreads' page metadata; drives the header total and pager. */
+  paging?: Pick<Page<unknown>, "page" | "pageCount" | "total" | "pageSize">;
 }) {
+  const page = paging?.page ?? 1;
   // Mobile drill-down: when a thread is selected, the reader takes
   // the whole viewport and the list hides. When no thread is
   // selected, the list takes the whole viewport and the reader
@@ -131,9 +150,7 @@ export function ThreadList({
             {matterLabel ?? FILTER_LABEL[filter]}
           </div>
           <div className="text-sm font-display font-medium text-ink">
-            {threads.length >= THREAD_LIST_CAP
-              ? `${THREAD_LIST_CAP}+ threads`
-              : plural(threads.length, "thread")}
+            {plural(paging?.total ?? threads.length, "thread")}
           </div>
         </div>
         {/* Compose — async server island: gates itself on
@@ -158,7 +175,7 @@ export function ThreadList({
             // interactive content inside an anchor).
             <li key={t.id} className="relative group">
               <Link
-                href={rowHref(t.id, filter, matterId ?? null)}
+                href={rowHref(t.id, filter, matterId ?? null, page)}
                 scroll={false}
                 className={cn(
                   "block px-4 py-3 border-b border-line transition-colors",
@@ -243,6 +260,15 @@ export function ThreadList({
           ))
         )}
       </ul>
+      {paging && (
+        <Pager
+          {...paging}
+          href={listHref(filter, matterId ?? null)}
+          prevLabel="Newer"
+          nextLabel="Older"
+          className="px-3 py-2 border-t border-line shrink-0"
+        />
+      )}
     </div>
   );
 }

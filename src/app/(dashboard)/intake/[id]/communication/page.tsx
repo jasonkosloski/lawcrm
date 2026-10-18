@@ -29,6 +29,7 @@ import {
   getFilingMatterOptions,
   getThreadById,
   listThreadsForEmail,
+  THREADS_FOR_EMAIL_CAP,
 } from "@/lib/queries/communication";
 import {
   listMessengerThreadsForLead,
@@ -44,6 +45,7 @@ import { listContactPickerOptions } from "@/lib/queries/contacts";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { LogCallButton } from "@/components/communication/log-call-button";
 import { requireUser } from "@/lib/current-user";
+import { TruncationNotice } from "@/components/shared/pager";
 
 export default async function LeadCommunicationPage({
   params,
@@ -64,9 +66,11 @@ export default async function LeadCommunicationPage({
 
   // Email + SMS in parallel; either may be empty depending on what
   // contact channels we know about.
-  const [emailThreads, messengerThreads, callContacts, tz] =
+  const [emailMatch, messengerThreads, callContacts, tz] =
     await Promise.all([
-      email ? listThreadsForEmail(email) : Promise.resolve([]),
+      email
+        ? listThreadsForEmail(email)
+        : Promise.resolve({ rows: [], truncated: false }),
       phone
         ? listMessengerThreadsForLead({
             contactId: lead.contact?.id,
@@ -102,6 +106,8 @@ export default async function LeadCommunicationPage({
         }}
       />
     ) : null;
+
+  const emailThreads = emailMatch.rows;
 
   // Only allow reading email threads that are actually in the lead's set.
   const threadId =
@@ -156,6 +162,13 @@ export default async function LeadCommunicationPage({
             />{" "}
             is the sender, recipient, or cc.
           </div>
+          {emailMatch.truncated && (
+            <TruncationNotice
+              shown={THREADS_FOR_EMAIL_CAP}
+              hint="Only the newest matching threads are searched; older mail with this address is in Communication."
+              className="shrink-0"
+            />
+          )}
           <EmbeddedInbox
             threads={emailThreads}
             selectedThread={selectedThread}

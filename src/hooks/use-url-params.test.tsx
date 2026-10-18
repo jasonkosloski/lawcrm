@@ -70,4 +70,11 @@ describe("useUrlParams", () => {
     act(() => result.current.setParams((p) => p.set("trust", "has")));
     expect(lastUrl()).toBe("?view=kanban&trust=has");
   });
+
+  test("a filter / sort write resets the list to page 1", () => {
+    search = "q=alv&page=3";
+    const { result } = renderHook(() => useUrlParams());
+    act(() => result.current.setParams((p) => p.set("sort", "name")));
+    expect(lastUrl()).toBe("?q=alv&sort=name");
+  });
 });

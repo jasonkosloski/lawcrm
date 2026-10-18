@@ -31,6 +31,8 @@ import {
   listThreads,
   listThreadsForEmail,
   listThreadsForMatter,
+  THREAD_PAGE_SIZE,
+  THREADS_FOR_EMAIL_CAP,
   type CommunicationFilter,
 } from "@/lib/queries/communication";
 import {
@@ -142,7 +144,7 @@ describe("listThreadsForEmail", () => {
       ],
     });
 
-    const rows = await listThreadsForEmail("lead@example.com");
+    const { rows } = await listThreadsForEmail("lead@example.com");
     // Newest-first ordering, matching the sibling list queries.
     expect(rows.map((r) => r.subject)).toEqual([
       "To the lead (cc)",
@@ -176,7 +178,7 @@ describe("listThreadsForEmail", () => {
       ],
     });
 
-    const rows = await listThreadsForEmail("joe@x.com");
+    const { rows } = await listThreadsForEmail("joe@x.com");
     expect(rows.map((r) => r.subject)).toEqual(["True match"]);
   });
 
@@ -192,7 +194,7 @@ describe("listThreadsForEmail", () => {
       ],
     });
 
-    expect(await listThreadsForEmail("lead@example.com")).toEqual([]);
+    expect((await listThreadsForEmail("lead@example.com")).rows).toEqual([]);
   });
 
   test("fromDisplay is the thread's first sender even when a later message matches", async () => {
@@ -215,13 +217,13 @@ describe("listThreadsForEmail", () => {
       ],
     });
 
-    const rows = await listThreadsForEmail("lead@example.com");
+    const { rows } = await listThreadsForEmail("lead@example.com");
     expect(rows).toHaveLength(1);
     expect(rows[0].fromDisplay).toBe("Pat Paralegal");
   });
 
   test("empty email short-circuits to an empty list", async () => {
-    expect(await listThreadsForEmail("")).toEqual([]);
+    expect((await listThreadsForEmail("")).rows).toEqual([]);
   });
 });
 
@@ -297,7 +299,7 @@ describe("mailbox scoping (security boundary)", () => {
     });
 
     for (const f of ["inbox", "all", "unread", "starred", "unfiled"] as const) {
-      const rows = await listThreads(f);
+      const { rows } = await listThreads(f);
       expect(rows.every((r) => r.subject === "Mine")).toBe(true);
     }
     const counts = await getCommunicationCounts();
@@ -320,7 +322,7 @@ describe("mailbox scoping (security boundary)", () => {
       subject: "Theirs",
       matterId: m.matterId,
     });
-    const rows = await listThreadsForMatter(m.matterId);
+    const { rows } = await listThreadsForMatter(m.matterId);
     expect(rows.map((r) => r.subject)).toEqual(["Mine"]);
   });
 });
@@ -371,30 +373,30 @@ describe("listThreads filters + counts agree", () => {
 
   test.each(FILTERS)("rail count for '%s' equals the list length", async (f) => {
     const counts = await getCommunicationCounts();
-    const rows = await listThreads(f);
+    const { rows } = await listThreads(f);
     expect(counts[f]).toBe(rows.length);
   });
 
   test("Inbox hides archived and still-snoozed threads, shows expired snoozes", async () => {
-    const subjects = (await listThreads("inbox")).map((r) => r.subject);
+    const subjects = (await listThreads("inbox")).rows.map((r) => r.subject);
     expect(subjects).toContain("plain");
     expect(subjects).toContain("snooze-expired");
     expect(subjects).not.toContain("snoozed");
     expect(subjects).not.toContain("archived");
     expect(subjects).not.toContain("filed-archived");
     // "All" shows everything.
-    expect(await listThreads("all")).toHaveLength(9);
+    expect((await listThreads("all")).rows).toHaveLength(9);
   });
 
   test("Unread excludes archived threads (same rule as the sidebar badge)", async () => {
-    const subjects = (await listThreads("unread")).map((r) => r.subject);
+    const subjects = (await listThreads("unread")).rows.map((r) => r.subject);
     expect(subjects).toEqual(["unread"]);
     expect(await getEmailUnreadCount()).toBe(1);
     expect((await getCommunicationCounts()).unread).toBe(1);
   });
 
   test("a matter id overrides the flat filters and reaches archived threads", async () => {
-    const subjects = (await listThreads("all", matterId)).map((r) => r.subject);
+    const subjects = (await listThreads("all", matterId)).rows.map((r) => r.subject);
     expect(subjects.sort()).toEqual(["filed", "filed-archived"]);
   });
 
@@ -413,7 +415,7 @@ describe("listThreads filters + counts agree", () => {
         emailMessageId: t.messages[0].id,
       },
     });
-    const subjects = (await listThreads("untimed")).map((r) => r.subject);
+    const subjects = (await listThreads("untimed")).rows.map((r) => r.subject);
     expect(subjects).not.toContain("plain");
     expect((await getCommunicationCounts()).untimed).toBe(subjects.length);
   });
@@ -425,7 +427,7 @@ describe("listThreads filters + counts agree", () => {
     // The drilldown's landing filter is the matter-mode default...
     const filter = defaultEmailFilter(matterId);
     expect(filter).toBe("all");
-    const rows = await listThreads(filter, matterId);
+    const { rows } = await listThreads(filter, matterId);
     // ...so the badge (all threads on the matter) matches the list,
     // archived ones included. With the Inbox default it showed 2 vs 1.
     expect(pinned[0].threadCount).toBe(rows.length);
@@ -466,5 +468,126 @@ describe("getFilingMatterOptions", () => {
     expect(opts.map((o) => o.name)).toEqual(["Open B", "Open A"]);
     expect(opts[0].isPinned).toBe(true);
     expect(opts.some((o) => o.id === archived.matterId)).toBe(false);
+  });
+});
+
+/** Bulk-seed `n` single-message threads, newest = index 0. */
+async function seedManyThreads(
+  n: number,
+  opts: { accountId: string; matterId?: string; fromEmail?: string }
+): Promise<void> {
+  const base = Date.parse("2026-01-01T00:00:00Z");
+  const threads = await prisma.emailThread.createManyAndReturn({
+    data: Array.from({ length: n }, (_, i) => ({
+      accountId: opts.accountId,
+      subject: `T${i}`,
+      messageCount: 1,
+      lastMessageAt: new Date(base - i * 60_000),
+      matterId: opts.matterId ?? null,
+    })),
+    select: { id: true, lastMessageAt: true },
+  });
+  await prisma.emailMessage.createMany({
+    data: threads.map((t) => ({
+      threadId: t.id,
+      fromName: "Sender",
+      fromEmail: opts.fromEmail ?? "sender@example.com",
+      toRecipients: "[]",
+      body: "b",
+      sentAt: t.lastMessageAt,
+    })),
+  });
+}
+
+describe("paging (no silent truncation)", () => {
+  test("listThreads pages past THREAD_PAGE_SIZE with an exact total", async () => {
+    await seedManyThreads(THREAD_PAGE_SIZE + 5, { accountId });
+
+    const first = await listThreads("all");
+    expect(first.total).toBe(THREAD_PAGE_SIZE + 5);
+    expect(first.pageCount).toBe(2);
+    expect(first.rows).toHaveLength(THREAD_PAGE_SIZE);
+    expect(first.rows[0].subject).toBe("T0");
+
+    const second = await listThreads("all", undefined, 2);
+    expect(second.page).toBe(2);
+    expect(second.rows.map((r) => r.subject)).toEqual(
+      Array.from({ length: 5 }, (_, i) => `T${THREAD_PAGE_SIZE + i}`)
+    );
+    // No row appears on both pages.
+    const ids = new Set(first.rows.map((r) => r.id));
+    expect(second.rows.some((r) => ids.has(r.id))).toBe(false);
+  });
+
+  test("out-of-range and junk pages clamp instead of returning nothing", async () => {
+    await seedManyThreads(3, { accountId });
+    expect((await listThreads("all", undefined, 99)).page).toBe(1);
+    expect((await listThreads("all", undefined, 99)).rows).toHaveLength(3);
+    expect((await listThreads("all", undefined, Number.NaN)).page).toBe(1);
+  });
+
+  test("an empty mailbox is one empty page", async () => {
+    const p = await listThreads("inbox");
+    expect(p).toMatchObject({ rows: [], total: 0, page: 1, pageCount: 1 });
+  });
+
+  test("listThreadsForMatter pages too", async () => {
+    const area = await seedPracticeArea();
+    const m = await seedMatter({
+      practiceAreaId: area.areaId,
+      stageId: area.stageId,
+      leadUserId: userId,
+    });
+    await seedManyThreads(THREAD_PAGE_SIZE + 1, {
+      accountId,
+      matterId: m.matterId,
+    });
+    await seedManyThreads(2, { accountId }); // unfiled: not counted
+    const p = await listThreadsForMatter(m.matterId, 2);
+    expect(p.total).toBe(THREAD_PAGE_SIZE + 1);
+    expect(p.rows).toHaveLength(1);
+  });
+
+  test("the total honours ethical walls (count and page share one where)", async () => {
+    const area = await seedPracticeArea();
+    const { firmId } = await seedFirm();
+    const { userId: otherId } = await seedUser({ firmId });
+    // TEAM mode, no view-all role: the viewer only sees team matters.
+    const viewer = await prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { firmId: true },
+    });
+    await prisma.firm.update({
+      where: { id: viewer.firmId! },
+      data: { matterVisibility: "TEAM" },
+    });
+    const walled = await seedMatter({
+      practiceAreaId: area.areaId,
+      stageId: area.stageId,
+      leadUserId: otherId,
+    });
+    await seedManyThreads(4, { accountId, matterId: walled.matterId });
+    await seedManyThreads(2, { accountId });
+
+    const p = await listThreads("all");
+    expect(p.total).toBe(2);
+    expect(p.rows.every((r) => r.matter === null)).toBe(true);
+  });
+
+  test("listThreadsForEmail reports truncation past its cap", async () => {
+    await seedManyThreads(THREADS_FOR_EMAIL_CAP + 1, {
+      accountId,
+      fromEmail: "busy@example.com",
+    });
+    const hit = await listThreadsForEmail("busy@example.com");
+    expect(hit.truncated).toBe(true);
+    expect(hit.rows).toHaveLength(THREADS_FOR_EMAIL_CAP);
+  }, 30_000);
+
+  test("listThreadsForEmail is not truncated at or under its cap", async () => {
+    await seedManyThreads(2, { accountId, fromEmail: "quiet@example.com" });
+    const hit = await listThreadsForEmail("quiet@example.com");
+    expect(hit).toMatchObject({ truncated: false });
+    expect(hit.rows).toHaveLength(2);
   });
 });

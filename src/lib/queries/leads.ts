@@ -7,6 +7,7 @@
  */
 
 import { cache } from "react";
+import { paginate, type Page } from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
 import { LEAD_CLOSED_STAGES } from "@/lib/constants/lead-stage";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
@@ -84,17 +85,29 @@ export function statuteDaysRemaining(
 }
 
 /// Safety bound on ACTIVE leads in the queue. Open leads carry
-/// statute-of-limitations exposure, so they are never cut by the
-/// history cap below — this only guards against a runaway table.
-const ACTIVE_LEADS_SAFETY_CAP = 1000;
-/// Cap on the CLOSED (converted / declined) history listed after the
-/// active leads — same rationale as LIST_MATTERS_CAP in matters.ts.
-/// Build paging when needed.
-const CLOSED_LEADS_CAP = 200;
+/// statute-of-limitations exposure, so they are never paged behind the
+/// closed history — this only guards against a runaway table, and the
+/// page says so (`activeTruncated`) if it is ever hit.
+export const ACTIVE_LEADS_SAFETY_CAP = 1000;
+/// Page size for the CLOSED (converted / declined) history listed after
+/// the active leads; `?page=N` pages through it (src/lib/pagination.ts).
+export const CLOSED_LEADS_PAGE_SIZE = 200;
+
+export type LeadList = {
+  /** Every active lead (up to the safety cap), then one page of closed
+   *  history, newest first within each group. */
+  rows: LeadListRow[];
+  /** More active leads exist than ACTIVE_LEADS_SAFETY_CAP. */
+  activeTruncated: boolean;
+  /** Paging metadata for the closed-history half. */
+  closed: Omit<Page<LeadListRow>, "rows">;
+};
 
 export async function listLeads(
-  now: Date = new Date()
-): Promise<LeadListRow[]> {
+  now: Date = new Date(),
+  /** 1-based `?page=` of the closed history; clamped into range. */
+  closedPage = 1
+): Promise<LeadList> {
   const include = {
     // Joined Contact wins for display fields when present — keeps
     // intake and the contact directory consistent if the user edits
@@ -106,22 +119,35 @@ export async function listLeads(
   // Two queries so closed history can never push an older, still-open
   // lead out of the cap (the old single newest-200 query did, while the
   // header's uncapped activeCount still counted it).
+  const closedWhere = { stage: { in: closedStages } };
   const [tz, active, closed] = await Promise.all([
     getCurrentUserTimeZone(),
     prisma.lead.findMany({
       where: { stage: { notIn: closedStages } },
-      take: ACTIVE_LEADS_SAFETY_CAP,
-      orderBy: [{ createdAt: "desc" }],
+      // One past the bound detects that it was hit.
+      take: ACTIVE_LEADS_SAFETY_CAP + 1,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       include,
     }),
-    prisma.lead.findMany({
-      where: { stage: { in: closedStages } },
-      take: CLOSED_LEADS_CAP,
-      orderBy: [{ createdAt: "desc" }],
-      include,
-    }),
+    paginate(
+      closedPage,
+      CLOSED_LEADS_PAGE_SIZE,
+      () => prisma.lead.count({ where: closedWhere }),
+      ({ skip, take }) =>
+        prisma.lead.findMany({
+          where: closedWhere,
+          skip,
+          take,
+          // `id` tiebreak keeps the order stable across pages.
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          include,
+        })
+    ),
   ]);
-  return [...active, ...closed].map((l) => ({
+  const activeTruncated = active.length > ACTIVE_LEADS_SAFETY_CAP;
+  if (activeTruncated) active.length = ACTIVE_LEADS_SAFETY_CAP;
+  const { rows: closedRows, ...closedMeta } = closed;
+  const rows = [...active, ...closedRows].map((l) => ({
     id: l.id,
     contactId: l.contact?.id ?? l.contactId,
     name: l.contact?.name ?? l.name,
@@ -145,6 +171,7 @@ export async function listLeads(
     ageDays: leadAgeDays(l.createdAt, tz, now),
     isActive: !(LEAD_CLOSED_STAGES as readonly string[]).includes(l.stage),
   }));
+  return { rows, activeTruncated, closed: closedMeta };
 }
 
 /**

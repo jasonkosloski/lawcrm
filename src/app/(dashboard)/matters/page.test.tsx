@@ -40,6 +40,7 @@ vi.mock("@/lib/prisma", () => ({
 vi.mock("@/lib/queries/matters", () => ({
   countMatters: vi.fn(),
   listMatters: vi.fn(),
+  LIST_MATTERS_SCAN_LIMIT: 5000,
   getMattersFilterOptions: vi.fn(),
 }));
 vi.mock("next/link", () => ({
@@ -87,6 +88,18 @@ const optionsMock = vi.mocked(getMattersFilterOptions);
 // The page only reads `.length` off the rows; the table/kanban are
 // stubbed, so a bare id stands in for the full row shape.
 const row = (id: string) => ({ id }) as unknown as MatterListRow;
+const pg = (
+  rows: MatterListRow[],
+  over: Partial<Awaited<ReturnType<typeof listMatters>>> = {}
+) => ({
+  rows,
+  page: 1,
+  pageCount: 1,
+  total: rows.length,
+  pageSize: 200,
+  scanLimited: false,
+  ...over,
+});
 
 /** Render the server component for the given URL search params. */
 async function renderPage(sp: Record<string, string | string[]>) {
@@ -109,7 +122,7 @@ beforeEach(() => {
 
 describe("New matter button — matters.create gate", () => {
   beforeEach(() => {
-    listMattersMock.mockResolvedValue([]);
+    listMattersMock.mockResolvedValue(pg([]));
     countMattersMock.mockResolvedValue(0);
   });
 
@@ -129,7 +142,7 @@ describe("New matter button — matters.create gate", () => {
 
 describe("totalCount denominator", () => {
   test("total comes from countMatters, not a second listMatters", async () => {
-    listMattersMock.mockResolvedValue([row("a"), row("b")]);
+    listMattersMock.mockResolvedValue(pg([row("a"), row("b")]));
     countMattersMock.mockResolvedValue(7);
 
     await renderPage({});
@@ -142,7 +155,7 @@ describe("totalCount denominator", () => {
   });
 
   test("search active → still exactly one listMatters; count gets the filter", async () => {
-    listMattersMock.mockResolvedValue([row("a")]);
+    listMattersMock.mockResolvedValue(pg([row("a")]));
     countMattersMock.mockResolvedValue(3);
 
     await renderPage({ q: "alvarez" });
@@ -154,7 +167,7 @@ describe("totalCount denominator", () => {
   });
 
   test("countMatters receives every non-search filter", async () => {
-    listMattersMock.mockResolvedValue([row("a")]);
+    listMattersMock.mockResolvedValue(pg([row("a")]));
     countMattersMock.mockResolvedValue(1);
 
     await renderPage({
@@ -167,5 +180,36 @@ describe("totalCount denominator", () => {
     const countFilter = countMattersMock.mock.calls[0][0] as MattersFilter;
     expect(countFilter.areas).toEqual(["Civil Rights", "Family"]);
     expect(countFilter.stages).toEqual(["Discovery"]);
+  });
+});
+
+describe("paging (no silent truncation)", () => {
+  beforeEach(() => countMattersMock.mockResolvedValue(450));
+
+  test("?page= reaches listMatters", async () => {
+    listMattersMock.mockResolvedValue(pg([row("a")], { page: 2, pageCount: 3, total: 450 }));
+    await renderPage({ q: "smith", page: "2" });
+    expect(listMattersMock.mock.calls[0][4]).toBe(2);
+  });
+
+  test("renders a pager that keeps the filters", async () => {
+    listMattersMock.mockResolvedValue(pg([row("a")], { page: 2, pageCount: 3, total: 450 }));
+    await renderPage({ q: "smith", area: ["A", "B"], page: "2" });
+    expect(screen.getByText(/201–400 of 450/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Next/ }).getAttribute("href")).toBe(
+      "/matters?q=smith&area=A&area=B&page=3"
+    );
+  });
+
+  test("says so when the scan bound was hit", async () => {
+    listMattersMock.mockResolvedValue(pg([row("a")], { scanLimited: true }));
+    await renderPage({});
+    expect(screen.getByRole("status").textContent).toMatch(/first 5000 of 450/);
+  });
+
+  test("no notice when the scan bound was not hit", async () => {
+    listMattersMock.mockResolvedValue(pg([row("a")]));
+    await renderPage({});
+    expect(screen.queryByRole("status")).toBeNull();
   });
 });

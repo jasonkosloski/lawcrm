@@ -18,6 +18,16 @@ import {
   matterAccessWhere,
   optionalMatterAccessClause,
 } from "@/lib/matter-access";
+import { paginate, type Page } from "@/lib/pagination";
+
+/** Threads per page in the inbox and a matter's Communication tab
+ *  (`?page=N`, see src/lib/pagination.ts). */
+export const THREAD_PAGE_SIZE = 100;
+
+/** Candidate cap for the lead tab's address match (listThreadsForEmail).
+ *  It can't page cheaply (a verification pass runs after the fetch), so
+ *  it reports `truncated` and the tab says so instead. */
+export const THREADS_FOR_EMAIL_CAP = 500;
 
 /** Ethical walls: a thread filed to a matter the viewer can't see is
  *  hidden from every list / count / reader (unfiled threads stay).
@@ -130,8 +140,10 @@ export async function listThreads(
   /** When set, filters to threads on this specific matter - used by
    *  the per-pinned-matter sub-rail entries. Overrides matter-related
    *  filters. */
-  matterId?: string
-): Promise<ThreadListRow[]> {
+  matterId?: string,
+  /** 1-based `?page=`; clamped into range. */
+  page = 1
+): Promise<Page<ThreadListRow>> {
   const userId = await getCurrentUserId();
 
   // `where` builds from the filter, but always scoped to the current
@@ -163,17 +175,30 @@ export async function listThreads(
   // Per-pinned-matter override - wins over any matter-related filter.
   if (matterId) where.matterId = matterId;
 
-  const threads = await prisma.emailThread.findMany({
-    where,
-    // 500-thread cap on the inbox - matches how Gmail / Outlook
-    // both default to "most recent N" without a true infinite
-    // scroll. Build proper paging when a real firm exceeds this.
-    take: 500,
-    include: threadListInclude,
-    orderBy: { lastMessageAt: "desc" },
-  });
+  return pageThreads(where, page);
+}
 
-  return threads.map(toThreadListRow);
+/** One page of threads matching `where`, newest first. The `id`
+ *  tiebreak keeps rows sharing a lastMessageAt stable across pages. */
+async function pageThreads(
+  where: Prisma.EmailThreadWhereInput,
+  page: number
+): Promise<Page<ThreadListRow>> {
+  return paginate(
+    page,
+    THREAD_PAGE_SIZE,
+    () => prisma.emailThread.count({ where }),
+    async ({ skip, take }) =>
+      (
+        await prisma.emailThread.findMany({
+          where,
+          skip,
+          take,
+          include: threadListInclude,
+          orderBy: [{ lastMessageAt: "desc" }, { id: "desc" }],
+        })
+      ).map(toThreadListRow)
+  );
 }
 
 /** Compact view of a time entry logged against a single email message
@@ -315,22 +340,19 @@ export async function getThreadById(id: string): Promise<ThreadDetail | null> {
 /** Threads whose `matterId` points at this matter — scoped to the
  *  current user's accounts. Used by the matter's Communication tab. */
 export async function listThreadsForMatter(
-  matterId: string
-): Promise<ThreadListRow[]> {
+  matterId: string,
+  /** 1-based `?page=`; clamped into range. */
+  page = 1
+): Promise<Page<ThreadListRow>> {
   const userId = await getCurrentUserId();
-  const threads = await prisma.emailThread.findMany({
-    where: {
+  return pageThreads(
+    {
       matterId,
       ...visibleEmailThreadWhere(userId),
       AND: await threadMatterAccessAnd(userId),
     },
-    // 500-thread cap matches listThreads. A single matter rarely
-    // exceeds this; if one does, build per-matter paging.
-    take: 500,
-    include: threadListInclude,
-    orderBy: { lastMessageAt: "desc" },
-  });
-  return threads.map(toThreadListRow);
+    page
+  );
 }
 
 /** Threads that touch a given email address (sender OR recipient).
@@ -344,8 +366,8 @@ export async function listThreadsForMatter(
  *  open questions) at which point this becomes a direct join. */
 export async function listThreadsForEmail(
   email: string
-): Promise<ThreadListRow[]> {
-  if (!email) return [];
+): Promise<{ rows: ThreadListRow[]; truncated: boolean }> {
+  if (!email) return { rows: [], truncated: false };
   const normalized = email.toLowerCase();
   const userId = await getCurrentUserId();
 
@@ -364,17 +386,18 @@ export async function listThreadsForEmail(
       AND: await threadMatterAccessAnd(userId),
       messages: { some: { OR: matchOr } },
     },
-    // Same 500-thread cap as listThreads - a per-lead view never
-    // needs more, and without it a busy address pulls its entire
-    // history in one query. Recipient JSON for verification comes from
-    // the message-scoped query below; loading it here would scale with
-    // total mail volume in every candidate thread, not with the number
-    // of actual matches.
-    take: 500,
+    // Capped (one past the cap detects truncation): without it a busy
+    // address pulls its entire history in one query. Recipient JSON
+    // for verification comes from the message-scoped query below;
+    // loading it here would scale with total mail volume in every
+    // candidate thread, not with the number of actual matches.
+    take: THREADS_FOR_EMAIL_CAP + 1,
     include: threadListInclude,
-    orderBy: { lastMessageAt: "desc" },
+    orderBy: [{ lastMessageAt: "desc" }, { id: "desc" }],
   });
-  if (candidates.length === 0) return [];
+  const truncated = candidates.length > THREADS_FOR_EMAIL_CAP;
+  if (truncated) candidates.length = THREADS_FOR_EMAIL_CAP;
+  if (candidates.length === 0) return { rows: [], truncated: false };
 
   // Verification pass: sharpen the recipient substring hits so a
   // collision doesn't produce a false positive. Only fetches messages
@@ -405,7 +428,10 @@ export async function listThreadsForEmail(
     if (isMatch) verified.add(m.threadId);
   }
 
-  return candidates.filter((t) => verified.has(t.id)).map(toThreadListRow);
+  return {
+    rows: candidates.filter((t) => verified.has(t.id)).map(toThreadListRow),
+    truncated,
+  };
 }
 
 export type CommunicationCounts = {

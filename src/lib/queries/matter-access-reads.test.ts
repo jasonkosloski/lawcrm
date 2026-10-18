@@ -118,10 +118,10 @@ describe("TEAM mode — matters list", () => {
   beforeEach(() => setMode("TEAM"));
 
   test("listMatters / countMatters show only the viewer's matters", async () => {
-    const rows = await listMatters(EMPTY_FILTER, undefined, alice, "UTC");
+    const { rows } = await listMatters(EMPTY_FILTER, undefined, alice, "UTC");
     expect(names(rows)).toEqual(["Alpha Matter zebra"]);
     expect(await countMatters(EMPTY_FILTER, alice, "UTC")).toBe(1);
-    const bobRows = await listMatters(EMPTY_FILTER, undefined, bob, "UTC");
+    const { rows: bobRows } = await listMatters(EMPTY_FILTER, undefined, bob, "UTC");
     expect(names(bobRows)).toEqual(["Bravo Matter zebra"]);
   });
 
@@ -163,7 +163,7 @@ describe("trust column (billing.view, ADR-038)", () => {
   });
 
   test("without billing.view the balance is withheld and trust sort/filter are ignored", async () => {
-    const rows = await listMatters(
+    const { rows } = await listMatters(
       { ...EMPTY_FILTER, trust: "has" },
       { field: "trust", dir: "desc" },
       alice,
@@ -179,7 +179,7 @@ describe("trust column (billing.view, ADR-038)", () => {
 
   test("with billing.view the balance, sort and filter work", async () => {
     await grant(alice, "billing.view");
-    const rows = await listMatters(
+    const { rows } = await listMatters(
       { ...EMPTY_FILTER, trust: "has" },
       { field: "trust", dir: "desc" },
       alice,
@@ -312,7 +312,7 @@ describe("TEAM mode — palette, sidebar, notifications, messenger", () => {
         lastItemAt: new Date(),
       },
     });
-    const threads = await listMessengerThreads();
+    const { rows: threads } = await listMessengerThreads();
     expect(threads.map((t) => t.contactPhone)).toEqual(["+13035550122"]);
   });
 });

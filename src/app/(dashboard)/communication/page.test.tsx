@@ -30,14 +30,14 @@ vi.mock("@/lib/queries/communication", async (importOriginal) => ({
   getEmailUnreadCount: vi.fn(async () => 0),
   getFilingMatterOptions: vi.fn(async () => []),
   getThreadById: vi.fn(),
-  listThreads: vi.fn(async () => []),
+  listThreads: vi.fn(async () => ({ rows: [], page: 1, pageCount: 1, total: 0, pageSize: 100 })),
 }));
 vi.mock("@/lib/queries/messenger", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/queries/messenger")>()),
   getMessengerUnreadCount: vi.fn(async () => 0),
   getMessengerMailboxCounts: vi.fn(async () => ({ all: 0, unread: 0 })),
   getMessengerThread: vi.fn(),
-  listMessengerThreads: vi.fn(async () => []),
+  listMessengerThreads: vi.fn(async () => ({ rows: [], page: 1, pageCount: 1, total: 0, pageSize: 100 })),
 }));
 vi.mock("@/lib/queries/contacts", () => ({
   listContactPickerOptions: vi.fn(async () => []),
@@ -86,8 +86,11 @@ vi.mock("@/components/communication/messenger-thread-reader", () => ({
   MessengerThreadReader: () => null,
 }));
 
-import { getThreadById } from "@/lib/queries/communication";
-import { getMessengerThread } from "@/lib/queries/messenger";
+import { getThreadById, listThreads } from "@/lib/queries/communication";
+import {
+  getMessengerThread,
+  listMessengerThreads,
+} from "@/lib/queries/messenger";
 import CommunicationPage from "./page";
 
 const props = (sp: Record<string, string>) =>
@@ -124,5 +127,27 @@ describe("stale ?thread= id", () => {
     );
     expect(screen.getByTestId("msg-list").dataset.selected).toBe("");
     expect(screen.getByTestId("msg-rail").dataset.selected).toBe("");
+  });
+});
+
+describe("?page= is the list's page (ADR-007)", () => {
+  test("email view passes it to listThreads", async () => {
+    vi.mocked(getThreadById).mockResolvedValue(null);
+    render(await CommunicationPage(props({ filter: "all", page: "3" })));
+    expect(vi.mocked(listThreads)).toHaveBeenLastCalledWith("all", undefined, 3);
+  });
+
+  test("messages view passes it to listMessengerThreads", async () => {
+    render(await CommunicationPage(props({ view: "messages", page: "2" })));
+    expect(vi.mocked(listMessengerThreads)).toHaveBeenLastCalledWith({
+      filter: "all",
+      page: 2,
+    });
+  });
+
+  test("junk page values fall back to page 1", async () => {
+    vi.mocked(getThreadById).mockResolvedValue(null);
+    render(await CommunicationPage(props({ page: "abc" })));
+    expect(vi.mocked(listThreads)).toHaveBeenLastCalledWith("inbox", undefined, 1);
   });
 });

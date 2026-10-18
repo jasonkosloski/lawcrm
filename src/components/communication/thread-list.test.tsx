@@ -27,7 +27,7 @@ vi.mock("next/link", () => ({
 }));
 
 import type { ThreadListRow } from "@/lib/queries/communication";
-import { rowHref, ThreadList, THREAD_LIST_CAP } from "./thread-list";
+import { listHref, rowHref, ThreadList } from "./thread-list";
 
 function row(over: Partial<ThreadListRow> = {}): ThreadListRow {
   return {
@@ -69,6 +69,16 @@ describe("rowHref", () => {
     }
   );
 
+  test("page > 1 is preserved; page 1 stays out of the URL", () => {
+    expect(rowHref("t1", "inbox", null, 3)).toBe("/communication?page=3&thread=t1");
+    expect(rowHref("t1", "inbox", null, 1)).toBe("/communication?thread=t1");
+  });
+
+  test("listHref is the bare list URL for the pager", () => {
+    expect(listHref("inbox", null)).toBe("/communication");
+    expect(listHref("starred", "m1")).toBe("/communication?filter=starred&matter=m1");
+  });
+
   test("matter drill-down is preserved alongside the filter", () => {
     expect(rowHref("t1", "all", "m1")).toBe(
       "/communication?filter=all&matter=m1&thread=t1"
@@ -99,12 +109,31 @@ describe("header count", () => {
     expect(screen.getByText("2 threads")).toBeInTheDocument();
   });
 
-  test("shows N+ at the query cap (the list is truncated)", () => {
-    const many = Array.from({ length: THREAD_LIST_CAP }, (_, i) =>
-      row({ id: `t${i}` })
+  test("shows the total across pages, plus a pager, when paged", () => {
+    render(
+      <ThreadList
+        threads={[row({ id: "a" })]}
+        filter="all"
+        selectedThreadId={null}
+        paging={{ page: 2, pageCount: 3, total: 250, pageSize: 100 }}
+      />
     );
-    render(<ThreadList threads={many} filter="all" selectedThreadId={null} />);
-    expect(screen.getByText(`${THREAD_LIST_CAP}+ threads`)).toBeInTheDocument();
+    expect(screen.getByText("250 threads")).toBeInTheDocument();
+    expect(screen.getByText(/101–200 of 250/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Older/ })).toHaveAttribute(
+      "href",
+      "/communication?filter=all&page=3"
+    );
+    expect(screen.getByRole("link", { name: /Newer/ })).toHaveAttribute(
+      "href",
+      "/communication?filter=all"
+    );
+    // Rows keep the page so opening a thread doesn't reset the list.
+    expect(
+      screen.getAllByRole("link").find((l) =>
+        l.getAttribute("href")?.includes("thread=a")
+      )
+    ).toHaveAttribute("href", "/communication?filter=all&page=2&thread=a");
   });
 });
 

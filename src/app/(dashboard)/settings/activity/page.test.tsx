@@ -40,6 +40,7 @@ vi.mock("next/link", () => ({
 vi.mock("@/lib/queries/firm-activity", () => ({
   getFirmActivity: vi.fn(async () => []),
   listFirmActivityAuthors: vi.fn(async () => []),
+  FIRM_ACTIVITY_LIMIT: 3,
 }));
 
 import { currentUserHasPermission } from "@/lib/permission-check";
@@ -118,5 +119,40 @@ describe("/settings/activity page gate", () => {
     expect(screen.getByLabelText("User")).toBeInstanceOf(HTMLSelectElement);
     expect(screen.getByLabelText("From")).toHaveAttribute("type", "date");
     expect(screen.getByLabelText("To")).toHaveAttribute("type", "date");
+  });
+});
+
+describe("row cap notice", () => {
+  const row = (i: number) => ({
+    id: `a${i}`,
+    type: "email",
+    title: `Event ${i}`,
+    detail: null,
+    iconName: "zap",
+    source: "user",
+    timestamp: new Date("2026-10-15T12:00:00Z"),
+    matterId: null,
+    matterName: null,
+    authorId: null,
+    authorName: null,
+    authorInitials: null,
+  });
+
+  test("says the list is capped when it hits FIRM_ACTIVITY_LIMIT", async () => {
+    mockedHasPermission.mockResolvedValue(true);
+    vi.mocked(getFirmActivity).mockResolvedValueOnce([row(1), row(2), row(3)]);
+
+    render(await FirmActivityPage(props()));
+
+    expect(screen.getByText(/most recent 3 events/)).toBeInTheDocument();
+  });
+
+  test("no notice below the cap", async () => {
+    mockedHasPermission.mockResolvedValue(true);
+    vi.mocked(getFirmActivity).mockResolvedValueOnce([row(1)]);
+
+    render(await FirmActivityPage(props()));
+
+    expect(screen.queryByText(/most recent/)).not.toBeInTheDocument();
   });
 });

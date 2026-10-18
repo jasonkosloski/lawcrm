@@ -28,6 +28,8 @@ import type { MessengerThreadRow } from "@/lib/queries/messenger";
 import type { MessengerFilter } from "./messenger-mailbox-rail";
 import { MailboxDrawerTrigger } from "./mailbox-drawer";
 import { contactInitials } from "./contact-initials";
+import { Pager } from "@/components/shared/pager";
+import type { Page } from "@/lib/pagination";
 
 const MESSENGER_FILTER_LABEL: Record<MessengerFilter, string> = {
   all: "All",
@@ -36,10 +38,25 @@ const MESSENGER_FILTER_LABEL: Record<MessengerFilter, string> = {
   pinned: "Pinned",
 };
 
-function hrefFor(threadId: string, filter: MessengerFilter): string {
+/** The list URL for a filter (no thread / page) — the pager's base. */
+export function messengerListHref(filter: MessengerFilter): string {
   const params = new URLSearchParams();
   params.set("view", "messages");
   if (filter !== "all") params.set("filter", filter);
+  return `/communication?${params.toString()}`;
+}
+
+/** A row's href; keeps `?page=` so opening a thread doesn't reset the
+ *  list to page 1. */
+export function messengerRowHref(
+  threadId: string,
+  filter: MessengerFilter,
+  page = 1
+): string {
+  const params = new URLSearchParams();
+  params.set("view", "messages");
+  if (filter !== "all") params.set("filter", filter);
+  if (page > 1) params.set("page", String(page));
   params.set("thread", threadId);
   return `/communication?${params.toString()}`;
 }
@@ -67,6 +84,7 @@ export function MessengerThreadList({
   selectedThreadId,
   action,
   tz = null,
+  paging,
 }: {
   threads: MessengerThreadRow[];
   filter: MessengerFilter;
@@ -76,7 +94,11 @@ export function MessengerThreadList({
   /** Viewer's IANA zone — anchors formatRelative's calendar-date
    *  fallback for threads older than ~30 days. */
   tz?: string | null;
+  /** listMessengerThreads' page metadata; drives the total and pager. */
+  paging?: Pick<Page<unknown>, "page" | "pageCount" | "total" | "pageSize">;
 }) {
+  const page = paging?.page ?? 1;
+  const total = paging?.total ?? threads.length;
   // Mobile drill-down — same shape as the email ThreadList. When a
   // thread is selected the reader takes over; otherwise the list
   // takes the whole viewport. lg+ keeps the fixed 80 (320px) width.
@@ -94,8 +116,7 @@ export function MessengerThreadList({
             {MESSENGER_FILTER_LABEL[filter]}
           </div>
           <div className="text-xs font-semibold text-ink">
-            {threads.length}{" "}
-            {threads.length === 1 ? "conversation" : "conversations"}
+            {total} {total === 1 ? "conversation" : "conversations"}
           </div>
         </div>
         {action}
@@ -122,7 +143,7 @@ export function MessengerThreadList({
             return (
               <li key={t.id}>
                 <Link
-                  href={hrefFor(t.id, filter)}
+                  href={messengerRowHref(t.id, filter, page)}
                   className={cn(
                     "flex items-start gap-3 px-4 py-2.5 border-b border-line transition-colors",
                     active
@@ -202,6 +223,15 @@ export function MessengerThreadList({
             );
           })}
         </ul>
+      )}
+      {paging && (
+        <Pager
+          {...paging}
+          href={messengerListHref(filter)}
+          prevLabel="Newer"
+          nextLabel="Older"
+          className="px-3 py-2 border-t border-line shrink-0"
+        />
       )}
     </div>
   );

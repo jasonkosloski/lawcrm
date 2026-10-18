@@ -324,6 +324,13 @@ what's blocking it.
 - Thin custom scrollbar: 8px width, #c9ced4 thumb, transparent track
 - Apply `.scrollbar-thin` class to scrollable containers
 
+### Long lists: paginate, never truncate
+- A list that can outgrow one screen never cuts rows silently. Default: offset paging by `?page=N` (the URL is the source of truth, ADR-007). Helpers in `src/lib/pagination.ts`: `parsePageParam` for the param, `paginate(page, size, count, fetch)` for a Prisma read (count and fetch share ONE `where`, so matter-access clauses filter the total too), `paginateArray` when rows must be sorted in JS first (matters list). Junk or out-of-range pages clamp, never 404.
+- Order by a unique tiebreak (`[{ lastMessageAt: "desc" }, { id: "desc" }]`) so rows don't repeat or vanish across pages.
+- Render `<Pager>` (`src/components/shared/pager.tsx`) with the list's base href; build it with `hrefFromSearchParams(path, sp)` on a server page so the filters survive. Row links that open a reader keep `?page=` (`withPageParam`), and `useUrlParams` drops `page` on every filter/sort write so a new filter starts on page 1.
+- When paging isn't worth it (a capped scan, a match with a post-filter), fetch `cap + 1`, return a `truncated` flag, and render `<TruncationNotice>` saying how many are shown and how to narrow. Never compare `rows.length` to a literal; use the exported constant.
+- Examples: `listThreads` + `/communication`, `listMatters` + `/matters`, `listLeads` (closed history) + `/intake`, `getNotificationsFeed` + `/notifications`.
+
 ### Per-browser UI preferences (localStorage)
 - For small conveniences only (a collapsed rail, a remembered toggle), never data.
 - Read with `useSyncExternalStore(subscribe, readFromStorage, () => default)`: the server snapshot is the default, so there's no hydration mismatch and no setState-in-effect. Write with a helper that saves and dispatches a custom window event the subscriber listens to (plus `storage` for other tabs).

@@ -17,6 +17,8 @@
  */
 
 import { cn } from "@/lib/utils";
+import { withPageParam, type Page } from "@/lib/pagination";
+import { Pager } from "@/components/shared/pager";
 import { EmbeddedThreadList } from "./embedded-thread-list";
 import { ThreadReader } from "./thread-reader";
 import type {
@@ -34,6 +36,7 @@ export function EmbeddedInbox({
   emptyHint,
   showMatterChip = true,
   tz = null,
+  paging,
 }: {
   threads: ThreadListRow[];
   selectedThread: ThreadDetail | null;
@@ -49,8 +52,12 @@ export function EmbeddedInbox({
   /** Viewer's IANA zone — message timestamps are real instants
    *  (ADR-012); forwarded to the list + reader panes. */
   tz?: string | null;
+  /** Page metadata when the list is paged (`?page=N`); thread hrefs
+   *  keep the page so opening a thread doesn't jump back to page 1. */
+  paging?: Pick<Page<unknown>, "page" | "pageCount" | "total" | "pageSize">;
 }) {
-  const threadHref = (id: string): string => `${basePath}?thread=${id}`;
+  const threadHref = (id: string): string =>
+    withPageParam(`${basePath}?thread=${id}`, paging?.page ?? 1);
 
   return (
     <div className="flex gap-4 flex-1 min-h-0">
@@ -70,6 +77,9 @@ export function EmbeddedInbox({
           selectedThreadId={selectedThread?.id ?? null}
           tz={tz}
         />
+        {paging && (
+          <Pager {...paging} href={basePath} className="mt-2 shrink-0" />
+        )}
       </div>
 
       {/* Right pane: reader (below lg only once a thread is selected) */}

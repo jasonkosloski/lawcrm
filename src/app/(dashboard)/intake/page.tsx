@@ -33,7 +33,12 @@ import {
 } from "@/lib/queries/leads";
 import { requireUser } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
-import { sortIntakeQueue } from "@/lib/queries/leads";
+import {
+  ACTIVE_LEADS_SAFETY_CAP,
+  sortIntakeQueue,
+} from "@/lib/queries/leads";
+import { parsePageParam } from "@/lib/pagination";
+import { Pager, TruncationNotice } from "@/components/shared/pager";
 import { describeStatuteRemaining } from "@/lib/lead-statute";
 
 const ASSESSMENT_LABEL: Record<string, string> = {
@@ -172,14 +177,18 @@ function AssessmentBadges({ row }: { row: LeadListRow }) {
   );
 }
 
-export default async function IntakePage() {
+export default async function IntakePage({
+  searchParams,
+}: PageProps<"/intake">) {
   await requireUser();
+  const sp = await searchParams;
   const [leads, summary, canCreate] = await Promise.all([
-    listLeads(),
+    // `?page=` pages the closed history; active leads always show.
+    listLeads(undefined, parsePageParam(sp.page)),
     getLeadSummary(),
     currentUserHasPermission("intake.create"),
   ]);
-  const sorted = sortIntakeQueue(leads);
+  const sorted = sortIntakeQueue(leads.rows);
 
   const crumbBits = [
     `${summary.activeCount} active`,
@@ -203,7 +212,14 @@ export default async function IntakePage() {
         }
       />
 
-      <div className="flex-1 overflow-y-auto p-3 sm:p-5 animate-page-enter">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-5 animate-page-enter flex flex-col gap-3">
+        {leads.activeTruncated && (
+          <TruncationNotice
+            shown={ACTIVE_LEADS_SAFETY_CAP}
+            total={summary.activeCount}
+            hint="Only the newest active leads are listed — close out or convert stale leads to bring the rest into view."
+          />
+        )}
         {/* Mobile: card stack. The 8-col leads table doesn't
             survive a phone, so we collapse to one card per lead
             with the most-glanceable bits (name, source, score,
@@ -330,6 +346,13 @@ export default async function IntakePage() {
             </TableBody>
           </Table>
         </Card>
+
+        <Pager
+          {...leads.closed}
+          href="/intake"
+          prevLabel="Newer closed"
+          nextLabel="Older closed"
+        />
       </div>
     </>
   );

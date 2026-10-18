@@ -9,12 +9,12 @@
  *   2. Non-search filters (practice area, archived default, terminal
  *      stages hidden unless showClosed) constrain the count exactly
  *      like they constrain the list.
- *   3. The count is NOT subject to LIST_MATTERS_CAP — with more
- *      matters than the cap, listMatters truncates but countMatters
- *      reports the true total.
+ *   3. The count is NOT subject to paging — with more matters than a
+ *      page, listMatters returns page 1 but countMatters reports the
+ *      true total.
  *
  * listMatters: search and sort run over EVERY matching matter before
- * the cap; deadline windows are calendar days in the viewer's zone
+ * paging, and later pages continue the sorted result; deadline windows are calendar days in the viewer's zone
  * (due-today is not overdue; overdue is negative, not clamped to 0).
  */
 
@@ -151,14 +151,14 @@ describe("countMatters", () => {
     ).toBe(3);
   });
 
-  test("not capped: reports the true total past LIST_MATTERS_CAP", async () => {
+  test("not paged: reports the true total past LIST_MATTERS_PAGE_SIZE", async () => {
     await seedMatters(205);
 
-    const [rows, count] = await Promise.all([
+    const [{ rows }, count] = await Promise.all([
       listMatters(EMPTY_FILTER, { field: "created", dir: "desc" }, userId),
       countMatters(EMPTY_FILTER, userId),
     ]);
-    expect(rows).toHaveLength(200); // list is capped…
+    expect(rows).toHaveLength(200); // page 1 holds one page…
     expect(count).toBe(205); // …the denominator is not
   });
 });
@@ -183,7 +183,7 @@ describe("listMatters search + sort run before the row cap (F289/F305/F322/F344)
     });
     await seedMatters(205);
 
-    const byName = await listMatters(
+    const { rows: byName } = await listMatters(
       { ...EMPTY_FILTER, q: "alvarez" },
       byCreated,
       userId,
@@ -191,7 +191,7 @@ describe("listMatters search + sort run before the row cap (F289/F305/F322/F344)
     );
     expect(byName.map((r) => r.name)).toEqual(["Alvarez v. City"]);
 
-    const byCase = await listMatters(
+    const { rows: byCase } = await listMatters(
       { ...EMPTY_FILTER, q: "2019cv" },
       byCreated,
       userId,
@@ -214,7 +214,7 @@ describe("listMatters search + sort run before the row cap (F289/F305/F322/F344)
     });
     await seedMatters(205);
 
-    const rows = await listMatters(
+    const { rows } = await listMatters(
       EMPTY_FILTER,
       { field: "name", dir: "asc" },
       userId,
@@ -224,6 +224,29 @@ describe("listMatters search + sort run before the row cap (F289/F305/F322/F344)
     expect(rows[0]!.name).toBe("AAA first alphabetically");
   });
 
+  test("page 2 continues the sorted result with no overlap", async () => {
+    await prisma.matter.create({
+      data: {
+        name: "zzz last alphabetically",
+        practiceAreaId: areaId,
+        stageId,
+        feeStructure: "hourly",
+      },
+    });
+    await seedMatters(205);
+    const byName = { field: "name", dir: "asc" } as const;
+
+    const p1 = await listMatters(EMPTY_FILTER, byName, userId, "UTC", 1);
+    const p2 = await listMatters(EMPTY_FILTER, byName, userId, "UTC", 2);
+    expect(p1).toMatchObject({ total: 206, pageCount: 2, scanLimited: false });
+    expect(p2.rows).toHaveLength(6);
+    expect(p2.rows.at(-1)!.name).toBe("zzz last alphabetically");
+    const seen = new Set(p1.rows.map((r) => r.id));
+    expect(p2.rows.some((r) => seen.has(r.id))).toBe(false);
+    // Past the end clamps to the last page.
+    expect((await listMatters(EMPTY_FILTER, byName, userId, "UTC", 9)).page).toBe(2);
+  });
+
   test("search treats LIKE wildcards literally", async () => {
     for (const name of ["50% off", "50x off", "a_b", "axb"]) {
       await prisma.matter.create({
@@ -231,7 +254,7 @@ describe("listMatters search + sort run before the row cap (F289/F305/F322/F344)
       });
     }
     const find = async (q: string) =>
-      (await listMatters({ ...EMPTY_FILTER, q }, byCreated, userId, "UTC"))
+      (await listMatters({ ...EMPTY_FILTER, q }, byCreated, userId, "UTC")).rows
         .map((r) => r.name)
         .sort();
 
@@ -253,7 +276,7 @@ describe("listMatters search + sort run before the row cap (F289/F305/F322/F344)
     });
     await prisma.userMatterPin.create({ data: { userId, matterId: z.id } });
 
-    const asc = await listMatters(
+    const { rows: asc } = await listMatters(
       EMPTY_FILTER,
       { field: "name", dir: "asc" },
       userId,
@@ -295,7 +318,7 @@ describe("listMatters deadline math is calendar-day, in the viewer's zone (F304/
     await matterDue("in 8 days", "2026-05-05");
     await matterDue("in 20 days", "2026-05-17");
 
-    const all = await listMatters(
+    const { rows: all } = await listMatters(
       EMPTY_FILTER,
       { field: "deadline", dir: "asc" },
       userId,
@@ -318,7 +341,7 @@ describe("listMatters deadline math is calendar-day, in the viewer's zone (F304/
       "in 20 days",
     ]);
 
-    const overdue = await listMatters(
+    const { rows: overdue } = await listMatters(
       { ...EMPTY_FILTER, deadline: "overdue" },
       byCreated,
       userId,
@@ -326,7 +349,7 @@ describe("listMatters deadline math is calendar-day, in the viewer's zone (F304/
     );
     expect(names(overdue)).toEqual(["late 12"]);
 
-    const w7 = await listMatters(
+    const { rows: w7 } = await listMatters(
       { ...EMPTY_FILTER, deadline: "within-7d" },
       byCreated,
       userId,
@@ -335,7 +358,7 @@ describe("listMatters deadline math is calendar-day, in the viewer's zone (F304/
     // Open at the low end: the overdue matter stays in the window.
     expect(names(w7)).toEqual(["due today", "due tomorrow", "late 12"]);
 
-    const w30 = await listMatters(
+    const { rows: w30 } = await listMatters(
       { ...EMPTY_FILTER, deadline: "within-30d" },
       byCreated,
       userId,
@@ -355,7 +378,7 @@ describe("listMatters deadline math is calendar-day, in the viewer's zone (F304/
     vi.useFakeTimers({ now: new Date("2026-04-28T02:00:00Z"), toFake: ["Date"] });
     await matterDue("apr 27", "2026-04-27");
 
-    const denver = await listMatters(
+    const { rows: denver } = await listMatters(
       { ...EMPTY_FILTER, deadline: "overdue" },
       byCreated,
       userId,
@@ -363,7 +386,7 @@ describe("listMatters deadline math is calendar-day, in the viewer's zone (F304/
     );
     expect(denver).toHaveLength(0);
 
-    const utc = await listMatters(
+    const { rows: utc } = await listMatters(
       { ...EMPTY_FILTER, deadline: "overdue" },
       byCreated,
       userId,
@@ -379,7 +402,7 @@ describe("listMatters deadline math is calendar-day, in the viewer's zone (F304/
       where: { matterId: id },
       data: { status: "completed" },
     });
-    const rows = await listMatters(
+    const { rows } = await listMatters(
       { ...EMPTY_FILTER, deadline: "none" },
       byCreated,
       userId,

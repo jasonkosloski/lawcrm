@@ -12,11 +12,10 @@
  * Next.js 16: `searchParams` is a Promise that must be awaited.
  */
 
-import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { TopBar } from "@/components/layout/topbar";
 import { NotificationsFeed } from "@/components/notifications/notifications-feed";
-import { cn } from "@/lib/utils";
+import { Pager } from "@/components/shared/pager";
+import { parsePageParam } from "@/lib/pagination";
 import {
   getNotificationsFeed,
   NOTIFICATIONS_PAGE_SIZE,
@@ -32,12 +31,9 @@ export default async function NotificationsPage({
   await requireUser();
   const sp = await searchParams;
   const [feed, tz] = await Promise.all([
-    getNotificationsFeed(Number(sp.page ?? "1")),
+    getNotificationsFeed(parsePageParam(sp.page)),
     getCurrentUserTimeZone(),
   ]);
-
-  const rangeStart = (feed.page - 1) * NOTIFICATIONS_PAGE_SIZE + 1;
-  const rangeEnd = Math.min(feed.total, feed.page * NOTIFICATIONS_PAGE_SIZE);
 
   return (
     <>
@@ -55,60 +51,17 @@ export default async function NotificationsPage({
             asOf={feed.asOf}
           />
 
-          {/* Pager — only when there's more than one page. */}
-          {feed.pageCount > 1 && (
-            <div className="flex items-center justify-between text-2xs font-mono text-ink-4">
-              <PagerLink
-                href={`/notifications?page=${feed.page - 1}`}
-                disabled={feed.page <= 1}
-              >
-                <ChevronLeft size={12} />
-                Newer
-              </PagerLink>
-              <span>
-                {rangeStart}–{rangeEnd} of {feed.total} · page {feed.page}/
-                {feed.pageCount}
-              </span>
-              <PagerLink
-                href={`/notifications?page=${feed.page + 1}`}
-                disabled={feed.page >= feed.pageCount}
-              >
-                Older
-                <ChevronRight size={12} />
-              </PagerLink>
-            </div>
-          )}
+          <Pager
+            page={feed.page}
+            pageCount={feed.pageCount}
+            total={feed.total}
+            pageSize={NOTIFICATIONS_PAGE_SIZE}
+            href="/notifications"
+            prevLabel="Newer"
+            nextLabel="Older"
+          />
         </div>
       </div>
     </>
-  );
-}
-
-function PagerLink({
-  href,
-  disabled,
-  children,
-}: {
-  href: string;
-  disabled: boolean;
-  children: React.ReactNode;
-}) {
-  const cls = cn(
-    "inline-flex items-center gap-1 px-2 py-1 rounded-md border",
-    disabled
-      ? "border-line/60 text-ink-4/60 cursor-default"
-      : "border-line-2 bg-white text-ink-3 hover:border-brand-300 hover:text-brand-700 transition-colors"
-  );
-  if (disabled) {
-    return (
-      <span className={cls} aria-disabled="true">
-        {children}
-      </span>
-    );
-  }
-  return (
-    <Link href={href} className={cls}>
-      {children}
-    </Link>
   );
 }

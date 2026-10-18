@@ -14,6 +14,9 @@
  * settles, so back/forward and link navigation never leave a stale base.
  * `mutate` receives that base, so callers can branch on the latest state
  * (e.g. a sort header's asc -> desc -> clear cycle).
+ *
+ * Every write drops `?page=` (src/lib/pagination.ts): a changed filter,
+ * sort or view is a new result, which starts on page 1.
  */
 
 "use client";
@@ -44,6 +47,7 @@ export function useUrlParams() {
   const setParams = useCallback(
     (mutate: (params: URLSearchParams) => void) => {
       const next = new URLSearchParams(inFlight.current ?? committedRef.current);
+      next.delete("page");
       mutate(next);
       const query = next.toString();
       inFlight.current = query;

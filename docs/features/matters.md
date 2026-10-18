@@ -15,7 +15,7 @@ Related: [ADR-006](../decisions/006-matter-urls-use-cuid-not-slug.md), [ADR-010]
 > Scope note: each matter-detail tab is its own substantial area, not one line item. "Shipped" below means the tab exists and renders real data; deeper work (create/edit flows, rich text, drag-drop, in-tab search, OCR, deadline auto-generation, conflict checks) belongs to dedicated phases.
 
 - [x] **Matters list — route + table** — route, table, real data, click-through to detail.
-- [x] **Matters list — sort & filter** — URL-backed state (ADR-007/009), 8 filter dimensions, sortable column headers. Search and sort apply before the 200-row cap; pinned matters sort first; deadline windows use the viewer's calendar day.
+- [x] **Matters list — sort & filter** — URL-backed state (ADR-007/009), 8 filter dimensions, sortable column headers. Search and sort apply before paging (`?page=N`, 200 per page); past the 5,000-row in-memory sort bound the page says so; pinned matters sort first; deadline windows use the viewer's calendar day.
 - [x] **Matters list — Table / Kanban toggle** — segmented control, URL-backed (`?view=kanban`). Kanban shows one column per stage present in the filtered result (empty stages get no column); cards show area/fee/lead/trust/next deadline.
 - [x] **Pin toggle** — per-user pin/unpin (ADR-010); server action + revalidation; sidebar updates live.
 - [x] **Overview tab** — case facts; team roster (active in brand color, former dimmed with "(former)"); preview cards for upcoming deadlines and open tasks; the full Notes section (since 2026-10-18, same composer and list as the Notes tab); Clients card with contact info. Trust/WIP facts need `billing.view` (ADR-038).

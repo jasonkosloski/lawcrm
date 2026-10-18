@@ -14,6 +14,7 @@
  */
 
 import { cache } from "react";
+import { paginateArray, type Page } from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
 import { toSolPeriod } from "@/lib/sol";
 import { getCurrentUserId } from "@/lib/current-user";
@@ -234,30 +235,37 @@ function makeComparator(sort: MattersSort) {
   };
 }
 
-/// Maximum rows listMatters returns — covers a small/mid firm without a
-/// real pagination UI. The cap is applied AFTER search, filters and
-/// sort, so it can only truncate the tail of the user's own result
-/// (the page shows "N of M" from countMatters). When a firm hits it,
-/// build "Load more" / page controls.
-const LIST_MATTERS_CAP = 200;
+/// Rows per page of the matters list (`?page=N`, src/lib/pagination.ts).
+/// Paging applies AFTER search, filters and sort, so page 2 is the
+/// continuation of the user's own sorted result.
+export const LIST_MATTERS_PAGE_SIZE = 200;
 
 /// Safety bound on how many matching rows are pulled to sort in
 /// memory (the sorts mirror localeCompare and derived fields the DB
-/// can't order by). Rows are narrow; the newest are kept past it.
-const LIST_MATTERS_SCAN_LIMIT = 5000;
+/// can't order by). Rows are narrow; the newest are kept past it, and
+/// the result reports `scanLimited` so the page can say so.
+export const LIST_MATTERS_SCAN_LIMIT = 5000;
+
+export type MattersPage = Page<MatterListRow> & {
+  /** True when more than LIST_MATTERS_SCAN_LIMIT rows matched: only
+   *  the newest were sorted and paged. */
+  scanLimited: boolean;
+};
 
 /**
  * Matters matching `filter`, sorted by `sort` (pinned always first),
- * at most LIST_MATTERS_CAP rows. Text search and every filter run in
- * the database; only the ordering is applied in memory, over all
- * matching rows, before the cap.
+ * one LIST_MATTERS_PAGE_SIZE page at a time. Text search and every
+ * filter run in the database; only the ordering is applied in memory,
+ * over all matching rows (up to the scan bound), before paging.
  */
 export async function listMatters(
   filter: MattersFilter = EMPTY_FILTER,
   sort: MattersSort = { field: "created", dir: "desc" },
   currentUserId?: string,
-  tz?: string
-): Promise<MatterListRow[]> {
+  tz?: string,
+  /** 1-based `?page=`; clamped into range. */
+  page = 1
+): Promise<MattersPage> {
   const userId = currentUserId ?? (await getCurrentUserId());
   const zone = tz ?? (await getCurrentUserTimeZone());
   const canViewTrust = await userCanViewTrust(userId);
@@ -273,7 +281,8 @@ export async function listMatters(
   };
   const matters = await prisma.matter.findMany({
     where,
-    take: LIST_MATTERS_SCAN_LIMIT,
+    // One past the bound detects that it was hit.
+    take: LIST_MATTERS_SCAN_LIMIT + 1,
     // Newest first so the safety bound (if ever hit) drops the oldest.
     orderBy: { createdAt: "desc" },
     include: {
@@ -300,11 +309,8 @@ export async function listMatters(
     },
   });
 
-  if (matters.length >= LIST_MATTERS_SCAN_LIMIT) {
-    console.warn(
-      `listMatters: scan limit ${LIST_MATTERS_SCAN_LIMIT} reached; the oldest matches are not sorted or shown`
-    );
-  }
+  const scanLimited = matters.length > LIST_MATTERS_SCAN_LIMIT;
+  if (scanLimited) matters.length = LIST_MATTERS_SCAN_LIMIT;
 
   const rows: MatterListRow[] = matters.map((m) => ({
     id: m.id,
@@ -330,12 +336,15 @@ export async function listMatters(
     createdAt: m.createdAt,
   }));
 
-  return rows.sort(makeComparator(sort)).slice(0, LIST_MATTERS_CAP);
+  return {
+    ...paginateArray(rows.sort(makeComparator(sort)), page, LIST_MATTERS_PAGE_SIZE),
+    scanLimited,
+  };
 }
 
 /**
  * Count of matters matching `filter`, evaluated entirely in the DB —
- * not subject to LIST_MATTERS_CAP. Uses the same `buildWhere` as
+ * not subject to paging or LIST_MATTERS_SCAN_LIMIT. Uses the same `buildWhere` as
  * `listMatters` (text search included), so it is the exact "showing N
  * of M" denominator for what the list can return.
  */
