@@ -71,6 +71,11 @@ const SECTIONS: NavSection[] = [
         href: "/settings/templates",
         label: "Document templates",
       },
+      {
+        href: "/settings/records-types",
+        label: "Records request types",
+        requires: "records.types.manage",
+      },
       // Integrations is self-service — connecting YOUR OWN mailbox
       // is identity-scoped like profile/notifications, so everyone
       // sees it. Billing & rates stays a placeholder gated on
