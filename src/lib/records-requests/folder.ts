@@ -81,6 +81,63 @@ async function findOrCreateChild(
   return created.id;
 }
 
+/** Link pre-existing request folders under an adopted legacy root, the
+ *  way the migration backfill does: each child becomes `records_request`
+ *  for the request owning the most documents tagged in it or its direct
+ *  subfolders (ties -> earliest request); childless-of-tags stay
+ *  unmarked; role subfolders get the matching kind and the same link. */
+export async function linkRecordsFoldersUnder(
+  tx: Tx,
+  where: ScopeWhere,
+  rootId: string,
+): Promise<void> {
+  const children = await tx.documentFolder.findMany({
+    where: { ...where, parentId: rootId },
+    select: { id: true },
+  });
+  for (const child of children) {
+    const subs = await tx.documentFolder.findMany({
+      where: { ...where, parentId: child.id },
+      select: { id: true, name: true },
+    });
+    const tagged = await tx.document.findMany({
+      where: {
+        folderId: { in: [child.id, ...subs.map((f) => f.id)] },
+        recordsRequestId: { not: null },
+      },
+      select: { recordsRequestId: true },
+    });
+    if (tagged.length === 0) continue;
+    const counts = new Map<string, number>();
+    for (const d of tagged) {
+      const id = d.recordsRequestId as string;
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+    const best = Math.max(...counts.values());
+    const winner = await tx.recordsRequest.findFirst({
+      where: {
+        id: { in: [...counts].filter(([, n]) => n === best).map(([id]) => id) },
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true },
+    });
+    if (!winner) continue;
+    await tx.documentFolder.update({
+      where: { id: child.id },
+      data: { systemKind: "records_request", recordsRequestId: winner.id },
+    });
+    for (const r of RECORDS_DOC_ROLES) {
+      const n = RECORDS_ROLE_INFO[r].folderName.toLowerCase();
+      for (const sub of subs.filter((f) => f.name.toLowerCase() === n)) {
+        await tx.documentFolder.update({
+          where: { id: sub.id },
+          data: { systemKind: kindForRole(r), recordsRequestId: winner.id },
+        });
+      }
+    }
+  }
+}
+
 /** `Investigation/Records Requests`, adopting a legacy root "Records"
  *  folder (moved + renamed) when it already holds request files and no
  *  "Records Requests" exists yet. A root "Records" with no request
@@ -158,6 +215,7 @@ async function resolveRecordsRoot(
           systemKind: "records_root",
         },
       });
+      await linkRecordsFoldersUnder(tx, where, legacy.id);
       return legacy.id;
     }
   }

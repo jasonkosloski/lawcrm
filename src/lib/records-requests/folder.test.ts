@@ -96,9 +96,15 @@ describe("resolveRecordsFolder", () => {
       parentId: legacy.folderId,
     });
     const r = await mkRequest();
-    await prisma.documentFolder.update({
-      where: { id: reqFolder.folderId },
-      data: { systemKind: "records_request", recordsRequestId: r.id },
+    const subA = await seedDocumentFolder({
+      matterId,
+      name: "Request documents",
+      parentId: reqFolder.folderId,
+    });
+    const subB = await seedDocumentFolder({
+      matterId,
+      name: "Responsive documents",
+      parentId: reqFolder.folderId,
     });
     await prisma.document.update({
       where: {
@@ -115,6 +121,16 @@ describe("resolveRecordsFolder", () => {
     expect(moved.name).toBe("Records Requests");
     expect(moved.parent?.name).toBe("Investigation");
     expect(moved.systemKind).toBe("records_root");
+    // Adopted children are linked, not duplicated as "(2)".
+    expect(
+      await prisma.documentFolder.findUniqueOrThrow({ where: { id: reqFolder.folderId } })
+    ).toMatchObject({ systemKind: "records_request", recordsRequestId: r.id });
+    expect(
+      await prisma.documentFolder.findUniqueOrThrow({ where: { id: subA.folderId } })
+    ).toMatchObject({ systemKind: "records_request_docs", recordsRequestId: r.id });
+    expect(
+      await prisma.documentFolder.findUniqueOrThrow({ where: { id: subB.folderId } })
+    ).toMatchObject({ systemKind: "records_responsive_docs", recordsRequestId: r.id });
   });
 
   test("a root Records folder with no request files is left alone", async () => {
