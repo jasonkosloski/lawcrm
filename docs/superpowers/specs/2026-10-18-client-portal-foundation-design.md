@@ -121,7 +121,7 @@ model PortalSession {
    - `requestPortalLink(email)` is a server action on the portal host.
    - The page always answers "If that email has portal access, a link is on its way."
    - It sends only if an enabled identity with that email has at least one live access row and the portal is on.
-   - Throttle: 3 requests per email per 15 minutes, counted from `PortalLoginToken` rows, plus 20 per IP per 15 minutes, counted from the activity log.
+   - Throttle: 3 requests per email and 20 per IP, per 15 minutes, counted from a `PortalLinkRequest` table that stores only hashed email and IP. Attempts for unknown emails are never written to the activity log (the house rule in `src/lib/auth-events.ts`).
    - Issuing a token marks the identity's earlier unused login tokens as used.
 2. **Verify**
    - The email links to `/auth/verify?token=…`.
@@ -133,8 +133,8 @@ model PortalSession {
    - Revoking an identity's last live matter access deletes all of that identity's sessions.
    - Disabling an identity, or switching the portal off firm-wide, makes `getPortalIdentity` fail closed. Disabling also deletes the sessions.
 
-**Audit:** `logActivity` rows with `type: "auth"`, never containing a token:
-- link requested (whether or not an identity matched; the detail says which, and the response never does)
+**Audit:** `ActivityLog` rows with `type: "auth"` and no staff user (`userId` null), never containing a token:
+- link requested (matched identities only)
 - signed in, signed out, link rejected (expired or used)
 - invited, revoked: these also carry `matterId`, so they show on the matter timeline.
 
