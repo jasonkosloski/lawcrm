@@ -65,6 +65,7 @@ export function PortalCard({
 }) {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [revokeError, setRevokeError] = useState<string | null>(null);
 
   const revoke = (row: PortalAccessRow) => {
     if (
@@ -74,9 +75,10 @@ export function PortalCard({
     ) {
       return;
     }
+    setRevokeError(null);
     startTransition(async () => {
       const result = await revokePortalAccess(row.accessId);
-      if (!result.ok) alert(result.error);
+      if (!result.ok) setRevokeError(result.error ?? "Couldn't revoke access.");
     });
   };
 
@@ -101,6 +103,11 @@ export function PortalCard({
           <div className="mb-2 text-2xs text-warn">
             The client portal is turned off for the firm. Turn it on in
             Settings → Firm to send invites.
+          </div>
+        )}
+        {revokeError && (
+          <div role="alert" className="mb-2 text-2xs text-warn">
+            {revokeError}
           </div>
         )}
         {rows.length === 0 ? (

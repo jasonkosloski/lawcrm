@@ -65,6 +65,12 @@ export type PortalCardData = {
 export async function getPortalCardData(
   matterId: string
 ): Promise<PortalCardData> {
+  // Same gate order as getPortalAccessForMatter: wall first (throws
+  // notFound), then the permission, before any matter-scoped query.
+  await assertMatterAccess(matterId);
+  if (!(await currentUserHasPermission("portal.view"))) {
+    return { rows: [], contacts: [], portalEnabled: false };
+  }
   const [rows, parties, firm] = await Promise.all([
     getPortalAccessForMatter(matterId),
     prisma.matterContact.findMany({

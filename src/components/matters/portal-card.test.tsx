@@ -135,6 +135,17 @@ describe("PortalCard", () => {
     expect(screen.getByText(/turned off for the firm/)).toBeTruthy();
   });
 
+  test("a failed revoke shows the error inline", async () => {
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    vi.mocked(revokePortalAccess).mockResolvedValue({
+      ok: false,
+      error: "Couldn't revoke.",
+    });
+    renderCard({ rows: [row({})] });
+    await userEvent.setup().click(screen.getByRole("button", { name: "Revoke" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("Couldn't revoke.");
+  });
+
   test("no revoke button without canRevoke or on a revoked row", () => {
     const { unmount } = renderCard({ canRevoke: false, rows: [row({})] });
     expect(screen.queryByRole("button", { name: "Revoke" })).toBeNull();
