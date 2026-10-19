@@ -107,6 +107,7 @@ model User {
 
   // Relationships
   matterAssignments     MatterTeamMember[]
+  leadAssignments       LeadTeamMember[]
   timeEntries           TimeEntry[]
   tasks                 Task[]               @relation("TaskOwner")
   activityLogs          ActivityLog[]
@@ -463,6 +464,11 @@ model Matter {
   /// per-matter (a §1988-eligible case might swap from client →
   /// fee_petition mid-life). iteration 1: schema only.
   billingMode    String       @default("client")
+  /// Ethical wall that holds even while the firm's matterVisibility is
+  /// FIRM: a restricted matter is visible only to its active team,
+  /// `matters.view_all` holders and Admins. Inherited from a restricted
+  /// lead on conversion. See ADR-049.
+  restricted     Boolean      @default(false)
   /// IOLTA trust balance for this matter. Decimal (not Float) for
   /// regulatory-grade precision — a $0.01 drift on real client trust
   /// money is a compliance violation.
@@ -782,6 +788,10 @@ model Lead {
   stage                   String    @default("new") /// new | contacted | qualifying | meeting | converted | declined | hold
   declineReason           String?
   convertedMatterId       String? /// If converted, links to the created matter
+  /// Opt-in ethical wall: when true only the lead's team
+  /// (`LeadTeamMember`), `intake.view_restricted` holders and Admins
+  /// can see the lead and anything on it. See ADR-049.
+  restricted              Boolean   @default(false)
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
@@ -805,11 +815,33 @@ model Lead {
   /// the lead converts. See Document.leadId / DocumentFolder.leadId.
   documents       Document[]       @relation("LeadDocuments")
   documentFolders DocumentFolder[] @relation("LeadDocumentFolders")
+  /// Who may see a restricted lead (ignored while unrestricted).
+  teamMembers     LeadTeamMember[]
+  activityLogs    ActivityLog[]    @relation("LeadActivity")
 
   @@index([stage])
   @@index([score])
   @@index([contactId])
   @@map("leads")
+}
+
+/// A user allowed to see a restricted lead. Roles use the matter-team
+/// vocabulary so members carry over to MatterTeamMember on conversion.
+/// Hard-deleted on removal (the activity log keeps the history).
+model LeadTeamMember {
+  id        String   @id @default(cuid())
+  leadId    String
+  userId    String
+  role      String   @default("co_counsel") /// lead | co_counsel | paralegal | investigator | of_counsel
+  addedBy   String?
+  createdAt DateTime @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([leadId, userId])
+  @@index([userId])
+  @@map("lead_team_members")
 }
 
 // =============================================================================
@@ -1332,10 +1364,6 @@ model TimeEntry {
 model Expense {
   id                String          @id @default(cuid())
   matterId          String
-  /// Optional intake-time expenses. When a Lead converts to a
-  /// Matter, expenses logged against the lead carry over via the
-  /// conversion path (not yet wired — placeholder FK ready).
-  leadId            String?
   /// User who logged the expense — drives the audit trail and the
   /// timeline-tab attribution. Required for new rows; legacy rows
   /// from a future bulk import may be null.
@@ -2016,6 +2044,9 @@ model Note {
 model ActivityLog {
   id        String   @id @default(cuid())
   matterId  String? /// Null for firm-wide events
+  /// Set on intake-lead events so lead walls can filter the firm
+  /// feed (ADR-049). Older rows were backfilled from `detail`.
+  leadId    String?
   userId    String? /// User who triggered the action (null for system events)
   type      String /// filing | email | evidence | deposition | task_complete | settlement | deposit | automation | deadline | note | document | time_entry
   icon      String? /// Icon name for display, e.g. "gavel", "mail", "dollar"
@@ -2025,9 +2056,11 @@ model ActivityLog {
   timestamp DateTime @default(now())
 
   matter Matter? @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  lead   Lead?   @relation("LeadActivity", fields: [leadId], references: [id], onDelete: SetNull)
   user   User?   @relation(fields: [userId], references: [id])
 
   @@index([matterId])
+  @@index([leadId])
   @@index([timestamp])
   @@index([matterId, timestamp])
   @@index([userId, type, timestamp])

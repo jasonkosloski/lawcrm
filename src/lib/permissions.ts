@@ -59,6 +59,12 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
           "Add or remove people from a matter's case team via the matter edit page.",
       },
       {
+        key: "matters.restrict",
+        label: "Restrict matters",
+        description:
+          "Restrict a matter to its case team even while the firm's matter visibility is Firm-wide (set on the matter edit page). View-all holders and Admins still see it. Logged.",
+      },
+      {
         key: "matters.edit",
         label: "Edit matter details",
         description:
@@ -149,6 +155,18 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         label: "Override conflict flags",
         description:
           "Mark a flagged or conflicted lead as cleared with a justification. Required for ethics compliance — the override is logged in the audit trail.",
+      },
+      {
+        key: "intake.restrict",
+        label: "Restrict intakes",
+        description:
+          "Mark an intake restricted and choose who can see it (its intake team). Everyone else gets \"not found\" on the lead and everything on it. Logged.",
+      },
+      {
+        key: "intake.view_restricted",
+        label: "View restricted intakes",
+        description:
+          "See every restricted intake even when not on its team. Admins always have it.",
       },
       {
         key: "intake.decline",

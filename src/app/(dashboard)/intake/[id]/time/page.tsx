@@ -11,9 +11,9 @@
  * the new matter (convertLeadToMatter) and this list empties.
  *
  * NO expense section, deliberately: `Expense.matterId` is still
- * required in the schema (`Expense.leadId` is an unwired
- * placeholder), so lead-only expenses can't exist yet. When that
- * column relaxes, mirror the matter tab's ExpensesSection here.
+ * required in the schema and there is no lead column (ADR-049
+ * dropped the unwired placeholder), so lead-only expenses can't exist
+ * yet. When lead expenses land, mirror the matter tab's ExpensesSection here.
  */
 
 import Link from "next/link";

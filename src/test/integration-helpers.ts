@@ -105,6 +105,7 @@ export const TABLES_IN_DELETE_ORDER = [
   "timer_sessions",
   "matters",
   // Lookups + lifecycle
+  "lead_team_members",
   "leads",
   "contact_phones",
   "contacts",
@@ -503,12 +504,19 @@ export async function seedLead(opts?: {
   name?: string;
   email?: string | null;
   contactId?: string | null;
+  restricted?: boolean;
+  /** LeadTeamMember rows (role co_counsel). */
+  teamUserIds?: string[];
 }): Promise<{ leadId: string }> {
   const lead = await prisma.lead.create({
     data: {
       name: opts?.name ?? "Test Lead",
       email: opts?.email ?? null,
       contactId: opts?.contactId ?? null,
+      restricted: opts?.restricted ?? false,
+      teamMembers: opts?.teamUserIds?.length
+        ? { create: opts.teamUserIds.map((userId) => ({ userId })) }
+        : undefined,
     },
     select: { id: true },
   });
