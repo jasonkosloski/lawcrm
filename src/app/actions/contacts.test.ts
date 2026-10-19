@@ -1692,3 +1692,79 @@ describe("reactivateContact", () => {
     ).toBe(false);
   });
 });
+
+describe("mergeContacts carries the portal identity", () => {
+  async function twoMatters() {
+    const { areaId, stageId } = await seedPracticeArea();
+    const m1 = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId, name: "Portal One" });
+    const m2 = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId, name: "Portal Two" });
+    return { m1: m1.matterId, m2: m2.matterId };
+  }
+
+  test("merge re-points a loser-only portal identity", async () => {
+    const { m1 } = await twoMatters();
+    const { contactId: loserId } = await seedContact({ name: "Loser" });
+    const { contactId: survivorId } = await seedContact({ name: "Survivor" });
+    const ident = await prisma.portalIdentity.create({
+      data: { contactId: loserId, email: "loser@example.com" },
+    });
+    await prisma.portalMatterAccess.create({
+      data: { identityId: ident.id, matterId: m1, invitedById: userId },
+    });
+
+    expect(await mergeContacts(loserId, survivorId)).toEqual({ ok: true });
+
+    const after = await prisma.portalIdentity.findUniqueOrThrow({ where: { id: ident.id } });
+    expect(after.contactId).toBe(survivorId);
+    expect(await prisma.portalIdentity.count({ where: { contactId: loserId } })).toBe(0);
+    expect(await prisma.portalMatterAccess.count({ where: { identityId: ident.id } })).toBe(1);
+  });
+
+  test("merge folds two identities: survivor keeps both matters' access; loser identity gone", async () => {
+    const { m1, m2 } = await twoMatters();
+    const { contactId: loserId } = await seedContact({ name: "Loser" });
+    const { contactId: survivorId } = await seedContact({ name: "Survivor" });
+    const revokedAt = new Date();
+    const sIdent = await prisma.portalIdentity.create({
+      data: { contactId: survivorId, email: "survivor@example.com" },
+    });
+    const lIdent = await prisma.portalIdentity.create({
+      data: { contactId: loserId, email: "loser@example.com" },
+    });
+    // m1: survivor revoked, loser live -> ends live. m2: loser only -> moves.
+    await prisma.portalMatterAccess.create({
+      data: { identityId: sIdent.id, matterId: m1, invitedById: userId, revokedAt, revokedById: userId },
+    });
+    await prisma.portalMatterAccess.create({
+      data: { identityId: lIdent.id, matterId: m1, invitedById: userId },
+    });
+    await prisma.portalMatterAccess.create({
+      data: { identityId: lIdent.id, matterId: m2, invitedById: userId },
+    });
+    await prisma.portalSession.create({
+      data: { identityId: lIdent.id, tokenHash: "sess-hash", expiresAt: new Date(Date.now() + 1e6) },
+    });
+    await prisma.portalLoginToken.create({
+      data: { identityId: lIdent.id, tokenHash: "tok-hash", purpose: "login", expiresAt: new Date(Date.now() + 1e6) },
+    });
+
+    expect(await mergeContacts(loserId, survivorId)).toEqual({ ok: true });
+
+    expect(await prisma.portalIdentity.findUnique({ where: { id: lIdent.id } })).toBeNull();
+    expect(await prisma.portalSession.count({ where: { identityId: lIdent.id } })).toBe(0);
+    expect(await prisma.portalLoginToken.count({ where: { identityId: lIdent.id } })).toBe(0);
+    const survivor = await prisma.portalIdentity.findUniqueOrThrow({ where: { id: sIdent.id } });
+    expect(survivor.email).toBe("survivor@example.com");
+    expect(survivor.disabledAt).toBeNull();
+    const rows = await prisma.portalMatterAccess.findMany({ where: { identityId: sIdent.id } });
+    expect(rows.map((r) => r.matterId).sort()).toEqual([m1, m2].sort());
+    expect(rows.every((r) => r.revokedAt === null && r.revokedById === null)).toBe(true);
+  });
+
+  test("merge with no portal identity on either side changes nothing", async () => {
+    const { contactId: loserId } = await seedContact({ name: "Loser" });
+    const { contactId: survivorId } = await seedContact({ name: "Survivor" });
+    expect(await mergeContacts(loserId, survivorId)).toEqual({ ok: true });
+    expect(await prisma.portalIdentity.count()).toBe(0);
+  });
+});

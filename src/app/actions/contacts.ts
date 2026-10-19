@@ -768,6 +768,56 @@ export async function mergeContacts(
         data: { custodianContactId: survivorId },
       });
 
+      // Portal identity (one per contact). Loser-only: re-point it.
+      // Both: the survivor's identity keeps its own email and disabled
+      // state; the loser's matter access folds in (live if either side
+      // was live), then its sessions/tokens/identity go.
+      const [loserIdentity, survivorIdentity] = await Promise.all([
+        tx.portalIdentity.findUnique({ where: { contactId: loserId } }),
+        tx.portalIdentity.findUnique({ where: { contactId: survivorId } }),
+      ]);
+      if (loserIdentity && !survivorIdentity) {
+        await tx.portalIdentity.update({
+          where: { id: loserIdentity.id },
+          data: { contactId: survivorId },
+        });
+      } else if (loserIdentity && survivorIdentity) {
+        const loserAccess = await tx.portalMatterAccess.findMany({
+          where: { identityId: loserIdentity.id },
+        });
+        for (const row of loserAccess) {
+          const keep = await tx.portalMatterAccess.findUnique({
+            where: {
+              identityId_matterId: {
+                identityId: survivorIdentity.id,
+                matterId: row.matterId,
+              },
+            },
+          });
+          if (!keep) {
+            await tx.portalMatterAccess.update({
+              where: { id: row.id },
+              data: { identityId: survivorIdentity.id },
+            });
+            continue;
+          }
+          if (keep.revokedAt && !row.revokedAt) {
+            await tx.portalMatterAccess.update({
+              where: { id: keep.id },
+              data: { revokedAt: null, revokedById: null },
+            });
+          }
+          await tx.portalMatterAccess.delete({ where: { id: row.id } });
+        }
+        await tx.portalSession.deleteMany({
+          where: { identityId: loserIdentity.id },
+        });
+        await tx.portalLoginToken.deleteMany({
+          where: { identityId: loserIdentity.id },
+        });
+        await tx.portalIdentity.delete({ where: { id: loserIdentity.id } });
+      }
+
       // Phones: move the loser's rows over, dropping numbers the
       // survivor already has. Survivor keeps its primary; incoming
       // rows land demoted, after the survivor's existing order range.
