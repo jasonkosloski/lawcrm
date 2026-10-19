@@ -288,6 +288,30 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         description:
           "Remove a person's portal access to a matter. Also allows disabling their portal login entirely (not yet available in the app).",
       },
+      {
+        key: "portal.share_documents",
+        label: "Share documents with clients",
+        description:
+          "Choose which folders and files on a matter are visible to the client in the portal, and hide individual files.",
+      },
+      {
+        key: "portal.add_requests",
+        label: "Request documents from clients",
+        description:
+          "Create document requests on a matter that appear in the client's portal.",
+      },
+      {
+        key: "portal.edit_requests",
+        label: "Manage document requests",
+        description:
+          "Edit, return, and complete document requests, and review what clients uploaded against them.",
+      },
+      {
+        key: "portal.delete_requests",
+        label: "Delete document requests",
+        description:
+          "Delete a document request. Files the client already uploaded are kept.",
+      },
     ],
   },
   {

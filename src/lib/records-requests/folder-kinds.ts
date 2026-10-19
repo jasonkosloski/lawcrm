@@ -12,6 +12,8 @@ export const FOLDER_SYSTEM_KINDS = [
   "records_request",
   "records_request_docs",
   "records_responsive_docs",
+  /** Portal client uploads ("From client"); no records request. */
+  "portal_uploads",
 ] as const;
 export type FolderSystemKind = (typeof FOLDER_SYSTEM_KINDS)[number];
 

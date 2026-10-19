@@ -47,6 +47,7 @@ enum MatterVisibility {
 
 model User {
   id                      String                   @id @default(cuid())
+  documentRequestsCreated DocumentRequest[]        @relation("DocumentRequestCreator")
   email                   String                   @unique
   /// Argon2id-hashed password. Null means the user can't log in via
   /// the credentials provider — they must use a linked OAuth account
@@ -537,6 +538,7 @@ model Matter {
   timerSessions           TimerSession[]
   documentFolders         DocumentFolder[]
   portalAccess            PortalMatterAccess[]
+  documentRequests        DocumentRequest[]
 
   @@index([stageId])
   @@index([practiceAreaId])
@@ -816,7 +818,7 @@ model Lead {
 
 /// A document associated with a matter — filings, contracts, correspondence, etc.
 model Document {
-  id                     String          @id @default(cuid())
+  id                     String           @id @default(cuid())
   /// EXACTLY ONE of matterId / leadId is set (app-enforced; see
   /// scopeOf in src/lib/record-scope.ts). An intake lead's documents
   /// re-home onto the new matter on conversion. A document shares its
@@ -829,12 +831,12 @@ model Document {
   recordsRequestId       String?
   recordsRequestRole     String?
   name                   String /// Filename or display title
-  category               String          @default("other") /// filing | pleading | correspondence | contract | intake | discovery | expert_report | evidence | vendor | archive | other
+  category               String           @default("other") /// filing | pleading | correspondence | contract | intake | discovery | expert_report | evidence | vendor | archive | other
   source                 String? /// ECF | email | email_attachment | scan | upload | generated | vendor
   fileUrl                String? /// Storage URL or local path
   contentType            String? /// MIME type, e.g. "application/pdf"
   fileSize               Int? /// Size in bytes
-  status                 String          @default("active") /// active | filed | received | review | archived
+  status                 String           @default("active") /// active | filed | received | review | archived
   uploadedBy             String? /// User ID who uploaded
   /// Folder within the matter's file tree. Null = matter root.
   /// SetNull is the backstop — the folder-delete action re-parents
@@ -854,9 +856,22 @@ model Document {
   /// When this email's attachments were extracted into documents.
   /// Null = not yet (older uploads, or extraction failed).
   attachmentsExtractedAt DateTime?
-  createdAt              DateTime        @default(now())
-  updatedAt              DateTime        @updatedAt
-  recordsRequest         RecordsRequest? @relation("RecordsRequestDocuments", fields: [recordsRequestId], references: [id], onDelete: SetNull)
+  /// Portal sharing: null = default (visible only via a shared folder),
+  /// "shared" = explicitly shared with the client, "hidden" = hidden
+  /// even inside a shared folder.
+  clientShare            String?
+  /// Set when a portal client uploaded this file. Restrict: an identity
+  /// with uploads is disabled, never deleted.
+  portalUploaderId       String?
+  /// Client-generated uuid grouping files uploaded together.
+  portalBatchId          String?
+  /// The document request this file fulfils. SetNull keeps the file.
+  documentRequestId      String?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  portalUploader         PortalIdentity?  @relation(fields: [portalUploaderId], references: [id], onDelete: Restrict)
+  documentRequest        DocumentRequest? @relation(fields: [documentRequestId], references: [id], onDelete: SetNull)
+  recordsRequest         RecordsRequest?  @relation("RecordsRequestDocuments", fields: [recordsRequestId], references: [id], onDelete: SetNull)
 
   matter             Matter?         @relation(fields: [matterId], references: [id], onDelete: Restrict)
   lead               Lead?           @relation("LeadDocuments", fields: [leadId], references: [id], onDelete: Restrict)
@@ -875,6 +890,8 @@ model Document {
   @@index([category])
   @@index([folderId])
   @@index([parentDocumentId])
+  @@index([portalUploaderId, createdAt])
+  @@index([documentRequestId])
   @@map("documents")
 }
 
@@ -2294,6 +2311,9 @@ model DocumentFolder {
   /// The records request a generated folder belongs to (SetNull; the
   /// request's delete action also clears systemKind).
   recordsRequestId String?
+  /// Portal: files in this folder (and its subfolders) are visible to
+  /// the client unless individually hidden.
+  clientShared     Boolean  @default(false)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -2453,6 +2473,29 @@ model RecordsRequestFollowUp {
 /// A client-portal login, one per Contact. `email` is the normalized
 /// (trimmed, lowercase) address invites and sign-in links go to; it may
 /// differ from the contact's own email.
+/// A staff request for documents from the client, shown in the portal.
+model DocumentRequest {
+  id           String    @id @default(cuid())
+  matterId     String
+  title        String
+  instructions String?
+  dueDate      DateTime? @db.Date
+  /// open | submitted | returned | completed (app-enforced)
+  status       String    @default("open")
+  returnNote   String?
+  createdById  String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  completedAt  DateTime?
+
+  matter    Matter     @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  createdBy User       @relation("DocumentRequestCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  documents Document[]
+
+  @@index([matterId, status])
+  @@map("document_requests")
+}
+
 model PortalIdentity {
   id         String    @id @default(cuid())
   contactId  String    @unique
@@ -2464,6 +2507,7 @@ model PortalIdentity {
   access   PortalMatterAccess[]
   tokens   PortalLoginToken[]
   sessions PortalSession[]
+  uploads  Document[]
 
   @@map("portal_identities")
 }

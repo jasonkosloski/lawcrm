@@ -48,3 +48,16 @@ describe("kindForRole", () => {
     expect(kindForRole("received_records")).toBe("records_responsive_docs");
   });
 });
+
+describe("portal_uploads folder kind", () => {
+  test("is protected and has no source link", () => {
+    expect(FOLDER_SYSTEM_KINDS).toContain("portal_uploads");
+    expect(isProtectedFolder({ systemKind: "portal_uploads" })).toBe(true);
+    expect(
+      folderSourceLink(
+        { systemKind: "portal_uploads", recordsRequestId: null },
+        { kind: "matter", matterId: "m1" }
+      )
+    ).toBeNull();
+  });
+});
