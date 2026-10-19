@@ -315,6 +315,25 @@ describe("onUploadCompleted", () => {
     mockedFolder.mockResolvedValue({ id: "fold1" } as any);
   }
 
+  test.each([
+    [
+      "a portal-shaped payload",
+      { kind: "portal", identityId: "i1", matterId: "m1", requestId: null, batchId: "b", name: "x.pdf", note: null, contentType: "application/pdf" },
+    ],
+    ["a payload without userId", { matterId: "m1", folderId: null, name: "x.pdf", contentType: "application/pdf" }],
+  ])("%s: blob deleted, no row, no throw", async (_label, p) => {
+    wireCompletion();
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockedDel.mockResolvedValue(undefined);
+    await expect(
+      onUploadCompleted({ blob: BLOB, tokenPayload: JSON.stringify(p) })
+    ).resolves.toBeUndefined();
+    expect(mockedDel).toHaveBeenCalledWith(BLOB.url);
+    expect(mockedCreate).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    errSpy.mockRestore();
+  });
+
   test("creates the Document row with the blob URL as fileUrl", async () => {
     wireCompletion();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -23,6 +23,7 @@ vi.mock("@/lib/file-storage", async () => {
     isBlobKey: (k: string) => k.startsWith("https://"),
     signedBlobUrl: vi.fn(async () => "https://signed.example/file?sig=1"),
     openReadStream: vi.fn(() => Readable.from([Buffer.from("hello")])),
+    statFile: vi.fn(async () => ({ size: 5 })),
   };
 });
 
@@ -38,7 +39,7 @@ import {
 } from "@/test/integration-helpers";
 import { PORTAL_COOKIE } from "@/lib/portal/cookie";
 import { createSession } from "@/lib/portal/sessions";
-import { openReadStream, signedBlobUrl } from "@/lib/file-storage";
+import { openReadStream, signedBlobUrl, statFile } from "@/lib/file-storage";
 import { GET } from "./route";
 
 beforeAll(() => {
@@ -105,6 +106,15 @@ describe("portal download route", () => {
     expect(res.headers.get("cache-control")).toContain("no-store");
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
     expect(openReadStream).toHaveBeenCalledWith("abc__a.pdf");
+  });
+
+  test("a local file missing from disk 404s without opening a stream", async () => {
+    const id = await doc({});
+    vi.mocked(statFile).mockResolvedValueOnce(null);
+    const res = await get(id);
+    expect(res.status).toBe(404);
+    expect(statFile).toHaveBeenCalledWith("abc__a.pdf");
+    expect(openReadStream).not.toHaveBeenCalled();
   });
 
   test("html file is still an attachment", async () => {

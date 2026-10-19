@@ -3,6 +3,7 @@ ALTER TABLE "document_folders" ADD COLUMN     "clientShared" BOOLEAN NOT NULL DE
 
 -- AlterTable
 ALTER TABLE "documents" ADD COLUMN     "clientShare" TEXT,
+ADD COLUMN     "clientNote" TEXT,
 ADD COLUMN     "documentRequestId" TEXT,
 ADD COLUMN     "portalBatchId" TEXT,
 ADD COLUMN     "portalUploaderId" TEXT;

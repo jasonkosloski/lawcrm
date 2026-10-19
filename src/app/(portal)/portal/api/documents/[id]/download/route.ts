@@ -19,6 +19,7 @@ import {
   isBlobKey,
   openReadStream,
   signedBlobUrl,
+  statFile,
 } from "@/lib/file-storage";
 
 export const dynamic = "force-dynamic";
@@ -53,6 +54,10 @@ export async function GET(
       headers: { Location: target, "Cache-Control": NO_STORE },
     });
   }
+
+  // A row whose file is gone from disk is a plain 404 for the client
+  // (the staff route answers 410 so staff can prune it).
+  if (!(await statFile(doc.fileUrl))) return notFound();
 
   let nodeStream: Readable;
   try {

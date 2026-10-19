@@ -15,7 +15,7 @@ vi.mock("@vercel/blob", async (importOriginal) => {
 });
 
 import { NextRequest } from "next/server";
-import { del, head } from "@vercel/blob";
+import { BlobNotFoundError, del, head } from "@vercel/blob";
 import { getPayloadFromClientToken, handleUpload } from "@vercel/blob/client";
 import { getPortalIdentity } from "@/lib/portal-access";
 import { deleteFile } from "@/lib/file-storage";
@@ -129,6 +129,26 @@ describe("onBeforeGenerateToken: gates", () => {
     const err = await tokenError(KEY, payload({ requestId }));
     expect(err.status).toBe(409);
     expect(err.message).toBe("This request was closed by the firm.");
+  });
+
+  test("a request this batch answered and staff sent back since -> 409", async () => {
+    const requestId = await request("open");
+    await prisma.document.create({
+      data: {
+        matterId,
+        name: "first.pdf",
+        source: "portal",
+        portalUploaderId: identityId,
+        portalBatchId: BATCH,
+        documentRequestId: requestId,
+      },
+    });
+    await prisma.documentRequest.update({ where: { id: requestId }, data: { returnNote: "Wrong year" } });
+    expect((await tokenError(KEY, payload({ requestId }))).status).toBe(409);
+    // A new batch may resubmit it.
+    await expect(
+      onBeforeGenerateToken(KEY, payload({ requestId, batchId: "33333333-3333-4333-8333-333333333333" }), false)
+    ).resolves.toBeTruthy();
   });
 
   test("a disallowed type -> 400 with the rejection copy", async () => {
@@ -346,6 +366,37 @@ describe("onUploadCompleted (signed webhook: no portal cookie)", () => {
       complete(JSON.stringify({ matterId, folderId: null, name: "x.pdf", userId, contentType: "application/pdf" }))
     ).rejects.toThrow();
     expect(await prisma.document.count()).toBe(0);
+  });
+
+  test("redelivery after the blob was refused and deleted: head 404 -> clean return", async () => {
+    const tp = await signedPayload();
+    vi.mocked(head).mockRejectedValue(new BlobNotFoundError());
+    await expect(complete(tp)).resolves.toBeUndefined();
+    expect(await prisma.document.count()).toBe(0);
+  });
+
+  test("other head() failures still throw so Vercel retries", async () => {
+    const tp = await signedPayload();
+    vi.mocked(head).mockRejectedValue(new Error("network"));
+    await expect(complete(tp)).rejects.toThrow("network");
+  });
+
+  test("a blob key with a disallowed type is deleted, no row", async () => {
+    const tp = await signedPayload();
+    vi.mocked(head).mockResolvedValue({ size: 10 } as Awaited<ReturnType<typeof head>>);
+    await onUploadCompleted({
+      blob: {
+        url: "https://store.public.blob.vercel-storage.com/AAAAAAAAAAAAAAAA__x.exe",
+        downloadUrl: "",
+        pathname: "AAAAAAAAAAAAAAAA__x.exe",
+        contentType: "application/octet-stream",
+        contentDisposition: "",
+        etag: "e",
+      },
+      tokenPayload: tp,
+    } as Parameters<typeof onUploadCompleted>[0]);
+    expect(await prisma.document.count()).toBe(0);
+    expect(del).toHaveBeenCalledWith("https://store.public.blob.vercel-storage.com/AAAAAAAAAAAAAAAA__x.exe");
   });
 
   test("a disallowed type in a payload is refused at completion too", async () => {

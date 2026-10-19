@@ -867,6 +867,8 @@ model Document {
   portalBatchId          String?
   /// The document request this file fulfils. SetNull keeps the file.
   documentRequestId      String?
+  /// The portal client's "What is this?" note on their upload (max 500).
+  clientNote             String?
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
   portalUploader         PortalIdentity?  @relation(fields: [portalUploaderId], references: [id], onDelete: Restrict)

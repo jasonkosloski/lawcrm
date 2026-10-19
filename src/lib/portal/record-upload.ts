@@ -96,8 +96,10 @@ export async function checkPortalUploadTarget(input: {
     if (!request) return { ok: false, status: 404, error: "Request not found." };
     // A batch's later files may follow the first one, which already moved
     // the request to submitted.
-    const sameBatch =
-      request.status === "submitted" &&
+    // Open: allowed unless this batch already answered it (then staff sent
+    // it back after the batch started). Submitted: only for later files of
+    // the batch that submitted it.
+    const batchAnswered =
       (await prisma.document.count({
         where: {
           documentRequestId: input.requestId,
@@ -105,7 +107,10 @@ export async function checkPortalUploadTarget(input: {
           portalUploaderId: input.identityId,
         },
       })) > 0;
-    if (request.status !== "open" && !sameBatch) {
+    const allowed =
+      (request.status === "open" && !batchAnswered) ||
+      (request.status === "submitted" && batchAnswered);
+    if (!allowed) {
       return { ok: false, status: 409, error: REQUEST_CLOSED_ERROR };
     }
   }
@@ -159,26 +164,36 @@ async function claimRequest(
   input: RecordPortalUploadInput
 ): Promise<boolean> {
   if (!input.requestId) return false;
-  const moved = await tx.documentRequest.updateMany({
+  const batchFiles = {
+    portalBatchId: input.batchId,
+    portalUploaderId: input.identityId,
+  };
+  // A new submission: open (possibly sent back) and not already answered
+  // by this batch. Clears the staff returnNote.
+  const submitted = await tx.documentRequest.updateMany({
     where: {
       id: input.requestId,
       matterId: input.matterId,
-      OR: [
-        { status: "open" },
-        {
-          status: "submitted",
-          documents: {
-            some: {
-              portalBatchId: input.batchId,
-              portalUploaderId: input.identityId,
-            },
-          },
-        },
-      ],
+      status: "open",
+      documents: { none: batchFiles },
     },
     data: { status: "submitted", returnNote: null },
   });
-  return moved.count === 1;
+  if (submitted.count === 1) return true;
+  // A later file of the batch that submitted it: link only while it is
+  // still submitted. If staff sent it back (open + returnNote) since the
+  // batch started, the file lands unlinked and the note stays. The no-op
+  // write takes the row lock so a racing staff transition can't interleave.
+  const continued = await tx.documentRequest.updateMany({
+    where: {
+      id: input.requestId,
+      matterId: input.matterId,
+      status: "submitted",
+      documents: { some: batchFiles },
+    },
+    data: { status: "submitted" },
+  });
+  return continued.count === 1;
 }
 
 type Outcome =
@@ -262,6 +277,7 @@ export async function recordPortalUpload(
         portalUploaderId: input.identityId,
         portalBatchId: input.batchId,
         documentRequestId: linked ? input.requestId : null,
+        clientNote: note,
       },
       select: { id: true },
     });

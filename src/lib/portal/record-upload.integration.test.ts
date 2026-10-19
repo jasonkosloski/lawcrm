@@ -80,6 +80,7 @@ describe("recordPortalUpload", () => {
     if (!r.ok) return;
     const doc = await prisma.document.findUniqueOrThrow({ where: { id: r.documentId }, include: { folder: true } });
     expect(doc).toMatchObject({
+      clientNote: "My lease",
       matterId,
       leadId: null,
       name: "a.pdf",
@@ -124,6 +125,9 @@ describe("recordPortalUpload", () => {
     expect((await prisma.document.findUniqueOrThrow({ where: { id: r.documentId } })).folderId).toBe(oldest.id);
   });
 
+  // Smoke test only, NOT a regression guard for the advisory lock: it also
+  // passes with the lock removed (the test pool doesn't produce the race
+  // reliably). The lock's correctness rests on the code review.
   test("concurrent first uploads create exactly one folder and one notification per member", async () => {
     const results = await Promise.all([
       recordPortalUpload(input()),
@@ -156,6 +160,39 @@ describe("recordPortalUpload", () => {
     // A different batch is not part of that submission.
     const other = await recordPortalUpload(input({ requestId, batchId: BATCH2 }));
     expect(other).toMatchObject({ ok: true, requestClosed: true });
+  });
+
+  test("the note is capped at 500 characters; blank means null", async () => {
+    const long = await recordPortalUpload(input({ note: "x".repeat(600) }));
+    const blank = await recordPortalUpload(input({ note: "   " }));
+    if (!long.ok || !blank.ok) throw new Error("upload failed");
+    expect((await prisma.document.findUniqueOrThrow({ where: { id: long.documentId } })).clientNote).toHaveLength(500);
+    expect((await prisma.document.findUniqueOrThrow({ where: { id: blank.documentId } })).clientNote).toBeNull();
+  });
+
+  test("a late file of a batch never re-submits a request sent back since, nor clears its note", async () => {
+    const requestId = await request("open");
+    await recordPortalUpload(input({ requestId }));
+    // Staff send it back while the batch is still uploading.
+    await prisma.documentRequest.update({
+      where: { id: requestId },
+      data: { status: "open", returnNote: "Wrong year" },
+    });
+    const late = await recordPortalUpload(input({ requestId }));
+    expect(late).toMatchObject({ ok: true, requestClosed: true });
+    if (!late.ok) return;
+    expect((await prisma.document.findUniqueOrThrow({ where: { id: late.documentId } })).documentRequestId).toBeNull();
+    expect(await prisma.documentRequest.findUniqueOrThrow({ where: { id: requestId } })).toMatchObject({
+      status: "open",
+      returnNote: "Wrong year",
+    });
+    // A NEW batch is a real resubmission: it submits and clears the note.
+    const fresh = await recordPortalUpload(input({ requestId, batchId: BATCH2 }));
+    expect(fresh).toMatchObject({ ok: true, requestClosed: false });
+    expect(await prisma.documentRequest.findUniqueOrThrow({ where: { id: requestId } })).toMatchObject({
+      status: "submitted",
+      returnNote: null,
+    });
   });
 
   test("cancelled request: file lands unlinked, requestClosed true", async () => {

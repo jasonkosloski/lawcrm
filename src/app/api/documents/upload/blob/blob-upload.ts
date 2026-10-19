@@ -295,6 +295,17 @@ export const onUploadCompleted: NonNullable<
   // handleUpload verified the callback signature.
   const t = JSON.parse(tokenPayload) as TokenPayload;
 
+  // A portal token (src/app/(portal)/portal/api/documents/upload/blob) is
+  // signed with the same store token, so its callback would verify here if
+  // it were ever misrouted. It names no staff uploader: never file it as a
+  // staff document. Delete the blob and succeed so Vercel stops retrying.
+  const shape = t as Partial<TokenPayload> & { kind?: unknown };
+  if (shape.kind === "portal" || typeof shape.userId !== "string" || !shape.userId) {
+    console.error("[blob-upload] non-staff token payload on the staff route; blob removed");
+    await del(blob.url).catch(() => {});
+    return;
+  }
+
   // Redelivery: the row for this blob already exists.
   const existing = await prisma.document.findFirst({
     where: { fileUrl: blob.url },

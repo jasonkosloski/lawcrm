@@ -23,7 +23,7 @@
  * the proxy rewrites it back here.
  */
 
-import { del, head } from "@vercel/blob";
+import { BlobNotFoundError, del, head } from "@vercel/blob";
 import type { HandleUploadOptions } from "@vercel/blob/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -164,21 +164,33 @@ export const onUploadCompleted: NonNullable<HandleUploadOptions["onUploadComplet
     });
     if (existing) return;
 
-    const meta = await head(blob.url);
+    // A redelivery after we refused (and deleted) the blob finds nothing:
+    // succeed so Vercel stops retrying.
+    let meta: Awaited<ReturnType<typeof head>>;
+    try {
+      meta = await head(blob.url);
+    } catch (err) {
+      if (err instanceof BlobNotFoundError) return;
+      throw err;
+    }
     if (meta.size === 0) {
       await del(blob.url).catch(() => {});
       return;
     }
 
     // The stored key's type must still pass (it did at token time).
-    const keyPolicy = checkPortalUpload(blob.pathname);
+    if (!checkPortalUpload(blob.pathname).ok) {
+      await del(blob.url).catch(() => {});
+      return;
+    }
+
     const result = await recordPortalUpload({
       identityId: t.identityId,
       matterId: t.matterId,
       requestId: t.requestId,
       batchId: t.batchId,
       storageKey: blob.url,
-      filename: keyPolicy.ok ? t.name : blob.pathname,
+      filename: t.name,
       contentType: t.contentType,
       size: meta.size,
       note: t.note,
