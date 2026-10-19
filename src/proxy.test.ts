@@ -155,7 +155,6 @@ describe("proxy matcher", () => {
     "/api/documents/upload",
     "/_next/static/chunks/a.js",
     "/favicon.ico",
-    "/logo.png",
   ])("does not run the proxy for %s", (path) => {
     expect(re.test(path)).toBe(false);
   });
@@ -168,6 +167,8 @@ describe("proxy matcher", () => {
     "/api/documents/123/download",
     "/api/email-sync",
     "/login",
+    "/logo.png",
+    "/matters/x.js",
   ])("still runs the proxy for %s", (path) => {
     expect(re.test(path)).toBe(true);
   });
@@ -234,8 +235,9 @@ describe("portal host routing", () => {
   it("portal host: / rewrites to /portal and carries the page CSP", () => {
     const res = proxy(portalReq("/"));
     expect(rewriteOf(res).pathname).toBe("/portal");
-    expect(res.headers.get("Content-Security-Policy-Report-Only")).toBeTruthy();
-    expect(forwardedHeader(res, "content-security-policy-report-only")).toBeTruthy();
+    const csp = res.headers.get("Content-Security-Policy-Report-Only");
+    expect(csp).toBeTruthy();
+    expect(forwardedHeader(res, "content-security-policy-report-only")).toBe(csp);
     expect(forwardedHeader(res, "x-pathname")).toBe("/");
   });
 
@@ -265,6 +267,22 @@ describe("portal host routing", () => {
     expect(res.status).toBe(200);
     expect(res.headers.has("location")).toBe(false);
     expect(rewriteOf(res).pathname).toBe("/portal/login");
+  });
+
+  it("portal host: static-looking staff paths are still rewritten", () => {
+    const res = proxy(portalReq("/matters/x.js"));
+    expect(rewriteOf(res).pathname).toBe("/portal/matters/x.js");
+  });
+
+  it("staff host: static-looking paths pass through untouched", () => {
+    const res = proxy(makeRequest("/foo.js"));
+    expect(res.status).toBe(200);
+    expect(res.headers.has("location")).toBe(false);
+    expect(res.headers.has("x-middleware-rewrite")).toBe(false);
+  });
+
+  it("isPortalHost ignores one trailing dot", () => {
+    expect(isPortalHost("portal.example.com.")).toBe(true);
   });
 
   it("staff host: /portal and /portal/x return 404", () => {

@@ -13,7 +13,9 @@ import { PORTAL_COOKIE } from "@/lib/portal/cookie";
 import { createSession } from "@/lib/portal/sessions";
 
 const jar = new Map<string, string>();
+let hostHeader = "portal.localhost:3000";
 vi.mock("next/headers", () => ({
+  headers: async () => ({ get: (n: string) => (n === "host" ? hostHeader : null) }),
   cookies: async () => ({
     get: (name: string) =>
       jar.has(name) ? { name, value: jar.get(name)! } : undefined,
@@ -48,6 +50,7 @@ let matterC: string;
 beforeEach(async () => {
   await resetDb();
   jar.clear();
+  hostHeader = "portal.localhost:3000";
   const { firmId } = await seedFirm();
   await prisma.firm.update({
     where: { id: firmId },
@@ -94,6 +97,12 @@ describe("portal identity", () => {
   test("portal disabled firm-wide → null even with a valid session", async () => {
     jar.set(PORTAL_COOKIE, await createSession(identityId));
     await prisma.firm.updateMany({ data: { portalEnabled: false } });
+    expect(await getPortalIdentity()).toBeNull();
+  });
+
+  test("a valid portal session cookie on the staff host → null", async () => {
+    jar.set(PORTAL_COOKIE, await createSession(identityId));
+    hostHeader = "app.example.com";
     expect(await getPortalIdentity()).toBeNull();
   });
 

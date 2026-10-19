@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation";
 
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { requestIsOnPortalHost } from "@/lib/portal/host";
 import { PORTAL_COOKIE } from "@/lib/portal/cookie";
 import { resolveSession } from "@/lib/portal/sessions";
 
@@ -21,6 +22,7 @@ export type PortalIdentityContext = {
  * app is single-tenant; no firm row counts as disabled.
  */
 export async function getPortalIdentity(): Promise<PortalIdentityContext | null> {
+  if (!(await requestIsOnPortalHost())) return null;
   const raw = (await cookies()).get(PORTAL_COOKIE)?.value;
   if (!raw) return null;
 

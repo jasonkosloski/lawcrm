@@ -4,12 +4,17 @@
  * is "a password change invalidates sessions issued before it".
  */
 
-import { beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import type { JWT } from "next-auth/jwt";
 import { prisma } from "@/lib/prisma";
 import { passwordFingerprint } from "@/lib/session-fingerprint";
 import { validateSessionToken } from "@/lib/session-token";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
+
+let hostHeader = "app.example.com";
+vi.mock("next/headers", () => ({
+  headers: async () => ({ get: (n: string) => (n === "host" ? hostHeader : null) }),
+}));
 
 let userId: string;
 
@@ -27,6 +32,7 @@ beforeAll(() => {
 });
 
 beforeEach(async () => {
+  hostHeader = "app.example.com";
   await resetDb();
   const { firmId } = await seedFirm();
   ({ userId } = await seedUser({ firmId }));
@@ -34,6 +40,15 @@ beforeEach(async () => {
 });
 
 describe("validateSessionToken", () => {
+  test("a valid staff token on the portal host resolves to no user", async () => {
+    const token = await signIn();
+    hostHeader = "portal.localhost:3000";
+    const onPortal = await validateSessionToken({ ...token });
+    expect(onPortal.userId).toBeUndefined();
+    hostHeader = "app.example.com";
+    expect((await validateSessionToken({ ...token })).userId).toBe(userId);
+  });
+
   test("sign-in stamps userId + a password fingerprint", async () => {
     const token = await signIn();
     expect(token.userId).toBe(userId);

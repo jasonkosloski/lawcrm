@@ -33,6 +33,11 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { CSP_HEADER, createNonce, pageCsp } from "@/lib/csp";
+import { isPortalHost } from "@/lib/portal/host";
+
+export { isPortalHost };
+
+const STATIC_EXT = /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)$/;
 
 /** Auth.js cookie name. The `__Secure-` prefix is added when running
  *  over HTTPS (production); dev uses the unprefixed name. We check
@@ -70,27 +75,18 @@ function isPublicPath(pathname: string): boolean {
   );
 }
 
-/**
- * True when `host` (a Host header, port allowed) is the client-portal
- * host: `PORTAL_HOST`, or `portal.localhost` outside production. Reads
- * the env per call so tests can stub it.
- */
-export function isPortalHost(host: string | null): boolean {
-  if (!host) return false;
-  const name = host.toLowerCase().replace(/:\d+$/, "");
-  const configured = (process.env.PORTAL_HOST ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/:\d+$/, "");
-  if (configured && name === configured) return true;
-  return name === "portal.localhost" && process.env.NODE_ENV !== "production";
-}
-
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const onPortalHost = isPortalHost(
     request.headers.get("host") ?? request.nextUrl.host
   );
+
+  // The matcher no longer skips static-looking paths (on the portal
+  // host they must still be rewritten into /portal), so the staff host
+  // skips them here, exactly as the matcher used to.
+  if (!onPortalHost && STATIC_EXT.test(pathname)) {
+    return NextResponse.next();
+  }
 
   // Staff routes for the portal live under /portal internally and are
   // served at /* on the portal host only; on any other host they 404.
@@ -180,6 +176,6 @@ export const config = {
   // itself (session 401 + `documents.upload` 403), so the cookie gate
   // adds nothing; it does not read `x-pathname`.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|api/documents/upload$|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/documents/upload$).*)",
   ],
 };

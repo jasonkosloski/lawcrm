@@ -25,6 +25,7 @@
 
 import { timingSafeEqual } from "node:crypto";
 import type { JWT } from "next-auth/jwt";
+import { requestIsOnPortalHost } from "@/lib/portal/host";
 import { prisma } from "@/lib/prisma";
 import { passwordFingerprint } from "@/lib/session-fingerprint";
 
@@ -51,6 +52,14 @@ export async function validateSessionToken(
     token.userId = opts.signInUserId;
   }
   if (!token.userId) return token;
+
+  // Host isolation: a staff cookie presented on the portal host never
+  // authenticates (the proxy alone can't guarantee this: matcher
+  // exclusions and server-action IDs bypass it).
+  if (await requestIsOnPortalHost()) {
+    delete token.userId;
+    return token;
+  }
 
   const row = await prisma.user.findUnique({
     where: { id: token.userId },
