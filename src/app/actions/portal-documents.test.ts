@@ -372,7 +372,57 @@ describe("share actions", () => {
     expect(await setDocumentsClientShare([], true)).toMatchObject({ ok: false });
     const many = Array.from({ length: 201 }, (_, i) => `x${i}`);
     expect(await setDocumentsClientShare(many, true)).toMatchObject({ ok: false });
-    expect(await setDocumentsClientShare([a, "missing"], true)).toMatchObject({ ok: false });
+  });
+
+  // ADR-039: a walled user must not be able to tell a walled record from
+  // a missing one, so every case below is the same not-found.
+  test("a walled user gets the same not-found for missing, walled, lead+walled and mixed ids", async () => {
+    await prisma.firm.update({ where: { id: firmId }, data: { matterVisibility: "TEAM" } });
+    sessionUser = await userWith(["portal.share_documents"]);
+    const mine = (
+      await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: sessionUser, name: "Mine" })
+    ).matterId;
+    const visible = (await seedDocument({ matterId: mine })).documentId;
+    const walled = (await seedDocument({ matterId })).documentId;
+    const otherWalled = (
+      await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: admin, name: "Other walled" })
+    ).matterId;
+    const walled2 = (await seedDocument({ matterId: otherWalled })).documentId;
+    const { leadId } = await seedLead();
+    const leadDoc = (
+      await prisma.document.create({
+        data: { leadId, name: "L.pdf", category: "other", source: "upload" },
+        select: { id: true },
+      })
+    ).id;
+    const notFound = { digest: expect.stringContaining("404") };
+    for (const ids of [
+      ["missing"],
+      [walled],
+      [leadDoc, walled],
+      [visible, walled],
+      [walled, walled2],
+      [visible, "missing"],
+    ]) {
+      await expect(setDocumentsClientShare(ids, true)).rejects.toMatchObject(notFound);
+    }
+    expect((await share(walled)).clientShare).toBeNull();
+    expect((await share(visible)).clientShare).toBeNull();
+    // Lead documents are not walled (intake is not matter-ACL'd), so a
+    // plain lead batch still gets its own refusal.
+    expect(await setDocumentsClientShare([leadDoc], true)).toEqual({
+      ok: false,
+      error: "Lead documents can't be shared with clients.",
+    });
+  });
+
+  test("folder share: missing and walled folders are the same not-found", async () => {
+    await prisma.firm.update({ where: { id: firmId }, data: { matterVisibility: "TEAM" } });
+    sessionUser = await userWith(["portal.share_documents"]);
+    const { folderId } = await seedDocumentFolder({ matterId, name: "Walled" });
+    const notFound = { digest: expect.stringContaining("404") };
+    await expect(setFolderClientShared("missing", true)).rejects.toMatchObject(notFound);
+    await expect(setFolderClientShared(folderId, true)).rejects.toMatchObject(notFound);
   });
 
   test("folder share emails once; unshare does not", async () => {
@@ -455,6 +505,14 @@ describe("previewFolderMoveVisibility", () => {
     const moving = await mk("Moving");
     sessionUser = await userWith(["portal.share_documents"]);
     await expect(previewFolderMoveVisibility(moving, null)).rejects.toMatchObject({
+      digest: expect.stringContaining("404"),
+    });
+  });
+
+  test("a missing folder is the same not-found as a walled one", async () => {
+    await prisma.firm.update({ where: { id: firmId }, data: { matterVisibility: "TEAM" } });
+    sessionUser = await userWith(["portal.share_documents"]);
+    await expect(previewFolderMoveVisibility("missing", null)).rejects.toMatchObject({
       digest: expect.stringContaining("404"),
     });
   });

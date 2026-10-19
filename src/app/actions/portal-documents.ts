@@ -11,7 +11,9 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { notFound } from "next/navigation";
 import { assertMatterAccess } from "@/lib/matter-access";
+import { assertScopeAccess } from "@/lib/scope-access";
 import { currentUserHasPermission, requirePermissionResult } from "@/lib/permission-check";
 import { logActivity, logActivityTx } from "@/lib/activity-log";
 import { parseDateOnly } from "@/lib/format-date";
@@ -233,6 +235,16 @@ export async function deleteDocumentRequest(id: string): Promise<Result> {
 
 const LEAD_REFUSED = "Lead documents can't be shared with clients.";
 
+/** ADR-039: assert access to a record's scope BEFORE any error that
+ *  depends on the record, so a walled id and a missing one both 404.
+ *  Lead scopes are not walled (intake is not matter-ACL'd). Never wrap
+ *  in try/catch. */
+async function assertRecordScope(r: { matterId: string | null; leadId: string | null }) {
+  if (r.matterId) await assertMatterAccess(r.matterId);
+  else if (r.leadId) await assertScopeAccess({ kind: "lead", leadId: r.leadId });
+  else notFound();
+}
+
 /** Emails live portal users; true when delivery failed. Never throws. */
 async function notifyShared(matterId: string): Promise<boolean> {
   try {
@@ -266,7 +278,9 @@ export async function setDocumentsClientShare(
     where: { id: { in: ids } },
     select: { id: true, matterId: true, leadId: true, folderId: true, clientShare: true },
   });
-  if (docs.length !== ids.length) return { ok: false, error: "File not found." };
+  if (docs.length !== ids.length) notFound();
+  const scopes = new Map(docs.map((d) => [`${d.matterId}|${d.leadId}`, d]));
+  for (const d of scopes.values()) await assertRecordScope(d);
   if (docs.some((d) => d.leadId !== null || d.matterId === null)) {
     return { ok: false, error: LEAD_REFUSED };
   }
@@ -275,7 +289,6 @@ export async function setDocumentsClientShare(
     return { ok: false, error: "Select files from one matter at a time." };
   }
   const matterId = docs[0].matterId as string;
-  await assertMatterAccess(matterId);
 
   const folders = await prisma.documentFolder.findMany({
     where: { matterId },
@@ -321,12 +334,12 @@ export async function setFolderClientShared(
     where: { id: folderId },
     select: { id: true, name: true, matterId: true, leadId: true },
   });
-  if (!folder) return { ok: false, error: "Folder not found." };
+  if (!folder) notFound();
+  await assertRecordScope(folder);
   if (folder.leadId !== null || folder.matterId === null) {
     return { ok: false, error: LEAD_REFUSED };
   }
   const matterId = folder.matterId;
-  await assertMatterAccess(matterId);
 
   const [folders, docs] = await Promise.all([
     prisma.documentFolder.findMany({
@@ -365,8 +378,9 @@ export async function setFolderClientShared(
 /**
  * Read-only: how many files would become / stop being visible to the
  * client if this folder moved under `targetFolderId`. Powers the folder
- * move dialog's warning. Zeros (never an error) for users without
- * portal.share_documents, for lead folders, and for bad targets.
+ * move dialog's warning. A missing or walled folder 404s (ADR-039);
+ * zeros for users without portal.share_documents, for lead folders,
+ * and for bad targets.
  */
 export async function previewFolderMoveVisibility(
   folderId: string,
@@ -377,9 +391,10 @@ export async function previewFolderMoveVisibility(
     where: { id: folderId },
     select: { matterId: true, leadId: true },
   });
-  if (!folder || folder.leadId !== null || folder.matterId === null) return none;
+  if (!folder) notFound();
+  await assertRecordScope(folder);
+  if (folder.leadId !== null || folder.matterId === null) return none;
   const matterId = folder.matterId;
-  await assertMatterAccess(matterId);
   if (!(await currentUserHasPermission("portal.share_documents"))) return none;
 
   const folders = await prisma.documentFolder.findMany({
