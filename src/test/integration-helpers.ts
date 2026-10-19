@@ -39,7 +39,6 @@ export const TABLES_IN_DELETE_ORDER = [
   "portal_login_tokens",
   "portal_sessions",
   "portal_matter_access",
-  "portal_identities",
   "portal_link_requests",
   // Records requests — before contacts (custodian Restrict), expenses, tasks, documents
   "records_request_follow_ups",
@@ -90,6 +89,10 @@ export const TABLES_IN_DELETE_ORDER = [
   "flagged_moments",
   "evidence",
   "documents",
+  // Portal: identities after documents (Document.portalUploaderId is Restrict);
+  // document_requests after documents (SetNull) and before users/matters.
+  "portal_identities",
+  "document_requests",
   "document_folders",
   // Template library rows reference users (createdById); drop
   // before users.
