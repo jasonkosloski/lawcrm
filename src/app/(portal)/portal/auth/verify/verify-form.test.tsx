@@ -38,6 +38,8 @@ describe("portal verify form", () => {
     render(<VerifyForm token="t" />);
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/"));
+    expect(screen.getByText("Signing you in\u2026")).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull();
     Object.defineProperty(window, "location", { value: original, configurable: true });
     result = "invalid";
   });

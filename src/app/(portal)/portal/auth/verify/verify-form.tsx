@@ -19,6 +19,16 @@ export function VerifyForm({ token }: { token: string }) {
     if (state.status === "ok") window.location.replace("/");
   }, [state.status]);
 
+  if (state.status === "ok") {
+    // No button while the full navigation runs, so it can't be re-submitted
+    // with an already-spent token.
+    return (
+      <p role="status" className="text-sm text-ink-3">
+        Signing you in…
+      </p>
+    );
+  }
+
   if (state.status === "invalid") {
     return (
       <div className="flex flex-col gap-3">
