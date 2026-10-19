@@ -290,4 +290,9 @@ describe("portal host routing", () => {
     expect(proxy(makeRequest("/portal/x", { cookie: SESSION_COOKIE })).status).toBe(404);
     expect(proxy(makeRequest("/portalx", { cookie: SESSION_COOKIE })).status).not.toBe(404);
   });
+
+  it("staff host: static-looking /portal paths also 404", () => {
+    expect(proxy(makeRequest("/portal/x.js")).status).toBe(404);
+    expect(proxy(makeRequest("/portal/matters/a.png")).status).toBe(404);
+  });
 });

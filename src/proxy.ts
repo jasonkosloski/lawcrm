@@ -81,20 +81,21 @@ export function proxy(request: NextRequest) {
     request.headers.get("host") ?? request.nextUrl.host
   );
 
-  // The matcher no longer skips static-looking paths (on the portal
-  // host they must still be rewritten into /portal), so the staff host
-  // skips them here, exactly as the matcher used to.
-  if (!onPortalHost && STATIC_EXT.test(pathname)) {
-    return NextResponse.next();
-  }
-
-  // Staff routes for the portal live under /portal internally and are
+  // Portal pages live under /portal internally live under /portal internally and are
   // served at /* on the portal host only; on any other host they 404.
+  // Checked BEFORE the static-extension skip so /portal/x.js 404s too.
   if (
     !onPortalHost &&
     (pathname === "/portal" || pathname.startsWith("/portal/"))
   ) {
     return new NextResponse(null, { status: 404 });
+  }
+
+  // The matcher no longer skips static-looking paths (on the portal
+  // host they must still be rewritten into /portal), so the staff host
+  // skips them here, exactly as the matcher used to.
+  if (!onPortalHost && STATIC_EXT.test(pathname)) {
+    return NextResponse.next();
   }
 
   // Server layouts can't see the request URL, so we forward
