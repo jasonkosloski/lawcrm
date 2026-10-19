@@ -16,8 +16,12 @@ vi.mock("@/lib/current-user", () => ({
 vi.mock("@/lib/matter-access", () => ({
   assertMatterAccess: vi.fn(async () => "u1"),
 }));
+vi.mock("@/lib/lead-access", () => ({
+  assertLeadAccess: vi.fn(async () => "u1"),
+}));
 
 import { prisma } from "@/lib/prisma";
+import { assertLeadAccess } from "@/lib/lead-access";
 import {
   assertScopeAccess,
   assertScopeWritable,
@@ -54,13 +58,13 @@ describe("revalidateDocumentScope", () => {
 });
 
 describe("assertScopeAccess", () => {
-  test("lead scope: 404 when missing, user id when present", async () => {
-    findUnique.mockResolvedValueOnce(null);
+  test("lead scope goes through the lead wall (ADR-049)", async () => {
+    vi.mocked(assertLeadAccess).mockRejectedValueOnce(new Error("NEXT_NOT_FOUND"));
     await expect(assertScopeAccess({ kind: "lead", leadId: "x" })).rejects.toThrow(
       "NEXT_NOT_FOUND"
     );
-    findUnique.mockResolvedValueOnce({ id: "l1" });
     await expect(assertScopeAccess({ kind: "lead", leadId: "l1" })).resolves.toBe("u1");
+    expect(assertLeadAccess).toHaveBeenLastCalledWith("l1");
   });
 });
 

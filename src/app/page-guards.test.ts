@@ -278,3 +278,80 @@ describe("matter detail access guards", () => {
     ).toBe("assertMatterAccess runs before the session guard");
   });
 });
+
+// ── Lead-access guard (restricted intake, ADR-049) ─────────────────────
+//
+// Every page and the layout under intake/[id] must 404 a restricted
+// lead the viewer isn't on: `assertLeadAccess(id)` right after the
+// session guard and before any direct prisma read.
+
+const LEAD_DETAIL_PREFIX = "(dashboard)/intake/[id]/";
+const ASSERT_LEAD_ACCESS = /\bawait\s+assertLeadAccess\s*\(/;
+
+/** Pure check on source text (self-checked below). */
+function checkLeadAccessSource(src: string): string | null {
+  const body = stripNoise(src);
+  const start = body.indexOf("export default");
+  const fn = start === -1 ? body : body.slice(start);
+  const access = ASSERT_LEAD_ACCESS.exec(fn);
+  if (!access) return "no assertLeadAccess call";
+  const guard = AWAITED_GUARD.exec(fn);
+  if (!guard || guard.index > access.index) {
+    return "assertLeadAccess runs before the session guard";
+  }
+  const firstPrisma = fn.indexOf("prisma.");
+  if (firstPrisma !== -1 && firstPrisma < access.index) {
+    return "reads prisma before assertLeadAccess";
+  }
+  return null;
+}
+
+const leadDetailFiles = [...pages, ...layouts].filter((f) =>
+  rel(f).startsWith(LEAD_DETAIL_PREFIX)
+);
+
+describe("lead detail access guards", () => {
+  test("the scan finds the lead detail pages and layout", () => {
+    const names = leadDetailFiles.map(rel);
+    expect(names).toContain(`${LEAD_DETAIL_PREFIX}layout.tsx`);
+    expect(names).toContain(`${LEAD_DETAIL_PREFIX}page.tsx`);
+    expect(names).toContain(`${LEAD_DETAIL_PREFIX}documents/[documentId]/page.tsx`);
+    expect(names).toContain(`${LEAD_DETAIL_PREFIX}records/[requestId]/page.tsx`);
+    expect(names.length).toBeGreaterThanOrEqual(11);
+  });
+
+  test.each(leadDetailFiles.map((f) => [rel(f), f] as const))(
+    "%s asserts lead access",
+    (name, file) => {
+      expect(checkLeadAccessSource(readFileSync(file, "utf8")), name).toBeNull();
+    }
+  );
+
+  test("accepts an assert after the guard, before prisma (self-check)", () => {
+    expect(
+      checkLeadAccessSource(
+        `export default async function P({ params }) {\n` +
+          `  await requireUser();\n  const { id } = await params;\n` +
+          `  await assertLeadAccess(id);\n  await prisma.lead.findUnique({});\n}`
+      )
+    ).toBeNull();
+  });
+
+  test("rejects a prisma read before the assert (self-check)", () => {
+    expect(
+      checkLeadAccessSource(
+        `export default async function P({ params }) {\n` +
+          `  await requireUser();\n  await prisma.lead.findUnique({});\n` +
+          `  await assertLeadAccess(id);\n}`
+      )
+    ).toBe("reads prisma before assertLeadAccess");
+  });
+
+  test("rejects a page with no lead assertion (self-check)", () => {
+    expect(
+      checkLeadAccessSource(
+        `export default async function P() {\n  await requireUser();\n}`
+      )
+    ).toBe("no assertLeadAccess call");
+  });
+});

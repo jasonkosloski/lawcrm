@@ -35,6 +35,7 @@ vi.mock("@/lib/permission-check", () => ({
 }));
 
 import { requirePermission } from "@/lib/permission-check";
+import { getCurrentUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import {
   createFolder,
@@ -73,6 +74,8 @@ beforeEach(async () => {
   const u = await seedUser({ firmId, name: "Test Attorney" });
   userId = u.userId;
   vi.mocked(requirePermission).mockResolvedValue(userId);
+  // The lead wall (ADR-049) runs for real: the viewer must exist.
+  vi.mocked(getCurrentUserId).mockResolvedValue(userId);
 
   const { areaId, stageId } = await seedPracticeArea();
   const m = await seedMatter({

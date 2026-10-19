@@ -22,6 +22,7 @@ import { Card } from "@/components/ui/card";
 import { EventDetailModal } from "@/components/calendar/event-detail-modal";
 import { EventComposer } from "@/components/matters/captures/event-composer";
 import { requireUser } from "@/lib/current-user";
+import { assertLeadAccess } from "@/lib/lead-access";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { prisma } from "@/lib/prisma";
@@ -48,6 +49,7 @@ export default async function LeadEventsPage({
   // Pages guard themselves: layouts don't re-run on soft navigation (ADR-028).
   await requireUser();
   const { id } = await params;
+  await assertLeadAccess(id);
   const sp = await searchParams;
   const rawEventParam = Array.isArray(sp.event) ? sp.event[0] : sp.event;
   const requestedEventId =

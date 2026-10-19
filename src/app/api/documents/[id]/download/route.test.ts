@@ -30,6 +30,9 @@ vi.mock("@/lib/prisma", () => ({
 vi.mock("@/lib/matter-access", () => ({
   canAccessMatter: vi.fn(async () => true),
 }));
+vi.mock("@/lib/lead-access", () => ({
+  canAccessLead: vi.fn(async () => true),
+}));
 vi.mock("@/lib/file-storage", () => ({
   openReadStream: vi.fn(),
   statFile: vi.fn(),
@@ -48,6 +51,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { openReadStream, statFile } from "@/lib/file-storage";
 import { canAccessMatter } from "@/lib/matter-access";
+import { canAccessLead } from "@/lib/lead-access";
 import { GET } from "./route";
 
 const mockedAuth = vi.mocked(auth);
@@ -430,10 +434,18 @@ describe("GET /api/documents/[id]/download - matter wall", () => {
 });
 
 describe("GET /api/documents/[id]/download - lead scope", () => {
-  test("a lead document streams for a signed-in user without a matter check", async () => {
+  test("a lead document streams when the lead is visible, without a matter check", async () => {
     const res = await download("application/pdf", { leadId: "l1" });
     expect(res.status).toBe(200);
+    expect(canAccessLead).toHaveBeenCalledWith("u1", "l1");
     expect(canAccessMatter).not.toHaveBeenCalled();
+  });
+
+  test("a document on a restricted lead the user isn't on is a 404 (ADR-049)", async () => {
+    vi.mocked(canAccessLead).mockResolvedValueOnce(false);
+    const res = await download("application/pdf", { leadId: "l1" });
+    expect(res.status).toBe(404);
+    expect(mockedOpen).not.toHaveBeenCalled();
   });
 
   test("a row with neither scope id is never served", async () => {

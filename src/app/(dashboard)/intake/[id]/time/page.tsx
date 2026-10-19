@@ -47,12 +47,14 @@ import {
   type LeadTimeEntryRow,
 } from "@/lib/queries/lead-time";
 import { requireUser } from "@/lib/current-user";
+import { assertLeadAccess } from "@/lib/lead-access";
 
 export default async function LeadTimePage({
   params,
 }: PageProps<"/intake/[id]/time">) {
   const currentUserId = await requireUser();
   const { id } = await params;
+  await assertLeadAccess(id);
   const [
     lead,
     entries,

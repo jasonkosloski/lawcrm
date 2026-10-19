@@ -8,6 +8,11 @@
 import { isValidElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
+// Lead wall (ADR-049) is unit-tested in src/lib/lead-access.test.ts;
+// pages are pinned to call it by src/app/page-guards.test.ts.
+vi.mock("@/lib/lead-access", () => ({
+  assertLeadAccess: vi.fn(async () => "u1"),
+}));
 vi.mock("server-only", () => ({}));
 vi.mock("next/navigation", () => ({
   notFound: vi.fn(() => {

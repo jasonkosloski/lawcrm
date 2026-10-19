@@ -13,6 +13,7 @@ import Link from "next/link";
 import { Briefcase } from "lucide-react";
 import { DocumentsBrowser } from "@/components/documents/documents-browser";
 import { requireUser } from "@/lib/current-user";
+import { assertLeadAccess } from "@/lib/lead-access";
 import { prisma } from "@/lib/prisma";
 
 export default async function LeadDocumentsPage({
@@ -22,6 +23,7 @@ export default async function LeadDocumentsPage({
   // Pages guard themselves: layouts don't re-run on soft navigation (ADR-028).
   await requireUser();
   const { id } = await params;
+  await assertLeadAccess(id);
   const sp = await searchParams;
   const lead = await prisma.lead.findUnique({
     where: { id },

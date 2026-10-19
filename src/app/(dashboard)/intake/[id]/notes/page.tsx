@@ -21,12 +21,14 @@ import { getNoteAccess } from "@/lib/note-access";
 import { NoteComposer } from "@/components/matters/notes/note-composer";
 import { NotesTabBody } from "@/components/matters/notes/notes-tab-body";
 import { requireUser } from "@/lib/current-user";
+import { assertLeadAccess } from "@/lib/lead-access";
 
 export default async function LeadNotesPage({
   params,
 }: PageProps<"/intake/[id]/notes">) {
   await requireUser();
   const { id } = await params;
+  await assertLeadAccess(id);
   const [lead, notes, access] = await Promise.all([
     // Stage decides whether the composer renders: a converted lead's
     // notes already moved to the matter (createLeadNote refuses it).

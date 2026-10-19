@@ -41,6 +41,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessMatter } from "@/lib/matter-access";
+import { canAccessLead } from "@/lib/lead-access";
 import { scopeOf } from "@/lib/record-scope";
 import {
   isBlobKey,
@@ -71,8 +72,7 @@ export const dynamic = "force-dynamic";
 // drift.
 
 /** Matter documents follow the matter wall; an intake lead's
- *  documents (no matter) are visible to any signed-in user, like the
- *  intake pages themselves. */
+ *  documents follow the lead wall (restricted leads, ADR-049). */
 async function canReadDocument(
   userId: string,
   doc: { matterId: string | null; leadId: string | null }
@@ -85,7 +85,7 @@ async function canReadDocument(
   }
   return scope.kind === "matter"
     ? canAccessMatter(userId, scope.matterId)
-    : true;
+    : canAccessLead(userId, scope.leadId);
 }
 
 export async function GET(

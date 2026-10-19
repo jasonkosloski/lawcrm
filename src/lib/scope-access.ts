@@ -1,8 +1,7 @@
 import { revalidatePath } from "next/cache";
-import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUserId } from "@/lib/current-user";
 import { assertMatterAccess } from "@/lib/matter-access";
+import { assertLeadAccess } from "@/lib/lead-access";
 import {
   scopeBasePath,
   scopePaths,
@@ -13,18 +12,13 @@ import {
 /**
  * Access guard for a record scope (documents / folders that belong to
  * a matter OR an intake lead). Matter scope = `assertMatterAccess`;
- * lead scope 404s when the lead doesn't exist (intake is not
- * matter-ACL'd). Never wrap in try/catch. Returns the user id.
+ * lead scope = `assertLeadAccess` (404 when missing or restricted
+ * and the user isn't on its team, ADR-049). Never wrap in try/catch.
+ * Returns the user id.
  */
 export async function assertScopeAccess(scope: RecordScope): Promise<string> {
   if (scope.kind === "matter") return assertMatterAccess(scope.matterId);
-  const userId = await getCurrentUserId();
-  const lead = await prisma.lead.findUnique({
-    where: { id: scope.leadId },
-    select: { id: true },
-  });
-  if (!lead) notFound();
-  return userId;
+  return assertLeadAccess(scope.leadId);
 }
 
 /** Error string when the scope is read-only (a converted lead — its

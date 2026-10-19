@@ -13,6 +13,11 @@ import { render, screen } from "@testing-library/react";
 import type { NoteScope } from "@/lib/note-scope";
 import type { NoteAccess } from "@/lib/note-constants";
 
+// Lead wall (ADR-049) is unit-tested in src/lib/lead-access.test.ts;
+// pages are pinned to call it by src/app/page-guards.test.ts.
+vi.mock("@/lib/lead-access", () => ({
+  assertLeadAccess: vi.fn(async () => "u1"),
+}));
 vi.mock("@/lib/current-user", () => ({
   requireUser: vi.fn(async () => "user_1"),
   getCurrentUserId: vi.fn(async () => "user_1"),
@@ -56,6 +61,7 @@ vi.mock("@/components/matters/notes/notes-tab-body", () => ({
 import { getCurrentUserPermissions } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { getLeadNotes } from "@/lib/queries/matter-detail";
+import { assertLeadAccess } from "@/lib/lead-access";
 import LeadNotesPage from "./page";
 
 const mockedFindLead = vi.mocked(prisma.lead.findUnique);
@@ -79,6 +85,13 @@ const renderPage = async () => {
 afterEach(() => vi.clearAllMocks());
 
 describe("LeadNotesPage", () => {
+  test("a restricted lead the viewer isn't on 404s before any read (ADR-049)", async () => {
+    vi.mocked(assertLeadAccess).mockRejectedValueOnce(new Error("NEXT_NOT_FOUND"));
+    await expect(renderPage()).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(mockedFindLead).not.toHaveBeenCalled();
+    expect(getLeadNotes).not.toHaveBeenCalled();
+  });
+
   test("open lead + notes.create + notes.pin: lead-scoped composer, pin, no captures", async () => {
     lead("qualifying");
     grant(["notes.create", "notes.pin"]);

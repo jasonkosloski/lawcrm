@@ -25,6 +25,7 @@ import { currentUserHasPermission } from "@/lib/permission-check";
 import { getLeadTasks } from "@/lib/queries/matter-detail";
 import { listAssigneeOptions } from "@/lib/queries/team";
 import { getCurrentUserId, requireUser } from "@/lib/current-user";
+import { assertLeadAccess } from "@/lib/lead-access";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { prisma } from "@/lib/prisma";
 
@@ -33,6 +34,7 @@ export default async function LeadTasksPage({
 }: PageProps<"/intake/[id]/tasks">) {
   await requireUser();
   const { id } = await params;
+  await assertLeadAccess(id);
   const [
     lead,
     tasks,

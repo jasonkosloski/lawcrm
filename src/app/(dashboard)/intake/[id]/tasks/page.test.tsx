@@ -8,6 +8,11 @@ import { render, screen } from "@testing-library/react";
 import type { RecordScope } from "@/lib/record-scope";
 import type { TaskRowPerms } from "@/components/tasks/task-list-by-status";
 
+// Lead wall (ADR-049) is unit-tested in src/lib/lead-access.test.ts;
+// pages are pinned to call it by src/app/page-guards.test.ts.
+vi.mock("@/lib/lead-access", () => ({
+  assertLeadAccess: vi.fn(async () => "u1"),
+}));
 vi.mock("@/lib/current-user", () => ({
   requireUser: vi.fn(async () => "user_1"),
   getCurrentUserId: vi.fn(async () => "user_1"),

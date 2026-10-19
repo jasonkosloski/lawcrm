@@ -9,6 +9,7 @@ import { notFound } from "next/navigation";
 import { Briefcase } from "lucide-react";
 import { RecordsTab } from "@/components/records-requests/records-tab";
 import { requireUser } from "@/lib/current-user";
+import { assertLeadAccess } from "@/lib/lead-access";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 
@@ -17,6 +18,7 @@ export default async function LeadRecordsPage({
 }: PageProps<"/intake/[id]/records">) {
   await requireUser();
   const { id } = await params;
+  await assertLeadAccess(id);
   const [lead, canView] = await Promise.all([
     prisma.lead.findUnique({
       where: { id },

@@ -9,6 +9,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/current-user";
+import { assertLeadAccess } from "@/lib/lead-access";
 import {
   Ban,
   Building2,
@@ -84,6 +85,7 @@ export default async function LeadOverviewPage({
   // Pages guard themselves: layouts don't re-run on soft navigation (ADR-028).
   await requireUser();
   const { id } = await params;
+  await assertLeadAccess(id);
   const lead = await getLeadById(id);
   if (!lead) notFound();
 
