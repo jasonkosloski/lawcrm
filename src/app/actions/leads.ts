@@ -483,6 +483,8 @@ export async function convertLeadToMatter(
         color: area.color,
         description: description || null,
         clientId: clientContactId,
+        // A restricted intake stays walled as a matter (ADR-049).
+        restricted: lead.restricted,
         incidentDate,
         statuteOfLimitationsDate: solDate,
         // Invariant shared with createMatter / updateMatter: whenever
@@ -523,6 +525,23 @@ export async function convertLeadToMatter(
     await tx.matterTeamMember.create({
       data: { matterId: matter.id, userId, role: "lead" },
     });
+    // The intake team carries over with its roles (ADR-049), so a
+    // restricted lead's matter is visible to the same people. The
+    // converter is already the lead; any other intake "lead" joins as
+    // co-counsel (one lead per matter).
+    const intakeTeam = await tx.leadTeamMember.findMany({
+      where: { leadId, NOT: { userId } },
+      select: { userId: true, role: true },
+    });
+    if (intakeTeam.length > 0) {
+      await tx.matterTeamMember.createMany({
+        data: intakeTeam.map((m) => ({
+          matterId: matter.id,
+          userId: m.userId,
+          role: m.role === "lead" ? "co_counsel" : m.role,
+        })),
+      });
+    }
 
     // Auto-pin so the new matter appears in the user's sidebar.
     await tx.userMatterPin.create({

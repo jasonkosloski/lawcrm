@@ -39,6 +39,9 @@ vi.mock("next/navigation", () => ({
   redirect: vi.fn((url: string) => {
     throw new Error(`REDIRECT:${url}`);
   }),
+  notFound: () => {
+    throw new Error("NEXT_NOT_FOUND");
+  },
 }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("@/lib/permission-check", () => ({
@@ -1336,5 +1339,77 @@ describe("createLead", () => {
 
     expect(await prisma.lead.count()).toBe(0);
     expect(await prisma.contact.count()).toBe(0);
+  });
+});
+
+describe("convertLeadToMatter — restricted intake carries its wall (ADR-049)", () => {
+  async function convert(leadId: string) {
+    const { areaId, stageId } = await seedArea({});
+    await expect(
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+    ).rejects.toThrow(/REDIRECT:/);
+    return prisma.matter.findFirstOrThrow({
+      select: {
+        id: true,
+        restricted: true,
+        teamMembers: { select: { userId: true, role: true }, orderBy: { createdAt: "asc" } },
+      },
+    });
+  }
+
+  test("a restricted lead's matter is restricted and inherits the team with roles", async () => {
+    const { firmId } = await seedFirm({ name: "Second firm row" });
+    const { userId: para } = await seedUser({ firmId });
+    const { leadId } = await seedIntakeLead();
+    await prisma.lead.update({ where: { id: leadId }, data: { restricted: true } });
+    await prisma.leadTeamMember.createMany({
+      data: [
+        { leadId, userId, role: "paralegal" }, // the converter, below
+        { leadId, userId: para, role: "investigator" },
+      ],
+    });
+
+    const matter = await convert(leadId);
+    expect(matter.restricted).toBe(true);
+    const roles = Object.fromEntries(matter.teamMembers.map((m) => [m.userId, m.role]));
+    // The converter is the lead exactly once, whatever their intake role.
+    expect(roles).toEqual({ [userId]: "lead", [para]: "investigator" });
+    expect(matter.teamMembers).toHaveLength(2);
+  });
+
+  test("a second 'lead' on the intake team becomes co-counsel on the matter", async () => {
+    const { firmId } = await seedFirm({ name: "Third firm row" });
+    const { userId: other } = await seedUser({ firmId });
+    const { leadId } = await seedIntakeLead();
+    await prisma.lead.update({ where: { id: leadId }, data: { restricted: true } });
+    await prisma.leadTeamMember.createMany({
+      data: [
+        { leadId, userId, role: "co_counsel" },
+        { leadId, userId: other, role: "lead" },
+      ],
+    });
+    const matter = await convert(leadId);
+    const roles = Object.fromEntries(matter.teamMembers.map((m) => [m.userId, m.role]));
+    expect(roles).toEqual({ [userId]: "lead", [other]: "co_counsel" });
+  });
+
+  test("an open lead converts as today: unrestricted, converter only", async () => {
+    const { leadId } = await seedIntakeLead();
+    const matter = await convert(leadId);
+    expect(matter.restricted).toBe(false);
+    expect(matter.teamMembers).toEqual([{ userId, role: "lead" }]);
+  });
+
+  test("a non-member can't convert a restricted lead (404, nothing created)", async () => {
+    const { firmId } = await seedFirm({ name: "Fourth firm row" });
+    const { userId: owner } = await seedUser({ firmId });
+    const { leadId } = await seedIntakeLead();
+    await prisma.lead.update({ where: { id: leadId }, data: { restricted: true } });
+    await prisma.leadTeamMember.create({ data: { leadId, userId: owner } });
+    const { areaId, stageId } = await seedArea({});
+    await expect(
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+    ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
+    expect(await prisma.matter.count()).toBe(0);
   });
 });

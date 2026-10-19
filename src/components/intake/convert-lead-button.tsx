@@ -18,7 +18,7 @@
 
 import { useState, useTransition } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -60,10 +60,14 @@ export function ConvertLeadButton({
   leadId,
   defaultMatterName,
   areas,
+  restrictedTo,
 }: {
   leadId: string;
   defaultMatterName: string;
   areas: PracticeAreaOption[];
+  /** Set for a restricted lead (ADR-049): the intake team's names,
+   *  who become the matter's team; the matter is restricted too. */
+  restrictedTo?: string[];
 }) {
   const [open, setOpen] = useState(false);
   const action = convertLeadToMatter.bind(null, leadId);
@@ -144,6 +148,15 @@ export function ConvertLeadButton({
         </DialogHeader>
 
         <form onSubmit={onSubmit} className="flex flex-col gap-3">
+          {restrictedTo && (
+            <div className="flex items-start gap-2 text-xs text-ink-2 p-3 rounded-md bg-warn-soft border border-warn-border">
+              <Lock size={12} className="text-warn shrink-0 mt-0.5" aria-hidden />
+              <span>
+                Restricted: the matter will be restricted to{" "}
+                {restrictedTo.length > 0 ? restrictedTo.join(", ") : "you"}.
+              </span>
+            </div>
+          )}
           {areas.length === 0 ? (
             <div className="text-xs text-warn p-3 rounded-md bg-warn-soft border border-warn-border">
               No practice areas exist yet. Create one in Settings → Practice

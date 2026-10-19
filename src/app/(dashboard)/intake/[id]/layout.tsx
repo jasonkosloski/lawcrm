@@ -92,6 +92,11 @@ export default async function LeadDetailLayout({
                   leadId={lead.id}
                   defaultMatterName={lead.displayName}
                   areas={areas}
+                  restrictedTo={
+                    lead.restricted
+                      ? lead.teamMembers.map((m) => m.user.name)
+                      : undefined
+                  }
                 />
               )}
             </>

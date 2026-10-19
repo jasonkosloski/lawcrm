@@ -246,3 +246,28 @@ describe("ConvertLeadButton — server errors and live props", () => {
     expect(offered).toContain(familyStage.value);
   });
 });
+
+describe("ConvertLeadButton — restricted intake (ADR-049)", () => {
+  test("a restricted lead says the matter will be restricted to its team", async () => {
+    const user = userEvent.setup();
+    render(
+      <ConvertLeadButton
+        leadId="lead1"
+        defaultMatterName="Doe v. Acme"
+        areas={AREAS}
+        restrictedTo={["Alice Attorney", "Bob Paralegal"]}
+      />
+    );
+    await openDialog(user);
+    expect(
+      screen.getByText(/matter will be restricted to Alice Attorney, Bob Paralegal/i)
+    ).toBeTruthy();
+  });
+
+  test("an open lead shows no restriction note", async () => {
+    const user = userEvent.setup();
+    renderButton();
+    await openDialog(user);
+    expect(screen.queryByText(/will be restricted/i)).toBeNull();
+  });
+});
