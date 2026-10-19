@@ -135,7 +135,7 @@ describe("DocumentsBrowser", () => {
       vi.mocked(getFolderListing).mockResolvedValueOnce({ documents: docs } as never);
 
     test("a shared folder row shows Shared; its subfolder says via folder", async () => {
-      grant(["portal.share_documents"]);
+      grant(["portal.share_documents", "portal.view"]);
       vi.mocked(getDocumentFolders).mockResolvedValueOnce([
         folder({ clientShared: true }),
         folder({ id: "f2", name: "Inner", parentId: "f1" }),
@@ -174,7 +174,7 @@ describe("DocumentsBrowser", () => {
     });
 
     test("matter docs get the share item with portal.share_documents", async () => {
-      grant(["portal.share_documents"]);
+      grant(["portal.share_documents", "portal.view"]);
       listing([doc({})]);
       await renderMatter();
       await userEvent.click(screen.getByRole("button", { name: "Document actions" }));
@@ -192,7 +192,7 @@ describe("DocumentsBrowser", () => {
       expect(matterHasLivePortalAccess).not.toHaveBeenCalled();
     });
 
-    test("hint appears when nobody has live access", async () => {
+    test("hint appears when nobody has live access, even without portal.view", async () => {
       grant(["portal.share_documents"]);
       vi.mocked(matterHasLivePortalAccess).mockResolvedValueOnce(false);
       await renderMatter();

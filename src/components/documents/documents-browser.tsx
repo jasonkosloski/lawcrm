@@ -134,11 +134,12 @@ export async function DocumentsBrowser({
   ]);
 
   const isMatter = scope.kind === "matter";
-  const canShare = isMatter && canSharePermission;
-  // Staff see the Shared badge with either portal permission.
-  const showShareState = isMatter && (canSharePermission || canViewPortal);
+  // Needs portal.view too: the row's clientShare is only populated for its holders.
+  const canShare = isMatter && canSharePermission && canViewPortal;
+  // The Shared badge follows portal.view.
+  const showShareState = isMatter && canViewPortal;
   const noPortalAccess =
-    canShare && scope.kind === "matter"
+    canSharePermission && scope.kind === "matter"
       ? !(await matterHasLivePortalAccess(scope.matterId))
       : false;
   const sharedFolders = sharedFolderIds(folders);

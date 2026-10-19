@@ -21,7 +21,6 @@ export async function matterHasLivePortalAccess(
   matterId: string
 ): Promise<boolean> {
   await assertMatterAccess(matterId);
-  if (!(await currentUserHasPermission("portal.view"))) return false;
   const n = await prisma.portalMatterAccess.count({
     where: { matterId, revokedAt: null },
   });

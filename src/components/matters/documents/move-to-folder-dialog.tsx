@@ -39,6 +39,7 @@ export function MoveToFolderDialog({
   submitLabel = "Move",
   pendingLabel = "Moving…",
   warningFor,
+  warningLoader,
   onMove,
 }: {
   open: boolean;
@@ -56,12 +57,18 @@ export function MoveToFolderDialog({
   pendingLabel?: string;
   /** Heads-up for the picked target (e.g. client-visibility change). Advisory only. */
   warningFor?: (folderId: string | null) => string | null;
+  /** Async variant for warnings that need the server (folder moves). */
+  warningLoader?: (folderId: string | null) => Promise<string | null>;
   onMove: (
     folderId: string | null
   ) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const [target, setTarget] = useState<string | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState<{
+    target: string | null;
+    warning: string | null;
+  } | null>(null);
   const [pending, startTransition] = useTransition();
 
   // Reset per open so a stale pick/error never flashes (render-phase
@@ -72,11 +79,27 @@ export function MoveToFolderDialog({
     if (open) {
       setTarget(undefined);
       setError(null);
+      setLoaded(null);
     }
   }
 
   const disabled = new Set(disabledIds ?? []);
-  const warning = target !== undefined && warningFor ? warningFor(target) : null;
+  const warning =
+    target !== undefined && warningFor
+      ? warningFor(target)
+      : loaded && loaded.target === target
+        ? loaded.warning
+        : null;
+
+  const pick = (id: string | null) => {
+    setTarget(id);
+    if (!warningLoader) return;
+    setLoaded(null);
+    warningLoader(id)
+      .then((w) => setLoaded({ target: id, warning: w }))
+      // A failed preview must never block the move; the server enforces.
+      .catch(() => setLoaded({ target: id, warning: null }));
+  };
 
   const submit = () => {
     if (target === undefined) return;
@@ -103,7 +126,7 @@ export function MoveToFolderDialog({
         disabled={isDisabled || isCurrent || pending}
         // Selection state for assistive tech (colour alone isn't enough).
         aria-pressed={isPicked}
-        onClick={() => setTarget(id)}
+        onClick={() => pick(id)}
         className={cn(
           "flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-left text-xs",
           isPicked

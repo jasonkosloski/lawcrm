@@ -27,6 +27,7 @@ import {
   deleteDocumentRequest,
   sendBackDocumentRequest,
   setDocumentsClientShare,
+  previewFolderMoveVisibility,
   setFolderClientShared,
   updateDocumentRequest,
 } from "./portal-documents";
@@ -396,5 +397,71 @@ describe("share actions", () => {
     const { folderId } = await seedDocumentFolder({ matterId, name: "Empty" });
     await setFolderClientShared(folderId, true);
     expect(cap.sent).toHaveLength(0);
+  });
+});
+
+describe("previewFolderMoveVisibility", () => {
+  const ZERO = { becomesVisible: 0, becomesHidden: 0 };
+  const mk = async (name: string, parentId: string | null = null, shared = false) => {
+    const { folderId } = await seedDocumentFolder({ matterId, name, parentId });
+    if (shared) await prisma.documentFolder.update({ where: { id: folderId }, data: { clientShared: true } });
+    return folderId;
+  };
+
+  test("moving into a shared folder makes its files visible, including nested ones", async () => {
+    const shared = await mk("Shared", null, true);
+    const moving = await mk("Moving");
+    const inner = await mk("Inner", moving);
+    await seedDocument({ matterId, folderId: moving });
+    await seedDocument({ matterId, folderId: inner });
+    expect(await previewFolderMoveVisibility(moving, shared)).toEqual({ becomesVisible: 2, becomesHidden: 0 });
+  });
+
+  test("moving out of a shared folder hides its files", async () => {
+    const shared = await mk("Shared", null, true);
+    const moving = await mk("Moving", shared);
+    await seedDocument({ matterId, folderId: moving });
+    expect(await previewFolderMoveVisibility(moving, null)).toEqual({ becomesVisible: 0, becomesHidden: 1 });
+  });
+
+  test("a folder that is itself shared stays visible wherever it goes", async () => {
+    const other = await mk("Other", null, true);
+    const moving = await mk("Moving", null, true);
+    await seedDocument({ matterId, folderId: moving });
+    expect(await previewFolderMoveVisibility(moving, other)).toEqual(ZERO);
+    expect(await previewFolderMoveVisibility(moving, null)).toEqual(ZERO);
+  });
+
+  test("a hidden file inside stays hidden and a shared file stays shared", async () => {
+    const shared = await mk("Shared", null, true);
+    const moving = await mk("Moving");
+    const hidden = (await seedDocument({ matterId, folderId: moving })).documentId;
+    const pinned = (await seedDocument({ matterId, folderId: moving })).documentId;
+    await prisma.document.update({ where: { id: hidden }, data: { clientShare: "hidden" } });
+    await prisma.document.update({ where: { id: pinned }, data: { clientShare: "shared" } });
+    expect(await previewFolderMoveVisibility(moving, shared)).toEqual(ZERO);
+  });
+
+  test("zeros without portal.share_documents", async () => {
+    const shared = await mk("Shared", null, true);
+    const moving = await mk("Moving");
+    await seedDocument({ matterId, folderId: moving });
+    sessionUser = await userWith([]);
+    expect(await previewFolderMoveVisibility(moving, shared)).toEqual(ZERO);
+  });
+
+  test("a walled user gets not-found", async () => {
+    await prisma.firm.update({ where: { id: firmId }, data: { matterVisibility: "TEAM" } });
+    const moving = await mk("Moving");
+    sessionUser = await userWith(["portal.share_documents"]);
+    await expect(previewFolderMoveVisibility(moving, null)).rejects.toMatchObject({
+      digest: expect.stringContaining("404"),
+    });
+  });
+
+  test("a move into its own subtree is zeros", async () => {
+    const moving = await mk("Moving");
+    const inner = await mk("Inner", moving);
+    expect(await previewFolderMoveVisibility(moving, inner)).toEqual(ZERO);
   });
 });

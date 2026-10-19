@@ -113,4 +113,31 @@ describe("PortalUploader", () => {
     });
     expect(reload).toHaveBeenCalled();
   });
+
+  test("offers Done to reload when a later file fails after earlier ones were sent", async () => {
+    upload.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error("boom"));
+    const { container } = render(<PortalUploader matterId="m1" storageDriver="vercel-blob" />);
+    const input = container.querySelector("input[type=file]") as HTMLInputElement;
+    fireEvent.change(input, {
+      target: {
+        files: [
+          new File(["x"], "a.pdf", { type: "application/pdf" }),
+          new File(["y"], "b.pdf", { type: "application/pdf" }),
+        ],
+      },
+    });
+    await screen.findByRole("alert");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    });
+    expect(reload).toHaveBeenCalled();
+  });
+
+  test("a first-file failure offers no Done", async () => {
+    upload.mockRejectedValue(new Error("boom"));
+    const { container } = render(<PortalUploader matterId="m1" storageDriver="vercel-blob" />);
+    pick(container, "a.pdf");
+    await screen.findByRole("alert");
+    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+  });
 });

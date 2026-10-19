@@ -9,11 +9,17 @@ export function moveWarning(
   targetFolderId: string | null,
   folders: { id: string; parentId: string | null; clientShared: boolean }[]
 ): string | null {
-  const { becomesVisible, becomesHidden } = visibilityChangeForMove(
-    docs,
-    targetFolderId,
-    folders
-  );
+  return visibilityWarning(visibilityChangeForMove(docs, targetFolderId, folders));
+}
+
+/** The warning copy for a visibility delta, or null when it is zero. */
+export function visibilityWarning({
+  becomesVisible,
+  becomesHidden,
+}: {
+  becomesVisible: number;
+  becomesHidden: number;
+}): string | null {
   const parts: string[] = [];
   if (becomesVisible > 0) {
     parts.push(

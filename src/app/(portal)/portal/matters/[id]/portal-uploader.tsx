@@ -47,6 +47,8 @@ export function PortalUploader({
   const [rows, setRows] = useState<FileRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [closedNotice, setClosedNotice] = useState(false);
+  // Some files of a batch were saved before a later one failed.
+  const [partialSent, setPartialSent] = useState(false);
 
   const busy = rows !== null && !closedNotice;
 
@@ -90,6 +92,7 @@ export function PortalUploader({
   const sendBlob = async (files: File[], batchId: string) => {
     const controller = new AbortController();
     abortRef.current = { abort: () => controller.abort() };
+    let sent = 0;
     try {
       for (let i = 0; i < files.length; i++) {
         const f = files[i];
@@ -111,6 +114,7 @@ export function PortalUploader({
           onUploadProgress: ({ loaded }) => setLoaded(i, loaded),
         });
         setLoaded(i, f.size);
+        sent++;
       }
     } catch (err) {
       if (controller.signal.aborted) {
@@ -119,6 +123,7 @@ export function PortalUploader({
         return;
       }
       fail(blobUploadErrorMessage(err));
+      if (sent > 0) setPartialSent(true);
       return;
     }
     abortRef.current = null;
@@ -187,6 +192,7 @@ export function PortalUploader({
 
   const start = (files: File[]) => {
     setError(null);
+    setPartialSent(false);
     const problem = preflight(files);
     if (problem) {
       setError(problem);
@@ -283,6 +289,17 @@ export function PortalUploader({
             Done
           </Button>
         </div>
+      ) : null}
+
+      {partialSent ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="h-10 self-start px-4 text-sm"
+          onClick={() => window.location.reload()}
+        >
+          Done
+        </Button>
       ) : null}
 
       {error ? (

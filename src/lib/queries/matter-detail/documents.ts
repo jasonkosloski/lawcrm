@@ -4,6 +4,7 @@
 
 import { scopeWhere, type RecordScope } from "@/lib/record-scope";
 import { prisma } from "@/lib/prisma";
+import { currentUserHasPermission } from "@/lib/permission-check";
 
 // ── Documents ────────────────────────────────────────────────────────────
 
@@ -60,9 +61,12 @@ export async function shapeDocumentRows(
       : [];
   const byUser = new Map(uploaders.map((u) => [u.id, u]));
 
-  const portalIds = [
-    ...new Set(rows.map((d) => d.portalUploaderId).filter((v): v is string => !!v)),
-  ];
+  // Portal sharing state and client-upload attribution are staff-portal
+  // data: only portal.view holders get them.
+  const canViewPortal = await currentUserHasPermission("portal.view");
+  const portalIds = canViewPortal
+    ? [...new Set(rows.map((d) => d.portalUploaderId).filter((v): v is string => !!v))]
+    : [];
   const portalUploaders =
     portalIds.length > 0
       ? await prisma.portalIdentity.findMany({
@@ -88,11 +92,11 @@ export async function shapeDocumentRows(
     uploaderName: d.uploadedBy ? byUser.get(d.uploadedBy)?.name ?? null : null,
     folderId: d.folderId,
     parentDocumentId: d.parentDocumentId,
-    clientShare: d.clientShare,
-    portalUploaderName: d.portalUploaderId
+    clientShare: canViewPortal ? d.clientShare : null,
+    portalUploaderName: canViewPortal && d.portalUploaderId
       ? (portalNames.get(d.portalUploaderId) ?? null)
       : null,
-    clientNote: d.clientNote,
+    clientNote: canViewPortal ? d.clientNote : null,
     createdAt: d.createdAt,
   }));
 }

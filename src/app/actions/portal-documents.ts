@@ -12,12 +12,12 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { assertMatterAccess } from "@/lib/matter-access";
-import { requirePermissionResult } from "@/lib/permission-check";
+import { currentUserHasPermission, requirePermissionResult } from "@/lib/permission-check";
 import { logActivity, logActivityTx } from "@/lib/activity-log";
 import { parseDateOnly } from "@/lib/format-date";
 import { documentRequestEmail, documentsSharedEmail } from "@/lib/portal/emails";
 import { portalHomeUrl } from "@/lib/portal/link-url";
-import { MOVE_DOCUMENTS_BATCH_CAP } from "@/lib/folder-tree";
+import { MOVE_DOCUMENTS_BATCH_CAP, collectDescendantIds } from "@/lib/folder-tree";
 import { isEffectivelyShared, sharedFolderIds } from "@/lib/portal/document-visibility";
 import { emailLivePortalUsers } from "@/lib/portal/notify-clients";
 
@@ -360,4 +360,53 @@ export async function setFolderClientShared(
     detail: emailFailed ? "— email failed" : null,
   });
   return done(matterId);
+}
+
+/**
+ * Read-only: how many files would become / stop being visible to the
+ * client if this folder moved under `targetFolderId`. Powers the folder
+ * move dialog's warning. Zeros (never an error) for users without
+ * portal.share_documents, for lead folders, and for bad targets.
+ */
+export async function previewFolderMoveVisibility(
+  folderId: string,
+  targetFolderId: string | null
+): Promise<{ becomesVisible: number; becomesHidden: number }> {
+  const none = { becomesVisible: 0, becomesHidden: 0 };
+  const folder = await prisma.documentFolder.findUnique({
+    where: { id: folderId },
+    select: { matterId: true, leadId: true },
+  });
+  if (!folder || folder.leadId !== null || folder.matterId === null) return none;
+  const matterId = folder.matterId;
+  await assertMatterAccess(matterId);
+  if (!(await currentUserHasPermission("portal.share_documents"))) return none;
+
+  const folders = await prisma.documentFolder.findMany({
+    where: { matterId },
+    select: { id: true, parentId: true, clientShared: true },
+  });
+  const subtree = collectDescendantIds(folders, folderId);
+  if (targetFolderId !== null) {
+    if (targetFolderId === folderId || subtree.has(targetFolderId)) return none;
+    if (!folders.some((f) => f.id === targetFolderId)) return none;
+  }
+  subtree.add(folderId);
+  const docs = await prisma.document.findMany({
+    where: { matterId, folderId: { in: [...subtree] } },
+    select: { clientShare: true, folderId: true },
+  });
+  const before = sharedFolderIds(folders);
+  const after = sharedFolderIds(
+    folders.map((f) => (f.id === folderId ? { ...f, parentId: targetFolderId } : f))
+  );
+  let becomesVisible = 0;
+  let becomesHidden = 0;
+  for (const d of docs) {
+    const was = isEffectivelyShared(d, before);
+    const will = isEffectivelyShared(d, after);
+    if (!was && will) becomesVisible++;
+    else if (was && !will) becomesHidden++;
+  }
+  return { becomesVisible, becomesHidden };
 }

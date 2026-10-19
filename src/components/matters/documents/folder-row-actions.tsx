@@ -47,9 +47,10 @@ import {
   moveFolder,
   renameFolder,
 } from "@/app/actions/document-folders";
-import { setFolderClientShared } from "@/app/actions/portal-documents";
+import { previewFolderMoveVisibility, setFolderClientShared } from "@/app/actions/portal-documents";
 import { collectDescendantIds, type FlatFolder } from "@/lib/folder-tree";
 import { confirmAction, notifyError } from "@/lib/feedback";
+import { visibilityWarning } from "@/lib/portal/move-warning";
 import { MoveToFolderDialog } from "./move-to-folder-dialog";
 
 export function FolderRowActions({
@@ -253,6 +254,12 @@ export function FolderRowActions({
         folders={folders}
         disabledIds={disabledIds}
         currentFolderId={parentId}
+        warningLoader={
+          canShare
+            ? async (target) =>
+                visibilityWarning(await previewFolderMoveVisibility(folderId, target))
+            : undefined
+        }
         onMove={(target) => moveFolder(folderId, target)}
       />
     </>
