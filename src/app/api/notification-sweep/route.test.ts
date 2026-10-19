@@ -18,16 +18,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/notification-sweeps", () => ({
   runDeadlineNotificationSweep: vi.fn(),
 }));
+vi.mock("@/lib/portal/prune", () => ({
+  prunePortalRecords: vi.fn(),
+}));
 
 import { runDeadlineNotificationSweep } from "@/lib/notification-sweeps";
+import { prunePortalRecords } from "@/lib/portal/prune";
 import { GET } from "./route";
 
 const mockedSweep = vi.mocked(runDeadlineNotificationSweep);
+const mockedPrune = vi.mocked(prunePortalRecords);
 const savedSecret = process.env.CRON_SECRET;
 
 beforeEach(() => {
   mockedSweep.mockReset();
   mockedSweep.mockResolvedValue({ notified: 3 } as never);
+  mockedPrune.mockReset();
+  mockedPrune.mockResolvedValue({ sessions: 0, tokens: 0, linkRequests: 0 });
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -50,6 +57,7 @@ describe("GET /api/notification-sweep", () => {
       expect(res.status).toBe(401);
     }
     expect(mockedSweep).not.toHaveBeenCalled();
+    expect(mockedPrune).not.toHaveBeenCalled();
   });
 
   it("rejects everything when CRON_SECRET is the empty string", async () => {
@@ -79,6 +87,21 @@ describe("GET /api/notification-sweep", () => {
     expect(await res.json()).toEqual({ ok: true, notified: 3 });
     expect(mockedSweep).toHaveBeenCalledOnce();
     expect(mockedSweep.mock.calls[0][1]).toEqual({ revalidate: true });
+    expect(mockedPrune).toHaveBeenCalledOnce();
+    expect(mockedPrune.mock.calls[0][0]).toBeInstanceOf(Date);
+  });
+
+  it("a portal prune failure is logged and never fails the sweep", async () => {
+    process.env.CRON_SECRET = "s3cret";
+    mockedPrune.mockRejectedValue(new Error("prune boom"));
+    const res = await GET(request("Bearer s3cret"));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, notified: 3 });
+    expect(mockedSweep).toHaveBeenCalledOnce();
+    expect(console.error).toHaveBeenCalledWith(
+      "[notification-sweep] portal prune failed",
+      expect.any(Error)
+    );
   });
 
   it("500s with a generic body (no error text) when the sweep throws", async () => {

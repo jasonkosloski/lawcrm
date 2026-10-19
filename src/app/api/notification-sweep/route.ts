@@ -19,10 +19,15 @@
  * advisory lock, so overlap with the dashboard's opportunistic
  * hourly run is harmless (the later one waits, then finds nothing
  * new to write).
+ *
+ * The same hourly tick prunes dead client-portal rows (expired sessions,
+ * spent tokens, old link-request throttle rows; src/lib/portal/prune.ts).
+ * A prune failure is logged and never fails the sweep.
  */
 
 import { isAuthorizedCron } from "@/lib/cron-auth";
 import { runDeadlineNotificationSweep } from "@/lib/notification-sweeps";
+import { prunePortalRecords } from "@/lib/portal/prune";
 
 /** Headroom for waiting on the sweep's advisory lock behind an
  *  overlapping run. */
@@ -33,8 +38,15 @@ export async function GET(request: Request): Promise<Response> {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const now = new Date();
   try {
-    const result = await runDeadlineNotificationSweep(new Date(), {
+    await prunePortalRecords(now);
+  } catch (err) {
+    console.error("[notification-sweep] portal prune failed", err);
+  }
+
+  try {
+    const result = await runDeadlineNotificationSweep(now, {
       revalidate: true,
     });
     return Response.json({ ok: true, ...result });
