@@ -52,6 +52,24 @@ describe("portal tokens", () => {
     expect(await consumeToken(login)).toEqual({ identityId });
   });
 
+  test("a newer login token kills an older login token", async () => {
+    const first = await issueToken(identityId, "login");
+    const second = await issueToken(identityId, "login");
+    expect(await consumeToken(first)).toBeNull();
+    expect(await consumeToken(second)).toEqual({ identityId });
+  });
+
+  test("token for a disabled identity is rejected and stays unused", async () => {
+    const raw = await issueToken(identityId, "login");
+    await prisma.portalIdentity.update({
+      where: { id: identityId },
+      data: { disabledAt: new Date() },
+    });
+    expect(await consumeToken(raw)).toBeNull();
+    const row = await prisma.portalLoginToken.findFirstOrThrow();
+    expect(row.usedAt).toBeNull();
+  });
+
   test("only the hash is stored", async () => {
     const raw = await issueToken(identityId, "login");
     const rows = await prisma.portalLoginToken.findMany();

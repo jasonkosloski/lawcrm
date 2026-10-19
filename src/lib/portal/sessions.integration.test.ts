@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { prisma } from "@/lib/prisma";
 import { resetDb, seedContact } from "@/test/integration-helpers";
@@ -87,7 +87,32 @@ describe("portal sessions", () => {
     });
     expect(await resolveSession(raw)).not.toBeNull();
     const row = await prisma.portalSession.findFirstOrThrow();
-    expect(row.expiresAt.getTime()).toBeLessThanOrEqual(createdAt.getTime() + 30 * DAY);
+    expect(
+      Math.abs(row.expiresAt.getTime() - (createdAt.getTime() + 30 * DAY))
+    ).toBeLessThan(5000);
+  });
+
+  test("resolve returns normally when the row vanishes before the slide", async () => {
+    const raw = await createSession(identityId);
+    await prisma.portalSession.updateMany({
+      data: { lastSeenAt: new Date(Date.now() - 2 * 60_000) },
+    });
+    const real = prisma.portalSession.findUnique.bind(prisma.portalSession);
+    const spy = vi
+      .spyOn(prisma.portalSession, "findUnique")
+      .mockImplementationOnce(((args: never) => {
+        const p = real(args) as Promise<unknown>;
+        return p.then(async (r) => {
+          await deleteSession(raw);
+          return r;
+        });
+      }) as never);
+    try {
+      await expect(resolveSession(raw)).resolves.toBeTruthy();
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await resolveSession(raw)).toBeNull();
   });
 
   test("deleteSession removes just that session", async () => {

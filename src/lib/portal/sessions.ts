@@ -40,15 +40,18 @@ export async function resolveSession(
   if (!session || session.expiresAt <= now || session.identity.disabledAt) {
     return null;
   }
-  if (now.getTime() - session.lastSeenAt.getTime() > SLIDE_AFTER_MS) {
+  const slideBefore = new Date(now.getTime() - SLIDE_AFTER_MS);
+  if (session.lastSeenAt < slideBefore) {
     const expiresAt = new Date(
       Math.min(
         now.getTime() + IDLE_MS,
         session.createdAt.getTime() + ABSOLUTE_MS
       )
     );
-    await prisma.portalSession.update({
-      where: { id: session.id },
+    // updateMany: a concurrent logout/revoke may have deleted the row since
+    // the read; that must not throw. The count is deliberately ignored.
+    await prisma.portalSession.updateMany({
+      where: { id: session.id, lastSeenAt: { lt: slideBefore } },
       data: { lastSeenAt: now, expiresAt },
     });
   }

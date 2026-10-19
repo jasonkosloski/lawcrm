@@ -46,7 +46,12 @@ export async function consumeToken(
   const tokenHash = hashSecret(raw);
   const now = new Date();
   const { count } = await prisma.portalLoginToken.updateMany({
-    where: { tokenHash, usedAt: null, expiresAt: { gt: now } },
+    where: {
+      tokenHash,
+      usedAt: null,
+      expiresAt: { gt: now },
+      identity: { disabledAt: null },
+    },
     data: { usedAt: now },
   });
   if (count !== 1) return null;
