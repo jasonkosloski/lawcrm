@@ -71,6 +71,9 @@ import {
   formatFileSize,
 } from "@/lib/document-display";
 import { scopeBasePath, type RecordScope } from "@/lib/record-scope";
+import { ClientShareBadge } from "@/components/documents/client-share-badge";
+import { isEffectivelyShared, shareReason, sharedFolderIds } from "@/lib/portal/document-visibility";
+import { matterHasLivePortalAccess } from "@/lib/queries/document-requests";
 
 export async function DocumentsBrowser({
   scope,
@@ -93,6 +96,8 @@ export async function DocumentsBrowser({
     canFolderEdit,
     canFolderDelete,
     canOrganize,
+    canSharePermission,
+    canViewPortal,
     templates,
     tz,
   ] = await Promise.all([
@@ -108,6 +113,9 @@ export async function DocumentsBrowser({
     currentUserHasPermission("documents.folder.edit"),
     currentUserHasPermission("documents.folder.delete"),
     currentUserHasPermission("documents.organize"),
+    // Client-portal sharing (matters only — leads have no portal).
+    currentUserHasPermission("portal.share_documents"),
+    currentUserHasPermission("portal.view"),
     // Active templates only — the generation picker never offers
     // archived ones (soft-archive semantics on DocumentTemplate).
     prisma.documentTemplate.findMany({
@@ -124,6 +132,16 @@ export async function DocumentsBrowser({
     // viewer's calendar, not the server's (UTC in prod).
     getCurrentUserTimeZone(),
   ]);
+
+  const isMatter = scope.kind === "matter";
+  const canShare = isMatter && canSharePermission;
+  // Staff see the Shared badge with either portal permission.
+  const showShareState = isMatter && (canSharePermission || canViewPortal);
+  const noPortalAccess =
+    canShare && scope.kind === "matter"
+      ? !(await matterHasLivePortalAccess(scope.matterId))
+      : false;
+  const sharedFolders = sharedFolderIds(folders);
 
   // Unknown / stale folder id → root, never a 404.
   const selectedId =
@@ -172,6 +190,18 @@ export async function DocumentsBrowser({
             <Icon size={14} className="shrink-0 text-ink-4" />
             {d.name}
           </Link>
+          {showShareState && <ClientShareBadge reason={shareReason(d, folders)} />}
+          {d.portalUploaderName && (
+            <div className="text-2xs font-normal text-ink-3 mt-0.5">
+              From {d.portalUploaderName}
+              {d.clientNote && (
+                <span className="text-ink-4" title={d.clientNote}>
+                  {" · "}
+                  {d.clientNote.length > 80 ? `${d.clientNote.slice(0, 80)}…` : d.clientNote}
+                </span>
+              )}
+            </div>
+          )}
         </TableCell>
         <TableCell className="text-2xs font-mono text-ink-4">{documentCategoryLabel(d.category)}</TableCell>
         <TableCell>
@@ -196,6 +226,10 @@ export async function DocumentsBrowser({
             isAttachment={d.parentDocumentId !== null}
             unsavedAttachments={attachments.filter((a) => a.copiedTo.length === 0).map((a) => a.name)}
             savedAttachments={attachments.filter((a) => a.copiedTo.length > 0).map((a) => a.name)}
+            canShare={canShare}
+            isShared={isEffectivelyShared(d, sharedFolders)}
+            clientShare={d.clientShare}
+            visibilityFolders={isMatter ? folders : undefined}
           />
         </TableCell>
       </TableRow>
@@ -259,6 +293,11 @@ export async function DocumentsBrowser({
               );
             })}
           </nav>
+          {noPortalAccess && (
+            <span className="text-2xs text-ink-4">
+              No one has portal access on this matter yet.
+            </span>
+          )}
           <div className="ml-auto flex items-center gap-2">
             {writable && canFolderCreate && !atDepthCap && (
               <NewFolderButton
@@ -334,6 +373,15 @@ export async function DocumentsBrowser({
                           )}
                         </Link>
                         <FolderSourceBadge folder={folder} scope={scope} />
+                        {showShareState && (
+                          <ClientShareBadge
+                            reason={
+                              folder.clientShared
+                                ? { kind: "file" }
+                                : shareReason({ clientShare: null, folderId: folder.id }, folders)
+                            }
+                          />
+                        )}
                       </TableCell>
                       <TableCell className="text-2xs font-mono text-ink-4">
                         Folder
@@ -355,6 +403,8 @@ export async function DocumentsBrowser({
                           hasProtectedDescendant={protectedAncestors.has(
                             folder.id
                           )}
+                          canShare={canShare}
+                          clientShared={folder.clientShared}
                         />
                       </TableCell>
                     </TableRow>

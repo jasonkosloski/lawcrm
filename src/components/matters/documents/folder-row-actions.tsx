@@ -18,6 +18,8 @@
 
 import { useState, useTransition } from "react";
 import {
+  Eye,
+  EyeOff,
   FolderInput,
   MoreHorizontal,
   Pencil,
@@ -45,6 +47,7 @@ import {
   moveFolder,
   renameFolder,
 } from "@/app/actions/document-folders";
+import { setFolderClientShared } from "@/app/actions/portal-documents";
 import { collectDescendantIds, type FlatFolder } from "@/lib/folder-tree";
 import { confirmAction, notifyError } from "@/lib/feedback";
 import { MoveToFolderDialog } from "./move-to-folder-dialog";
@@ -59,6 +62,8 @@ export function FolderRowActions({
   canOrganize,
   isProtected = false,
   hasProtectedDescendant = false,
+  canShare = false,
+  clientShared = false,
 }: {
   folderId: string;
   name: string;
@@ -73,6 +78,10 @@ export function FolderRowActions({
   isProtected?: boolean;
   /** Holds a protected folder below it: can't be deleted. */
   hasProtectedDescendant?: boolean;
+  /** portal.share_documents on a matter folder (never leads). */
+  canShare?: boolean;
+  /** The folder's own client-share flag. */
+  clientShared?: boolean;
 }) {
   const [renameOpen, setRenameOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
@@ -93,7 +102,8 @@ export function FolderRowActions({
   const showRename = canEdit && !isProtected;
   const showMove = canOrganize && !isProtected;
   const showDelete = canDelete && !isProtected && !hasProtectedDescendant;
-  if (!showRename && !showMove && !showDelete) return null;
+  const showShare = canShare && !isProtected;
+  if (!showRename && !showMove && !showDelete && !showShare) return null;
 
   const submitRename = () => {
     setRenameError(null);
@@ -101,6 +111,13 @@ export function FolderRowActions({
       const res = await renameFolder(folderId, newName);
       if (res.ok) setRenameOpen(false);
       else setRenameError(res.error);
+    });
+  };
+
+  const onToggleShare = () => {
+    startTransition(async () => {
+      const res = await setFolderClientShared(folderId, !clientShared);
+      if (!res.ok) notifyError(res.error ?? "Couldn't update sharing.");
     });
   };
 
@@ -156,9 +173,15 @@ export function FolderRowActions({
               Move to…
             </DropdownMenuItem>
           )}
+          {showShare && (
+            <DropdownMenuItem onClick={onToggleShare}>
+              {clientShared ? <EyeOff /> : <Eye />}
+              {clientShared ? "Stop sharing folder" : "Share folder with client"}
+            </DropdownMenuItem>
+          )}
           {showDelete && (
             <>
-              {(showRename || showMove) && <DropdownMenuSeparator />}
+              {(showRename || showMove || showShare) && <DropdownMenuSeparator />}
               <DropdownMenuItem variant="destructive" onClick={onDelete}>
                 <Trash2 />
                 Delete

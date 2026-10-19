@@ -39,6 +39,12 @@ vi.mock("@/lib/queries/portal-access", () => ({
 vi.mock("@/components/matters/portal-card", () => ({
   PortalCard: () => <div data-testid="portal-card" />,
 }));
+vi.mock("@/lib/queries/document-requests", () => ({
+  getDocumentRequestsForMatter: vi.fn(async () => ({ requests: [], hasLiveAccess: true })),
+}));
+vi.mock("@/components/matters/client-requests-card", () => ({
+  ClientRequestsCard: () => <div data-testid="client-requests-card" />,
+}));
 vi.mock("@/lib/queries/matters", () => ({ getMatterById: vi.fn() }));
 vi.mock("@/lib/queries/matter-detail", () => ({
   getMatterDeadlines: vi.fn(async () => []),
@@ -178,6 +184,7 @@ describe("MatterOverviewPage", () => {
     const { getPortalCardData } = await import("@/lib/queries/portal-access");
     await renderPage();
     expect(screen.getByTestId("portal-card")).toBeTruthy();
+    expect(screen.getByTestId("client-requests-card")).toBeTruthy();
 
     vi.mocked(getPortalCardData).mockClear();
     vi.mocked(currentUserHasPermission).mockImplementation(
@@ -186,6 +193,7 @@ describe("MatterOverviewPage", () => {
     document.body.innerHTML = "";
     await renderPage();
     expect(screen.queryByTestId("portal-card")).toBeNull();
+    expect(screen.queryByTestId("client-requests-card")).toBeNull();
     expect(getPortalCardData).not.toHaveBeenCalled();
     vi.mocked(currentUserHasPermission).mockImplementation(async () => true);
   });

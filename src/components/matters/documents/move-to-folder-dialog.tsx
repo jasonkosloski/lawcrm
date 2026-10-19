@@ -38,6 +38,7 @@ export function MoveToFolderDialog({
   currentFolderId,
   submitLabel = "Move",
   pendingLabel = "Moving…",
+  warningFor,
   onMove,
 }: {
   open: boolean;
@@ -53,6 +54,8 @@ export function MoveToFolderDialog({
   currentFolderId: string | null | undefined;
   submitLabel?: string;
   pendingLabel?: string;
+  /** Heads-up for the picked target (e.g. client-visibility change). Advisory only. */
+  warningFor?: (folderId: string | null) => string | null;
   onMove: (
     folderId: string | null
   ) => Promise<{ ok: boolean; error?: string }>;
@@ -73,6 +76,7 @@ export function MoveToFolderDialog({
   }
 
   const disabled = new Set(disabledIds ?? []);
+  const warning = target !== undefined && warningFor ? warningFor(target) : null;
 
   const submit = () => {
     if (target === undefined) return;
@@ -135,6 +139,16 @@ export function MoveToFolderDialog({
             option(f.id, f.name, f.depth + 1, disabled.has(f.id))
           )}
         </div>
+
+        {warning && (
+          <div
+            role="status"
+            className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn"
+          >
+            <TriangleAlert size={12} className="shrink-0 mt-px" />
+            <span>{warning}</span>
+          </div>
+        )}
 
         {error && (
           <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">

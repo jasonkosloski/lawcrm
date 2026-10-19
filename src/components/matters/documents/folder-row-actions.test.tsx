@@ -7,7 +7,11 @@ vi.mock("@/app/actions/document-folders", () => ({
   moveFolder: vi.fn(),
   renameFolder: vi.fn(),
 }));
+vi.mock("@/app/actions/portal-documents", () => ({
+  setFolderClientShared: vi.fn(async () => ({ ok: true })),
+}));
 
+import { setFolderClientShared } from "@/app/actions/portal-documents";
 import { FolderRowActions } from "./folder-row-actions";
 
 async function open(over: { isProtected: boolean; hasProtectedDescendant: boolean }) {
@@ -48,5 +52,45 @@ describe("FolderRowActions protection", () => {
     await open({ isProtected: false, hasProtectedDescendant: true });
     expect(screen.getByText("Rename")).toBeInTheDocument();
     expect(screen.queryByText("Delete")).toBeNull();
+  });
+});
+
+describe("FolderRowActions sharing", () => {
+  const renderShare = async (over: Record<string, unknown>) => {
+    render(
+      <FolderRowActions
+        folderId="f1"
+        name="F"
+        parentId={null}
+        folders={[{ id: "f1", parentId: null, name: "F", depth: 1 }]}
+        canEdit={false}
+        canDelete={false}
+        canOrganize={false}
+        {...over}
+      />
+    );
+    const trigger = screen.queryByRole("button", { name: "Folder actions" });
+    if (trigger) await userEvent.click(trigger);
+    return trigger;
+  };
+
+  test("no share item without canShare", async () => {
+    expect(await renderShare({ clientShared: false })).toBeNull();
+  });
+
+  test("shares an unshared folder", async () => {
+    await renderShare({ canShare: true, clientShared: false });
+    await userEvent.click(screen.getByText("Share folder with client"));
+    expect(setFolderClientShared).toHaveBeenCalledWith("f1", true);
+  });
+
+  test("stops sharing a shared folder", async () => {
+    await renderShare({ canShare: true, clientShared: true });
+    await userEvent.click(screen.getByText("Stop sharing folder"));
+    expect(setFolderClientShared).toHaveBeenCalledWith("f1", false);
+  });
+
+  test("a protected folder offers no share item", async () => {
+    expect(await renderShare({ canShare: true, isProtected: true })).toBeNull();
   });
 });

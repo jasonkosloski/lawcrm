@@ -14,7 +14,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Copy, Download, FolderInput, MoreHorizontal, Trash2 } from "lucide-react";
+import { Copy, Download, Eye, EyeOff, FolderInput, MoreHorizontal, Trash2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +25,8 @@ import {
 import { copyDocumentToFolder, deleteDocument } from "@/app/actions/documents";
 import { COPY_DESCRIPTION } from "@/components/documents-viewer/document-placement";
 import { moveDocuments } from "@/app/actions/document-folders";
+import { setDocumentsClientShare } from "@/app/actions/portal-documents";
+import { moveWarning } from "@/lib/portal/move-warning";
 import type { FlatFolder } from "@/lib/folder-tree";
 import { confirmAction, notifyError } from "@/lib/feedback";
 import { MoveToFolderDialog } from "./move-to-folder-dialog";
@@ -52,6 +54,10 @@ export function DocumentRowActions({
   /** For an email: attachments with no copy elsewhere / with one. */
   unsavedAttachments = [],
   savedAttachments = [],
+  canShare = false,
+  isShared = false,
+  clientShare = null,
+  visibilityFolders,
 }: {
   documentId: string;
   name: string;
@@ -63,6 +69,15 @@ export function DocumentRowActions({
   isAttachment?: boolean;
   unsavedAttachments?: string[];
   savedAttachments?: string[];
+  /** portal.share_documents on a matter document (never leads). */
+  canShare?: boolean;
+  /** Effectively visible to the client right now. */
+  isShared?: boolean;
+  /** The document's own override, for the move warning. */
+  clientShare?: string | null;
+  /** Folder share flags; when given, the move dialog warns on a
+   *  client-visibility change. */
+  visibilityFolders?: { id: string; parentId: string | null; clientShared: boolean }[];
 }) {
   const [pending, startTransition] = useTransition();
   const [moveOpen, setMoveOpen] = useState(false);
@@ -94,7 +109,14 @@ export function DocumentRowActions({
     });
   };
 
-  if (!hasFile && !canMove && !canDelete) return null;
+  const onToggleShare = () => {
+    startTransition(async () => {
+      const result = await setDocumentsClientShare([documentId], !isShared);
+      if (!result.ok) notifyError(result.error ?? "Couldn't update sharing.");
+    });
+  };
+
+  if (!hasFile && !canMove && !canDelete && !canShare) return null;
   const canRelocate = canMove && !isAttachment;
 
   return (
@@ -138,9 +160,15 @@ export function DocumentRowActions({
               Copy to…
             </DropdownMenuItem>
           )}
+          {canShare && (
+            <DropdownMenuItem onClick={onToggleShare}>
+              {isShared ? <EyeOff /> : <Eye />}
+              {isShared ? "Stop sharing" : "Share with client"}
+            </DropdownMenuItem>
+          )}
           {canDelete && (
             <>
-              {(hasFile || canMove) && <DropdownMenuSeparator />}
+              {(hasFile || canMove || canShare) && <DropdownMenuSeparator />}
               <DropdownMenuItem variant="destructive" onClick={onDelete}>
                 <Trash2 />
                 Delete
@@ -158,6 +186,16 @@ export function DocumentRowActions({
           description="Pick the folder this document should live in."
           folders={folders}
           currentFolderId={currentFolderId}
+          warningFor={
+            visibilityFolders
+              ? (target) =>
+                  moveWarning(
+                    [{ clientShare, folderId: currentFolderId }],
+                    target,
+                    visibilityFolders
+                  )
+              : undefined
+          }
           onMove={(target) => moveDocuments([documentId], target)}
         />
       )}

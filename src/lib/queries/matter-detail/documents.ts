@@ -33,6 +33,13 @@ export type DocumentRow = {
   folderId: string | null;
   /** The email this file was extracted from (ADR-043), else null. */
   parentDocumentId: string | null;
+  /** Portal visibility override: null follows the folder, "shared" /
+   *  "hidden" is the per-file choice. Staff UI only (portal.view). */
+  clientShare: string | null;
+  /** Contact name of the portal user who uploaded this ("From <name>"). */
+  portalUploaderName: string | null;
+  /** The client's note on their upload. */
+  clientNote: string | null;
   createdAt: Date;
 };
 
@@ -53,6 +60,18 @@ export async function shapeDocumentRows(
       : [];
   const byUser = new Map(uploaders.map((u) => [u.id, u]));
 
+  const portalIds = [
+    ...new Set(rows.map((d) => d.portalUploaderId).filter((v): v is string => !!v)),
+  ];
+  const portalUploaders =
+    portalIds.length > 0
+      ? await prisma.portalIdentity.findMany({
+          where: { id: { in: portalIds } },
+          select: { id: true, contact: { select: { name: true } } },
+        })
+      : [];
+  const portalNames = new Map(portalUploaders.map((p) => [p.id, p.contact.name]));
+
   return rows.map((d) => ({
     id: d.id,
     name: d.name,
@@ -69,6 +88,11 @@ export async function shapeDocumentRows(
     uploaderName: d.uploadedBy ? byUser.get(d.uploadedBy)?.name ?? null : null,
     folderId: d.folderId,
     parentDocumentId: d.parentDocumentId,
+    clientShare: d.clientShare,
+    portalUploaderName: d.portalUploaderId
+      ? (portalNames.get(d.portalUploaderId) ?? null)
+      : null,
+    clientNote: d.clientNote,
     createdAt: d.createdAt,
   }));
 }
@@ -85,6 +109,8 @@ export async function getDocumentFolders(
     name: string;
     order: number;
     systemKind: string | null;
+    /** Folder-level client-portal share flag (staff UI). */
+    clientShared: boolean;
     recordsRequestId: string | null;
     /** Subject of the owning records request, for the badge tooltip. */
     sourceTitle: string | null;
@@ -98,6 +124,7 @@ export async function getDocumentFolders(
       name: true,
       order: true,
       systemKind: true,
+      clientShared: true,
       recordsRequestId: true,
       recordsRequest: { select: { subject: true } },
     },

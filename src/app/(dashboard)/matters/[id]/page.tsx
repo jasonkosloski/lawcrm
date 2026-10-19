@@ -39,6 +39,8 @@ import { getNoteAccess } from "@/lib/note-access";
 import { allowedCaptureKinds } from "@/lib/note-constants";
 import { PortalCard } from "@/components/matters/portal-card";
 import { getPortalCardData } from "@/lib/queries/portal-access";
+import { ClientRequestsCard } from "@/components/matters/client-requests-card";
+import { getDocumentRequestsForMatter } from "@/lib/queries/document-requests";
 import { NoteComposer } from "@/components/matters/notes/note-composer";
 import { NotesTabBody } from "@/components/matters/notes/notes-tab-body";
 
@@ -81,6 +83,9 @@ export default async function MatterOverviewPage({
     canViewPortal,
     canInvitePortal,
     canRevokePortal,
+    canAddRequests,
+    canEditRequests,
+    canDeleteRequests,
   ] = await Promise.all([
     getMatterById(id),
     getMatterDeadlines(id, { tz, openOnly: true, limit: 4 }),
@@ -122,12 +127,17 @@ export default async function MatterOverviewPage({
     currentUserHasPermission("portal.view"),
     currentUserHasPermission("portal.invite"),
     currentUserHasPermission("portal.revoke"),
+    currentUserHasPermission("portal.add_requests"),
+    currentUserHasPermission("portal.edit_requests"),
+    currentUserHasPermission("portal.delete_requests"),
   ]);
   if (!matter) notFound();
 
   // The loader needs portal.view (it returns nothing without it), so
   // it runs only for holders.
-  const portal = canViewPortal ? await getPortalCardData(id) : null;
+  const [portal, clientRequests] = canViewPortal
+    ? await Promise.all([getPortalCardData(id), getDocumentRequestsForMatter(id)])
+    : [null, null];
 
   const stageOptions = await prisma.matterStage.findMany({
     // Active stages, plus the matter's own stage even if it was
@@ -451,6 +461,17 @@ export default async function MatterOverviewPage({
               canRevoke={canRevokePortal}
               portalEnabled={portal.portalEnabled}
               tz={tz}
+            />
+          )}
+
+          {clientRequests && (
+            <ClientRequestsCard
+              matterId={matter.id}
+              requests={clientRequests.requests}
+              hasLiveAccess={clientRequests.hasLiveAccess}
+              canAdd={canAddRequests}
+              canEdit={canEditRequests}
+              canDelete={canDeleteRequests}
             />
           )}
 

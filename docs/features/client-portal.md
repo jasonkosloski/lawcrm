@@ -74,3 +74,8 @@ Steps marked **(you)** need the user; the rest is code that is already shipped.
 - **`auth()` on the portal host returns a session without `user.id`** (signed-out shape by design). Any code reading `session.user.id` must not assume it is set there.
 - **Timing difference on link requests**: a matched email does token + send work, an unknown one returns sooner, so latency can hint at who has portal access. Mitigated by the throttle only; consider queueing the send.
 - **Smaller known gaps**: the invite P2002 catch maps any unique violation to the email copy; the walled-actor check runs outside the invite transaction (narrow race); invite refusals can reveal identity facts from hidden matters; there is no UI for `disablePortalIdentity` yet.
+
+## Documents: staff UI (sub-project 2)
+- Documents browser (matters only; leads never show share items): file kebab "Share with client" / "Stop sharing", folder kebab "Share folder with client" / "Stop sharing folder" (not on protected system folders), both gated on `portal.share_documents`. "Shared" badge (needs `portal.view` or `portal.share_documents`) is computed from the folder list the page already loads plus `shareReason`; tooltip is "Shared with client" or "Shared via folder <name>".
+- Client uploads show "From <contact name>" and the client's note under the file name. The move dialog warns (advisory) via `moveWarning` when a move changes client visibility; folder moves do not warn.
+- "Client requests" card on the matter Overview beside the Portal card, behind `portal.view`; reads in `src/lib/queries/document-requests.ts`. "No one has portal access on this matter yet." shows near the share controls and the card when no live `PortalMatterAccess` exists.

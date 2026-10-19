@@ -16,12 +16,14 @@ export function DateOnlyField({
   onChange,
   label,
   error,
+  required = true,
 }: {
   name: string;
   value: string;
   onChange: (v: string) => void;
   label: string;
   error?: string;
+  required?: boolean;
 }) {
   return (
     <label className="flex flex-col gap-1 text-2xs text-ink-3">
@@ -31,7 +33,7 @@ export function DateOnlyField({
         name={name}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        required
+        required={required}
         className="h-8 px-2 rounded-md border border-line text-xs text-ink bg-white font-mono"
       />
       {error && <span className="text-2xs text-warn">{error}</span>}
