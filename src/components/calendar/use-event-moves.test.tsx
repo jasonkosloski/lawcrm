@@ -2,7 +2,7 @@
  * useEventMoves — the optimistic drag/resize pipeline.
  *
  * Pins the failure handling: a rejected result AND a thrown action
- * both roll the chip back and alert instead of escaping to the error
+ * both roll the chip back and show an error toast instead of escaping to the error
  * boundary; a failed EARLIER move must not yank a newer pending move
  * for the same event; a move the viewer can't edit never reaches the
  * server; and a success needs no manual router.refresh() (the action
@@ -21,7 +21,9 @@ const { moveCalendarEvent, unstable_rethrow } = vi.hoisted(() => ({
 vi.mock("@/app/actions/calendar-events", () => ({ moveCalendarEvent }));
 // No useRouter: the hook must not need the router any more.
 vi.mock("next/navigation", () => ({ unstable_rethrow }));
+vi.mock("@/lib/feedback", () => ({ notifyError: vi.fn() }));
 
+import { notifyError } from "@/lib/feedback";
 import { useEventMoves } from "./use-event-moves";
 
 const SERVER_START = new Date("2026-04-28T15:00:00.000Z");
@@ -60,10 +62,10 @@ const move = (hour: number) => ({
 /** Let the transition's async callback settle. */
 const flush = () => act(async () => {});
 
-let alertSpy: ReturnType<typeof vi.fn>;
+let errorToast: ReturnType<typeof vi.mocked<typeof notifyError>>;
 beforeEach(() => {
-  alertSpy = vi.fn();
-  vi.stubGlobal("alert", alertSpy);
+  errorToast = vi.mocked(notifyError);
+  errorToast.mockClear();
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 afterEach(() => {
@@ -102,10 +104,10 @@ describe("useEventMoves", () => {
     ];
     rerender({ items: fresh });
     expect(result.current.renderItems).toBe(fresh);
-    expect(alertSpy).not.toHaveBeenCalled();
+    expect(errorToast).not.toHaveBeenCalled();
   });
 
-  test("a rejected result rolls the chip back and alerts the server's message", async () => {
+  test("a rejected result rolls the chip back and toasts the server's message", async () => {
     moveCalendarEvent.mockResolvedValue({ ok: false, error: "Nope." });
     const items = [event()];
     const { result } = renderHook(() => useEventMoves(items));
@@ -114,10 +116,10 @@ describe("useEventMoves", () => {
     await flush();
 
     expect(startOf(result.current.renderItems)).toBe(SERVER_START.toISOString());
-    expect(alertSpy).toHaveBeenCalledWith("Nope.");
+    expect(errorToast).toHaveBeenCalledWith("Nope.");
   });
 
-  test("a THROWN action rolls back and alerts instead of escaping", async () => {
+  test("a THROWN action rolls back and toasts instead of escaping", async () => {
     const boom = new Error("network down");
     moveCalendarEvent.mockRejectedValue(boom);
     const items = [event()];
@@ -128,7 +130,7 @@ describe("useEventMoves", () => {
 
     expect(unstable_rethrow).toHaveBeenCalledWith(boom);
     expect(startOf(result.current.renderItems)).toBe(SERVER_START.toISOString());
-    expect(alertSpy).toHaveBeenCalledWith(
+    expect(errorToast).toHaveBeenCalledWith(
       "Couldn't move event. Please try again."
     );
   });
@@ -152,7 +154,7 @@ describe("useEventMoves", () => {
 
     // The chip must stay where the SECOND drag put it.
     expect(startOf(result.current.renderItems)).toBe("2026-04-29T12:00:00.000Z");
-    expect(alertSpy).toHaveBeenCalledWith("First failed.");
+    expect(errorToast).toHaveBeenCalledWith("First failed.");
   });
 
   test("a move the viewer can't edit never reaches the server", async () => {
@@ -166,7 +168,7 @@ describe("useEventMoves", () => {
 
     expect(moveCalendarEvent).not.toHaveBeenCalled();
     expect(startOf(result.current.renderItems)).toBe(SERVER_START.toISOString());
-    expect(alertSpy).toHaveBeenCalledWith(
+    expect(errorToast).toHaveBeenCalledWith(
       "You don't have permission to move this event."
     );
   });

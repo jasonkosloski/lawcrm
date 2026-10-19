@@ -22,6 +22,7 @@
 import { useRef, useState, useTransition } from "react";
 import { unstable_rethrow } from "next/navigation";
 import { moveCalendarEvent } from "@/app/actions/calendar-events";
+import { notifyError } from "@/lib/feedback";
 import type { CalendarItem } from "@/lib/queries/calendar";
 import {
   applyPending,
@@ -78,7 +79,7 @@ export function useEventMoves(
 
   const moveEvent: MoveEventFn = (eventId, schedule) => {
     if (canMove && !canMove(eventId)) {
-      alert("You don't have permission to move this event.");
+      notifyError("You don't have permission to move this event.");
       return;
     }
     const mine: PendingMove = {
@@ -105,7 +106,7 @@ export function useEventMoves(
           return next;
         });
       }
-      alert(message);
+      notifyError(message);
     };
 
     startTransition(async () => {

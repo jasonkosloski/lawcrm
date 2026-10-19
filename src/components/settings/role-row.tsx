@@ -16,6 +16,7 @@ import {
   Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { confirmAction, notifyError } from "@/lib/feedback";
 import { formatDate } from "@/lib/format-date";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import { TableCell, TableRow } from "@/components/ui/table";
@@ -50,20 +51,23 @@ export function RoleRow({
   // the server render and the hydrated client agree (ADR-012).
   const tz = useUserTimeZone();
 
-  const onDelete = () => {
+  const onDelete = async () => {
     if (
-      !confirm(
-        `Delete the role "${role.name}"?\n\n${role.memberCount} ${
+      !(await confirmAction({
+        title: `Delete the role "${role.name}"?`,
+        description: `${role.memberCount} ${
           role.memberCount === 1 ? "member" : "members"
-        } currently hold it. They keep their other roles. This can't be undone.`
-      )
+        } currently hold it. They keep their other roles. This can't be undone.`,
+        confirmLabel: "Delete role",
+        destructive: true,
+      }))
     ) {
       return;
     }
     startTransition(async () => {
       const result = await deleteRoleAction(role.id);
       if (result.status !== "ok") {
-        alert(result.errors?._form?.[0] ?? "Couldn't delete role.");
+        notifyError(result.errors?._form?.[0] ?? "Couldn't delete role.");
       }
     });
   };

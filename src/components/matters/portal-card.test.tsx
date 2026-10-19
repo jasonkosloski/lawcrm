@@ -2,12 +2,18 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+vi.mock("@/lib/feedback", () => ({
+  confirmAction: vi.fn(async () => true),
+  notifyError: vi.fn(),
+  notifySuccess: vi.fn(),
+}));
 vi.mock("@/app/actions/portal-access", () => ({
   invitePortalUser: vi.fn(),
   revokePortalAccess: vi.fn(),
 }));
 
 import { invitePortalUser, revokePortalAccess } from "@/app/actions/portal-access";
+import { confirmAction } from "@/lib/feedback";
 import { PortalCard } from "./portal-card";
 import type { PortalAccessRow } from "@/lib/queries/portal-access";
 
@@ -112,15 +118,15 @@ describe("PortalCard", () => {
 
   test("Revoke asks for confirmation before calling revokePortalAccess", async () => {
     const user = userEvent.setup();
-    const confirmMock = vi.fn(() => false);
-    vi.stubGlobal("confirm", confirmMock);
+    const confirmMock = vi.mocked(confirmAction);
+    confirmMock.mockResolvedValueOnce(false);
     renderCard({ rows: [row({})] });
 
     await user.click(screen.getByRole("button", { name: "Revoke" }));
     expect(confirmMock).toHaveBeenCalledTimes(1);
     expect(revokePortalAccess).not.toHaveBeenCalled();
 
-    confirmMock.mockReturnValue(true);
+    confirmMock.mockResolvedValue(true);
     await user.click(screen.getByRole("button", { name: "Revoke" }));
     await waitFor(() => expect(revokePortalAccess).toHaveBeenCalledWith("a1"));
   });
@@ -136,7 +142,7 @@ describe("PortalCard", () => {
   });
 
   test("a failed revoke shows the error inline", async () => {
-    vi.stubGlobal("confirm", vi.fn(() => true));
+    vi.mocked(confirmAction).mockResolvedValue(true);
     vi.mocked(revokePortalAccess).mockResolvedValue({
       ok: false,
       error: "Couldn't revoke.",

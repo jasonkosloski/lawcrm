@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { cn } from "@/lib/utils";
+import { confirmAction, type ConfirmOptions } from "@/lib/feedback";
 import {
   addAutoApply,
   deleteDeadlineRule,
@@ -99,8 +100,11 @@ export function AutomationsLibrary({
       : ` This also removes ${n} automatic default${n === 1 ? "" : "s"} (new matters will stop getting it).`;
   };
 
-  const confirmThen = (message: string, fn: () => Promise<{ ok: boolean; error?: string }>) => {
-    if (window.confirm(message)) run(fn);
+  const confirmThen = async (
+    opts: ConfirmOptions,
+    fn: () => Promise<{ ok: boolean; error?: string }>,
+  ) => {
+    if (await confirmAction(opts)) run(fn);
   };
 
   return (
@@ -141,7 +145,7 @@ export function AutomationsLibrary({
                     onEdit={can.ruleEdit ? () => setRuleDialog({ open: true, rule: r }) : undefined}
                     archived={!r.isActive}
                     onToggleArchive={can.ruleEdit ? () => run(() => setDeadlineRuleActive(r.id, !r.isActive)) : undefined}
-                    onDelete={can.ruleDelete ? () => confirmThen(`Delete the rule "${r.title}"? Deadlines it already created stay on their matters.${defaultsNote("rule", r.id)}`, () => deleteDeadlineRule(r.id)) : undefined}
+                    onDelete={can.ruleDelete ? () => void confirmThen({ title: `Delete the rule "${r.title}"?`, description: `Deadlines it already created stay on their matters.${defaultsNote("rule", r.id)}`, confirmLabel: "Delete rule", destructive: true }, () => deleteDeadlineRule(r.id)) : undefined}
                   />
                 }
               />
@@ -180,7 +184,7 @@ export function AutomationsLibrary({
                     onEdit={can.listEdit ? () => setListDialog({ open: true, list: l }) : undefined}
                     archived={!l.isActive}
                     onToggleArchive={can.listEdit ? () => run(() => setTaskListActive(l.id, !l.isActive)) : undefined}
-                    onDelete={can.listDelete ? () => confirmThen(`Delete the task list "${l.name}"? Tasks it already created stay on their matters.${defaultsNote("list", l.id)}`, () => deleteTaskList(l.id)) : undefined}
+                    onDelete={can.listDelete ? () => void confirmThen({ title: `Delete the task list "${l.name}"?`, description: `Tasks it already created stay on their matters.${defaultsNote("list", l.id)}`, confirmLabel: "Delete task list", destructive: true }, () => deleteTaskList(l.id)) : undefined}
                   />
                 }
               />

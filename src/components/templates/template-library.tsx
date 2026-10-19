@@ -31,6 +31,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { confirmAction, notifyError } from "@/lib/feedback";
 import {
   TEMPLATE_CATEGORIES,
   templateCategoryLabel,
@@ -201,21 +202,25 @@ function TemplateRow({
         template.id,
         !template.isActive
       );
-      if (!res.ok) alert(res.error ?? "Couldn't update template.");
+      if (!res.ok) notifyError(res.error ?? "Couldn't update template.");
     });
   };
 
-  const onDelete = () => {
+  const onDelete = async () => {
     if (
-      !confirm(
-        `Permanently delete "${template.name}"?\n\nThis can't be undone. Documents already generated from it are untouched. Prefer Archive unless the template was a mistake.`
-      )
+      !(await confirmAction({
+        title: `Permanently delete "${template.name}"?`,
+        description:
+          "This can't be undone. Documents already generated from it are untouched. Prefer Archive unless the template was a mistake.",
+        confirmLabel: "Delete template",
+        destructive: true,
+      }))
     ) {
       return;
     }
     startTransition(async () => {
       const res = await deleteDocumentTemplate(template.id);
-      if (!res.ok) alert(res.error ?? "Couldn't delete template.");
+      if (!res.ok) notifyError(res.error ?? "Couldn't delete template.");
     });
   };
 

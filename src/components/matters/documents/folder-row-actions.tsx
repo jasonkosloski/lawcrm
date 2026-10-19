@@ -6,7 +6,7 @@
  * Move to… (documents.organize) → shared folder picker, with the
  *   folder itself + its descendants disabled (cycle prevention; the
  *   server re-checks).
- * Delete (documents.folder.delete) → confirm(). Deleting never
+ * Delete (documents.folder.delete) → confirmation dialog. Deleting never
  *   deletes files: contents re-parent to the folder's parent, name
  *   collisions get a " (2)"-style suffix (see the action header).
  *
@@ -46,6 +46,7 @@ import {
   renameFolder,
 } from "@/app/actions/document-folders";
 import { collectDescendantIds, type FlatFolder } from "@/lib/folder-tree";
+import { confirmAction, notifyError } from "@/lib/feedback";
 import { MoveToFolderDialog } from "./move-to-folder-dialog";
 
 export function FolderRowActions({
@@ -103,17 +104,21 @@ export function FolderRowActions({
     });
   };
 
-  const onDelete = () => {
+  const onDelete = async () => {
     if (
-      !confirm(
-        `Delete the folder "${name}"?\n\nNothing inside is deleted — its subfolders and files move up one level.`
-      )
+      !(await confirmAction({
+        title: `Delete the folder "${name}"?`,
+        description:
+          "Nothing inside is deleted — its subfolders and files move up one level.",
+        confirmLabel: "Delete folder",
+        destructive: true,
+      }))
     ) {
       return;
     }
     startTransition(async () => {
       const res = await deleteFolder(folderId);
-      if (!res.ok) alert(res.error ?? "Couldn't delete folder.");
+      if (!res.ok) notifyError(res.error ?? "Couldn't delete folder.");
     });
   };
 

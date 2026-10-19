@@ -34,6 +34,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { deleteFlaggedMoment } from "@/app/actions/flagged-moments";
+import { confirmAction } from "@/lib/feedback";
 import {
   FLAG_NOT_FOUND,
   flagAnchorKind,
@@ -78,15 +79,18 @@ export function MomentsRail({
   const [, startTransition] = useTransition();
   const router = useRouter();
 
-  const remove = (m: RailMoment) => {
+  const remove = async (m: RailMoment) => {
     // Hard delete, no undo — confirm first, naming whose note goes.
     const own = m.flaggedById === currentUserId;
     if (
-      !confirm(
-        own
-          ? "Delete this flag? This can't be undone."
-          : `Delete ${m.flaggedByName ?? "another reviewer"}'s flag? This can't be undone.`,
-      )
+      !(await confirmAction({
+        title: own
+          ? "Delete this flag?"
+          : `Delete ${m.flaggedByName ?? "another reviewer"}'s flag?`,
+        description: "This can't be undone.",
+        confirmLabel: "Delete flag",
+        destructive: true,
+      }))
     ) {
       return;
     }

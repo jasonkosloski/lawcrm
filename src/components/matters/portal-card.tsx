@@ -26,6 +26,7 @@ import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { invitePortalUser, revokePortalAccess } from "@/app/actions/portal-access";
 import { formatDate } from "@/lib/format-date";
 import type { PortalAccessRow } from "@/lib/queries/portal-access";
+import { confirmAction } from "@/lib/feedback";
 
 export type PortalContactOption = {
   id: string;
@@ -67,11 +68,14 @@ export function PortalCard({
   const [pending, startTransition] = useTransition();
   const [revokeError, setRevokeError] = useState<string | null>(null);
 
-  const revoke = (row: PortalAccessRow) => {
+  const revoke = async (row: PortalAccessRow) => {
     if (
-      !confirm(
-        `Revoke portal access?\n\n${row.contactName} (${row.email}) will no longer be able to open this matter in the client portal.`
-      )
+      !(await confirmAction({
+        title: "Revoke portal access?",
+        description: `${row.contactName} (${row.email}) will no longer be able to open this matter in the client portal.`,
+        confirmLabel: "Revoke access",
+        destructive: true,
+      }))
     ) {
       return;
     }

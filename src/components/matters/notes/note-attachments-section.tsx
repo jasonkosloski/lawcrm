@@ -63,6 +63,7 @@ import {
   daysUntilDateOnly,
   formatDateOnly,
 } from "@/lib/format-date";
+import { confirmAction, notifyError } from "@/lib/feedback";
 import { useUserTimeZone } from "@/components/user-time-zone";
 
 const formatDate = (d: Date): string => formatDateOnly(d, "short");
@@ -308,13 +309,20 @@ function TaskChip({
   const [pending, startTransition] = useTransition();
   const done = task.status === "done" || task.status === "cancelled";
 
-  const onDelete = () => {
-    if (!confirm(`Delete "${task.title}"?`)) return;
+  const onDelete = async () => {
+    if (
+      !(await confirmAction({
+        title: `Delete "${task.title}"?`,
+        confirmLabel: "Delete task",
+        destructive: true,
+      }))
+    )
+      return;
     startTransition(async () => {
       // Surface failures (e.g. "Task not found") — otherwise the chip
       // just un-dims and silently stays. Same pattern as TimeEntryItem.
       const res = await deleteTask(task.id);
-      if (!res.ok && res.error) alert(res.error);
+      if (!res.ok && res.error) notifyError(res.error);
     });
   };
 
@@ -382,13 +390,20 @@ function DeadlineChip({
   const isCritical = deadline.kind === "critical";
   const done = deadline.status === "completed" || deadline.status === "waived";
 
-  const onDelete = () => {
-    if (!confirm(`Delete "${deadline.title}"?`)) return;
+  const onDelete = async () => {
+    if (
+      !(await confirmAction({
+        title: `Delete "${deadline.title}"?`,
+        confirmLabel: "Delete deadline",
+        destructive: true,
+      }))
+    )
+      return;
     startTransition(async () => {
       // Surface failures — otherwise the chip just un-dims and
       // silently stays. Same pattern as TimeEntryItem.
       const res = await deleteDeadline(deadline.id);
-      if (!res.ok && res.error) alert(res.error);
+      if (!res.ok && res.error) notifyError(res.error);
     });
   };
 
@@ -566,11 +581,19 @@ function TimeEntryItem({
 }) {
   const [pending, startTransition] = useTransition();
 
-  const onDelete = () => {
-    if (!confirm("Delete this time entry? This can't be undone.")) return;
+  const onDelete = async () => {
+    if (
+      !(await confirmAction({
+        title: "Delete this time entry?",
+        description: "This can't be undone.",
+        confirmLabel: "Delete time entry",
+        destructive: true,
+      }))
+    )
+      return;
     startTransition(async () => {
       const res = await deleteTimeEntry(entry.id);
-      if (!res.ok && res.error) alert(res.error);
+      if (!res.ok && res.error) notifyError(res.error);
     });
   };
 

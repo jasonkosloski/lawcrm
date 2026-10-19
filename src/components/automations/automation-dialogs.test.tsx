@@ -3,8 +3,14 @@
  * and the task-list editor's posted payload.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+
+vi.mock("@/lib/feedback", () => ({
+  confirmAction: vi.fn(async () => true),
+  notifyError: vi.fn(),
+  notifySuccess: vi.fn(),
+}));
 
 vi.mock("@/app/actions/automations", () => ({
   applyDeadlineRuleToMatter: vi.fn(),
@@ -29,6 +35,7 @@ import {
   deleteDeadlineRule,
   deleteTaskList,
 } from "@/app/actions/automations";
+import { confirmAction } from "@/lib/feedback";
 import type { AutoApplyRow, DeadlineRuleRow, TaskListRow } from "@/lib/queries/automations";
 import { ApplyDeadlineRuleDialog } from "./apply-deadline-rule-dialog";
 import { ApplyTaskListDialog } from "./apply-task-list-dialog";
@@ -194,8 +201,7 @@ describe("AutomationsLibrary", () => {
 
   it("tells the admin how many automatic defaults a delete will remove", async () => {
     const user = userEvent.setup();
-    const confirm = vi.fn<(message: string) => boolean>(() => false);
-    vi.stubGlobal("confirm", confirm);
+    vi.mocked(confirmAction).mockResolvedValue(false);
     render(
       <AutomationsLibrary
         rules={[ruleRow({ id: "r1", title: "CGIA" }), ruleRow({ id: "r2", title: "No defaults" })]}
@@ -211,16 +217,16 @@ describe("AutomationsLibrary", () => {
     };
 
     await deleteVia("Intake");
-    expect(confirm).toHaveBeenLastCalledWith(expect.stringContaining("also removes 2 automatic defaults"));
+    await waitFor(() => expect(confirmAction).toHaveBeenLastCalledWith(expect.objectContaining({ description: expect.stringContaining("also removes 2 automatic defaults") })));
     expect(deleteTaskList).not.toHaveBeenCalled(); // declined
 
     await deleteVia("CGIA");
-    expect(confirm).toHaveBeenLastCalledWith(expect.stringContaining("also removes 1 automatic default "));
+    await waitFor(() => expect(confirmAction).toHaveBeenLastCalledWith(expect.objectContaining({ description: expect.stringContaining("also removes 1 automatic default ") })));
 
     await deleteVia("No defaults");
-    expect(confirm.mock.calls.at(-1)![0]).not.toMatch(/automatic default/);
+    await waitFor(() => expect(confirmAction).toHaveBeenCalledTimes(3));
+    expect(vi.mocked(confirmAction).mock.calls.at(-1)![0].description).not.toMatch(/automatic default/);
     expect(deleteDeadlineRule).not.toHaveBeenCalled();
-    vi.unstubAllGlobals();
   });
 
   it("keeps the picked rule and practice area when adding a default fails", async () => {

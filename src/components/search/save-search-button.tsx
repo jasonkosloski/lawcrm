@@ -15,6 +15,7 @@
 import { useTransition } from "react";
 import { Bookmark, BookmarkCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { notifyError } from "@/lib/feedback";
 import {
   createSavedSearch,
   deleteSavedSearch,
@@ -51,10 +52,10 @@ export function SaveSearchButton({
               query,
               type
             );
-        if (!res.ok) alert(res.error);
+        if (!res.ok) notifyError(res.error);
       } catch (err) {
         console.error("[save-search] action failed", err);
-        alert("Couldn't update saved searches. Please try again.");
+        notifyError("Couldn't update saved searches. Please try again.");
       }
     });
   };

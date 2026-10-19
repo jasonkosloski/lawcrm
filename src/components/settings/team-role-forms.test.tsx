@@ -18,6 +18,12 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+vi.mock("@/lib/feedback", () => ({
+  confirmAction: vi.fn(async () => true),
+  notifyError: vi.fn(),
+  notifySuccess: vi.fn(),
+}));
+
 vi.mock("@/app/actions/team", () => ({
   inviteFirmMember: vi.fn(),
   updateFirmMember: vi.fn(),
@@ -39,6 +45,7 @@ import {
   unlockFirmMemberSignIn,
   updateFirmMember,
 } from "@/app/actions/team";
+import { notifySuccess } from "@/lib/feedback";
 import { createRoleAction, updateRoleAction } from "@/app/actions/roles";
 import { updateFirmAction } from "@/app/actions/firm";
 import { UserTimeZoneProvider } from "@/components/user-time-zone";
@@ -101,7 +108,6 @@ beforeEach(() => {
   ]) {
     m.mockReset();
   }
-  vi.stubGlobal("alert", vi.fn());
 });
 
 describe("InviteMemberComposer", () => {
@@ -315,6 +321,7 @@ describe("MemberRow", () => {
     expect(screen.getByText("Reset password")).toBeTruthy();
     await user.click(screen.getByText("Unlock sign-in"));
     await waitFor(() => expect(mockedUnlock).toHaveBeenCalledWith("u2"));
+    await waitFor(() => expect(notifySuccess).toHaveBeenCalled());
   });
 
   test("a delegated manager gets no actions at all on an Admin account", () => {

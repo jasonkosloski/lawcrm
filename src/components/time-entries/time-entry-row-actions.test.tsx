@@ -15,6 +15,12 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+vi.mock("@/lib/feedback", () => ({
+  confirmAction: vi.fn(async () => true),
+  notifyError: vi.fn(),
+  notifySuccess: vi.fn(),
+}));
+
 vi.mock("@/app/actions/time-entries", () => ({
   deleteTimeEntry: vi.fn(),
   setTimeEntryStatus: vi.fn(),
@@ -25,6 +31,7 @@ import {
   deleteTimeEntry,
   setTimeEntryStatus,
 } from "@/app/actions/time-entries";
+import { confirmAction, notifyError } from "@/lib/feedback";
 import { parseDateOnly } from "@/lib/format-date";
 import { TimeEntryRowMenu } from "./time-entry-row-actions";
 import type { EditableTimeEntry } from "./edit-time-entry-dialog";
@@ -49,12 +56,12 @@ const openMenu = async (user: ReturnType<typeof setupUser>) =>
 beforeEach(() => {
   vi.mocked(deleteTimeEntry).mockReset();
   vi.mocked(setTimeEntryStatus).mockReset();
-  vi.stubGlobal("confirm", vi.fn(() => true));
-  vi.stubGlobal("alert", vi.fn());
+  vi.mocked(confirmAction).mockResolvedValue(true);
+  vi.mocked(notifyError).mockClear();
 });
 
 describe("TimeEntryRowMenu - server refusals are surfaced", () => {
-  test("a refused status change alerts the server's message", async () => {
+  test("a refused status change toasts the server's message", async () => {
     vi.mocked(setTimeEntryStatus).mockResolvedValue({
       ok: false,
       error: "This entry changed while you were editing it.",
@@ -65,13 +72,13 @@ describe("TimeEntryRowMenu - server refusals are surfaced", () => {
     await user.click(await screen.findByText("Submitted"));
 
     await waitFor(() =>
-      expect(window.alert).toHaveBeenCalledWith(
+      expect(notifyError).toHaveBeenCalledWith(
         "This entry changed while you were editing it."
       )
     );
   });
 
-  test("a refused delete alerts the server's message", async () => {
+  test("a refused delete toasts the server's message", async () => {
     vi.mocked(deleteTimeEntry).mockResolvedValue({
       ok: false,
       error: "Entry is already billed.",
@@ -82,7 +89,7 @@ describe("TimeEntryRowMenu - server refusals are surfaced", () => {
     await user.click(await screen.findByText("Delete"));
 
     await waitFor(() =>
-      expect(window.alert).toHaveBeenCalledWith("Entry is already billed.")
+      expect(notifyError).toHaveBeenCalledWith("Entry is already billed.")
     );
   });
 
@@ -93,8 +100,10 @@ describe("TimeEntryRowMenu - server refusals are surfaced", () => {
     await openMenu(user);
     await user.click(await screen.findByText("Delete"));
 
-    expect(window.confirm).toHaveBeenCalledWith(
-      expect.stringContaining("0.25h")
+    await waitFor(() =>
+      expect(confirmAction).toHaveBeenCalledWith(
+        expect.objectContaining({ description: expect.stringContaining("0.25h") })
+      )
     );
   });
 });

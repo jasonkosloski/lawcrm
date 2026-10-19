@@ -42,6 +42,7 @@ import {
   setTimeEntryStatus,
 } from "@/app/actions/time-entries";
 import { formatHours } from "@/lib/time-entry-constants";
+import { confirmAction, notifyError } from "@/lib/feedback";
 import {
   EditTimeEntryDialog,
   type EditableTimeEntry,
@@ -73,15 +74,18 @@ export function TimeEntryRowMenu({
       // The radio group is controlled by entry.status, so a refusal
       // just snaps back — say why (billed by invoice generation,
       // still on an invoice, changed in another tab…).
-      if (!result.ok && result.error) alert(result.error);
+      if (!result.ok && result.error) notifyError(result.error);
     });
   };
 
-  const onDelete = () => {
+  const onDelete = async () => {
     if (
-      !confirm(
-        `Delete this time entry?\n\n"${entry.activity}" — ${formatHours(entry.hours)}h\n\nThis can't be undone.`
-      )
+      !(await confirmAction({
+        title: "Delete this time entry?",
+        description: `"${entry.activity}" — ${formatHours(entry.hours)}h. This can't be undone.`,
+        confirmLabel: "Delete time entry",
+        destructive: true,
+      }))
     ) {
       return;
     }
@@ -90,7 +94,7 @@ export function TimeEntryRowMenu({
       if (!result.ok && result.error) {
         // Server refuses to delete a billed entry — surface that
         // verbatim so the user knows why.
-        alert(result.error);
+        notifyError(result.error);
       }
     });
   };

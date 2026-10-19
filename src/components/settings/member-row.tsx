@@ -21,6 +21,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { confirmAction, notifyError, notifySuccess } from "@/lib/feedback";
 import { TableCell, TableRow } from "@/components/ui/table";
 import {
   DropdownMenu,
@@ -68,11 +69,15 @@ export function MemberRow({
   const canEditMember = viewerIsAdmin || !member.isAdmin;
   const canTakeOverMember = viewerIsAdmin || !targetIsPrivileged;
 
-  const onResetPassword = () => {
+  const onResetPassword = async () => {
     if (
-      !confirm(
-        `Reset ${member.name}'s password?\n\nA new temporary password will be generated. Their existing password stops working immediately. You'll need to deliver the new one to them out-of-band.`
-      )
+      !(await confirmAction({
+        title: `Reset ${member.name}'s password?`,
+        description:
+          "A new temporary password will be generated. Their existing password stops working immediately. You'll need to deliver the new one to them out-of-band.",
+        confirmLabel: "Reset password",
+        destructive: true,
+      }))
     ) {
       return;
     }
@@ -81,7 +86,7 @@ export function MemberRow({
       if (result.status === "ok" && result.resetPassword) {
         setResetPassword(result.resetPassword);
       } else {
-        alert(result.errors?._form?.[0] ?? "Couldn't reset password.");
+        notifyError(result.errors?._form?.[0] ?? "Couldn't reset password.");
       }
     });
   };
@@ -90,9 +95,9 @@ export function MemberRow({
     startTransition(async () => {
       const result = await unlockFirmMemberSignIn(member.id);
       if (result.status === "ok") {
-        alert(`${member.name} can sign in again.`);
+        notifySuccess(`${member.name} can sign in again.`);
       } else {
-        alert(result.errors?._form?.[0] ?? "Couldn't unlock sign-in.");
+        notifyError(result.errors?._form?.[0] ?? "Couldn't unlock sign-in.");
       }
     });
   };

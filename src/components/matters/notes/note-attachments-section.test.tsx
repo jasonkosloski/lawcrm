@@ -31,6 +31,11 @@ import userEvent from "@testing-library/user-event";
 
 // Pure anchor stand-in — chips only need href-based navigation and
 // next/link wants router context that doesn't exist in tests.
+vi.mock("@/lib/feedback", () => ({
+  confirmAction: vi.fn(async () => true),
+  notifyError: vi.fn(),
+  notifySuccess: vi.fn(),
+}));
 vi.mock("next/link", () => ({
   default: ({
     href,
@@ -51,6 +56,7 @@ vi.mock("@/app/actions/note-attachments", () => ({
 }));
 
 import { deleteTask } from "@/app/actions/tasks";
+import { confirmAction, notifyError } from "@/lib/feedback";
 import { deleteDeadline } from "@/app/actions/deadlines";
 import { parseDateOnly } from "@/lib/format-date";
 import { UserTimeZoneProvider } from "@/components/user-time-zone";
@@ -144,10 +150,8 @@ const chipOf = (title: string): HTMLElement | null =>
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // happy-dom doesn't implement confirm/alert — stub both so the
-  // chips' confirm() gate passes and alert() calls are observable.
-  vi.stubGlobal("confirm", vi.fn(() => true));
-  vi.stubGlobal("alert", vi.fn());
+  // The confirmation dialog auto-accepts and toasts are observable.
+  vi.mocked(confirmAction).mockResolvedValue(true);
 });
 
 afterEach(() => {
@@ -223,7 +227,7 @@ describe("aggregateByUser — per-user rollup identity", () => {
 });
 
 describe("chip deletes surface action failures", () => {
-  test("task chip: failed delete alerts with the action's error", async () => {
+  test("task chip: failed delete toasts the action's error", async () => {
     const user = userEvent.setup();
     vi.mocked(deleteTask).mockResolvedValue({
       ok: false,
@@ -234,11 +238,11 @@ describe("chip deletes surface action failures", () => {
     await user.click(screen.getByRole("button", { name: "Delete task" }));
 
     await waitFor(() =>
-      expect(window.alert).toHaveBeenCalledWith("Task not found")
+      expect(notifyError).toHaveBeenCalledWith("Task not found")
     );
   });
 
-  test("deadline chip: failed delete alerts with the action's error", async () => {
+  test("deadline chip: failed delete toasts the action's error", async () => {
     const user = userEvent.setup();
     vi.mocked(deleteDeadline).mockResolvedValue({
       ok: false,
@@ -249,7 +253,7 @@ describe("chip deletes surface action failures", () => {
     await user.click(screen.getByRole("button", { name: "Delete deadline" }));
 
     await waitFor(() =>
-      expect(window.alert).toHaveBeenCalledWith("Deadline not found")
+      expect(notifyError).toHaveBeenCalledWith("Deadline not found")
     );
   });
 
@@ -261,7 +265,7 @@ describe("chip deletes surface action failures", () => {
     await user.click(screen.getByRole("button", { name: "Delete task" }));
 
     await waitFor(() => expect(deleteTask).toHaveBeenCalledWith("t1"));
-    expect(window.alert).not.toHaveBeenCalled();
+    expect(notifyError).not.toHaveBeenCalled();
   });
 });
 

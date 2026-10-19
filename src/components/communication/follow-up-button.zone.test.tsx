@@ -12,6 +12,13 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+vi.mock("@/lib/feedback", () => ({
+  confirmAction: vi.fn(async () => true),
+  notifyError: vi.fn(),
+  notifySuccess: vi.fn(),
+}));
+
+import { notifyError } from "@/lib/feedback";
 import { UserTimeZoneProvider } from "@/components/user-time-zone";
 import { FollowUpButton, type FollowUpAction } from "./follow-up-button";
 
@@ -90,10 +97,8 @@ describe("evening in the viewer's zone", () => {
 });
 
 describe("a thrown action does not escape the transition", () => {
-  test("alerts instead of bubbling to the error boundary", async () => {
+  test("toasts instead of bubbling to the error boundary", async () => {
     const user = setupUser();
-    const alertSpy = vi.fn();
-    vi.stubGlobal("alert", alertSpy);
     const action = vi.fn(async () => {
       throw new Error("db down");
     });
@@ -103,8 +108,10 @@ describe("a thrown action does not escape the transition", () => {
     await screen.findByText(/follow up by/i);
     await user.click(screen.getByRole("button", { name: "Today" }));
 
-    await waitFor(() => expect(alertSpy).toHaveBeenCalled());
-    expect(alertSpy.mock.calls[0]![0]).toMatch(/try again/i);
-    vi.unstubAllGlobals();
+    await waitFor(() =>
+      expect(notifyError).toHaveBeenCalledWith(
+        expect.stringMatching(/try again/i)
+      )
+    );
   });
 });

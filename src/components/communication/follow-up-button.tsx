@@ -16,6 +16,7 @@
 import { useState, useTransition } from "react";
 import { BellPlus, BellRing, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { notifyError } from "@/lib/feedback";
 // followUpAt is stored as an instant (end of the chosen day). Which
 // calendar day it denotes - and whether that day is today, tomorrow
 // or past - is judged in the viewer's PROFILE zone (ADR-012), the
@@ -84,11 +85,11 @@ export function FollowUpButton({
     startTransition(async () => {
       try {
         const res = await action(threadId, dateString);
-        if (!res.ok && res.error) alert(res.error);
+        if (!res.ok && res.error) notifyError(res.error);
       } catch {
         // A thrown action (DB blip, dropped connection) must not
         // swap the whole page for the error boundary.
-        alert("Couldn't save the follow-up - try again.");
+        notifyError("Couldn't save the follow-up - try again.");
       }
     });
   };

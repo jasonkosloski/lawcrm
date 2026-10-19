@@ -14,6 +14,7 @@ import { useTransition } from "react";
 import Link from "next/link";
 import { ExternalLink, Pin, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { confirmAction, notifyError } from "@/lib/feedback";
 import { deleteNote, toggleNotePin } from "@/app/actions/notes";
 import { NOTE_TYPE_LABEL, type NoteType } from "@/lib/note-constants";
 import { formatDate } from "@/lib/format-date";
@@ -99,15 +100,23 @@ function EventNoteItem({ note }: { note: EventNote }) {
   const onTogglePin = () => {
     startTransition(async () => {
       const res = await toggleNotePin(note.id);
-      if (!res.ok && res.error) alert(res.error);
+      if (!res.ok && res.error) notifyError(res.error);
     });
   };
 
-  const onDelete = () => {
-    if (!confirm("Delete this note? This can't be undone.")) return;
+  const onDelete = async () => {
+    if (
+      !(await confirmAction({
+        title: "Delete this note?",
+        description: "This can't be undone.",
+        confirmLabel: "Delete note",
+        destructive: true,
+      }))
+    )
+      return;
     startTransition(async () => {
       const res = await deleteNote(note.id);
-      if (!res.ok && res.error) alert(res.error);
+      if (!res.ok && res.error) notifyError(res.error);
     });
   };
 

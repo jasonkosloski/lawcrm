@@ -26,6 +26,7 @@ import { copyDocumentToFolder, deleteDocument } from "@/app/actions/documents";
 import { COPY_DESCRIPTION } from "@/components/documents-viewer/document-placement";
 import { moveDocuments } from "@/app/actions/document-folders";
 import type { FlatFolder } from "@/lib/folder-tree";
+import { confirmAction, notifyError } from "@/lib/feedback";
 import { MoveToFolderDialog } from "./move-to-folder-dialog";
 import { DeleteDocumentDialog } from "./delete-document-dialog";
 
@@ -69,22 +70,26 @@ export function DocumentRowActions({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const hasAttachments = unsavedAttachments.length + savedAttachments.length > 0;
 
-  const onDelete = () => {
+  const onDelete = async () => {
     if (hasAttachments) {
       setDeleteOpen(true);
       return;
     }
     if (
-      !confirm(
-        `Delete "${name}"?\n\nThis can't be undone. Copies of it in other folders are separate documents and aren't affected.`
-      )
+      !(await confirmAction({
+        title: `Delete "${name}"?`,
+        description:
+          "This can't be undone. Copies of it in other folders are separate documents and aren't affected.",
+        confirmLabel: "Delete document",
+        destructive: true,
+      }))
     ) {
       return;
     }
     startTransition(async () => {
       const result = await deleteDocument(documentId);
       if (!result.ok) {
-        alert(result.error ?? "Couldn't delete document.");
+        notifyError(result.error ?? "Couldn't delete document.");
       }
     });
   };

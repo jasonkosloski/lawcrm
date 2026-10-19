@@ -106,6 +106,22 @@ Hover (non-primary): border-brand-300, text-brand-700
 Active: translateY(0.5px)
 ```
 
+### Action feedback (toasts and confirmations)
+```
+src/lib/feedback.ts — never window.alert/confirm/prompt (ESLint no-alert).
+- notifyError(msg): a mutation failed; show the server's message or what to try next.
+- notifySuccess(msg): it worked AND nothing on screen already shows it
+  (a row disappearing or a value changing is its own confirmation).
+- await confirmAction({ title, description, confirmLabel, destructive }):
+  title is the question ("Delete this note?"), description the
+  consequence ("This can't be undone."), confirmLabel names the action
+  ("Delete note", never "OK"), destructive for losses. Await it BEFORE
+  startTransition.
+- Rendered by <Toaster> and <ConfirmHost>, mounted once in Providers.
+- Field-level validation stays inline next to the field (useActionState).
+- Tests: vi.mock("@/lib/feedback") and assert on the mocks.
+```
+
 ---
 
 ## Layout Patterns

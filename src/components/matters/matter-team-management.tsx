@@ -32,6 +32,7 @@ import {
   matterTeamRoleLabel,
   type MatterTeamRole,
 } from "@/lib/matter-team-constants";
+import { confirmAction } from "@/lib/feedback";
 
 export type TeamMemberRow = {
   membershipId: string;
@@ -111,11 +112,15 @@ export function MatterTeamManagement({
     });
   };
 
-  const handleRemove = (membershipId: string, name: string) => {
+  const handleRemove = async (membershipId: string, name: string) => {
     if (
-      !confirm(
-        `Remove ${name} from this matter? They stay in the audit trail but won't appear in the active roster.`
-      )
+      !(await confirmAction({
+        title: `Remove ${name} from this matter?`,
+        description:
+          "They stay in the audit trail but won't appear in the active roster.",
+        confirmLabel: "Remove member",
+        destructive: true,
+      }))
     )
       return;
     setError(null);

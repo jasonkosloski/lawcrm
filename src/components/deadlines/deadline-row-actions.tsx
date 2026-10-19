@@ -33,6 +33,7 @@ import {
 } from "@/lib/constants/deadline-status";
 import { deleteDeadline, setDeadlineStatus } from "@/app/actions/deadlines";
 import { SOL_SOURCE_TYPE } from "@/lib/sol";
+import { confirmAction } from "@/lib/feedback";
 import { addTimeEntryToDeadline } from "@/app/actions/time-on-entity";
 import {
   EditDeadlineDialog,
@@ -74,11 +75,14 @@ export function DeadlineRowMenu({
     });
   };
 
-  const onDelete = () => {
+  const onDelete = async () => {
     if (
-      !confirm(
-        `Delete this deadline?\n\n"${deadline.title}"\n\nThis can't be undone.`
-      )
+      !(await confirmAction({
+        title: `Delete "${deadline.title}"?`,
+        description: "This can't be undone.",
+        confirmLabel: "Delete deadline",
+        destructive: true,
+      }))
     ) {
       return;
     }

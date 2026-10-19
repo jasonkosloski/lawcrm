@@ -51,6 +51,7 @@ import {
   updateCalendarEvent,
 } from "@/app/actions/calendar-events";
 import { updateCalendarEventInitialState } from "@/lib/calendar-event-form";
+import { confirmAction } from "@/lib/feedback";
 import {
   EVENT_TYPES,
   EVENT_TYPE_LABEL,
@@ -219,11 +220,14 @@ function EventDetailModalInner({
     return true;
   };
 
-  const onDelete = () => {
+  const onDelete = async () => {
     if (
-      !confirm(
-        `Delete this event?\n\n"${committed.title}"\n\nThis can't be undone.`
-      )
+      !(await confirmAction({
+        title: `Delete "${committed.title}"?`,
+        description: "This can't be undone.",
+        confirmLabel: "Delete event",
+        destructive: true,
+      }))
     ) {
       return;
     }

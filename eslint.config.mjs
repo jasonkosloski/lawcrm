@@ -5,6 +5,11 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  {
+    // alert()/confirm()/prompt() block the page and ignore the brand.
+    // Use notifyError / notifySuccess / confirmAction (src/lib/feedback.ts).
+    rules: { "no-alert": "error" },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

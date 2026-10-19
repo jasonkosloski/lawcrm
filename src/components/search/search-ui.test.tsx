@@ -10,6 +10,12 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+vi.mock("@/lib/feedback", () => ({
+  confirmAction: vi.fn(async () => true),
+  notifyError: vi.fn(),
+  notifySuccess: vi.fn(),
+}));
+
 vi.mock("@/app/actions/saved-searches", () => ({
   createSavedSearch: vi.fn(),
   deleteSavedSearch: vi.fn(),
@@ -17,6 +23,7 @@ vi.mock("@/app/actions/saved-searches", () => ({
 }));
 
 import { createSavedSearch } from "@/app/actions/saved-searches";
+import { notifyError } from "@/lib/feedback";
 import { SaveSearchButton } from "./save-search-button";
 import { SearchResults } from "./search-results";
 
@@ -92,16 +99,14 @@ describe("SearchResults", () => {
 });
 
 describe("SaveSearchButton", () => {
-  test("a rejected action alerts instead of throwing into the error boundary", async () => {
-    const alertSpy = vi.fn();
-    vi.stubGlobal("alert", alertSpy);
+  test("a rejected action toasts instead of throwing into the error boundary", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.mocked(createSavedSearch).mockRejectedValue(new Error("db down"));
 
     render(<SaveSearchButton query="ambulance" type={null} savedId={null} />);
     await userEvent.setup().click(screen.getByRole("button"));
 
-    await waitFor(() => expect(alertSpy).toHaveBeenCalled());
+    await waitFor(() => expect(notifyError).toHaveBeenCalled());
     expect(createSavedSearch).toHaveBeenCalledWith(
       "ambulance",
       "ambulance",
@@ -110,14 +115,12 @@ describe("SaveSearchButton", () => {
   });
 
   test("a validation error from the action is shown", async () => {
-    const alertSpy = vi.fn();
-    vi.stubGlobal("alert", alertSpy);
     vi.mocked(createSavedSearch).mockResolvedValue({
       ok: false,
       error: "nope",
     });
     render(<SaveSearchButton query="ambulance" type={null} savedId={null} />);
     await userEvent.setup().click(screen.getByRole("button"));
-    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith("nope"));
+    await waitFor(() => expect(notifyError).toHaveBeenCalledWith("nope"));
   });
 });

@@ -14,6 +14,12 @@ const updateFlaggedMoment = vi.fn();
 const deleteFlaggedMoment = vi.fn();
 const refresh = vi.fn();
 
+vi.mock("@/lib/feedback", () => ({
+  confirmAction: vi.fn(async () => true),
+  notifyError: vi.fn(),
+  notifySuccess: vi.fn(),
+}));
+
 vi.mock("@/app/actions/flagged-moments", () => ({
   createFlaggedMoment: (...a: unknown[]) => createFlaggedMoment(...a),
   updateFlaggedMoment: (...a: unknown[]) => updateFlaggedMoment(...a),
@@ -24,6 +30,7 @@ vi.mock("next/navigation", () => ({
   unstable_rethrow: vi.fn(),
 }));
 
+import { confirmAction } from "@/lib/feedback";
 import { FlagComposer, type ComposerAnchor } from "./flag-composer";
 import { MomentsRail, type RailMoment } from "./moments-rail";
 
@@ -227,7 +234,7 @@ describe("MomentsRail — delete", () => {
   };
 
   test("declining the confirm deletes nothing", async () => {
-    vi.stubGlobal("confirm", vi.fn(() => false));
+    vi.mocked(confirmAction).mockResolvedValueOnce(false);
     render(
       <MomentsRail
         documentId="d1"
@@ -239,11 +246,11 @@ describe("MomentsRail — delete", () => {
       />
     );
     await openDelete();
+    await waitFor(() => expect(confirmAction).toHaveBeenCalledTimes(1));
     expect(deleteFlaggedMoment).not.toHaveBeenCalled();
   });
 
   test("confirming deletes, without router.refresh", async () => {
-    vi.stubGlobal("confirm", vi.fn(() => true));
     deleteFlaggedMoment.mockResolvedValue({ ok: true });
     render(
       <MomentsRail
@@ -261,7 +268,6 @@ describe("MomentsRail — delete", () => {
   });
 
   test("a failed delete surfaces the error instead of an error page", async () => {
-    vi.stubGlobal("confirm", vi.fn(() => true));
     deleteFlaggedMoment.mockResolvedValue({ ok: false, error: "Flag not found" });
     render(
       <MomentsRail
@@ -278,7 +284,6 @@ describe("MomentsRail — delete", () => {
   });
 
   test("a rejected delete shows a connection error", async () => {
-    vi.stubGlobal("confirm", vi.fn(() => true));
     deleteFlaggedMoment.mockRejectedValue(new Error("network"));
     render(
       <MomentsRail

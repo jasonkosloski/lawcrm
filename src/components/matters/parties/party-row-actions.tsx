@@ -9,6 +9,7 @@
 import { useTransition } from "react";
 import { Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { confirmAction, notifyError } from "@/lib/feedback";
 import { removeMatterContact } from "@/app/actions/parties";
 
 export function PartyRowActions({
@@ -20,11 +21,18 @@ export function PartyRowActions({
 }) {
   const [pending, startTransition] = useTransition();
 
-  const onDelete = () => {
-    if (!confirm(`Remove ${name} from this matter?`)) return;
+  const onDelete = async () => {
+    if (
+      !(await confirmAction({
+        title: `Remove ${name} from this matter?`,
+        confirmLabel: "Remove party",
+        destructive: true,
+      }))
+    )
+      return;
     startTransition(async () => {
       const res = await removeMatterContact(matterContactId);
-      if (!res.ok && res.error) alert(res.error);
+      if (!res.ok && res.error) notifyError(res.error);
     });
   };
 

@@ -25,6 +25,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { Briefcase, Check, Pin, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { notifyError } from "@/lib/feedback";
 import {
   Popover,
   PopoverContent,
@@ -64,10 +65,10 @@ export function FileToMatterPicker({
     startTransition(async () => {
       try {
         const res = await setEmailThreadMatter(threadId, matterId);
-        if (!res.ok && res.error) alert(res.error);
+        if (!res.ok && res.error) notifyError(res.error);
       } catch {
         // A thrown action must not swap the page for the error boundary.
-        alert("Couldn't update the filing - try again.");
+        notifyError("Couldn't update the filing - try again.");
       }
     });
   };

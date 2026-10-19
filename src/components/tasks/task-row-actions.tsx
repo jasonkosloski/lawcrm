@@ -48,6 +48,7 @@ import {
   TASK_STATUS_LABEL as STATUS_LABEL,
   type TaskStatus,
 } from "@/lib/constants/task-status";
+import { confirmAction } from "@/lib/feedback";
 import { deleteTask, setTaskStatus } from "@/app/actions/tasks";
 import { addTimeEntryToTask } from "@/app/actions/time-on-entity";
 import { addNoteToTask } from "@/app/actions/note-on-entity";
@@ -173,11 +174,14 @@ export function TaskRowMenu({
     });
   };
 
-  const onDelete = () => {
+  const onDelete = async () => {
     if (
-      !confirm(
-        `Delete this task?\n\n"${task.title}"\n\nThis can't be undone.`
-      )
+      !(await confirmAction({
+        title: `Delete "${task.title}"?`,
+        description: "This can't be undone.",
+        confirmLabel: "Delete task",
+        destructive: true,
+      }))
     ) {
       return;
     }

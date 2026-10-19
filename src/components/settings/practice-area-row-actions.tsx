@@ -3,7 +3,7 @@
  *
  * Stays small: a couple of icon buttons. Archive is blocked server-
  * side when the area still has active matters, so the "archive"
- * button here surfaces the server's error message inline via alert().
+ * button here surfaces the server's error message as a toast.
  */
 
 "use client";
@@ -11,6 +11,7 @@
 import { useTransition } from "react";
 import { Archive, ArchiveRestore, ArrowDown, ArrowUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { notifyError } from "@/lib/feedback";
 import {
   movePracticeArea,
   setPracticeAreaActive,
@@ -37,12 +38,12 @@ export function PracticeAreaRowActions({
 
   const toggleActive = () => {
     if (isActive && activeMatterCount > 0) {
-      alert(areaArchiveBlockedMessage(activeMatterCount));
+      notifyError(areaArchiveBlockedMessage(activeMatterCount));
       return;
     }
     startTransition(async () => {
       const res = await setPracticeAreaActive(areaId, !isActive);
-      if (!res.ok && res.error) alert(res.error);
+      if (!res.ok && res.error) notifyError(res.error);
     });
   };
 

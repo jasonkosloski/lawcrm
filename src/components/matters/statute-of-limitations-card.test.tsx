@@ -18,11 +18,17 @@ process.env.TZ = "America/Denver";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
+vi.mock("@/lib/feedback", () => ({
+  confirmAction: vi.fn(async () => true),
+  notifyError: vi.fn(),
+  notifySuccess: vi.fn(),
+}));
 vi.mock("@/app/actions/matters", () => ({
   setMatterSolSatisfied: vi.fn(),
 }));
 
 import { setMatterSolSatisfied } from "@/app/actions/matters";
+import { notifyError } from "@/lib/feedback";
 import { UserTimeZoneProvider } from "@/components/user-time-zone";
 import {
   StatuteOfLimitationsCard,
@@ -264,17 +270,15 @@ describe("StatuteOfLimitationsCard — satisfied toggle (F785)", () => {
     );
   });
 
-  test("a refused toggle alerts the error and the card goes back to unsatisfied", async () => {
+  test("a refused toggle toasts the error and the card goes back to unsatisfied", async () => {
     vi.mocked(setMatterSolSatisfied).mockResolvedValue({
       ok: false,
       error: "You don't have permission to edit matters.",
     });
-    const alertSpy = vi.fn();
-    vi.stubGlobal("alert", alertSpy);
     render(<StatuteOfLimitationsCard {...baseProps} date={date} />);
     fireEvent.click(screen.getByRole("button", { name: /mark satisfied/i }));
     await waitFor(() =>
-      expect(alertSpy).toHaveBeenCalledWith(
+      expect(notifyError).toHaveBeenCalledWith(
         "You don't have permission to edit matters."
       )
     );

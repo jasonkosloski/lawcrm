@@ -9,7 +9,7 @@
  *
  * Archive is soft-delete: a stage with active matters can't be
  * archived (the server action rejects with an error surfaced via
- * alert()). Archived stages render muted below active ones.
+ * a toast). Archived stages render muted below active ones.
  */
 
 "use client";
@@ -24,6 +24,7 @@ import {
   Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { notifyError } from "@/lib/feedback";
 import {
   createStage,
   moveStage,
@@ -121,14 +122,14 @@ function StageRow({
 
   const toggleActive = () => {
     if (stage.isActive && stage.matterCount > 0) {
-      alert(
+      notifyError(
         `Cannot archive — ${stage.matterCount} active matter${stage.matterCount === 1 ? "" : "s"} still sit in "${stage.name}". Move them to a different stage first.`
       );
       return;
     }
     startTransition(async () => {
       const res = await setStageActive(stage.id, !stage.isActive);
-      if (!res.ok && res.error) alert(res.error);
+      if (!res.ok && res.error) notifyError(res.error);
     });
   };
 

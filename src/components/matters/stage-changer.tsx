@@ -36,6 +36,7 @@
 import { useOptimistic, useState, useTransition } from "react";
 import { Check, ChevronDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { confirmAction, notifyError } from "@/lib/feedback";
 import {
   Popover,
   PopoverContent,
@@ -152,14 +153,20 @@ export function StageChanger({
       // terminal reopen, or backward jump >1). Surface the warning
       // and retry with force=true if the user confirms.
       if (res.requiresConfirmation && res.warning) {
-        if (confirm(res.warning)) {
+        if (
+          await confirmAction({
+            title: "Change stage anyway?",
+            description: res.warning,
+            confirmLabel: "Change stage",
+          })
+        ) {
           const retry = await updateMatterStage(matterId, nextId, {
             force: true,
           });
           if (!retry.ok) {
             // Revert the optimistic flip — the server still refused.
             setOptimisticStageId(currentStageId);
-            alert(retry.error ?? "Couldn't change stage.");
+            notifyError(retry.error ?? "Couldn't change stage.");
           }
         } else {
           // Cancelled — revert optimistic state.
@@ -167,7 +174,7 @@ export function StageChanger({
         }
       } else {
         setOptimisticStageId(currentStageId);
-        alert(res.error ?? "Couldn't change stage.");
+        notifyError(res.error ?? "Couldn't change stage.");
       }
     });
   };

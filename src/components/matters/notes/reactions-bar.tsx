@@ -24,6 +24,7 @@ import {
   type ReactionEmoji,
 } from "@/lib/note-constants";
 import type { NoteReactionSummary } from "@/lib/queries/matter-detail";
+import { notifyError } from "@/lib/feedback";
 
 export function ReactionsBar({
   noteId,
@@ -40,11 +41,11 @@ export function ReactionsBar({
     startTransition(async () => {
       try {
         const res = await toggleNoteReaction(noteId, emoji);
-        if (!res.ok && res.error) alert(res.error);
+        if (!res.ok && res.error) notifyError(res.error);
       } catch {
         // A network blip must not take down the whole Notes tab via
         // the error boundary - the pill simply stays as it was.
-        alert("Couldn't save your reaction. Try again.");
+        notifyError("Couldn't save your reaction. Try again.");
       }
     });
   };

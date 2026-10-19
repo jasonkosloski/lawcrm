@@ -1,6 +1,6 @@
 /**
  * Tests for the Reactivate button (deactivated contact's detail page).
- * Confirm first (cancel = no action), refresh on success, alert the
+ * Confirm first (cancel = no action), refresh on success, toast the
  * server's reason on failure.
  */
 
@@ -13,20 +13,22 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh }),
 }));
 vi.mock("@/app/actions/contacts", () => ({ reactivateContact: vi.fn() }));
+vi.mock("@/lib/feedback", () => ({
+  confirmAction: vi.fn(async () => true),
+  notifyError: vi.fn(),
+  notifySuccess: vi.fn(),
+}));
 
 import { reactivateContact } from "@/app/actions/contacts";
+import { confirmAction, notifyError } from "@/lib/feedback";
 import { ContactReactivateButton } from "./contact-reactivate-button";
 
 const mockedReactivate = vi.mocked(reactivateContact);
-const alertMock = vi.fn();
-const confirmMock = vi.fn();
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockedReactivate.mockResolvedValue({ ok: true });
-  confirmMock.mockReturnValue(true);
-  vi.stubGlobal("alert", alertMock);
-  vi.stubGlobal("confirm", confirmMock);
+  vi.mocked(confirmAction).mockResolvedValue(true);
 });
 
 describe("ContactReactivateButton", () => {
@@ -36,15 +38,15 @@ describe("ContactReactivateButton", () => {
 
     await user.click(screen.getByRole("button", { name: /reactivate/i }));
 
-    expect(confirmMock).toHaveBeenCalledWith(
-      expect.stringContaining('"Dana"')
+    expect(confirmAction).toHaveBeenCalledWith(
+      expect.objectContaining({ title: expect.stringContaining('"Dana"') })
     );
     await waitFor(() => expect(mockedReactivate).toHaveBeenCalledWith("c1"));
     await waitFor(() => expect(refresh).toHaveBeenCalled());
   });
 
   test("cancelling the confirm never calls the action", async () => {
-    confirmMock.mockReturnValue(false);
+    vi.mocked(confirmAction).mockResolvedValueOnce(false);
     const user = userEvent.setup();
     render(<ContactReactivateButton contactId="c1" contactName="Dana" />);
 
@@ -53,14 +55,14 @@ describe("ContactReactivateButton", () => {
     expect(mockedReactivate).not.toHaveBeenCalled();
   });
 
-  test("alerts the server's reason on failure and does not refresh", async () => {
+  test("toasts the server's reason on failure and does not refresh", async () => {
     mockedReactivate.mockResolvedValue({ ok: false, error: "Merged" });
     const user = userEvent.setup();
     render(<ContactReactivateButton contactId="c1" contactName="Dana" />);
 
     await user.click(screen.getByRole("button", { name: /reactivate/i }));
 
-    await waitFor(() => expect(alertMock).toHaveBeenCalledWith("Merged"));
+    await waitFor(() => expect(notifyError).toHaveBeenCalledWith("Merged"));
     expect(refresh).not.toHaveBeenCalled();
   });
 });

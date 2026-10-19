@@ -21,6 +21,7 @@ import {
 import { deleteExpense } from "@/app/actions/expenses";
 import { EditExpenseDialog, type EditableExpense } from "./edit-expense-dialog";
 import type { ExpenseDocumentOption } from "./expense-fields";
+import { confirmAction, notifyError } from "@/lib/feedback";
 
 export function ExpenseRowActions({
   expense,
@@ -48,16 +49,20 @@ export function ExpenseRowActions({
   const showDelete = canDelete && !isBilled;
   if (!showEdit && !showDelete) return null;
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (
-      !confirm(
-        `Delete expense "${expense.description}"? This is permanent. The audit log keeps a record of the deletion.`
-      )
+      !(await confirmAction({
+        title: `Delete expense "${expense.description}"?`,
+        description:
+          "This is permanent. The audit log keeps a record of the deletion.",
+        confirmLabel: "Delete expense",
+        destructive: true,
+      }))
     )
       return;
     startTransition(async () => {
       const res = await deleteExpense(expense.id);
-      if (!res.ok) alert(res.error ?? "Couldn't delete expense.");
+      if (!res.ok) notifyError(res.error ?? "Couldn't delete expense.");
     });
   };
 

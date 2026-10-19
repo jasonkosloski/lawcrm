@@ -8,6 +8,11 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+vi.mock("@/lib/feedback", () => ({
+  confirmAction: vi.fn(async () => true),
+  notifyError: vi.fn(),
+  notifySuccess: vi.fn(),
+}));
 vi.mock("@/app/actions/matters", () => ({
   addMatterTeamMember: vi.fn(),
   removeMatterTeamMember: vi.fn(),
@@ -17,6 +22,7 @@ import {
   addMatterTeamMember,
   removeMatterTeamMember,
 } from "@/app/actions/matters";
+import { confirmAction } from "@/lib/feedback";
 import {
   MatterTeamManagement,
   type TeamMemberRow,
@@ -64,7 +70,7 @@ const userOptions: TeamUserOption[] = [
 beforeEach(() => {
   mockedAdd.mockReset();
   mockedRemove.mockReset();
-  vi.stubGlobal("confirm", vi.fn(() => true));
+  vi.mocked(confirmAction).mockResolvedValue(true);
 });
 
 const renderCard = () =>

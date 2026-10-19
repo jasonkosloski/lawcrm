@@ -7,7 +7,7 @@
  * permission flags passed down from the server component).
  *
  * Edit reuses the log-call composer (`CallLogDialog` in edit mode)
- * prefilled from the item; Delete confirms then calls the
+ * prefilled from the item; Delete asks for confirmation then calls the
  * `deleteCallLog` action. Same idioms as TimeEntryRowMenu.
  */
 
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { deleteCallLog } from "@/app/actions/calls";
 import type { EditableCallLog } from "@/lib/call-log-form";
+import { confirmAction, notifyError } from "@/lib/feedback";
 import { CallLogDialog, type CallMatterOption } from "./log-call-button";
 
 export function ManualCallActions({
@@ -43,11 +44,14 @@ export function ManualCallActions({
 
   if (!canEdit && !canDelete) return null;
 
-  const onDelete = () => {
+  const onDelete = async () => {
     if (
-      !confirm(
-        `Delete this logged call with ${item.contactLabel}?\n\nThis can't be undone.`
-      )
+      !(await confirmAction({
+        title: `Delete this logged call with ${item.contactLabel}?`,
+        description: "This can't be undone.",
+        confirmLabel: "Delete call log",
+        destructive: true,
+      }))
     ) {
       return;
     }
@@ -56,11 +60,11 @@ export function ManualCallActions({
         const result = await deleteCallLog(item.id);
         if (!result.ok && result.error) {
           // Server refuses (e.g. provider-synced item) — surface why.
-          alert(result.error);
+          notifyError(result.error);
         }
       } catch {
         // A thrown action must not swap the page for the error boundary.
-        alert("Couldn't delete the call log - try again.");
+        notifyError("Couldn't delete the call log - try again.");
       }
     });
   };

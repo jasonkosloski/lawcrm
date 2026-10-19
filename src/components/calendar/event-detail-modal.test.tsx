@@ -39,6 +39,12 @@ const { replaceMock, pushMock, refreshMock, searchParams } = vi.hoisted(() => ({
   searchParams: new URLSearchParams("event=e1"),
 }));
 
+vi.mock("@/lib/feedback", () => ({
+  confirmAction: vi.fn(async () => true),
+  notifyError: vi.fn(),
+  notifySuccess: vi.fn(),
+}));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     replace: replaceMock,
@@ -77,6 +83,7 @@ import {
   deleteCalendarEvent,
   updateCalendarEvent,
 } from "@/app/actions/calendar-events";
+import { confirmAction } from "@/lib/feedback";
 import { UserTimeZoneProvider } from "@/components/user-time-zone";
 import { parseDateOnly } from "@/lib/format-date";
 import type { CalendarEventDetail } from "@/lib/queries/calendar";
@@ -601,7 +608,6 @@ describe("Busy view and read-only mode", () => {
 describe("Delete", () => {
   test("a refused delete shows the reason instead of failing silently", async () => {
     const user = userEvent.setup();
-    vi.stubGlobal("confirm", vi.fn(() => true));
     deleteMock.mockResolvedValueOnce({
       ok: false,
       error: "You don't have permission to delete this event.",
@@ -619,18 +625,19 @@ describe("Delete", () => {
 
   test("a successful delete returns to the calendar", async () => {
     const user = userEvent.setup();
-    vi.stubGlobal("confirm", vi.fn(() => true));
     renderModal(makeEvent());
 
     await user.click(screen.getByRole("button", { name: /Delete/ }));
 
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/calendar"));
+    expect(confirmAction).toHaveBeenCalledWith(
+      expect.objectContaining({ title: expect.stringMatching(/^Delete ".+"\?$/), destructive: true })
+    );
     expect(deleteMock).toHaveBeenCalledWith("e1");
   });
 
   test("deleting a matter event returns to that matter's events", async () => {
     const user = userEvent.setup();
-    vi.stubGlobal("confirm", vi.fn(() => true));
     deleteMock.mockResolvedValueOnce({ ok: true, matterId: "m9" });
     renderModal(makeEvent());
 
@@ -643,7 +650,6 @@ describe("Delete", () => {
 
   test("Delete stays disabled after success while the redirect is in flight", async () => {
     const user = userEvent.setup();
-    vi.stubGlobal("confirm", vi.fn(() => true));
     renderModal(makeEvent());
 
     await user.click(screen.getByRole("button", { name: /Delete/ }));
@@ -653,10 +659,11 @@ describe("Delete", () => {
 
   test("declining the confirm deletes nothing", async () => {
     const user = userEvent.setup();
-    vi.stubGlobal("confirm", vi.fn(() => false));
+    vi.mocked(confirmAction).mockResolvedValueOnce(false);
     renderModal(makeEvent());
 
     await user.click(screen.getByRole("button", { name: /Delete/ }));
+    await waitFor(() => expect(confirmAction).toHaveBeenCalledTimes(1));
     expect(deleteMock).not.toHaveBeenCalled();
   });
 });

@@ -1,10 +1,10 @@
 /**
  * FileToMatterPicker: read-only without communication.file_email
  * (the action redirects to the dashboard on denial), and a thrown
- * action alerts instead of replacing the page with the error boundary.
+ * action toasts instead of replacing the page with the error boundary.
  */
 
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -20,11 +20,18 @@ vi.mock("next/link", () => ({
   ),
 }));
 const setEmailThreadMatter = vi.fn();
+vi.mock("@/lib/feedback", () => ({
+  confirmAction: vi.fn(async () => true),
+  notifyError: vi.fn(),
+  notifySuccess: vi.fn(),
+}));
+
 vi.mock("@/app/actions/email-filing", () => ({
   setEmailThreadMatter: (...args: unknown[]) => setEmailThreadMatter(...args),
 }));
 
 import type { FilingMatterOption } from "@/lib/queries/communication";
+import { notifyError } from "@/lib/feedback";
 import { FileToMatterPicker } from "./file-to-matter-picker";
 
 const options = [
@@ -42,7 +49,6 @@ const setupUser = () => userEvent.setup({ pointerEventsCheck: 0 });
 beforeEach(() => {
   setEmailThreadMatter.mockReset();
 });
-afterEach(() => vi.unstubAllGlobals());
 
 describe("without communication.file_email", () => {
   test("a filed thread shows only the matter link", () => {
@@ -73,9 +79,7 @@ describe("without communication.file_email", () => {
 });
 
 describe("a thrown action", () => {
-  test("alerts instead of throwing out of the transition", async () => {
-    const alertSpy = vi.fn();
-    vi.stubGlobal("alert", alertSpy);
+  test("toasts instead of throwing out of the transition", async () => {
     setEmailThreadMatter.mockImplementation(async () => {
       throw new Error("db down");
     });
@@ -91,7 +95,10 @@ describe("a thrown action", () => {
     await user.click(screen.getByRole("button", { name: /file to matter/i }));
     await user.click(await screen.findByRole("button", { name: /Smith v\. Jones/ }));
 
-    await waitFor(() => expect(alertSpy).toHaveBeenCalled());
-    expect(alertSpy.mock.calls[0]![0]).toMatch(/try again/i);
+    await waitFor(() =>
+      expect(notifyError).toHaveBeenCalledWith(
+        expect.stringMatching(/try again/i)
+      )
+    );
   });
 });

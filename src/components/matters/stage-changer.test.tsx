@@ -7,11 +7,17 @@
 import { beforeEach, afterEach, describe, expect, test, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
+vi.mock("@/lib/feedback", () => ({
+  confirmAction: vi.fn(async () => true),
+  notifyError: vi.fn(),
+  notifySuccess: vi.fn(),
+}));
 vi.mock("@/app/actions/matters", () => ({
   updateMatterStage: vi.fn(),
 }));
 
 import { updateMatterStage } from "@/app/actions/matters";
+import { confirmAction, notifyError } from "@/lib/feedback";
 import { StageChanger, stepperSteps, type StageOption } from "./stage-changer";
 
 const mockedUpdate = vi.mocked(updateMatterStage);
@@ -79,14 +85,14 @@ describe("StageChanger — transition flow", () => {
         warning: "Reopen a closed matter?",
       })
       .mockResolvedValueOnce({ ok: true });
-    const confirmSpy = vi.fn().mockReturnValue(true);
-    vi.stubGlobal("confirm", confirmSpy);
     render(
       <StageChanger matterId="m1" stages={stages} currentStageId="s3" canEdit />
     );
     await pick("Intake");
     await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(2));
-    expect(confirmSpy).toHaveBeenCalledWith("Reopen a closed matter?");
+    expect(confirmAction).toHaveBeenCalledWith(
+      expect.objectContaining({ description: "Reopen a closed matter?" })
+    );
     expect(mockedUpdate).toHaveBeenLastCalledWith("m1", "s1", { force: true });
   });
 
@@ -96,7 +102,7 @@ describe("StageChanger — transition flow", () => {
       requiresConfirmation: true,
       warning: "Reopen a closed matter?",
     });
-    vi.stubGlobal("confirm", vi.fn().mockReturnValue(false));
+    vi.mocked(confirmAction).mockResolvedValueOnce(false);
     render(
       <StageChanger matterId="m1" stages={stages} currentStageId="s3" canEdit />
     );
@@ -111,13 +117,11 @@ describe("StageChanger — transition flow", () => {
 
   test("a refusal alerts the error and reverts", async () => {
     mockedUpdate.mockResolvedValue({ ok: false, error: "Nope." });
-    const alertSpy = vi.fn();
-    vi.stubGlobal("alert", alertSpy);
     render(
       <StageChanger matterId="m1" stages={stages} currentStageId="s1" canEdit />
     );
     await pick("Discovery");
-    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith("Nope."));
+    await waitFor(() => expect(notifyError).toHaveBeenCalledWith("Nope."));
     await waitFor(() =>
       expect(screen.getByText(/Currently in/).textContent).toContain("Intake")
     );
@@ -131,15 +135,12 @@ describe("StageChanger — transition flow", () => {
         warning: "Are you sure?",
       })
       .mockResolvedValueOnce({ ok: false, error: "Still refused." });
-    vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
-    const alertSpy = vi.fn();
-    vi.stubGlobal("alert", alertSpy);
     render(
       <StageChanger matterId="m1" stages={stages} currentStageId="s3" canEdit />
     );
     await pick("Intake");
     await waitFor(() =>
-      expect(alertSpy).toHaveBeenCalledWith("Still refused.")
+      expect(notifyError).toHaveBeenCalledWith("Still refused.")
     );
   });
 });

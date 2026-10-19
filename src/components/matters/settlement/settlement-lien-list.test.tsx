@@ -7,6 +7,11 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+vi.mock("@/lib/feedback", () => ({
+  confirmAction: vi.fn(async () => true),
+  notifyError: vi.fn(),
+  notifySuccess: vi.fn(),
+}));
 vi.mock("@/app/actions/settlements", () => ({
   updateSettlementLien: vi.fn(),
   deleteSettlementLien: vi.fn(),
@@ -16,6 +21,7 @@ import {
   deleteSettlementLien,
   updateSettlementLien,
 } from "@/app/actions/settlements";
+import { confirmAction } from "@/lib/feedback";
 import { SettlementLienList, type SettlementLienListRow } from "./settlement-lien-list";
 
 const LIENS: SettlementLienListRow[] = [
@@ -39,8 +45,7 @@ const LIENS: SettlementLienListRow[] = [
   },
 ];
 
-// happy-dom doesn't implement confirm — stub it as a global.
-const confirmMock = vi.fn();
+const confirmMock = vi.mocked(confirmAction);
 
 beforeEach(() => {
   vi.mocked(updateSettlementLien).mockReset();
@@ -51,7 +56,7 @@ beforeEach(() => {
   }));
   vi.mocked(deleteSettlementLien).mockResolvedValue({ ok: true });
   confirmMock.mockReset();
-  vi.stubGlobal("confirm", confirmMock);
+  confirmMock.mockResolvedValue(true);
 });
 
 afterEach(() => {
@@ -162,7 +167,7 @@ describe("SettlementLienList — edit", () => {
 
 describe("SettlementLienList — delete", () => {
   test("confirm -> deleteSettlementLien with the lien id", async () => {
-    confirmMock.mockReturnValue(true);
+    confirmMock.mockResolvedValue(true);
     const user = userEvent.setup();
     render(<SettlementLienList liens={LIENS} canManage locked={false} />);
     await user.click(screen.getByRole("button", { name: "Remove lien Aetna" }));
@@ -170,7 +175,7 @@ describe("SettlementLienList — delete", () => {
   });
 
   test("declining the confirm does nothing", async () => {
-    confirmMock.mockReturnValue(false);
+    confirmMock.mockResolvedValue(false);
     const user = userEvent.setup();
     render(<SettlementLienList liens={LIENS} canManage locked={false} />);
     await user.click(screen.getByRole("button", { name: "Remove lien Aetna" }));
@@ -178,7 +183,7 @@ describe("SettlementLienList — delete", () => {
   });
 
   test("a server refusal is shown on the row", async () => {
-    confirmMock.mockReturnValue(true);
+    confirmMock.mockResolvedValue(true);
     vi.mocked(deleteSettlementLien).mockResolvedValueOnce({
       ok: false,
       error: "Settlement is closed — can't remove liens after disbursement.",

@@ -34,6 +34,7 @@ import {
   SETTLEMENT_LIEN_STATUS_LABEL,
   type SettlementLienStatus,
 } from "@/lib/constants/settlement-status";
+import { confirmAction } from "@/lib/feedback";
 
 export type SettlementLienListRow = {
   id: string;
@@ -119,11 +120,14 @@ function LienRow({
     setEditing(true);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (
-      !confirm(
-        `Remove the ${lien.lienholder} lien (${formatMoney(lien.effectiveAmount)})? This is permanent. The audit log keeps a record.`
-      )
+      !(await confirmAction({
+        title: `Remove the ${lien.lienholder} lien (${formatMoney(lien.effectiveAmount)})?`,
+        description: "This is permanent. The audit log keeps a record.",
+        confirmLabel: "Remove lien",
+        destructive: true,
+      }))
     )
       return;
     setDeleteError(null);

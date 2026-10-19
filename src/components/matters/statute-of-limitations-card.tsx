@@ -28,6 +28,7 @@ import {
   formatDateOnly,
 } from "@/lib/format-date";
 import { computeSolDate, type SolPeriod } from "@/lib/sol";
+import { notifyError } from "@/lib/feedback";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import { Card, CardContent } from "@/components/ui/card";
 import { setMatterSolSatisfied } from "@/app/actions/matters";
@@ -89,7 +90,7 @@ export function StatuteOfLimitationsCard({
     startTransition(async () => {
       setOptimisticSatisfied(!optimisticSatisfied);
       const res = await setMatterSolSatisfied(matterId, !optimisticSatisfied);
-      if (!res.ok && res.error) alert(res.error);
+      if (!res.ok && res.error) notifyError(res.error);
     });
   };
 

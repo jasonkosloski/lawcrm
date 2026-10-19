@@ -15,6 +15,12 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+vi.mock("@/lib/feedback", () => ({
+  confirmAction: vi.fn(async () => true),
+  notifyError: vi.fn(),
+  notifySuccess: vi.fn(),
+}));
+
 vi.mock("@/app/actions/tasks", () => ({
   deleteTask: vi.fn(),
   setTaskStatus: vi.fn(),
@@ -39,6 +45,7 @@ vi.mock("@/app/actions/conversions", () => ({
   convertDeadlineToTask: vi.fn(),
 }));
 
+import { confirmAction } from "@/lib/feedback";
 import { deleteTask, setTaskStatus } from "@/app/actions/tasks";
 import { TaskRowMenu, TaskStatusToggle } from "./task-row-actions";
 import { DashboardTaskRow } from "./dashboard-task-row";
@@ -68,7 +75,7 @@ const setupUser = () => userEvent.setup({ pointerEventsCheck: 0 });
 beforeEach(() => {
   vi.mocked(deleteTask).mockReset();
   vi.mocked(setTaskStatus).mockReset();
-  vi.stubGlobal("confirm", vi.fn(() => true));
+  vi.mocked(confirmAction).mockResolvedValue(true);
 });
 
 describe("TaskStatusToggle", () => {

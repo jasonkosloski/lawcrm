@@ -12,6 +12,12 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+vi.mock("@/lib/feedback", () => ({
+  confirmAction: vi.fn(async () => true),
+  notifyError: vi.fn(),
+  notifySuccess: vi.fn(),
+}));
+
 vi.mock("@/app/actions/deadlines", () => ({
   deleteDeadline: vi.fn(),
   setDeadlineStatus: vi.fn(),
@@ -25,6 +31,7 @@ vi.mock("@/app/actions/time-on-entity", () => ({
 }));
 
 import { deleteDeadline, setDeadlineStatus } from "@/app/actions/deadlines";
+import { confirmAction } from "@/lib/feedback";
 import { DeadlineRowMenu } from "./deadline-row-actions";
 import type { EditableDeadline } from "./edit-deadline-dialog";
 
@@ -46,7 +53,7 @@ const setupUser = () => userEvent.setup({ pointerEventsCheck: 0 });
 beforeEach(() => {
   vi.mocked(deleteDeadline).mockReset();
   vi.mocked(setDeadlineStatus).mockReset();
-  vi.stubGlobal("confirm", vi.fn(() => true));
+  vi.mocked(confirmAction).mockResolvedValue(true);
 });
 
 describe("DeadlineRowMenu", () => {

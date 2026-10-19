@@ -4,7 +4,7 @@
  *
  * Each chip links to /search?q=…[&type=…]; the kebab at its right
  * edge (revealed on hover/focus, always present for touch) offers
- * Rename (small dialog) and Delete (confirm()). Mutations go through
+ * Rename (small dialog) and Delete (confirmation dialog). Mutations go through
  * the identity-scoped actions in app/actions/saved-searches.ts,
  * which revalidate /search so the server-rendered strip refreshes.
  */
@@ -15,6 +15,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { Bookmark, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { confirmAction, notifyError } from "@/lib/feedback";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -79,16 +80,23 @@ function SavedSearchChip({
   const [renameOpen, setRenameOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  const onDelete = () => {
-    if (!confirm(`Delete the saved search "${row.name}"?`)) return;
+  const onDelete = async () => {
+    if (
+      !(await confirmAction({
+        title: `Delete the saved search "${row.name}"?`,
+        confirmLabel: "Delete saved search",
+        destructive: true,
+      }))
+    )
+      return;
     startTransition(async () => {
       try {
         const res = await deleteSavedSearch(row.id);
-        if (!res.ok) alert(res.error);
+        if (!res.ok) notifyError(res.error);
       } catch (err) {
         // Don't let a rejected transition reach the error boundary.
         console.error("[saved-searches] delete failed", err);
-        alert("Couldn't delete the saved search. Please try again.");
+        notifyError("Couldn't delete the saved search. Please try again.");
       }
     });
   };
@@ -164,13 +172,13 @@ function RenameDialog({
       try {
         const res = await renameSavedSearch(row.id, name);
         if (!res.ok) {
-          alert(res.error);
+          notifyError(res.error);
           return;
         }
         onOpenChange(false);
       } catch (err) {
         console.error("[saved-searches] rename failed", err);
-        alert("Couldn't rename the saved search. Please try again.");
+        notifyError("Couldn't rename the saved search. Please try again.");
       }
     });
   };

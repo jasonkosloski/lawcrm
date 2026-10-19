@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { reactivateContact } from "@/app/actions/contacts";
+import { confirmAction, notifyError } from "@/lib/feedback";
 
 export function ContactReactivateButton({
   contactId,
@@ -25,11 +26,14 @@ export function ContactReactivateButton({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
-  const onReactivate = () => {
+  const onReactivate = async () => {
     if (
-      !confirm(
-        `Reactivate this contact?\n\n"${contactName}"\n\nThey will appear in the directory, pickers and conflict-check lists again.`
-      )
+      !(await confirmAction({
+        title: `Reactivate "${contactName}"?`,
+        description:
+          "They will appear in the directory, pickers and conflict-check lists again.",
+        confirmLabel: "Reactivate contact",
+      }))
     ) {
       return;
     }
@@ -38,7 +42,7 @@ export function ContactReactivateButton({
       if (result.ok) {
         router.refresh();
       } else if (result.error) {
-        alert(result.error);
+        notifyError(result.error);
       }
     });
   };

@@ -27,6 +27,11 @@ vi.mock("next/link", () => ({
     </a>
   ),
 }));
+vi.mock("@/lib/feedback", () => ({
+  confirmAction: vi.fn(async () => true),
+  notifyError: vi.fn(),
+  notifySuccess: vi.fn(),
+}));
 vi.mock("@/app/actions/notes", () => ({
   deleteNote: vi.fn(async () => ({ ok: true })),
   toggleNotePin: vi.fn(async () => ({ ok: true })),
@@ -112,8 +117,6 @@ function renderCard(
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.stubGlobal("confirm", vi.fn(() => true));
-  vi.stubGlobal("alert", vi.fn());
 });
 
 describe("NoteCard timestamp", () => {

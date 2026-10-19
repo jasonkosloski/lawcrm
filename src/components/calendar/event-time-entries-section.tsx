@@ -15,6 +15,7 @@ import { useTransition } from "react";
 import Link from "next/link";
 import { ExternalLink, Lock, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { confirmAction, notifyError } from "@/lib/feedback";
 import { deleteTimeEntry } from "@/app/actions/time-entries";
 // Entry dates are date-only values (ADR-012): `formatDateOnly` reads
 // them in UTC, so the server render and every browser show the day
@@ -102,11 +103,19 @@ function EventTimeEntryItem({ entry }: { entry: EventTimeEntry }) {
     canDeleteAnyTimeEntry
   );
 
-  const onDelete = () => {
-    if (!confirm("Delete this time entry? This can't be undone.")) return;
+  const onDelete = async () => {
+    if (
+      !(await confirmAction({
+        title: "Delete this time entry?",
+        description: "This can't be undone.",
+        confirmLabel: "Delete time entry",
+        destructive: true,
+      }))
+    )
+      return;
     startTransition(async () => {
       const res = await deleteTimeEntry(entry.id);
-      if (!res.ok && res.error) alert(res.error);
+      if (!res.ok && res.error) notifyError(res.error);
     });
   };
 

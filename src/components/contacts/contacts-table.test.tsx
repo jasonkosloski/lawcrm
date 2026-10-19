@@ -6,8 +6,8 @@
  *     header checkbox selects/clears the whole page, Clear resets;
  *   - Set type wires the selected ids + chosen type to
  *     `bulkSetContactType`, clears the selection and refreshes on
- *     success, alerts + keeps the selection on failure;
- *   - Deactivate asks confirm() first (cancel = no action call) and
+ *     success, toasts + keeps the selection on failure;
+ *   - Deactivate asks for confirmation first (cancel = no action call) and
  *     wires the ids to `bulkDeactivateContacts`;
  *   - Export CSV wires the ids to `exportContactsCsv` and funnels the
  *     result through a blob download (no permission flag needed);
@@ -42,6 +42,12 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+vi.mock("@/lib/feedback", () => ({
+  confirmAction: vi.fn(async () => true),
+  notifyError: vi.fn(),
+  notifySuccess: vi.fn(),
+}));
+
 vi.mock("@/app/actions/contacts", () => ({
   bulkDeactivateContacts: vi.fn(),
   bulkSetContactType: vi.fn(),
@@ -53,6 +59,7 @@ import {
   bulkSetContactType,
   exportContactsCsv,
 } from "@/app/actions/contacts";
+import { confirmAction, notifyError } from "@/lib/feedback";
 import { BULK_CONTACT_LIMIT } from "@/lib/contact-constants";
 import type { ContactListRow } from "@/lib/queries/contacts";
 import { ContactsTable } from "./contacts-table";
@@ -83,11 +90,6 @@ function renderTable(props?: Partial<Parameters<typeof ContactsTable>[0]>) {
   );
 }
 
-// happy-dom doesn't implement alert/confirm — stub them as globals
-// (vi.spyOn(window, "alert") throws "can only spy on a function").
-const alertMock = vi.fn();
-const confirmMock = vi.fn();
-
 beforeEach(() => {
   vi.clearAllMocks();
   mockedSetType.mockResolvedValue({ ok: true, count: 2 });
@@ -97,9 +99,7 @@ beforeEach(() => {
     csv: "Name\r\nAlpha\r\n",
     filename: "contacts-export-2026-07-07.csv",
   });
-  confirmMock.mockReturnValue(true);
-  vi.stubGlobal("alert", alertMock);
-  vi.stubGlobal("confirm", confirmMock);
+  vi.mocked(confirmAction).mockResolvedValue(true);
   // happy-dom lacks object URLs; the download path needs both plus a
   // click that doesn't try to navigate.
   URL.createObjectURL = vi.fn(() => "blob:test");
@@ -152,7 +152,7 @@ describe("ContactsTable — set type", () => {
   });
 
   test("asks to confirm first; cancelling never calls the action and keeps the selection", async () => {
-    confirmMock.mockReturnValue(false);
+    vi.mocked(confirmAction).mockResolvedValueOnce(false);
     const user = userEvent.setup();
     renderTable();
 
@@ -161,14 +161,14 @@ describe("ContactsTable — set type", () => {
     );
     await user.selectOptions(screen.getByLabelText("Set type"), "witness");
 
-    expect(confirmMock).toHaveBeenCalledWith(
-      'Set type to "Witness" on 2 contacts?'
+    expect(confirmAction).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Set type to "Witness" on 2 contacts?' })
     );
     expect(mockedSetType).not.toHaveBeenCalled();
     expect(screen.getByText("2 selected")).toBeInTheDocument();
   });
 
-  test("keeps the selection and alerts on failure", async () => {
+  test("keeps the selection and toasts on failure", async () => {
     mockedSetType.mockResolvedValue({ ok: false, error: "Nope" });
     const user = userEvent.setup();
     renderTable();
@@ -176,7 +176,7 @@ describe("ContactsTable — set type", () => {
     await user.click(screen.getByRole("checkbox", { name: "Select Alpha" }));
     await user.selectOptions(screen.getByLabelText("Set type"), "expert");
 
-    await waitFor(() => expect(alertMock).toHaveBeenCalledWith("Nope"));
+    await waitFor(() => expect(notifyError).toHaveBeenCalledWith("Nope"));
     expect(screen.getByText("1 selected")).toBeInTheDocument();
     expect(refresh).not.toHaveBeenCalled();
   });
@@ -192,8 +192,8 @@ describe("ContactsTable — deactivate", () => {
     );
     await user.click(screen.getByRole("button", { name: /Deactivate/ }));
 
-    expect(confirmMock).toHaveBeenCalledWith(
-      expect.stringContaining("Deactivate 2 contacts?")
+    expect(confirmAction).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Deactivate 2 contacts?" })
     );
     expect(mockedDeactivate).toHaveBeenCalledWith(["c1", "c2"]);
     await waitFor(() =>
@@ -202,7 +202,7 @@ describe("ContactsTable — deactivate", () => {
   });
 
   test("cancelling the confirm never calls the action", async () => {
-    confirmMock.mockReturnValue(false);
+    vi.mocked(confirmAction).mockResolvedValueOnce(false);
     const user = userEvent.setup();
     renderTable();
 

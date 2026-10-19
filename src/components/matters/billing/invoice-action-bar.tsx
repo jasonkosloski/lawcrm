@@ -61,6 +61,7 @@ import {
   invoiceStatusTransitions,
   type InvoiceKind,
 } from "@/lib/billing-form";
+import { confirmAction, notifyError, type ConfirmOptions } from "@/lib/feedback";
 import { ApplyTrustDialog } from "./apply-trust-dialog";
 import { RecordPaymentDialog } from "./record-payment-dialog";
 import { SendInvoiceDialog } from "./send-invoice-dialog";
@@ -161,11 +162,11 @@ export function InvoiceActionBar({
     !voidAllowed;
   if (nothingToDo) return null;
 
-  const transitionTo = (next: string, confirmCopy?: string) => {
-    if (confirmCopy && !confirm(confirmCopy)) return;
+  const transitionTo = async (next: string, confirmCopy?: ConfirmOptions) => {
+    if (confirmCopy && !(await confirmAction(confirmCopy))) return;
     startTransition(async () => {
       const res = await setInvoiceStatus(invoiceId, next);
-      if (!res.ok) alert(res.error ?? "Couldn't update invoice.");
+      if (!res.ok) notifyError(res.error ?? "Couldn't update invoice.");
     });
   };
 
@@ -176,20 +177,24 @@ export function InvoiceActionBar({
       // it since the page loaded, the server refuses instead of
       // approving an amount nobody saw.
       const res = await approveInvoice(invoiceId, invoiceBalance.toFixed(2));
-      if (!res.ok) alert(res.error ?? "Couldn't approve invoice.");
+      if (!res.ok) notifyError(res.error ?? "Couldn't approve invoice.");
     });
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (
-      !confirm(
-        `Delete draft invoice ${invoiceNumber}? This removes the row entirely and returns linked time entries to billable WIP.`
-      )
+      !(await confirmAction({
+        title: `Delete draft invoice ${invoiceNumber}?`,
+        description:
+          "This removes the row entirely and returns linked time entries to billable WIP.",
+        confirmLabel: "Delete invoice",
+        destructive: true,
+      }))
     )
       return;
     startTransition(async () => {
       const res = await deleteInvoice(invoiceId);
-      if (!res.ok) alert(res.error ?? "Couldn't delete invoice.");
+      if (!res.ok) notifyError(res.error ?? "Couldn't delete invoice.");
     });
   };
 
@@ -268,7 +273,12 @@ export function InvoiceActionBar({
           onClick={() =>
             transitionTo(
               "paid",
-              `Lock internal record ${invoiceNumber}? Linked time entries stay linked; void unlinks them back to WIP.`
+              {
+                title: `Lock internal record ${invoiceNumber}?`,
+                description:
+                  "Linked time entries stay linked; void unlinks them back to WIP.",
+                confirmLabel: "Mark recorded",
+              }
             )
           }
           disabled={pending}
@@ -312,7 +322,13 @@ export function InvoiceActionBar({
                 onClick={() =>
                   transitionTo(
                     "void",
-                    `Void invoice ${invoiceNumber}? Linked time entries return to billable WIP.`
+                    {
+                      title: `Void invoice ${invoiceNumber}?`,
+                      description:
+                        "Linked time entries return to billable WIP.",
+                      confirmLabel: "Void invoice",
+                      destructive: true,
+                    }
                   )
                 }
               >

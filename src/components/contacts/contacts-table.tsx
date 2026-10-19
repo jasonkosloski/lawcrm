@@ -13,8 +13,8 @@
  * Bulk bar (appears above the table when anything is selected):
  *   - Set type…  — contacts.edit, one updateMany server-side
  *   - Export CSV — no permission (read-only), server builds the file
- *   - Deactivate — contacts.delete, soft-delete, confirm() first
- *     (same confirm() idiom as the single-row delete button)
+ *   - Deactivate — contacts.delete, soft-delete, confirmation dialog first
+ *     (same idiom as the single-row delete button)
  * Batches are capped at BULK_CONTACT_LIMIT; past that the bar swaps
  * the actions for a "trim your selection" note (the server enforces
  * the same cap).
@@ -47,6 +47,7 @@ import {
   CONTACT_TYPE_LABEL,
 } from "@/lib/contact-constants";
 import { CSV_BOM } from "@/lib/csv";
+import { confirmAction, notifyError } from "@/lib/feedback";
 // Type-only import — erased at build time, so it doesn't pull the
 // Prisma-backed queries module into the client bundle.
 import type { ContactListRow } from "@/lib/queries/contacts";
@@ -116,19 +117,24 @@ export function ContactsTable({
 
   const selectedIdList = () => selected.map((r) => r.id);
 
-  const runSetType = (type: string) => {
+  const runSetType = async (type: string) => {
     if (!type) return;
     // Same guard as Deactivate: a closed <select> fires change on
     // arrow-key / typeahead presses, and this rewrites up to 100 rows.
     const n = selected.length;
     const label = CONTACT_TYPE_LABEL[type as keyof typeof CONTACT_TYPE_LABEL] ?? type;
-    if (!confirm(`Set type to "${label}" on ${n} contact${n === 1 ? "" : "s"}?`)) {
+    if (
+      !(await confirmAction({
+        title: `Set type to "${label}" on ${n} contact${n === 1 ? "" : "s"}?`,
+        confirmLabel: "Set type",
+      }))
+    ) {
       return;
     }
     startTransition(async () => {
       const res = await bulkSetContactType(selectedIdList(), type);
       if (!res.ok) {
-        alert(res.error ?? "Something went wrong");
+        notifyError(res.error ?? "Something went wrong");
         return;
       }
       clearSelection();
@@ -136,19 +142,23 @@ export function ContactsTable({
     });
   };
 
-  const runDeactivate = () => {
+  const runDeactivate = async () => {
     const n = selected.length;
     if (
-      !confirm(
-        `Deactivate ${n} contact${n === 1 ? "" : "s"}?\n\nThey will be removed from the directory but kept on any matters where they appear so historical records aren't broken.`
-      )
+      !(await confirmAction({
+        title: `Deactivate ${n} contact${n === 1 ? "" : "s"}?`,
+        description:
+          "They will be removed from the directory but kept on any matters where they appear so historical records aren't broken.",
+        confirmLabel: `Deactivate ${n} contact${n === 1 ? "" : "s"}`,
+        destructive: true,
+      }))
     ) {
       return;
     }
     startTransition(async () => {
       const res = await bulkDeactivateContacts(selectedIdList());
       if (!res.ok) {
-        alert(res.error ?? "Something went wrong");
+        notifyError(res.error ?? "Something went wrong");
         return;
       }
       clearSelection();
@@ -160,7 +170,7 @@ export function ContactsTable({
     startTransition(async () => {
       const res = await exportContactsCsv(selectedIdList());
       if (!res.ok) {
-        alert(res.error ?? "Something went wrong");
+        notifyError(res.error ?? "Something went wrong");
         return;
       }
       downloadCsv(res.csv, res.filename);

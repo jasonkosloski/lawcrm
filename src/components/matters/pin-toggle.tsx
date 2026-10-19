@@ -14,6 +14,7 @@ import { Pin, PinOff } from "lucide-react";
 import { useOptimistic, useTransition } from "react";
 import { setMatterPin } from "@/app/actions/matter-pins";
 import { cn } from "@/lib/utils";
+import { notifyError } from "@/lib/feedback";
 
 export function PinToggle({
   matterId,
@@ -33,9 +34,9 @@ export function PinToggle({
         const res = await setMatterPin(matterId, target);
         // The optimistic value falls back to the (unchanged) prop when
         // the transition ends, so a refusal needs no manual revert.
-        if (!res.ok) alert(res.error ?? "Couldn't update the pin.");
+        if (!res.ok) notifyError(res.error ?? "Couldn't update the pin.");
       } catch {
-        alert("Couldn't update the pin. Please try again.");
+        notifyError("Couldn't update the pin. Please try again.");
       }
     });
   };
