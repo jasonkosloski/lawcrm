@@ -223,10 +223,15 @@ export async function setPortalEnabled(
   });
   if (!user?.firmId) return { ok: false, error: "Firm not found." };
 
-  await prisma.firm.update({
-    where: { id: user.firmId },
-    data: { portalEnabled: enabled },
-  });
+  // Off also ends every client session (single-tenant: all of them), so
+  // turning it back on later does not resurrect old sign-ins.
+  await prisma.$transaction([
+    prisma.firm.update({
+      where: { id: user.firmId },
+      data: { portalEnabled: enabled },
+    }),
+    ...(enabled ? [] : [prisma.portalSession.deleteMany({})]),
+  ]);
   await logActivity({
     matterId: null,
     userId: gate.userId,

@@ -32,7 +32,12 @@ import { requirePermissionResult } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { setPortalEnabled, updateFirmAction } from "@/app/actions/firm";
 import { firmInitialState } from "@/lib/firm-form";
-import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
+import {
+  resetDb,
+  seedContact,
+  seedFirm,
+  seedUser,
+} from "@/test/integration-helpers";
 
 const mockedGetFirm = vi.mocked(loadCurrentFirm);
 const mockedGetGoals = vi.mocked(loadFirmGoals);
@@ -294,5 +299,27 @@ describe("setPortalEnabled", () => {
       where: { userId: actorId, title: { contains: "client portal" } },
     });
     expect(logs).toHaveLength(2);
+  });
+
+  test("switching off deletes every portal session; switching on deletes none", async () => {
+    const mk = async (email: string) => {
+      const { contactId } = await seedContact({ email });
+      const ident = await prisma.portalIdentity.create({
+        data: { contactId, email },
+      });
+      await prisma.portalSession.create({
+        data: {
+          identityId: ident.id,
+          tokenHash: `h-${email}`,
+          expiresAt: new Date(Date.now() + 86_400_000),
+        },
+      });
+    };
+    await mk("a@example.com");
+    await mk("b@example.com");
+    await setPortalEnabled(true);
+    expect(await prisma.portalSession.count()).toBe(2);
+    await setPortalEnabled(false);
+    expect(await prisma.portalSession.count()).toBe(0);
   });
 });
