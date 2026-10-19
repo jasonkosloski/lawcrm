@@ -17,6 +17,7 @@ import {
   EXPENSE_CATEGORY_LABEL,
   type ExpenseCategory,
 } from "@/lib/expense-constants";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 
 export type ExpenseDocumentOption = {
   id: string;
@@ -104,19 +105,19 @@ export function ExpenseFields({
           {errors.amount && <FieldError>{errors.amount[0]}</FieldError>}
         </Field>
         <Field label="Category" htmlFor={`${uid}-category`}>
-          <select
+          <NativeSelect
+            className="w-full"
             id={`${uid}-category`}
             name="category"
             value={draft.category}
             onChange={(e) => onChange({ category: e.target.value as ExpenseCategory })}
-            className={inputClass}
           >
             {EXPENSE_CATEGORIES.map((c) => (
-              <option key={c} value={c}>
+              <NativeSelectOption key={c} value={c}>
                 {EXPENSE_CATEGORY_LABEL[c]}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
+          </NativeSelect>
         </Field>
       </div>
 
@@ -185,23 +186,23 @@ export function ExpenseFields({
           receipt via the Documents tab first). */}
       {documentOptions.length > 0 && (
         <Field label="Receipt" htmlFor={`${uid}-receipt`}>
-          <select
+          <NativeSelect
+            className="w-full"
             id={`${uid}-receipt`}
             name="receiptDocumentId"
             value={draft.receiptDocumentId}
             onChange={(e) => onChange({ receiptDocumentId: e.target.value })}
-            className={inputClass}
           >
-            <option value="">— No receipt —</option>
+            <NativeSelectOption value="">— No receipt —</NativeSelectOption>
             {receiptOffList && (
-              <option value={draft.receiptDocumentId}>Current receipt</option>
+              <NativeSelectOption value={draft.receiptDocumentId}>Current receipt</NativeSelectOption>
             )}
             {documentOptions.map((d) => (
-              <option key={d.id} value={d.id}>
+              <NativeSelectOption key={d.id} value={d.id}>
                 {d.name}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
+          </NativeSelect>
         </Field>
       )}
       {/* No picker at all (no documents listed) → still post the

@@ -13,6 +13,7 @@ import { Plus, Search, X } from "lucide-react";
 import { searchAttendeesAction } from "@/app/actions/attendee-search";
 import { createCustodianContact } from "@/app/actions/records-requests";
 import { cn } from "@/lib/utils";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 
 type Picked = { id: string; name: string };
 type Hit = { id: string; name: string; sub: string | null };
@@ -154,15 +155,14 @@ export function CustodianPicker({
                 onChange={(e) => setNewName(e.target.value)}
                 className={cn(input, "flex-1 min-w-40")}
               />
-              <select
+              <NativeSelect
                 aria-label="New custodian type"
                 value={newType}
                 onChange={(e) => setNewType(e.target.value)}
-                className={input}
               >
-                <option value="medical_provider">Medical provider</option>
-                <option value="government">Government</option>
-              </select>
+                <NativeSelectOption value="medical_provider">Medical provider</NativeSelectOption>
+                <NativeSelectOption value="government">Government</NativeSelectOption>
+              </NativeSelect>
               <button
                 type="button"
                 disabled={pending || !newName.trim()}

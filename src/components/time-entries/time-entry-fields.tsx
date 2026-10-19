@@ -5,7 +5,7 @@
  *
  *   - UtbmsCodeSelect — UTBMS code picker over the catalog in
  *     `src/lib/time-entry-constants.ts` (A100 activity set + L100
- *     litigation task set), grouped via <optgroup>. Optional field;
+ *     litigation task set), grouped via <NativeSelectOptGroup>. Optional field;
  *     posts "" when unset.
  *
  *   - DurationFields — the duration input with two modes:
@@ -23,6 +23,7 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { NativeSelect, NativeSelectOption, NativeSelectOptGroup } from "@/components/ui/native-select";
 import {
   UTBMS_ACTIVITY_CODES,
   UTBMS_LITIGATION_TASK_CODES,
@@ -44,34 +45,30 @@ export function UtbmsCodeSelect({
 }) {
   return (
     <div className={cn("flex flex-col gap-0.5 min-w-0", className)}>
-      <select
+      <NativeSelect
         name={name}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-label="UTBMS code"
-        className={cn(
-          "h-8 px-2 rounded-md border bg-white text-xs",
-          value ? "text-ink" : "text-ink-4",
-          "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-          error ? "border-warn" : "border-line"
-        )}
+        className="w-full"
+        aria-invalid={!!error || undefined}
       >
-        <option value="">UTBMS code (optional)</option>
-        <optgroup label="Activity (A100)">
+        <NativeSelectOption value="">UTBMS code (optional)</NativeSelectOption>
+        <NativeSelectOptGroup label="Activity (A100)">
           {UTBMS_ACTIVITY_CODES.map((c) => (
-            <option key={c.code} value={c.code}>
+            <NativeSelectOption key={c.code} value={c.code}>
               {c.code} — {c.label}
-            </option>
+            </NativeSelectOption>
           ))}
-        </optgroup>
-        <optgroup label="Litigation task (L100–L500)">
+        </NativeSelectOptGroup>
+        <NativeSelectOptGroup label="Litigation task (L100–L500)">
           {UTBMS_LITIGATION_TASK_CODES.map((c) => (
-            <option key={c.code} value={c.code}>
+            <NativeSelectOption key={c.code} value={c.code}>
               {c.code} — {c.label}
-            </option>
+            </NativeSelectOption>
           ))}
-        </optgroup>
-      </select>
+        </NativeSelectOptGroup>
+      </NativeSelect>
       {error && <div className="text-2xs text-warn">{error}</div>}
     </div>
   );

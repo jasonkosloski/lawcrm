@@ -20,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Button } from "@/components/ui/button";
 import { createDeadlineRule, updateDeadlineRule } from "@/app/actions/automations";
 import {
@@ -135,19 +136,19 @@ export function DeadlineRuleDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Kind">
-              <select name="kind" value={kind} onChange={(e) => setKind(e.target.value)} className={inputCls}>
-                <option value="critical">Critical</option>
-                <option value="standard">Standard</option>
-              </select>
+              <NativeSelect name="kind" value={kind} onChange={(e) => setKind(e.target.value)} className="w-full">
+                <NativeSelectOption value="critical">Critical</NativeSelectOption>
+                <NativeSelectOption value="standard">Standard</NativeSelectOption>
+              </NativeSelect>
             </Field>
             <Field label="Counts from" error={errs.anchor?.[0]}>
-              <select name="anchor" value={anchor} onChange={(e) => setAnchor(e.target.value as DeadlineRuleAnchor)} className={inputCls}>
+              <NativeSelect name="anchor" value={anchor} onChange={(e) => setAnchor(e.target.value as DeadlineRuleAnchor)} className="w-full">
                 {DEADLINE_RULE_ANCHORS.map((a) => (
-                  <option key={a} value={a} disabled={a === "rule" && candidates.length === 0 && anchor !== "rule"}>
+                  <NativeSelectOption key={a} value={a} disabled={a === "rule" && candidates.length === 0 && anchor !== "rule"}>
                     {DEADLINE_RULE_ANCHOR_LABEL[a]}
-                  </option>
+                  </NativeSelectOption>
                 ))}
-              </select>
+              </NativeSelect>
             </Field>
           </div>
 
@@ -161,12 +162,12 @@ export function DeadlineRuleDialog({
           )}
           {anchor === "rule" && (
             <Field label="Which rule's deadline" error={errs.anchorRuleId?.[0]}>
-              <select name="anchorRuleId" value={anchorRuleId} onChange={(e) => setAnchorRuleId(e.target.value)} required className={inputCls}>
-                <option value="">Choose a rule…</option>
+              <NativeSelect name="anchorRuleId" value={anchorRuleId} onChange={(e) => setAnchorRuleId(e.target.value)} required className="w-full">
+                <NativeSelectOption value="">Choose a rule…</NativeSelectOption>
                 {candidates.map((r) => (
-                  <option key={r.id} value={r.id}>{r.isActive ? r.title : `${r.title} (archived)`}</option>
+                  <NativeSelectOption key={r.id} value={r.id}>{r.isActive ? r.title : `${r.title} (archived)`}</NativeSelectOption>
                 ))}
-              </select>
+              </NativeSelect>
             </Field>
           )}
           {anchor === "prompt" && (
@@ -178,13 +179,13 @@ export function DeadlineRuleDialog({
           <Field label="Offset" error={errs.amount?.[0]}>
             <div className="grid grid-cols-[90px_1fr_1fr] gap-2">
               <input name="amount" type="number" min={0} max={36500} value={amount} onChange={(e) => setAmount(e.target.value)} required className={inputCls} aria-label="Amount" />
-              <select name="unit" value={unit} onChange={(e) => setUnit(e.target.value as OffsetUnit)} className={inputCls} aria-label="Unit">
-                {OFFSET_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-              </select>
-              <select name="direction" value={direction} onChange={(e) => setDirection(e.target.value as "after" | "before")} className={inputCls} aria-label="Direction">
-                <option value="after">after</option>
-                <option value="before">before</option>
-              </select>
+              <NativeSelect name="unit" value={unit} onChange={(e) => setUnit(e.target.value as OffsetUnit)} className="w-full" aria-label="Unit">
+                {OFFSET_UNITS.map((u) => <NativeSelectOption key={u} value={u}>{u}</NativeSelectOption>)}
+              </NativeSelect>
+              <NativeSelect name="direction" value={direction} onChange={(e) => setDirection(e.target.value as "after" | "before")} className="w-full" aria-label="Direction">
+                <NativeSelectOption value="after">after</NativeSelectOption>
+                <NativeSelectOption value="before">before</NativeSelectOption>
+              </NativeSelect>
             </div>
           </Field>
           {preview && (

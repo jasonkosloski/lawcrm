@@ -35,6 +35,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import {
   FIRM_ACTIVITY_LIMIT,
@@ -173,19 +177,19 @@ export default async function FirmActivityPage({
           >
             User
           </label>
-          <select
+          <NativeSelect
             id="activity-user"
             name="user"
             defaultValue={userId ?? ""}
-            className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
+            className="w-full"
           >
-            <option value="">Anyone</option>
+            <NativeSelectOption value="">Anyone</NativeSelectOption>
             {authors.map((u) => (
-              <option key={u.id} value={u.id}>
+              <NativeSelectOption key={u.id} value={u.id}>
                 {u.name}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
+          </NativeSelect>
         </div>
         <div className="flex flex-col gap-1">
           <label

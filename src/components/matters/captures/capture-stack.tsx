@@ -47,6 +47,7 @@ import {
 import { DEADLINE_KIND_LABEL } from "@/lib/constants/deadline-status";
 import { EVENT_TYPE_LABEL } from "@/lib/constants/calendar-event-type";
 import { TASK_PRIORITY_LABEL } from "@/lib/constants/priority";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 
 const KIND_ICON: Record<CaptureKind, typeof ListTodo> = {
   task: ListTodo,
@@ -577,20 +578,16 @@ function Select({
   ariaLabel: string;
 }) {
   return (
-    <select
+    <NativeSelect size="sm"
       value={value}
       onChange={(e) => onChange(e.target.value)}
       aria-label={ariaLabel}
-      className={cn(
-        "h-7 px-2 rounded-md border border-line bg-white text-xs text-ink",
-        "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
-      )}
     >
       {options.map((o) => (
-        <option key={o.value} value={o.value}>
+        <NativeSelectOption key={o.value} value={o.value}>
           {o.label}
-        </option>
+        </NativeSelectOption>
       ))}
-    </select>
+    </NativeSelect>
   );
 }

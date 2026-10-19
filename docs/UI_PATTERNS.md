@@ -106,6 +106,17 @@ Hover (non-primary): border-brand-300, text-brand-700
 Active: translateY(0.5px)
 ```
 
+### Dropdowns (`NativeSelect`)
+```
+src/components/ui/native-select.tsx — never a raw <select> (ESLint enforces).
+- Native on purpose: posts with the form, OS picker on phones,
+  userEvent.selectOptions in tests. Use a Popover+Command combobox
+  (attendee-picker) only when options need search or rich rows.
+- className sizes the WRAPPER (default w-fit): pass w-full in form
+  fields. size="sm" (h-7) for toolbars.
+- Errors: aria-invalid, not a conditional border class.
+```
+
 ### Action feedback (toasts and confirmations)
 ```
 src/lib/feedback.ts — never window.alert/confirm/prompt (ESLint no-alert).

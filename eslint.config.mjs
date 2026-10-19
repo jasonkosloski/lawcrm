@@ -10,6 +10,20 @@ const eslintConfig = defineConfig([
     // Use notifyError / notifySuccess / confirmAction (src/lib/feedback.ts).
     rules: { "no-alert": "error" },
   },
+  {
+    files: ["src/**/*.tsx"],
+    ignores: ["src/components/ui/**"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "JSXOpeningElement[name.name='select']",
+          message:
+            "Use NativeSelect from @/components/ui/native-select (brand styling, aria-invalid errors).",
+        },
+      ],
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

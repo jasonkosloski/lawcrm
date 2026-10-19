@@ -26,6 +26,7 @@ import {
   BILLING_MODE_LABEL,
   type BillingMode,
 } from "@/lib/billing-mode-constants";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 
 export function EditPracticeAreaForm({
   area,
@@ -179,19 +180,20 @@ export function EditPracticeAreaForm({
             htmlFor="statutePeriodUnit"
             error={errs.statutePeriodUnit}
           >
-            <select
+            <NativeSelect
               id="statutePeriodUnit"
               name="statutePeriodUnit"
               value={unit}
               onChange={(e) => setUnit(e.target.value)}
-              className={inputCls(!!errs.statutePeriodUnit)}
+              className="w-full"
+              aria-invalid={!!errs.statutePeriodUnit || undefined}
             >
               {SOL_PERIOD_UNITS.map((u) => (
-                <option key={u} value={u}>
+                <NativeSelectOption key={u} value={u}>
                   {u.charAt(0) + u.slice(1).toLowerCase()}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </Field>
         </div>
         <Field
@@ -230,19 +232,20 @@ export function EditPracticeAreaForm({
           BILLING_MODE_DESCRIPTION[billingMode as BillingMode]
         }
       >
-        <select
+        <NativeSelect
           id="defaultBillingMode"
           name="defaultBillingMode"
           value={billingMode}
           onChange={(e) => setBillingMode(e.target.value)}
-          className={cn(inputCls(!!errs.defaultBillingMode), "max-w-xs")}
+          className="w-full max-w-xs"
+          aria-invalid={!!errs.defaultBillingMode || undefined}
         >
           {BILLING_MODES.map((m) => (
-            <option key={m} value={m}>
+            <NativeSelectOption key={m} value={m}>
               {BILLING_MODE_LABEL[m]}
-            </option>
+            </NativeSelectOption>
           ))}
-        </select>
+        </NativeSelect>
       </Field>
 
       <div className="flex items-center justify-end gap-2">

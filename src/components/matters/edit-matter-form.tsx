@@ -43,8 +43,8 @@ import {
   Row,
   Section,
   inputCls,
-  selectCls,
 } from "./form-primitives";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 
 export type MatterForEdit = {
   id: string;
@@ -271,41 +271,43 @@ export function EditMatterForm({
             required
             error={errs.practiceAreaId}
           >
-            <select
+            <NativeSelect
+              className="w-full"
               id="practiceAreaId"
               name="practiceAreaId"
               value={practiceAreaId}
               onChange={(e) => handleAreaChange(e.target.value)}
               required
-              className={selectCls(!!errs.practiceAreaId)}
+              aria-invalid={!!errs.practiceAreaId || undefined}
             >
               {options.areas.map((a) => (
-                <option key={a.id} value={a.id}>
+                <NativeSelectOption key={a.id} value={a.id}>
                   {a.name}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </Field>
 
           <Field label="Stage" name="stageId" error={errs.stageId}>
-            <select
+            <NativeSelect
+              className="w-full"
               id="stageId"
               name="stageId"
               value={stageId}
               onChange={(e) => setStageId(e.target.value)}
-              className={selectCls(!!errs.stageId)}
+              aria-invalid={!!errs.stageId || undefined}
             >
               {stageOptions.length === 0 && (
-                <option value="" disabled>
+                <NativeSelectOption value="" disabled>
                   No stages for this area
-                </option>
+                </NativeSelectOption>
               )}
               {stageOptions.map((s) => (
-                <option key={s.id} value={s.id}>
+                <NativeSelectOption key={s.id} value={s.id}>
                   {s.name}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </Field>
         </Row>
 
@@ -326,18 +328,19 @@ export function EditMatterForm({
             name="feeStructure"
             error={errs.feeStructure}
           >
-            <select
+            <NativeSelect
+              className="w-full"
               id="feeStructure"
               name="feeStructure"
               defaultValue={init.feeStructure}
-              className={selectCls(!!errs.feeStructure)}
+              aria-invalid={!!errs.feeStructure || undefined}
             >
               {FEE_OPTIONS.map((f) => (
-                <option key={f.value} value={f.value}>
+                <NativeSelectOption key={f.value} value={f.value}>
                   {f.label}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </Field>
         </Row>
 
@@ -348,18 +351,19 @@ export function EditMatterForm({
             error={errs.billingMode}
             hint="Which workflow the Billing tab uses. Inherited from the practice area on create; override per-matter when this case bills differently (e.g. a §1988-eligible contingency case switching to fee-petition mode)."
           >
-            <select
+            <NativeSelect
+              className="w-full"
               id="billingMode"
               name="billingMode"
               defaultValue={init.billingMode}
-              className={selectCls(!!errs.billingMode)}
+              aria-invalid={!!errs.billingMode || undefined}
             >
               {BILLING_MODES.map((m) => (
-                <option key={m} value={m}>
+                <NativeSelectOption key={m} value={m}>
                   {BILLING_MODE_LABEL[m]}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </Field>
         </Row>
       </Section>
@@ -372,22 +376,23 @@ export function EditMatterForm({
             error={errs.clientId}
             hint="Swap to a different existing contact, or clear to detach."
           >
-            <select
+            <NativeSelect
+              className="w-full"
               id="clientId"
               name="clientId"
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
-              className={selectCls(!!errs.clientId)}
+              aria-invalid={!!errs.clientId || undefined}
             >
-              <option value="">— No client —</option>
+              <NativeSelectOption value="">— No client —</NativeSelectOption>
               {options.clients.map((c) => (
-                <option key={c.id} value={c.id}>
+                <NativeSelectOption key={c.id} value={c.id}>
                   {c.name}
                   {c.organization ? ` · ${c.organization}` : ""}
                   {c.inactive ? " (inactive)" : ""}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </Field>
 
           <Field
@@ -401,25 +406,26 @@ export function EditMatterForm({
                 : "Changing the lead attorney requires permission to manage the case team."
             }
           >
-            <select
+            <NativeSelect
+              className="w-full"
               id="leadUserId"
               name={canChangeLead ? "leadUserId" : undefined}
               value={leadUserId}
               onChange={(e) => setLeadUserId(e.target.value)}
               required={canChangeLead}
               disabled={!canChangeLead}
-              className={selectCls(!!errs.leadUserId)}
+              aria-invalid={!!errs.leadUserId || undefined}
             >
               {leadUserId === "" && (
-                <option value="">Choose a lead…</option>
+                <NativeSelectOption value="">Choose a lead…</NativeSelectOption>
               )}
               {options.users.map((u) => (
-                <option key={u.id} value={u.id}>
+                <NativeSelectOption key={u.id} value={u.id}>
                   {u.name} · {u.jobTitle}
                   {u.inactive ? " (inactive)" : ""}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
             {/* A disabled select isn't submitted — post the current
                 lead back so the save leaves it unchanged. */}
             {!canChangeLead && (

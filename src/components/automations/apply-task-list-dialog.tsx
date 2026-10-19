@@ -19,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Button } from "@/components/ui/button";
 import { applyTaskListToMatter } from "@/app/actions/automations";
 import type { ApplyTaskListResult } from "@/lib/automation-form";
@@ -79,21 +80,21 @@ export function ApplyTaskListDialog({
           </DialogHeader>
 
           <div className="flex flex-col gap-3">
-            <select
+            <NativeSelect
               value={listId}
               onChange={(e) => {
                 setListId(e.target.value);
                 setResult(null);
               }}
               aria-label="Task list"
-              className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
+              className="w-full"
             >
               {lists.map((l) => (
-                <option key={l.id} value={l.id}>
+                <NativeSelectOption key={l.id} value={l.id}>
                   {l.name} ({l.itemTitles.length})
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
             {selected && (
               <ul className="text-2xs text-ink-3 list-disc pl-4 flex flex-col gap-0.5 max-h-40 overflow-y-auto">
                 {selected.itemTitles.map((t, i) => (

@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -263,16 +264,16 @@ function TypeDialog({
               <label htmlFor="rrt-unit" className={labelCls}>
                 Day type
               </label>
-              <select
+              <NativeSelect
                 id="rrt-unit"
                 name="responseUnit"
                 defaultValue={v?.responseUnit ?? type?.responseUnit ?? ""}
-                className={inputCls}
+                className="w-full"
               >
-                <option value="">—</option>
-                <option value="CALENDAR_DAYS">Calendar days</option>
-                <option value="BUSINESS_DAYS">Business days</option>
-              </select>
+                <NativeSelectOption value="">—</NativeSelectOption>
+                <NativeSelectOption value="CALENDAR_DAYS">Calendar days</NativeSelectOption>
+                <NativeSelectOption value="BUSINESS_DAYS">Business days</NativeSelectOption>
+              </NativeSelect>
               {errP("responseUnit")}
             </div>
           </div>
@@ -294,19 +295,19 @@ function TypeDialog({
             <label htmlFor="rrt-template" className={labelCls}>
               Default letter template
             </label>
-            <select
+            <NativeSelect
               id="rrt-template"
               name="defaultTemplateId"
               defaultValue={v?.defaultTemplateId ?? type?.defaultTemplateId ?? ""}
-              className={inputCls}
+              className="w-full"
             >
-              <option value="">None</option>
+              <NativeSelectOption value="">None</NativeSelectOption>
               {templates.map((t) => (
-                <option key={t.id} value={t.id}>
+                <NativeSelectOption key={t.id} value={t.id}>
                   {t.name}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
             {errP("defaultTemplateId")}
           </div>
           {err("form") && (

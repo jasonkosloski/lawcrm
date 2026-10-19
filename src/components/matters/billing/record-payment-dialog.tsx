@@ -23,6 +23,7 @@
 
 import { useEffect, useId, useMemo, useState, useTransition } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
   Dialog,
   DialogContent,
@@ -302,21 +303,21 @@ function RecordPaymentForm({
           >
             Method <span className="text-warn">*</span>
           </label>
-          <select
+          <NativeSelect
+            className="w-full"
             id={`${ids}-source`}
             name="source"
             required
             value={source}
             onChange={(e) => setSource(e.target.value as InvoicePaymentSource)}
-            className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
           >
             {selectableSources.map((s) => (
-              <option key={s} value={s}>
+              <NativeSelectOption key={s} value={s}>
                 {INVOICE_PAYMENT_SOURCE_LABEL[s]}
                 {s === "trust" && ` (avail: $${trustBalance.toFixed(2)})`}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
+          </NativeSelect>
         </div>
         <div className="flex flex-col gap-1">
           <label

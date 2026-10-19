@@ -27,6 +27,7 @@ import {
   todayDateString,
 } from "@/lib/note-constants";
 import { useUserTimeZone } from "@/components/user-time-zone";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 
 // ── Shared input primitives ────────────────────────────────────────────
 
@@ -132,19 +133,19 @@ export function AddTaskForm({
           />
           <FieldError msg={errs.dueDate?.[0]} />
         </div>
-        <select
+        <NativeSelect
+          className="[&_select]:capitalize"
           name="priority"
           aria-label="Priority"
           value={priority}
           onChange={(e) => setPriority(e.target.value)}
-          className={cn(inputClass, "capitalize")}
         >
           {TASK_PRIORITIES.map((p) => (
-            <option key={p} value={p}>
+            <NativeSelectOption key={p} value={p}>
               {p}
-            </option>
+            </NativeSelectOption>
           ))}
-        </select>
+        </NativeSelect>
       </div>
 
       <textarea
@@ -227,21 +228,21 @@ export function AddDeadlineForm({
           />
           <FieldError msg={errs.dueDate?.[0]} />
         </div>
-        <select
+        <NativeSelect
+          className="[&_select]:capitalize"
           name="kind"
           aria-label="Deadline type"
           value={kind}
           onChange={(e) =>
             setKind(e.target.value as (typeof DEADLINE_KINDS)[number])
           }
-          className={cn(inputClass, "capitalize")}
         >
           {DEADLINE_KINDS.map((k) => (
-            <option key={k} value={k}>
+            <NativeSelectOption key={k} value={k}>
               {k.replace("_", " ")}
-            </option>
+            </NativeSelectOption>
           ))}
-        </select>
+        </NativeSelect>
       </div>
 
       <textarea

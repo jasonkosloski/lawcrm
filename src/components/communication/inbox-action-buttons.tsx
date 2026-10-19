@@ -33,6 +33,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
   createDeadlineFromEmail,
   createDeadlineFromMessage,
@@ -295,18 +296,18 @@ function CreateTaskDialog({
                 <div className="text-2xs text-warn">{errs.dueDate[0]}</div>
               )}
             </div>
-            <select
+            <NativeSelect
               name="priority"
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
-              className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink capitalize focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
+              className="w-full"
             >
               {TASK_PRIORITIES.map((p) => (
-                <option key={p} value={p}>
+                <NativeSelectOption key={p} value={p}>
                   {p}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </div>
 
           <textarea
@@ -412,20 +413,20 @@ function CreateDeadlineDialog({
                 <div className="text-2xs text-warn">{errs.dueDate[0]}</div>
               )}
             </div>
-            <select
+            <NativeSelect
               name="kind"
               value={kind}
               onChange={(e) =>
                 setKind(e.target.value as (typeof DEADLINE_KINDS)[number])
               }
-              className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink capitalize focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
+              className="w-full"
             >
               {DEADLINE_KINDS.map((k) => (
-                <option key={k} value={k}>
+                <NativeSelectOption key={k} value={k}>
                   {DEADLINE_KIND_LABEL[k]}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </div>
 
           <textarea
@@ -506,18 +507,18 @@ function CreateNoteDialog({
             value={textareaToHtml(content)}
           />
 
-          <select
+          <NativeSelect
             name="type"
             value={type}
             onChange={(e) => setType(e.target.value)}
-            className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink capitalize focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 self-start"
+            className="self-start"
           >
             {NOTE_TYPES.map((t) => (
-              <option key={t} value={t}>
+              <NativeSelectOption key={t} value={t}>
                 {NOTE_TYPE_LABEL[t]}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
+          </NativeSelect>
 
           <textarea
             value={content}

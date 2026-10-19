@@ -32,6 +32,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -174,14 +175,14 @@ export function TemplateEditorDialog({
               <label htmlFor="template-category" className={fieldLabelCls}>
                 Category
               </label>
-              <select
+              <NativeSelect
                 id="template-category"
                 name="category"
                 value={category}
                 onChange={(e) =>
                   setCategory(e.target.value as TemplateCategory)
                 }
-                className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
+                className="w-full"
               >
                 {/* A row whose category isn't in the curated list
                     (imported / SQL-inserted) keeps its own value —
@@ -189,16 +190,16 @@ export function TemplateEditorDialog({
                     first option and a body-typo fix silently moves
                     the template into "Demand letters". */}
                 {!isTemplateCategory(category) && (
-                  <option value={category}>
+                  <NativeSelectOption value={category}>
                     {templateCategoryLabel(category)}
-                  </option>
+                  </NativeSelectOption>
                 )}
                 {TEMPLATE_CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
+                  <NativeSelectOption key={c} value={c}>
                     {TEMPLATE_CATEGORY_LABEL[c]}
-                  </option>
+                  </NativeSelectOption>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
           </div>
 

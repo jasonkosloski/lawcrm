@@ -60,6 +60,7 @@ import {
 import type { RecordsRequestDetail } from "@/lib/queries/records-requests";
 import { cn } from "@/lib/utils";
 import type { TypeOption, UserOption } from "./new-request-composer";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 
 export type RequestDetailPermissions = {
   /** records.edit */
@@ -610,20 +611,20 @@ export function RequestDetail({
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="flex flex-col gap-1">
                     <label htmlFor="rr-e-type" className={label}>Type</label>
-                    <select
+                    <NativeSelect
                       id="rr-e-type"
                       value={typeChoice}
                       onChange={(e) => setTypeChoice(e.target.value)}
-                      className={field}
+                      className="w-full"
                     >
                       {types.map((t) => (
-                        <option key={t.id} value={t.id}>{t.name}</option>
+                        <NativeSelectOption key={t.id} value={t.id}>{t.name}</NativeSelectOption>
                       ))}
                       {detail.typeId && !types.some((t) => t.id === detail.typeId) && (
-                        <option value={detail.typeId}>{detail.typeName}</option>
+                        <NativeSelectOption value={detail.typeId}>{detail.typeName}</NativeSelectOption>
                       )}
-                      <option value={ADHOC}>Ad hoc (other)</option>
-                    </select>
+                      <NativeSelectOption value={ADHOC}>Ad hoc (other)</NativeSelectOption>
+                    </NativeSelect>
                   </div>
                   {typeChoice === ADHOC && (
                     <div className="flex flex-col gap-1">
@@ -686,20 +687,20 @@ export function RequestDetail({
                   ))}
                   <div className="flex flex-col gap-1">
                     <label htmlFor="rr-e-owner" className={label}>Owner</label>
-                    <select
+                    <NativeSelect
                       id="rr-e-owner"
                       name="ownerId"
                       defaultValue={detail.ownerId ?? ""}
-                      className={field}
+                      className="w-full"
                     >
-                      <option value="">Unassigned</option>
+                      <NativeSelectOption value="">Unassigned</NativeSelectOption>
                       {users.map((u) => (
-                        <option key={u.id} value={u.id}>{u.name}</option>
+                        <NativeSelectOption key={u.id} value={u.id}>{u.name}</NativeSelectOption>
                       ))}
                       {detail.ownerId && !users.some((u) => u.id === detail.ownerId) && (
-                        <option value={detail.ownerId}>{detail.ownerName}</option>
+                        <NativeSelectOption value={detail.ownerId}>{detail.ownerName}</NativeSelectOption>
                       )}
-                    </select>
+                    </NativeSelect>
                     <FieldError state={edit.state} name="ownerId" />
                   </div>
                 </div>

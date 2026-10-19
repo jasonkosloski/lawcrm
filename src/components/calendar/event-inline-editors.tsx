@@ -10,6 +10,7 @@ import {
 } from "@/lib/event-schedule";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 
 // ── Inline editors ─────────────────────────────────────────────────────
 
@@ -240,7 +241,7 @@ export function InlineTextarea({
   );
 }
 
-/** Tiny native <select>-style inline picker. Click to flip into
+/** Tiny native <NativeSelect>-style inline picker. Click to flip into
  *  a select; picking an option with the mouse commits + closes;
  *  Escape cancels. Arrow keys only MOVE the highlighted option
  *  (some browsers fire `change` on every arrow press of a closed
@@ -276,7 +277,7 @@ export function InlineSelect({
 
   if (editing) {
     return (
-      <select
+      <NativeSelect
         autoFocus
         defaultValue={value}
         aria-label={ariaLabel}
@@ -313,14 +314,14 @@ export function InlineSelect({
             viaKeys.current = true;
           }
         }}
-        className={cn(inputBase, "text-2xs font-mono uppercase tracking-wider")}
+        size="sm"
       >
         {options.map((o) => (
-          <option key={o.value} value={o.value}>
+          <NativeSelectOption key={o.value} value={o.value}>
             {o.label}
-          </option>
+          </NativeSelectOption>
         ))}
-      </select>
+      </NativeSelect>
     );
   }
 

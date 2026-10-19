@@ -10,6 +10,7 @@ import { useId, useState } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Button } from "@/components/ui/button";
 import { addSettlementLien } from "@/app/actions/settlements";
 import {
@@ -115,20 +116,20 @@ export function SettlementLienForm({
           >
             Type
           </label>
-          <select
+          <NativeSelect
+            className="w-full"
             id={`${uid}-type`}
             name="lienholderType"
             value={lienholderType}
             onChange={(e) => setLienholderType(e.target.value)}
-            className={inputClass}
           >
-            <option value="">—</option>
+            <NativeSelectOption value="">—</NativeSelectOption>
             {LIENHOLDER_TYPES.map((t) => (
-              <option key={t} value={t}>
+              <NativeSelectOption key={t} value={t}>
                 {LIENHOLDER_TYPE_LABEL[t]}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
+          </NativeSelect>
         </div>
       </div>
 

@@ -16,13 +16,14 @@
  * editing a task whose owner has since been deactivated, pass them as
  * `currentOwner`: they are shown as "<name> (inactive)" and stay
  * selected, so saving an unrelated edit re-posts the same owner
- * instead of silently unassigning the task (a controlled <select>
+ * instead of silently unassigning the task (a controlled <NativeSelect>
  * whose value has no matching option falls back to the first option).
  */
 
 "use client";
 
 import { cn } from "@/lib/utils";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import type { AssigneeOption } from "@/lib/queries/team";
 
 export type { AssigneeOption };
@@ -67,29 +68,26 @@ export function AssigneeSelect({
         >
           {selected ? selected.initials : "—"}
         </span>
-        <select
+        <NativeSelect
           name={name}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           aria-label="Assignee"
-          className={cn(
-            "h-8 flex-1 min-w-0 px-2 rounded-md border bg-white text-xs text-ink",
-            "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-            error ? "border-warn" : "border-line"
-          )}
+          className="flex-1 min-w-0"
+          aria-invalid={!!error || undefined}
         >
-          <option value="">Unassigned</option>
+          <NativeSelectOption value="">Unassigned</NativeSelectOption>
           {inactiveOwner && (
-            <option value={inactiveOwner.id}>
+            <NativeSelectOption value={inactiveOwner.id}>
               {inactiveOwner.name} (inactive)
-            </option>
+            </NativeSelectOption>
           )}
           {assignees.map((a) => (
-            <option key={a.id} value={a.id}>
+            <NativeSelectOption key={a.id} value={a.id}>
               {a.name}
-            </option>
+            </NativeSelectOption>
           ))}
-        </select>
+        </NativeSelect>
       </div>
       {error && <div className="text-2xs text-warn">{error}</div>}
     </div>

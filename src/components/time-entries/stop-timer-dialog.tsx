@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
   DateField,
   TextField,
@@ -43,7 +44,6 @@ import { todayKey } from "@/lib/format-date";
 import { stopTimer } from "@/app/actions/timer";
 import { timeEntryInitialState } from "@/lib/time-entry-constants";
 import type { TimerMatterOption } from "@/lib/queries/timer";
-import { cn } from "@/lib/utils";
 
 export function StopTimerDialog({
   open,
@@ -139,25 +139,21 @@ export function StopTimerDialog({
         <form action={formAction} className="flex flex-col gap-3">
           <input type="hidden" name="sessionId" value={sessionId} />
           <div className="flex flex-col gap-0.5">
-            <select
+            <NativeSelect
               name="matterId"
               value={matterId}
               onChange={(e) => setMatterId(e.target.value)}
               aria-label="Matter"
-              className={cn(
-                "h-8 px-2 rounded-md border bg-white text-xs",
-                matterId ? "text-ink" : "text-ink-4",
-                "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-                errs.matterId ? "border-warn" : "border-line"
-              )}
+              className="w-full"
+              aria-invalid={!!errs.matterId || undefined}
             >
-              <option value="">Select matter (required)</option>
+              <NativeSelectOption value="">Select matter (required)</NativeSelectOption>
               {matterOptions.map((m) => (
-                <option key={m.id} value={m.id}>
+                <NativeSelectOption key={m.id} value={m.id}>
                   {m.name}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
             {errs.matterId && (
               <div className="text-2xs text-warn">{errs.matterId[0]}</div>
             )}

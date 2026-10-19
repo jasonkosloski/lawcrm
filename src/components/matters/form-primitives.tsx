@@ -102,10 +102,3 @@ export const inputCls = (hasError: boolean): string =>
     "placeholder:text-ink-4",
     hasError ? "border-warn" : "border-line"
   );
-
-export const selectCls = (hasError: boolean): string =>
-  cn(
-    "h-8 px-2 rounded-md border bg-white text-xs text-ink",
-    "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-    hasError ? "border-warn" : "border-line"
-  );

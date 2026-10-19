@@ -39,6 +39,7 @@
 import { useId, useState, useTransition } from "react";
 import { unstable_rethrow, useRouter } from "next/navigation";
 import { Clock } from "lucide-react";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
   createFlaggedMoment,
   updateFlaggedMoment,
@@ -367,18 +368,18 @@ export function FlagComposer({
           >
             Category
           </label>
-          <select
+          <NativeSelect
             id={`${uid}-category`}
             value={category}
             onChange={(e) => setCategory(e.target.value as FlagCategory)}
-            className="h-7 rounded-md border border-line bg-white px-2 text-xs text-ink focus:border-brand-300 focus:outline-none"
+            size="sm"
           >
             {FLAG_CATEGORIES.map((c) => (
-              <option key={c} value={c}>
+              <NativeSelectOption key={c} value={c}>
                 {FLAG_CATEGORY_LABEL[c]}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
+          </NativeSelect>
         </div>
       </div>
 

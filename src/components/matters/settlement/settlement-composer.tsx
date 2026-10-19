@@ -20,6 +20,7 @@ import { useId, useState } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { Pencil, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Button } from "@/components/ui/button";
 import { upsertSettlement } from "@/app/actions/settlements";
 import {
@@ -258,19 +259,19 @@ export function SettlementComposer({
               </div>
             </>
           ) : (
-            <select
+            <NativeSelect
+              className="w-full"
               id={`${uid}-status`}
               name="status"
               value={status}
               onChange={(e) => setStatus(e.target.value)}
-              className={inputClass}
             >
               {statusOptions(initial.status).map((s) => (
-                <option key={s} value={s}>
+                <NativeSelectOption key={s} value={s}>
                   {statusLabel(s)}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           )}
         </Field>
       </div>

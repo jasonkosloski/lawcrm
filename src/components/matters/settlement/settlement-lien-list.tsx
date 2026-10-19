@@ -18,6 +18,7 @@ import { useId, useState, useTransition } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { cn } from "@/lib/utils";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Button } from "@/components/ui/button";
 import {
   deleteSettlementLien,
@@ -221,19 +222,19 @@ function LienRow({
               >
                 Status
               </label>
-              <select
+              <NativeSelect
+                className="w-full"
                 id={`${uid}-status`}
                 name="status"
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
-                className={inputClass}
               >
                 {SETTLEMENT_LIEN_STATUSES.map((s) => (
-                  <option key={s} value={s}>
+                  <NativeSelectOption key={s} value={s}>
                     {SETTLEMENT_LIEN_STATUS_LABEL[s]}
-                  </option>
+                  </NativeSelectOption>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
           </div>
 

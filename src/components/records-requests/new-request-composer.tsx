@@ -22,6 +22,7 @@ import {
 import type { RecordScope } from "@/lib/record-scope";
 import { cn } from "@/lib/utils";
 import { CustodianPicker } from "./custodian-picker";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 
 export type TypeOption = { id: string; name: string };
 export type UserOption = { id: string; name: string };
@@ -113,19 +114,19 @@ export function NewRequestComposer({
           <label htmlFor="rr-type" className={label}>
             Type
           </label>
-          <select
+          <NativeSelect
             id="rr-type"
             value={typeChoice}
             onChange={(e) => setTypeChoice(e.target.value)}
-            className={field}
+            className="w-full"
           >
             {types.map((t) => (
-              <option key={t.id} value={t.id}>
+              <NativeSelectOption key={t.id} value={t.id}>
                 {t.name}
-              </option>
+              </NativeSelectOption>
             ))}
-            <option value={ADHOC}>Ad hoc (other)</option>
-          </select>
+            <NativeSelectOption value={ADHOC}>Ad hoc (other)</NativeSelectOption>
+          </NativeSelect>
           {errs.typeId && (
             <span className="text-2xs text-warn">{errs.typeId[0]}</span>
           )}
@@ -135,19 +136,19 @@ export function NewRequestComposer({
           <label htmlFor="rr-owner" className={label}>
             Owner
           </label>
-          <select
+          <NativeSelect
             id="rr-owner"
             name="ownerId"
             defaultValue={currentUserId}
-            className={field}
+            className="w-full"
           >
-            <option value="">Unassigned</option>
+            <NativeSelectOption value="">Unassigned</NativeSelectOption>
             {users.map((u) => (
-              <option key={u.id} value={u.id}>
+              <NativeSelectOption key={u.id} value={u.id}>
                 {u.name}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
+          </NativeSelect>
         </div>
       </div>
 

@@ -26,6 +26,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { NativeSelect, NativeSelectOptGroup, NativeSelectOption } from "@/components/ui/native-select";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { RecordScope } from "@/lib/record-scope";
@@ -198,27 +199,27 @@ export function GenerateFromTemplateDialog({
                 >
                   Template
                 </label>
-                <select
+                <NativeSelect
                   id="generate-template"
                   value={templateId}
                   onChange={(e) => onPick(e.target.value)}
-                  className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
+                  className="w-full"
                 >
-                  <option value="">Pick a template…</option>
+                  <NativeSelectOption value="">Pick a template…</NativeSelectOption>
                   {[...grouped.entries()].map(([category, rows]) => (
-                    <optgroup
+                    <NativeSelectOptGroup
                       key={category}
                       label={templateCategoryLabel(category)}
                     >
                       {rows.map((t) => (
-                        <option key={t.id} value={t.id}>
+                        <NativeSelectOption key={t.id} value={t.id}>
                           {t.name}
                           {t.description ? ` — ${t.description}` : ""}
-                        </option>
+                        </NativeSelectOption>
                       ))}
-                    </optgroup>
+                    </NativeSelectOptGroup>
                   ))}
-                </select>
+                </NativeSelect>
               </div>
 
               {previewPending && (

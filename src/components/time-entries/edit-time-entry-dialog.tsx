@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
   DateField,
   TextField,
@@ -46,7 +47,6 @@ import {
   type TimeEntryFormState,
 } from "@/lib/time-entry-constants";
 import { dateOnlyKey } from "@/lib/format-date";
-import { cn } from "@/lib/utils";
 
 export type EditableTimeEntry = {
   id: string;
@@ -171,25 +171,22 @@ export function EditTimeEntryDialog({
           />
 
           <div className="flex flex-col gap-0.5">
-            <select
+            <NativeSelect
               name="status"
               value={status}
               onChange={(e) => setStatus(e.target.value as TimeEntryStatus)}
               aria-label="Status"
-              className={cn(
-                "h-8 px-2 rounded-md border bg-white text-xs text-ink capitalize",
-                "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-                errs.status ? "border-warn" : "border-line"
-              )}
+              className="w-full"
+              aria-invalid={!!errs.status || undefined}
             >
               {/* "Billed" is set only by invoice generation; the
                   server refuses it here, so don't offer it. */}
               {TIME_ENTRY_STATUSES.filter((s) => s !== "billed").map((s) => (
-                <option key={s} value={s}>
+                <NativeSelectOption key={s} value={s}>
                   {STATUS_LABEL[s]}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
             {errs.status && (
               <div className="text-2xs text-warn">{errs.status[0]}</div>
             )}

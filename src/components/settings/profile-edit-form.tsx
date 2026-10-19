@@ -28,6 +28,7 @@ import {
   profileInitialState,
   type ProfileFormState,
 } from "@/lib/profile-form";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 
 export type EditableProfile = {
   name: string;
@@ -164,18 +165,19 @@ export function ProfileEditForm({ profile }: { profile: EditableProfile }) {
           hint="Used for dashboard agenda, deadlines countdown, and timeline timestamps."
           className="sm:col-span-2"
         >
-          <select
+          <NativeSelect
             id="timeZone"
             name="timeZone"
             defaultValue={currentZone}
-            className={inputClass(!!errs.timeZone)}
+            className="w-full"
+            aria-invalid={!!errs.timeZone || undefined}
           >
             {zoneOptions.map((tz) => (
-              <option key={tz.value} value={tz.value}>
+              <NativeSelectOption key={tz.value} value={tz.value}>
                 {tz.label}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
+          </NativeSelect>
         </Field>
 
         <Field

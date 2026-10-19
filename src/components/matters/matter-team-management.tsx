@@ -21,6 +21,7 @@
 import { useId, useState, useTransition } from "react";
 import { Plus, TriangleAlert, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Button } from "@/components/ui/button";
 import {
   addMatterTeamMember,
@@ -209,21 +210,21 @@ export function MatterTeamManagement({
             >
               Add member
             </label>
-            <select
+            <NativeSelect
+              className="w-full"
               id={addUserSelectId}
               value={addUserId}
               onChange={(e) => setAddUserId(e.target.value)}
               disabled={pending}
-              className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
             >
-              <option value="">Pick a user…</option>
+              <NativeSelectOption value="">Pick a user…</NativeSelectOption>
               {candidates.map((u) => (
-                <option key={u.id} value={u.id}>
+                <NativeSelectOption key={u.id} value={u.id}>
                   {u.name}
                   {u.jobTitle ? ` · ${u.jobTitle}` : ""}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </div>
           <div className="flex flex-col gap-1 w-44">
             <label
@@ -232,21 +233,21 @@ export function MatterTeamManagement({
             >
               Role
             </label>
-            <select
+            <NativeSelect
+              className="w-full"
               id={addRoleSelectId}
               value={addRole}
               onChange={(e) =>
                 setAddRole(e.target.value as MatterTeamRole)
               }
               disabled={pending}
-              className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
             >
               {MATTER_TEAM_ROLES.map((r) => (
-                <option key={r} value={r}>
+                <NativeSelectOption key={r} value={r}>
                   {MATTER_TEAM_ROLE_LABEL[r]}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </div>
           <Button
             type="button"

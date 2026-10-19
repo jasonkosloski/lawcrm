@@ -47,13 +47,13 @@ import {
   Row,
   Section,
   inputCls,
-  selectCls,
 } from "./form-primitives";
 import {
   createMatterInitialState,
   NEW_CLIENT_SENTINEL,
   type CreateMatterState,
 } from "@/lib/new-matter-constants";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 
 type ClientOption = {
   id: string;
@@ -361,46 +361,48 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
             required
             error={errs.practiceAreaId}
           >
-            <select
+            <NativeSelect
+              className="w-full"
               id="practiceAreaId"
               name="practiceAreaId"
               value={practiceAreaId}
               onChange={(e) => handleAreaChange(e.target.value)}
               required
-              className={selectCls(!!errs.practiceAreaId)}
+              aria-invalid={!!errs.practiceAreaId || undefined}
             >
               {options.areas.length === 0 && (
-                <option value="" disabled>
+                <NativeSelectOption value="" disabled>
                   No practice areas configured
-                </option>
+                </NativeSelectOption>
               )}
               {options.areas.map((a) => (
-                <option key={a.id} value={a.id}>
+                <NativeSelectOption key={a.id} value={a.id}>
                   {a.name}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </Field>
 
           <Field label="Stage" name="stageId" error={errs.stageId}>
-            <select
+            <NativeSelect
+              className="w-full"
               id="stageId"
               name="stageId"
               value={stageId}
               onChange={(e) => setStageId(e.target.value)}
-              className={selectCls(!!errs.stageId)}
+              aria-invalid={!!errs.stageId || undefined}
             >
               {stageOptions.length === 0 && (
-                <option value="" disabled>
+                <NativeSelectOption value="" disabled>
                   No stages for this area
-                </option>
+                </NativeSelectOption>
               )}
               {stageOptions.map((s) => (
-                <option key={s.id} value={s.id}>
+                <NativeSelectOption key={s.id} value={s.id}>
                   {s.name}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </Field>
         </Row>
 
@@ -435,18 +437,19 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
         </Row>
 
         <Field label="Fee structure" name="feeStructure" error={errs.feeStructure}>
-          <select
+          <NativeSelect
+            className="w-full"
             id="feeStructure"
             name="feeStructure"
             defaultValue={vals.feeStructure ?? "contingent"}
-            className={selectCls(!!errs.feeStructure)}
+            aria-invalid={!!errs.feeStructure || undefined}
           >
             {FEE_OPTIONS.map((f) => (
-              <option key={f.value} value={f.value}>
+              <NativeSelectOption key={f.value} value={f.value}>
                 {f.label}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
+          </NativeSelect>
         </Field>
       </Section>
 
@@ -591,19 +594,20 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
             required
             error={errs.leadUserId}
           >
-            <select
+            <NativeSelect
+              className="w-full"
               id="leadUserId"
               name="leadUserId"
               defaultValue={vals.leadUserId ?? options.currentUserId}
               required
-              className={selectCls(!!errs.leadUserId)}
+              aria-invalid={!!errs.leadUserId || undefined}
             >
               {options.users.map((u) => (
-                <option key={u.id} value={u.id}>
+                <NativeSelectOption key={u.id} value={u.id}>
                   {u.name} · {u.jobTitle}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </Field>
         </Row>
 

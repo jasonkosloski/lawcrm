@@ -44,6 +44,7 @@ import {
 } from "@/lib/document-form";
 import { makeStorageKey, type StorageDriver } from "@/lib/storage/storage-key";
 import { blobUploadErrorMessage } from "./upload-errors";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 
 const MAX_MB = Math.round(MAX_DOCUMENT_BYTES / (1024 * 1024));
 
@@ -262,19 +263,19 @@ export function UploadDocumentForm({
           >
             Category
           </label>
-          <select
+          <NativeSelect
+            className="w-full"
             id={categoryId}
             name="category"
             value={category}
             onChange={(e) => setCategory(e.target.value as DocumentCategory)}
-            className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
           >
             {DOCUMENT_CATEGORIES.map((c) => (
-              <option key={c} value={c}>
+              <NativeSelectOption key={c} value={c}>
                 {DOCUMENT_CATEGORY_LABEL[c]}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
+          </NativeSelect>
         </div>
       </div>
 

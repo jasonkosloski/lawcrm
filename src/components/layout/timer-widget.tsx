@@ -43,6 +43,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Play, Square, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
   discardTimer,
   startTimer,
@@ -242,7 +243,7 @@ export function TimerWidget({
           <div className="text-2xs font-semibold uppercase tracking-wider text-ink-3">
             Timer details
           </div>
-          <select
+          <NativeSelect
             value={session.matterId ?? ""}
             onChange={(e) => {
               const matterId = e.target.value || null;
@@ -253,19 +254,15 @@ export function TimerWidget({
               run(() => updateTimer({ matterId }), previous);
             }}
             aria-label="Timer matter"
-            className={cn(
-              "h-8 px-2 rounded-md border border-line bg-white text-xs",
-              session.matterId ? "text-ink" : "text-ink-4",
-              "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
-            )}
+            className="w-full"
           >
-            <option value="">No matter yet</option>
+            <NativeSelectOption value="">No matter yet</NativeSelectOption>
             {matterOptions.map((m) => (
-              <option key={m.id} value={m.id}>
+              <NativeSelectOption key={m.id} value={m.id}>
                 {m.name}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
+          </NativeSelect>
           <input
             type="text"
             value={activityDraft ?? session.activity ?? ""}

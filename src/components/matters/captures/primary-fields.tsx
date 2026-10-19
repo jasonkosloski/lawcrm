@@ -10,6 +10,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 
 export function TextField({
   name,
@@ -144,23 +145,19 @@ export function SelectField({
   capitalize?: boolean;
 }) {
   return (
-    <select
+    <NativeSelect
       name={name}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       aria-label={ariaLabel}
-      className={cn(
-        "h-8 px-2 rounded-md border border-line bg-white text-xs text-ink",
-        capitalize && "capitalize",
-        "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
-      )}
+      className={cn(capitalize && "[&_select]:capitalize")}
     >
       {options.map((o) => (
-        <option key={o.value} value={o.value}>
+        <NativeSelectOption key={o.value} value={o.value}>
           {o.label}
-        </option>
+        </NativeSelectOption>
       ))}
-    </select>
+    </NativeSelect>
   );
 }
 

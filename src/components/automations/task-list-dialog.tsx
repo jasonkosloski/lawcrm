@@ -20,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Button } from "@/components/ui/button";
 import { createTaskList, updateTaskList } from "@/app/actions/automations";
 import {
@@ -164,13 +165,13 @@ export function TaskListDialog({
                 <div key={item.key} className="flex flex-col gap-1 p-1.5 rounded-md border border-line bg-paper">
                   <div className="grid grid-cols-1 sm:grid-cols-[1fr_96px_120px_88px_76px] gap-2 items-center">
                     <input aria-label="Task title" value={item.title} onChange={(e) => update(item.key, { title: e.target.value })} maxLength={200} placeholder={`Task ${idx + 1}`} className={inputCls} />
-                    <select aria-label="Priority" value={item.priority} onChange={(e) => update(item.key, { priority: e.target.value as DraftItem["priority"] })} className={inputCls}>
-                      {TASK_PRIORITIES.map((p) => <option key={p} value={p}>{TASK_PRIORITY_LABEL[p]}</option>)}
-                    </select>
-                    <select aria-label="Assign to" value={item.assignTo} onChange={(e) => update(item.key, { assignTo: e.target.value as DraftItem["assignTo"] })} className={inputCls}>
-                      <option value="lead">Lead attorney</option>
-                      <option value="unassigned">Unassigned</option>
-                    </select>
+                    <NativeSelect aria-label="Priority" value={item.priority} onChange={(e) => update(item.key, { priority: e.target.value as DraftItem["priority"] })} className="w-full">
+                      {TASK_PRIORITIES.map((p) => <NativeSelectOption key={p} value={p}>{TASK_PRIORITY_LABEL[p]}</NativeSelectOption>)}
+                    </NativeSelect>
+                    <NativeSelect aria-label="Assign to" value={item.assignTo} onChange={(e) => update(item.key, { assignTo: e.target.value as DraftItem["assignTo"] })} className="w-full">
+                      <NativeSelectOption value="lead">Lead attorney</NativeSelectOption>
+                      <NativeSelectOption value="unassigned">Unassigned</NativeSelectOption>
+                    </NativeSelect>
                     <input aria-label="Due days after applied" type="number" min={0} max={3650} value={item.due} onChange={(e) => update(item.key, { due: e.target.value })} placeholder="none" className={inputCls} />
                     <div className="flex items-center gap-0.5 justify-end">
                       <IconBtn label="Move up" onClick={() => move(idx, -1)} disabled={idx === 0}><ArrowUp size={13} /></IconBtn>

@@ -23,6 +23,7 @@ import {
   type NewIntakeFormState,
 } from "@/lib/new-intake-form";
 import { LEAD_SOURCES, LEAD_SOURCE_LABEL } from "@/lib/constants/lead-stage";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 
 const MAX_SUGGESTIONS = 6;
 const labelCls = "text-2xs font-mono uppercase tracking-wider text-ink-4";
@@ -187,12 +188,12 @@ export function NewIntakeForm({ contacts }: { contacts: IntakeContactOption[] })
       <Section title="Inquiry">
         <div className="grid grid-cols-1 sm:grid-cols-[200px_1fr] gap-3">
           <Field label="Source" error={errs.source?.[0]}>
-            <select name="source" defaultValue={v.source ?? "phone"} className={inputCls(!!errs.source)}>
-              <option value="">Unknown</option>
+            <NativeSelect name="source" defaultValue={v.source ?? "phone"} className="w-full" aria-invalid={!!errs.source || undefined}>
+              <NativeSelectOption value="">Unknown</NativeSelectOption>
               {LEAD_SOURCES.map((s) => (
-                <option key={s} value={s}>{LEAD_SOURCE_LABEL[s] ?? s}</option>
+                <NativeSelectOption key={s} value={s}>{LEAD_SOURCE_LABEL[s] ?? s}</NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </Field>
           <Field label="Source detail" error={errs.sourceDetail?.[0]}>
             <input name="sourceDetail" defaultValue={v.sourceDetail ?? ""} maxLength={200} placeholder="e.g. referred by …" className={inputCls(!!errs.sourceDetail)} />

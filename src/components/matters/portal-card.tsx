@@ -12,6 +12,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -246,18 +247,18 @@ function InviteForm({
     <form action={formAction} className="flex flex-col gap-3">
       <label className="flex flex-col gap-1 text-xs text-ink-2">
         Contact
-        <select
+        <NativeSelect
+          className="w-full"
           name="contactId"
           value={contactId}
           onChange={(e) => pick(e.target.value)}
-          className="h-8 rounded-md border border-line bg-paper px-2 text-xs text-ink"
         >
           {contacts.map((c) => (
-            <option key={c.id} value={c.id}>
+            <NativeSelectOption key={c.id} value={c.id}>
               {c.name}
-            </option>
+            </NativeSelectOption>
           ))}
-        </select>
+        </NativeSelect>
       </label>
       <label className="flex flex-col gap-1 text-xs text-ink-2">
         Email

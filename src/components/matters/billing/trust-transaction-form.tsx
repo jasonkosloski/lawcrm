@@ -25,6 +25,7 @@ import {
 } from "@/lib/billing-form";
 import { todayKey } from "@/lib/format-date";
 import { useUserTimeZone } from "@/components/user-time-zone";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 
 export function TrustTransactionForm({ matterId }: { matterId: string }) {
   const [expanded, setExpanded] = useState(false);
@@ -107,19 +108,19 @@ export function TrustTransactionForm({ matterId }: { matterId: string }) {
           >
             Type <span className="text-warn">*</span>
           </label>
-          <select
+          <NativeSelect
+            className="w-full"
             id={`${ids}-type`}
             name="type"
             value={type}
             onChange={(e) => setType(e.target.value as TrustTxnType)}
-            className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
           >
             {TRUST_TXN_TYPES.map((t) => (
-              <option key={t} value={t}>
+              <NativeSelectOption key={t} value={t}>
                 {TRUST_TXN_TYPE_LABEL[t]}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
+          </NativeSelect>
         </div>
         <div className="flex flex-col gap-1">
           <label

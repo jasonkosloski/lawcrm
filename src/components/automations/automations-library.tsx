@@ -21,6 +21,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import { NativeSelect, NativeSelectOptGroup, NativeSelectOption } from "@/components/ui/native-select";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/empty-state";
 import {
@@ -271,8 +272,6 @@ function AddDefaultForm({
   useEffect(() => {
     if (state.status === "ok") formRef.current?.reset();
   }, [state]);
-  const selectCls =
-    "h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30";
   const err = state.errors?.target?.[0] ?? state.errors?.practiceAreaId?.[0];
   if (rules.length === 0 && lists.length === 0) return null;
   return (
@@ -286,24 +285,24 @@ function AddDefaultForm({
       className="flex flex-wrap items-center gap-2"
     >
       <input type="hidden" name="trigger" value="matter_created" />
-      <select name="target" required defaultValue="" aria-label="Rule or task list" className={selectCls}>
-        <option value="" disabled>Choose a rule or task list…</option>
+      <NativeSelect name="target" required defaultValue="" aria-label="Rule or task list">
+        <NativeSelectOption value="" disabled>Choose a rule or task list…</NativeSelectOption>
         {rules.length > 0 && (
-          <optgroup label="Deadline rules">
-            {rules.map((r) => <option key={r.id} value={`rule:${r.id}`}>{r.title}</option>)}
-          </optgroup>
+          <NativeSelectOptGroup label="Deadline rules">
+            {rules.map((r) => <NativeSelectOption key={r.id} value={`rule:${r.id}`}>{r.title}</NativeSelectOption>)}
+          </NativeSelectOptGroup>
         )}
         {lists.length > 0 && (
-          <optgroup label="Task lists">
-            {lists.map((l) => <option key={l.id} value={`list:${l.id}`}>{l.name}</option>)}
-          </optgroup>
+          <NativeSelectOptGroup label="Task lists">
+            {lists.map((l) => <NativeSelectOption key={l.id} value={`list:${l.id}`}>{l.name}</NativeSelectOption>)}
+          </NativeSelectOptGroup>
         )}
-      </select>
+      </NativeSelect>
       <span className="text-xs text-ink-4">for new matters in</span>
-      <select name="practiceAreaId" defaultValue="" aria-label="Practice area" className={selectCls}>
-        <option value="">Every practice area</option>
-        {practiceAreas.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-      </select>
+      <NativeSelect name="practiceAreaId" defaultValue="" aria-label="Practice area">
+        <NativeSelectOption value="">Every practice area</NativeSelectOption>
+        {practiceAreas.map((a) => <NativeSelectOption key={a.id} value={a.id}>{a.name}</NativeSelectOption>)}
+      </NativeSelect>
       <button type="submit" disabled={isPending} className={newBtnCls}>
         <Plus size={13} /> Add
       </button>

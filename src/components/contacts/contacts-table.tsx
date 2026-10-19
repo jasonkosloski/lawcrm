@@ -33,6 +33,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EmailLink } from "@/components/ui/email-link";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
   Table,
   TableBody,
@@ -119,7 +120,7 @@ export function ContactsTable({
 
   const runSetType = async (type: string) => {
     if (!type) return;
-    // Same guard as Deactivate: a closed <select> fires change on
+    // Same guard as Deactivate: a closed <NativeSelect> fires change on
     // arrow-key / typeahead presses, and this rewrites up to 100 rows.
     const n = selected.length;
     const label = CONTACT_TYPE_LABEL[type as keyof typeof CONTACT_TYPE_LABEL] ?? type;
@@ -201,22 +202,22 @@ export function ContactsTable({
             ) : (
               <>
                 {canEdit && (
-                  <select
+                  <NativeSelect
                     aria-label="Set type"
                     value=""
                     disabled={pending}
                     onChange={(e) => runSetType(e.target.value)}
-                    className="h-7 px-2 rounded-md border border-line bg-white text-2xs text-ink focus:outline-none focus:border-brand-500"
+                    size="sm"
                   >
-                    <option value="" disabled>
+                    <NativeSelectOption value="" disabled>
                       Set type…
-                    </option>
+                    </NativeSelectOption>
                     {CONTACT_TYPES.map((t) => (
-                      <option key={t} value={t}>
+                      <NativeSelectOption key={t} value={t}>
                         {CONTACT_TYPE_LABEL[t]}
-                      </option>
+                      </NativeSelectOption>
                     ))}
-                  </select>
+                  </NativeSelect>
                 )}
                 {canExport && (
                   <Button

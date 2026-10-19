@@ -46,6 +46,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { isInlineSafeType } from "@/lib/inline-safe-types";
 import { contentTypeForFilename } from "@/app/api/documents/upload/upload-config";
 import {
@@ -379,24 +380,24 @@ function FileAttachmentDialog({
               <Briefcase size={11} className="text-ink-4" />
               Folder
             </span>
-            <select
+            <NativeSelect
               value={folderId ?? ""}
               disabled={pending || foldersLoading}
               onChange={(e) => setFolderId(e.target.value || null)}
-              className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink-2 outline-none"
+              className="w-full"
             >
-              <option value="">
+              <NativeSelectOption value="">
                 {foldersLoading
                   ? "Loading folders…"
                   : "All documents (matter root)"}
-              </option>
+              </NativeSelectOption>
               {folders.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {/* NBSP indent — plain spaces collapse inside <option>. */}
+                <NativeSelectOption key={f.id} value={f.id}>
+                  {/* NBSP indent — plain spaces collapse inside <NativeSelectOption>. */}
                   {`${"  ".repeat(f.depth - 1)}${f.name}`}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
             {foldersError && (
               <span className="flex items-center gap-2 text-warn">
                 Couldn&apos;t load folders - this would file to the matter

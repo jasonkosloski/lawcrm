@@ -25,6 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Button } from "@/components/ui/button";
 import { applyDeadlineRuleToMatter } from "@/app/actions/automations";
 import type { ApplyRuleResult } from "@/lib/automation-form";
@@ -35,9 +36,6 @@ export type ApplicableRule = {
   /** e.g. "182 days after Incident date" */
   summary: string;
 };
-
-const selectCls =
-  "h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30";
 
 export function ApplyDeadlineRuleDialog({
   matterId,
@@ -112,7 +110,7 @@ export function ApplyDeadlineRuleDialog({
               <span className="text-2xs font-mono uppercase tracking-wider text-ink-4">
                 Rule
               </span>
-              <select
+              <NativeSelect
                 value={ruleId}
                 onChange={(e) => {
                   setRuleId(e.target.value);
@@ -120,14 +118,14 @@ export function ApplyDeadlineRuleDialog({
                   setAnchorDate("");
                   setForced(false);
                 }}
-                className={selectCls}
+                className="w-full"
               >
                 {rules.map((r) => (
-                  <option key={r.id} value={r.id}>
+                  <NativeSelectOption key={r.id} value={r.id}>
                     {r.title}
-                  </option>
+                  </NativeSelectOption>
                 ))}
-              </select>
+              </NativeSelect>
               {selected && (
                 <span className="text-2xs text-ink-4">{selected.summary}</span>
               )}
@@ -142,7 +140,7 @@ export function ApplyDeadlineRuleDialog({
                   type="date"
                   value={anchorDate}
                   onChange={(e) => setAnchorDate(e.target.value)}
-                  className={selectCls}
+                  className="w-full"
                   autoFocus
                 />
                 <span className="text-2xs text-ink-4">
