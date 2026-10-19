@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email/send";
 import { logPortalEvent } from "@/lib/portal/audit";
 import { PORTAL_COOKIE, portalCookieOptions } from "@/lib/portal/cookie";
+import { portalLinkUrl } from "@/lib/portal/link-url";
 import { loginEmail } from "@/lib/portal/emails";
 import { requestIsOnPortalHost } from "@/lib/portal/host";
 import { hashSecret } from "@/lib/portal/secrets";
@@ -19,15 +20,6 @@ export type PortalVerifyState = { status: "idle" | "invalid" };
 const WINDOW_MS = 15 * 60 * 1000;
 const EMAIL_LIMIT = 3;
 const IP_LIMIT = 20;
-
-/** Absolute sign-in link. Env is read per call. */
-export function portalLinkUrl(raw: string): string {
-  const host = process.env.PORTAL_HOST?.trim();
-  const base = host
-    ? `https://${host}`
-    : "http://portal.localhost:3000";
-  return `${base}/auth/verify?token=${encodeURIComponent(raw)}`;
-}
 
 /**
  * Request a sign-in link. Always returns the same state for any input so
