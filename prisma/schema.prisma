@@ -2480,7 +2480,7 @@ model DocumentRequest {
   title        String
   instructions String?
   dueDate      DateTime? @db.Date
-  /// open | submitted | returned | completed (app-enforced)
+  /// open | submitted | complete | cancelled (app-enforced)
   status       String    @default("open")
   returnNote   String?
   createdById  String

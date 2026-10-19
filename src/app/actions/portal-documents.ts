@@ -15,8 +15,10 @@ import { assertMatterAccess } from "@/lib/matter-access";
 import { requirePermissionResult } from "@/lib/permission-check";
 import { logActivity, logActivityTx } from "@/lib/activity-log";
 import { parseDateOnly } from "@/lib/format-date";
-import { documentRequestEmail } from "@/lib/portal/emails";
+import { documentRequestEmail, documentsSharedEmail } from "@/lib/portal/emails";
 import { portalHomeUrl } from "@/lib/portal/link-url";
+import { MOVE_DOCUMENTS_BATCH_CAP } from "@/lib/folder-tree";
+import { isEffectivelyShared, sharedFolderIds } from "@/lib/portal/document-visibility";
 import { emailLivePortalUsers } from "@/lib/portal/notify-clients";
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -227,4 +229,135 @@ export async function deleteDocumentRequest(id: string): Promise<Result> {
   });
   if (res) return { ok: false, error: res };
   return done(req.matterId);
+}
+
+const LEAD_REFUSED = "Lead documents can't be shared with clients.";
+
+/** Emails live portal users; true when delivery failed. Never throws. */
+async function notifyShared(matterId: string): Promise<boolean> {
+  try {
+    const res = await emailLivePortalUsers(
+      matterId,
+      documentsSharedEmail(portalHomeUrl())
+    );
+    return res.failed > 0;
+  } catch (err) {
+    console.warn("[portal-documents] shared email failed", err);
+    return true;
+  }
+}
+
+export async function setDocumentsClientShare(
+  documentIds: string[],
+  shared: boolean
+): Promise<Result> {
+  const gate = await requirePermissionResult("portal.share_documents");
+  if (!gate.ok) return { ok: false, error: gate.error };
+  const ids = [...new Set(documentIds ?? [])];
+  if (ids.length === 0) return { ok: false, error: "Select at least one file." };
+  if (ids.length > MOVE_DOCUMENTS_BATCH_CAP) {
+    return {
+      ok: false,
+      error: `Select no more than ${MOVE_DOCUMENTS_BATCH_CAP} files at a time.`,
+    };
+  }
+
+  const docs = await prisma.document.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, matterId: true, leadId: true, folderId: true, clientShare: true },
+  });
+  if (docs.length !== ids.length) return { ok: false, error: "File not found." };
+  if (docs.some((d) => d.leadId !== null || d.matterId === null)) {
+    return { ok: false, error: LEAD_REFUSED };
+  }
+  const matterIds = new Set(docs.map((d) => d.matterId));
+  if (matterIds.size !== 1) {
+    return { ok: false, error: "Select files from one matter at a time." };
+  }
+  const matterId = docs[0].matterId as string;
+  await assertMatterAccess(matterId);
+
+  const folders = await prisma.documentFolder.findMany({
+    where: { matterId },
+    select: { id: true, parentId: true, clientShared: true },
+  });
+  const sharedFolders = sharedFolderIds(folders);
+  const becameVisible = shared && docs.some((d) => !isEffectivelyShared(d, sharedFolders));
+
+  await prisma.$transaction(async (tx) => {
+    if (shared) {
+      await tx.document.updateMany({ where: { id: { in: ids } }, data: { clientShare: "shared" } });
+    } else {
+      const hide = docs.filter((d) => d.folderId && sharedFolders.has(d.folderId)).map((d) => d.id);
+      const clear = docs.filter((d) => !(d.folderId && sharedFolders.has(d.folderId))).map((d) => d.id);
+      if (hide.length) {
+        await tx.document.updateMany({ where: { id: { in: hide } }, data: { clientShare: "hidden" } });
+      }
+      if (clear.length) {
+        await tx.document.updateMany({ where: { id: { in: clear } }, data: { clientShare: null } });
+      }
+    }
+  });
+
+  const emailFailed = becameVisible ? await notifyShared(matterId) : false;
+  const n = ids.length;
+  await logActivity({
+    matterId,
+    userId: gate.userId,
+    type: "document",
+    title: `${shared ? "Shared" : "Unshared"} ${n} ${n === 1 ? "file" : "files"} ${shared ? "with" : "from"} the client`,
+    detail: emailFailed ? "— email failed" : null,
+  });
+  return done(matterId);
+}
+
+export async function setFolderClientShared(
+  folderId: string,
+  shared: boolean
+): Promise<Result> {
+  const gate = await requirePermissionResult("portal.share_documents");
+  if (!gate.ok) return { ok: false, error: gate.error };
+  const folder = await prisma.documentFolder.findUnique({
+    where: { id: folderId },
+    select: { id: true, name: true, matterId: true, leadId: true },
+  });
+  if (!folder) return { ok: false, error: "Folder not found." };
+  if (folder.leadId !== null || folder.matterId === null) {
+    return { ok: false, error: LEAD_REFUSED };
+  }
+  const matterId = folder.matterId;
+  await assertMatterAccess(matterId);
+
+  const [folders, docs] = await Promise.all([
+    prisma.documentFolder.findMany({
+      where: { matterId },
+      select: { id: true, parentId: true, clientShared: true },
+    }),
+    prisma.document.findMany({
+      where: { matterId, folderId: { not: null } },
+      select: { clientShare: true, folderId: true },
+    }),
+  ]);
+  const before = sharedFolderIds(folders);
+  const after = sharedFolderIds(
+    folders.map((f) => (f.id === folderId ? { ...f, clientShared: shared } : f))
+  );
+  const becameVisible =
+    shared &&
+    docs.some((d) => !isEffectivelyShared(d, before) && isEffectivelyShared(d, after));
+
+  await prisma.documentFolder.update({
+    where: { id: folderId },
+    data: { clientShared: shared },
+  });
+
+  const emailFailed = becameVisible ? await notifyShared(matterId) : false;
+  await logActivity({
+    matterId,
+    userId: gate.userId,
+    type: "document",
+    title: `${shared ? "Shared" : "Unshared"} folder ${shared ? "with" : "from"} the client: ${folder.name}`,
+    detail: emailFailed ? "— email failed" : null,
+  });
+  return done(matterId);
 }

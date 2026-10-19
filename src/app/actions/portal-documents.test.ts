@@ -11,7 +11,10 @@ import { prisma } from "@/lib/prisma";
 import {
   resetDb,
   seedContact,
+  seedDocument,
+  seedDocumentFolder,
   seedFirm,
+  seedLead,
   seedMatter,
   seedPracticeArea,
   seedUser,
@@ -23,6 +26,8 @@ import {
   createDocumentRequest,
   deleteDocumentRequest,
   sendBackDocumentRequest,
+  setDocumentsClientShare,
+  setFolderClientShared,
   updateDocumentRequest,
 } from "./portal-documents";
 
@@ -255,5 +260,141 @@ describe("deleteDocumentRequest", () => {
       error: "This request has files attached. Cancel it instead.",
     });
     expect(await prisma.documentRequest.count()).toBe(1);
+  });
+});
+
+describe("share actions", () => {
+  const SHARED_SUBJECT = "Your legal team shared documents with you";
+  const share = (id: string) =>
+    prisma.document.findUniqueOrThrow({ where: { id }, select: { clientShare: true } });
+
+  test("denies without portal.share_documents", async () => {
+    sessionUser = await userWith([]);
+    const { documentId } = await seedDocument({ matterId });
+    const { folderId } = await seedDocumentFolder({ matterId, name: "F" });
+    expect(await setDocumentsClientShare([documentId], true)).toMatchObject({ ok: false });
+    expect(await setFolderClientShared(folderId, true)).toMatchObject({ ok: false });
+    expect((await share(documentId)).clientShare).toBeNull();
+  });
+
+  test("a walled user gets not-found", async () => {
+    await prisma.firm.update({ where: { id: firmId }, data: { matterVisibility: "TEAM" } });
+    sessionUser = await userWith(["portal.share_documents"]);
+    const { documentId } = await seedDocument({ matterId });
+    const { folderId } = await seedDocumentFolder({ matterId, name: "F" });
+    const notFound = { digest: expect.stringContaining("404") };
+    await expect(setDocumentsClientShare([documentId], true)).rejects.toMatchObject(notFound);
+    await expect(setFolderClientShared(folderId, true)).rejects.toMatchObject(notFound);
+  });
+
+  test("bulk share of 50 docs sends one email per identity and one activity row", async () => {
+    await seedIdentity("a@example.com");
+    await seedIdentity("b@example.com");
+    const ids: string[] = [];
+    for (let i = 0; i < 50; i++) ids.push((await seedDocument({ matterId, name: `d${i}` })).documentId);
+    const before = await activityCount();
+    expect(await setDocumentsClientShare(ids, true)).toEqual({ ok: true });
+    expect(await prisma.document.count({ where: { clientShare: "shared" } })).toBe(50);
+    expect(cap.sent.map((m) => m.to).sort()).toEqual(["a@example.com", "b@example.com"]);
+    expect(cap.sent[0].subject).toBe(SHARED_SUBJECT);
+    expect((await activityCount()) - before).toBe(1);
+  });
+
+  test("sharing already-visible docs sends no email", async () => {
+    await seedIdentity("a@example.com");
+    const { documentId } = await seedDocument({ matterId });
+    await setDocumentsClientShare([documentId], true);
+    cap.sent.length = 0;
+    expect(await setDocumentsClientShare([documentId], true)).toEqual({ ok: true });
+    expect(cap.sent).toHaveLength(0);
+  });
+
+  test("unshare inside a shared folder writes hidden", async () => {
+    const { folderId } = await seedDocumentFolder({ matterId, name: "Shared" });
+    await prisma.documentFolder.update({ where: { id: folderId }, data: { clientShared: true } });
+    const { folderId: childId } = await seedDocumentFolder({ matterId, name: "Kid", parentId: folderId });
+    const { documentId } = await seedDocument({ matterId, folderId: childId });
+    await setDocumentsClientShare([documentId], true);
+    expect(await setDocumentsClientShare([documentId], false)).toEqual({ ok: true });
+    expect((await share(documentId)).clientShare).toBe("hidden");
+    // Re-sharing writes "shared".
+    await setDocumentsClientShare([documentId], true);
+    expect((await share(documentId)).clientShare).toBe("shared");
+  });
+
+  test("unshare outside a shared folder writes null", async () => {
+    const { documentId } = await seedDocument({ matterId });
+    await setDocumentsClientShare([documentId], true);
+    expect(await setDocumentsClientShare([documentId], false)).toEqual({ ok: true });
+    expect((await share(documentId)).clientShare).toBeNull();
+  });
+
+  test("a hidden doc in a shared folder shared again becomes visible and emails", async () => {
+    await seedIdentity("a@example.com");
+    const { folderId } = await seedDocumentFolder({ matterId, name: "Shared" });
+    await prisma.documentFolder.update({ where: { id: folderId }, data: { clientShared: true } });
+    const { documentId } = await seedDocument({ matterId, folderId });
+    await prisma.document.update({ where: { id: documentId }, data: { clientShare: "hidden" } });
+    await setDocumentsClientShare([documentId], true);
+    expect(cap.sent).toHaveLength(1);
+  });
+
+  test("refuses lead documents", async () => {
+    const { leadId } = await seedLead();
+    const doc = await prisma.document.create({
+      data: { leadId, name: "L.pdf", category: "other", source: "upload" },
+      select: { id: true },
+    });
+    expect(await setDocumentsClientShare([doc.id], true)).toEqual({
+      ok: false,
+      error: "Lead documents can't be shared with clients.",
+    });
+    expect((await share(doc.id)).clientShare).toBeNull();
+  });
+
+  test("refuses lead folders", async () => {
+    const { leadId } = await seedLead();
+    const f = await prisma.documentFolder.create({ data: { leadId, name: "LF" }, select: { id: true } });
+    expect(await setFolderClientShared(f.id, true)).toEqual({
+      ok: false,
+      error: "Lead documents can't be shared with clients.",
+    });
+  });
+
+  test("refuses a mixed-matter batch and an over-cap batch", async () => {
+    const other = (await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: admin, name: "Other" })).matterId;
+    const a = (await seedDocument({ matterId })).documentId;
+    const b = (await seedDocument({ matterId: other })).documentId;
+    const mixed = await setDocumentsClientShare([a, b], true);
+    expect(mixed).toMatchObject({ ok: false });
+    expect((await share(a)).clientShare).toBeNull();
+    expect(await setDocumentsClientShare([], true)).toMatchObject({ ok: false });
+    const many = Array.from({ length: 201 }, (_, i) => `x${i}`);
+    expect(await setDocumentsClientShare(many, true)).toMatchObject({ ok: false });
+    expect(await setDocumentsClientShare([a, "missing"], true)).toMatchObject({ ok: false });
+  });
+
+  test("folder share emails once; unshare does not", async () => {
+    await seedIdentity("a@example.com");
+    const { folderId } = await seedDocumentFolder({ matterId, name: "F" });
+    await seedDocument({ matterId, folderId });
+    await seedDocument({ matterId, folderId });
+    const before = await activityCount();
+    expect(await setFolderClientShared(folderId, true)).toEqual({ ok: true });
+    expect((await prisma.documentFolder.findUniqueOrThrow({ where: { id: folderId } })).clientShared).toBe(true);
+    expect(cap.sent).toHaveLength(1);
+    expect(cap.sent[0].subject).toBe(SHARED_SUBJECT);
+    expect((await activityCount()) - before).toBe(1);
+    cap.sent.length = 0;
+    expect(await setFolderClientShared(folderId, false)).toEqual({ ok: true });
+    expect((await prisma.documentFolder.findUniqueOrThrow({ where: { id: folderId } })).clientShared).toBe(false);
+    expect(cap.sent).toHaveLength(0);
+  });
+
+  test("sharing an empty folder sends no email", async () => {
+    await seedIdentity("a@example.com");
+    const { folderId } = await seedDocumentFolder({ matterId, name: "Empty" });
+    await setFolderClientShared(folderId, true);
+    expect(cap.sent).toHaveLength(0);
   });
 });
