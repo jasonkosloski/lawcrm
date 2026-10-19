@@ -30,7 +30,7 @@ vi.mock("@/lib/firm", () => ({
 import { loadCurrentFirm, loadFirmGoals } from "@/lib/firm";
 import { requirePermissionResult } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
-import { updateFirmAction } from "@/app/actions/firm";
+import { setPortalEnabled, updateFirmAction } from "@/app/actions/firm";
 import { firmInitialState } from "@/lib/firm-form";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
@@ -267,5 +267,30 @@ describe("updateFirmAction", () => {
       expect(res.status).toBe("error");
       expect(res.errors?.monthlyBillableGoal?.length).toBeGreaterThan(0);
     });
+  });
+});
+
+describe("setPortalEnabled", () => {
+  test("needs firm.edit_info", async () => {
+    mockedGate.mockResolvedValue({ ok: false, error: "nope" });
+    const res = await setPortalEnabled(true);
+    expect(res).toEqual({ ok: false, error: "nope" });
+    const firm = await prisma.firm.findUniqueOrThrow({ where: { id: firmId } });
+    expect(firm.portalEnabled).toBe(false);
+  });
+
+  test("flips the switch and logs it", async () => {
+    expect(await setPortalEnabled(true)).toEqual({ ok: true });
+    expect(
+      (await prisma.firm.findUniqueOrThrow({ where: { id: firmId } })).portalEnabled
+    ).toBe(true);
+    expect(await setPortalEnabled(false)).toEqual({ ok: true });
+    expect(
+      (await prisma.firm.findUniqueOrThrow({ where: { id: firmId } })).portalEnabled
+    ).toBe(false);
+    const logs = await prisma.activityLog.findMany({
+      where: { userId: actorId, title: { contains: "client portal" } },
+    });
+    expect(logs).toHaveLength(2);
   });
 });

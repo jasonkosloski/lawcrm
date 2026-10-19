@@ -209,3 +209,30 @@ export async function updateFirmAction(
   revalidatePath("/", "layout");
   return { ...firmInitialState, status: "ok" };
 }
+
+/** Master switch for the client portal. Gated on `firm.edit_info`. */
+export async function setPortalEnabled(
+  enabled: boolean
+): Promise<{ ok: boolean; error?: string }> {
+  const gate = await requirePermissionResult("firm.edit_info");
+  if (!gate.ok) return { ok: false, error: gate.error };
+
+  const user = await prisma.user.findUnique({
+    where: { id: gate.userId },
+    select: { firmId: true },
+  });
+  if (!user?.firmId) return { ok: false, error: "Firm not found." };
+
+  await prisma.firm.update({
+    where: { id: user.firmId },
+    data: { portalEnabled: enabled },
+  });
+  await logActivity({
+    matterId: null,
+    userId: gate.userId,
+    type: "auth",
+    title: enabled ? "Turned the client portal on" : "Turned the client portal off",
+  });
+  revalidatePath("/settings/firm");
+  return { ok: true };
+}
