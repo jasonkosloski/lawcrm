@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
+let openId = "";
 const identity = { identityId: "", contactId: "", email: "jane@example.com" };
 vi.mock("@/lib/portal-access", async (orig) => ({
   ...(await orig<typeof import("@/lib/portal-access")>()),
@@ -39,6 +40,7 @@ beforeEach(async () => {
   const mk = (name: string) =>
     seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId, name });
   const open = await mk("Open Matter");
+  openId = open.matterId;
   const closed = await mk("Closed Matter");
   await mk("Uninvited Matter");
   const revoked = await mk("Revoked Matter");
@@ -67,6 +69,8 @@ describe("portal home", () => {
     expect(screen.getByText("Closed Matter")).toBeTruthy();
     expect(screen.queryByText("Uninvited Matter")).toBeNull();
     expect(screen.queryByText("Revoked Matter")).toBeNull();
+    const href = screen.getByText("Open Matter").closest("a")?.getAttribute("href");
+    expect(href).toBe(`/matters/${openId}`);
     expect(screen.getByText("Open")).toBeTruthy();
     expect(screen.getByText("Closed")).toBeTruthy();
   });

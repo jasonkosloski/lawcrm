@@ -8,7 +8,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-export function LoginForm() {
+export function LoginForm({
+  submitLabel = "Email me a link",
+}: {
+  submitLabel?: string;
+}) {
   const [state, formAction, pending] = useActionState<PortalLinkState, FormData>(
     requestPortalLink,
     { status: "idle" }
@@ -41,7 +45,7 @@ export function LoginForm() {
         />
       </div>
       <Button type="submit" disabled={pending}>
-        Email me a link
+        {submitLabel}
       </Button>
     </form>
   );
