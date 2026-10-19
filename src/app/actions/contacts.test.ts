@@ -1761,6 +1761,37 @@ describe("mergeContacts carries the portal identity", () => {
     expect(rows.every((r) => r.revokedAt === null && r.revokedById === null)).toBe(true);
   });
 
+  test("merge folds a loser identity that has portal uploads onto the survivor identity", async () => {
+    const { m1 } = await twoMatters();
+    const { contactId: loserId } = await seedContact({ name: "Loser" });
+    const { contactId: survivorId } = await seedContact({ name: "Survivor" });
+    const sIdent = await prisma.portalIdentity.create({
+      data: { contactId: survivorId, email: "survivor@example.com" },
+    });
+    const lIdent = await prisma.portalIdentity.create({
+      data: { contactId: loserId, email: "loser@example.com" },
+    });
+    await prisma.portalMatterAccess.create({
+      data: { identityId: lIdent.id, matterId: m1, invitedById: userId },
+    });
+    const doc = await prisma.document.create({
+      data: {
+        matterId: m1,
+        name: "client-upload.pdf",
+        category: "other",
+        source: "upload",
+        fileUrl: "f",
+        portalUploaderId: lIdent.id,
+      },
+    });
+
+    expect(await mergeContacts(loserId, survivorId)).toEqual({ ok: true });
+
+    expect(await prisma.portalIdentity.findUnique({ where: { id: lIdent.id } })).toBeNull();
+    const after = await prisma.document.findUniqueOrThrow({ where: { id: doc.id } });
+    expect(after.portalUploaderId).toBe(sIdent.id);
+  });
+
   test("merge with no portal identity on either side changes nothing", async () => {
     const { contactId: loserId } = await seedContact({ name: "Loser" });
     const { contactId: survivorId } = await seedContact({ name: "Survivor" });

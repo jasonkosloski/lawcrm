@@ -848,6 +848,11 @@ export async function mergeContacts(
         await tx.portalLoginToken.deleteMany({
           where: { identityId: loserIdentity.id },
         });
+        // Client uploads keep their uploader (FK is Restrict).
+        await tx.document.updateMany({
+          where: { portalUploaderId: loserIdentity.id },
+          data: { portalUploaderId: survivorIdentity.id },
+        });
         await tx.portalIdentity.delete({ where: { id: loserIdentity.id } });
       }
 
