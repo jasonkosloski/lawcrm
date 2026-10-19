@@ -68,6 +68,7 @@ const EXTENSION_MIME: Record<string, string> = {
   tif: "image/tiff",
   tiff: "image/tiff",
   heic: "image/heic",
+  heif: "image/heif",
   svg: "image/svg+xml",
   // Video
   mp4: "video/mp4",

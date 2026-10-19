@@ -35,6 +35,9 @@ export type NotificationType =
   | "note_mentioned"
   /** Recipient was added to a matter's team. */
   | "matter_assigned"
+  /** A portal client uploaded files to a matter the recipient is on
+   *  (one per upload batch). */
+  | "portal_upload"
   /** Catch-all for callsites that don't fit a specific bucket. */
   | "generic";
 

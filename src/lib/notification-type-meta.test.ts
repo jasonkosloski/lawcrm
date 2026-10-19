@@ -22,6 +22,9 @@ describe("notificationTypeMeta", () => {
     expect(notificationTypeMeta("deadline_overdue")).toBe(
       NOTIFICATION_TYPE_META.deadline_overdue
     );
+    expect(notificationTypeMeta("portal_upload")).toBe(
+      NOTIFICATION_TYPE_META.portal_upload
+    );
   });
 
   test("unknown / legacy type strings fall back to generic", () => {
