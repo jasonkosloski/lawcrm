@@ -28,11 +28,15 @@ import {
   matterIdOfChild,
   matterRelationAccessWhere,
   optionalMatterAccessWhere,
+  optionalRecordAccessClause,
+  leadIdOfChild,
 } from "@/lib/matter-access";
 import {
   resetDb,
   seedFirm,
+  seedLead,
   seedMatter,
+  seedTimeEntry,
   seedPracticeArea,
   seedUser,
 } from "@/test/integration-helpers";
@@ -198,5 +202,145 @@ describe("TEAM mode", () => {
     });
     expect(await matterIdOfChild("task", task.id)).toBeNull();
     await expect(assertChildMatterAccess("task", task.id)).resolves.toBeNull();
+  });
+});
+
+describe("restricted matters (ADR-049)", () => {
+  beforeEach(async () => {
+    await prisma.matter.update({
+      where: { id: matterA },
+      data: { restricted: true },
+    });
+  });
+
+  test("FIRM mode: a restricted matter is team-only", async () => {
+    expect(await canAccessMatter(alice, matterA)).toBe(true);
+    expect(await canAccessMatter(bob, matterA)).toBe(false);
+    expect(await canAccessMatter(bob, matterB)).toBe(true);
+    const rows = await prisma.matter.findMany({
+      where: await matterAccessWhere(bob),
+      select: { id: true },
+    });
+    expect(rows.map((r) => r.id)).toEqual([matterB]);
+  });
+
+  test("FIRM mode: matters.view_all and Admin still see it", async () => {
+    const role = await prisma.role.create({ data: { firmId, name: "Billing" } });
+    await prisma.rolePermission.create({
+      data: { roleId: role.id, permission: "matters.view_all" },
+    });
+    const { userId: billing } = await seedUser({ firmId, roleIds: [role.id] });
+    const { userId: admin } = await seedUser({ firmId, roleIds: [adminRoleId] });
+    expect(await canAccessMatter(billing, matterA)).toBe(true);
+    expect(await canAccessMatter(admin, matterA)).toBe(true);
+    expect(await matterAccessWhere(billing)).toEqual({});
+  });
+
+  test("FIRM mode: a removed member of a restricted matter loses access", async () => {
+    await prisma.matterTeamMember.update({
+      where: { matterId_userId: { matterId: matterA, userId: alice } },
+      data: { removedAt: new Date() },
+    });
+    expect(await canAccessMatter(alice, matterA)).toBe(false);
+  });
+
+  test("TEAM mode: the flag changes nothing", async () => {
+    await setMode("TEAM");
+    expect(await canAccessMatter(alice, matterA)).toBe(true);
+    expect(await canAccessMatter(bob, matterA)).toBe(false);
+    expect(await canAccessMatter(bob, matterB)).toBe(false);
+  });
+
+  test("filterAccessibleMatterIds honours the flag", async () => {
+    expect([...(await filterAccessibleMatterIds(bob, [matterA, matterB]))]).toEqual([
+      matterB,
+    ]);
+  });
+});
+
+describe("lead-scoped children (ADR-049)", () => {
+  let walled: string;
+  let open: string;
+
+  beforeEach(async () => {
+    ({ leadId: walled } = await seedLead({
+      name: "Walled",
+      restricted: true,
+      teamUserIds: [alice],
+    }));
+    ({ leadId: open } = await seedLead({ name: "Open" }));
+    mockedUser.mockResolvedValue(bob);
+  });
+
+  test("by-id children of a restricted lead 404 for a non-member", async () => {
+    const note = await prisma.note.create({
+      data: { leadId: walled, authorId: alice, content: "x" },
+    });
+    const task = await prisma.task.create({ data: { title: "t", leadId: walled } });
+    const event = await prisma.calendarEvent.create({
+      data: {
+        title: "consult",
+        leadId: walled,
+        startTime: new Date(),
+        endTime: new Date(Date.now() + 3600_000),
+        createdById: alice,
+      },
+    });
+    const { timeEntryId } = await seedTimeEntry({ leadId: walled, userId: alice });
+    const doc = await prisma.document.create({
+      data: { leadId: walled, name: "secret.pdf", category: "other" },
+    });
+    const cases = [
+      ["note", note.id],
+      ["task", task.id],
+      ["calendarEvent", event.id],
+      ["timeEntry", timeEntryId],
+      ["document", doc.id],
+    ] as const;
+    for (const [kind, id] of cases) {
+      expect(await leadIdOfChild(kind, id)).toBe(walled);
+      await expect(assertChildMatterAccess(kind, id)).rejects.toThrow(
+        "NEXT_NOT_FOUND"
+      );
+    }
+    mockedUser.mockResolvedValue(alice);
+    for (const [kind, id] of cases) {
+      await expect(assertChildMatterAccess(kind, id)).resolves.toBeNull();
+    }
+  });
+
+  test("children of an open lead pass", async () => {
+    const note = await prisma.note.create({
+      data: { leadId: open, authorId: alice, content: "x" },
+    });
+    await expect(assertChildMatterAccess("note", note.id)).resolves.toBeNull();
+  });
+
+  test("optionalRecordAccessClause hides restricted-lead rows, keeps firm-wide ones", async () => {
+    await prisma.task.createMany({
+      data: [
+        { title: "walled", leadId: walled },
+        { title: "open", leadId: open },
+        { title: "firm" },
+        { title: "matter", matterId: matterA },
+      ],
+    });
+    const titles = async (uid: string) =>
+      (
+        await prisma.task.findMany({
+          where: { AND: await optionalRecordAccessClause(uid) },
+          select: { title: true },
+          orderBy: { title: "asc" },
+        })
+      ).map((t) => t.title);
+    expect(await titles(bob)).toEqual(["firm", "matter", "open"]);
+    expect(await titles(alice)).toEqual(["firm", "matter", "open", "walled"]);
+    await setMode("TEAM");
+    expect(await titles(bob)).toEqual(["firm", "open"]);
+  });
+
+  test("optionalRecordAccessClause is empty for an unrestricted viewer", async () => {
+    const { userId: admin } = await seedUser({ firmId, roleIds: [adminRoleId] });
+    expect(await optionalRecordAccessClause(admin)).toEqual([]);
   });
 });

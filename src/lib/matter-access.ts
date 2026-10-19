@@ -6,7 +6,13 @@
  *      `removedAt = null`);
  *   2. they hold `matters.view_all` (Admin implicitly);
  *   3. the firm's `matterVisibility` is still `FIRM` (the default —
- *      everyone sees everything, the pre-wall behaviour).
+ *      everyone sees everything, the pre-wall behaviour) AND the
+ *      matter is not `restricted` (ADR-049: a restricted matter is
+ *      team-only even in FIRM mode).
+ *
+ * Lead-scoped children (a note / task / document … on an intake lead)
+ * are walled by `lead-access.ts`; the child resolvers below route them
+ * there, so one assert covers both scopes.
  *
  * Seeing is the precondition for doing: every matter-scoped write
  * asserts the same access on top of its permission key. A hidden
@@ -31,16 +37,19 @@ import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { ADMIN_ROLE_NAME } from "@/lib/role-constants";
+import { assertLeadAccess, leadAccessWhere } from "@/lib/lead-access";
 
 /** Permission key that lifts the wall for every matter. */
 export const MATTERS_VIEW_ALL = "matters.view_all";
 
 export type MatterAccessScope = {
-  /** True when the user sees every matter (view-all holder, Admin,
-   *  or the firm is in FIRM mode). */
+  /** True when the user sees every matter, restricted ones included
+   *  (view-all holder or Admin). */
   all: boolean;
   /** False for unknown / inactive users: they see nothing at all. */
   active: boolean;
+  /** Firm is in FIRM mode: unrestricted matters are open to everyone. */
+  firmMode: boolean;
 };
 
 const resolveScope = cache(
@@ -65,14 +74,17 @@ const resolveScope = cache(
         },
       },
     });
-    if (!user || !user.isActive) return { all: false, active: false };
-    if (user.firm?.matterVisibility !== "TEAM") {
-      return { all: true, active: true };
+    if (!user || !user.isActive) {
+      return { all: false, active: false, firmMode: false };
     }
     const viewAll = user.userRoles.some(
       (ur) => ur.role.name === ADMIN_ROLE_NAME || ur.role.permissions.length > 0
     );
-    return { all: viewAll, active: true };
+    return {
+      all: viewAll,
+      active: true,
+      firmMode: user.firm?.matterVisibility !== "TEAM",
+    };
   }
 );
 
@@ -82,13 +94,24 @@ export async function getMatterAccessScope(
   return resolveScope(userId);
 }
 
+/** Whether any matter is restricted at all — lets FIRM-mode firms that
+ *  never restrict keep the unfiltered (`{}`) queries. Per request. */
+const anyRestrictedMatter = cache(async (): Promise<boolean> => {
+  const hit = await prisma.matter.findFirst({
+    where: { restricted: true },
+    select: { id: true },
+  });
+  return !!hit;
+});
+
 /** Match-nothing fragment for users who may not see any matter. */
 const NO_MATTERS: Prisma.MatterWhereInput = { id: { in: [] } };
 
 /**
  * Prisma `Matter` where-fragment for "matters this user may see".
- * `{}` (no restriction) for view-all holders, Admins and FIRM-mode
- * firms. Spread/AND it into every matter list, count and aggregate.
+ * `{}` (no restriction) for view-all holders and Admins; in FIRM mode
+ * everyone else sees unrestricted matters plus their own team's.
+ * Spread/AND it into every matter list, count and aggregate.
  */
 export async function matterAccessWhere(
   userId: string
@@ -96,7 +119,14 @@ export async function matterAccessWhere(
   const scope = await resolveScope(userId);
   if (!scope.active) return NO_MATTERS;
   if (scope.all) return {};
-  return { teamMembers: { some: { userId, removedAt: null } } };
+  const onTeam: Prisma.MatterWhereInput = {
+    teamMembers: { some: { userId, removedAt: null } },
+  };
+  if (scope.firmMode) {
+    if (!(await anyRestrictedMatter())) return {};
+    return { OR: [{ restricted: false }, onTeam] };
+  }
+  return onTeam;
 }
 
 /**
@@ -136,6 +166,35 @@ export async function optionalMatterAccessClause(
   return Object.keys(frag).length === 0 ? [] : [frag];
 }
 
+/**
+ * Access clause for models that carry BOTH an optional `matterId` and
+ * an optional `leadId` (Note, Task, CalendarEvent, TimeEntry, Document,
+ * RecordsRequest): rows on neither stay visible, matter rows need
+ * matter access, lead rows need lead access. Use it in place of
+ * `optionalMatterAccessClause` on those models, inside `AND: [...]`.
+ * `[]` when the viewer is unrestricted on both sides.
+ */
+export async function optionalRecordAccessClause(
+  userId: string
+): Promise<Array<Record<string, unknown>>> {
+  const [mWhere, lWhere] = await Promise.all([
+    matterAccessWhere(userId),
+    leadAccessWhere(userId),
+  ]);
+  const mOpen = Object.keys(mWhere).length === 0;
+  const lOpen = Object.keys(lWhere).length === 0;
+  if (mOpen && lOpen) return [];
+  return [
+    {
+      OR: [
+        { matterId: null, leadId: null },
+        mOpen ? { matterId: { not: null } } : { matter: mWhere },
+        lOpen ? { leadId: { not: null } } : { lead: lWhere },
+      ],
+    },
+  ];
+}
+
 /** True when `userId` may see `matterId`. Unknown matter → false. */
 export async function canAccessMatter(
   userId: string,
@@ -143,18 +202,9 @@ export async function canAccessMatter(
 ): Promise<boolean> {
   const scope = await resolveScope(userId);
   if (!scope.active) return false;
-  if (scope.all) {
-    const exists = await prisma.matter.findUnique({
-      where: { id: matterId },
-      select: { id: true },
-    });
-    return !!exists;
-  }
+  const where = await matterAccessWhere(userId);
   const hit = await prisma.matter.findFirst({
-    where: {
-      id: matterId,
-      teamMembers: { some: { userId, removedAt: null } },
-    },
+    where: { AND: [{ id: matterId }, where] },
     select: { id: true },
   });
   return !!hit;
@@ -184,27 +234,27 @@ export async function assertOptionalMatterAccess(
 
 const CHILD_RESOLVERS = {
   note: (id: string) =>
-    prisma.note.findUnique({ where: { id }, select: { matterId: true } }),
+    prisma.note.findUnique({ where: { id }, select: { matterId: true , leadId: true } }),
   document: (id: string) =>
-    prisma.document.findUnique({ where: { id }, select: { matterId: true } }),
+    prisma.document.findUnique({ where: { id }, select: { matterId: true , leadId: true } }),
   documentFolder: (id: string) =>
     prisma.documentFolder.findUnique({
       where: { id },
-      select: { matterId: true },
+      select: { matterId: true , leadId: true },
     }),
   evidence: (id: string) =>
     prisma.evidence.findUnique({ where: { id }, select: { matterId: true } }),
   deadline: (id: string) =>
     prisma.deadline.findUnique({ where: { id }, select: { matterId: true } }),
   task: (id: string) =>
-    prisma.task.findUnique({ where: { id }, select: { matterId: true } }),
+    prisma.task.findUnique({ where: { id }, select: { matterId: true , leadId: true } }),
   calendarEvent: (id: string) =>
     prisma.calendarEvent.findUnique({
       where: { id },
-      select: { matterId: true },
+      select: { matterId: true , leadId: true },
     }),
   timeEntry: (id: string) =>
-    prisma.timeEntry.findUnique({ where: { id }, select: { matterId: true } }),
+    prisma.timeEntry.findUnique({ where: { id }, select: { matterId: true , leadId: true } }),
   expense: (id: string) =>
     prisma.expense.findUnique({ where: { id }, select: { matterId: true } }),
   invoice: (id: string) =>
@@ -247,13 +297,16 @@ const CHILD_RESOLVERS = {
       .findUnique({
         where: { id },
         select: {
-          document: { select: { matterId: true } },
+          document: { select: { matterId: true, leadId: true } },
           evidence: { select: { matterId: true } },
         },
       })
       .then((r) =>
         r
-          ? { matterId: r.document?.matterId ?? r.evidence?.matterId ?? null }
+          ? {
+              matterId: r.document?.matterId ?? r.evidence?.matterId ?? null,
+              leadId: r.document?.leadId ?? null,
+            }
           : null
       ),
 } as const;
@@ -265,20 +318,40 @@ export type MatterChildKind = keyof typeof CHILD_RESOLVERS;
  * `undefined` = the record does not exist; `null` = it exists but is
  * not matter-scoped (firm-wide task, personal event, unfiled email).
  */
+type ChildScopeRow = { matterId: string | null; leadId?: string | null };
+
+function resolveChild(
+  kind: MatterChildKind,
+  id: string
+): Promise<ChildScopeRow | null> {
+  return (CHILD_RESOLVERS[kind] as (id: string) => Promise<ChildScopeRow | null>)(
+    id
+  );
+}
+
 export async function matterIdOfChild(
   kind: MatterChildKind,
   id: string
 ): Promise<string | null | undefined> {
-  const row = await (CHILD_RESOLVERS[kind] as (
-    id: string
-  ) => Promise<{ matterId: string | null } | null>)(id);
+  const row = await resolveChild(kind, id);
   if (!row) return undefined;
   return row.matterId;
 }
 
+/** The intake lead a child record belongs to: `undefined` = missing
+ *  record, `null` = not lead-scoped. */
+export async function leadIdOfChild(
+  kind: MatterChildKind,
+  id: string
+): Promise<string | null | undefined> {
+  const row = await resolveChild(kind, id);
+  if (!row) return undefined;
+  return row.leadId ?? null;
+}
+
 /**
  * Guard for a child record reached by its own id: resolves its matter
- * and 404s when the current user can't see it. A missing record or a
+ * (or intake lead) and 404s when the current user can't see it. A missing record or a
  * record with no matter passes through untouched — the caller's own
  * not-found / permission handling still applies (and a missing id
  * reveals nothing). Returns the resolved matterId (if any).
@@ -287,10 +360,12 @@ export async function assertChildMatterAccess(
   kind: MatterChildKind,
   id: string
 ): Promise<string | null> {
-  const matterId = await matterIdOfChild(kind, id);
-  if (!matterId) return null;
-  await assertMatterAccess(matterId);
-  return matterId;
+  const row = await resolveChild(kind, id);
+  if (!row) return null;
+  if (row.leadId) await assertLeadAccess(row.leadId);
+  if (!row.matterId) return null;
+  await assertMatterAccess(row.matterId);
+  return row.matterId;
 }
 
 /**

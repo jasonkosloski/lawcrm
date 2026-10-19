@@ -68,6 +68,16 @@ export async function getLeadAccessScope(
 
 const NO_LEADS: Prisma.LeadWhereInput = { id: { in: [] } };
 
+/** Whether any lead is restricted at all — firms that never restrict
+ *  keep unfiltered (`{}`) queries. Per request. */
+const anyRestrictedLead = cache(async (): Promise<boolean> => {
+  const hit = await prisma.lead.findFirst({
+    where: { restricted: true },
+    select: { id: true },
+  });
+  return !!hit;
+});
+
 /**
  * Prisma `Lead` where-fragment for "leads this user may see". `{}`
  * for view_restricted holders and Admins. AND it into every lead
@@ -78,7 +88,7 @@ export async function leadAccessWhere(
 ): Promise<Prisma.LeadWhereInput> {
   const scope = await resolveLeadScope(userId);
   if (!scope.active) return NO_LEADS;
-  if (scope.all) return {};
+  if (scope.all || !(await anyRestrictedLead())) return {};
   return {
     OR: [{ restricted: false }, { teamMembers: { some: { userId } } }],
   };
