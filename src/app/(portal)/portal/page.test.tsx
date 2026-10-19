@@ -2,6 +2,7 @@ import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
 let openId = "";
+let userId0 = "";
 const identity = { identityId: "", contactId: "", email: "jane@example.com" };
 vi.mock("@/lib/portal-access", async (orig) => ({
   ...(await orig<typeof import("@/lib/portal-access")>()),
@@ -40,6 +41,7 @@ beforeEach(async () => {
   const mk = (name: string) =>
     seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId, name });
   const open = await mk("Open Matter");
+  userId0 = userId;
   openId = open.matterId;
   const closed = await mk("Closed Matter");
   await mk("Uninvited Matter");
@@ -69,9 +71,31 @@ describe("portal home", () => {
     expect(screen.getByText("Closed Matter")).toBeTruthy();
     expect(screen.queryByText("Uninvited Matter")).toBeNull();
     expect(screen.queryByText("Revoked Matter")).toBeNull();
-    const href = screen.getByText("Open Matter").closest("a")?.getAttribute("href");
+    const href = screen
+      .getByText("Open Matter")
+      .closest("a")
+      ?.getAttribute("href");
     expect(href).toBe(`/matters/${openId}`);
     expect(screen.getByText("Open")).toBeTruthy();
     expect(screen.getByText("Closed")).toBeTruthy();
+  });
+
+  test("badge shows only for matters with open requests", async () => {
+    const mkReq = (matterId: string, title: string, status = "open") =>
+      prisma.documentRequest.create({
+        data: { matterId, title, createdById: userId0, status },
+      });
+    await mkReq(openId, "a");
+    await mkReq(openId, "b");
+    await mkReq(openId, "c", "submitted");
+    const { unmount } = render(await PortalHome());
+    expect(screen.getByText("2 items requested")).toBeTruthy();
+    expect(screen.queryByText("1 item requested")).toBeNull();
+    unmount();
+    await prisma.documentRequest.deleteMany({
+      where: { title: { in: ["b"] } },
+    });
+    render(await PortalHome());
+    expect(screen.getByText("1 item requested")).toBeTruthy();
   });
 });

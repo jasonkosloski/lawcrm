@@ -5,12 +5,13 @@ import { Briefcase, ChevronRight } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
 import { portalMatterWhere, requirePortalIdentity } from "@/lib/portal-access";
 import { prisma } from "@/lib/prisma";
+import { countOpenRequestsByMatter } from "@/lib/portal/requests";
 import { MatterStatus } from "./matter-status";
 
 export default async function PortalHome() {
   const { identityId, contactId } = await requirePortalIdentity();
 
-  const [contact, matters] = await Promise.all([
+  const [contact, matters, openCounts] = await Promise.all([
     prisma.contact.findUnique({
       where: { id: contactId },
       select: { name: true },
@@ -20,6 +21,7 @@ export default async function PortalHome() {
       select: { id: true, name: true, isArchived: true },
       orderBy: { name: "asc" },
     }),
+    countOpenRequestsByMatter(identityId),
   ]);
 
   const open = matters.filter((m) => !m.isArchived);
@@ -47,10 +49,18 @@ export default async function PortalHome() {
       ) : (
         <>
           {open.length > 0 ? (
-            <MatterList heading="My matters" matters={open} />
+            <MatterList
+              heading="My matters"
+              matters={open}
+              openCounts={openCounts}
+            />
           ) : null}
           {closed.length > 0 ? (
-            <MatterList heading="Closed matters" matters={closed} />
+            <MatterList
+              heading="Closed matters"
+              matters={closed}
+              openCounts={openCounts}
+            />
           ) : null}
         </>
       )}
@@ -61,8 +71,10 @@ export default async function PortalHome() {
 function MatterList({
   heading,
   matters,
+  openCounts,
 }: {
   heading: string;
+  openCounts: Map<string, number>;
   matters: { id: string; name: string; isArchived: boolean }[];
 }) {
   const id = `${heading.toLowerCase().replace(/\s+/g, "-")}-heading`;
@@ -81,6 +93,13 @@ function MatterList({
               <span className="min-w-0 flex-1 truncate font-display text-base font-medium text-ink group-hover:text-brand-700">
                 {m.name}
               </span>
+              {(openCounts.get(m.id) ?? 0) > 0 ? (
+                <span className="shrink-0 rounded-full border border-warn-border bg-warn-soft px-2.5 py-0.5 text-xs font-medium text-warn">
+                  {openCounts.get(m.id) === 1
+                    ? "1 item requested"
+                    : `${openCounts.get(m.id)} items requested`}
+                </span>
+              ) : null}
               <MatterStatus closed={m.isArchived} />
               <ChevronRight
                 className="size-4 shrink-0 text-ink-4 transition-transform group-hover:translate-x-0.5 group-hover:text-brand-500 motion-reduce:transition-none"

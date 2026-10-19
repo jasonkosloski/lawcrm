@@ -1,16 +1,24 @@
-/** A single invited matter. Foundation stage: name and open/closed only. */
+/** A single invited matter: requests, shared documents and the client's uploads. */
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, Inbox } from "lucide-react";
-import { EmptyState } from "@/components/shared/empty-state";
+import { ChevronLeft } from "lucide-react";
 import {
   assertPortalMatterAccess,
   portalMatterWhere,
   requirePortalIdentity,
 } from "@/lib/portal-access";
 import { prisma } from "@/lib/prisma";
+import { activeStorageDriver } from "@/lib/file-storage";
+import {
+  listPortalSharedDocuments,
+  listPortalUploads,
+} from "@/lib/portal/document-visibility.server";
+import { listPortalRequests } from "@/lib/portal/requests";
 import { MatterStatus } from "../../matter-status";
+import { RequestsSection } from "./requests-section";
+import { SharedSection } from "./shared-section";
+import { UploadsSection } from "./uploads-section";
 
 export default async function PortalMatterPage({
   params,
@@ -26,6 +34,13 @@ export default async function PortalMatterPage({
     select: { id: true, name: true, isArchived: true },
   });
   if (!matter) notFound();
+
+  const [requests, shared, uploads] = await Promise.all([
+    listPortalRequests(identityId, id),
+    listPortalSharedDocuments(identityId, id),
+    listPortalUploads(identityId, id),
+  ]);
+  const storageDriver = activeStorageDriver();
 
   return (
     <div className="flex flex-col gap-6">
@@ -44,12 +59,16 @@ export default async function PortalMatterPage({
         </h1>
       </div>
 
-      <EmptyState
-        framed
-        icon={Inbox}
-        title="Nothing shared yet"
-        description="Updates your legal team shares about this matter will appear here. For anything urgent, call or email the office."
-        className="bg-white py-12"
+      <RequestsSection
+        requests={requests}
+        matterId={matter.id}
+        storageDriver={storageDriver}
+      />
+      <SharedSection documents={shared} />
+      <UploadsSection
+        uploads={uploads}
+        matterId={matter.id}
+        storageDriver={storageDriver}
       />
     </div>
   );
