@@ -14,6 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { assertMatterAccess } from "@/lib/matter-access";
 import { assertScopeAccess } from "@/lib/scope-access";
+import { scopeOf } from "@/lib/record-scope";
 import { currentUserHasPermission, requirePermissionResult } from "@/lib/permission-check";
 import { logActivity, logActivityTx } from "@/lib/activity-log";
 import { parseDateOnly } from "@/lib/format-date";
@@ -236,15 +237,10 @@ export async function deleteDocumentRequest(id: string): Promise<Result> {
 
 const LEAD_REFUSED = "Lead documents can't be shared with clients.";
 
-/** ADR-039: assert access to a record's scope BEFORE any error that
- *  depends on the record, so a walled id and a missing one both 404.
- *  Lead scopes are not walled (intake is not matter-ACL'd). Never wrap
- *  in try/catch. */
-async function assertRecordScope(r: { matterId: string | null; leadId: string | null }) {
-  if (r.matterId) await assertMatterAccess(r.matterId);
-  else if (r.leadId) await assertScopeAccess({ kind: "lead", leadId: r.leadId });
-  else notFound();
-}
+// ADR-039: the share actions below assert access to every record's scope
+// BEFORE any error that depends on the record, so a walled id and a
+// missing one both 404. Lead scopes are not walled (intake is not
+// matter-ACL'd), so the lead refusal after the check leaks nothing.
 
 /** Emails live portal users; true when delivery failed. Never throws. */
 async function notifyShared(matterId: string): Promise<boolean> {
@@ -288,7 +284,7 @@ export async function setDocumentsClientShare(
   });
   if (docs.length !== ids.length) notFound();
   const scopes = new Map(docs.map((d) => [`${d.matterId}|${d.leadId}`, d]));
-  for (const d of scopes.values()) await assertRecordScope(d);
+  for (const d of scopes.values()) await assertScopeAccess(scopeOf(d));
   if (docs.some((d) => d.leadId !== null || d.matterId === null)) {
     return { ok: false, error: LEAD_REFUSED };
   }
@@ -346,7 +342,7 @@ export async function setFolderClientShared(
     select: { id: true, name: true, matterId: true, leadId: true, systemKind: true },
   });
   if (!folder) notFound();
-  await assertRecordScope(folder);
+  await assertScopeAccess(scopeOf(folder));
   if (folder.leadId !== null || folder.matterId === null) {
     return { ok: false, error: LEAD_REFUSED };
   }
@@ -411,7 +407,7 @@ export async function previewFolderMoveVisibility(
     select: { matterId: true, leadId: true },
   });
   if (!folder) notFound();
-  await assertRecordScope(folder);
+  await assertScopeAccess(scopeOf(folder));
   if (folder.leadId !== null || folder.matterId === null) return none;
   const matterId = folder.matterId;
   if (!(await currentUserHasPermission("portal.share_documents"))) return none;
