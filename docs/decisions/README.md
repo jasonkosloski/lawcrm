@@ -69,3 +69,4 @@ ADR true to the code are appended in place and dated.
 | [048](048-generated-folders-carry-their-source-and-are-protected.md) | Generated folders carry their source and are protected |  |
 | [050](050-lead-conversion-re-runs-the-conflict-check.md) | Lead conversion re-runs the conflict check and refuses a live conflict |  |
 | [051](051-client-portal-identity-is-separate-from-staff-auth.md) | Client portal identity is separate from staff auth (magic link, database sessions, host-only cookie) |  |
+| [052](052-portal-uploads-are-matter-documents.md) | Portal uploads are ordinary matter documents; three-state file share with folder inheritance |  |
