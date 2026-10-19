@@ -267,6 +267,30 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
     ],
   },
   {
+    id: "portal",
+    label: "Client portal",
+    permissions: [
+      {
+        key: "portal.view",
+        label: "View client portal access",
+        description:
+          "See the Portal card on a matter: who has been invited to the client portal and their status.",
+      },
+      {
+        key: "portal.invite",
+        label: "Invite to client portal",
+        description:
+          "Invite or re-invite a contact to see a matter in the client portal. Sends them a sign-in link by email.",
+      },
+      {
+        key: "portal.revoke",
+        label: "Revoke client portal access",
+        description:
+          "Remove a person's portal access to a matter, or disable their portal login entirely.",
+      },
+    ],
+  },
+  {
     id: "documents",
     label: "Documents",
     permissions: [

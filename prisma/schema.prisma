@@ -221,16 +221,19 @@ model Firm {
   createdAt                   DateTime         @default(now())
   updatedAt                   DateTime         @updatedAt
 
-  users    User[]
+  users         User[]
   /// Permission roles defined for this firm. Always includes the
   /// two system roles ("Admin" + "default") plus any custom roles
   /// firm admins create.
-  roles    Role[]
+  roles         Role[]
   /// Contacts owned by this firm — clients, opposing counsel,
   /// witnesses, experts, etc. Optional today (Contact.firmId is
   /// nullable for legacy rows); becomes the multi-tenancy scope
   /// once backfilled.
-  contacts Contact[] @relation("FirmContacts")
+  contacts      Contact[] @relation("FirmContacts")
+  /// Master switch for the client portal. Off: the portal host serves
+  /// "unavailable", invites are refused, and sessions do not authenticate.
+  portalEnabled Boolean   @default(false)
 
   @@map("firms")
 }
@@ -523,8 +526,8 @@ model Matter {
   tasks                   Task[]
   notes                   Note[]
   emailThreads            EmailThread[]
-  messengerThreadDefaults MessengerThread[]  @relation("MessengerThreadDefaultMatter")
-  messengerItems          MessengerItem[]    @relation("MessengerItemMatter")
+  messengerThreadDefaults MessengerThread[]    @relation("MessengerThreadDefaultMatter")
+  messengerItems          MessengerItem[]      @relation("MessengerItemMatter")
   activityLogs            ActivityLog[]
   calendarEvents          CalendarEvent[]
   trustTransactions       TrustTransaction[]
@@ -533,6 +536,7 @@ model Matter {
   notifications           Notification[]
   timerSessions           TimerSession[]
   documentFolders         DocumentFolder[]
+  portalAccess            PortalMatterAccess[]
 
   @@index([stageId])
   @@index([practiceAreaId])
@@ -648,6 +652,7 @@ model Contact {
   /// on. Created by the modal's attendee picker (existing-contact
   /// pick OR new-contact-from-arbitrary-name path).
   calendarAttendances CalendarAttendee[] @relation("CalendarAttendeeContact")
+  portalIdentity      PortalIdentity?
 
   @@index([type])
   @@index([name])
@@ -2443,4 +2448,89 @@ model RecordsRequestFollowUp {
 
   @@index([requestId])
   @@map("records_request_follow_ups")
+}
+
+/// A client-portal login, one per Contact. `email` is the normalized
+/// (trimmed, lowercase) address invites and sign-in links go to; it may
+/// differ from the contact's own email.
+model PortalIdentity {
+  id         String    @id @default(cuid())
+  contactId  String    @unique
+  email      String
+  disabledAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  contact  Contact              @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  access   PortalMatterAccess[]
+  tokens   PortalLoginToken[]
+  sessions PortalSession[]
+
+  @@index([email])
+  @@map("portal_identities")
+}
+
+/// Which matters a portal identity may see. Revoking sets `revokedAt`;
+/// re-inviting clears it on the same row.
+model PortalMatterAccess {
+  id          String    @id @default(cuid())
+  identityId  String
+  matterId    String
+  invitedById String
+  invitedAt   DateTime  @default(now())
+  revokedAt   DateTime?
+  revokedById String?
+
+  identity PortalIdentity @relation(fields: [identityId], references: [id], onDelete: Restrict)
+  matter   Matter         @relation(fields: [matterId], references: [id], onDelete: Restrict)
+
+  @@unique([identityId, matterId])
+  @@index([matterId])
+  @@map("portal_matter_access")
+}
+
+/// One-time sign-in / invite token. Only the SHA-256 hex is stored; the
+/// raw value exists only in the email link.
+model PortalLoginToken {
+  id         String    @id @default(cuid())
+  identityId String
+  tokenHash  String    @unique
+  /// "login" (15 min) | "invite" (7 days)
+  purpose    String
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  identity PortalIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+
+  @@index([identityId])
+  @@map("portal_login_tokens")
+}
+
+/// A portal browser session. `tokenHash` is the SHA-256 of the cookie value.
+model PortalSession {
+  id         String   @id @default(cuid())
+  identityId String
+  tokenHash  String   @unique
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  /// Sliding, capped at createdAt + 30 days.
+  expiresAt  DateTime
+
+  identity PortalIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+
+  @@index([identityId])
+  @@map("portal_sessions")
+}
+
+/// Throttle ledger for sign-in link requests. Hashed email and IP only, so
+/// attempts for unknown accounts leave no readable trace (see auth-events.ts).
+model PortalLinkRequest {
+  id        String   @id @default(cuid())
+  emailHash String
+  ipHash    String
+  createdAt DateTime @default(now())
+
+  @@index([emailHash, createdAt])
+  @@index([ipHash, createdAt])
+  @@map("portal_link_requests")
 }

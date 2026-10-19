@@ -134,6 +134,11 @@ async function main() {
   await prisma.timeEntry.deleteMany();
   await prisma.activityLog.deleteMany();
   await prisma.userMatterPin.deleteMany();
+  await prisma.portalSession.deleteMany();
+  await prisma.portalLoginToken.deleteMany();
+  await prisma.portalMatterAccess.deleteMany();
+  await prisma.portalIdentity.deleteMany();
+  await prisma.portalLinkRequest.deleteMany();
   await prisma.matterContact.deleteMany();
   await prisma.matterTeamMember.deleteMany();
   await prisma.matter.deleteMany();
