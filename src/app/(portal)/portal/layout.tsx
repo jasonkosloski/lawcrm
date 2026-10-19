@@ -18,6 +18,10 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+// Every portal route reads the firm row (portal switch, letterhead) and the
+// session, so nothing here may be prerendered at build time.
+export const dynamic = "force-dynamic";
+
 export default async function PortalLayout({
   children,
 }: {
