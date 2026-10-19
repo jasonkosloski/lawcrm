@@ -30,3 +30,21 @@ export function inviteEmail(
     html: `<p>${esc(firmName)} has given you access to the client portal for: ${esc(matterName)}.</p><p><a href="${esc(link)}">Get started</a></p><p>It works once and expires in 7 days.</p>`,
   };
 }
+
+/** Names no matter, request title, or file. */
+export function documentRequestEmail(link: string): Body {
+  return {
+    subject: "Your legal team has requested documents",
+    text: `Your legal team has requested documents from you. Sign in to the client portal to see what is needed:\n\n${link}`,
+    html: `<p>Your legal team has requested documents from you. Sign in to the client portal to see what is needed:</p><p><a href="${esc(link)}">Open the client portal</a></p>`,
+  };
+}
+
+/** Names no matter, request title, or file. */
+export function documentsSharedEmail(link: string): Body {
+  return {
+    subject: "Your legal team shared documents with you",
+    text: `Your legal team shared documents with you. Sign in to the client portal to view them:\n\n${link}`,
+    html: `<p>Your legal team shared documents with you. Sign in to the client portal to view them:</p><p><a href="${esc(link)}">Open the client portal</a></p>`,
+  };
+}
