@@ -309,6 +309,17 @@ what's blocking it.
 
 ---
 
+### Client portal
+
+The portal (`src/app/(portal)/portal/`) is for clients, not staff: often stressed, non-technical and on a phone. Same brand tokens, different register.
+
+- **Letterhead header:** `bg-brand-900` band, firm name in Fraunces, `brand-gradient-line` under it. This is the portal's one bold element; keep everything else quiet on `bg-paper-2`.
+- **Type is larger than staff UI:** body `text-sm`, page titles Fraunces `text-3xl` in `text-brand-900`, matter names Fraunces `text-base`. No 10px mono labels, no all-caps; labels are sentence case (shadcn `Label`).
+- **Touch targets:** inputs and primary buttons `h-10`; list rows at least `min-h-16`, the whole row is the link, with a visible `focus-visible` ring.
+- **Shared pieces:** `AuthPanel` (sign-in card), `PortalMessage` (404/error: icon, title, plain explanation, a way home), `MatterStatus` (Open = ok chip, Closed = neutral chip), `PortalOff`, and the shared `EmptyState`.
+- **Copy:** plain words, says what happens next ("We'll email you a secure link"), points to a person when stuck ("call or email the office"). Never show staff vocabulary, error text or internal IDs.
+- **Uniform auth copy:** the link-request result reads the same whether or not the email has access; don't add copy that varies by account.
+
 ## Interaction Patterns
 
 ### Transitions

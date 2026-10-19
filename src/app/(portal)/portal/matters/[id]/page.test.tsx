@@ -73,6 +73,6 @@ describe("portal matter page", () => {
 
     render(await PortalMatterPage({ params: Promise.resolve({ id: invited }) }));
     expect(screen.getByText("Smith Estate")).toBeTruthy();
-    expect(screen.getByText("More details are coming soon.")).toBeTruthy();
+    expect(screen.getByText("Nothing shared yet")).toBeTruthy();
   });
 });

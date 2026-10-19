@@ -7,7 +7,10 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
+import { TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PortalMessage } from "./portal-message";
 
 export default function PortalError({
   error,
@@ -21,14 +24,22 @@ export default function PortalError({
   }, [error]);
 
   return (
-    <div className="py-10 text-center">
-      <h1 className="text-xl font-semibold">Something went wrong</h1>
-      <p className="mt-2 text-sm text-ink-3">
-        We could not load this page. Please try again.
-      </p>
-      <Button className="mt-4" onClick={() => retry()}>
+    <PortalMessage
+      icon={TriangleAlert}
+      title="Something went wrong"
+      description="This page didn’t load. Try again, and if it keeps happening, contact your legal team."
+    >
+      <Button size="lg" className="h-10 px-4" onClick={() => retry()}>
         Try again
       </Button>
-    </div>
+      <Button
+        size="lg"
+        variant="outline"
+        className="h-10 px-4"
+        render={<Link href="/" />}
+      >
+        Go to my matters
+      </Button>
+    </PortalMessage>
   );
 }

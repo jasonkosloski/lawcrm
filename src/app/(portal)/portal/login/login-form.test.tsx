@@ -21,3 +21,17 @@ describe("portal login form", () => {
     );
   });
 });
+
+describe("portal login form, after sending", () => {
+  test("echoes the typed address and can start over", async () => {
+    render(<LoginForm />);
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: "a@b.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Email me a link" }));
+    await waitFor(() => expect(screen.getByText("a@b.com")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Use a different email" }));
+    const input = screen.getByLabelText("Email") as HTMLInputElement;
+    expect(input.value).toBe("");
+  });
+});

@@ -4,7 +4,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import PortalError from "./error";
 
 describe("portal error boundary", () => {
-  test("offers a retry and no staff copy or links", () => {
+  test("offers a retry and a link to portal home, no staff copy or links", () => {
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     const retry = vi.fn();
     const { container } = render(
@@ -16,7 +16,11 @@ describe("portal error boundary", () => {
     const text = container.textContent ?? "";
     expect(text).not.toMatch(/dashboard/i);
     expect(text).not.toContain("postgres");
-    expect(container.querySelectorAll("a")).toHaveLength(0);
+    // Only link: portal home ("/" is rewritten to the portal on its host).
+    const hrefs = [...container.querySelectorAll("a")].map((a) =>
+      a.getAttribute("href")
+    );
+    expect(hrefs).toEqual(["/"]);
     err.mockRestore();
   });
 });

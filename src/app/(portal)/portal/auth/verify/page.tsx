@@ -4,8 +4,10 @@
  * link cannot burn it. Reachable signed out by design.
  */
 
-import { Card } from "@/components/ui/card";
 import { prisma } from "@/lib/prisma";
+import { AuthPanel } from "../../auth-panel";
+import { LoginForm } from "../../login/login-form";
+import { PortalOff } from "../../portal-off";
 import { VerifyForm } from "./verify-form";
 
 export default async function PortalVerifyPage({
@@ -17,20 +19,28 @@ export default async function PortalVerifyPage({
   const sp = await searchParams;
   const token = Array.isArray(sp.token) ? sp.token[0] : sp.token;
 
+  if (!firm?.portalEnabled) {
+    return (
+      <AuthPanel title="Sign in">
+        <PortalOff />
+      </AuthPanel>
+    );
+  }
+
+  if (!token) {
+    return (
+      <AuthPanel
+        title="Link expired"
+        description="This link has expired or was already used."
+      >
+        <LoginForm submitLabel="Send a new link" />
+      </AuthPanel>
+    );
+  }
+
   return (
-    <Card className="mx-auto max-w-sm gap-3 px-4 py-5">
-      <h1 className="text-lg font-semibold">Sign in</h1>
-      {!firm?.portalEnabled ? (
-        <p className="text-sm text-ink-3">
-          The client portal is not available right now.
-        </p>
-      ) : token ? (
-        <VerifyForm token={token} />
-      ) : (
-        <p className="text-sm text-ink-3">
-          This link has expired or was already used.
-        </p>
-      )}
-    </Card>
+    <AuthPanel title="Sign in">
+      <VerifyForm token={token} />
+    </AuthPanel>
   );
 }
