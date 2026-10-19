@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import {
   verifyPortalLink,
   type PortalVerifyState,
@@ -13,6 +13,11 @@ export function VerifyForm({ token }: { token: string }) {
     PortalVerifyState,
     FormData
   >(verifyPortalLink, { status: "idle" });
+
+  useEffect(() => {
+    // Full navigation so the request goes through the portal proxy rewrite.
+    if (state.status === "ok") window.location.replace("/");
+  }, [state.status]);
 
   if (state.status === "invalid") {
     return (

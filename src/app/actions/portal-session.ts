@@ -1,7 +1,6 @@
 "use server";
 
 import { cookies, headers } from "next/headers";
-import { redirect } from "next/navigation";
 
 import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email/send";
@@ -15,7 +14,15 @@ import { createSession, deleteSession } from "@/lib/portal/sessions";
 import { consumeToken, issueToken } from "@/lib/portal/tokens";
 
 export type PortalLinkState = { status: "idle" | "sent" };
-export type PortalVerifyState = { status: "idle" | "invalid" };
+/**
+ * NOTE: portal server actions must never call redirect(). The portal host is
+ * served by a proxy rewrite (/x -> /portal/x), but Next renders a server
+ * action's redirect target in the same request WITHOUT going back through the
+ * proxy, so redirect("/") would render the staff root. Actions return a
+ * result and the client does a full navigation (window.location), which does
+ * pass through the proxy. Do not "fix" this back to redirect().
+ */
+export type PortalVerifyState = { status: "idle" | "invalid" | "ok" };
 
 const WINDOW_MS = 15 * 60 * 1000;
 const EMAIL_LIMIT = 3;
@@ -122,7 +129,7 @@ export async function verifyPortalLink(
     identityId: result.identityId,
     title: "Signed in to portal",
   });
-  redirect("/");
+  return { status: "ok" };
 }
 
 export async function signOutPortal(): Promise<void> {
@@ -143,5 +150,4 @@ export async function signOutPortal(): Promise<void> {
   }
   // Full options: a bare delete omits Secure, which browsers reject for __Host- names.
   jar.set(PORTAL_COOKIE, "", { ...portalCookieOptions(), maxAge: 0 });
-  redirect("/login");
 }

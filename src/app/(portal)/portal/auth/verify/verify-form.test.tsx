@@ -1,8 +1,9 @@
 import { describe, expect, test, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
+let result = "invalid";
 vi.mock("@/app/actions/portal-session", () => ({
-  verifyPortalLink: vi.fn(async () => ({ status: "invalid" })),
+  verifyPortalLink: vi.fn(async () => ({ status: result })),
   requestPortalLink: vi.fn(async () => ({ status: "sent" })),
 }));
 
@@ -27,5 +28,17 @@ describe("portal verify form", () => {
         screen.getByText("If that email has portal access, a link is on its way.")
       ).toBeTruthy()
     );
+  });
+
+  test("an ok result does a full navigation to /", async () => {
+    result = "ok";
+    const replace = vi.fn();
+    const original = window.location;
+    Object.defineProperty(window, "location", { value: { replace }, configurable: true });
+    render(<VerifyForm token="t" />);
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/"));
+    Object.defineProperty(window, "location", { value: original, configurable: true });
+    result = "invalid";
   });
 });

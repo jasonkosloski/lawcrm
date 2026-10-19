@@ -40,6 +40,7 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
+import { redirect } from "next/navigation";
 import {
   requestPortalLink,
   signOutPortal,
@@ -177,9 +178,10 @@ describe("requestPortalLink", () => {
 });
 
 describe("verifyPortalLink", () => {
-  test("valid token sets the cookie and redirects to /", async () => {
+  test("valid token sets the cookie and returns ok without redirecting", async () => {
     const raw = await issueToken(identityId, "login");
-    await expect(verifyPortalLink({ status: "idle" }, tokenForm(raw))).rejects.toThrow("REDIRECT:/");
+    expect(await verifyPortalLink({ status: "idle" }, tokenForm(raw))).toEqual({ status: "ok" });
+    expect(redirect).not.toHaveBeenCalled();
     expect(jar.get(PORTAL_COOKIE)).toBeTruthy();
     expect(await prisma.portalSession.count({ where: { identityId } })).toBe(1);
     expect(await prisma.activityLog.count({ where: { title: "Signed in to portal" } })).toBe(1);
@@ -187,7 +189,7 @@ describe("verifyPortalLink", () => {
 
   test("used/expired token returns invalid and sets no cookie", async () => {
     const raw = await issueToken(identityId, "login");
-    await expect(verifyPortalLink({ status: "idle" }, tokenForm(raw))).rejects.toThrow("REDIRECT:/");
+    expect(await verifyPortalLink({ status: "idle" }, tokenForm(raw))).toEqual({ status: "ok" });
     jar.clear();
     expect(await verifyPortalLink({ status: "idle" }, tokenForm(raw))).toEqual({ status: "invalid" });
     expect(jar.size).toBe(0);
@@ -226,14 +228,15 @@ describe("verifyPortalLink", () => {
     expect(await verifyPortalLink({ status: "idle" }, tokenForm(raw))).toEqual({ status: "invalid" });
     expect(jar.size).toBe(0);
     hostHeader = "portal.localhost:3000";
-    await expect(verifyPortalLink({ status: "idle" }, tokenForm(raw))).rejects.toThrow("REDIRECT:/");
+    expect(await verifyPortalLink({ status: "idle" }, tokenForm(raw))).toEqual({ status: "ok" });
   });
 });
 
 describe("signOutPortal", () => {
   test("deletes the session row and clears the cookie", async () => {
     jar.set(PORTAL_COOKIE, await createSession(identityId));
-    await expect(signOutPortal()).rejects.toThrow("REDIRECT:/login");
+    await signOutPortal();
+    expect(redirect).not.toHaveBeenCalled();
     expect(jar.has(PORTAL_COOKIE)).toBe(false);
     expect(setCalls.at(-1)).toEqual({
       name: PORTAL_COOKIE,

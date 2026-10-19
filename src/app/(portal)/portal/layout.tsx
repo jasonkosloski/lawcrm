@@ -5,10 +5,9 @@
  */
 
 import type { Metadata } from "next";
-import { signOutPortal } from "@/app/actions/portal-session";
-import { Button } from "@/components/ui/button";
 import { getPortalIdentity } from "@/lib/portal-access";
 import { prisma } from "@/lib/prisma";
+import { SignOutButton } from "./sign-out-button";
 
 export const metadata: Metadata = {
   title: { absolute: "Client portal" },
@@ -43,11 +42,7 @@ export default async function PortalLayout({
             </span>
           </div>
           {identity ? (
-            <form action={signOutPortal}>
-              <Button type="submit" variant="outline" size="sm">
-                Sign out
-              </Button>
-            </form>
+            <SignOutButton />
           ) : null}
         </div>
       </header>
