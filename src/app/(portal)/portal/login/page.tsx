@@ -5,6 +5,9 @@ import { AuthPanel } from "../auth-panel";
 import { PortalOff } from "../portal-off";
 import { LoginForm } from "./login-form";
 
+// Reads the firm's portal switch, so it must render per request, not at build.
+export const dynamic = "force-dynamic";
+
 export default async function PortalLoginPage() {
   const firm = await prisma.firm.findFirst({ select: { portalEnabled: true } });
 
