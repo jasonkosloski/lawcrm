@@ -50,6 +50,7 @@ src/
 │   │                         #   email-attachments, and the session-checked GET
 │   │                         #   notifications/bell read (see Interactivity).
 │   │                         #   Data mutations do NOT go here.
+│   ├── (portal)/portal/      # Client portal pages (served at / on PORTAL_HOST; see Security)
 │   ├── login/                # Public login page
 │   ├── print/                # Print-friendly renderings (outside app shell)
 │   ├── layout.tsx            # Root layout (fonts, providers)
@@ -138,6 +139,7 @@ error follow the React 19 patterns in [UI_PATTERNS.md](./UI_PATTERNS.md).
   (password fingerprint, ADR-017). Sign-in lockout is a reserve/settle under a
   per-email Postgres advisory lock (ADR-020); redirects after login go through the
   strict `safeRedirectPath` (`src/lib/safe-redirect.ts`).
+- **Host routing and the client portal** (ADR-051): `PORTAL_HOST` (`portal.localhost` in dev) is a second domain on the same project. `src/proxy.ts` rewrites every path on that host into the `(portal)/portal` route group (staff paths 404 there, no staff cookie gate) and 404s `/portal/*` on the staff host. Portal clients authenticate with their own magic-link identity and a host-only `__Host-portal_session` cookie; isolation is also enforced in both session readers (Auth.js `jwt` callback and `getPortalIdentity` check the host), not just the proxy. Portal pages call `requirePortalIdentity` first. See [features/client-portal.md](./features/client-portal.md).
 - **Page guards**: layouts are not auth gates; every `page.tsx`/`layout.tsx` calls a guard as its first `await` (ADR-028). See [PERMISSIONS.md](./PERMISSIONS.md).
 - **Cron endpoints** (`/api/email-sync`, `/api/notification-sweep`) authenticate
   with `isAuthorizedCron` (`src/lib/cron-auth.ts`, constant-time compare, fails

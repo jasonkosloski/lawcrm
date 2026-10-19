@@ -68,3 +68,4 @@ ADR true to the code are appended in place and dated.
 | [047](047-records-requests-are-a-dedicated-model-with.md) | Records requests are a dedicated model with a rolling follow-up task |  |
 | [048](048-generated-folders-carry-their-source-and-are-protected.md) | Generated folders carry their source and are protected |  |
 | [050](050-lead-conversion-re-runs-the-conflict-check.md) | Lead conversion re-runs the conflict check and refuses a live conflict |  |
+| [051](051-client-portal-identity-is-separate-from-staff-auth.md) | Client portal identity is separate from staff auth (magic link, database sessions, host-only cookie) |  |

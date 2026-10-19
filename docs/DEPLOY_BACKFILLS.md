@@ -65,3 +65,14 @@ npx prisma migrate status                    # "Database schema is up to date"
 - Open Settings -> Practice areas and confirm each SOL area shows the expected amount and unit.
 - Existing matters keep their stored SOL dates. A date that was auto-computed under the old 365-day rule may differ by a day from the new calendar result; it is treated as a manual date until the matter is edited and is never rewritten silently.
 - Confirm a billing user still sees the matter Billing tab and a non-billing user does not.
+
+# Deploy steps: client portal foundation
+
+Migrations `20261019090000_client_portal_foundation` (new tables, `firms."portalEnabled"` default false, grants `portal.view/invite/revoke` to every role holding `matters.edit`) and `20261019091000_portal_identity_email_unique`. Nothing is dropped; the portal stays off until step 5.
+
+1. Provision Resend via the Vercel Marketplace; set `RESEND_API_KEY` and `EMAIL_FROM` (SPF/DKIM for the sending domain first).
+2. Add `portal.<domain>` to the Vercel project and DNS.
+3. Set `PORTAL_HOST` to that host.
+4. Back up, load the PRODUCTION env, `export DIRECT_DATABASE_URL="$DATABASE_URL"` (see the gotcha above), `npx prisma migrate status`, then `npx prisma migrate deploy`.
+5. Settings, Firm: turn on "Client portal enabled".
+6. Invite a test contact from a matter's Portal card; confirm the email arrives and signs in on the portal host, and that the portal host serves no staff pages.

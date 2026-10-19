@@ -128,6 +128,10 @@ The catalog still has some coarse `manage_*` keys (`matters.manage_team`, `firm.
 
 - **`parties.edit` + `contacts.edit`**: the Parties-tab edit form (`updateMatterContact`) can also rewrite the firm-wide `Contact` (name, email, organization, phones), which flows to every matter. `parties.edit` alone covers only the per-matter row (role, notes, representation). When a submit actually changes a contact field the action additionally requires `contacts.edit`, else returns a field error and writes nothing; the form renders those inputs read-only without `contacts.edit`. Tab controls follow `parties.create` / `.edit` / `.delete`.
 
+### Client portal (separate identity)
+
+Portal clients are **not** users and hold no roles or keys: they sign in through their own identity (ADR-051) and see only matters with a live `PortalMatterAccess` row (`assertPortalMatterAccess`, `portalMatterWhere` in `src/lib/portal-access.ts`; every portal page calls `requirePortalIdentity` first, pinned by `portal-guards.test.ts`). Staff control of that access uses the `portal.*` keys in the catalog (view the Portal card, invite, revoke/disable); the migration granted them to roles holding `matters.edit`. Each action also asserts matter access (ADR-039), and identity-wide changes (disable, re-enable, email change) require access to every matter the identity has. Enabling the portal is the existing `firm.edit_info` key (Settings, Firm). Details: [features/client-portal.md](./features/client-portal.md).
+
 ---
 
 ## Resolution rules (runtime)
