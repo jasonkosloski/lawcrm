@@ -276,7 +276,14 @@ export async function setDocumentsClientShare(
 
   const docs = await prisma.document.findMany({
     where: { id: { in: ids } },
-    select: { id: true, matterId: true, leadId: true, folderId: true, clientShare: true },
+    select: {
+      id: true,
+      matterId: true,
+      leadId: true,
+      folderId: true,
+      clientShare: true,
+      status: true,
+    },
   });
   if (docs.length !== ids.length) notFound();
   const scopes = new Map(docs.map((d) => [`${d.matterId}|${d.leadId}`, d]));
@@ -295,7 +302,10 @@ export async function setDocumentsClientShare(
     select: { id: true, parentId: true, clientShared: true },
   });
   const sharedFolders = sharedFolderIds(folders);
-  const becameVisible = shared && docs.some((d) => !isEffectivelyShared(d, sharedFolders));
+  // Archived files never reach the portal, so sharing them emails no one.
+  const becameVisible =
+    shared &&
+    docs.some((d) => d.status !== "archived" && !isEffectivelyShared(d, sharedFolders));
 
   await prisma.$transaction(async (tx) => {
     if (shared) {
@@ -347,7 +357,7 @@ export async function setFolderClientShared(
       select: { id: true, parentId: true, clientShared: true },
     }),
     prisma.document.findMany({
-      where: { matterId, folderId: { not: null } },
+      where: { matterId, folderId: { not: null }, status: { not: "archived" } },
       select: { clientShare: true, folderId: true },
     }),
   ]);
@@ -408,7 +418,7 @@ export async function previewFolderMoveVisibility(
   }
   subtree.add(folderId);
   const docs = await prisma.document.findMany({
-    where: { matterId, folderId: { in: [...subtree] } },
+    where: { matterId, folderId: { in: [...subtree] }, status: { not: "archived" } },
     select: { clientShare: true, folderId: true },
   });
   const before = sharedFolderIds(folders);

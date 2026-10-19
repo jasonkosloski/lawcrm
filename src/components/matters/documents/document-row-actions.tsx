@@ -57,6 +57,7 @@ export function DocumentRowActions({
   canShare = false,
   isShared = false,
   clientShare = null,
+  status,
   attachmentShares = [],
   visibilityFolders,
 }: {
@@ -76,6 +77,8 @@ export function DocumentRowActions({
   isShared?: boolean;
   /** The document's own override, for the move warning. */
   clientShare?: string | null;
+  /** Document status; an archived file never counts in the move warning. */
+  status?: string;
   /** An email's extracted attachments: moving the email moves them
    *  too, so the move warning counts them. */
   attachmentShares?: { clientShare: string | null; folderId: string | null; status: string }[];
@@ -194,7 +197,7 @@ export function DocumentRowActions({
             visibilityFolders
               ? (target) =>
                   moveWarning(
-                    [{ clientShare, folderId: currentFolderId }, ...attachmentShares],
+                    [{ clientShare, folderId: currentFolderId, status }, ...attachmentShares],
                     target,
                     visibilityFolders
                   )

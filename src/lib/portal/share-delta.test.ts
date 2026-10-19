@@ -58,4 +58,20 @@ describe("visibilityChangeForMove", () => {
       visibilityChangeForMove([{ clientShare: null, folderId: "plain" }], null, folders)
     ).toEqual({ becomesVisible: 0, becomesHidden: 0 });
   });
+
+  test("archived files never count (the portal never shows them)", () => {
+    const docs = [
+      { clientShare: null, folderId: "plain", status: "archived" },
+      { clientShare: null, folderId: "shared", status: "archived" },
+      { clientShare: null, folderId: "plain", status: "final" },
+    ];
+    expect(visibilityChangeForMove(docs, "sub", folders)).toEqual({
+      becomesVisible: 1,
+      becomesHidden: 0,
+    });
+    expect(visibilityChangeForMove(docs.slice(0, 2), "plain", folders)).toEqual({
+      becomesVisible: 0,
+      becomesHidden: 0,
+    });
+  });
 });

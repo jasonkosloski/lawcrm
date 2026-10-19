@@ -5,7 +5,7 @@ import { visibilityChangeForMove } from "@/lib/portal/share-delta";
  * `targetFolderId` does to client visibility, or null when nothing changes.
  */
 export function moveWarning(
-  docs: { clientShare: string | null; folderId: string | null }[],
+  docs: { clientShare: string | null; folderId: string | null; status?: string }[],
   targetFolderId: string | null,
   folders: { id: string; parentId: string | null; clientShared: boolean }[]
 ): string | null {

@@ -158,6 +158,18 @@ describe("DocumentsBrowser", () => {
       expect(badges).toHaveLength(2);
     });
 
+    test("an archived document shows no Shared badge (the portal never shows it)", async () => {
+      grant(["portal.view"]);
+      vi.mocked(getDocumentFolders).mockResolvedValueOnce([folder({ clientShared: true })] as never);
+      listing([
+        doc({ id: "d1", name: "a.pdf", clientShare: "shared", status: "archived" }),
+        doc({ id: "d2", name: "b.pdf", clientShare: null, folderId: "f1", status: "archived" }),
+      ]);
+      await renderMatter();
+      // only the folder row
+      expect(screen.getAllByText("Shared")).toHaveLength(1);
+    });
+
     test("no badges without a portal permission", async () => {
       grant([]);
       listing([doc({ clientShare: "shared" })]);

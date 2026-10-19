@@ -442,6 +442,19 @@ describe("share actions", () => {
     expect(cap.sent).toHaveLength(0);
   });
 
+  test("sharing only archived files sends no email", async () => {
+    await seedIdentity("a@example.com");
+    const { documentId } = await seedDocument({ matterId });
+    await prisma.document.update({ where: { id: documentId }, data: { status: "archived" } });
+    expect(await setDocumentsClientShare([documentId], true)).toEqual({ ok: true });
+    expect(cap.sent).toHaveLength(0);
+    const { folderId } = await seedDocumentFolder({ matterId, name: "Old" });
+    const inFolder = (await seedDocument({ matterId, folderId })).documentId;
+    await prisma.document.update({ where: { id: inFolder }, data: { status: "archived" } });
+    expect(await setFolderClientShared(folderId, true)).toEqual({ ok: true });
+    expect(cap.sent).toHaveLength(0);
+  });
+
   test("sharing an empty folder sends no email", async () => {
     await seedIdentity("a@example.com");
     const { folderId } = await seedDocumentFolder({ matterId, name: "Empty" });
@@ -490,6 +503,15 @@ describe("previewFolderMoveVisibility", () => {
     await prisma.document.update({ where: { id: hidden }, data: { clientShare: "hidden" } });
     await prisma.document.update({ where: { id: pinned }, data: { clientShare: "shared" } });
     expect(await previewFolderMoveVisibility(moving, shared)).toEqual(ZERO);
+  });
+
+  test("archived files inside are not counted", async () => {
+    const shared = await mk("Shared", null, true);
+    const moving = await mk("Moving");
+    const archived = (await seedDocument({ matterId, folderId: moving })).documentId;
+    await prisma.document.update({ where: { id: archived }, data: { status: "archived" } });
+    await seedDocument({ matterId, folderId: moving });
+    expect(await previewFolderMoveVisibility(moving, shared)).toEqual({ becomesVisible: 1, becomesHidden: 0 });
   });
 
   test("zeros without portal.share_documents", async () => {

@@ -191,7 +191,7 @@ export async function DocumentsBrowser({
             <Icon size={14} className="shrink-0 text-ink-4" />
             {d.name}
           </Link>
-          {showShareState && <ClientShareBadge reason={shareReason(d, folders)} />}
+          {showShareState && d.status !== "archived" && <ClientShareBadge reason={shareReason(d, folders)} />}
           {d.portalUploaderName && (
             <div className="text-2xs font-normal text-ink-3 mt-0.5">
               From {d.portalUploaderName}
@@ -230,6 +230,7 @@ export async function DocumentsBrowser({
             canShare={canShare}
             isShared={isEffectivelyShared(d, sharedFolders)}
             clientShare={d.clientShare}
+            status={d.status}
             attachmentShares={attachments.map((a) => ({
               clientShare: a.clientShare,
               folderId: a.folderId,
