@@ -1768,3 +1768,104 @@ describe("mergeContacts carries the portal identity", () => {
     expect(await prisma.portalIdentity.count()).toBe(0);
   });
 });
+
+describe("mergeContacts portal fold: walls and audit", () => {
+  async function bothIdentities() {
+    const { areaId, stageId } = await seedPracticeArea();
+    const mk = async (name: string) =>
+      (await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId, name })).matterId;
+    const m1 = await mk("Fold One");
+    // Led by someone else: the actor is not on m2's team.
+    const firm = await prisma.firm.findFirstOrThrow();
+    const otherLead = (await seedUser({ firmId: firm.id, name: "Other Lead" })).userId;
+    const m2 = (
+      await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: otherLead, name: "Fold Two" })
+    ).matterId;
+    const { contactId: loserId } = await seedContact({ name: "Loser" });
+    const { contactId: survivorId } = await seedContact({ name: "Survivor" });
+    const sIdent = await prisma.portalIdentity.create({
+      data: { contactId: survivorId, email: "s@example.com" },
+    });
+    const lIdent = await prisma.portalIdentity.create({
+      data: { contactId: loserId, email: "l@example.com" },
+    });
+    await prisma.portalMatterAccess.create({
+      data: { identityId: sIdent.id, matterId: m1, invitedById: userId },
+    });
+    await prisma.portalMatterAccess.create({
+      data: { identityId: lIdent.id, matterId: m2, invitedById: userId },
+    });
+    return { m1, m2, loserId, survivorId, lIdent };
+  }
+
+  test("refused when the actor cannot see every live portal matter of both identities", async () => {
+    const { loserId, survivorId, lIdent } = await bothIdentities();
+    const firm = await prisma.firm.findFirstOrThrow();
+    await prisma.firm.update({ where: { id: firm.id }, data: { matterVisibility: "TEAM" } });
+    // The actor leads m1 only; m2 (the loser identity's matter) is behind a wall.
+
+    expect(await mergeContacts(loserId, survivorId)).toEqual({
+      ok: false,
+      error:
+        "Both contacts have client portal access on matters you can't see. Ask someone who can see all of them to merge.",
+    });
+    expect(await prisma.portalIdentity.findUnique({ where: { id: lIdent.id } })).not.toBeNull();
+    expect(
+      (await prisma.contact.findUniqueOrThrow({ where: { id: loserId } })).mergedIntoId
+    ).toBeNull();
+  });
+
+  test("success records the fold in the merge audit detail", async () => {
+    const { loserId, survivorId } = await bothIdentities();
+    expect(await mergeContacts(loserId, survivorId)).toEqual({ ok: true });
+    const row = await prisma.activityLog.findFirstOrThrow({ where: { type: "merge" } });
+    expect(row.detail).toContain("Portal access folded: 1 matter");
+  });
+});
+
+describe("deactivating a contact ends its portal access", () => {
+  async function withPortal(name: string, email: string) {
+    const { contactId } = await seedContact({ name });
+    const ident = await prisma.portalIdentity.create({ data: { contactId, email } });
+    await prisma.portalSession.create({
+      data: { identityId: ident.id, tokenHash: `h-${email}`, expiresAt: new Date(Date.now() + 1e7) },
+    });
+    return { contactId, identityId: ident.id };
+  }
+
+  test("deleteContact disables the identity and deletes its sessions", async () => {
+    const a = await withPortal("Alpha", "a@example.com");
+    const other = await withPortal("Other", "o@example.com");
+    expect((await deleteContact(a.contactId)).ok).toBe(true);
+    const ident = await prisma.portalIdentity.findUniqueOrThrow({ where: { id: a.identityId } });
+    expect(ident.disabledAt).not.toBeNull();
+    expect(await prisma.portalSession.count({ where: { identityId: a.identityId } })).toBe(0);
+    // Nobody else is touched.
+    expect(await prisma.portalSession.count({ where: { identityId: other.identityId } })).toBe(1);
+  });
+
+  test("bulkDeactivateContacts disables each identity and deletes its sessions", async () => {
+    const a = await withPortal("Alpha", "a@example.com");
+    const b = await withPortal("Beta", "b@example.com");
+    const keep = await withPortal("Gamma", "g@example.com");
+    expect((await bulkDeactivateContacts([a.contactId, b.contactId])).ok).toBe(true);
+    for (const x of [a, b]) {
+      const ident = await prisma.portalIdentity.findUniqueOrThrow({ where: { id: x.identityId } });
+      expect(ident.disabledAt).not.toBeNull();
+    }
+    expect(await prisma.portalSession.count()).toBe(1);
+    expect(
+      (await prisma.portalIdentity.findUniqueOrThrow({ where: { id: keep.identityId } })).disabledAt
+    ).toBeNull();
+  });
+
+  test("an already-disabled identity keeps its original disabledAt", async () => {
+    const a = await withPortal("Alpha", "a@example.com");
+    const when = new Date("2026-01-01T00:00:00Z");
+    await prisma.portalIdentity.update({ where: { id: a.identityId }, data: { disabledAt: when } });
+    await deleteContact(a.contactId);
+    expect(
+      (await prisma.portalIdentity.findUniqueOrThrow({ where: { id: a.identityId } })).disabledAt
+    ).toEqual(when);
+  });
+});

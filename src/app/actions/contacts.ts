@@ -33,6 +33,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { actorSeesAllPortalMatters } from "@/lib/portal/identity-scope";
 import {
   requirePermission,
   requirePermissionResult,
@@ -657,7 +658,37 @@ export async function mergeContacts(
     }
   }
 
+  // Folding two portal identities is an identity-wide change: it moves the
+  // loser's portal access (and kills its sign-ins) across every matter it
+  // touches. A walled actor must not do that to matters they can't see
+  // (ADR-039), so both identities' live matters must all be visible.
+  const [preLoserIdentity, preSurvivorIdentity] = await Promise.all([
+    prisma.portalIdentity.findUnique({
+      where: { contactId: loserId },
+      select: { id: true },
+    }),
+    prisma.portalIdentity.findUnique({
+      where: { contactId: survivorId },
+      select: { id: true },
+    }),
+  ]);
+  if (preLoserIdentity && preSurvivorIdentity) {
+    const [seesLoser, seesSurvivor] = await Promise.all([
+      actorSeesAllPortalMatters(userId, preLoserIdentity.id),
+      actorSeesAllPortalMatters(userId, preSurvivorIdentity.id),
+    ]);
+    if (!seesLoser || !seesSurvivor) {
+      return {
+        ok: false,
+        error:
+          "Both contacts have client portal access on matters you can't see. Ask someone who can see all of them to merge.",
+      };
+    }
+  }
+
   let mergedConflict: string;
+  /** Portal outcome for the audit row: null = neither had an identity. */
+  let portalFold: { moved: true } | { folded: number } | null = null;
   try {
     mergedConflict = await prisma.$transaction(async (tx) => {
       // The checks above ran outside the transaction. Lock both rows
@@ -781,10 +812,12 @@ export async function mergeContacts(
           where: { id: loserIdentity.id },
           data: { contactId: survivorId },
         });
+        portalFold = { moved: true };
       } else if (loserIdentity && survivorIdentity) {
         const loserAccess = await tx.portalMatterAccess.findMany({
           where: { identityId: loserIdentity.id },
         });
+        portalFold = { folded: loserAccess.length };
         for (const row of loserAccess) {
           const keep = await tx.portalMatterAccess.findUnique({
             where: {
@@ -908,7 +941,8 @@ export async function mergeContacts(
         : "") +
       (loser.notes?.trim()
         ? " Internal notes were appended to the surviving record."
-        : ""),
+        : "") +
+      portalFoldDetail(portalFold),
   });
 
   revalidatePath("/contacts");
@@ -917,6 +951,33 @@ export async function mergeContacts(
   // The merged contact may surface on matters / dashboards anywhere.
   revalidatePath("/", "layout");
   return { ok: true };
+}
+
+function portalFoldDetail(
+  fold: { moved: true } | { folded: number } | null
+): string {
+  if (!fold) return "";
+  if ("moved" in fold) {
+    return " Client portal access moved to the surviving record.";
+  }
+  return ` Portal access folded: ${fold.folded} matter${fold.folded === 1 ? "" : "s"}.`;
+}
+
+/**
+ * Ends client-portal sign-in for deactivated contacts: disables their
+ * portal identity (keeping an earlier disabledAt) and deletes its sessions.
+ * Re-enabling is a re-invite after reactivation.
+ */
+function endPortalAccessFor(contactIds: string[]) {
+  return [
+    prisma.portalIdentity.updateMany({
+      where: { contactId: { in: contactIds }, disabledAt: null },
+      data: { disabledAt: new Date() },
+    }),
+    prisma.portalSession.deleteMany({
+      where: { identity: { contactId: { in: contactIds } } },
+    }),
+  ] as const;
 }
 
 /**
@@ -962,10 +1023,13 @@ export async function deleteContact(
   // contacts) would need to reason about all of them. Flipping the
   // flag drops the contact from the directory without touching any
   // of those rows.
-  await prisma.contact.update({
-    where: { id: contactId },
-    data: { isActive: false },
-  });
+  await prisma.$transaction([
+    prisma.contact.update({
+      where: { id: contactId },
+      data: { isActive: false },
+    }),
+    ...endPortalAccessFor([contactId]),
+  ]);
 
   await logContactActivity({
     userId,
@@ -1251,10 +1315,14 @@ export async function bulkDeactivateContacts(
     };
   }
 
-  const res = await prisma.contact.updateMany({
-    where: { id: { in: loaded.contacts.map((c) => c.id) } },
-    data: { isActive: false },
-  });
+  const ids = loaded.contacts.map((c) => c.id);
+  const [res] = await prisma.$transaction([
+    prisma.contact.updateMany({
+      where: { id: { in: ids } },
+      data: { isActive: false },
+    }),
+    ...endPortalAccessFor(ids),
+  ]);
 
   await logContactActivity({
     userId,
