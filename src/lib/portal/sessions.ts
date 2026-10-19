@@ -5,8 +5,20 @@ import { hashSecret, newSecret } from "./secrets";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const IDLE_MS = 7 * DAY_MS;
-const ABSOLUTE_MS = 30 * DAY_MS;
+export const ABSOLUTE_MS = 30 * DAY_MS;
 const SLIDE_AFTER_MS = 60 * 1000;
+
+/**
+ * Cookie maxAge (seconds) for a session: its remaining absolute lifetime, so
+ * the cookie survives browser restarts but never outlives the server cap.
+ */
+export function sessionCookieMaxAge(
+  createdAt: Date,
+  now: Date = new Date()
+): number {
+  const ms = createdAt.getTime() + ABSOLUTE_MS - now.getTime();
+  return Math.max(0, Math.floor(ms / 1000));
+}
 
 /** Create a session; returns the raw cookie value (only its hash is stored). */
 export async function createSession(identityId: string): Promise<string> {

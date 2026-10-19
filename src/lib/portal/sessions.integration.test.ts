@@ -8,6 +8,7 @@ import {
   deleteSession,
   deleteSessionsFor,
   resolveSession,
+  sessionCookieMaxAge,
 } from "./sessions";
 
 beforeAll(() => {
@@ -129,5 +130,17 @@ describe("portal sessions", () => {
     expect(await deleteSessionsFor(identityId)).toBe(2);
     expect(await resolveSession(a)).toBeNull();
     expect(await resolveSession(b)).toBeNull();
+  });
+});
+
+describe("sessionCookieMaxAge", () => {
+  test("is createdAt + 30 days - now, in whole seconds, never negative", () => {
+    const now = new Date("2026-10-18T12:00:00Z");
+    const day = 24 * 60 * 60;
+    expect(sessionCookieMaxAge(now, now)).toBe(30 * day);
+    const tenDaysAgo = new Date(now.getTime() - 10 * day * 1000);
+    expect(sessionCookieMaxAge(tenDaysAgo, now)).toBe(20 * day);
+    const old = new Date(now.getTime() - 31 * day * 1000);
+    expect(sessionCookieMaxAge(old, now)).toBe(0);
   });
 });

@@ -9,8 +9,12 @@ import { PORTAL_COOKIE, portalCookieOptions } from "@/lib/portal/cookie";
 import { portalLinkUrl } from "@/lib/portal/link-url";
 import { loginEmail } from "@/lib/portal/emails";
 import { requestIsOnPortalHost } from "@/lib/portal/host";
-import { hashSecret } from "@/lib/portal/secrets";
-import { createSession, deleteSession } from "@/lib/portal/sessions";
+import { hashSecret, hmacSecret } from "@/lib/portal/secrets";
+import {
+  createSession,
+  deleteSession,
+  sessionCookieMaxAge,
+} from "@/lib/portal/sessions";
 import { consumeToken, issueToken } from "@/lib/portal/tokens";
 
 export type PortalLinkState = { status: "idle" | "sent" };
@@ -44,8 +48,9 @@ export async function requestPortalLink(
 
   const forwarded = (await headers()).get("x-forwarded-for") ?? "";
   const ip = forwarded.split(",")[0]?.trim() || "unknown";
-  const emailHash = hashSecret(email);
-  const ipHash = hashSecret(ip);
+  // Keyed: emails and IPs are guessable, so a plain hash would be reversible.
+  const emailHash = hmacSecret(email);
+  const ipHash = hmacSecret(ip);
 
   await prisma.portalLinkRequest.create({ data: { emailHash, ipHash } });
   const since = new Date(Date.now() - WINDOW_MS);
@@ -124,7 +129,15 @@ export async function verifyPortalLink(
   if (!firm?.portalEnabled || live === 0) return { status: "invalid" };
 
   const session = await createSession(result.identityId);
-  (await cookies()).set(PORTAL_COOKIE, session, portalCookieOptions());
+  const row = await prisma.portalSession.findUniqueOrThrow({
+    where: { tokenHash: hashSecret(session) },
+    select: { createdAt: true },
+  });
+  // Persistent cookie capped at the session's absolute expiry.
+  (await cookies()).set(PORTAL_COOKIE, session, {
+    ...portalCookieOptions(),
+    maxAge: sessionCookieMaxAge(row.createdAt),
+  });
   await logPortalEvent({
     identityId: result.identityId,
     title: "Signed in to portal",

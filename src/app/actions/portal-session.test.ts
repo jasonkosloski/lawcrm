@@ -13,7 +13,8 @@ import { captureEmails } from "@/test/email-capture";
 import { PORTAL_COOKIE, portalCookieOptions } from "@/lib/portal/cookie";
 import { createSession } from "@/lib/portal/sessions";
 import { issueToken } from "@/lib/portal/tokens";
-import { hashSecret } from "@/lib/portal/secrets";
+import { createHash } from "node:crypto";
+import { hmacSecret } from "@/lib/portal/secrets";
 
 const jar = new Map<string, string>();
 const setCalls: { name: string; value: string; opts: unknown }[] = [];
@@ -135,7 +136,11 @@ describe("requestPortalLink", () => {
     await requestPortalLink({ status: "idle" }, form("  Jane@Example.COM "));
     expect(cap.sent).toHaveLength(1);
     const rows = await prisma.portalLinkRequest.findMany();
-    expect(rows[0].emailHash).toBe(hashSecret("jane@example.com"));
+    expect(rows[0].emailHash).toBe(hmacSecret("jane@example.com"));
+    // Keyed: a plain SHA-256 of a guessed email does not match the stored row.
+    expect(rows[0].emailHash).not.toBe(
+      createHash("sha256").update("jane@example.com").digest("hex")
+    );
   });
 
   test("4th request for one email in 15 min sends nothing; response unchanged", async () => {
@@ -156,9 +161,9 @@ describe("requestPortalLink", () => {
     expect(cap.sent).toHaveLength(0);
     expect(await prisma.portalLinkRequest.count()).toBe(21);
     const row = await prisma.portalLinkRequest.findFirst({
-      where: { emailHash: hashSecret("jane@example.com") },
+      where: { emailHash: hmacSecret("jane@example.com") },
     });
-    expect(row?.ipHash).toBe(hashSecret("203.0.113.7"));
+    expect(row?.ipHash).toBe(hmacSecret("203.0.113.7"));
     const all = JSON.stringify(await prisma.portalLinkRequest.findMany());
     expect(all).not.toContain("jane@example.com");
     expect(all).not.toContain("203.0.113.7");
@@ -185,6 +190,17 @@ describe("verifyPortalLink", () => {
     expect(jar.get(PORTAL_COOKIE)).toBeTruthy();
     expect(await prisma.portalSession.count({ where: { identityId } })).toBe(1);
     expect(await prisma.activityLog.count({ where: { title: "Signed in to portal" } })).toBe(1);
+  });
+
+  test("cookie maxAge is the session's remaining absolute lifetime (30 days)", async () => {
+    const raw = await issueToken(identityId, "login");
+    await verifyPortalLink({ status: "idle" }, tokenForm(raw));
+    const call = setCalls.find((c) => c.name === PORTAL_COOKIE && c.value);
+    const opts = call?.opts as { maxAge?: number; httpOnly?: boolean };
+    expect(opts.httpOnly).toBe(true);
+    const thirtyDays = 30 * 24 * 60 * 60;
+    expect(opts.maxAge).toBeLessThanOrEqual(thirtyDays);
+    expect(opts.maxAge).toBeGreaterThan(thirtyDays - 60);
   });
 
   test("used/expired token returns invalid and sets no cookie", async () => {

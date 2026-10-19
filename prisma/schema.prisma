@@ -2521,8 +2521,10 @@ model PortalSession {
   @@map("portal_sessions")
 }
 
-/// Throttle ledger for sign-in link requests. Hashed email and IP only, so
-/// attempts for unknown accounts leave no readable trace (see auth-events.ts).
+/// Throttle ledger for sign-in link requests. Email and IP are stored only as
+/// HMAC-SHA256 keyed with AUTH_SECRET (src/lib/portal/secrets.ts hmacSecret),
+/// so a leaked table cannot be reversed by hashing guessed emails without the
+/// key. Rows older than a day are pruned (src/lib/portal/prune.ts).
 model PortalLinkRequest {
   id        String   @id @default(cuid())
   emailHash String
