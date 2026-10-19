@@ -37,6 +37,8 @@ import { requireUser } from "@/lib/current-user";
 import { assertMatterAccess } from "@/lib/matter-access";
 import { getNoteAccess } from "@/lib/note-access";
 import { allowedCaptureKinds } from "@/lib/note-constants";
+import { PortalCard } from "@/components/matters/portal-card";
+import { getPortalCardData } from "@/lib/queries/portal-access";
 import { NoteComposer } from "@/components/matters/notes/note-composer";
 import { NotesTabBody } from "@/components/matters/notes/notes-tab-body";
 
@@ -76,6 +78,9 @@ export default async function MatterOverviewPage({
     clientRows,
     canEditMatter,
     canViewBilling,
+    canViewPortal,
+    canInvitePortal,
+    canRevokePortal,
   ] = await Promise.all([
     getMatterById(id),
     getMatterDeadlines(id, { tz, openOnly: true, limit: 4 }),
@@ -114,8 +119,15 @@ export default async function MatterOverviewPage({
     }),
     currentUserHasPermission("matters.edit"),
     currentUserHasPermission("billing.view"),
+    currentUserHasPermission("portal.view"),
+    currentUserHasPermission("portal.invite"),
+    currentUserHasPermission("portal.revoke"),
   ]);
   if (!matter) notFound();
+
+  // The loader needs portal.view (it returns nothing without it), so
+  // it runs only for holders.
+  const portal = canViewPortal ? await getPortalCardData(id) : null;
 
   const stageOptions = await prisma.matterStage.findMany({
     // Active stages, plus the matter's own stage even if it was
@@ -429,6 +441,18 @@ export default async function MatterOverviewPage({
               )}
             </CardContent>
           </Card>
+
+          {portal && (
+            <PortalCard
+              matterId={matter.id}
+              rows={portal.rows}
+              contacts={portal.contacts}
+              canInvite={canInvitePortal}
+              canRevoke={canRevokePortal}
+              portalEnabled={portal.portalEnabled}
+              tz={tz}
+            />
+          )}
 
           {/* Upcoming deadlines */}
           <Card>

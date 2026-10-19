@@ -29,6 +29,16 @@ vi.mock("@/lib/prisma", () => ({
     matterStage: { findMany: vi.fn(async () => []) },
   },
 }));
+vi.mock("@/lib/queries/portal-access", () => ({
+  getPortalCardData: vi.fn(async () => ({
+    rows: [],
+    contacts: [],
+    portalEnabled: true,
+  })),
+}));
+vi.mock("@/components/matters/portal-card", () => ({
+  PortalCard: () => <div data-testid="portal-card" />,
+}));
 vi.mock("@/lib/queries/matters", () => ({ getMatterById: vi.fn() }));
 vi.mock("@/lib/queries/matter-detail", () => ({
   getMatterDeadlines: vi.fn(async () => []),
@@ -163,6 +173,23 @@ afterEach(() => {
 });
 
 describe("MatterOverviewPage", () => {
+  test("renders the Portal card only for portal.view holders, and skips the loader otherwise", async () => {
+    const { currentUserHasPermission } = await import("@/lib/permission-check");
+    const { getPortalCardData } = await import("@/lib/queries/portal-access");
+    await renderPage();
+    expect(screen.getByTestId("portal-card")).toBeTruthy();
+
+    vi.mocked(getPortalCardData).mockClear();
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (k: string) => k !== "portal.view"
+    );
+    document.body.innerHTML = "";
+    await renderPage();
+    expect(screen.queryByTestId("portal-card")).toBeNull();
+    expect(getPortalCardData).not.toHaveBeenCalled();
+    vi.mocked(currentUserHasPermission).mockImplementation(async () => true);
+  });
+
   test("WIP is the live unbilled figure, in dollars and cents", async () => {
     vi.mocked(getMatterTimeSummary).mockResolvedValue({
       totalHours: 10,

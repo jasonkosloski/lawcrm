@@ -16,6 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FirmEditForm } from "@/components/settings/firm-edit-form";
 import { FirmReadView } from "@/components/settings/firm-read-view";
 import { FirmCalendarDefaultsCard } from "@/components/settings/calendar-defaults-card";
+import { PortalEnabledCard } from "@/components/settings/portal-enabled-card";
 import { MatterVisibilityCard } from "@/components/settings/matter-visibility-card";
 import {
   ADMIN_ROLE_NAME,
@@ -45,6 +46,7 @@ export default async function FirmSettingsPage() {
         autoAddTeamToNewEvents: true,
         autoAddTeamToUpcomingEvents: true,
         matterVisibility: true,
+        portalEnabled: true,
       },
     }),
     getFirmGoals(),
@@ -98,6 +100,12 @@ export default async function FirmSettingsPage() {
             canEdit={canEdit}
           />
         </div>
+
+        {canEdit && (
+          <div className="mt-6">
+            <PortalEnabledCard current={firmSettings.portalEnabled} />
+          </div>
+        )}
 
         {isAdmin && thin && (
           <div className="mt-6">

@@ -3,6 +3,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { assertMatterAccess } from "@/lib/matter-access";
 import { currentUserHasPermission } from "@/lib/permission-check";
+import { getCurrentFirm } from "@/lib/firm";
 
 export type PortalAccessRow = {
   accessId: string;
@@ -51,4 +52,44 @@ export async function getPortalAccessForMatter(
     lastSignInAt: r.identity.sessions[0]?.createdAt ?? null,
     revokedAt: r.revokedAt,
   }));
+}
+
+export type PortalCardData = {
+  rows: PortalAccessRow[];
+  /** Matter parties (client first) who are active, unmerged and have an email. */
+  contacts: { id: string; name: string; email: string | null }[];
+  portalEnabled: boolean;
+};
+
+/** Everything the matter Portal card needs. Call only for portal.view holders. */
+export async function getPortalCardData(
+  matterId: string
+): Promise<PortalCardData> {
+  const [rows, parties, firm] = await Promise.all([
+    getPortalAccessForMatter(matterId),
+    prisma.matterContact.findMany({
+      where: {
+        matterId,
+        contact: { isActive: true, mergedIntoId: null },
+      },
+      orderBy: [{ category: "asc" }, { createdAt: "asc" }],
+      select: {
+        category: true,
+        contact: { select: { id: true, name: true, email: true } },
+      },
+    }),
+    getCurrentFirm().then((f) =>
+      prisma.firm.findUnique({
+        where: { id: f.id },
+        select: { portalEnabled: true },
+      })
+    ),
+  ]);
+  const seen = new Set<string>();
+  const contacts = parties
+    // Clients first, then everyone else in creation order.
+    .sort((a, b) => Number(b.category === "client") - Number(a.category === "client"))
+    .map((p) => p.contact)
+    .filter((c) => !seen.has(c.id) && !!seen.add(c.id));
+  return { rows, contacts, portalEnabled: firm?.portalEnabled ?? false };
 }
