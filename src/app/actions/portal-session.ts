@@ -8,7 +8,10 @@ import { logPortalEvent } from "@/lib/portal/audit";
 import { PORTAL_COOKIE, portalCookieOptions } from "@/lib/portal/cookie";
 import { portalLinkUrl } from "@/lib/portal/link-url";
 import { loginEmail } from "@/lib/portal/emails";
-import { requestIsOnPortalHost } from "@/lib/portal/host";
+import {
+  requestAllowsDevPortalSignIn,
+  requestIsOnPortalHost,
+} from "@/lib/portal/host";
 import { hashSecret, hmacSecret } from "@/lib/portal/secrets";
 import {
   createSession,
@@ -128,7 +131,44 @@ export async function verifyPortalLink(
   ]);
   if (!firm?.portalEnabled || live === 0) return { status: "invalid" };
 
-  const session = await createSession(result.identityId);
+  await startSession(result.identityId, "Signed in to portal");
+  return { status: "ok" };
+}
+
+/**
+ * Dev-only: sign in as an invited client without an emailed link. Refused
+ * unless the request is on `portal.localhost` outside production. The same
+ * portal-on, enabled and live-access checks as a real sign-in still apply.
+ */
+export async function devPortalSignIn(
+  _prev: PortalVerifyState,
+  fd: FormData
+): Promise<PortalVerifyState> {
+  if (!(await requestAllowsDevPortalSignIn())) return { status: "invalid" };
+
+  const identityId = String(fd.get("identityId") ?? "");
+  if (!identityId) return { status: "invalid" };
+
+  const [firm, identity] = await Promise.all([
+    prisma.firm.findFirst({ select: { portalEnabled: true } }),
+    prisma.portalIdentity.findFirst({
+      where: {
+        id: identityId,
+        disabledAt: null,
+        access: { some: { revokedAt: null } },
+      },
+      select: { id: true },
+    }),
+  ]);
+  if (!firm?.portalEnabled || !identity) return { status: "invalid" };
+
+  await startSession(identity.id, "Signed in to portal (dev shortcut)");
+  return { status: "ok" };
+}
+
+/** Create a session, set the persistent cookie, and audit the sign-in. */
+async function startSession(identityId: string, title: string): Promise<void> {
+  const session = await createSession(identityId);
   const row = await prisma.portalSession.findUniqueOrThrow({
     where: { tokenHash: hashSecret(session) },
     select: { createdAt: true },
@@ -138,11 +178,7 @@ export async function verifyPortalLink(
     ...portalCookieOptions(),
     maxAge: sessionCookieMaxAge(row.createdAt),
   });
-  await logPortalEvent({
-    identityId: result.identityId,
-    title: "Signed in to portal",
-  });
-  return { status: "ok" };
+  await logPortalEvent({ identityId, title });
 }
 
 export async function signOutPortal(): Promise<void> {
