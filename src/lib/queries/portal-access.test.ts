@@ -40,6 +40,8 @@ describe("getPortalCardData", () => {
       portalEnabled: false,
     });
     expect(prisma.matterContact.findMany).not.toHaveBeenCalled();
+    expect(prisma.portalMatterAccess.findMany).not.toHaveBeenCalled();
+    expect(prisma.firm.findUnique).not.toHaveBeenCalled();
   });
 
   test("with portal.view: clients first, deduped", async () => {
