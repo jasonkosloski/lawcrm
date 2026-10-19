@@ -17,6 +17,10 @@ vi.mock("@/lib/file-storage", () => {
     storeStream: vi.fn(),
   };
 });
+const findFirst = vi.fn(async (): Promise<{ id: string } | null> => null);
+vi.mock("@/lib/prisma", () => ({
+  prisma: { document: { findFirst: () => findFirst() } },
+}));
 vi.mock("@/lib/portal/record-upload", () => ({
   PORTAL_UPLOAD_NOTE_MAX: 500,
   checkPortalUploadTarget: vi.fn(async () => ({ ok: true })),
@@ -35,7 +39,7 @@ const BATCH = "11111111-1111-4111-8111-111111111111";
  *  undici's generator rejects after an early cancel). */
 async function toRequest(fd: FormData): Promise<Request> {
   const encoded = new Response(fd);
-  return new Request("http://portal.localhost:3000/portal/api/documents/upload", {
+  return new Request("http://portal.localhost:3000/portal/api/documents/upload/local", {
     method: "POST",
     headers: { "content-type": encoded.headers.get("content-type")! },
     body: new Uint8Array(await encoded.arrayBuffer()),
@@ -73,7 +77,7 @@ afterEach(() => {
   vi.mocked(checkPortalUploadTarget).mockResolvedValue({ ok: true });
 });
 
-describe("POST portal /api/documents/upload (dev multipart)", () => {
+describe("POST portal /api/documents/upload/local (dev multipart)", () => {
   test("refuses without a portal session (401) and stores nothing", async () => {
     vi.mocked(getPortalIdentity).mockResolvedValue(null);
     const res = await POST(await form([["a.pdf", "hello"]]));
@@ -145,6 +149,31 @@ describe("POST portal /api/documents/upload (dev multipart)", () => {
     });
     const res = await POST(await form([["a.pdf", "x"]]));
     expect(res.status).toBe(403);
+  });
+
+  test("a completion that throws mid-batch removes the unrecorded files", async () => {
+    vi.mocked(recordPortalUpload)
+      .mockResolvedValueOnce({ ok: true, documentId: "d1", requestClosed: false })
+      .mockRejectedValueOnce(new Error("db down"));
+    const res = await POST(await form([["a.pdf", "1"], ["b.pdf", "2"], ["c.pdf", "3"]]));
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "Upload failed." });
+    const removed = vi.mocked(deleteFile).mock.calls.map((c) => c[0]);
+    // The first file has its row and stays; the failed one and the rest go.
+    expect(removed).toHaveLength(2);
+    const [first] = vi.mocked(recordPortalUpload).mock.calls.map((c) => c[0].storageKey);
+    expect(removed).not.toContain(first);
+  });
+
+  test("a throw after the row was written keeps that file's bytes", async () => {
+    vi.mocked(recordPortalUpload).mockRejectedValueOnce(new Error("log failed"));
+    findFirst.mockResolvedValueOnce({ id: "d1" });
+    const res = await POST(await form([["a.pdf", "1"], ["b.pdf", "2"]]));
+    expect(res.status).toBe(500);
+    const removed = vi.mocked(deleteFile).mock.calls.map((c) => c[0]);
+    const [first] = vi.mocked(recordPortalUpload).mock.calls.map((c) => c[0].storageKey);
+    expect(removed).toHaveLength(1);
+    expect(removed).not.toContain(first);
   });
 
   test("an empty file is rejected and removed", async () => {

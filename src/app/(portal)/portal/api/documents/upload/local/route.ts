@@ -1,13 +1,17 @@
 /**
- * POST /api/documents/upload on the PORTAL host (internally
- * /portal/api/documents/upload). The local-storage-driver path for client
- * uploads in development: Vercel Blob's completion webhook can't reach
- * localhost, so dev streams multipart here instead (same reason the staff
- * streaming route exists). 501 under the blob driver.
+ * POST /api/documents/upload/local on the PORTAL host (internally
+ * /portal/api/documents/upload/local). The local-storage-driver path for
+ * client uploads in development: Vercel Blob's completion webhook can't
+ * reach localhost, so dev streams multipart here instead (same reason the
+ * staff streaming route exists). 501 under the blob driver.
  *
- * Note: on the portal host the proxy runs on every path, and a proxied
- * request body is capped at 10 MB, so local dev uploads are limited to
- * about 10 MB per request. Production uses the blob route.
+ * Not at /api/documents/upload: the proxy matcher skips that exact path on
+ * every host, so on the portal host it would never be rewritten and would
+ * reach the staff route. This path IS proxied (the rewrite into /portal
+ * needs it), and a proxied request body is buffered to at most 10 MB
+ * (`proxyClientMaxBodySize`); past that the route sees a truncated body
+ * and fails the batch as malformed. The uploader refuses batches over the
+ * cap up front. Production uses the blob route.
  *
  * Contract (multipart/form-data, fields BEFORE any file part):
  *   matterId, batchId (uuid), requestId?, note?, then one or more `files`.
@@ -25,6 +29,7 @@ import { Readable } from "node:stream";
 import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import busboy from "busboy";
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 import { getPortalIdentity } from "@/lib/portal-access";
 import {
   FileTooLargeError,
@@ -92,23 +97,35 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const documents: { id: string; name: string; requestClosed: boolean }[] = [];
+  const removeFrom = (i: number) =>
+    Promise.all(parsed.stored.slice(i).map((s) => deleteFile(s.key).catch(() => {})));
   for (const [i, f] of parsed.stored.entries()) {
-    const r = await recordPortalUpload({
-      identityId: identity.identityId,
-      matterId: fields.matterId,
-      requestId: fields.requestId,
-      batchId: fields.batchId,
-      storageKey: f.key,
-      filename: f.name,
-      contentType: f.contentType,
-      size: f.size,
-      note: fields.note,
-    });
+    let r: Awaited<ReturnType<typeof recordPortalUpload>>;
+    try {
+      r = await recordPortalUpload({
+        identityId: identity.identityId,
+        matterId: fields.matterId,
+        requestId: fields.requestId,
+        batchId: fields.batchId,
+        storageKey: f.key,
+        filename: f.name,
+        contentType: f.contentType,
+        size: f.size,
+        note: fields.note,
+      });
+    } catch (err) {
+      console.error("[portal-upload] completion failed", err);
+      // The throw may come after this file's row was written (logging,
+      // notify); keep its bytes then. The rest were never recorded.
+      const recorded = await prisma.document
+        .findFirst({ where: { fileUrl: f.key }, select: { id: true } })
+        .catch(() => ({ id: "unknown" }));
+      await removeFrom(recorded ? i + 1 : i);
+      return json({ error: "Upload failed." }, 500);
+    }
     if (!r.ok) {
       // recordPortalUpload removed this file; remove the unrecorded rest.
-      await Promise.all(
-        parsed.stored.slice(i + 1).map((s) => deleteFile(s.key).catch(() => {}))
-      );
+      await removeFrom(i + 1);
       return json({ error: r.error }, 403);
     }
     documents.push({ id: r.documentId, name: f.name, requestClosed: r.requestClosed });

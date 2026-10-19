@@ -133,6 +133,39 @@ describe("PortalUploader", () => {
     expect(reload).toHaveBeenCalled();
   });
 
+  test("the local driver posts multipart to /api/documents/upload/local", () => {
+    const opened: string[] = [];
+    class FakeXhr {
+      upload = {};
+      open(method: string, url: string) {
+        opened.push(`${method} ${url}`);
+      }
+      send() {}
+    }
+    vi.stubGlobal("XMLHttpRequest", FakeXhr);
+    try {
+      const { container } = render(<PortalUploader matterId="m1" storageDriver="local" />);
+      pick(container, "a.pdf");
+      expect(opened).toEqual(["POST /api/documents/upload/local"]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  test("the local driver refuses a batch over the dev proxy's 10 MB body cap", () => {
+    const xhr = vi.spyOn(globalThis, "XMLHttpRequest");
+    const { container } = render(<PortalUploader matterId="m1" storageDriver="local" />);
+    const big = new File(["x"], "big.pdf", { type: "application/pdf" });
+    Object.defineProperty(big, "size", { value: 11 * 1024 * 1024 });
+    const input = container.querySelector("input[type=file]") as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [big] } });
+    expect(
+      screen.getByText("In development, uploads are limited to 10 MB per batch."),
+    ).toBeTruthy();
+    expect(xhr).not.toHaveBeenCalled();
+    xhr.mockRestore();
+  });
+
   test("a first-file failure offers no Done", async () => {
     upload.mockRejectedValue(new Error("boom"));
     const { container } = render(<PortalUploader matterId="m1" storageDriver="vercel-blob" />);

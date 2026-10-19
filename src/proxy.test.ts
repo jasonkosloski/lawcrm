@@ -291,6 +291,24 @@ describe("portal host routing", () => {
     expect(proxy(makeRequest("/portalx", { cookie: SESSION_COOKIE })).status).not.toBe(404);
   });
 
+  // The portal's dev multipart route lives one level below the matcher-
+  // excluded staff path, so the proxy runs and rewrites it on the portal
+  // host (the excluded exact path would reach the staff route instead).
+  it("portal host: /api/documents/upload/local rewrites to the portal route", () => {
+    const re = new RegExp(`^${config.matcher[0]}$`);
+    expect(re.test("/api/documents/upload/local")).toBe(true);
+    const res = proxy(portalReq("/api/documents/upload/local"));
+    expect(rewriteOf(res).pathname).toBe("/portal/api/documents/upload/local");
+  });
+
+  it("staff host: the portal upload route is unreachable", () => {
+    expect(
+      proxy(makeRequest("/portal/api/documents/upload/local", { cookie: SESSION_COOKIE })).status
+    ).toBe(404);
+    const res = proxy(makeRequest("/api/documents/upload/local", { cookie: SESSION_COOKIE }));
+    expect(res.headers.has("x-middleware-rewrite")).toBe(false);
+  });
+
   it("staff host: static-looking /portal paths also 404", () => {
     expect(proxy(makeRequest("/portal/x.js")).status).toBe(404);
     expect(proxy(makeRequest("/portal/matters/a.png")).status).toBe(404);

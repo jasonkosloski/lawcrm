@@ -86,7 +86,7 @@ One module decides what a client sees: `src/lib/portal/document-visibility.ts` (
 
 ### Client uploads
 Uploads are **ordinary matter documents** ([ADR-052](../decisions/052-portal-uploads-are-matter-documents.md)) in the protected "From client" folder (`PORTAL_UPLOADS_FOLDER_NAME`, a folder kind in `folder-kinds.ts`), with `portalUploaderId`, `portalBatchId`, optional `documentRequestId` and `clientNote` (the "What is this?" note, max 500).
-- **Allowlist** (`src/lib/portal/upload-policy.ts`, client-safe): only the last extension counts, content type is derived from it (declared MIME ignored), size caps match staff. Production uploads go client-direct to Blob; dev uses a multipart route.
+- **Allowlist** (`src/lib/portal/upload-policy.ts`, client-safe): only the last extension counts, content type is derived from it (declared MIME ignored), size caps match staff. Production uploads go client-direct to Blob; dev posts multipart to `/api/documents/upload/local` (not `/api/documents/upload`: the proxy matcher skips that exact path on every host, so on the portal host it would reach the staff route).
 - **Blob token step** (`portal-blob-upload.ts`) pins content type and size from the allowlist and checks identity, access, portal-on and the daily cap. **Completion identity comes only from the signed token payload** (the webhook has no cookie). The callback URL targets `https://$PORTAL_HOST/api/documents/upload/blob` (the public path, not the internal rewrite); the token step refuses (503) when `PORTAL_HOST` is unset. The staff blob completion handler refuses portal-shaped payloads.
 - **Completion** (`record-upload.ts`, shared by webhook and dev route) re-checks everything, since access can be revoked mid-upload, and deletes the stored file if refused. All writes run under a per-matter advisory lock (`portal_uploads:<matterId>`), which serializes creating the one "From client" folder (a duplicate, if ever present, resolves to the oldest), picking the first file of a batch (one staff notification per batch) and request linking.
 - **Daily cap**: 100 uploads per identity per rolling 24 hours, checked at token time only (a burst of parallel tokens can slightly exceed it).
@@ -110,7 +110,7 @@ Uploads are **ordinary matter documents** ([ADR-052](../decisions/052-portal-upl
 ### Open risks and deferred items (documents)
 - No virus scanning: allowlist plus attachment-only download instead.
 - No bulk share: the browser has no multi-select; share a folder instead.
-- Dev multipart upload on `portal.localhost` is limited to 10 MB by the proxy body cap (proxy deliberately unchanged); production uses client-direct blob.
+- Dev multipart upload on `portal.localhost` runs through the proxy (it has to, for the rewrite), which buffers at most 10 MB of a request body (`proxyClientMaxBodySize`) and passes a truncated copy past that. The uploader refuses local batches over the cap up front; production uses client-direct blob.
 - "Overdue" on the portal uses America/Denver (the firm has no zone field), so it can be a few hours off for an out-of-zone firm.
 - Client uploads stay downloadable by co-clients of the matter even if staff move or unshare them (they are matter documents, ADR-052).
 - The blob path reloads the list 1.5 s after a batch, so a slow completion webhook can lag the list. A request closed meanwhile is reported via `getPortalRequestStatus`.

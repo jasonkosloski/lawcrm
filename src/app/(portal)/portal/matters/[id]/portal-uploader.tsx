@@ -6,7 +6,8 @@
  *
  * Transport follows the server-supplied `storageDriver` (a client can't read
  * env): `vercel-blob` uploads each file straight to Blob through the token
- * route; `local` (dev) posts one multipart request. Every pick is one batch
+ * route; `local` (dev) posts one multipart request to
+ * /api/documents/upload/local. Every pick is one batch
  * (`batchId`), so several files can answer a request together.
  *
  * Never redirects from client code: when the batch is done the page is
@@ -29,6 +30,12 @@ const CLOSED_MESSAGE =
 type FileRow = { name: string; size: number; loaded: number };
 
 const mib = (bytes: number) => `${Math.floor(bytes / (1024 * 1024))} MB`;
+
+/** The local (dev) route is reached through the proxy, which buffers at
+ *  most 10 MB of a request body and hands the route a truncated copy
+ *  past that. Keep the whole multipart body under it (headroom for the
+ *  part headers and fields). */
+const LOCAL_BATCH_MAX_BYTES = 10 * 1024 * 1024 - 64 * 1024;
 
 export function PortalUploader({
   matterId,
@@ -55,6 +62,12 @@ export function PortalUploader({
   const preflight = (files: File[]): string | null => {
     if (files.length > MAX_FILES_PER_BATCH) {
       return `Please send ${MAX_FILES_PER_BATCH} files or fewer at a time.`;
+    }
+    if (
+      storageDriver === "local" &&
+      files.reduce((sum, f) => sum + f.size, 0) > LOCAL_BATCH_MAX_BYTES
+    ) {
+      return "In development, uploads are limited to 10 MB per batch.";
     }
     for (const f of files) {
       const check = checkPortalUpload(f.name);
@@ -186,7 +199,7 @@ export function PortalUploader({
       abortRef.current = null;
       setRows(null);
     };
-    xhr.open("POST", "/api/documents/upload");
+    xhr.open("POST", "/api/documents/upload/local");
     xhr.send(fd);
   };
 
