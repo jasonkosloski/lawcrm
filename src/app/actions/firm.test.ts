@@ -274,6 +274,7 @@ describe("setPortalEnabled", () => {
   test("needs firm.edit_info", async () => {
     mockedGate.mockResolvedValue({ ok: false, error: "nope" });
     const res = await setPortalEnabled(true);
+    expect(mockedGate).toHaveBeenCalledWith("firm.edit_info");
     expect(res).toEqual({ ok: false, error: "nope" });
     const firm = await prisma.firm.findUniqueOrThrow({ where: { id: firmId } });
     expect(firm.portalEnabled).toBe(false);
@@ -281,6 +282,7 @@ describe("setPortalEnabled", () => {
 
   test("flips the switch and logs it", async () => {
     expect(await setPortalEnabled(true)).toEqual({ ok: true });
+    expect(mockedGate).toHaveBeenCalledWith("firm.edit_info");
     expect(
       (await prisma.firm.findUniqueOrThrow({ where: { id: firmId } })).portalEnabled
     ).toBe(true);

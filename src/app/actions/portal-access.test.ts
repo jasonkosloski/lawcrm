@@ -264,3 +264,88 @@ describe("getPortalAccessForMatter", () => {
     expect(await getPortalAccessForMatter(matterId)).toEqual([]);
   });
 });
+
+describe("fix round 1 rulings", () => {
+  async function walledSetup() {
+    const { matterId: hidden } = await seedMatter({
+      practiceAreaId: areaId, stageId, leadUserId: admin, name: "Hidden matter",
+    });
+    await invitePortalUser(hidden, contactId, "jane@example.com");
+    await prisma.firm.update({ where: { id: firmId }, data: { matterVisibility: "TEAM" } });
+    const walled = await userWith(["portal.invite", "portal.revoke", "portal.view"]);
+    await prisma.matterTeamMember.create({ data: { matterId, userId: walled, role: "attorney" } });
+    const identity = await prisma.portalIdentity.findUniqueOrThrow({ where: { contactId } });
+    return { walled, hidden, identityId: identity.id };
+  }
+
+  test("disable refuses when the actor cannot see all of the identity's matters", async () => {
+    const { walled, identityId } = await walledSetup();
+    sessionUser = walled;
+    const res = await disablePortalIdentity(identityId);
+    expect(res).toEqual({
+      ok: false,
+      error: "You can only disable someone whose portal matters you can all see. Revoke access on this matter instead.",
+    });
+    expect((await prisma.portalIdentity.findUniqueOrThrow({ where: { id: identityId } })).disabledAt).toBeNull();
+  });
+
+  test("re-invite of a disabled identity needs the actor to see all its matters", async () => {
+    const { walled, identityId } = await walledSetup();
+    await prisma.portalIdentity.update({ where: { id: identityId }, data: { disabledAt: new Date() } });
+    sessionUser = walled;
+    expect(await invitePortalUser(matterId, contactId, "jane@example.com")).toEqual({
+      ok: false,
+      error: "This person's portal access is disabled. Someone who can see all of their matters must re-enable it.",
+    });
+    expect((await prisma.portalIdentity.findUniqueOrThrow({ where: { id: identityId } })).disabledAt).not.toBeNull();
+    sessionUser = admin;
+    expect(await invitePortalUser(matterId, contactId, "jane@example.com")).toEqual({ ok: true });
+    expect((await prisma.portalIdentity.findUniqueOrThrow({ where: { id: identityId } })).disabledAt).toBeNull();
+  });
+
+  test("email change is refused for a walled actor; allowed for a full-view actor and kills sessions", async () => {
+    const { walled, identityId } = await walledSetup();
+    await createSession(identityId);
+    sessionUser = walled;
+    expect(await invitePortalUser(matterId, contactId, "new@example.com")).toEqual({
+      ok: false,
+      error: "This person already has portal access under a different email. Someone who can see all of their matters must change it.",
+    });
+    expect(await prisma.portalSession.count()).toBe(1);
+    sessionUser = admin;
+    expect(await invitePortalUser(matterId, contactId, "new@example.com")).toEqual({ ok: true });
+    expect((await prisma.portalIdentity.findUniqueOrThrow({ where: { id: identityId } })).email).toBe("new@example.com");
+    expect(await prisma.portalSession.count()).toBe(0);
+  });
+
+  test("invite refuses an email already used by another identity", async () => {
+    await invitePortalUser(matterId, contactId, "jane@example.com");
+    const { contactId: other } = await seedContact({ name: "Other" });
+    expect(await invitePortalUser(matterId, other, "jane@example.com")).toEqual({
+      ok: false,
+      error: "Another portal user already uses this email.",
+    });
+    expect(await prisma.portalIdentity.count()).toBe(1);
+  });
+
+  test("invite refuses an archived matter and an inactive contact", async () => {
+    await prisma.contact.update({ where: { id: contactId }, data: { isActive: false } });
+    expect(await invitePortalUser(matterId, contactId, "jane@example.com")).toEqual({
+      ok: false, error: "This contact is inactive.",
+    });
+    await prisma.contact.update({ where: { id: contactId }, data: { isActive: true } });
+    await prisma.matter.update({ where: { id: matterId }, data: { isArchived: true } });
+    expect(await invitePortalUser(matterId, contactId, "jane@example.com")).toEqual({
+      ok: false, error: "This matter is archived.",
+    });
+    expect(await prisma.portalIdentity.count()).toBe(0);
+  });
+
+  test("getPortalAccessForMatter: a walled user gets notFound", async () => {
+    await prisma.firm.update({ where: { id: firmId }, data: { matterVisibility: "TEAM" } });
+    sessionUser = await userWith(["portal.view"]);
+    await expect(getPortalAccessForMatter(matterId)).rejects.toMatchObject({
+      digest: expect.stringContaining("404"),
+    });
+  });
+});
