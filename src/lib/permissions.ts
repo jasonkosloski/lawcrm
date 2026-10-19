@@ -286,7 +286,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         key: "portal.revoke",
         label: "Revoke client portal access",
         description:
-          "Remove a person's portal access to a matter, or disable their portal login entirely.",
+          "Remove a person's portal access to a matter. Also allows disabling their portal login entirely (not yet available in the app).",
       },
     ],
   },
