@@ -61,7 +61,7 @@ Steps marked **(you)** need the user; the rest is code that is already shipped.
 
 1. **(you)** Provision Resend through the Vercel Marketplace; set `RESEND_API_KEY` and `EMAIL_FROM`. Set up SPF/DKIM for the sending domain first or invites land in spam.
 2. **(you)** Add `portal.<domain>` to the Vercel project and DNS.
-3. **(you)** Set `PORTAL_HOST`. Uploads need it in production: the upload token step returns 503 without it (no guessed callback URL).
+3. **(you)** Set `PORTAL_HOST` for the **Production** environment only. Uploads need it in production: the upload token step returns 503 without it (no guessed callback URL). Previews run as production, so a preview with it set would hand Blob a callback to the production portal.
 4. **(you)** Run `prisma migrate deploy` for the three portal migrations (the third is `20261019183859_portal_documents`, which also grants the four document keys to roles holding `matters.edit`) (see [DEPLOY_BACKFILLS](../DEPLOY_BACKFILLS.md); mind the `DIRECT_DATABASE_URL` gotcha there).
 5. **(you)** Turn on Settings, Firm, "Client portal enabled".
 6. `src/lib/env-check.ts` reports missing `PORTAL_HOST` / `RESEND_API_KEY` / `EMAIL_FROM` at startup as degraded (logged, not blocking).
@@ -80,9 +80,9 @@ Steps marked **(you)** need the user; the rest is code that is already shipped.
 
 ### Visibility rule
 One module decides what a client sees: `src/lib/portal/document-visibility.ts` (pure, client-safe: `sharedFolderIds`, `isEffectivelyShared`, `shareReason`) and `document-visibility.server.ts` (DB queries and `canPortalDownload`). Nothing else re-derives it; staff badges, portal lists and the download route all call it.
-- **Three-state file share** (`Document.clientShare`): null follows the folder, `shared` is visible regardless, `hidden` wins even inside a shared folder. **Folders** have `clientShared`, inherited by the whole subtree. Protected system folders cannot be shared.
+- **Three-state file share** (`Document.clientShare`): null follows the folder, `shared` is visible regardless, `hidden` wins even inside a shared folder. **Folders** have `clientShared`, inherited by the whole subtree. Protected system folders cannot be shared (they can be unshared). Archived documents are never client-visible, so the staff "Shared" badge, move warnings and share emails ignore them too.
 - Audience is matter-wide (all live access holders see the same set). Matters only, not leads.
-- Client uploads are listed separately ("Your uploads") and ignore `hidden`: they are the client's own files.
+- Client uploads are listed separately ("Your uploads") and ignore `hidden`: they are the client's own files. The list is matter-wide, so it includes co-clients' uploads, each with the uploader's email. An upload that staff also share appears in both "Shared with you" and "Your uploads".
 
 ### Client uploads
 Uploads are **ordinary matter documents** ([ADR-052](../decisions/052-portal-uploads-are-matter-documents.md)) in the protected "From client" folder (`PORTAL_UPLOADS_FOLDER_NAME`, a folder kind in `folder-kinds.ts`), with `portalUploaderId`, `portalBatchId`, optional `documentRequestId` and `clientNote` (the "What is this?" note, max 500).
@@ -95,7 +95,7 @@ Uploads are **ordinary matter documents** ([ADR-052](../decisions/052-portal-upl
 `DocumentRequest` (title, instructions, optional date-only due date, `returnNote`). Status: `open` -> `submitted` (a client upload against it) -> `complete` (staff accept) or `cancelled`. **Send back** is `open` plus a `returnNote`, not a separate status. A batch answers one request: later files of a batch link to the request the batch's first file submitted. Late files from a batch started before a send-back land unlinked (still in "From client"). Staff actions: `src/app/actions/portal-documents.ts`. Deleting a request keeps the files. Creating one is allowed while the portal is off (no email), so staff can prepare ahead.
 
 ### Download
-`portal/api/documents/[id]/download` is gated by `canPortalDownload` alone (live access, portal on, matter not archived, effectively shared or a client upload on that matter). Everything else is a bare 404 (no detail, no log). Always `Content-Disposition: attachment`, never cached; blob keys 302 to a short-lived signed URL.
+`portal/api/documents/[id]/download` is gated by `canPortalDownload` alone (live access, portal on, document not archived, and effectively shared or uploaded by a live-access client of that matter). `Matter.isArchived` is not checked: clients keep downloading, and can still upload, on closed matters. Everything else is a bare 404 (no detail, no log). Always `Content-Disposition: attachment`, never cached; blob keys 302 to a short-lived signed URL.
 
 ### Notifications and email
 - Clients: `documentRequestEmail` on request creation and `documentsSharedEmail` when shares are turned on, sent to live portal users of the matter (`emailLivePortalUsers`); links go to portal home. Skipped while the portal is off.
@@ -115,3 +115,6 @@ Uploads are **ordinary matter documents** ([ADR-052](../decisions/052-portal-upl
 - Client uploads stay downloadable by co-clients of the matter even if staff move or unshare them (they are matter documents, ADR-052).
 - The blob path reloads the list 1.5 s after a batch, so a slow completion webhook can lag the list. A request closed meanwhile is reported via `getPortalRequestStatus`.
 - No due-date reminder emails.
+- A blob whose completion webhook never arrives is never cleaned up (no Document row points at it); same as the staff blob path.
+- "Copy to..." into a shared folder makes the copy client-visible with no warning (only moves warn).
+- Deleting the only file of a submitted request leaves it `submitted` with no files; staff send it back or cancel it.

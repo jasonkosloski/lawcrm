@@ -2472,9 +2472,6 @@ model RecordsRequestFollowUp {
   @@map("records_request_follow_ups")
 }
 
-/// A client-portal login, one per Contact. `email` is the normalized
-/// (trimmed, lowercase) address invites and sign-in links go to; it may
-/// differ from the contact's own email.
 /// A staff request for documents from the client, shown in the portal.
 model DocumentRequest {
   id           String    @id @default(cuid())
@@ -2498,6 +2495,9 @@ model DocumentRequest {
   @@map("document_requests")
 }
 
+/// A client-portal login, one per Contact. `email` is the normalized
+/// (trimmed, lowercase) address invites and sign-in links go to; it may
+/// differ from the contact's own email.
 model PortalIdentity {
   id         String    @id @default(cuid())
   contactId  String    @unique
