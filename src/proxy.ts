@@ -70,8 +70,36 @@ function isPublicPath(pathname: string): boolean {
   );
 }
 
+/**
+ * True when `host` (a Host header, port allowed) is the client-portal
+ * host: `PORTAL_HOST`, or `portal.localhost` outside production. Reads
+ * the env per call so tests can stub it.
+ */
+export function isPortalHost(host: string | null): boolean {
+  if (!host) return false;
+  const name = host.toLowerCase().replace(/:\d+$/, "");
+  const configured = (process.env.PORTAL_HOST ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/:\d+$/, "");
+  if (configured && name === configured) return true;
+  return name === "portal.localhost" && process.env.NODE_ENV !== "production";
+}
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const onPortalHost = isPortalHost(
+    request.headers.get("host") ?? request.nextUrl.host
+  );
+
+  // Staff routes for the portal live under /portal internally and are
+  // served at /* on the portal host only; on any other host they 404.
+  if (
+    !onPortalHost &&
+    (pathname === "/portal" || pathname.startsWith("/portal/"))
+  ) {
+    return new NextResponse(null, { status: 404 });
+  }
 
   // Server layouts can't see the request URL, so we forward
   // pathname + search as `x-pathname` (read by the dashboard layout to
@@ -96,6 +124,24 @@ export function proxy(request: NextRequest) {
     if (csp) res.headers.set(CSP_HEADER, csp);
     return res;
   };
+
+  // Portal host: no staff cookie gate. Every path is rewritten into
+  // /portal/*, where staff routes do not exist (so they 404). Next
+  // internals and the CSP report endpoint pass through untouched.
+  if (onPortalHost) {
+    if (pathname.startsWith("/_next/") || pathname === "/api/csp-report") {
+      return passThrough();
+    }
+    const target = new URL(
+      "/portal" + (pathname === "/" ? "" : pathname) + request.nextUrl.search,
+      request.url
+    );
+    const res = NextResponse.rewrite(target, {
+      request: { headers: requestHeaders },
+    });
+    if (csp) res.headers.set(CSP_HEADER, csp);
+    return res;
+  }
 
   // Public routes always pass.
   if (isPublicPath(pathname) || SELF_AUTHENTICATED_PATHS.has(pathname)) {

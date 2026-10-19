@@ -16,9 +16,9 @@
  * the observable surface we assert against here.
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { config, proxy } from "./proxy";
+import { config, isPortalHost, proxy } from "./proxy";
 
 const SESSION_COOKIE = "authjs.session-token=some-token";
 
@@ -198,5 +198,78 @@ describe("proxy CSP nonce", () => {
   it("API routes get no page policy", () => {
     const res = proxy(makeRequest("/api/csp-report"));
     expect(res.headers.get(CSP)).toBeNull();
+  });
+});
+
+describe("portal host routing", () => {
+  beforeEach(() => {
+    vi.stubEnv("PORTAL_HOST", "portal.example.com");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  const portalReq = (path: string, init?: { cookie?: string }) => {
+    const headers = new Headers({ host: "portal.example.com" });
+    if (init?.cookie) headers.set("cookie", init.cookie);
+    return new NextRequest(new URL(path, "https://portal.example.com"), { headers });
+  };
+  const rewriteOf = (res: Response) =>
+    new URL(res.headers.get("x-middleware-rewrite")!);
+
+  it("isPortalHost strips the port and matches PORTAL_HOST", () => {
+    expect(isPortalHost("portal.example.com")).toBe(true);
+    expect(isPortalHost("portal.example.com:3000")).toBe(true);
+    expect(isPortalHost("app.example.com")).toBe(false);
+    expect(isPortalHost(null)).toBe(false);
+  });
+
+  it("portal.localhost is a portal host outside production only", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    expect(isPortalHost("portal.localhost:3000")).toBe(true);
+    vi.stubEnv("NODE_ENV", "production");
+    expect(isPortalHost("portal.localhost:3000")).toBe(false);
+  });
+
+  it("portal host: / rewrites to /portal and carries the page CSP", () => {
+    const res = proxy(portalReq("/"));
+    expect(rewriteOf(res).pathname).toBe("/portal");
+    expect(res.headers.get("Content-Security-Policy-Report-Only")).toBeTruthy();
+    expect(forwardedHeader(res, "content-security-policy-report-only")).toBeTruthy();
+    expect(forwardedHeader(res, "x-pathname")).toBe("/");
+  });
+
+  it("portal host: /matters/abc rewrites to /portal/matters/abc", () => {
+    const res = proxy(portalReq("/matters/abc?x=1"));
+    const u = rewriteOf(res);
+    expect(u.pathname).toBe("/portal/matters/abc");
+    expect(u.search).toBe("?x=1");
+  });
+
+  it("portal host: staff paths are unreachable", () => {
+    for (const p of ["/settings", "/api/email-sync", "/intake/x"]) {
+      const res = proxy(portalReq(p));
+      expect(rewriteOf(res).pathname.startsWith("/portal/")).toBe(true);
+    }
+  });
+
+  it("portal host: /api/csp-report and /_next pass through", () => {
+    for (const p of ["/api/csp-report", "/_next/webpack-hmr"]) {
+      const res = proxy(portalReq(p));
+      expect(res.headers.has("x-middleware-rewrite")).toBe(false);
+    }
+  });
+
+  it("portal host: no staff cookie gate", () => {
+    const res = proxy(portalReq("/login"));
+    expect(res.status).toBe(200);
+    expect(res.headers.has("location")).toBe(false);
+    expect(rewriteOf(res).pathname).toBe("/portal/login");
+  });
+
+  it("staff host: /portal and /portal/x return 404", () => {
+    expect(proxy(makeRequest("/portal", { cookie: SESSION_COOKIE })).status).toBe(404);
+    expect(proxy(makeRequest("/portal/x", { cookie: SESSION_COOKIE })).status).toBe(404);
+    expect(proxy(makeRequest("/portalx", { cookie: SESSION_COOKIE })).status).not.toBe(404);
   });
 });

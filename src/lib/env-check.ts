@@ -36,6 +36,15 @@ export function checkEnv(env: Env): EnvCheckResult {
     if (!set(env, "EMAIL_TOKEN_KEY")) {
       degraded.push("EMAIL_TOKEN_KEY (Gmail connect and sync fail)");
     }
+    if (!set(env, "PORTAL_HOST")) {
+      degraded.push("PORTAL_HOST (the client portal host is never routed)");
+    }
+    if (!set(env, "RESEND_API_KEY")) {
+      degraded.push("RESEND_API_KEY (portal sign-in emails are not delivered)");
+    }
+    if (!set(env, "EMAIL_FROM")) {
+      degraded.push("EMAIL_FROM (portal sign-in emails have no sender)");
+    }
   }
   return { fatal, degraded };
 }
