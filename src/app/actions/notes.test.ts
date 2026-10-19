@@ -915,7 +915,7 @@ describe("createLeadNote", () => {
     expect((await prisma.note.findFirstOrThrow()).isPinned).toBe(true);
   });
 
-  test("empty content, a missing lead, and a converted lead are form errors", async () => {
+  test("empty content and a converted lead are form errors; a missing lead 404s", async () => {
     const { leadId } = await seedLead();
     const empty = await createLeadNote(
       leadId,
@@ -924,8 +924,10 @@ describe("createLeadNote", () => {
     );
     expect(empty.errors?.content?.[0]).toMatch(/can't be empty/i);
 
-    const missing = await createLeadNote("ghost", noteInitialState, noteForm({}));
-    expect(missing.errors?.content?.[0]).toMatch(/no longer exists/i);
+    // Unknown == hidden: the lead wall answers with notFound() (ADR-049).
+    await expect(
+      createLeadNote("ghost", noteInitialState, noteForm({}))
+    ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
 
     await prisma.lead.update({
       where: { id: leadId },

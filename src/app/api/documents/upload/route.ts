@@ -76,6 +76,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessMatter } from "@/lib/matter-access";
+import { canAccessLead } from "@/lib/lead-access";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { scopeWhere, type RecordScope } from "@/lib/record-scope";
@@ -412,13 +413,15 @@ async function resolveTarget(
     }
     scope = { kind: "matter", matterId };
   } else if (leadId) {
-    // Intake is not matter-ACL'd; the lead only has to exist and be
-    // unconverted (its records moved to the matter on conversion).
+    // Lead wall (restricted intake, ADR-049): hidden == missing. The
+    // lead must also be unconverted (its records moved to the matter).
     const lead = await prisma.lead.findUnique({
       where: { id: leadId },
       select: { id: true },
     });
-    if (!lead) return { status: 404, error: "Lead not found." };
+    if (!lead || !(await canAccessLead(userId, leadId))) {
+      return { status: 404, error: "Lead not found." };
+    }
     scope = { kind: "lead", leadId: lead.id };
     const readOnly = await assertScopeWritable(scope);
     if (readOnly) return { status: 409, error: readOnly };

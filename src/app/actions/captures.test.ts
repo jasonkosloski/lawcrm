@@ -519,7 +519,7 @@ describe("createLeadTask", () => {
     expect(n.body).toBe("Intake · Pat Prospect");
   });
 
-  test("refuses siblings, a missing lead and a converted lead", async () => {
+  test("refuses siblings and a converted lead; a missing lead 404s", async () => {
     const { leadId } = await seedLead();
     const withSibling = await createLeadTask(
       leadId,
@@ -531,10 +531,10 @@ describe("createLeadTask", () => {
       })
     );
     expect(withSibling.status).toBe("error");
-    expect(
-      (await createLeadTask("ghost", captureInitialState, taskForm())).errors
-        ?._form?.[0]
-    ).toMatch(/no longer exists/i);
+    // Unknown == hidden: the lead wall answers with notFound() (ADR-049).
+    await expect(
+      createLeadTask("ghost", captureInitialState, taskForm())
+    ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
     await prisma.lead.update({ where: { id: leadId }, data: { stage: "converted" } });
     expect(
       (await createLeadTask(leadId, captureInitialState, taskForm())).errors

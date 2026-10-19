@@ -29,11 +29,14 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { logActivity } from "@/lib/activity-log";
 import { requirePermission } from "@/lib/permission-check";
 import { runConflictMatcher } from "@/lib/conflict-check";
+import { assertLeadAccess } from "@/lib/lead-access";
 
 export async function runLeadConflictCheck(
   leadId: string
 ): Promise<{ ok: boolean; error?: string; severity?: string }> {
   await requirePermission("intake.conflict_check.run");
+  // Restricted intake: 404 unless the viewer may see this lead (ADR-049).
+  await assertLeadAccess(leadId);
   const actorId = await getCurrentUserId();
 
   const lead = await prisma.lead.findUnique({
@@ -112,6 +115,8 @@ export async function overrideLeadConflictCheck(
   formData: FormData
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("intake.conflict_check.override");
+  // Restricted intake: 404 unless the viewer may see this lead (ADR-049).
+  await assertLeadAccess(leadId);
   const actorId = await getCurrentUserId();
 
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;

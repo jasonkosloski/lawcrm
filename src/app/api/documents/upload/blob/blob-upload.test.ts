@@ -38,6 +38,9 @@ vi.mock("@/lib/prisma", () => ({
     $queryRaw: vi.fn(),
   },
 }));
+vi.mock("@/lib/lead-access", () => ({
+  canAccessLead: vi.fn(async () => true),
+}));
 vi.mock("@/lib/matter-access", () => ({
   canAccessMatter: vi.fn(async () => true),
 }));
@@ -57,6 +60,7 @@ import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
 import { canAccessMatter } from "@/lib/matter-access";
+import { canAccessLead } from "@/lib/lead-access";
 import { resolveRecordsUpload } from "@/lib/records-requests/folder";
 import { revalidatePath } from "next/cache";
 import {
@@ -544,6 +548,14 @@ describe("lead scope — onBeforeGenerateToken", () => {
     const err = await tokenError(KEY, LEAD_PAYLOAD);
     expect(err.status).toBe(409);
     expect(err.message).toMatch(/already converted/);
+  });
+
+  test("a restricted lead the uploader isn't on -> 404, no token (ADR-049)", async () => {
+    wireLeadGates();
+    vi.mocked(canAccessLead).mockResolvedValueOnce(false);
+    const err = await tokenError(KEY, LEAD_PAYLOAD);
+    expect(err.status).toBe(404);
+    expect(err.message).toBe("Lead not found.");
   });
 
   test("an unknown lead -> 404 Lead not found.", async () => {

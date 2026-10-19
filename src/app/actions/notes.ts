@@ -77,6 +77,7 @@ import {
   isEffectivelyEmpty,
   sanitizeUserHtml as sanitize,
 } from "@/lib/sanitize-html";
+import { assertLeadAccess } from "@/lib/lead-access";
 
 const noteSchema = z.object({
   content: z.string().max(200_000, "Note is too long"),
@@ -370,6 +371,8 @@ export async function createLeadNote(
   formData: FormData
 ): Promise<NoteFormState> {
   await requirePermission("notes.create");
+  // Restricted intake: 404 unless the viewer may see this lead (ADR-049).
+  await assertLeadAccess(leadId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = noteSchema.safeParse(raw);
   if (!parsed.success) {

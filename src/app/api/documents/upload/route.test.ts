@@ -37,6 +37,9 @@ vi.mock("@/lib/prisma", () => ({
     $queryRaw: vi.fn(),
   },
 }));
+vi.mock("@/lib/lead-access", () => ({
+  canAccessLead: vi.fn(async () => true),
+}));
 vi.mock("@/lib/matter-access", () => ({
   canAccessMatter: vi.fn(async () => true),
 }));
@@ -61,6 +64,7 @@ import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
 import { canAccessMatter } from "@/lib/matter-access";
+import { canAccessLead } from "@/lib/lead-access";
 import { resolveRecordsUpload } from "@/lib/records-requests/folder";
 import { revalidatePath } from "next/cache";
 import {
@@ -487,6 +491,17 @@ describe("POST /api/documents/upload — intake lead scope", () => {
       false
     );
     expect(vi.mocked(logActivity).mock.calls[0]![0].matterId).toBeNull();
+  });
+
+  test("a restricted lead the uploader isn't on -> 404 before any byte is stored (ADR-049)", async () => {
+    wireLead();
+    vi.mocked(canAccessLead).mockResolvedValueOnce(false);
+    const res = await POST(
+      await makeRequest(fdWith({ leadId: "l1" }, [{ name: "a.pdf" }]))
+    );
+    expect(res.status).toBe(404);
+    expect(mockedStore).not.toHaveBeenCalled();
+    expect(mockedCreate).not.toHaveBeenCalled();
   });
 
   test("a lead folder is looked up scoped by leadId", async () => {

@@ -230,6 +230,20 @@ export async function assertOptionalMatterAccess(
   return assertMatterAccess(matterId);
 }
 
+/**
+ * Guard for a row the caller has already loaded that may sit on a
+ * matter OR an intake lead (time entry, flagged moment's document):
+ * asserts whichever scope is set, passes a firm-wide row. Returns the
+ * user id. Never wrap in try/catch.
+ */
+export async function assertRecordAccess(row: {
+  matterId?: string | null;
+  leadId?: string | null;
+}): Promise<string> {
+  if (row.leadId) await assertLeadAccess(row.leadId);
+  return assertOptionalMatterAccess(row.matterId);
+}
+
 // ── Child records reached by their own id ───────────────────────────────
 
 const CHILD_RESOLVERS = {

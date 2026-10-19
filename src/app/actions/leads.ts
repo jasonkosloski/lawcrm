@@ -60,6 +60,7 @@ import type {
   DeclineLeadFormState,
 } from "@/lib/lead-conversion-form";
 import { LEAD_SOURCES, type LeadStage } from "@/lib/constants/lead-stage";
+import { assertLeadAccess } from "@/lib/lead-access";
 
 // Stage writes/compares below are typed against the centralized
 // LeadStage union (src/lib/constants/lead-stage.ts) so a typo can't
@@ -268,6 +269,8 @@ export async function convertLeadToMatter(
   // create path so the rule is single: "creating a matter requires
   // matters.create, regardless of the entry point."
   await requirePermission("matters.create");
+  // Restricted intake: 404 unless the viewer may see this lead (ADR-049).
+  await assertLeadAccess(leadId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = convertSchema.safeParse(raw);
   if (!parsed.success) {
@@ -802,6 +805,8 @@ export async function declineLead(
   // authenticated user. Fail-closed until the key is granted via
   // the role matrix (admins always pass).
   const actorId = await requirePermission("intake.decline");
+  // Restricted intake: 404 unless the viewer may see this lead (ADR-049).
+  await assertLeadAccess(leadId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = declineSchema.safeParse(raw);
   if (!parsed.success) {

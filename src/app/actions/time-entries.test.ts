@@ -938,13 +938,10 @@ describe("createLeadTimeEntry", () => {
     expect(await prisma.timeEntry.count()).toBe(0);
   });
 
-  test("errors when the lead no longer exists", async () => {
-    const res = await createLeadTimeEntry(
-      "nonexistent-lead",
-      timeEntryInitialState,
-      buildCreateForm()
-    );
-    expect(res.status).toBe("error");
+  test("404s when the lead no longer exists (lead wall, ADR-049)", async () => {
+    await expect(
+      createLeadTimeEntry("nonexistent-lead", timeEntryInitialState, buildCreateForm())
+    ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
     expect(await prisma.timeEntry.count()).toBe(0);
   });
 

@@ -124,9 +124,8 @@ describe("runLeadConflictCheck", () => {
   });
 
   test("unknown lead → not found, nothing written", async () => {
-    const res = await runLeadConflictCheck("nope");
-    expect(res.ok).toBe(false);
-    expect(res.error).toMatch(/not found/i);
+    // Unknown == hidden: the lead wall answers with notFound() (ADR-049).
+    await expect(runLeadConflictCheck("nope")).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
     expect(await prisma.activityLog.count()).toBe(0);
   });
 
@@ -278,12 +277,9 @@ describe("overrideLeadConflictCheck", () => {
   );
 
   test("unknown lead → not found", async () => {
-    const res = await overrideLeadConflictCheck(
-      "nope",
-      overrideForm("A perfectly good reason")
-    );
-    expect(res.ok).toBe(false);
-    expect(res.error).toMatch(/not found/i);
+    await expect(
+      overrideLeadConflictCheck("nope", overrideForm("A perfectly good reason"))
+    ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
   });
 
   test("is gated on intake.conflict_check.override", async () => {

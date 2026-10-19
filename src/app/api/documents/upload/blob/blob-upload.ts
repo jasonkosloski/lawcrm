@@ -44,6 +44,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessMatter } from "@/lib/matter-access";
+import { canAccessLead } from "@/lib/lead-access";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { scopeWhere, type RecordScope } from "@/lib/record-scope";
@@ -196,7 +197,13 @@ export const onBeforeGenerateToken: HandleUploadOptions["onBeforeGenerateToken"]
         where: { id: payload.leadId },
         select: { id: true },
       });
-      if (!lead) throw new UploadTokenError(404, "Lead not found.");
+      // Lead wall (ADR-049): hidden == missing, before any token.
+      if (
+        !lead ||
+        !(await canAccessLead(session.user.id, payload.leadId))
+      ) {
+        throw new UploadTokenError(404, "Lead not found.");
+      }
       scope = { kind: "lead", leadId: lead.id };
       const readOnly = await assertScopeWritable(scope);
       if (readOnly) throw new UploadTokenError(409, readOnly);

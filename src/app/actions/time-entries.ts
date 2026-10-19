@@ -29,7 +29,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { assertMatterAccess, assertOptionalMatterAccess } from "@/lib/matter-access";
+import { assertMatterAccess, assertRecordAccess } from "@/lib/matter-access";
 import { roundMoney } from "@/lib/money";
 import { getCurrentUserId } from "@/lib/current-user";
 // Date-only input ("YYYY-MM-DD") is stored as UTC midnight and read
@@ -45,6 +45,7 @@ import type { TimeEntryFormState } from "@/lib/time-entry-constants";
 import { timeEntryFields } from "@/lib/time-entry-schema";
 import { assertTimeEntryScope } from "@/lib/time-entry-scope";
 import type { LeadStage } from "@/lib/constants/lead-stage";
+import { assertLeadAccess } from "@/lib/lead-access";
 
 // Typed against the centralized LeadStage union so a typo can't
 // silently let post-conversion intake logging through (leads.ts
@@ -200,6 +201,8 @@ export async function createLeadTimeEntry(
   formData: FormData
 ): Promise<TimeEntryFormState> {
   await requirePermission("time_entries.create");
+  // Restricted intake: 404 unless the viewer may see this lead (ADR-049).
+  await assertLeadAccess(leadId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = leadTimeEntrySchema.safeParse(raw);
   if (!parsed.success) {
@@ -344,7 +347,7 @@ export async function updateTimeEntry(
       values: raw,
     };
   }
-  await assertOptionalMatterAccess(entry.matterId);
+  await assertRecordAccess(entry);
 
   // Author can always edit their own; otherwise require the
   // `_any` permission. Admins pass either path.
@@ -481,7 +484,7 @@ export async function setTimeEntryStatus(
     },
   });
   if (!entry) return { ok: false, error: "Time entry not found" };
-  await assertOptionalMatterAccess(entry.matterId);
+  await assertRecordAccess(entry);
 
   // Status changes are still edits. Author bypass; otherwise gate.
   const actorId = await getCurrentUserId();
@@ -551,7 +554,7 @@ export async function deleteTimeEntry(
     },
   });
   if (!entry) return { ok: false, error: "Time entry not found" };
-  await assertOptionalMatterAccess(entry.matterId);
+  await assertRecordAccess(entry);
   // Author can always delete their own unbilled entries; otherwise
   // gate on time_entries.delete_any.
   const actorId = await getCurrentUserId();

@@ -23,7 +23,7 @@ const SCOPE_IDENT =
 const SCOPE_FORM_KEY = /\bget\(\s*["'`](?:matterId|matter_id|matter)["'`]\s*\)/;
 
 const ACCESS_CALL =
-  /\b(?:assertMatterAccess|assertOptionalMatterAccess|assertChildMatterAccess|assertMatterAccessResult|assertAnyMatterAccess|assertMattersAccess|assertScopeAccess)\s*\(/;
+  /\b(?:assertMatterAccess|assertOptionalMatterAccess|assertRecordAccess|assertChildMatterAccess|assertMatterAccessResult|assertAnyMatterAccess|assertMattersAccess|assertScopeAccess)\s*\(/;
 
 /**
  * "file.ts:functionName" -> reason. Keep tiny; every entry needs a
@@ -191,5 +191,58 @@ export async function b() { return 1; }
       `export async function f(name: string) { await prisma.tag.create({}); }`
     );
     expect(checkFunction(fn)).toBeNull();
+  });
+});
+
+// ── Lead wall (restricted intake, ADR-049) ──────────────────────────────
+//
+// An action that references a `leadId` must call a LEAD-AWARE helper:
+// `assertLeadAccess`, `assertScopeAccess` (lead branch) or
+// `assertChildMatterAccess` (routes lead children to the lead wall).
+// `assertOptionalMatterAccess` / `assertMatterAccess` do not count.
+
+const LEAD_IDENT = /\bleadId\b/;
+const LEAD_ACCESS_CALL =
+  /\b(?:assertLeadAccess|assertScopeAccess|assertChildMatterAccess|assertRecordAccess)\s*\(/;
+
+/** "file.ts:functionName" -> reason. */
+const LEAD_ALLOWLIST: Record<string, string> = {};
+
+export function checkLeadFunction(fn: ExportedFn): string | null {
+  // `leadId: null` is a matter-only write, not a lead reference.
+  const body = fn.body.replace(/\bleadId\s*:\s*null\b/g, "");
+  if (!LEAD_IDENT.test(body)) return null;
+  if (LEAD_ACCESS_CALL.test(fn.body)) return null;
+  return "references a leadId but never calls a lead-aware access helper";
+}
+
+describe("lead-access guards on server actions", () => {
+  test("the scan sees the lead actions", () => {
+    const names = cases.map(([n]) => n);
+    expect(names).toContain("leads.ts:convertLeadToMatter");
+    expect(names).toContain("notes.ts:createLeadNote");
+  });
+
+  test.each(cases)("%s", (name, fn) => {
+    if (LEAD_ALLOWLIST[name]) return;
+    expect(checkLeadFunction(fn), name).toBeNull();
+  });
+
+  test("the allowlist only names functions that exist", () => {
+    const names = new Set<string>(cases.map(([n]) => n));
+    for (const entry of Object.keys(LEAD_ALLOWLIST)) {
+      expect(names.has(entry), entry).toBe(true);
+    }
+  });
+
+  test("self-check: assertOptionalMatterAccess does not satisfy the lead rule", () => {
+    const [fn] = exportedAsyncFunctions(
+      `export async function f(leadId: string) { await assertOptionalMatterAccess(null); }`
+    );
+    expect(checkLeadFunction(fn)).not.toBeNull();
+    const [ok] = exportedAsyncFunctions(
+      `export async function f(leadId: string) { await assertLeadAccess(leadId); }`
+    );
+    expect(checkLeadFunction(ok)).toBeNull();
   });
 });

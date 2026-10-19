@@ -64,6 +64,7 @@ import { getEffectiveCalendarDefaults } from "@/lib/calendar-defaults";
 import { textareaToHtml } from "@/lib/text-to-html";
 import { scopePaths } from "@/lib/record-scope";
 import type { LeadStage } from "@/lib/constants/lead-stage";
+import { assertLeadAccess } from "@/lib/lead-access";
 
 // ── Shared helpers ──────────────────────────────────────────────────────
 
@@ -788,6 +789,8 @@ export async function createLeadTask(
   formData: FormData
 ): Promise<CaptureFormState> {
   await requirePermission("tasks.create");
+  // Restricted intake: 404 unless the viewer may see this lead (ADR-049).
+  await assertLeadAccess(leadId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = taskSchema.safeParse(raw);
   if (!parsed.success) {
@@ -867,6 +870,8 @@ export async function createLeadEvent(
   formData: FormData
 ): Promise<CaptureFormState> {
   await requirePermission("events.create");
+  // Restricted intake: 404 unless the viewer may see this lead (ADR-049).
+  await assertLeadAccess(leadId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = eventSchema.safeParse(raw);
   if (!parsed.success) {
