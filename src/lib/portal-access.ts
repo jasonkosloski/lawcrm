@@ -49,7 +49,7 @@ export const getPortalIdentity = cache(
       contactId: identity.contactId,
       email: identity.email,
     };
-  },
+  }
 );
 
 /**
@@ -69,7 +69,7 @@ export async function requirePortalIdentity(): Promise<PortalIdentityContext> {
 /** notFound() unless the identity holds live (unrevoked) access to the matter. */
 export async function assertPortalMatterAccess(
   identityId: string,
-  matterId: string,
+  matterId: string
 ): Promise<void> {
   const row = await prisma.portalMatterAccess.findFirst({
     where: { identityId, matterId, revokedAt: null },
