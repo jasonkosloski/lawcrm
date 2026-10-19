@@ -45,6 +45,7 @@ describe("sendEmail", () => {
 
   it("resend non-2xx returns ok:false without throwing", async () => {
     vi.stubEnv("RESEND_API_KEY", "k");
+    vi.stubEnv("EMAIL_FROM", "a@b.test");
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -56,6 +57,36 @@ describe("sendEmail", () => {
     );
     const res = await sendEmail(msg);
     expect(res.ok).toBe(false);
+    expect(JSON.stringify(res)).toContain("422");
+  });
+
+  it("production without RESEND_API_KEY refuses and logs nothing", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("RESEND_API_KEY", " ");
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const res = await sendEmail(msg);
+    expect(res).toEqual({ ok: false, error: "Email is not configured." });
+    expect(info).not.toHaveBeenCalled();
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("missing EMAIL_FROM returns ok:false without calling fetch", async () => {
+    vi.stubEnv("RESEND_API_KEY", "k");
+    vi.stubEnv("EMAIL_FROM", " ");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const res = await sendEmail(msg);
+    expect(res).toEqual({ ok: false, error: "EMAIL_FROM is not set." });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejected fetch returns ok:false instead of throwing", async () => {
+    vi.stubEnv("RESEND_API_KEY", "k");
+    vi.stubEnv("EMAIL_FROM", "a@b.test");
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("boom")));
+    const res = await sendEmail(msg);
+    expect(res).toEqual({ ok: false, error: "boom" });
   });
 
   it("captureEmails records messages instead of sending", async () => {

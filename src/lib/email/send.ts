@@ -1,6 +1,7 @@
 import "server-only";
 import {
   consoleDriver,
+  notConfiguredDriver,
   resendDriver,
   type EmailDriver,
   type EmailResult,
@@ -21,8 +22,11 @@ export function __setDriverForTests(driver: EmailDriver | null): void {
 
 function pickDriver(): EmailDriver {
   if (testDriver) return testDriver;
-  const key = process.env.RESEND_API_KEY;
-  return key ? resendDriver(key) : consoleDriver;
+  const key = process.env.RESEND_API_KEY?.trim();
+  if (key) return resendDriver(key);
+  // The console driver prints message bodies (including sign-in links); never in production.
+  if (process.env.NODE_ENV === "production") return notConfiguredDriver;
+  return consoleDriver;
 }
 
 /** Sends one email. RESEND_API_KEY set -> Resend, otherwise console log. Never throws. */
