@@ -44,3 +44,23 @@ describe("DocumentRowActions sharing", () => {
     expect(setDocumentsClientShare).toHaveBeenCalledWith(["d1"], false);
   });
 });
+
+describe("DocumentRowActions move warning", () => {
+  const folders = [{ id: "a", parentId: null, name: "A", depth: 1 }];
+  const visibilityFolders = [{ id: "a", parentId: null, clientShared: true }];
+
+  test("an email's attachments move with it, so they count in the warning", async () => {
+    await open({
+      canMove: true,
+      folders,
+      visibilityFolders,
+      attachmentShares: [
+        { clientShare: null, folderId: null, status: "active" },
+        { clientShare: null, folderId: null, status: "active" },
+      ],
+    });
+    await userEvent.click(screen.getByText("Move to…"));
+    await userEvent.click(screen.getByRole("button", { name: /^A$/ }));
+    expect(screen.getByText("3 files will become visible to the client.")).toBeInTheDocument();
+  });
+});

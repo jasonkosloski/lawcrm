@@ -230,6 +230,11 @@ export async function DocumentsBrowser({
             canShare={canShare}
             isShared={isEffectivelyShared(d, sharedFolders)}
             clientShare={d.clientShare}
+            attachmentShares={attachments.map((a) => ({
+              clientShare: a.clientShare,
+              folderId: a.folderId,
+              status: a.status,
+            }))}
             visibilityFolders={isMatter ? folders : undefined}
           />
         </TableCell>

@@ -57,6 +57,7 @@ export function DocumentRowActions({
   canShare = false,
   isShared = false,
   clientShare = null,
+  attachmentShares = [],
   visibilityFolders,
 }: {
   documentId: string;
@@ -75,6 +76,9 @@ export function DocumentRowActions({
   isShared?: boolean;
   /** The document's own override, for the move warning. */
   clientShare?: string | null;
+  /** An email's extracted attachments: moving the email moves them
+   *  too, so the move warning counts them. */
+  attachmentShares?: { clientShare: string | null; folderId: string | null; status: string }[];
   /** Folder share flags; when given, the move dialog warns on a
    *  client-visibility change. */
   visibilityFolders?: { id: string; parentId: string | null; clientShared: boolean }[];
@@ -190,7 +194,7 @@ export function DocumentRowActions({
             visibilityFolders
               ? (target) =>
                   moveWarning(
-                    [{ clientShare, folderId: currentFolderId }],
+                    [{ clientShare, folderId: currentFolderId }, ...attachmentShares],
                     target,
                     visibilityFolders
                   )
