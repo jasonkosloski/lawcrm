@@ -332,6 +332,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   // flood the recent-activity feed with 40 rows.
   await logActivity({
     matterId: scope.kind === "matter" ? scope.matterId : null,
+    leadId: scope.kind === "lead" ? scope.leadId : null,
     userId,
     type: "document",
     title:

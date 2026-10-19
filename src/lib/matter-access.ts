@@ -119,14 +119,18 @@ export async function matterAccessWhere(
   const scope = await resolveScope(userId);
   if (!scope.active) return NO_MATTERS;
   if (scope.all) return {};
-  const onTeam: Prisma.MatterWhereInput = {
-    teamMembers: { some: { userId, removedAt: null } },
-  };
   if (scope.firmMode) {
     if (!(await anyRestrictedMatter())) return {};
-    return { OR: [{ restricted: false }, onTeam] };
+    // "Unrestricted OR on the team", written as a NOT so callers that
+    // spread this into a where with its own OR don't clobber it.
+    return {
+      NOT: {
+        restricted: true,
+        teamMembers: { none: { userId, removedAt: null } },
+      },
+    };
   }
-  return onTeam;
+  return { teamMembers: { some: { userId, removedAt: null } } };
 }
 
 /**

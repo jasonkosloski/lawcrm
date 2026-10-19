@@ -82,6 +82,7 @@ export async function runLeadConflictCheck(
   // Activity log is firm-scope here.
   await logActivity({
     matterId: null,
+    leadId,
     userId: actorId,
     type: "filing",
     // ActivityLog has no lead reference, so the lead is named in the
@@ -158,6 +159,7 @@ export async function overrideLeadConflictCheck(
 
   await logActivity({
     matterId: null,
+    leadId,
     userId: actorId,
     type: "filing",
     title: `Conflict check overridden on lead ${lead.contact?.name ?? lead.name}`,

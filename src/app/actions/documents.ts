@@ -139,6 +139,7 @@ export async function deleteDocument(
   // must not leave the trail empty or the list stale.
   await logActivity({
     matterId: doc.matterId,
+    leadId: doc.leadId,
     userId,
     type: "document",
     title: "Document deleted",
@@ -330,6 +331,7 @@ export async function copyDocumentToFolder(
 
   await logActivity({
     matterId: doc.matterId,
+    leadId: doc.leadId,
     userId,
     type: "document",
     title: "Document copied",

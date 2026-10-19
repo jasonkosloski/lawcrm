@@ -504,6 +504,7 @@ export const onUploadCompleted: NonNullable<
   // Known trade-off (ADR-015): a 40-file production writes 40 rows.
   await logActivity({
     matterId: scope.kind === "matter" ? scope.matterId : null,
+    leadId: scope.kind === "lead" ? scope.leadId : null,
     userId: t.userId,
     type: "document",
     title: "Document uploaded",

@@ -665,6 +665,7 @@ export async function generateDocumentFromTemplate(
 
   await logActivity({
     matterId: scope.kind === "matter" ? scope.matterId : null,
+    leadId: scope.kind === "lead" ? scope.leadId : null,
     userId,
     type: "document",
     title: "Document generated from template",

@@ -9,6 +9,8 @@
 import { cache } from "react";
 import { paginate, type Page } from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUserId } from "@/lib/current-user";
+import { leadAccessWhere } from "@/lib/lead-access";
 import { LEAD_CLOSED_STAGES } from "@/lib/constants/lead-stage";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import {
@@ -119,11 +121,14 @@ export async function listLeads(
   // Two queries so closed history can never push an older, still-open
   // lead out of the cap (the old single newest-200 query did, while the
   // header's uncapped activeCount still counted it).
-  const closedWhere = { stage: { in: closedStages } };
+  // Restricted intake (ADR-049): hidden leads are neither listed nor
+  // counted. The fragment is a single NOT key, safe to spread.
+  const access = await leadAccessWhere(await getCurrentUserId());
+  const closedWhere = { ...access, stage: { in: closedStages } };
   const [tz, active, closed] = await Promise.all([
     getCurrentUserTimeZone(),
     prisma.lead.findMany({
-      where: { stage: { notIn: closedStages } },
+      where: { ...access, stage: { notIn: closedStages } },
       // One past the bound detects that it was hit.
       take: ACTIVE_LEADS_SAFETY_CAP + 1,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -284,20 +289,25 @@ export async function getLeadSummary(now: Date = new Date()) {
   const [y, m, d] = todayKey(tz, now).split("-").map(Number);
   const startOfToday = instantInTz(y, m, d, 0, 0, tz);
   const openStage = { notIn: [...LEAD_CLOSED_STAGES] };
+  // Same visibility as the queue it heads (ADR-049).
+  const access = await leadAccessWhere(await getCurrentUserId());
 
   const [activeCount, newTodayCount, conflictCount, convertedCount] =
     await Promise.all([
-      prisma.lead.count({ where: { stage: openStage } }),
-      prisma.lead.count({ where: { createdAt: { gte: startOfToday } } }),
+      prisma.lead.count({ where: { ...access, stage: openStage } }),
+      prisma.lead.count({
+        where: { ...access, createdAt: { gte: startOfToday } },
+      }),
       // Open leads only: a flagged lead that was later converted or
       // declined must not inflate the "N conflict" header forever.
       prisma.lead.count({
         where: {
+          ...access,
           stage: openStage,
           conflictCheck: { in: ["warn", "conflict"] },
         },
       }),
-      prisma.lead.count({ where: { stage: "converted" } }),
+      prisma.lead.count({ where: { ...access, stage: "converted" } }),
     ]);
 
   return { activeCount, newTodayCount, conflictCount, convertedCount };

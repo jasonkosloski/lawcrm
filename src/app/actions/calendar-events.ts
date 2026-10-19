@@ -749,6 +749,7 @@ export async function updateCalendarEvent(
       event.endTime.getTime() !== endDate.getTime();
     await logActivity({
       matterId: event.matterId,
+      leadId: event.leadId,
       userId: viewerId,
       type: "event",
       title: moved ? "Event rescheduled" : "Event updated",
@@ -841,6 +842,7 @@ export async function deleteCalendarEvent(
   if (event.matterId) {
     await logActivity({
       matterId: event.matterId,
+      leadId: event.leadId,
       userId: viewerId,
       type: "event",
       title: "Event deleted",
@@ -1210,6 +1212,7 @@ export async function moveCalendarEvent(
   if (event.matterId) {
     await logActivity({
       matterId: event.matterId,
+      leadId: event.leadId,
       userId: viewerId,
       type: "event",
       title: "Event rescheduled",

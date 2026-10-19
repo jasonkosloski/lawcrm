@@ -268,6 +268,7 @@ export async function createLeadTimeEntry(
   // Lead-scoped: no matter to hang the row on (matterId null).
   await logActivity({
     matterId: null,
+    leadId,
     userId,
     type: "time_entry",
     title: `Intake time logged · ${parsed.data.hours}h`,
@@ -449,6 +450,7 @@ export async function updateTimeEntry(
   }
   await logActivity({
     matterId: entry.matterId,
+    leadId: entry.leadId,
     userId: actorId,
     type: "time_entry",
     title: `Time entry edited · ${newHours}h`,
@@ -529,6 +531,7 @@ export async function setTimeEntryStatus(
   revalidateEntryScope(entry);
   await logActivity({
     matterId: entry.matterId,
+    leadId: entry.leadId,
     userId: actorId,
     type: "time_entry",
     title: `Time entry status changed · ${entry.status} → ${status}`,
@@ -586,6 +589,7 @@ export async function deleteTimeEntry(
   revalidateEntryScope(entry);
   await logActivity({
     matterId: entry.matterId,
+    leadId: entry.leadId,
     userId: actorId,
     type: "time_entry",
     title: `Time entry deleted · ${entry.hours}h`,

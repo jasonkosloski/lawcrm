@@ -169,6 +169,7 @@ export async function createFolder(
 
   await logActivity({
     matterId: scope.kind === "matter" ? scope.matterId : null,
+    leadId: scope.kind === "lead" ? scope.leadId : null,
     userId,
     type: "document",
     title: "Folder created",
@@ -237,6 +238,7 @@ export async function renameFolder(
 
   await logActivity({
     matterId: folder.matterId,
+    leadId: folder.leadId,
     userId,
     type: "document",
     title: "Folder renamed",
@@ -353,6 +355,7 @@ export async function deleteFolder(id: string): Promise<FolderActionResult> {
   const { folder, parentName, childCount, docsMoved } = outcome;
   await logActivity({
     matterId: folder.matterId,
+    leadId: folder.leadId,
     userId,
     type: "document",
     title: "Folder deleted",
@@ -584,6 +587,7 @@ export async function moveFolder(
 
   await logActivity({
     matterId: folder.matterId,
+    leadId: folder.leadId,
     userId,
     type: "document",
     title: "Folder moved",

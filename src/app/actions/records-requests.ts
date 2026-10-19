@@ -192,6 +192,7 @@ export async function createRecordsRequest(
 
   await logActivity({
     matterId: scope.kind === "matter" ? scope.matterId : null,
+    leadId: scope.kind === "lead" ? scope.leadId : null,
     userId,
     type: "records",
     title: "Records request created",
@@ -301,6 +302,7 @@ export async function updateRecordsRequest(
 
   await logActivity({
     matterId: row.matterId,
+    leadId: row.leadId,
     userId,
     type: "records",
     title: "Records request updated",
@@ -397,6 +399,7 @@ export async function markRecordsRequestSent(
 
   await logActivity({
     matterId: row.matterId,
+    leadId: row.leadId,
     userId,
     type: "records",
     title: "Records request sent",
@@ -441,6 +444,7 @@ export async function logRecordsFollowUp(
 
   await logActivity({
     matterId: row.matterId,
+    leadId: row.leadId,
     userId,
     type: "records",
     title: "Records follow-up logged",
@@ -554,6 +558,7 @@ export async function setRecordsRequestStatus(
 
   await logActivity({
     matterId: row.matterId,
+    leadId: row.leadId,
     userId,
     type: "records",
     title: result.reopen
@@ -594,6 +599,7 @@ export async function deleteRecordsRequest(
 
   await logActivity({
     matterId: row.matterId,
+    leadId: row.leadId,
     userId,
     type: "records",
     title: "Records request deleted",
@@ -860,6 +866,7 @@ export async function linkRecordsDocuments(
 
   await logActivity({
     matterId: row.matterId,
+    leadId: row.leadId,
     userId,
     type: "records",
     title: "Documents linked to records request",
@@ -890,6 +897,7 @@ export async function unlinkRecordsDocument(
   });
   await logActivity({
     matterId: doc.matterId,
+    leadId: doc.leadId,
     userId,
     type: "records",
     title: "Document unlinked from records request",

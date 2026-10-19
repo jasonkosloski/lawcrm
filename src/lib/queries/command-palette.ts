@@ -15,6 +15,7 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { matterAccessWhere } from "@/lib/matter-access";
+import { leadAccessWhere } from "@/lib/lead-access";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { LEAD_CLOSED_STAGES } from "@/lib/constants/lead-stage";
 
@@ -85,6 +86,7 @@ export async function getPaletteData(): Promise<PaletteData> {
   // pulling whole rows (contact addresses/notes, lead assessments)
   // is serialization weight for nothing.
   const access = await matterAccessWhere(userId);
+  const leadAccess = await leadAccessWhere(userId);
   const [canViewReports, matters, contacts, leads, users] = await Promise.all([
     currentUserHasPermission("reports.view"),
     prisma.matter.findMany({
@@ -115,7 +117,7 @@ export async function getPaletteData(): Promise<PaletteData> {
       take: PALETTE_CAP,
     }),
     prisma.lead.findMany({
-      where: { stage: { notIn: [...LEAD_CLOSED_STAGES] } },
+      where: { ...leadAccess, stage: { notIn: [...LEAD_CLOSED_STAGES] } },
       select: { id: true, name: true, email: true, stage: true },
       orderBy: { updatedAt: "desc" },
       take: PALETTE_CAP,

@@ -277,6 +277,7 @@ export async function createFlaggedMoment(
   revalidateFlagSurfaces(scopeOf(doc), doc.id);
   await logActivity({
     matterId: doc.matterId,
+    leadId: doc.leadId,
     userId,
     type: "evidence",
     title: createTitle(kind, anchor),
@@ -397,6 +398,7 @@ export async function updateFlaggedMoment(
     // flag this entry (userId = the editor) is the audit trail.
     await logActivity({
       matterId: flag.document.matterId,
+      leadId: flag.document.leadId,
       userId: actorId,
       type: "evidence",
       title:
@@ -460,6 +462,7 @@ export async function deleteFlaggedMoment(
     const kind = flagAnchorKind(flag);
     await logActivity({
       matterId: flag.document.matterId,
+      leadId: flag.document.leadId,
       userId: actorId,
       type: "evidence",
       title:

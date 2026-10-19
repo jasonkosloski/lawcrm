@@ -210,6 +210,7 @@ export async function createLead(
 
   await logActivity({
     matterId: null,
+    leadId: lead.id,
     userId: actorId,
     type: "filing",
     title: `New intake: ${lead.name}`,
@@ -865,6 +866,7 @@ export async function declineLead(
   // the conflict-check actions.
   await logActivity({
     matterId: null,
+    leadId,
     userId: actorId,
     type: "filing",
     // "filing" would label this "Documents" in the feeds.

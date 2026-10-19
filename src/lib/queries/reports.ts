@@ -115,6 +115,9 @@ export async function getPipelineReport(tz: string): Promise<PipelineReport> {
 
   const [leadGroups, convertedCandidates, matterGroups, areas] =
     await Promise.all([
+      // Firm-wide counts on purpose: reports.view aggregates ignore
+      // the lead wall, as they ignore the matter wall (ADR-039/049).
+      // No restricted lead is named here.
       prisma.lead.groupBy({ by: ["stage"], _count: true }),
       // updatedAt >= conversion time, so this is a superset of the
       // leads converted this quarter; the matter's createdAt narrows

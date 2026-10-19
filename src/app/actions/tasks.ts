@@ -185,6 +185,7 @@ export async function setTaskStatus(
     const userId = await getCurrentUserId();
     await logActivity({
       matterId: task.matterId,
+      leadId: task.leadId,
       userId,
       type: "task_complete",
       title: status === "cancelled" ? "Task cancelled" : "Task completed",
@@ -194,6 +195,7 @@ export async function setTaskStatus(
     const userId = await getCurrentUserId();
     await logActivity({
       matterId: task.matterId,
+      leadId: task.leadId,
       userId,
       type: "task",
       title: "Task reopened",
@@ -269,6 +271,7 @@ export async function deleteTask(
   // Title captured before the delete — the row is gone now.
   await logActivity({
     matterId: task.matterId,
+    leadId: task.leadId,
     userId,
     type: "task",
     title: "Task deleted",
@@ -459,6 +462,7 @@ export async function updateTask(
   if (changes.length > 0) {
     await logActivity({
       matterId: task.matterId,
+      leadId: task.leadId,
       userId,
       type: !wasComplete && isComplete ? "task_complete" : "task",
       title:

@@ -5,7 +5,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-import { optionalMatterAccessClause } from "@/lib/matter-access";
+import { optionalRecordAccessClause } from "@/lib/matter-access";
 import { scopeBasePath, scopeOf, scopeWhere, type RecordScope } from "@/lib/record-scope";
 import {
   addDaysToKey,
@@ -246,7 +246,7 @@ export async function getMyRecordsToChase(tz: string): Promise<RecordsChaseItem[
   const today = todayKey(tz);
   const todayStart = parseDateOnly(today)!;
   const windowEnd = parseDateOnly(addDaysToKey(today, CHASE_WINDOW_DAYS + 1))!;
-  const accessOpt = await optionalMatterAccessClause(viewerId);
+  const accessOpt = await optionalRecordAccessClause(viewerId);
   const rows = await prisma.recordsRequest.findMany({
     where: {
       AND: [

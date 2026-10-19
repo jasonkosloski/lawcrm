@@ -68,6 +68,11 @@ export type VisibilityInput = {
    *  omit it; every cross-matter surface (calendar, dashboard) must
    *  pass it. */
   matterAccessible?: boolean;
+  /** Intake lead scope, if any. */
+  leadId?: string | null;
+  /** Whether the viewer may see the event's lead (restricted intake,
+   *  ADR-049). Same contract as `matterAccessible`. */
+  leadAccessible?: boolean;
 };
 
 /** Per-event visibility values stored on `CalendarEvent.visibility`. */
@@ -98,6 +103,8 @@ export function canViewEventDetails(input: VisibilityInput): boolean {
   // creator's show-details default (an attendee invite must not punch
   // through the wall). Only the creator (above) is exempt.
   if (input.matterId && input.matterAccessible === false) return false;
+  // Lead wall: same rule for an event on a restricted lead.
+  if (input.leadId && input.leadAccessible === false) return false;
   // 2. Attendee.
   if (input.attendeeUserIds.includes(input.viewerId)) return true;
   // 3. Matter team.

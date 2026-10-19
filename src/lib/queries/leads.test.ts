@@ -16,6 +16,8 @@ const tzMock = vi.hoisted(() => ({ tz: "America/Denver" }));
 vi.mock("@/lib/current-user-tz", () => ({
   getCurrentUserTimeZone: vi.fn(async () => tzMock.tz),
 }));
+// The lead wall (ADR-049) resolves the viewer; a real active user.
+vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 
 import { prisma } from "@/lib/prisma";
 import {
@@ -26,7 +28,8 @@ import {
   sortIntakeQueue,
   statuteDaysRemaining,
 } from "@/lib/queries/leads";
-import { resetDb } from "@/test/integration-helpers";
+import { getCurrentUserId } from "@/lib/current-user";
+import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
 beforeAll(() => {
   expect(process.env.DATABASE_URL).toMatch(/lawcrm_test/);
@@ -35,6 +38,9 @@ beforeAll(() => {
 beforeEach(async () => {
   tzMock.tz = "America/Denver";
   await resetDb();
+  const { firmId } = await seedFirm();
+  const { userId } = await seedUser({ firmId });
+  vi.mocked(getCurrentUserId).mockResolvedValue(userId);
 });
 
 const lead = (data: {

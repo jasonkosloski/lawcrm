@@ -487,6 +487,7 @@ export async function createLeadNote(
   // pattern).
   await logActivity({
     matterId: null,
+    leadId,
     userId: currentUserId,
     type: "note",
     title: d.parentNoteId ? "Intake reply added" : "Intake note added",
@@ -523,6 +524,7 @@ export async function toggleNotePin(
   revalidateNoteScope(scope, note);
   await logActivity({
     matterId: activityMatterId(scope),
+    leadId: scope.kind === "lead" ? scope.leadId : null,
     userId: actorId,
     type: "note",
     title: note.isPinned ? "Note unpinned" : "Note pinned",
@@ -608,6 +610,7 @@ export async function deleteNote(
   revalidateNoteScope(scope, note);
   await logActivity({
     matterId: activityMatterId(scope),
+    leadId: scope.kind === "lead" ? scope.leadId : null,
     userId: actorId,
     type: "note",
     title: "Note deleted",
@@ -682,6 +685,7 @@ export async function updateNote(
   revalidateNoteScope(scope);
   await logActivity({
     matterId: activityMatterId(scope),
+    leadId: scope.kind === "lead" ? scope.leadId : null,
     userId: actorId,
     type: "note",
     title: "Note edited",

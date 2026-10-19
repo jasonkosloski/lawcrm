@@ -30,11 +30,13 @@ import {
   resolveActivityMoneyAccess,
 } from "@/lib/activity-money-filters";
 import { canViewEventDetails } from "@/lib/calendar-visibility";
+import { filterAccessibleLeadIds } from "@/lib/lead-access";
 import { visibleEmailThreadWhere } from "@/lib/email-visibility";
 import {
   filterAccessibleMatterIds,
   matterAccessWhere,
   optionalMatterAccessClause,
+  optionalRecordAccessClause,
 } from "@/lib/matter-access";
 import { TASK_CLOSED_STATUSES } from "@/lib/constants/task-status";
 import { TASK_PRIORITIES } from "@/lib/constants/priority";
@@ -246,6 +248,11 @@ export async function getTodayAgenda(tz: string): Promise<AgendaItem[]> {
     viewerId,
     events.flatMap((e) => (e.matter ? [e.matter.id] : []))
   );
+  // Lead wall (ADR-049): events on hidden leads are Busy as well.
+  const accessibleLeads = await filterAccessibleLeadIds(
+    viewerId,
+    events.flatMap((e) => (e.leadId ? [e.leadId] : []))
+  );
 
   // All-day rows lead the agenda, then timed events in start order
   // (Array.sort is stable, so the DB's startTime order is kept).
@@ -267,6 +274,8 @@ export async function getTodayAgenda(tz: string): Promise<AgendaItem[]> {
         .filter((id): id is string => !!id),
       matterTeamUserIds: e.matter?.teamMembers.map((t) => t.userId) ?? [],
       matterAccessible: e.matter ? accessibleMatters.has(e.matter.id) : true,
+      leadId: e.leadId,
+      leadAccessible: e.leadId ? accessibleLeads.has(e.leadId) : true,
     });
 
     // Busy scrub - identical to the calendar's: the time block stays,
@@ -314,9 +323,10 @@ export async function getRecentActivity(
     currentUserHasPermission("firm.view_activity"),
   ]);
   const viewerId = await getCurrentUserId();
-  // Matter wall: matter-linked rows only for accessible matters
-  // (firm-scope rows, matterId null, stay under their own gate below).
-  const activityAccess = await optionalMatterAccessClause(viewerId);
+  // Matter + lead walls: matter-linked rows only for accessible
+  // matters, lead-linked rows (ActivityLog.leadId) only for visible
+  // leads; firm-scope rows stay under their own gate below.
+  const activityAccess = await optionalRecordAccessClause(viewerId);
   const entries = await prisma.activityLog.findMany({
     where: {
       // Sign-in/password audit rows and firm-settings changes (practice
@@ -607,7 +617,7 @@ export async function getMyOpenTasks(tz: string): Promise<MyTasksGrouped> {
   const where = {
     ownerId: userId,
     status: { notIn: [...TASK_CLOSED_STATUSES] },
-    AND: await optionalMatterAccessClause(userId),
+    AND: await optionalRecordAccessClause(userId),
   };
 
   const [tasks, total, overdueCount] = await Promise.all([

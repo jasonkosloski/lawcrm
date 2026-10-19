@@ -206,7 +206,10 @@ const LEAD_ACCESS_CALL =
   /\b(?:assertLeadAccess|assertScopeAccess|assertChildMatterAccess|assertRecordAccess)\s*\(/;
 
 /** "file.ts:functionName" -> reason. */
-const LEAD_ALLOWLIST: Record<string, string> = {};
+const LEAD_ALLOWLIST: Record<string, string> = {
+  "leads.ts:createLead":
+    "Creates a brand-new, unrestricted lead; `leadId` is only the new row's id on its activity entry.",
+};
 
 export function checkLeadFunction(fn: ExportedFn): string | null {
   // `leadId: null` is a matter-only write, not a lead reference.

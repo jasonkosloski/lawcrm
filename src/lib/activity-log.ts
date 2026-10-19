@@ -46,6 +46,9 @@ export type ActivityType =
 
 export type ActivityInput = {
   matterId: string | null;
+  /** Intake lead the event is about (firm-scope rows, matterId null).
+   *  Lets the lead wall filter the firm feeds (ADR-049). */
+  leadId?: string | null;
   userId: string;
   type: ActivityType;
   title: string;
@@ -56,6 +59,7 @@ export type ActivityInput = {
 
 const toRow = (input: ActivityInput) => ({
   matterId: input.matterId,
+  leadId: input.leadId ?? null,
   userId: input.userId,
   type: input.type,
   title: input.title,

@@ -13,7 +13,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { addDaysToKey, instantInTz } from "@/lib/format-date";
 import { getCurrentUserId } from "@/lib/current-user";
-import { optionalMatterAccessClause } from "@/lib/matter-access";
+import { optionalRecordAccessClause } from "@/lib/matter-access";
 import {
   activityMoneyFilters,
   resolveActivityMoneyAccess,
@@ -84,7 +84,7 @@ export async function getFirmActivity(
   // Ethical walls: rows on a hidden matter are not listed (firm-scope
   // rows with no matter stay).
   const [matterClause, moneyAccess] = await Promise.all([
-    optionalMatterAccessClause(viewerId),
+    optionalRecordAccessClause(viewerId),
     resolveActivityMoneyAccess(),
   ]);
   const where: Prisma.ActivityLogWhereInput = {
@@ -156,7 +156,7 @@ export async function listFirmActivityAuthors(
     by: ["userId"],
     where: {
       userId: { not: null },
-      AND: (await optionalMatterAccessClause(viewerId)) as Prisma.ActivityLogWhereInput[],
+      AND: (await optionalRecordAccessClause(viewerId)) as Prisma.ActivityLogWhereInput[],
     },
   });
   const userIds = grouped

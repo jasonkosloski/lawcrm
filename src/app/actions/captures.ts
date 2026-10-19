@@ -849,6 +849,7 @@ export async function createLeadTask(
   // Lead-scoped: no matter to hang the row on (like firm-wide tasks).
   await logActivity({
     matterId: null,
+    leadId,
     userId,
     type: "task",
     title: "Intake task added",
@@ -920,6 +921,7 @@ export async function createLeadEvent(
   revalidateLead(leadId, "events");
   await logActivity({
     matterId: null,
+    leadId,
     userId,
     type: "event",
     title: "Intake event scheduled",

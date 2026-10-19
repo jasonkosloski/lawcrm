@@ -20,6 +20,7 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { matterAccessWhere } from "@/lib/matter-access";
+import { leadAccessWhere } from "@/lib/lead-access";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { dateOnlyRange, todayKey } from "@/lib/format-date";
 import { currentUserHasPermission } from "@/lib/permission-check";
@@ -78,6 +79,9 @@ export async function getSidebarData(): Promise<SidebarData> {
   // viewer may see.
   const access = await matterAccessWhere(currentUserId);
   const openWhere = { ...OPEN_MATTER_WHERE, ...access };
+  // Restricted intake (ADR-049): the open-leads badge counts only
+  // leads the viewer may see.
+  const leadAccess = await leadAccessWhere(currentUserId);
 
   const [
     user,
@@ -105,7 +109,7 @@ export async function getSidebarData(): Promise<SidebarData> {
       },
     }),
     prisma.lead.count({
-      where: { stage: { notIn: [...LEAD_CLOSED_STAGES] } },
+      where: { ...leadAccess, stage: { notIn: [...LEAD_CLOSED_STAGES] } },
     }),
     // Pinned matters for this user only, ordered by the pin createdAt
     // (most recently pinned first).

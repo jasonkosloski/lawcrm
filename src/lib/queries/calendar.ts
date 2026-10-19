@@ -33,6 +33,7 @@ import {
   filterAccessibleMatterIds,
   matterRelationAccessWhere,
 } from "@/lib/matter-access";
+import { canAccessLead, filterAccessibleLeadIds } from "@/lib/lead-access";
 import { dateKeyInTz, dateOnlyRange } from "@/lib/format-date";
 
 export type CalendarEventRow = {
@@ -180,6 +181,11 @@ export async function getCalendarItems(
     viewerId,
     events.flatMap((e) => (e.matter ? [e.matter.id] : []))
   );
+  // Restricted intake (ADR-049): events on hidden leads are Busy too.
+  const accessibleLeads = await filterAccessibleLeadIds(
+    viewerId,
+    events.flatMap((e) => (e.leadId ? [e.leadId] : []))
+  );
 
   const mappedEvents: CalendarItem[] = events.map((e) => {
     const attendeeUserIds = e.attendees
@@ -197,6 +203,8 @@ export async function getCalendarItems(
       attendeeUserIds,
       matterTeamUserIds,
       matterAccessible: e.matter ? accessibleMatters.has(e.matter.id) : true,
+      leadId: e.leadId,
+      leadAccessible: e.leadId ? accessibleLeads.has(e.leadId) : true,
     });
 
     if (!canSee) {
@@ -364,6 +372,8 @@ export async function getCalendarEventById(
     matterAccessible: e.matter
       ? await canAccessMatter(viewerId, e.matter.id)
       : true,
+    leadId: e.leadId,
+    leadAccessible: e.leadId ? await canAccessLead(viewerId, e.leadId) : true,
   });
   if (!canSee) {
     return {

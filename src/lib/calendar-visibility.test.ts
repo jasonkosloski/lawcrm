@@ -309,3 +309,35 @@ describe("viewerMayTouchLoadedEvent (private events + matter wall)", () => {
     expect(viewerMayTouchLoadedEvent("other", e, true)).toBe(true);
   });
 });
+
+describe("canViewEventDetails - restricted intake (ADR-049)", () => {
+  test("an event on a hidden lead is Busy, even for an attendee", () => {
+    expect(
+      canViewEventDetails({
+        ...baseView,
+        eventVisibility: "show_details",
+        leadId: "l1",
+        leadAccessible: false,
+        attendeeUserIds: [baseView.viewerId],
+      })
+    ).toBe(false);
+  });
+
+  test("the creator still sees their own event on a hidden lead", () => {
+    expect(
+      canViewEventDetails({
+        ...baseView,
+        createdById: baseView.viewerId,
+        leadId: "l1",
+        leadAccessible: false,
+      })
+    ).toBe(true);
+  });
+
+  test("a visible lead changes nothing", () => {
+    const input = { ...baseView, attendeeUserIds: [baseView.viewerId] };
+    expect(
+      canViewEventDetails({ ...input, leadId: "l1", leadAccessible: true })
+    ).toBe(canViewEventDetails(input));
+  });
+});

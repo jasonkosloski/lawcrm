@@ -62,8 +62,9 @@ import {
   filterAccessibleMatterIds,
   matterAccessWhere,
   matterRelationAccessWhere,
-  optionalMatterAccessClause,
+  optionalRecordAccessClause,
 } from "@/lib/matter-access";
+import { leadAccessWhere } from "@/lib/lead-access";
 import {
   SNIPPET_MARK_END,
   SNIPPET_MARK_START,
@@ -244,7 +245,10 @@ export async function globalSearch(
   const qLower = q.toLowerCase();
   const accessMatter = await matterAccessWhere(viewerId);
   const accessRel = await matterRelationAccessWhere(viewerId);
-  const accessOpt = await optionalMatterAccessClause(viewerId);
+  // Every `accessOpt` model carries matterId + leadId: rows on a
+  // hidden matter OR a restricted lead the viewer isn't on drop out.
+  const accessOpt = await optionalRecordAccessClause(viewerId);
+  const accessLead = await leadAccessWhere(viewerId);
 
   /** Shared ILIKE fragment (LIKE metacharacters escaped). */
   const ci = { contains: escapeLike(q), mode: "insensitive" as const };
@@ -350,8 +354,10 @@ export async function globalSearch(
   const searchLeads = async (): Promise<SearchGroup> => {
     // Name + the free-text intake fields (summary / injuries /
     // location) + email. All stages including converted/declined —
-    // an old intake's story is still searchable history.
+    // an old intake's story is still searchable history. Restricted
+    // leads only for their team (ADR-049).
     const where = {
+      ...accessLead,
       OR: [
         { name: ci },
         { email: ci },
@@ -408,8 +414,8 @@ export async function globalSearch(
     // rows we scanned: exact when the scan reached the end, an upper
     // bound otherwise — gone once FTS indexes the stripped text.
     // Note.matter is optional (intake notes hang off a Lead), so the
-    // optional-relation clause: lead notes stay visible, matter notes
-    // must be on an accessible matter.
+    // record clause: matter notes need matter access, lead notes lead
+    // access.
     const where = {
       AND: [...accessOpt, { OR: ciHtml.map((c) => ({ content: c })) }],
     };

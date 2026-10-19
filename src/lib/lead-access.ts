@@ -89,9 +89,9 @@ export async function leadAccessWhere(
   const scope = await resolveLeadScope(userId);
   if (!scope.active) return NO_LEADS;
   if (scope.all || !(await anyRestrictedLead())) return {};
-  return {
-    OR: [{ restricted: false }, { teamMembers: { some: { userId } } }],
-  };
+  // "Unrestricted OR on the team", written as a NOT so callers can
+  // spread it into a where that has its own OR.
+  return { NOT: { restricted: true, teamMembers: { none: { userId } } } };
 }
 
 /** The same restriction for a child with a `lead` relation:
