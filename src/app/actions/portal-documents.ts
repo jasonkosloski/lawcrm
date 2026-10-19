@@ -22,6 +22,7 @@ import { portalHomeUrl } from "@/lib/portal/link-url";
 import { MOVE_DOCUMENTS_BATCH_CAP, collectDescendantIds } from "@/lib/folder-tree";
 import { isEffectivelyShared, sharedFolderIds } from "@/lib/portal/document-visibility";
 import { emailLivePortalUsers } from "@/lib/portal/notify-clients";
+import { isProtectedFolder } from "@/lib/records-requests/folder-kinds";
 
 type Result = { ok: true } | { ok: false; error: string };
 type Input = { title: string; instructions?: string; dueDate?: string };
@@ -342,12 +343,20 @@ export async function setFolderClientShared(
   if (!gate.ok) return { ok: false, error: gate.error };
   const folder = await prisma.documentFolder.findUnique({
     where: { id: folderId },
-    select: { id: true, name: true, matterId: true, leadId: true },
+    select: { id: true, name: true, matterId: true, leadId: true, systemKind: true },
   });
   if (!folder) notFound();
   await assertRecordScope(folder);
   if (folder.leadId !== null || folder.matterId === null) {
     return { ok: false, error: LEAD_REFUSED };
+  }
+  // System folders ("From client", records requests) are never shared
+  // whole; unsharing stays allowed so a stray flag can be cleared.
+  if (shared && isProtectedFolder(folder)) {
+    return {
+      ok: false,
+      error: "This folder is managed by the app and can't be shared. Share its files instead.",
+    };
   }
   const matterId = folder.matterId;
 

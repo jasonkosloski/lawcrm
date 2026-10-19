@@ -425,6 +425,18 @@ describe("share actions", () => {
     await expect(setFolderClientShared(folderId, true)).rejects.toMatchObject(notFound);
   });
 
+  test("refuses protected system folders", async () => {
+    const f = await prisma.documentFolder.create({
+      data: { matterId, name: "From client", systemKind: "portal_uploads" },
+      select: { id: true },
+    });
+    expect(await setFolderClientShared(f.id, true)).toEqual({
+      ok: false,
+      error: "This folder is managed by the app and can't be shared. Share its files instead.",
+    });
+    expect((await prisma.documentFolder.findUniqueOrThrow({ where: { id: f.id } })).clientShared).toBe(false);
+  });
+
   test("folder share emails once; unshare does not", async () => {
     await seedIdentity("a@example.com");
     const { folderId } = await seedDocumentFolder({ matterId, name: "F" });
