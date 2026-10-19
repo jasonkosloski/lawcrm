@@ -10,12 +10,13 @@ import {
   seedUser,
 } from "@/test/integration-helpers";
 import { captureEmails } from "@/test/email-capture";
-import { PORTAL_COOKIE } from "@/lib/portal/cookie";
+import { PORTAL_COOKIE, portalCookieOptions } from "@/lib/portal/cookie";
 import { createSession } from "@/lib/portal/sessions";
 import { issueToken } from "@/lib/portal/tokens";
 import { hashSecret } from "@/lib/portal/secrets";
 
 const jar = new Map<string, string>();
+const setCalls: { name: string; value: string; opts: unknown }[] = [];
 let hostHeader = "portal.localhost:3000";
 let forwardedFor = "203.0.113.7, 10.0.0.1";
 vi.mock("next/headers", () => ({
@@ -26,8 +27,11 @@ vi.mock("next/headers", () => ({
   cookies: async () => ({
     get: (name: string) =>
       jar.has(name) ? { name, value: jar.get(name)! } : undefined,
-    set: (name: string, value: string) => void jar.set(name, value),
-    delete: (name: string) => void jar.delete(name),
+    set: (name: string, value: string, opts?: unknown) => {
+      setCalls.push({ name, value, opts });
+      if (value === "") jar.delete(name);
+      else jar.set(name, value);
+    },
   }),
 }));
 vi.mock("next/navigation", () => ({
@@ -67,6 +71,7 @@ const SENT = { status: "sent" };
 beforeEach(async () => {
   await resetDb();
   jar.clear();
+  setCalls.length = 0;
   hostHeader = "portal.localhost:3000";
   forwardedFor = "203.0.113.7, 10.0.0.1";
   cap = captureEmails();
@@ -102,14 +107,13 @@ describe("requestPortalLink", () => {
       data: { contactId: c2, email: "off@example.com", disabledAt: new Date() },
     });
     const { contactId: c3 } = await seedContact({ email: "none@example.com" });
-    const noAccess = await prisma.portalIdentity.create({
+    await prisma.portalIdentity.create({
       data: { contactId: c3, email: "none@example.com" },
     });
     await prisma.portalMatterAccess.updateMany({
       where: { identityId },
       data: { revokedAt: new Date() },
     });
-    void noAccess;
     for (const e of ["nobody@example.com", "off@example.com", "none@example.com", "jane@example.com"]) {
       expect(await requestPortalLink({ status: "idle" }, form(e))).toEqual(SENT);
     }
@@ -193,6 +197,30 @@ describe("verifyPortalLink", () => {
     expect(await prisma.activityLog.count({ where: { title: "Portal link rejected" } })).toBe(1);
   });
 
+  test("portal off or no live access after consume: invalid, no session", async () => {
+    await prisma.firm.update({ where: { id: firmId }, data: { portalEnabled: false } });
+    let raw = await issueToken(identityId, "login");
+    expect(await verifyPortalLink({ status: "idle" }, tokenForm(raw))).toEqual({ status: "invalid" });
+    await prisma.firm.update({ where: { id: firmId }, data: { portalEnabled: true } });
+    await prisma.portalMatterAccess.updateMany({ data: { revokedAt: new Date() } });
+    raw = await issueToken(identityId, "login");
+    expect(await verifyPortalLink({ status: "idle" }, tokenForm(raw))).toEqual({ status: "invalid" });
+    expect(await prisma.portalSession.count()).toBe(0);
+    expect(jar.size).toBe(0);
+  });
+
+  test("send failure is recorded on the audit row", async () => {
+    cap.restore();
+    const { __setDriverForTests } = await import("@/lib/email/send");
+    __setDriverForTests(async () => ({ ok: false, error: "boom" }));
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    await requestPortalLink({ status: "idle" }, form("jane@example.com"));
+    const row = await prisma.activityLog.findFirst({ where: { title: "Portal link requested" } });
+    expect(row?.detail).toContain("send failed");
+    expect(JSON.stringify(err.mock.calls)).not.toContain("jane@example.com");
+    err.mockRestore();
+  });
+
   test("off the portal host: invalid, no cookie, token not consumed", async () => {
     const raw = await issueToken(identityId, "login");
     hostHeader = "app.example.com";
@@ -208,6 +236,11 @@ describe("signOutPortal", () => {
     jar.set(PORTAL_COOKIE, await createSession(identityId));
     await expect(signOutPortal()).rejects.toThrow("REDIRECT:/login");
     expect(jar.has(PORTAL_COOKIE)).toBe(false);
+    expect(setCalls.at(-1)).toEqual({
+      name: PORTAL_COOKIE,
+      value: "",
+      opts: { ...portalCookieOptions(), maxAge: 0 },
+    });
     expect(await prisma.portalSession.count({ where: { identityId } })).toBe(0);
   });
 });

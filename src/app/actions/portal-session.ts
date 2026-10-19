@@ -74,8 +74,18 @@ export async function requestPortalLink(
   if (!identity) return uniform;
 
   const raw = await issueToken(identity.id, "login");
-  await sendEmail({ to: email, ...loginEmail(portalLinkUrl(raw)) });
-  await logPortalEvent({ identityId: identity.id, title: "Portal link requested" });
+  const sent = await sendEmail({ to: email, ...loginEmail(portalLinkUrl(raw)) });
+  if (!sent.ok) {
+    console.error("[portal] link email failed", {
+      identityId: identity.id,
+      error: sent.error,
+    });
+  }
+  await logPortalEvent({
+    identityId: identity.id,
+    title: "Portal link requested",
+    detail: sent.ok ? undefined : "\u2014 send failed",
+  });
   return uniform;
 }
 
@@ -104,6 +114,16 @@ export async function verifyPortalLink(
     return { status: "invalid" };
   }
 
+  // Fail closed like the request path: the portal may have been switched off
+  // or access revoked since the link was issued. The token stays burned.
+  const [firm, live] = await Promise.all([
+    prisma.firm.findFirst({ select: { portalEnabled: true } }),
+    prisma.portalMatterAccess.count({
+      where: { identityId: result.identityId, revokedAt: null },
+    }),
+  ]);
+  if (!firm?.portalEnabled || live === 0) return { status: "invalid" };
+
   const session = await createSession(result.identityId);
   (await cookies()).set(PORTAL_COOKIE, session, portalCookieOptions());
   await logPortalEvent({
@@ -129,6 +149,7 @@ export async function signOutPortal(): Promise<void> {
       });
     }
   }
-  jar.delete(PORTAL_COOKIE);
+  // Full options: a bare delete omits Secure, which browsers reject for __Host- names.
+  jar.set(PORTAL_COOKIE, "", { ...portalCookieOptions(), maxAge: 0 });
   redirect("/login");
 }
