@@ -36,6 +36,7 @@ import {
 } from "@/lib/matter-create-types";
 import { requireUser } from "@/lib/current-user";
 import { assertMatterAccess } from "@/lib/matter-access";
+import { RestrictedBadge } from "@/components/shared/restricted-badge";
 
 const FEE_LABEL: Record<string, string> = {
   contingent: "Contingent",
@@ -99,6 +100,7 @@ export default async function MatterDetailLayout({
               {matter.stage}
             </span>
             <span className="text-2xs text-ink-3">{matter.area}</span>
+            {matter.restricted && <RestrictedBadge />}
           </>
         }
         actions={

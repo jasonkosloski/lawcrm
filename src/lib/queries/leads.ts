@@ -57,6 +57,8 @@ export type LeadListRow = {
    *  run. Null when the lead has no statute window. */
   statuteDaysRemaining: number | null;
   conflictCheck: string;
+  /** Restricted intake (ADR-049) — shown as a lock badge. */
+  restricted: boolean;
   /** Calendar days since the lead came in (viewer's zone). */
   ageDays: number;
   isActive: boolean;
@@ -173,6 +175,7 @@ export async function listLeads(
       now
     ),
     conflictCheck: l.conflictCheck,
+    restricted: l.restricted,
     ageDays: leadAgeDays(l.createdAt, tz, now),
     isActive: !(LEAD_CLOSED_STAGES as readonly string[]).includes(l.stage),
   }));
@@ -228,6 +231,15 @@ export const getLeadById = cache(async (id: string) => {
               isPrimary: true,
             },
           },
+        },
+      },
+      // Restricted-intake team (ADR-049); listed on the Access card.
+      teamMembers: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          userId: true,
+          role: true,
+          user: { select: { name: true, initials: true, jobTitle: true } },
         },
       },
     },

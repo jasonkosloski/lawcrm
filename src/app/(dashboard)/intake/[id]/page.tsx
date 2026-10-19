@@ -23,6 +23,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmailLink } from "@/components/ui/email-link";
 import { ConflictCheckCard } from "@/components/intake/conflict-check-card";
+import { LeadAccessCard } from "@/components/intake/lead-access-card";
 // Centralized date formatting — default "medium" matches the
 // "Apr 15, 2026" this page always used. dateOfIncident is a date-only
 // value (formatDateOnly never shifts the day); createdAt is a real
@@ -36,6 +37,7 @@ import { runConflictMatcher } from "@/lib/conflict-check";
 import { redactConflictResultForViewer } from "@/lib/conflict-check-redact";
 import { getCurrentUserId } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
+import { prisma } from "@/lib/prisma";
 
 const ASSESSMENT_LABEL: Record<string, string> = {
   strong: "Strong",
@@ -96,7 +98,7 @@ export default async function LeadOverviewPage({
   // further decision, so skip the several-query scan and show the
   // status recorded at the last run/override instead.
   const isResolved = lead.stage === "converted" || lead.stage === "declined";
-  const [conflictResult, canRunCheck, canOverride, tz] = await Promise.all([
+  const [conflictResult, canRunCheck, canOverride, tz, canRestrict] = await Promise.all([
     isResolved
       ? Promise.resolve({ matches: [] })
       : runConflictMatcher({
@@ -115,7 +117,16 @@ export default async function LeadOverviewPage({
     // "Received" is a real instant — render it on the viewer's
     // calendar, not the server's (UTC in prod).
     getCurrentUserTimeZone(),
+    currentUserHasPermission("intake.restrict"),
   ]);
+  // Restricted intake (ADR-049): the Access card's add-member picker.
+  const teamUserOptions = canRestrict
+    ? await prisma.user.findMany({
+        where: { isActive: true },
+        select: { id: true, name: true, jobTitle: true },
+        orderBy: { name: "asc" },
+      })
+    : [];
 
   // The stored statuteWindow is a snapshot from intake day; show the
   // live countdown so the <= 30 day warning can actually fire.
@@ -382,6 +393,30 @@ export default async function LeadOverviewPage({
               />
             </CardContent>
           </Card>
+
+          {/* Access (restricted intake, ADR-049) */}
+          {(canRestrict || lead.restricted) && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold">Access</CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                <LeadAccessCard
+                  leadId={lead.id}
+                  restricted={lead.restricted}
+                  members={lead.teamMembers.map((m) => ({
+                    userId: m.userId,
+                    role: m.role,
+                    name: m.user.name,
+                    initials: m.user.initials,
+                    jobTitle: m.user.jobTitle,
+                  }))}
+                  userOptions={teamUserOptions}
+                  canManage={canRestrict}
+                />
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

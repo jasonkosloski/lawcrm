@@ -20,6 +20,7 @@ import { getPracticeAreaOptions } from "@/lib/queries/practice-area-options";
 import { requireUser } from "@/lib/current-user";
 import { assertLeadAccess } from "@/lib/lead-access";
 import { currentUserHasPermission } from "@/lib/permission-check";
+import { RestrictedBadge } from "@/components/shared/restricted-badge";
 
 function StageChip({ stage }: { stage: string }) {
   // DB stage values arrive untyped — fall back to the raw slug
@@ -74,6 +75,7 @@ export default async function LeadDetailLayout({
         subtitle={
           <>
             <StageChip stage={lead.stage} />
+            {lead.restricted && <RestrictedBadge />}
             {lead.score !== null && (
               <span className="text-2xs font-mono font-semibold text-ink-3">
                 Score {lead.score}

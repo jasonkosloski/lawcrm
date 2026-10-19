@@ -40,6 +40,7 @@ import {
 import { parsePageParam } from "@/lib/pagination";
 import { Pager, TruncationNotice } from "@/components/shared/pager";
 import { describeStatuteRemaining } from "@/lib/lead-statute";
+import { RestrictedBadge } from "@/components/shared/restricted-badge";
 
 const ASSESSMENT_LABEL: Record<string, string> = {
   strong: "Strong",
@@ -253,6 +254,7 @@ export default async function IntakePage({
                       )}
                       <div className="flex items-center gap-2 flex-wrap mt-1.5">
                         <StageChip stage={lead.stage} />
+                        {lead.restricted && <RestrictedBadge />}
                         <SourceLabel
                           source={lead.source}
                           detail={lead.sourceDetail}
@@ -307,7 +309,10 @@ export default async function IntakePage({
                         href={`/intake/${lead.id}`}
                         className="flex flex-col gap-0.5 hover:text-brand-700"
                       >
-                        <span className="font-medium text-ink">{lead.name}</span>
+                        <span className="font-medium text-ink inline-flex items-center gap-2">
+                          {lead.name}
+                          {lead.restricted && <RestrictedBadge />}
+                        </span>
                         {lead.summary && (
                           <span className="text-2xs text-ink-3 truncate max-w-md">
                             {lead.summary}

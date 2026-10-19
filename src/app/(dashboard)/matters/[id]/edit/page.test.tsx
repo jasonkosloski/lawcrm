@@ -72,6 +72,11 @@ vi.mock("@/components/matters/matter-team-management", () => ({
     return <div data-testid="team-management" />;
   },
 }));
+vi.mock("@/components/matters/matter-restrict-card", () => ({
+  MatterRestrictCard: (props: { restricted: boolean }) => (
+    <div data-testid="restrict-card" data-restricted={String(props.restricted)} />
+  ),
+}));
 vi.mock("@/components/settings/calendar-defaults-card", () => ({
   MatterCalendarDefaultsCard: () => (
     <div data-testid="calendar-defaults-card" />
@@ -154,6 +159,29 @@ describe("EditMatterPage — matters.edit gate", () => {
     await renderPage();
     expect(screen.getByTestId("edit-matter-form")).toBeTruthy();
     expect(screen.queryByTestId("team-management")).toBeNull();
+  });
+});
+
+describe("EditMatterPage — matters.restrict gate (ADR-049)", () => {
+  test("the restrict card renders only with matters.restrict", async () => {
+    grant("matters.edit");
+    await renderPage();
+    expect(screen.queryByTestId("restrict-card")).toBeNull();
+  });
+
+  test("with matters.restrict the card gets the matter's flag", async () => {
+    grant("matters.restrict");
+    vi.mocked(prisma.matter.findUnique).mockResolvedValue(
+      { ...matter, restricted: true } as unknown as Awaited<
+        ReturnType<typeof prisma.matter.findUnique>
+      >
+    );
+    render(
+      await EditMatterPage({
+        params: Promise.resolve({ id: "m1" }),
+      } as Parameters<typeof EditMatterPage>[0])
+    );
+    expect(screen.getByTestId("restrict-card").dataset.restricted).toBe("true");
   });
 });
 

@@ -31,6 +31,7 @@ import { toSolPeriod } from "@/lib/sol";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { assertMatterAccess } from "@/lib/matter-access";
+import { MatterRestrictCard } from "@/components/matters/matter-restrict-card";
 
 export default async function EditMatterPage({
   params,
@@ -75,6 +76,7 @@ export default async function EditMatterPage({
     canManageTeam,
     canEditMatter,
     firmDefaults,
+    canRestrict,
   ] = await Promise.all([
     prisma.practiceArea.findMany({
       where: { isActive: true },
@@ -124,6 +126,7 @@ export default async function EditMatterPage({
         autoAddTeamToUpcomingEvents: true,
       },
     }),
+    currentUserHasPermission("matters.restrict"),
   ]);
 
   // Calendar period (ADR-035) as one serializable value for the forms.
@@ -224,6 +227,15 @@ export default async function EditMatterPage({
                 members={teamMembers}
                 userOptions={users}
               />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Restrict to the case team (ADR-049) — `matters.restrict`. */}
+        {canRestrict && (
+          <Card>
+            <CardContent className="p-5">
+              <MatterRestrictCard matterId={matter.id} restricted={matter.restricted} />
             </CardContent>
           </Card>
         )}

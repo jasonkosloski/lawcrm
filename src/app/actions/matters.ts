@@ -1238,6 +1238,47 @@ export async function setMatterSolSatisfied(
 // "one row per user-matter relationship" without losing the audit
 // thread.
 
+/**
+ * Restrict a matter to its case team even while the firm's matter
+ * visibility is FIRM (ADR-049). View-all holders and Admins still see
+ * it. Refused with no active team member, so nobody but Admins is
+ * locked out by accident.
+ */
+export async function setMatterRestricted(
+  matterId: string,
+  restricted: boolean
+): Promise<{ ok: boolean; error?: string }> {
+  const actorId = await requirePermission("matters.restrict");
+  await assertMatterAccess(matterId);
+
+  if (restricted) {
+    const members = await prisma.matterTeamMember.count({
+      where: { matterId, removedAt: null },
+    });
+    if (members === 0) {
+      return { ok: false, error: "Add a team member before restricting this matter." };
+    }
+  }
+  const { count } = await prisma.matter.updateMany({
+    where: { id: matterId, restricted: !restricted },
+    data: { restricted },
+  });
+  if (count > 0) {
+    await logActivity({
+      matterId,
+      userId: actorId,
+      type: "filing",
+      title: restricted
+        ? "Matter restricted to its case team"
+        : "Matter opened to the firm",
+    });
+  }
+  revalidatePath(`/matters/${matterId}`, "layout");
+  revalidatePath("/matters");
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
 const addTeamMemberSchema = z.object({
   userId: z.string().trim().min(1, "Pick a user"),
   role: z.enum(MATTER_TEAM_ROLES),

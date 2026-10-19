@@ -31,6 +31,13 @@ vi.mock("@/lib/current-user-tz", () => ({
 vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn(async () => true),
 }));
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    user: {
+      findMany: vi.fn(async () => [{ id: "u2", name: "Bob", jobTitle: null }]),
+    },
+  },
+}));
 vi.mock("@/lib/conflict-check", () => ({
   runConflictMatcher: vi.fn(async () => ({ severity: "clear", matches: [] })),
 }));
@@ -42,6 +49,8 @@ vi.mock("@/lib/queries/leads", () => ({
 import { runConflictMatcher } from "@/lib/conflict-check";
 import { getLeadById } from "@/lib/queries/leads";
 import { ConflictCheckCard } from "@/components/intake/conflict-check-card";
+import { LeadAccessCard } from "@/components/intake/lead-access-card";
+import { currentUserHasPermission } from "@/lib/permission-check";
 import LeadOverviewPage from "./page";
 
 const mockedMatcher = vi.mocked(runConflictMatcher);
@@ -56,10 +65,12 @@ function findAll(node: ReactNode, type: unknown, out: unknown[] = []) {
   return out;
 }
 
-function lead(stage: string) {
+function lead(stage: string, extra: Record<string, unknown> = {}) {
   return {
     id: "lead1",
     stage,
+    restricted: false,
+    teamMembers: [],
     name: "Priya Patel",
     contactId: "c1",
     contact: { id: "c1", name: "Priya Patel", email: "p@x.com", organization: null, phones: [] },
@@ -86,11 +97,12 @@ function lead(stage: string) {
     displayName: "Priya Patel",
     displayEmail: "p@x.com",
     displayPhone: null,
+    ...extra,
   } as unknown as Awaited<ReturnType<typeof getLeadById>>;
 }
 
-async function renderPage(stage: string) {
-  mockedLead.mockResolvedValue(lead(stage));
+async function renderPage(stage: string, extra: Record<string, unknown> = {}) {
+  mockedLead.mockResolvedValue(lead(stage, extra));
   const tree = await LeadOverviewPage({
     params: Promise.resolve({ id: "lead1" }),
   } as unknown as Parameters<typeof LeadOverviewPage>[0]);
@@ -132,4 +144,48 @@ describe("LeadOverviewPage conflict card", () => {
       });
     }
   );
+});
+
+describe("LeadOverviewPage access card (ADR-049)", () => {
+  const accessCard = async (extra: Record<string, unknown>) => {
+    const { tree } = await renderPage("qualifying", extra);
+    return (findAll(tree, LeadAccessCard) as Array<{ props: Record<string, unknown> }>)[0];
+  };
+
+  test("intake.restrict holders get a managing card with the user picker", async () => {
+    const card = await accessCard({});
+    expect(card.props).toMatchObject({
+      leadId: "lead1",
+      restricted: false,
+      canManage: true,
+      userOptions: [{ id: "u2", name: "Bob", jobTitle: null }],
+    });
+  });
+
+  test("a restricted lead lists its team read-only for viewers without the key", async () => {
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (key: string) => key !== "intake.restrict"
+    );
+    const card = await accessCard({
+      restricted: true,
+      teamMembers: [
+        { userId: "u1", role: "lead", user: { name: "Alice", initials: "AL", jobTitle: null } },
+      ],
+    });
+    expect(card.props).toMatchObject({
+      restricted: true,
+      canManage: false,
+      userOptions: [],
+      members: [{ userId: "u1", role: "lead", name: "Alice", initials: "AL", jobTitle: null }],
+    });
+    vi.mocked(currentUserHasPermission).mockImplementation(async () => true);
+  });
+
+  test("an open lead shows no card to viewers without the key", async () => {
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (key: string) => key !== "intake.restrict"
+    );
+    expect(await accessCard({})).toBeUndefined();
+    vi.mocked(currentUserHasPermission).mockImplementation(async () => true);
+  });
 });
