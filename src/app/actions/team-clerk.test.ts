@@ -168,7 +168,7 @@ describe("deactivate / reactivate", () => {
     const res = await updateFirmMember(id, teamInitialState, updateForm(false));
     expect(res.status).toBe("ok");
     expect(res.warning).toBe(
-      "Signed out locally; Clerk didn't confirm. Retry from the member menu."
+      "Deactivated. They can't use the CRM, but the sign-in service didn't confirm signing them out. Use Sign out everywhere to retry."
     );
     const auth = await resolveStaffUser("user_clerk_1", "s");
     expect(auth.status).toBe("no_access");
@@ -185,6 +185,20 @@ describe("deactivate / reactivate", () => {
       await prisma.activityLog.findMany({ where: { type: "auth" } })
     ).map((l) => l.title);
     expect(titles).toContain("Sign-in unblocked (reactivated)");
+  });
+
+  test("an unban failure warns and the member is active in the DB", async () => {
+    await actingAdmin();
+    const id = await linkedMember({ isActive: false });
+    mUnban.mockResolvedValue(FAIL);
+    const res = await updateFirmMember(id, teamInitialState, updateForm(true));
+    expect(res.status).toBe("ok");
+    expect(res.warning).toBe(
+      "Reactivated, but the sign-in service still blocks their sign-in. Deactivate and reactivate them to retry."
+    );
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id } })).isActive
+    ).toBe(true);
   });
 
   test("an unlinked member needs no Clerk call", async () => {
@@ -241,16 +255,22 @@ describe("resetFirmMemberSignInLink", () => {
     expect(titles).toContain("Sign-in link reset by an administrator");
   });
 
-  test("a revoke failure still resets the link and warns", async () => {
+  test("a revoke failure changes nothing and reports an error", async () => {
     await actingAdmin();
     const id = await linkedMember();
     mRevokeAll.mockResolvedValue(FAIL);
     const res = await resetFirmMemberSignInLink(id);
-    expect(res.status).toBe("ok");
-    expect(res.warning).toBeTruthy();
+    expect(res.status).toBe("error");
+    expect(res.errors?._form?.[0]).toBe(
+      "Couldn't sign them out of the sign-in service, so the link was not reset. Try again."
+    );
     expect(
       (await prisma.user.findUniqueOrThrow({ where: { id } })).clerkUserId
-    ).toBeNull();
+    ).toBe("user_clerk_1");
+    const titles = (
+      await prisma.activityLog.findMany({ where: { type: "auth" } })
+    ).map((l) => l.title);
+    expect(titles).not.toContain("Sign-in link reset by an administrator");
   });
 
   test("cannot target yourself", async () => {

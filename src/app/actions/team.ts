@@ -124,8 +124,10 @@ const PRIVILEGED_ROLE_MESSAGE =
 
 const INVITE_WARNING =
   "Member added, but the invitation email didn't send. Use Resend invite.";
-const CLERK_SYNC_WARNING =
-  "Signed out locally; Clerk didn't confirm. Retry from the member menu.";
+const BAN_WARNING =
+  "Deactivated. They can't use the CRM, but the sign-in service didn't confirm signing them out. Use Sign out everywhere to retry.";
+const UNBAN_WARNING =
+  "Reactivated, but the sign-in service still blocks their sign-in. Deactivate and reactivate them to retry.";
 
 const ADMIN_TARGET_MESSAGE =
   "Only an Admin can edit or deactivate an Admin.";
@@ -551,7 +553,7 @@ export async function updateFirmMember(
         reason: deactivating ? "deactivated from the team page" : "reactivated from the team page",
       });
     } else {
-      warning = CLERK_SYNC_WARNING;
+      warning = deactivating ? BAN_WARNING : UNBAN_WARNING;
     }
   }
 
@@ -665,9 +667,9 @@ export async function signOutFirmMemberEverywhere(
 
 /**
  * Detach a member from their Clerk identity (e.g. they lost access to
- * the Google account). The DB link is cleared first — that is the
- * security effect — then the old identity's sessions are revoked. The
- * member's next verified-email sign-in re-links.
+ * the Google account). The old identity's sessions are revoked
+ * first, and only then is the DB link cleared (otherwise a surviving
+ * session would re-link itself). The member's next verified-email sign-in re-links.
  */
 export async function resetFirmMemberSignInLink(
   userId: string
@@ -683,12 +685,20 @@ export async function resetFirmMemberSignInLink(
     return denied("This member hasn't signed in yet — nothing to reset.");
   }
 
+  // Revoke FIRST: if sessions survived a cleared link, the old
+  // session's next request would re-link itself via the verified
+  // email. Only clear the link once the old identity is signed out.
+  const revoked = await revokeAllStaffSessions(oldClerkUserId);
+  if (!revoked.ok) {
+    return denied(
+      "Couldn't sign them out of the sign-in service, so the link was not reset. Try again."
+    );
+  }
   // Conditional on the id we read, so a concurrent re-link isn't wiped.
   await prisma.user.updateMany({
     where: { id: target.id, clerkUserId: oldClerkUserId },
     data: { clerkUserId: null },
   });
-  const revoked = await revokeAllStaffSessions(oldClerkUserId);
 
   await logAuthEvent({
     userId: target.id,
@@ -702,11 +712,5 @@ export async function resetFirmMemberSignInLink(
     title: `Reset sign-in link for ${target.name}`,
   });
   revalidatePath("/settings/team");
-  return {
-    ...teamInitialState,
-    status: "ok",
-    warning: revoked.ok
-      ? undefined
-      : "Sign-in link reset, but Clerk didn't confirm ending existing sessions. Use Sign out everywhere after they sign in again.",
-  };
+  return { ...teamInitialState, status: "ok" };
 }
