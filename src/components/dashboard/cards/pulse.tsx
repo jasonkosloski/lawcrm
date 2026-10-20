@@ -1,14 +1,11 @@
 import type { FirmPulse } from "@/lib/queries/dashboard";
 import { DashboardCard } from "../dashboard-card";
-
-/** Dollar amount with comma separators, no cents. */
-const formatMoney = (n: number): string =>
-  `$${Math.round(n).toLocaleString("en-US")}`;
+import { formatMoney, percentOf } from "./format";
 
 /** Null without reports.view - the card renders nothing. */
 export function PulseCard({ pulse }: { pulse: FirmPulse | null }) {
   if (!pulse) return null;
-  const mtdPct = Math.min(100, (pulse.billableMtd / pulse.billableGoal) * 100);
+  const mtdPct = percentOf(pulse.billableMtd, pulse.billableGoal);
   return (
     <DashboardCard title="Firm pulse">
       <div className="flex flex-col gap-3">

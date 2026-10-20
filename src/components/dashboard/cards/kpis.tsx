@@ -1,10 +1,8 @@
 import { Briefcase, Clock, DollarSign, Mail, type LucideIcon } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import type { DashboardKpis } from "@/lib/queries/dashboard";
+import { formatMoney } from "./format";
 
-/** Dollar amount with comma separators, no cents. */
-const formatMoney = (n: number): string =>
-  `$${Math.round(n).toLocaleString("en-US")}`;
 
 type KpiTile = {
   label: string;
@@ -47,7 +45,7 @@ export function KpisCard({ kpis }: { kpis: DashboardKpis }) {
       variant: "accent",
       progress: goalPercent(kpis.hoursToday, kpis.hoursGoal),
     },
-    // Firm-wide trust total: null (tile omitted) without reports.view.
+    // Firm-wide trust total: null (tile omitted) without reports.view and billing.view.
     ...(kpis.trustBalance !== null
       ? [
           {

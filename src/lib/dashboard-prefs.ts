@@ -1,10 +1,10 @@
 /**
- * Dashboard Preferences — shared types and constants
+ * Dashboard Preferences - shared types and constants
  *
- * Per-user show/hide settings for the Today/Dashboard cards. Persisted as
- * a JSON blob on `User.dashboardPrefs`. Null or missing keys fall back to
- * the defaults (everything visible) — that way new cards added in the
- * future are visible by default without a backfill.
+ * Per-user layout of the Today/Dashboard cards (placement, split and a
+ * hidden tray), persisted as a JSON blob on `User.dashboardPrefs`. Null
+ * or missing data falls back to the default layout, and cards added
+ * later land in their default zone without a backfill.
  *
  * This module is intentionally Prisma-free so it can be imported from
  * both server queries and client components. The DB-touching loader lives
@@ -78,16 +78,9 @@ export const DASHBOARD_CARDS: Record<
   },
 };
 
-/** Human-readable labels used in the customize popover (derived). */
-export const DASHBOARD_CARD_LABELS: Record<DashboardCardKey, string> =
-  Object.fromEntries(
-    DASHBOARD_CARD_KEYS.map((k) => [k, DASHBOARD_CARDS[k].label])
-  ) as Record<DashboardCardKey, string>;
-
 /**
- * Which dashboard column each card lives in. Ordering moves cards only
- * within their column — the page layout (main column vs. right rail)
- * stays fixed in v2; cross-column moves arrive with drag + resize (v3).
+ * Which legacy (v1/v2) column each card lived in. Only used to convert
+ * stored v2 blobs to the v3 layout; v3 placement is `DashboardLayout`.
  */
 export type DashboardColumn = "main" | "rail";
 
@@ -313,7 +306,8 @@ export function mergeLayout(stored: unknown): DashboardLayout {
  * Move a card to a zone, removing it from wherever it was. Inserts at
  * `position` (default: end; clamped) - an index into the target list
  * AFTER the card has been removed (matters when reordering within one
- * list). A column index past the last column lands in the last. Pure — returns a new layout.
+ * list). A column index past the last column lands in the last.
+ * Pure - returns a new layout.
  */
 export function moveCard(
   layout: DashboardLayout,

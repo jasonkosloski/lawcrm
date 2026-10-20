@@ -15,7 +15,6 @@ import {
   DASHBOARD_CARDS,
   DASHBOARD_CARD_COLUMNS,
   DASHBOARD_CARD_KEYS,
-  DASHBOARD_CARD_LABELS,
   DEFAULT_LAYOUT,
   layoutsEqual,
   mergeLayout,
@@ -29,7 +28,7 @@ import {
 describe("records card", () => {
   test("is a column-1 card, labelled, and visible by default", () => {
     expect(DASHBOARD_CARD_KEYS).toContain("records");
-    expect(DASHBOARD_CARD_LABELS.records).toBe("Records to chase");
+    expect(DASHBOARD_CARDS.records.label).toBe("Records to chase");
     expect(DASHBOARD_CARDS.records.defaultPlacement).toEqual({
       zone: "column",
       index: 1,
@@ -42,7 +41,7 @@ describe("DASHBOARD_CARD_KEYS shape", () => {
   test("non-empty + every key has a label", () => {
     expect(DASHBOARD_CARD_KEYS.length).toBeGreaterThan(0);
     for (const k of DASHBOARD_CARD_KEYS) {
-      expect(DASHBOARD_CARD_LABELS[k]).toBeTruthy();
+      expect(DASHBOARD_CARDS[k].label).toBeTruthy();
     }
   });
 

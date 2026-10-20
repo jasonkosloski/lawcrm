@@ -19,7 +19,6 @@ export function DashboardCard({
   empty?: { icon: LucideIcon; text: string } | null;
   children?: ReactNode;
 }) {
-  const Icon = empty?.icon;
   return (
     <section
       data-slot="dashboard-card"
@@ -43,9 +42,9 @@ export function DashboardCard({
           </Link>
         )}
       </header>
-      {empty && Icon ? (
+      {empty ? (
         <div className="flex items-center gap-2 py-3 text-xs text-ink-4">
-          <Icon className="size-4 text-ink-4" aria-hidden />
+          <empty.icon className="size-4 text-ink-4" aria-hidden />
           <span>{empty.text}</span>
         </div>
       ) : (
