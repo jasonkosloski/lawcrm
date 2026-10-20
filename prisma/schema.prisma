@@ -193,6 +193,10 @@ model Firm {
   /// Default for "auto-add matter team to new calendar events".
   /// Per-matter override lives on Matter.autoAddTeamToNewEvents
   /// (null on the matter inherits this firm value).
+  /// Template for new matter names on /matters/new. Tokens such as
+  /// {client_last}, {client_first}, {case_number}, {location}.
+  /// A practice area's own template overrides this.
+  matterNameTemplate          String           @default("{client_last}, {client_first} - {case_number} - {location}")
   autoAddTeamToNewEvents      Boolean          @default(true)
   /// Default for "auto-add new team members to upcoming events
   /// on the matter". Same per-matter override pattern as above.
@@ -327,6 +331,10 @@ model PracticeArea {
   /// the new/edit forms. False for areas like "Guardianships" where
   /// SOL isn't meaningful.
   hasStatuteOfLimitations Boolean        @default(false)
+  /// Per-area override of Firm.matterNameTemplate; null = use the firm's.
+  matterNameTemplate      String?
+  /// Matter fields that must be filled on /matters/new for this area.
+  requiredMatterFields    String[]       @default([])
   /// Statute period as a calendar amount + unit (ADR-035): "2 YEARS",
   /// "18 MONTHS", "180 DAYS". The SOL date is computed with calendar
   /// arithmetic on the incident's UTC date-only value (src/lib/sol.ts),
@@ -394,6 +402,8 @@ model Matter {
   court          String? /// Court and judge, e.g. "D. Colorado · Hon. L. Martinez"
   filedDate      DateTime?
   trialDate      DateTime?
+  venueId        String? /// FK → venues
+  venue          Venue?       @relation(fields: [venueId], references: [id], onDelete: Restrict)
   feeStructure   String       @default("contingent") /// contingent | hourly | flat | hybrid | pro_bono
   /// Which billing flow the matter uses on the Billing tab —
   /// "client" (today's traditional invoicing), "court_voucher"
@@ -490,7 +500,26 @@ model Matter {
   @@index([stageId])
   @@index([practiceAreaId])
   @@index([clientId])
+  @@index([venueId])
   @@map("matters")
+}
+
+/// A court or forum a matter is venued in. Managed in Settings → Venues
+/// and addable inline from the matter form.
+model Venue {
+  id        String   @id @default(cuid())
+  name      String
+  /// lower(trim(name)); case-insensitive uniqueness, includes archived rows
+  nameKey   String   @unique
+  city      String?
+  county    String?
+  state     String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  matters   Matter[]
+
+  @@map("venues")
 }
 
 /// Per-user pin of a matter — controls which matters appear in a given

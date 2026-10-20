@@ -285,6 +285,29 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
     ],
   },
   {
+    id: "venues",
+    label: "Venues",
+    permissions: [
+      {
+        key: "venues.add",
+        label: "Add venues",
+        description:
+          "Add venues in Settings → Venues, or inline from the matter form by pressing Enter on a new name.",
+      },
+      {
+        key: "venues.edit",
+        label: "Edit venues",
+        description:
+          "Rename venues and change their city, county and state; archive and restore them.",
+      },
+      {
+        key: "venues.delete",
+        label: "Delete venues",
+        description: "Delete a venue no matter uses.",
+      },
+    ],
+  },
+  {
     id: "portal",
     label: "Client portal",
     permissions: [

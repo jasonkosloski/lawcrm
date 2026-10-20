@@ -74,6 +74,14 @@ describe("isKnownPermission", () => {
   });
 });
 
+describe("venue keys", () => {
+  test("venue keys are catalogued", () => {
+    for (const k of ["venues.add", "venues.edit", "venues.delete"]) {
+      expect(isKnownPermission(k)).toBe(true);
+    }
+  });
+});
+
 describe("permissionLabel", () => {
   test("known keys return their human label", () => {
     expect(permissionLabel("matters.manage_team")).toBe(
