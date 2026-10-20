@@ -10,11 +10,13 @@
  * both server queries and client components. The DB-touching loader lives
  * in `src/lib/queries/dashboard-prefs.ts`.
  *
- * v2 supports show/hide (`visible`) + reorder (`order`). Ordering is
- * per-column: each card belongs to a fixed column (main / right rail —
- * see DASHBOARD_CARD_COLUMNS) and moves only within it. `order` is still
- * stored as ONE flat array so column membership can change later without
- * a prefs migration. Drag + resize (v3) is tracked in docs/features/app-shell.md.
+ * v3 stores a band + 1-3 column layout (`DashboardLayout`): a full-width
+ * band of cards on top, then a column split (`DashboardSplit`) whose
+ * columns each hold an ordered stack of cards, plus a `hidden` tray.
+ * `mergeLayout` is the single decoder; it also converts legacy v2 blobs
+ * (`visible` + `order`) so no DB migration is needed. The v2 helpers
+ * (`mergeVisibility`, `mergeOrder`, `DASHBOARD_CARD_COLUMNS`) remain for
+ * that conversion and for callers not yet moved to v3.
  */
 
 /** Stable identifier for each toggleable surface on the dashboard. */
@@ -31,17 +33,56 @@ export const DASHBOARD_CARD_KEYS = [
 
 export type DashboardCardKey = (typeof DASHBOARD_CARD_KEYS)[number];
 
-/** Human-readable labels used in the customize popover. */
-export const DASHBOARD_CARD_LABELS: Record<DashboardCardKey, string> = {
-  kpis: "KPI tiles",
-  agenda: "Today's agenda",
-  tasks: "Your tasks",
-  followUps: "Follow up today",
-  activity: "Recent activity",
-  deadlines: "Deadlines this week",
-  pulse: "Firm pulse",
-  records: "Records to chase",
+/** Where a card lands when a stored layout doesn't mention it. */
+export type CardPlacement =
+  | { zone: "band" }
+  | { zone: "column"; index: number };
+
+/**
+ * Card registry: label (shown in the customizer) + default placement
+ * (used by `mergeLayout` for cards missing from a stored layout, so new
+ * cards appear without a backfill). New cards register here.
+ */
+export const DASHBOARD_CARDS: Record<
+  DashboardCardKey,
+  { label: string; defaultPlacement: CardPlacement }
+> = {
+  kpis: { label: "KPI tiles", defaultPlacement: { zone: "band" } },
+  agenda: {
+    label: "Today's agenda",
+    defaultPlacement: { zone: "column", index: 0 },
+  },
+  tasks: {
+    label: "Your tasks",
+    defaultPlacement: { zone: "column", index: 0 },
+  },
+  followUps: {
+    label: "Follow up today",
+    defaultPlacement: { zone: "column", index: 0 },
+  },
+  activity: {
+    label: "Recent activity",
+    defaultPlacement: { zone: "column", index: 0 },
+  },
+  deadlines: {
+    label: "Deadlines this week",
+    defaultPlacement: { zone: "column", index: 1 },
+  },
+  pulse: {
+    label: "Firm pulse",
+    defaultPlacement: { zone: "column", index: 1 },
+  },
+  records: {
+    label: "Records to chase",
+    defaultPlacement: { zone: "column", index: 1 },
+  },
 };
+
+/** Human-readable labels used in the customize popover (derived). */
+export const DASHBOARD_CARD_LABELS: Record<DashboardCardKey, string> =
+  Object.fromEntries(
+    DASHBOARD_CARD_KEYS.map((k) => [k, DASHBOARD_CARDS[k].label])
+  ) as Record<DashboardCardKey, string>;
 
 /**
  * Which dashboard column each card lives in. Ordering moves cards only
@@ -169,4 +210,199 @@ export function moveCardInColumn(
   const b = next.indexOf(neighbor);
   [next[a], next[b]] = [next[b], next[a]];
   return next;
+}
+
+// ── v3: band + columns layout ─────────────────────────────────────────
+
+/** Column split of the grid below the band, as 12-grid spans. */
+export type DashboardSplit = "8/4" | "4/8" | "6/6" | "4/4/4" | "12";
+
+export const DASHBOARD_SPLITS: readonly DashboardSplit[] = [
+  "8/4",
+  "4/8",
+  "6/6",
+  "4/4/4",
+  "12",
+];
+
+/** Each column's span out of 12, per split. Length = column count. */
+export const SPLIT_SPANS: Record<DashboardSplit, number[]> = {
+  "8/4": [8, 4],
+  "4/8": [4, 8],
+  "6/6": [6, 6],
+  "4/4/4": [4, 4, 4],
+  "12": [12],
+};
+
+/** The decoded per-user dashboard layout (`User.dashboardPrefs`, v3). */
+export type DashboardLayout = {
+  v: 3;
+  split: DashboardSplit;
+  /** Full-width cards rendered above the columns. */
+  band: DashboardCardKey[];
+  /** One ordered stack per column; length always matches the split. */
+  columns: DashboardCardKey[][];
+  hidden: DashboardCardKey[];
+};
+
+/** What a new user and "Reset" get — reproduces the v2 page. */
+export const DEFAULT_LAYOUT: DashboardLayout = {
+  v: 3,
+  split: "8/4",
+  band: ["kpis"],
+  columns: [
+    ["agenda", "tasks", "followUps", "activity"],
+    ["deadlines", "pulse", "records"],
+  ],
+  hidden: [],
+};
+
+/** Where a card can be moved to. */
+export type LayoutTarget =
+  | { zone: "band" }
+  | { zone: "column"; index: number }
+  | { zone: "hidden" };
+
+function freshDefault(): DashboardLayout {
+  return {
+    ...DEFAULT_LAYOUT,
+    band: [...DEFAULT_LAYOUT.band],
+    columns: DEFAULT_LAYOUT.columns.map((c) => [...c]),
+    hidden: [...DEFAULT_LAYOUT.hidden],
+  };
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
+const KNOWN_KEYS = new Set<string>(DASHBOARD_CARD_KEYS);
+
+/** Convert a legacy v2 blob (`visible` + `order`) to a v3 layout. */
+function layoutFromV2(stored: unknown): DashboardLayout {
+  const order = mergeOrder(stored);
+  const visible = mergeVisibility(stored);
+  const main = order.filter((k) => DASHBOARD_CARD_COLUMNS[k] === "main");
+  const rail = order.filter((k) => DASHBOARD_CARD_COLUMNS[k] === "rail");
+  const kpisFirst = main[0] === "kpis";
+  const shown = (k: DashboardCardKey) => visible[k];
+  return {
+    v: 3,
+    split: "8/4",
+    band: kpisFirst && shown("kpis") ? ["kpis"] : [],
+    columns: [
+      main.filter((k) => !(kpisFirst && k === "kpis") && shown(k)),
+      rail.filter(shown),
+    ],
+    hidden: order.filter((k) => !shown(k)),
+  };
+}
+
+/**
+ * Decode a stored `User.dashboardPrefs` blob into a complete, valid v3
+ * layout. Rules, in order: non-object → default; v2 blob (no `v: 3`) →
+ * converted; v3 blob → sanitized (unknown split → 8/4, junk keys
+ * dropped, each key once with band > columns > hidden precedence,
+ * columns folded/padded to the split's column count); finally any known
+ * card missing from the result is placed in its default zone so cards
+ * added after the user saved still appear. Always returns fresh arrays.
+ */
+export function mergeLayout(stored: unknown): DashboardLayout {
+  if (!isPlainObject(stored)) return freshDefault();
+  if (stored.v !== 3) return mergeLayout(layoutFromV2(stored));
+
+  const split: DashboardSplit = DASHBOARD_SPLITS.includes(
+    stored.split as DashboardSplit
+  )
+    ? (stored.split as DashboardSplit)
+    : "8/4";
+  const colCount = SPLIT_SPANS[split].length;
+
+  const seen = new Set<DashboardCardKey>();
+  const clean = (list: unknown): DashboardCardKey[] => {
+    const out: DashboardCardKey[] = [];
+    if (!Array.isArray(list)) return out;
+    for (const e of list) {
+      if (typeof e !== "string" || !KNOWN_KEYS.has(e)) continue;
+      const key = e as DashboardCardKey;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(key);
+    }
+    return out;
+  };
+
+  const band = clean(stored.band);
+  const rawCols = Array.isArray(stored.columns) ? stored.columns : [];
+  const cleaned = rawCols.map(clean);
+  const columns: DashboardCardKey[][] = [];
+  for (let i = 0; i < colCount; i++) columns.push(cleaned[i] ?? []);
+  // Extra columns (from a wider split) fold onto the end of the last one.
+  for (let i = colCount; i < cleaned.length; i++) {
+    columns[colCount - 1].push(...cleaned[i]);
+  }
+  const hidden = clean(stored.hidden);
+
+  for (const key of DASHBOARD_CARD_KEYS) {
+    if (seen.has(key)) continue;
+    const p = DASHBOARD_CARDS[key].defaultPlacement;
+    if (p.zone === "band") band.push(key);
+    else columns[Math.min(p.index, colCount - 1)].push(key);
+  }
+  return { v: 3, split, band, columns, hidden };
+}
+
+/**
+ * Move a card to a zone, removing it from wherever it was. Inserts at
+ * `position` (default: end; clamped). A column index past the last
+ * column lands in the last. Pure — returns a new layout.
+ */
+export function moveCard(
+  layout: DashboardLayout,
+  key: DashboardCardKey,
+  to: LayoutTarget,
+  position?: number
+): DashboardLayout {
+  const without = (list: DashboardCardKey[]) => list.filter((k) => k !== key);
+  const next: DashboardLayout = {
+    ...layout,
+    band: without(layout.band),
+    columns: layout.columns.map(without),
+    hidden: without(layout.hidden),
+  };
+  const target =
+    to.zone === "band"
+      ? next.band
+      : to.zone === "hidden"
+        ? next.hidden
+        : next.columns[
+            Math.max(0, Math.min(to.index, next.columns.length - 1))
+          ];
+  const at =
+    position === undefined
+      ? target.length
+      : Math.max(0, Math.min(position, target.length));
+  target.splice(at, 0, key);
+  return next;
+}
+
+/** Change the column split, re-folding/padding columns via `mergeLayout`. */
+export function setSplit(
+  layout: DashboardLayout,
+  split: DashboardSplit
+): DashboardLayout {
+  return mergeLayout({ ...layout, split });
+}
+
+/** Structural equality — used to skip a save when nothing changed. */
+export function layoutsEqual(a: DashboardLayout, b: DashboardLayout): boolean {
+  const eq = (x: readonly string[], y: readonly string[]) =>
+    x.length === y.length && x.every((k, i) => k === y[i]);
+  return (
+    a.split === b.split &&
+    eq(a.band, b.band) &&
+    eq(a.hidden, b.hidden) &&
+    a.columns.length === b.columns.length &&
+    a.columns.every((c, i) => eq(c, b.columns[i]))
+  );
 }
