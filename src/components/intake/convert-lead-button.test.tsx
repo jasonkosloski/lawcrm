@@ -51,6 +51,7 @@ function renderButton() {
       leadId="lead1"
       defaultMatterName="Doe v. Acme"
       areas={AREAS}
+      todayKey="2026-10-20"
     />
   );
 }
@@ -223,6 +224,7 @@ describe("ConvertLeadButton — server errors and live props", () => {
         leadId="lead1"
         defaultMatterName="Doe v. Acme"
         areas={AREAS.map((a) => ({ ...a }))}
+        todayKey="2026-10-20"
       />
     );
     expect(screen.getByPlaceholderText("Matter name")).toHaveValue(
@@ -256,6 +258,7 @@ describe("ConvertLeadButton — restricted intake (ADR-049)", () => {
         defaultMatterName="Doe v. Acme"
         areas={AREAS}
         restrictedTo={["Alice Attorney", "Bob Paralegal"]}
+        todayKey="2026-10-20"
       />
     );
     await openDialog(user);

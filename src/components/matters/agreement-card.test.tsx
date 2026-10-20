@@ -52,4 +52,24 @@ describe("AgreementCard", () => {
     expect(document.querySelector('select[name="agreementStatus"]')).toBeTruthy();
     expect(document.querySelector('select[name="documentId"]')).toBeTruthy();
   });
+
+  test("Cancel discards edits and reopens at the saved values", async () => {
+    const user = userEvent.setup();
+    render(
+      <AgreementCard
+        {...base}
+        canEdit
+        agreement={{ status: "sent", signedDate: null, document: { id: "d1", name: "fee.pdf" } }}
+      />
+    );
+    await user.click(screen.getByRole("button", { name: /edit/i }));
+    const status = () => document.querySelector('select[name="agreementStatus"]') as HTMLSelectElement;
+    const doc = () => document.querySelector('select[name="documentId"]') as HTMLSelectElement;
+    await user.selectOptions(status(), "signed");
+    await user.selectOptions(doc(), "");
+    await user.click(screen.getByRole("button", { name: /cancel/i }));
+    await user.click(screen.getByRole("button", { name: /edit/i }));
+    expect(status().value).toBe("sent");
+    expect(doc().value).toBe("d1");
+  });
 });

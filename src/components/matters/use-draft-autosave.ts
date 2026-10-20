@@ -12,6 +12,8 @@
  * - `notfound` -> "gone": a teammate deleted the draft or opened a
  *   matter from it. Saving stops; nothing is silently re-created.
  * - `stale` -> someone else saved first. Saving stops until reload.
+ * - `invalid` -> the draft is too large to save. Auto-save stops.
+ * - `error` (thrown / network) -> shown; the next change retries.
  */
 
 "use client";
@@ -21,7 +23,7 @@ import { saveMatterDraft, type DraftValues } from "@/app/actions/matter-drafts";
 
 export const AUTOSAVE_INTERVAL_MS = 30_000;
 
-export type AutosaveStatus = "idle" | "saving" | "saved" | "stale" | "gone";
+export type AutosaveStatus = "idle" | "saving" | "saved" | "stale" | "gone" | "error" | "invalid";
 
 export function useDraftAutosave({
   draftId,
@@ -83,11 +85,12 @@ export function useDraftAutosave({
         blockedRef.current = true;
         setStatus("stale");
       } else {
-        setStatus("idle");
+        blockedRef.current = true;
+        setStatus("invalid");
       }
       return null;
     } catch {
-      setStatus("idle");
+      setStatus("error");
       return null;
     }
   }, []);

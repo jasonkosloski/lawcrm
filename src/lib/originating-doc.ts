@@ -54,7 +54,7 @@ export function agreementGateErrors(
     }
   } else if (!isRealDate(input.signedDate)) {
     errors.agreementSignedDate = "Enter a valid date.";
-  } else if (input.signedDate > today) {
+  } else if (today !== "" && input.signedDate > today) {
     errors.agreementSignedDate = "The signed date can't be in the future.";
   }
 

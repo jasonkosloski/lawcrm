@@ -131,7 +131,11 @@ export function AgreementCard({
                 type="button"
                 size="sm"
                 variant="ghost"
-                onClick={() => setEditing(false)}
+                onClick={() => {
+                  setStatus(agreement?.status ?? "not_sent");
+                  setSignedDate(agreement?.signedDate ?? "");
+                  setEditing(false);
+                }}
               >
                 Cancel
               </Button>

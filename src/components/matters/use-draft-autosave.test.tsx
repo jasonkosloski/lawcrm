@@ -121,14 +121,34 @@ describe("useDraftAutosave", () => {
     expect(save).toHaveBeenCalledTimes(1);
   });
 
-  test("a save that throws (network) is not fatal: back to idle, next change retries", async () => {
+  test("a save that throws (network) is not fatal: error status, next change retries", async () => {
     save.mockRejectedValueOnce(new Error("offline"));
     save.mockResolvedValueOnce({ ok: true, draftId: "d1", updatedAt: T2 });
     const { hook, values } = setup();
     values.current = { name: "B" };
     await tick();
-    expect(hook.result.current.status).toBe("idle");
+    expect(hook.result.current.status).toBe("error");
     await tick();
     expect(hook.result.current.status).toBe("saved");
+  });
+
+  test("a failed manual save shows the error status; a thrown auto-save error retries", async () => {
+    save.mockRejectedValueOnce(new Error("offline"));
+    const { hook } = setup();
+    await act(async () => {
+      await hook.result.current.saveNow();
+    });
+    expect(hook.result.current.status).toBe("error");
+  });
+
+  test("invalid -> invalid status and auto-save stops", async () => {
+    save.mockResolvedValue({ ok: false, code: "invalid" });
+    const { hook, values } = setup();
+    values.current = { name: "B" };
+    await tick();
+    expect(hook.result.current.status).toBe("invalid");
+    values.current = { name: "C" };
+    await tick();
+    expect(save).toHaveBeenCalledTimes(1);
   });
 });

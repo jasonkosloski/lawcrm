@@ -68,7 +68,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { ConflictReview } from "./conflict-review";
 import { NewMatterTeamPicker, parseTeamSeats } from "./new-matter-team-picker";
 import { EngagementSection, type EngagementChange } from "./engagement-section";
-import { useDraftAutosave } from "./use-draft-autosave";
+import { useDraftAutosave, type AutosaveStatus } from "./use-draft-autosave";
 import type { DraftValues } from "@/app/actions/matter-drafts";
 import { agreementGateErrors } from "@/lib/originating-doc";
 import type { StorageDriver } from "@/lib/storage/storage-key";
@@ -145,7 +145,12 @@ const DEFAULT_ENGAGEMENT: NewMatterEngagement = {
 };
 
 /** Carried by the draft row / files themselves, never saved as values. */
-const NOT_DRAFT_VALUES = new Set(["draftId", "draftUpdatedAt", "originatingFileId"]);
+const NOT_DRAFT_VALUES = new Set([
+  "draftId",
+  "draftUpdatedAt",
+  "originatingFileId",
+  "originatingFileMark",
+]);
 
 function serializeForm(form: HTMLFormElement): DraftValues {
   const fd = new FormData(form);
@@ -193,7 +198,7 @@ export function NewMatterForm({
       {
         required: engagement.required,
         label: engagementLabel,
-        today: engagement.todayKey || new Date().toISOString().slice(0, 10),
+        today: engagement.todayKey,
       }
     );
     if (missing.length > 0 || Object.keys(gate).length > 0) {
@@ -1163,7 +1168,7 @@ function DraftStatus({
   savedAt,
   timeZone,
 }: {
-  status: "idle" | "saving" | "saved" | "stale" | "gone";
+  status: AutosaveStatus;
   savedAt: Date | null;
   timeZone: string;
 }) {
@@ -1185,6 +1190,20 @@ function DraftStatus({
     return (
       <span role="status" className="mr-auto text-2xs text-warn">
         This draft no longer exists
+      </span>
+    );
+  }
+  if (status === "invalid") {
+    return (
+      <span role="status" className="mr-auto text-2xs text-warn">
+        This draft is too large to save.
+      </span>
+    );
+  }
+  if (status === "error") {
+    return (
+      <span role="status" className="mr-auto text-2xs text-warn">
+        Couldn&apos;t save the draft. Try again.
       </span>
     );
   }

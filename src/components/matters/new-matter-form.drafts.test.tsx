@@ -121,6 +121,31 @@ describe("NewMatterForm - Save draft", () => {
     await waitFor(() => expect(hidden("draftUpdatedAt")).toBe("2026-10-20T10:05:00.000Z"));
   });
 
+  test("the originating-file radio is not saved as a draft value", async () => {
+    save.mockResolvedValue({ ok: true, draftId: "d1", updatedAt: T1 });
+    const user = userEvent.setup();
+    render(<NewMatterForm options={options} draft={draft()} engagement={engagement()} />);
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(save).toHaveBeenCalled());
+    expect(save.mock.calls[0][2]).not.toHaveProperty("originatingFileMark");
+  });
+
+  test("a failed save shows 'Couldn't save the draft. Try again.'", async () => {
+    save.mockRejectedValue(new Error("offline"));
+    const user = userEvent.setup();
+    render(<NewMatterForm options={options} draft={draft()} engagement={engagement()} />);
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    expect(await screen.findByText("Couldn't save the draft. Try again.")).toBeTruthy();
+  });
+
+  test("an oversize draft shows 'This draft is too large to save.'", async () => {
+    save.mockResolvedValue({ ok: false, code: "invalid" });
+    const user = userEvent.setup();
+    render(<NewMatterForm options={options} draft={draft()} engagement={engagement()} />);
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    expect(await screen.findByText("This draft is too large to save.")).toBeTruthy();
+  });
+
   test("stale: shows the verbatim message", async () => {
     save.mockResolvedValue({ ok: false, code: "stale" });
     const user = userEvent.setup();

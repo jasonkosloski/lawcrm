@@ -85,21 +85,21 @@ export default async function LeadDetailLayout({
     canConvert,
     canDecline,
     canViewRecords,
-    engagement,
   ] = await Promise.all([
     getLeadById(id),
     getPracticeAreaOptions(),
     currentUserHasPermission("matters.create"),
     currentUserHasPermission("intake.decline"),
     currentUserHasPermission("records.view"),
-    // Engagement block of the convert dialog: the lead's live documents
-    // (the page's assertLeadAccess above already scoped the viewer to
-    // this lead) and the firm's signed-document switch.
-    loadEngagementInputs(id, userId),
   ]);
   if (!lead) notFound();
 
   const isResolved = lead.stage === "converted" || lead.stage === "declined";
+  // Engagement block of the convert dialog: the lead's live documents
+  // (assertLeadAccess above already scoped the viewer to this lead) and
+  // the firm's signed-document switch. Only loaded when the button renders.
+  const engagement =
+    canConvert && !isResolved ? await loadEngagementInputs(id, userId) : null;
 
   return (
     <>
@@ -121,7 +121,7 @@ export default async function LeadDetailLayout({
           !isResolved ? (
             <>
               {canDecline && <DeclineLeadButton leadId={lead.id} />}
-              {canConvert && (
+              {canConvert && engagement && (
                 <ConvertLeadButton
                   leadId={lead.id}
                   defaultMatterName={lead.displayName}

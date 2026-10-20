@@ -66,3 +66,15 @@ describe("agreementGateErrors", () => {
     ).toBeTruthy();
   });
 });
+
+describe("agreementGateErrors with an unknown today", () => {
+  test("empty today skips only the future-date check", () => {
+    const opts = { required: true, label: "Fee agreement", today: "" };
+    const base = { status: "signed", signedDate: "2026-10-12", hasOriginatingFile: true };
+    expect(agreementGateErrors(base, opts)).toEqual({});
+    expect(agreementGateErrors({ ...base, signedDate: "2026-02-30" }, opts)).toEqual({
+      agreementSignedDate: "Enter a valid date.",
+    });
+  });
+});
+

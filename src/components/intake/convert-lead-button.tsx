@@ -75,7 +75,7 @@ export function ConvertLeadButton({
   restrictedTo,
   documents = [],
   requireOriginatingDoc = false,
-  todayKey = "",
+  todayKey,
 }: {
   leadId: string;
   defaultMatterName: string;
@@ -88,7 +88,7 @@ export function ConvertLeadButton({
   /** Firm switch: converting needs a signed originating document. */
   requireOriginatingDoc?: boolean;
   /** Today's calendar date (YYYY-MM-DD, firm zone) for the future-date check. */
-  todayKey?: string;
+  todayKey: string;
 }) {
   const [open, setOpen] = useState(false);
   const action = convertLeadToMatter.bind(null, leadId);

@@ -42,6 +42,7 @@ vi.mock("@/lib/queries/practice-area-options", () => ({
   getPracticeAreaOptions: vi.fn(async () => []),
 }));
 
+import { prisma } from "@/lib/prisma";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { getLeadById } from "@/lib/queries/leads";
 import { ConvertLeadButton } from "@/components/intake/convert-lead-button";
@@ -89,6 +90,8 @@ async function renderLayout(opts: {
 }
 
 beforeEach(() => {
+  vi.mocked(prisma.document.findMany).mockClear();
+  vi.mocked(prisma.user.findUnique).mockClear();
   mockedHas.mockReset();
   mockedLead.mockReset();
 });
@@ -125,5 +128,42 @@ describe("LeadDetailLayout action buttons", () => {
         stage: "declined",
       })
     ).toEqual({ decline: 0, convert: 0 });
+  });
+});
+
+describe("LeadDetailLayout engagement inputs", () => {
+  test("not loaded for a viewer without matters.create, or a resolved lead", async () => {
+    await renderLayout({ grants: ["intake.decline"] });
+    await renderLayout({ grants: ["matters.create"], stage: "converted" });
+    expect(prisma.document.findMany).not.toHaveBeenCalled();
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  test("the dialog receives documents, the firm switch and today", async () => {
+    vi.mocked(prisma.document.findMany).mockResolvedValueOnce([
+      { id: "d1", name: "fee.pdf" },
+    ] as never);
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+      firm: { requireOriginatingDoc: true },
+    } as never);
+    mockedHas.mockImplementation(async (key) => key === "matters.create");
+    mockedLead.mockResolvedValue({
+      id: "lead1",
+      stage: "new",
+      score: null,
+      displayName: "Priya Patel",
+      convertedMatter: null,
+    } as unknown as Awaited<ReturnType<typeof getLeadById>>);
+    const tree = await LeadDetailLayout({
+      children: null,
+      params: Promise.resolve({ id: "lead1" }),
+    } as unknown as Parameters<typeof LeadDetailLayout>[0]);
+    const [topBar] = findAll(tree, TopBar) as Array<{ props: { actions?: ReactNode } }>;
+    const [convert] = findAll(topBar.props.actions, ConvertLeadButton) as Array<{
+      props: Record<string, unknown>;
+    }>;
+    expect(convert.props.documents).toEqual([{ id: "d1", name: "fee.pdf" }]);
+    expect(convert.props.requireOriginatingDoc).toBe(true);
+    expect(convert.props.todayKey).toBe("2026-10-20");
   });
 });
