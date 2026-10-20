@@ -59,7 +59,7 @@ The portal host never reaches Clerk. `src/proxy.ts` handles portal 404/rewrite/s
 3. Add the DNS records from Clerk -> Domains (DNS-only if the domain is behind Cloudflare).
 4. Clerk settings: restricted sign-up mode, Google only, allowed domain, session lifetimes.
 5. Add the webhook (session events) pointing at `/api/webhooks/clerk`; set `CLERK_WEBHOOK_SIGNING_SECRET`.
-6. Vercel env: production `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY`; set `STAFF_ORIGINS` to the real staff origin (not the portal host). `AUTH_SECRET` stays set: no longer used for staff sessions; keys the portal link-request HMAC and the Google integration's OAuth state. `src/lib/env-check.ts` flags missing values.
+6. Vercel env: production `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY`; set `STAFF_ORIGINS=https://litgox.com,https://www.litgox.com` (never `portal.litgox.com`); Clerk production is DNS-verified on `litgox.com` (`clerk.litgox.com`). `AUTH_SECRET` stays set: no longer used for staff sessions; keys the portal link-request HMAC and the Google integration's OAuth state. `src/lib/env-check.ts` flags missing values.
 7. Run `npm run clerk:preflight` with an explicit production `DATABASE_URL`. It is read-only: it prints the DB host and the first 6 chars of the DB user, active users not on `@kosloskilaw.com`, and how many are already linked to Clerk. Confirm it is the production DB before trusting it.
 8. Deploy; confirm an invited Google account signs in under restricted mode and links, and that an uninvited one lands on `/no-access`.
 
