@@ -1,48 +1,81 @@
 # Authentication
 
-Auth.js v5 email + password sign-in with argon2id and JWT sessions, change password, password-fingerprint session revocation, per-account lockout and an auth audit trail. There is no self sign-up (users are seeded or invited by an admin). 2FA, password reset by email, OAuth/SSO and similar are DELIBERATELY DEFERRED until a planned auth overhaul (project memory: do not start auth features before that).
-Related: [ADR-017](../decisions/017-password-fingerprint-in-the-jwt-revoke-sessions.md), [ADR-020](../decisions/020-sign-in-lockout-is-a-reserve-settle.md), [ADR-028](../decisions/028-layouts-are-not-auth-gates-every-page.md), [ADR-022](../decisions/022-security-header-baseline-no-csp-yet-and.md), [PERMISSIONS.md](../PERMISSIONS.md), [settings-admin.md](settings-admin.md)
+Staff sign in with Google through Clerk (restricted, invite-only). Clerk proves who someone is; the `User` table decides whether they may use the app ([ADR-053](../decisions/053-clerk-proves-identity-the-user-table-grants-access.md)). There is no self sign-up. The client portal has its own, separate identity ([ADR-051](../decisions/051-client-portal-identity-is-separate-from-staff-auth.md), [client-portal.md](client-portal.md)).
+Related: [ADR-028](../decisions/028-layouts-are-not-auth-gates-every-page.md), [ADR-022](../decisions/022-security-header-baseline-no-csp-yet-and.md), [PERMISSIONS.md](../PERMISSIONS.md), [settings-admin.md](settings-admin.md)
+
+Status: shipped on branch `clerk-staff-auth`; production cutover pending (checklist below).
 
 ## Open work
-- [~] **Authentication overhaul** (P2) — Phase 1 done. Everything below waits for the planned overhaul / concrete demand; where each would land:
-  - Google OAuth sign-in: append `Google()` to `providers` in `src/auth.ts`, set `AUTH_GOOGLE_*`; the `Account` table exists. Other OAuth (Microsoft 365, GitHub): same drill.
-  - Self-service password reset (email link): new `/forgot-password` + `/reset-password?token=...` routes; single-use hashed tokens in `VerificationToken`; invalidate sessions on reset. Today an admin resets from Settings -> Team (clears any lock, signs the target out everywhere). Needs an email delivery provider (Resend in prod / console in dev).
-  - Email verification: send on signup + email change; consume via `VerificationToken`; flip `User.emailVerified`.
-  - MFA / TOTP: `User.totpSecret` + `RecoveryCode` table; second login step; `/account/mfa` enroll.
-  - Session list / revoke individual sessions: switch strategy `jwt` -> `database`, add `Session` table, `/account/sessions` UI. (Revoke-ALL-others on password change/reset already works via ADR-017.)
-  - Idle timeout / absolute lifetime: session-callback timestamps, configurable in firm settings.
-  - Pwned-passwords check: HaveIBeenPwned k-anonymity range API in the credentials authorize step.
-  - Rate limiting per IP / route: nothing beyond the per-account lockout; use a Vercel Firewall rule on the sign-in route or a Redis/Upstash sliding window.
-  - Re-auth challenge for sensitive actions: a `requireRecentAuth(maxAgeMin)` helper checking session age.
-  - Multi-tenancy (`firmId` on session): add `Firm` model relations + `User.firmId`; extend `jwt`/`session` callbacks; audit every query for `where: { firmId }`.
-  - SAML/OIDC SSO: Auth.js provider, likely only when a >50-user firm asks.
+- [ ] **Production cutover** — see the checklist below. Needs the Clerk production instance, Google OAuth client, DNS and env vars.
+- [ ] **Drop migration** (Task 10, once Clerk sign-in is stable in production): remove `User.passwordHash`, `User.emailVerified`, `User.image`, and the `Account` and `VerificationToken` tables, all unused since Auth.js was removed. Destructive, so it waits until rollback is no longer wanted.
+- [ ] **Microsoft sign-in** — add as a second Clerk SSO connection if a firm member needs it; linking is by verified primary email, so no change to the resolver is expected.
+- [ ] **Portal auth decision** — the portal keeps magic links for now. If it moves to Clerk, use a separate Clerk application (ADR-053).
+- [ ] Not built, would sit on Clerk: idle timeout / absolute lifetime (Clerk session settings), re-auth challenge for sensitive actions, multi-tenancy (`firmId` would attach in `getStaffAuth()`).
 
-## Shipped
-- [x] **Phase 1: email + password, JWT sessions** (2026-04-25) — Auth.js v5 (`next-auth@beta`) + Prisma adapter + argon2id (constant-time `argon2.verify`). `/login` with generic errors (no email enumeration), `?next=` round-trip via `src/proxy.ts`, sign-out in the sidebar profile strip. Seed users get hashed passwords from `SEED_ADMIN_PASSWORD` or a random one printed once. `Account` + `VerificationToken` tables provisioned for OAuth / reset later. Migration `20260425201311_auth_phase_1` added `User.passwordHash` (null = no credentials login), `User.emailVerified`, `User.image`, `Account`, `VerificationToken`.
-- [x] **Phase 2 hardening** (2026-10-16) — change password (same throttle as sign-in, 5 failed attempts / 15 min via `reserveAttempt`), login lockout (5 failures / 15 min per account, atomic; unknown/inactive/passwordless/locked accounts burn a dummy argon2 verify; per-account not per-IP, an accepted availability trade-off, ADR-020), auth audit trail (`type: "auth"` ActivityLog rows), password change/reset signs out other sessions (ADR-017). Details and UI in [settings-admin.md](settings-admin.md).
-- [x] **RBAC** — `Role` / `UserRole` / `RolePermission`, catalog in `src/lib/permissions.ts`, `requirePermission`. Matter-level team access shipped as ADR-039 (see [matter-access.md](matter-access.md)).
+## What Clerk does vs what the User table does
+- **Clerk:** Google sign-in, MFA (Google's), session issue and revoke, invitations, restricted sign-up, ban, the signed session webhook.
+- **User table:** whether the Clerk identity is a firm member (`clerkUserId` link, `isActive`), roles and permissions, matter walls, and the audit trail. Clerk never grants anything; an unlinked, inactive or unverifiable identity is `no_access` (the `/no-access` page).
+- **Fail closed:** a Clerk API error, an unverified primary email or an inactive user all resolve to `no_access`, never `ok`.
 
-## Decisions in force
-- Library: Auth.js v5 (Credentials + any OAuth later; Prisma adapter first-class).
-- Hashing: argon2id; seed hashes once, login uses constant-time verify.
-- Sessions: JWT strategy, no `Session` table. Cannot revoke one session before expiry; revoke-all-others works through the password fingerprint (`pwv`) in the JWT (ADR-017). `changePasswordAction` re-stamps its own session via `unstable_update({ pwv })`; the `jwt` callback honors that only when the payload `pwv` equals the fingerprint freshly computed from the DB (proof-gated), so a stolen revoked cookie cannot revive itself via `POST /api/auth/session`. Tokens issued before ADR-017 carry no fingerprint (everyone signed in once more).
-- Cookie: `authjs.session-token`, HttpOnly, SameSite=Lax, Secure in prod (Auth.js defaults, not overridden).
-- Email delivery: none yet.
-- Tenancy: single-tenant, structured for an additive `firmId`.
+## How a request is authenticated
+1. `src/proxy.ts` runs `clerkMiddleware` on the staff host: a cheap, DB-free redirect to `/login?next=…` when there is no verified Clerk session. It is a UX gate, not the authority.
+2. Every page, layout, server action and route handler resolves the user through `getStaffAuth()` (`src/lib/staff-auth.ts`), request-cached, returning `signed_out`, `no_access` or `ok`. `getSession()` (`src/lib/session.ts`) adapts that to `{ user: { id } }` and is null unless `ok`. `getCurrentUserId()` / `requireUser()` (`src/lib/current-user.ts`) sit on it; every `page.tsx` / `layout.tsx` under `(dashboard)` and `print` must call a guard as its first `await` (ADR-028, enforced by `src/app/page-guards.test.ts`).
+3. Public paths: `/login`, `/sso-callback`, `/no-access`, `/api/csp-report`. Machine endpoints that carry their own credential (cron, blob callback, Clerk webhook) are exact-match exemptions in the proxy.
+
+## First-sign-in linking
+The first time a Clerk user signs in, an ACTIVE `User` whose email matches the Clerk user's verified primary email (case-insensitive) and has no `clerkUserId` gets the Clerk id written by one conditional `updateMany` (`clerkUserId IS NULL`). Racing identities cannot both win; a linked row is never re-pointed; afterwards the Clerk id is the identity and email is never consulted. Success logs `account_linked`. If nothing can be linked, the resolver returns `no_access` and writes at most one `no_access` audit row per Clerk id per 15 minutes (every request from that visitor lands here, so it is deduped).
+
+## Deactivation and Clerk ban
+The database is authoritative: `isActive = false` denies on the very next request whatever the Clerk session says. Settings -> Team deactivate/reactivate also bans/unbans the Clerk user after the DB commit, as belt-and-braces; a Clerk failure is reported as a warning because access is already denied. Wrapper: `src/lib/clerk-admin.ts` (`inviteStaff`, `banStaff`, `unbanStaff`, `revokeAllStaffSessions`, `listActiveStaffSessions`, `revokeStaffSession`).
+
+## Team sign-in management
+`src/app/actions/team.ts`, gated by `firm.manage_team_directory` (Admin-class targets are Admin-only):
+- **Invite** (`inviteFirmMember`): creates the `User` row and sends a Clerk invitation whose redirect is `staffAppUrl()`. **Resend invite** (`resendFirmMemberInvite`) re-sends it.
+- **Edit** (`updateFirmMember`): profile, role and active flag (ban sync above).
+- **Sign out everywhere** (`signOutFirmMemberEverywhere`): revokes all the member's Clerk sessions.
+- **Reset sign-in link** (`resetFirmMemberSignInLink`): for a member who lost their Google account. Revokes the old identity's sessions FIRST and only on success clears `clerkUserId` (a surviving session would otherwise re-link itself); a revoke failure returns an error and changes nothing. The member's next verified-email sign-in links again.
+
+## Settings -> Security devices
+`/settings/security` is identity-scoped (no permission key). It lists the user's live Clerk sessions (browser, device, location, last active, "This device" badge) and lets them revoke any other one via `revokeMySession` (`src/app/actions/security-sessions.ts`). The Clerk user id comes only from `getStaffAuth()` on the server; the client sends a session id and `revokeStaffSession` refuses a session that is not the caller's. The current device uses Sign out.
+
+## Audit
+`type: "auth"` `ActivityLog` rows via `src/lib/auth-events.ts`. Sign-in, sign-out and session-revoked rows come from `POST /api/webhooks/clerk` (Svix-verified with `CLERK_WEBHOOK_SIGNING_SECRET`; the signature is its only control, it never touches `User`, and rows are deduped per event and session). Link, no-access, invite, update, sign-out-everywhere, link reset and ban sync are written by the app. Rows from the Auth.js era keep their titles on `/settings/activity`.
+
+## Origins (STAFF_ORIGINS / authorizedParties)
+Session tokens are verified against an explicit authorized-parties list from `staffAuthorizedParties()` (`src/lib/staff-authorized-parties.ts`), shared by the middleware and `authenticateRequest` so both agree. `STAFF_ORIGINS` (comma-separated bare origins, e.g. `https://crm.example.com`) is authoritative when set; otherwise it falls back to Vercel URLs and `AUTH_URL` minus anything on `PORTAL_HOST`. `localhost:3000` is added outside production. The list is never empty (Clerk treats empty as "skip the check"): with nothing configured, production rejects every token. A wrong list signs everyone out in a login loop. `staffAppUrl()` derives the invitation redirect from the same list.
+
+## Portal-host isolation
+The portal host never reaches Clerk. `src/proxy.ts` handles portal 404/rewrite/static paths before invoking `clerkMiddleware`, and `getStaffAuth()` / `getStaffAuthFromRequest()` return `signed_out` on the portal host before calling Clerk (whose `auth()` throws when its middleware did not run). Both session readers enforce it, not only the proxy (ADR-051).
+
+## Upload route's request-based reader
+`/api/documents/upload` is excluded from the proxy matcher so Next does not buffer (and truncate at 10 MB) multi-GB streamed bodies. With no middleware state to read, it authenticates with `getStaffAuthFromRequest(req)` (`authenticateRequest` with the same authorized parties), then checks `documents.upload`, answering JSON 401/403 instead of redirecting. `/api/documents/upload/blob` stays matched and is exempt as a self-authenticating path.
+
+## Dev sign-in-as
+`/dev/sign-in-as` signs a developer in as any active seeded user locally by minting a 60 s Clerk sign-in ticket and writes a "Signed in (dev impersonation)" audit row. One switch, `isDevSignInAllowed()` (`src/lib/dev-sign-in.ts`): not `NODE_ENV=production`, a `pk_test_` publishable key, and not on Vercel. The page, the `devSignInAs` action and the proxy each check it independently, so any one alone keeps the backdoor shut.
+
+## Cutover checklist (production)
+1. Create the Clerk production instance.
+2. Google Cloud: create an OAuth client with Clerk's redirect URI and the app origin, and set the consent screen to "In production". Enter it in Clerk -> SSO connections -> Google -> custom credentials.
+3. Add the DNS records from Clerk -> Domains (DNS-only if the domain is behind Cloudflare).
+4. Clerk settings: restricted sign-up mode, Google only, allowed domain, session lifetimes.
+5. Add the webhook (session events) pointing at `/api/webhooks/clerk`; set `CLERK_WEBHOOK_SIGNING_SECRET`.
+6. Vercel env: production `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY`; set `STAFF_ORIGINS` to the real staff origin (not the portal host). `AUTH_SECRET` stays set but is portal-only now (HMAC for portal tokens, Google integration state), not staff sessions. `src/lib/env-check.ts` flags missing values.
+7. Run `npm run clerk:preflight` with an explicit production `DATABASE_URL`. It is read-only: it prints the DB host and the first 6 chars of the DB user, active users not on `@kosloskilaw.com`, and how many are already linked to Clerk. Confirm it is the production DB before trusting it.
+8. Deploy; confirm an invited Google account signs in under restricted mode and links, and that an uninvited one lands on `/no-access`.
 
 ## Files to look at
-- `src/auth.ts` — Auth.js config (Credentials, Prisma adapter, JWT, callbacks). The `jwt` callback re-validates `token.userId` against the DB on every request and strips it when the user is gone, inactive, or the fingerprint no longer matches.
-- `src/app/api/auth/[...nextauth]/route.ts` — re-exports `handlers`.
-- `src/proxy.ts` — Next.js 16 proxy (renamed from middleware); optimistic cookie-presence check only, never validates the JWT.
-- `src/lib/current-user.ts` — `getCurrentUserId()` (redirects to `/login` on miss) and `requireUser()`. EVERY `page.tsx` / `layout.tsx` under `(dashboard)` and `print` must call a guard as its first `await` (a layout is not a gate: partial navigations skip parent layouts). Enforced by `src/app/page-guards.test.ts` (ADR-028).
-- `src/lib/credentials-authorize.ts` — `authorize` + lockout/throttle (`reserveAttempt`/`settleAttempt`, `isLockedOut`; `LOCKOUT_THRESHOLD`/`LOCKOUT_WINDOW_MS`). `src/lib/session-token.ts` — `jwt` callback body. Both moved out so they are tested against a real DB.
-- `src/app/actions/auth.ts` — `loginAction`, `logoutAction`, `changePasswordAction`. Generic "Invalid email or password" only for `CredentialsSignin`; other errors (e.g. DB outage) log server-side and show "Sign-in is temporarily unavailable".
-- `src/app/login/page.tsx` + `src/components/auth/login-form.tsx`; skip-the-form check uses `session?.user?.id` so a stale cookie cannot loop. `src/types/next-auth.d.ts` types `session.user.id` optional (undefined = stale).
+- `src/proxy.ts` — host routing, Clerk gate, CSP nonce.
+- `src/lib/staff-auth.ts` — `getStaffAuth`, `getStaffAuthFromRequest`, `resolveStaffUser` (linking).
+- `src/lib/staff-authorized-parties.ts` — origins list, `staffAppUrl`.
+- `src/lib/clerk-admin.ts` — Clerk Backend API wrapper (invite, ban, sessions, dev ticket).
+- `src/lib/session.ts`, `src/lib/current-user.ts` — request-cached session and guards.
+- `src/app/actions/team.ts` (sign-in management), `src/app/actions/security-sessions.ts`.
+- `src/app/api/webhooks/clerk/route.ts` — audit webhook.
+- `src/app/login`, `src/app/sso-callback`, `src/app/no-access`, `src/components/auth/` — sign-in UI.
+- `src/lib/dev-sign-in.ts`, `src/app/dev/sign-in-as` — dev impersonation.
+- `scripts/clerk-preflight.ts` — cutover pre-flight.
 
 ## Notes
-- **Defense in depth against stale JWTs:** (1) the `jwt` callback validates the user on every request; (2) every page/layout calls `requireUser()` or stronger first; (3) the login page detects a valid-but-stale cookie and renders the form so re-auth overwrites it. The proxy stays optimistic (fast, Edge-compatible).
-- **Multi-tenant seams:** `getCurrentUserId()`/`requireUser()` is the only chokepoint for identity; when `firmId` lands add `getCurrentUserContext(): { userId, firmId }` beside it. The `session` callback in `src/auth.ts` is where `firmId` attaches (one line). The `Account` table supports multi-firm. The real lift is auditing every query for `where: { firmId }`.
-- **Operational:** rotating `AUTH_SECRET` (`openssl rand -base64 32`, replace, restart) logs everyone out. Password changes: users via `/settings/security`, admins via Settings -> Team. Re-seeding a dev DB resets every demo user (set `SEED_ADMIN_PASSWORD` to choose it; otherwise a random one prints once; none is stored in the repo). Dev login: the seeded admin email in `prisma/seed.ts`; other seed users share that password.
-- **The seed is destructive and guarded:** `prisma/seed.ts` and `npm run db:reset` (guard in `prisma.config.ts`) refuse unless every database URL is localhost / 127.0.0.1 / ::1, or `ALLOW_SEED=1` for a known dev DB; production-looking environments are always refused (`src/lib/seed-guard.ts`).
-- **Dev sign-in-as (Clerk):** `/dev/sign-in-as` lets a developer sign in as any active seeded user locally (mints a 60 s Clerk sign-in ticket). One switch, `isDevSignInAllowed()` in `src/lib/dev-sign-in.ts` (not production, `pk_test_` key, not on Vercel), checked independently by the page, the `devSignInAs` action and the proxy. Each use writes a "Signed in (dev impersonation)" audit row.
-- **Cutover pre-flight:** `npm run clerk:preflight` is read-only; it prints the DB host/user prefix, active users not on `@kosloskilaw.com`, and how many are linked to Clerk.
+- **The seed is destructive and guarded:** `prisma/seed.ts` and `npm run db:reset` (guard in `prisma.config.ts`) refuse unless every database URL is localhost / 127.0.0.1 / ::1, or `ALLOW_SEED=1` for a known dev DB; production-looking environments are always refused (`src/lib/seed-guard.ts`). Seeded users have no password; sign in locally with `/dev/sign-in-as`.
+- **Multi-tenant seam:** `getStaffAuth()` is the only identity chokepoint; `firmId` would attach there. The real lift is auditing every query for `where: { firmId }`.
+- **RBAC:** `Role` / `UserRole` / `RolePermission`, catalog in `src/lib/permissions.ts`, `requirePermission`. Matter-level team access is ADR-039 ([matter-access.md](matter-access.md)).

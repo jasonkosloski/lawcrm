@@ -40,7 +40,7 @@ src/
 │   │                         #   integrations, notifications, activity, security, profile
 │   ├── actions/              # ★ ALL mutations live here — one "use server" module per resource
 │   │                         #   (matters, billing, tasks, notes, calls, settlements, …)
-│   │   ├── api/                  # Sanctioned route handlers ONLY: auth handler,
+│   │   ├── api/                  # Sanctioned route handlers ONLY: Clerk webhook,
 │   │                         #   document download (streams local / 302s blob),
 │   │                         #   streaming upload (local driver), blob upload
 │   │                         #   token+callback, Google OAuth redirect legs

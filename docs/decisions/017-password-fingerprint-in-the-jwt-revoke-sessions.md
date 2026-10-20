@@ -1,7 +1,7 @@
 # ADR-017: Password fingerprint in the JWT — revoke sessions on password change without a Session table
 
 **Date:** 2026-10-16
-**Status:** Superseded — staff sign-in moved to Clerk (2026-10-19); passwords, JWT sessions and lockout no longer exist
+**Status:** Superseded by ADR-053
 
 **Context:** Sessions are stateless JWTs (`docs/features/auth.md`). With no session row to delete, changing or resetting a password left every existing session — including a stolen one — valid until expiry. Switching to database sessions is the textbook fix but is a schema change plus a session-strategy change, and the credentials provider has caveats with DB sessions.
 

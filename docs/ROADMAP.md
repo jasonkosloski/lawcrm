@@ -23,6 +23,7 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 
 ## P1: next up
 
+- [~] **Clerk staff auth**: Google sign-in via Clerk shipped on branch `clerk-staff-auth`; production cutover pending, then drop-migration and Microsoft sign-in. → [auth](features/auth.md)
 - [~] **Notification delivery channels**: email/SMS/push fan-out from `createNotification`; per-matter preferences. → [notifications](features/notifications.md)
 - [~] **Phone / SMS / voicemail**: manual call logging shipped; SMS send and voicemail transcription need providers. → [calls](features/communication-calls.md)
 - [~] **`/matters/new` v2**: name pattern, case location, multi-team, conflict pre-save, retainer, drafts. → [matters](features/matters.md)
@@ -84,4 +85,5 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 
 ## Deferred
 
-- [-] **Auth overhaul**: OAuth sign-in, email password reset, MFA/2FA, sessions list, rate limiting, `firmId`, SSO. Deliberately held until the planned overhaul; don't build piecemeal. → [auth](features/auth.md), [settings-admin](features/settings-admin.md)
+
+Nothing currently deferred.

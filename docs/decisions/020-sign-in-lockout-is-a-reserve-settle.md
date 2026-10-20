@@ -1,7 +1,7 @@
 # ADR-020: Sign-in lockout is a reserve/settle under a per-email advisory lock; per-account (not per-IP) lock is an accepted DoS risk
 
 **Date:** 2026-10-16
-**Status:** Superseded — staff sign-in moved to Clerk (2026-10-19); passwords, JWT sessions and lockout no longer exist
+**Status:** Superseded by ADR-053
 
 **Context:** The lockout (5 failures / 15 min, counted from `ActivityLog` auth rows) was check-then-act: N parallel guesses could all pass the count before any failure row existed, so the threshold did not bound guessing. Separately, a lock keyed on the account lets anyone who knows an email lock that account on purpose.
 

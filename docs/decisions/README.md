@@ -35,10 +35,10 @@ ADR true to the code are appended in place and dated.
 | [014](014-global-search-is-ilike-v1-inheriting-each.md) | Global search is ILIKE v1, inheriting each entity's read model — Postgres FTS is the upgrade path |  |
 | [015](015-driver-based-document-storage-local-disk-in.md) | Driver-based document storage — local disk in dev, Vercel Blob (client-direct + 302 serving) in prod | Public-access parts superseded by ADR-018 |
 | [016](016-postgres-migration-baseline-prisma-migrate-replaces-db.md) | Postgres migration baseline — `prisma migrate` replaces `db push` for schema changes |  |
-| [017](017-password-fingerprint-in-the-jwt-revoke-sessions.md) | Password fingerprint in the JWT — revoke sessions on password change without a Session table |  |
+| [017](017-password-fingerprint-in-the-jwt-revoke-sessions.md) | Password fingerprint in the JWT — revoke sessions on password change without a Session table | Superseded by 053 |
 | [018](018-private-blob-store-presigned-urls-for-documents.md) | Private Blob store + presigned URLs for documents | Public-access parts superseded by ADR-018 |
 | [019](019-deadline-rules-task-lists-as-firm-libraries.md) | Deadline rules + task lists as firm libraries, applied on demand or by AutoApply defaults |  |
-| [020](020-sign-in-lockout-is-a-reserve-settle.md) | Sign-in lockout is a reserve/settle under a per-email advisory lock; per-account (not per-IP) lock is an accepted DoS risk |  |
+| [020](020-sign-in-lockout-is-a-reserve-settle.md) | Sign-in lockout is a reserve/settle under a per-email advisory lock; per-account (not per-IP) lock is an accepted DoS risk | Superseded by 053 |
 | [021](021-matter-tabs-honour-calendar-visibility-and-money.md) | Matter tabs honour calendar visibility and money-view permissions |  |
 | [022](022-security-header-baseline-no-csp-yet-and.md) | Security-header baseline, no CSP yet, and "no class on user HTML" |  |
 | [023](023-google-sync-skips-only-deterministic-failures-catch.md) | Google sync skips only deterministic failures; catch-up never advances past an open gap; Google cancel is unlink-only |  |
@@ -71,3 +71,4 @@ ADR true to the code are appended in place and dated.
 | [050](050-lead-conversion-re-runs-the-conflict-check.md) | Lead conversion re-runs the conflict check and refuses a live conflict |  |
 | [051](051-client-portal-identity-is-separate-from-staff-auth.md) | Client portal identity is separate from staff auth (magic link, database sessions, host-only cookie) |  |
 | [052](052-portal-uploads-are-matter-documents.md) | Portal uploads are ordinary matter documents; three-state file share with folder inheritance |  |
+| [053](053-clerk-proves-identity-the-user-table-grants-access.md) | Clerk proves staff identity; the User table grants access (DB-authoritative, one-time email link) |  |

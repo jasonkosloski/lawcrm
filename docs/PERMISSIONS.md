@@ -18,7 +18,7 @@ Every server action and page guard funnels through `src/lib/permission-check.ts`
 
 ## Page and layout guards
 
-A layout is **not** an auth gate: Next renders a page on partial (RSC) navigations without re-running its parent layouts, and `src/proxy.ts` only checks that a session cookie exists. So every `page.tsx` and `layout.tsx` under `src/app/(dashboard)` and `src/app/print` must call a guard as the **first `await`** of its default export, before reading any data:
+A layout is **not** an auth gate: Next renders a page on partial (RSC) navigations without re-running its parent layouts, and `src/proxy.ts` only checks for a verified Clerk session (not that the user is an active firm member). So every `page.tsx` and `layout.tsx` under `src/app/(dashboard)` and `src/app/print` must call a guard as the **first `await`** of its default export, before reading any data:
 
 - `requireUser()` (`src/lib/current-user.ts`): session only; use when the page has no finer key.
 - `requirePermission(key)` / `requireAdmin()`: session plus a key / the Admin role.
@@ -257,9 +257,9 @@ Example: an expense feature gets `matters.expense.view/create/edit/delete` plus 
 
 ## Edge cases
 
-- **Inactive user**: no permissions (Admin or otherwise); the session validator in `src/auth.ts` also invalidates their JWT on the next request.
+- **Inactive user**: no permissions (Admin or otherwise); `getStaffAuth()` (`src/lib/staff-auth.ts`) resolves them to `no_access` on the next request, whatever their Clerk session says.
 - **Tampered form**: `setRolePermissionAction` validates the key with `isKnownPermission()` and refuses to mutate Admin. Action gates re-check on every call regardless of the UI.
-- **Multi-tenant, future**: roles/grants are firm-scoped via `Role.firmId`; the session callback in `src/auth.ts` already threads `firmId`, so the permission helpers need no change.
+- **Multi-tenant, future**: roles/grants are firm-scoped via `Role.firmId`; `getStaffAuth()` is the single identity chokepoint where a `firmId` would attach, so the permission helpers need no change.
 
 ## Not in the system
 
