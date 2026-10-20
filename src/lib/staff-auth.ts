@@ -22,6 +22,7 @@ import { cache } from "react";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { requestIsOnPortalHost } from "@/lib/portal/host";
+import { staffAuthorizedParties } from "@/lib/staff-authorized-parties";
 import { AUTH_EVENT_TITLES, logAuthEvent } from "@/lib/auth-events";
 
 /** Minimum gap between `no_access` audit rows for one Clerk user. */
@@ -165,6 +166,8 @@ export async function getStaffAuthFromRequest(
   const client = await clerkClient();
   const state = await client.authenticateRequest(req, {
     acceptsToken: "session_token",
+    // Same origins clerkMiddleware verifies against (src/proxy.ts).
+    authorizedParties: staffAuthorizedParties(),
   });
   return fromIdentity(state.toAuth());
 }

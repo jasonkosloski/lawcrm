@@ -1,10 +1,7 @@
 // @vitest-environment node
 //
-// The default happy-dom environment enforces the browser's
-// forbidden-header list and silently drops `cookie` when building a
-// Request, so `request.cookies` would always be empty. The proxy is
-// edge/server code, so node (undici, which permits `cookie`) is the
-// honest environment for it.
+// The proxy is edge/server code, so node (undici) is the honest
+// environment for it rather than the default happy-dom.
 
 /**
  * Proxy (edge auth gate) tests.
@@ -14,18 +11,59 @@
  * (plus `x-middleware-override-headers`) — that's the wire format
  * the Next runtime reads to rebuild the upstream request, so it's
  * the observable surface we assert against here.
+ *
+ * Clerk's middleware wrapper is replaced by a stand-in that calls our
+ * handler with a controllable `auth()`; it also counts handler runs so
+ * the portal-host tests can prove Clerk is never reached there.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { NextRequest } from "next/server";
-import { config, isPortalHost, proxy } from "./proxy";
+import { NextRequest, type NextFetchEvent } from "next/server";
 
-const SESSION_COOKIE = "authjs.session-token=some-token";
+const clerk = vi.hoisted(() => ({
+  userId: null as string | null,
+  handlerCalls: 0,
+  options: undefined as unknown,
+}));
+vi.mock("@clerk/nextjs/server", () => ({
+  clerkMiddleware: vi.fn(
+    (
+      handler: (
+        auth: () => Promise<{ userId: string | null }>,
+        req: NextRequest,
+        evt: NextFetchEvent
+      ) => unknown,
+      options: unknown
+    ) => {
+      clerk.options = options;
+      return (req: NextRequest, evt: NextFetchEvent) => {
+        clerk.handlerCalls++;
+        return handler(async () => ({ userId: clerk.userId }), req, evt);
+      };
+    }
+  ),
+}));
 
-function makeRequest(url: string, init?: { cookie?: string; headers?: Record<string, string> }) {
-  const headers = new Headers(init?.headers);
-  if (init?.cookie) headers.set("cookie", init.cookie);
-  return new NextRequest(new URL(url, "https://app.example.com"), { headers });
+import { config, isPortalHost, proxy as rawProxy } from "./proxy";
+
+const EVENT = {} as NextFetchEvent;
+const proxy = async (req: NextRequest) =>
+  (await rawProxy(req, EVENT)) as Response;
+
+beforeEach(() => {
+  clerk.userId = null;
+  clerk.handlerCalls = 0;
+});
+
+/** `signedIn: true` makes Clerk's auth() report a user. */
+function makeRequest(
+  url: string,
+  init?: { signedIn?: boolean; headers?: Record<string, string> }
+) {
+  if (init?.signedIn) clerk.userId = "user_clerk_1";
+  return new NextRequest(new URL(url, "https://app.example.com"), {
+    headers: new Headers(init?.headers),
+  });
 }
 
 /** Forwarded request-header value, per the encoding described above. */
@@ -34,110 +72,139 @@ function forwardedHeader(response: Response, name: string) {
 }
 
 describe("proxy auth gate", () => {
-  it("redirects unauthenticated requests to /login?next=<path+search>", () => {
-    const res = proxy(makeRequest("/matters/42?tab=notes"));
+  it("redirects signed-out requests to /login?next=<path+search>", async () => {
+    const res = await proxy(makeRequest("/matters/42?tab=notes"));
     expect(res.status).toBe(307);
     const location = new URL(res.headers.get("location")!);
     expect(location.pathname).toBe("/login");
     expect(location.searchParams.get("next")).toBe("/matters/42?tab=notes");
   });
 
-  it("omits ?next= when the target is the bare root", () => {
-    const res = proxy(makeRequest("/"));
+  it("encodes ?next= for a simple path", async () => {
+    const res = await proxy(makeRequest("/matters"));
+    expect(new URL(res.headers.get("location")!).search).toBe(
+      "?next=%2Fmatters"
+    );
+  });
+
+  it("omits ?next= when the target is the bare root", async () => {
+    const res = await proxy(makeRequest("/"));
     const location = new URL(res.headers.get("location")!);
     expect(location.pathname).toBe("/login");
     expect(location.searchParams.has("next")).toBe(false);
   });
 
-  it("passes public routes through without a session", () => {
-    const res = proxy(makeRequest("/login"));
+  it.each(["/login", "/sso-callback", "/no-access", "/api/csp-report"])(
+    "passes public route %s without a session",
+    async (path) => {
+      const res = await proxy(makeRequest(path));
+      expect(res.status).toBe(200);
+      expect(res.headers.has("location")).toBe(false);
+    }
+  );
+
+  it("passes the Clerk webhook without a session (it verifies its own signature)", async () => {
+    const res = await proxy(makeRequest("/api/webhooks/clerk"));
     expect(res.status).toBe(200);
     expect(res.headers.has("location")).toBe(false);
   });
 
   // Regression: Vercel Cron + Blob's upload-completed callback send no
-  // session cookie; redirecting them meant the jobs never ran and
+  // session; redirecting them meant the jobs never ran and
   // client-direct uploads never created Document rows.
   it.each([
     "/api/email-sync",
     "/api/notification-sweep",
     "/api/documents/upload/blob",
-  ])("passes self-authenticated machine endpoint %s through without a cookie", (path) => {
-    const res = proxy(
+  ])("passes self-authenticated machine endpoint %s through without a session", async (path) => {
+    const res = await proxy(
       makeRequest(path, { headers: { authorization: "Bearer x" } })
     );
     expect(res.status).toBe(200);
     expect(res.headers.has("location")).toBe(false);
   });
 
-  it("lets CSP violation reports through without a cookie (exact path only)", () => {
-    expect(proxy(makeRequest("/api/csp-report")).status).toBe(200);
-    expect(proxy(makeRequest("/api/csp-reports")).status).toBe(307);
+  it("lets CSP violation reports through (exact path only)", async () => {
+    expect((await proxy(makeRequest("/api/csp-report"))).status).toBe(200);
+    expect((await proxy(makeRequest("/api/csp-reports"))).status).toBe(307);
   });
 
-  it("keeps lookalike paths of machine endpoints behind the gate", () => {
-    for (const path of ["/api/email-sync-admin", "/api/documents/upload"]) {
-      const res = proxy(makeRequest(path));
+  it("keeps lookalike paths of machine endpoints behind the gate", async () => {
+    for (const path of [
+      "/api/email-sync-admin",
+      "/api/documents/upload",
+      "/api/webhooks/clerk-admin",
+      "/api/webhooks",
+    ]) {
+      const res = await proxy(makeRequest(path));
       expect(res.status).toBe(307);
     }
   });
 
   // F442: the public prefixes match on a path boundary, so a lookalike
-  // can't ride the /login or /api/auth exemptions.
-  it.each(["/loginfoo", "/login-help", "/api/authz/keys", "/api/auth-export"])(
+  // can't ride the /login exemption.
+  it.each(["/loginfoo", "/login-help", "/sso-callbackx", "/no-access-x"])(
     "keeps prefix lookalike %s behind the gate",
-    (path) => {
-      const res = proxy(makeRequest(path));
+    async (path) => {
+      const res = await proxy(makeRequest(path));
       expect(res.status).toBe(307);
       expect(new URL(res.headers.get("location")!).pathname).toBe("/login");
     }
   );
 
-  it.each([
-    "/login",
-    "/login/",
-    "/login/reset",
-    "/api/auth",
-    "/api/auth/session",
-    "/api/auth/callback/google",
-  ])("still passes public route %s without a session", (path) => {
-    const res = proxy(makeRequest(path));
+  it.each(["/login", "/login/", "/login/factor-two"])(
+    "still passes public route %s without a session",
+    async (path) => {
+      const res = await proxy(makeRequest(path));
+      expect(res.status).toBe(200);
+      expect(res.headers.has("location")).toBe(false);
+    }
+  );
+
+  it("Auth.js's /api/auth is no longer public", async () => {
+    const res = await proxy(makeRequest("/api/auth/session"));
+    expect(res.status).toBe(307);
+  });
+
+  it("passes signed-in requests through", async () => {
+    const res = await proxy(makeRequest("/matters", { signedIn: true }));
     expect(res.status).toBe(200);
     expect(res.headers.has("location")).toBe(false);
   });
 
-  it("passes authenticated requests through", () => {
-    const res = proxy(makeRequest("/matters", { cookie: SESSION_COOKIE }));
-    expect(res.status).toBe(200);
-    expect(res.headers.has("location")).toBe(false);
+  it("gives clerkMiddleware an authorizedParties option", () => {
+    // Same helper the route-handler path (authenticateRequest) uses.
+    const opts = clerk.options as (req: unknown) => { authorizedParties?: string[] };
+    expect(typeof opts).toBe("function");
+    expect(opts(undefined)).toHaveProperty("authorizedParties");
   });
 });
 
 describe("x-pathname request-header injection", () => {
-  it("forwards pathname + search to layouts on authenticated pass-through", () => {
-    const res = proxy(
-      makeRequest("/matters/42?tab=notes", { cookie: SESSION_COOKIE })
+  it("forwards pathname + search to layouts on signed-in pass-through", async () => {
+    const res = await proxy(
+      makeRequest("/matters/42?tab=notes", { signedIn: true })
     );
     expect(forwardedHeader(res, "x-pathname")).toBe("/matters/42?tab=notes");
   });
 
-  it("forwards it on public-route pass-through too", () => {
-    const res = proxy(makeRequest("/login?next=%2Fmatters"));
+  it("forwards it on public-route pass-through too", async () => {
+    const res = await proxy(makeRequest("/login?next=%2Fmatters"));
     expect(forwardedHeader(res, "x-pathname")).toBe("/login?next=%2Fmatters");
   });
 
-  it("overwrites a client-spoofed x-pathname (open-redirect guard)", () => {
-    const res = proxy(
+  it("overwrites a client-spoofed x-pathname (open-redirect guard)", async () => {
+    const res = await proxy(
       makeRequest("/matters", {
-        cookie: SESSION_COOKIE,
+        signedIn: true,
         headers: { "x-pathname": "https://evil.example.com/phish" },
       })
     );
     expect(forwardedHeader(res, "x-pathname")).toBe("/matters");
   });
 
-  it("sets it as a request header, not a client-visible response header", () => {
-    const res = proxy(makeRequest("/matters", { cookie: SESSION_COOKIE }));
+  it("sets it as a request header, not a client-visible response header", async () => {
+    const res = await proxy(makeRequest("/matters", { signedIn: true }));
     expect(res.headers.get("x-pathname")).toBeNull();
   });
 });
@@ -177,10 +244,9 @@ describe("proxy matcher", () => {
 describe("proxy CSP nonce", () => {
   const CSP = "content-security-policy-report-only";
 
-  it("gives each page request a fresh nonce, on both the request and the response", () => {
-    const cookie = "authjs.session-token=x";
-    const a = proxy(makeRequest("/matters", { cookie }));
-    const b = proxy(makeRequest("/matters", { cookie }));
+  it("gives each page request a fresh nonce, on both the request and the response", async () => {
+    const a = await proxy(makeRequest("/matters", { signedIn: true }));
+    const b = await proxy(makeRequest("/matters", { signedIn: true }));
     const policyA = a.headers.get(CSP)!;
     const nonceA = /'nonce-([^']+)'/.exec(policyA)![1];
     const nonceB = /'nonce-([^']+)'/.exec(b.headers.get(CSP)!)![1];
@@ -192,12 +258,14 @@ describe("proxy CSP nonce", () => {
     expect(policyA).toContain("frame-ancestors 'none'");
   });
 
-  it("covers the public login page too", () => {
-    expect(proxy(makeRequest("/login")).headers.get(CSP)).toContain("'nonce-");
+  it("covers the public login page too", async () => {
+    expect((await proxy(makeRequest("/login"))).headers.get(CSP)).toContain(
+      "'nonce-"
+    );
   });
 
-  it("API routes get no page policy", () => {
-    const res = proxy(makeRequest("/api/csp-report"));
+  it("API routes get no page policy", async () => {
+    const res = await proxy(makeRequest("/api/csp-report"));
     expect(res.headers.get(CSP)).toBeNull();
   });
 });
@@ -210,11 +278,10 @@ describe("portal host routing", () => {
     vi.unstubAllEnvs();
   });
 
-  const portalReq = (path: string, init?: { cookie?: string }) => {
-    const headers = new Headers({ host: "portal.example.com" });
-    if (init?.cookie) headers.set("cookie", init.cookie);
-    return new NextRequest(new URL(path, "https://portal.example.com"), { headers });
-  };
+  const portalReq = (path: string) =>
+    new NextRequest(new URL(path, "https://portal.example.com"), {
+      headers: new Headers({ host: "portal.example.com" }),
+    });
   const rewriteOf = (res: Response) =>
     new URL(res.headers.get("x-middleware-rewrite")!);
 
@@ -232,8 +299,8 @@ describe("portal host routing", () => {
     expect(isPortalHost("portal.localhost:3000")).toBe(false);
   });
 
-  it("portal host: / rewrites to /portal and carries the page CSP", () => {
-    const res = proxy(portalReq("/"));
+  it("portal host: / rewrites to /portal and carries the page CSP", async () => {
+    const res = await proxy(portalReq("/"));
     expect(rewriteOf(res).pathname).toBe("/portal");
     const csp = res.headers.get("Content-Security-Policy-Report-Only");
     expect(csp).toBeTruthy();
@@ -241,76 +308,86 @@ describe("portal host routing", () => {
     expect(forwardedHeader(res, "x-pathname")).toBe("/");
   });
 
-  it("portal host: /matters/abc rewrites to /portal/matters/abc", () => {
-    const res = proxy(portalReq("/matters/abc?x=1"));
+  it("portal host: the Clerk middleware is never invoked", async () => {
+    for (const p of ["/", "/login", "/matters/x.js", "/_next/webpack-hmr", "/api/csp-report"]) {
+      await proxy(portalReq(p));
+    }
+    expect(clerk.handlerCalls).toBe(0);
+  });
+
+  it("portal host: /matters/abc rewrites to /portal/matters/abc", async () => {
+    const res = await proxy(portalReq("/matters/abc?x=1"));
     const u = rewriteOf(res);
     expect(u.pathname).toBe("/portal/matters/abc");
     expect(u.search).toBe("?x=1");
   });
 
-  it("portal host: staff paths are unreachable", () => {
+  it("portal host: staff paths are unreachable", async () => {
     for (const p of ["/settings", "/api/email-sync", "/intake/x"]) {
-      const res = proxy(portalReq(p));
+      const res = await proxy(portalReq(p));
       expect(rewriteOf(res).pathname.startsWith("/portal/")).toBe(true);
     }
   });
 
-  it("portal host: /api/csp-report and /_next pass through", () => {
+  it("portal host: /api/csp-report and /_next pass through", async () => {
     for (const p of ["/api/csp-report", "/_next/webpack-hmr"]) {
-      const res = proxy(portalReq(p));
+      const res = await proxy(portalReq(p));
       expect(res.headers.has("x-middleware-rewrite")).toBe(false);
     }
   });
 
-  it("portal host: no staff cookie gate", () => {
-    const res = proxy(portalReq("/login"));
+  it("portal host: no staff session gate", async () => {
+    const res = await proxy(portalReq("/login"));
     expect(res.status).toBe(200);
     expect(res.headers.has("location")).toBe(false);
     expect(rewriteOf(res).pathname).toBe("/portal/login");
   });
 
-  it("portal host: static-looking staff paths are still rewritten", () => {
-    const res = proxy(portalReq("/matters/x.js"));
+  it("portal host: static-looking staff paths are still rewritten", async () => {
+    const res = await proxy(portalReq("/matters/x.js"));
     expect(rewriteOf(res).pathname).toBe("/portal/matters/x.js");
   });
 
-  it("staff host: static-looking paths pass through untouched", () => {
-    const res = proxy(makeRequest("/foo.js"));
+  it("staff host: static-looking paths pass through untouched", async () => {
+    const res = await proxy(makeRequest("/foo.js"));
     expect(res.status).toBe(200);
     expect(res.headers.has("location")).toBe(false);
     expect(res.headers.has("x-middleware-rewrite")).toBe(false);
+    expect(clerk.handlerCalls).toBe(0);
   });
 
   it("isPortalHost ignores one trailing dot", () => {
     expect(isPortalHost("portal.example.com.")).toBe(true);
   });
 
-  it("staff host: /portal and /portal/x return 404", () => {
-    expect(proxy(makeRequest("/portal", { cookie: SESSION_COOKIE })).status).toBe(404);
-    expect(proxy(makeRequest("/portal/x", { cookie: SESSION_COOKIE })).status).toBe(404);
-    expect(proxy(makeRequest("/portalx", { cookie: SESSION_COOKIE })).status).not.toBe(404);
+  it("staff host: /portal and /portal/x return 404", async () => {
+    expect((await proxy(makeRequest("/portal", { signedIn: true }))).status).toBe(404);
+    expect((await proxy(makeRequest("/portal/x", { signedIn: true }))).status).toBe(404);
+    expect((await proxy(makeRequest("/portalx", { signedIn: true }))).status).not.toBe(404);
   });
 
   // The portal's dev multipart route lives one level below the matcher-
   // excluded staff path, so the proxy runs and rewrites it on the portal
   // host (the excluded exact path would reach the staff route instead).
-  it("portal host: /api/documents/upload/local rewrites to the portal route", () => {
+  it("portal host: /api/documents/upload/local rewrites to the portal route", async () => {
     const re = new RegExp(`^${config.matcher[0]}$`);
     expect(re.test("/api/documents/upload/local")).toBe(true);
-    const res = proxy(portalReq("/api/documents/upload/local"));
+    const res = await proxy(portalReq("/api/documents/upload/local"));
     expect(rewriteOf(res).pathname).toBe("/portal/api/documents/upload/local");
   });
 
-  it("staff host: the portal upload route is unreachable", () => {
+  it("staff host: the portal upload route is unreachable", async () => {
     expect(
-      proxy(makeRequest("/portal/api/documents/upload/local", { cookie: SESSION_COOKIE })).status
+      (await proxy(makeRequest("/portal/api/documents/upload/local", { signedIn: true }))).status
     ).toBe(404);
-    const res = proxy(makeRequest("/api/documents/upload/local", { cookie: SESSION_COOKIE }));
+    const res = await proxy(
+      makeRequest("/api/documents/upload/local", { signedIn: true })
+    );
     expect(res.headers.has("x-middleware-rewrite")).toBe(false);
   });
 
-  it("staff host: static-looking /portal paths also 404", () => {
-    expect(proxy(makeRequest("/portal/x.js")).status).toBe(404);
-    expect(proxy(makeRequest("/portal/matters/a.png")).status).toBe(404);
+  it("staff host: static-looking /portal paths also 404", async () => {
+    expect((await proxy(makeRequest("/portal/x.js"))).status).toBe(404);
+    expect((await proxy(makeRequest("/portal/matters/a.png"))).status).toBe(404);
   });
 });

@@ -14,7 +14,7 @@ vi.mock("@vercel/blob", async (importOriginal) => {
   return { ...actual, del: vi.fn(async () => {}), head: vi.fn() };
 });
 
-import { NextRequest } from "next/server";
+import { NextRequest, type NextFetchEvent } from "next/server";
 import { BlobNotFoundError, del, head } from "@vercel/blob";
 import { getPayloadFromClientToken, handleUpload } from "@vercel/blob/client";
 import { getPortalIdentity } from "@/lib/portal-access";
@@ -269,12 +269,12 @@ describe("callback URL (the completion webhook must reach the PUBLIC portal path
     );
   });
 
-  test("the proxy rewrites that public path into this route on the portal host", () => {
+  test("the proxy rewrites that public path into this route on the portal host", async () => {
     const req = new NextRequest(new URL(PORTAL_UPLOAD_CALLBACK_PATH, "https://portal.example.com"), {
       method: "POST",
       headers: { host: "portal.example.com" },
     });
-    const res = proxy(req);
+    const res = (await proxy(req, {} as NextFetchEvent)) as Response;
     expect(new URL(res.headers.get("x-middleware-rewrite")!).pathname).toBe(
       "/portal/api/documents/upload/blob"
     );

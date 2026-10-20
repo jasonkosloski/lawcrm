@@ -1,88 +1,147 @@
 /**
- * Edge proxy — optimistic cookie-presence gate (a UX redirect, NOT
- * the authority).
+ * Edge proxy — Clerk-backed optimistic sign-in gate (a UX redirect,
+ * NOT the authority).
  *
- * In Next.js 16, what was `middleware.ts` is now `proxy.ts`. Its job
- * here is the cheap "is there ANY session cookie?" check, redirecting
- * unauthenticated requests to /login before they render anything. The
- * real check happens in every page / action / route handler
- * (`requireUser()` / `getCurrentUserId()` / `requirePermission`) —
- * pages authenticate themselves — so an attacker can't bypass auth by
- * spoofing the cookie name: they'd hit the redirect from `auth()`
- * anyway.
+ * In Next.js 16, what was `middleware.ts` is now `proxy.ts`. Staff
+ * requests run through `clerkMiddleware`, which verifies the Clerk
+ * session token cheaply (no DB) so unauthenticated requests redirect
+ * to /login before rendering anything. Whether the Clerk user is an
+ * actual firm member is NOT decided here: every page / action / route
+ * handler resolves that through `getStaffAuth()` (src/lib/staff-auth.ts).
  *
- * Per the Next.js auth guide we deliberately do NOT validate the JWT
- * here:
- *   - Decoding requires the AUTH_SECRET in the proxy bundle, which
- *     widens the trusted boundary.
- *   - Adds DB-shaped overhead to every request.
- *   - Auth.js explicitly recommends optimistic checks here, real
- *     checks in pages/actions.
+ * The portal host never reaches Clerk: portal 404/rewrite/static
+ * handling happens BEFORE the Clerk middleware is invoked, so portal
+ * visitors never touch Clerk at all.
  *
- * Allowlist:
- *   - /login — the form itself
- *   - /api/auth/* — Auth.js handlers (sign-in callbacks, CSRF, etc.)
- *   - SELF_AUTHENTICATED_PATHS — cron + blob-callback endpoints that
- *     carry their own credential instead of a cookie
- *   - Static assets (Next handles via the matcher exclusion below)
- *   - /api/csp-report — browsers post CSP violation reports without
- *     a reliable cookie (the login page reports too); it only logs
+ * Allowlist (PUBLIC_PATH_PREFIXES, path-boundary matched):
+ *   - /login, /sso-callback — the Google sign-in flow
+ *   - /no-access — signed in with Clerk but not a firm member
+ *   - /api/csp-report — browsers post CSP violation reports without a
+ *     reliable session (the login page reports too); it only logs
+ *   - SELF_AUTHENTICATED_PATHS — cron, blob-callback and Clerk-webhook
+ *     endpoints that carry their own credential instead of a session
  *   - /api/documents/upload is excluded by the matcher (see below); the
  *     route does its own session + permission check and answers JSON 401
  */
 
-import { NextResponse, type NextRequest } from "next/server";
+import {
+  NextResponse,
+  type NextFetchEvent,
+  type NextRequest,
+} from "next/server";
+import { clerkMiddleware } from "@clerk/nextjs/server";
 import { CSP_HEADER, createNonce, pageCsp } from "@/lib/csp";
 import { isPortalHost } from "@/lib/portal/host";
+import { staffAuthorizedParties } from "@/lib/staff-authorized-parties";
 
 export { isPortalHost };
 
 const STATIC_EXT = /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)$/;
 
-/** Auth.js cookie name. The `__Secure-` prefix is added when running
- *  over HTTPS (production); dev uses the unprefixed name. We check
- *  both so this works in every environment without env detection. */
-const SESSION_COOKIE_NAMES = [
-  "authjs.session-token",
-  "__Secure-authjs.session-token",
+const PUBLIC_PATH_PREFIXES = [
+  "/login",
+  "/sso-callback",
+  "/no-access",
+  "/api/csp-report",
 ];
-
-const PUBLIC_PATH_PREFIXES = ["/login", "/api/auth", "/api/csp-report"];
 
 /**
  * Endpoints called by machines that never carry a session cookie —
  * redirecting them to /login means they silently never run. Each one
- * authenticates itself, so skipping the cookie check widens nothing:
+ * authenticates itself, so skipping the session check widens nothing:
  *   - cron endpoints require `Authorization: Bearer <CRON_SECRET>`
  *     (fail-closed when unset)
  *   - the blob upload route checks session + `documents.upload` when
  *     issuing tokens, and Vercel's completion callback is
  *     signature-verified by `handleUpload`
+ *   - the Clerk webhook verifies its Svix signature
  * Exact matches only — a lookalike path stays behind the gate.
  */
 const SELF_AUTHENTICATED_PATHS = new Set([
   "/api/email-sync",
   "/api/notification-sweep",
   "/api/documents/upload/blob",
+  "/api/webhooks/clerk",
 ]);
 
 /** Path-boundary-aware prefix match: `/login` and `/login/...` are
- *  public, `/loginfoo` and a future `/api/authz/*` or `/api/auth-export`
- *  are not (a bare `startsWith` would let them skip the cookie gate). */
+ *  public, `/loginfoo` is not (a bare `startsWith` would let it skip
+ *  the session gate). */
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATH_PREFIXES.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`)
   );
 }
 
-export function proxy(request: NextRequest) {
+/** Page CSP for this request, or null for API routes (JSON/files; the
+ *  framed file routes get theirs in next.config.ts). */
+function cspFor(pathname: string): string | null {
+  return pathname.startsWith("/api/")
+    ? null
+    : pageCsp(createNonce(), {
+        isDev: process.env.NODE_ENV === "development",
+        clerkPublishableKey: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+      });
+}
+
+/** Staff-host request handling, run inside Clerk's middleware. */
+const staffProxy = clerkMiddleware(
+  async (auth, request) => {
+    const { pathname } = request.nextUrl;
+
+    // Server layouts can't see the request URL, so we forward
+    // pathname + search as `x-pathname` (read by the dashboard layout to
+    // build /login?next=…). Always SET — overwriting any client-sent
+    // value — so the header can't be spoofed into an open-redirect vector.
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-pathname", pathname + request.nextUrl.search);
+
+    // Page CSP with a fresh nonce (src/lib/csp.ts). Next reads the nonce
+    // from the REQUEST header and stamps its scripts/styles; the response
+    // header is what the browser applies.
+    const csp = cspFor(pathname);
+    if (csp) requestHeaders.set(CSP_HEADER, csp);
+    const passThrough = () => {
+      // `request.headers` (not top-level `headers`) — top-level would set
+      // RESPONSE headers, leaking to clients instead of reaching layouts.
+      const res = NextResponse.next({ request: { headers: requestHeaders } });
+      if (csp) res.headers.set(CSP_HEADER, csp);
+      return res;
+    };
+
+    // Public routes always pass.
+    if (isPublicPath(pathname) || SELF_AUTHENTICATED_PATHS.has(pathname)) {
+      return passThrough();
+    }
+
+    // Cheap check on Clerk's verified session token — no DB. Whether
+    // the user is a firm member is decided by pages/actions.
+    const { userId } = await auth();
+    if (userId) return passThrough();
+
+    // Bounce to /login with a `?next=` so we can land them back where
+    // they were trying to go. Search params are preserved.
+    const next = pathname + request.nextUrl.search;
+    const loginUrl = new URL("/login", request.url);
+    if (next && next !== "/") {
+      loginUrl.searchParams.set("next", next);
+    }
+    const res = NextResponse.redirect(loginUrl);
+    if (csp) res.headers.set(CSP_HEADER, csp);
+    return res;
+  },
+  // Same origins `authenticateRequest` gets in staff-auth.ts.
+  () => ({ authorizedParties: staffAuthorizedParties() })
+);
+
+export function proxy(request: NextRequest, event: NextFetchEvent) {
   const { pathname } = request.nextUrl;
   const onPortalHost = isPortalHost(
     request.headers.get("host") ?? request.nextUrl.host
   );
 
-  // Portal pages live under /portal internally live under /portal internally and are
-  // served at /* on the portal host only; on any other host they 404.
+  // Portal pages live under /portal internally and are served at /* on
+  // the portal host only; on any other host they 404.
   // Checked BEFORE the static-extension skip so /portal/x.js 404s too.
   if (
     !onPortalHost &&
@@ -98,36 +157,18 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Server layouts can't see the request URL, so we forward
-  // pathname + search as `x-pathname` (read by the dashboard layout to
-  // build /login?next=…). Always SET — overwriting any client-sent
-  // value — so the header can't be spoofed into an open-redirect vector.
-  const requestHeaders = new Headers(request.headers);
-  requestHeaders.set("x-pathname", pathname + request.nextUrl.search);
-
-  // Page CSP with a fresh nonce (src/lib/csp.ts). Next reads the nonce
-  // from the REQUEST header and stamps its scripts/styles; the response
-  // header is what the browser applies. API routes return JSON or files
-  // and get none here (the framed file routes get theirs in
-  // next.config.ts).
-  const csp = pathname.startsWith("/api/")
-    ? null
-    : pageCsp(createNonce(), { isDev: process.env.NODE_ENV === "development" });
-  if (csp) requestHeaders.set(CSP_HEADER, csp);
-  const passThrough = () => {
-    // `request.headers` (not top-level `headers`) — top-level would set
-    // RESPONSE headers, leaking to clients instead of reaching layouts.
-    const res = NextResponse.next({ request: { headers: requestHeaders } });
-    if (csp) res.headers.set(CSP_HEADER, csp);
-    return res;
-  };
-
-  // Portal host: no staff cookie gate. Every path is rewritten into
-  // /portal/*, where staff routes do not exist (so they 404). Next
-  // internals and the CSP report endpoint pass through untouched.
+  // Portal host: no staff session gate and NO Clerk. Every path is
+  // rewritten into /portal/*, where staff routes do not exist (so they
+  // 404). Next internals and the CSP report endpoint pass through.
   if (onPortalHost) {
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-pathname", pathname + request.nextUrl.search);
+    const csp = cspFor(pathname);
+    if (csp) requestHeaders.set(CSP_HEADER, csp);
     if (pathname.startsWith("/_next/") || pathname === "/api/csp-report") {
-      return passThrough();
+      const res = NextResponse.next({ request: { headers: requestHeaders } });
+      if (csp) res.headers.set(CSP_HEADER, csp);
+      return res;
     }
     const target = new URL(
       "/portal" + (pathname === "/" ? "" : pathname) + request.nextUrl.search,
@@ -140,27 +181,7 @@ export function proxy(request: NextRequest) {
     return res;
   }
 
-  // Public routes always pass.
-  if (isPublicPath(pathname) || SELF_AUTHENTICATED_PATHS.has(pathname)) {
-    return passThrough();
-  }
-
-  // Cheap presence check — never reads or validates the JWT itself.
-  const hasSession = SESSION_COOKIE_NAMES.some((name) =>
-    request.cookies.has(name)
-  );
-  if (hasSession) {
-    return passThrough();
-  }
-
-  // Bounce to /login with a `?next=` so we can land them back where
-  // they were trying to go. Search params are preserved.
-  const next = pathname + request.nextUrl.search;
-  const loginUrl = new URL("/login", request.url);
-  if (next && next !== "/") {
-    loginUrl.searchParams.set("next", next);
-  }
-  return NextResponse.redirect(loginUrl);
+  return staffProxy(request, event);
 }
 
 export const config = {
@@ -174,7 +195,7 @@ export const config = {
   // (`proxyClientMaxBodySize`), and only the truncated body reaches the
   // handler. That route streams multi-GB multipart uploads through
   // busboy and would silently store corrupt files. It authenticates
-  // itself (session 401 + `documents.upload` 403), so the cookie gate
+  // itself (session 401 + `documents.upload` 403), so the Clerk gate
   // adds nothing; it does not read `x-pathname`.
   matcher: [
     "/((?!_next/static|_next/image|favicon.ico|api/documents/upload$).*)",

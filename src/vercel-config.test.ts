@@ -15,8 +15,19 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
-import { NextRequest } from "next/server";
+import { describe, expect, it, vi } from "vitest";
+import { NextRequest, type NextFetchEvent } from "next/server";
+
+// Clerk's wrapper would verify a session token (needs real keys); run
+// our handler directly with a signed-out `auth()`. The cron paths are
+// self-authenticated, so the handler never consults it.
+vi.mock("@clerk/nextjs/server", () => ({
+  clerkMiddleware:
+    (handler: (...a: unknown[]) => unknown) =>
+    (req: unknown, evt: unknown) =>
+      handler(async () => ({ userId: null }), req, evt),
+}));
+
 import { proxy } from "./proxy";
 
 type Cron = { path: string; schedule: string };
@@ -46,12 +57,13 @@ describe("vercel.json crons", () => {
     );
   });
 
-  it.each(crons)("$path passes the proxy without a session cookie", ({ path: p }) => {
-    const res = proxy(
+  it.each(crons)("$path passes the proxy without a session", async ({ path: p }) => {
+    const res = (await proxy(
       new NextRequest(new URL(p, "https://app.example.com"), {
         headers: { authorization: "Bearer cron-secret" },
-      })
-    );
+      }),
+      {} as NextFetchEvent
+    )) as Response;
     expect(res.status).toBe(200);
     expect(res.headers.has("location")).toBe(false);
   });
