@@ -30,9 +30,11 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import {
+  saveDashboardLayout,
   setDashboardCardOrder,
   setDashboardCardVisible,
 } from "@/app/actions/dashboard-prefs";
+import { getDashboardLayout } from "@/lib/queries/dashboard-prefs";
 import { DASHBOARD_CARD_KEYS } from "@/lib/dashboard-prefs";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
@@ -177,5 +179,56 @@ describe("setDashboardCardOrder", () => {
     expect(blob.order?.slice(0, 2)).toEqual(["agenda", "kpis"]);
     // Visibility half written alongside — defaults, all visible.
     expect(blob.visible?.kpis).toBe(true);
+  });
+});
+
+describe("saveDashboardLayout", () => {
+  test("authenticates before validating", async () => {
+    mockedGetUser.mockRejectedValue(new Error("unauth"));
+    await expect(saveDashboardLayout("junk")).rejects.toThrow("unauth");
+  });
+
+  test("rejects non-object input and leaves the stored blob unchanged", async () => {
+    const before = await prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { dashboardPrefs: true },
+    });
+    for (const bad of [null, "x", 3, []]) {
+      await expect(saveDashboardLayout(bad)).rejects.toThrow();
+    }
+    const after = await prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { dashboardPrefs: true },
+    });
+    expect(after.dashboardPrefs).toEqual(before.dashboardPrefs);
+  });
+
+  test("persists the sanitized layout", async () => {
+    const res = await saveDashboardLayout({
+      split: "6/6",
+      band: ["bogus", "agenda"],
+      columns: [["tasks"]],
+      hidden: ["pulse"],
+    });
+    const blob = await storedPrefs();
+    expect(blob).toEqual(res);
+    expect(res.v).toBe(3);
+    expect(res.band).toEqual(["agenda", "kpis"]);
+    expect(JSON.stringify(blob)).not.toContain("bogus");
+    expect(res.hidden).toEqual(["pulse"]);
+  });
+
+  test("revalidates the dashboard", async () => {
+    await saveDashboardLayout({});
+    expect(mockedRevalidate).toHaveBeenCalledWith("/");
+  });
+
+  test("getDashboardLayout decodes a stored v2 blob", async () => {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { dashboardPrefs: { visible: { pulse: false } } },
+    });
+    const layout = await getDashboardLayout(userId);
+    expect(layout.hidden).toEqual(["pulse"]);
   });
 });

@@ -7,7 +7,12 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { mergePrefs, type DashboardPrefs } from "@/lib/dashboard-prefs";
+import {
+  mergeLayout,
+  mergePrefs,
+  type DashboardLayout,
+  type DashboardPrefs,
+} from "@/lib/dashboard-prefs";
 
 /**
  * Load the current user's dashboard prefs (visibility + card order),
@@ -22,4 +27,18 @@ export async function getDashboardPrefs(
     select: { dashboardPrefs: true },
   });
   return mergePrefs(user?.dashboardPrefs);
+}
+
+/**
+ * Load the current user's v3 dashboard layout. Decodes v3 blobs as-is
+ * and migrates v1/v2 blobs (`{ visible, order }`) via `mergeLayout`.
+ */
+export async function getDashboardLayout(
+  userId: string
+): Promise<DashboardLayout> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { dashboardPrefs: true },
+  });
+  return mergeLayout(user?.dashboardPrefs);
 }

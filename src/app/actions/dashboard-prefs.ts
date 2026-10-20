@@ -1,6 +1,14 @@
 /**
  * Server actions for dashboard preferences.
  *
+ * v3: `saveDashboardLayout` persists the whole band + columns layout
+ * (`{ v: 3, split, band, columns, hidden }`) wholesale. Auth runs
+ * first, non-object input is rejected, and the payload is sanitized
+ * server-side via `mergeLayout` (unknown keys dropped, missing cards
+ * appended to their default zone) so a stale or malicious client can
+ * never persist a broken layout. The v2 actions below remain only
+ * until the old popover is removed.
+ *
  * v2: show/hide toggles per card + per-column card ordering. The whole
  * prefs blob (`{ visible, order }`) is rewritten on every change —
  * small object, no need for partial updates — so BOTH halves must
@@ -21,7 +29,9 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import {
   DASHBOARD_CARD_KEYS,
+  mergeLayout,
   mergeOrder,
+  type DashboardLayout,
   type DashboardCardKey,
   type DashboardVisibility,
 } from "@/lib/dashboard-prefs";
@@ -81,6 +91,29 @@ export async function setDashboardCardOrder(
     where: { id: userId },
     // Write visibility back too — the blob is replaced wholesale.
     data: { dashboardPrefs: { visible: current.visible, order: next } },
+  });
+
+  revalidatePath("/");
+  return next;
+}
+
+/**
+ * Persist the full v3 layout for the current user. Returns the
+ * sanitized layout so the caller can reconcile.
+ */
+export async function saveDashboardLayout(
+  layout: unknown
+): Promise<DashboardLayout> {
+  // Authenticate first so an anonymous caller gets an auth error.
+  const userId = await getCurrentUserId();
+  if (typeof layout !== "object" || layout === null || Array.isArray(layout)) {
+    throw new Error("layout must be an object");
+  }
+  const next = mergeLayout({ ...(layout as Record<string, unknown>), v: 3 });
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { dashboardPrefs: next },
   });
 
   revalidatePath("/");
