@@ -18,6 +18,7 @@ vi.mock("@/lib/permission-check", () => ({
 }));
 vi.mock("@/lib/clerk-admin", () => ({
   inviteStaff: vi.fn(),
+  revokeStaffInvitation: vi.fn(),
   banStaff: vi.fn(),
   unbanStaff: vi.fn(),
   revokeAllStaffSessions: vi.fn(),
@@ -28,6 +29,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermissionResult } from "@/lib/permission-check";
 import {
   banStaff,
+  revokeStaffInvitation,
   inviteStaff,
   revokeAllStaffSessions,
   unbanStaff,
@@ -48,6 +50,7 @@ const mockedGetUser = vi.mocked(getCurrentUserId);
 const mockedGate = vi.mocked(requirePermissionResult);
 const mInvite = vi.mocked(inviteStaff);
 const mBan = vi.mocked(banStaff);
+const mRevokeInvite = vi.mocked(revokeStaffInvitation);
 const mUnban = vi.mocked(unbanStaff);
 const mRevokeAll = vi.mocked(revokeAllStaffSessions);
 
@@ -67,6 +70,7 @@ beforeEach(async () => {
   mockedGate.mockResolvedValue({ ok: true, userId: "test-user" });
   mInvite.mockResolvedValue(OK);
   mBan.mockResolvedValue(OK);
+  mRevokeInvite.mockResolvedValue(OK);
   mUnban.mockResolvedValue(OK);
   mRevokeAll.mockResolvedValue(OK);
   await resetDb();
@@ -201,12 +205,42 @@ describe("deactivate / reactivate", () => {
     ).toBe(true);
   });
 
-  test("an unlinked member needs no Clerk call", async () => {
+  test("deactivating a never-signed-in member revokes their pending invitation", async () => {
     await actingAdmin();
     const m = await seedUser({ firmId, roleIds: [defaultRoleId] });
+    const email = (
+      await prisma.user.findUniqueOrThrow({ where: { id: m.userId } })
+    ).email;
     const res = await updateFirmMember(m.userId, teamInitialState, updateForm(false));
     expect(res.status).toBe("ok");
+    expect(res.warning).toBeUndefined();
     expect(mBan).not.toHaveBeenCalled();
+    expect(mRevokeInvite).toHaveBeenCalledWith(email);
+  });
+
+  test("an invitation revoke failure warns; the DB already denies access", async () => {
+    await actingAdmin();
+    const m = await seedUser({ firmId, roleIds: [defaultRoleId] });
+    mRevokeInvite.mockResolvedValue(FAIL);
+    const res = await updateFirmMember(m.userId, teamInitialState, updateForm(false));
+    expect(res.status).toBe("ok");
+    expect(res.warning).toContain("Deactivated");
+  });
+
+  test("a linked member's deactivation does not touch invitations", async () => {
+    await actingAdmin();
+    const id = await linkedMember();
+    await updateFirmMember(id, teamInitialState, updateForm(false));
+    expect(mRevokeInvite).not.toHaveBeenCalled();
+  });
+
+  test("reactivating an unlinked member makes no Clerk call", async () => {
+    await actingAdmin();
+    const m = await seedUser({ firmId, roleIds: [defaultRoleId], isActive: false });
+    const res = await updateFirmMember(m.userId, teamInitialState, updateForm(true));
+    expect(res.status).toBe("ok");
+    expect(mRevokeInvite).not.toHaveBeenCalled();
+    expect(mUnban).not.toHaveBeenCalled();
   });
 });
 
@@ -241,7 +275,7 @@ describe("signOutFirmMemberEverywhere", () => {
 });
 
 describe("resetFirmMemberSignInLink", () => {
-  test("nulls clerkUserId then revokes the old identity's sessions", async () => {
+  test("revokes the old identity's sessions, then clears clerkUserId", async () => {
     await actingAdmin();
     const id = await linkedMember();
     const res = await resetFirmMemberSignInLink(id);

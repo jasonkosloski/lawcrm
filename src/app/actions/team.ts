@@ -57,6 +57,7 @@ import { logActivity } from "@/lib/activity-log";
 import { logAuthEvent } from "@/lib/auth-events";
 import {
   banStaff,
+  revokeStaffInvitation,
   inviteStaff,
   revokeAllStaffSessions,
   unbanStaff,
@@ -319,6 +320,7 @@ export async function updateFirmMember(
     select: {
       id: true,
       isActive: true,
+      email: true,
       clerkUserId: true,
       userRoles: { select: { roleId: true, role: { select: { name: true } } } },
     },
@@ -555,6 +557,11 @@ export async function updateFirmMember(
     } else {
       warning = deactivating ? BAN_WARNING : UNBAN_WARNING;
     }
+  } else if (!target.clerkUserId && target.isActive && !newIsActive) {
+    // Never signed in: no Clerk user to ban, but a pending invitation
+    // would still let them create a Clerk identity. Revoke it.
+    const revoked = await revokeStaffInvitation(target.email);
+    if (!revoked.ok) warning = BAN_WARNING;
   }
 
   revalidatePath("/settings/team");

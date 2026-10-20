@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 
 /**
  * Ends the Clerk session and lands on /login. Must render under a
- * ClerkProvider (the root layout provides it).
+ * ClerkProvider (StaffClerkProvider provides it; the root layout deliberately has none).
  */
 export function SignOutButton({ className }: { className?: string }) {
   const { signOut } = useClerk();

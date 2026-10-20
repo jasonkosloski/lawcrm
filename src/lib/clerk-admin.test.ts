@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const client = {
-  invitations: { createInvitation: vi.fn() },
+  invitations: {
+    createInvitation: vi.fn(),
+    getInvitationList: vi.fn(),
+    revokeInvitation: vi.fn(),
+  },
   users: { banUser: vi.fn(), unbanUser: vi.fn() },
   sessions: {
     getSessionList: vi.fn(),
@@ -17,6 +21,7 @@ import {
   banStaff,
   inviteStaff,
   listActiveStaffSessions,
+  revokeStaffInvitation,
   revokeStaffSession,
   unbanStaff,
 } from "./clerk-admin";
@@ -147,5 +152,40 @@ describe("listActiveStaffSessions", () => {
   it("returns ok:false on error", async () => {
     client.sessions.getSessionList.mockRejectedValue(new Error("x"));
     expect(await listActiveStaffSessions("u1")).toEqual(FAIL);
+  });
+});
+
+describe("revokeStaffInvitation", () => {
+  it("revokes each pending invitation whose email matches exactly", async () => {
+    client.invitations.getInvitationList.mockResolvedValue({
+      data: [
+        { id: "inv_1", emailAddress: "Jo@Firm.com" },
+        { id: "inv_2", emailAddress: "jo@firm.com" },
+        { id: "inv_3", emailAddress: "other-jo@firm.com" },
+      ],
+      totalCount: 3,
+    });
+    expect(await revokeStaffInvitation("jo@firm.com")).toEqual({ ok: true });
+    expect(client.invitations.getInvitationList).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "pending", query: "jo@firm.com" })
+    );
+    expect(client.invitations.revokeInvitation.mock.calls).toEqual([
+      ["inv_1"],
+      ["inv_2"],
+    ]);
+  });
+
+  it("is ok when there is nothing pending", async () => {
+    client.invitations.getInvitationList.mockResolvedValue({
+      data: [],
+      totalCount: 0,
+    });
+    expect(await revokeStaffInvitation("jo@firm.com")).toEqual({ ok: true });
+    expect(client.invitations.revokeInvitation).not.toHaveBeenCalled();
+  });
+
+  it("returns ok:false when Clerk throws", async () => {
+    client.invitations.getInvitationList.mockRejectedValue(new Error("boom"));
+    expect(await revokeStaffInvitation("jo@firm.com")).toEqual(FAIL);
   });
 });

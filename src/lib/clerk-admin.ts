@@ -5,7 +5,7 @@
  * surface a warning instead of failing half-way.
  *
  * Methods verified against @clerk/backend types: invitations.
- * createInvitation, users.banUser/unbanUser, sessions.getSessionList
+ * createInvitation, invitations.getInvitationList/revokeInvitation, users.banUser/unbanUser, sessions.getSessionList
  * (paginated { data, totalCount }), getSession, revokeSession.
  */
 
@@ -60,6 +60,34 @@ export async function inviteStaff(email: string): Promise<ClerkResult> {
       notify: true,
       ignoreExisting: true,
     });
+    return { ok: true };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/**
+ * Revoke every pending invitation for an email (a member deactivated
+ * before they ever signed in has no Clerk user to ban). `query` is a
+ * fuzzy filter, so results are re-checked for an exact, case-insensitive
+ * email match before anything is revoked.
+ */
+export async function revokeStaffInvitation(
+  email: string
+): Promise<ClerkResult> {
+  try {
+    const client = await clerkClient();
+    const wanted = email.trim().toLowerCase();
+    const { data } = await client.invitations.getInvitationList({
+      query: wanted,
+      status: "pending",
+      limit: PAGE,
+    });
+    for (const inv of data) {
+      if (inv.emailAddress.trim().toLowerCase() === wanted) {
+        await client.invitations.revokeInvitation(inv.id);
+      }
+    }
     return { ok: true };
   } catch (err) {
     return fail(err);
