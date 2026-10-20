@@ -140,6 +140,35 @@ describe("resolveStaffUser", () => {
     });
   });
 
+  test("repeated unlinkable resolutions write one no_access row per Clerk id", async () => {
+    hoisted.getUser.mockResolvedValue(clerkUser("nobody@firm.test"));
+    await resolveStaffUser("user_a", "s1");
+    await resolveStaffUser("user_a", "s2");
+    expect(
+      await prisma.activityLog.count({
+        where: { type: "auth", title: "Signed in without firm access" },
+      })
+    ).toBe(1);
+    // A different Clerk id is its own audit subject.
+    await resolveStaffUser("user_b", "s3");
+    expect(
+      await prisma.activityLog.count({
+        where: { type: "auth", title: "Signed in without firm access" },
+      })
+    ).toBe(2);
+    // Outside the 15 minute window the event is recorded again.
+    await prisma.activityLog.updateMany({
+      where: { title: "Signed in without firm access" },
+      data: { timestamp: new Date(Date.now() - 16 * 60 * 1000) },
+    });
+    await resolveStaffUser("user_a", "s4");
+    expect(
+      await prisma.activityLog.count({
+        where: { type: "auth", title: "Signed in without firm access" },
+      })
+    ).toBe(3);
+  });
+
   test("race: two Clerk ids, same email -> exactly one ok", async () => {
     await seedUser({ firmId, email: "jane@firm.test" });
     hoisted.getUser.mockResolvedValue(clerkUser("jane@firm.test"));

@@ -22,9 +22,32 @@ import { pipeline } from "node:stream/promises";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-vi.mock("@/lib/staff-auth", () => ({ getStaffAuthFromRequest: vi.fn() }));
+// This route is excluded from the Clerk middleware matcher, so anything
+// that reads Clerk request state throws in production (Clerk's auth()
+// "can't detect clerkMiddleware"). Model that: every request-context
+// identity path throws, and only getStaffAuthFromRequest works.
+const NO_CLERK_STATE = "Clerk request state is unavailable on this route";
+vi.mock("@clerk/nextjs/server", () => ({
+  auth: vi.fn(async () => {
+    throw new Error(NO_CLERK_STATE);
+  }),
+}));
+vi.mock("@/lib/staff-auth", () => ({
+  getStaffAuthFromRequest: vi.fn(),
+  getStaffAuth: vi.fn(async () => {
+    throw new Error(NO_CLERK_STATE);
+  }),
+}));
+vi.mock("@/lib/current-user", () => ({
+  getCurrentUserId: vi.fn(async () => {
+    throw new Error(NO_CLERK_STATE);
+  }),
+}));
 vi.mock("@/lib/permission-check", () => ({
-  currentUserHasPermission: vi.fn(),
+  userHasPermission: vi.fn(),
+  currentUserHasPermission: vi.fn(async () => {
+    throw new Error(NO_CLERK_STATE);
+  }),
 }));
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -60,7 +83,10 @@ vi.mock("@/lib/file-storage", async (importOriginal) => {
 });
 
 import { getStaffAuthFromRequest } from "@/lib/staff-auth";
-import { currentUserHasPermission } from "@/lib/permission-check";
+import { userHasPermission } from "@/lib/permission-check";
+import { auth as clerkAuth } from "@clerk/nextjs/server";
+import { getStaffAuth } from "@/lib/staff-auth";
+import { getCurrentUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
 import { canAccessMatter } from "@/lib/matter-access";
@@ -81,7 +107,7 @@ const OK = {
   clerkUserId: "clerk_1",
   sessionId: "sess_1",
 } as const;
-const mockedPerm = vi.mocked(currentUserHasPermission);
+const mockedPerm = vi.mocked(userHasPermission);
 const mockedMatter = vi.mocked(prisma.matter.findUnique);
 const mockedLead = vi.mocked(prisma.lead.findUnique);
 const mockedFolder = vi.mocked(prisma.documentFolder.findFirst);
@@ -199,7 +225,7 @@ describe("POST /api/documents/upload — gates", () => {
       await makeRequest(fdWith({ matterId: "m1" }, [{ name: "a.pdf" }]))
     );
     expect(res.status).toBe(403);
-    expect(mockedPerm).toHaveBeenCalledWith("documents.upload");
+    expect(mockedPerm).toHaveBeenCalledWith("u1", "documents.upload");
     expect(mockedStore).not.toHaveBeenCalled();
   });
 
@@ -256,6 +282,18 @@ describe("POST /api/documents/upload — happy path + contract", () => {
     expect(vi.mocked(logActivity).mock.calls[0]![0].title).toMatch(
       /2 documents uploaded/
     );
+  });
+
+  test("never reads Clerk request state or the session-based resolvers (matcher-excluded route)", async () => {
+    wireHappyMocks();
+    const res = await POST(
+      await makeRequest(fdWith({ matterId: "m1" }, [{ name: "a.pdf" }]))
+    );
+    expect(res.status).toBe(200);
+    expect(mockedPerm).toHaveBeenCalledWith("u1", "documents.upload");
+    expect(clerkAuth).not.toHaveBeenCalled();
+    expect(getStaffAuth).not.toHaveBeenCalled();
+    expect(getCurrentUserId).not.toHaveBeenCalled();
   });
 
   test("server-derived MIME beats the client-declared part type", async () => {
@@ -734,7 +772,7 @@ describe("POST /api/documents/upload — records requests", () => {
 
   test("without records.edit -> 403 before any byte is stored", async () => {
     wireHappyMocks();
-    mockedPerm.mockImplementation(async (k) => k !== "records.edit");
+    mockedPerm.mockImplementation(async (_u, k) => k !== "records.edit");
     mockedReq.mockResolvedValue({ id: "rr1" } as never);
     const res = await POST(
       await makeRequest(

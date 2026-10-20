@@ -50,7 +50,7 @@
  * empty) fails the request and removes everything already written.
  *
  * Auth: session (401) + `documents.upload` (403). The permission
- * gate uses `currentUserHasPermission` rather than
+ * gate uses `userHasPermission` rather than
  * `requirePermission` because the latter `redirect("/")`s on denial
  * — the wrong shape for a JSON API consumed via fetch.
  *
@@ -77,7 +77,7 @@ import { getStaffAuthFromRequest } from "@/lib/staff-auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessMatter } from "@/lib/matter-access";
 import { canAccessLead } from "@/lib/lead-access";
-import { currentUserHasPermission } from "@/lib/permission-check";
+import { userHasPermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { scopeWhere, type RecordScope } from "@/lib/record-scope";
 import {
@@ -150,7 +150,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
   const userId = staff.userId;
 
-  const allowed = await currentUserHasPermission("documents.upload");
+  const allowed = await userHasPermission(userId, "documents.upload");
   if (!allowed) {
     return NextResponse.json(
       { error: "You don't have permission to upload documents." },
@@ -450,7 +450,7 @@ async function resolveTarget(
   // and the request must live in THIS scope - checked before any byte.
   const recordsRequestId = fields.recordsRequestId?.trim() || null;
   if (recordsRequestId) {
-    if (!(await currentUserHasPermission("records.edit"))) {
+    if (!(await userHasPermission(userId, "records.edit"))) {
       return {
         status: 403,
         error: "You don't have permission to link documents to records requests.",

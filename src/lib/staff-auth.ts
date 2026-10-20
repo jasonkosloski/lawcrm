@@ -22,7 +22,10 @@ import { cache } from "react";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { requestIsOnPortalHost } from "@/lib/portal/host";
-import { logAuthEvent } from "@/lib/auth-events";
+import { AUTH_EVENT_TITLES, logAuthEvent } from "@/lib/auth-events";
+
+/** Minimum gap between `no_access` audit rows for one Clerk user. */
+const NO_ACCESS_LOG_WINDOW_MS = 15 * 60 * 1000;
 
 export type StaffAuth =
   | { status: "signed_out" }
@@ -107,13 +110,28 @@ export async function resolveStaffUser(
     where: { email: emailMatch },
     select: { id: true },
   });
-  await logAuthEvent({
-    userId: row?.id ?? null,
-    kind: "no_access",
-    reason: row
-      ? `Clerk ${clerkUserId}: row unavailable (inactive or linked elsewhere)`
-      : `Clerk ${clerkUserId}: no firm user for ${email}`,
+  // Every request from an unlinkable Clerk user lands here, so the
+  // audit row is deduped: at most one per Clerk id per window. The
+  // "Clerk user <id>:" prefix of `detail` is the match key.
+  const tag = `Clerk user ${clerkUserId}:`;
+  const recent = await prisma.activityLog.findFirst({
+    where: {
+      type: "auth",
+      title: AUTH_EVENT_TITLES.no_access,
+      detail: { startsWith: tag },
+      timestamp: { gt: new Date(Date.now() - NO_ACCESS_LOG_WINDOW_MS) },
+    },
+    select: { id: true },
   });
+  if (!recent) {
+    await logAuthEvent({
+      userId: row?.id ?? null,
+      kind: "no_access",
+      reason: row
+        ? `${tag} row unavailable (inactive or linked elsewhere)`
+        : `${tag} no firm user for ${email}`,
+    });
+  }
   return noAccess;
 }
 

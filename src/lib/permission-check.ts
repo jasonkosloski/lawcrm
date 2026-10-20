@@ -45,12 +45,12 @@ type ResolvedPermissions = {
 };
 
 /**
- * Pulls the current user's roles + their granted permissions in one
- * query. Cached per-request so concurrent checks don't re-fetch.
+ * Pulls a user's roles + their granted permissions in one query.
+ * Cached per-request (keyed by user id) so concurrent checks don't
+ * re-fetch.
  */
-const resolveCurrentUserPermissions = cache(
-  async (): Promise<ResolvedPermissions> => {
-    const userId = await getCurrentUserId();
+const resolveUserPermissions = cache(
+  async (userId: string): Promise<ResolvedPermissions> => {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -84,6 +84,23 @@ const resolveCurrentUserPermissions = cache(
     return { isAdmin, granted };
   }
 );
+
+const resolveCurrentUserPermissions = async (): Promise<ResolvedPermissions> =>
+  resolveUserPermissions(await getCurrentUserId());
+
+/**
+ * True when the GIVEN user has `permission`. For callers that already
+ * hold a verified user id and must not resolve the session again
+ * (route handlers the Clerk middleware does not cover, where
+ * `getCurrentUserId()` would throw). Admins always do.
+ */
+export async function userHasPermission(
+  userId: string,
+  permission: string
+): Promise<boolean> {
+  const { isAdmin, granted } = await resolveUserPermissions(userId);
+  return isAdmin || granted.has(permission);
+}
 
 /** True when the current user has `permission`. Admins always do. */
 export async function currentUserHasPermission(
