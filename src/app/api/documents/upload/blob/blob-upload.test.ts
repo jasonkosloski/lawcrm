@@ -31,6 +31,8 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     matter: { findUnique: vi.fn() },
     lead: { findUnique: vi.fn() },
+    matterDraft: { findUnique: vi.fn() },
+    matterDraftFile: { count: vi.fn(), create: vi.fn(), findFirst: vi.fn() },
     documentFolder: { findFirst: vi.fn() },
     document: { create: vi.fn(), findFirst: vi.fn() },
     recordsRequest: { findFirst: vi.fn() },
@@ -44,6 +46,13 @@ vi.mock("@/lib/lead-access", () => ({
 vi.mock("@/lib/matter-access", () => ({
   canAccessMatter: vi.fn(async () => true),
 }));
+vi.mock("@/lib/draft-access", () => ({
+  canAccessDraft: vi.fn(async () => true),
+}));
+vi.mock("@/lib/file-storage", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/file-storage")>();
+  return { ...actual, deleteFile: vi.fn() };
+});
 vi.mock("@/lib/records-requests/folder", () => ({
   resolveRecordsUpload: vi.fn(),
 }));
@@ -61,6 +70,8 @@ import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
 import { canAccessMatter } from "@/lib/matter-access";
 import { canAccessLead } from "@/lib/lead-access";
+import { canAccessDraft } from "@/lib/draft-access";
+import { deleteFile } from "@/lib/file-storage";
 import { resolveRecordsUpload } from "@/lib/records-requests/folder";
 import { revalidatePath } from "next/cache";
 import {
@@ -870,5 +881,132 @@ describe("records requests", () => {
       expect(data.recordsRequestId).toBeUndefined();
       expect(data.recordsRequestRole).toBeUndefined();
     });
+  });
+});
+
+describe("draft target", () => {
+  const DRAFT_PAYLOAD = JSON.stringify({ draftId: "d1", name: "agreement.pdf" });
+  const BLOB_URL = "https://store.public.blob.vercel-storage.com/AAAAAAAAAAAAAAAA__agreement.pdf";
+  const COMPLETED_PAYLOAD = JSON.stringify({
+    draftId: "d1",
+    folderId: null,
+    name: "agreement.pdf",
+    category: "discovery",
+    contentType: "application/pdf",
+    userId: "u1",
+  });
+
+  function wireDraftGates(existing = 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedAuth.mockResolvedValue({ user: { id: "u1" } } as any);
+    mockedPerm.mockResolvedValue(true);
+    vi.mocked(canAccessDraft).mockResolvedValue(true);
+    vi.mocked(prisma.matterDraftFile.count).mockResolvedValue(existing);
+    vi.mocked(prisma.matterDraft.findUnique).mockResolvedValue({ id: "d1" } as never);
+    vi.mocked(prisma.matterDraftFile.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.matterDraftFile.create).mockResolvedValue({
+      id: "df1",
+      name: "agreement.pdf",
+    } as never);
+  }
+
+  test("token: payload carries draftId and the 50 MB cap", async () => {
+    wireDraftGates();
+    const token = await onBeforeGenerateToken(KEY, DRAFT_PAYLOAD, false);
+    expect(token.maximumSizeInBytes).toBe(50 * 1024 * 1024);
+    expect(JSON.parse(token.tokenPayload as string)).toMatchObject({
+      draftId: "d1",
+      userId: "u1",
+    });
+    expect(canAccessDraft).toHaveBeenCalledWith("u1", "d1");
+  });
+
+  test("token: combined targets, folders or records requests -> 400", async () => {
+    for (const extra of [
+      { matterId: "m1" },
+      { leadId: "l1" },
+      { folderId: "f1" },
+      { recordsRequestId: "r1" },
+    ]) {
+      wireDraftGates();
+      const err = await tokenError(
+        KEY,
+        JSON.stringify({ draftId: "d1", name: "a.pdf", ...extra })
+      );
+      expect(err.status, JSON.stringify(extra)).toBe(400);
+    }
+    wireDraftGates();
+    const err = await tokenError(
+      KEY,
+      JSON.stringify({ draftId: "d1", matterId: "m1", name: "a.pdf" })
+    );
+    expect(err.message).toBe("Choose exactly one of a matter, a lead or a draft.");
+  });
+
+  test("token: no access -> 404; no documents.upload -> 403", async () => {
+    wireDraftGates();
+    vi.mocked(canAccessDraft).mockResolvedValue(false);
+    expect((await tokenError(KEY, DRAFT_PAYLOAD)).status).toBe(404);
+    wireDraftGates();
+    mockedPerm.mockResolvedValue(false);
+    expect((await tokenError(KEY, DRAFT_PAYLOAD)).status).toBe(403);
+  });
+
+  test("token: a full draft (20 files) -> 400", async () => {
+    wireDraftGates(20);
+    const err = await tokenError(KEY, DRAFT_PAYLOAD);
+    expect(err.status).toBe(400);
+    expect(err.message).toBe("A draft can hold up to 20 files.");
+  });
+
+  test("completed: writes a draft-file row and no Document", async () => {
+    wireDraftGates();
+    mockedHead.mockResolvedValue({ size: 1234 } as never);
+    await onUploadCompleted({
+      blob: { url: BLOB_URL } as never,
+      tokenPayload: COMPLETED_PAYLOAD,
+    });
+    expect(prisma.matterDraftFile.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          draftId: "d1",
+          name: "agreement.pdf",
+          fileUrl: BLOB_URL,
+          fileSize: 1234,
+          uploadedBy: "u1",
+        }),
+      })
+    );
+    expect(mockedCreate).not.toHaveBeenCalled();
+    expect(logActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        matterId: null,
+        type: "filing",
+        title: "File attached to a matter draft",
+      })
+    );
+  });
+
+  test("completed: draft deleted mid-upload -> blob removed, nothing written", async () => {
+    wireDraftGates();
+    vi.mocked(prisma.matterDraft.findUnique).mockResolvedValue(null);
+    mockedHead.mockResolvedValue({ size: 10 } as never);
+    await onUploadCompleted({
+      blob: { url: BLOB_URL } as never,
+      tokenPayload: COMPLETED_PAYLOAD,
+    });
+    expect(deleteFile).toHaveBeenCalledWith(BLOB_URL);
+    expect(prisma.matterDraftFile.create).not.toHaveBeenCalled();
+  });
+
+  test("completed: draft already at 20 files -> blob removed, nothing written", async () => {
+    wireDraftGates(20);
+    mockedHead.mockResolvedValue({ size: 10 } as never);
+    await onUploadCompleted({
+      blob: { url: BLOB_URL } as never,
+      tokenPayload: COMPLETED_PAYLOAD,
+    });
+    expect(deleteFile).toHaveBeenCalledWith(BLOB_URL);
+    expect(prisma.matterDraftFile.create).not.toHaveBeenCalled();
   });
 });

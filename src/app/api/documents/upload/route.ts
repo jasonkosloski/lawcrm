@@ -77,6 +77,7 @@ import { getStaffAuthFromRequest } from "@/lib/staff-auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessMatter } from "@/lib/matter-access";
 import { canAccessLead } from "@/lib/lead-access";
+import { canAccessDraft } from "@/lib/draft-access";
 import { userHasPermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { scopeWhere, type RecordScope } from "@/lib/record-scope";
@@ -99,6 +100,12 @@ import {
 } from "@/lib/file-storage";
 import { parseUploadMeta, type DocumentCategory } from "@/lib/document-form";
 import {
+  DRAFT_FILE_COUNT_ERROR,
+  DRAFT_FILE_TOO_LARGE_ERROR,
+  DRAFT_MAX_FILES,
+  DRAFT_MAX_FILE_BYTES,
+  UPLOAD_DRAFT_EXCLUSIVE_ERROR,
+  UPLOAD_DRAFT_NO_FOLDER_ERROR,
   MAX_FILES_PER_BATCH,
   MAX_MEDIA_UPLOAD_BYTES,
   MAX_STANDARD_UPLOAD_BYTES,
@@ -125,7 +132,10 @@ type UploadFailure = { status: number; error: string };
 type ParseResult =
   | {
       ok: true;
-      scope: RecordScope;
+      /** Null for a matter-draft target (see draftId). */
+      scope: RecordScope | null;
+      draftId: string | null;
+      existingDraftFiles: number;
       folderId: string | null;
       recordsRequestId: string | null;
       recordsRole: RecordsDocRole;
@@ -197,8 +207,13 @@ export async function POST(req: NextRequest): Promise<Response> {
     );
   }
 
+  if (result.draftId) {
+    return fileOntoDraft(result, result.draftId, userId);
+  }
+  const docScope = result.scope as RecordScope;
+
   let documents: { id: string; name: string; contentType: string | null }[];
-  let scope: RecordScope = result.scope;
+  let scope: RecordScope = docScope;
   // Set when a records tag was requested but the request no longer
   // matches the final scope (e.g. re-homed by a lead conversion).
   let recordsTagDropped = false;
@@ -235,13 +250,13 @@ export async function POST(req: NextRequest): Promise<Response> {
   });
   const select = { id: true, name: true, contentType: true } as const;
   try {
-    if (result.scope.kind === "lead") {
+    if (docScope.kind === "lead") {
       // Lead scope: re-check the lead INSIDE the create transaction
       // under a FOR SHARE lock (resolveLeadUploadTarget). If it
       // converted while the bytes streamed, the files go onto its
       // matter (folder falls back to the matter root) rather than
       // being stranded on a read-only lead.
-      const leadId = result.scope.leadId;
+      const leadId = docScope.leadId;
       const outcome = await prisma.$transaction(async (tx) => {
         const target = await resolveLeadUploadTarget(
           tx,
@@ -292,7 +307,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       recordsTagDropped = outcome.dropped;
     } else if (result.recordsRequestId) {
       const requestId = result.recordsRequestId;
-      const matterScope = result.scope;
+      const matterScope = docScope;
       documents = await prisma.$transaction(async (tx) => {
         const tag = await resolveRecordsUpload(
           tx,
@@ -319,7 +334,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       documents = await prisma.$transaction(
         result.files.map((f) =>
           prisma.document.create({
-            data: rowData(f, result.scope, result.folderId),
+            data: rowData(f, docScope, result.folderId),
             select,
           })
         )
@@ -359,8 +374,88 @@ export async function POST(req: NextRequest): Promise<Response> {
   return NextResponse.json({ documents });
 }
 
+/** Matter-draft target: one transaction re-checks the draft still
+ *  exists and has room, then writes the MatterDraftFile rows. Bytes
+ *  are removed on every failure path. */
+async function fileOntoDraft(
+  result: Extract<ParseResult, { ok: true }>,
+  draftId: string,
+  userId: string
+): Promise<Response> {
+  const removeBytes = () =>
+    Promise.all(
+      result.files.map(async (f) => {
+        try {
+          await deleteFile(f.key);
+        } catch {
+          /* best-effort */
+        }
+      })
+    );
+  let outcome: "gone" | "full" | { id: string; name: string }[];
+  try {
+    outcome = await prisma.$transaction(async (tx) => {
+      const draft = await tx.matterDraft.findUnique({
+        where: { id: draftId },
+        select: { id: true },
+      });
+      if (!draft) return "gone" as const;
+      const existing = await tx.matterDraftFile.count({ where: { draftId } });
+      if (existing + result.files.length > DRAFT_MAX_FILES) {
+        return "full" as const;
+      }
+      const rows: { id: string; name: string }[] = [];
+      for (const f of result.files) {
+        rows.push(
+          await tx.matterDraftFile.create({
+            data: {
+              draftId,
+              // A display-name override only makes sense for one file.
+              name:
+                result.files.length === 1 && result.displayName
+                  ? capDocumentName(result.displayName)
+                  : f.name,
+              fileUrl: f.key,
+              contentType: f.contentType,
+              fileSize: f.size,
+              uploadedBy: userId,
+            },
+            select: { id: true, name: true },
+          })
+        );
+      }
+      return rows;
+    });
+  } catch (err) {
+    await removeBytes();
+    // The draft vanished between the check and the insert (FK).
+    if ((err as { code?: unknown } | null)?.code === "P2003") {
+      return NextResponse.json({ error: "Draft not found." }, { status: 404 });
+    }
+    throw err;
+  }
+  if (outcome === "gone") {
+    await removeBytes();
+    return NextResponse.json({ error: "Draft not found." }, { status: 404 });
+  }
+  if (outcome === "full") {
+    await removeBytes();
+    return NextResponse.json({ error: DRAFT_FILE_COUNT_ERROR }, { status: 400 });
+  }
+  // File names never go in the activity log (drafts are pre-conflict).
+  await logActivity({
+    matterId: null,
+    userId,
+    type: "filing",
+    title: "File attached to a matter draft",
+  });
+  return NextResponse.json({ documents: outcome });
+}
+
 type Target = {
-  scope: RecordScope;
+  scope: RecordScope | null;
+  draftId: string | null;
+  existingDraftFiles: number;
   folderId: string | null;
   recordsRequestId: string | null;
   recordsRole: RecordsDocRole;
@@ -375,6 +470,7 @@ async function resolveTarget(
   fields: {
     matterId?: string;
     leadId?: string;
+    draftId?: string;
     folderId?: string;
     recordsRequestId?: string;
     recordsRole?: string;
@@ -398,6 +494,31 @@ async function resolveTarget(
     : "received_records";
   const matterId = fields.matterId?.trim();
   const leadId = fields.leadId?.trim();
+  const draftId = fields.draftId?.trim();
+  if (draftId) {
+    if (matterId || leadId) {
+      return { status: 400, error: UPLOAD_DRAFT_EXCLUSIVE_ERROR };
+    }
+    if (fields.folderId?.trim() || fields.recordsRequestId?.trim()) {
+      return { status: 400, error: UPLOAD_DRAFT_NO_FOLDER_ERROR };
+    }
+    // Hidden == missing, checked before the first byte is written.
+    if (!(await canAccessDraft(userId, draftId))) {
+      return { status: 404, error: "Draft not found." };
+    }
+    return {
+      scope: null,
+      draftId,
+      existingDraftFiles: await prisma.matterDraftFile.count({
+        where: { draftId },
+      }),
+      folderId: null,
+      recordsRequestId: null,
+      recordsRole,
+      category: meta.category,
+      displayName: meta.name,
+    };
+  }
   if ((matterId && leadId) || (!matterId && !leadId)) {
     return { status: 400, error: UPLOAD_SCOPE_REQUIRED_ERROR };
   }
@@ -466,6 +587,8 @@ async function resolveTarget(
   }
   return {
     scope,
+    draftId: null,
+    existingDraftFiles: 0,
     folderId: folderId || null,
     recordsRequestId,
     recordsRole,
@@ -520,6 +643,7 @@ async function parseAndStore(
   const fields: {
     matterId?: string;
     leadId?: string;
+    draftId?: string;
     folderId?: string;
     recordsRequestId?: string;
     recordsRole?: string;
@@ -565,6 +689,7 @@ async function parseAndStore(
       if (
         name === "matterId" ||
         name === "leadId" ||
+        name === "draftId" ||
         name === "folderId" ||
         name === "recordsRequestId" ||
         name === "recordsRole" ||
@@ -607,9 +732,20 @@ async function parseAndStore(
         }
 
         const resolvedType = contentTypeForFilename(filename);
-        const cap = isMediaType(resolvedType)
-          ? MAX_MEDIA_UPLOAD_BYTES
-          : MAX_STANDARD_UPLOAD_BYTES;
+        const isDraft = Boolean(target.draftId);
+        if (
+          isDraft &&
+          target.existingDraftFiles + stored.length + 1 > DRAFT_MAX_FILES
+        ) {
+          fail({ status: 400, error: DRAFT_FILE_COUNT_ERROR });
+          stream.resume();
+          return;
+        }
+        const cap = isDraft
+          ? DRAFT_MAX_FILE_BYTES
+          : isMediaType(resolvedType)
+            ? MAX_MEDIA_UPLOAD_BYTES
+            : MAX_STANDARD_UPLOAD_BYTES;
 
         // A failed pipeline destroys busboy's part stream and busboy
         // may still push into it — swallow the post-mortem error so
@@ -630,7 +766,9 @@ async function parseAndStore(
             contentType: resolvedType,
           });
         } catch (err) {
-          if (err instanceof FileTooLargeError) {
+          if (err instanceof FileTooLargeError && isDraft) {
+            fail({ status: 400, error: DRAFT_FILE_TOO_LARGE_ERROR });
+          } else if (err instanceof FileTooLargeError) {
             const capMiB = Math.floor(cap / (1024 * 1024));
             fail({
               status: 413,
@@ -706,6 +844,8 @@ async function parseAndStore(
   return {
     ok: true,
     scope: t.scope,
+    draftId: t.draftId,
+    existingDraftFiles: t.existingDraftFiles,
     folderId: t.folderId,
     recordsRequestId: t.recordsRequestId,
     recordsRole: t.recordsRole,

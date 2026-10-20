@@ -45,6 +45,8 @@ import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { canAccessMatter } from "@/lib/matter-access";
 import { canAccessLead } from "@/lib/lead-access";
+import { canAccessDraft } from "@/lib/draft-access";
+import { deleteFile } from "@/lib/file-storage";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { scopeWhere, type RecordScope } from "@/lib/record-scope";
@@ -66,6 +68,11 @@ import {
 } from "@/lib/records-requests/roles";
 import { BLOB_CACHE_MAX_AGE_SECONDS } from "@/lib/storage/blob-driver";
 import {
+  DRAFT_FILE_COUNT_ERROR,
+  DRAFT_MAX_FILES,
+  DRAFT_MAX_FILE_BYTES,
+  UPLOAD_DRAFT_EXCLUSIVE_ERROR,
+  UPLOAD_DRAFT_NO_FOLDER_ERROR,
   MAX_MEDIA_UPLOAD_BYTES,
   MAX_STANDARD_UPLOAD_BYTES,
   UPLOAD_FOLDER_SCOPE_ERROR,
@@ -93,6 +100,9 @@ const clientPayloadSchema = z
     /** Exactly one of matterId / leadId (refined below). */
     matterId: z.string().min(1).optional(),
     leadId: z.string().min(1).optional(),
+    /** Matter-draft target; exclusive with matterId / leadId and
+     *  incompatible with folders / records requests (refined below). */
+    draftId: z.string().min(1).optional(),
     folderId: z.string().min(1).nullish(),
     /** Tag the file as received records of this request (must be in
      *  the same scope; needs records.edit). */
@@ -109,8 +119,24 @@ const clientPayloadSchema = z
      *  (→ "discovery", same default as the streaming route). */
     category: z.enum(DOCUMENT_CATEGORIES).optional(),
   })
-  .refine((p) => Boolean(p.matterId) !== Boolean(p.leadId), {
-    message: UPLOAD_SCOPE_REQUIRED_ERROR,
+  .superRefine((p, ctx) => {
+    if (p.draftId) {
+      if (p.matterId || p.leadId) {
+        ctx.addIssue({
+          code: "custom",
+          message: UPLOAD_DRAFT_EXCLUSIVE_ERROR,
+        });
+      } else if (p.folderId || p.recordsRequestId) {
+        ctx.addIssue({
+          code: "custom",
+          message: UPLOAD_DRAFT_NO_FOLDER_ERROR,
+        });
+      }
+      return;
+    }
+    if (Boolean(p.matterId) === Boolean(p.leadId)) {
+      ctx.addIssue({ code: "custom", message: UPLOAD_SCOPE_REQUIRED_ERROR });
+    }
   });
 
 /** Token lifetimes. The SDK default is ONE hour, fixed at mint time
@@ -127,6 +153,8 @@ type TokenPayload = {
   /** Exactly one of matterId / leadId is set. */
   matterId?: string;
   leadId?: string;
+  /** Set instead of matterId / leadId for a matter-draft upload. */
+  draftId?: string;
   folderId: string | null;
   recordsRequestId?: string | null;
   recordsRole?: RecordsDocRole;
@@ -161,8 +189,48 @@ export const onBeforeGenerateToken: HandleUploadOptions["onBeforeGenerateToken"]
     let payload: z.infer<typeof clientPayloadSchema>;
     try {
       payload = clientPayloadSchema.parse(JSON.parse(clientPayload ?? ""));
-    } catch {
+    } catch (err) {
+      // The draft-target refinements carry user-facing copy.
+      if (err instanceof z.ZodError) {
+        const draftIssue = err.issues.find(
+          (i) =>
+            i.message === UPLOAD_DRAFT_EXCLUSIVE_ERROR ||
+            i.message === UPLOAD_DRAFT_NO_FOLDER_ERROR
+        );
+        if (draftIssue) throw new UploadTokenError(400, draftIssue.message);
+      }
       throw new UploadTokenError(400, "Invalid upload payload.");
+    }
+
+    if (payload.draftId) {
+      // Hidden == missing, before any token is issued.
+      if (!(await canAccessDraft(session.user.id, payload.draftId))) {
+        throw new UploadTokenError(404, "Draft not found.");
+      }
+      const existing = await prisma.matterDraftFile.count({
+        where: { draftId: payload.draftId },
+      });
+      if (existing >= DRAFT_MAX_FILES) {
+        throw new UploadTokenError(400, DRAFT_FILE_COUNT_ERROR);
+      }
+      const contentType = contentTypeForFilename(pathname);
+      const draftPayload: TokenPayload = {
+        draftId: payload.draftId,
+        folderId: null,
+        name: payload.name,
+        category: payload.category ?? "discovery",
+        contentType,
+        userId: session.user.id,
+      };
+      return {
+        allowedContentTypes: [contentType],
+        maximumSizeInBytes: DRAFT_MAX_FILE_BYTES,
+        validUntil: Date.now() + TOKEN_TTL_MS,
+        addRandomSuffix: false,
+        allowOverwrite: false,
+        cacheControlMaxAge: BLOB_CACHE_MAX_AGE_SECONDS,
+        tokenPayload: JSON.stringify(draftPayload),
+      };
     }
 
     if (
@@ -279,6 +347,77 @@ const isForeignKeyError = (err: unknown): boolean =>
   err !== null &&
   (err as { code?: unknown }).code === "P2003";
 
+/** Completion for a matter-draft target: idempotent, and the blob is
+ *  removed (nothing written) when the draft vanished, is full, or the
+ *  file is empty / over the draft cap. */
+async function completeDraftUpload(
+  blobUrl: string,
+  t: TokenPayload,
+  draftId: string
+): Promise<void> {
+  const removeBlob = async (why: string) => {
+    console.error(`[blob-upload] ${why}; blob removed`);
+    try {
+      await deleteFile(blobUrl);
+    } catch (err) {
+      console.error("[blob-upload] draft blob cleanup failed", err);
+    }
+  };
+
+  // Redelivery: the row for this blob already exists.
+  const already = await prisma.matterDraftFile.findFirst({
+    where: { fileUrl: blobUrl },
+    select: { id: true },
+  });
+  if (already) return;
+
+  const meta = await head(blobUrl);
+  if (meta.size === 0 || meta.size > DRAFT_MAX_FILE_BYTES) {
+    await removeBlob("empty or oversized draft file");
+    return;
+  }
+
+  const draft = await prisma.matterDraft.findUnique({
+    where: { id: draftId },
+    select: { id: true },
+  });
+  if (!draft) {
+    await removeBlob("draft vanished during upload");
+    return;
+  }
+  // Re-check the count: parallel tokens can all pass the token-time check.
+  const existing = await prisma.matterDraftFile.count({ where: { draftId } });
+  if (existing >= DRAFT_MAX_FILES) {
+    await removeBlob("draft is full");
+    return;
+  }
+
+  try {
+    await prisma.matterDraftFile.create({
+      data: {
+        draftId,
+        name: t.name,
+        fileUrl: blobUrl,
+        contentType: t.contentType,
+        fileSize: meta.size,
+        uploadedBy: t.userId,
+      },
+    });
+  } catch (err) {
+    if (!isForeignKeyError(err)) throw err;
+    await removeBlob("draft vanished during upload");
+    return;
+  }
+
+  // File names never go in the activity log (drafts are pre-conflict).
+  await logActivity({
+    matterId: null,
+    userId: t.userId,
+    type: "filing",
+    title: "File attached to a matter draft",
+  });
+}
+
 /**
  * Vercel delivers this callback AT LEAST once and retries on any
  * non-2xx, so it must be idempotent and must not fail permanently
@@ -310,6 +449,11 @@ export const onUploadCompleted: NonNullable<
   if (shape.kind === "portal" || typeof shape.userId !== "string" || !shape.userId) {
     console.error("[blob-upload] non-staff token payload on the staff route; blob removed");
     await del(blob.url).catch(() => {});
+    return;
+  }
+
+  if (t.draftId) {
+    await completeDraftUpload(blob.url, t, t.draftId);
     return;
   }
 

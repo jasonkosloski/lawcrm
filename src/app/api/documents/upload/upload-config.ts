@@ -147,3 +147,15 @@ export const UPLOAD_FOLDER_SCOPE_ERROR =
   "Folder not found in this matter or intake.";
 export const UPLOAD_RECORDS_REQUEST_SCOPE_ERROR =
   "Records request not found in this matter or intake.";
+
+/** Matter-draft targets (pre-conflict-check intake): a smaller per-file
+ *  cap and a per-draft file count, enforced by both upload paths. */
+export const DRAFT_MAX_FILE_BYTES = 50 * 1024 * 1024;
+export const DRAFT_MAX_FILES = 20;
+export const DRAFT_FILE_TOO_LARGE_ERROR =
+  "Draft files are limited to 50 MB each.";
+export const DRAFT_FILE_COUNT_ERROR = "A draft can hold up to 20 files.";
+export const UPLOAD_DRAFT_EXCLUSIVE_ERROR =
+  "Choose exactly one of a matter, a lead or a draft.";
+export const UPLOAD_DRAFT_NO_FOLDER_ERROR =
+  "Draft files can't be placed in a folder or linked to a records request.";

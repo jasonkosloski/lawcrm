@@ -53,6 +53,8 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     matter: { findUnique: vi.fn() },
     lead: { findUnique: vi.fn() },
+    matterDraft: { findUnique: vi.fn() },
+    matterDraftFile: { count: vi.fn(), create: vi.fn() },
     documentFolder: { findFirst: vi.fn() },
     document: { create: vi.fn() },
     recordsRequest: { findFirst: vi.fn() },
@@ -65,6 +67,9 @@ vi.mock("@/lib/lead-access", () => ({
 }));
 vi.mock("@/lib/matter-access", () => ({
   canAccessMatter: vi.fn(async () => true),
+}));
+vi.mock("@/lib/draft-access", () => ({
+  canAccessDraft: vi.fn(async () => true),
 }));
 vi.mock("@/lib/records-requests/folder", () => ({
   resolveRecordsUpload: vi.fn(),
@@ -91,6 +96,7 @@ import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
 import { canAccessMatter } from "@/lib/matter-access";
 import { canAccessLead } from "@/lib/lead-access";
+import { canAccessDraft } from "@/lib/draft-access";
 import { resolveRecordsUpload } from "@/lib/records-requests/folder";
 import { revalidatePath } from "next/cache";
 import {
@@ -935,5 +941,141 @@ describe("POST /api/documents/upload — records requests", () => {
     );
     expect(mockedCreate).not.toHaveBeenCalled();
     expect(mockedDelete.mock.calls.length).toBe(mockedStore.mock.calls.length);
+  });
+});
+
+describe("POST /api/documents/upload — draft target", () => {
+  function wireDraft(existing = 0) {
+    wireHappyMocks();
+    vi.mocked(canAccessDraft).mockResolvedValue(true);
+    vi.mocked(prisma.matterDraft.findUnique).mockResolvedValue({
+      id: "d1",
+    } as never);
+    vi.mocked(prisma.matterDraftFile.count).mockResolvedValue(existing);
+    vi.mocked(prisma.matterDraftFile.create).mockImplementation(((args: {
+      data: { name: string };
+    }) =>
+      Promise.resolve({
+        id: `df-${args.data.name}`,
+        name: args.data.name,
+      })) as never);
+  }
+
+  test("writes draft-file rows (no Document) and returns their ids", async () => {
+    wireDraft();
+    const res = await POST(
+      await makeRequest(
+        fdWith({ draftId: "d1" }, [{ name: "agreement.pdf" }, { name: "b.pdf" }])
+      )
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { documents: { id: string; name: string }[] };
+    expect(body.documents).toEqual([
+      { id: "df-agreement.pdf", name: "agreement.pdf" },
+      { id: "df-b.pdf", name: "b.pdf" },
+    ]);
+    expect(prisma.matterDraftFile.create).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(prisma.matterDraftFile.create).mock.calls[0][0].data).toMatchObject({
+      draftId: "d1",
+      name: "agreement.pdf",
+      fileUrl: "key-agreement.pdf",
+      uploadedBy: "u1",
+    });
+    expect(mockedCreate).not.toHaveBeenCalled();
+    expect(logActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        matterId: null,
+        type: "filing",
+        title: "File attached to a matter draft",
+      })
+    );
+    expect(JSON.stringify(vi.mocked(logActivity).mock.calls)).not.toContain("agreement.pdf");
+  });
+
+  test("combined with matterId, leadId, folderId or recordsRequestId -> 400", async () => {
+    const extras: Record<string, string>[] = [
+      { matterId: "m1" },
+      { leadId: "l1" },
+      { folderId: "fold1" },
+      { recordsRequestId: "r1" },
+    ];
+    for (const extra of extras) {
+      wireDraft();
+      const res = await POST(
+        await makeRequest(fdWith({ draftId: "d1", ...extra }, [{ name: "a.pdf" }]))
+      );
+      expect(res.status, JSON.stringify(extra)).toBe(400);
+      expect(mockedStore).not.toHaveBeenCalled();
+      vi.clearAllMocks();
+    }
+    wireDraft();
+    const res = await POST(
+      await makeRequest(fdWith({ draftId: "d1", matterId: "m1" }, [{ name: "a.pdf" }]))
+    );
+    expect((await res.json()).error).toBe(
+      "Choose exactly one of a matter, a lead or a draft."
+    );
+  });
+
+  test("no draft access -> 404 before any byte is stored", async () => {
+    wireDraft();
+    vi.mocked(canAccessDraft).mockResolvedValue(false);
+    const res = await POST(
+      await makeRequest(fdWith({ draftId: "d1" }, [{ name: "a.pdf" }]))
+    );
+    expect(res.status).toBe(404);
+    expect(mockedStore).not.toHaveBeenCalled();
+  });
+
+  test("403 without documents.upload", async () => {
+    wireDraft();
+    mockedPerm.mockResolvedValue(false);
+    const res = await POST(
+      await makeRequest(fdWith({ draftId: "d1" }, [{ name: "a.pdf" }]))
+    );
+    expect(res.status).toBe(403);
+  });
+
+  test("over the 50 MB per-file cap -> 400 with the draft message", async () => {
+    wireDraft();
+    mockedStore.mockImplementation((async (
+      stream: NodeJS.ReadableStream,
+      _f: string,
+      cap: number
+    ) => {
+      await drain(stream);
+      if (cap === 50 * 1024 * 1024) throw new FileTooLargeError(cap);
+      return { key: "k", size: 1, url: "k" };
+    }) as unknown as typeof storeStream);
+    const res = await POST(
+      await makeRequest(fdWith({ draftId: "d1" }, [{ name: "a.pdf" }]))
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("Draft files are limited to 50 MB each.");
+    expect(prisma.matterDraftFile.create).not.toHaveBeenCalled();
+  });
+
+  test("existing rows + this batch over 20 -> 400, nothing written", async () => {
+    wireDraft(19);
+    const res = await POST(
+      await makeRequest(
+        fdWith({ draftId: "d1" }, [{ name: "a.pdf" }, { name: "b.pdf" }])
+      )
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("A draft can hold up to 20 files.");
+    expect(prisma.matterDraftFile.create).not.toHaveBeenCalled();
+    expect(mockedDelete).toHaveBeenCalled();
+  });
+
+  test("draft deleted while the bytes streamed -> 404 and files removed", async () => {
+    wireDraft();
+    vi.mocked(prisma.matterDraft.findUnique).mockResolvedValue(null);
+    const res = await POST(
+      await makeRequest(fdWith({ draftId: "d1" }, [{ name: "a.pdf" }]))
+    );
+    expect(res.status).toBe(404);
+    expect(mockedDelete).toHaveBeenCalledWith("key-a.pdf");
+    expect(prisma.matterDraftFile.create).not.toHaveBeenCalled();
   });
 });
