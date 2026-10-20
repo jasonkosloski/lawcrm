@@ -109,3 +109,19 @@ export function dueTodayCount(
     data.deadlines.items.filter((d) => d.days === 0).length
   );
 }
+
+/**
+ * Cards this viewer may not see (drives the edit-mode "Not available
+ * for your role" note). A hidden card is never "unavailable": its
+ * loader and permission check were skipped, so it just isn't loaded.
+ */
+export function unavailableCards(
+  data: DashboardData,
+  layout: DashboardLayout,
+): DashboardCardKey[] {
+  const out: DashboardCardKey[] = [];
+  if (!data.pulse && !layout.hidden.includes("pulse")) out.push("pulse");
+  if (!data.canViewRecords && !layout.hidden.includes("records"))
+    out.push("records");
+  return out;
+}

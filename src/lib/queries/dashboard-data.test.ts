@@ -29,7 +29,7 @@ vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: m.currentUserHasPermission,
 }));
 
-import { dueTodayCount, loadDashboardData } from "./dashboard-data";
+import { dueTodayCount, loadDashboardData, unavailableCards } from "./dashboard-data";
 
 const layout = (hidden: DashboardLayout["hidden"] = []): DashboardLayout => ({
   v: 3,
@@ -104,5 +104,29 @@ describe("dueTodayCount", () => {
     const l = layout(["tasks", "deadlines"]);
     const d = await loadDashboardData(l, "UTC");
     expect(dueTodayCount(d, l)).toBeNull();
+  });
+});
+
+describe("unavailableCards", () => {
+  it("does not list records while it is hidden", async () => {
+    m.currentUserHasPermission.mockResolvedValue(false);
+    const l = layout(["records"]);
+    const d = await loadDashboardData(l, "UTC");
+    expect(unavailableCards(d, l)).not.toContain("records");
+  });
+
+  it("lists records when visible without permission", async () => {
+    m.currentUserHasPermission.mockResolvedValue(false);
+    const d = await loadDashboardData(layout(), "UTC");
+    expect(unavailableCards(d, layout())).toContain("records");
+  });
+
+  it("lists pulse when null while visible, not when hidden", async () => {
+    m.getFirmPulse.mockResolvedValue(null);
+    const d = await loadDashboardData(layout(), "UTC");
+    expect(unavailableCards(d, layout())).toContain("pulse");
+    const l = layout(["pulse"]);
+    const d2 = await loadDashboardData(l, "UTC");
+    expect(unavailableCards(d2, l)).not.toContain("pulse");
   });
 });

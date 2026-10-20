@@ -21,7 +21,7 @@ import {
   type DashboardCardKey,
   type DashboardLayout,
 } from "@/lib/dashboard-prefs";
-import { DashboardCustomizer, applyDragEnd } from "./customizer";
+import { DashboardCustomizer, applyDragEnd, zoneCollision } from "./customizer";
 
 const mockedSave = vi.mocked(saveDashboardLayout);
 
@@ -239,6 +239,34 @@ describe("edit mode", () => {
     expect(mockedSave).not.toHaveBeenCalled();
   });
 
+  test("Esc from an element outside the customizer keeps edit mode", async () => {
+    const user = userEvent.setup();
+    const { container } = setup();
+    await customize(user);
+    const outside = document.createElement("button");
+    document.body.appendChild(outside);
+    fireEvent.keyDown(outside, { key: "Escape" });
+    expect(toolbar()).toBeTruthy();
+    outside.remove();
+    expect(container.querySelector("[data-customizer]")).toBeTruthy();
+  });
+
+  test("a successful save commits the server-sanitized layout", async () => {
+    const user = userEvent.setup();
+    mockedSave.mockImplementation(async () => fresh());
+    setup();
+    await customize(user);
+    await user.click(
+      within(arrange()).getByRole("button", { name: `Move ${label("tasks")} up` })
+    );
+    await user.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(toolbar()).toBeNull());
+    await customize(user);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await customize(user);
+    expect(zoneKeys("Column 1")).toEqual(fresh().columns[0]);
+  });
+
   test("unpermitted card: nothing in view, a note in edit", async () => {
     const user = userEvent.setup();
     const cards = allCards();
@@ -258,5 +286,63 @@ describe("edit mode", () => {
     await customize(user);
     await user.click(screen.getByRole("button", { name: "Restore Your tasks" }));
     expect(screen.getAllByText("Shown after you save").length).toBeGreaterThan(0);
+  });
+});
+
+describe("zoneCollision", () => {
+  const rect = (top: number, left: number, w: number, h: number) => ({
+    top,
+    left,
+    width: w,
+    height: h,
+    right: left + w,
+    bottom: top + h,
+  });
+  const cont = (id: string, containerId?: string) =>
+    ({
+      id,
+      key: id,
+      disabled: false,
+      node: { current: null },
+      rect: { current: null },
+      data: { current: containerId ? { sortable: { containerId } } : {} },
+    }) as never;
+  // zone:0 at left (0-300 wide), two cards; zone:1 at right (320-620), empty.
+  const droppableRects = new Map<string | number, ReturnType<typeof rect>>([
+    ["zone:0", rect(0, 0, 300, 400)],
+    ["a", rect(20, 10, 280, 100)],
+    ["b", rect(130, 10, 280, 100)],
+    ["zone:1", rect(0, 320, 300, 400)],
+  ] as never);
+  const containers = [
+    cont("zone:0"),
+    cont("a", "zone:0"),
+    cont("b", "zone:0"),
+    cont("zone:1"),
+  ];
+  const run = (x: number, y: number) =>
+    zoneCollision({
+      active: { id: "z" } as never,
+      collisionRect: rect(y - 10, x - 10, 20, 20) as never,
+      droppableRects: droppableRects as never,
+      droppableContainers: containers,
+      pointerCoordinates: { x, y },
+    }).map((c) => c.id);
+
+  test("picks the nearest card inside the zone under the pointer", () => {
+    expect(run(100, 150)[0]).toBe("b");
+    expect(run(100, 30)[0]).toBe("a");
+  });
+
+  test("the pointer below the last card resolves to the zone (append)", () => {
+    expect(run(100, 300)).toEqual(["zone:0"]);
+  });
+
+  test("an empty zone resolves to itself", () => {
+    expect(run(400, 50)).toEqual(["zone:1"]);
+  });
+
+  test("outside every zone yields no collision", () => {
+    expect(run(900, 900)).toEqual([]);
   });
 });

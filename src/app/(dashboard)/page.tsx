@@ -29,7 +29,11 @@ import { maybeRunDeadlineNotificationSweep } from "@/lib/notification-sweeps";
 import { Greeting } from "@/components/dashboard/greeting";
 import type { DashboardCardKey } from "@/lib/dashboard-prefs";
 import { getDashboardLayout } from "@/lib/queries/dashboard-prefs";
-import { dueTodayCount, loadDashboardData } from "@/lib/queries/dashboard-data";
+import {
+  dueTodayCount,
+  loadDashboardData,
+  unavailableCards,
+} from "@/lib/queries/dashboard-data";
 
 export default async function DashboardPage() {
   // Authenticate before anything else - including the post-response
@@ -75,11 +79,7 @@ export default async function DashboardPage() {
   // No fee data; needs records.view.
   if (data.canViewRecords) cards.records = <RecordsCard items={data.records} />;
 
-  // Cards this viewer may not see, so edit mode can say why one is
-  // empty. A hidden card is not "unavailable" - it just isn't loaded.
-  const unavailable: DashboardCardKey[] = [];
-  if (!data.pulse && !layout.hidden.includes("pulse")) unavailable.push("pulse");
-  if (!data.canViewRecords) unavailable.push("records");
+  const unavailable = unavailableCards(data, layout);
 
   return (
     <>

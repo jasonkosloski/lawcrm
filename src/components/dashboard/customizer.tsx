@@ -40,11 +40,14 @@ import {
   KeyboardSensor,
   PointerSensor,
   TouchSensor,
-  closestCorners,
+  closestCenter,
+  pointerWithin,
+  rectIntersection,
   useDroppable,
   useSensor,
   useSensors,
   type Announcements,
+  type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
@@ -119,6 +122,40 @@ export function applyDragEnd(
   );
 }
 
+/**
+ * Two-step collision detection (dnd-kit's multiple-containers
+ * pattern): find the zone under the pointer (falling back to rect
+ * overlap for the keyboard sensor), then the nearest card inside it.
+ * The zone itself wins when it is empty or the pointer is below its
+ * last card, so "append" is reachable.
+ */
+export const zoneCollision: CollisionDetection = (args) => {
+  const zones = args.droppableContainers.filter((c) =>
+    String(c.id).startsWith("zone:")
+  );
+  let hits = pointerWithin({ ...args, droppableContainers: zones });
+  if (hits.length === 0)
+    hits = rectIntersection({ ...args, droppableContainers: zones });
+  const zone = hits[0];
+  if (!zone) return [];
+
+  const items = args.droppableContainers.filter(
+    (c) =>
+      !String(c.id).startsWith("zone:") &&
+      c.data.current?.sortable?.containerId === zone.id
+  );
+  if (items.length === 0) return [zone];
+
+  const y = args.pointerCoordinates?.y;
+  if (y !== undefined) {
+    const lastBottom = Math.max(
+      ...items.map((c) => args.droppableRects.get(c.id)?.bottom ?? -Infinity)
+    );
+    if (y > lastBottom) return [zone];
+  }
+  return closestCenter({ ...args, droppableContainers: items });
+};
+
 /** Resolve a dnd-kit `over.id` (zone container or card) to a drop spot. */
 function resolveOver(
   layout: DashboardLayout,
@@ -174,6 +211,16 @@ export function DashboardCustomizer({
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented) return;
       if (rootRef.current?.getAttribute("data-dragging") === "true") return;
+      // Esc meant for another overlay (palette, open select) is not ours.
+      const target = e.target instanceof Element ? e.target : null;
+      if (target?.closest("select,[role=combobox],[role=listbox],[role=dialog]"))
+        return;
+      const outside = (n: EventTarget | null) =>
+        n instanceof Element &&
+        n !== document.body &&
+        n !== document.documentElement &&
+        !rootRef.current?.contains(n);
+      if (outside(target) || outside(document.activeElement)) return;
       setLayout(committed);
       setEditing(false);
     };
@@ -188,8 +235,8 @@ export function DashboardCustomizer({
     }
     setSaving(true);
     try {
-      await saveDashboardLayout(layout);
-      setCommitted(layout);
+      const saved = await saveDashboardLayout(layout);
+      setCommitted(saved);
       router.refresh();
       setEditing(false);
     } catch {
@@ -410,6 +457,10 @@ function DragEditor({
     })
   );
 
+  // Highlight the zone containing the current drop target (card or zone).
+  const [overId, setOverId] = useState<string | null>(null);
+  const overZone = overId ? resolveOver(layout, overId)?.zone : undefined;
+
   const where = (overId: string | number | undefined) => {
     const r = overId === undefined ? null : resolveOver(layout, String(overId));
     return r ? zoneName(r.zone) : "its original place";
@@ -431,6 +482,7 @@ function DragEditor({
     setActiveKey(e.active.id as DashboardCardKey);
   const onDragEnd = (e: DragEndEvent) => {
     setActiveKey(null);
+    setOverId(null);
     const key = e.active.id as DashboardCardKey;
     setLayout((l) => {
       const over = e.over ? resolveOver(l, String(e.over.id)) : null;
@@ -442,6 +494,7 @@ function DragEditor({
   const zoneProps = {
     cards,
     unavailable,
+    overZone,
     onHide: (k: DashboardCardKey) =>
       setLayout((l) => moveCard(l, k, { zone: "hidden" })),
   };
@@ -450,11 +503,15 @@ function DragEditor({
     <div className="hidden lg:block">
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCorners}
+        collisionDetection={zoneCollision}
         accessibility={{ announcements }}
         onDragStart={onDragStart}
+        onDragOver={(e) => setOverId(e.over ? String(e.over.id) : null)}
         onDragEnd={onDragEnd}
-        onDragCancel={() => setActiveKey(null)}
+        onDragCancel={() => {
+          setActiveKey(null);
+          setOverId(null);
+        }}
       >
         <DropZone zone="band" keys={layout.band} {...zoneProps} />
         <div className="mt-5 grid grid-cols-12 gap-5">
@@ -481,27 +538,33 @@ function DropZone({
   keys,
   cards,
   unavailable,
+  overZone,
   onHide,
 }: {
   zone: Zone;
   keys: DashboardCardKey[];
   cards: Props["cards"];
   unavailable: DashboardCardKey[];
+  overZone?: Zone;
   onHide: (k: DashboardCardKey) => void;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: zoneId(zone) });
+  const { setNodeRef } = useDroppable({ id: zoneId(zone) });
   return (
     <div
       ref={setNodeRef}
       data-zone={zone}
       className={`flex min-h-24 flex-col gap-3 rounded-xl border border-dashed p-2 ${
-        isOver ? "border-brand-300 bg-paper-2" : "border-line-2"
+        overZone === zone ? "border-brand-300 bg-paper-2" : "border-line-2"
       }`}
     >
       <div className="px-1 text-2xs font-semibold uppercase tracking-wider text-ink-3">
         {zoneName(zone)}
       </div>
-      <SortableContext items={keys} strategy={verticalListSortingStrategy}>
+      <SortableContext
+        id={zoneId(zone)}
+        items={keys}
+        strategy={verticalListSortingStrategy}
+      >
         {keys.map((k) => (
           <SortableCard
             key={k}
