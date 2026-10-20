@@ -9,6 +9,8 @@ const fullProd = {
   VERCEL_ENV: "production",
   DATABASE_URL: "postgres://x",
   AUTH_SECRET: "s",
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk",
+  CLERK_SECRET_KEY: "sk",
   BLOB_READ_WRITE_TOKEN: "t",
   CRON_SECRET: "c",
   EMAIL_TOKEN_KEY: "k",
@@ -28,7 +30,13 @@ describe("checkEnv", () => {
 
   test("missing core vars on Vercel are fatal; blank counts as missing", () => {
     const r = checkEnv({ VERCEL: "1", VERCEL_ENV: "preview", AUTH_SECRET: "  " });
-    expect(r.fatal).toEqual(["DATABASE_URL", "AUTH_SECRET", "BLOB_READ_WRITE_TOKEN"]);
+    expect(r.fatal).toEqual([
+      "DATABASE_URL",
+      "AUTH_SECRET",
+      "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
+      "CLERK_SECRET_KEY",
+      "BLOB_READ_WRITE_TOKEN",
+    ]);
     expect(r.degraded).toEqual([]);
   });
 
@@ -36,6 +44,14 @@ describe("checkEnv", () => {
     const rest = without(["CRON_SECRET", "EMAIL_TOKEN_KEY"]);
     expect(checkEnv(rest).degraded).toHaveLength(2);
     expect(checkEnv({ ...rest, VERCEL_ENV: "preview" }).degraded).toHaveLength(0);
+  });
+});
+
+describe("clerk env", () => {
+  test("missing Clerk keys are fatal; AUTH_SECRET stays required (portal)", () => {
+    const r = checkEnv(without(["CLERK_SECRET_KEY", "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"]));
+    expect(r.fatal).toEqual(["NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "CLERK_SECRET_KEY"]);
+    expect(checkEnv(without(["AUTH_SECRET"])).fatal).toEqual(["AUTH_SECRET"]);
   });
 });
 

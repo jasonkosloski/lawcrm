@@ -49,6 +49,8 @@ model User {
   id                      String                   @id @default(cuid())
   documentRequestsCreated DocumentRequest[]        @relation("DocumentRequestCreator")
   email                   String                   @unique
+  /// Clerk user id; null until first Google sign-in links this row (src/lib/staff-auth.ts)
+  clerkUserId             String?                  @unique
   /// Argon2id-hashed password. Null means the user can't log in via
   /// the credentials provider — they must use a linked OAuth account
   /// (none of those wired yet) or the firm admin must invite them.

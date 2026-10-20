@@ -25,7 +25,13 @@ export function checkEnv(env: Env): EnvCheckResult {
   const degraded: string[] = [];
   if (!set(env, "VERCEL")) return { fatal, degraded };
 
-  for (const key of ["DATABASE_URL", "AUTH_SECRET", "BLOB_READ_WRITE_TOKEN"]) {
+  for (const key of [
+    "DATABASE_URL",
+    "AUTH_SECRET",
+    "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
+    "CLERK_SECRET_KEY",
+    "BLOB_READ_WRITE_TOKEN",
+  ]) {
     if (!set(env, key)) fatal.push(key);
   }
   // Preview deployments legitimately run without crons or Gmail.
