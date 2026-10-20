@@ -71,12 +71,12 @@ export const REQUIRED_FIELD_INPUT_NAME: Record<RequiredMatterField, string> = {
  */
 export function requiredKeysFor(
   area: {
-    requiredMatterFields: readonly string[];
+    requiredMatterFields: readonly string[] | null | undefined;
     hasStatuteOfLimitations: boolean;
   } | null,
 ): RequiredMatterField[] {
   if (!area) return [];
-  return area.requiredMatterFields
+  return (area.requiredMatterFields ?? [])
     .filter(isRequiredMatterField)
     .filter((k) => k !== "incidentDate" || area.hasStatuteOfLimitations);
 }

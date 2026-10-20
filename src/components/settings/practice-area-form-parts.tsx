@@ -53,9 +53,12 @@ export const inputCls = (hasError: boolean): string =>
  */
 export function RequiredFieldsGroup({
   defaultChecked = [],
+  tracksSol = true,
   error,
 }: {
   defaultChecked?: readonly string[];
+  /** Whether the area tracks the statute of limitations (incident date only applies then). */
+  tracksSol?: boolean;
   error?: string[];
 }) {
   return (
@@ -66,19 +69,23 @@ export function RequiredFieldsGroup({
       <input type="hidden" name="requiredMatterFieldsPresent" value="1" />
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5">
         {REQUIRED_MATTER_FIELDS.map((f) => (
-          <label
-            key={f.key}
-            className="flex items-center gap-2 cursor-pointer select-none"
-          >
-            <input
-              type="checkbox"
-              name="requiredMatterFields"
-              value={f.key}
-              defaultChecked={defaultChecked.includes(f.key)}
-              className="w-3.5 h-3.5 rounded border-line"
-            />
-            <span className="text-xs text-ink-2">{f.label}</span>
-          </label>
+          <div key={f.key} className="flex flex-col gap-0.5">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                name="requiredMatterFields"
+                value={f.key}
+                defaultChecked={defaultChecked.includes(f.key)}
+                className="w-3.5 h-3.5 rounded border-line"
+              />
+              <span className="text-xs text-ink-2">{f.label}</span>
+            </label>
+            {f.key === "incidentDate" && !tracksSol && (
+              <span className="pl-[22px] text-2xs text-ink-4">
+                Only applies when this area tracks the statute of limitations.
+              </span>
+            )}
+          </div>
         ))}
       </div>
       <p className="text-2xs text-ink-4 leading-relaxed">

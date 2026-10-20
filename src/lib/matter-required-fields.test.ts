@@ -57,6 +57,15 @@ describe("requiredKeysFor", () => {
     expect(requiredKeysFor(null)).toEqual([]);
   });
 
+  it("tolerates a null or undefined list", () => {
+    expect(
+      requiredKeysFor({ requiredMatterFields: null, hasStatuteOfLimitations: true }),
+    ).toEqual([]);
+    expect(
+      requiredKeysFor({ requiredMatterFields: undefined, hasStatuteOfLimitations: true }),
+    ).toEqual([]);
+  });
+
   it("keeps the area's recognised keys in order", () => {
     expect(
       requiredKeysFor({
