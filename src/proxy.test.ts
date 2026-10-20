@@ -137,6 +137,8 @@ describe("proxy auth gate", () => {
       vi.stubEnv("NODE_ENV", "development");
       vi.stubEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "pk_test_x");
       vi.stubEnv("VERCEL", "");
+      vi.stubEnv("DEV_SIGN_IN", "1");
+      vi.stubEnv("DATABASE_URL", "postgresql://u:p@localhost:5433/db");
       expect((await proxy(makeRequest("/dev/sign-in-as"))).status).toBe(200);
     });
 

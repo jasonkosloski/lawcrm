@@ -42,6 +42,8 @@ describe("/dev/sign-in-as page", () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "pk_test_x");
     vi.stubEnv("VERCEL", "");
+    vi.stubEnv("DEV_SIGN_IN", "1");
+    vi.stubEnv("DATABASE_URL", "postgresql://u:p@localhost:5433/db");
     await DevSignInAsPage();
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { isActive: true } })

@@ -27,6 +27,8 @@ function env(nodeEnv: string, key: string | undefined, vercel?: string) {
   vi.stubEnv("NODE_ENV", nodeEnv);
   vi.stubEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", key ?? "");
   vi.stubEnv("VERCEL", vercel ?? "");
+  vi.stubEnv("DEV_SIGN_IN", "1");
+  vi.stubEnv("DATABASE_URL", "postgresql://u:p@localhost:5433/db");
 }
 
 beforeEach(() => {

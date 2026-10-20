@@ -46,8 +46,11 @@ into `.env.local`, which Next.js loads *over* `.env`. Schema changes ship as mig
 (`npx prisma migrate dev --name <change>`) — see ADR-016 in
 `docs/decisions/`. Staff sign in with Google via Clerk and there is no self sign-up: admins invite
 people from Settings -> Team, and the first sign-in links the Clerk identity to
-the pre-created user by verified email. Locally, seed the demo users and use
-`/dev/sign-in-as` (see `docs/features/auth.md`).
+the pre-created user by verified email. Locally, seed the demo users, set
+`DEV_SIGN_IN=1` in `.env.local` and use `/dev/sign-in-as` (see
+`docs/features/auth.md`). It is off unless you opt in, and refuses a
+non-local database (unless `ALLOW_SEED=1`): with it on, anyone who can reach
+your dev server can sign in as any active user.
 
 ## Environment
 
