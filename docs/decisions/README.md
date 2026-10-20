@@ -57,7 +57,7 @@ ADR true to the code are appended in place and dated.
 | [036](036-money-is-decimal-14-2-one-settlement.md) | Money is DECIMAL(14,2); one settlement per matter; hot-path indexes | Completes adr-024 |
 | [037](037-private-calendar-events-show-to-their-creator.md) | Private calendar events show to their creator only | Completes adr-021's calendar model |
 | [038](038-billing-view-gates-the-billing-read-surface.md) | `billing.view` gates the billing read surface |  |
-| [039](039-matter-team-access-ethical-walls.md) | Matter-team access (ethical walls) |  |
+| [039](039-matter-team-access-ethical-walls.md) | Matter-team access (ethical walls) | Amended by ADR-049 (restricted matters) |
 | [040](040-dependent-deadlines-are-recalculated-only-after-explicit.md) | Dependent deadlines are recalculated only after explicit confirmation |  |
 | [041](041-pdfs-render-in-the-page-with-pdf.md) | PDFs render in the page with pdf.js; PDF flags anchor to page + quote |  |
 | [042](042-excel-and-email-convert-on-the-server.md) | Excel and email convert on the server; TIFF and HEIC decode in the browser |  |
@@ -67,6 +67,7 @@ ADR true to the code are appended in place and dated.
 | [046](046-intake-documents-share-document-and-documentfolder-scoped.md) | Intake documents share Document and DocumentFolder, scoped to a lead until conversion |  |
 | [047](047-records-requests-are-a-dedicated-model-with.md) | Records requests are a dedicated model with a rolling follow-up task |  |
 | [048](048-generated-folders-carry-their-source-and-are-protected.md) | Generated folders carry their source and are protected |  |
+| [049](049-restricted-intake-is-an-opt-in-wall-carried-to-the-matter.md) | Restricted intake is an opt-in wall with a lead team, carried to the matter |  |
 | [050](050-lead-conversion-re-runs-the-conflict-check.md) | Lead conversion re-runs the conflict check and refuses a live conflict |  |
 | [051](051-client-portal-identity-is-separate-from-staff-auth.md) | Client portal identity is separate from staff auth (magic link, database sessions, host-only cookie) |  |
 | [052](052-portal-uploads-are-matter-documents.md) | Portal uploads are ordinary matter documents; three-state file share with folder inheritance |  |

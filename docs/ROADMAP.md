@@ -11,7 +11,7 @@ Status: `[ ]` planned · `[~]` in progress · `[x]` shipped · `[-]` descoped
 Past MVP feature-completeness: a solo lawyer can run a practice on what's
 shipped (intake → matter → time → billing → trust → settlement, with
 calendar, deadlines, tasks, notes, documents, records requests, contacts,
-Gmail, audit log, granular permissions and matter-team access). Production
+Gmail, audit log, granular permissions, matter-team access and restricted intake). Production
 runs on Prisma Postgres + Vercel Blob. Remaining work clusters around
 external integrations (SMS, voicemail, notification delivery), polish, and
 tech-debt sweeps. Everything shipped is listed per area in
@@ -41,7 +41,7 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 - [ ] **Intake queue: split-view reader pane** → [intake](features/intake.md)
 - [ ] **Lead scoring deep dive**: nothing computes scores yet. → [intake](features/intake.md)
 - [ ] **New intake form leftovers**: phone matching, initial stage, coordinator assignment. → [intake](features/intake.md)
-- [ ] **Lead-scoped expenses**: `Expense.matterId` still required; needs conversion roll-forward. → [intake](features/intake.md)
+- [ ] **Lead-scoped expenses**: needs a lead column on Expense, `matterId` relaxed, conversion roll-forward. → [intake](features/intake.md)
 - [ ] **Capture task/event from the intake note composer** → [intake](features/intake.md)
 - [ ] **Records follow-ups**: per-item completeness, HIPAA auth expiry, holiday-aware business days, email/fax send, PDF/DOCX letters, firm-wide `/records` page. → [records-requests](features/records-requests.md)
 

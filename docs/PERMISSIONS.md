@@ -34,7 +34,7 @@ A user can see a matter, and everything attached to it (notes, documents, time i
 
 1. they are an **active** `MatterTeamMember` (`removedAt = null`);
 2. they hold **`matters.view_all`** (Admins implicitly);
-3. the firm's `matterVisibility` is `FIRM` (the default, "Everyone").
+3. the firm's `matterVisibility` is `FIRM` (the default, "Everyone") AND the matter is not **restricted** (`Matter.restricted`, toggled with `matters.restrict` on the edit page or inherited from a restricted lead; ADR-049).
 
 An Admin flips the firm to `TEAM` ("Team only") in Settings, Firm (admin-only, not a delegable key; logged). The same page lists "thin teams" (open matters with no active member, or only the lead) so rosters can be fixed first. **Before flipping, grant `matters.view_all` to roles that need firm-wide reach (billing, office manager, reception).**
 
@@ -47,8 +47,10 @@ Helpers (`src/lib/matter-access.ts`, ADR-039):
 | list / count / aggregate matters | `matterAccessWhere(userId)` spread into the `Matter` where |
 | child list with required matter | `matterRelationAccessWhere(userId)` |
 | child list with nullable matter | `optionalMatterAccessWhere` / `optionalMatterAccessClause` |
+| child list with nullable matter AND lead | `optionalRecordAccessClause` (Note, Task, CalendarEvent, TimeEntry, Document, RecordsRequest, ActivityLog; a row with both ids needs both) |
+| already-loaded row with matterId/leadId | `assertRecordAccess(row)` |
 | page or action with a matterId | `assertMatterAccess(matterId)` (`assertOptionalMatterAccess` if nullable) |
-| action with a child id | `assertChildMatterAccess(kind, id)` |
+| action with a child id | `assertChildMatterAccess(kind, id)` (routes lead children to the lead wall) |
 | boolean checks | `canAccessMatter(userId, matterId)`, `filterAccessibleMatterIds` |
 
 Enforcement tests: `src/app/page-guards.test.ts` (every `matters/[id]` page and layout asserts), `src/app/actions/matter-access-guards.test.ts` (every action taking a matter/child id asserts; commented allowlist), plus two-user integration tests.
@@ -60,6 +62,14 @@ Per-surface rules:
 - **Trust column** in the matters list/kanban, its sort and filter need `billing.view` (ADR-038).
 - **Conflict checks** still scan every matter; hits on matters the viewer cannot access keep their severity but lose the matter name.
 - **Email** remains mailbox-personal (`visibleEmailThreadWhere`, `src/lib/email-visibility.ts`); threads filed to a hidden matter are additionally hidden from non-access users.
+
+## Intake access (restricted leads)
+
+A lead is visible to every active user unless it is **restricted** (`Lead.restricted`). A restricted lead and everything on it is visible only to its team (`LeadTeamMember`), holders of **`intake.view_restricted`** (Admins implicitly), nobody else; inactive users see no lead. `intake.restrict` restricts / reopens a lead and manages its team. Conversion copies the flag and the team to the matter (ADR-049).
+
+Helpers (`src/lib/lead-access.ts`): `leadAccessWhere(userId)` for lead lists and counts, `leadRelationAccessWhere` for a child with a `lead` relation, `assertLeadAccess(leadId)` on pages / actions (404), `canAccessLead` / `filterAccessibleLeadIds` for routes and batches. `assertScopeAccess`, `assertChildMatterAccess`, `assertRecordAccess` and `optionalRecordAccessClause` already route lead rows here.
+
+Enforcement tests: `page-guards.test.ts` (every `intake/[id]` page and layout calls `assertLeadAccess` before any prisma read) and the lead rule in `matter-access-guards.test.ts` (every action that references a `leadId` calls a lead-aware helper). Events on hidden leads are Busy (`leadAccessible`). `reports.view` pipeline counts stay firm-wide.
 
 ### Other read-side gates (filtered per viewer inside the query; ADR-021)
 
