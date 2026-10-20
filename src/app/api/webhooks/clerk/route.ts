@@ -26,8 +26,18 @@ const KIND_BY_EVENT: Record<string, AuthEventKind> = {
 export async function POST(request: NextRequest) {
   let evt;
   try {
-    evt = await verifyWebhook(request);
-  } catch {
+    // Trimmed: a secret pasted into the Vercel dashboard with a trailing
+    // newline otherwise fails every signature.
+    evt = await verifyWebhook(request, {
+      signingSecret: process.env.CLERK_WEBHOOK_SIGNING_SECRET?.trim(),
+    });
+  } catch (err) {
+    // The reason only (never the secret or payload), so a mismatched
+    // secret is distinguishable from a stale timestamp or bad header.
+    console.warn(
+      "[clerk-webhook] verification failed:",
+      err instanceof Error ? err.message : String(err)
+    );
     return new Response("Invalid signature", { status: 401 });
   }
 

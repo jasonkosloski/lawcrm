@@ -59,10 +59,26 @@ beforeEach(() => {
 });
 
 describe("POST /api/webhooks/clerk", () => {
-  it("rejects a bad signature with 401 and writes nothing", async () => {
+  it("rejects a bad signature with 401, logs the reason, writes nothing", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     mockedVerify.mockRejectedValue(new Error("bad sig"));
     expect((await POST(req())).status).toBe(401);
     expect(rows).toHaveLength(0);
+    expect(warn).toHaveBeenCalledWith(
+      "[clerk-webhook] verification failed:",
+      "bad sig"
+    );
+    warn.mockRestore();
+  });
+
+  it("verifies with the trimmed signing secret", async () => {
+    vi.stubEnv("CLERK_WEBHOOK_SIGNING_SECRET", "whsec_abc\n");
+    mockedVerify.mockResolvedValue(event("session.created"));
+    await POST(req());
+    expect(mockedVerify).toHaveBeenCalledWith(expect.anything(), {
+      signingSecret: "whsec_abc",
+    });
+    vi.unstubAllEnvs();
   });
 
   it("session.created for a linked user writes one Signed in row", async () => {
