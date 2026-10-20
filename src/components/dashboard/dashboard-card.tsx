@@ -31,13 +31,12 @@ export function DashboardCard({
           <span className="font-mono text-2xs text-ink-3">{count}</span>
         )}
         {warn && (
-          <span className="rounded-full border border-warn-border bg-warn-soft px-2 py-0.5 font-mono text-2xs font-medium text-warn">
-            {warn}
-          </span>
+          <LatePill tone="warn">{warn}</LatePill>
         )}
         {viewAllHref && (
           <Link
             href={viewAllHref}
+            aria-label={`View all ${title}`}
             className="ml-auto text-2xs text-ink-3 hover:text-ink"
           >
             View all

@@ -16,9 +16,16 @@ describe("DashboardCard", () => {
     expect(screen.getByText("body")).toBeTruthy();
   });
 
-  test("renders the warn text", () => {
+  test("renders the warn text as a warn pill", () => {
     render(<DashboardCard title="T" warn="3 overdue" />);
-    expect(screen.getByText("3 overdue")).toBeTruthy();
+    expect(screen.getByText("3 overdue").className).toContain("bg-warn-soft");
+  });
+
+  test("view all link is named after its card", () => {
+    render(<DashboardCard title="Deadlines" viewAllHref="/x" />);
+    expect(
+      screen.getByRole("link", { name: "View all Deadlines" }),
+    ).toBeTruthy();
   });
 
   test("view all link present with href, absent otherwise", () => {
