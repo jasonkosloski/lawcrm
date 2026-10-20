@@ -44,8 +44,10 @@ overwrites data and resets every user's password. Watch out for
 `vercel env pull` / `vercel link`: they write Development variables
 into `.env.local`, which Next.js loads *over* `.env`. Schema changes ship as migrations
 (`npx prisma migrate dev --name <change>`) — see ADR-016 in
-`docs/decisions/`. Auth is email + password; there is no self-service sign-up. Seed
-the demo users (or have an admin invite one), then log in at `/login`.
+`docs/decisions/`. Staff sign in with Google via Clerk and there is no self sign-up: admins invite
+people from Settings -> Team, and the first sign-in links the Clerk identity to
+the pre-created user by verified email. Locally, seed the demo users and use
+`/dev/sign-in-as` (see `docs/features/auth.md`).
 
 ## Environment
 
@@ -58,9 +60,9 @@ Notable variables:
   (Clerk). Set `STAFF_ORIGINS` to the staff origin and
   `CLERK_WEBHOOK_SIGNING_SECRET` for the audit webhook in production; see
   [`docs/features/auth.md`](./docs/features/auth.md).
-- `AUTH_SECRET` - required in every environment, but portal-only now (HMAC
-  for portal link requests; also the Google integration's OAuth state), not
-  staff sessions. `AUTH_URL` is optional (only behind a proxy/CDN).
+- `AUTH_SECRET` - required in every environment. No longer used for staff
+  sessions; keys the portal link-request HMAC and the Google integration's
+  OAuth state. `AUTH_URL` is optional (only behind a proxy/CDN).
 - `CRON_SECRET` - **required in production.** Vercel Cron sends it as a
   bearer token to `/api/email-sync` and `/api/notification-sweep`;
   unset means both return 401 and background syncs silently stop.
