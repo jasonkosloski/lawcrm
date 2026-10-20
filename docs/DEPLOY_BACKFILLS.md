@@ -76,3 +76,12 @@ Migrations `20261019090000_client_portal_foundation` (new tables, `firms."portal
 4. Back up, load the PRODUCTION env, `export DIRECT_DATABASE_URL="$DATABASE_URL"` (see the gotcha above), `npx prisma migrate status`, then `npx prisma migrate deploy`.
 5. Settings, Firm: turn on "Client portal enabled".
 6. Invite a test contact from a matter's Portal card; confirm the email arrives and signs in on the portal host, and that the portal host serves no staff pages.
+
+# Deploy steps: matter drafts and agreements
+
+Migration `20261020225241_matter_drafts_and_agreements` (ADR-056). Add-only: new draft and agreement tables, `firms."requireOriginatingDoc"` (default false), `practice_areas."originatingDocLabel"`; grants `matters.agreement.edit` to every role holding `matters.edit`. Nothing is dropped.
+
+1. If the venues migration from the previous release (ADR-055) has not been applied, it must go first; `migrate deploy` applies both in order.
+2. Back up, load the PRODUCTION env, `export DIRECT_DATABASE_URL="$DATABASE_URL"` (see the gotcha above), `npx prisma migrate status` (check the printed host), then `npx prisma migrate deploy`.
+3. Deploy the code carrying the new daily cron `/api/matter-draft-sweep` (`vercel.json`). It authenticates with `CRON_SECRET`, already required in production; no new env var.
+4. Existing matters get no agreement row; the Overview card treats a missing row as "No agreement on file".

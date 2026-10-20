@@ -38,6 +38,10 @@ Rationale, invariants, and conventions for the Prisma schema. The models, column
 
 Only non-obvious facts; anything not listed is as `schema.prisma` reads.
 
+**Matter drafts / agreement** (ADR-056)
+- **MatterDraftFile**: not a `Document` until Create moves it into the matter; `isOriginating` true on at most one file per draft is app-enforced, not a constraint. `MatterDraft.values` is read only by the form and create, never queried; `leadUserId`/`teamUserIds` are copies for access checks.
+- **MatterAgreement**: one per matter (`matterId` unique); `documentId` is unique and `SetNull` if the document goes. Dates are date-only UTC midnight (ADR-012).
+
 **Identity / firm**
 - **User**: `jobTitle` is the display title; admin power comes from membership in the `Admin` role (no `isAdmin` column). `dashboardPrefs` shape is `{ visible, order }`.
 - **Firm**: single-tenant today (one row, every User belongs to it); `firmId` is the intended multi-tenant scoping handle (would attach at the `getStaffAuth()` seam, `src/lib/staff-auth.ts`), but `Contact.firmId` is nullable and not a scoping handle yet. `matterVisibility` (FIRM | TEAM, default FIRM) is the matter-access switch, enforced (ADR-039). `dailyHoursGoal` (6.0) / `monthlyBillableGoal` (200) are firm data edited under `firm.edit_info`.

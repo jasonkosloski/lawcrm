@@ -74,3 +74,4 @@ ADR true to the code are appended in place and dated.
 | [053](053-clerk-proves-identity-the-user-table-grants-access.md) | Clerk proves staff identity; the User table grants access (DB-authoritative, one-time email link) |  |
 | [054](054-new-matter-screens-both-directions-and-overrides-on-the-matter.md) | Matter writes are conflict-checked in both directions; the override is recorded on the matter |  |
 | [055](055-venues-are-a-firm-list-required-fields-are-per-area.md) | Venues are a firm list; required matter fields are per practice area (enforced on create, can't-clear-but-don't-block on edit) |  |
+| [056](056-drafts-hold-intake-files-firm-can-require-originating-document.md) | Matter drafts hold intake files; a firm switch can require a signed originating document to open a matter |  |
