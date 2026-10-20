@@ -15,7 +15,7 @@ import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permission-check";
-import { logActivity } from "@/lib/activity-log";
+import { logAuditEntry } from "@/lib/audit-entry";
 import type { VenueOption } from "@/lib/queries/venues";
 
 export type VenueInput = { name: string; city?: string; county?: string; state: string };
@@ -79,10 +79,12 @@ export async function createVenue(
   const nameKey = p.data.name.toLowerCase();
   try {
     const venue = await prisma.venue.create({ data: { ...p.data, nameKey }, select: SELECT });
-    await logActivity({
+    await logAuditEntry({
       matterId: null,
       userId,
-      type: "records",
+      type: "settings",
+      source: "Settings",
+      icon: "zap",
       title: `Venue "${venue.name}" added`,
       detail: null,
     });
@@ -115,10 +117,12 @@ export async function updateVenue(
       data: { ...p.data, nameKey },
       select: SELECT,
     });
-    await logActivity({
+    await logAuditEntry({
       matterId: null,
       userId,
-      type: "records",
+      type: "settings",
+      source: "Settings",
+      icon: "zap",
       title: `Venue "${venue.name}" updated`,
       detail: null,
     });
@@ -147,10 +151,12 @@ export async function setVenueActive(
   if (!row) return { ok: false, error: "Not found" };
   if (row.isActive === active) return { ok: true };
   await prisma.venue.update({ where: { id }, data: { isActive: active } });
-  await logActivity({
+  await logAuditEntry({
     matterId: null,
     userId,
-    type: "records",
+    type: "settings",
+    source: "Settings",
+    icon: "zap",
     title: `Venue "${row.name}" ${active ? "restored" : "archived"}`,
     detail: null,
   });
@@ -177,10 +183,12 @@ export async function deleteVenue(
     }
     throw e;
   }
-  await logActivity({
+  await logAuditEntry({
     matterId: null,
     userId,
-    type: "records",
+    type: "settings",
+    source: "Settings",
+    icon: "zap",
     title: `Venue "${row.name}" deleted`,
     detail: null,
   });

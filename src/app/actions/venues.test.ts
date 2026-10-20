@@ -15,7 +15,7 @@ import { requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { createVenue, deleteVenue, setVenueActive, updateVenue } from "@/app/actions/venues";
 import { listVenues } from "@/lib/queries/venues";
-import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
+import { resetDb, seedFirm, seedMatter, seedPracticeArea, seedUser } from "@/test/integration-helpers";
 
 let userId: string;
 
@@ -41,7 +41,7 @@ describe("createVenue", () => {
     const row = await prisma.venue.findFirstOrThrow();
     expect(row).toMatchObject({ name: "Aurora", nameKey: "aurora", state: "CO", isActive: true });
     const log = await prisma.activityLog.findFirst({ where: { title: 'Venue "Aurora" added' } });
-    expect(log?.matterId).toBeNull();
+    expect(log).toMatchObject({ matterId: null, type: "settings", source: "Settings" });
   });
 
   test("duplicate name case-insensitively returns exists with the existing id", async () => {
@@ -101,12 +101,14 @@ describe("deleteVenue / setVenueActive", () => {
   test("refused when a matter references the venue, succeeds otherwise", async () => {
     const c = await createVenue(aurora);
     if (!c.ok) throw new Error("setup");
-    const spy = vi.spyOn(prisma.matter, "count").mockResolvedValueOnce(1);
+    const { areaId, stageId } = await seedPracticeArea();
+    const { matterId } = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId });
+    await prisma.matter.update({ where: { id: matterId }, data: { venueId: c.venue.id } });
     const blocked = await deleteVenue(c.venue.id);
-    spy.mockRestore();
     expect(blocked).toEqual({ ok: false, error: "A matter uses this venue. Archive it instead." });
     expect(requirePermission).toHaveBeenCalledWith("venues.delete");
     expect(await prisma.venue.count()).toBe(1);
+    await prisma.matter.update({ where: { id: matterId }, data: { venueId: null } });
     expect(await deleteVenue(c.venue.id)).toEqual({ ok: true });
     expect(await prisma.venue.count()).toBe(0);
   });
