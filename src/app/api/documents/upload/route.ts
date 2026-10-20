@@ -78,6 +78,7 @@ import { prisma } from "@/lib/prisma";
 import { canAccessMatter } from "@/lib/matter-access";
 import { canAccessLead } from "@/lib/lead-access";
 import { canAccessDraft } from "@/lib/draft-access";
+import { isStoredFileReferenced } from "@/lib/stored-file-refs";
 import { userHasPermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { scopeWhere, type RecordScope } from "@/lib/record-scope";
@@ -386,6 +387,7 @@ async function fileOntoDraft(
     Promise.all(
       result.files.map(async (f) => {
         try {
+          if (await isStoredFileReferenced(f.key)) return;
           await deleteFile(f.key);
         } catch {
           /* best-effort */

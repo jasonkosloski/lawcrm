@@ -1023,4 +1023,18 @@ describe("draft target", () => {
     expect(deleteFile).toHaveBeenCalledWith(BLOB_URL);
     expect(prisma.matterDraftFile.create).not.toHaveBeenCalled();
   });
+
+  test("completed: retried callback after Create re-homed the file -> bytes kept", async () => {
+    wireDraftGates();
+    // No draft-file row any more, draft gone, but a Document owns the bytes.
+    vi.mocked(prisma.matterDraft.findUnique).mockResolvedValue(null);
+    mockedDocFind.mockResolvedValue({ id: "doc1" } as never);
+    mockedHead.mockResolvedValue({ size: 10 } as never);
+    await onUploadCompleted({
+      blob: { url: BLOB_URL } as never,
+      tokenPayload: COMPLETED_PAYLOAD,
+    });
+    expect(deleteFile).not.toHaveBeenCalled();
+    expect(prisma.matterDraftFile.create).not.toHaveBeenCalled();
+  });
 });

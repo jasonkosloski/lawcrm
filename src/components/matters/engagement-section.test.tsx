@@ -93,6 +93,15 @@ describe("EngagementSection", () => {
     expect(onChange).toHaveBeenCalledWith({ originatingFileId: "f2" });
   });
 
+  test("marking a file that fails (rejects or ok:false) shows a small error", async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderSection();
+    vi.mocked(setDraftFileOriginating).mockRejectedValueOnce(new Error("boom"));
+    await user.click(screen.getAllByLabelText(/this is the fee agreement/i)[1]);
+    expect(screen.getByText(/couldn't mark that file/i)).toBeTruthy();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   test("removing a file calls the action then reports it; a failure shows an error", async () => {
     const user = userEvent.setup();
     const { onChange } = renderSection();

@@ -15,6 +15,7 @@
 import { prisma } from "@/lib/prisma";
 import { isAuthorizedCron } from "@/lib/cron-auth";
 import { deleteFile } from "@/lib/file-storage";
+import { isStoredFileReferenced } from "@/lib/stored-file-refs";
 import { MATTER_DRAFT_RETENTION_DAYS } from "@/lib/draft-access";
 
 export const maxDuration = 60;
@@ -57,6 +58,8 @@ export async function GET(request: Request): Promise<Response> {
 
       for (const key of keys) {
         try {
+          // Never delete bytes a Document now references (re-homed).
+          if (await isStoredFileReferenced(key)) continue;
           await deleteFile(key);
         } catch (err) {
           console.error("[matter-draft-sweep] storage cleanup failed", {

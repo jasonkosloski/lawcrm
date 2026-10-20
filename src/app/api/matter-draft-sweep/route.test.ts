@@ -96,6 +96,30 @@ describe("GET /api/matter-draft-sweep", () => {
     expect(await prisma.matterDraft.count()).toBe(0);
   });
 
+  it("skips a key a Document references", async () => {
+    await makeDraft(100, ["shared", "plain"]);
+    const user = await prisma.user.findFirstOrThrow();
+    const area = await prisma.practiceArea.create({ data: { name: "PA sweep" } });
+    const stage = await prisma.matterStage.create({
+      data: { practiceAreaId: area.id, name: "Intake", order: 0 },
+    });
+    const matter = await prisma.matter.create({
+      data: {
+        name: "M",
+        practiceAreaId: area.id,
+        stageId: stage.id,
+        feeStructure: "hourly",
+        teamMembers: { create: { userId: user.id, role: "lead" } },
+      },
+    });
+    await prisma.document.create({
+      data: { matterId: matter.id, name: "d", fileUrl: "shared" },
+    });
+    const res = await GET(request("Bearer s3cret"));
+    expect(await res.json()).toEqual({ deleted: 1 });
+    expect(mockedDelete.mock.calls.map((c) => c[0])).toEqual(["plain"]);
+  });
+
   it("a draft saved between the batch read and the delete survives, files kept", async () => {
     const d = await makeDraft(100, ["racy"]);
     const realFind = prisma.matterDraft.findMany.bind(prisma.matterDraft);

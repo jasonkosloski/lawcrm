@@ -56,7 +56,7 @@ vi.mock("@/lib/prisma", () => ({
     matterDraft: { findUnique: vi.fn() },
     matterDraftFile: { count: vi.fn(), create: vi.fn() },
     documentFolder: { findFirst: vi.fn() },
-    document: { create: vi.fn() },
+    document: { create: vi.fn(), findFirst: vi.fn() },
     recordsRequest: { findFirst: vi.fn() },
     $transaction: vi.fn(),
     $queryRaw: vi.fn(),
@@ -1078,6 +1078,18 @@ describe("POST /api/documents/upload — draft target", () => {
     );
     expect(res.status).toBe(404);
     expect(mockedDelete).toHaveBeenCalledWith("key-a.pdf");
+  });
+
+  test("failure cleanup never deletes a key a Document references", async () => {
+    wireDraft();
+    vi.mocked(prisma.matterDraft.findUnique).mockResolvedValue(null);
+    vi.mocked(prisma.document.findFirst).mockResolvedValue({ id: "doc1" } as never);
+    const res = await POST(
+      await makeRequest(fdWith({ draftId: "d1" }, [{ name: "a.pdf" }]))
+    );
+    expect(res.status).toBe(404);
+    expect(mockedDelete).not.toHaveBeenCalledWith("key-a.pdf");
+    vi.mocked(prisma.document.findFirst).mockReset();
   });
 
   test("draft deleted while the bytes streamed -> 404 and files removed", async () => {

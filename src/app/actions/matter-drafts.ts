@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { deleteFile } from "@/lib/file-storage";
+import { isStoredFileReferenced } from "@/lib/stored-file-refs";
 import { ADMIN_ROLE_NAME } from "@/lib/role-constants";
 import {
   DRAFT_PERMISSION,
@@ -105,10 +106,12 @@ export async function saveMatterDraft(
   return { ok: true, draftId, updatedAt: now.toISOString() };
 }
 
-/** Best-effort byte removal once the rows are committed away. */
+/** Best-effort byte removal once the rows are committed away. Bytes a
+ *  Document references (re-homed by Create) are never deleted. */
 async function deleteStoredFiles(keys: string[]): Promise<void> {
   for (const key of keys) {
     try {
+      if (await isStoredFileReferenced(key)) continue;
       await deleteFile(key);
     } catch (err) {
       console.error("[matter-drafts] storage cleanup failed", {
@@ -139,15 +142,21 @@ export async function deleteMatterDraft(
       };
     }
   }
-  const files = await prisma.$transaction(async (tx) => {
+  // Lock the draft FIRST (as createMatter does): if a Create holds the
+  // claim, wait for it, then find nothing to delete and touch no bytes.
+  const deleted = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "matter_drafts" WHERE id = ${id} FOR UPDATE`;
     const rows = await tx.matterDraftFile.findMany({
       where: { draftId: id },
       select: { fileUrl: true },
     });
-    await tx.matterDraft.deleteMany({ where: { id } });
-    return rows;
+    const res = await tx.matterDraft.deleteMany({ where: { id } });
+    return res.count > 0 ? rows : null;
   });
-  await deleteStoredFiles(files.map((f) => f.fileUrl));
+  if (deleted === null) {
+    return { ok: false, error: "This draft was already used to open a matter." };
+  }
+  await deleteStoredFiles(deleted.map((f) => f.fileUrl));
   await logActivity({
     matterId: null,
     userId,
@@ -168,16 +177,20 @@ export async function setDraftFileOriginating(
   });
   if (!file) return { ok: false };
   await assertDraftAccess(file.draftId);
-  await prisma.$transaction([
-    prisma.matterDraftFile.updateMany({
+  const marked = await prisma.$transaction(async (tx) => {
+    // Scoped to the draft; a file removed meanwhile marks nothing.
+    const res = await tx.matterDraftFile.updateMany({
+      where: { id: fileId, draftId: file.draftId },
+      data: { isOriginating: true },
+    });
+    if (res.count === 0) return false;
+    await tx.matterDraftFile.updateMany({
       where: { draftId: file.draftId, id: { not: fileId } },
       data: { isOriginating: false },
-    }),
-    prisma.matterDraftFile.update({
-      where: { id: fileId },
-      data: { isOriginating: true },
-    }),
-  ]);
+    });
+    return true;
+  });
+  if (!marked) return { ok: false };
   revalidatePath("/matters/new");
   return { ok: true };
 }

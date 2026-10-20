@@ -15,7 +15,13 @@ import {
   setDraftFileOriginating,
 } from "@/app/actions/matter-drafts";
 import { listMatterDrafts } from "@/lib/queries/matter-drafts";
-import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
+import {
+  resetDb,
+  seedFirm,
+  seedMatter,
+  seedPracticeArea,
+  seedUser,
+} from "@/test/integration-helpers";
 
 let creator: string, other: string, admin: string, testFirmId: string;
 
@@ -125,6 +131,50 @@ describe("deleteMatterDraft", () => {
     expect(titles.join()).not.toMatch(/secret/i);
   });
 
+  test("Create claimed the draft first -> 'already used', no bytes deleted", async () => {
+    const a = await newDraft();
+    await prisma.matterDraftFile.create({
+      data: { draftId: a.draftId, name: "a", fileUrl: "k-claimed", uploadedBy: creator },
+    });
+    // Simulate Create winning before the delete's transaction takes its lock.
+    const real = prisma.$transaction.bind(prisma);
+    const spy = vi.spyOn(prisma, "$transaction").mockImplementationOnce(((
+      fn: unknown,
+      o: unknown
+    ) =>
+      prisma.matterDraft
+        .delete({ where: { id: a.draftId } })
+        .then(() => (real as (x: unknown, y: unknown) => unknown)(fn, o))) as never);
+    expect(await deleteMatterDraft(a.draftId)).toEqual({
+      ok: false,
+      error: "This draft was already used to open a matter.",
+    });
+    spy.mockRestore();
+    expect(deleteFile).not.toHaveBeenCalled();
+    expect(
+      (await prisma.activityLog.findMany()).map((l) => l.title)
+    ).not.toContain("Matter draft deleted");
+  });
+
+  test("never deletes bytes a Document references", async () => {
+    const a = await newDraft();
+    await prisma.matterDraftFile.create({
+      data: { draftId: a.draftId, name: "a", fileUrl: "k-shared", uploadedBy: creator },
+    });
+    const { areaId, stageId } = await seedPracticeArea();
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: creator,
+      name: "M",
+    });
+    await prisma.document.create({
+      data: { matterId, name: "a", fileUrl: "k-shared", uploadedBy: creator },
+    });
+    expect(await deleteMatterDraft(a.draftId)).toEqual({ ok: true });
+    expect(deleteFile).not.toHaveBeenCalled();
+  });
+
   test("Admin may delete", async () => {
     const a = await newDraft();
     as(admin);
@@ -149,6 +199,25 @@ describe("draft files", () => {
     expect(deleteFile).toHaveBeenCalledWith("k1");
     const titles = (await prisma.activityLog.findMany()).map((l) => l.title);
     expect(titles).toContain("File removed from a matter draft");
+  });
+});
+
+describe("setDraftFileOriginating when the file vanishes", () => {
+  test("returns { ok: false } instead of throwing", async () => {
+    const a = await newDraft();
+    const f = await prisma.matterDraftFile.create({
+      data: { draftId: a.draftId, name: "a", fileUrl: "k-gone", uploadedBy: creator },
+    });
+    const real = prisma.$transaction.bind(prisma);
+    const spy = vi.spyOn(prisma, "$transaction").mockImplementationOnce(((
+      fn: unknown,
+      o: unknown
+    ) =>
+      prisma.matterDraftFile
+        .delete({ where: { id: f.id } })
+        .then(() => (real as (x: unknown, y: unknown) => unknown)(fn, o))) as never);
+    await expect(setDraftFileOriginating(f.id)).resolves.toEqual({ ok: false });
+    spy.mockRestore();
   });
 });
 

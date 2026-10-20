@@ -66,15 +66,23 @@ export function EngagementSection({
 
   const mark = async (fileId: string) => {
     setFileError(null);
-    const res = await setDraftFileOriginating(fileId);
-    if (res.ok) onChange({ originatingFileId: fileId });
-    else setFileError("Couldn't mark that file. Try again.");
+    try {
+      const res = await setDraftFileOriginating(fileId);
+      if (res.ok) onChange({ originatingFileId: fileId });
+      else setFileError("Couldn't mark that file. Try again.");
+    } catch {
+      setFileError("Couldn't mark that file. Try again.");
+    }
   };
   const remove = async (fileId: string) => {
     setFileError(null);
-    const res = await removeDraftFile(fileId);
-    if (res.ok) onChange({ removedFileId: fileId });
-    else setFileError("Couldn't remove that file. Try again.");
+    try {
+      const res = await removeDraftFile(fileId);
+      if (res.ok) onChange({ removedFileId: fileId });
+      else setFileError("Couldn't remove that file. Try again.");
+    } catch {
+      setFileError("Couldn't remove that file. Try again.");
+    }
   };
 
   return (

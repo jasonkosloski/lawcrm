@@ -47,6 +47,7 @@ import { canAccessMatter } from "@/lib/matter-access";
 import { canAccessLead } from "@/lib/lead-access";
 import { canAccessDraft } from "@/lib/draft-access";
 import { deleteFile } from "@/lib/file-storage";
+import { isStoredFileReferenced } from "@/lib/stored-file-refs";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { scopeWhere, type RecordScope } from "@/lib/record-scope";
@@ -356,8 +357,14 @@ async function completeDraftUpload(
   draftId: string
 ): Promise<void> {
   const removeBlob = async (why: string) => {
-    console.error(`[blob-upload] ${why}; blob removed`);
     try {
+      // A retried callback can arrive after Create re-homed this blob
+      // onto a Document: those bytes are live and must never be removed.
+      if (await isStoredFileReferenced(blobUrl)) {
+        console.error(`[blob-upload] ${why}; blob kept (a Document references it)`);
+        return;
+      }
+      console.error(`[blob-upload] ${why}; blob removed`);
       await deleteFile(blobUrl);
     } catch (err) {
       console.error("[blob-upload] draft blob cleanup failed", err);
