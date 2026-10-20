@@ -141,15 +141,19 @@ Layout:
 
 Cards move out of the 650-line page into
 `src/components/dashboard/cards/<key>.tsx` — server components that take
-their already-loaded data as props. `src/components/dashboard/registry.ts`
-maps `DashboardCardKey → { label, defaultPlacement }` (Prisma- and
-component-free so the client editor can import it); the page holds the
-key → element map. Sub-project 2 adds cards by registering here.
+their already-loaded data as props. The card registry
+(`DASHBOARD_CARDS: Record<DashboardCardKey, { label, defaultPlacement }>`)
+lives in `src/lib/dashboard-prefs.ts` beside the keys — `mergeLayout`
+needs the placements, and that module is already Prisma- and
+component-free so the client editor can import it. The page holds the
+key → element map. Sub-project 2 adds cards by registering there.
 
 ## Customize mode
 
-Client component `DashboardCustomizer` wraps the layout. The topbar
-"Customize" button toggles it; the v2 popover is removed.
+Client component `DashboardCustomizer` wraps the layout. A "Customize"
+button in the page header row (beside the greeting, inside the
+customizer's client tree so edit state lives in one place) toggles it;
+the v2 topbar popover is removed.
 
 **Edit mode (lg+):**
 
