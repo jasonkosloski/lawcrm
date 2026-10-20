@@ -29,6 +29,8 @@ import {
 } from "@/lib/firm-form";
 import type { FirmGoals, FirmProfile } from "@/lib/firm";
 import { dateOnlyKey } from "@/lib/format-date";
+import { MatterNameTemplateField } from "./matter-name-template-field";
+import { DEFAULT_MATTER_NAME_TEMPLATE } from "@/lib/matter-name-template";
 import { Field, FormErrorBanner, formErrorMessage, inputClass } from "./form-field";
 
 export function FirmEditForm({
@@ -251,6 +253,14 @@ export function FirmEditForm({
           )}
         </Field>
       </div>
+
+      <SectionHeader label="Matter names" />
+      <MatterNameTemplateField
+        defaultValue={firm.matterNameTemplate ?? DEFAULT_MATTER_NAME_TEMPLATE}
+        label="Default matter name template"
+        hint="Practice areas can override this."
+        error={errs.matterNameTemplate}
+      />
 
       <SectionHeader label="Goals" />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

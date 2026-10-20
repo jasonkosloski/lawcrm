@@ -148,3 +148,18 @@ describe("FirmReadView — established date", () => {
     expect(dd?.textContent).toBe("—");
   });
 });
+
+describe("FirmEditForm — matter name template", () => {
+  test("prefills the firm's current template", () => {
+    const { container } = render(
+      <FirmEditForm
+        firm={{ ...BASE_FIRM, matterNameTemplate: "{client_full} - {year}" }}
+        goals={BASE_GOALS}
+      />
+    );
+    expect(
+      container.querySelector<HTMLInputElement>('input[name="matterNameTemplate"]')!
+        .value
+    ).toBe("{client_full} - {year}");
+  });
+});

@@ -7,6 +7,7 @@
  */
 
 import { cn } from "@/lib/utils";
+import { REQUIRED_MATTER_FIELDS } from "@/lib/matter-required-fields";
 
 export function Field({
   label,
@@ -44,3 +45,50 @@ export const inputCls = (hasError: boolean): string =>
     "placeholder:text-ink-4",
     hasError ? "border-warn" : "border-line"
   );
+
+/**
+ * "Required at creation" checkbox group. Posts `requiredMatterFields`
+ * (one entry per checked box) plus the `requiredMatterFieldsPresent`
+ * marker the update action needs before it changes the list.
+ */
+export function RequiredFieldsGroup({
+  defaultChecked = [],
+  error,
+}: {
+  defaultChecked?: readonly string[];
+  error?: string[];
+}) {
+  return (
+    <fieldset className="flex flex-col gap-2 px-3 py-2.5 rounded-md border border-line bg-paper-2/30">
+      <legend className="px-1 text-2xs font-mono uppercase tracking-wider text-ink-4">
+        Required at creation
+      </legend>
+      <input type="hidden" name="requiredMatterFieldsPresent" value="1" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5">
+        {REQUIRED_MATTER_FIELDS.map((f) => (
+          <label
+            key={f.key}
+            className="flex items-center gap-2 cursor-pointer select-none"
+          >
+            <input
+              type="checkbox"
+              name="requiredMatterFields"
+              value={f.key}
+              defaultChecked={defaultChecked.includes(f.key)}
+              className="w-3.5 h-3.5 rounded border-line"
+            />
+            <span className="text-xs text-ink-2">{f.label}</span>
+          </label>
+        ))}
+      </div>
+      <p className="text-2xs text-ink-4 leading-relaxed">
+        New matters in this area can&rsquo;t be created without these.
+        Existing matters aren&rsquo;t affected unless someone clears a value
+        they already had.
+      </p>
+      {error && error.length > 0 && (
+        <div className="text-2xs text-warn">{error[0]}</div>
+      )}
+    </fieldset>
+  );
+}

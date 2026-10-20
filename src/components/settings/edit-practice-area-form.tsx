@@ -14,7 +14,10 @@ import { updatePracticeArea } from "@/app/actions/practice-areas";
 import {
   Field,
   inputCls,
+  RequiredFieldsGroup,
 } from "@/components/settings/practice-area-form-parts";
+import { MatterNameTemplateField } from "@/components/settings/matter-name-template-field";
+import { DEFAULT_MATTER_NAME_TEMPLATE } from "@/lib/matter-name-template";
 import { SOL_PERIOD_UNITS, type SolPeriodUnit } from "@/lib/sol";
 import {
   practiceAreaInitialState,
@@ -30,7 +33,10 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 
 export function EditPracticeAreaForm({
   area,
+  firmTemplate,
 }: {
+  /** The firm's template, shown as the placeholder when blank (inherit). */
+  firmTemplate?: string;
   area: {
     id: string;
     name: string;
@@ -42,6 +48,9 @@ export function EditPracticeAreaForm({
     statutePeriodUnit: SolPeriodUnit | null;
     statuteSourceCitation: string | null;
     defaultBillingMode: string;
+    /** null = inherit the firm template. */
+    matterNameTemplate?: string | null;
+    requiredMatterFields?: string[];
   };
 }) {
   const boundAction = updatePracticeArea.bind(null, area.id);
@@ -247,6 +256,19 @@ export function EditPracticeAreaForm({
           ))}
         </NativeSelect>
       </Field>
+
+      <MatterNameTemplateField
+        defaultValue={area.matterNameTemplate ?? ""}
+        placeholder={firmTemplate ?? DEFAULT_MATTER_NAME_TEMPLATE}
+        practiceAreaName={area.name}
+        hint="Leave blank to use the firm's template."
+        error={errs.matterNameTemplate}
+      />
+
+      <RequiredFieldsGroup
+        defaultChecked={area.requiredMatterFields ?? []}
+        error={errs.requiredMatterFields}
+      />
 
       <div className="flex items-center justify-end gap-2">
         {state.status === "ok" && (

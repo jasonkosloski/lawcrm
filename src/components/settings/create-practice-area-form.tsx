@@ -16,7 +16,10 @@ import { createPracticeArea } from "@/app/actions/practice-areas";
 import {
   Field,
   inputCls,
+  RequiredFieldsGroup,
 } from "@/components/settings/practice-area-form-parts";
+import { MatterNameTemplateField } from "@/components/settings/matter-name-template-field";
+import { DEFAULT_MATTER_NAME_TEMPLATE } from "@/lib/matter-name-template";
 import {
   practiceAreaInitialState,
   type PracticeAreaFormState,
@@ -24,7 +27,11 @@ import {
 
 const DEFAULT_COLOR = "#2563a8";
 
-export function CreatePracticeAreaForm() {
+export function CreatePracticeAreaForm({
+  firmTemplate,
+}: {
+  firmTemplate?: string;
+}) {
   const [state, formAction, isPending] = useActionState<
     PracticeAreaFormState,
     FormData
@@ -129,6 +136,16 @@ export function CreatePracticeAreaForm() {
           Track statute of limitations on matters in this area
         </span>
       </label>
+
+      <MatterNameTemplateField
+        defaultValue=""
+        placeholder={firmTemplate ?? DEFAULT_MATTER_NAME_TEMPLATE}
+        practiceAreaName={name.trim() || undefined}
+        hint="Optional. Leave blank to use the firm's template."
+        error={errs.matterNameTemplate}
+      />
+
+      <RequiredFieldsGroup error={errs.requiredMatterFields} />
 
       <div className="text-2xs text-ink-4">
         New areas start with the default 10-stage lifecycle (Intake →

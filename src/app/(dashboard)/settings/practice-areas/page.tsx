@@ -22,11 +22,13 @@ import {
 } from "@/components/ui/card";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permission-check";
+import { getCurrentFirm } from "@/lib/firm";
 import { CreatePracticeAreaForm } from "@/components/settings/create-practice-area-form";
 import { PracticeAreaRowActions } from "@/components/settings/practice-area-row-actions";
 
 export default async function PracticeAreasSettingsPage() {
   await requirePermission("firm.manage_practice_areas");
+  const firm = await getCurrentFirm();
   const areas = await prisma.practiceArea.findMany({
     // (order, id) matches the tiebreaker movePracticeArea swaps by.
     orderBy: [{ isActive: "desc" }, { order: "asc" }, { id: "asc" }],
@@ -71,7 +73,7 @@ export default async function PracticeAreasSettingsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4">
-          <CreatePracticeAreaForm />
+          <CreatePracticeAreaForm firmTemplate={firm.matterNameTemplate} />
         </CardContent>
       </Card>
 

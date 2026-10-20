@@ -20,6 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permission-check";
 import { EditPracticeAreaForm } from "@/components/settings/edit-practice-area-form";
+import { getCurrentFirm } from "@/lib/firm";
 import { StageManager } from "@/components/settings/stage-manager";
 
 export default async function PracticeAreaDetailPage({
@@ -48,6 +49,7 @@ export default async function PracticeAreaDetailPage({
     },
   });
   if (!area) notFound();
+  const firm = await getCurrentFirm();
 
   return (
     <div className="flex flex-col gap-6 max-w-3xl">
@@ -83,7 +85,10 @@ export default async function PracticeAreaDetailPage({
         </CardHeader>
         <CardContent className="px-4 pb-4">
           <EditPracticeAreaForm
+            firmTemplate={firm.matterNameTemplate}
             area={{
+              matterNameTemplate: area.matterNameTemplate,
+              requiredMatterFields: area.requiredMatterFields,
               id: area.id,
               name: area.name,
               label: area.label,

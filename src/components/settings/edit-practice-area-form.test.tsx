@@ -136,3 +136,30 @@ describe("EditPracticeAreaForm after a server validation error", () => {
     ).toBe("YEARS");
   });
 });
+
+describe("EditPracticeAreaForm matter-name template and required fields", () => {
+  test("posts checked required fields, the presence marker and a blank template", async () => {
+    const user = userEvent.setup();
+    mockedUpdate.mockImplementation(async () => ({
+      status: "ok" as const,
+      errors: {},
+      values: {},
+    }));
+    render(
+      <EditPracticeAreaForm
+        area={{ ...area, matterNameTemplate: null, requiredMatterFields: ["venue"] }}
+        firmTemplate="{client_full} - {year}"
+      />
+    );
+    expect(
+      (screen.getByRole("checkbox", { name: "Venue" }) as HTMLInputElement).checked
+    ).toBe(true);
+    await user.click(screen.getByRole("checkbox", { name: "Case number" }));
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+    await waitFor(() => expect(mockedUpdate).toHaveBeenCalled());
+    const fd = mockedUpdate.mock.calls[0][2] as FormData;
+    expect(fd.getAll("requiredMatterFields")).toEqual(["venue", "caseNumber"]);
+    expect(fd.get("requiredMatterFieldsPresent")).toBe("1");
+    expect(fd.get("matterNameTemplate")).toBe("");
+  });
+});
