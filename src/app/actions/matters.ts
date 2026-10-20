@@ -60,6 +60,13 @@ import {
   type ConflictGateOutcome,
 } from "@/lib/matter-conflict-gate";
 import { normalize } from "@/lib/conflict-check";
+import {
+  clearedRequired,
+  missingRequired,
+  requiredFieldError,
+  type RequiredFieldValues,
+  type RequiredMatterField,
+} from "@/lib/matter-required-fields";
 
 const createMatterSchema = z
   .object({
@@ -113,6 +120,9 @@ const createMatterSchema = z
       .max(4000)
       .optional()
       .or(z.literal("")),
+    venueId: z.string().trim().optional().or(z.literal("")),
+    filedDate: z.string().trim().optional().or(z.literal("")),
+    trialDate: z.string().trim().optional().or(z.literal("")),
     pinForMe: z.literal("on").optional(),
   })
   .superRefine((data, ctx) => {
@@ -240,6 +250,61 @@ function parseSolDates(
   return { ok: true, incident, sol };
 }
 
+/** Form input name for each required-field key (the two that differ). */
+const REQUIRED_ERROR_FIELD: Record<RequiredMatterField, string> = {
+  venue: "venueId",
+  client: "clientId",
+  caseNumber: "caseNumber",
+  court: "court",
+  filedDate: "filedDate",
+  trialDate: "trialDate",
+  incidentDate: "incidentDate",
+  opposingParty: "opposingParty",
+  opposingFirm: "opposingFirm",
+  description: "description",
+};
+
+function requiredFieldErrors(
+  keys: RequiredMatterField[]
+): Record<string, string[]> {
+  const errors: Record<string, string[]> = {};
+  for (const k of keys) errors[REQUIRED_ERROR_FIELD[k]] = [requiredFieldError];
+  return errors;
+}
+
+/** Strictly parse the posted filed/trial dates (undefined = not posted). */
+function parseFiledTrial(
+  filedRaw: string | undefined,
+  trialRaw: string | undefined
+):
+  | { ok: true; filed: Date | null; trial: Date | null }
+  | { ok: false; errors: Record<string, string[]> } {
+  const errors: Record<string, string[]> = {};
+  const filed = filedRaw ? parseDateOnly(filedRaw) : null;
+  if (filedRaw && !filed) errors.filedDate = ["Enter a valid date"];
+  const trial = trialRaw ? parseDateOnly(trialRaw) : null;
+  if (trialRaw && !trial) errors.trialDate = ["Enter a valid date"];
+  if (Object.keys(errors).length > 0) return { ok: false, errors };
+  return { ok: true, filed, trial };
+}
+
+/** A posted venue must exist and be active — except that a matter may
+ *  keep its own current venue even after it was archived. */
+async function checkVenue(
+  venueId: string,
+  currentVenueId: string | null
+): Promise<{ ok: true; name: string } | { ok: false; error: string }> {
+  const venue = await prisma.venue.findUnique({
+    where: { id: venueId },
+    select: { isActive: true, name: true },
+  });
+  if (!venue) return { ok: false, error: "Choose a venue from the list." };
+  if (!venue.isActive && venueId !== currentVenueId) {
+    return { ok: false, error: "That venue is archived." };
+  }
+  return { ok: true, name: venue.name };
+}
+
 /**
  * Verify the stage belongs to the area. If not, return the first
  * active stage for the area as a safe fallback. Also returns the area
@@ -263,6 +328,8 @@ async function resolveAreaAndStage(
        *  rewrite history. Per-matter override happens via the matter
        *  edit form. */
       defaultBillingMode: string;
+      /** Keys the firm requires on new matters in this area. */
+      requiredMatterFields: string[];
     }
   | { ok: false; error: string }
 > {
@@ -277,6 +344,7 @@ async function resolveAreaAndStage(
       statutePeriodAmount: true,
       statutePeriodUnit: true,
       defaultBillingMode: true,
+      requiredMatterFields: true,
       stages: {
         where: { isActive: true },
         orderBy: { order: "asc" },
@@ -301,6 +369,7 @@ async function resolveAreaAndStage(
     hasStatuteOfLimitations: area.hasStatuteOfLimitations,
     statutePeriod: toSolPeriod(area.statutePeriodAmount, area.statutePeriodUnit),
     defaultBillingMode: area.defaultBillingMode,
+    requiredMatterFields: area.requiredMatterFields,
   };
 }
 
@@ -395,6 +464,50 @@ export async function createMatter(
       values: raw,
     };
   }
+
+  // Per-area required fields, venue and filed/trial dates. Validated
+  // here, before the conflict gate, so a submit with missing fields
+  // never asks for a conflict acknowledgement. incidentDate is only
+  // enforced when the area tracks SOL (the form only shows it then).
+  const existingClientForRequired =
+    data.clientId && data.clientId !== NEW_CLIENT_SENTINEL
+      ? await prisma.contact.findUnique({
+          where: { id: data.clientId },
+          select: { id: true },
+        })
+      : null;
+  const createValues: RequiredFieldValues = {
+    venue: data.venueId,
+    caseNumber: data.caseNumber,
+    court: data.court,
+    filedDate: data.filedDate,
+    trialDate: data.trialDate,
+    incidentDate: resolved.hasStatuteOfLimitations ? data.incidentDate : "n/a",
+    opposingParty: data.opposingParty,
+    opposingFirm: data.opposingFirm,
+    description: data.description,
+    client: existingClientForRequired
+      ? existingClientForRequired.id
+      : data.clientId === NEW_CLIENT_SENTINEL
+        ? data.newClientName
+        : null,
+  };
+  const createErrors = requiredFieldErrors(
+    missingRequired(resolved.requiredMatterFields, createValues)
+  );
+  const filedTrial = parseFiledTrial(data.filedDate, data.trialDate);
+  if (!filedTrial.ok) Object.assign(createErrors, filedTrial.errors);
+  let venueName: string | null = null;
+  if (data.venueId) {
+    const v = await checkVenue(data.venueId, null);
+    if (v.ok) venueName = v.name;
+    else createErrors.venueId = [v.error];
+  }
+  if (Object.keys(createErrors).length > 0) {
+    return { status: "error", errors: createErrors, values: raw };
+  }
+  const filedDate = filedTrial.ok ? filedTrial.filed : null;
+  const trialDate = filedTrial.ok ? filedTrial.trial : null;
 
   const [currentUserId, tz] = await Promise.all([
     getCurrentUserId(),
@@ -549,6 +662,9 @@ export async function createMatter(
         opposingParty: data.opposingParty || null,
         opposingFirm: data.opposingFirm || null,
         description: data.description || null,
+        venueId: data.venueId || null,
+        filedDate,
+        trialDate,
         color: resolved.color,
         clientId,
         incidentDate,
@@ -628,6 +744,9 @@ export async function createMatter(
     detail: [
       `${data.name} — ${resolved.areaName}`,
       solDate ? `Statute of limitations ${dateOnlyKey(solDate)}` : null,
+      venueName ? `Venue ${venueName}` : null,
+      filedDate ? `Filed ${dateOnlyKey(filedDate)}` : null,
+      trialDate ? `Trial ${dateOnlyKey(trialDate)}` : null,
     ]
       .filter(Boolean)
       .join("; "),
@@ -720,6 +839,12 @@ const updateMatterSchema = z.object({
     .max(4000)
     .optional()
     .or(z.literal("")),
+  /** Venue + filed/trial dates. An omitted key (older client) leaves the
+   *  stored value alone; a posted blank clears it (subject to the
+   *  practice area's required-field rule). */
+  venueId: z.string().trim().optional().or(z.literal("")),
+  filedDate: z.string().trim().optional().or(z.literal("")),
+  trialDate: z.string().trim().optional().or(z.literal("")),
 });
 
 /**
@@ -771,6 +896,10 @@ export async function updateMatter(
       opposingParty: true,
       opposingFirm: true,
       description: true,
+      venueId: true,
+      venue: { select: { name: true } },
+      filedDate: true,
+      trialDate: true,
       clientId: true,
       client: { select: { name: true } },
       // The matter's own clients, never screened as its adversaries.
@@ -877,6 +1006,65 @@ export async function updateMatter(
   );
   if (!parsedDates.ok) {
     return { status: "error", errors: parsedDates.errors, values: raw };
+  }
+
+  // Venue, filed/trial dates and the area's required fields. An omitted
+  // key leaves the stored value alone. Required fields follow the "can't
+  // clear, don't block" rule: only a field that had a value and is now
+  // blank is refused, so an old matter with gaps stays editable.
+  const updateErrors: Record<string, string[]> = {};
+  const filedTrial = parseFiledTrial(
+    data.filedDate ?? (stored.filedDate ? dateOnlyKey(stored.filedDate) : ""),
+    data.trialDate ?? (stored.trialDate ? dateOnlyKey(stored.trialDate) : "")
+  );
+  if (!filedTrial.ok) Object.assign(updateErrors, filedTrial.errors);
+  const nextVenueId =
+    data.venueId === undefined ? stored.venueId : data.venueId || null;
+  let nextVenueName: string | null = stored.venue?.name ?? null;
+  if (nextVenueId && nextVenueId !== stored.venueId) {
+    const v = await checkVenue(nextVenueId, stored.venueId);
+    if (v.ok) nextVenueName = v.name;
+    else updateErrors.venueId = [v.error];
+  }
+  if (!nextVenueId) nextVenueName = null;
+  const nextFiled = filedTrial.ok ? filedTrial.filed : stored.filedDate;
+  const nextTrial = filedTrial.ok ? filedTrial.trial : stored.trialDate;
+  const dayKey = (d: Date | null) => (d ? dateOnlyKey(d) : null);
+  const beforeValues: RequiredFieldValues = {
+    venue: stored.venueId,
+    caseNumber: stored.caseNumber,
+    court: stored.court,
+    filedDate: dayKey(stored.filedDate),
+    trialDate: dayKey(stored.trialDate),
+    incidentDate: dayKey(stored.incidentDate),
+    opposingParty: stored.opposingParty,
+    opposingFirm: stored.opposingFirm,
+    description: stored.description,
+    client: stored.clientId,
+  };
+  const afterValues: RequiredFieldValues = {
+    venue: nextVenueId,
+    caseNumber: data.caseNumber,
+    court: data.court,
+    filedDate: dayKey(nextFiled),
+    trialDate: dayKey(nextTrial),
+    // Untracked areas leave the incident date untouched.
+    incidentDate: resolved.hasStatuteOfLimitations
+      ? data.incidentDate
+      : dayKey(stored.incidentDate),
+    opposingParty: data.opposingParty,
+    opposingFirm: data.opposingFirm,
+    description: data.description,
+    client: clientId,
+  };
+  Object.assign(
+    updateErrors,
+    requiredFieldErrors(
+      clearedRequired(resolved.requiredMatterFields, beforeValues, afterValues)
+    )
+  );
+  if (Object.keys(updateErrors).length > 0) {
+    return { status: "error", errors: updateErrors, values: raw };
   }
 
   // Conflict gate (ADR-054), only for what this save changes: a new
@@ -1019,6 +1207,9 @@ export async function updateMatter(
         opposingParty: data.opposingParty || null,
         opposingFirm: data.opposingFirm || null,
         description: data.description || null,
+        venueId: nextVenueId,
+        filedDate: nextFiled,
+        trialDate: nextTrial,
         color: resolved.color,
         clientId,
         ...(resolved.hasStatuteOfLimitations
@@ -1171,6 +1362,19 @@ export async function updateMatter(
   diff("opposing party", stored.opposingParty, data.opposingParty || null);
   diff("opposing firm", stored.opposingFirm, data.opposingFirm || null);
   diff("summary", stored.description, data.description || null);
+  if (stored.venueId !== nextVenueId) {
+    changed.push(`Venue: ${stored.venue?.name ?? "none"} → ${nextVenueName ?? "none"}`);
+  }
+  if (dayOrNone(stored.filedDate) !== dayOrNone(nextFiled)) {
+    changed.push(
+      `Filed date: ${dayOrNone(stored.filedDate)} → ${dayOrNone(nextFiled)}`
+    );
+  }
+  if (dayOrNone(stored.trialDate) !== dayOrNone(nextTrial)) {
+    changed.push(
+      `Trial date: ${dayOrNone(stored.trialDate)} → ${dayOrNone(nextTrial)}`
+    );
+  }
   if (stored.practiceAreaId !== resolved.practiceAreaId) {
     changed.push(
       `practice area ${stored.practiceArea.name} → ${resolved.areaName}`

@@ -1647,3 +1647,202 @@ describe("updateMatter — incident date change needs confirmation for dependent
     ).rejects.toThrow(/__REDIRECT__/);
   });
 });
+
+// ── Venue, filed/trial dates, per-area required fields ──────────────────
+
+describe("matter venue, dates and required fields", () => {
+  const mkVenue = (name: string, isActive = true) =>
+    prisma.venue.create({
+      data: { name, nameKey: name.toLowerCase(), state: "CO", isActive },
+    });
+  const requireOnArea = (fields: string[]) =>
+    prisma.practiceArea.update({
+      where: { id: areaId },
+      data: { requiredMatterFields: fields },
+    });
+  // A successful save redirects (mocked as a throw); report it as "saved".
+  const upd = async (id: string, o: Record<string, string> = {}) => {
+    try {
+      return await updateMatter(id, updateMatterInitialState, updateForm(o));
+    } catch (e) {
+      if (String(e).includes("__REDIRECT__")) return { status: "saved" as const, errors: undefined };
+      throw e;
+    }
+  };
+  const redirected = (p: Promise<unknown>) =>
+    expect(p).rejects.toThrow("__REDIRECT__");
+
+  test("create: required fields all blank -> errors on each, no matter row", async () => {
+    await requireOnArea(["caseNumber", "filedDate", "venue"]);
+    const res = await createMatter(createMatterInitialState, createForm());
+    expect(res.status).toBe("error");
+    expect(Object.keys(res.errors ?? {}).sort()).toEqual(
+      ["caseNumber", "filedDate", "venueId"].sort(),
+    );
+    expect(await prisma.matter.count()).toBe(0);
+  });
+
+  test("create: required check runs before the conflict gate", async () => {
+    await requireOnArea(["court"]);
+    const res = await createMatter(createMatterInitialState, createForm());
+    expect(res.status).toBe("error");
+    expect(res.conflict).toBeUndefined();
+    expect(res.errors?.court).toBeDefined();
+  });
+
+  test("create: new-client sentinel with a name satisfies required client", async () => {
+    await requireOnArea(["client"]);
+    await redirected(
+      createMatter(
+        createMatterInitialState,
+        createForm({
+          clientId: NEW_CLIENT_SENTINEL,
+          newClientName: "Jane Doe",
+          newClientEmail: "jane@example.com",
+        }),
+      ),
+    );
+    const blank = await createMatter(createMatterInitialState, createForm());
+    expect(blank.errors?.clientId).toBeDefined();
+  });
+
+  test("create: unknown and archived venue are refused", async () => {
+    const unknown = await createMatter(
+      createMatterInitialState,
+      createForm({ venueId: "nope" }),
+    );
+    expect(unknown.errors?.venueId).toEqual(["Choose a venue from the list."]);
+    const old = await mkVenue("Old Court", false);
+    const archived = await createMatter(
+      createMatterInitialState,
+      createForm({ venueId: old.id }),
+    );
+    expect(archived.errors?.venueId).toEqual(["That venue is archived."]);
+    expect(await prisma.matter.count()).toBe(0);
+  });
+
+  test("create: persists venue and filed/trial dates as UTC midnight", async () => {
+    const v = await mkVenue("Denver District");
+    await redirected(
+      createMatter(
+        createMatterInitialState,
+        createForm({
+          venueId: v.id,
+          filedDate: "2026-03-04",
+          trialDate: "2027-01-15",
+        }),
+      ),
+    );
+    const m = await prisma.matter.findFirstOrThrow();
+    expect(m.venueId).toBe(v.id);
+    expect(dateOnlyKey(m.filedDate!)).toBe("2026-03-04");
+    expect(dateOnlyKey(m.trialDate!)).toBe("2027-01-15");
+    expect(m.filedDate!.getUTCHours()).toBe(0);
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { matterId: m.id, title: "Matter created" },
+    });
+    expect(log.detail).toContain("Denver District");
+    expect(log.detail).toContain("2026-03-04");
+  });
+
+  test("create: malformed dates are field errors", async () => {
+    const res = await createMatter(
+      createMatterInitialState,
+      createForm({ filedDate: "garbage", trialDate: "2026-13-45" }),
+    );
+    expect(res.errors?.filedDate).toBeDefined();
+    expect(res.errors?.trialDate).toBeDefined();
+    expect(await prisma.matter.count()).toBe(0);
+  });
+
+  test("update: clearing a required field that has a value is refused", async () => {
+    await requireOnArea(["court"]);
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    await prisma.matter.update({ where: { id: matterId }, data: { court: "D. Colo." } });
+    const res = await upd(matterId, { court: "", name: "Renamed" });
+    expect(res.status).toBe("error");
+    expect(res.errors?.court).toBeDefined();
+    const m = await prisma.matter.findUniqueOrThrow({ where: { id: matterId } });
+    expect(m.court).toBe("D. Colo.");
+    expect(m.name).not.toBe("Renamed");
+  });
+
+  test("update: a required field already empty does not block other edits", async () => {
+    await requireOnArea(["court"]);
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    const res = await upd(matterId, { court: "", name: "Renamed" });
+    expect(res.status).not.toBe("error");
+    const m = await prisma.matter.findUniqueOrThrow({ where: { id: matterId } });
+    expect(m.name).toBe("Renamed");
+  });
+
+  test("update: moving to an area requiring an already-empty field saves", async () => {
+    const other = await seedPracticeArea({ name: "Needs Case No" });
+    await prisma.practiceArea.update({
+      where: { id: other.areaId },
+      data: { requiredMatterFields: ["caseNumber"] },
+    });
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    const res = await upd(matterId, { practiceAreaId: other.areaId, stageId: other.stageId });
+    expect(res.status).not.toBe("error");
+    const m = await prisma.matter.findUniqueOrThrow({ where: { id: matterId } });
+    expect(m.practiceAreaId).toBe(other.areaId);
+  });
+
+  test("update: archived current venue is kept; a different archived venue is refused", async () => {
+    await requireOnArea(["venue"]);
+    const cur = await mkVenue("Aurora", false);
+    const other = await mkVenue("Boulder", false);
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    await prisma.matter.update({ where: { id: matterId }, data: { venueId: cur.id } });
+    const ok = await upd(matterId, { venueId: cur.id, name: "Same venue" });
+    expect(ok.status).not.toBe("error");
+    const bad = await upd(matterId, { venueId: other.id });
+    expect(bad.errors?.venueId).toEqual(["That venue is archived."]);
+    const unknown = await upd(matterId, { venueId: "nope" });
+    expect(unknown.errors?.venueId).toEqual(["Choose a venue from the list."]);
+    const clear = await upd(matterId, { venueId: "" });
+    expect(clear.errors?.venueId).toEqual(["Required for this practice area."]);
+  });
+
+  test("update: logs venue and date changes with old -> new", async () => {
+    const a = await mkVenue("Aurora");
+    const d = await mkVenue("Denver");
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    await prisma.matter.update({
+      where: { id: matterId },
+      data: { venueId: a.id, filedDate: new Date("2026-01-02T00:00:00Z") },
+    });
+    const res = await upd(matterId, { venueId: d.id, filedDate: "2026-02-03", trialDate: "2027-05-06" });
+    expect(res.status).not.toBe("error");
+    const m = await prisma.matter.findUniqueOrThrow({ where: { id: matterId } });
+    expect(m.venueId).toBe(d.id);
+    expect(dateOnlyKey(m.filedDate!)).toBe("2026-02-03");
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { matterId, title: "Matter updated" },
+    });
+    expect(log.detail).toContain("Venue: Aurora → Denver");
+    expect(log.detail).toContain("Filed date: 2026-01-02 → 2026-02-03");
+    expect(log.detail).toContain("Trial date: none → 2027-05-06");
+  });
+});
