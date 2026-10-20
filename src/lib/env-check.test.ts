@@ -16,6 +16,7 @@ const fullProd = {
   EMAIL_TOKEN_KEY: "k",
   PORTAL_HOST: "portal.example.com",
   STAFF_ORIGINS: "https://crm.example.com",
+  CLERK_WEBHOOK_SIGNING_SECRET: "whsec_x",
   RESEND_API_KEY: "r",
   EMAIL_FROM: "Firm <noreply@example.com>",
 };
@@ -64,6 +65,15 @@ describe("staff origins", () => {
     expect(r.degraded).toHaveLength(1);
     expect(r.degraded[0]).toMatch(/^STAFF_ORIGINS/);
     expect(checkEnv({ ...rest, VERCEL_ENV: "preview" }).degraded).toEqual([]);
+  });
+});
+
+describe("clerk webhook", () => {
+  test("CLERK_WEBHOOK_SIGNING_SECRET is degraded (warn, not fatal)", () => {
+    const r = checkEnv(without(["CLERK_WEBHOOK_SIGNING_SECRET"]));
+    expect(r.fatal).toEqual([]);
+    expect(r.degraded).toHaveLength(1);
+    expect(r.degraded[0]).toMatch(/^CLERK_WEBHOOK_SIGNING_SECRET/);
   });
 });
 

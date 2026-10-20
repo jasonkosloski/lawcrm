@@ -50,6 +50,11 @@ export function checkEnv(env: Env): EnvCheckResult {
         "STAFF_ORIGINS (staff sign-in origin is guessed from Vercel env; set e.g. https://crm.example.com)"
       );
     }
+    if (!set(env, "CLERK_WEBHOOK_SIGNING_SECRET")) {
+      degraded.push(
+        "CLERK_WEBHOOK_SIGNING_SECRET (Clerk session webhooks are rejected; no sign-in/out audit rows)"
+      );
+    }
     if (!set(env, "RESEND_API_KEY")) {
       degraded.push("RESEND_API_KEY (portal sign-in emails are not delivered)");
     }
