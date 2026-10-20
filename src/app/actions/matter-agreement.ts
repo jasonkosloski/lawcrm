@@ -39,8 +39,9 @@ export async function updateMatterAgreement(
     const v = fd.get(k);
     return typeof v === "string" ? v.trim() : "";
   };
-  const status = str("status");
-  const signedDate = str("signedDate");
+  // Posted under the shared controls' names (one name per value).
+  const status = str("agreementStatus");
+  const signedDate = str("agreementSignedDate");
   const documentId = str("documentId");
 
   const matter = await prisma.matter.findUnique({
@@ -70,18 +71,30 @@ export async function updateMatterAgreement(
     select: { firm: { select: { requireOriginatingDoc: true } } },
   });
   const label = originatingDocLabel(matter.practiceArea);
+  // With the switch on, the full gate applies only when the record is (or
+  // is being set to) signed: a signed record can't regress, but an
+  // unsigned or missing one may record any status (e.g. "Sent").
+  const switchOn = user?.firm?.requireOriginatingDoc ?? false;
+  const gateApplies =
+    switchOn && (matter.agreement?.status === "signed" || status === "signed");
   const gate = agreementGateErrors(
     { status, signedDate, hasOriginatingFile: documentId !== "" },
     {
-      required: user?.firm?.requireOriginatingDoc ?? false,
+      required: gateApplies,
       label,
       today: dateOnlyKey(await todayDateOnly()),
     }
   );
   if (Object.keys(gate).length > 0) {
     const errors: Record<string, string[]> = {};
+    // Keys match this form's inputs (status / signedDate / documentId).
+    const KEY: Record<string, string> = {
+      originatingFileId: "documentId",
+      agreementStatus: "status",
+      agreementSignedDate: "signedDate",
+    };
     for (const [k, v] of Object.entries(gate)) {
-      errors[k === "originatingFileId" ? "documentId" : k] = [v as string];
+      errors[KEY[k] ?? k] = [v as string];
     }
     return { status: "error", errors };
   }

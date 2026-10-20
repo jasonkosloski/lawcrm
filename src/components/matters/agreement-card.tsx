@@ -91,10 +91,6 @@ export function AgreementCard({
       <CardContent className="px-4 pb-4">
         {editing ? (
           <form action={formAction} className="flex flex-col gap-3">
-            {/* The action reads `status` / `signedDate`; the shared
-                controls post their own names, so mirror the values. */}
-            <input type="hidden" name="status" value={status} />
-            <input type="hidden" name="signedDate" value={signedDate} />
             <AgreementFields
               required={required}
               status={status}

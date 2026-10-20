@@ -72,4 +72,26 @@ describe("AgreementCard", () => {
     expect(status().value).toBe("sent");
     expect(doc().value).toBe("d1");
   });
+
+  test("renders server errors under status / date / document and posts one name per value", async () => {
+    const { updateMatterAgreement } = await import("@/app/actions/matter-agreement");
+    vi.mocked(updateMatterAgreement).mockResolvedValueOnce({
+      status: "error",
+      errors: {
+        status: ["Mark the Fee agreement as signed."],
+        signedDate: ["Enter the date it was signed."],
+        documentId: ["Attach the signed Fee agreement."],
+      },
+    });
+    const user = userEvent.setup();
+    render(<AgreementCard {...base} canEdit required agreement={null} />);
+    await user.click(screen.getByRole("button", { name: /edit/i }));
+    // No duplicate hidden mirrors: only the visible controls post these values.
+    expect(document.querySelector('input[name="status"]')).toBeNull();
+    expect(document.querySelector('input[name="signedDate"]')).toBeNull();
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+    expect(await screen.findByText("Mark the Fee agreement as signed.")).toBeTruthy();
+    expect(screen.getByText("Enter the date it was signed.")).toBeTruthy();
+    expect(screen.getByText("Attach the signed Fee agreement.")).toBeTruthy();
+  });
 });

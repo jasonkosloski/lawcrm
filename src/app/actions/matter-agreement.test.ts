@@ -63,7 +63,7 @@ describe("updateMatterAgreement", () => {
     const r = await updateMatterAgreement(
       matterId,
       idle,
-      form({ status: "signed", signedDate: "2020-01-02", documentId })
+      form({ agreementStatus: "signed", agreementSignedDate: "2020-01-02", documentId })
     );
     expect(r.status).toBe("ok");
     const row = await prisma.matterAgreement.findUniqueOrThrow({ where: { matterId } });
@@ -75,7 +75,7 @@ describe("updateMatterAgreement", () => {
 
   test("rejects a document from another matter", async () => {
     const { documentId } = await seedDocument({ matterId: otherMatterId });
-    const r = await updateMatterAgreement(matterId, idle, form({ status: "sent", documentId }));
+    const r = await updateMatterAgreement(matterId, idle, form({ agreementStatus: "sent", documentId }));
     expect(r.status).toBe("error");
     expect(r.errors?.documentId).toBeDefined();
     expect(await prisma.matterAgreement.count({ where: { matterId } })).toBe(0);
@@ -87,10 +87,10 @@ describe("updateMatterAgreement", () => {
     const r = await updateMatterAgreement(
       matterId,
       idle,
-      form({ status: "signed", signedDate: "", documentId })
+      form({ agreementStatus: "signed", agreementSignedDate: "", documentId })
     );
     expect(r.status).toBe("error");
-    expect(r.errors?.agreementSignedDate).toEqual(["Enter the date it was signed."]);
+    expect(r.errors?.signedDate).toEqual(["Enter the date it was signed."]);
   });
 
   test("switch on: unlinking the document is an error on documentId", async () => {
@@ -98,17 +98,61 @@ describe("updateMatterAgreement", () => {
     const r = await updateMatterAgreement(
       matterId,
       idle,
-      form({ status: "signed", signedDate: "2020-01-02", documentId: "" })
+      form({ agreementStatus: "signed", agreementSignedDate: "2020-01-02", documentId: "" })
     );
     expect(r.errors?.documentId).toEqual(["Attach the signed Fee agreement."]);
   });
 
   test("switch off: unlink is allowed", async () => {
     const { documentId } = await seedDocument({ matterId });
-    await updateMatterAgreement(matterId, idle, form({ status: "sent", documentId }));
-    const r = await updateMatterAgreement(matterId, idle, form({ status: "sent", documentId: "" }));
+    await updateMatterAgreement(matterId, idle, form({ agreementStatus: "sent", documentId }));
+    const r = await updateMatterAgreement(matterId, idle, form({ agreementStatus: "sent", documentId: "" }));
     expect(r.status).toBe("ok");
     const row = await prisma.matterAgreement.findUniqueOrThrow({ where: { matterId } });
     expect(row.documentId).toBeNull();
+  });
+
+  test("switch on: a legacy not_sent record may be set to sent (I5)", async () => {
+    await prisma.firm.update({ where: { id: firmId }, data: { requireOriginatingDoc: true } });
+    await prisma.matterAgreement.create({ data: { matterId, status: "not_sent" } });
+    const r = await updateMatterAgreement(matterId, idle, form({ agreementStatus: "sent" }));
+    expect(r.status).toBe("ok");
+    const row = await prisma.matterAgreement.findUniqueOrThrow({ where: { matterId } });
+    expect(row.status).toBe("sent");
+  });
+
+  test("switch on: no record at all may be set to sent", async () => {
+    await prisma.firm.update({ where: { id: firmId }, data: { requireOriginatingDoc: true } });
+    const r = await updateMatterAgreement(matterId, idle, form({ agreementStatus: "sent" }));
+    expect(r.status).toBe("ok");
+  });
+
+  test("switch on: a signed record can't regress to sent", async () => {
+    await prisma.firm.update({ where: { id: firmId }, data: { requireOriginatingDoc: true } });
+    const { documentId } = await seedDocument({ matterId });
+    await prisma.matterAgreement.create({
+      data: { matterId, status: "signed", signedDate: new Date("2020-01-02T00:00:00Z"), documentId },
+    });
+    const r = await updateMatterAgreement(
+      matterId,
+      idle,
+      form({ agreementStatus: "sent", documentId })
+    );
+    expect(r.status).toBe("error");
+    expect(r.errors?.status).toEqual(["Mark the Fee agreement as signed."]);
+    const row = await prisma.matterAgreement.findUniqueOrThrow({ where: { matterId } });
+    expect(row.status).toBe("signed");
+  });
+
+  test("switch on: not_sent -> signed without a document is refused", async () => {
+    await prisma.firm.update({ where: { id: firmId }, data: { requireOriginatingDoc: true } });
+    await prisma.matterAgreement.create({ data: { matterId, status: "not_sent" } });
+    const r = await updateMatterAgreement(
+      matterId,
+      idle,
+      form({ agreementStatus: "signed", agreementSignedDate: "2020-01-02" })
+    );
+    expect(r.status).toBe("error");
+    expect(r.errors?.documentId).toEqual(["Attach the signed Fee agreement."]);
   });
 });
