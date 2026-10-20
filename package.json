@@ -18,6 +18,7 @@
     "test:related": "vitest related --run --passWithNoTests",
     "precommit": "npm run typecheck && npm run lint",
     "prepare": "husky",
+    "clerk:preflight": "tsx --conditions=react-server scripts/clerk-preflight.ts",
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset --force"
   },
