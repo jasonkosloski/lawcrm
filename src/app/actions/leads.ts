@@ -47,6 +47,8 @@ import { computeSolDate, SOL_SOURCE_TYPE, toSolPeriod } from "@/lib/sol";
 import { dateOnlyKey, parseDateOnly } from "@/lib/format-date";
 import { runConflictMatcher } from "@/lib/conflict-check";
 import type { NewIntakeFormState } from "@/lib/new-intake-form";
+import { agreementGateErrors, originatingDocLabel } from "@/lib/originating-doc";
+import { todayDateOnly } from "@/app/actions/billing/helpers";
 import { rehomeLeadDocuments } from "@/lib/lead-documents";
 import {
   feeMakesExpense,
@@ -229,6 +231,10 @@ const convertSchema = z.object({
   feeStructure: z
     .enum(["contingent", "hourly", "flat", "hybrid", "pro_bono"])
     .default("contingent"),
+  agreementStatus: z.string().trim().optional().or(z.literal("")),
+  agreementSignedDate: z.string().trim().optional().or(z.literal("")),
+  /** A Document on THIS lead (not archived), marked as originating. */
+  originatingDocumentId: z.string().trim().optional().or(z.literal("")),
 });
 
 /**
@@ -341,6 +347,59 @@ export async function convertLeadToMatter(
     };
   }
 
+  // Originating-document gate: same rules and order as createMatter,
+  // after validation and before the conflict re-check.
+  const [userId, tz] = await Promise.all([
+    getCurrentUserId(),
+    getCurrentUserTimeZone(),
+  ]);
+  const [gateFirm, gateArea, onLead] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { firm: { select: { requireOriginatingDoc: true } } },
+    }),
+    prisma.practiceArea.findUnique({
+      where: { id: area.id },
+      select: { originatingDocLabel: true },
+    }),
+    parsed.data.originatingDocumentId
+      ? prisma.document.findFirst({
+          where: {
+            id: parsed.data.originatingDocumentId,
+            leadId,
+            status: { not: "archived" },
+          },
+          select: { id: true },
+        })
+      : null,
+  ]);
+  const agreementLabel = originatingDocLabel(gateArea);
+  const agreementErrors = agreementGateErrors(
+    {
+      status: parsed.data.agreementStatus ?? "",
+      signedDate: parsed.data.agreementSignedDate ?? "",
+      hasOriginatingFile: !!onLead,
+    },
+    {
+      required: gateFirm?.firm?.requireOriginatingDoc ?? false,
+      label: agreementLabel,
+      today: dateOnlyKey(await todayDateOnly()),
+    }
+  );
+  if (Object.keys(agreementErrors).length > 0) {
+    return {
+      status: "error",
+      errors: Object.fromEntries(
+        Object.entries(agreementErrors).map(([k, v]) => [
+          k === "originatingFileId" ? "originatingDocumentId" : k,
+          [v as string],
+        ])
+      ),
+    };
+  }
+  const agreementStatus = parsed.data.agreementStatus || "not_sent";
+  const agreementSignedKey = parsed.data.agreementSignedDate || null;
+
   // Conflict gate (ADR-050). Re-run the matcher NOW rather than trust
   // the stored status: a contact flagged or a party added since the
   // last check must still stop the conversion. A recorded override
@@ -384,10 +443,6 @@ export async function convertLeadToMatter(
       ? "warn (reviewed)"
       : "clear";
 
-  const [userId, tz] = await Promise.all([
-    getCurrentUserId(),
-    getCurrentUserTimeZone(),
-  ]);
   const description = composeMatterDescription(lead);
 
   // SOL carry-over — same rules as the direct create path: persist
@@ -610,6 +665,17 @@ export async function convertLeadToMatter(
     // suffixed rather than duplicated.
     const carriedDocumentCount = await rehomeLeadDocuments(tx, leadId, matter.id);
 
+    // Every matter has an agreement row; the picked document moved with
+    // the lead's documents above (same id).
+    await tx.matterAgreement.create({
+      data: {
+        matterId: matter.id,
+        status: agreementStatus,
+        signedDate: agreementSignedKey ? parseDateOnly(agreementSignedKey) : null,
+        documentId: onLead ? onLead.id : null,
+      },
+    });
+
     // Records requests roll forward after tasks/documents (their follow-up
     // tasks and letters already moved). The lead row is write-locked by
     // the claim above, matching the uploads' lead-then-request lock order.
@@ -707,6 +773,14 @@ export async function convertLeadToMatter(
     title: `Converted from lead: ${lead.name}`,
     detail: lead.source ? `Source: ${lead.source}` : null,
   });
+  if (agreementStatus === "signed" && agreementSignedKey) {
+    await logActivity({
+      matterId,
+      userId,
+      type: "automation",
+      title: `${agreementLabel} signed ${agreementSignedKey}`,
+    });
+  }
   const defaultsLine = describeDefaults(defaults);
   if (defaultsLine) {
     await logActivity({

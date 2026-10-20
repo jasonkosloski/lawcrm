@@ -1429,3 +1429,117 @@ describe("convertLeadToMatter — restricted intake carries its wall (ADR-049)",
     expect(await prisma.matter.count()).toBe(0);
   });
 });
+
+// ── originating-document gate ───────────────────────────────────────────
+
+describe("convertLeadToMatter — originating-document gate", () => {
+  async function switchOn() {
+    await prisma.firm.updateMany({ data: { requireOriginatingDoc: true } });
+  }
+  async function leadDoc(leadId: string, status = "active") {
+    return prisma.document.create({
+      data: { leadId, name: "Retainer.pdf", status },
+      select: { id: true },
+    });
+  }
+  function form(
+    base: { areaId: string; stageId: string },
+    extra: Record<string, string> = {}
+  ) {
+    const fd = convertForm(base);
+    for (const [k, v] of Object.entries(extra)) fd.set(k, v);
+    return fd;
+  }
+  const run = (leadId: string, fd: FormData) =>
+    convertLeadToMatter(leadId, { status: "idle" }, fd);
+
+  test("switch on, nothing supplied: every piece is refused, no matter created", async () => {
+    await switchOn();
+    const base = await seedArea({});
+    const { leadId } = await seedIntakeLead();
+    const res = await run(leadId, form(base));
+    expect(res.status).toBe("error");
+    expect(res.errors?.originatingDocumentId).toBeTruthy();
+    expect(res.errors?.agreementStatus).toBeTruthy();
+    expect(await prisma.matter.count()).toBe(0);
+  });
+
+  test("switch on, signed but no date or no document: refused", async () => {
+    await switchOn();
+    const base = await seedArea({});
+    const { leadId } = await seedIntakeLead();
+    const doc = await leadDoc(leadId);
+    const noDate = await run(
+      leadId,
+      form(base, { agreementStatus: "signed", originatingDocumentId: doc.id })
+    );
+    expect(noDate.errors?.agreementSignedDate).toBeTruthy();
+    const noDoc = await run(
+      leadId,
+      form(base, { agreementStatus: "signed", agreementSignedDate: "2020-01-02" })
+    );
+    expect(noDoc.errors?.originatingDocumentId).toBeTruthy();
+    expect(await prisma.matter.count()).toBe(0);
+  });
+
+  test("a document from another lead (or archived) does not count", async () => {
+    await switchOn();
+    const base = await seedArea({});
+    const { leadId } = await seedIntakeLead();
+    const other = await seedIntakeLead();
+    const foreign = await leadDoc(other.leadId);
+    const archived = await leadDoc(leadId, "archived");
+    for (const id of [foreign.id, archived.id]) {
+      const res = await run(
+        leadId,
+        form(base, {
+          agreementStatus: "signed",
+          agreementSignedDate: "2020-01-02",
+          originatingDocumentId: id,
+        })
+      );
+      expect(res.errors?.originatingDocumentId).toBeTruthy();
+    }
+    expect(await prisma.matter.count()).toBe(0);
+  });
+
+  test("switch off: converts and writes a not_sent agreement", async () => {
+    const base = await seedArea({});
+    const { leadId } = await seedIntakeLead();
+    await expect(run(leadId, form(base))).rejects.toThrow(/^REDIRECT:/);
+    const a = await prisma.matterAgreement.findFirstOrThrow();
+    expect(a.status).toBe("not_sent");
+    expect(a.documentId).toBeNull();
+    expect(a.signedDate).toBeNull();
+  });
+
+  test("success: agreement points at the re-homed document and is logged", async () => {
+    await switchOn();
+    const base = await seedArea({});
+    const { leadId } = await seedIntakeLead();
+    const doc = await leadDoc(leadId);
+    await expect(
+      run(
+        leadId,
+        form(base, {
+          agreementStatus: "signed",
+          agreementSignedDate: "2020-01-02",
+          originatingDocumentId: doc.id,
+        })
+      )
+    ).rejects.toThrow(/^REDIRECT:/);
+    const matter = await prisma.matter.findFirstOrThrow({ select: { id: true } });
+    const a = await prisma.matterAgreement.findFirstOrThrow();
+    expect(a.matterId).toBe(matter.id);
+    expect(a.status).toBe("signed");
+    expect(a.signedDate).toEqual(new Date("2020-01-02T00:00:00.000Z"));
+    expect(a.documentId).toBe(doc.id);
+    const d = await prisma.document.findUniqueOrThrow({ where: { id: doc.id } });
+    expect(d.matterId).toBe(matter.id);
+    expect(d.leadId).toBeNull();
+    const log = await prisma.activityLog.findFirst({
+      where: { matterId: matter.id, title: "Fee agreement signed 2020-01-02" },
+    });
+    expect(log).not.toBeNull();
+  });
+});

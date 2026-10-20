@@ -10,6 +10,9 @@ export type ConvertLeadFormState = {
       | "stageId"
       | "name"
       | "feeStructure"
+      | "originatingDocumentId"
+      | "agreementStatus"
+      | "agreementSignedDate"
       | "_form",
       string[]
     >
