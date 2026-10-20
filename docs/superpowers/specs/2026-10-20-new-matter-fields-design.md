@@ -241,7 +241,7 @@ preview and a token reference.
   follow-up line; `docs/ROADMAP.md` line updated.
 - `docs/features/settings-admin.md`: Venues page, template and required
   fields settings.
-- New ADR-055: venues are a firm list (no free-text location); required
+- New ADR-056: venues are a firm list (no free-text location); required
   fields are per area, enforced on create, and can't be cleared but
   don't block on edit. Row in `docs/decisions/README.md`.
 - `docs/SCHEMA_NOTES.md`: `Venue.nameKey` for case-insensitive

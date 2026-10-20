@@ -1,7 +1,7 @@
 # UI Patterns & Component Conventions
 
 Reusable patterns applied across the app. Reference this when building new screens.
-The system is v2 ([ADR-055](decisions/055-ui-system-v2-legibility-floor-and-colour-on-meaning.md)):
+The system is v2 ([ADR-056](decisions/056-ui-system-v2-legibility-floor-and-colour-on-meaning.md)):
 a legibility floor, and colour spent only on meaning.
 
 ---

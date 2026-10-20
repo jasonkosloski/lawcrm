@@ -36,7 +36,7 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 
 ## P2: polish and follow-ups
 
-- [x] **UI system v2**: legibility floor, contrast-safe greys, colour only on meaning (ADR-055); dark theme and the matter-tab regroup are open. → [app-shell](features/app-shell.md)
+- [x] **UI system v2**: legibility floor, contrast-safe greys, colour only on meaning (ADR-056); dark theme and the matter-tab regroup are open. → [app-shell](features/app-shell.md)
 
 **Matters, intake, records**
 - [~] **Matter header "Create" menu**: only Note/Event have quick forms; others link to tabs. → [matters](features/matters.md)

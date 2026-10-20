@@ -1,4 +1,4 @@
-# ADR-055: UI system v2 — a legibility floor, and colour spent only on meaning
+# ADR-056: UI system v2 — a legibility floor, and colour spent only on meaning
 
 **Date:** 2026-10-20
 **Status:** Accepted (refines ADR-004; ADR-003 stands)

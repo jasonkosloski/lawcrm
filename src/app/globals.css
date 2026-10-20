@@ -57,7 +57,7 @@
   --font-code: var(--font-jetbrains-mono);
   --font-display: var(--font-fraunces);
 
-  /* Type ramp (UI system v2, ADR-055). Nothing renders under 11px:
+  /* Type ramp (UI system v2, ADR-056). Nothing renders under 11px:
      people read this app all day. The names are kept from v1 so every
      caller moved up one step without an edit.
        3xs 11 · 2xs 12 (meta) · xs 13 (body, cells) · sm 14 (nav, lead text) */

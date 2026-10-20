@@ -260,8 +260,8 @@ collapse runs of whitespace to one space; trim; strip a trailing/leading " -" or
 - Create: `docs/decisions/055-venues-are-a-firm-list-required-fields-are-per-area.md`
 - Delete: this plan and the spec
 
-- [ ] **Step 1:** Write ADR-055 (context, decision: no free-text location; required per area, enforced on create, can't-clear-but-don't-block on edit; consequences). Add its README row.
-- [ ] **Step 2:** `matters.md`: add a Shipped line for this sub-project (2026-10-20, ADR-055), trim the v2 follow-up list to what's left (retainer + trust deposit, save-draft, plus the untouched items). ROADMAP `/matters/new v2` line: "conflict check, team, venues, name template, dates, required fields shipped; retainer and drafts left." `settings-admin.md`: Venues page and the template/required settings. `SCHEMA_NOTES.md`: `Venue.nameKey` note.
+- [ ] **Step 1:** Write ADR-056 (context, decision: no free-text location; required per area, enforced on create, can't-clear-but-don't-block on edit; consequences). Add its README row.
+- [ ] **Step 2:** `matters.md`: add a Shipped line for this sub-project (2026-10-20, ADR-056), trim the v2 follow-up list to what's left (retainer + trust deposit, save-draft, plus the untouched items). ROADMAP `/matters/new v2` line: "conflict check, team, venues, name template, dates, required fields shipped; retainer and drafts left." `settings-admin.md`: Venues page and the template/required settings. `SCHEMA_NOTES.md`: `Venue.nameKey` note.
 - [ ] **Step 3:** `npm run typecheck && npm run lint && npm test` → all pass. Fix anything red before continuing.
-- [ ] **Step 4:** `git rm` the spec and plan and commit them with the docs in one step: `docs(matters): venues, name templates and required fields shipped; ADR-055`.
+- [ ] **Step 4:** `git rm` the spec and plan and commit them with the docs in one step: `docs(matters): venues, name templates and required fields shipped; ADR-056`.
 - [ ] **Step 5:** Push to main once the pre-commit hook has passed on every commit.
