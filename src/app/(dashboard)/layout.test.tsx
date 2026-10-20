@@ -37,6 +37,12 @@ vi.mock("@/lib/current-user-tz", () => ({
   getCurrentUserTimeZone: vi.fn(async () => "Pacific/Honolulu"),
 }));
 
+vi.mock("@/components/auth/staff-clerk-provider", () => ({
+  StaffClerkProvider: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
+}));
+
 // Leaf layout chrome — we only care that children pass through.
 vi.mock("@/components/layout/app-shell", () => ({
   AppShell: ({ children }: { children: React.ReactNode }) => (

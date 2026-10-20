@@ -9,6 +9,7 @@
  */
 
 import { redirect } from "next/navigation";
+import { StaffClerkProvider } from "@/components/auth/staff-clerk-provider";
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { getStaffAuth } from "@/lib/staff-auth";
 
@@ -27,7 +28,9 @@ export default async function NoAccessPage() {
           You&apos;re signed in with Google, but this account isn&apos;t set up
           as a firm member. Ask an administrator to invite you.
         </p>
-        <SignOutButton />
+        <StaffClerkProvider>
+          <SignOutButton />
+        </StaffClerkProvider>
       </div>
     </div>
   );

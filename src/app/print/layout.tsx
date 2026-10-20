@@ -16,14 +16,16 @@
  * on-screen render.
  */
 
+import { StaffClerkProvider } from "@/components/auth/staff-clerk-provider";
+
 export default function PrintLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-full bg-white text-ink">
-      {children}
-    </div>
+    <StaffClerkProvider>
+      <div className="min-h-full bg-white text-ink">{children}</div>
+    </StaffClerkProvider>
   );
 }

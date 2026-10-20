@@ -18,6 +18,7 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { getStaffAuth } from "@/lib/staff-auth";
+import { StaffClerkProvider } from "@/components/auth/staff-clerk-provider";
 import { AppShell } from "@/components/layout/app-shell";
 import { UserTimeZoneProvider } from "@/components/user-time-zone";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
@@ -54,8 +55,10 @@ export default async function DashboardLayout({
   // the user's profile zone via useUserTimeZone() (ADR-012).
   const timeZone = await getCurrentUserTimeZone();
   return (
-    <UserTimeZoneProvider timeZone={timeZone}>
-      <AppShell>{children}</AppShell>
-    </UserTimeZoneProvider>
+    <StaffClerkProvider>
+      <UserTimeZoneProvider timeZone={timeZone}>
+        <AppShell>{children}</AppShell>
+      </UserTimeZoneProvider>
+    </StaffClerkProvider>
   );
 }

@@ -8,6 +8,11 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 vi.mock("@/lib/staff-auth", () => ({ getStaffAuth: vi.fn() }));
+vi.mock("@/components/auth/staff-clerk-provider", () => ({
+  StaffClerkProvider: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
+}));
 vi.mock("@clerk/nextjs", () => ({
   useClerk: () => ({ signOut: vi.fn() }),
 }));

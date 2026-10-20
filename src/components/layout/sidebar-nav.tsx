@@ -37,7 +37,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useCommandPalette } from "@/components/command-palette/command-palette-provider";
-import { logoutAction } from "@/app/actions/auth";
+import { useClerk } from "@clerk/nextjs";
 import type { SidebarData } from "@/lib/queries/sidebar";
 import { useMobileNav } from "./mobile-nav-provider";
 
@@ -396,20 +396,20 @@ export function SidebarNav({
   );
 }
 
-/** Sign-out is a server-action button (no JS-on-client required). The
- *  button needs to be inside a client form, but since the parent is
- *  already a client component this is just the inline form pattern. */
+/** Ends the Clerk session and returns to /login. Rendered under the
+ *  dashboard layout's StaffClerkProvider. Kept as a compact icon
+ *  button (the shared SignOutButton is a full-width labelled Button). */
 function SignOutButton() {
+  const { signOut } = useClerk();
   return (
-    <form action={logoutAction}>
-      <button
-        type="submit"
-        title="Sign out"
-        aria-label="Sign out"
-        className="inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-4 hover:text-warn hover:bg-warn-soft transition-colors"
-      >
-        <LogOut size={13} />
-      </button>
-    </form>
+    <button
+      type="button"
+      title="Sign out"
+      aria-label="Sign out"
+      onClick={() => signOut({ redirectUrl: "/login" })}
+      className="inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-4 hover:text-warn hover:bg-warn-soft transition-colors"
+    >
+      <LogOut size={13} />
+    </button>
   );
 }

@@ -37,12 +37,12 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-// Context provider + server action are irrelevant to drawer a11y.
+// Context provider + Clerk sign-out are irrelevant to drawer a11y.
 vi.mock("@/components/command-palette/command-palette-provider", () => ({
   useCommandPalette: () => ({ openPalette: vi.fn() }),
 }));
-vi.mock("@/app/actions/auth", () => ({
-  logoutAction: vi.fn(),
+vi.mock("@clerk/nextjs", () => ({
+  useClerk: () => ({ signOut: vi.fn() }),
 }));
 
 import { SidebarNav } from "./sidebar-nav";

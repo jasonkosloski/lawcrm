@@ -1,24 +1,22 @@
 /**
- * /login — email + password sign-in.
+ * /login — staff sign-in with Google, through Clerk.
  *
- * Server component reads the `?next=` param so the client form can
- * post the user back to wherever they were trying to go before the
- * proxy redirected them here. Already-authenticated users land on
- * `/` (or `?next=`) without seeing the form. `?next=` is sanitized
- * to a same-origin relative path before use — both the GET redirect
- * below and the form's hidden field — so a crafted
- * `/login?next=https://evil.example` link can't bounce a signed-in
- * user off-site.
+ * Server component reads the `?next=` param so the sign-in button can
+ * send the user back to wherever they were trying to go before the
+ * proxy redirected them here. `?next=` is sanitized to a same-origin
+ * relative path before use — both the GET redirect below and the
+ * button prop — so a crafted `/login?next=https://evil.example` link
+ * can't bounce a signed-in user off-site.
  *
- * No "forgot password" link yet — password reset is a Phase 2 task.
- * Keep the empty space below the form so adding it later doesn't
- * shift the layout.
+ * A firm member skips the page; a signed-in Clerk user who isn't a
+ * firm member goes to /no-access (not back here: that would loop).
  */
 
 import { redirect } from "next/navigation";
-import { auth } from "@/auth";
-import { LoginForm } from "@/components/auth/login-form";
+import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
+import { StaffClerkProvider } from "@/components/auth/staff-clerk-provider";
 import { safeRedirectPath } from "@/lib/safe-redirect";
+import { getStaffAuth } from "@/lib/staff-auth";
 
 export default async function LoginPage({
   searchParams,
@@ -26,16 +24,9 @@ export default async function LoginPage({
   const sp = await searchParams;
   const next = safeRedirectPath(Array.isArray(sp.next) ? sp.next[0] : sp.next);
 
-  // Already signed in with a VALID session? Skip the form.
-  // `session?.user?.id` is undefined when the JWT references a
-  // user that no longer exists or is deactivated (the jwt callback
-  // in src/auth.ts wipes userId in those cases) — we render the
-  // login form so they can re-auth, and submitting the form mints
-  // a fresh JWT that overwrites the stale cookie.
-  const session = await auth();
-  if (session?.user?.id) {
-    redirect(next);
-  }
+  const staff = await getStaffAuth();
+  if (staff.status === "ok") redirect(next);
+  if (staff.status === "no_access") redirect("/no-access");
 
   return (
     <div className="min-h-dvh flex items-center justify-center bg-paper-2 px-4 py-10">
@@ -48,7 +39,9 @@ export default async function LoginPage({
             Sign in to continue
           </p>
         </div>
-        <LoginForm next={next} />
+        <StaffClerkProvider>
+          <GoogleSignInButton next={next} />
+        </StaffClerkProvider>
       </div>
     </div>
   );
