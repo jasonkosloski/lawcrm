@@ -263,7 +263,17 @@ export function DashboardCustomizer({
           <div className="grid grid-cols-12 gap-5">
             {spans.map((span, i) => {
               const keys = shown(layout.columns[i] ?? []);
-              if (keys.length === 0) return null;
+              // Keep an empty column's grid slot (lg+ only) so the
+              // others don't slide to the left edge.
+              if (keys.length === 0)
+                return (
+                  <div
+                    key={i}
+                    data-column={i}
+                    aria-hidden
+                    className={`hidden ${SPAN_CLASS[span]} lg:block`}
+                  />
+                );
               return (
                 <div
                   key={i}
@@ -306,7 +316,7 @@ function Toolbar({
     <div
       role="toolbar"
       aria-label="Customize dashboard"
-      className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-line bg-card px-3 py-2"
+      className="sticky top-0 z-20 mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-line bg-paper px-3 py-2 shadow-sm"
     >
       <SplitPicker value={layout.split} onChange={onSplit} />
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -504,7 +514,7 @@ function DropZone({
       </SortableContext>
       {keys.length === 0 && (
         <p className="px-1 py-4 text-center text-xs text-ink-4">
-          Drop cards here
+          Drop a card here
         </p>
       )}
     </div>

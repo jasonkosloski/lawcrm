@@ -104,6 +104,15 @@ describe("view mode", () => {
     expect(container.querySelector("[data-band]")).toBeNull();
   });
 
+  test("an empty column keeps its grid slot", () => {
+    let layout = fresh();
+    for (const k of layout.columns[0]) layout = moveCard(layout, k, { zone: "hidden" });
+    const { container } = setup({ layout });
+    const cols = container.querySelectorAll("[data-column]");
+    expect(cols).toHaveLength(2);
+    expect(cols[1].className).toContain("lg:col-span-4");
+  });
+
   test("a card missing from `cards` renders nothing in view mode", () => {
     const cards = allCards();
     delete cards.pulse;

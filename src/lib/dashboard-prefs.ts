@@ -312,8 +312,8 @@ export function mergeLayout(stored: unknown): DashboardLayout {
 /**
  * Move a card to a zone, removing it from wherever it was. Inserts at
  * `position` (default: end; clamped) - an index into the target list
- * AFTER the card has been removed (matters when reordering within one list). A column index past the last
- * column lands in the last. Pure — returns a new layout.
+ * AFTER the card has been removed (matters when reordering within one
+ * list). A column index past the last column lands in the last. Pure — returns a new layout.
  */
 export function moveCard(
   layout: DashboardLayout,
