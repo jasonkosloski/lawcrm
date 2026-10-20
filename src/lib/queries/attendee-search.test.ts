@@ -17,7 +17,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 // `searchAttendees` calls `getCurrentFirm` — mock the resolver
-// so the auth chain (next-auth → next/server) doesn't have to
+// so the auth chain (@clerk/nextjs → next/server) doesn't have to
 // load. Each test re-points the mock at its seeded firm.
 vi.mock("@/lib/firm", () => ({
   getCurrentFirm: vi.fn(),

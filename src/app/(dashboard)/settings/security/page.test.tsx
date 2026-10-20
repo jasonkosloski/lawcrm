@@ -79,7 +79,7 @@ function row(title: string, minutesAgo: number) {
 describe("SecuritySettingsPage", () => {
   test("shows the user's own auth events, not admin actions on other people", async () => {
     await row(AUTH_EVENT_TITLES.sign_in, 30);
-    await row(AUTH_EVENT_TITLES.sign_in_unlocked, 20);
+    await row(AUTH_EVENT_TITLES.session_revoked, 20);
     // 20 recent admin actions would crowd the 15-row cap if unfiltered.
     for (let i = 0; i < 20; i++) await row(`Invited Person ${i} to the firm`, i + 1);
     await row("Reset password for Pat", 2);
@@ -87,7 +87,7 @@ describe("SecuritySettingsPage", () => {
     render(await SecuritySettingsPage());
 
     expect(screen.getByText(AUTH_EVENT_TITLES.sign_in)).toBeInTheDocument();
-    expect(screen.getByText(AUTH_EVENT_TITLES.sign_in_unlocked)).toBeInTheDocument();
+    expect(screen.getByText(AUTH_EVENT_TITLES.session_revoked)).toBeInTheDocument();
     expect(screen.queryByText(/Invited Person/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Reset password for/)).not.toBeInTheDocument();
   });

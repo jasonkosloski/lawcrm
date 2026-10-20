@@ -10,7 +10,7 @@
  *
  * Multi-tenant note: scopes the update by firmId resolved from the
  * current user's session. When we go multi-tenant, the same code
- * works as-is — `getCurrentFirm()` will read firmId off the JWT
+ * works as-is — `getCurrentFirm()` will read firmId off the resolved staff session
  * instead of joining through the User row.
  */
 

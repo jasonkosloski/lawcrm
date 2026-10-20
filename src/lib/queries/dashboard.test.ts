@@ -26,7 +26,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 // getMyOpenTasks resolves the owner via getCurrentUserId; stub the
-// auth chain so next-auth doesn't have to load.
+// auth chain so @clerk/nextjs doesn't have to load.
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 
 import { prisma } from "@/lib/prisma";

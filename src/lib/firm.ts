@@ -5,7 +5,7 @@
  * and are they allowed to administer it?" Multi-tenant friendly: when
  * we add multiple firms, scoping every query off `getCurrentFirm()`
  * is the contract; the session callback just needs to start putting
- * `firmId` on the JWT.
+ * `firmId` on the resolved staff session.
  *
  * Today (single tenant), `getCurrentFirm()` resolves the user → their
  * firm → returns the firm row. Tomorrow it'll read `firmId` directly

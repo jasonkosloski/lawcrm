@@ -14,7 +14,7 @@
  *
  * Permission gates are mocked at module level (covered
  * separately). `getCurrentFirm` is also mocked so the import
- * chain doesn't pull next-auth.
+ * chain doesn't pull @clerk/nextjs.
  */
 
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";

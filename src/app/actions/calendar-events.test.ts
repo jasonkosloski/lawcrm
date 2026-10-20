@@ -27,14 +27,14 @@ vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
 }));
 // `getCurrentFirm` (used by the new attendee-create path) pulls
-// in next-auth at module load. Stub the resolver so nothing in
+// in @clerk/nextjs at module load. Stub the resolver so nothing in
 // the auth chain has to resolve. Each test re-points the mock
 // to whatever firm it just seeded.
 vi.mock("@/lib/firm", () => ({
   getCurrentFirm: vi.fn(),
 }));
 // `createCalendarEvent` stamps `createdById` from the current
-// user; the resolver pulls in next-auth, so mock the same way.
+// user; the resolver pulls in @clerk/nextjs, so mock the same way.
 vi.mock("@/lib/current-user", () => ({
   getCurrentUserId: vi.fn(),
 }));

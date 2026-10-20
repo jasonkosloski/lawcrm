@@ -34,7 +34,7 @@ import {
 } from "vitest";
 
 // getUtilizationReport resolves the viewer (for firm goals) via
-// getCurrentUserId; stub the auth chain so next-auth doesn't load.
+// getCurrentUserId; stub the auth chain so @clerk/nextjs doesn't load.
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 
 import { Prisma } from "@/generated/prisma/client";

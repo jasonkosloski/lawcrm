@@ -7,7 +7,7 @@
  * A wrong list signs everyone out (azp mismatch -> login loop), so:
  *   - `STAFF_ORIGINS` (comma-separated origins, e.g.
  *     `https://crm.example.com`) is authoritative when set.
- *   - Otherwise a heuristic from Vercel/Auth.js env: the branch URL,
+ *   - Otherwise a heuristic from Vercel env: the branch URL,
  *     the deployment URL, the production URL and `AUTH_URL`, minus
  *     anything on `PORTAL_HOST` (VERCEL_PROJECT_PRODUCTION_URL is the
  *     shortest custom domain and can be the portal's).

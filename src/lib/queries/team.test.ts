@@ -11,7 +11,7 @@
 import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 // The query resolves the firm via getCurrentFirm → getCurrentUserId;
-// stub the auth chain so next-auth doesn't have to load.
+// stub the auth chain so @clerk/nextjs doesn't have to load.
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 
 import { getCurrentUserId } from "@/lib/current-user";

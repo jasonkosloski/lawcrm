@@ -12,7 +12,7 @@ _If the folder tree or data-flow section stops matching the code, fix it here._
 | Mutations | Server actions (`src/app/actions/`) | Permission-gated, audit-logged, `revalidatePath` for cache invalidation |
 | ORM | Prisma 7 | Type-safe queries, migration system, great DX |
 | Database | PostgreSQL everywhere | Prisma Postgres (Vercel integration) — separate `lawcrm-dev` database for local dev, production database for prod; tests use a dockerized Postgres (`docker-compose.test.yml`, port 5433) |
-| Auth | Auth.js v5 + argon2id | Credentials provider, JWT sessions; see [features/auth.md](./features/auth.md) |
+| Auth | Clerk (staff, Google sign-in) | `clerkMiddleware` + `getStaffAuth()`; see [features/auth.md](./features/auth.md) |
 | File storage | Driver facade: local disk (dev) / Vercel Blob (prod) | `src/lib/file-storage.ts` + `src/lib/storage/`; prod uploads go client-direct, serving 302s to the blob CDN — ADR-015 |
 | Testing | Vitest + happy-dom | See [TESTING.md](./TESTING.md) |
 | Fonts | Inter / JetBrains Mono / Fraunces | Per design handoff — UI / metadata / display |
@@ -21,7 +21,6 @@ _If the folder tree or data-flow section stops matching the code, fix it here._
 
 ```
 src/
-├── auth.ts                   # Auth.js v5 config (credentials + argon2id, JWT sessions)
 ├── proxy.ts                  # Optimistic cookie-presence redirect for app routes (UX only;
 │                             #   pages authenticate themselves — see Security)
 ├── app/
@@ -132,14 +131,12 @@ error follow the React 19 patterns in [UI_PATTERNS.md](./UI_PATTERNS.md).
 
 ## Security
 
-- **Auth**: Auth.js v5 credentials provider with argon2id hashing (`src/auth.ts`);
-  `src/proxy.ts` only checks for a session cookie (optimistic redirect; its matcher
-  excludes `/api/documents/upload` so streaming uploads aren't body-buffered); JWT
-  session validated per request
-  (password fingerprint, ADR-017). Sign-in lockout is a reserve/settle under a
-  per-email Postgres advisory lock (ADR-020); redirects after login go through the
+- **Auth**: staff sign in with Clerk (Google); `src/proxy.ts` runs `clerkMiddleware` as an
+  optimistic redirect (its matcher excludes `/api/documents/upload` so streaming uploads
+  aren't body-buffered) and every page/action resolves the firm user through
+  `getStaffAuth()` (`src/lib/staff-auth.ts`); redirects after login go through the
   strict `safeRedirectPath` (`src/lib/safe-redirect.ts`).
-- **Host routing and the client portal** (ADR-051): `PORTAL_HOST` (`portal.localhost` in dev) is a second domain on the same project. `src/proxy.ts` rewrites every path on that host into the `(portal)/portal` route group (staff paths 404 there, no staff cookie gate) and 404s `/portal/*` on the staff host. Portal clients authenticate with their own magic-link identity and a host-only `__Host-portal_session` cookie; isolation is also enforced in both session readers (Auth.js `jwt` callback and `getPortalIdentity` check the host), not just the proxy. Portal pages call `requirePortalIdentity` first. See [features/client-portal.md](./features/client-portal.md).
+- **Host routing and the client portal** (ADR-051): `PORTAL_HOST` (`portal.localhost` in dev) is a second domain on the same project. `src/proxy.ts` rewrites every path on that host into the `(portal)/portal` route group (staff paths 404 there, no staff cookie gate) and 404s `/portal/*` on the staff host. Portal clients authenticate with their own magic-link identity and a host-only `__Host-portal_session` cookie; isolation is also enforced in the session readers (`getPortalIdentity` checks the host), not just the proxy. Portal pages call `requirePortalIdentity` first. See [features/client-portal.md](./features/client-portal.md).
 - **Page guards**: layouts are not auth gates; every `page.tsx`/`layout.tsx` calls a guard as its first `await` (ADR-028). See [PERMISSIONS.md](./PERMISSIONS.md).
 - **Cron endpoints** (`/api/email-sync`, `/api/notification-sweep`) authenticate
   with `isAuthorizedCron` (`src/lib/cron-auth.ts`, constant-time compare, fails

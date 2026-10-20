@@ -14,9 +14,9 @@
  * to run unless DATABASE_URL (and DIRECT_DATABASE_URL, when set) point
  * at localhost / 127.0.0.1 / ::1 — set ALLOW_SEED=1 only for a hosted
  * dev database you are certain is disposable. It never runs under
- * NODE_ENV/VERCEL_ENV=production. The login password comes from
- * SEED_ADMIN_PASSWORD, or is generated randomly and printed once at
- * the end of the run; no password is stored in the repo.
+ * NODE_ENV/VERCEL_ENV=production. Seeded staff have no Clerk
+ * identity (clerkUserId null); the first Clerk sign-in with a matching
+ * @kosloskilaw.com email links them.
  *
  * All dates are anchored to TODAY in the firm's zone (America/Denver),
  * not to the machine running the seed, so "deadlines this week",
@@ -28,8 +28,6 @@
  */
 
 import "dotenv/config";
-import { randomBytes } from "node:crypto";
-import * as argon2 from "argon2";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { checkDestructiveDbAllowed } from "../src/lib/seed-guard";
@@ -46,13 +44,6 @@ if (!guard.ok) {
   console.error(`❌ Seed refused: ${guard.reason}`);
   process.exit(1);
 }
-
-/// Single dev password applied to every seed user. Read from
-/// SEED_ADMIN_PASSWORD, else generated randomly for this run and
-/// printed once in the seed log. Nothing secret lives in the repo.
-const PASSWORD_FROM_ENV = !!process.env.SEED_ADMIN_PASSWORD;
-const DEV_PASSWORD =
-  process.env.SEED_ADMIN_PASSWORD || randomBytes(15).toString("base64url");
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -201,11 +192,6 @@ async function main() {
   ]);
 
   console.log("  Creating users…");
-  // Hash once and reuse for every dev user — argon2 is intentionally
-  // slow (that's the point), so don't re-derive five times.
-  const devPasswordHash = await argon2.hash(DEV_PASSWORD, {
-    type: argon2.argon2id,
-  });
   const [jason, leo, rachel, marco, _elena] = await Promise.all([
     prisma.user.create({
       data: {
@@ -215,7 +201,6 @@ async function main() {
         jobTitle: "Managing",
         barNumber: "CO-44821",
         phone: "(303) 555-0100",
-        passwordHash: devPasswordHash,
         firmId: firm.id,
       },
     }),
@@ -227,7 +212,6 @@ async function main() {
         jobTitle: "Partner",
         barNumber: "CO-39110",
         phone: "(303) 555-0101",
-        passwordHash: devPasswordHash,
         firmId: firm.id,
       },
     }),
@@ -238,7 +222,6 @@ async function main() {
         initials: "RK",
         jobTitle: "Paralegal",
         phone: "(303) 555-0102",
-        passwordHash: devPasswordHash,
         firmId: firm.id,
       },
     }),
@@ -249,7 +232,6 @@ async function main() {
         initials: "MG",
         jobTitle: "Investigator",
         phone: "(303) 555-0103",
-        passwordHash: devPasswordHash,
         firmId: firm.id,
       },
     }),
@@ -260,7 +242,6 @@ async function main() {
         initials: "ES",
         jobTitle: "Intake",
         phone: "(303) 555-0104",
-        passwordHash: devPasswordHash,
         firmId: firm.id,
       },
     }),
@@ -2767,14 +2748,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
   console.log(`   ${counts[10]} messenger threads`);
   console.log(`   ${counts[11]} messenger items`);
 
-  console.log("\n🔐 Dev login (every seed user uses the same password):");
-  console.log(`   email:    jkosloski@kosloskilaw.com`);
-  console.log(
-    PASSWORD_FROM_ENV
-      ? "   password: (the value of SEED_ADMIN_PASSWORD)"
-      : `   password: ${DEV_PASSWORD}   <- generated for this run; shown once`
-  );
-  console.log(`   (other emails: leo / rachel / marco / elena @kosloskilaw.com)`);
+  console.log("\n🔐 Staff sign in through Clerk with a matching @kosloskilaw.com email (e.g. jkosloski@kosloskilaw.com).");
 }
 
 main()

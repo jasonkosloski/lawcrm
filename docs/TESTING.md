@@ -74,7 +74,7 @@ Real DB, real Prisma, real action. Slower (50-500ms/test); use for the highest-l
 - **Run lock.** A second one-shot `vitest` run against the SAME database (commit hook plus manual `npm test`, two agent sessions) queues behind the first and fails after `TEST_DB_LOCK_TIMEOUT_MS` (default 10 min). Watch/`--ui` sessions don't hold it.
 - `src/test/setup.ts` makes tests hermetic: deletes `BLOB_READ_WRITE_TOKEN`, `STORAGE_DRIVER`, `CRON_SECRET`, Google and `AUTH_URL` variables, sets a deterministic `EMAIL_TOKEN_KEY`, and blocks `fetch` to any non-loopback host (mock fetch in the test).
 - `src/test/integration-helpers.ts`: `resetDb()` is a single `DO $$ ... DELETE ... $$` statement over an explicit table list (**new tables must be added to it**, in FK-safe order); fixture builders (`seedFirm`, `seedUser`, `seedPracticeArea`, `seedMatter`, `seedTimeEntry`, `seedExpense`, `seedContact`, `seedMatterContact`, `seedLead`, `seedCalendarEvent`, ...) return the row id.
-- Password hashing goes through `lib/argon2-options.ts` (cheap params only when `NODE_ENV=test`; prod params pinned by a test). `syncEmailAccount` takes a `fullSyncMaxThreads` test seam.
+- `syncEmailAccount` takes a `fullSyncMaxThreads` test seam.
 
 **Mocking pattern** for action tests:
 

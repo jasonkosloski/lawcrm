@@ -1,13 +1,14 @@
 /**
- * Auth event audit — sign-ins, failed sign-ins, sign-outs, password
- * changes. Rows land in `ActivityLog` with `type: "auth"` (firm-wide,
+ * Auth event audit — sign-ins, sign-outs, and admin sign-in actions
+ * (revoke, ban/unban, link reset). Rows land in `ActivityLog` with `type: "auth"` (firm-wide,
  * no matter), so they show on /settings/activity under "Security"
  * (gated `firm.view_activity`) and in the user's own sign-in history
  * on /settings/security. The dashboard feed excludes them.
  *
- * Only events tied to a REAL account are recorded — failures for
- * unknown emails are not, so credential-stuffing bots can't flood the
- * log, and we never persist arbitrary attacker-supplied strings.
+ * Only events tied to a REAL account are recorded, so we never
+ * persist arbitrary attacker-supplied strings. Historical rows from
+ * the Auth.js era (failed sign-in, password change, unlock) keep their
+ * stored titles and still show on /settings/activity.
  *
  * Fire-and-forget like `logActivity`: an audit write must never block
  * or fail sign-in. Unlike `logActivity` there's no revalidatePath —
@@ -19,17 +20,7 @@ import { prisma, type Tx } from "@/lib/prisma";
 
 export type AuthEventKind =
   | "sign_in"
-  | "sign_in_failed"
-  /** Refused during a lockout — password not even checked. Kept
-   *  distinct from sign_in_failed so it doesn't extend the lock. */
-  | "sign_in_blocked"
   | "sign_out"
-  | "password_changed"
-  | "password_change_failed"
-  /** An admin cleared a (possibly attacker-induced) lockout, or reset
-   *  the password. Counts like a successful sign-in for lockout
-   *  purposes: failures before it are forgotten. */
-  | "sign_in_unlocked"
   /** First Google sign-in matched a verified email to an existing
    *  firm user and linked the Clerk identity. */
   | "account_linked"
@@ -41,16 +32,11 @@ export type AuthEventKind =
   | "clerk_banned"
   | "clerk_unbanned";
 
-/** Row titles — also the query keys for lockout counting
- *  (src/lib/credentials-authorize.ts), so change with care. */
+/** Row titles — also the query keys for the /settings/security
+ *  history filter, so change with care. */
 export const AUTH_EVENT_TITLES: Record<AuthEventKind, string> = {
   sign_in: "Signed in",
-  sign_in_failed: "Failed sign-in",
-  sign_in_blocked: "Blocked sign-in (too many failures)",
   sign_out: "Signed out",
-  password_changed: "Changed password",
-  password_change_failed: "Failed password change",
-  sign_in_unlocked: "Sign-in unlocked by an administrator",
   account_linked: "Linked Google sign-in",
   no_access: "Signed in without firm access",
   session_revoked: "Session revoked",
@@ -76,10 +62,8 @@ async function requestContext(): Promise<string | null> {
   }
 }
 
-/** The audit-row `detail` line: reason + request context. Exported so
- *  the lockout path can write its reservation row inside a
- *  transaction with the same shape logAuthEvent produces. */
-export async function authEventDetail(reason?: string): Promise<string | null> {
+/** The audit-row `detail` line: reason + request context. */
+async function authEventDetail(reason?: string): Promise<string | null> {
   const context = await requestContext();
   return [reason, context].filter(Boolean).join(" — ") || null;
 }
@@ -88,7 +72,7 @@ type AuthEventInput = {
   /** Null when the event is not tied to a known account. */
   userId: string | null;
   kind: AuthEventKind;
-  /** Short reason, e.g. "wrong password" — admin-visible only. */
+  /** Short reason, e.g. "revoked by admin" — admin-visible only. */
   reason?: string;
 };
 

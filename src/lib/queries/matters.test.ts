@@ -29,7 +29,7 @@ import {
 } from "vitest";
 
 // matters.ts imports getCurrentUserId (for pin lookups); stub it so the
-// auth chain (next-auth → next/server) doesn't have to load. Tests pass
+// auth chain (@clerk/nextjs → next/server) doesn't have to load. Tests pass
 // an explicit userId, so the stub is never exercised.
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("@/lib/current-user-tz", () => ({

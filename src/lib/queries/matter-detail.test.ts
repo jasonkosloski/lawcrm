@@ -18,7 +18,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 // matter-detail.ts imports getCurrentUserId (for the Notes tab's
-// read-tracking); stub it so the auth chain (next-auth → next/server)
+// read-tracking); stub it so the auth chain (@clerk/nextjs → next/server)
 // doesn't have to load. The time queries under test never call it.
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 // The deadline / task / event queries resolve the viewer's zone for
