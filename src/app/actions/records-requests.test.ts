@@ -855,6 +855,11 @@ describe("saveRecordsFee", () => {
     expect(row.expenseId).toBeNull();
     expect(row.feeAmount!.toString()).toBe("25");
     expect(await prisma.expense.count()).toBe(0);
+    // The log row carries the lead so the lead wall filters it (ADR-049).
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { title: "Records fee updated" },
+    });
+    expect(log.leadId).toBe(leadId);
   });
 
   test("a matter fee needs matters.expense.view", async () => {

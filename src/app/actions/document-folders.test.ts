@@ -676,6 +676,20 @@ describe("lead-scoped folders", () => {
     ).toBeNull();
   });
 
+  test("moveDocuments on a lead logs the lead (ADR-049)", async () => {
+    const { leadId } = await seedLead();
+    const a = await prisma.document.create({
+      data: { leadId, name: "L.pdf", category: "other", source: "upload" },
+    });
+    const f = await prisma.documentFolder.create({ data: { leadId, name: "Intake" } });
+    expect((await moveDocuments([a.id], f.id)).ok).toBe(true);
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { title: "Document moved" },
+    });
+    expect(log.leadId).toBe(leadId);
+    expect(log.matterId).toBeNull();
+  });
+
   test("moveDocuments refuses a batch spanning scopes", async () => {
     const { leadId } = await seedLead();
     const a = await prisma.document.create({

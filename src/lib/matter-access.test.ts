@@ -339,6 +339,29 @@ describe("lead-scoped children (ADR-049)", () => {
     expect(await titles(bob)).toEqual(["firm", "open"]);
   });
 
+  test("optionalRecordAccessClause needs BOTH scopes when a row has both (ActivityLog)", async () => {
+    // A conversion audit row sits on the matter and names the lead.
+    await prisma.matter.update({ where: { id: matterA }, data: { restricted: true } });
+    await prisma.activityLog.createMany({
+      data: [
+        { matterId: matterA, leadId: open, userId: alice, type: "filing", title: "both" },
+        { matterId: matterB, leadId: walled, userId: alice, type: "filing", title: "walled lead" },
+        { matterId: matterB, leadId: open, userId: alice, type: "filing", title: "visible" },
+      ],
+    });
+    const titles = async (uid: string) =>
+      (
+        await prisma.activityLog.findMany({
+          where: { AND: await optionalRecordAccessClause(uid) },
+          select: { title: true },
+          orderBy: { title: "asc" },
+        })
+      ).map((t) => t.title);
+    // bob is on neither matter A's team nor the walled lead's.
+    expect(await titles(bob)).toEqual(["visible"]);
+    expect(await titles(alice)).toEqual(["both", "visible", "walled lead"]);
+  });
+
   test("optionalRecordAccessClause is empty for an unrestricted viewer", async () => {
     const { userId: admin } = await seedUser({ firmId, roleIds: [adminRoleId] });
     expect(await optionalRecordAccessClause(admin)).toEqual([]);

@@ -41,9 +41,10 @@ ALTER TABLE "lead_team_members" ADD CONSTRAINT "lead_team_members_userId_fkey" F
 ALTER TABLE "activity_logs" ADD CONSTRAINT "activity_logs_leadId_fkey" FOREIGN KEY ("leadId") REFERENCES "leads"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 
--- Backfill: lead-scoped firm activity rows carry "lead <id>: ..." in
+-- Backfill: lead-scoped firm activity rows (matterId null) carry "lead <id>: ..." in
 -- detail (createLead, conflict checks, decline). Link them so the
 -- lead wall can filter the feed (ADR-049).
 UPDATE "activity_logs" a SET "leadId" = l."id"
 FROM "leads" l
-WHERE a."leadId" IS NULL AND a."detail" LIKE 'lead ' || l."id" || ':%';
+WHERE a."leadId" IS NULL AND a."matterId" IS NULL
+  AND a."detail" LIKE 'lead ' || l."id" || ':%';

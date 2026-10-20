@@ -328,6 +328,11 @@ describe("lead (intake) scope", () => {
     const kids = await attachmentsOf(emailId);
     expect(kids).toHaveLength(2);
     expect(kids.every((k) => k.leadId === leadId && k.matterId === null)).toBe(true);
+    // The audit row carries the lead so the lead wall filters it (ADR-049).
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { title: { contains: "email attachment" } },
+    });
+    expect(log.leadId).toBe(leadId);
   });
 
   test("lead listing and folder queries return only that lead's rows", async () => {

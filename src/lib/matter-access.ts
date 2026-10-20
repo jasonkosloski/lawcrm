@@ -171,12 +171,13 @@ export async function optionalMatterAccessClause(
 }
 
 /**
- * Access clause for models that carry BOTH an optional `matterId` and
+ * Access clauses for models that carry BOTH an optional `matterId` and
  * an optional `leadId` (Note, Task, CalendarEvent, TimeEntry, Document,
- * RecordsRequest): rows on neither stay visible, matter rows need
- * matter access, lead rows need lead access. Use it in place of
- * `optionalMatterAccessClause` on those models, inside `AND: [...]`.
- * `[]` when the viewer is unrestricted on both sides.
+ * RecordsRequest, ActivityLog): a matter-linked row needs matter
+ * access AND a lead-linked row needs lead access — a row with both
+ * (a conversion audit entry) needs both. Rows on neither pass. Spread
+ * into `AND: [...]` in place of `optionalMatterAccessClause`. `[]`
+ * when the viewer is unrestricted on both sides.
  */
 export async function optionalRecordAccessClause(
   userId: string
@@ -185,18 +186,14 @@ export async function optionalRecordAccessClause(
     matterAccessWhere(userId),
     leadAccessWhere(userId),
   ]);
-  const mOpen = Object.keys(mWhere).length === 0;
-  const lOpen = Object.keys(lWhere).length === 0;
-  if (mOpen && lOpen) return [];
-  return [
-    {
-      OR: [
-        { matterId: null, leadId: null },
-        mOpen ? { matterId: { not: null } } : { matter: mWhere },
-        lOpen ? { leadId: { not: null } } : { lead: lWhere },
-      ],
-    },
-  ];
+  const clauses: Array<Record<string, unknown>> = [];
+  if (Object.keys(mWhere).length > 0) {
+    clauses.push({ OR: [{ matterId: null }, { matter: mWhere }] });
+  }
+  if (Object.keys(lWhere).length > 0) {
+    clauses.push({ OR: [{ leadId: null }, { lead: lWhere }] });
+  }
+  return clauses;
 }
 
 /** True when `userId` may see `matterId`. Unknown matter → false. */

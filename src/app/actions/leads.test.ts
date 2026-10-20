@@ -1393,6 +1393,22 @@ describe("convertLeadToMatter — restricted intake carries its wall (ADR-049)",
     expect(roles).toEqual({ [userId]: "lead", [other]: "co_counsel" });
   });
 
+  test("restricting while a conversion is in flight still yields a restricted matter", async () => {
+    // The pre-claim read sees the lead as open; the wall lands before
+    // the claim. The matter must follow the locked row, not the stale read.
+    const { leadId } = await seedIntakeLead();
+    const stale = await prisma.lead.findUniqueOrThrow({ where: { id: leadId } });
+    await prisma.lead.update({ where: { id: leadId }, data: { restricted: true } });
+    await prisma.leadTeamMember.create({ data: { leadId, userId } });
+    const spy = vi.spyOn(prisma.lead, "findUnique").mockResolvedValueOnce(stale as never);
+    try {
+      const matter = await convert(leadId);
+      expect(matter.restricted).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   test("an open lead converts as today: unrestricted, converter only", async () => {
     const { leadId } = await seedIntakeLead();
     const matter = await convert(leadId);

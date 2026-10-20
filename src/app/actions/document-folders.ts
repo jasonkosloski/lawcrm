@@ -452,6 +452,7 @@ export async function moveDocuments(
 
   await logActivity({
     matterId,
+    leadId: scope.kind === "lead" ? scope.leadId : null,
     userId,
     type: "document",
     title: ids.length === 1 ? "Document moved" : `${ids.length} documents moved`,

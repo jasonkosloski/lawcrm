@@ -422,6 +422,13 @@ export async function convertLeadToMatter(
       data: { stage: CONVERTED, declineReason: null },
     });
     if (claimed.count === 0) throw new LeadClaimLostError();
+    // Re-read the wall now that the claim holds the row lock: a
+    // setLeadRestricted that committed after the read above must not
+    // leave the matter open (ADR-049; setLeadRestricted locks the same row).
+    const { restricted } = await tx.lead.findUniqueOrThrow({
+      where: { id: leadId },
+      select: { restricted: true },
+    });
 
     // Lock the lead's records requests BEFORE re-homing tasks/documents
     // (request rows first, then task rows: the order every records
@@ -484,7 +491,7 @@ export async function convertLeadToMatter(
         description: description || null,
         clientId: clientContactId,
         // A restricted intake stays walled as a matter (ADR-049).
-        restricted: lead.restricted,
+        restricted,
         incidentDate,
         statuteOfLimitationsDate: solDate,
         // Invariant shared with createMatter / updateMatter: whenever

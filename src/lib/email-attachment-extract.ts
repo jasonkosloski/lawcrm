@@ -120,6 +120,7 @@ export async function extractEmailAttachments(documentId: string, actorId: strin
     if (rows.length > 0) {
       await logActivity({
         matterId: email.matterId,
+        leadId: email.leadId,
         userId: actorId,
         type: "document",
         title: rows.length === 1 ? "Email attachment added" : `${rows.length} email attachments added`,

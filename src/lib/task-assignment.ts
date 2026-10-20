@@ -16,6 +16,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { createNotification } from "@/lib/notifications";
+import { canAccessLead } from "@/lib/lead-access";
 
 /** True when `ownerId` refers to an existing, active user. Callers
  *  surface the failure as a field error / result error — inactive
@@ -47,6 +48,20 @@ export async function notifyTaskAssigned(opts: {
 }): Promise<void> {
   const { ownerId, actorId, taskTitle, matterId, leadId } = opts;
   if (!ownerId || ownerId === actorId) return;
+
+  // Restricted intake (ADR-049): an assignee who can't see the lead
+  // gets a bare ping, never the lead's name or the task title.
+  if (!matterId && leadId && !(await canAccessLead(ownerId, leadId))) {
+    await createNotification({
+      userId: ownerId,
+      type: "task_assigned",
+      title: "Task assigned on a restricted intake",
+      body: null,
+      link: "/",
+      matterId: null,
+    });
+    return;
+  }
 
   const [matter, lead] = await Promise.all([
     matterId

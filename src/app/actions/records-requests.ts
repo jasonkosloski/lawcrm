@@ -762,6 +762,7 @@ export async function saveRecordsFee(
 
   await logActivity({
     matterId: result.matterId,
+    leadId: scope.kind === "lead" ? scope.leadId : null,
     userId,
     type: "records",
     title: "Records fee updated",
