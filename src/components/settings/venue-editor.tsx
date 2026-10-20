@@ -46,11 +46,14 @@ export function VenueEditor({
   canAdd,
   canEdit,
   canDelete,
+  defaultState = "",
 }: {
   venues: VenueRow[];
   canAdd: boolean;
   canEdit: boolean;
   canDelete: boolean;
+  /** State prefilled on a new venue (the firm's state). */
+  defaultState?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<VenueRow | null>(null);
@@ -163,7 +166,7 @@ export function VenueEditor({
         </Table>
       )}
 
-      <VenueDialog open={open} onOpenChange={setOpen} venue={editing} />
+      <VenueDialog open={open} onOpenChange={setOpen} venue={editing} defaultState={defaultState} />
     </>
   );
 }
@@ -172,10 +175,12 @@ function VenueDialog({
   open,
   onOpenChange,
   venue,
+  defaultState,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   venue: VenueRow | null;
+  defaultState: string;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -190,6 +195,7 @@ function VenueDialog({
         <VenueForm
           key={`${venue?.id ?? "new"}-${open}`}
           venue={venue}
+          defaultState={defaultState}
           onDone={() => onOpenChange(false)}
           onCancel={() => onOpenChange(false)}
         />
@@ -200,17 +206,19 @@ function VenueDialog({
 
 function VenueForm({
   venue,
+  defaultState,
   onDone,
   onCancel,
 }: {
   venue: VenueRow | null;
+  defaultState: string;
   onDone: () => void;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(venue?.name ?? "");
   const [city, setCity] = useState(venue?.city ?? "");
   const [county, setCounty] = useState(venue?.county ?? "");
-  const [state, setState] = useState(venue?.state ?? "CO");
+  const [state, setState] = useState(venue?.state ?? defaultState);
   const [errors, setErrors] = useState<Record<string, string[]>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();

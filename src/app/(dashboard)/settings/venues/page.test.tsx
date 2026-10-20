@@ -15,14 +15,15 @@ vi.mock("next/navigation", () => ({
     throw new Error("NEXT_NOT_FOUND");
   }),
 }));
+vi.mock("@/lib/firm", () => ({ getCurrentFirm: vi.fn(async () => ({ state: "WY" })) }));
 vi.mock("@/lib/queries/venues", () => ({
   listVenues: vi.fn(async () => [
     { id: "v1", name: "Aurora", city: null, county: null, state: "CO", isActive: true, matterCount: 3 },
   ]),
 }));
 vi.mock("@/components/settings/venue-editor", () => ({
-  VenueEditor: ({ venues }: { venues: { name: string; matterCount: number }[] }) => (
-    <ul>
+  VenueEditor: ({ venues, defaultState }: { venues: { name: string; matterCount: number }[]; defaultState: string }) => (
+    <ul data-state={defaultState}>
       {venues.map((v) => (
         <li key={v.name}>
           {v.name} {v.matterCount}
@@ -55,5 +56,6 @@ describe("/settings/venues", () => {
     render(await VenuesPage());
     expect(listVenues).toHaveBeenCalledWith({ activeOnly: false });
     expect(screen.getByText("Aurora 3")).toBeInTheDocument();
+    expect(document.querySelector("ul")).toHaveAttribute("data-state", "WY");
   });
 });

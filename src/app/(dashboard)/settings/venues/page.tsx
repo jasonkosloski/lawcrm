@@ -12,6 +12,7 @@ import {
   currentUserHasAnyPermission,
   currentUserHasPermission,
 } from "@/lib/permission-check";
+import { getCurrentFirm } from "@/lib/firm";
 import { listVenues } from "@/lib/queries/venues";
 import { VenueEditor } from "@/components/settings/venue-editor";
 
@@ -23,8 +24,9 @@ export default async function VenuesPage() {
     notFound();
   }
 
-  const [venues, canAdd, canEdit, canDelete] = await Promise.all([
+  const [venues, firm, canAdd, canEdit, canDelete] = await Promise.all([
     listVenues({ activeOnly: false }),
+    getCurrentFirm(),
     currentUserHasPermission("venues.add"),
     currentUserHasPermission("venues.edit"),
     currentUserHasPermission("venues.delete"),
@@ -46,6 +48,7 @@ export default async function VenuesPage() {
         canAdd={canAdd}
         canEdit={canEdit}
         canDelete={canDelete}
+        defaultState={firm.state ?? ""}
       />
     </div>
   );

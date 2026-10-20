@@ -52,15 +52,20 @@ describe("VenueEditor", () => {
 
   test("add dialog submits createVenue", async () => {
     actions.createVenue.mockResolvedValue({ ok: true, venue: unused });
-    render(<VenueEditor venues={[]} {...all} />);
+    render(<VenueEditor venues={[]} {...all} defaultState="CO" />);
     await userEvent.click(screen.getByRole("button", { name: /add venue/i }));
     await userEvent.type(screen.getByLabelText(/^name/i), "Boulder");
-    await userEvent.clear(screen.getByLabelText(/^state/i));
-    await userEvent.type(screen.getByLabelText(/^state/i), "CO");
+    expect(screen.getByLabelText(/^state/i)).toHaveValue("CO");
     await userEvent.click(screen.getByRole("button", { name: "Create" }));
     await waitFor(() =>
       expect(actions.createVenue).toHaveBeenCalledWith({ name: "Boulder", city: "", county: "", state: "CO" })
     );
+  });
+
+  test("new venue state is blank without a default", async () => {
+    render(<VenueEditor venues={[]} {...all} />);
+    await userEvent.click(screen.getByRole("button", { name: /add venue/i }));
+    expect(screen.getByLabelText(/^state/i)).toHaveValue("");
   });
 
   test("shows delete error", async () => {
