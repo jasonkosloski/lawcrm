@@ -1,49 +1,85 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { staffAuthorizedParties } from "./staff-authorized-parties";
 
+const KEYS = [
+  "STAFF_ORIGINS",
+  "VERCEL_BRANCH_URL",
+  "VERCEL_URL",
+  "VERCEL_PROJECT_PRODUCTION_URL",
+  "AUTH_URL",
+  "PORTAL_HOST",
+];
+
+beforeEach(() => {
+  for (const k of KEYS) vi.stubEnv(k, "");
+  vi.stubEnv("NODE_ENV", "production");
+});
 afterEach(() => vi.unstubAllEnvs());
 
 describe("staffAuthorizedParties", () => {
-  it("production: the deployment's own origins only, never localhost", () => {
-    vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "app.example.com");
-    vi.stubEnv("VERCEL_URL", "lawcrm-abc.vercel.app");
-    vi.stubEnv("AUTH_URL", "");
+  it("STAFF_ORIGINS wins and ignores the Vercel heuristic", () => {
+    vi.stubEnv("STAFF_ORIGINS", "https://crm.example.com, https://b.example.com");
+    vi.stubEnv("VERCEL_URL", "hash.vercel.app");
+    vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "portal.example.com");
     expect(staffAuthorizedParties()).toEqual([
-      "https://app.example.com",
-      "https://lawcrm-abc.vercel.app",
+      "https://crm.example.com",
+      "https://b.example.com",
     ]);
   });
 
-  it("includes AUTH_URL's origin when set, deduped", () => {
-    vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "app.example.com");
-    vi.stubEnv("VERCEL_URL", "");
-    vi.stubEnv("AUTH_URL", "https://app.example.com/");
-    expect(staffAuthorizedParties()).toEqual(["https://app.example.com"]);
+  it("drops malformed STAFF_ORIGINS entries (paths, junk, other schemes)", () => {
+    vi.stubEnv(
+      "STAFF_ORIGINS",
+      "https://ok.example.com,not a url,https://x.example.com/path,ftp://f.example.com,"
+    );
+    expect(staffAuthorizedParties()).toEqual(["https://ok.example.com"]);
+  });
+
+  it("heuristic: branch, deployment, production and AUTH_URL origins, deduped", () => {
+    vi.stubEnv("VERCEL_BRANCH_URL", "app-git-feat-x.vercel.app");
+    vi.stubEnv("VERCEL_URL", "app-abc.vercel.app");
+    vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "crm.example.com");
+    vi.stubEnv("AUTH_URL", "https://crm.example.com/");
+    expect(staffAuthorizedParties()).toEqual([
+      "https://app-git-feat-x.vercel.app",
+      "https://app-abc.vercel.app",
+      "https://crm.example.com",
+    ]);
+  });
+
+  it("heuristic excludes the portal host", () => {
+    vi.stubEnv("PORTAL_HOST", "portal.example.com");
+    vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "portal.example.com");
+    vi.stubEnv("VERCEL_URL", "app-abc.vercel.app");
+    expect(staffAuthorizedParties()).toEqual(["https://app-abc.vercel.app"]);
+  });
+
+  it("ignores a malformed AUTH_URL", () => {
+    vi.stubEnv("VERCEL_URL", "app-abc.vercel.app");
+    vi.stubEnv("AUTH_URL", "not a url");
+    expect(staffAuthorizedParties()).toEqual(["https://app-abc.vercel.app"]);
+  });
+
+  it("production with nothing usable fails closed (never empty/undefined)", () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(staffAuthorizedParties()).toEqual(["https://invalid.invalid"]);
+    vi.stubEnv("STAFF_ORIGINS", "junk");
+    expect(staffAuthorizedParties()).toEqual(["https://invalid.invalid"]);
+    err.mockRestore();
   });
 
   it("development adds localhost:3000", () => {
     vi.stubEnv("NODE_ENV", "development");
-    vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "");
-    vi.stubEnv("VERCEL_URL", "");
-    vi.stubEnv("AUTH_URL", "");
     expect(staffAuthorizedParties()).toEqual(["http://localhost:3000"]);
+    vi.stubEnv("STAFF_ORIGINS", "https://crm.example.com");
+    expect(staffAuthorizedParties()).toEqual([
+      "https://crm.example.com",
+      "http://localhost:3000",
+    ]);
   });
 
-  it("ignores a malformed AUTH_URL", () => {
-    vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "app.example.com");
-    vi.stubEnv("VERCEL_URL", "");
-    vi.stubEnv("AUTH_URL", "not a url");
-    expect(staffAuthorizedParties()).toEqual(["https://app.example.com"]);
-  });
-
-  it("production with nothing configured returns undefined (no azp check)", () => {
-    vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "");
-    vi.stubEnv("VERCEL_URL", "");
-    vi.stubEnv("AUTH_URL", "");
-    expect(staffAuthorizedParties()).toBeUndefined();
+  it("production never includes localhost", () => {
+    vi.stubEnv("STAFF_ORIGINS", "https://crm.example.com");
+    expect(staffAuthorizedParties()).not.toContain("http://localhost:3000");
   });
 });

@@ -45,6 +45,7 @@ vi.mock("@clerk/nextjs/server", () => ({
 }));
 
 import { config, isPortalHost, proxy as rawProxy } from "./proxy";
+import { staffAuthorizedParties } from "@/lib/staff-authorized-parties";
 
 const EVENT = {} as NextFetchEvent;
 const proxy = async (req: NextRequest) =>
@@ -176,7 +177,12 @@ describe("proxy auth gate", () => {
     // Same helper the route-handler path (authenticateRequest) uses.
     const opts = clerk.options as (req: unknown) => { authorizedParties?: string[] };
     expect(typeof opts).toBe("function");
-    expect(opts(undefined)).toHaveProperty("authorizedParties");
+    vi.stubEnv("STAFF_ORIGINS", "https://crm.example.com");
+    expect(opts(undefined).authorizedParties).toEqual(staffAuthorizedParties());
+    expect(opts(undefined).authorizedParties).toContain(
+      "https://crm.example.com"
+    );
+    vi.unstubAllEnvs();
   });
 });
 

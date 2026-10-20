@@ -15,6 +15,7 @@ const fullProd = {
   CRON_SECRET: "c",
   EMAIL_TOKEN_KEY: "k",
   PORTAL_HOST: "portal.example.com",
+  STAFF_ORIGINS: "https://crm.example.com",
   RESEND_API_KEY: "r",
   EMAIL_FROM: "Firm <noreply@example.com>",
 };
@@ -52,6 +53,17 @@ describe("clerk env", () => {
     const r = checkEnv(without(["CLERK_SECRET_KEY", "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"]));
     expect(r.fatal).toEqual(["NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "CLERK_SECRET_KEY"]);
     expect(checkEnv(without(["AUTH_SECRET"])).fatal).toEqual(["AUTH_SECRET"]);
+  });
+});
+
+describe("staff origins", () => {
+  test("STAFF_ORIGINS is degraded (warn, not fatal) in production only", () => {
+    const rest = without(["STAFF_ORIGINS"]);
+    const r = checkEnv(rest);
+    expect(r.fatal).toEqual([]);
+    expect(r.degraded).toHaveLength(1);
+    expect(r.degraded[0]).toMatch(/^STAFF_ORIGINS/);
+    expect(checkEnv({ ...rest, VERCEL_ENV: "preview" }).degraded).toEqual([]);
   });
 });
 

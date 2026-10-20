@@ -45,6 +45,11 @@ export function checkEnv(env: Env): EnvCheckResult {
     if (!set(env, "PORTAL_HOST")) {
       degraded.push("PORTAL_HOST (the client portal host is never routed)");
     }
+    if (!set(env, "STAFF_ORIGINS")) {
+      degraded.push(
+        "STAFF_ORIGINS (staff sign-in origin is guessed from Vercel env; set e.g. https://crm.example.com)"
+      );
+    }
     if (!set(env, "RESEND_API_KEY")) {
       degraded.push("RESEND_API_KEY (portal sign-in emails are not delivered)");
     }
