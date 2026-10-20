@@ -369,7 +369,7 @@ async function resolveAreaAndStage(
     hasStatuteOfLimitations: area.hasStatuteOfLimitations,
     statutePeriod: toSolPeriod(area.statutePeriodAmount, area.statutePeriodUnit),
     defaultBillingMode: area.defaultBillingMode,
-    requiredMatterFields: area.requiredMatterFields,
+    requiredMatterFields: area.requiredMatterFields ?? [],
   };
 }
 

@@ -266,6 +266,7 @@ export function EditPracticeAreaForm({
       />
 
       <RequiredFieldsGroup
+        tracksSol={hasSol}
         defaultChecked={area.requiredMatterFields ?? []}
         error={errs.requiredMatterFields}
       />

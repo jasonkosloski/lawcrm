@@ -1,5 +1,5 @@
 /**
- * DueLabel: how a due date reads everywhere (UI system v2, ADR-056).
+ * DueLabel: how a due date reads everywhere (UI system v2, ADR-057).
  * The date plus a countdown, coloured only when it matters:
  * overdue is danger, due within two days is warn, the rest is grey.
  *

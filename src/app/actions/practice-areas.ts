@@ -436,8 +436,8 @@ export async function updatePracticeArea(
       ? `Matter name template: "${before.matterNameTemplate ?? "firm default"}" → "${data.matterNameTemplate || "firm default"}"`
       : null,
     requiredPosted &&
-    describeRequired(before.requiredMatterFields) !== describeRequired(requiredFields)
-      ? `Required fields: ${describeRequired(before.requiredMatterFields)} → ${describeRequired(requiredFields)}`
+    describeRequired(before.requiredMatterFields ?? []) !== describeRequired(requiredFields)
+      ? `Required fields: ${describeRequired(before.requiredMatterFields ?? [])} → ${describeRequired(requiredFields)}`
       : null,
   ], true);
 

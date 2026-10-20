@@ -15,13 +15,29 @@
  * three layers are needed.
  */
 
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { getStaffAuth } from "@/lib/staff-auth";
+import { getCurrentFirm } from "@/lib/firm";
 import { StaffClerkProvider } from "@/components/auth/staff-clerk-provider";
 import { AppShell } from "@/components/layout/app-shell";
 import { UserTimeZoneProvider } from "@/components/user-time-zone";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
+
+/**
+ * Tab titles read "<page> · <firm>" using the signed-in user's firm
+ * (its short name when set, else its legal name). Signed out, this
+ * adds nothing and the root layout's "LitGox" template applies; the
+ * layout body redirects anyway.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const staff = await getStaffAuth();
+  if (staff.status !== "ok") return {};
+  const firm = await getCurrentFirm();
+  const name = firm.shortName?.trim() || firm.name;
+  return { title: { default: name, template: `%s · ${name}` } };
+}
 
 export default async function DashboardLayout({
   children,

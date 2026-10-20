@@ -1,7 +1,9 @@
 /**
- * Auto matter-name helpers (pure, shared by NewMatterForm).
+ * Matter-name helpers (pure, shared by NewMatterForm).
  *
- * The firm's pattern is `Last, First - Case Number - Location`. Only
+ * Names are produced by the template renderer in matter-name-template.ts
+ * (firm default, overridable per practice area). This file holds the
+ * name-splitting helpers that renderer feeds on: only
  * person names are inverted; organization-like names ("Colorado Freedom
  * Fund", "Acme LLC") are used as typed, and generational / professional
  * suffixes ("Jr.", "III", "Esq.") stay attached to the person instead of

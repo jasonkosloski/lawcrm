@@ -190,13 +190,13 @@ model Firm {
   /// background). Surfaces on letterhead, invoices, the login page
   /// branding once we wire it. Null = use the default app brand.
   logoUrl                     String?
-  /// Default for "auto-add matter team to new calendar events".
-  /// Per-matter override lives on Matter.autoAddTeamToNewEvents
-  /// (null on the matter inherits this firm value).
   /// Template for new matter names on /matters/new. Tokens such as
   /// {client_last}, {client_first}, {case_number}, {location}.
   /// A practice area's own template overrides this.
   matterNameTemplate          String           @default("{client_last}, {client_first} - {case_number} - {location}")
+  /// Default for "auto-add matter team to new calendar events".
+  /// Per-matter override lives on Matter.autoAddTeamToNewEvents
+  /// (null on the matter inherits this firm value).
   autoAddTeamToNewEvents      Boolean          @default(true)
   /// Default for "auto-add new team members to upcoming events
   /// on the matter". Same per-matter override pattern as above.

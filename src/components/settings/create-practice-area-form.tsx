@@ -145,7 +145,7 @@ export function CreatePracticeAreaForm({
         error={errs.matterNameTemplate}
       />
 
-      <RequiredFieldsGroup error={errs.requiredMatterFields} />
+      <RequiredFieldsGroup tracksSol={hasSol} error={errs.requiredMatterFields} />
 
       <div className="text-2xs text-ink-4">
         New areas start with the default 10-stage lifecycle (Intake →

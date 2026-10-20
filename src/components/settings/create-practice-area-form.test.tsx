@@ -71,3 +71,17 @@ describe("CreatePracticeAreaForm after a server validation error", () => {
     expect(screen.getByLabelText("Color")).toBeTruthy();
   });
 });
+
+describe("CreatePracticeAreaForm required-field hint", () => {
+  const HINT = /only applies when this area tracks the statute of limitations/i;
+
+  test("shows the incident date hint until SOL tracking is on", async () => {
+    const user = userEvent.setup();
+    render(<CreatePracticeAreaForm />);
+    expect(screen.getByText(HINT)).toBeTruthy();
+    await user.click(
+      screen.getByRole("checkbox", { name: /track statute of limitations/i })
+    );
+    expect(screen.queryByText(HINT)).toBeNull();
+  });
+});

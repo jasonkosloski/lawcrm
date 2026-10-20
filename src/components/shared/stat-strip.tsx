@@ -1,6 +1,6 @@
 /**
  * StatStrip: a row of headline figures in one bordered card, split by
- * hairlines (UI system v2, ADR-056). Label above value, no icons, no
+ * hairlines (UI system v2, ADR-057). Label above value, no icons, no
  * tints: colour is kept for figures that need attention (`tone`).
  *
  * Columns follow the item count (2 / 3 / 4) so there is never an orphan

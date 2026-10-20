@@ -22,7 +22,7 @@ ADR true to the code are appended in place and dated.
 | [001](001-sqlite-for-development-postgresql-for-production.md) | SQLite for development, PostgreSQL for production |  |
 | [002](002-app-router-route-groups-for-layout-isolation.md) | App Router route groups for layout isolation |  |
 | [003](003-design-tokens-as-css-custom-properties-not.md) | Design tokens as CSS custom properties, not Tailwind config |  |
-| [004](004-fraunces-for-display-only-inter-for-all.md) | Fraunces for display only, Inter for all UI chrome | Refined by ADR-056 |
+| [004](004-fraunces-for-display-only-inter-for-all.md) | Fraunces for display only, Inter for all UI chrome | Refined by ADR-057 |
 | [005](005-schema-is-iterative-not-upfront.md) | Schema is iterative, not upfront |  |
 | [006](006-matter-urls-use-cuid-not-slug.md) | Matter URLs use cuid, not slug |  |
 | [007](007-url-query-params-as-single-source-of.md) | URL query params as single source of truth for list filters |  |
@@ -73,4 +73,5 @@ ADR true to the code are appended in place and dated.
 | [052](052-portal-uploads-are-matter-documents.md) | Portal uploads are ordinary matter documents; three-state file share with folder inheritance |  |
 | [053](053-clerk-proves-identity-the-user-table-grants-access.md) | Clerk proves staff identity; the User table grants access (DB-authoritative, one-time email link) |  |
 | [054](054-new-matter-screens-both-directions-and-overrides-on-the-matter.md) | Matter writes are conflict-checked in both directions; the override is recorded on the matter |  |
-| [056](056-ui-system-v2-legibility-floor-and-colour-on-meaning.md) | UI system v2: an 11px legibility floor, contrast-safe greys, colour spent only on meaning |  |
+| [055](055-venues-are-a-firm-list-required-fields-are-per-area.md) | Venues are a firm list; required matter fields are per practice area (enforced on create, can't-clear-but-don't-block on edit) |  |
+| [057](057-ui-system-v2-legibility-floor-and-colour-on-meaning.md) | UI system v2: an 11px legibility floor, contrast-safe greys, colour spent only on meaning |  |

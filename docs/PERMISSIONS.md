@@ -136,6 +136,8 @@ The catalog still has some coarse `manage_*` keys (`matters.manage_team`, `firm.
 
 ### Cross-key gates
 
+- **`venues.*`**: no view key. Picking a venue on the matter forms needs only `matters.create` / `matters.edit`; `/settings/venues` needs any one venues key, and `venues.add` also gates press-Enter-to-add in the venue picker on the matter forms.
+
 - **`parties.edit` + `contacts.edit`**: the Parties-tab edit form (`updateMatterContact`) can also rewrite the firm-wide `Contact` (name, email, organization, phones), which flows to every matter. `parties.edit` alone covers only the per-matter row (role, notes, representation). When a submit actually changes a contact field the action additionally requires `contacts.edit`, else returns a field error and writes nothing; the form renders those inputs read-only without `contacts.edit`. Tab controls follow `parties.create` / `.edit` / `.delete`.
 
 ### Client portal (separate identity)
