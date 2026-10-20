@@ -23,6 +23,8 @@ interface NavItem {
    *  nav item is just so people don't see a link that would
    *  bounce them. */
   requires?: string;
+  /** Like `requires`, but visible when the user holds ANY of these. */
+  requiresAny?: string[];
 }
 
 interface NavSection {
@@ -58,6 +60,11 @@ const SECTIONS: NavSection[] = [
         href: "/settings/practice-areas",
         label: "Practice areas",
         requires: "firm.manage_practice_areas",
+      },
+      {
+        href: "/settings/venues",
+        label: "Venues",
+        requiresAny: ["venues.add", "venues.edit", "venues.delete"],
       },
       // Visible to everyone — generating FROM templates is ungated,
       // so anyone may browse the library. Manage affordances inside
@@ -101,9 +108,11 @@ export function SettingsNav({
   // Filter items by required permission. Sections that end up with
   // no visible items get hidden too — no empty section header.
   const canSee = (item: NavItem): boolean => {
-    if (!item.requires) return true;
+    if (!item.requires && !item.requiresAny) return true;
     if (isAdmin) return true;
-    return granted.has(item.requires);
+    if (item.requires && !granted.has(item.requires)) return false;
+    if (item.requiresAny && !item.requiresAny.some((k) => granted.has(k))) return false;
+    return true;
   };
   const visibleSections = SECTIONS.map((section) => ({
     ...section,
