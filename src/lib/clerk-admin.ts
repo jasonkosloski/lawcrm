@@ -156,3 +156,44 @@ export async function revokeStaffSession(
     return fail(err);
   }
 }
+
+/**
+ * DEV ONLY (callers gate on isDevSignInAllowed): the Clerk user for a
+ * seeded email, reusing an existing one before creating. Dev instances
+ * accept backend-created users with no verification or password.
+ */
+export async function ensureDevClerkUser(
+  email: string
+): Promise<{ ok: true; clerkUserId: string } | { ok: false; error: string }> {
+  try {
+    const client = await clerkClient();
+    const existing = await client.users.getUserList({
+      emailAddress: [email],
+      limit: 1,
+    });
+    if (existing.data[0]) return { ok: true, clerkUserId: existing.data[0].id };
+    const created = await client.users.createUser({
+      emailAddress: [email],
+      skipPasswordRequirement: true,
+    });
+    return { ok: true, clerkUserId: created.id };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** DEV ONLY: a 60-second one-time sign-in ticket for a Clerk user. */
+export async function createDevSignInToken(
+  clerkUserId: string
+): Promise<{ ok: true; token: string } | { ok: false; error: string }> {
+  try {
+    const client = await clerkClient();
+    const t = await client.signInTokens.createSignInToken({
+      userId: clerkUserId,
+      expiresInSeconds: 60,
+    });
+    return { ok: true, token: t.token };
+  } catch (err) {
+    return fail(err);
+  }
+}

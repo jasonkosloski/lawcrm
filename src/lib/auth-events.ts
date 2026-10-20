@@ -21,6 +21,8 @@ import { prisma, type Tx } from "@/lib/prisma";
 export type AuthEventKind =
   | "sign_in"
   | "sign_out"
+  /** Dev-only "sign in as" impersonation (src/app/actions/dev-sign-in.ts). */
+  | "dev_sign_in"
   /** First Google sign-in matched a verified email to an existing
    *  firm user and linked the Clerk identity. */
   | "account_linked"
@@ -37,6 +39,7 @@ export type AuthEventKind =
 export const AUTH_EVENT_TITLES: Record<AuthEventKind, string> = {
   sign_in: "Signed in",
   sign_out: "Signed out",
+  dev_sign_in: "Signed in (dev impersonation)",
   account_linked: "Linked Google sign-in",
   no_access: "Signed in without firm access",
   session_revoked: "Session revoked",

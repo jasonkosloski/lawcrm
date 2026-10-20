@@ -130,6 +130,30 @@ describe("proxy auth gate", () => {
     expect((await proxy(makeRequest("/api/csp-reports"))).status).toBe(307);
   });
 
+  describe("/dev/sign-in-as (dev-only backdoor)", () => {
+    afterEach(() => vi.unstubAllEnvs());
+
+    it("is public when dev-allowed", async () => {
+      vi.stubEnv("NODE_ENV", "development");
+      vi.stubEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "pk_test_x");
+      vi.stubEnv("VERCEL", "");
+      expect((await proxy(makeRequest("/dev/sign-in-as"))).status).toBe(200);
+    });
+
+    it.each([
+      ["production", "pk_test_x", ""],
+      ["development", "pk_live_x", ""],
+      ["development", "pk_test_x", "1"],
+    ])("stays behind the gate (%s, %s, VERCEL=%s)", async (ne, key, vercel) => {
+      vi.stubEnv("NODE_ENV", ne);
+      vi.stubEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", key);
+      vi.stubEnv("VERCEL", vercel);
+      const res = await proxy(makeRequest("/dev/sign-in-as"));
+      expect(res.status).toBe(307);
+      expect(new URL(res.headers.get("location")!).pathname).toBe("/login");
+    });
+  });
+
   it("keeps lookalike paths of machine endpoints behind the gate", async () => {
     for (const path of [
       "/api/email-sync-admin",

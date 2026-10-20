@@ -16,6 +16,8 @@
  * Allowlist (PUBLIC_PATH_PREFIXES, path-boundary matched):
  *   - /login, /sso-callback — the Google sign-in flow
  *   - /no-access — signed in with Clerk but not a firm member
+ *   - /dev/sign-in-as — dev-only impersonation, public only when
+ *     isDevSignInAllowed() (src/lib/dev-sign-in.ts)
  *   - /api/csp-report — browsers post CSP violation reports without a
  *     reliable session (the login page reports too); it only logs
  *   - SELF_AUTHENTICATED_PATHS — cron, blob-callback and Clerk-webhook
@@ -31,6 +33,7 @@ import {
 } from "next/server";
 import { clerkMiddleware } from "@clerk/nextjs/server";
 import { CSP_HEADER, createNonce, pageCsp } from "@/lib/csp";
+import { isDevSignInAllowed } from "@/lib/dev-sign-in";
 import { isPortalHost } from "@/lib/portal/host";
 import { staffAuthorizedParties } from "@/lib/staff-authorized-parties";
 
@@ -68,6 +71,15 @@ const SELF_AUTHENTICATED_PATHS = new Set([
  *  public, `/loginfoo` is not (a bare `startsWith` would let it skip
  *  the session gate). */
 function isPublicPath(pathname: string): boolean {
+  // Dev-only sign-in-as page: public ONLY when dev-allowed (never in
+  // production, with a live Clerk key, or on Vercel).
+  if (
+    (pathname === "/dev/sign-in-as" ||
+      pathname.startsWith("/dev/sign-in-as/")) &&
+    isDevSignInAllowed()
+  ) {
+    return true;
+  }
   return PUBLIC_PATH_PREFIXES.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`)
   );
