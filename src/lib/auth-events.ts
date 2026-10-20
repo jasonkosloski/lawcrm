@@ -29,7 +29,17 @@ export type AuthEventKind =
   /** An admin cleared a (possibly attacker-induced) lockout, or reset
    *  the password. Counts like a successful sign-in for lockout
    *  purposes: failures before it are forgotten. */
-  | "sign_in_unlocked";
+  | "sign_in_unlocked"
+  /** First Google sign-in matched a verified email to an existing
+   *  firm user and linked the Clerk identity. */
+  | "account_linked"
+  /** Signed in with Clerk but no active firm user matches. */
+  | "no_access"
+  | "session_revoked"
+  | "signed_out_everywhere"
+  | "sign_in_link_reset"
+  | "clerk_banned"
+  | "clerk_unbanned";
 
 /** Row titles — also the query keys for lockout counting
  *  (src/lib/credentials-authorize.ts), so change with care. */
@@ -41,6 +51,13 @@ export const AUTH_EVENT_TITLES: Record<AuthEventKind, string> = {
   password_changed: "Changed password",
   password_change_failed: "Failed password change",
   sign_in_unlocked: "Sign-in unlocked by an administrator",
+  account_linked: "Linked Google sign-in",
+  no_access: "Signed in without firm access",
+  session_revoked: "Session revoked",
+  signed_out_everywhere: "Signed out everywhere by an administrator",
+  sign_in_link_reset: "Sign-in link reset by an administrator",
+  clerk_banned: "Sign-in blocked (deactivated)",
+  clerk_unbanned: "Sign-in unblocked (reactivated)",
 };
 
 /** Client IP + user agent for the detail line. Vercel sets
@@ -68,7 +85,8 @@ export async function authEventDetail(reason?: string): Promise<string | null> {
 }
 
 type AuthEventInput = {
-  userId: string;
+  /** Null when the event is not tied to a known account. */
+  userId: string | null;
   kind: AuthEventKind;
   /** Short reason, e.g. "wrong password" — admin-visible only. */
   reason?: string;
