@@ -1,0 +1,161 @@
+/** Integration: matter-draft server actions. */
+import { beforeEach, describe, expect, test, vi } from "vitest";
+
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
+vi.mock("@/lib/file-storage", () => ({ deleteFile: vi.fn(async () => {}) }));
+
+import { getCurrentUserId } from "@/lib/current-user";
+import { deleteFile } from "@/lib/file-storage";
+import { prisma } from "@/lib/prisma";
+import {
+  deleteMatterDraft,
+  removeDraftFile,
+  saveMatterDraft,
+  setDraftFileOriginating,
+} from "@/app/actions/matter-drafts";
+import { listMatterDrafts } from "@/lib/queries/matter-drafts";
+import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
+
+let creator: string, other: string, admin: string;
+
+function as(u: string) {
+  vi.mocked(getCurrentUserId).mockResolvedValue(u);
+}
+
+beforeEach(async () => {
+  await resetDb();
+  vi.mocked(deleteFile).mockReset();
+  vi.mocked(deleteFile).mockResolvedValue(undefined);
+  const { firmId, adminRoleId } = await seedFirm();
+  const role = await prisma.role.create({
+    data: { firmId, name: "intake", description: "x" },
+    select: { id: true },
+  });
+  await prisma.rolePermission.create({
+    data: { roleId: role.id, permission: "matters.create" },
+  });
+  creator = (await seedUser({ firmId, name: "Cara", roleIds: [role.id] })).userId;
+  other = (await seedUser({ firmId, roleIds: [role.id] })).userId;
+  admin = (await seedUser({ firmId, roleIds: [adminRoleId] })).userId;
+  as(creator);
+});
+
+async function newDraft() {
+  const r = await saveMatterDraft(null, null, { newClientName: "Secret Client" });
+  if (!r.ok) throw new Error("save failed");
+  return r;
+}
+
+describe("saveMatterDraft", () => {
+  test("create then update then stale", async () => {
+    const a = await newDraft();
+    const b = await saveMatterDraft(a.draftId, a.updatedAt, {
+      newClientName: "X",
+      leadUserId: other,
+      extraTeam: JSON.stringify([{ userId: admin, role: "paralegal" }]),
+    });
+    expect(b.ok).toBe(true);
+    const row = await prisma.matterDraft.findUniqueOrThrow({
+      where: { id: a.draftId },
+    });
+    expect(row.leadUserId).toBe(other);
+    expect(row.teamUserIds).toEqual([admin]);
+    const stale = await saveMatterDraft(a.draftId, a.updatedAt, {});
+    expect(stale).toEqual({ ok: false, code: "stale" });
+  });
+
+  test("a deleted id never recreates", async () => {
+    const a = await newDraft();
+    await prisma.matterDraft.delete({ where: { id: a.draftId } });
+    const r = await saveMatterDraft(a.draftId, a.updatedAt, {});
+    expect(r).toEqual({ ok: false, code: "notfound" });
+    expect(await prisma.matterDraft.count()).toBe(0);
+  });
+
+  test("only creation logs, and titles carry no client name", async () => {
+    const a = await newDraft();
+    await saveMatterDraft(a.draftId, a.updatedAt, { newClientName: "Y" });
+    const logs = await prisma.activityLog.findMany();
+    expect(logs.map((l) => l.title)).toEqual(["Matter draft started"]);
+  });
+});
+
+describe("deleteMatterDraft", () => {
+  test("non-creator refused; creator deletes rows then files", async () => {
+    const a = await newDraft();
+    await prisma.matterDraftFile.create({
+      data: { draftId: a.draftId, name: "secret.pdf", fileUrl: "k1", uploadedBy: creator },
+    });
+    await prisma.matterDraft.update({
+      where: { id: a.draftId },
+      data: { leadUserId: other },
+    });
+    as(other);
+    expect(await deleteMatterDraft(a.draftId)).toEqual({
+      ok: false,
+      error: "Only the person who started this draft can delete it.",
+    });
+    as(creator);
+    let rowsAtFileDelete = -1;
+    vi.mocked(deleteFile).mockImplementation(async () => {
+      rowsAtFileDelete = await prisma.matterDraft.count();
+    });
+    expect(await deleteMatterDraft(a.draftId)).toEqual({ ok: true });
+    expect(deleteFile).toHaveBeenCalledWith("k1");
+    expect(rowsAtFileDelete).toBe(0);
+    const titles = (await prisma.activityLog.findMany()).map((l) => l.title);
+    expect(titles).toContain("Matter draft deleted");
+    expect(titles.join()).not.toMatch(/secret/i);
+  });
+
+  test("Admin may delete", async () => {
+    const a = await newDraft();
+    as(admin);
+    expect(await deleteMatterDraft(a.draftId)).toEqual({ ok: true });
+  });
+});
+
+describe("draft files", () => {
+  test("originating toggle keeps exactly one; remove deletes row then bytes", async () => {
+    const a = await newDraft();
+    const f1 = await prisma.matterDraftFile.create({
+      data: { draftId: a.draftId, name: "a", fileUrl: "k1", uploadedBy: creator, isOriginating: true },
+    });
+    const f2 = await prisma.matterDraftFile.create({
+      data: { draftId: a.draftId, name: "b", fileUrl: "k2", uploadedBy: creator },
+    });
+    expect(await setDraftFileOriginating(f2.id)).toEqual({ ok: true });
+    const rows = await prisma.matterDraftFile.findMany({ where: { isOriginating: true } });
+    expect(rows.map((r) => r.id)).toEqual([f2.id]);
+    expect(await removeDraftFile(f1.id)).toEqual({ ok: true });
+    expect(await prisma.matterDraftFile.count()).toBe(1);
+    expect(deleteFile).toHaveBeenCalledWith("k1");
+    const titles = (await prisma.activityLog.findMany()).map((l) => l.title);
+    expect(titles).toContain("File removed from a matter draft");
+  });
+});
+
+describe("listMatterDrafts", () => {
+  test("scopes to the user, labels, delete flag, retention countdown", async () => {
+    const a = await newDraft();
+    await prisma.matterDraft.update({
+      where: { id: a.draftId },
+      data: { updatedAt: new Date(Date.now() - 80 * 86_400_000) },
+    });
+    const mine = await listMatterDrafts();
+    expect(mine).toHaveLength(1);
+    expect(mine[0]).toMatchObject({
+      clientLabel: "Secret Client",
+      createdByName: "Cara",
+      canDelete: true,
+      deletesInDays: 10,
+    });
+    as(other);
+    expect(await listMatterDrafts()).toHaveLength(0);
+    as(admin);
+    const adm = await listMatterDrafts();
+    expect(adm).toHaveLength(1);
+    expect(adm[0].canDelete).toBe(true);
+  });
+});
