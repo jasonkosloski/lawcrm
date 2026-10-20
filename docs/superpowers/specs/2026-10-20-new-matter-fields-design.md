@@ -56,7 +56,7 @@ model Venue {
   nameKey   String   @unique /// lower(trim(name)); case-insensitive uniqueness
   city      String?
   county    String?
-  state     String   /// Two-letter US state; inline add defaults to Firm.state
+  state     String   /// Required, free text (max 60) like Firm.state; inline add defaults to Firm.state
   isActive  Boolean  @default(true) /// Archived venues stay on existing matters
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
