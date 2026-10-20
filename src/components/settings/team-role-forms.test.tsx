@@ -10,7 +10,7 @@
  *   - labels are associated with their controls;
  *   - the New-role composer collapses after EVERY successful create;
  *   - a delegated (non-Admin) directory manager sees privileged roles
- *     locked and no Edit / Reset / Unlock on Admin accounts;
+ *     locked and no Edit / sign-in management on Admin accounts;
  *   - RoleRow formats `createdAt` in the viewer's zone.
  */
 
@@ -27,8 +27,9 @@ vi.mock("@/lib/feedback", () => ({
 vi.mock("@/app/actions/team", () => ({
   inviteFirmMember: vi.fn(),
   updateFirmMember: vi.fn(),
-  resetFirmMemberPassword: vi.fn(),
-  unlockFirmMemberSignIn: vi.fn(),
+  resendFirmMemberInvite: vi.fn(),
+  resetFirmMemberSignInLink: vi.fn(),
+  signOutFirmMemberEverywhere: vi.fn(),
 }));
 vi.mock("@/app/actions/roles", () => ({
   createRoleAction: vi.fn(),
@@ -41,8 +42,9 @@ vi.mock("@/app/actions/firm", () => ({
 
 import {
   inviteFirmMember,
-  resetFirmMemberPassword,
-  unlockFirmMemberSignIn,
+  resendFirmMemberInvite,
+  resetFirmMemberSignInLink,
+  signOutFirmMemberEverywhere,
   updateFirmMember,
 } from "@/app/actions/team";
 import { notifySuccess } from "@/lib/feedback";
@@ -60,8 +62,9 @@ import { FirmEditForm } from "./firm-edit-form";
 
 const mockedInvite = vi.mocked(inviteFirmMember);
 const mockedUpdateMember = vi.mocked(updateFirmMember);
-const mockedReset = vi.mocked(resetFirmMemberPassword);
-const mockedUnlock = vi.mocked(unlockFirmMemberSignIn);
+const mockedResend = vi.mocked(resendFirmMemberInvite);
+const mockedResetLink = vi.mocked(resetFirmMemberSignInLink);
+const mockedSignOut = vi.mocked(signOutFirmMemberEverywhere);
 const mockedCreateRole = vi.mocked(createRoleAction);
 const mockedUpdateRole = vi.mocked(updateRoleAction);
 const mockedFirm = vi.mocked(updateFirmAction);
@@ -83,6 +86,7 @@ const MEMBER: FirmUserRow = {
   phone: null,
   barNumber: null,
   isActive: true,
+  hasSignedIn: true,
   roles: [ROLES[1]],
   isAdmin: false,
   isSelf: false,
@@ -100,8 +104,9 @@ beforeEach(() => {
   for (const m of [
     mockedInvite,
     mockedUpdateMember,
-    mockedReset,
-    mockedUnlock,
+    mockedResend,
+    mockedResetLink,
+    mockedSignOut,
     mockedCreateRole,
     mockedUpdateRole,
     mockedFirm,
@@ -189,26 +194,41 @@ describe("InviteMemberComposer", () => {
     ).toBe(false);
   });
 
-  test("shows the temp password after each successful invite, not just the first", async () => {
-    mockedInvite
-      .mockResolvedValueOnce({ status: "ok", invitePassword: "first-pw-1111" })
-      .mockResolvedValueOnce({ status: "ok", invitePassword: "second-pw-2222" });
+  test("confirms each successful invite, not just the first", async () => {
+    mockedInvite.mockImplementation(async () => ({ status: "ok" as const }));
     const user = userEvent.setup();
     render(<InviteMemberComposer rolePickerOptions={ROLES} />);
 
-    for (const [pw, email] of [
-      ["first-pw-1111", "a@example.com"],
-      ["second-pw-2222", "b@example.com"],
-    ]) {
+    for (const email of ["a@example.com", "b@example.com"]) {
       await user.click(screen.getByRole("button", { name: /invite member/i }));
       await user.type(screen.getByLabelText(/^name/i), "X");
       await user.type(screen.getByLabelText(/^email/i), email);
       await user.type(screen.getByLabelText(/^initials/i), "X");
       await user.type(screen.getByLabelText(/^job title/i), "Paralegal");
       await user.click(screen.getByRole("button", { name: /send invite/i }));
-      await waitFor(() => expect(screen.getByText(pw)).toBeTruthy());
+      await waitFor(() =>
+        expect(screen.getByText(`Invitation sent to ${email}.`)).toBeTruthy()
+      );
       await user.click(screen.getByRole("button", { name: /dismiss/i }));
     }
+  });
+
+  test("shows the warning when the invitation email failed", async () => {
+    mockedInvite.mockResolvedValue({
+      status: "ok",
+      warning: "Member added, but the invitation email didn't send. Use Resend invite.",
+    });
+    const user = userEvent.setup();
+    render(<InviteMemberComposer rolePickerOptions={ROLES} />);
+    await user.click(screen.getByRole("button", { name: /invite member/i }));
+    await user.type(screen.getByLabelText(/^name/i), "X");
+    await user.type(screen.getByLabelText(/^email/i), "a@example.com");
+    await user.type(screen.getByLabelText(/^initials/i), "X");
+    await user.type(screen.getByLabelText(/^job title/i), "Paralegal");
+    await user.click(screen.getByRole("button", { name: /send invite/i }));
+    await waitFor(() =>
+      expect(screen.getByText(/Use Resend invite/)).toBeTruthy()
+    );
   });
 });
 
@@ -312,16 +332,29 @@ describe("MemberRow", () => {
     );
   }
 
-  test("an Admin viewer can edit, reset and unlock sign-in; unlock calls the action", async () => {
-    mockedUnlock.mockResolvedValue({ status: "ok" });
+  test("an Admin viewer can edit and sign a member out everywhere", async () => {
+    mockedSignOut.mockResolvedValue({ status: "ok" });
     const user = userEvent.setup();
     renderRow({ member: ADMIN_MEMBER, viewerIsAdmin: true });
     await user.click(screen.getByRole("button", { name: /member actions/i }));
     expect(await screen.findByText("Edit")).toBeTruthy();
-    expect(screen.getByText("Reset password")).toBeTruthy();
-    await user.click(screen.getByText("Unlock sign-in"));
-    await waitFor(() => expect(mockedUnlock).toHaveBeenCalledWith("u2"));
+    expect(screen.getByText("Reset sign-in link")).toBeTruthy();
+    await user.click(screen.getByText("Sign out everywhere"));
+    await waitFor(() => expect(mockedSignOut).toHaveBeenCalledWith("u2"));
     await waitFor(() => expect(notifySuccess).toHaveBeenCalled());
+  });
+
+  test("a never-signed-in member offers Resend invite instead", async () => {
+    mockedResend.mockResolvedValue({ status: "ok" });
+    const user = userEvent.setup();
+    renderRow({
+      member: { ...MEMBER, hasSignedIn: false },
+      viewerIsAdmin: true,
+    });
+    await user.click(screen.getByRole("button", { name: /member actions/i }));
+    expect(screen.queryByText("Sign out everywhere")).toBeNull();
+    await user.click(await screen.findByText("Resend invite"));
+    await waitFor(() => expect(mockedResend).toHaveBeenCalledWith("u1"));
   });
 
   test("a delegated manager gets no actions at all on an Admin account", () => {
@@ -334,7 +367,7 @@ describe("MemberRow", () => {
     renderRow({ member: MEMBER, viewerIsAdmin: false });
     await user.click(screen.getByRole("button", { name: /member actions/i }));
     expect(await screen.findByText("Edit")).toBeTruthy();
-    expect(screen.getByText("Reset password")).toBeTruthy();
+    expect(screen.getByText("Reset sign-in link")).toBeTruthy();
   });
 });
 

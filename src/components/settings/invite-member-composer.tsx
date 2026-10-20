@@ -4,10 +4,9 @@
  * Collapsed: a single "Invite member" button. Expanded: inline form
  * for name, email, initials, jobTitle, optional phone + bar number,
  * and a roles multi-select. The "default" role is always granted
- * server-side regardless of form state. On success the action
- * returns a temporary password we render alongside a copy hint —
- * once email delivery lands (Phase 2 of AUTH_PLAN) this becomes a
- * magic-link send instead and the password panel goes away.
+ * server-side regardless of form state. On success Clerk emails the
+ * invitation (sign-in is Google); if that email failed the action
+ * returns a warning and the admin uses Resend invite from the row.
  *
  * Submission is dispatched manually (not `<form action>`) so React 19
  * does not reset the fields — including the ticked roles — after a
@@ -49,20 +48,22 @@ export function InviteMemberComposer({
   >(inviteFirmMember, teamInitialState);
   const [, startTransition] = useTransition();
   const [expanded, setExpanded] = useState(false);
-  const [tempPassword, setTempPassword] = useState<string | null>(null);
-  const [tempEmail, setTempEmail] = useState<string | null>(null);
+  const [invitedEmail, setInvitedEmail] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
+  const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
   // Each action result is a fresh object, so tracking the last one
   // handled (rather than state.status) reacts to EVERY success.
   const [handledState, setHandledState] = useState(state);
 
   if (state !== handledState) {
     setHandledState(state);
-    if (state.status === "ok" && state.invitePassword) {
-      setTempPassword(state.invitePassword);
+    if (state.status === "ok") {
+      setInvitedEmail(submittedEmail ?? "");
+      setWarning(state.warning ?? null);
     }
   }
 
-  if (!expanded && !tempPassword) {
+  if (!expanded && invitedEmail === null) {
     return (
       <button
         type="button"
@@ -87,46 +88,33 @@ export function InviteMemberComposer({
 
   return (
     <div className="flex flex-col gap-3 p-4 rounded-md border border-line bg-paper-2/40">
-      {tempPassword ? (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-start justify-between gap-2">
-            <div className="text-xs text-ink">
-              <div className="font-medium mb-1">
-                Invite sent — copy this temp password to deliver out-of-band.
-              </div>
-              <div className="text-ink-4">
-                {tempEmail ? (
-                  <>
-                    The new user signs in with{" "}
-                    <span className="font-mono text-ink-3">{tempEmail}</span> +
-                    the password below. They can change it once we wire the
-                    password-change flow.
-                  </>
-                ) : (
-                  <>
-                    The new user signs in with their email + the password
-                    below. They can change it once we wire the password-change
-                    flow.
-                  </>
-                )}
-              </div>
+      {invitedEmail !== null ? (
+        <div className="flex items-start justify-between gap-2">
+          <div className="text-xs text-ink">
+            <div className="font-medium mb-1">
+              {warning
+                ? warning
+                : invitedEmail
+                  ? `Invitation sent to ${invitedEmail}.`
+                  : "Invitation sent."}
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setTempPassword(null);
-                setTempEmail(null);
-                setExpanded(false);
-              }}
-              className="text-ink-4 hover:text-ink shrink-0"
-              aria-label="Dismiss"
-            >
-              <X size={14} />
-            </button>
+            <div className="text-ink-4">
+              They sign in with Google using this email address.
+            </div>
           </div>
-          <code className="block px-3 py-2 rounded bg-white border border-line font-mono text-sm text-ink select-all">
-            {tempPassword}
-          </code>
+          <button
+            type="button"
+            onClick={() => {
+              setInvitedEmail(null);
+              setWarning(null);
+              setSubmittedEmail(null);
+              setExpanded(false);
+            }}
+            className="text-ink-4 hover:text-ink shrink-0"
+            aria-label="Dismiss"
+          >
+            <X size={14} />
+          </button>
         </div>
       ) : (
         <form
@@ -134,7 +122,7 @@ export function InviteMemberComposer({
             e.preventDefault();
             const formData = new FormData(e.currentTarget);
             const email = formData.get("email");
-            if (typeof email === "string") setTempEmail(email);
+            if (typeof email === "string") setSubmittedEmail(email);
             startTransition(() => formAction(formData));
           }}
           className="flex flex-col gap-3"

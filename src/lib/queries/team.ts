@@ -26,6 +26,9 @@ export type FirmUserRow = {
   phone: string | null;
   barNumber: string | null;
   isActive: boolean;
+  /** True once the member has signed in with Clerk. The Clerk id
+   *  itself never leaves the server. */
+  hasSignedIn: boolean;
   /** Roles this user holds, ordered system-first then alpha. The
    *  Admin chip always renders first when present. */
   roles: RoleChip[];
@@ -56,6 +59,7 @@ function shapeRow(
     phone: string | null;
     barNumber: string | null;
     isActive: boolean;
+    clerkUserId: string | null;
     createdAt: Date;
     userRoles: Array<{
       role: { id: string; name: string; isSystem: boolean };
@@ -81,6 +85,7 @@ function shapeRow(
     phone: r.phone,
     barNumber: r.barNumber,
     isActive: r.isActive,
+    hasSignedIn: r.clerkUserId != null,
     roles,
     isAdmin: roles.some((rr) => rr.name === ADMIN_ROLE_NAME),
     isSelf: r.id === currentUserId,
@@ -109,6 +114,7 @@ export async function listFirmUsers(
       phone: true,
       barNumber: true,
       isActive: true,
+      clerkUserId: true,
       createdAt: true,
       ...ROLE_INCLUDE,
     },

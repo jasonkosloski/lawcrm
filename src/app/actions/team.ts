@@ -8,7 +8,7 @@
  *
  *   1. "At least one Admin" — a firm without an active user holding
  *      the Admin role can't change its own settings, invite,
- *      deactivate, or reset passwords. Any write that would leave
+ *      deactivate, or reset sign-in links. Any write that would leave
  *      zero active admins is rejected — and the count is re-checked
  *      INSIDE a Serializable transaction so two concurrent demotions
  *      can't both slip past a stale pre-check (check-then-act).
@@ -25,11 +25,10 @@
  *      escalation path. A non-Admin caller may not grant or remove
  *      the Admin role, or any role carrying an ADMIN_ONLY permission
  *      (src/lib/permissions.ts), on anyone — themselves included;
- *      may not deactivate/reactivate, or reset the password of, a
- *      member who holds such a role (that would be account takeover);
- *      may not unlock their sign-in (each unlock grants fresh
- *      password guesses against the highest-value accounts); and may
- *      not edit an Admin's profile at all (name / initials / bar
+ *      may not deactivate/reactivate, sign out, reset the sign-in
+ *      link of, or re-invite a member who holds such a role (that
+ *      would be account takeover or a denial-of-service lever); and
+ *      may not edit an Admin's profile at all (name / initials / bar
  *      number changes are an impersonation and audit-confusion
  *      vector). Enforced here, server-side — the UI hiding the checkbox is
  *      convenience only.
@@ -42,7 +41,7 @@
  *
  * Every successful mutation writes an activity-log entry (see
  * roles.ts for the same treatment of permission flips) — invites,
- * role/status changes, and password resets are governance actions a
+ * role/status changes, and sign-in resets are governance actions a
  * firm must be able to retrace. matterId is always null: firm scope,
  * not matter scope.
  */
@@ -51,14 +50,17 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import * as argon2 from "argon2";
-import { argon2HashOptions } from "@/lib/argon2-options";
-import { randomBytes } from "node:crypto";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { logActivity } from "@/lib/activity-log";
-import { recordAuthEvent } from "@/lib/auth-events";
+import { logAuthEvent } from "@/lib/auth-events";
+import {
+  banStaff,
+  inviteStaff,
+  revokeAllStaffSessions,
+  unbanStaff,
+} from "@/lib/clerk-admin";
 import {
   ADMIN_ROLE_NAME,
   DEFAULT_ROLE_NAME,
@@ -71,25 +73,6 @@ import {
   teamInitialState,
   type TeamFormState,
 } from "@/lib/team-form";
-
-/** Generate a URL-safe random password. 16 chars from a 64-symbol
- *  alphabet ≈ 96 bits of entropy — enough for one-time use. */
-function generateTempPassword(): string {
-  // Strip out characters that look alike (l/1/I, 0/O) to make
-  // verbal/typed handoff less error-prone.
-  const alphabet =
-    "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&";
-  const bytes = randomBytes(16);
-  let out = "";
-  for (let i = 0; i < bytes.length; i++) {
-    out += alphabet[bytes[i] % alphabet.length];
-  }
-  return out;
-}
-
-async function hashPassword(plain: string): Promise<string> {
-  return argon2.hash(plain, argon2HashOptions());
-}
 
 /** Thrown inside the update transaction when the in-transaction
  *  admin recount says the write would leave zero active admins.
@@ -138,6 +121,11 @@ function denied(error: string, values?: Record<string, string>): TeamFormState {
 
 const PRIVILEGED_ROLE_MESSAGE =
   "Only an Admin can grant or remove the Admin role, or roles that carry access-management permissions.";
+
+const INVITE_WARNING =
+  "Member added, but the invitation email didn't send. Use Resend invite.";
+const CLERK_SYNC_WARNING =
+  "Signed out locally; Clerk didn't confirm. Retry from the member menu.";
 
 const ADMIN_TARGET_MESSAGE =
   "Only an Admin can edit or deactivate an Admin.";
@@ -239,8 +227,6 @@ export async function inviteFirmMember(
     }
   }
 
-  const tempPassword = generateTempPassword();
-  const passwordHash = await hashPassword(tempPassword);
   const currentUserId = await getCurrentUserId();
 
   await prisma.$transaction(async (tx) => {
@@ -254,7 +240,6 @@ export async function inviteFirmMember(
         phone: parsed.data.phone || null,
         barNumber: parsed.data.barNumber || null,
         isActive: true,
-        passwordHash,
       },
       select: { id: true },
     });
@@ -267,9 +252,8 @@ export async function inviteFirmMember(
     });
   });
 
-  // Audit trail — an invite mints credentials and grants roles in
-  // one shot; a firm needs to be able to retrace who added whom
-  // with what access. The temp password is deliberately NOT logged.
+  // Audit trail — an invite grants roles; a firm needs to be able to
+  // retrace who added whom with what access.
   const grantedRoleNames = [...validRoleIds]
     .map((id) => roleMap.byId.get(id)?.name ?? id)
     .sort();
@@ -281,13 +265,17 @@ export async function inviteFirmMember(
     detail: `${parsed.data.email} — roles: ${grantedRoleNames.join(", ")}`,
   });
 
+  // Clerk emails the invitation. The row is already committed, so a
+  // failure here is a warning (Resend invite), never a rollback.
+  const sent = await inviteStaff(parsed.data.email);
+
   revalidatePath("/settings/team");
   revalidatePath("/settings/firm"); // member count + admin list
   revalidatePath("/settings/roles"); // member counts
   return {
     ...teamInitialState,
     status: "ok",
-    invitePassword: tempPassword,
+    warning: sent.ok ? undefined : INVITE_WARNING,
   };
 }
 
@@ -329,6 +317,7 @@ export async function updateFirmMember(
     select: {
       id: true,
       isActive: true,
+      clerkUserId: true,
       userRoles: { select: { roleId: true, role: { select: { name: true } } } },
     },
   });
@@ -546,161 +535,178 @@ export async function updateFirmMember(
       roleDiffSuffix(addedRoleIds, removedRoleIds, roleMap.byId),
   });
 
+  // Mirror the status change into Clerk AFTER the commit. The DB is
+  // authoritative (resolveStaffUser denies an inactive user at once),
+  // so a Clerk failure is a warning with a retry, not a rollback.
+  let warning: string | undefined;
+  if (target.clerkUserId && target.isActive !== newIsActive) {
+    const deactivating = !newIsActive;
+    const synced = deactivating
+      ? await banStaff(target.clerkUserId)
+      : await unbanStaff(target.clerkUserId);
+    if (synced.ok) {
+      await logAuthEvent({
+        userId: target.id,
+        kind: deactivating ? "clerk_banned" : "clerk_unbanned",
+        reason: deactivating ? "deactivated from the team page" : "reactivated from the team page",
+      });
+    } else {
+      warning = CLERK_SYNC_WARNING;
+    }
+  }
+
   revalidatePath("/settings/team");
   revalidatePath("/settings/firm"); // admin list might change
   revalidatePath("/settings/roles"); // member counts
   // Sidebar profile reads from the User row — bust layout cache.
   revalidatePath("/", "layout");
-  return { ...teamInitialState, status: "ok" };
+  return { ...teamInitialState, status: "ok", warning };
 }
 
-// ── Reset password ──────────────────────────────────────────────────────
+// ── Sign-in management (Clerk) ──────────────────────────────────────────
 
-export async function resetFirmMemberPassword(
+const SIGN_IN_TARGET_MESSAGE =
+  "Only an Admin can manage sign-in for an Admin (or another access-management role holder).";
+
+type SignInTarget = {
+  id: string;
+  name: string;
+  email: string;
+  isActive: boolean;
+  clerkUserId: string | null;
+};
+
+/** Shared gate for the sign-in actions: permission, same-firm lookup,
+ *  and the Admin-class escalation guard. */
+async function loadSignInTarget(
   userId: string
-): Promise<TeamFormState> {
+): Promise<{ target: SignInTarget } | { error: TeamFormState }> {
   const gate = await requirePermissionResult("firm.manage_team_directory");
-  if (!gate.ok) return denied(gate.error);
+  if (!gate.ok) return { error: denied(gate.error) };
   const firm = await getCurrentFirm();
   const target = await prisma.user.findFirst({
     where: { id: userId, firmId: firm.id },
-    select: { id: true, name: true, userRoles: { select: { roleId: true } } },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      isActive: true,
+      clerkUserId: true,
+      userRoles: { select: { roleId: true } },
+    },
   });
-  if (!target) {
-    return {
-      status: "error",
-      errors: { _form: ["User not found in this firm."] },
-    };
-  }
+  if (!target) return { error: denied("User not found in this firm.") };
 
-  // Resetting a password hands the caller a working login for that
-  // account — for an Admin (or an access-management role holder)
-  // that is a full takeover, so it is Admin-only.
+  // Signing someone out, resetting their link or re-inviting them is
+  // account-takeover / lockout shaped for Admin-class accounts.
   if (!(await isCurrentUserAdmin())) {
     const privileged = await getPrivilegedRoleIds(firm.id);
     if (target.userRoles.some((ur) => privileged.has(ur.roleId))) {
-      return {
-        status: "error",
-        errors: {
-          _form: [
-            "Only an Admin can reset the password of an Admin (or another access-management role holder).",
-          ],
-        },
-      };
+      return { error: denied(SIGN_IN_TARGET_MESSAGE) };
     }
   }
+  const { userRoles: _roles, ...rest } = target;
+  void _roles;
+  return { target: rest };
+}
 
-  const tempPassword = generateTempPassword();
-  const passwordHash = await hashPassword(tempPassword);
-  // A reset also lifts any sign-in lockout (src/lib/credentials-
-  // authorize.ts): otherwise an attacker who deliberately failed
-  // logins to lock the account would still have the user locked out
-  // of the brand-new password. The unlock row is written in the same
-  // transaction as the new hash, so a failed audit write can't leave
-  // a reset that reports ok while the account is still locked.
-  await prisma.$transaction(async (tx) => {
-    await tx.user.update({
-      where: { id: target.id },
-      data: { passwordHash },
-    });
-    await recordAuthEvent(
-      {
-        userId: target.id,
-        kind: "sign_in_unlocked",
-        reason: "password reset by an administrator",
-      },
-      tx
-    );
-  });
+export async function resendFirmMemberInvite(
+  userId: string
+): Promise<TeamFormState> {
+  const loaded = await loadSignInTarget(userId);
+  if ("error" in loaded) return loaded.error;
+  const { target } = loaded;
+  if (target.clerkUserId) {
+    return denied("This member has already signed in.");
+  }
+  if (!target.isActive) {
+    return denied("Reactivate this member before re-sending an invite.");
+  }
+  const sent = await inviteStaff(target.email);
+  if (!sent.ok) return denied(sent.error);
 
-  // Audit trail — this replaces someone else's credentials and hands
-  // the temp password to the caller, which is account-takeover-shaped
-  // if abused. "Who reset whose password when" must be answerable;
-  // the temp password itself is deliberately NOT logged.
-  const actorId = await getCurrentUserId();
   await logActivity({
     matterId: null,
-    userId: actorId,
+    userId: await getCurrentUserId(),
     type: "auth",
-    title: `Reset password for ${target.name}`,
+    title: `Re-sent invitation to ${target.name}`,
+    detail: target.email,
   });
+  revalidatePath("/settings/team");
+  return { ...teamInitialState, status: "ok" };
+}
 
+export async function signOutFirmMemberEverywhere(
+  userId: string
+): Promise<TeamFormState> {
+  const loaded = await loadSignInTarget(userId);
+  if ("error" in loaded) return loaded.error;
+  const { target } = loaded;
+  if (!target.clerkUserId) {
+    return denied("This member hasn't signed in yet — no sessions to end.");
+  }
+  const revoked = await revokeAllStaffSessions(target.clerkUserId);
+  if (!revoked.ok) return denied(revoked.error);
+
+  await logAuthEvent({
+    userId: target.id,
+    kind: "signed_out_everywhere",
+    reason: "from the team page",
+  });
+  await logActivity({
+    matterId: null,
+    userId: await getCurrentUserId(),
+    type: "auth",
+    title: `Signed ${target.name} out everywhere`,
+  });
+  revalidatePath("/settings/team");
+  return { ...teamInitialState, status: "ok" };
+}
+
+/**
+ * Detach a member from their Clerk identity (e.g. they lost access to
+ * the Google account). The DB link is cleared first — that is the
+ * security effect — then the old identity's sessions are revoked. The
+ * member's next verified-email sign-in re-links.
+ */
+export async function resetFirmMemberSignInLink(
+  userId: string
+): Promise<TeamFormState> {
+  const loaded = await loadSignInTarget(userId);
+  if ("error" in loaded) return loaded.error;
+  const { target } = loaded;
+  if (target.id === (await getCurrentUserId())) {
+    return denied("You can't reset your own sign-in link.");
+  }
+  const oldClerkUserId = target.clerkUserId;
+  if (!oldClerkUserId) {
+    return denied("This member hasn't signed in yet — nothing to reset.");
+  }
+
+  // Conditional on the id we read, so a concurrent re-link isn't wiped.
+  await prisma.user.updateMany({
+    where: { id: target.id, clerkUserId: oldClerkUserId },
+    data: { clerkUserId: null },
+  });
+  const revoked = await revokeAllStaffSessions(oldClerkUserId);
+
+  await logAuthEvent({
+    userId: target.id,
+    kind: "sign_in_link_reset",
+    reason: "from the team page",
+  });
+  await logActivity({
+    matterId: null,
+    userId: await getCurrentUserId(),
+    type: "auth",
+    title: `Reset sign-in link for ${target.name}`,
+  });
   revalidatePath("/settings/team");
   return {
     ...teamInitialState,
     status: "ok",
-    resetPassword: tempPassword,
+    warning: revoked.ok
+      ? undefined
+      : "Sign-in link reset, but Clerk didn't confirm ending existing sessions. Use Sign out everywhere after they sign in again.",
   };
-}
-
-// ── Unlock sign-in ──────────────────────────────────────────────────────
-
-/**
- * Clear a member's sign-in lockout immediately (5 failed sign-ins in
- * 15 minutes pause the account — and anyone who knows a staff email
- * can trigger that on purpose). Writes a `sign_in_unlocked` auth
- * event, which the lockout counter treats like a successful sign-in,
- * plus an actor-attributed activity entry.
- */
-export async function unlockFirmMemberSignIn(
-  userId: string
-): Promise<TeamFormState> {
-  const gate = await requirePermissionResult("firm.manage_team_directory");
-  if (!gate.ok) return denied(gate.error);
-  const firm = await getCurrentFirm();
-  const target = await prisma.user.findFirst({
-    where: { id: userId, firmId: firm.id },
-    select: { id: true, name: true, userRoles: { select: { roleId: true } } },
-  });
-  if (!target) {
-    return {
-      status: "error",
-      errors: { _form: ["User not found in this firm."] },
-    };
-  }
-
-  // Each unlock resets the failure count, i.e. grants fresh password
-  // guesses. A delegate must not be able to keep an Admin's throttle
-  // open on demand, so Admin-class targets are Admin-only (same rule
-  // as resetFirmMemberPassword).
-  if (!(await isCurrentUserAdmin())) {
-    const privileged = await getPrivilegedRoleIds(firm.id);
-    if (target.userRoles.some((ur) => privileged.has(ur.roleId))) {
-      return {
-        status: "error",
-        errors: {
-          _form: [
-            "Only an Admin can unlock sign-in for an Admin (or another access-management role holder).",
-          ],
-        },
-      };
-    }
-  }
-
-  // The unlock row IS the effect: write it with the throwing variant
-  // so a failed write surfaces as an error instead of a false "ok"
-  // on a still-locked account.
-  try {
-    await recordAuthEvent({
-      userId: target.id,
-      kind: "sign_in_unlocked",
-      reason: "unlocked from the team page",
-    });
-  } catch (err) {
-    console.error("[team] failed to record sign-in unlock", err);
-    return {
-      status: "error",
-      errors: { _form: ["Couldn't unlock sign-in — try again."] },
-    };
-  }
-  const actorId = await getCurrentUserId();
-  await logActivity({
-    matterId: null,
-    userId: actorId,
-    type: "auth",
-    title: `Unlocked sign-in for ${target.name}`,
-  });
-
-  revalidatePath("/settings/team");
-  return { ...teamInitialState, status: "ok" };
 }

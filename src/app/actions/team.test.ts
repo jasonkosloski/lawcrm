@@ -10,10 +10,8 @@
  *     admins. We pin the single-request rejection + rollback and a
  *     concurrent double-demotion that must never end at zero.
  *
- *   - Audit trail. Invite / member update / password reset are
- *     governance actions (credential minting, role grants, password
- *     replacement) and must each write an activity-log entry — and
- *     must NOT leak the temp password into it.
+ *   - Audit trail. Invite / member update are governance actions
+ *     (role grants) and must each write an activity-log entry.
  *
  * Auth + permission gates are stubbed; the gate itself is covered by
  * permission-check.integration.test.ts.
@@ -30,6 +28,12 @@ vi.mock("@/lib/firm", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/firm")>();
   return { ...actual, isCurrentUserAdmin: vi.fn(actual.isCurrentUserAdmin) };
 });
+vi.mock("@/lib/clerk-admin", () => ({
+  inviteStaff: vi.fn().mockResolvedValue({ ok: true }),
+  banStaff: vi.fn().mockResolvedValue({ ok: true }),
+  unbanStaff: vi.fn().mockResolvedValue({ ok: true }),
+  revokeAllStaffSessions: vi.fn().mockResolvedValue({ ok: true }),
+}));
 vi.mock("@/lib/permission-check", () => ({
   requirePermission: vi.fn().mockResolvedValue("test-user"),
   requirePermissionResult: vi
@@ -43,11 +47,8 @@ import { isCurrentUserAdmin } from "@/lib/firm";
 import { prisma } from "@/lib/prisma";
 import {
   inviteFirmMember,
-  resetFirmMemberPassword,
-  unlockFirmMemberSignIn,
   updateFirmMember,
 } from "@/app/actions/team";
-import { isLockedOut } from "@/lib/credentials-authorize";
 import { teamInitialState } from "@/lib/team-form";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
@@ -253,7 +254,7 @@ describe("updateFirmMember — last-active-admin invariant", () => {
 });
 
 describe("audit trail — team mutations write activity-log entries", () => {
-  test("inviteFirmMember logs who invited whom (without the temp password)", async () => {
+  test("inviteFirmMember logs who invited whom", async () => {
     const actor = await seedUser({
       firmId,
       roleIds: [adminRoleId, defaultRoleId],
@@ -262,7 +263,6 @@ describe("audit trail — team mutations write activity-log entries", () => {
 
     const res = await inviteFirmMember(teamInitialState, inviteForm());
     expect(res.status).toBe("ok");
-    expect(res.invitePassword).toBeTruthy();
 
     const log = await prisma.activityLog.findFirstOrThrow({
       where: { userId: actor.userId, type: "auth" },
@@ -270,9 +270,6 @@ describe("audit trail — team mutations write activity-log entries", () => {
     expect(log.matterId).toBeNull();
     expect(log.title).toContain("Invited New Hire");
     expect(log.detail).toContain("new.hire@example.com");
-    // Credentials never land in the audit trail.
-    expect(log.title).not.toContain(res.invitePassword!);
-    expect(log.detail ?? "").not.toContain(res.invitePassword!);
   });
 
   test("updateFirmMember logs the role/status outcome", async () => {
@@ -300,34 +297,6 @@ describe("audit trail — team mutations write activity-log entries", () => {
     expect(log.matterId).toBeNull();
     expect(log.title).toContain("Updated team member Member");
     expect(log.detail).toContain("Admin");
-  });
-
-  test("resetFirmMemberPassword logs actor + target (without the temp password)", async () => {
-    const actor = await seedUser({
-      firmId,
-      roleIds: [adminRoleId, defaultRoleId],
-    });
-    const member = await seedUser({ firmId, name: "Target Member" });
-    mockedGetUser.mockResolvedValue(actor.userId);
-
-    const res = await resetFirmMemberPassword(member.userId);
-    expect(res.status).toBe("ok");
-    expect(res.resetPassword).toBeTruthy();
-
-    // Password actually rotated.
-    const row = await prisma.user.findUniqueOrThrow({
-      where: { id: member.userId },
-      select: { passwordHash: true },
-    });
-    expect(row.passwordHash).toBeTruthy();
-
-    const log = await prisma.activityLog.findFirstOrThrow({
-      where: { userId: actor.userId, type: "auth" },
-    });
-    expect(log.matterId).toBeNull();
-    expect(log.title).toBe("Reset password for Target Member");
-    expect(log.title).not.toContain(res.resetPassword!);
-    expect(log.detail ?? "").not.toContain(res.resetPassword!);
   });
 });
 
@@ -516,35 +485,6 @@ describe("escalation guard — non-Admin directory manager", () => {
     expect((await rolesOf(memberId)).sort()).toEqual([defaultRoleId, ordinary.id].sort());
   });
 
-  test("cannot reset an Admin's password", async () => {
-    const before = await prisma.user.findUniqueOrThrow({
-      where: { id: adminUserId },
-      select: { passwordHash: true },
-    });
-    const res = await resetFirmMemberPassword(adminUserId);
-    expect(res.status).toBe("error");
-    expect(res.resetPassword).toBeUndefined();
-    const after = await prisma.user.findUniqueOrThrow({
-      where: { id: adminUserId },
-      select: { passwordHash: true },
-    });
-    expect(after.passwordHash).toBe(before.passwordHash);
-  });
-
-  test("cannot reset the password of a privileged-role holder, but can reset an ordinary member's", async () => {
-    const holder = await seedUser({
-      firmId,
-      name: "Access Holder",
-      roleIds: [defaultRoleId, privilegedRoleId],
-    });
-    const denied = await resetFirmMemberPassword(holder.userId);
-    expect(denied.status).toBe("error");
-
-    const ok = await resetFirmMemberPassword(memberId);
-    expect(ok.status).toBe("ok");
-    expect(ok.resetPassword).toBeTruthy();
-  });
-
   test("an Admin can do all of the above", async () => {
     mockedGetUser.mockResolvedValue(adminUserId);
     const promote = await updateFirmMember(
@@ -553,136 +493,10 @@ describe("escalation guard — non-Admin directory manager", () => {
       updateForm({ name: "Plain Member", roleIds: [defaultRoleId, adminRoleId] })
     );
     expect(promote.status).toBe("ok");
-    const otherAdmin = await resetFirmMemberPassword(memberId);
-    expect(otherAdmin.status).toBe("ok");
     const invited = await inviteFirmMember(
       teamInitialState,
       withRoles(inviteForm(), [adminRoleId])
     );
     expect(invited.status).toBe("ok");
-  });
-});
-
-describe("sign-in lockout — admin unlock", () => {
-  async function lock(userId: string) {
-    for (let i = 0; i < 5; i++) {
-      await prisma.activityLog.create({
-        data: {
-          matterId: null,
-          userId,
-          type: "auth",
-          title: "Failed sign-in",
-        },
-      });
-    }
-  }
-
-  test("a password reset clears an attacker-induced lockout", async () => {
-    const actor = await seedUser({ firmId, roleIds: [adminRoleId, defaultRoleId] });
-    const member = await seedUser({ firmId, name: "Locked Member" });
-    mockedGetUser.mockResolvedValue(actor.userId);
-    await lock(member.userId);
-    expect(await isLockedOut(member.userId)).toBe(true);
-
-    const res = await resetFirmMemberPassword(member.userId);
-    expect(res.status).toBe("ok");
-    expect(await isLockedOut(member.userId)).toBe(false);
-  });
-
-  test("unlockFirmMemberSignIn clears the lock and logs both sides", async () => {
-    const actor = await seedUser({ firmId, roleIds: [adminRoleId, defaultRoleId] });
-    const member = await seedUser({ firmId, name: "Locked Member" });
-    mockedGetUser.mockResolvedValue(actor.userId);
-    await lock(member.userId);
-
-    const res = await unlockFirmMemberSignIn(member.userId);
-    expect(res.status).toBe("ok");
-    expect(await isLockedOut(member.userId)).toBe(false);
-    const titles = (
-      await prisma.activityLog.findMany({ where: { type: "auth" } })
-    ).map((l) => l.title);
-    expect(titles).toContain("Sign-in unlocked by an administrator");
-    expect(titles).toContain("Unlocked sign-in for Locked Member");
-  });
-
-  test("a delegate cannot unlock an Admin (or an access-manager role holder)", async () => {
-    const delegate = await seedUser({ firmId, name: "Delegate" });
-    const admin = await seedUser({
-      firmId,
-      name: "Locked Admin",
-      roleIds: [adminRoleId, defaultRoleId],
-    });
-    const priv = await prisma.role.create({
-      data: {
-        firmId,
-        name: "Access manager",
-        isSystem: false,
-        permissions: { create: { permission: "firm.manage_team_directory" } },
-      },
-      select: { id: true },
-    });
-    const holder = await seedUser({
-      firmId,
-      name: "Locked Holder",
-      roleIds: [defaultRoleId, priv.id],
-    });
-    mockedGetUser.mockResolvedValue(delegate.userId);
-    await lock(admin.userId);
-    await lock(holder.userId);
-
-    for (const target of [admin.userId, holder.userId]) {
-      const res = await unlockFirmMemberSignIn(target);
-      expect(res.status).toBe("error");
-      expect(res.errors?._form?.[0]).toMatch(/Only an Admin/);
-      expect(await isLockedOut(target)).toBe(true);
-    }
-  });
-
-  test("a delegate cannot clear an Admin's lock via a password reset either", async () => {
-    const delegate = await seedUser({ firmId, name: "Delegate" });
-    const admin = await seedUser({
-      firmId,
-      name: "Locked Admin",
-      roleIds: [adminRoleId, defaultRoleId],
-    });
-    mockedGetUser.mockResolvedValue(delegate.userId);
-    await lock(admin.userId);
-    const res = await resetFirmMemberPassword(admin.userId);
-    expect(res.status).toBe("error");
-    expect(await isLockedOut(admin.userId)).toBe(true);
-  });
-
-  test("a delegate CAN unlock an ordinary member", async () => {
-    const delegate = await seedUser({ firmId, name: "Delegate" });
-    const member = await seedUser({ firmId, name: "Locked Member" });
-    mockedGetUser.mockResolvedValue(delegate.userId);
-    await lock(member.userId);
-    const res = await unlockFirmMemberSignIn(member.userId);
-    expect(res.status).toBe("ok");
-    expect(await isLockedOut(member.userId)).toBe(false);
-  });
-
-  test("a failed unlock write is reported as an error, not ok", async () => {
-    const actor = await seedUser({ firmId, roleIds: [adminRoleId, defaultRoleId] });
-    const member = await seedUser({ firmId, name: "Locked Member" });
-    mockedGetUser.mockResolvedValue(actor.userId);
-    await lock(member.userId);
-
-    const spy = vi
-      .spyOn(prisma.activityLog, "create")
-      .mockRejectedValueOnce(new Error("db down"));
-    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
-    const res = await unlockFirmMemberSignIn(member.userId);
-    spy.mockRestore();
-    quiet.mockRestore();
-    expect(res.status).toBe("error");
-    expect(await isLockedOut(member.userId)).toBe(true);
-  });
-
-  test("unlocking a user outside the firm is refused", async () => {
-    const actor = await seedUser({ firmId, roleIds: [adminRoleId, defaultRoleId] });
-    mockedGetUser.mockResolvedValue(actor.userId);
-    const res = await unlockFirmMemberSignIn("no-such-user");
-    expect(res.status).toBe("error");
   });
 });

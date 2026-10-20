@@ -23,6 +23,12 @@ import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
+vi.mock("@/lib/clerk-admin", () => ({
+  inviteStaff: vi.fn().mockResolvedValue({ ok: true }),
+  banStaff: vi.fn().mockResolvedValue({ ok: true }),
+  unbanStaff: vi.fn().mockResolvedValue({ ok: true }),
+  revokeAllStaffSessions: vi.fn().mockResolvedValue({ ok: true }),
+}));
 vi.mock("@/lib/permission-check", () => ({
   requirePermission: vi.fn().mockResolvedValue("test-user"),
   requirePermissionResult: vi
@@ -37,8 +43,6 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   inviteFirmMember,
-  resetFirmMemberPassword,
-  unlockFirmMemberSignIn,
   updateFirmMember,
 } from "@/app/actions/team";
 import { teamInitialState } from "@/lib/team-form";
@@ -127,12 +131,8 @@ describe("permission gate — denial is a form error, not a redirect", () => {
       teamInitialState,
       updateForm({ name: "Hacked" })
     );
-    mockedGate.mockResolvedValueOnce(DENIED);
-    const reset = await resetFirmMemberPassword(member.userId);
-    mockedGate.mockResolvedValueOnce(DENIED);
-    const unlocked = await unlockFirmMemberSignIn(member.userId);
 
-    for (const res of [invited, updated, reset, unlocked]) {
+    for (const res of [invited, updated]) {
       expect(res.status).toBe("error");
       expect(res.errors?._form?.[0]).toMatch(/permission/);
     }
@@ -279,9 +279,6 @@ describe("team actions — input integrity", () => {
     );
     expect(res.status).toBe("error");
     expect(res.errors?.name?.[0]).toMatch(/not found/i);
-    const reset = await resetFirmMemberPassword(stranger.userId);
-    expect(reset.status).toBe("error");
-    expect(reset.errors?._form?.[0]).toMatch(/not found/i);
     const row = await prisma.user.findUniqueOrThrow({
       where: { id: stranger.userId },
       select: { name: true, passwordHash: true },

@@ -8,13 +8,9 @@ export type TeamFormState = {
   status: "idle" | "ok" | "error";
   errors?: Record<string, string[]>;
   values?: Record<string, string>;
-  /** Surfaced after a successful invite — gives the admin a chance
-   *  to copy + share the temporary password. Null on edit/reset/etc.
-   *  Today this is the only path to deliver creds since email
-   *  delivery is deferred. */
-  invitePassword?: string;
-  /** Surfaced after a successful password reset — same reason. */
-  resetPassword?: string;
+  /** The action succeeded, but a follow-up step (Clerk invite / ban
+   *  sync) didn't. Shown to the admin with a suggested retry. */
+  warning?: string;
 };
 
 export const teamInitialState: TeamFormState = { status: "idle" };

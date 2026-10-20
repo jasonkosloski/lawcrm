@@ -5,8 +5,8 @@
  * kebab (admin-only). Edit mode: collapses into a colSpan cell with
  * the MemberEditForm.
  *
- * Reset-password is a separate inline action (not in the kebab) so
- * the temp password renders right next to the row that's affected.
+ * Sign-in management (sign out everywhere, reset sign-in link, resend
+ * invite) lives in the kebab; sign-in itself is Google via Clerk.
  */
 
 "use client";
@@ -15,7 +15,8 @@ import { useState, useTransition } from "react";
 import {
   KeyRound,
   Lock,
-  LockOpen,
+  LogOut,
+  MailPlus,
   MoreHorizontal,
   Pencil,
   ShieldCheck,
@@ -30,9 +31,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  resetFirmMemberPassword,
-  unlockFirmMemberSignIn,
+  resendFirmMemberInvite,
+  resetFirmMemberSignInLink,
+  signOutFirmMemberEverywhere,
 } from "@/app/actions/team";
+import type { TeamFormState } from "@/lib/team-form";
 import { ADMIN_ROLE_NAME } from "@/lib/role-constants";
 import { MemberEditForm } from "./member-edit-form";
 import type { FirmUserRow, RoleChip } from "@/lib/queries/team";
@@ -47,8 +50,8 @@ export function MemberRow({
   member: FirmUserRow;
   canManageDirectory: boolean;
   /** False for a delegated (non-Admin) directory manager. The server
-   *  refuses edits to Admins and password resets / unlocks of
-   *  Admin-class members from them, so those actions are hidden. */
+   *  refuses edits to Admins and sign-in management of Admin-class
+   *  members from them, so those actions are hidden. */
   viewerIsAdmin?: boolean;
   /** Admin + every role carrying an admin-only permission. */
   privilegedRoleIds?: string[];
@@ -57,10 +60,6 @@ export function MemberRow({
   rolePickerOptions: RoleChip[];
 }) {
   const [editing, setEditing] = useState(false);
-  // Last-shown reset password — shown until the user dismisses it
-  // OR another row's reset overwrites the global state. Per-row
-  // state keeps the password tied to the row that triggered it.
-  const [resetPassword, setResetPassword] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const privileged = new Set(privilegedRoleIds);
   const targetIsPrivileged =
@@ -69,36 +68,62 @@ export function MemberRow({
   const canEditMember = viewerIsAdmin || !member.isAdmin;
   const canTakeOverMember = viewerIsAdmin || !targetIsPrivileged;
 
-  const onResetPassword = async () => {
+  const report = (result: TeamFormState, success: string) => {
+    if (result.status !== "ok") {
+      notifyError(result.errors?._form?.[0] ?? "Something went wrong.");
+    } else if (result.warning) {
+      notifyError(result.warning);
+    } else {
+      notifySuccess(success);
+    }
+  };
+
+  const onSignOutEverywhere = async () => {
     if (
       !(await confirmAction({
-        title: `Reset ${member.name}'s password?`,
+        title: `Sign ${member.name} out everywhere?`,
         description:
-          "A new temporary password will be generated. Their existing password stops working immediately. You'll need to deliver the new one to them out-of-band.",
-        confirmLabel: "Reset password",
+          "Every active session ends immediately. They can sign back in with Google.",
+        confirmLabel: "Sign out everywhere",
         destructive: true,
       }))
     ) {
       return;
     }
     startTransition(async () => {
-      const result = await resetFirmMemberPassword(member.id);
-      if (result.status === "ok" && result.resetPassword) {
-        setResetPassword(result.resetPassword);
-      } else {
-        notifyError(result.errors?._form?.[0] ?? "Couldn't reset password.");
-      }
+      report(
+        await signOutFirmMemberEverywhere(member.id),
+        `${member.name} was signed out everywhere.`
+      );
     });
   };
 
-  const onUnlock = () => {
+  const onResetLink = async () => {
+    if (
+      !(await confirmAction({
+        title: `Reset ${member.name}'s sign-in link?`,
+        description:
+          "Detaches their current Google sign-in and ends its sessions. The next time they sign in with a verified Google account on their firm email, it links again.",
+        confirmLabel: "Reset sign-in link",
+        destructive: true,
+      }))
+    ) {
+      return;
+    }
     startTransition(async () => {
-      const result = await unlockFirmMemberSignIn(member.id);
-      if (result.status === "ok") {
-        notifySuccess(`${member.name} can sign in again.`);
-      } else {
-        notifyError(result.errors?._form?.[0] ?? "Couldn't unlock sign-in.");
-      }
+      report(
+        await resetFirmMemberSignInLink(member.id),
+        `${member.name}'s sign-in link was reset.`
+      );
+    });
+  };
+
+  const onResendInvite = () => {
+    startTransition(async () => {
+      report(
+        await resendFirmMemberInvite(member.id),
+        `Invitation re-sent to ${member.email}.`
+      );
     });
   };
 
@@ -152,20 +177,8 @@ export function MemberRow({
         )}
       </TableCell>
       <TableCell>
-        {resetPassword && (
-          <div className="text-2xs">
-            <div className="text-ink-4 mb-0.5">New temp password:</div>
-            <code className="px-1.5 py-0.5 rounded bg-paper-2 font-mono text-ink select-all">
-              {resetPassword}
-            </code>
-            <button
-              type="button"
-              onClick={() => setResetPassword(null)}
-              className="ml-2 text-ink-4 hover:text-ink"
-            >
-              dismiss
-            </button>
-          </div>
+        {member.isActive && !member.hasSignedIn && (
+          <span className="text-2xs text-ink-4">Invite pending</span>
         )}
       </TableCell>
       <TableCell className="pr-4 text-right">
@@ -192,14 +205,27 @@ export function MemberRow({
               )}
               {canTakeOverMember && (
                 <>
-                  <DropdownMenuItem onClick={onResetPassword}>
-                    <KeyRound />
-                    Reset password
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={onUnlock}>
-                    <LockOpen />
-                    Unlock sign-in
-                  </DropdownMenuItem>
+                  {member.hasSignedIn ? (
+                    <>
+                      <DropdownMenuItem onClick={onSignOutEverywhere}>
+                        <LogOut />
+                        Sign out everywhere
+                      </DropdownMenuItem>
+                      {!member.isSelf && (
+                        <DropdownMenuItem onClick={onResetLink}>
+                          <KeyRound />
+                          Reset sign-in link
+                        </DropdownMenuItem>
+                      )}
+                    </>
+                  ) : (
+                    member.isActive && (
+                      <DropdownMenuItem onClick={onResendInvite}>
+                        <MailPlus />
+                        Resend invite
+                      </DropdownMenuItem>
+                    )
+                  )}
                 </>
               )}
             </DropdownMenuContent>
