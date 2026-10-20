@@ -105,11 +105,9 @@ export default async function TeamSettingsPage() {
             viewerIsAdmin={viewerIsAdmin}
             privilegedRoleIds={privilegedRoleIds}
           />
-          <div className="text-[10px] text-ink-4 leading-relaxed">
-            Invites generate a one-time password you deliver to the new
-            member. Email-based invites land when we wire delivery
-            (Phase 2 of <span className="font-mono">docs/features/auth.md</span>).
-          </div>
+          <p className="text-2xs text-ink-4">
+            New members get an email invitation and sign in with Google.
+          </p>
         </div>
       )}
     </div>

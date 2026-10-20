@@ -20,8 +20,9 @@
  * error) renders inline, then the page refresh picks up the moved
  * oldest date + thread count.
  *
- * When the deploy has no GOOGLE_CLIENT_ID/SECRET, renders setup
- * guidance instead of a connect button that would bounce.
+ * When the deploy has no GOOGLE_CLIENT_ID/SECRET, renders a plain
+ * "not set up" notice instead of a connect button that would bounce
+ * (setup steps live in .env.example, not the UI).
  *
  * "Connect" is a plain <a> to the OAuth redirect route — a
  * top-level navigation, not a fetch, because Google's consent
@@ -156,14 +157,10 @@ export function GmailIntegrationCard({
 
         {!configured ? (
           <div className="rounded-md border border-border bg-paper-2 px-3 py-2.5 text-xs text-ink-3">
-            <p className="font-medium text-ink-2">Not configured</p>
+            <p className="font-medium text-ink-2">Not set up yet</p>
             <p className="mt-1">
-              Gmail connections need a Google OAuth app. Set{" "}
-              <code className="text-2xs">GOOGLE_CLIENT_ID</code> and{" "}
-              <code className="text-2xs">GOOGLE_CLIENT_SECRET</code> in the
-              environment (see <code className="text-2xs">.env.example</code>{" "}
-              for the redirect-URI registration steps), then reload this
-              page.
+              Gmail isn&apos;t connected for this firm yet. An administrator
+              needs to set it up before you can connect your mailbox.
             </p>
           </div>
         ) : (

@@ -30,64 +30,56 @@ interface NavSection {
   items: NavItem[];
 }
 
+// Only pages that do something are linked. /settings/notifications and
+// /settings/billing are placeholders and stay unlinked until they ship;
+// /settings/automations is reached from the main sidebar instead.
 const SECTIONS: NavSection[] = [
   {
-    label: "Account",
+    label: "You",
     items: [
       { href: "/settings/profile", label: "Profile" },
       { href: "/settings/security", label: "Security" },
-      { href: "/settings/notifications", label: "Notifications" },
     ],
   },
   {
     label: "Firm",
+    // Read-only for everyone; the pages render write affordances by
+    // each user's permissions.
     items: [
-      // Team + Roles + Firm info expose read-only views for everyone
-      // (the underlying pages render write affordances based on
-      // each user's permissions). Practice-areas / integrations /
-      // billing are write-only surfaces for now.
+      { href: "/settings/firm", label: "Firm info" },
       { href: "/settings/team", label: "Team" },
       { href: "/settings/roles", label: "Roles" },
-      { href: "/settings/firm", label: "Firm info" },
+    ],
+  },
+  {
+    label: "Practice",
+    items: [
       {
         href: "/settings/practice-areas",
         label: "Practice areas",
         requires: "firm.manage_practice_areas",
       },
-      {
-        href: "/settings/automations",
-        label: "Automations",
-        requires: "automations.view",
-      },
-      {
-        href: "/settings/activity",
-        label: "Activity log",
-        requires: "firm.view_activity",
-      },
       // Visible to everyone — generating FROM templates is ungated,
       // so anyone may browse the library. Manage affordances inside
       // the page gate on the documents.template.* keys.
-      {
-        href: "/settings/templates",
-        label: "Document templates",
-      },
+      { href: "/settings/templates", label: "Document templates" },
       {
         href: "/settings/records-types",
         label: "Records request types",
         requires: "records.types.manage",
       },
-      // Integrations is self-service — connecting YOUR OWN mailbox
-      // is identity-scoped like profile/notifications, so everyone
-      // sees it. Billing & rates stays a placeholder gated on
-      // edit_info as a stand-in until it gets its own keys.
+    ],
+  },
+  {
+    label: "Admin",
+    items: [
+      // Self-service: connecting YOUR OWN mailbox is identity-scoped,
+      // so everyone sees it.
+      { href: "/settings/integrations", label: "Integrations" },
       {
-        href: "/settings/integrations",
-        label: "Integrations",
-      },
-      {
-        href: "/settings/billing",
-        label: "Billing & rates",
-        requires: "firm.edit_info",
+        href: "/settings/activity",
+        label: "Activity log",
+        requires: "firm.view_activity",
       },
     ],
   },

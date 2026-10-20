@@ -11,6 +11,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SessionList } from "@/components/settings/session-list";
 import { EmptyState } from "@/components/shared/empty-state";
+import { describeAuthDetail } from "@/lib/auth-event-display";
 import { AUTH_EVENT_TITLES } from "@/lib/auth-events";
 import { listActiveStaffSessions } from "@/lib/clerk-admin";
 import { requireUser } from "@/lib/current-user";
@@ -97,7 +98,9 @@ export default async function SecuritySettingsPage() {
             />
           ) : (
             <ul className="flex flex-col divide-y divide-line">
-              {events.map((e) => (
+              {events.map((e) => {
+                const detail = describeAuthDetail(e.detail);
+                return (
                 <li key={e.id} className="py-2 flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <div
@@ -108,15 +111,16 @@ export default async function SecuritySettingsPage() {
                     >
                       {e.title}
                     </div>
-                    {e.detail && (
-                      <div className="text-2xs text-ink-4 truncate">{e.detail}</div>
+                    {detail && (
+                      <div className="text-2xs text-ink-4 truncate">{detail}</div>
                     )}
                   </div>
                   <div className="text-2xs text-ink-4 shrink-0 font-mono">
                     {formatDate(e.timestamp, "datetime", tz)}
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
           <p className="text-2xs text-ink-4 mt-3">

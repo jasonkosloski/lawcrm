@@ -1,8 +1,8 @@
 /**
  * /settings/integrations — per-user third-party connections.
  *
- * Live today: Gmail (per-user OAuth). Everything else renders as an
- * "upcoming" list until its feature phase lands.
+ * Live today: Gmail (per-user OAuth). Unbuilt integrations are not
+ * listed (they live on the roadmap, not in the UI).
  *
  * Auth: session only — NO permission key, deliberately. Connecting
  * YOUR OWN mailbox is identity-scoped, exactly like notification
@@ -24,14 +24,6 @@ import { hasCalendarScope } from "@/lib/google/calendar-shared";
 import { formatDate } from "@/lib/format-date";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { GmailIntegrationCard } from "@/components/settings/gmail-integration-card";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
-const UPCOMING_INTEGRATIONS = [
-  "Westlaw / research tools",
-  "E-signature (DocuSign or similar)",
-  "IOLTA trust account bank feed",
-  "PACER / court filing integrations",
-];
 
 export default async function IntegrationsSettingsPage({
   searchParams,
@@ -103,24 +95,6 @@ export default async function IntegrationsSettingsPage({
         }))}
       />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Coming later</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ul className="space-y-1.5">
-            {UPCOMING_INTEGRATIONS.map((item) => (
-              <li key={item} className="text-xs text-ink-3">
-                {item}
-              </li>
-            ))}
-          </ul>
-          <p className="text-xs text-ink-4 mt-3">
-            Each integration lights up as its underlying feature phase
-            lands (Calendar, Billing, etc.).
-          </p>
-        </CardContent>
-      </Card>
     </div>
   );
 }

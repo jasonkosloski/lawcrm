@@ -77,8 +77,8 @@ function renderCard(overrides?: Partial<Parameters<typeof GmailIntegrationCard>[
 describe("GmailIntegrationCard", () => {
   test("not configured: setup guidance, no connect link", () => {
     renderCard({ configured: false });
-    expect(screen.getByText("Not configured")).toBeInTheDocument();
-    expect(screen.getByText(/GOOGLE_CLIENT_ID/)).toBeInTheDocument();
+    expect(screen.getByText("Not set up yet")).toBeInTheDocument();
+    expect(screen.queryByText(/GOOGLE_CLIENT_ID/)).not.toBeInTheDocument();
     expect(screen.queryByText("Connect Gmail")).not.toBeInTheDocument();
   });
 
