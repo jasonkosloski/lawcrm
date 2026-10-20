@@ -78,3 +78,17 @@ export function staffAuthorizedParties(): string[] {
   }
   return [...origins];
 }
+
+/**
+ * The staff app's public origin, for links Clerk emails out (invitation
+ * redirect). First configured origin that isn't the localhost dev one;
+ * outside production, localhost. Null when production has none
+ * configured (callers must treat that as "can't build a link").
+ */
+export function staffAppUrl(): string | null {
+  const real = staffAuthorizedParties().find(
+    (o) => o !== NOTHING_CONFIGURED && !/^https?:\/\/localhost(:\d+)?$/.test(o)
+  );
+  if (real) return real;
+  return process.env.NODE_ENV !== "production" ? "http://localhost:3000" : null;
+}

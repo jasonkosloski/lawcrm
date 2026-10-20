@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { staffAuthorizedParties } from "./staff-authorized-parties";
+import { staffAppUrl, staffAuthorizedParties } from "./staff-authorized-parties";
 
 const KEYS = [
   "STAFF_ORIGINS",
@@ -81,5 +81,23 @@ describe("staffAuthorizedParties", () => {
   it("production never includes localhost", () => {
     vi.stubEnv("STAFF_ORIGINS", "https://crm.example.com");
     expect(staffAuthorizedParties()).not.toContain("http://localhost:3000");
+  });
+});
+
+describe("staffAppUrl", () => {
+  it("returns the first non-localhost origin in production", () => {
+    vi.stubEnv("STAFF_ORIGINS", "https://crm.example.com,https://b.example.com");
+    expect(staffAppUrl()).toBe("https://crm.example.com");
+  });
+
+  it("is null in production with nothing configured", () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(staffAppUrl()).toBeNull();
+    err.mockRestore();
+  });
+
+  it("falls back to localhost outside production", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    expect(staffAppUrl()).toBe("http://localhost:3000");
   });
 });
