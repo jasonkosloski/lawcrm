@@ -37,6 +37,8 @@ vi.mock("@/lib/current-user-tz", () => ({
   getCurrentUserTimeZone: vi.fn(async () => "Pacific/Honolulu"),
 }));
 
+vi.mock("@/lib/firm", () => ({ getCurrentFirm: vi.fn() }));
+
 vi.mock("@/components/auth/staff-clerk-provider", () => ({
   StaffClerkProvider: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>
@@ -54,11 +56,19 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { getStaffAuth } from "@/lib/staff-auth";
 import { useUserTimeZone } from "@/components/user-time-zone";
-import DashboardLayout from "./layout";
+import { getCurrentFirm } from "@/lib/firm";
+import DashboardLayout, { generateMetadata } from "./layout";
 
 const mockedAuth = vi.mocked(getStaffAuth);
 const mockedRedirect = vi.mocked(redirect);
 const mockedHeaders = vi.mocked(headers);
+const mockedFirm = vi.mocked(getCurrentFirm);
+
+/** Only the name fields matter to the tab title. */
+const withFirm = (name: string, shortName: string | null) =>
+  mockedFirm.mockResolvedValue({ name, shortName } as Awaited<
+    ReturnType<typeof getCurrentFirm>
+  >);
 
 const signedIn = () =>
   mockedAuth.mockResolvedValue({
@@ -147,5 +157,32 @@ describe("DashboardLayout — authenticated", () => {
     expect(screen.getByTestId("app-shell")).toHaveTextContent(
       "Pacific/Honolulu"
     );
+  });
+});
+
+describe("DashboardLayout — tab title", () => {
+  test("uses the signed-in user's firm short name", async () => {
+    signedIn();
+    withFirm("Kosloski Law Firm, P.C.", "Kosloski Law");
+    expect(await generateMetadata()).toEqual({
+      title: { default: "Kosloski Law", template: "%s · Kosloski Law" },
+    });
+  });
+
+  test("falls back to the legal name when no short name is set", async () => {
+    signedIn();
+    withFirm("Kosloski Law Firm, P.C.", "  ");
+    expect(await generateMetadata()).toEqual({
+      title: {
+        default: "Kosloski Law Firm, P.C.",
+        template: "%s · Kosloski Law Firm, P.C.",
+      },
+    });
+  });
+
+  test("signed out adds nothing and reads no firm", async () => {
+    signedOut();
+    expect(await generateMetadata()).toEqual({});
+    expect(mockedFirm).not.toHaveBeenCalled();
   });
 });

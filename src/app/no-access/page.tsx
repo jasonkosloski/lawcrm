@@ -22,7 +22,7 @@ export default async function NoAccessPage() {
     <div className="min-h-dvh flex items-center justify-center bg-paper-2 px-4 py-10">
       <div className="w-full max-w-sm text-center">
         <h1 className="text-lg font-semibold text-ink">
-          No access to Kosloski Law CRM
+          No access to LitGox
         </h1>
         <p className="text-sm text-ink-3 mt-3 mb-6">
           You&apos;re signed in with Google, but this account isn&apos;t set up

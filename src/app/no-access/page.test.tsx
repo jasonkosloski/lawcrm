@@ -35,7 +35,7 @@ describe("/no-access", () => {
     });
     render(await NoAccessPage());
     expect(
-      screen.getByRole("heading", { name: "No access to Kosloski Law CRM" })
+      screen.getByRole("heading", { name: "No access to LitGox" })
     ).toBeInTheDocument();
     expect(
       screen.getByText(/this account isn.t set up as a firm member/)

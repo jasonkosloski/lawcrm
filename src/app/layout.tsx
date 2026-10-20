@@ -8,8 +8,9 @@
  *
  * Wraps the app in the Providers component (the slot for app-wide client
  * context; currently a passthrough). Page titles use the
- * `%s · Kosloski Law CRM` template, so a page that exports
- * `metadata.title` / `generateMetadata` gets a distinguishable tab.
+ * `%s · LitGox` template (the (dashboard) layout swaps in the signed-in
+ * user's firm name), so a page that exports `metadata.title` /
+ * `generateMetadata` gets a distinguishable tab.
  */
 
 import type { Metadata } from "next";
@@ -37,11 +38,10 @@ const fraunces = Fraunces({
 
 export const metadata: Metadata = {
   title: {
-    default: "Kosloski Law CRM",
-    template: "%s · Kosloski Law CRM",
+    default: "LitGox",
+    template: "%s · LitGox",
   },
-  description:
-    "Practice management, case tracking, and client communication for Kosloski Law.",
+  description: "Case management for law firms.",
 };
 
 export default function RootLayout({
