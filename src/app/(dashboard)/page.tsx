@@ -1,13 +1,14 @@
 /**
  * Today / Dashboard Page
  *
- * The home screen of the CRM. Three-column layout:
- * - Left: KPI tiles, today's agenda, recent activity feed
- * - Right: Deadlines this week, firm pulse
+ * The home screen of the CRM. Renders the viewer's saved layout: a
+ * full-width band of cards, then a 12-col grid whose columns follow the
+ * layout's split (SPLIT_SPANS); below lg everything stacks in order.
+ * Hidden cards are neither loaded nor rendered.
  *
- * All data is queried live from Prisma on each request. Queries run in
- * parallel at the top of the component so render isn't bottlenecked on
- * the slowest one.
+ * All data is queried live from Prisma on each request (see
+ * loadDashboardData), in parallel so render isn't bottlenecked on the
+ * slowest query.
  */
 
 import { Fragment, type ReactNode } from "react";
@@ -25,22 +26,20 @@ import { RecordsCard } from "@/components/dashboard/cards/records";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { maybeRunDeadlineNotificationSweep } from "@/lib/notification-sweeps";
-import { cardsInColumn, type DashboardCardKey } from "@/lib/dashboard-prefs";
-import { currentUserHasPermission } from "@/lib/permission-check";
-import { getMyRecordsToChase } from "@/lib/queries/records-requests";
-import { getDashboardPrefs } from "@/lib/queries/dashboard-prefs";
+import { Greeting } from "@/components/dashboard/greeting";
+import { SPLIT_SPANS, type DashboardCardKey } from "@/lib/dashboard-prefs";
 import {
-  getDashboardKpis,
-  getFirmPulse,
-  getFollowUpsDueToday,
-  getMyOpenTasks,
-  getRecentActivity,
-  getTodayAgenda,
-  getUpcomingDeadlines,
-  type DeadlinesCard as DeadlinesData,
-  type MyTasksGrouped,
-} from "@/lib/queries/dashboard";
-
+  getDashboardLayout,
+  getDashboardPrefs,
+} from "@/lib/queries/dashboard-prefs";
+import { dueTodayCount, loadDashboardData } from "@/lib/queries/dashboard-data";
+// Literal class strings so Tailwind generates them.
+const SPAN_CLASS: Record<number, string> = {
+  4: "lg:col-span-4",
+  6: "lg:col-span-6",
+  8: "lg:col-span-8",
+  12: "lg:col-span-12",
+};
 
 export default async function DashboardPage() {
   // Authenticate before anything else - including the post-response
@@ -61,68 +60,37 @@ export default async function DashboardPage() {
   // pattern as /calendar).
   const tz = await getCurrentUserTimeZone();
 
-  // Prefs first: a hidden card's loader is skipped entirely, so
-  // hiding "Firm pulse" also skips its invoice aggregates.
+  // Popover (removed in a later task) still reads the v2 prefs.
   const prefs = await getDashboardPrefs(userId);
-  const show = prefs.visible;
-  const emptyTasks: MyTasksGrouped = {
-    overdue: [],
-    today: [],
-    thisWeek: [],
-    later: [],
-    noDueDate: [],
-    total: 0,
-    overdueCount: 0,
-    hidden: 0,
-  };
-  const emptyDeadlines: DeadlinesData = { items: [], overdueHidden: 0 };
-  // Records card: only for viewers with records.view (the loader is
-  // skipped otherwise, and the card renders nothing).
-  const canViewRecords = show.records
-    ? await currentUserHasPermission("records.view")
-    : false;
-  // Activity card's "View all" needs firm.view_activity; resolved only
-  // when the card is visible.
-  const canViewActivityLog = show.activity
-    ? await currentUserHasPermission("firm.view_activity")
-    : false;
-  const [kpis, agenda, activity, deadlines, pulse, myTasks, followUps, recordsToChase] =
-    await Promise.all([
-      show.kpis ? getDashboardKpis(tz) : Promise.resolve(null),
-      show.agenda ? getTodayAgenda(tz) : Promise.resolve([]),
-      show.activity ? getRecentActivity(tz, 5) : Promise.resolve([]),
-      show.deadlines
-        ? getUpcomingDeadlines(tz, 7)
-        : Promise.resolve(emptyDeadlines),
-      show.pulse ? getFirmPulse(tz) : Promise.resolve(null),
-      show.tasks ? getMyOpenTasks(tz) : Promise.resolve(emptyTasks),
-      show.followUps ? getFollowUpsDueToday(tz) : Promise.resolve([]),
-      canViewRecords ? getMyRecordsToChase(tz) : Promise.resolve([]),
-    ]);
+  // Layout first: a hidden card's loader is skipped entirely, so
+  // hiding "Firm pulse" also skips its invoice aggregates.
+  const layout = await getDashboardLayout(userId);
+  const data = await loadDashboardData(layout, tz);
 
-  // Each card keyed by its pref key. The return below walks the
-  // user's saved order per column (main vs. right rail) and skips
-  // hidden cards. Cards keep a fixed column in v2 — the saved order
-  // only moves them within it (see DASHBOARD_CARD_COLUMNS in
-  // src/lib/dashboard-prefs.ts).
   const cards: Record<DashboardCardKey, ReactNode> = {
-    kpis: kpis && <KpisCard kpis={kpis} />,
-    agenda: <AgendaCard items={agenda} />,
-    tasks: <TasksCard tasks={myTasks} />,
-    followUps: <FollowUpsCard items={followUps} />,
+    kpis: data.kpis && <KpisCard kpis={data.kpis} />,
+    agenda: <AgendaCard items={data.agenda} />,
+    tasks: <TasksCard tasks={data.tasks} />,
+    followUps: <FollowUpsCard items={data.followUps} />,
     activity: (
       <ActivityCard
-        items={activity}
-        canViewActivityLog={canViewActivityLog}
+        items={data.activity}
+        canViewActivityLog={data.canViewActivityLog}
       />
     ),
-    deadlines: <DeadlinesCard data={deadlines} />,
+    deadlines: <DeadlinesCard data={data.deadlines} />,
     // No fee data; renders nothing without records.view.
-    records: canViewRecords && <RecordsCard items={recordsToChase} />,
-    // Null without reports.view — the card renders nothing.
-    pulse: <PulseCard pulse={pulse} />,
+    records: data.canViewRecords && <RecordsCard items={data.records} />,
+    // Null without reports.view - the card renders nothing.
+    pulse: <PulseCard pulse={data.pulse} />,
   };
 
+  const renderCards = (keys: DashboardCardKey[]) =>
+    keys
+      .filter((key) => !layout.hidden.includes(key))
+      .map((key) => <Fragment key={key}>{cards[key]}</Fragment>);
+
+  const spans = SPLIT_SPANS[layout.split];
 
   return (
     <>
@@ -133,30 +101,22 @@ export default async function DashboardPage() {
       />
 
       <div className="flex-1 overflow-y-auto p-3 sm:p-5 animate-page-enter">
-        {/* Two-column on lg+, stack on smaller. The right rail
-            (deadlines + firm pulse) drops below the main column
-            on mobile/tablet so the user reads top-to-bottom
-            instead of side-to-side. */}
-        <div className="flex flex-col lg:flex-row gap-5">
-          {/* ── Main column — cards in the user's saved order ───────────── */}
-          <div className="flex-1 min-w-0 flex flex-col gap-5">
-            {cardsInColumn(prefs.order, "main")
-              .filter((key) => prefs.visible[key])
-              .map((key) => (
-                <Fragment key={key}>{cards[key]}</Fragment>
-              ))}
-          </div>
+        <Greeting tz={tz} dueToday={dueTodayCount(data, layout)} />
 
-          {/* ── Right rail — same treatment ────────────────────────────────
-              At lg+ this is a 340px sidebar; below lg it stacks under the
-              main column at full width. */}
-          <div className="w-full lg:w-85 lg:shrink-0 flex flex-col gap-5">
-            {cardsInColumn(prefs.order, "rail")
-              .filter((key) => prefs.visible[key])
-              .map((key) => (
-                <Fragment key={key}>{cards[key]}</Fragment>
-              ))}
-          </div>
+        {/* Band: full-width cards stacked above the columns. */}
+        <div className="flex flex-col gap-5">{renderCards(layout.band)}</div>
+
+        {/* Columns: one per span of the layout's split at lg+; below lg
+            everything stacks in order (band, column 0, column 1, ...). */}
+        <div className="mt-5 grid grid-cols-12 gap-5">
+          {spans.map((span, i) => (
+            <div
+              key={i}
+              className={`col-span-12 min-w-0 flex flex-col gap-5 ${SPAN_CLASS[span]}`}
+            >
+              {renderCards(layout.columns[i] ?? [])}
+            </div>
+          ))}
         </div>
       </div>
     </>
