@@ -1977,7 +1977,7 @@ describe("createMatter: open from a draft + originating-document gate", () => {
     test("no draft: originating file error, no matter, no conflict", async () => {
       const res = await run(createForm(signed));
       expect(res.errors?.originatingFileId).toEqual([
-        "Upload the Fee agreement before creating the matter.",
+        "Attach the signed Fee agreement.",
       ]);
       expect(res.conflict).toBeUndefined();
       expect(await matterCount()).toBe(0);
@@ -2001,7 +2001,7 @@ describe("createMatter: open from a draft + originating-document gate", () => {
         })
       );
       expect(res.errors?.agreementStatus).toEqual([
-        "The Fee agreement must be marked signed.",
+        "Mark the Fee agreement as signed.",
       ]);
       expect(await matterCount()).toBe(0);
     });
@@ -2012,7 +2012,7 @@ describe("createMatter: open from a draft + originating-document gate", () => {
         draftForm(draft, { originatingFileId: files[0].id, agreementStatus: "signed" })
       );
       expect(res.errors?.agreementSignedDate).toEqual([
-        "Enter the date the Fee agreement was signed.",
+        "Enter the date it was signed.",
       ]);
       expect(await matterCount()).toBe(0);
     });
@@ -2049,7 +2049,7 @@ describe("createMatter: open from a draft + originating-document gate", () => {
       });
       const res = await run(createForm(signed));
       expect(res.errors?.originatingFileId).toEqual([
-        "Upload the Retainer before creating the matter.",
+        "Attach the signed Retainer.",
       ]);
     });
 

@@ -26,9 +26,9 @@ describe("agreementGateErrors", () => {
       "agreementStatus",
       "originatingFileId",
     ]);
-    expect(e.originatingFileId).toContain("Retainer");
-    expect(e.agreementStatus).toContain("Retainer");
-    expect(e.agreementSignedDate).toContain("Retainer");
+    expect(e.originatingFileId).toBe("Attach the signed Retainer.");
+    expect(e.agreementStatus).toBe("Mark the Retainer as signed.");
+    expect(e.agreementSignedDate).toBe("Enter the date it was signed.");
   });
   test("future date errors; today does not", () => {
     const base = { status: "signed", hasOriginatingFile: true };

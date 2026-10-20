@@ -716,186 +716,186 @@ export async function createMatter(
   };
   try {
     txResult = await prisma.$transaction(async (tx) => {
-    // Resolve client: either pick an existing Contact, create a new
-    // one inline, or leave null.
-    let clientId: string | null = null;
-    if (data.clientId === NEW_CLIENT_SENTINEL) {
-      const newClient = await tx.contact.create({
+      // Resolve client: either pick an existing Contact, create a new
+      // one inline, or leave null.
+      let clientId: string | null = null;
+      if (data.clientId === NEW_CLIENT_SENTINEL) {
+        const newClient = await tx.contact.create({
+          data: {
+            name: data.newClientName!,
+            email: data.newClientEmail || null,
+            phone: data.newClientPhone || null,
+            organization: data.newClientOrganization || null,
+            type: "client",
+            firmId,
+          },
+          select: { id: true },
+        });
+        clientId = newClient.id;
+        // Seed a first-class primary ContactPhone row so the contact
+        // starts with a real phone record the Parties edit form can
+        // manage. Denormalized Contact.phone above keeps old readers happy.
+        if (data.newClientPhone) {
+          await tx.contactPhone.create({
+            data: {
+              contactId: clientId,
+              label: "Primary",
+              number: data.newClientPhone,
+              isPrimary: true,
+              order: 0,
+            },
+          });
+        }
+      } else if (existingClient) {
+        clientId = existingClient.id;
+      }
+
+      const created = await tx.matter.create({
         data: {
-          name: data.newClientName!,
-          email: data.newClientEmail || null,
-          phone: data.newClientPhone || null,
-          organization: data.newClientOrganization || null,
-          type: "client",
-          firmId,
-        },
-        select: { id: true },
-      });
-      clientId = newClient.id;
-      // Seed a first-class primary ContactPhone row so the contact
-      // starts with a real phone record the Parties edit form can
-      // manage. Denormalized Contact.phone above keeps old readers happy.
-      if (data.newClientPhone) {
-        await tx.contactPhone.create({
-          data: {
-            contactId: clientId,
-            label: "Primary",
-            number: data.newClientPhone,
-            isPrimary: true,
-            order: 0,
+          name: data.name,
+          practiceAreaId: resolved.practiceAreaId,
+          stageId: resolved.stageId,
+          feeStructure: data.feeStructure,
+          // Snapshot the area's defaultBillingMode onto the matter on
+          // create. Per-area changes don't rewrite history; per-matter
+          // override happens on the matter edit form.
+          billingMode: resolved.defaultBillingMode,
+          caseNumber: data.caseNumber || null,
+          court: data.court || null,
+          opposingParty: data.opposingParty || null,
+          opposingFirm: data.opposingFirm || null,
+          description: data.description || null,
+          venueId: data.venueId || null,
+          filedDate,
+          trialDate,
+          color: resolved.color,
+          clientId,
+          incidentDate,
+          statuteOfLimitationsDate: solDate,
+          statuteOfLimitationsNotes: solNotes,
+          teamMembers: {
+            create: [
+              { userId: leadUserId, role: "lead" },
+              ...team.seats.map((seat) => ({ userId: seat.userId, role: seat.role })),
+            ],
           },
-        });
-      }
-    } else if (existingClient) {
-      clientId = existingClient.id;
-    }
-
-    const created = await tx.matter.create({
-      data: {
-        name: data.name,
-        practiceAreaId: resolved.practiceAreaId,
-        stageId: resolved.stageId,
-        feeStructure: data.feeStructure,
-        // Snapshot the area's defaultBillingMode onto the matter on
-        // create. Per-area changes don't rewrite history; per-matter
-        // override happens on the matter edit form.
-        billingMode: resolved.defaultBillingMode,
-        caseNumber: data.caseNumber || null,
-        court: data.court || null,
-        opposingParty: data.opposingParty || null,
-        opposingFirm: data.opposingFirm || null,
-        description: data.description || null,
-        venueId: data.venueId || null,
-        filedDate,
-        trialDate,
-        color: resolved.color,
-        clientId,
-        incidentDate,
-        statuteOfLimitationsDate: solDate,
-        statuteOfLimitationsNotes: solNotes,
-        teamMembers: {
-          create: [
-            { userId: leadUserId, role: "lead" },
-            ...team.seats.map((seat) => ({ userId: seat.userId, role: seat.role })),
-          ],
+          // Invariant: whenever a matter has a client, that contact
+          // surfaces as a MatterContact with category="client" so the
+          // Parties tab always shows them. Additional co-clients can
+          // still be added manually from the tab.
+          ...(clientId
+            ? {
+                contacts: {
+                  create: { contactId: clientId, category: "client" },
+                },
+              }
+            : {}),
+          ...(data.pinForMe === "on"
+            ? {
+                pins: {
+                  create: { userId: currentUserId },
+                },
+              }
+            : {}),
         },
-        // Invariant: whenever a matter has a client, that contact
-        // surfaces as a MatterContact with category="client" so the
-        // Parties tab always shows them. Additional co-clients can
-        // still be added manually from the tab.
-        ...(clientId
-          ? {
-              contacts: {
-                create: { contactId: clientId, category: "client" },
-              },
-            }
-          : {}),
-        ...(data.pinForMe === "on"
-          ? {
-              pins: {
-                create: { userId: currentUserId },
-              },
-            }
-          : {}),
-      },
-    });
+      });
 
-    // Auto-create the critical SOL Deadline when the area tracks SOL
-    // and a date was provided. Kept in sync via updateMatter +
-    // setMatterSolSatisfied below.
-    await syncMatterSolDeadline(tx, {
-      matterId: created.id,
-      trackSol: resolved.hasStatuteOfLimitations,
-      date: solDate,
-      notes: solNotes,
-      satisfied: false,
-      satisfiedAt: null,
-      ownerId: leadUserId,
-    });
-
-    // Firm-configured defaults (Settings → Automations): deadline
-    // rules + task lists set to apply when a matter is created in
-    // this practice area (or any). Same transaction — a matter never
-    // exists without the deadlines the firm said it must have.
-    const defaults = await applyAutoDefaults(tx, {
-      matterId: created.id,
-      practiceAreaId: resolved.practiceAreaId,
-      trigger: "matter_created",
-      tz,
-    });
-
-    // The conflict outcome, in the transaction: a matter created over
-    // a conflict must never exist without its record.
-    const conflictEntry = conflictGateLogEntry(gate, "Created");
-    if (conflictEntry) {
-      await logActivityTx(tx, {
+      // Auto-create the critical SOL Deadline when the area tracks SOL
+      // and a date was provided. Kept in sync via updateMatter +
+      // setMatterSolSatisfied below.
+      await syncMatterSolDeadline(tx, {
         matterId: created.id,
-        userId: currentUserId,
-        type: "automation",
-        ...conflictEntry,
+        trackSol: resolved.hasStatuteOfLimitations,
+        date: solDate,
+        notes: solNotes,
+        satisfied: false,
+        satisfiedAt: null,
+        ownerId: leadUserId,
       });
-    }
 
-    // Open from a draft: read its files, claim it (the delete cascades
-    // them), re-home the files under an Engagement folder, then record
-    // the agreement. 0 claimed rows rolls everything back.
-    let originatingDocumentId: string | null = null;
-    if (draft) {
-      const files = await tx.matterDraftFile.findMany({
-        where: { draftId: draft.id },
-        orderBy: { createdAt: "asc" },
+      // Firm-configured defaults (Settings → Automations): deadline
+      // rules + task lists set to apply when a matter is created in
+      // this practice area (or any). Same transaction — a matter never
+      // exists without the deadlines the firm said it must have.
+      const defaults = await applyAutoDefaults(tx, {
+        matterId: created.id,
+        practiceAreaId: resolved.practiceAreaId,
+        trigger: "matter_created",
+        tz,
       });
-      const claimed = await tx.matterDraft.deleteMany({
-        where: { id: draft.id, updatedAt: new Date(data.draftUpdatedAt!) },
-      });
-      if (claimed.count === 0) {
-        const still = await tx.matterDraft.findUnique({
-          where: { id: draft.id },
-          select: { id: true },
+
+      // The conflict outcome, in the transaction: a matter created over
+      // a conflict must never exist without its record.
+      const conflictEntry = conflictGateLogEntry(gate, "Created");
+      if (conflictEntry) {
+        await logActivityTx(tx, {
+          matterId: created.id,
+          userId: currentUserId,
+          type: "automation",
+          ...conflictEntry,
         });
-        throw new UserFacingError(still ? DRAFT_STALE_MESSAGE : DRAFT_USED_MESSAGE);
       }
-      if (files.length > 0) {
-        const folder = await tx.documentFolder.create({
-          data: {
-            matterId: created.id,
-            parentId: null,
-            name: "Engagement",
-            order: 0,
-            createdById: currentUserId,
-          },
-          select: { id: true },
+
+      // Open from a draft: read its files, claim it (the delete cascades
+      // them), re-home the files under an Engagement folder, then record
+      // the agreement. 0 claimed rows rolls everything back.
+      let originatingDocumentId: string | null = null;
+      if (draft) {
+        const files = await tx.matterDraftFile.findMany({
+          where: { draftId: draft.id },
+          orderBy: { createdAt: "asc" },
         });
-        for (const f of files) {
-          const isOrig = f.id === data.originatingFileId;
-          const doc = await tx.document.create({
+        const claimed = await tx.matterDraft.deleteMany({
+          where: { id: draft.id, updatedAt: new Date(data.draftUpdatedAt!) },
+        });
+        if (claimed.count === 0) {
+          const still = await tx.matterDraft.findUnique({
+            where: { id: draft.id },
+            select: { id: true },
+          });
+          throw new UserFacingError(still ? DRAFT_STALE_MESSAGE : DRAFT_USED_MESSAGE);
+        }
+        if (files.length > 0) {
+          const folder = await tx.documentFolder.create({
             data: {
               matterId: created.id,
-              folderId: folder.id,
-              name: f.name,
-              fileUrl: f.fileUrl,
-              contentType: f.contentType,
-              fileSize: f.fileSize,
-              uploadedBy: f.uploadedBy,
-              source: "upload",
-              category: isOrig ? "contract" : "intake",
+              parentId: null,
+              name: "Engagement",
+              order: 0,
+              createdById: currentUserId,
             },
             select: { id: true },
           });
-          if (isOrig) originatingDocumentId = doc.id;
+          for (const f of files) {
+            const isOrig = f.id === data.originatingFileId;
+            const doc = await tx.document.create({
+              data: {
+                matterId: created.id,
+                folderId: folder.id,
+                name: f.name,
+                fileUrl: f.fileUrl,
+                contentType: f.contentType,
+                fileSize: f.fileSize,
+                uploadedBy: f.uploadedBy,
+                source: "upload",
+                category: isOrig ? "contract" : "intake",
+              },
+              select: { id: true },
+            });
+            if (isOrig) originatingDocumentId = doc.id;
+          }
         }
       }
-    }
-    await tx.matterAgreement.create({
-      data: {
-        matterId: created.id,
-        status: agreementStatus,
-        signedDate: agreementSignedDate,
-        documentId: originatingDocumentId,
-      },
-    });
+      await tx.matterAgreement.create({
+        data: {
+          matterId: created.id,
+          status: agreementStatus,
+          signedDate: agreementSignedDate,
+          documentId: originatingDocumentId,
+        },
+      });
 
-    return { matter: created, defaults };
+      return { matter: created, defaults };
     });
   } catch (err) {
     if (err instanceof UserFacingError) {

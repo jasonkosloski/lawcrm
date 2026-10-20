@@ -39,18 +39,18 @@ export function agreementGateErrors(
   const { required, label, today } = opts;
 
   if (required && !input.hasOriginatingFile) {
-    errors.originatingFileId = `Upload the ${label} before creating the matter.`;
+    errors.originatingFileId = `Attach the signed ${label}.`;
   }
 
   if (input.status !== "" && !(AGREEMENT_STATUSES as readonly string[]).includes(input.status)) {
-    errors.agreementStatus = `Choose a valid ${label} status.`;
+    errors.agreementStatus = "Choose a status.";
   } else if (required && input.status !== "signed") {
-    errors.agreementStatus = `The ${label} must be marked signed.`;
+    errors.agreementStatus = `Mark the ${label} as signed.`;
   }
 
   if (input.signedDate === "") {
     if (required) {
-      errors.agreementSignedDate = `Enter the date the ${label} was signed.`;
+      errors.agreementSignedDate = "Enter the date it was signed.";
     }
   } else if (!isRealDate(input.signedDate)) {
     errors.agreementSignedDate = "Enter a valid date.";
