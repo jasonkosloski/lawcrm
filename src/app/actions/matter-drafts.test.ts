@@ -77,23 +77,6 @@ describe("saveMatterDraft", () => {
   test("rejects oversize or non-string values without writing", async () => {
     const big = await saveMatterDraft(null, null, { notes: "x".repeat(200_001) });
     expect(big).toEqual({ ok: false, code: "invalid" });
-    const bad = await saveMatterDraft(null, null, {
-      a: { nested: 1 },
-    } as never);
-    expect(bad).toEqual({ ok: false, code: "invalid" });
-    const badArr = await saveMatterDraft(null, null, { a: [1] } as never);
-    expect(badArr).toEqual({ ok: false, code: "invalid" });
-    expect(await prisma.matterDraft.count()).toBe(0);
-    const a = await newDraft();
-    const upd = await saveMatterDraft(a.draftId, a.updatedAt, {
-      notes: "x".repeat(200_001),
-    });
-    expect(upd).toEqual({ ok: false, code: "invalid" });
-  });
-
-  test("rejects oversize or non-string values without writing", async () => {
-    const big = await saveMatterDraft(null, null, { notes: "x".repeat(200_001) });
-    expect(big).toEqual({ ok: false, code: "invalid" });
     const bad = await saveMatterDraft(null, null, { a: { nested: 1 } } as never);
     expect(bad).toEqual({ ok: false, code: "invalid" });
     const badArr = await saveMatterDraft(null, null, { a: [1] } as never);
@@ -166,6 +149,27 @@ describe("draft files", () => {
     expect(deleteFile).toHaveBeenCalledWith("k1");
     const titles = (await prisma.activityLog.findMany()).map((l) => l.title);
     expect(titles).toContain("File removed from a matter draft");
+  });
+});
+
+describe("removeDraftFile vs Create claim", () => {
+  test("file row gone (draft claimed) -> no stored bytes deleted", async () => {
+    const a = await newDraft();
+    const f = await prisma.matterDraftFile.create({
+      data: { draftId: a.draftId, name: "a", fileUrl: "k-claimed", uploadedBy: creator },
+    });
+    // Simulate Create winning between the action's read and its lock.
+    const real = prisma.$transaction.bind(prisma);
+    const spy = vi.spyOn(prisma, "$transaction").mockImplementationOnce(((
+      fn: unknown,
+      o: unknown
+    ) =>
+      prisma.matterDraft
+        .delete({ where: { id: a.draftId } })
+        .then(() => (real as (x: unknown, y: unknown) => unknown)(fn, o))) as never);
+    expect(await removeDraftFile(f.id)).toEqual({ ok: false });
+    spy.mockRestore();
+    expect(deleteFile).not.toHaveBeenCalled();
   });
 });
 

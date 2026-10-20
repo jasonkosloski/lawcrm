@@ -192,7 +192,17 @@ export async function removeDraftFile(
   });
   if (!file) return { ok: false };
   await assertDraftAccess(file.draftId);
-  await prisma.matterDraftFile.deleteMany({ where: { id: fileId } });
+  // Lock the parent draft (as createMatter does) so a Create that is
+  // re-homing this blob can't have it deleted underneath the new
+  // Document: if Create won, the row is gone and no bytes are touched.
+  const removed = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "matter_drafts" WHERE id = ${file.draftId} FOR UPDATE`;
+    const res = await tx.matterDraftFile.deleteMany({
+      where: { id: fileId, draftId: file.draftId },
+    });
+    return res.count > 0;
+  });
+  if (!removed) return { ok: false };
   await deleteStoredFiles([file.fileUrl]);
   await logActivity({
     matterId: null,
