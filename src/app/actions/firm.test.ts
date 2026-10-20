@@ -323,3 +323,48 @@ describe("setPortalEnabled", () => {
     expect(await prisma.portalSession.count()).toBe(0);
   });
 });
+
+describe("updateFirmAction matter-name template", () => {
+  test("stores a template and audits it", async () => {
+    const res = await updateFirmAction(
+      firmInitialState,
+      firmForm({ matterNameTemplate: "{client_last} - {case_number}" })
+    );
+    expect(res.status).toBe("ok");
+    const firm = await prisma.firm.findUniqueOrThrow({ where: { id: firmId } });
+    expect(firm.matterNameTemplate).toBe("{client_last} - {case_number}");
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { title: "Updated firm profile" },
+    });
+    expect(log.detail).toContain("matterNameTemplate");
+  });
+
+  test("blank template is an error and nothing changes", async () => {
+    const before = await prisma.firm.findUniqueOrThrow({ where: { id: firmId } });
+    const res = await updateFirmAction(
+      firmInitialState,
+      firmForm({ matterNameTemplate: "  " })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.matterNameTemplate).toEqual(["A default template is required."]);
+    const after = await prisma.firm.findUniqueOrThrow({ where: { id: firmId } });
+    expect(after.matterNameTemplate).toBe(before.matterNameTemplate);
+  });
+
+  test("invalid token is a field error", async () => {
+    const res = await updateFirmAction(
+      firmInitialState,
+      firmForm({ matterNameTemplate: "{nope}" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.matterNameTemplate?.length).toBeGreaterThan(0);
+  });
+
+  test("omitted template leaves the current value alone", async () => {
+    const before = await prisma.firm.findUniqueOrThrow({ where: { id: firmId } });
+    const res = await updateFirmAction(firmInitialState, firmForm());
+    expect(res.status).toBe("ok");
+    const after = await prisma.firm.findUniqueOrThrow({ where: { id: firmId } });
+    expect(after.matterNameTemplate).toBe(before.matterNameTemplate);
+  });
+});

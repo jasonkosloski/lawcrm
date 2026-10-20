@@ -532,3 +532,99 @@ describe("permission gate", () => {
     expect(await activeStageNames(area.id)).toEqual(["One", "Two"]);
   });
 });
+
+describe("matter-name template + required fields", () => {
+  function tplForm(tpl: string | null, keys: string[], present = true): FormData {
+    const fd = areaForm();
+    if (tpl !== null) fd.set("matterNameTemplate", tpl);
+    if (present) fd.set("requiredMatterFieldsPresent", "1");
+    for (const k of keys) fd.append("requiredMatterFields", k);
+    return fd;
+  }
+
+  test("update stores template + required fields and audits old -> new", async () => {
+    await create();
+    const id = await areaIdByName("Employment");
+    const res = await updatePracticeArea(
+      id,
+      practiceAreaInitialState,
+      tplForm("State v. {client_last}", ["caseNumber", "court"])
+    );
+    expect(res.status).toBe("ok");
+    const area = await prisma.practiceArea.findUniqueOrThrow({ where: { id } });
+    expect(area.matterNameTemplate).toBe("State v. {client_last}");
+    expect(area.requiredMatterFields).toEqual(["caseNumber", "court"]);
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { title: "Practice area updated — Employment" },
+    });
+    expect(log.detail).toContain(
+      'Matter name template: "firm default" → "State v. {client_last}"'
+    );
+    expect(log.detail).toContain("Required fields: none → caseNumber, court");
+  });
+
+  test("blank template stores null", async () => {
+    await create();
+    const id = await areaIdByName("Employment");
+    await updatePracticeArea(id, practiceAreaInitialState, tplForm("X {client_last}", []));
+    await updatePracticeArea(id, practiceAreaInitialState, tplForm("  ", []));
+    const area = await prisma.practiceArea.findUniqueOrThrow({ where: { id } });
+    expect(area.matterNameTemplate).toBeNull();
+  });
+
+  test("bad template token is a field error and writes nothing", async () => {
+    await create();
+    const id = await areaIdByName("Employment");
+    const res = await updatePracticeArea(
+      id,
+      practiceAreaInitialState,
+      tplForm("{nope}", ["court"])
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.matterNameTemplate?.length).toBeGreaterThan(0);
+    const area = await prisma.practiceArea.findUniqueOrThrow({ where: { id } });
+    expect(area.matterNameTemplate).toBeNull();
+    expect(area.requiredMatterFields).toEqual([]);
+  });
+
+  test("unknown required key is a field error", async () => {
+    await create();
+    const id = await areaIdByName("Employment");
+    const res = await updatePracticeArea(
+      id,
+      practiceAreaInitialState,
+      tplForm(null, ["bogus"])
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.requiredMatterFields).toEqual(["Unknown field: bogus"]);
+  });
+
+  test("without the presence marker, update leaves required fields alone", async () => {
+    await create();
+    const id = await areaIdByName("Employment");
+    await updatePracticeArea(id, practiceAreaInitialState, tplForm(null, ["court"]));
+    await updatePracticeArea(id, practiceAreaInitialState, areaForm());
+    const area = await prisma.practiceArea.findUniqueOrThrow({ where: { id } });
+    expect(area.requiredMatterFields).toEqual(["court"]);
+    // marker present with nothing checked clears them
+    await updatePracticeArea(id, practiceAreaInitialState, tplForm(null, []));
+    const cleared = await prisma.practiceArea.findUniqueOrThrow({ where: { id } });
+    expect(cleared.requiredMatterFields).toEqual([]);
+  });
+
+  test("create stores template and required fields; omitted means []", async () => {
+    await create();
+    expect(
+      (await prisma.practiceArea.findFirstOrThrow({ where: { name: "Employment" } }))
+        .requiredMatterFields
+    ).toEqual([]);
+    const fd = tplForm("{client_last} matter", ["venue"]);
+    fd.set("name", "Torts");
+    try {
+      await createPracticeArea(practiceAreaInitialState, fd);
+    } catch {}
+    const torts = await prisma.practiceArea.findFirstOrThrow({ where: { name: "Torts" } });
+    expect(torts.matterNameTemplate).toBe("{client_last} matter");
+    expect(torts.requiredMatterFields).toEqual(["venue"]);
+  });
+});

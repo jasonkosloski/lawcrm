@@ -35,6 +35,8 @@ import {
   type SolPeriod,
 } from "@/lib/sol";
 import { logAuditEntry } from "@/lib/audit-entry";
+import { parseTemplate } from "@/lib/matter-name-template";
+import { isRequiredMatterField } from "@/lib/matter-required-fields";
 import {
   areaArchiveBlockedMessage,
   planReorder,
@@ -126,6 +128,8 @@ const practiceAreaSchema = z.object({
    *  about and fall back to "client" for stale forms posting an
    *  unknown value. */
   defaultBillingMode: z.enum(BILLING_MODES).optional(),
+  /** Per-area matter-name template; blank = use the firm default. */
+  matterNameTemplate: z.string().trim().max(300).optional().or(z.literal("")),
 }).superRefine((v, ctx) => {
   if (v.hasStatuteOfLimitations !== "on") return;
   const raw = v.statutePeriodAmount ?? "";
@@ -146,6 +150,28 @@ const practiceAreaSchema = z.object({
     });
   }
 });
+
+/** Template + required-field validation shared by create and update.
+ *  Returns field errors, or null when valid. */
+function matterFieldErrors(
+  template: string | undefined,
+  required: string[]
+): Record<string, string[]> | null {
+  const errors: Record<string, string[]> = {};
+  if (template) {
+    const res = parseTemplate(template);
+    if (!res.ok) errors.matterNameTemplate = [res.error];
+  }
+  const unknown = required.filter((k) => !isRequiredMatterField(k));
+  if (unknown.length > 0) {
+    errors.requiredMatterFields = unknown.map((k) => `Unknown field: ${k}`);
+  }
+  return Object.keys(errors).length > 0 ? errors : null;
+}
+
+function describeRequired(keys: readonly string[]): string {
+  return keys.length > 0 ? keys.join(", ") : "none";
+}
 
 /** Column pair for a period (both null when unconfigured). */
 function periodColumns(period: SolPeriod | null) {
@@ -181,6 +207,11 @@ export async function createPracticeArea(
     };
   }
   const data = parsed.data;
+  const requiredFields = [...new Set(formData.getAll("requiredMatterFields").map(String))];
+  const matterErrors = matterFieldErrors(data.matterNameTemplate, requiredFields);
+  if (matterErrors) {
+    return { status: "error", errors: matterErrors, values: raw };
+  }
 
   // Check for name collision — including archived rows, since the
   // unique constraint doesn't honor soft-delete.
@@ -215,6 +246,8 @@ export async function createPracticeArea(
       label: data.label || null,
       color: data.color,
       order: nextOrder,
+      matterNameTemplate: data.matterNameTemplate || null,
+      requiredMatterFields: requiredFields,
       hasStatuteOfLimitations: data.hasStatuteOfLimitations === "on",
       // SOL configuration — only stored when the area actually
       // tracks SOL. Stored as amount + unit (ADR-035); the legacy
@@ -267,6 +300,15 @@ export async function updatePracticeArea(
     };
   }
   const data = parsed.data;
+  // The form posts a hidden `requiredMatterFieldsPresent` marker so
+  // "unchecked everything" (marker, no values) differs from "field absent"
+  // (older callers): only the former changes the stored list.
+  const requiredPosted = formData.get("requiredMatterFieldsPresent") !== null;
+  const requiredFields = [...new Set(formData.getAll("requiredMatterFields").map(String))];
+  const matterErrors = matterFieldErrors(data.matterNameTemplate, requiredFields);
+  if (matterErrors) {
+    return { status: "error", errors: matterErrors, values: raw };
+  }
 
   const before = await prisma.practiceArea.findUnique({
     where: { id },
@@ -279,6 +321,8 @@ export async function updatePracticeArea(
       statutePeriodUnit: true,
       statuteSourceCitation: true,
       defaultBillingMode: true,
+      matterNameTemplate: true,
+      requiredMatterFields: true,
     },
   });
   if (!before) {
@@ -309,6 +353,12 @@ export async function updatePracticeArea(
       name: data.name,
       label: data.label || null,
       color: data.color,
+      // A form that omits the field entirely leaves the template alone;
+      // a present-but-blank one resets to the firm default.
+      ...(data.matterNameTemplate !== undefined
+        ? { matterNameTemplate: data.matterNameTemplate || null }
+        : {}),
+      ...(requiredPosted ? { requiredMatterFields: requiredFields } : {}),
       hasStatuteOfLimitations: data.hasStatuteOfLimitations === "on",
       // Turning SOL tracking OFF only stops auto-computing for future
       // use: the stored period + citation are kept (so re-enabling
@@ -380,6 +430,14 @@ export async function updatePracticeArea(
     data.defaultBillingMode &&
     before.defaultBillingMode !== data.defaultBillingMode
       ? `billing mode ${before.defaultBillingMode} → ${data.defaultBillingMode}`
+      : null,
+    data.matterNameTemplate !== undefined &&
+    (before.matterNameTemplate ?? "") !== data.matterNameTemplate
+      ? `Matter name template: "${before.matterNameTemplate ?? "firm default"}" → "${data.matterNameTemplate || "firm default"}"`
+      : null,
+    requiredPosted &&
+    describeRequired(before.requiredMatterFields) !== describeRequired(requiredFields)
+      ? `Required fields: ${describeRequired(before.requiredMatterFields)} → ${describeRequired(requiredFields)}`
       : null,
   ], true);
 

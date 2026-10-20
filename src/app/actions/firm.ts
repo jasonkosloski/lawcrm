@@ -22,6 +22,7 @@ import { prisma } from "@/lib/prisma";
 import { loadCurrentFirm, loadFirmGoals } from "@/lib/firm";
 import { logActivity } from "@/lib/activity-log";
 import { dateOnlyKey, parseDateOnly } from "@/lib/format-date";
+import { parseTemplate } from "@/lib/matter-name-template";
 import { requirePermissionResult } from "@/lib/permission-check";
 import {
   firmInitialState,
@@ -85,6 +86,14 @@ const firmSchema = z.object({
    *  deliberately generous ceiling that still rejects fat-fingered
    *  values like 2000. */
   monthlyBillableGoal: goalField("Monthly billable goal", 744),
+  /** Firm-default matter-name template. Omitted entirely = leave the
+   *  current value alone; present but blank = error. */
+  matterNameTemplate: z
+    .string()
+    .trim()
+    .min(1, "A default template is required.")
+    .max(300)
+    .optional(),
 });
 
 /** Profile columns whose change is recorded (by NAME only — values
@@ -128,6 +137,17 @@ export async function updateFirmAction(
 
   const data = parsed.data;
 
+  if (data.matterNameTemplate !== undefined) {
+    const t = parseTemplate(data.matterNameTemplate);
+    if (!t.ok) {
+      return {
+        status: "error",
+        errors: { matterNameTemplate: [t.error] },
+        values: raw,
+      };
+    }
+  }
+
   // Validate the date before touching the DB — same friendly field
   // error the zod failures above get, instead of a Prisma 500.
   // Date-only value: stored at UTC midnight (ADR-012), no zone.
@@ -164,10 +184,23 @@ export async function updateFirmAction(
     country: data.country,
   };
 
+  const oldTemplate =
+    data.matterNameTemplate !== undefined
+      ? (
+          await prisma.firm.findUnique({
+            where: { id: firm.id },
+            select: { matterNameTemplate: true },
+          })
+        )?.matterNameTemplate
+      : undefined;
+
   await prisma.firm.update({
     where: { id: firm.id },
     data: {
       ...next,
+      ...(data.matterNameTemplate !== undefined
+        ? { matterNameTemplate: data.matterNameTemplate }
+        : {}),
       establishedAt,
       // Safe Number() — the goalField regex admits only \d+(\.\d)?
       dailyHoursGoal: Number(data.dailyHoursGoal),
@@ -180,6 +213,14 @@ export async function updateFirmAction(
   const changed: string[] = PROFILE_FIELDS.filter(
     (f) => (firm[f] ?? null) !== next[f]
   );
+  if (
+    data.matterNameTemplate !== undefined &&
+    oldTemplate !== data.matterNameTemplate
+  ) {
+    changed.push(
+      `matterNameTemplate ("${oldTemplate ?? ""}" -> "${data.matterNameTemplate}")`
+    );
+  }
   const oldKey = firm.establishedAt ? dateOnlyKey(firm.establishedAt) : null;
   const newKey = establishedAt ? dateOnlyKey(establishedAt) : null;
   if (oldKey !== newKey) changed.push("establishedAt");
