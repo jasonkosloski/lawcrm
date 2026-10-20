@@ -166,7 +166,7 @@ export default async function DashboardPage() {
                     {agenda.map((item) => (
                       <div
                         key={item.id}
-                        className="flex items-center gap-3 py-2.5 border-b border-line-2 last:border-b-0"
+                        className="flex items-center gap-3 py-2 border-b border-line-2 last:border-b-0"
                       >
                         <span className="text-xs text-ink-3 tabular-nums w-16 shrink-0">
                           {item.time}
@@ -175,7 +175,7 @@ export default async function DashboardPage() {
                           className="w-1.5 h-1.5 rounded-full shrink-0"
                           style={{ background: item.color }}
                         />
-                        <span className="text-sm text-ink truncate">{item.title}</span>
+                        <span className="text-xs text-ink truncate">{item.title}</span>
                         <span className="ml-auto text-2xs text-ink-4 shrink-0">
                           {item.area}
                         </span>
@@ -332,7 +332,7 @@ export default async function DashboardPage() {
                       <Link
                         key={d.id}
                         href={`/matters/${d.matterId}/deadlines`}
-                        className="flex items-center gap-3 py-2.5 border-b border-line-2 last:border-b-0 hover:bg-paper -mx-2 px-2 rounded-md transition-colors"
+                        className="flex items-center gap-3 py-2 border-b border-line-2 last:border-b-0 hover:bg-paper -mx-2 px-2 rounded-md transition-colors"
                       >
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 text-xs text-ink">
@@ -388,7 +388,7 @@ export default async function DashboardPage() {
                       <Link
                         key={r.id}
                         href={r.href}
-                        className="flex items-center gap-3 py-2.5 border-b border-line-2 last:border-b-0 hover:bg-paper -mx-2 px-2 rounded-md transition-colors"
+                        className="flex items-center gap-3 py-2 border-b border-line-2 last:border-b-0 hover:bg-paper -mx-2 px-2 rounded-md transition-colors"
                       >
                         <div className="flex-1 min-w-0">
                           <div className="text-xs text-ink truncate">{r.subject}</div>
@@ -578,7 +578,7 @@ function FollowUpRow({ item }: { item: FollowUpItem }) {
   return (
     <Link
       href={href}
-      className="flex items-center gap-3 py-2.5 border-b border-line-2 last:border-b-0 hover:bg-paper -mx-2 px-2 rounded-md transition-colors"
+      className="flex items-center gap-3 py-2 border-b border-line-2 last:border-b-0 hover:bg-paper -mx-2 px-2 rounded-md transition-colors"
     >
       <span
         className={

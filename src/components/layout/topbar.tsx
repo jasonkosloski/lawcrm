@@ -34,7 +34,7 @@ export function TopBar({ title, crumbs, actions, below, subtitle }: TopBarProps)
   return (
     <div className="flex flex-col shrink-0 bg-card border-b border-line">
       {/* ── Title row ────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3 px-3 sm:px-6 min-h-16 py-2.5">
+      <div className="flex items-center justify-between gap-3 px-3 sm:px-6 min-h-14 py-2">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           {/* Hamburger — visible only below `lg` where the sidebar
               is hidden by default. lg+ users have the persistent
@@ -54,7 +54,7 @@ export function TopBar({ title, crumbs, actions, below, subtitle }: TopBarProps)
               </div>
             )}
             <div className="flex items-center gap-2.5 min-w-0">
-              <h1 className="font-display text-lg sm:text-[22px] leading-tight font-medium tracking-[-0.015em] text-ink truncate">
+              <h1 className="font-display text-lg sm:text-xl leading-tight font-medium tracking-[-0.015em] text-ink truncate">
                 {title}
               </h1>
               {/* Subtitle chips hide below sm — they're contextual

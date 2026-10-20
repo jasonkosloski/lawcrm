@@ -415,7 +415,7 @@ function NavGroup({
   const [collapsed, toggle] = useCollapsed(section.collapseKey);
   const listId = section.collapseKey ? `${section.collapseKey}-list` : undefined;
   return (
-    <div className={section.label ? "mt-5" : "mt-1"}>
+    <div className={section.label ? "mt-4" : "mt-1"}>
       {section.label &&
         (section.collapseKey ? (
           <button
@@ -452,7 +452,7 @@ function NavGroup({
                 onClick={onNavigate}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex items-center gap-2.5 h-8 px-2.5 rounded-md text-sm transition-colors",
+                  "flex items-center gap-2.5 h-[30px] px-2.5 rounded-md text-sm transition-colors",
                   active
                     ? "bg-sidebar-accent text-ink font-medium"
                     : "text-ink-2 hover:bg-paper-2 hover:text-ink"

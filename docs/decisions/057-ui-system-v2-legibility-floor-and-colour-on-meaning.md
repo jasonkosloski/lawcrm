@@ -12,7 +12,8 @@ with. The rules that replaced it are in UI_PATTERNS (Identity, Type, Component P
 
 **Decision:**
 - **A floor, enforced by the tokens.** Nothing renders under 11px. Token *values*
-  changed and names were kept (`text-2xs` 12, `text-xs` 13, `text-sm` 14; `ink-3`/`ink-4`
+  changed and names were kept (`text-2xs` 11.5, `text-xs` 12.5, `text-sm` 13.5, half-pixel
+  steps chosen after a first pass at 12/13/14 scrolled too much on desktop; `ink-3`/`ink-4`
   darkened so every word-carrying tier is at least 4.5:1; `ink-5` for placeholders and
   decorative icons only), so all existing callers moved at once.
 - **Colour on meaning, not chrome.** The chrome is ink and neutral: the active nav item

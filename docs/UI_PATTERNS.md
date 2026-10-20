@@ -28,11 +28,11 @@ money and counts); `font-code` (JetBrains Mono) is for code only.
 | Token | Size | Use |
 |---|---|---|
 | `text-3xs` | 11px | The floor. Dense chips only |
-| `text-2xs` | 12px | Meta: timestamps, counts, secondary lines, table headers, section labels |
-| `text-xs` | 13px | Body: table cells, row titles, form text |
-| `text-sm` | 14px | Nav, lead rows, card body where there's room |
+| `text-2xs` | 11.5px | Meta: timestamps, counts, secondary lines, table headers, section labels |
+| `text-xs` | 12.5px | Body: table cells, row titles, form text |
+| `text-sm` | 13.5px | Nav, lead rows, card body where there's room |
 | `text-[15px] font-semibold` | 15px | Card titles (`CardTitle`) |
-| Fraunces `text-[22px]` | 22px | Page title |
+| Fraunces `text-xl` | 20px | Page title |
 
 - **Nothing under 11px**: no `text-[9px]`/`[10px]`.
 - **No uppercase or letter-spaced labels.** Section labels, field labels and table headers
@@ -48,7 +48,7 @@ money and counts); `font-code` (JetBrains Mono) is for code only.
 ### Headline figures (`StatStrip`)
 ```
 src/components/shared/stat-strip.tsx — one bordered card split by hairlines.
-- Label 12px ink-3 above a 24px value; optional 12px ink-4 detail line.
+- Label 11.5px ink-3 above a 24px value; optional 11.5px ink-4 detail line.
 - Columns follow the item count (no orphan cells); 2-up on phones, odd last cell spans.
 - No icons, no tints. `tone` colours a value only when it needs attention.
 - `href` makes a cell a link (to the list that explains the figure).
@@ -89,7 +89,7 @@ Shared component: src/components/shared/empty-state.tsx
 
 ### Navigation and selection
 ```
-Sidebar item: h-8, 14px, 16px outline icon (ink-4; ink when active).
+Sidebar item: 30px tall, 13.5px, 16px outline icon (ink-4; ink when active).
   Active: bg-sidebar-accent (neutral pill), ink label, font-medium. Hover: bg-paper-2.
   Counts: 12px tabular grey; queues that need action (unread email, new leads) in ink semibold.
 Selected list row (inbox, mailbox, settings nav): bg-paper-2 / bg-sidebar-accent, never a brand fill.
@@ -106,8 +106,8 @@ Clickable card: `card-hover` (the edge darkens; no lift, no blue glow).
 
 ### Table
 ```
-- Header: 12px ink-4 sentence case, medium; no fill band.
-- Rows: h-11, 13px, border line-2 between rows, hover bg-paper/70. No zebra.
+- Header: 11.5px ink-4 sentence case, medium; no fill band.
+- Rows: h-10, 12.5px, border line-2 between rows, hover bg-paper/70. No zebra.
 - Numbers right-aligned and tabular; zero money in ink-4; missing values "—".
 - Shared primitives: src/components/ui/table.tsx.
 ```

@@ -11,7 +11,7 @@ Related: [ADR-057](../decisions/057-ui-system-v2-legibility-floor-and-colour-on-
 - [ ] **Role-based & customizable sidebar** (P2) — different sidebar content per role with per-user overrides. Generic "pinned items" concept spanning matters, reports, leads, contacts, saved-filter URLs. Depends on auth (shipped) plus a `UserPreferences` model.
 
 ## Shipped
-- [x] **UI system v2** (2026-10-20, ADR-057) — 11px floor and a 12/13/14 ramp, contrast-safe ink tiers, `font-mono` as tabular Inter, text-safe status colours; neutral ink chrome (sidebar pill, underline tabs, no gradients or tinted tiles); `StatStrip` for headline figures and `DueLabel` for every due date; foldable practice-area group in the sidebar; the idle timer as an icon button. Patterns in UI_PATTERNS.
+- [x] **UI system v2** (2026-10-20, ADR-057) — 11px floor and an 11.5/12.5/13.5 ramp, contrast-safe ink tiers, `font-mono` as tabular Inter, text-safe status colours; neutral ink chrome (sidebar pill, underline tabs, no gradients or tinted tiles); `StatStrip` for headline figures and `DueLabel` for every due date; foldable practice-area group in the sidebar; the idle timer as an icon button. Patterns in UI_PATTERNS.
 - [x] **Project scaffold** — Next.js, shadcn, Prisma, TanStack Query (the query package is installed but unused; mutations are server actions).
 - [x] **Design tokens** — brand colors, fonts, spacing from the design handoff (ADR-003).
 - [x] **App shell** — sidebar nav, topbar, layout wrapper.
