@@ -26,7 +26,8 @@ import { cardsInColumn, type DashboardCardKey } from "@/lib/dashboard-prefs";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { getMyRecordsToChase } from "@/lib/queries/records-requests";
 import { getDashboardPrefs } from "@/lib/queries/dashboard-prefs";
-import { Briefcase, Clock, DollarSign, Mail } from "lucide-react";
+import { StatStrip, type Stat } from "@/components/shared/stat-strip";
+import { DueLabel } from "@/components/shared/due-label";
 import {
   getDashboardKpis,
   getFirmPulse,
@@ -98,43 +99,41 @@ export default async function DashboardPage() {
       canViewRecords ? getMyRecordsToChase(tz) : Promise.resolve([]),
     ]);
 
-  const kpiTiles = !kpis
+  const kpiStats: Stat[] = !kpis
     ? []
     : [
-    {
-      label: "Open matters",
-      value: kpis.openMatters.toString(),
-      change: kpis.openMattersChange,
-      icon: Briefcase,
-      variant: "accent" as const,
-    },
-    {
-      label: "Unread email",
-      value: kpis.unreadEmail.toString(),
-      change: kpis.flaggedEmail > 0 ? `${kpis.flaggedEmail} starred unread` : "none starred",
-      icon: Mail,
-      variant: kpis.flaggedEmail > 0 ? ("critical" as const) : ("accent" as const),
-    },
-    {
-      label: "Hours today",
-      value: kpis.hoursToday.toFixed(1),
-      change: `${kpis.hoursGoal.toFixed(1)} goal`,
-      icon: Clock,
-      variant: "accent" as const,
-    },
-    // Firm-wide trust total: null (tile omitted) without reports.view.
-    ...(kpis.trustBalance !== null
-      ? [
-          {
-            label: "Trust balance",
-            value: formatMoney(kpis.trustBalance),
-            change: `across ${kpis.trustMatterCount ?? 0} matters`,
-            icon: DollarSign,
-            variant: "ok" as const,
-          },
-        ]
-      : []),
-  ];
+        {
+          label: "Open matters",
+          value: kpis.openMatters.toString(),
+          detail: kpis.openMattersChange,
+          href: "/matters",
+        },
+        {
+          label: "Unread email",
+          value: kpis.unreadEmail.toString(),
+          detail:
+            kpis.flaggedEmail > 0
+              ? `${kpis.flaggedEmail} starred unread`
+              : "None starred",
+          href: "/communication?filter=unread",
+        },
+        {
+          label: "Hours today",
+          value: kpis.hoursToday.toFixed(1),
+          detail: `Goal ${kpis.hoursGoal.toFixed(1)}`,
+          href: "/time",
+        },
+        // Firm-wide trust total: null (cell omitted) without reports.view.
+        ...(kpis.trustBalance !== null
+          ? [
+              {
+                label: "Trust balance",
+                value: formatMoney(kpis.trustBalance),
+                detail: `Across ${kpis.trustMatterCount ?? 0} matters`,
+              },
+            ]
+          : []),
+      ];
 
   const mtdPct = pulse
     ? Math.min(100, (pulse.billableMtd / pulse.billableGoal) * 100)
@@ -147,56 +146,13 @@ export default async function DashboardPage() {
   // src/lib/dashboard-prefs.ts).
   const cards: Record<DashboardCardKey, ReactNode> = {
     // KPI tile grid — 1 / 2 / 4 columns at xs / sm / lg+.
-    kpis: (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-              {kpiTiles.map((kpi) => {
-                const Icon = kpi.icon;
-                const variantClass =
-                  kpi.variant === "critical"
-                    ? "kpi-accent kpi-critical"
-                    : kpi.variant === "ok"
-                      ? "kpi-accent kpi-ok"
-                      : "kpi-accent";
-                const badgeClass =
-                  kpi.variant === "critical"
-                    ? "bg-warn shadow-[0_4px_10px_-4px_rgba(182,98,61,0.55)]"
-                    : kpi.variant === "ok"
-                      ? "bg-ok shadow-[0_4px_10px_-4px_rgba(45,138,95,0.5)]"
-                      : "bg-brand-500 shadow-[0_4px_10px_-4px_rgba(37,99,168,0.6)]";
-
-                return (
-                  <Card
-                    key={kpi.label}
-                    className={`${variantClass} card-hover relative`}
-                  >
-                    <CardContent className="p-3">
-                      <div
-                        className={`absolute top-2.5 right-2.5 w-7 h-7 rounded-lg flex items-center justify-center text-white ${badgeClass}`}
-                      >
-                        <Icon size={14} />
-                      </div>
-
-                      <div className="text-2xs font-semibold uppercase tracking-wider text-ink-3 mb-1">
-                        {kpi.label}
-                      </div>
-                      <div className="text-2xl font-display font-medium tracking-tight text-ink">
-                        {kpi.value}
-                      </div>
-                      <div className="text-2xs text-ink-4 mt-0.5">
-                        {kpi.change}
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-    ),
+    kpis: <StatStrip stats={kpiStats} />,
 
     // Today's agenda
     agenda: (
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">
+              <CardHeader className="pb-1">
+                <CardTitle>
                   Today&apos;s agenda
                 </CardTitle>
               </CardHeader>
@@ -210,17 +166,17 @@ export default async function DashboardPage() {
                     {agenda.map((item) => (
                       <div
                         key={item.id}
-                        className="flex items-center gap-3 py-2 border-b border-line last:border-b-0"
+                        className="flex items-center gap-3 py-2.5 border-b border-line-2 last:border-b-0"
                       >
-                        <span className="text-2xs font-mono text-ink-4 w-12 shrink-0">
+                        <span className="text-xs text-ink-3 tabular-nums w-16 shrink-0">
                           {item.time}
                         </span>
                         <span
                           className="w-1.5 h-1.5 rounded-full shrink-0"
                           style={{ background: item.color }}
                         />
-                        <span className="text-xs text-ink">{item.title}</span>
-                        <span className="ml-auto text-2xs font-mono text-ink-4">
+                        <span className="text-sm text-ink truncate">{item.title}</span>
+                        <span className="ml-auto text-2xs text-ink-4 shrink-0">
                           {item.area}
                         </span>
                       </div>
@@ -234,14 +190,14 @@ export default async function DashboardPage() {
     // Your tasks (assigned to current user, grouped by due date)
     tasks: (
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <CardHeader className="pb-1">
+                <CardTitle className="flex items-center gap-2">
                   Your tasks
-                  <span className="text-2xs font-mono font-normal text-ink-4">
+                  <span className="text-xs font-normal text-ink-4 tabular-nums">
                     {myTasks.total}
                   </span>
                   {myTasks.overdueCount > 0 && (
-                    <span className="ml-auto text-2xs font-mono font-medium px-2 py-0.5 rounded-full bg-warn-soft text-warn border border-warn-border">
+                    <span className="ml-auto text-2xs font-medium px-2 py-0.5 rounded-full bg-danger-soft text-danger">
                       {myTasks.overdueCount} overdue
                     </span>
                   )}
@@ -274,14 +230,14 @@ export default async function DashboardPage() {
     // date today or earlier — overdue ones bubble to the top)
     followUps: (
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <CardHeader className="pb-1">
+                <CardTitle className="flex items-center gap-2">
                   Follow up today
-                  <span className="text-2xs font-mono font-normal text-ink-4">
+                  <span className="text-xs font-normal text-ink-4 tabular-nums">
                     {followUps.length}
                   </span>
                   {followUps.some((f) => f.isOverdue) && (
-                    <span className="ml-auto text-2xs font-mono font-medium px-2 py-0.5 rounded-full bg-warn-soft text-warn border border-warn-border">
+                    <span className="ml-auto text-2xs font-medium px-2 py-0.5 rounded-full bg-danger-soft text-danger">
                       {followUps.filter((f) => f.isOverdue).length} overdue
                     </span>
                   )}
@@ -307,8 +263,8 @@ export default async function DashboardPage() {
     // Recent activity
     activity: (
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">
+              <CardHeader className="pb-1">
+                <CardTitle>
                   Recent activity
                 </CardTitle>
               </CardHeader>
@@ -326,9 +282,12 @@ export default async function DashboardPage() {
                           key={item.id}
                           className="flex items-start gap-3 py-2.5 border-b border-line last:border-b-0"
                         >
-                          <div className="w-7 h-7 rounded-md bg-brand-50 flex items-center justify-center shrink-0 mt-0.5">
-                            <Icon size={13} className="text-brand-500" />
-                          </div>
+                          <Icon
+                            size={16}
+                            strokeWidth={1.75}
+                            aria-hidden
+                            className="text-ink-4 shrink-0 mt-0.5"
+                          />
                           <div className="flex-1 min-w-0">
                             <div className="text-xs font-medium text-ink">
                               {item.title}
@@ -338,10 +297,10 @@ export default async function DashboardPage() {
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-0.5 shrink-0">
-                            <span className="text-2xs font-mono text-ink-4">
+                            <span className="text-2xs text-ink-4 tabular-nums">
                               {item.time}
                             </span>
-                            <span className="text-3xs font-mono uppercase tracking-wider text-ink-4">
+                            <span className="text-2xs text-ink-4">
                               {item.source}
                             </span>
                           </div>
@@ -357,8 +316,8 @@ export default async function DashboardPage() {
     // Deadlines this week (right rail)
     deadlines: (
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">
+              <CardHeader className="pb-1">
+                <CardTitle>
                   Deadlines this week
                 </CardTitle>
               </CardHeader>
@@ -373,31 +332,30 @@ export default async function DashboardPage() {
                       <Link
                         key={d.id}
                         href={`/matters/${d.matterId}/deadlines`}
-                        className="flex items-center gap-3 py-2 border-b border-line last:border-b-0 hover:bg-paper-2 -mx-2 px-2 rounded-sm transition-colors"
+                        className="flex items-center gap-3 py-2.5 border-b border-line-2 last:border-b-0 hover:bg-paper -mx-2 px-2 rounded-md transition-colors"
                       >
                         <div className="flex-1 min-w-0">
-                          <div className="text-xs text-ink truncate">
-                            {d.title}
+                          <div className="flex items-center gap-1.5 text-xs text-ink">
+                            <span className="truncate">{d.title}</span>
+                            {d.kind === "critical" && (
+                              <span className="shrink-0 text-2xs font-medium text-danger">
+                                Critical
+                              </span>
+                            )}
                           </div>
-                          <div className="text-3xs font-mono uppercase tracking-wider text-ink-4 truncate">
+                          <div className="text-2xs text-ink-4 truncate">
                             {d.matterName}
                           </div>
                         </div>
-                        <span
-                          className={`text-2xs font-mono font-medium px-2 py-0.5 rounded-full border ${
-                            d.days < 0 || d.kind === "critical"
-                              ? "bg-warn-soft text-warn border-warn-border"
-                              : d.kind === "auto_rule"
-                                ? "bg-brand-soft text-brand-700 border-brand-200"
-                                : "bg-paper-2 text-ink-3 border-line"
-                          }`}
-                        >
-                          {d.days < 0 ? `${Math.abs(d.days)}d late` : `${d.days}d`}
-                        </span>
+                        <DueLabel
+                          dueDate={d.dueDate}
+                          days={d.days}
+                          className="shrink-0"
+                        />
                       </Link>
                     ))}
                     {deadlines.overdueHidden > 0 && (
-                      <div className="pt-2 text-2xs font-mono text-ink-4">
+                      <div className="pt-2 text-2xs text-ink-4">
                         +{deadlines.overdueHidden} more overdue
                       </div>
                     )}
@@ -411,10 +369,10 @@ export default async function DashboardPage() {
     // No fee data; renders nothing without records.view.
     records: canViewRecords && (
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <CardHeader className="pb-1">
+                <CardTitle className="flex items-center gap-2">
                   Records to chase
-                  <span className="text-2xs font-mono font-normal text-ink-4">
+                  <span className="text-xs font-normal text-ink-4 tabular-nums">
                     {recordsToChase.length}
                   </span>
                 </CardTitle>
@@ -430,18 +388,18 @@ export default async function DashboardPage() {
                       <Link
                         key={r.id}
                         href={r.href}
-                        className="flex items-center gap-3 py-2 border-b border-line last:border-b-0 hover:bg-paper-2 -mx-2 px-2 rounded-sm transition-colors"
+                        className="flex items-center gap-3 py-2.5 border-b border-line-2 last:border-b-0 hover:bg-paper -mx-2 px-2 rounded-md transition-colors"
                       >
                         <div className="flex-1 min-w-0">
                           <div className="text-xs text-ink truncate">{r.subject}</div>
-                          <div className="text-3xs font-mono uppercase tracking-wider text-ink-4 truncate">
+                          <div className="text-2xs text-ink-4 truncate">
                             {r.custodianName} · {r.context}
                           </div>
                         </div>
                         <span
-                          className={`text-2xs font-mono shrink-0 ${
+                          className={`text-2xs tabular-nums shrink-0 ${
                             r.label.endsWith("overdue")
-                              ? "text-warn font-medium"
+                              ? "text-danger font-medium"
                               : "text-ink-4"
                           }`}
                         >
@@ -459,42 +417,42 @@ export default async function DashboardPage() {
     // Null without reports.view — the card renders nothing.
     pulse: pulse && (
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">
+              <CardHeader className="pb-1">
+                <CardTitle>
                   Firm pulse
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-4">
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-2xs text-ink-3">
-                      Billable hours (MTD)
+                    <span className="text-xs text-ink-3">
+                      Billable hours this month
                     </span>
-                    <span className="text-xs font-mono font-medium text-ink">
+                    <span className="text-sm font-medium text-ink tabular-nums">
                       {pulse.billableMtd.toFixed(1)}h
                     </span>
                   </div>
                   <div className="h-1.5 bg-paper-2 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-brand-500 rounded-full"
+                      className="h-full bg-brand-700 rounded-full"
                       style={{ width: `${mtdPct}%` }}
                     />
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-2xs text-ink-3">
+                    <span className="text-xs text-ink-3">
                       Collection rate
                     </span>
-                    <span className="text-xs font-mono font-medium text-ok">
+                    <span className="text-sm font-medium text-ink tabular-nums">
                       {pulse.collectionRate > 0
                         ? `${pulse.collectionRate.toFixed(1)}%`
                         : "—"}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-2xs text-ink-3">
+                    <span className="text-xs text-ink-3">
                       A/R outstanding
                     </span>
-                    <span className="text-xs font-mono font-medium text-ink">
+                    <span className="text-sm font-medium text-ink tabular-nums">
                       {pulse.arOutstanding > 0
                         ? formatMoney(pulse.arOutstanding)
                         : "—"}
@@ -510,11 +468,10 @@ export default async function DashboardPage() {
     <>
       <TopBar
         title="Today"
-        crumbs="Dashboard"
         actions={<DashboardCustomizeButton initialPrefs={prefs} />}
       />
 
-      <div className="flex-1 overflow-y-auto p-3 sm:p-5 animate-page-enter">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-6 animate-page-enter">
         {/* Two-column on lg+, stack on smaller. The right rail
             (deadlines + firm pulse) drops below the main column
             on mobile/tablet so the user reads top-to-bottom
@@ -575,19 +532,19 @@ function TaskGroup({
   if (tasks.length === 0) return null;
   const labelClass =
     tone === "warn"
-      ? "text-warn"
+      ? "text-danger"
       : tone === "brand"
-        ? "text-brand-700"
+        ? "text-ink"
         : "text-ink-3";
   return (
     <div>
       <div className="flex items-center gap-2 mb-1">
         <span
-          className={`text-2xs font-semibold uppercase tracking-wider ${labelClass}`}
+          className={`text-xs font-semibold ${labelClass}`}
         >
           {label}
         </span>
-        <span className="text-2xs font-mono text-ink-4">{tasks.length}</span>
+        <span className="text-2xs text-ink-4 tabular-nums">{tasks.length}</span>
       </div>
       <div className="flex flex-col">
         {tasks.map((t) => (
@@ -620,29 +577,30 @@ function FollowUpRow({ item }: { item: FollowUpItem }) {
   return (
     <Link
       href={href}
-      className="flex items-center gap-3 py-2 border-b border-line last:border-b-0 hover:bg-paper-2 -mx-2 px-2 rounded-sm transition-colors"
+      className="flex items-center gap-3 py-2.5 border-b border-line-2 last:border-b-0 hover:bg-paper -mx-2 px-2 rounded-md transition-colors"
     >
       <span
         className={
           "w-1.5 h-1.5 rounded-full shrink-0 " +
-          (item.isOverdue ? "bg-warn" : "bg-brand-500")
+          (item.isOverdue ? "bg-danger" : "bg-ink-5")
         }
       />
       <div className="flex-1 min-w-0">
         <div className="text-xs text-ink truncate">{item.label}</div>
         {item.matterName && (
-          <div className="text-3xs font-mono uppercase tracking-wider text-ink-4 truncate">
+          <div className="text-2xs text-ink-4 truncate">
             {item.matterName}
           </div>
         )}
       </div>
       <span
         className={
-          "text-2xs font-mono shrink-0 " +
-          (item.isOverdue ? "text-warn font-medium" : "text-ink-4")
+          "text-2xs shrink-0 " +
+          (item.isOverdue ? "text-danger font-medium" : "text-ink-4")
         }
       >
-        {item.kind === "email" ? "✉ " : "💬 "}
+        {item.kind === "email" ? "Email" : "Message"}
+        {" · "}
         {item.isOverdue ? "Late" : "Today"}
       </span>
     </Link>

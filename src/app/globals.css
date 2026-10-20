@@ -50,16 +50,25 @@
 
   /* Font families */
   --font-sans: var(--font-inter);
-  --font-mono: var(--font-jetbrains-mono);
+  /* `font-mono` is Inter with tabular figures (see the base layer):
+     timestamps, money and counts align without a code face. Real
+     identifiers (case, invoice and bar numbers) use `font-code`. */
+  --font-mono: var(--font-inter);
+  --font-code: var(--font-jetbrains-mono);
   --font-display: var(--font-fraunces);
 
-  /* Sub-xs font sizes for dense mono labels (activity timestamps, KPI captions).
-     Tailwind's built-in scale bottoms out at text-xs (12px) — these tokens fill
-     the 9–10px range used throughout the CRM's dense data surfaces. */
-  --text-2xs: 0.625rem;          /* 10px */
-  --text-2xs--line-height: 1rem; /* 16px */
-  --text-3xs: 0.5625rem;         /* 9px */
-  --text-3xs--line-height: 0.875rem; /* 14px */
+  /* Type ramp (UI system v2, ADR-055). Nothing renders under 11px:
+     people read this app all day. The names are kept from v1 so every
+     caller moved up one step without an edit.
+       3xs 11 · 2xs 12 (meta) · xs 13 (body, cells) · sm 14 (nav, lead text) */
+  --text-3xs: 0.6875rem;              /* 11px */
+  --text-3xs--line-height: 1rem;      /* 16px */
+  --text-2xs: 0.75rem;                /* 12px */
+  --text-2xs--line-height: 1rem;      /* 16px */
+  --text-xs: 0.8125rem;               /* 13px */
+  --text-xs--line-height: 1.125rem;   /* 18px */
+  --text-sm: 0.875rem;                /* 14px */
+  --text-sm--line-height: 1.25rem;    /* 20px */
 
   /* Radius scale */
   --radius-sm: calc(var(--radius) * 0.6);
@@ -84,24 +93,30 @@
   --color-brand-tint: #f6faff;
 
   /* ── Warm paper neutrals ────────────────────────────────────────────────── */
+  /* Every ink tier that carries words is at least 4.5:1 on white and on
+     paper. ink-5 is for placeholders, disabled glyphs and decorative
+     icons only, never for words someone needs to read. */
   --color-ink: #14181f;
   --color-ink-2: #3a4251;
-  --color-ink-3: #6b7280;
-  --color-ink-4: #9aa1ad;
-  --color-line: #e5e4de;
-  --color-line-2: #eeece6;
-  --color-paper: #faf9f5;
-  --color-paper-2: #f3f1ea;
+  --color-ink-3: #555c69;
+  --color-ink-4: #6b7280;
+  --color-ink-5: #9aa1ad;
+  --color-line: #e6e4de;
+  --color-line-2: #efede8;
+  --color-paper: #f7f6f2;
+  --color-paper-2: #efede7;
   --color-paper-email: #faf8f3;
 
   /* ── Semantic colors ────────────────────────────────────────────────────── */
+  /* Text-safe: each is at least 4.5:1 on white and on paper. */
   --color-highlight: #fff1bd;
-  --color-ok: #2d8a5f;
-  --color-ok-soft: #ecf6f1;
-  --color-warn: #b6623d;
-  --color-warn-soft: #fbf0ea;
+  --color-ok: #23744d;
+  --color-ok-soft: #e9f5ee;
+  --color-warn: #9a4a26;
+  --color-warn-soft: #fbefe8;
   --color-warn-border: #e2c0ad;
-  --color-danger: #c13c3c;
+  --color-danger: #b02a2a;
+  --color-danger-soft: #fcecec;
 
   /* Practice-area / matter colors are DATA (PracticeArea.color,
      Matter.color — validated hex in the DB), not theme tokens. */
@@ -109,23 +124,26 @@
 
 /* ── Root CSS variables (shadcn-compatible, mapped to brand) ────────────────── */
 :root {
-  --background: #faf9f5;
+  --background: #f7f6f2;
   --foreground: #14181f;
   --card: #ffffff;
   --card-foreground: #14181f;
   --popover: #ffffff;
   --popover-foreground: #14181f;
-  --primary: #2563a8;
+  /* Primary actions are the deep navy (brand-700): the firm's colour at
+     near-ink weight. brand-500 is for links, focus and selection marks. */
+  --primary: #18406e;
   --primary-foreground: #ffffff;
-  --secondary: #f3f1ea;
+  --secondary: #efede7;
   --secondary-foreground: #14181f;
-  --muted: #f3f1ea;
+  --muted: #efede7;
   --muted-foreground: #6b7280;
-  --accent: #eaf3fa;
-  --accent-foreground: #0c2443;
-  --destructive: #c13c3c;
-  --border: #e5e4de;
-  --input: #e5e4de;
+  --accent: #efede7;
+  --accent-foreground: #14181f;
+  --destructive: #b02a2a;
+  --border: #e6e4de;
+  /* Controls take one step more edge than cards. */
+  --input: #d6d3cb;
   --ring: #2563a8;
   --chart-1: #2563a8;
   --chart-2: #2d8a5f;
@@ -135,13 +153,13 @@
   --radius: 0.5rem;
 
   /* Sidebar */
-  --sidebar: #f3f1ea;
+  --sidebar: #f7f6f2;
   --sidebar-foreground: #14181f;
-  --sidebar-primary: #2563a8;
+  --sidebar-primary: #18406e;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #eaf3fa;
-  --sidebar-accent-foreground: #0c2443;
-  --sidebar-border: #e5e4de;
+  --sidebar-accent: #e9e7e0;
+  --sidebar-accent-foreground: #14181f;
+  --sidebar-border: #e6e4de;
   --sidebar-ring: #2563a8;
 }
 
@@ -158,6 +176,34 @@
 
   body {
     @apply bg-paper text-ink;
+  }
+
+  /* `font-mono` is the text face with tabular figures (see @theme). */
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+
+  code, kbd, samp, pre {
+    font-family: var(--font-code);
+  }
+
+  ::placeholder {
+    color: var(--color-ink-5);
+  }
+
+  /* One focus ring everywhere a component doesn't draw its own. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
@@ -203,36 +249,18 @@
   height: auto;
 }
 
-/* ── Card hover lift (blue-tinted shadow from design spec) ──────────────────── */
+/* ── Card hover (clickable cards): a darker edge, no lift ─────────────────── */
 .card-hover {
-  transition: box-shadow 0.16s ease, border-color 0.16s ease;
+  transition: border-color 0.12s ease;
 }
 .card-hover:hover {
-  border-color: var(--color-brand-300);
-  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.02), 0 10px 24px -14px rgba(37, 99, 168, 0.35);
+  border-color: #c9c5bb;
 }
 
-/* ── KPI tile gradient overlays ─────────────────────────────────────────────── */
-.kpi-accent {
-  position: relative;
-  overflow: hidden;
-}
-.kpi-accent::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, var(--color-brand-soft) 0%, #fff 55%);
-  pointer-events: none;
-  z-index: 0;
-}
-.kpi-accent > * { position: relative; z-index: 1; }
-
-.kpi-critical::before {
-  background: linear-gradient(135deg, #fbf0ea 0%, #fff 55%) !important;
-}
-.kpi-ok::before {
-  background: linear-gradient(135deg, #ecf6f1 0%, #fff 55%) !important;
-}
+/* ── KPI tiles (v1) ─────────────────────────────────────────────────────────
+   Retired: KPIs are a divided StatStrip (components/shared/stat-strip.tsx).
+   The classes stay as no-ops until the last caller is gone. */
+.kpi-accent { position: relative; }
 
 /* ── Subtle page transition ─────────────────────────────────────────────────── */
 @keyframes fadeIn {
@@ -249,7 +277,7 @@
   height: 8px;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: #c9ced4;
+  background: #cfccc4;
   border-radius: 4px;
 }
 .scrollbar-thin::-webkit-scrollbar-track {

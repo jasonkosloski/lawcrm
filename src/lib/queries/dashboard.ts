@@ -476,6 +476,8 @@ function prettyPhoneForFollowUp(p: string): string {
 export type DeadlineItem = {
   id: string;
   title: string;
+  /** Date-only due date (UTC midnight, ADR-012). */
+  dueDate: Date;
   /** Whole days from the viewer's today: 0 = today, NEGATIVE = overdue. */
   days: number;
   kind: "critical" | "auto_rule" | "manual";
@@ -549,6 +551,7 @@ export async function getUpcomingDeadlines(
   const toItem = (dl: (typeof upcoming)[number]): DeadlineItem => ({
     id: dl.id,
     title: dl.title,
+    dueDate: dl.dueDate,
     days: daysUntilDateOnly(dl.dueDate, tz),
     kind: (dl.kind as DeadlineItem["kind"]) ?? "manual",
     matterId: dl.matterId,

@@ -11,13 +11,16 @@
  *  - pinned matters (user's pinned list)
  *  - practice-area counts (matters per area, excluding archived/closed)
  *
- * Design tokens: warm paper gradient background, blue-500 active state,
- * #eaf0f5 hover, badges in mono with blue-50 bg.
+ * Design (UI system v2): the sidebar sits on the page ground behind one
+ * hairline; the active item is a neutral pill, not a brand fill. Counts
+ * are grey numerals; only queues that need action (unread email, new
+ * leads) set theirs in ink. The practice-area group folds away so the
+ * column fits a 900px-tall laptop.
  */
 
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -28,6 +31,7 @@ import {
   Calendar,
   Clock,
   BarChart3,
+  ChevronRight,
   LogOut,
   Zap,
   Settings,
@@ -47,12 +51,55 @@ interface NavItem {
   href: string;
   icon?: React.ElementType;
   badge?: string;
+  /** A queue that needs action: its count is set in ink, not grey. */
+  queue?: boolean;
   dotColor?: string;
 }
 
 interface NavSection {
   label?: string;
+  /** localStorage key for a section the user can fold. */
+  collapseKey?: string;
   items: NavItem[];
+}
+
+const COLLAPSE_EVENT = "sidebar-collapse-change";
+
+function readCollapsed(key: string): boolean {
+  try {
+    return window.localStorage.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function subscribeToCollapse(callback: () => void) {
+  window.addEventListener(COLLAPSE_EVENT, callback);
+  window.addEventListener("storage", callback);
+  return () => {
+    window.removeEventListener(COLLAPSE_EVENT, callback);
+    window.removeEventListener("storage", callback);
+  };
+}
+
+/** Per-browser fold state for a sidebar section (UI_PATTERNS:
+ *  per-browser preferences). Server snapshot is "open". */
+function useCollapsed(key: string | undefined): [boolean, () => void] {
+  const collapsed = useSyncExternalStore(
+    subscribeToCollapse,
+    () => (key ? readCollapsed(key) : false),
+    () => false
+  );
+  const toggle = useCallback(() => {
+    if (!key) return;
+    try {
+      window.localStorage.setItem(key, collapsed ? "0" : "1");
+    } catch {
+      // Private mode or blocked storage: the fold just doesn't persist.
+    }
+    window.dispatchEvent(new Event(COLLAPSE_EVENT));
+  }, [key, collapsed]);
+  return [collapsed, toggle];
 }
 
 /**
@@ -157,6 +204,7 @@ export function SidebarNav({
           href: "/intake",
           icon: Inbox,
           badge: numBadge(data.activeLeadCount),
+          queue: true,
         },
         {
           id: "communication",
@@ -164,6 +212,7 @@ export function SidebarNav({
           href: "/communication",
           icon: Mail,
           badge: numBadge(data.unreadEmailCount),
+          queue: true,
         },
         { id: "calendar", label: "Calendar", href: "/calendar", icon: Calendar },
         { id: "contacts", label: "Contacts", href: "/contacts", icon: Users },
@@ -178,6 +227,7 @@ export function SidebarNav({
     },
     {
       label: "Practice areas",
+      collapseKey: "sidebar:practice-areas-collapsed",
       items: data.areaCounts.map((a) => ({
         id: `area-${a.area}`,
         label: a.label,
@@ -246,7 +296,7 @@ export function SidebarNav({
 
       <aside
         className={cn(
-          "flex flex-col w-60 shrink-0 h-full border-r border-line",
+          "flex flex-col w-60 shrink-0 h-full border-r border-line bg-paper",
           // Mobile (< lg): fixed-position overlay that slides in
           // from the left when `open`. Sits above the backdrop.
           "fixed inset-y-0 left-0 z-40 transition-transform lg:transition-none",
@@ -254,9 +304,6 @@ export function SidebarNav({
           // lg+: persistent column, no transform.
           "lg:static lg:translate-x-0"
         )}
-        style={{
-          background: "linear-gradient(180deg, #f6f5ef 0%, #eef2f5 100%)",
-        }}
         // Closed on mobile = translated off-canvas but still in the
         // DOM, so `inert` pulls its links out of the tab order and
         // the a11y tree. Must not apply at lg+ where this same
@@ -264,29 +311,25 @@ export function SidebarNav({
         // query instead of a plain `!open`.
         inert={!open && !isDesktop}
       >
-      {/* ── Firm logo + command palette trigger ──────────────────────────── */}
-      <div className="flex items-center justify-between p-3 pb-2">
-        <div className="flex items-center gap-2">
+      {/* ── Firm mark + command palette trigger ─────────────────────────── */}
+      <div className="flex items-center justify-between h-14 px-4">
+        <div className="flex items-center gap-2.5">
           <div
-            className="flex items-center justify-center w-6 h-6 rounded-md text-white font-display text-sm font-semibold"
-            style={{
-              background:
-                "linear-gradient(135deg, var(--color-brand-500), var(--color-brand-700))",
-              boxShadow:
-                "0 2px 6px -2px rgba(37,99,168,.55), inset 0 1px 0 rgba(255,255,255,.18)",
-              letterSpacing: "-0.04em",
-            }}
+            aria-hidden
+            className="flex items-center justify-center w-7 h-7 rounded-md bg-brand-700 text-white font-display text-[15px] font-semibold tracking-tight"
           >
             k
           </div>
-          <span className="font-display text-sm font-medium">Kosloski Law</span>
+          <span className="font-display text-[15px] font-medium text-ink">
+            Kosloski Law
+          </span>
         </div>
         <div className="flex items-center gap-1">
           <button
             onClick={openPalette}
-            className="inline-block px-1.5 h-4 leading-[14px] border border-line-2 rounded text-2xs font-mono text-brand-700 bg-white cursor-pointer hover:border-brand-300 transition-colors"
-            style={{ borderBottomWidth: 2 }}
-            title="Command palette (⌘K)"
+            className="hidden lg:inline-flex items-center h-6 px-1.5 rounded border border-line bg-white text-2xs text-ink-4 hover:text-ink hover:border-input transition-colors"
+            title="Search and commands (⌘K)"
+            aria-label="Search and commands"
           >
             ⌘K
           </button>
@@ -294,94 +337,38 @@ export function SidebarNav({
               see it because the sidebar isn't a drawer there. */}
           <button
             onClick={close}
-            className="lg:hidden inline-flex items-center justify-center w-5 h-5 rounded text-ink-3 hover:text-ink hover:bg-paper-2"
+            className="lg:hidden inline-flex items-center justify-center w-9 h-9 rounded-md text-ink-3 hover:text-ink hover:bg-paper-2"
             title="Close navigation"
             aria-label="Close navigation"
           >
-            <X size={14} />
+            <X size={18} />
           </button>
         </div>
       </div>
 
       {/* ── Navigation groups ────────────────────────────────────────────── */}
-      <nav className="flex-1 overflow-y-auto px-1.5 pb-2.5 scrollbar-thin">
+      <nav className="flex-1 overflow-y-auto px-2 pb-3 scrollbar-thin">
         {sections.map((section, si) => (
-          <div key={si}>
-            {section.label && (
-              <div className="px-2.5 pt-3 pb-1 text-2xs font-semibold uppercase tracking-wider text-ink-4">
-                {section.label}
-              </div>
-            )}
-            <div className="flex flex-col gap-px">
-              {section.items.map((item) => {
-                const active = isActive(item.href, pathname, searchParams);
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.id}
-                    href={item.href}
-                    onClick={close}
-                    className={cn(
-                      "flex items-center gap-2 px-2.5 py-[5px] rounded-md text-xs transition-all duration-100 cursor-pointer",
-                      active
-                        ? "bg-brand-500 text-white shadow-[0_1px_0_rgba(0,0,0,.04),inset_0_1px_0_rgba(255,255,255,.12)]"
-                        : "text-ink-2 hover:bg-[#eaf0f5] hover:text-brand-700"
-                    )}
-                  >
-                    {item.dotColor && (
-                      <span
-                        className="w-1.5 h-1.5 rounded-full shrink-0"
-                        style={{
-                          background: item.dotColor,
-                          ...(active
-                            ? { boxShadow: "0 0 0 2px rgba(255,255,255,.35)" }
-                            : {}),
-                        }}
-                      />
-                    )}
-                    {Icon && (
-                      <span
-                        className={cn(
-                          "w-4 h-4 shrink-0 flex items-center justify-center",
-                          active ? "text-white" : "text-ink-3"
-                        )}
-                      >
-                        <Icon size={14} />
-                      </span>
-                    )}
-                    <span className="overflow-hidden text-ellipsis whitespace-nowrap">
-                      {item.label}
-                    </span>
-                    {item.badge !== undefined && (
-                      <span
-                        className={cn(
-                          "ml-auto text-2xs font-mono font-medium px-1.5 py-px rounded-lg",
-                          active
-                            ? "bg-white/[.18] text-white border border-transparent"
-                            : "bg-brand-50 text-brand-700 border border-brand-100"
-                        )}
-                      >
-                        {item.badge}
-                      </span>
-                    )}
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
+          <NavGroup
+            key={si}
+            section={section}
+            pathname={pathname}
+            searchParams={searchParams}
+            onNavigate={close}
+          />
         ))}
       </nav>
 
       {/* ── User profile strip ───────────────────────────────────────────── */}
       <div className="border-t border-line">
-        <div className="flex items-center gap-2 p-2.5">
-          <Avatar className="h-7 w-7 shadow-[0_0_0_2px_var(--color-brand-100)]">
-            <AvatarFallback className="text-2xs font-semibold bg-[#efe3d9] text-ink-2">
+        <div className="flex items-center gap-2.5 px-4 py-3">
+          <Avatar className="h-8 w-8">
+            <AvatarFallback className="text-2xs font-semibold bg-paper-2 text-ink-2">
               {user?.initials ?? "??"}
             </AvatarFallback>
           </Avatar>
           <div className="flex flex-col min-w-0 flex-1">
-            <span className="text-xs font-medium truncate">
+            <span className="text-sm font-medium text-ink truncate">
               {user?.name ?? "Not signed in"}
             </span>
             <span className="text-2xs text-ink-4">
@@ -407,9 +394,104 @@ function SignOutButton() {
       title="Sign out"
       aria-label="Sign out"
       onClick={() => signOut({ redirectUrl: "/login" })}
-      className="inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-4 hover:text-warn hover:bg-warn-soft transition-colors"
+      className="inline-flex items-center justify-center w-8 h-8 rounded-md text-ink-4 hover:text-ink hover:bg-paper-2 transition-colors"
     >
-      <LogOut size={13} />
+      <LogOut size={15} />
     </button>
+  );
+}
+
+function NavGroup({
+  section,
+  pathname,
+  searchParams,
+  onNavigate,
+}: {
+  section: NavSection;
+  pathname: string;
+  searchParams: URLSearchParams;
+  onNavigate: () => void;
+}) {
+  const [collapsed, toggle] = useCollapsed(section.collapseKey);
+  const listId = section.collapseKey ? `${section.collapseKey}-list` : undefined;
+  return (
+    <div className={section.label ? "mt-5" : "mt-1"}>
+      {section.label &&
+        (section.collapseKey ? (
+          <button
+            type="button"
+            onClick={toggle}
+            aria-expanded={!collapsed}
+            aria-controls={listId}
+            className="group flex w-full items-center gap-1 px-2.5 pb-1.5 text-2xs font-medium text-ink-4 hover:text-ink-2"
+          >
+            {section.label}
+            <ChevronRight
+              size={13}
+              aria-hidden
+              className={cn(
+                "transition-transform",
+                collapsed ? "rotate-0" : "rotate-90"
+              )}
+            />
+          </button>
+        ) : (
+          <div className="px-2.5 pb-1.5 text-2xs font-medium text-ink-4">
+            {section.label}
+          </div>
+        ))}
+      {!collapsed && (
+        <div id={listId} className="flex flex-col gap-px">
+          {section.items.map((item) => {
+            const active = isActive(item.href, pathname, searchParams);
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.id}
+                href={item.href}
+                onClick={onNavigate}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "flex items-center gap-2.5 h-8 px-2.5 rounded-md text-sm transition-colors",
+                  active
+                    ? "bg-sidebar-accent text-ink font-medium"
+                    : "text-ink-2 hover:bg-paper-2 hover:text-ink"
+                )}
+              >
+                {item.dotColor && (
+                  <span
+                    aria-hidden
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ background: item.dotColor }}
+                  />
+                )}
+                {Icon && (
+                  <Icon
+                    size={16}
+                    strokeWidth={1.75}
+                    aria-hidden
+                    className={cn(
+                      "shrink-0",
+                      active ? "text-ink" : "text-ink-4"
+                    )}
+                  />
+                )}
+                <span className="truncate">{item.label}</span>
+                {item.badge !== undefined && (
+                  <span
+                    className={cn(
+                      "ml-auto text-2xs tabular-nums",
+                      item.queue ? "font-semibold text-ink" : "text-ink-4"
+                    )}
+                  >
+                    {item.badge}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
