@@ -6,7 +6,7 @@ time & expenses, billing with trust accounting, settlements, notes, tasks,
 documents, and a unified email + SMS/call communication inbox.
 
 Built with Next.js 16 (App Router), Prisma 7 + PostgreSQL, shadcn/ui,
-Tailwind v4, and Auth.js v5. Mutations are permission-gated server actions
+Tailwind v4, and Clerk (Google sign-in for staff). Mutations are permission-gated server actions
 with an audit trail. See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)
 for the full picture and [`docs/README.md`](./docs/README.md) for the
 documentation index.
@@ -54,8 +54,13 @@ Notable variables:
 
 - `DATABASE_URL` / `DIRECT_DATABASE_URL` - Postgres. `DATABASE_POOL_MAX`
   is optional.
-- `AUTH_SECRET` - required in every environment. `AUTH_URL` is optional
-  (only behind a proxy/CDN).
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` / `CLERK_SECRET_KEY` - staff sign-in
+  (Clerk). Set `STAFF_ORIGINS` to the staff origin and
+  `CLERK_WEBHOOK_SIGNING_SECRET` for the audit webhook in production; see
+  [`docs/features/auth.md`](./docs/features/auth.md).
+- `AUTH_SECRET` - required in every environment, but portal-only now (HMAC
+  for portal link requests; also the Google integration's OAuth state), not
+  staff sessions. `AUTH_URL` is optional (only behind a proxy/CDN).
 - `CRON_SECRET` - **required in production.** Vercel Cron sends it as a
   bearer token to `/api/email-sync` and `/api/notification-sweep`;
   unset means both return 401 and background syncs silently stop.
