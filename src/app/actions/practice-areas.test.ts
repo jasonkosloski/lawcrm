@@ -628,3 +628,29 @@ describe("matter-name template + required fields", () => {
     expect(torts.requiredMatterFields).toEqual(["venue"]);
   });
 });
+
+describe("originatingDocLabel", () => {
+  test("create stores trimmed label; update omitted keeps it; blank resets with audit line", async () => {
+    await create({ originatingDocLabel: "  Retainer agreement " });
+    const area = await prisma.practiceArea.findFirstOrThrow({ where: { name: "Employment" } });
+    expect(area.originatingDocLabel).toBe("Retainer agreement");
+
+    await updatePracticeArea(area.id, practiceAreaInitialState, areaForm());
+    expect(
+      (await prisma.practiceArea.findUniqueOrThrow({ where: { id: area.id } })).originatingDocLabel
+    ).toBe("Retainer agreement");
+
+    await updatePracticeArea(
+      area.id,
+      practiceAreaInitialState,
+      areaForm({ originatingDocLabel: "" })
+    );
+    expect(
+      (await prisma.practiceArea.findUniqueOrThrow({ where: { id: area.id } })).originatingDocLabel
+    ).toBeNull();
+    const log = await prisma.activityLog.findFirst({
+      where: { detail: { contains: "Originating document:" } },
+    });
+    expect(log?.detail).toContain('"Retainer agreement" → "Fee agreement (default)"');
+  });
+});

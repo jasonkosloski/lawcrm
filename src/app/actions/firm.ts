@@ -19,8 +19,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { loadCurrentFirm, loadFirmGoals } from "@/lib/firm";
+import { loadCurrentFirm, loadFirmGoals, requireAdmin } from "@/lib/firm";
 import { logActivity } from "@/lib/activity-log";
+import { logAuditEntry } from "@/lib/audit-entry";
 import { dateOnlyKey, parseDateOnly } from "@/lib/format-date";
 import { parseTemplate } from "@/lib/matter-name-template";
 import { requirePermissionResult } from "@/lib/permission-check";
@@ -280,5 +281,37 @@ export async function setPortalEnabled(
     title: enabled ? "Turned the client portal on" : "Turned the client portal off",
   });
   revalidatePath("/settings/firm");
+  return { ok: true };
+}
+
+/** Firm switch: matters need a signed originating document before they
+ *  can be created or opened from a draft. Admin only (like matter
+ *  visibility) because it changes what every attorney can do. */
+export async function setRequireOriginatingDoc(
+  on: boolean
+): Promise<{ ok: true }> {
+  const userId = await requireAdmin();
+  const firm = await loadCurrentFirm();
+  const before = await prisma.firm.findUniqueOrThrow({
+    where: { id: firm.id },
+    select: { requireOriginatingDoc: true },
+  });
+  if (before.requireOriginatingDoc === on) return { ok: true };
+  await prisma.firm.update({
+    where: { id: firm.id },
+    data: { requireOriginatingDoc: on },
+  });
+  await logAuditEntry({
+    matterId: null,
+    userId,
+    type: "settings",
+    source: "Settings",
+    title: on
+      ? "Signed originating document required to open a matter"
+      : "Signed originating document no longer required to open a matter",
+    detail: `Changed from ${before.requireOriginatingDoc ? "required" : "not required"} to ${on ? "required" : "not required"}`,
+  });
+  revalidatePath("/settings/firm");
+  revalidatePath("/", "layout");
   return { ok: true };
 }

@@ -25,6 +25,7 @@ vi.mock("@/lib/permission-check", () => ({
 vi.mock("@/lib/firm", () => ({
   loadCurrentFirm: vi.fn(),
   loadFirmGoals: vi.fn(),
+  requireAdmin: vi.fn(),
 }));
 
 import { loadCurrentFirm, loadFirmGoals } from "@/lib/firm";
@@ -366,5 +367,24 @@ describe("updateFirmAction matter-name template", () => {
     expect(res.status).toBe("ok");
     const after = await prisma.firm.findUniqueOrThrow({ where: { id: firmId } });
     expect(after.matterNameTemplate).toBe(before.matterNameTemplate);
+  });
+});
+
+describe("setRequireOriginatingDoc", () => {
+  test("admin turns it on and it is logged; non-admin is refused", async () => {
+    const { setRequireOriginatingDoc } = await import("@/app/actions/firm");
+    const { requireAdmin } = await import("@/lib/firm");
+    vi.mocked(requireAdmin).mockResolvedValue(actorId);
+    await setRequireOriginatingDoc(true);
+    const firm = await prisma.firm.findUniqueOrThrow({ where: { id: firmId } });
+    expect(firm.requireOriginatingDoc).toBe(true);
+    expect(
+      await prisma.activityLog.count({ where: { type: "settings", userId: actorId } })
+    ).toBe(1);
+
+    vi.mocked(requireAdmin).mockRejectedValue(new Error("REDIRECT"));
+    await expect(setRequireOriginatingDoc(false)).rejects.toThrow("REDIRECT");
+    const after = await prisma.firm.findUniqueOrThrow({ where: { id: firmId } });
+    expect(after.requireOriginatingDoc).toBe(true);
   });
 });

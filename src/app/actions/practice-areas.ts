@@ -60,6 +60,8 @@ const DEFAULT_STAGE_TEMPLATE: Array<{ name: string; isTerminal?: boolean }> = [
   { name: "Closed", isTerminal: true },
 ];
 
+const DEFAULT_DOC_LABEL = "Fee agreement (default)";
+
 function formatPeriodOrNone(period: SolPeriod | null): string {
   return period ? formatStatutePeriod(period) : "none";
 }
@@ -130,6 +132,9 @@ const practiceAreaSchema = z.object({
   defaultBillingMode: z.enum(BILLING_MODES).optional(),
   /** Per-area matter-name template; blank = use the firm default. */
   matterNameTemplate: z.string().trim().max(300).optional().or(z.literal("")),
+  /** Name of this area's originating document ("Retainer agreement");
+   *  blank = the default "Fee agreement". Omitted on update = unchanged. */
+  originatingDocLabel: z.string().trim().max(80).optional().or(z.literal("")),
 }).superRefine((v, ctx) => {
   if (v.hasStatuteOfLimitations !== "on") return;
   const raw = v.statutePeriodAmount ?? "";
@@ -247,6 +252,7 @@ export async function createPracticeArea(
       color: data.color,
       order: nextOrder,
       matterNameTemplate: data.matterNameTemplate || null,
+      originatingDocLabel: data.originatingDocLabel || null,
       requiredMatterFields: requiredFields,
       hasStatuteOfLimitations: data.hasStatuteOfLimitations === "on",
       // SOL configuration — only stored when the area actually
@@ -322,6 +328,7 @@ export async function updatePracticeArea(
       statuteSourceCitation: true,
       defaultBillingMode: true,
       matterNameTemplate: true,
+      originatingDocLabel: true,
       requiredMatterFields: true,
     },
   });
@@ -357,6 +364,9 @@ export async function updatePracticeArea(
       // a present-but-blank one resets to the firm default.
       ...(data.matterNameTemplate !== undefined
         ? { matterNameTemplate: data.matterNameTemplate || null }
+        : {}),
+      ...(data.originatingDocLabel !== undefined
+        ? { originatingDocLabel: data.originatingDocLabel || null }
         : {}),
       ...(requiredPosted ? { requiredMatterFields: requiredFields } : {}),
       hasStatuteOfLimitations: data.hasStatuteOfLimitations === "on",
@@ -434,6 +444,10 @@ export async function updatePracticeArea(
     data.matterNameTemplate !== undefined &&
     (before.matterNameTemplate ?? "") !== data.matterNameTemplate
       ? `Matter name template: "${before.matterNameTemplate ?? "firm default"}" → "${data.matterNameTemplate || "firm default"}"`
+      : null,
+    data.originatingDocLabel !== undefined &&
+    (before.originatingDocLabel ?? "") !== data.originatingDocLabel
+      ? `Originating document: "${before.originatingDocLabel ?? DEFAULT_DOC_LABEL}" → "${data.originatingDocLabel || DEFAULT_DOC_LABEL}"`
       : null,
     requiredPosted &&
     describeRequired(before.requiredMatterFields ?? []) !== describeRequired(requiredFields)
