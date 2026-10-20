@@ -163,3 +163,13 @@ describe("EditPracticeAreaForm matter-name template and required fields", () => 
     expect(fd.get("matterNameTemplate")).toBe("");
   });
 });
+
+describe("EditPracticeAreaForm originating document", () => {
+  test("seeds the field from the area's label", () => {
+    render(<EditPracticeAreaForm area={{ ...area, originatingDocLabel: "Retainer" }} />);
+    const input = screen.getByLabelText("Originating document") as HTMLInputElement;
+    expect(input.name).toBe("originatingDocLabel");
+    expect(input.value).toBe("Retainer");
+    expect(input.placeholder).toBe("Fee agreement");
+  });
+});

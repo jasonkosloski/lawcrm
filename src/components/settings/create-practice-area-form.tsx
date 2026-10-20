@@ -16,6 +16,7 @@ import { createPracticeArea } from "@/app/actions/practice-areas";
 import {
   Field,
   inputCls,
+  OriginatingDocField,
   RequiredFieldsGroup,
 } from "@/components/settings/practice-area-form-parts";
 import { MatterNameTemplateField } from "@/components/settings/matter-name-template-field";
@@ -143,6 +144,11 @@ export function CreatePracticeAreaForm({
         practiceAreaName={name.trim() || undefined}
         hint="Optional. Leave blank to use the firm's template."
         error={errs.matterNameTemplate}
+      />
+
+      <OriginatingDocField
+        defaultValue={vals.originatingDocLabel ?? ""}
+        error={errs.originatingDocLabel}
       />
 
       <RequiredFieldsGroup tracksSol={hasSol} error={errs.requiredMatterFields} />

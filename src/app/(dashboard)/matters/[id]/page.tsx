@@ -21,7 +21,9 @@ import { formatPhone } from "@/lib/format-phone";
 // Filed / trial / task due dates are date-only (formatDateOnly never
 // shifts the day); the pinned-note timestamp is an instant and renders
 // in the viewer's profile zone (ADR-012).
-import { formatDateOnly } from "@/lib/format-date";
+import { dateOnlyKey, formatDateOnly } from "@/lib/format-date";
+import { originatingDocLabel } from "@/lib/originating-doc";
+import { AgreementCard } from "@/components/matters/agreement-card";
 import { formatMoney } from "@/lib/format-money";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { prisma } from "@/lib/prisma";
@@ -62,7 +64,7 @@ function dayDistanceLabel(days: number): string {
 export default async function MatterOverviewPage({
   params,
 }: PageProps<"/matters/[id]">) {
-  await requireUser();
+  const userId = await requireUser();
   const { id } = await params;
   await assertMatterAccess(id);
   const tz = await getCurrentUserTimeZone();
@@ -86,6 +88,7 @@ export default async function MatterOverviewPage({
     canAddRequests,
     canEditRequests,
     canDeleteRequests,
+    canEditAgreement,
   ] = await Promise.all([
     getMatterById(id),
     getMatterDeadlines(id, { tz, openOnly: true, limit: 4 }),
@@ -130,8 +133,28 @@ export default async function MatterOverviewPage({
     currentUserHasPermission("portal.add_requests"),
     currentUserHasPermission("portal.edit_requests"),
     currentUserHasPermission("portal.delete_requests"),
+    currentUserHasPermission("matters.agreement.edit"),
   ]);
   if (!matter) notFound();
+
+  // Picker documents and the firm switch matter only to the edit form.
+  // The matter load above is the access check; documents are scoped to
+  // that same, already-authorized matter.
+  const [agreementDocuments, agreementRequired] = canEditAgreement
+    ? await Promise.all([
+        prisma.document.findMany({
+          where: { matterId: matter.id, status: { not: "archived" } },
+          orderBy: { name: "asc" },
+          select: { id: true, name: true },
+        }),
+        prisma.user
+          .findUnique({
+            where: { id: userId },
+            select: { firm: { select: { requireOriginatingDoc: true } } },
+          })
+          .then((u) => u?.firm?.requireOriginatingDoc ?? false),
+      ])
+    : [[], false];
 
   // The loader needs portal.view (it returns nothing without it), so
   // it runs only for holders.
@@ -205,6 +228,27 @@ export default async function MatterOverviewPage({
               canEdit={canEditMatter}
             />
           )}
+
+          <AgreementCard
+            matterId={matter.id}
+            label={originatingDocLabel({
+              originatingDocLabel: matter.practiceAreaOriginatingDocLabel,
+            })}
+            agreement={
+              matter.agreement
+                ? {
+                    status: matter.agreement.status,
+                    signedDate: matter.agreement.signedDate
+                      ? dateOnlyKey(matter.agreement.signedDate)
+                      : null,
+                    document: matter.agreement.document,
+                  }
+                : null
+            }
+            documents={agreementDocuments}
+            canEdit={canEditAgreement}
+            required={agreementRequired}
+          />
 
           {/* Case facts */}
           <Card>

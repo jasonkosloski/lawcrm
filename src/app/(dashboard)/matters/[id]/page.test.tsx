@@ -27,7 +27,19 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     matterContact: { findMany: vi.fn(async () => []) },
     matterStage: { findMany: vi.fn(async () => []) },
+    document: { findMany: vi.fn(async () => [{ id: "d1", name: "fee.pdf" }]) },
+    user: {
+      findUnique: vi.fn(async () => ({ firm: { requireOriginatingDoc: true } })),
+    },
   },
+}));
+vi.mock("@/app/actions/billing/helpers", () => ({
+  todayDateOnly: vi.fn(async () => new Date("2026-10-20T00:00:00Z")),
+}));
+vi.mock("@/components/matters/agreement-card", () => ({
+  AgreementCard: (p: Record<string, unknown>) => (
+    <div data-testid="agreement-card" data-props={JSON.stringify(p)} />
+  ),
 }));
 vi.mock("@/lib/queries/portal-access", () => ({
   getPortalCardData: vi.fn(async () => ({
@@ -179,6 +191,39 @@ afterEach(() => {
 });
 
 describe("MatterOverviewPage", () => {
+  test("wires the agreement card from the matter load and its area label", async () => {
+    vi.mocked(getMatterById).mockResolvedValue({
+      ...matter,
+      practiceAreaOriginatingDocLabel: "Retainer",
+      agreement: {
+        status: "signed",
+        signedDate: new Date("2026-10-12T00:00:00Z"),
+        document: { id: "d1", name: "fee.pdf" },
+      },
+    } as unknown as NonNullable<Awaited<ReturnType<typeof getMatterById>>>);
+    await renderPage();
+    const props = JSON.parse(
+      screen.getByTestId("agreement-card").getAttribute("data-props")!
+    );
+    expect(props.label).toBe("Retainer");
+    expect(props.agreement.signedDate).toBe("2026-10-12");
+    expect(props.canEdit).toBe(true);
+    expect(props.required).toBe(true);
+    expect(props.documents).toEqual([{ id: "d1", name: "fee.pdf" }]);
+  });
+
+  test("loads the picker documents only for matters.agreement.edit holders", async () => {
+    const { currentUserHasPermission } = await import("@/lib/permission-check");
+    const { prisma } = await import("@/lib/prisma");
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (k: string) => k !== "matters.agreement.edit"
+    );
+    vi.mocked(prisma.document.findMany).mockClear();
+    await renderPage();
+    expect(prisma.document.findMany).not.toHaveBeenCalled();
+    vi.mocked(currentUserHasPermission).mockImplementation(async () => true);
+  });
+
   test("renders the Portal card only for portal.view holders, and skips the loader otherwise", async () => {
     const { currentUserHasPermission } = await import("@/lib/permission-check");
     const { getPortalCardData } = await import("@/lib/queries/portal-access");

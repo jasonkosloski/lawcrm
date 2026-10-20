@@ -1,0 +1,55 @@
+import { beforeEach, describe, expect, test, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+
+vi.mock("@/app/actions/matter-agreement", () => ({
+  updateMatterAgreement: vi.fn(async () => ({ status: "ok" })),
+}));
+vi.mock("next/link", () => ({
+  default: (props: React.ComponentProps<"a">) => <a {...props} />,
+}));
+
+import { AgreementCard } from "./agreement-card";
+
+const base = {
+  matterId: "m1",
+  label: "Fee agreement",
+  documents: [{ id: "d1", name: "fee.pdf" }],
+  canEdit: false,
+  required: false,
+};
+
+beforeEach(() => vi.clearAllMocks());
+
+describe("AgreementCard", () => {
+  test("shows signed date and a link to the document viewer", () => {
+    render(
+      <AgreementCard
+        {...base}
+        agreement={{
+          status: "signed",
+          signedDate: "2026-10-12",
+          document: { id: "d1", name: "fee.pdf" },
+        }}
+      />
+    );
+    expect(screen.getByText(/Signed 2026-10-12/)).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: /view document/i }).getAttribute("href")
+    ).toBe("/matters/m1/documents/d1");
+  });
+
+  test("shows the empty state with the area's label", () => {
+    render(<AgreementCard {...base} label="Retainer" agreement={null} />);
+    expect(screen.getByText("No Retainer on file")).toBeTruthy();
+  });
+
+  test("hides Edit without permission and shows the form with it", async () => {
+    const { rerender } = render(<AgreementCard {...base} agreement={null} />);
+    expect(screen.queryByRole("button", { name: /edit/i })).toBeNull();
+    rerender(<AgreementCard {...base} canEdit agreement={null} />);
+    await userEvent.click(screen.getByRole("button", { name: /edit/i }));
+    expect(document.querySelector('select[name="agreementStatus"]')).toBeTruthy();
+    expect(document.querySelector('select[name="documentId"]')).toBeTruthy();
+  });
+});

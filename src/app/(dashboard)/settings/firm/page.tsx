@@ -11,6 +11,7 @@ import { FirmReadView } from "@/components/settings/firm-read-view";
 import { FirmCalendarDefaultsCard } from "@/components/settings/calendar-defaults-card";
 import { PortalEnabledCard } from "@/components/settings/portal-enabled-card";
 import { MatterVisibilityCard } from "@/components/settings/matter-visibility-card";
+import { OriginatingDocCard } from "@/components/settings/originating-doc-card";
 import {
   getCurrentFirm,
   getFirmGoals,
@@ -39,12 +40,24 @@ export default async function FirmSettingsPage() {
         autoAddTeamToUpcomingEvents: true,
         matterVisibility: true,
         portalEnabled: true,
+        requireOriginatingDoc: true,
       },
     }),
     getFirmGoals(),
   ]);
   // Admin-only: the wall switch + the rosters to fix before flipping it.
   const thin = isAdmin ? await listThinTeams() : null;
+  // Admin-only: open matters (not archived, stage not terminal) with no
+  // signed agreement on file, so the switch shows what it would catch.
+  const missingCount = isAdmin
+    ? await prisma.matter.count({
+        where: {
+          isArchived: false,
+          stage: { isTerminal: false },
+          OR: [{ agreement: { is: null } }, { agreement: { status: { not: "signed" } } }],
+        },
+      })
+    : 0;
   const calendarDefaults = {
     autoAddTeamToNewEvents: firmSettings.autoAddTeamToNewEvents,
     autoAddTeamToUpcomingEvents: firmSettings.autoAddTeamToUpcomingEvents,
@@ -85,6 +98,15 @@ export default async function FirmSettingsPage() {
               current={firmSettings.matterVisibility}
               thinTotal={thin.total}
               thinRows={thin.rows}
+            />
+          </div>
+        )}
+
+        {isAdmin && (
+          <div className="mt-6">
+            <OriginatingDocCard
+              current={firmSettings.requireOriginatingDoc}
+              missingCount={missingCount}
             />
           </div>
         )}

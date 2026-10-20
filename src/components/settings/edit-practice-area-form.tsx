@@ -14,6 +14,7 @@ import { updatePracticeArea } from "@/app/actions/practice-areas";
 import {
   Field,
   inputCls,
+  OriginatingDocField,
   RequiredFieldsGroup,
 } from "@/components/settings/practice-area-form-parts";
 import { MatterNameTemplateField } from "@/components/settings/matter-name-template-field";
@@ -51,6 +52,8 @@ export function EditPracticeAreaForm({
     /** null = inherit the firm template. */
     matterNameTemplate?: string | null;
     requiredMatterFields?: string[];
+    /** null/blank = "Fee agreement". */
+    originatingDocLabel?: string | null;
   };
 }) {
   const boundAction = updatePracticeArea.bind(null, area.id);
@@ -263,6 +266,11 @@ export function EditPracticeAreaForm({
         practiceAreaName={area.name}
         hint="Leave blank to use the firm's template."
         error={errs.matterNameTemplate}
+      />
+
+      <OriginatingDocField
+        defaultValue={area.originatingDocLabel ?? ""}
+        error={errs.originatingDocLabel}
       />
 
       <RequiredFieldsGroup

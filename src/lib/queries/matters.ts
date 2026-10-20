@@ -473,12 +473,20 @@ export const getMatterById = cache(async (id: string) => {
           statutePeriodAmount: true,
           statutePeriodUnit: true,
           statuteSourceCitation: true,
+          originatingDocLabel: true,
         },
       },
       stage: {
         select: { id: true, name: true, order: true, isTerminal: true },
       },
       client: true,
+      agreement: {
+        select: {
+          status: true,
+          signedDate: true,
+          document: { select: { id: true, name: true } },
+        },
+      },
       teamMembers: {
         include: {
           user: {
@@ -529,6 +537,7 @@ export const getMatterById = cache(async (id: string) => {
       practiceArea.statutePeriodUnit
     ),
     practiceAreaStatuteSourceCitation: practiceArea.statuteSourceCitation,
+    practiceAreaOriginatingDocLabel: practiceArea.originatingDocLabel,
     stageId: stage.id,
     stageOrder: stage.order,
     stageIsTerminal: stage.isTerminal,

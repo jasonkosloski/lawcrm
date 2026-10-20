@@ -85,3 +85,12 @@ describe("CreatePracticeAreaForm required-field hint", () => {
     expect(screen.queryByText(HINT)).toBeNull();
   });
 });
+
+describe("CreatePracticeAreaForm originating document", () => {
+  test("has an Originating document field with the default placeholder", () => {
+    render(<CreatePracticeAreaForm />);
+    const input = screen.getByLabelText("Originating document") as HTMLInputElement;
+    expect(input.name).toBe("originatingDocLabel");
+    expect(input.placeholder).toBe("Fee agreement");
+  });
+});

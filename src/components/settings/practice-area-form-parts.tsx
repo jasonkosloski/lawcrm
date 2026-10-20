@@ -99,3 +99,34 @@ export function RequiredFieldsGroup({
     </fieldset>
   );
 }
+
+/**
+ * "Originating document" label (fee agreement, retainer, engagement
+ * letter...). Blank falls back to "Fee agreement" wherever it shows.
+ */
+export function OriginatingDocField({
+  defaultValue = "",
+  error,
+}: {
+  defaultValue?: string;
+  error?: string[];
+}) {
+  return (
+    <Field
+      label="Originating document"
+      htmlFor="originatingDocLabel"
+      error={error}
+      hint="What this area calls the signed document that opens a matter. Leave blank for Fee agreement."
+    >
+      <input
+        id="originatingDocLabel"
+        name="originatingDocLabel"
+        type="text"
+        defaultValue={defaultValue}
+        maxLength={80}
+        placeholder="Fee agreement"
+        className={inputCls(!!error?.length)}
+      />
+    </Field>
+  );
+}

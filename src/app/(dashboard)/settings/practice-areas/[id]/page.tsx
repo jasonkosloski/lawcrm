@@ -89,6 +89,7 @@ export default async function PracticeAreaDetailPage({
             area={{
               matterNameTemplate: area.matterNameTemplate,
               requiredMatterFields: area.requiredMatterFields,
+              originatingDocLabel: area.originatingDocLabel,
               id: area.id,
               name: area.name,
               label: area.label,
