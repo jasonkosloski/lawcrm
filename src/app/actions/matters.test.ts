@@ -34,6 +34,7 @@ vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("@/lib/permission-check", () => ({
   requirePermission: vi.fn().mockResolvedValue("test-user"),
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
+  userHasPermission: vi.fn().mockResolvedValue(true),
 }));
 vi.mock("next/navigation", () => ({
   redirect: vi.fn((url: string) => {
@@ -45,6 +46,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { getCurrentUserId } from "@/lib/current-user";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { prisma } from "@/lib/prisma";
 import { dateOnlyKey } from "@/lib/format-date";
 import {
@@ -1844,5 +1846,244 @@ describe("matter venue, dates and required fields", () => {
     expect(log.detail).toContain("Venue: Aurora → Denver");
     expect(log.detail).toContain("Filed date: 2026-01-02 → 2026-02-03");
     expect(log.detail).toContain("Trial date: none → 2027-05-06");
+  });
+});
+
+describe("createMatter: open from a draft + originating-document gate", () => {
+  const seedDraft = async (nFiles = 2) => {
+    const draft = await prisma.matterDraft.create({
+      data: { createdById: userId, values: {}, leadUserId: userId },
+    });
+    const files = [];
+    for (let i = 0; i < nFiles; i++) {
+      files.push(
+        await prisma.matterDraftFile.create({
+          data: {
+            draftId: draft.id,
+            name: `file-${i}.pdf`,
+            fileUrl: `https://blob.test/file-${i}.pdf`,
+            contentType: "application/pdf",
+            fileSize: 100 + i,
+            uploadedBy: userId,
+          },
+        })
+      );
+    }
+    return { draft, files };
+  };
+  const draftForm = (
+    d: { id: string; updatedAt: Date },
+    extra: Record<string, string> = {}
+  ) =>
+    createForm({
+      draftId: d.id,
+      draftUpdatedAt: d.updatedAt.toISOString(),
+      ...extra,
+    });
+  const run = (fd: FormData) => createMatter(createMatterInitialState, fd);
+  const requireOn = () =>
+    prisma.firm.update({ where: { id: firmId }, data: { requireOriginatingDoc: true } });
+  const matterCount = () => prisma.matter.count();
+
+  test("opens from a draft: Engagement folder, documents, agreement, draft gone", async () => {
+    const { draft, files } = await seedDraft(2);
+    await expect(
+      run(
+        draftForm(draft, {
+          originatingFileId: files[0].id,
+          agreementStatus: "signed",
+          agreementSignedDate: "2026-01-05",
+        })
+      )
+    ).rejects.toThrow(/__REDIRECT__/);
+    const m = await prisma.matter.findFirstOrThrow();
+    const folder = await prisma.documentFolder.findFirstOrThrow({
+      where: { matterId: m.id },
+    });
+    expect(folder.name).toBe("Engagement");
+    expect(folder.parentId).toBeNull();
+    const docs = await prisma.document.findMany({
+      where: { matterId: m.id },
+      orderBy: { name: "asc" },
+    });
+    expect(docs).toHaveLength(2);
+    expect(docs.every((d) => d.folderId === folder.id && d.source === "upload")).toBe(true);
+    expect(docs[0].category).toBe("contract");
+    expect(docs[1].category).toBe("intake");
+    expect(docs[0].fileUrl).toBe("https://blob.test/file-0.pdf");
+    const ag = await prisma.matterAgreement.findUniqueOrThrow({ where: { matterId: m.id } });
+    expect(ag.status).toBe("signed");
+    expect(dateOnlyKey(ag.signedDate!)).toBe("2026-01-05");
+    expect(ag.documentId).toBe(docs[0].id);
+    expect(await prisma.matterDraft.count()).toBe(0);
+    expect(await prisma.matterDraftFile.count()).toBe(0);
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { matterId: m.id, title: "Matter created" },
+    });
+    expect(log.detail).toContain("Fee agreement signed 2026-01-05");
+    expect(log.detail).toContain("Opened from a draft started by");
+  });
+
+  test("a second Create with the same draft is refused; one matter only", async () => {
+    const { draft } = await seedDraft(1);
+    await expect(run(draftForm(draft))).rejects.toThrow(/__REDIRECT__/);
+    const res = await run(draftForm(draft));
+    expect(res.status).toBe("error");
+    expect(res.errors?.draftId).toEqual(["This draft was already used to open a matter."]);
+    expect(await matterCount()).toBe(1);
+  });
+
+  test("stale draftUpdatedAt creates nothing and keeps the draft", async () => {
+    const { draft } = await seedDraft(1);
+    const res = await run(
+      createForm({
+        draftId: draft.id,
+        draftUpdatedAt: new Date(draft.updatedAt.getTime() - 5000).toISOString(),
+      })
+    );
+    expect(res.errors?.draftId).toEqual([
+      "Someone else saved this draft. Reload to see their changes.",
+    ]);
+    expect(await matterCount()).toBe(0);
+    expect(await prisma.matterDraft.count()).toBe(1);
+  });
+
+  test("a claim lost inside the transaction rolls the matter back", async () => {
+    const { draft } = await seedDraft(1);
+    // Pass the pre-checks, then lose the race: touch the draft after
+    // the action has read it by bumping updatedAt from a spy on the
+    // first transaction.
+    const real = prisma.$transaction.bind(prisma);
+    const spy = vi
+      .spyOn(prisma, "$transaction")
+      .mockImplementationOnce(((fn: unknown, opts: unknown) => {
+        return prisma.matterDraft
+          .update({ where: { id: draft.id }, data: { leadUserId: userId } })
+          .then(() => (real as (a: unknown, b: unknown) => unknown)(fn, opts));
+      }) as never);
+    const res = await run(draftForm(draft));
+    spy.mockRestore();
+    expect(res.errors?.draftId).toEqual([
+      "Someone else saved this draft. Reload to see their changes.",
+    ]);
+    expect(await matterCount()).toBe(0);
+    expect(await prisma.matterDraft.count()).toBe(1);
+  });
+
+  describe("switch on", () => {
+    beforeEach(requireOn);
+    const signed = { agreementStatus: "signed", agreementSignedDate: "2026-01-05" };
+
+    test("no draft: originating file error, no matter, no conflict", async () => {
+      const res = await run(createForm(signed));
+      expect(res.errors?.originatingFileId).toEqual([
+        "Upload the Fee agreement before creating the matter.",
+      ]);
+      expect(res.conflict).toBeUndefined();
+      expect(await matterCount()).toBe(0);
+    });
+
+    test("no originating file selected", async () => {
+      const { draft } = await seedDraft(1);
+      const res = await run(draftForm(draft, signed));
+      expect(res.errors?.originatingFileId).toBeDefined();
+      expect(await matterCount()).toBe(0);
+      expect(await prisma.matterDraft.count()).toBe(1);
+    });
+
+    test("not signed", async () => {
+      const { draft, files } = await seedDraft(1);
+      const res = await run(
+        draftForm(draft, {
+          originatingFileId: files[0].id,
+          agreementStatus: "sent",
+          agreementSignedDate: "2026-01-05",
+        })
+      );
+      expect(res.errors?.agreementStatus).toEqual([
+        "The Fee agreement must be marked signed.",
+      ]);
+      expect(await matterCount()).toBe(0);
+    });
+
+    test("no date", async () => {
+      const { draft, files } = await seedDraft(1);
+      const res = await run(
+        draftForm(draft, { originatingFileId: files[0].id, agreementStatus: "signed" })
+      );
+      expect(res.errors?.agreementSignedDate).toEqual([
+        "Enter the date the Fee agreement was signed.",
+      ]);
+      expect(await matterCount()).toBe(0);
+    });
+
+    test("future date", async () => {
+      const { draft, files } = await seedDraft(1);
+      const res = await run(
+        draftForm(draft, {
+          originatingFileId: files[0].id,
+          agreementStatus: "signed",
+          agreementSignedDate: "2999-01-01",
+        })
+      );
+      expect(res.errors?.agreementSignedDate).toEqual([
+        "The signed date can't be in the future.",
+      ]);
+      expect(await matterCount()).toBe(0);
+    });
+
+    test("a file from another draft is refused", async () => {
+      const { draft } = await seedDraft(1);
+      const other = await seedDraft(1);
+      const res = await run(
+        draftForm(draft, { originatingFileId: other.files[0].id, ...signed })
+      );
+      expect(res.errors?.originatingFileId).toBeDefined();
+      expect(await matterCount()).toBe(0);
+    });
+
+    test("uses the practice area's label in errors", async () => {
+      await prisma.practiceArea.update({
+        where: { id: areaId },
+        data: { originatingDocLabel: "Retainer" },
+      });
+      const res = await run(createForm(signed));
+      expect(res.errors?.originatingFileId).toEqual([
+        "Upload the Retainer before creating the matter.",
+      ]);
+    });
+
+    test("signed today late evening in the profile zone is accepted", async () => {
+      vi.mocked(getCurrentUserTimeZone).mockResolvedValue("America/Denver");
+      // 23:30 on Oct 20 in Denver is already Oct 21 in UTC.
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-21T05:30:00Z"));
+      try {
+        const { draft, files } = await seedDraft(1);
+        await expect(
+          run(
+            draftForm(draft, {
+              originatingFileId: files[0].id,
+              agreementStatus: "signed",
+              agreementSignedDate: "2026-10-20",
+            })
+          )
+        ).rejects.toThrow(/__REDIRECT__/);
+        expect(await matterCount()).toBe(1);
+      } finally {
+        vi.useRealTimers();
+        vi.mocked(getCurrentUserTimeZone).mockResolvedValue("UTC");
+      }
+    });
+  });
+
+  test("switch off: succeeds without a file and writes not_sent", async () => {
+    await expect(run(createForm())).rejects.toThrow(/__REDIRECT__/);
+    const m = await prisma.matter.findFirstOrThrow();
+    const ag = await prisma.matterAgreement.findUniqueOrThrow({ where: { matterId: m.id } });
+    expect(ag.status).toBe("not_sent");
+    expect(ag.signedDate).toBeNull();
+    expect(ag.documentId).toBeNull();
+    expect(await prisma.documentFolder.count({ where: { matterId: m.id } })).toBe(0);
   });
 });

@@ -31,7 +31,11 @@ import {
   toSolPeriod,
   type SolPeriod,
 } from "@/lib/sol";
-import { dateOnlyKey, parseDateOnly } from "@/lib/format-date";
+import { dateOnlyKey, parseDateOnly, todayKey } from "@/lib/format-date";
+import { assertDraftAccess } from "@/lib/draft-access";
+import { agreementGateErrors, originatingDocLabel } from "@/lib/originating-doc";
+import { UserFacingError } from "@/lib/user-facing-error";
+import { todayDateOnly } from "@/app/actions/billing/helpers";
 import { getCurrentFirm } from "@/lib/firm";
 import { applyAutoDefaults, describeDefaults } from "@/lib/automations/apply";
 import {
@@ -67,6 +71,10 @@ import {
   type RequiredFieldValues,
   type RequiredMatterField,
 } from "@/lib/matter-required-fields";
+
+const DRAFT_USED_MESSAGE = "This draft was already used to open a matter.";
+const DRAFT_STALE_MESSAGE =
+  "Someone else saved this draft. Reload to see their changes.";
 
 const createMatterSchema = z
   .object({
@@ -124,6 +132,14 @@ const createMatterSchema = z
     filedDate: z.string().trim().optional().or(z.literal("")),
     trialDate: z.string().trim().optional().or(z.literal("")),
     pinForMe: z.literal("on").optional(),
+    /** Matter draft this Create opens from (re-homes its files). */
+    draftId: z.string().trim().optional().or(z.literal("")),
+    /** The draft's updatedAt as the form last saw it (optimistic token). */
+    draftUpdatedAt: z.string().trim().optional().or(z.literal("")),
+    agreementStatus: z.string().trim().optional().or(z.literal("")),
+    agreementSignedDate: z.string().trim().optional().or(z.literal("")),
+    /** A file id of THIS draft, marked as the originating document. */
+    originatingFileId: z.string().trim().optional().or(z.literal("")),
   })
   .superRefine((data, ctx) => {
     if (data.clientId === NEW_CLIENT_SENTINEL) {
@@ -513,6 +529,88 @@ export async function createMatter(
     getCurrentUserId(),
     getCurrentUserTimeZone(),
   ]);
+
+  // Originating-document gate. After the required/venue checks and
+  // BEFORE the conflict gate: missing paperwork never asks for a
+  // conflict acknowledgement. A file can only be attached via a draft.
+  const draftId = data.draftId || "";
+  let draft: Awaited<ReturnType<typeof assertDraftAccess>> | null = null;
+  let draftFiles: { id: string }[] = [];
+  if (draftId) {
+    // A draft that no longer exists was already used (or deleted):
+    // say so instead of the 404 the access guard would give.
+    const exists = await prisma.matterDraft.findUnique({
+      where: { id: draftId },
+      select: { id: true },
+    });
+    if (!exists) {
+      return {
+        status: "error",
+        errors: { draftId: [DRAFT_USED_MESSAGE] },
+        values: raw,
+      };
+    }
+    draft = await assertDraftAccess(draftId);
+    if (
+      !data.draftUpdatedAt ||
+      new Date(data.draftUpdatedAt).getTime() !== draft.updatedAt.getTime()
+    ) {
+      return {
+        status: "error",
+        errors: { draftId: [DRAFT_STALE_MESSAGE] },
+        values: raw,
+      };
+    }
+    draftFiles = await prisma.matterDraftFile.findMany({
+      where: { draftId },
+      select: { id: true },
+    });
+  }
+  const [gateFirm, gateArea] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: currentUserId },
+      select: { firm: { select: { requireOriginatingDoc: true } } },
+    }),
+    prisma.practiceArea.findUnique({
+      where: { id: resolved.practiceAreaId },
+      select: { originatingDocLabel: true },
+    }),
+  ]);
+  const agreementLabel = originatingDocLabel(gateArea);
+  const agreementErrors = agreementGateErrors(
+    {
+      status: data.agreementStatus ?? "",
+      signedDate: data.agreementSignedDate ?? "",
+      hasOriginatingFile:
+        !!data.originatingFileId &&
+        draftFiles.some((f) => f.id === data.originatingFileId),
+    },
+    {
+      required: gateFirm?.firm?.requireOriginatingDoc ?? false,
+      label: agreementLabel,
+      today: dateOnlyKey(await todayDateOnly()),
+    }
+  );
+  if (Object.keys(agreementErrors).length > 0) {
+    return {
+      status: "error",
+      errors: Object.fromEntries(
+        Object.entries(agreementErrors).map(([k, v]) => [k, [v as string]])
+      ),
+      values: raw,
+    };
+  }
+  const agreementStatus = data.agreementStatus || "not_sent";
+  const agreementSignedDate = data.agreementSignedDate
+    ? parseDateOnly(data.agreementSignedDate)
+    : null;
+  const draftCreator = draft
+    ? await prisma.user.findUnique({
+        where: { id: draft.createdById },
+        select: { name: true },
+      })
+    : null;
+
   // Contact.firmId is stamped by the action layer on every new write
   // (schema comment); only an inline new client needs it here.
   const firmId =
@@ -612,7 +710,12 @@ export async function createMatter(
   // orphaned Contact (+ContactPhone), and a matter can't exist
   // without its critical SOL Deadline. Mirrors updateMatter and
   // convertLeadToMatter, which already run transactionally.
-  const { matter, defaults } = await prisma.$transaction(async (tx) => {
+  let txResult: {
+    matter: { id: string };
+    defaults: Awaited<ReturnType<typeof applyAutoDefaults>>;
+  };
+  try {
+    txResult = await prisma.$transaction(async (tx) => {
     // Resolve client: either pick an existing Contact, create a new
     // one inline, or leave null.
     let clientId: string | null = null;
@@ -733,8 +836,78 @@ export async function createMatter(
       });
     }
 
+    // Open from a draft: read its files, claim it (the delete cascades
+    // them), re-home the files under an Engagement folder, then record
+    // the agreement. 0 claimed rows rolls everything back.
+    let originatingDocumentId: string | null = null;
+    if (draft) {
+      const files = await tx.matterDraftFile.findMany({
+        where: { draftId: draft.id },
+        orderBy: { createdAt: "asc" },
+      });
+      const claimed = await tx.matterDraft.deleteMany({
+        where: { id: draft.id, updatedAt: new Date(data.draftUpdatedAt!) },
+      });
+      if (claimed.count === 0) {
+        const still = await tx.matterDraft.findUnique({
+          where: { id: draft.id },
+          select: { id: true },
+        });
+        throw new UserFacingError(still ? DRAFT_STALE_MESSAGE : DRAFT_USED_MESSAGE);
+      }
+      if (files.length > 0) {
+        const folder = await tx.documentFolder.create({
+          data: {
+            matterId: created.id,
+            parentId: null,
+            name: "Engagement",
+            order: 0,
+            createdById: currentUserId,
+          },
+          select: { id: true },
+        });
+        for (const f of files) {
+          const isOrig = f.id === data.originatingFileId;
+          const doc = await tx.document.create({
+            data: {
+              matterId: created.id,
+              folderId: folder.id,
+              name: f.name,
+              fileUrl: f.fileUrl,
+              contentType: f.contentType,
+              fileSize: f.fileSize,
+              uploadedBy: f.uploadedBy,
+              source: "upload",
+              category: isOrig ? "contract" : "intake",
+            },
+            select: { id: true },
+          });
+          if (isOrig) originatingDocumentId = doc.id;
+        }
+      }
+    }
+    await tx.matterAgreement.create({
+      data: {
+        matterId: created.id,
+        status: agreementStatus,
+        signedDate: agreementSignedDate,
+        documentId: originatingDocumentId,
+      },
+    });
+
     return { matter: created, defaults };
-  });
+    });
+  } catch (err) {
+    if (err instanceof UserFacingError) {
+      return {
+        status: "error",
+        errors: { draftId: [err.message] },
+        values: raw,
+      };
+    }
+    throw err;
+  }
+  const { matter, defaults } = txResult;
 
   await logActivity({
     matterId: matter.id,
@@ -743,6 +916,12 @@ export async function createMatter(
     title: "Matter created",
     detail: [
       `${data.name} — ${resolved.areaName}`,
+      agreementStatus === "signed" && data.agreementSignedDate
+        ? `${agreementLabel} signed ${data.agreementSignedDate}`
+        : null,
+      draft
+        ? `Opened from a draft started by ${draftCreator?.name ?? "a colleague"} on ${todayKey(tz, draft.createdAt)}`
+        : null,
       solDate ? `Statute of limitations ${dateOnlyKey(solDate)}` : null,
       venueName ? `Venue ${venueName}` : null,
       filedDate ? `Filed ${dateOnlyKey(filedDate)}` : null,
