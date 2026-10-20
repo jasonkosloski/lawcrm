@@ -104,6 +104,7 @@ export const TABLES_IN_DELETE_ORDER = [
   // Timer scratch rows reference user + matter; drop before both.
   "timer_sessions",
   "matters",
+  "venues",
   // Lookups + lifecycle
   "lead_team_members",
   "leads",
