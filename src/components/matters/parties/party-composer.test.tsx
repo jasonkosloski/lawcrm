@@ -177,3 +177,32 @@ describe("PartyComposer - submit", () => {
     expect(screen.getByLabelText("Phone")).toHaveAttribute("maxlength", "80");
   });
 });
+
+describe("PartyComposer - conflict gate (ADR-054)", () => {
+  test("a conflict prompt shows the matches, and the tick posts the fingerprint on resubmit", async () => {
+    const user = userEvent.setup();
+    mockedAction.mockResolvedValueOnce({
+      status: "error",
+      conflict: {
+        severity: "warn",
+        matches: [{ severity: "warn", description: "Acme — former client" }],
+        fingerprint: "fp-party",
+        canOverride: false,
+      },
+    });
+    render(
+      <PartyComposer matterId="m1" category="opposing" contacts={contacts} />
+    );
+    await user.click(screen.getByRole("button", { name: /opposing/i }));
+    await user.type(screen.getByRole("combobox", { name: /party name/i }), "Acme");
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: /add party/i }));
+    expect(await screen.findByText("Acme — former client")).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText(/reviewed these possible conflicts/i));
+    await user.click(screen.getByRole("button", { name: /add party/i }));
+    await waitFor(() => expect(mockedAction).toHaveBeenCalledTimes(2));
+    const fd = mockedAction.mock.calls[1][2] as FormData;
+    expect(fd.get("conflictAck")).toBe("fp-party");
+  });
+});

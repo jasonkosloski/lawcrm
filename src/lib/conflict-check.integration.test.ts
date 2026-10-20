@@ -801,7 +801,7 @@ describe("runAdverseConflictMatcher — adverse party vs the firm's clients", ()
 
   test("the new matter's own client is never screened as its own adversary", async () => {
     const { contactId } = await clientMatter("Self Same");
-    expect((await runAdverseConflictMatcher(["Self Same"], contactId)).severity).toBe("clear");
+    expect((await runAdverseConflictMatcher(["Self Same"], [contactId])).severity).toBe("clear");
   });
 
   test("a flagged contact matched only by organization is a warn", async () => {

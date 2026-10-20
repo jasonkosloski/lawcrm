@@ -469,15 +469,15 @@ export function adverseNameKeys(values: Array<string | null | undefined>): strin
  *     ORGANIZATION (suing a client's employer is not a conflict by
  *     itself, but an organizational client is stored the same way).
  *
- * `ownContactId` is the new matter's own client, never screened as
- * its own adversary.
+ * `ownClientIds` are the matter's own clients, never screened as its
+ * adversaries.
  *
  * Merged-away contacts are excluded (their rows moved to the
  * survivor); deactivated ones still count, as in the client path.
  */
 export async function runAdverseConflictMatcher(
   adverseNames: Array<string | null | undefined>,
-  ownContactId?: string | null
+  ownClientIds: string[] = []
 ): Promise<ConflictCheckResult> {
   const keys = adverseNameKeys(adverseNames);
   if (keys.length === 0) return { severity: "clear", matches: [] };
@@ -490,7 +490,7 @@ export async function runAdverseConflictMatcher(
     where: {
       mergedIntoId: null,
       OR: identity,
-      ...(ownContactId ? { NOT: { id: ownContactId } } : {}),
+      ...(ownClientIds.length > 0 ? { id: { notIn: ownClientIds } } : {}),
     },
     select: {
       id: true,

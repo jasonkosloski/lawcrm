@@ -19,6 +19,7 @@ import { useActionState, useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { updateMatter } from "@/app/actions/matters";
 import { CascadeConfirm } from "@/components/automations/cascade-confirm";
+import { ConflictReview } from "./conflict-review";
 import {
   computeSolDate,
   formatStatutePeriod,
@@ -586,6 +587,23 @@ export function EditMatterForm({
             kept as they are.
           </p>
         )}
+
+      {/* Conflict gate (ADR-054) for a changed client or opposing
+          party; keyed by fingerprint so a new result never inherits
+          the previous one's tick. Stays up through the cascade confirm
+          (the action carries the prompt there) so that resubmit still
+          posts the acknowledgement. */}
+      {state.conflict && (
+        <ConflictReview
+          key={state.conflict.fingerprint}
+          conflict={state.conflict}
+          checked="the new client against adverse parties on other matters, and the new opposing party or firm against the firm's clients"
+          reasonError={errs.conflictOverrideReason}
+          staleError={errs.conflictAck}
+          defaultReason={vals.conflictOverrideReason}
+          defaultReviewed={vals.conflictAck === state.conflict.fingerprint}
+        />
+      )}
 
       {state.status === "confirm" &&
       state !== dismissedConfirm &&

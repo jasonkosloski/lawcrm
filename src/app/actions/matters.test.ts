@@ -1170,6 +1170,97 @@ describe("createMatter — conflict gate", () => {
   });
 });
 
+// ── Conflict gate on edit (ADR-054) ────────────────────────────────────
+
+describe("updateMatter — conflict gate on a changed client or opposing party", () => {
+  let matterId: string;
+  beforeEach(async () => {
+    matterId = (await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId }))
+      .matterId;
+  });
+  /** A client on ANOTHER active matter. */
+  const seedOtherClient = async (name: string) => {
+    const c = await seedContact({ name, type: "client" });
+    const m = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId });
+    await prisma.matter.update({ where: { id: m.matterId }, data: { clientId: c.contactId } });
+    return c.contactId;
+  };
+  const opposing = async () =>
+    (await prisma.matter.findUniqueOrThrow({ where: { id: matterId } })).opposingParty;
+
+  test("a new opposing party who is a current client needs an override, recorded on save", async () => {
+    await seedOtherClient("Acme Holdings");
+    const first = await updateMatter(
+      matterId,
+      updateMatterInitialState,
+      updateForm({ opposingParty: "Acme Holdings" })
+    );
+    expect(first.conflict?.severity).toBe("conflict");
+    expect(await opposing()).toBeNull();
+
+    await expect(
+      updateMatter(
+        matterId,
+        first,
+        updateForm({
+          opposingParty: "Acme Holdings",
+          conflictAck: first.conflict!.fingerprint,
+          conflictOverrideReason: "Waiver on file",
+        })
+      )
+    ).rejects.toThrow(/__REDIRECT__/);
+    expect(await opposing()).toBe("Acme Holdings");
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { matterId, title: "Saved with conflict check: override" },
+      select: { detail: true },
+    });
+    expect(log.detail).toBe("1 match overridden: Waiver on file");
+  });
+
+  test("an unchanged opposing party is not re-screened on a routine save", async () => {
+    await seedOtherClient("Acme Holdings");
+    await prisma.matter.update({
+      where: { id: matterId },
+      data: { opposingParty: "Acme Holdings" },
+    });
+    await expect(
+      updateMatter(
+        matterId,
+        updateMatterInitialState,
+        updateForm({ opposingParty: " acme holdings ", court: "D. Colo." })
+      )
+    ).rejects.toThrow(/__REDIRECT__/);
+  });
+
+  test("the matter's own client typed as opposing party is not its own conflict", async () => {
+    const own = await seedContact({ name: "Own Client", type: "client" });
+    await prisma.matter.update({ where: { id: matterId }, data: { clientId: own.contactId } });
+    await expect(
+      updateMatter(
+        matterId,
+        updateMatterInitialState,
+        updateForm({ clientId: own.contactId, opposingParty: "Own Client" })
+      )
+    ).rejects.toThrow(/__REDIRECT__/);
+  });
+
+  test("a changed client who is an adverse party elsewhere is screened", async () => {
+    const adverse = await seedContact({ name: "Dan Defendant", type: "other" });
+    const other = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId });
+    await prisma.matterContact.create({
+      data: { matterId: other.matterId, contactId: adverse.contactId, category: "opposing" },
+    });
+    const res = await updateMatter(
+      matterId,
+      updateMatterInitialState,
+      updateForm({ clientId: adverse.contactId })
+    );
+    expect(res.conflict?.severity).toBe("conflict");
+    const m = await prisma.matter.findUniqueOrThrow({ where: { id: matterId } });
+    expect(m.clientId).toBeNull();
+  });
+});
+
 // ── Extra team seats on create ─────────────────────────────────────────
 
 describe("createMatter — extra team members", () => {

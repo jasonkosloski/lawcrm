@@ -12,6 +12,8 @@
  * hardcoded.
  */
 
+import type { ConflictPrompt } from "@/lib/conflict-gate-constants";
+
 export const PARTY_CATEGORIES = [
   "client",
   "opposing",
@@ -44,6 +46,8 @@ export type PartyFormState = {
   /** Field errors keyed by form field name; `_form` carries errors
    *  that belong to no single field (party removed, stale snapshot). */
   errors?: Record<string, string[]>;
+  /** Conflict gate prompt (ADR-054) when adding an opposing party. */
+  conflict?: ConflictPrompt;
 };
 
 export const partyInitialState: PartyFormState = { status: "idle" };

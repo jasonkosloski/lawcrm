@@ -54,7 +54,7 @@ import {
   type CreateMatterState,
 } from "@/lib/new-matter-constants";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { NewMatterConflictReview } from "./new-matter-conflict-review";
+import { ConflictReview } from "./conflict-review";
 import { NewMatterTeamPicker, parseTeamSeats } from "./new-matter-team-picker";
 
 type ClientOption = {
@@ -806,9 +806,10 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
       {/* Conflict gate (ADR-054): keyed by fingerprint so a new result
           never inherits the previous one's "reviewed" tick. */}
       {state.conflict && (
-        <NewMatterConflictReview
+        <ConflictReview
           key={state.conflict.fingerprint}
           conflict={state.conflict}
+          checked="the client against adverse parties on other matters, and the opposing party and firm against the firm's clients"
           reasonError={errs.conflictOverrideReason}
           staleError={errs.conflictAck}
           defaultReason={vals.conflictOverrideReason}

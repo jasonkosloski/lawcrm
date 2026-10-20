@@ -53,8 +53,13 @@ import {
   type NewMatterTeamSeat,
   type UpdateMatterState,
 } from "@/lib/new-matter-constants";
-import { conflictFingerprint, screenNewMatter } from "@/lib/matter-create-conflict";
-import { redactConflictResultForViewer } from "@/lib/conflict-check-redact";
+import {
+  conflictGateLogEntry,
+  evaluateConflictGate,
+  screenMatter,
+  type ConflictGateOutcome,
+} from "@/lib/matter-conflict-gate";
+import { normalize } from "@/lib/conflict-check";
 
 const createMatterSchema = z
   .object({
@@ -438,11 +443,6 @@ export async function createMatter(
     return { status: "error", errors: { extraTeam: [team.error] }, values: raw };
   }
 
-  // Conflict gate (ADR-054): screen the client against adverse
-  // parties AND the typed adverse party against existing clients,
-  // before anything is written. Mirrors lead conversion (ADR-050),
-  // except that the override is recorded here, on the new matter,
-  // since there is no lead to carry it.
   // Resolved once and reused by the write below. A contact merged
   // away since the form loaded resolves to its survivor, so the screen
   // and the matter both use the live record.
@@ -466,7 +466,12 @@ export async function createMatter(
       select: clientSelect,
     });
   }
-  const screen = await screenNewMatter({
+  // Conflict gate (ADR-054): screen the client against adverse
+  // parties AND the typed adverse party against existing clients,
+  // before anything is written. Mirrors lead conversion (ADR-050),
+  // except that the override is recorded here, on the new matter,
+  // since there is no lead to carry it.
+  const screen = await screenMatter({
     client: existingClient
       ? {
           name: existingClient.name,
@@ -481,56 +486,12 @@ export async function createMatter(
             organization: data.newClientOrganization || null,
           }
         : null,
-    opposingParty: data.opposingParty || null,
-    opposingFirm: data.opposingFirm || null,
+    adverseNames: [data.opposingParty, data.opposingFirm],
+    ownClientIds: existingClient ? [existingClient.id] : [],
   });
-  let overrideReason: string | null = null;
-  if (screen.severity !== "clear") {
-    const fingerprint = conflictFingerprint(screen.matches);
-    const acknowledged = raw.conflictAck === fingerprint;
-    const canOverride =
-      screen.severity === "conflict" &&
-      (await currentUserHasPermission("intake.conflict_check.override"));
-    const reason = (raw.conflictOverrideReason ?? "").trim();
-    const passes =
-      acknowledged &&
-      (screen.severity === "warn" ||
-        (canOverride && reason.length >= 5 && reason.length <= 2000));
-    if (!passes) {
-      const shown = await redactConflictResultForViewer(currentUserId, screen);
-      // An acknowledgement of an earlier, different result: say so,
-      // or the user may resubmit without noticing the new matches.
-      const stale = !!raw.conflictAck && !acknowledged;
-      return {
-        status: "error",
-        values: raw,
-        errors: stale
-          ? {
-              conflictAck: [
-                "The conflict check results changed since you reviewed them. Review the list again.",
-              ],
-            }
-          : acknowledged && canOverride
-            ? {
-                conflictOverrideReason: [
-                  reason.length > 2000
-                    ? "Keep the justification under 2000 characters."
-                    : "Justification is required (5+ characters).",
-                ],
-              }
-            : undefined,
-        conflict: {
-          severity: screen.severity,
-          matches: shown.matches.map((m) => ({
-            severity: m.severity,
-            description: m.description,
-          })),
-          fingerprint,
-          canOverride,
-        },
-      };
-    }
-    if (screen.severity === "conflict") overrideReason = reason;
+  const gate = await evaluateConflictGate(screen, raw, currentUserId);
+  if (!gate.ok) {
+    return { status: "error", values: raw, errors: gate.errors, conflict: gate.prompt };
   }
 
   // Inline client, matter, and SOL deadline are dependent writes —
@@ -644,23 +605,15 @@ export async function createMatter(
       tz,
     });
 
-    // The conflict outcome, as on conversion: a plain "clear" stays
-    // silent; a reviewed warning or an override (with its reason) is
-    // what compliance review asks about. In the transaction: a matter
-    // created over a conflict must never exist without its record.
-    if (screen.severity !== "clear") {
-      const n = screen.matches.length;
+    // The conflict outcome, in the transaction: a matter created over
+    // a conflict must never exist without its record.
+    const conflictEntry = conflictGateLogEntry(gate, "Created");
+    if (conflictEntry) {
       await logActivityTx(tx, {
         matterId: created.id,
         userId: currentUserId,
         type: "automation",
-        title: `Created with conflict check: ${
-          overrideReason !== null ? "override" : "warn (reviewed)"
-        }`,
-        detail:
-          overrideReason !== null
-            ? `${n} match${n === 1 ? "" : "es"} overridden: ${overrideReason}`
-            : `${n} possible conflict${n === 1 ? "" : "s"} acknowledged`,
+        ...conflictEntry,
       });
     }
 
@@ -820,6 +773,8 @@ export async function updateMatter(
       description: true,
       clientId: true,
       client: { select: { name: true } },
+      // The matter's own clients, never screened as its adversaries.
+      contacts: { where: { category: "client" }, select: { contactId: true } },
       practiceAreaId: true,
       practiceArea: { select: { name: true } },
       stageId: true,
@@ -881,6 +836,12 @@ export async function updateMatter(
   // pick must exist.
   let clientId: string | null = null;
   let newClientName: string | null = null;
+  let changedClient: {
+    id: string;
+    name: string;
+    email: string | null;
+    organization: string | null;
+  } | null = null;
   if (data.clientId) {
     if (data.clientId === stored.clientId) {
       clientId = stored.clientId;
@@ -888,7 +849,7 @@ export async function updateMatter(
     } else {
       const client = await prisma.contact.findUnique({
         where: { id: data.clientId },
-        select: { id: true, name: true },
+        select: { id: true, name: true, email: true, organization: true },
       });
       if (!client) {
         return {
@@ -899,9 +860,12 @@ export async function updateMatter(
       }
       clientId = client.id;
       newClientName = client.name;
+      changedClient = client;
     }
   }
 
+  // Validated before the conflict gate, so no refusal after an
+  // acknowledged gate drops its prompt (and the user's justification).
   // SOL inputs are only meaningful when the (new) area tracks SOL. When
   // it doesn't, the matter's incident date, SOL date/notes and SOL
   // deadline are left exactly as they are — switching to a non-tracking
@@ -913,6 +877,46 @@ export async function updateMatter(
   );
   if (!parsedDates.ok) {
     return { status: "error", errors: parsedDates.errors, values: raw };
+  }
+
+  // Conflict gate (ADR-054), only for what this save changes: a new
+  // client is screened against adverse parties, a new opposing party /
+  // firm against the firm's clients (never this matter's own). An
+  // unchanged value is not re-screened, so a routine save never asks
+  // (values set before this gate existed are screened when edited).
+  const adverseNames = [
+    [data.opposingParty, stored.opposingParty],
+    [data.opposingFirm, stored.opposingFirm],
+  ].flatMap(([next, prev]) =>
+    next && normalize(next) !== normalize(prev) ? [next] : []
+  );
+  let gate: ConflictGateOutcome = { ok: true, outcome: "clear" };
+  if (changedClient || adverseNames.length > 0) {
+    const ownClientIds = [
+      ...stored.contacts.map((r) => r.contactId),
+      ...(stored.clientId ? [stored.clientId] : []),
+      ...(clientId ? [clientId] : []),
+    ];
+    const screen = await screenMatter({
+      client: changedClient
+        ? {
+            name: changedClient.name,
+            email: changedClient.email,
+            organization: changedClient.organization,
+            ownContactId: changedClient.id,
+          }
+        : null,
+      adverseNames,
+      ownClientIds,
+    });
+    // keepPrompt: the deadline-cascade confirm below can still stop
+    // this save after the gate passed.
+    gate = await evaluateConflictGate(screen, raw, currentUserId, {
+      keepPrompt: true,
+    });
+    if (!gate.ok) {
+      return { status: "error", values: raw, errors: gate.errors, conflict: gate.prompt };
+    }
   }
 
   const newStage = await prisma.matterStage.findUnique({
@@ -937,7 +941,16 @@ export async function updateMatter(
       : null;
   if (incidentTrigger && !cascadeDecision) {
     const cascade = await previewRecalc(prisma, matterId, incidentTrigger);
-    if (cascade.length > 0) return { status: "confirm", cascade, values: raw };
+    if (cascade.length > 0) {
+      return {
+        status: "confirm",
+        cascade,
+        values: raw,
+        // Keep an acknowledged conflict prompt in the form so the
+        // confirm resubmit still carries its acknowledgement.
+        conflict: gate.ok && gate.outcome !== "clear" ? gate.prompt : undefined,
+      };
+    }
   }
   let recalculated: RecalcChange[] = [];
 
@@ -1108,6 +1121,18 @@ export async function updateMatter(
 
     if (incidentTrigger && cascadeDecision === "apply") {
       recalculated = await applyRecalc(tx, matterId, incidentTrigger, cascadeIds);
+    }
+
+    // The conflict outcome, in the same transaction as the change it
+    // let through.
+    const conflictEntry = gate.ok ? conflictGateLogEntry(gate, "Saved") : null;
+    if (conflictEntry) {
+      await logActivityTx(tx, {
+        matterId,
+        userId: currentUserId,
+        type: "automation",
+        ...conflictEntry,
+      });
     }
 
     return {

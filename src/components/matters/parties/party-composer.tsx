@@ -20,6 +20,7 @@
 import { useState, useTransition } from "react";
 import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ConflictReview } from "@/components/matters/conflict-review";
 import { createMatterContact } from "@/app/actions/parties";
 import {
   CREATE_NEW,
@@ -147,6 +148,7 @@ export function PartyComposer({
   // a picked contact's contactId, form-level) get one summary line so
   // a rejected submit never looks like it did nothing.
   const inlineKeys = [
+    ...(state.conflict ? ["conflictAck", "conflictOverrideReason"] : []),
     ...(selected ? [] : ["newContactName", "contactId"]),
     ...(representation === "yes" && !repSelected
       ? ["newRepresentationName", "representationContactId"]
@@ -424,6 +426,23 @@ export function PartyComposer({
             </div>
           )}
         </>
+      )}
+
+      {/* Conflict gate (ADR-054), opposing parties and co-clients.
+          Keyed by fingerprint so a new result never inherits an old
+          tick. */}
+      {state.conflict && (
+        <ConflictReview
+          key={state.conflict.fingerprint}
+          conflict={state.conflict}
+          checked={
+            category === "client"
+              ? "this client against adverse parties on other matters"
+              : "this opposing party and its counsel against the firm's clients"
+          }
+          reasonError={errs.conflictOverrideReason}
+          staleError={errs.conflictAck}
+        />
       )}
 
       {otherErrors.length > 0 && (

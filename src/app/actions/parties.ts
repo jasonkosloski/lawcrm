@@ -34,6 +34,13 @@ import {
   requirePermission,
 } from "@/lib/permission-check";
 import { logAuditEntry } from "@/lib/audit-entry";
+import { logActivityTx } from "@/lib/activity-log";
+import {
+  conflictGateLogEntry,
+  evaluateConflictGate,
+  screenMatter,
+  type ConflictGateOutcome,
+} from "@/lib/matter-conflict-gate";
 import {
   parsePhonesJson,
   phonesSignature,
@@ -341,7 +348,12 @@ export async function createMatterContact(
   // Guard that the matter exists.
   const matter = await prisma.matter.findUnique({
     where: { id: matterId },
-    select: { id: true },
+    select: {
+      id: true,
+      clientId: true,
+      // The matter's own clients, never screened as its adversaries.
+      contacts: { where: { category: "client" }, select: { contactId: true } },
+    },
   });
   if (!matter) {
     return {
@@ -375,6 +387,64 @@ export async function createMatterContact(
           ],
         },
       };
+    }
+  }
+
+  // Conflict gate (ADR-054). An opposing party — and the counsel or
+  // firm representing it — is screened against the firm's clients
+  // (never this matter's own); a co-client against adverse parties on
+  // other matters. Other categories (witnesses) are not screened.
+  let gate: ConflictGateOutcome = { ok: true, outcome: "clear" };
+  if (data.category === "opposing" || data.category === "client") {
+    const picked =
+      data.contactMode === PICK_EXISTING && data.contactId
+        ? await prisma.contact.findUnique({
+            where: { id: data.contactId },
+            select: { id: true, name: true, email: true, organization: true },
+          })
+        : null;
+    const identity = picked ?? {
+      id: null,
+      name: data.newContactName ?? null,
+      email: data.newContactEmail ?? null,
+      organization: data.newContactOrganization ?? null,
+    };
+    const ownClientIds = [
+      ...matter.contacts.map((c) => c.contactId),
+      ...(matter.clientId ? [matter.clientId] : []),
+    ];
+    let screen;
+    if (data.category === "client") {
+      screen = await screenMatter({
+        client: { ...identity, ownContactId: identity.id },
+        adverseNames: [],
+        ownClientIds,
+      });
+    } else {
+      const rep =
+        data.representation !== "yes"
+          ? null
+          : data.representationContactMode === PICK_EXISTING &&
+              data.representationContactId
+            ? await prisma.contact.findUnique({
+                where: { id: data.representationContactId },
+                select: { name: true, organization: true },
+              })
+            : {
+                name: data.newRepresentationName ?? null,
+                organization: data.newRepresentationFirm ?? null,
+              };
+      screen = await screenMatter({
+        client: null,
+        adverseNames: [identity.name, identity.organization, rep?.name, rep?.organization],
+        ownClientIds,
+      });
+    }
+    // keepPrompt: the write below can still be refused (stale pick),
+    // and the composer must keep the acknowledgement for the retry.
+    gate = await evaluateConflictGate(screen, raw, userId, { keepPrompt: true });
+    if (!gate.ok) {
+      return { status: "error", errors: gate.errors, conflict: gate.prompt };
     }
   }
 
@@ -491,9 +561,29 @@ export async function createMatterContact(
           ...rep,
         },
       });
+
+      // The conflict outcome, in the same transaction as the party it
+      // let onto the matter.
+      const conflictEntry = gate.ok
+        ? conflictGateLogEntry(
+            gate,
+            `${addedName} added as ${data.category === "client" ? "co-client" : "opposing party"}`
+          )
+        : null;
+      if (conflictEntry) {
+        await logActivityTx(tx, {
+          matterId,
+          userId,
+          type: "automation",
+          ...conflictEntry,
+        });
+      }
     });
   } catch (err) {
-    return partyErrorState(err);
+    return {
+      ...partyErrorState(err),
+      conflict: gate.ok && gate.outcome !== "clear" ? gate.prompt : undefined,
+    };
   }
 
   await logAuditEntry({
