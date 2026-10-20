@@ -20,7 +20,6 @@ Constraints carried forward:
 - Sign-in methods: **Google only**, restricted to `@kosloskilaw.com`. Email/password, email codes, other social providers off.
 - Sign-up mode: **Restricted** (invitation only).
 - Sessions: inactivity timeout **12 hours**, maximum lifetime **7 days**.
-- Session token customised with the user's primary email as a claim, so first-sign-in linking needs no Backend API call.
 - Production instance: own Google OAuth client (Google Cloud Console) and Clerk's DNS CNAMEs on `kosloskilaw.com`. Exact steps go in the plan.
 
 ## 2. App wiring
@@ -28,7 +27,7 @@ Constraints carried forward:
 - `src/proxy.ts` wraps the existing proxy logic (portal-host rewrite, CSP nonce, self-authenticated paths) in `clerkMiddleware`. Staff host: optimistic gate only — no Clerk session → redirect to `/login?next=…`. Portal host: Clerk is not consulted.
 - `/login`: one "Sign in with Google" button (custom button using Clerk's `signIn.authenticateWithRedirect`, in our design language), preserving `?next=`.
 - Sidebar sign-out calls Clerk `signOut`.
-- **Settings → Security:** the user's own signed-in devices with per-device revoke (Clerk `<UserProfile>` security section). Change-password removed.
+- **Settings → Security:** the user's own signed-in devices with per-device revoke (our own list from Clerk's Backend sessions API; `<UserProfile>` cannot be limited to that section). Change-password removed.
 - **CSP** (`src/lib/csp.ts`): add Clerk's Frontend API / script / image domains; pinned by CSP tests.
 
 ## 3. Identity mapping
@@ -36,12 +35,12 @@ Constraints carried forward:
 **Schema:** `User.clerkUserId String? @unique`.
 
 **`getSession()`** (still React-`cache()`d per request):
-1. Portal host → `null`.
+1. Portal host → `null`, before calling Clerk (Clerk's `auth()` throws where its middleware did not run; the proxy skips Clerk on the portal host).
 2. Clerk `auth()` → no Clerk user → `null`.
 3. Active `User` with that `clerkUserId` → `{ user: { id } }` (same shape as today).
 4. Otherwise try **linking**; on failure the request is "signed in to Clerk, not a firm member": guards send it to a **No access** page (explains, offers sign-out). `requireUser()` never passes it.
 
-**Linking (first sign-in):** match the Clerk session's verified primary email to a `User` that is active and has `clerkUserId` null. Write it with a conditional update (`where: { id, clerkUserId: null }`) so concurrent first sign-ins link once. Log an `auth` ActivityLog row. After linking, matching is by Clerk id only (a later Google email change does not break it).
+**Linking (first sign-in):** fetch the Clerk user once (Backend API) and match its primary email, only if Clerk marks it verified, to a `User` that is active and has `clerkUserId` null. Write it with a conditional update (`where: { id, clerkUserId: null }`) so concurrent first sign-ins link once. Log an `auth` ActivityLog row. After linking, matching is by Clerk id only (a later Google email change does not break it).
 
 **Email already linked to another Clerk user** (e.g. Google account recreated) → No access. Settings → Team gets **Reset sign-in link** (clears `clerkUserId`; next sign-in relinks). Gated by `firm.manage_team_directory`, Admin targets admin-only (existing escalation guard).
 
@@ -66,7 +65,7 @@ Removed code: `next-auth`, `@auth/prisma-adapter`, `argon2`; `src/auth.ts`; `src
 
 ## 6. Dev, seed, cutover
 
-- Seed: `SEED_ADMIN_EMAIL` (a real Google address) for the admin so local sign-in links; other seed users are demo data. Test users for other roles via Clerk dev instance (verify the mechanism during planning).
+- Seed: the admin is already `jkosloski@kosloskilaw.com`, so a local Google sign-in links. Other seeded staff are reachable through a dev-only **sign-in-as** page (Clerk dev instance + backend sign-in tokens; refused in production and with live keys).
 - Pre-flight script: list active users whose `email` is not a `@kosloskilaw.com` address (they would land on No access).
 - At deploy everyone is signed out once and signs back in with Google, which links them.
 
