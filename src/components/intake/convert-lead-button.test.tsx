@@ -271,3 +271,127 @@ describe("ConvertLeadButton — restricted intake (ADR-049)", () => {
     expect(screen.queryByText(/will be restricted/i)).toBeNull();
   });
 });
+
+describe("ConvertLeadButton — engagement block", () => {
+  const DOCS = [
+    { id: "d1", name: "retainer-signed.pdf" },
+    { id: "d2", name: "intake-notes.pdf" },
+  ];
+  const LABELLED: PracticeAreaOption[] = [
+    { ...AREAS[0], originatingDocLabel: "Retainer agreement" },
+    AREAS[1],
+  ];
+
+  function renderEngagement(over: {
+    required?: boolean;
+    areas?: PracticeAreaOption[];
+  } = {}) {
+    return render(
+      <ConvertLeadButton
+        leadId="lead1"
+        defaultMatterName="Doe v. Acme"
+        areas={over.areas ?? LABELLED}
+        documents={DOCS}
+        requireOriginatingDoc={over.required ?? false}
+        todayKey="2026-10-20"
+      />
+    );
+  }
+
+  test("renders the block titled with the picked area's label", async () => {
+    const user = userEvent.setup();
+    renderEngagement();
+    await openDialog(user);
+    expect(
+      screen.getByRole("heading", { name: "Retainer agreement" })
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Status/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Date signed/)).toBeInTheDocument();
+  });
+
+  test("the label follows the picked area (default Fee agreement)", async () => {
+    const user = userEvent.setup();
+    renderEngagement();
+    await openDialog(user);
+    const areaSelect = screen
+      .getByRole("option", { name: "Personal Injury" })
+      .closest("select") as HTMLSelectElement;
+    await user.selectOptions(areaSelect, "pa-fam");
+    expect(
+      screen.getByRole("heading", { name: "Fee agreement" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("This is the Fee agreement", { exact: false })
+    ).toBeInTheDocument();
+  });
+
+  test("lists the lead's documents with a None option", async () => {
+    const user = userEvent.setup();
+    renderEngagement();
+    await openDialog(user);
+    expect(screen.getByRole("option", { name: "None" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "retainer-signed.pdf" })
+    ).toBeInTheDocument();
+  });
+
+  test("not required: no markers, and an empty block converts", async () => {
+    const user = userEvent.setup();
+    vi.mocked(convertLeadToMatter).mockResolvedValue({ status: "error" });
+    renderEngagement({ required: false });
+    await openDialog(user);
+    expect(document.querySelector(".text-warn.ml-0\\.5")).toBeNull();
+    await user.click(screen.getByRole("button", { name: /^convert$/i }));
+    expect(convertLeadToMatter).toHaveBeenCalledTimes(1);
+  });
+
+  test("required: markers show and an incomplete block blocks the submit", async () => {
+    const user = userEvent.setup();
+    renderEngagement({ required: true });
+    await openDialog(user);
+    expect(
+      document.querySelectorAll(".text-warn.ml-0\\.5").length
+    ).toBeGreaterThanOrEqual(3);
+    await user.click(screen.getByRole("button", { name: /^convert$/i }));
+    expect(convertLeadToMatter).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("Attach the signed Retainer agreement.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Mark the Retainer agreement as signed.")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Enter the date it was signed.")).toBeInTheDocument();
+  });
+
+  test("posts status, signed date and the picked document", async () => {
+    const user = userEvent.setup();
+    vi.mocked(convertLeadToMatter).mockResolvedValue({ status: "error" });
+    renderEngagement({ required: true });
+    await openDialog(user);
+    await user.selectOptions(screen.getByLabelText(/^Status/), "signed");
+    await user.type(screen.getByLabelText(/^Date signed/), "2026-10-01");
+    await user.selectOptions(
+      screen.getByRole("option", { name: "retainer-signed.pdf" }).closest("select")!,
+      "d1"
+    );
+    await user.click(screen.getByRole("button", { name: /^convert$/i }));
+    const fd = vi.mocked(convertLeadToMatter).mock.calls.at(-1)![2] as FormData;
+    expect(fd.get("agreementStatus")).toBe("signed");
+    expect(fd.get("agreementSignedDate")).toBe("2026-10-01");
+    expect(fd.get("originatingDocumentId")).toBe("d1");
+  });
+
+  test("shows server field errors under originatingDocumentId", async () => {
+    const user = userEvent.setup();
+    vi.mocked(convertLeadToMatter).mockResolvedValue({
+      status: "error",
+      errors: { originatingDocumentId: ["Attach the signed Retainer agreement."] },
+    });
+    renderEngagement({ required: false });
+    await openDialog(user);
+    await user.click(screen.getByRole("button", { name: /^convert$/i }));
+    expect(
+      await screen.findByText("Attach the signed Retainer agreement.")
+    ).toBeInTheDocument();
+  });
+});

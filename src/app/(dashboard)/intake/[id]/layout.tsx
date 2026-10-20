@@ -17,6 +17,9 @@ import { ConvertLeadButton } from "@/components/intake/convert-lead-button";
 import { DeclineLeadButton } from "@/components/intake/decline-lead-button";
 import { getLeadById, LEAD_STAGE_LABEL } from "@/lib/queries/leads";
 import { getPracticeAreaOptions } from "@/lib/queries/practice-area-options";
+import { prisma } from "@/lib/prisma";
+import { dateOnlyKey } from "@/lib/format-date";
+import { todayDateOnly } from "@/app/actions/billing/helpers";
 import { requireUser } from "@/lib/current-user";
 import { assertLeadAccess } from "@/lib/lead-access";
 import { currentUserHasPermission } from "@/lib/permission-check";
@@ -45,23 +48,54 @@ function StageChip({ stage }: { stage: string }) {
   );
 }
 
+async function loadEngagementInputs(leadId: string, userId: string) {
+  const [documents, firm, today] = await Promise.all([
+    prisma.document.findMany({
+      where: { leadId, status: { not: "archived" } },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { firm: { select: { requireOriginatingDoc: true } } },
+    }),
+    todayDateOnly(),
+  ]);
+  return {
+    documents,
+    requireOriginatingDoc: firm?.firm?.requireOriginatingDoc ?? false,
+    todayKey: dateOnlyKey(today),
+  };
+}
+
 export default async function LeadDetailLayout({
   children,
   params,
 }: LayoutProps<"/intake/[id]">) {
-  await requireUser();
+  const userId = await requireUser();
   const { id } = await params;
   await assertLeadAccess(id);
   // Hide the lead-level actions the viewer's role can't use — the
   // server actions still gate, but a refused click just bounces to "/"
   // after the user has typed into the dialog. Convert creates a Matter
   // (matters.create); Decline has its own key.
-  const [lead, areas, canConvert, canDecline, canViewRecords] = await Promise.all([
+  const [
+    lead,
+    areas,
+    canConvert,
+    canDecline,
+    canViewRecords,
+    engagement,
+  ] = await Promise.all([
     getLeadById(id),
     getPracticeAreaOptions(),
     currentUserHasPermission("matters.create"),
     currentUserHasPermission("intake.decline"),
     currentUserHasPermission("records.view"),
+    // Engagement block of the convert dialog: the lead's live documents
+    // (the page's assertLeadAccess above already scoped the viewer to
+    // this lead) and the firm's signed-document switch.
+    loadEngagementInputs(id, userId),
   ]);
   if (!lead) notFound();
 
@@ -92,6 +126,9 @@ export default async function LeadDetailLayout({
                   leadId={lead.id}
                   defaultMatterName={lead.displayName}
                   areas={areas}
+                  documents={engagement.documents}
+                  requireOriginatingDoc={engagement.requireOriginatingDoc}
+                  todayKey={engagement.todayKey}
                   restrictedTo={
                     lead.restricted
                       ? lead.teamMembers.map((m) => m.user.name)

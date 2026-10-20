@@ -12,6 +12,8 @@ import { prisma } from "@/lib/prisma";
 export type PracticeAreaOption = {
   id: string;
   name: string;
+  /** Null/absent: the default "Fee agreement". */
+  originatingDocLabel?: string | null;
   stages: Array<{
     id: string;
     name: string;
@@ -27,6 +29,7 @@ export async function getPracticeAreaOptions(): Promise<PracticeAreaOption[]> {
     select: {
       id: true,
       name: true,
+      originatingDocLabel: true,
       stages: {
         where: { isActive: true },
         select: {

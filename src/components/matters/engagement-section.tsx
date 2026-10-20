@@ -18,10 +18,9 @@ import {
   removeDraftFile,
   setDraftFileOriginating,
 } from "@/app/actions/matter-drafts";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { AGREEMENT_STATUSES } from "@/lib/originating-doc";
 import type { StorageDriver } from "@/lib/storage/storage-key";
-import { Field, Row, Section, inputCls } from "./form-primitives";
+import { AgreementFields } from "./agreement-fields";
+import { Section } from "./form-primitives";
 
 export type EngagementFile = { id: string; name: string; isOriginating: boolean };
 
@@ -31,12 +30,6 @@ export type EngagementChange = {
   originatingFileId?: string;
   /** A file was removed from the draft. */
   removedFileId?: string;
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  not_sent: "Not sent",
-  sent: "Sent",
-  signed: "Signed",
 };
 
 export function EngagementSection({
@@ -90,44 +83,14 @@ export function EngagementSection({
       <input type="hidden" name="draftUpdatedAt" value={draftUpdatedAt ?? ""} />
       <input type="hidden" name="originatingFileId" value={originatingFileId} />
 
-      <Row>
-        <Field
-          label="Status"
-          name="agreementStatus"
-          required={required}
-          error={errors?.agreementStatus}
-        >
-          <NativeSelect
-            className="w-full"
-            id="agreementStatus"
-            name="agreementStatus"
-            value={status}
-            onChange={(e) => onChange({ status: e.target.value })}
-            aria-invalid={!!err("agreementStatus") || undefined}
-          >
-            {AGREEMENT_STATUSES.map((s) => (
-              <NativeSelectOption key={s} value={s}>
-                {STATUS_LABELS[s]}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </Field>
-        <Field
-          label="Date signed"
-          name="agreementSignedDate"
-          required={required}
-          error={errors?.agreementSignedDate}
-        >
-          <input
-            id="agreementSignedDate"
-            name="agreementSignedDate"
-            type="date"
-            value={signedDate}
-            onChange={(e) => onChange({ signedDate: e.target.value })}
-            className={inputCls(!!err("agreementSignedDate"))}
-          />
-        </Field>
-      </Row>
+      <AgreementFields
+        required={required}
+        status={status}
+        signedDate={signedDate}
+        onStatusChange={(v) => onChange({ status: v })}
+        onSignedDateChange={(v) => onChange({ signedDate: v })}
+        errors={errors}
+      />
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">

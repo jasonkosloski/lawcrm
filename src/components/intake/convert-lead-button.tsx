@@ -12,6 +12,11 @@
  * conflict comes back as a form error; possible conflicts ("warn")
  * come back as `conflictWarnings`, which reveals a review tick that
  * must be checked before the resubmit converts.
+ *
+ * Engagement block: the matter's originating document (fee agreement /
+ * retainer; the area names it). Picks one of the lead's existing
+ * documents rather than uploading; the same gate the server runs
+ * (agreementGateErrors) runs here first when the firm requires it.
  */
 
 "use client";
@@ -29,6 +34,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { AgreementFields } from "@/components/matters/agreement-fields";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Field, Section } from "@/components/matters/form-primitives";
 import {
   SelectField,
   TextField,
@@ -38,6 +46,10 @@ import {
   convertLeadInitialState,
   type ConvertLeadFormState,
 } from "@/lib/lead-conversion-form";
+import {
+  agreementGateErrors,
+  originatingDocLabel,
+} from "@/lib/originating-doc";
 import type { PracticeAreaOption } from "@/lib/queries/practice-area-options";
 
 const FEE_OPTIONS = [
@@ -61,6 +73,9 @@ export function ConvertLeadButton({
   defaultMatterName,
   areas,
   restrictedTo,
+  documents = [],
+  requireOriginatingDoc = false,
+  todayKey = "",
 }: {
   leadId: string;
   defaultMatterName: string;
@@ -68,6 +83,12 @@ export function ConvertLeadButton({
   /** Set for a restricted lead (ADR-049): the intake team's names,
    *  who become the matter's team; the matter is restricted too. */
   restrictedTo?: string[];
+  /** The lead's non-archived documents, offered as the originating one. */
+  documents?: Array<{ id: string; name: string }>;
+  /** Firm switch: converting needs a signed originating document. */
+  requireOriginatingDoc?: boolean;
+  /** Today's calendar date (YYYY-MM-DD, firm zone) for the future-date check. */
+  todayKey?: string;
 }) {
   const [open, setOpen] = useState(false);
   const action = convertLeadToMatter.bind(null, leadId);
@@ -88,6 +109,12 @@ export function ConvertLeadButton({
   );
   const [feeStructure, setFeeStructure] = useState("contingent");
   const [warningsReviewed, setWarningsReviewed] = useState(false);
+  const [agreementStatus, setAgreementStatus] = useState("not_sent");
+  const [signedDate, setSignedDate] = useState("");
+  const [docId, setDocId] = useState("");
+  // Client-side gate errors from the last submit attempt; they take
+  // precedence over (stale) server errors for the same field.
+  const [gateErrors, setGateErrors] = useState<Record<string, string[]>>({});
 
   // Seed every field from the CURRENT props each time the dialog opens
   // (done in the open handler, not an effect keyed on the props: a
@@ -100,6 +127,10 @@ export function ConvertLeadButton({
     setStageId(firstNonTerminalStage(areas[0])?.id ?? "");
     setFeeStructure("contingent");
     setWarningsReviewed(false);
+    setAgreementStatus("not_sent");
+    setSignedDate("");
+    setDocId("");
+    setGateErrors({});
   };
   const handleOpenChange = (next: boolean) => {
     if (next) seedFields();
@@ -120,13 +151,42 @@ export function ConvertLeadButton({
   const [, startSubmit] = useTransition();
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const found = agreementGateErrors(
+      {
+        status: agreementStatus,
+        signedDate,
+        hasOriginatingFile: docId !== "",
+      },
+      { required: requireOriginatingDoc, label: agreementLabel, today: todayKey }
+    );
+    // The gate's key for the document is the matter form's; the action
+    // (and this dialog's select) call it originatingDocumentId.
+    const mapped = Object.fromEntries(
+      Object.entries(found).map(([k, v]) => [
+        k === "originatingFileId" ? "originatingDocumentId" : k,
+        [v as string],
+      ])
+    );
+    setGateErrors(mapped);
+    if (Object.keys(mapped).length > 0) return;
     const fd = new FormData(e.currentTarget);
     startSubmit(() => formAction(fd));
   };
 
   const stagesForArea = areas.find((a) => a.id === areaId)?.stages ?? [];
 
+  const agreementLabel = originatingDocLabel({
+    originatingDocLabel:
+      areas.find((a) => a.id === areaId)?.originatingDocLabel ?? null,
+  });
   const errs = state.errors ?? {};
+  const engagementErrors: Record<string, string[] | undefined> = {
+    agreementStatus: gateErrors.agreementStatus ?? errs.agreementStatus,
+    agreementSignedDate:
+      gateErrors.agreementSignedDate ?? errs.agreementSignedDate,
+    originatingDocumentId:
+      gateErrors.originatingDocumentId ?? errs.originatingDocumentId,
+  };
   const formError = errs._form?.[0];
   // The three selects have no inline error slot, so their server field
   // errors (area/stage retired while the dialog was open, bad fee) are
@@ -197,6 +257,39 @@ export function ConvertLeadButton({
                 onChange={setFeeStructure}
                 options={FEE_OPTIONS}
               />
+
+              <Section title={agreementLabel}>
+                <AgreementFields
+                  required={requireOriginatingDoc}
+                  status={agreementStatus}
+                  signedDate={signedDate}
+                  onStatusChange={setAgreementStatus}
+                  onSignedDateChange={setSignedDate}
+                  errors={engagementErrors}
+                />
+                <Field
+                  label={`This is the ${agreementLabel}`}
+                  name="originatingDocumentId"
+                  required={requireOriginatingDoc}
+                  error={engagementErrors.originatingDocumentId}
+                >
+                  <NativeSelect
+                    className="w-full"
+                    id="originatingDocumentId"
+                    name="originatingDocumentId"
+                    value={docId}
+                    onChange={(e) => setDocId(e.target.value)}
+                    aria-invalid={!!engagementErrors.originatingDocumentId || undefined}
+                  >
+                    <NativeSelectOption value="">None</NativeSelectOption>
+                    {documents.map((d) => (
+                      <NativeSelectOption key={d.id} value={d.id}>
+                        {d.name}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </Field>
+              </Section>
 
               {fieldError && (
                 <div

@@ -27,6 +27,17 @@ vi.mock("@/lib/queries/leads", () => ({
   getLeadById: vi.fn(),
   LEAD_STAGE_LABEL: { new: "New" },
 }));
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    document: { findMany: vi.fn(async () => []) },
+    user: {
+      findUnique: vi.fn(async () => ({ firm: { requireOriginatingDoc: false } })),
+    },
+  },
+}));
+vi.mock("@/app/actions/billing/helpers", () => ({
+  todayDateOnly: vi.fn(async () => new Date("2026-10-20T00:00:00Z")),
+}));
 vi.mock("@/lib/queries/practice-area-options", () => ({
   getPracticeAreaOptions: vi.fn(async () => []),
 }));
