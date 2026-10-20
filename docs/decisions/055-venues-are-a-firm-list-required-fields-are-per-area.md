@@ -18,3 +18,4 @@
 - (+) Tightening required fields is safe for existing matters
 - (-) Matters created before this change have no venue until someone edits them
 - (-) A field that was filled and is now required-and-empty on an old matter is only caught when the user tries to clear it, not swept
+- (-) Lead → matter conversion does not yet enforce an area's required fields or capture a venue; follow-up tracked in [matters](../features/matters.md)
