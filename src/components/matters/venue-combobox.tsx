@@ -5,7 +5,10 @@
  * Enter on a name that matches nothing to add it inline (small popover with
  * name / state / city / county). The visible text box never posts: only the
  * hidden `<input name={name}>` carries the selected venue id, and typing
- * clears the selection so free text can't masquerade as a venue.
+ * clears the selection so free text can't masquerade as a venue. On blur,
+ * unpicked text is reconciled: an exact name match selects that venue,
+ * otherwise the previous selection is restored (or, with none, the user is
+ * told to pick from the list). Empty text means "cleared on purpose".
  */
 
 import { useId, useState } from "react";
@@ -60,8 +63,14 @@ export function VenueCombobox({
 
   const [text, setText] = useState(current ? inputText(current) : "");
   const [prevValue, setPrevValue] = useState(value);
+  // The venue the form started with (even if archived) stays selectable, and
+  // the last picked venue is what unpicked text reverts to.
+  const [original] = useState(value);
+  const [lastPicked, setLastPicked] = useState(value);
+  const [hint, setHint] = useState<string | null>(null);
   if (value !== prevValue) {
     setPrevValue(value);
+    if (value) setLastPicked(value);
     if (current) setText(inputText(current));
   }
   const [listOpen, setListOpen] = useState(false);
@@ -76,18 +85,39 @@ export function VenueCombobox({
   const query = text.trim().toLowerCase();
   const filtering = !current && query.length > 0;
   const shown = all.filter((v) => {
-    if (!v.isActive && v.id !== value) return false;
+    if (!v.isActive && v.id !== value && v.id !== original) return false;
     if (!filtering) return true;
     return [v.name, v.city, v.county].some((p) => p?.toLowerCase().includes(query));
   });
   const exact = all.some((v) => v.name.trim().toLowerCase() === query);
   const showAdd = canAdd && query.length > 0 && !exact && !current;
+  const archivedExact =
+    filtering && !shown.some((v) => v.name.trim().toLowerCase() === query)
+      ? all.find((v) => !v.isActive && v.name.trim().toLowerCase() === query)
+      : undefined;
   const showNoMatch = !canAdd && filtering && shown.length === 0;
 
   function pick(v: VenueOption) {
     setText(inputText(v));
     setListOpen(false);
+    setHint(null);
     onChange(v);
+  }
+
+  /** Blur: turn leftover typed text into a selection, a revert, or a hint. */
+  function reconcile() {
+    if (value || addOpen || saving) return;
+    const t = text.trim().toLowerCase();
+    if (!t) return;
+    const match = all.find(
+      (v) =>
+        (v.isActive || v.id === original) &&
+        (v.name.trim().toLowerCase() === t || inputText(v).toLowerCase() === t)
+    );
+    if (match) return pick(match);
+    const prev = lastPicked ? all.find((v) => v.id === lastPicked) : undefined;
+    if (prev) return pick(prev);
+    setHint("Pick a venue from the list or clear the box.");
   }
 
   function openAdd() {
@@ -125,6 +155,8 @@ export function VenueCombobox({
       } else {
         setFieldErrors(res.errors);
       }
+    } catch {
+      setFormError("Couldn't save the venue. Try again.");
     } finally {
       setSaving(false);
     }
@@ -142,6 +174,7 @@ export function VenueCombobox({
       onBlur={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
           setListOpen(false);
+          reconcile();
         }
       }}
     >
@@ -164,6 +197,8 @@ export function VenueCombobox({
             onValueChange={(t) => {
               setText(t);
               setListOpen(true);
+              setHint(null);
+              if (!t.trim()) setLastPicked(null);
               if (value) onChange(null);
             }}
             onKeyDown={(e) => {
@@ -177,6 +212,17 @@ export function VenueCombobox({
               aria-label="Venues"
               className="absolute left-0 right-0 top-[calc(100%+2px)] z-20 rounded-md border border-line bg-white shadow-md py-1"
             >
+              {/* First, so cmdk's auto-selected first row is the add action. */}
+              {showAdd && (
+                <CommandItem
+                  value={ADD_VALUE}
+                  onSelect={openAdd}
+                  className="text-xs"
+                >
+                  <Plus size={12} />
+                  Press Enter to add &quot;{text.trim()}&quot;
+                </CommandItem>
+              )}
               {shown.map((v) => (
                 <CommandItem
                   key={v.id}
@@ -188,17 +234,12 @@ export function VenueCombobox({
                   {!v.isActive ? " (archived)" : ""}
                 </CommandItem>
               ))}
-              {showAdd && (
-                <CommandItem
-                  value={ADD_VALUE}
-                  onSelect={openAdd}
-                  className="text-xs"
-                >
-                  <Plus size={12} />
-                  Press Enter to add &quot;{text.trim()}&quot;
-                </CommandItem>
+              {archivedExact && (
+                <div className="px-2.5 py-1.5 text-xs text-ink-4">
+                  &quot;{archivedExact.name}&quot; is archived. Restore it in Settings → Venues.
+                </div>
               )}
-              {showNoMatch && (
+              {showNoMatch && !archivedExact && (
                 <div className="px-2.5 py-1.5 text-xs text-ink-4">
                   No venue matches. Ask an admin to add it.
                 </div>
@@ -272,6 +313,7 @@ export function VenueCombobox({
           </div>
         </PopoverContent>
       </Popover>
+      {hint && !error && <div className="text-2xs text-warn mt-1">{hint}</div>}
       {error && <div className="text-2xs text-warn mt-1">{error}</div>}
     </div>
   );
