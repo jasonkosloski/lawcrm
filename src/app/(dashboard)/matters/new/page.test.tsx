@@ -22,15 +22,29 @@ vi.mock("@/lib/permission-check", () => ({
   requirePermission: vi.fn(),
   currentUserHasPermission: vi.fn(async () => false),
 }));
+vi.mock("@/lib/queries/venues", () => ({
+  listVenues: vi.fn(async () => [
+    { id: "v1", name: "Denver", city: null, county: null, state: "CO", isActive: true, matterCount: 0 },
+  ]),
+}));
+vi.mock("@/lib/firm", () => ({
+  getCurrentFirm: vi.fn(async () => ({ state: "CO", matterNameTemplate: "{client_last}" })),
+}));
+vi.mock("@/lib/current-user-tz", () => ({
+  getCurrentUserTimeZone: vi.fn(async () => "America/Chicago"),
+}));
 vi.mock("@/components/layout/topbar", () => ({ TopBar: () => null }));
 vi.mock("@/components/matters/new-matter-form", () => ({
-  NewMatterForm: ({ options }: { options: { currentUserId: string } }) => (
-    <div data-testid="new-matter-form">{options.currentUserId}</div>
+  NewMatterForm: ({ options }: { options: Record<string, unknown> }) => (
+    <div data-testid="new-matter-form" data-options={JSON.stringify(options)}>
+      {String(options.currentUserId)}
+    </div>
   ),
 }));
 
 import { prisma } from "@/lib/prisma";
-import { requirePermission } from "@/lib/permission-check";
+import { listVenues } from "@/lib/queries/venues";
+import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import NewMatterPage from "./page";
 
 afterEach(() => vi.clearAllMocks());
@@ -41,6 +55,22 @@ describe("NewMatterPage — matters.create gate", () => {
     render(await NewMatterPage());
     expect(requirePermission).toHaveBeenCalledWith("matters.create");
     expect(screen.getByTestId("new-matter-form").textContent).toBe("user_1");
+  });
+
+  test("passes venues, firm template/state, canAddVenue and the user zone", async () => {
+    vi.mocked(requirePermission).mockResolvedValue("user_1");
+    vi.mocked(currentUserHasPermission).mockResolvedValue(true);
+    render(await NewMatterPage());
+    expect(listVenues).toHaveBeenCalledWith({ activeOnly: true });
+    expect(currentUserHasPermission).toHaveBeenCalledWith("venues.add");
+    const o = JSON.parse(
+      screen.getByTestId("new-matter-form").getAttribute("data-options")!
+    );
+    expect(o.venues).toHaveLength(1);
+    expect(o.canAddVenue).toBe(true);
+    expect(o.firmState).toBe("CO");
+    expect(o.firmTemplate).toBe("{client_last}");
+    expect(o.timeZone).toBe("America/Chicago");
   });
 
   test("a denied user is bounced before any data is read or the form renders", async () => {

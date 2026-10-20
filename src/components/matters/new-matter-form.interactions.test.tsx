@@ -31,6 +31,8 @@ const options: NewMatterFormOptions = {
       hasStatuteOfLimitations: false,
       statutePeriod: null,
       statuteSourceCitation: null,
+      matterNameTemplate: null,
+      requiredMatterFields: [],
       stages: [{ id: "stage1", name: "Intake", order: 0, isTerminal: false }],
     },
     {
@@ -39,10 +41,22 @@ const options: NewMatterFormOptions = {
       hasStatuteOfLimitations: true,
       statutePeriod: { amount: 1, unit: "YEARS" as const },
       statuteSourceCitation: null,
+      matterNameTemplate: "State v. {client_last}",
+      requiredMatterFields: [],
       stages: [
         { id: "stage2a", name: "Screening", order: 0, isTerminal: false },
         { id: "stage2b", name: "Demand", order: 1, isTerminal: false },
       ],
+    },
+    {
+      id: "area3",
+      name: "Criminal Defense",
+      hasStatuteOfLimitations: false,
+      statutePeriod: null,
+      statuteSourceCitation: null,
+      matterNameTemplate: null,
+      requiredMatterFields: ["caseNumber", "venue"],
+      stages: [{ id: "stage3", name: "Arraignment", order: 0, isTerminal: false }],
     },
   ],
   clients: [
@@ -60,6 +74,20 @@ const options: NewMatterFormOptions = {
   ],
   currentUserId: "u1",
   canManageTeam: false,
+  venues: [
+    {
+      id: "v1",
+      name: "Denver District Court",
+      city: "Denver",
+      county: "Denver",
+      state: "CO",
+      isActive: true,
+    },
+  ],
+  canAddVenue: false,
+  firmState: "CO",
+  firmTemplate: "{client_last}, {client_first} - {case_number} - {location}",
+  timeZone: "America/Denver",
 };
 
 const hiddenClientId = () =>
@@ -71,29 +99,54 @@ beforeEach(() => {
 });
 
 describe("NewMatterForm — auto name", () => {
-  test("derives the name from client + case number + location as the user types, with an auto badge", async () => {
+  test("derives the name from client + case number + venue as the user types, with an auto badge", async () => {
     const user = userEvent.setup();
     render(<NewMatterForm options={options} />);
 
     await user.type(screen.getByPlaceholderText(/client name/i), "Zed Newperson");
     await user.type(screen.getByLabelText(/case number/i), "2026-CV-1");
-    await user.type(screen.getByLabelText(/case location/i), "Denver");
+    await user.click(screen.getByPlaceholderText(/search or add a venue/i));
+    await user.click(screen.getByText(/Denver District Court/));
     expect(screen.getByLabelText(/matter name/i)).toHaveValue(
-      "Newperson, Zed - 2026-CV-1 - Denver"
+      "Newperson, Zed - 2026-CV-1 - Denver District Court"
     );
     expect(screen.getByText("auto")).toBeTruthy();
 
     // Typing in the name takes ownership; later edits don't overwrite it.
     await user.type(screen.getByLabelText(/matter name/i), "!");
-    await user.type(screen.getByLabelText(/case location/i), "x");
+    await user.type(screen.getByLabelText(/case number/i), "x");
     expect(screen.getByLabelText(/matter name/i)).toHaveValue(
-      "Newperson, Zed - 2026-CV-1 - Denver!"
+      "Newperson, Zed - 2026-CV-1 - Denver District Court!"
     );
     // Reset to auto recomputes from the current fields.
     await user.click(screen.getByRole("button", { name: /reset to auto/i }));
     expect(screen.getByLabelText(/matter name/i)).toHaveValue(
-      "Newperson, Zed - 2026-CV-1 - Denverx"
+      "Newperson, Zed - 2026-CV-1x - Denver District Court"
     );
+  });
+
+  test("an area template drives the name; switching areas follows the effective template until edited", async () => {
+    const user = userEvent.setup();
+    render(<NewMatterForm options={options} />);
+    await user.type(screen.getByPlaceholderText(/client name/i), "Maria Alvarez");
+    const name = screen.getByLabelText(/matter name/i);
+    expect(name).toHaveValue("Alvarez, Maria");
+
+    await user.selectOptions(screen.getByLabelText(/practice area/i), "area2");
+    expect(name).toHaveValue("State v. Alvarez");
+    expect(screen.getByText("State v. {client_last}")).toBeTruthy();
+
+    // Null template -> the firm default again.
+    await user.selectOptions(screen.getByLabelText(/practice area/i), "area1");
+    expect(name).toHaveValue("Alvarez, Maria");
+
+    // A manual edit is left alone when the area changes.
+    await user.selectOptions(screen.getByLabelText(/practice area/i), "area2");
+    await user.type(name, "!");
+    await user.selectOptions(screen.getByLabelText(/practice area/i), "area1");
+    expect(name).toHaveValue("State v. Alvarez!");
+    await user.click(screen.getByRole("button", { name: /reset to auto/i }));
+    expect(name).toHaveValue("Alvarez, Maria");
   });
 
   test("a picked organization contact is not inverted", async () => {
@@ -221,8 +274,34 @@ describe("NewMatterForm — accessibility", () => {
       "Case number already in use."
     );
     // A field without an error is not marked invalid.
-    expect(screen.getByLabelText(/case location/i)).not.toHaveAttribute(
+    expect(screen.getByLabelText(/court/i)).not.toHaveAttribute(
       "aria-invalid"
     );
+  });
+});
+
+describe("NewMatterForm — per-area required fields", () => {
+  test("a required area marks fields and blocks an empty submit client-side", async () => {
+    const user = userEvent.setup();
+    render(<NewMatterForm options={options} />);
+    await user.selectOptions(screen.getByLabelText(/practice area/i), "area3");
+    await user.type(screen.getByPlaceholderText(/client name/i), "Zed Newperson");
+
+    expect(screen.getAllByText("Required for Criminal Defense")).toHaveLength(2);
+    expect(screen.getByLabelText(/case number/i).closest("div")).toHaveTextContent("*");
+
+    await user.click(screen.getByRole("button", { name: /create matter/i }));
+    expect(mockedAction).not.toHaveBeenCalled();
+    expect(
+      screen.getAllByText("Required for this practice area.")
+    ).toHaveLength(2);
+    expect(screen.getByLabelText(/case number/i)).toHaveFocus();
+
+    // Filling both lets it through.
+    await user.type(screen.getByLabelText(/case number/i), "2026-CR-1");
+    await user.click(screen.getByPlaceholderText(/search or add a venue/i));
+    await user.click(screen.getByText(/Denver District Court/));
+    await user.click(screen.getByRole("button", { name: /create matter/i }));
+    await waitFor(() => expect(mockedAction).toHaveBeenCalledTimes(1));
   });
 });

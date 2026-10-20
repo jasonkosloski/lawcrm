@@ -63,6 +63,8 @@ const options: NewMatterFormOptions = {
       hasStatuteOfLimitations: false,
       statutePeriod: null,
       statuteSourceCitation: null,
+      matterNameTemplate: null,
+      requiredMatterFields: [],
       stages: [
         { id: "stage1", name: "Intake", order: 0, isTerminal: false },
       ],
@@ -74,6 +76,20 @@ const options: NewMatterFormOptions = {
   ],
   currentUserId: "u1",
   canManageTeam: false,
+  venues: [
+    {
+      id: "v1",
+      name: "Aurora",
+      city: "Aurora",
+      county: null,
+      state: "CO",
+      isActive: true,
+    },
+  ],
+  canAddVenue: false,
+  firmState: "CO",
+  firmTemplate: "{client_last}, {client_first} - {case_number} - {location}",
+  timeZone: "America/Denver",
 };
 
 beforeEach(() => {
@@ -83,21 +99,40 @@ beforeEach(() => {
 describe("NewMatterForm — fresh mount", () => {
   test("auto-name inputs start empty on the idle state", () => {
     render(<NewMatterForm options={options} />);
-    expect(screen.getByLabelText(/case location/i)).toHaveValue("");
+    expect(screen.getByPlaceholderText(/search or add a venue/i)).toHaveValue("");
     expect(screen.getByLabelText(/case number/i)).toHaveValue("");
+  });
+
+  test("renders Filed date and Trial date inputs in Details", () => {
+    render(<NewMatterForm options={options} />);
+    const filed = screen.getByLabelText(/filed date/i);
+    const trial = screen.getByLabelText(/trial date/i);
+    expect(filed).toHaveAttribute("type", "date");
+    expect(filed).toHaveAttribute("name", "filedDate");
+    expect(trial).toHaveAttribute("type", "date");
+    expect(trial).toHaveAttribute("name", "trialDate");
+  });
+
+  test("the name hint shows the effective template text", () => {
+    render(<NewMatterForm options={options} />);
+    expect(
+      screen.getByText("{client_last}, {client_first} - {case_number} - {location}")
+    ).toBeTruthy();
   });
 });
 
 describe("NewMatterForm — validation-error re-seed", () => {
-  test("Case location survives the round trip via echoed values", () => {
+  test("Venue survives the round trip via echoed values", () => {
     mountState.current = {
       status: "error",
       errors: { newClientEmail: ["Email or phone required."] },
-      values: { location: "Aurora", caseNumber: "2026-CV-00481" },
+      values: { venueId: "v1", caseNumber: "2026-CV-00481" },
     };
     render(<NewMatterForm options={options} />);
-    // The regression: location seeded from "" instead of vals.location.
-    expect(screen.getByLabelText(/case location/i)).toHaveValue("Aurora");
+    // The regression: venue seeded empty instead of from vals.venueId.
+    expect(screen.getByPlaceholderText(/search or add a venue/i)).toHaveValue(
+      "Aurora"
+    );
     // Sibling controlled input, same contract.
     expect(screen.getByLabelText(/case number/i)).toHaveValue(
       "2026-CV-00481"
@@ -108,7 +143,7 @@ describe("NewMatterForm — validation-error re-seed", () => {
     mountState.current = {
       status: "error",
       errors: { newClientEmail: ["Email or phone required."] },
-      values: { name: "Alvarez, Maria - Custom Name", location: "Aurora" },
+      values: { name: "Alvarez, Maria - Custom Name", venueId: "v1" },
     };
     render(<NewMatterForm options={options} />);
     // vals.name marks the field dirty, so the derived auto name must

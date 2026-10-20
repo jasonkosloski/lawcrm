@@ -38,6 +38,8 @@ export type FirmProfile = {
   country: string;
   establishedAt: Date | null;
   logoUrl: string | null;
+  /** Default matter-name token template (practice areas may override). */
+  matterNameTemplate?: string;
 };
 
 /** The current user's firm, read fresh from the database. Throws via
@@ -71,6 +73,7 @@ export async function loadCurrentFirm(): Promise<FirmProfile> {
           country: true,
           establishedAt: true,
           logoUrl: true,
+          matterNameTemplate: true,
         },
       },
     },

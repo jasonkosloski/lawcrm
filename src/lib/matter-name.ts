@@ -8,11 +8,6 @@
  * becoming the surname.
  */
 
-import {
-  DEFAULT_MATTER_NAME_TEMPLATE,
-  renderMatterName,
-} from "./matter-name-template";
-
 const SUFFIX_RE = /^(jr|sr|ii|iii|iv|esq)\.?$/i;
 
 /** Words that mark a name as an organization rather than a person. */
@@ -60,23 +55,4 @@ export function splitName(full: string): NameParts {
     firstName: parts.slice(0, -1).join(" "),
     suffix,
   };
-}
-
-/** Temporary wrapper (Task 8 removes it): the default template over the old inputs. */
-export function autoMatterName(input: {
-  clientName: string;
-  isOrganization?: boolean;
-  caseNumber: string;
-  location: string;
-}): string {
-  return renderMatterName(DEFAULT_MATTER_NAME_TEMPLATE, {
-    clientName: input.clientName,
-    isOrganization: input.isOrganization,
-    caseNumber: input.caseNumber,
-    venue: input.location ? { name: input.location, county: null, state: "" } : null,
-    opposingParty: "",
-    practiceAreaName: "",
-    now: new Date(),
-    timeZone: "UTC",
-  });
 }

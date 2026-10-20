@@ -3,13 +3,9 @@
  *
  * Create-matter flow with a "magical" auto-populated matter name.
  * Default stance is "you're creating a new client." As the user fills
- * in client name / case number / location, the Matter name builds
- * itself using the firm's pattern:
- *
- *     Last, First - Case Number - Location
- *
- * The pattern is hardcoded for now. Future: firm-admin-configurable
- * and per-practice-area overrides.
+ * in client / case number / venue / opposing party, the Matter name
+ * builds itself from the effective template (the practice area's own,
+ * else the firm's — see matter-name-template.ts).
  *
  * Dirty-tracking: once the user types in the matter name input, we
  * stop overwriting their value. While it is not dirty the displayed
@@ -17,11 +13,8 @@
  * "Reset to auto" link restores the auto-generated name.
  *
  * Typeahead client picker: matches existing Contacts as the user
- * types. Picking one links to the contact. Case location is
- * intentionally NOT inferred from the client's city — the location
- * of the case (incident location / venue) is a separate concept from
- * where the client lives, so it stays a free-text field the user
- * fills in only when relevant.
+ * types. Picking one links to the contact. Venue is a picked record,
+ * never inferred from the client's city.
  */
 
 "use client";
@@ -41,7 +34,17 @@ import { cn } from "@/lib/utils";
 import { createMatter } from "@/app/actions/matters";
 import { formatStatutePeriod, type SolPeriod } from "@/lib/sol";
 import { FEE_OPTIONS } from "@/lib/fee-structure-constants";
-import { autoMatterName } from "@/lib/matter-name";
+import {
+  effectiveTemplate,
+  renderMatterName,
+} from "@/lib/matter-name-template";
+import {
+  missingRequired,
+  requiredFieldError,
+  type RequiredMatterField,
+} from "@/lib/matter-required-fields";
+import type { VenueOption } from "@/lib/queries/venues";
+import { VenueCombobox } from "./venue-combobox";
 import {
   Field,
   Row,
@@ -72,6 +75,10 @@ export type AreaOption = {
    *  shown below the incident-date input on the SOL section. */
   statutePeriod: SolPeriod | null;
   statuteSourceCitation: string | null;
+  /** Per-area name template; null = the firm's. */
+  matterNameTemplate: string | null;
+  /** Keys from REQUIRED_MATTER_FIELDS the area insists on at creation. */
+  requiredMatterFields: string[];
   stages: Array<{
     id: string;
     name: string;
@@ -87,9 +94,29 @@ export type NewMatterFormOptions = {
   currentUserId: string;
   /** Holds `matters.manage_team`: shows the extra team seats. */
   canManageTeam: boolean;
+  venues: VenueOption[];
+  /** Holds `venues.add`: lets the venue picker add inline. */
+  canAddVenue: boolean;
+  firmState: string;
+  firmTemplate: string;
+  timeZone: string;
 };
 
 const MAX_SUGGESTIONS = 6;
+
+/** Required-field key -> the form control's `name` (and error key). */
+const FIELD_NAME: Record<RequiredMatterField, string> = {
+  venue: "venueId",
+  client: "clientId",
+  caseNumber: "caseNumber",
+  court: "court",
+  filedDate: "filedDate",
+  trialDate: "trialDate",
+  incidentDate: "incidentDate",
+  opposingParty: "opposingParty",
+  opposingFirm: "opposingFirm",
+  description: "description",
+};
 
 export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
   const [state, formAction, isPending] = useActionState<
@@ -104,6 +131,19 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
   const [, startTransition] = useTransition();
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const missing = checkRequired(new FormData(e.currentTarget));
+    if (missing.length > 0) {
+      const next: Record<string, string[]> = {};
+      for (const k of missing) next[FIELD_NAME[k]] = [requiredFieldError];
+      setClientErrs(next);
+      const first = formRef.current?.querySelector<HTMLElement>(
+        `[name="${FIELD_NAME[missing[0]]}"]:not([type="hidden"])`
+      );
+      (first ?? formRef.current?.querySelector<HTMLElement>('[aria-label="Venue"]'))
+        ?.focus();
+      return;
+    }
+    setClientErrs({});
     const submitter = (e.nativeEvent as SubmitEvent).submitter as
       | HTMLElement
       | null;
@@ -111,8 +151,11 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
     startTransition(() => formAction(fd));
   };
 
+  // Client-side required-field errors (the server stays authoritative).
+  const [clientErrs, setClientErrs] = useState<Record<string, string[]>>({});
+  const formRef = useRef<HTMLFormElement>(null);
   const vals = state.values ?? {};
-  const errs = state.errors ?? {};
+  const errs = { ...(state.errors ?? {}), ...clientErrs };
 
   // ── Client picker state ──────────────────────────────────────────────
   const initialSelectedId =
@@ -142,7 +185,12 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
   // Both seed from the action-echoed values so nothing typed gets
   // lost across a validation-error round trip.
   const [caseNumber, setCaseNumber] = useState<string>(vals.caseNumber ?? "");
-  const [location, setLocation] = useState<string>(vals.location ?? "");
+  const [venue, setVenue] = useState<VenueOption | null>(
+    options.venues.find((v) => v.id === vals.venueId) ?? null
+  );
+  const [opposingParty, setOpposingParty] = useState<string>(
+    vals.opposingParty ?? ""
+  );
 
   // ── Matter name state + dirty tracking ───────────────────────────────
   // If the server action re-rendered us after a validation error,
@@ -175,6 +223,38 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
   const selectedArea = options.areas.find((a) => a.id === practiceAreaId);
   const stageOptions = selectedArea?.stages ?? [];
 
+  // Incident date only counts when the area tracks SOL (that's the only
+  // time the field is shown; the server mirrors this).
+  const requiredKeys = new Set<string>(
+    (selectedArea?.requiredMatterFields ?? []).filter(
+      (k) => k !== "incidentDate" || selectedArea?.hasStatuteOfLimitations
+    )
+  );
+  const isRequired = (k: RequiredMatterField) => requiredKeys.has(k);
+  const requiredHint = selectedArea ? `Required for ${selectedArea.name}` : "";
+  const reqHint = (k: RequiredMatterField, extra?: string) =>
+    isRequired(k)
+      ? extra
+        ? `${requiredHint}. ${extra}`
+        : requiredHint
+      : extra;
+
+  function checkRequired(fd: FormData): RequiredMatterField[] {
+    const get = (n: string) => String(fd.get(n) ?? "");
+    return missingRequired([...requiredKeys], {
+      venue: get("venueId"),
+      caseNumber: get("caseNumber"),
+      court: get("court"),
+      filedDate: get("filedDate"),
+      trialDate: get("trialDate"),
+      incidentDate: get("incidentDate"),
+      opposingParty: get("opposingParty"),
+      opposingFirm: get("opposingFirm"),
+      description: get("description"),
+      client: get("clientId"),
+    });
+  }
+
   const handleAreaChange = (nextAreaId: string) => {
     setPracticeAreaId(nextAreaId);
     // If the current stage isn't part of the new area, snap to that
@@ -191,14 +271,24 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
   // The auto name is pure derived state. Until the user takes ownership
   // of the field the input shows it directly — no effect, no stale
   // first render.
-  const autoName = autoMatterName({
+  const template = effectiveTemplate(
+    selectedArea ?? null,
+    options.firmTemplate
+  );
+  const autoName = renderMatterName(template, {
     clientName,
     // A picked contact whose organization is its own name is an
     // organization — never invert it into "Fund, Colorado Freedom".
     isOrganization:
       !!selectedClient && selectedClient.organization === selectedClient.name,
     caseNumber,
-    location,
+    venue: venue
+      ? { name: venue.name, county: venue.county, state: venue.state }
+      : null,
+    opposingParty,
+    practiceAreaName: selectedArea?.name ?? "",
+    now: new Date(),
+    timeZone: options.timeZone,
   });
   const displayedName = isNameDirty ? matterName : autoName;
 
@@ -306,7 +396,7 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
       : "";
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-6">
+    <form ref={formRef} onSubmit={onSubmit} className="flex flex-col gap-6">
       {/* ── Core ────────────────────────────────────────────────── */}
       <Section title="Core">
         <div className="flex flex-col gap-1">
@@ -320,7 +410,7 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
               {!isNameDirty && displayedName && (
                 <span
                   className="inline-flex items-center gap-1 text-2xs font-mono text-brand-700 bg-brand-soft px-1.5 py-0.5 rounded-full border border-brand-200"
-                  title="Auto-generated from Client + Case number + Location"
+                  title="Auto-generated from the matter name template"
                 >
                   <Sparkles size={10} />
                   auto
@@ -355,9 +445,7 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
           ) : (
             <div className="text-2xs text-ink-4">
               Pattern:{" "}
-              <span className="font-mono text-ink-3">
-                Last, First - Case Number - Location
-              </span>
+              <span className="font-mono text-ink-3">{template}</span>
             </div>
           )}
         </div>
@@ -415,7 +503,13 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
         </Row>
 
         <Row>
-          <Field label="Case number" name="caseNumber" error={errs.caseNumber}>
+          <Field
+            label="Case number"
+            name="caseNumber"
+            required={isRequired("caseNumber")}
+            hint={reqHint("caseNumber")}
+            error={errs.caseNumber}
+          >
             <input
               id="caseNumber"
               name="caseNumber"
@@ -427,21 +521,30 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
             />
           </Field>
 
-          <Field
-            label="Case location"
-            name="location"
-            hint="Optional — incident location or venue (e.g. 'Aurora'). Folds into the matter name if set."
-          >
-            <input
-              id="location"
-              name="location"
-              type="text"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              className={inputCls(false)}
-              placeholder="Aurora (optional)"
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-ink-2">
+              Venue
+              {isRequired("venue") && <span className="text-warn ml-0.5">*</span>}
+            </span>
+            <VenueCombobox
+              name="venueId"
+              venues={options.venues}
+              value={venue?.id ?? null}
+              onChange={setVenue}
+              canAdd={options.canAddVenue}
+              defaultState={options.firmState}
+              error={errs.venueId?.[0]}
+              required={isRequired("venue")}
             />
-          </Field>
+            {/* The combobox renders its own error text. */}
+            {!errs.venueId?.[0] && (
+              <div className="text-2xs text-ink-4">
+                {isRequired("venue")
+                  ? requiredHint
+                  : "The court or jurisdiction the case is in."}
+              </div>
+            )}
+          </div>
         </Row>
 
         <Field label="Fee structure" name="feeStructure" error={errs.feeStructure}>
@@ -473,6 +576,9 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
               className="text-xs font-medium text-ink-2"
             >
               Client
+              {isRequired("client") && (
+                <span className="text-warn ml-0.5">*</span>
+              )}
             </label>
 
             {selectedClient ? (
@@ -588,9 +694,12 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
             {errs.newClientName && errs.newClientName.length > 0 && (
               <div className="text-2xs text-warn">{errs.newClientName[0]}</div>
             )}
-            {!selectedClient && !errs.newClientName?.length && (
+            {errs.clientId?.[0] && !errs.newClientName?.length && (
+              <div className="text-2xs text-warn">{errs.clientId[0]}</div>
+            )}
+            {!selectedClient && !errs.newClientName?.length && !errs.clientId?.length && (
               <div className="text-2xs text-ink-4">
-                Start typing — we&apos;ll suggest existing clients, or
+                {isRequired("client") && `${requiredHint}. `}Start typing — we&apos;ll suggest existing clients, or
                 create a new one on save.
               </div>
             )}
@@ -681,18 +790,31 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
         )}
 
         <Row>
-          <Field label="Opposing party" name="opposingParty" error={errs.opposingParty}>
+          <Field
+            label="Opposing party"
+            name="opposingParty"
+            required={isRequired("opposingParty")}
+            hint={reqHint("opposingParty")}
+            error={errs.opposingParty}
+          >
             <input
               id="opposingParty"
               name="opposingParty"
               type="text"
-              defaultValue={vals.opposingParty ?? ""}
+              value={opposingParty}
+              onChange={(e) => setOpposingParty(e.target.value)}
               className={inputCls(!!errs.opposingParty)}
               placeholder="City of Aurora, Officer J. Doe"
             />
           </Field>
 
-          <Field label="Opposing firm" name="opposingFirm" error={errs.opposingFirm}>
+          <Field
+            label="Opposing firm"
+            name="opposingFirm"
+            required={isRequired("opposingFirm")}
+            hint={reqHint("opposingFirm")}
+            error={errs.opposingFirm}
+          >
             <input
               id="opposingFirm"
               name="opposingFirm"
@@ -707,7 +829,13 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
 
       {/* ── Details ─────────────────────────────────────────────── */}
       <Section title="Details">
-        <Field label="Court" name="court" error={errs.court}>
+        <Field
+          label="Court"
+          name="court"
+          required={isRequired("court")}
+          hint={reqHint("court")}
+          error={errs.court}
+        >
           <input
             id="court"
             name="court"
@@ -718,7 +846,46 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
           />
         </Field>
 
-        <Field label="Summary" name="description" error={errs.description}>
+        <Row>
+          <Field
+            label="Filed date"
+            name="filedDate"
+            required={isRequired("filedDate")}
+            hint={reqHint("filedDate")}
+            error={errs.filedDate}
+          >
+            <input
+              id="filedDate"
+              name="filedDate"
+              type="date"
+              defaultValue={vals.filedDate ?? ""}
+              className={inputCls(!!errs.filedDate)}
+            />
+          </Field>
+          <Field
+            label="Trial date"
+            name="trialDate"
+            required={isRequired("trialDate")}
+            hint={reqHint("trialDate")}
+            error={errs.trialDate}
+          >
+            <input
+              id="trialDate"
+              name="trialDate"
+              type="date"
+              defaultValue={vals.trialDate ?? ""}
+              className={inputCls(!!errs.trialDate)}
+            />
+          </Field>
+        </Row>
+
+        <Field
+          label="Summary"
+          name="description"
+          required={isRequired("description")}
+          hint={reqHint("description")}
+          error={errs.description}
+        >
           <textarea
             id="description"
             name="description"
@@ -754,12 +921,14 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
             <Field
               label="Incident / accrual date"
               name="incidentDate"
+              required={isRequired("incidentDate")}
               error={errs.incidentDate}
-              hint={
+              hint={reqHint(
+                "incidentDate",
                 selectedArea.statutePeriod
                   ? `Period: ${formatStatutePeriod(selectedArea.statutePeriod)}${selectedArea.statuteSourceCitation ? ` · ${selectedArea.statuteSourceCitation}` : ""}. Leave Deadline blank to auto-compute.`
                   : "When known, drives the SOL deadline once the firm configures a statute period for this area."
-              }
+              )}
             >
               <input
                 id="incidentDate"
@@ -817,7 +986,7 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
       )}
 
       {/* ── Submit ──────────────────────────────────────────────── */}
-      <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
+      <div className="sticky bottom-0 z-10 -mx-5 px-5 py-3 sm:static sm:mx-0 sm:px-0 sm:py-0 sm:pt-2 bg-white sm:bg-transparent flex items-center justify-end gap-2 border-t border-line">
         <Link
           href="/matters"
           className="inline-flex items-center h-8 px-3 rounded-md text-xs font-medium text-ink-2 border border-line bg-white hover:border-brand-300 hover:text-brand-700 transition-colors"

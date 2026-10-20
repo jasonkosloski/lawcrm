@@ -14,6 +14,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { NewMatterForm } from "@/components/matters/new-matter-form";
 import { prisma } from "@/lib/prisma";
 import { toSolPeriod } from "@/lib/sol";
+import { getCurrentFirm } from "@/lib/firm";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
+import { DEFAULT_MATTER_NAME_TEMPLATE } from "@/lib/matter-name-template";
+import { listVenues } from "@/lib/queries/venues";
 import {
   currentUserHasPermission,
   requirePermission,
@@ -27,7 +31,16 @@ export default async function NewMatterPage() {
   // the user id.
   const currentUserId = await requirePermission("matters.create");
 
-  const [areaRows, clients, users, canManageTeam] = await Promise.all([
+  const [
+    areaRows,
+    clients,
+    users,
+    canManageTeam,
+    venueRows,
+    firm,
+    canAddVenue,
+    timeZone,
+  ] = await Promise.all([
     prisma.practiceArea.findMany({
       where: { isActive: true },
       orderBy: [{ order: "asc" }, { name: "asc" }],
@@ -38,6 +51,8 @@ export default async function NewMatterPage() {
         statutePeriodAmount: true,
         statutePeriodUnit: true,
         statuteSourceCitation: true,
+        matterNameTemplate: true,
+        requiredMatterFields: true,
         stages: {
           where: { isActive: true },
           orderBy: { order: "asc" },
@@ -61,7 +76,19 @@ export default async function NewMatterPage() {
       orderBy: { name: "asc" },
     }),
     currentUserHasPermission("matters.manage_team"),
+    listVenues({ activeOnly: true }),
+    getCurrentFirm(),
+    currentUserHasPermission("venues.add"),
+    getCurrentUserTimeZone(),
   ]);
+  const venues = venueRows.map((v) => ({
+    id: v.id,
+    name: v.name,
+    city: v.city,
+    county: v.county,
+    state: v.state,
+    isActive: v.isActive,
+  }));
 
   // Calendar period (ADR-035) as one serializable value for the forms.
   const areas = areaRows.map(
@@ -79,7 +106,18 @@ export default async function NewMatterPage() {
           <Card>
             <CardContent className="p-5">
               <NewMatterForm
-                options={{ areas, clients, users, currentUserId, canManageTeam }}
+                options={{
+                  areas,
+                  clients,
+                  users,
+                  currentUserId,
+                  canManageTeam,
+                  venues,
+                  canAddVenue,
+                  firmState: firm.state ?? "",
+                  firmTemplate: firm.matterNameTemplate ?? DEFAULT_MATTER_NAME_TEMPLATE,
+                  timeZone,
+                }}
               />
             </CardContent>
           </Card>
