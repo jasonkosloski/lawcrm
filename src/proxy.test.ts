@@ -116,6 +116,7 @@ describe("proxy auth gate", () => {
   it.each([
     "/api/email-sync",
     "/api/notification-sweep",
+    "/api/matter-draft-sweep",
     "/api/documents/upload/blob",
   ])("passes self-authenticated machine endpoint %s through without a session", async (path) => {
     const res = await proxy(
