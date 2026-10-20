@@ -42,10 +42,17 @@ import {
 import {
   clearedRequired,
   requiredFieldError,
+  requiredKeysFor,
+  REQUIRED_FIELD_INPUT_NAME,
   type RequiredMatterField,
 } from "@/lib/matter-required-fields";
 import type { VenueOption } from "@/lib/queries/venues";
 import { VenueCombobox } from "./venue-combobox";
+import {
+  focusFirstInvalid,
+  useRequiredHints,
+  VenueField,
+} from "./required-field-ui";
 import {
   Field,
   Row,
@@ -120,20 +127,6 @@ export type EditMatterFormOptions = {
   firmState?: string;
 };
 
-/** Required-field key -> the form control's `name` (and error key). */
-const FIELD_NAME: Record<RequiredMatterField, string> = {
-  venue: "venueId",
-  client: "clientId",
-  caseNumber: "caseNumber",
-  court: "court",
-  filedDate: "filedDate",
-  trialDate: "trialDate",
-  incidentDate: "incidentDate",
-  opposingParty: "opposingParty",
-  opposingFirm: "opposingFirm",
-  description: "description",
-};
-
 export function EditMatterForm({
   matter,
   options,
@@ -165,13 +158,11 @@ export function EditMatterForm({
     const cleared = checkCleared(new FormData(e.currentTarget));
     if (cleared.length > 0) {
       const next: Record<string, string[]> = {};
-      for (const k of cleared) next[FIELD_NAME[k]] = [requiredFieldError];
+      for (const k of cleared) {
+        next[REQUIRED_FIELD_INPUT_NAME[k]] = [requiredFieldError];
+      }
       setClientErrs(next);
-      const first = formRef.current?.querySelector<HTMLElement>(
-        `[name="${FIELD_NAME[cleared[0]]}"]:not([type="hidden"])`
-      );
-      (first ?? formRef.current?.querySelector<HTMLElement>('[aria-label="Venue"]'))
-        ?.focus();
+      if (formRef.current) focusFirstInvalid(formRef.current, cleared);
       return;
     }
     setClientErrs({});
@@ -286,28 +277,25 @@ export function EditMatterForm({
     vals.venueId ?? matter.venueId ?? null
   );
 
-  // Incident date only counts when the area tracks SOL (the only time the
-  // field is shown; the server mirrors this).
-  const requiredKeys = new Set<string>(
-    (selectedArea?.requiredMatterFields ?? []).filter(
-      (k) => k !== "incidentDate" || selectedArea?.hasStatuteOfLimitations
-    )
+  const requiredKeys = requiredKeysFor(
+    selectedArea
+      ? {
+          requiredMatterFields: selectedArea.requiredMatterFields ?? [],
+          hasStatuteOfLimitations: selectedArea.hasStatuteOfLimitations,
+        }
+      : null
   );
-  const isRequired = (k: RequiredMatterField) => requiredKeys.has(k);
-  const requiredHint = selectedArea ? `Required for ${selectedArea.name}` : "";
-  const reqHint = (k: RequiredMatterField, extra?: string) =>
-    isRequired(k)
-      ? extra
-        ? `${requiredHint}. ${extra}`
-        : requiredHint
-      : extra;
+  const { isRequired, requiredHint, reqHint } = useRequiredHints(
+    selectedArea?.name,
+    requiredKeys
+  );
 
   // Edit rule: only a field that HAD a value may not be cleared; one that
   // was already empty may stay empty (the server enforces the same).
   function checkCleared(fd: FormData): RequiredMatterField[] {
     const get = (n: string) => String(fd.get(n) ?? "");
     return clearedRequired(
-      [...requiredKeys],
+      requiredKeys,
       {
         venue: matter.venueId,
         caseNumber: matter.caseNumber,
@@ -589,11 +577,11 @@ export function EditMatterForm({
       </Section>
 
       <Section title="Details">
-        <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-ink-2">
-            Venue
-            {isRequired("venue") && <span className="text-warn ml-0.5">*</span>}
-          </span>
+        <VenueField
+          required={isRequired("venue")}
+          requiredHint={requiredHint}
+          error={errs.venueId?.[0]}
+        >
           <VenueCombobox
             name="venueId"
             venues={venues}
@@ -604,14 +592,7 @@ export function EditMatterForm({
             error={errs.venueId?.[0]}
             required={isRequired("venue")}
           />
-          {!errs.venueId?.[0] && (
-            <div className="text-2xs text-ink-4">
-              {isRequired("venue")
-                ? requiredHint
-                : "The court or jurisdiction the case is in."}
-            </div>
-          )}
-        </div>
+        </VenueField>
 
         <Field
           label="Court"

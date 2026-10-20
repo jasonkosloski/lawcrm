@@ -41,10 +41,17 @@ import {
 import {
   missingRequired,
   requiredFieldError,
+  requiredKeysFor,
+  REQUIRED_FIELD_INPUT_NAME,
   type RequiredMatterField,
 } from "@/lib/matter-required-fields";
 import type { VenueOption } from "@/lib/queries/venues";
 import { VenueCombobox } from "./venue-combobox";
+import {
+  focusFirstInvalid,
+  useRequiredHints,
+  VenueField,
+} from "./required-field-ui";
 import {
   Field,
   Row,
@@ -104,20 +111,6 @@ export type NewMatterFormOptions = {
 
 const MAX_SUGGESTIONS = 6;
 
-/** Required-field key -> the form control's `name` (and error key). */
-const FIELD_NAME: Record<RequiredMatterField, string> = {
-  venue: "venueId",
-  client: "clientId",
-  caseNumber: "caseNumber",
-  court: "court",
-  filedDate: "filedDate",
-  trialDate: "trialDate",
-  incidentDate: "incidentDate",
-  opposingParty: "opposingParty",
-  opposingFirm: "opposingFirm",
-  description: "description",
-};
-
 export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
   const [state, formAction, isPending] = useActionState<
     CreateMatterState,
@@ -134,13 +127,11 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
     const missing = checkRequired(new FormData(e.currentTarget));
     if (missing.length > 0) {
       const next: Record<string, string[]> = {};
-      for (const k of missing) next[FIELD_NAME[k]] = [requiredFieldError];
+      for (const k of missing) {
+        next[REQUIRED_FIELD_INPUT_NAME[k]] = [requiredFieldError];
+      }
       setClientErrs(next);
-      const first = formRef.current?.querySelector<HTMLElement>(
-        `[name="${FIELD_NAME[missing[0]]}"]:not([type="hidden"])`
-      );
-      (first ?? formRef.current?.querySelector<HTMLElement>('[aria-label="Venue"]'))
-        ?.focus();
+      if (formRef.current) focusFirstInvalid(formRef.current, missing);
       return;
     }
     setClientErrs({});
@@ -223,25 +214,15 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
   const selectedArea = options.areas.find((a) => a.id === practiceAreaId);
   const stageOptions = selectedArea?.stages ?? [];
 
-  // Incident date only counts when the area tracks SOL (that's the only
-  // time the field is shown; the server mirrors this).
-  const requiredKeys = new Set<string>(
-    (selectedArea?.requiredMatterFields ?? []).filter(
-      (k) => k !== "incidentDate" || selectedArea?.hasStatuteOfLimitations
-    )
+  const requiredKeys = requiredKeysFor(selectedArea ?? null);
+  const { isRequired, requiredHint, reqHint } = useRequiredHints(
+    selectedArea?.name,
+    requiredKeys
   );
-  const isRequired = (k: RequiredMatterField) => requiredKeys.has(k);
-  const requiredHint = selectedArea ? `Required for ${selectedArea.name}` : "";
-  const reqHint = (k: RequiredMatterField, extra?: string) =>
-    isRequired(k)
-      ? extra
-        ? `${requiredHint}. ${extra}`
-        : requiredHint
-      : extra;
 
   function checkRequired(fd: FormData): RequiredMatterField[] {
     const get = (n: string) => String(fd.get(n) ?? "");
-    return missingRequired([...requiredKeys], {
+    return missingRequired(requiredKeys, {
       venue: get("venueId"),
       caseNumber: get("caseNumber"),
       court: get("court"),
@@ -521,11 +502,11 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
             />
           </Field>
 
-          <div className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-ink-2">
-              Venue
-              {isRequired("venue") && <span className="text-warn ml-0.5">*</span>}
-            </span>
+          <VenueField
+            required={isRequired("venue")}
+            requiredHint={requiredHint}
+            error={errs.venueId?.[0]}
+          >
             <VenueCombobox
               name="venueId"
               venues={options.venues}
@@ -536,15 +517,7 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
               error={errs.venueId?.[0]}
               required={isRequired("venue")}
             />
-            {/* The combobox renders its own error text. */}
-            {!errs.venueId?.[0] && (
-              <div className="text-2xs text-ink-4">
-                {isRequired("venue")
-                  ? requiredHint
-                  : "The court or jurisdiction the case is in."}
-              </div>
-            )}
-          </div>
+          </VenueField>
         </Row>
 
         <Field label="Fee structure" name="feeStructure" error={errs.feeStructure}>

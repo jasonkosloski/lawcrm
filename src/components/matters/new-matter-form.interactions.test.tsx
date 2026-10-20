@@ -304,4 +304,34 @@ describe("NewMatterForm — per-area required fields", () => {
     await user.click(screen.getByRole("button", { name: /create matter/i }));
     await waitFor(() => expect(mockedAction).toHaveBeenCalledTimes(1));
   });
+
+  test("focus goes to the first missing field in DOM order, not key order", async () => {
+    const user = userEvent.setup();
+    const area = (id: string, fields: string[]) => ({
+      ...options.areas[0],
+      id,
+      name: `Area ${id}`,
+      requiredMatterFields: fields,
+      stages: [{ id: `s-${id}`, name: "Intake", order: 0, isTerminal: false }],
+    });
+    render(
+      <NewMatterForm
+        options={{
+          ...options,
+          areas: [area("a", ["client", "caseNumber"]), area("b", ["client", "opposingParty"])],
+        }}
+      />
+    );
+    // Matter name is natively required; fill it so the JS check runs.
+    await user.type(screen.getByLabelText(/matter name/i), "Test matter");
+    // client is listed first, but case number comes first in the DOM.
+    await user.click(screen.getByRole("button", { name: /create matter/i }));
+    expect(mockedAction).not.toHaveBeenCalled();
+    expect(screen.getByLabelText(/case number/i)).toHaveFocus();
+
+    // Here the client picker input is the earliest missing field.
+    await user.selectOptions(screen.getByLabelText(/practice area/i), "b");
+    await user.click(screen.getByRole("button", { name: /create matter/i }));
+    expect(screen.getByPlaceholderText(/client name/i)).toHaveFocus();
+  });
 });

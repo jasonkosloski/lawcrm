@@ -5,6 +5,8 @@ import {
   missingRequired,
   clearedRequired,
   requiredFieldError,
+  requiredKeysFor,
+  REQUIRED_FIELD_INPUT_NAME,
 } from "./matter-required-fields";
 
 describe("matter required fields", () => {
@@ -47,5 +49,41 @@ describe("matter required fields", () => {
 
   it("exports the error message", () => {
     expect(requiredFieldError).toBe("Required for this practice area.");
+  });
+});
+
+describe("requiredKeysFor", () => {
+  it("is empty without an area", () => {
+    expect(requiredKeysFor(null)).toEqual([]);
+  });
+
+  it("keeps the area's recognised keys in order", () => {
+    expect(
+      requiredKeysFor({
+        requiredMatterFields: ["court", "bogus", "venue"],
+        hasStatuteOfLimitations: false,
+      }),
+    ).toEqual(["court", "venue"]);
+  });
+
+  it("counts incidentDate only when the area tracks SOL", () => {
+    const fields = ["incidentDate", "court"];
+    expect(
+      requiredKeysFor({ requiredMatterFields: fields, hasStatuteOfLimitations: false }),
+    ).toEqual(["court"]);
+    expect(
+      requiredKeysFor({ requiredMatterFields: fields, hasStatuteOfLimitations: true }),
+    ).toEqual(["incidentDate", "court"]);
+  });
+});
+
+describe("REQUIRED_FIELD_INPUT_NAME", () => {
+  it("maps every required key to its form control name", () => {
+    expect(Object.keys(REQUIRED_FIELD_INPUT_NAME).sort()).toEqual(
+      REQUIRED_MATTER_FIELDS.map((f) => f.key).sort(),
+    );
+    expect(REQUIRED_FIELD_INPUT_NAME.venue).toBe("venueId");
+    expect(REQUIRED_FIELD_INPUT_NAME.client).toBe("clientId");
+    expect(REQUIRED_FIELD_INPUT_NAME.description).toBe("description");
   });
 });

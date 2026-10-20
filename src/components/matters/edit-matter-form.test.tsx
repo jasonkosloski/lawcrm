@@ -292,7 +292,7 @@ describe("EditMatterForm — venue, filed/trial dates, required fields", () => {
         canChangeLead
       />
     );
-    expect(screen.getByLabelText("Venue")).toHaveValue("Old Court");
+    expect(screen.getByLabelText("Venue")).toHaveValue("Old Court (archived)");
     await user.click(screen.getByLabelText("Venue"));
     expect(await screen.findByRole("option", { name: /\(archived\)/i })).toBeTruthy();
   });

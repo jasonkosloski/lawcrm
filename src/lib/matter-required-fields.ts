@@ -49,3 +49,34 @@ export function clearedRequired(
     .filter(isRequiredMatterField)
     .filter((k) => !isEmpty(before[k]) && isEmpty(after[k]));
 }
+
+/** Required-field key -> the form control's `name` (and error key). */
+export const REQUIRED_FIELD_INPUT_NAME: Record<RequiredMatterField, string> = {
+  venue: "venueId",
+  client: "clientId",
+  caseNumber: "caseNumber",
+  court: "court",
+  filedDate: "filedDate",
+  trialDate: "trialDate",
+  incidentDate: "incidentDate",
+  opposingParty: "opposingParty",
+  opposingFirm: "opposingFirm",
+  description: "description",
+};
+
+/**
+ * The keys an area insists on, as the forms enforce them. Incident date only
+ * counts when the area tracks SOL (the only time the field is shown; the
+ * server mirrors this).
+ */
+export function requiredKeysFor(
+  area: {
+    requiredMatterFields: readonly string[];
+    hasStatuteOfLimitations: boolean;
+  } | null,
+): RequiredMatterField[] {
+  if (!area) return [];
+  return area.requiredMatterFields
+    .filter(isRequiredMatterField)
+    .filter((k) => k !== "incidentDate" || area.hasStatuteOfLimitations);
+}

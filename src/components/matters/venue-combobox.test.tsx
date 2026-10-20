@@ -130,4 +130,28 @@ describe("VenueCombobox", () => {
     expect(create).not.toHaveBeenCalled();
     expect(screen.getByText("State is required.")).toBeTruthy();
   });
+
+  test("an archived current venue shows as 'Name (archived)' in the input; typing clears it", async () => {
+    const u = userEvent.setup();
+    const old: VenueOption = { ...aurora, id: "v9", name: "Old Court", isActive: false };
+    function Fixed() {
+      const [value, setValue] = useState<string | null>("v9");
+      return (
+        <VenueCombobox
+          name="venueId"
+          venues={[aurora, old]}
+          value={value}
+          onChange={(v) => setValue(v?.id ?? null)}
+          canAdd={false}
+          defaultState="CO"
+        />
+      );
+    }
+    render(<Fixed />);
+    const input = screen.getByRole("combobox") as HTMLInputElement;
+    expect(input.value).toBe("Old Court (archived)");
+    expect(hidden().value).toBe("v9");
+    await u.type(input, "x");
+    expect(hidden().value).toBe("");
+  });
 });

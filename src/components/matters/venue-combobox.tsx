@@ -26,6 +26,11 @@ export function venueLabel(v: VenueOption): string {
   return place ? `${v.name} · ${place}` : v.name;
 }
 
+/** Input text for a selected venue; an archived one says so. */
+function inputText(v: VenueOption): string {
+  return v.isActive ? v.name : `${v.name} (archived)`;
+}
+
 const ADD_VALUE = "__add_venue__";
 
 type Props = {
@@ -53,11 +58,11 @@ export function VenueCombobox({
   const all = [...venues, ...added.filter((a) => !venues.some((v) => v.id === a.id))];
   const current = value ? (all.find((v) => v.id === value) ?? null) : null;
 
-  const [text, setText] = useState(current?.name ?? "");
+  const [text, setText] = useState(current ? inputText(current) : "");
   const [prevValue, setPrevValue] = useState(value);
   if (value !== prevValue) {
     setPrevValue(value);
-    if (current) setText(current.name);
+    if (current) setText(inputText(current));
   }
   const [listOpen, setListOpen] = useState(false);
 
@@ -80,7 +85,7 @@ export function VenueCombobox({
   const showNoMatch = !canAdd && filtering && shown.length === 0;
 
   function pick(v: VenueOption) {
-    setText(v.name);
+    setText(inputText(v));
     setListOpen(false);
     onChange(v);
   }
