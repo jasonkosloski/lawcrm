@@ -31,7 +31,7 @@ const ADHOC = "__adhoc";
 
 const field =
   "h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30";
-const label = "text-2xs font-mono uppercase tracking-wider text-ink-4";
+const label = "text-xs font-medium text-ink-2";
 
 export function NewRequestComposer({
   scope,
@@ -246,7 +246,7 @@ export function NewRequestComposer({
         <button
           type="submit"
           disabled={isPending}
-          className="h-8 px-3 rounded-md bg-brand-500 text-white text-xs font-medium hover:bg-brand-600 disabled:opacity-50"
+          className="h-8 px-3 rounded-md bg-brand-700 text-white text-xs font-medium hover:bg-brand-900 disabled:opacity-50"
         >
           {isPending ? "Creating…" : "Create request"}
         </button>

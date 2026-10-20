@@ -1,7 +1,7 @@
 # ADR-004: Fraunces for display only, Inter for all UI chrome
 
 **Date:** 2026-04-24
-**Status:** Accepted
+**Status:** Accepted, refined by [ADR-055](055-ui-system-v2-legibility-floor-and-colour-on-meaning.md) (no Fraunces on KPI numbers; no JetBrains Mono outside code)
 
 **Context:** The design uses three fonts. Fraunces is a personality font that should be used sparingly.
 

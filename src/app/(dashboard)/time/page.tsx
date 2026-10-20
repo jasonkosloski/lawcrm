@@ -93,7 +93,10 @@ export default async function TimePage({ searchParams }: PageProps<"/time">) {
   // dates become the date-only keys the query groups by.
   const week = calendarWeekInTz(focal, userTz);
   const dayKeys = week.days.map(dayKeyFromNoonUtc);
-  const weekTime = await getMyWeekTime(dayKeys);
+  const [weekTime, goals] = await Promise.all([
+    getMyWeekTime(dayKeys),
+    getFirmGoals(),
+  ]);
   const todayKey = dateKeyInTz(new Date(), userTz);
 
   return (
@@ -104,7 +107,11 @@ export default async function TimePage({ searchParams }: PageProps<"/time">) {
       />
       <div className="flex-1 flex flex-col min-h-0 animate-page-enter">
         <TimeToolbar view={view} focal={focal} userTz={userTz} />
-        <TimeWeekView week={weekTime} todayKey={todayKey} />
+        <TimeWeekView
+          week={weekTime}
+          todayKey={todayKey}
+          dailyHoursGoal={goals.dailyHoursGoal}
+        />
       </div>
     </>
   );

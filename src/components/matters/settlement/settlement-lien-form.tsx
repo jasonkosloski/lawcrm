@@ -93,7 +93,7 @@ export function SettlementLienForm({
         <div className="flex flex-col gap-1">
           <label
             htmlFor={`${uid}-lienholder`}
-            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+            className="text-2xs font-medium text-ink-3"
           >
             Lienholder <span className="text-warn">*</span>
           </label>
@@ -112,7 +112,7 @@ export function SettlementLienForm({
         <div className="flex flex-col gap-1">
           <label
             htmlFor={`${uid}-type`}
-            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+            className="text-2xs font-medium text-ink-3"
           >
             Type
           </label>
@@ -137,7 +137,7 @@ export function SettlementLienForm({
         <div className="flex flex-col gap-1">
           <label
             htmlFor={`${uid}-amount`}
-            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+            className="text-2xs font-medium text-ink-3"
           >
             Original amount <span className="text-warn">*</span>
           </label>

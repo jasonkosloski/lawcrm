@@ -50,8 +50,7 @@ export function PageSkeleton({
           data-testid="skeleton-topbar"
           className="flex flex-col shrink-0 bg-card border-b border-line"
         >
-          <div className="brand-gradient-line" />
-          <div className="flex items-center justify-between px-4 py-2.5">
+          <div className="flex min-h-16 items-center justify-between px-4 py-2.5">
             <div className="flex flex-col gap-1.5">
               <Skeleton className="h-2.5 w-24" />
               <Skeleton className="h-6 w-44" />

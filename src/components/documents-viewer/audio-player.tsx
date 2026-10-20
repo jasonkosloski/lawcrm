@@ -72,7 +72,7 @@ export function AudioPlayer({
           }}
         />
         <div className="flex items-center gap-1">
-          <span className="mr-1 text-2xs uppercase tracking-wider text-ink-4">
+          <span className="mr-1 text-2xs font-medium text-ink-3">
             Speed
           </span>
           {RATES.map((r) => (
@@ -83,7 +83,7 @@ export function AudioPlayer({
               aria-pressed={rate === r}
               className={
                 rate === r
-                  ? "rounded-md border border-brand-200 bg-brand-soft px-2 py-1 text-xs font-medium text-brand-700"
+                  ? "rounded-md bg-paper-2 px-2 py-1 text-xs font-medium text-ink"
                   : "rounded-md border border-line bg-white px-2 py-1 text-xs text-ink-3 hover:border-brand-300 hover:text-brand-700"
               }
             >

@@ -237,7 +237,7 @@ export function InviteMemberComposer({
               disabled={isPending}
               className={cn(
                 "inline-flex items-center h-8 px-3 rounded-md text-xs font-medium",
-                "bg-brand-500 text-white hover:bg-brand-600 transition-colors",
+                "bg-brand-700 text-white hover:bg-brand-900 transition-colors",
                 "disabled:opacity-60 disabled:cursor-not-allowed"
               )}
             >

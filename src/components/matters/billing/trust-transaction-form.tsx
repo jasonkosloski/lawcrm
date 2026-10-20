@@ -104,7 +104,7 @@ export function TrustTransactionForm({ matterId }: { matterId: string }) {
         <div className="flex flex-col gap-1">
           <label
             htmlFor={`${ids}-type`}
-            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+            className="text-2xs font-medium text-ink-3"
           >
             Type <span className="text-warn">*</span>
           </label>
@@ -125,7 +125,7 @@ export function TrustTransactionForm({ matterId }: { matterId: string }) {
         <div className="flex flex-col gap-1">
           <label
             htmlFor={`${ids}-amount`}
-            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+            className="text-2xs font-medium text-ink-3"
           >
             Amount <span className="text-warn">*</span>
           </label>
@@ -150,7 +150,7 @@ export function TrustTransactionForm({ matterId }: { matterId: string }) {
         <div className="flex flex-col gap-1 col-span-2">
           <label
             htmlFor={`${ids}-description`}
-            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+            className="text-2xs font-medium text-ink-3"
           >
             Description <span className="text-warn">*</span>
           </label>
@@ -175,7 +175,7 @@ export function TrustTransactionForm({ matterId }: { matterId: string }) {
         <div className="flex flex-col gap-1">
           <label
             htmlFor={`${ids}-reference`}
-            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+            className="text-2xs font-medium text-ink-3"
           >
             Reference
           </label>
@@ -191,7 +191,7 @@ export function TrustTransactionForm({ matterId }: { matterId: string }) {
         <div className="flex flex-col gap-1">
           <label
             htmlFor={`${ids}-date`}
-            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+            className="text-2xs font-medium text-ink-3"
           >
             Date
           </label>
@@ -225,7 +225,7 @@ export function TrustTransactionForm({ matterId }: { matterId: string }) {
           disabled={isPending}
           className={cn(
             "inline-flex items-center h-8 px-3 rounded-md text-xs font-medium",
-            "bg-brand-500 text-white hover:bg-brand-600 transition-colors",
+            "bg-brand-700 text-white hover:bg-brand-900 transition-colors",
             "disabled:opacity-60 disabled:cursor-not-allowed"
           )}
         >

@@ -146,7 +146,7 @@ function CategorySection({
   return (
     <section>
       <div className="flex items-center gap-2 mb-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-3">
+        <h2 className="text-2xs font-medium text-ink-3">
           {PARTY_CATEGORY_LABEL[category]}
         </h2>
         <span className="text-2xs font-mono text-ink-4">{sortedRows.length}</span>

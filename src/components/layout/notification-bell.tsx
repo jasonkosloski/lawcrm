@@ -100,7 +100,7 @@ export function NotificationBell() {
         {hasUnread ? <BellDot size={14} /> : <Bell size={14} />}
         {hasUnread && (
           <span
-            className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-warn text-white text-[10px] font-mono font-medium leading-4 text-center"
+            className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-warn text-white text-3xs font-mono font-medium leading-4 text-center"
             aria-hidden="true"
           >
             {unread > 99 ? "99+" : unread}
@@ -120,7 +120,7 @@ export function NotificationBell() {
           )}
         >
           <div className="sticky top-0 bg-white border-b border-line px-3 py-2 flex items-center justify-between">
-            <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+            <div className="text-2xs font-medium text-ink-3">
               Notifications
               {hasUnread && (
                 <span className="ml-1.5 text-warn">{unread} unread</span>
@@ -177,7 +177,7 @@ export function NotificationBell() {
             <Link
               href="/notifications"
               onClick={() => setOpen(false)}
-              className="text-2xs font-mono uppercase tracking-wider text-brand-700 hover:underline underline-offset-2"
+              className="text-2xs font-medium text-brand-700 hover:underline underline-offset-2"
             >
               View all notifications
             </Link>

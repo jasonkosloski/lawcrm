@@ -111,7 +111,7 @@ export function EventNoteComposer({
 
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <div className="flex items-center gap-0.5 rounded-md border border-line bg-white p-0.5">
+          <div className="flex items-center gap-0.5 rounded-md bg-paper-2 p-0.5">
             {NOTE_TYPES.map((t) => (
               <button
                 key={t}
@@ -120,8 +120,8 @@ export function EventNoteComposer({
                 className={cn(
                   "text-2xs font-medium px-1.5 py-0.5 rounded transition-colors",
                   type === t
-                    ? "bg-brand-500 text-white"
-                    : "text-ink-3 hover:text-brand-700"
+                    ? "bg-white text-ink shadow-sm"
+                    : "text-ink-3 hover:text-ink"
                 )}
               >
                 {NOTE_TYPE_LABEL[t]}
@@ -163,8 +163,8 @@ export function EventNoteComposer({
             type="submit"
             disabled={isPending || html.trim().length === 0}
             className={cn(
-              "inline-flex items-center h-7 px-3 rounded-md text-xs font-medium bg-brand-500 text-white",
-              "hover:bg-brand-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              "inline-flex items-center h-7 px-3 rounded-md text-xs font-medium bg-brand-700 text-white hover:bg-brand-900",
+              "transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             )}
           >
             {isPending ? "Saving…" : "Save note"}

@@ -100,7 +100,7 @@ export function TemplateLibrary({
             onClick={openCreate}
             className={cn(
               "inline-flex items-center gap-2 h-9 px-3 text-xs font-medium",
-              "rounded-md bg-brand-500 text-white hover:bg-brand-600 transition-colors"
+              "rounded-md bg-brand-700 text-white hover:bg-brand-900 transition-colors"
             )}
           >
             <Plus size={13} />
@@ -130,7 +130,7 @@ export function TemplateLibrary({
         return (
           <section key={category} className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
-              <h2 className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+              <h2 className="text-2xs font-medium text-ink-3">
                 {templateCategoryLabel(category)}
               </h2>
               <span className="text-2xs font-mono text-ink-4">
@@ -154,7 +154,7 @@ export function TemplateLibrary({
 
       {archived.length > 0 && (
         <section className="flex flex-col gap-2">
-          <h2 className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+          <h2 className="text-2xs font-medium text-ink-3">
             Archived ({archived.length})
           </h2>
           <div className="flex flex-col gap-1.5">

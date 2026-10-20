@@ -25,7 +25,7 @@ export function Section({
 }) {
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+      <h2 className="text-2xs font-medium text-ink-3">
         {title}
       </h2>
       <div className="flex flex-col gap-3">{children}</div>

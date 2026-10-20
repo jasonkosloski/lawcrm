@@ -55,7 +55,7 @@ export function RequestRow({
         {badge && (
           <span
             className={cn(
-              "inline-block text-2xs font-medium px-2 py-0.5 rounded-full border shrink-0",
+              "inline-block text-2xs font-medium px-2 py-0.5 rounded-full shrink-0",
               badge.overdue
                 ? "bg-warn-soft text-warn border-warn-border"
                 : "bg-paper-2 text-ink-3 border-line"

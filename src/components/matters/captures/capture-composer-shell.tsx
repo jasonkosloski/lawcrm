@@ -131,8 +131,8 @@ export function CaptureComposerShell({
                 type="submit"
                 disabled={isPending || !hasContent}
                 className={cn(
-                  "inline-flex items-center h-7 px-3 rounded-md text-xs font-medium bg-brand-500 text-white",
-                  "hover:bg-brand-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  "inline-flex items-center h-7 px-3 rounded-md text-xs font-medium bg-brand-700 text-white",
+                  "hover:bg-brand-900 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 )}
               >
                 {isPending

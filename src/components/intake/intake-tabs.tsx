@@ -51,7 +51,7 @@ export function IntakeTabs({
               className={cn(
                 "px-3 py-2.5 text-xs font-medium -mb-px border-b-2 transition-colors",
                 active
-                  ? "text-brand-700 border-brand-500"
+                  ? "text-ink border-ink"
                   : "text-ink-3 border-transparent hover:text-ink hover:border-line"
               )}
             >

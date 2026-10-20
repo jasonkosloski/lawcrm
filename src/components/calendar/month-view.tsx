@@ -6,6 +6,7 @@
  * "+N more" tail.
  */
 
+import { CalendarClock } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { EventLink } from "./event-link";
@@ -73,7 +74,7 @@ export function MonthView({
             <div
               key={w}
               className={cn(
-                "text-2xs font-mono uppercase tracking-wider text-center py-2 border-l border-line first:border-l-0",
+                "text-2xs font-mono text-center py-2 border-l border-line first:border-l-0",
                 isWeekendLabel ? "text-ink-4/80 bg-paper" : "text-ink-4"
               )}
             >
@@ -117,7 +118,7 @@ export function MonthView({
                 className={cn(
                   "inline-flex items-center justify-center w-5 h-5 rounded-full text-2xs font-mono self-end shrink-0 transition-colors",
                   isToday
-                    ? "bg-brand-500 text-white font-semibold hover:bg-brand-600"
+                    ? "bg-brand-700 text-white font-semibold hover:bg-brand-900"
                     : isInMonth
                       ? "text-ink-2 hover:bg-brand-tint hover:text-brand-700"
                       : "text-ink-4 hover:bg-brand-tint hover:text-brand-700"
@@ -218,10 +219,9 @@ function EventPill({
 function DeadlinePill({ deadline }: { deadline: CalendarDeadlineRow }) {
   const cls =
     deadline.deadlineKind === "critical"
-      ? "bg-warn-soft text-warn border-warn-border"
-      : deadline.deadlineKind === "auto_rule"
-        ? "bg-brand-soft text-brand-700 border-brand-200"
-        : "bg-paper-2 text-ink-3 border-line";
+      ? "bg-danger-soft text-danger border-danger/30"
+      : "bg-white text-ink-2 border-warn/40";
+  const critical = deadline.deadlineKind === "critical";
   return (
     <Link
       href={`/matters/${deadline.matterId}/deadlines`}
@@ -231,7 +231,12 @@ function DeadlinePill({ deadline }: { deadline: CalendarDeadlineRow }) {
       )}
       title={`${deadline.title} — ${deadline.matterName}`}
     >
-      <span className="shrink-0">⚠</span>
+      <CalendarClock
+        size={11}
+        strokeWidth={2}
+        aria-label="Due"
+        className={cn("shrink-0", critical ? "text-danger" : "text-warn")}
+      />
       <span className="truncate">{deadline.title}</span>
     </Link>
   );

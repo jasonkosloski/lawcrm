@@ -33,7 +33,7 @@ const STATUS_META: Record<string, string> = {
   approved: "bg-brand-soft/60 text-brand-700 border-brand-200",
   sent: "bg-brand-soft text-brand-700 border-brand-200",
   partial: "bg-warn-soft text-warn border-warn-border",
-  overdue: "bg-warn-soft text-warn border-warn-border",
+  overdue: "bg-danger-soft text-danger border-line",
   paid: "bg-ok-soft text-ok border-line",
   void: "bg-paper-2 text-ink-4 border-line",
 };
@@ -112,9 +112,7 @@ export function InvoicePreview({
           <div className="px-6 py-4 border-b border-line">
             <div className="flex items-start justify-between gap-6">
               <div className="flex items-start gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0 border border-brand-100">
-                  <Building2 size={18} />
-                </div>
+                <Building2 size={20} strokeWidth={1.75} className="text-ink-4 shrink-0 mt-0.5" />
                 <div className="min-w-0">
                   <div className="text-base font-display font-medium text-ink truncate">
                     {firm.name}
@@ -134,7 +132,7 @@ export function InvoicePreview({
                 </div>
               </div>
               <div className="text-right shrink-0">
-                <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+                <div className="text-2xs font-medium text-ink-3">
                   {headerLabel}
                 </div>
                 <div className="text-lg font-display font-medium text-ink mt-0.5">
@@ -157,7 +155,7 @@ export function InvoicePreview({
             <div>
               {isInternal ? (
                 <>
-                  <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 mb-1">
+                  <div className="text-2xs font-medium text-ink-3 mb-1">
                     For matter file
                   </div>
                   <div className="text-sm font-medium text-ink">
@@ -169,7 +167,7 @@ export function InvoicePreview({
                     unaffected.
                   </div>
                   <div className="text-2xs text-ink-4 mt-2">
-                    <span className="font-mono uppercase tracking-wider">
+                    <span className="font-medium">
                       Re:
                     </span>{" "}
                     {invoice.matterName}
@@ -177,7 +175,7 @@ export function InvoicePreview({
                 </>
               ) : (
                 <>
-                  <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 mb-1">
+                  <div className="text-2xs font-medium text-ink-3 mb-1">
                     Bill to
                   </div>
                   <div className="text-sm font-medium text-ink">
@@ -209,7 +207,7 @@ export function InvoicePreview({
                     </div>
                   )}
                   <div className="text-2xs text-ink-4 mt-2">
-                    <span className="font-mono uppercase tracking-wider">
+                    <span className="font-medium">
                       Re:
                     </span>{" "}
                     {invoice.matterName}
@@ -252,7 +250,7 @@ export function InvoicePreview({
 
           {/* Line items */}
           <div className="px-6 py-4 border-b border-line">
-            <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 mb-2">
+            <div className="text-2xs font-medium text-ink-3 mb-2">
               Services
             </div>
             {invoice.lineItems.length === 0 ? (
@@ -265,19 +263,19 @@ export function InvoicePreview({
               <table className="w-full text-2xs">
                 <thead>
                   <tr className="text-ink-4 border-b border-line">
-                    <th className="text-left font-mono uppercase tracking-wider pb-1.5">
+                    <th className="text-left font-medium pb-1.5">
                       Date
                     </th>
-                    <th className="text-left font-mono uppercase tracking-wider pb-1.5">
+                    <th className="text-left font-medium pb-1.5">
                       Description
                     </th>
-                    <th className="text-right font-mono uppercase tracking-wider pb-1.5">
+                    <th className="text-right font-medium pb-1.5">
                       Hrs
                     </th>
-                    <th className="text-right font-mono uppercase tracking-wider pb-1.5">
+                    <th className="text-right font-medium pb-1.5">
                       Rate
                     </th>
-                    <th className="text-right font-mono uppercase tracking-wider pb-1.5">
+                    <th className="text-right font-medium pb-1.5">
                       Amount
                     </th>
                   </tr>
@@ -348,22 +346,22 @@ export function InvoicePreview({
               the eye groups them as parallel sections. */}
           {invoice.expenseLineItems.length > 0 && (
             <div className="px-6 py-4 border-b border-line">
-              <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 mb-2">
+              <div className="text-2xs font-medium text-ink-3 mb-2">
                 Expenses
               </div>
               <table className="w-full text-2xs">
                 <thead>
                   <tr className="text-ink-4 border-b border-line">
-                    <th className="text-left font-mono uppercase tracking-wider pb-1.5">
+                    <th className="text-left font-medium pb-1.5">
                       Date
                     </th>
-                    <th className="text-left font-mono uppercase tracking-wider pb-1.5">
+                    <th className="text-left font-medium pb-1.5">
                       Description
                     </th>
-                    <th className="text-left font-mono uppercase tracking-wider pb-1.5">
+                    <th className="text-left font-medium pb-1.5">
                       Category
                     </th>
-                    <th className="text-right font-mono uppercase tracking-wider pb-1.5">
+                    <th className="text-right font-medium pb-1.5">
                       Amount
                     </th>
                   </tr>
@@ -433,23 +431,23 @@ export function InvoicePreview({
               paidAmount without producing a TrustTransaction row). */}
           {invoice.payments.length > 0 && (
             <div className="px-6 py-4 border-b border-line">
-              <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 mb-2 flex items-center gap-1.5">
+              <div className="text-2xs font-medium text-ink-3 mb-2 flex items-center gap-1.5">
                 <Wallet size={11} />
                 Payments received
               </div>
               <table className="w-full text-2xs">
                 <thead>
                   <tr className="text-ink-4 border-b border-line">
-                    <th className="text-left font-mono uppercase tracking-wider pb-1.5">
+                    <th className="text-left font-medium pb-1.5">
                       Date
                     </th>
-                    <th className="text-left font-mono uppercase tracking-wider pb-1.5">
+                    <th className="text-left font-medium pb-1.5">
                       Source
                     </th>
-                    <th className="text-left font-mono uppercase tracking-wider pb-1.5">
+                    <th className="text-left font-medium pb-1.5">
                       Reference
                     </th>
-                    <th className="text-right font-mono uppercase tracking-wider pb-1.5">
+                    <th className="text-right font-medium pb-1.5">
                       Amount
                     </th>
                   </tr>
@@ -506,7 +504,7 @@ export function InvoicePreview({
           {/* Notes */}
           {invoice.notes && (
             <div className="px-6 py-4">
-              <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 mb-1 flex items-center gap-1.5">
+              <div className="text-2xs font-medium text-ink-3 mb-1 flex items-center gap-1.5">
                 <FileText size={11} />
                 Notes
               </div>

@@ -43,7 +43,7 @@ export function EventNotesSection({
   return (
     <div className="pt-3 border-t border-line flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+        <div className="text-2xs font-medium text-ink-3">
           Notes {notes.length > 0 && `(${notes.length})`}
         </div>
         {matterId && notes.length > 0 && (
@@ -141,11 +141,11 @@ function EventNoteItem({ note }: { note: EventNote }) {
           <span className="text-2xs font-medium text-ink-2 truncate">
             {note.authorName}
           </span>
-          <span className="text-[10px] text-ink-4 font-mono">
+          <span className="text-3xs text-ink-4 font-mono">
             {formatDate(note.createdAt, "datetime", tz)}
           </span>
         </div>
-        <span className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full border bg-white text-ink-3 border-line shrink-0">
+        <span className="inline-block text-3xs font-medium px-1.5 py-0.5 rounded-full border bg-white text-ink-3 border-line shrink-0">
           {typeLabel}
         </span>
         {canPinNotes && (
@@ -190,8 +190,8 @@ function EventNoteItem({ note }: { note: EventNote }) {
           "[&_h3]:text-2xs [&_h3]:font-semibold [&_h3]:mt-1 [&_h3]:mb-0.5",
           "[&_ul]:my-1 [&_ol]:my-1 [&_li]:text-xs [&_ul]:pl-5 [&_ol]:pl-5 [&_ul]:list-disc [&_ol]:list-decimal",
           "[&_blockquote]:border-l-2 [&_blockquote]:border-line [&_blockquote]:pl-2 [&_blockquote]:text-ink-3 [&_blockquote]:italic",
-          "[&_code]:bg-paper-2 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[11px] [&_code]:font-mono",
-          "[&_pre]:bg-paper-2 [&_pre]:p-1.5 [&_pre]:rounded [&_pre]:text-[11px]"
+          "[&_code]:bg-paper-2 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-3xs [&_code]:font-mono",
+          "[&_pre]:bg-paper-2 [&_pre]:p-1.5 [&_pre]:rounded [&_pre]:text-3xs"
         )}
         dangerouslySetInnerHTML={{ __html: note.content }}
       />

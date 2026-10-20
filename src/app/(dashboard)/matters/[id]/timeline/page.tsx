@@ -190,7 +190,7 @@ export default async function MatterTimelinePage({
               className={cn(
                 "inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full text-2xs font-medium border transition-colors",
                 active
-                  ? "bg-brand-500 text-white border-brand-500"
+                  ? "bg-paper-2 text-ink border-ink-5"
                   : count === 0
                     ? "bg-paper text-ink-4 border-line opacity-60 cursor-default pointer-events-none"
                     : "bg-white text-ink-2 border-line hover:border-brand-300 hover:text-brand-700"
@@ -225,7 +225,7 @@ export default async function MatterTimelinePage({
             <ul className="flex flex-col">
               {groups.map(({ key, label, items }) => (
                 <li key={key} className="border-b border-line last:border-b-0">
-                  <div className="px-4 py-1.5 bg-paper-2/50 text-2xs font-mono uppercase tracking-wider text-ink-4 border-b border-line">
+                  <div className="px-4 py-1.5 bg-paper-2/50 text-2xs font-medium text-ink-3 border-b border-line">
                     {label}
                   </div>
                   <ul className="flex flex-col">

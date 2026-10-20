@@ -17,7 +17,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SortableHead } from "@/components/matters/sortable-header";
-import { FEE_LABELS, formatDeadlineDays } from "@/lib/matters-filters";
+import { FEE_LABELS } from "@/lib/matters-filters";
+import { DueLabel } from "@/components/shared/due-label";
+
+/** Zero trust reads grey; a shortfall reads danger. */
+function trustTone(v: number | null): string {
+  if (!v) return "text-ink-4";
+  return v < 0 ? "text-danger" : "text-ink";
+}
 import { formatMoney } from "@/lib/format-money";
 import type { MatterListRow } from "@/lib/queries/matters";
 
@@ -128,24 +135,20 @@ export function MattersTable({
                   <StageChip stage={m.stage} isTerminal={m.stageIsTerminal} />
                 </TableCell>
                 {showTrust && (
-                  <TableCell className="text-right font-mono text-xs text-ink">
+                  <TableCell
+                    className={"text-right font-mono text-xs " + trustTone(m.trustBalance)}
+                  >
                     {formatMoney(m.trustBalance ?? 0)}
                   </TableCell>
                 )}
                 <TableCell className="text-xs text-ink-3">
                   {FEE_LABELS[m.feeStructure] ?? m.feeStructure}
                 </TableCell>
-                <TableCell className="text-right pr-4 font-mono text-2xs">
+                <TableCell className="text-right pr-4">
                   {m.nextDeadlineDays === null ? (
                     <span className="text-ink-4">—</span>
-                  ) : m.nextDeadlineDays <= 7 ? (
-                    <span className="text-warn font-medium">
-                      {formatDeadlineDays(m.nextDeadlineDays)}
-                    </span>
                   ) : (
-                    <span className="text-ink-3">
-                      {formatDeadlineDays(m.nextDeadlineDays)}
-                    </span>
+                    <DueLabel dueDate={m.nextDeadlineDate} days={m.nextDeadlineDays} />
                   )}
                 </TableCell>
               </TableRow>
@@ -202,21 +205,12 @@ function MatterCard({
           </div>
           <div className="flex flex-col items-end gap-1 shrink-0">
             {showTrust && (
-              <span className="font-mono text-xs text-ink">
+              <span className={"font-mono text-xs " + trustTone(m.trustBalance)}>
                 {formatMoney(m.trustBalance ?? 0)}
               </span>
             )}
             {m.nextDeadlineDays !== null && (
-              <span
-                className={
-                  "font-mono text-2xs " +
-                  (m.nextDeadlineDays <= 7
-                    ? "text-warn font-medium"
-                    : "text-ink-3")
-                }
-              >
-                {formatDeadlineDays(m.nextDeadlineDays)}
-              </span>
+              <DueLabel dueDate={m.nextDeadlineDate} days={m.nextDeadlineDays} />
             )}
           </div>
         </div>

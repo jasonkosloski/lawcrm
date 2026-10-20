@@ -235,7 +235,7 @@ export function FlagComposer({
       <div className="flex flex-col gap-1">
         <label
           htmlFor={id}
-          className="text-2xs uppercase tracking-wider text-ink-4"
+          className="text-2xs font-medium text-ink-3"
         >
           {label}
         </label>
@@ -296,7 +296,7 @@ export function FlagComposer({
         <div className="mb-2 flex flex-col gap-1">
           <label
             htmlFor={`${uid}-quote`}
-            className="text-2xs uppercase tracking-wider text-ink-4"
+            className="text-2xs font-medium text-ink-3"
           >
             Quoted text
           </label>
@@ -327,7 +327,7 @@ export function FlagComposer({
           <div className="flex flex-col gap-1">
             <label
               htmlFor={`${uid}-page`}
-              className="text-2xs uppercase tracking-wider text-ink-4"
+              className="text-2xs font-medium text-ink-3"
             >
               {editing ? "Page" : "Page (blank = whole document)"}
             </label>
@@ -346,7 +346,7 @@ export function FlagComposer({
           <div className="flex flex-col gap-1">
             <label
               htmlFor={`${uid}-end-page`}
-              className="text-2xs uppercase tracking-wider text-ink-4"
+              className="text-2xs font-medium text-ink-3"
             >
               To page (optional)
             </label>
@@ -364,7 +364,7 @@ export function FlagComposer({
         <div className="flex flex-col gap-1">
           <label
             htmlFor={`${uid}-category`}
-            className="text-2xs uppercase tracking-wider text-ink-4"
+            className="text-2xs font-medium text-ink-3"
           >
             Category
           </label>
@@ -406,7 +406,7 @@ export function FlagComposer({
           type="button"
           onClick={submit}
           disabled={pending}
-          className="inline-flex h-7 items-center rounded-md bg-brand-500 px-3 text-xs font-medium text-white transition-colors hover:bg-brand-600 disabled:opacity-60"
+          className="inline-flex h-7 items-center rounded-md bg-brand-700 px-3 text-xs font-medium text-white transition-colors hover:bg-brand-900 disabled:opacity-60"
         >
           {pending ? "Saving…" : editing ? "Save changes" : "Add flag"}
         </button>

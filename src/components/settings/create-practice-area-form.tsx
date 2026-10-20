@@ -115,7 +115,7 @@ export function CreatePracticeAreaForm({
             type="submit"
             disabled={isPending}
             className={cn(
-              "inline-flex items-center h-8 px-3 rounded-md text-xs font-medium bg-brand-500 text-white",
+              "inline-flex items-center h-8 px-3 rounded-md text-xs font-medium bg-brand-700 hover:bg-brand-900 text-white",
               "hover:bg-brand-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             )}
           >

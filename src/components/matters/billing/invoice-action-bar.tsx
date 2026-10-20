@@ -200,7 +200,7 @@ export function InvoiceActionBar({
 
   const primaryButtonClass = cn(
     "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-2xs font-medium",
-    "bg-brand-500 text-white hover:bg-brand-600 transition-colors",
+    "bg-brand-700 text-white hover:bg-brand-900 transition-colors",
     "disabled:opacity-60 disabled:cursor-not-allowed"
   );
 
@@ -244,7 +244,7 @@ export function InvoiceActionBar({
             // becomes secondary in that case.
             showApplyTrust
               ? "border border-line bg-white text-ink hover:border-brand-300 hover:text-brand-700"
-              : "bg-brand-500 text-white hover:bg-brand-600",
+              : "bg-brand-700 text-white hover:bg-brand-900",
             "transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           )}
           title="Log a payment received against this invoice (check, ACH, cash, card, trust, etc.)"

@@ -58,7 +58,7 @@ export function ErrorCard({
 
                 {(message || digest) && (
                   <div className="mb-4 rounded-md border border-line bg-paper-2/40 px-3 py-2">
-                    <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 mb-1">
+                    <div className="text-2xs font-medium text-ink-3 mb-1">
                       Error
                     </div>
                     {message && (

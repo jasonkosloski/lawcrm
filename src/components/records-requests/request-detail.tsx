@@ -76,9 +76,9 @@ export type RequestDetailPermissions = {
 const ADHOC = "__adhoc";
 const field =
   "h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 disabled:opacity-60";
-const label = "text-2xs font-mono uppercase tracking-wider text-ink-4";
+const label = "text-xs font-medium text-ink-2";
 const primaryBtn =
-  "h-8 px-3 rounded-md bg-brand-500 text-white text-xs font-medium hover:bg-brand-600 disabled:opacity-50";
+  "h-8 px-3 rounded-md bg-brand-700 text-white text-xs font-medium hover:bg-brand-900 disabled:opacity-50";
 const outlineBtn =
   "h-8 px-3 rounded-md border border-line bg-white text-xs font-medium text-ink-2 hover:border-brand-300 hover:text-brand-700 disabled:opacity-50";
 
@@ -135,7 +135,7 @@ function Section({
 }) {
   return (
     <section className="flex flex-col gap-2 border-t border-line pt-3">
-      <h3 className="text-2xs font-semibold uppercase tracking-wider text-ink-3">
+      <h3 className="text-2xs font-medium text-ink-3">
         {title}
       </h3>
       {children}
@@ -409,13 +409,13 @@ export function RequestDetail({
               {detail.custodianName} · {detail.typeName}
             </p>
           </div>
-          <span className="inline-block text-2xs font-medium px-2 py-0.5 rounded-full border bg-paper-2 text-ink-3 border-line shrink-0">
+          <span className="inline-block text-2xs font-medium px-2 py-0.5 rounded-full bg-paper-2 text-ink-3 border-line shrink-0">
             {RECORDS_STATUS_LABEL[detail.status]}
           </span>
           {badge && (
             <span
               className={cn(
-                "inline-block text-2xs font-medium px-2 py-0.5 rounded-full border shrink-0",
+                "inline-block text-2xs font-medium px-2 py-0.5 rounded-full shrink-0",
                 badge.overdue
                   ? "bg-warn-soft text-warn border-warn-border"
                   : "bg-paper-2 text-ink-3 border-line"
@@ -802,7 +802,7 @@ function DateSummary({
     >
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1" data-testid="sent-tile">
-          <span className="text-2xs font-semibold uppercase tracking-wider text-ink-3">
+          <span className="text-2xs font-medium text-ink-3">
             Sent
           </span>
           {sentAt ? (
@@ -832,7 +832,7 @@ function DateSummary({
           )}
           data-testid="due-tile"
         >
-          <span className="text-2xs font-semibold uppercase tracking-wider text-ink-3">
+          <span className="text-2xs font-medium text-ink-3">
             Response due
           </span>
           {responseDueDate ? (
@@ -881,7 +881,7 @@ function DateSummary({
           ] as const
         ).map(([k, v]) => (
           <div key={k} className="flex flex-col">
-            <dt className="text-2xs font-semibold uppercase tracking-wider text-ink-3">{k}</dt>
+            <dt className="text-2xs font-medium text-ink-3">{k}</dt>
             <dd className="text-ink">{v ? formatDateOnly(v) : "—"}</dd>
           </div>
         ))}

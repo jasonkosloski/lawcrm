@@ -58,7 +58,7 @@ export function StageManager({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col">
-        <div className="grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-2 px-2 pb-1.5 text-2xs font-mono uppercase tracking-wider text-ink-4 border-b border-line">
+        <div className="grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-2 px-2 pb-1.5 text-2xs font-medium text-ink-4 border-b border-line">
           <span className="w-12" />
           <span>Name</span>
           <span className="text-center">Terminal</span>
@@ -85,7 +85,7 @@ export function StageManager({
 
       {archived.length > 0 && (
         <div className="pt-3 border-t border-line flex flex-col">
-          <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 mb-1">
+          <div className="text-2xs font-medium text-ink-3 mb-1">
             Archived ({archived.length})
           </div>
           {archived.map((s) => (
@@ -328,7 +328,7 @@ function AddStageForm({ practiceAreaId }: { practiceAreaId: string }) {
         type="submit"
         disabled={isPending}
         className={cn(
-          "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-xs font-medium bg-brand-500 text-white",
+          "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-xs font-medium bg-brand-700 hover:bg-brand-900 text-white",
           "hover:bg-brand-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
         )}
       >

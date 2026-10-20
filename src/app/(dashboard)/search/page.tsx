@@ -79,7 +79,7 @@ export default async function SearchPage({
         }
       />
 
-      <div className="flex-1 overflow-y-auto p-3 sm:p-5 animate-page-enter">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-6 animate-page-enter">
         <div className="max-w-3xl mx-auto flex flex-col gap-4">
           <div className="flex items-center gap-2">
             <div className="flex-1 min-w-0">

@@ -28,7 +28,7 @@ import {
 import { recordsRequestInitialState } from "@/lib/records-requests/form";
 import type { RecordsRequestTypeRow } from "@/lib/queries/records-requests";
 
-const labelCls = "text-2xs font-mono uppercase tracking-wider text-ink-4";
+const labelCls = "text-xs font-medium text-ink-2";
 const inputCls =
   "h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30";
 
@@ -150,7 +150,7 @@ export function RequestTypeEditor({
       )}
 
       <section className="flex flex-col gap-2">
-        <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+        <div className="text-2xs font-medium text-ink-3">
           Active ({active.length})
         </div>
         {active.length === 0 ? (
@@ -166,7 +166,7 @@ export function RequestTypeEditor({
 
       {archived.length > 0 && (
         <section className="flex flex-col gap-2">
-          <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+          <div className="text-2xs font-medium text-ink-3">
             Archived ({archived.length})
           </div>
           <div className="flex flex-col gap-1.5">{archived.map((t) => row(t))}</div>

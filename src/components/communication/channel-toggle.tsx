@@ -32,7 +32,7 @@ export function ChannelToggle({
     <div
       role="group"
       aria-label="Communication channel"
-      className="inline-flex items-center rounded-md border border-line bg-white p-0.5"
+      className="inline-flex items-center rounded-md bg-paper-2 p-0.5"
     >
       {CHANNELS.map((c) => {
         const isActive = active === c.value;
@@ -43,10 +43,10 @@ export function ChannelToggle({
             href={c.value === "email" ? basePath : `${basePath}?channel=${c.value}`}
             aria-current={isActive ? "page" : undefined}
             className={cn(
-              "inline-flex items-center gap-1.5 h-6 px-2 rounded text-2xs font-medium transition-colors",
+              "inline-flex items-center gap-1.5 h-6 px-2 rounded-[5px] text-2xs font-medium transition-colors",
               isActive
-                ? "bg-brand-soft text-brand-700"
-                : "text-ink-3 hover:text-brand-700"
+                ? "bg-white text-ink shadow-sm"
+                : "text-ink-3 hover:text-ink"
             )}
           >
             <Icon size={12} />

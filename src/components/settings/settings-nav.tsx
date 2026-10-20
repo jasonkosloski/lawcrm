@@ -139,7 +139,7 @@ export function SettingsNav({
             {si > 0 && (
               <span aria-hidden className="h-3 w-px bg-line shrink-0" />
             )}
-            <span className="text-2xs font-semibold uppercase tracking-wider text-ink-4 shrink-0">
+            <span className="text-2xs font-medium text-ink-3 shrink-0">
               {section.label}
             </span>
             {section.items.map((item) => {
@@ -153,8 +153,8 @@ export function SettingsNav({
                   className={cn(
                     "shrink-0 inline-flex items-center px-2.5 py-1 rounded-full text-xs transition-colors",
                     active
-                      ? "bg-brand-500 text-white"
-                      : "text-ink-2 bg-paper-2 hover:bg-[#eaf0f5] hover:text-brand-700"
+                      ? "bg-sidebar-accent text-ink font-medium"
+                      : "text-ink-2 bg-paper-2 hover:bg-sidebar-accent hover:text-ink"
                   )}
                 >
                   {item.label}
@@ -169,7 +169,7 @@ export function SettingsNav({
       <nav className="hidden lg:flex flex-col gap-5">
         {visibleSections.map((section) => (
           <div key={section.label}>
-            <div className="px-2.5 pb-1.5 text-2xs font-semibold uppercase tracking-wider text-ink-4">
+            <div className="px-2.5 pb-1.5 text-2xs font-medium text-ink-3">
               {section.label}
             </div>
             <ul className="flex flex-col gap-px">
@@ -187,8 +187,8 @@ export function SettingsNav({
                       className={cn(
                         "block px-2.5 py-1.5 rounded-md text-xs transition-colors",
                         active
-                          ? "bg-brand-500 text-white"
-                          : "text-ink-2 hover:bg-[#eaf0f5] hover:text-brand-700"
+                          ? "bg-sidebar-accent text-ink font-medium"
+                          : "text-ink-2 hover:bg-sidebar-accent hover:text-ink"
                       )}
                     >
                       {item.label}

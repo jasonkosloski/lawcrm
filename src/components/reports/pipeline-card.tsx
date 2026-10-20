@@ -37,7 +37,7 @@ export function PipelineCard({ report }: { report: PipelineReport }) {
       <CardContent className="px-4 pb-4 flex flex-col gap-4">
         {/* Intake funnel */}
         <div className="flex flex-col gap-1.5">
-          <div className="text-2xs font-semibold uppercase tracking-wider text-ink-4">
+          <div className="text-2xs font-medium text-ink-3">
             Intake queue
           </div>
           {report.totalActiveLeads === 0 ? (
@@ -52,11 +52,11 @@ export function PipelineCard({ report }: { report: PipelineReport }) {
                 </span>
                 <div className="flex-1 h-1.5 bg-paper-2 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-brand-500 rounded-full"
+                    className="h-full bg-brand-700 rounded-full"
                     style={{ width: `${(s.count / leadScale) * 100}%` }}
                   />
                 </div>
-                <span className="w-6 shrink-0 text-right text-2xs font-mono text-ink">
+                <span className={`w-6 shrink-0 text-right text-2xs font-mono ${s.count === 0 ? "text-ink-4" : "text-ink"}`}>
                   {s.count}
                 </span>
               </div>
@@ -66,7 +66,7 @@ export function PipelineCard({ report }: { report: PipelineReport }) {
 
         {/* Open matters by area × stage */}
         <div className="flex flex-col gap-2">
-          <div className="text-2xs font-semibold uppercase tracking-wider text-ink-4">
+          <div className="text-2xs font-medium text-ink-3">
             Open matters by practice area
           </div>
           {report.areas.length === 0 ? (

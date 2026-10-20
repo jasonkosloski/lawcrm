@@ -31,7 +31,7 @@ import {
 import { TASK_PRIORITIES, TASK_PRIORITY_LABEL } from "@/lib/constants/priority";
 import type { TaskListRow } from "@/lib/queries/automations";
 
-const labelCls = "text-2xs font-mono uppercase tracking-wider text-ink-4";
+const labelCls = "text-xs font-medium text-ink-2";
 const inputCls =
   "h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4";
 
@@ -186,7 +186,7 @@ export function TaskListDialog({
             <button type="button" onClick={() => setItems((xs) => [...xs, blankItem()])} className="self-start inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-xs text-brand-700 hover:bg-brand-soft">
               <Plus size={13} /> Add task
             </button>
-            <span className="text-[10px] text-ink-4">
+            <span className="text-3xs text-ink-4">
               Due dates count from the day the list is applied. Leave blank for no due date.
             </span>
           </div>

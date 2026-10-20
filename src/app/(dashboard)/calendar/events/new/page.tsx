@@ -31,7 +31,7 @@ export default async function NewEventPage() {
 
   return (
     <>
-      <TopBar title="New event" crumbs="Calendar" />
+      <TopBar title="New event" />
       <div className="flex-1 overflow-y-auto p-5 animate-page-enter">
         <NewEventForm matters={matters} />
       </div>

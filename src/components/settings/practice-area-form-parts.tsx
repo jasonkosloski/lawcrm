@@ -60,7 +60,7 @@ export function RequiredFieldsGroup({
 }) {
   return (
     <fieldset className="flex flex-col gap-2 px-3 py-2.5 rounded-md border border-line bg-paper-2/30">
-      <legend className="px-1 text-2xs font-mono uppercase tracking-wider text-ink-4">
+      <legend className="px-1 text-2xs font-medium text-ink-3">
         Required at creation
       </legend>
       <input type="hidden" name="requiredMatterFieldsPresent" value="1" />

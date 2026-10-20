@@ -55,12 +55,12 @@ export function ArAgingCard({ report }: { report: ArAgingReport }) {
                       <div
                         className={cn(
                           "h-full rounded-full",
-                          overdue ? "bg-warn" : "bg-brand-500"
+                          overdue ? "bg-warn" : "bg-brand-700"
                         )}
                         style={{ width: `${(b.total / scale) * 100}%` }}
                       />
                     </div>
-                    <span className="w-28 shrink-0 text-right text-2xs font-mono text-ink">
+                    <span className={`w-28 shrink-0 text-right text-2xs font-mono ${b.total === 0 ? "text-ink-4" : "text-ink"}`}>
                       {formatMoney(b.total)}
                       <span className="text-ink-4"> · {b.count}</span>
                     </span>
@@ -70,7 +70,7 @@ export function ArAgingCard({ report }: { report: ArAgingReport }) {
             </div>
 
             <div className="flex flex-col gap-1">
-              <div className="text-2xs font-semibold uppercase tracking-wider text-ink-4">
+              <div className="text-2xs font-medium text-ink-3">
                 Oldest outstanding
               </div>
               {report.worstOffenders.map((inv) => (

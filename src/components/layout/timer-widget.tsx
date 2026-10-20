@@ -3,10 +3,11 @@
  * in AppShell).
  *
  * States:
- *   - idle: a minimal-but-VISIBLE "Timer" pill (deliberate call:
+ *   - idle: a minimal-but-VISIBLE round play button (deliberate call:
  *     hiding it entirely would make the feature undiscoverable, so
- *     idle renders the smallest useful affordance — icon + label,
- *     one click starts the clock with no matter attached).
+ *     idle renders the smallest useful affordance; a 36px icon covers
+ *     less of the page than a labelled pill. One click starts the
+ *     clock with no matter attached).
  *   - running: elapsed ticks client-side every second from the
  *     session's `startedAt` (no polling, no server round-trips);
  *     shows the matter name when set. Clicking the pill body opens
@@ -86,7 +87,7 @@ function ElapsedClock({ startedAt }: { startedAt: string }) {
   }, []);
   return (
     <span
-      className="font-mono text-xs tabular-nums"
+      className="text-xs tabular-nums"
       suppressHydrationWarning
     >
       {formatElapsed(Math.max(0, now - Date.parse(startedAt)))}
@@ -204,7 +205,7 @@ export function TimerWidget({
   const errorBanner = error ? (
     <div
       role="alert"
-      className="max-w-64 rounded-md border border-warn-border bg-warn-soft px-2.5 py-1.5 text-2xs text-warn shadow-md"
+      className="max-w-64 rounded-md bg-danger-soft px-2.5 py-1.5 text-2xs text-danger shadow-md"
     >
       {error}
     </div>
@@ -220,15 +221,15 @@ export function TimerWidget({
           onClick={onStart}
           disabled={isPending}
           className={cn(
-            "flex items-center gap-1.5 h-8 px-3 rounded-full text-xs text-ink-3",
+            "flex items-center justify-center w-9 h-9 rounded-full text-ink-3",
             "bg-white border border-line shadow-md",
-            "hover:border-brand-300 hover:text-brand-700 transition-colors",
+            "hover:text-ink hover:border-input transition-colors",
             "disabled:opacity-60"
           )}
           title="Start a timer"
+          aria-label="Start a timer"
         >
-          <Play size={12} />
-          Timer
+          <Play size={14} aria-hidden />
         </button>
       </div>
     );
@@ -240,7 +241,7 @@ export function TimerWidget({
       {errorBanner}
       {panelOpen && (
         <div className="w-64 p-3 rounded-lg bg-white border border-line shadow-lg flex flex-col gap-2">
-          <div className="text-2xs font-semibold uppercase tracking-wider text-ink-3">
+          <div className="text-xs font-medium text-ink-2">
             Timer details
           </div>
           <NativeSelect
@@ -281,8 +282,8 @@ export function TimerWidget({
             placeholder="What are you working on?"
             aria-label="Timer activity"
             className={cn(
-              "h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink",
-              "placeholder:text-ink-4",
+              "h-9 px-2.5 rounded-md border border-input bg-white text-xs text-ink",
+              "placeholder:text-ink-5",
               "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
             )}
           />
@@ -297,7 +298,7 @@ export function TimerWidget({
           title="Edit timer matter / activity"
         >
           {/* Pulsing recording dot */}
-          <span className="w-1.5 h-1.5 rounded-full bg-warn animate-pulse" />
+          <span className="w-2 h-2 rounded-full bg-danger motion-safe:animate-pulse" />
           <ElapsedClock startedAt={session.startedAt} />
           {session.matterName && (
             <span className="text-2xs text-white/70 max-w-36 truncate">
@@ -339,7 +340,7 @@ export function TimerWidget({
           className={cn(
             "flex items-center justify-center h-6 rounded-full transition-colors",
             discardArmed
-              ? "px-2 bg-warn text-white text-2xs font-medium"
+              ? "px-2 bg-danger text-white text-2xs font-medium"
               : "w-6 text-white/60 hover:text-white hover:bg-white/15"
           )}
           title="Discard timer without logging"

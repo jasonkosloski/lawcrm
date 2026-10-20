@@ -102,9 +102,7 @@ export async function MessengerThreadReader({
     return (
       <div className="hidden lg:flex flex-1 items-center justify-center bg-paper-2/30">
         <div className="text-center max-w-sm px-6">
-          <div className="w-12 h-12 rounded-full bg-brand-50 text-brand-500 flex items-center justify-center mx-auto mb-3">
-            <MessageSquare size={20} />
-          </div>
+          <MessageSquare size={20} strokeWidth={1.75} className="text-ink-4 mx-auto mb-3" />
           <div className="text-sm font-semibold text-ink mb-1">
             Select a conversation
           </div>
@@ -208,7 +206,7 @@ export async function MessengerThreadReader({
                 {showDivider && (
                   <div
                     role="separator"
-                    className="self-center text-3xs font-mono uppercase tracking-wider text-ink-4 py-0.5"
+                    className="self-center text-3xs text-ink-4 py-0.5"
                   >
                     {formatDate(it.occurredAt, "full_short", zone)}
                   </div>
@@ -365,7 +363,7 @@ function SmsBubble({
         className={cn(
           "rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm",
           outbound
-            ? "bg-brand-500 text-white rounded-br-sm"
+            ? "bg-brand-700 text-white rounded-br-sm"
             : "bg-paper-2 text-ink rounded-bl-sm"
         )}
       >
@@ -551,8 +549,8 @@ function VoicemailCard({
   return (
     <div className="self-start max-w-[80%] rounded-lg border border-line bg-paper-2/40 px-3 py-2 flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <Voicemail size={12} className="text-brand-500" />
-        <span className="text-2xs font-mono uppercase tracking-wider text-ink-3">
+        <Voicemail size={12} className="text-ink-4" />
+        <span className="text-2xs font-medium text-ink-3">
           Voicemail
         </span>
         {/* Explicit > 0 guard — a bare `&&` on a 0-second voicemail

@@ -46,7 +46,7 @@ export function RealizationCard({ months }: { months: RealizationMonth[] }) {
               <span className="w-16 shrink-0 text-2xs text-ink-3">Billed</span>
               <div className="flex-1 h-1.5 bg-paper-2 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-brand-500 rounded-full"
+                  className="h-full bg-brand-700 rounded-full"
                   style={{ width: `${Math.min(100, m.billedPctOfWorked)}%` }}
                 />
               </div>

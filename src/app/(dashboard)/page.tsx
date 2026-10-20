@@ -557,6 +557,7 @@ function TaskGroup({
             leadId={t.leadId}
             matterName={t.matterName}
             daysUntilDue={t.daysUntilDue}
+            dueDate={t.dueDate}
             dueLabel={formatTaskDue(t)}
           />
         ))}

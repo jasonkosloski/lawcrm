@@ -168,7 +168,7 @@ export function NotesTabBody({
                 )}
               >
                 {NOTE_TYPE_LABEL[t]}
-                <span className="font-mono text-[10px] text-ink-4">{c}</span>
+                <span className="font-mono text-3xs text-ink-4">{c}</span>
               </button>
             );
           })}
@@ -191,7 +191,7 @@ export function NotesTabBody({
               className={pinnedOnly ? "fill-brand-500 text-brand-500" : ""}
             />
             Pinned only
-            <span className="font-mono text-[10px] text-ink-4">
+            <span className="font-mono text-3xs text-ink-4">
               {pinnedCount}
             </span>
           </button>

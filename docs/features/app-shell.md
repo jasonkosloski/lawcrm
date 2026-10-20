@@ -1,14 +1,17 @@
 # App shell, dashboard, navigation
 
 App shell (sidebar, topbar, layout), the dashboard with customizable cards, the Cmd+K command palette, loading/error states and the mobile sweep are shipped. Open work is dashboard drag/resize, the rest of palette v2, and the role-based sidebar.
-Related: [ADR-002](../decisions/002-app-router-route-groups-for-layout-isolation.md), [ADR-003](../decisions/003-design-tokens-as-css-custom-properties-not.md), [ADR-033](../decisions/033-error-boundaries-use-retry-the-notification-bell.md), [ADR-021](../decisions/021-matter-tabs-honour-calendar-visibility-and-money.md)
+Related: [ADR-055](../decisions/055-ui-system-v2-legibility-floor-and-colour-on-meaning.md) (UI system v2), [ADR-002](../decisions/002-app-router-route-groups-for-layout-isolation.md), [ADR-003](../decisions/003-design-tokens-as-css-custom-properties-not.md), [ADR-033](../decisions/033-error-boundaries-use-retry-the-notification-bell.md), [ADR-021](../decisions/021-matter-tabs-honour-calendar-visibility-and-money.md)
 
 ## Open work
+- [ ] **Dark theme** (P3): v2 tokens make it a token-only change (`:root[data-theme=dark]` values); not started.
+- [ ] **Matter tabs regroup** (P2, needs a product call): 13 tabs; Events + Deadlines + Tasks could become one "Schedule" tab. Workflow change, not styling.
 - [ ] **Dashboard customizable layout — v3 (drag + resize)** (P2) — drag-to-reorder, per-card width control, role-based defaults tying into the customizable sidebar work.
 - [~] **Command palette — v2** (P2) — scoping prefixes and Create group shipped (below). Remaining: fuzzy-match highlight inside results; "New task" (no standalone create page yet); "Log a call" (CallLogDialog needs contact-picker data plus a URL affordance to auto-open); "Start timer" (`startTimer()` now refuses with `already_running` instead of replacing a running session, so the row could be added by surfacing that refusal).
 - [ ] **Role-based & customizable sidebar** (P2) — different sidebar content per role with per-user overrides. Generic "pinned items" concept spanning matters, reports, leads, contacts, saved-filter URLs. Depends on auth (shipped) plus a `UserPreferences` model.
 
 ## Shipped
+- [x] **UI system v2** (2026-10-20, ADR-055) — 11px floor and a 12/13/14 ramp, contrast-safe ink tiers, `font-mono` as tabular Inter, text-safe status colours; neutral ink chrome (sidebar pill, underline tabs, no gradients or tinted tiles); `StatStrip` for headline figures and `DueLabel` for every due date; foldable practice-area group in the sidebar; the idle timer as an icon button. Patterns in UI_PATTERNS.
 - [x] **Project scaffold** — Next.js, shadcn, Prisma, TanStack Query (the query package is installed but unused; mutations are server actions).
 - [x] **Design tokens** — brand colors, fonts, spacing from the design handoff (ADR-003).
 - [x] **App shell** — sidebar nav, topbar, layout wrapper.

@@ -123,7 +123,7 @@ export function DashboardCustomizePanel({
         const keys = cardsInColumn(order, column);
         return (
           <div key={column} className="flex flex-col gap-0.5">
-            <div className="text-2xs font-semibold uppercase tracking-wider text-ink-3 px-1 pb-1">
+            <div className="text-2xs font-medium text-ink-3 px-1 pb-1">
               {COLUMN_LABELS[column]}
             </div>
             {keys.map((key, i) => (

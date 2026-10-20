@@ -123,7 +123,7 @@ export function PartyRowView({
                 )}
                 {formatPhone(p.number)}
                 {p.isPrimary && party.phones.length > 1 && (
-                  <span className="text-[9px] text-brand-700 ml-1 font-sans">
+                  <span className="text-3xs text-brand-700 ml-1 font-sans">
                     primary
                   </span>
                 )}

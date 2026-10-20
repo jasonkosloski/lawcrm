@@ -102,7 +102,7 @@ export function ReviewPanel({
 
       {/* ── Moments rail ───────────────────────────────────────── */}
       <div className="flex flex-col gap-2 lg:w-80 lg:shrink-0 lg:overflow-y-auto">
-        <div className="flex items-center gap-1.5 text-2xs uppercase tracking-wider text-ink-4">
+        <div className="flex items-center gap-1.5 text-2xs font-medium text-ink-3">
           <Flag className="h-3 w-3" aria-hidden />
           Flags
           <span className="font-mono normal-case">

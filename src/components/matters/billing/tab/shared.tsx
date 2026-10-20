@@ -1,10 +1,8 @@
 /**
  * Shared pieces of the matter Billing tab sections: money / date
- * formatters, status + trust-type labels, the permissions shape, and
- * the KPI tile.
+ * formatters, status + trust-type labels, and the permissions shape.
  */
 
-import { Card, CardContent } from "@/components/ui/card";
 import { formatDateOnly } from "@/lib/format-date";
 
 export const formatMoney = (n: number): string =>
@@ -33,7 +31,7 @@ export const STATUS_META: Record<string, string> = {
   approved: "bg-brand-soft/60 text-brand-700 border-brand-200",
   sent: "bg-brand-soft text-brand-700 border-brand-200",
   partial: "bg-warn-soft text-warn border-warn-border",
-  overdue: "bg-warn-soft text-warn border-warn-border",
+  overdue: "bg-danger-soft text-danger border-line",
   paid: "bg-ok-soft text-ok border-line",
   void: "bg-paper-2 text-ink-4 border-line",
 };
@@ -45,37 +43,3 @@ export const TRUST_TYPE_LABEL: Record<string, string> = {
   transfer: "Transfer",
   interest: "Interest",
 };
-
-export function Kpi({
-  label,
-  primary,
-  secondary,
-  tone,
-}: {
-  label: string;
-  primary: string;
-  secondary: string;
-  tone?: "ok" | "brand" | "warn";
-}) {
-  const toneClass =
-    tone === "ok"
-      ? "text-ok"
-      : tone === "brand"
-        ? "text-brand-700"
-        : tone === "warn"
-          ? "text-warn"
-          : "text-ink";
-  return (
-    <Card>
-      <CardContent className="px-4 py-3">
-        <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
-          {label}
-        </div>
-        <div className={`text-xl font-display font-medium mt-1 ${toneClass}`}>
-          {primary}
-        </div>
-        <div className="text-2xs text-ink-4 mt-1">{secondary}</div>
-      </CardContent>
-    </Card>
-  );
-}

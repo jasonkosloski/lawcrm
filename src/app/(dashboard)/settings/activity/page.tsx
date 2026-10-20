@@ -151,7 +151,7 @@ export default async function FirmActivityPage({
               className={cn(
                 "inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full text-2xs font-medium border transition-colors",
                 active
-                  ? "bg-brand-500 text-white border-brand-500"
+                  ? "bg-paper-2 text-ink border-line-strong font-medium"
                   : "bg-white text-ink-2 border-line hover:border-brand-300 hover:text-brand-700"
               )}
             >
@@ -173,7 +173,7 @@ export default async function FirmActivityPage({
         <div className="flex flex-col gap-1">
           <label
             htmlFor="activity-user"
-            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+            className="text-xs font-medium text-ink-2"
           >
             User
           </label>
@@ -194,7 +194,7 @@ export default async function FirmActivityPage({
         <div className="flex flex-col gap-1">
           <label
             htmlFor="activity-from"
-            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+            className="text-xs font-medium text-ink-2"
           >
             From
           </label>
@@ -209,7 +209,7 @@ export default async function FirmActivityPage({
         <div className="flex flex-col gap-1">
           <label
             htmlFor="activity-to"
-            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+            className="text-xs font-medium text-ink-2"
           >
             To
           </label>
@@ -224,7 +224,7 @@ export default async function FirmActivityPage({
         <div className="flex items-center gap-2">
           <button
             type="submit"
-            className="h-8 px-3 rounded-md text-xs font-medium bg-brand-500 text-white hover:bg-brand-600"
+            className="h-8 px-3 rounded-md text-xs font-medium bg-brand-700 text-white hover:bg-brand-900"
           >
             Apply
           </button>

@@ -158,7 +158,7 @@ export function ConflictCheckCard({
       <div className="flex items-center justify-between gap-2">
         <div
           className={cn(
-            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-2xs font-medium",
+            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-2xs font-medium",
             meta.tone
           )}
         >
@@ -259,7 +259,7 @@ export function ConflictCheckCard({
       {/* Matches list */}
       {matches.length > 0 ? (
         <div className="flex flex-col gap-1.5">
-          <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+          <div className="text-2xs font-medium text-ink-3">
             Matches ({matches.length})
           </div>
           <ul className="border border-line rounded-md overflow-hidden divide-y divide-line">
@@ -272,7 +272,7 @@ export function ConflictCheckCard({
                   <div className="flex items-center gap-1.5">
                     <span
                       className={cn(
-                        "inline-block text-2xs font-medium px-1.5 py-0.5 rounded-full border",
+                        "inline-block text-2xs font-medium px-1.5 py-0.5 rounded-full",
                         m.severity === "conflict"
                           ? "bg-warn-soft text-warn border-warn-border"
                           : "bg-paper-2 text-ink-3 border-line"

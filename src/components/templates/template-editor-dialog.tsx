@@ -58,7 +58,7 @@ import {
 import type { TemplateListItem } from "@/components/templates/template-library";
 
 const fieldLabelCls =
-  "text-2xs font-mono uppercase tracking-wider text-ink-4";
+  "text-xs font-medium text-ink-2";
 const inputCls =
   "h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4";
 
@@ -280,7 +280,7 @@ export function TemplateEditorDialog({
                   </div>
                 )}
                 <div className="px-3 py-2.5 rounded-md border border-line bg-paper-2/40 max-h-72 overflow-y-auto">
-                  <div className="text-2xs text-ink-4 mb-1.5 font-mono uppercase tracking-wider">
+                  <div className="text-2xs text-ink-3 mb-1.5 font-medium">
                     Preview — sample data
                   </div>
                   <div className="text-xs text-ink whitespace-pre-wrap leading-relaxed">
@@ -339,8 +339,8 @@ function ModeButton({
       className={cn(
         "px-2.5 h-7 text-2xs font-medium transition-colors",
         active
-          ? "bg-brand-500 text-white"
-          : "bg-white text-ink-3 hover:text-brand-700"
+          ? "bg-paper-2 text-ink"
+          : "bg-white text-ink-3 hover:text-ink"
       )}
     >
       {children}
@@ -373,7 +373,7 @@ function InsertFieldMenu({
           // sit inside a Menu.Group or the menu throws at open time.
           <DropdownMenuGroup key={group.group}>
             {gi > 0 && <DropdownMenuSeparator />}
-            <DropdownMenuLabel className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+            <DropdownMenuLabel className="text-xs font-medium text-ink-2">
               {group.group}
             </DropdownMenuLabel>
             {group.fields.map((f) => (

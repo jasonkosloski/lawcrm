@@ -105,7 +105,7 @@ export function NotificationsFeed({
   return (
     <div className="rounded-md border border-line bg-white">
       <div className="border-b border-line px-3 py-2 flex items-center justify-between">
-        <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+        <div className="text-2xs font-medium text-ink-3">
           {unread > 0 ? (
             <span className="text-warn">{unread} unread</span>
           ) : (

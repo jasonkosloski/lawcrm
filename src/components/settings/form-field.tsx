@@ -44,7 +44,7 @@ export function Field({
     <div className={cn("flex flex-col gap-1", className)}>
       <label
         htmlFor={id}
-        className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+        className="text-xs font-medium text-ink-2"
       >
         {label}
         {required && <span className="text-warn ml-1">*</span>}
@@ -55,7 +55,7 @@ export function Field({
         "aria-describedby": describedBy,
       })}
       {hint && !error && (
-        <span id={hintId} className="text-[10px] text-ink-4 leading-relaxed">
+        <span id={hintId} className="text-3xs text-ink-4 leading-relaxed">
           {hint}
         </span>
       )}

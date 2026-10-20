@@ -230,7 +230,7 @@ function RecordPaymentForm({
       {/* Context strip — just the invoice side. No trust here. */}
       <div className="grid grid-cols-2 gap-2 text-2xs">
         <div className="px-3 py-2 rounded-md border border-line bg-paper-2/40">
-          <div className="font-mono uppercase tracking-wider text-ink-4">
+          <div className="text-2xs font-medium text-ink-3">
             Open balance
           </div>
           <div className="text-ink font-mono mt-0.5">
@@ -238,7 +238,7 @@ function RecordPaymentForm({
           </div>
         </div>
         <div className="px-3 py-2 rounded-md border border-line bg-paper-2/40">
-          <div className="font-mono uppercase tracking-wider text-ink-4">
+          <div className="text-2xs font-medium text-ink-3">
             After this payment
           </div>
           <div
@@ -256,7 +256,7 @@ function RecordPaymentForm({
       <div className="flex flex-col gap-1">
         <label
           htmlFor={`${ids}-amount`}
-          className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+          className="text-2xs font-medium text-ink-3"
         >
           Amount <span className="text-warn">*</span>
         </label>
@@ -299,7 +299,7 @@ function RecordPaymentForm({
         <div className="flex flex-col gap-1">
           <label
             htmlFor={`${ids}-source`}
-            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+            className="text-2xs font-medium text-ink-3"
           >
             Method <span className="text-warn">*</span>
           </label>
@@ -322,7 +322,7 @@ function RecordPaymentForm({
         <div className="flex flex-col gap-1">
           <label
             htmlFor={`${ids}-date`}
-            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+            className="text-2xs font-medium text-ink-3"
           >
             Date
           </label>
@@ -340,7 +340,7 @@ function RecordPaymentForm({
       <div className="flex flex-col gap-1">
         <label
           htmlFor={`${ids}-reference`}
-          className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+          className="text-2xs font-medium text-ink-3"
         >
           Reference
         </label>
@@ -359,7 +359,7 @@ function RecordPaymentForm({
       <div className="flex flex-col gap-1">
         <label
           htmlFor={`${ids}-description`}
-          className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+          className="text-2xs font-medium text-ink-3"
         >
           Memo
         </label>

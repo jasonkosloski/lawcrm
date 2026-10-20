@@ -32,6 +32,7 @@ function row(over: Partial<MatterListRow> = {}): MatterListRow {
     leadInitials: "PL",
     leadName: "Pat Lee",
     nextDeadlineDays: 4,
+    nextDeadlineDate: null,
     isPinned: false,
     isArchived: false,
     createdAt: new Date("2026-01-01T00:00:00Z"),
@@ -99,7 +100,7 @@ describe("MattersKanban", () => {
     const root = container.firstElementChild as HTMLElement;
     expect(root.className).toContain("-mx-3");
     expect(root.className).toContain("px-3");
-    expect(root.className).toContain("sm:-mx-5");
+    expect(root.className).toContain("sm:-mx-6");
     expect(root.className).not.toMatch(/(^|\s)-mx-5(\s|$)/);
   });
 });
