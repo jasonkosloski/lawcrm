@@ -8,6 +8,11 @@
  * becoming the surname.
  */
 
+import {
+  DEFAULT_MATTER_NAME_TEMPLATE,
+  renderMatterName,
+} from "./matter-name-template";
+
 const SUFFIX_RE = /^(jr|sr|ii|iii|iv|esq)\.?$/i;
 
 /** Words that mark a name as an organization rather than a person. */
@@ -57,47 +62,21 @@ export function splitName(full: string): NameParts {
   };
 }
 
-/** Build the firm's matter-name pattern from the filled-in parts.
- *  Only joins non-empty segments with " - " so partial fills read
- *  naturally: "Alvarez, Maria - Aurora" rather than "Alvarez, Maria
- *  -  - Aurora". */
-export function buildAutoMatterName(parts: {
-  firstName: string;
-  lastName: string;
-  suffix?: string;
-  caseNumber: string;
-  location: string;
-}): string {
-  const segments: string[] = [];
-  const f = parts.firstName.trim();
-  const l = parts.lastName.trim();
-  const s = (parts.suffix ?? "").trim();
-  if (f && l) segments.push(`${l}, ${f}${s ? ` ${s}` : ""}`);
-  else if (l) segments.push(s ? `${l} ${s}` : l);
-  else if (f) segments.push(s ? `${f} ${s}` : f);
-  const c = parts.caseNumber.trim();
-  if (c) segments.push(c);
-  const loc = parts.location.trim();
-  if (loc) segments.push(loc);
-  return segments.join(" - ");
-}
-
-/** The auto name for a client name + case number + location. Pass
- *  `isOrganization` when the picked contact is known to be an
- *  organization (the name is then never inverted). */
+/** Temporary wrapper (Task 8 removes it): the default template over the old inputs. */
 export function autoMatterName(input: {
   clientName: string;
   isOrganization?: boolean;
   caseNumber: string;
   location: string;
 }): string {
-  const name = input.clientName.trim();
-  const nameParts = input.isOrganization
-    ? { firstName: "", lastName: name, suffix: "" }
-    : splitName(name);
-  return buildAutoMatterName({
-    ...nameParts,
+  return renderMatterName(DEFAULT_MATTER_NAME_TEMPLATE, {
+    clientName: input.clientName,
+    isOrganization: input.isOrganization,
     caseNumber: input.caseNumber,
-    location: input.location,
+    venue: input.location ? { name: input.location, county: null, state: "" } : null,
+    opposingParty: "",
+    practiceAreaName: "",
+    now: new Date(),
+    timeZone: "UTC",
   });
 }
