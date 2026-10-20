@@ -16,7 +16,7 @@
  * `mergeLayout` is the single decoder; it also converts legacy v2 blobs
  * (`visible` + `order`) so no DB migration is needed. The v2 helpers
  * (`mergeVisibility`, `mergeOrder`, `DASHBOARD_CARD_COLUMNS`) remain for
- * that conversion and for callers not yet moved to v3.
+ * that conversion.
  */
 
 /** Stable identifier for each toggleable surface on the dashboard. */
@@ -167,51 +167,6 @@ export function mergeOrder(stored: unknown): DashboardCardKey[] {
   return merged;
 }
 
-/** The full decoded prefs blob — what the page and popover consume. */
-export type DashboardPrefs = {
-  visible: DashboardVisibility;
-  order: DashboardCardKey[];
-};
-
-/** Decode a stored `User.dashboardPrefs` blob into the complete shape. */
-export function mergePrefs(stored: unknown): DashboardPrefs {
-  return { visible: mergeVisibility(stored), order: mergeOrder(stored) };
-}
-
-/** The subset of `order` that renders in the given column, in order. */
-export function cardsInColumn(
-  order: readonly DashboardCardKey[],
-  column: DashboardColumn
-): DashboardCardKey[] {
-  return order.filter((key) => DASHBOARD_CARD_COLUMNS[key] === column);
-}
-
-/**
- * Move a card one slot up/down WITHIN its column. Returns the new full
- * order array, or null when the move is a no-op (card already at its
- * column's edge, or key missing from the array). Swaps the card with
- * its column neighbor in the flat array, so cards in the other column
- * keep their exact positions. Pure — never mutates the input.
- */
-export function moveCardInColumn(
-  order: readonly DashboardCardKey[],
-  key: DashboardCardKey,
-  direction: "up" | "down"
-): DashboardCardKey[] | null {
-  const columnKeys = cardsInColumn(order, DASHBOARD_CARD_COLUMNS[key]);
-  const columnIdx = columnKeys.indexOf(key);
-  if (columnIdx === -1) return null;
-  const neighbor =
-    columnKeys[direction === "up" ? columnIdx - 1 : columnIdx + 1];
-  if (neighbor === undefined) return null;
-
-  const next = [...order];
-  const a = next.indexOf(key);
-  const b = next.indexOf(neighbor);
-  [next[a], next[b]] = [next[b], next[a]];
-  return next;
-}
-
 // ── v3: band + columns layout ─────────────────────────────────────────
 
 /** Column split of the grid below the band, as 12-grid spans. */
@@ -226,7 +181,9 @@ export const DASHBOARD_SPLITS: readonly DashboardSplit[] = [
 ];
 
 /** Each column's span out of 12, per split. Length = column count. */
-export const SPLIT_SPANS: Record<DashboardSplit, number[]> = {
+export type SplitSpan = 4 | 6 | 8 | 12;
+
+export const SPLIT_SPANS: Record<DashboardSplit, SplitSpan[]> = {
   "8/4": [8, 4],
   "4/8": [4, 8],
   "6/6": [6, 6],
@@ -354,7 +311,8 @@ export function mergeLayout(stored: unknown): DashboardLayout {
 
 /**
  * Move a card to a zone, removing it from wherever it was. Inserts at
- * `position` (default: end; clamped). A column index past the last
+ * `position` (default: end; clamped) - an index into the target list
+ * AFTER the card has been removed (matters when reordering within one list). A column index past the last
  * column lands in the last. Pure — returns a new layout.
  */
 export function moveCard(

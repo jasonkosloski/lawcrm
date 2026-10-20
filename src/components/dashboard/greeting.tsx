@@ -13,7 +13,7 @@ export function Greeting({
     day: "numeric",
   }).format(new Date());
   return (
-    <p className="mb-4 text-sm text-ink-3">
+    <p className="text-sm text-ink-3">
       {date}
       {dueToday !== null && <> &middot; {dueToday} due today</>}
     </p>
