@@ -71,6 +71,12 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
           "Change name, practice area, stage, fee structure, opposing party, summary, and other matter fields.",
       },
       {
+        key: "matters.agreement.edit",
+        label: "Edit fee agreement record",
+        description:
+          "Change a matter's originating-document record: status, signed date and linked document.",
+      },
+      {
         key: "matters.archive",
         unwired: true,
         label: "Archive matters",

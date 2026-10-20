@@ -193,6 +193,8 @@ model Firm {
   /// Template for new matter names on /matters/new. Tokens such as
   /// {client_last}, {client_first}, {case_number}, {location}.
   /// A practice area's own template overrides this.
+  /// When true, creating a matter requires a signed originating document.
+  requireOriginatingDoc       Boolean          @default(false)
   matterNameTemplate          String           @default("{client_last}, {client_first} - {case_number} - {location}")
   /// Default for "auto-add matter team to new calendar events".
   /// Per-matter override lives on Matter.autoAddTeamToNewEvents
@@ -333,6 +335,8 @@ model PracticeArea {
   hasStatuteOfLimitations Boolean        @default(false)
   /// Per-area override of Firm.matterNameTemplate; null = use the firm's.
   matterNameTemplate      String?
+  /// Label for the originating document (null/blank -> "Fee agreement").
+  originatingDocLabel     String?
   /// Matter fields that must be filled on /matters/new for this area.
   requiredMatterFields    String[]       @default([])
   /// Statute period as a calendar amount + unit (ADR-035): "2 YEARS",
@@ -475,6 +479,7 @@ model Matter {
   // Relationships
   teamMembers             MatterTeamMember[]
   contacts                MatterContact[]
+  agreement               MatterAgreement?
   documents               Document[]
   evidence                Evidence[]
   deadlines               Deadline[]
@@ -877,16 +882,17 @@ model Document {
   documentRequest        DocumentRequest? @relation(fields: [documentRequestId], references: [id], onDelete: SetNull)
   recordsRequest         RecordsRequest?  @relation("RecordsRequestDocuments", fields: [recordsRequestId], references: [id], onDelete: SetNull)
 
-  matter             Matter?         @relation(fields: [matterId], references: [id], onDelete: Restrict)
-  lead               Lead?           @relation("LeadDocuments", fields: [leadId], references: [id], onDelete: Restrict)
-  folder             DocumentFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
-  parentDocument     Document?       @relation("EmailAttachments", fields: [parentDocumentId], references: [id], onDelete: SetNull)
-  attachments        Document[]      @relation("EmailAttachments")
+  matter             Matter?          @relation(fields: [matterId], references: [id], onDelete: Restrict)
+  lead               Lead?            @relation("LeadDocuments", fields: [leadId], references: [id], onDelete: Restrict)
+  folder             DocumentFolder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  parentDocument     Document?        @relation("EmailAttachments", fields: [parentDocumentId], references: [id], onDelete: SetNull)
+  attachments        Document[]       @relation("EmailAttachments")
   flaggedMoments     FlaggedMoment[]
   /// Expenses that point at this document as their receipt. SetNull
   /// on the FK in Expense — deleting the receipt doesn't lose the
   /// expense itself.
   receiptForExpenses Expense[]
+  agreement          MatterAgreement?
 
   @@index([matterId])
   @@index([leadId])
@@ -2583,4 +2589,52 @@ model PortalLinkRequest {
   @@index([emailHash, createdAt])
   @@index([ipHash, createdAt])
   @@map("portal_link_requests")
+}
+
+model MatterDraft {
+  id          String            @id @default(cuid())
+  createdById String
+  /// The form's field values as posted (strings / string arrays). Read
+  /// only by the form and createMatter; never queried into.
+  values      Json
+  /// Copied out of `values` for access checks (draft-access.ts).
+  leadUserId  String?
+  teamUserIds String[]          @default([])
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  files       MatterDraftFile[]
+
+  @@index([createdById])
+  @@index([updatedAt])
+  @@map("matter_drafts")
+}
+
+model MatterDraftFile {
+  id            String      @id @default(cuid())
+  draftId       String
+  draft         MatterDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  name          String
+  fileUrl       String
+  contentType   String?
+  fileSize      Int?
+  uploadedBy    String
+  isOriginating Boolean     @default(false) /// at most one true per draft (app-enforced)
+  createdAt     DateTime    @default(now())
+
+  @@index([draftId])
+  @@map("matter_draft_files")
+}
+
+model MatterAgreement {
+  id         String    @id @default(cuid())
+  matterId   String    @unique
+  matter     Matter    @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  status     String    @default("not_sent") /// not_sent | sent | signed
+  signedDate DateTime? /// date-only, UTC midnight (ADR-012)
+  documentId String?   @unique
+  document   Document? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@map("matter_agreements")
 }

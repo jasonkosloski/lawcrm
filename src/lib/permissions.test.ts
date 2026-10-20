@@ -22,6 +22,14 @@ import {
   PERMISSION_KEYS_SET,
 } from "./permissions";
 
+describe("matters.agreement.edit", () => {
+  test("is catalogued in the matters category", () => {
+    expect(isKnownPermission("matters.agreement.edit")).toBe(true);
+    const cat = PERMISSION_CATEGORIES.find((c) => c.id === "matters");
+    expect(cat?.permissions.some((p) => p.key === "matters.agreement.edit")).toBe(true);
+  });
+});
+
 describe("PERMISSION_KEYS — catalog shape", () => {
   test("non-empty", () => {
     expect(PERMISSION_KEYS.length).toBeGreaterThan(0);

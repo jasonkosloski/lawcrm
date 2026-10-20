@@ -35,6 +35,9 @@ function todayDateOnly(): Date {
  *  in sync with @@map() entries in `prisma/schema.prisma`;
  *  integration-helpers.test.ts fails when a table is missing. */
 export const TABLES_IN_DELETE_ORDER = [
+  // Matter drafts — children before parents (no FKs to other tables)
+  "matter_draft_files",
+  "matter_drafts",
   // Client portal — before matters/contacts (Restrict FKs)
   "portal_login_tokens",
   "portal_sessions",
@@ -88,6 +91,7 @@ export const TABLES_IN_DELETE_ORDER = [
   "evidence_syncs",
   "flagged_moments",
   "evidence",
+  "matter_agreements", // before documents (documentId) and matters
   "documents",
   // Portal: identities after documents (Document.portalUploaderId is Restrict);
   // document_requests after documents (SetNull) and before users/matters.
