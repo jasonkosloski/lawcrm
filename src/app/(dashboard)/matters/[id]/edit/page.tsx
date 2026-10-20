@@ -30,6 +30,8 @@ import { MatterCalendarDefaultsCard } from "@/components/settings/calendar-defau
 import { toSolPeriod } from "@/lib/sol";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
+import { listVenues } from "@/lib/queries/venues";
+import { getCurrentFirm } from "@/lib/firm";
 import { assertMatterAccess } from "@/lib/matter-access";
 import { MatterRestrictCard } from "@/components/matters/matter-restrict-card";
 
@@ -77,6 +79,10 @@ export default async function EditMatterPage({
     canEditMatter,
     firmDefaults,
     canRestrict,
+    venueRows,
+    currentVenue,
+    canAddVenue,
+    firm,
   ] = await Promise.all([
     prisma.practiceArea.findMany({
       where: { isActive: true },
@@ -88,6 +94,7 @@ export default async function EditMatterPage({
         statutePeriodAmount: true,
         statutePeriodUnit: true,
         statuteSourceCitation: true,
+        requiredMatterFields: true,
         stages: {
           where: { isActive: true },
           orderBy: { order: "asc" },
@@ -127,7 +134,36 @@ export default async function EditMatterPage({
       },
     }),
     currentUserHasPermission("matters.restrict"),
+    listVenues({ activeOnly: true }),
+    // The matter's current venue, kept in the picker even when archived.
+    matter.venueId
+      ? prisma.venue.findUnique({
+          where: { id: matter.venueId },
+          select: {
+            id: true,
+            name: true,
+            city: true,
+            county: true,
+            state: true,
+            isActive: true,
+          },
+        })
+      : Promise.resolve(null),
+    currentUserHasPermission("venues.add"),
+    getCurrentFirm(),
   ]);
+
+  const venues = venueRows.map((v) => ({
+    id: v.id,
+    name: v.name,
+    city: v.city,
+    county: v.county,
+    state: v.state,
+    isActive: v.isActive,
+  }));
+  if (currentVenue && !venues.some((v) => v.id === currentVenue.id)) {
+    venues.push(currentVenue);
+  }
 
   // Calendar period (ADR-035) as one serializable value for the forms.
   const areas = areaRows.map(
@@ -170,6 +206,9 @@ export default async function EditMatterPage({
     description: matter.description,
     leadUserId: activeLead?.userId ?? null,
     incidentDate: matter.incidentDate,
+    venueId: matter.venueId,
+    filedDate: matter.filedDate,
+    trialDate: matter.trialDate,
     statuteOfLimitationsDate: matter.statuteOfLimitationsDate,
     statuteOfLimitationsNotes: matter.statuteOfLimitationsNotes,
   };
@@ -200,7 +239,14 @@ export default async function EditMatterPage({
             <CardContent className="p-5">
               <EditMatterForm
                 matter={forEdit}
-                options={{ areas, clients, users: leadOptions }}
+                options={{
+                  areas,
+                  clients,
+                  users: leadOptions,
+                  venues,
+                  canAddVenue,
+                  firmState: firm.state ?? "",
+                }}
                 canChangeLead={canManageTeam}
               />
             </CardContent>

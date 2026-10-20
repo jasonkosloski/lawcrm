@@ -231,3 +231,100 @@ describe("EditMatterForm — validation error keeps the user's selections (F095)
     expect(second.get("practiceAreaId")).toBe("civil");
   });
 });
+
+describe("EditMatterForm — venue, filed/trial dates, required fields", () => {
+  const venueOpts = {
+    venues: [
+      {
+        id: "v1",
+        name: "Denver District Court",
+        city: "Denver",
+        county: "Denver",
+        state: "CO",
+        isActive: true,
+      },
+      {
+        id: "v2",
+        name: "Old Court",
+        city: null,
+        county: null,
+        state: "CO",
+        isActive: false,
+      },
+    ],
+    canAddVenue: false,
+    firmState: "CO",
+  };
+  const reqOptions: EditMatterFormOptions = {
+    ...options,
+    ...venueOpts,
+    areas: options.areas.map((a) =>
+      a.id === "civil"
+        ? { ...a, requiredMatterFields: ["venue", "court", "filedDate", "incidentDate"] }
+        : a
+    ),
+  };
+
+  test("shows the current venue and prefills filed/trial dates", () => {
+    render(
+      <EditMatterForm
+        matter={{
+          ...matter,
+          venueId: "v1",
+          filedDate: new Date("2025-02-03T00:00:00Z"),
+          trialDate: new Date("2026-09-10T00:00:00Z"),
+        }}
+        options={reqOptions}
+        canChangeLead
+      />
+    );
+    expect(screen.getByLabelText("Venue")).toHaveValue("Denver District Court");
+    expect(screen.getByLabelText(/filed date/i)).toHaveValue("2025-02-03");
+    expect(screen.getByLabelText(/trial date/i)).toHaveValue("2026-09-10");
+  });
+
+  test("an archived current venue is kept selected and labelled (archived)", async () => {
+    const user = userEvent.setup();
+    render(
+      <EditMatterForm
+        matter={{ ...matter, venueId: "v2" }}
+        options={reqOptions}
+        canChangeLead
+      />
+    );
+    expect(screen.getByLabelText("Venue")).toHaveValue("Old Court");
+    await user.click(screen.getByLabelText("Venue"));
+    expect(await screen.findByRole("option", { name: /\(archived\)/i })).toBeTruthy();
+  });
+
+  test("required markers follow the selected area", async () => {
+    const user = userEvent.setup();
+    render(<EditMatterForm matter={matter} options={reqOptions} canChangeLead />);
+    expect(screen.getAllByText("Required for Civil Rights", { exact: false }).length).toBeGreaterThan(0);
+    await user.selectOptions(screen.getByLabelText(/practice area/i), "emp");
+    expect(screen.queryByText("Required for Civil Rights", { exact: false })).toBeNull();
+  });
+
+  test("clearing a required field that had a value blocks submit with the error", async () => {
+    const user = userEvent.setup();
+    render(
+      <EditMatterForm
+        matter={{ ...matter, court: "D. Colo." }}
+        options={reqOptions}
+        canChangeLead
+      />
+    );
+    await user.clear(screen.getByLabelText(/^court/i));
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+    expect(await screen.findByText("Required for this practice area.")).toBeTruthy();
+    expect(posted.calls).toHaveLength(0);
+  });
+
+  test("an already-empty required field does not block submit", async () => {
+    const user = userEvent.setup();
+    render(<EditMatterForm matter={matter} options={reqOptions} canChangeLead />);
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+    await waitFor(() => expect(posted.calls).toHaveLength(1));
+    expect(posted.calls[0].get("venueId")).toBe("");
+  });
+});

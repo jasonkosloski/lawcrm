@@ -15,7 +15,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useRef, useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { updateMatter } from "@/app/actions/matters";
 import { CascadeConfirm } from "@/components/automations/cascade-confirm";
@@ -40,6 +40,13 @@ import {
   type UpdateMatterState,
 } from "@/lib/new-matter-constants";
 import {
+  clearedRequired,
+  requiredFieldError,
+  type RequiredMatterField,
+} from "@/lib/matter-required-fields";
+import type { VenueOption } from "@/lib/queries/venues";
+import { VenueCombobox } from "./venue-combobox";
+import {
   Field,
   Row,
   Section,
@@ -62,6 +69,9 @@ export type MatterForEdit = {
   description: string | null;
   leadUserId: string | null;
   incidentDate: Date | null;
+  venueId?: string | null;
+  filedDate?: Date | null;
+  trialDate?: Date | null;
   statuteOfLimitationsDate: Date | null;
   statuteOfLimitationsNotes: string | null;
 };
@@ -74,6 +84,8 @@ export type EditAreaOption = {
    *  under the Deadline date input. */
   statutePeriod: SolPeriod | null;
   statuteSourceCitation: string | null;
+  /** Keys from REQUIRED_MATTER_FIELDS the area insists on. */
+  requiredMatterFields?: string[];
   stages: Array<{
     id: string;
     name: string;
@@ -101,6 +113,25 @@ export type EditMatterFormOptions = {
     jobTitle: string;
     inactive?: boolean;
   }>;
+  /** Active venues plus the matter's current venue (even if archived). */
+  venues?: VenueOption[];
+  /** Holds `venues.add`: lets the venue picker add inline. */
+  canAddVenue?: boolean;
+  firmState?: string;
+};
+
+/** Required-field key -> the form control's `name` (and error key). */
+const FIELD_NAME: Record<RequiredMatterField, string> = {
+  venue: "venueId",
+  client: "clientId",
+  caseNumber: "caseNumber",
+  court: "court",
+  filedDate: "filedDate",
+  trialDate: "trialDate",
+  incidentDate: "incidentDate",
+  opposingParty: "opposingParty",
+  opposingFirm: "opposingFirm",
+  description: "description",
 };
 
 export function EditMatterForm({
@@ -131,6 +162,19 @@ export function EditMatterForm({
   const [, startTransition] = useTransition();
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const cleared = checkCleared(new FormData(e.currentTarget));
+    if (cleared.length > 0) {
+      const next: Record<string, string[]> = {};
+      for (const k of cleared) next[FIELD_NAME[k]] = [requiredFieldError];
+      setClientErrs(next);
+      const first = formRef.current?.querySelector<HTMLElement>(
+        `[name="${FIELD_NAME[cleared[0]]}"]:not([type="hidden"])`
+      );
+      (first ?? formRef.current?.querySelector<HTMLElement>('[aria-label="Venue"]'))
+        ?.focus();
+      return;
+    }
+    setClientErrs({});
     const submitter = (e.nativeEvent as SubmitEvent).submitter as
       | HTMLElement
       | null;
@@ -148,7 +192,9 @@ export function EditMatterForm({
   // nothing typed gets lost. On first render, use the matter's
   // current values.
   const vals = state.values ?? {};
-  const errs = state.errors ?? {};
+  const [clientErrs, setClientErrs] = useState<Record<string, string[]>>({});
+  const formRef = useRef<HTMLFormElement>(null);
+  const errs = { ...(state.errors ?? {}), ...clientErrs };
   const dateInputValue = (d: Date | null): string =>
     d ? dateOnlyKey(d) : "";
   // The stored SOL date is either auto-derived (it equals incident +
@@ -183,6 +229,8 @@ export function EditMatterForm({
     // silently picking someone.
     leadUserId: vals.leadUserId ?? matter.leadUserId ?? "",
     description: vals.description ?? matter.description ?? "",
+    filedDate: vals.filedDate ?? dateInputValue(matter.filedDate ?? null),
+    trialDate: vals.trialDate ?? dateInputValue(matter.trialDate ?? null),
     incidentDate:
       vals.incidentDate ?? dateInputValue(matter.incidentDate),
     statuteOfLimitationsDate:
@@ -232,6 +280,62 @@ export function EditMatterForm({
   );
 
   const selectedArea = options.areas.find((a) => a.id === practiceAreaId);
+
+  const venues = options.venues ?? [];
+  const [venueId, setVenueId] = useState<string | null>(
+    vals.venueId ?? matter.venueId ?? null
+  );
+
+  // Incident date only counts when the area tracks SOL (the only time the
+  // field is shown; the server mirrors this).
+  const requiredKeys = new Set<string>(
+    (selectedArea?.requiredMatterFields ?? []).filter(
+      (k) => k !== "incidentDate" || selectedArea?.hasStatuteOfLimitations
+    )
+  );
+  const isRequired = (k: RequiredMatterField) => requiredKeys.has(k);
+  const requiredHint = selectedArea ? `Required for ${selectedArea.name}` : "";
+  const reqHint = (k: RequiredMatterField, extra?: string) =>
+    isRequired(k)
+      ? extra
+        ? `${requiredHint}. ${extra}`
+        : requiredHint
+      : extra;
+
+  // Edit rule: only a field that HAD a value may not be cleared; one that
+  // was already empty may stay empty (the server enforces the same).
+  function checkCleared(fd: FormData): RequiredMatterField[] {
+    const get = (n: string) => String(fd.get(n) ?? "");
+    return clearedRequired(
+      [...requiredKeys],
+      {
+        venue: matter.venueId,
+        caseNumber: matter.caseNumber,
+        court: matter.court,
+        filedDate: matter.filedDate ? dateOnlyKey(matter.filedDate) : null,
+        trialDate: matter.trialDate ? dateOnlyKey(matter.trialDate) : null,
+        incidentDate: matter.incidentDate
+          ? dateOnlyKey(matter.incidentDate)
+          : null,
+        opposingParty: matter.opposingParty,
+        opposingFirm: matter.opposingFirm,
+        description: matter.description,
+        client: matter.clientId,
+      },
+      {
+        venue: get("venueId"),
+        caseNumber: get("caseNumber"),
+        court: get("court"),
+        filedDate: get("filedDate"),
+        trialDate: get("trialDate"),
+        incidentDate: get("incidentDate"),
+        opposingParty: get("opposingParty"),
+        opposingFirm: get("opposingFirm"),
+        description: get("description"),
+        client: get("clientId"),
+      }
+    );
+  }
   // Live "what auto-compute will produce" from the incident input and
   // the currently selected area.
   const parsedIncident = incidentDateInput
@@ -252,7 +356,7 @@ export function EditMatterForm({
   };
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-6">
+    <form ref={formRef} onSubmit={onSubmit} className="flex flex-col gap-6">
       <Section title="Core">
         <Field label="Matter name" name="name" required error={errs.name}>
           <input
@@ -313,7 +417,13 @@ export function EditMatterForm({
         </Row>
 
         <Row>
-          <Field label="Case number" name="caseNumber" error={errs.caseNumber}>
+          <Field
+            label="Case number"
+            name="caseNumber"
+            required={isRequired("caseNumber")}
+            hint={reqHint("caseNumber")}
+            error={errs.caseNumber}
+          >
             <input
               id="caseNumber"
               name="caseNumber"
@@ -374,8 +484,12 @@ export function EditMatterForm({
           <Field
             label="Client"
             name="clientId"
+            required={isRequired("client")}
             error={errs.clientId}
-            hint="Swap to a different existing contact, or clear to detach."
+            hint={reqHint(
+              "client",
+              "Swap to a different existing contact, or clear to detach."
+            )}
           >
             <NativeSelect
               className="w-full"
@@ -443,6 +557,8 @@ export function EditMatterForm({
           <Field
             label="Opposing party"
             name="opposingParty"
+            required={isRequired("opposingParty")}
+            hint={reqHint("opposingParty")}
             error={errs.opposingParty}
           >
             <input
@@ -457,6 +573,8 @@ export function EditMatterForm({
           <Field
             label="Opposing firm"
             name="opposingFirm"
+            required={isRequired("opposingFirm")}
+            hint={reqHint("opposingFirm")}
             error={errs.opposingFirm}
           >
             <input
@@ -471,7 +589,37 @@ export function EditMatterForm({
       </Section>
 
       <Section title="Details">
-        <Field label="Court" name="court" error={errs.court}>
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-ink-2">
+            Venue
+            {isRequired("venue") && <span className="text-warn ml-0.5">*</span>}
+          </span>
+          <VenueCombobox
+            name="venueId"
+            venues={venues}
+            value={venueId}
+            onChange={(v) => setVenueId(v?.id ?? null)}
+            canAdd={options.canAddVenue ?? false}
+            defaultState={options.firmState ?? ""}
+            error={errs.venueId?.[0]}
+            required={isRequired("venue")}
+          />
+          {!errs.venueId?.[0] && (
+            <div className="text-2xs text-ink-4">
+              {isRequired("venue")
+                ? requiredHint
+                : "The court or jurisdiction the case is in."}
+            </div>
+          )}
+        </div>
+
+        <Field
+          label="Court"
+          name="court"
+          required={isRequired("court")}
+          hint={reqHint("court")}
+          error={errs.court}
+        >
           <input
             id="court"
             name="court"
@@ -482,7 +630,46 @@ export function EditMatterForm({
           />
         </Field>
 
-        <Field label="Summary" name="description" error={errs.description}>
+        <Row>
+          <Field
+            label="Filed date"
+            name="filedDate"
+            required={isRequired("filedDate")}
+            hint={reqHint("filedDate")}
+            error={errs.filedDate}
+          >
+            <input
+              id="filedDate"
+              name="filedDate"
+              type="date"
+              defaultValue={init.filedDate}
+              className={inputCls(!!errs.filedDate)}
+            />
+          </Field>
+          <Field
+            label="Trial date"
+            name="trialDate"
+            required={isRequired("trialDate")}
+            hint={reqHint("trialDate")}
+            error={errs.trialDate}
+          >
+            <input
+              id="trialDate"
+              name="trialDate"
+              type="date"
+              defaultValue={init.trialDate}
+              className={inputCls(!!errs.trialDate)}
+            />
+          </Field>
+        </Row>
+
+        <Field
+          label="Summary"
+          name="description"
+          required={isRequired("description")}
+          hint={reqHint("description")}
+          error={errs.description}
+        >
           <textarea
             id="description"
             name="description"
@@ -510,12 +697,14 @@ export function EditMatterForm({
             <Field
               label="Incident / accrual date"
               name="incidentDate"
+              required={isRequired("incidentDate")}
               error={errs.incidentDate}
-              hint={
+              hint={reqHint(
+                "incidentDate",
                 selectedArea.statutePeriod
                   ? `Period: ${formatStatutePeriod(selectedArea.statutePeriod)}${selectedArea.statuteSourceCitation ? ` · ${selectedArea.statuteSourceCitation}` : ""}. Leave Deadline date blank to auto-compute.`
                   : "When known, drives the SOL deadline once the firm configures a statute period for this area."
-              }
+              )}
             >
               <input
                 id="incidentDate"

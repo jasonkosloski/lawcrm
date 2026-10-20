@@ -28,6 +28,7 @@ vi.mock("@/lib/prisma", () => ({
     practiceArea: { findMany: vi.fn(async () => []) },
     contact: { findMany: vi.fn(async () => []) },
     user: { findMany: vi.fn(async () => []) },
+    venue: { findUnique: vi.fn(async () => null) },
     firm: {
       findFirstOrThrow: vi.fn(async () => ({
         autoAddTeamToNewEvents: true,
@@ -35,6 +36,12 @@ vi.mock("@/lib/prisma", () => ({
       })),
     },
   },
+}));
+vi.mock("@/lib/queries/venues", () => ({
+  listVenues: vi.fn(async () => []),
+}));
+vi.mock("@/lib/firm", () => ({
+  getCurrentFirm: vi.fn(async () => ({ state: "CO" })),
 }));
 vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn(),
@@ -48,6 +55,9 @@ const formProps = vi.hoisted(() => ({
   current: undefined as
     | {
         options: {
+          venues?: Array<{ id: string; isActive: boolean }>;
+          canAddVenue?: boolean;
+          firmState?: string;
           clients: Array<{ id: string; inactive?: boolean }>;
           users: Array<{ id: string; inactive?: boolean }>;
         };
@@ -85,6 +95,7 @@ vi.mock("@/components/settings/calendar-defaults-card", () => ({
 
 import { prisma } from "@/lib/prisma";
 import { currentUserHasPermission } from "@/lib/permission-check";
+import { listVenues } from "@/lib/queries/venues";
 import EditMatterPage from "./page";
 
 /** Minimal matter row satisfying every field the page reads. */
@@ -259,5 +270,48 @@ describe("EditMatterPage — option lists keep the current client and lead (F082
     grant("matters.edit", "matters.manage_team");
     await renderPage();
     expect(formProps.current?.canChangeLead).toBe(true);
+  });
+});
+
+describe("EditMatterPage — venue options", () => {
+  const venue = (id: string, isActive: boolean) => ({
+    id,
+    name: id,
+    city: null,
+    county: null,
+    state: "CO",
+    isActive,
+    matterCount: 0,
+  });
+
+  test("passes active venues, add permission and firm state", async () => {
+    grant("matters.edit", "venues.add");
+    vi.mocked(listVenues).mockResolvedValueOnce([venue("v1", true)]);
+    await renderPage();
+    expect(listVenues).toHaveBeenCalledWith({ activeOnly: true });
+    expect(formProps.current?.options.venues?.map((v) => v.id)).toEqual(["v1"]);
+    expect(formProps.current?.options.canAddVenue).toBe(true);
+    expect(formProps.current?.options.firmState).toBe("CO");
+  });
+
+  test("includes the matter's archived current venue", async () => {
+    grant("matters.edit");
+    vi.mocked(listVenues).mockResolvedValueOnce([venue("v1", true)]);
+    vi.mocked(prisma.venue.findUnique).mockResolvedValueOnce(
+      venue("v-old", false) as never
+    );
+    vi.mocked(prisma.matter.findUnique).mockResolvedValue({
+      ...matter,
+      venueId: "v-old",
+    } as never);
+    render(
+      await EditMatterPage({
+        params: Promise.resolve({ id: "m1" }),
+      } as Parameters<typeof EditMatterPage>[0])
+    );
+    expect(formProps.current?.options.venues).toEqual([
+      expect.objectContaining({ id: "v1" }),
+      expect.objectContaining({ id: "v-old", isActive: false }),
+    ]);
   });
 });
