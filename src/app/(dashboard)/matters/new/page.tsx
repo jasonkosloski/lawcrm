@@ -14,7 +14,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { NewMatterForm } from "@/components/matters/new-matter-form";
 import { prisma } from "@/lib/prisma";
 import { toSolPeriod } from "@/lib/sol";
-import { requirePermission } from "@/lib/permission-check";
+import {
+  currentUserHasPermission,
+  requirePermission,
+} from "@/lib/permission-check";
 
 export default async function NewMatterPage() {
   // Same key `createMatter` enforces on submit: without it the form
@@ -24,7 +27,7 @@ export default async function NewMatterPage() {
   // the user id.
   const currentUserId = await requirePermission("matters.create");
 
-  const [areaRows, clients, users] = await Promise.all([
+  const [areaRows, clients, users, canManageTeam] = await Promise.all([
     prisma.practiceArea.findMany({
       where: { isActive: true },
       orderBy: [{ order: "asc" }, { name: "asc" }],
@@ -57,6 +60,7 @@ export default async function NewMatterPage() {
       select: { id: true, name: true, jobTitle: true, initials: true },
       orderBy: { name: "asc" },
     }),
+    currentUserHasPermission("matters.manage_team"),
   ]);
 
   // Calendar period (ADR-035) as one serializable value for the forms.
@@ -75,17 +79,10 @@ export default async function NewMatterPage() {
           <Card>
             <CardContent className="p-5">
               <NewMatterForm
-                options={{ areas, clients, users, currentUserId }}
+                options={{ areas, clients, users, currentUserId, canManageTeam }}
               />
             </CardContent>
           </Card>
-
-          <div className="text-2xs text-ink-4 mt-3">
-            First-pass form. Team assignment beyond the lead, tagging
-            to existing leads, automation hookups (CGIA notice
-            generation for §1983, etc.), and inline client creation
-            are all follow-ups.
-          </div>
         </div>
       </div>
     </>

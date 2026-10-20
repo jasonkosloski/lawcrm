@@ -54,6 +54,8 @@ import {
   type CreateMatterState,
 } from "@/lib/new-matter-constants";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { NewMatterConflictReview } from "./new-matter-conflict-review";
+import { NewMatterTeamPicker, parseTeamSeats } from "./new-matter-team-picker";
 
 type ClientOption = {
   id: string;
@@ -83,6 +85,8 @@ export type NewMatterFormOptions = {
   clients: ClientOption[];
   users: Array<{ id: string; name: string; jobTitle: string; initials: string }>;
   currentUserId: string;
+  /** Holds `matters.manage_team`: shows the extra team seats. */
+  canManageTeam: boolean;
 };
 
 const MAX_SUGGESTIONS = 6;
@@ -160,6 +164,10 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
     vals.stageId ??
     initialArea?.stages[0]?.id ??
     "";
+
+  const [leadUserId, setLeadUserId] = useState<string>(
+    vals.leadUserId ?? options.currentUserId
+  );
 
   const [practiceAreaId, setPracticeAreaId] = useState<string>(initialAreaId);
   const [stageId, setStageId] = useState<string>(initialStageId);
@@ -598,7 +606,8 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
               className="w-full"
               id="leadUserId"
               name="leadUserId"
-              defaultValue={vals.leadUserId ?? options.currentUserId}
+              value={leadUserId}
+              onChange={(e) => setLeadUserId(e.target.value)}
               required
               aria-invalid={!!errs.leadUserId || undefined}
             >
@@ -610,6 +619,15 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
             </NativeSelect>
           </Field>
         </Row>
+
+        {options.canManageTeam && (
+          <NewMatterTeamPicker
+            users={options.users}
+            leadUserId={leadUserId}
+            initial={parseTeamSeats(vals.extraTeam)}
+            error={errs.extraTeam}
+          />
+        )}
 
         {/* New-client fields — visible unless an existing client is linked. */}
         {!selectedClient && (
@@ -783,6 +801,18 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
             </Field>
           </Row>
         </Section>
+      )}
+
+      {/* Conflict gate (ADR-054): keyed by fingerprint so a new result
+          never inherits the previous one's "reviewed" tick. */}
+      {state.conflict && (
+        <NewMatterConflictReview
+          key={state.conflict.fingerprint}
+          conflict={state.conflict}
+          reasonError={errs.conflictOverrideReason}
+          staleError={errs.conflictAck}
+          defaultReason={vals.conflictOverrideReason}
+        />
       )}
 
       {/* ── Submit ──────────────────────────────────────────────── */}

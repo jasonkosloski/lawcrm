@@ -56,7 +56,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         key: "matters.manage_team",
         label: "Manage team members",
         description:
-          "Add or remove people from a matter's case team via the matter edit page.",
+          "Add or remove people from a matter's case team via the matter edit page, or add team members beyond the lead when creating a matter.",
       },
       {
         key: "matters.restrict",
@@ -154,7 +154,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         key: "intake.conflict_check.override",
         label: "Override conflict flags",
         description:
-          "Mark a flagged or conflicted lead as cleared with a justification. Required for ethics compliance — the override is logged in the audit trail.",
+          "Mark a flagged or conflicted lead as cleared, or create a matter despite a conflict, with a justification. Required for ethics compliance — the override is logged in the audit trail.",
       },
       {
         key: "intake.restrict",

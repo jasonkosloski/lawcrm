@@ -66,6 +66,7 @@ import {
 } from "@/lib/new-matter-constants";
 import {
   resetDb,
+  seedContact,
   seedFirm,
   seedMatter,
   seedPracticeArea,
@@ -995,6 +996,248 @@ describe("createMatter inline client", () => {
       select: { firmId: true, type: true },
     });
     expect(contact).toEqual({ firmId, type: "client" });
+  });
+});
+
+// ── Conflict gate on create (ADR-054) ──────────────────────────────────
+
+describe("createMatter — conflict gate", () => {
+  /** An active matter whose client is `name` (so naming them as the
+   *  adverse party is a hard conflict). */
+  const seedClientOnMatter = async (name: string) => {
+    const c = await seedContact({ name, type: "client" });
+    const m = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId });
+    await prisma.matter.update({ where: { id: m.matterId }, data: { clientId: c.contactId } });
+    return m.matterId;
+  };
+  const created = () => prisma.matter.count({ where: { name: "Doe v. Acme" } });
+
+  test("a clear check creates silently (no conflict timeline row)", async () => {
+    await expect(
+      createMatter(createMatterInitialState, createForm({ opposingParty: "Nobody Known" }))
+    ).rejects.toThrow(/__REDIRECT__/);
+    const rows = await prisma.activityLog.count({
+      where: { title: { startsWith: "Created with conflict check" } },
+    });
+    expect(rows).toBe(0);
+  });
+
+  test("possible conflicts block until acknowledged, then log 'warn (reviewed)'", async () => {
+    await seedContact({ name: "Jane Doe", type: "witness" });
+    const first = await createMatter(
+      createMatterInitialState,
+      createForm({
+        clientId: NEW_CLIENT_SENTINEL,
+        newClientName: "Jane Doe",
+        newClientEmail: "jane@example.com",
+      })
+    );
+    expect(first.conflict?.severity).toBe("warn");
+    expect(first.values?.newClientName).toBe("Jane Doe");
+    expect(await created()).toBe(0);
+
+    await expect(
+      createMatter(
+        first,
+        createForm({
+          clientId: NEW_CLIENT_SENTINEL,
+          newClientName: "Jane Doe",
+          newClientEmail: "jane@example.com",
+          conflictAck: first.conflict!.fingerprint,
+        })
+      )
+    ).rejects.toThrow(/__REDIRECT__/);
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { title: "Created with conflict check: warn (reviewed)" },
+      select: { detail: true },
+    });
+    expect(log.detail).toBe("1 possible conflict acknowledged");
+  });
+
+  test("a stale acknowledgement says the results changed", async () => {
+    await seedContact({ name: "Jane Doe", type: "witness" });
+    const res = await createMatter(
+      createMatterInitialState,
+      createForm({
+        clientId: NEW_CLIENT_SENTINEL,
+        newClientName: "Jane Doe",
+        newClientEmail: "jane@example.com",
+        conflictAck: "earlier-fingerprint",
+      })
+    );
+    expect(res.errors?.conflictAck?.[0]).toMatch(/changed/);
+  });
+
+  test("a client merged away since the form loaded resolves to the survivor", async () => {
+    const survivor = await seedContact({ name: "Survivor Client" });
+    const gone = await seedContact({ name: "Gone Client" });
+    await prisma.contact.update({
+      where: { id: gone.contactId },
+      data: { mergedIntoId: survivor.contactId },
+    });
+    await expect(
+      createMatter(createMatterInitialState, createForm({ clientId: gone.contactId }))
+    ).rejects.toThrow(/__REDIRECT__/);
+    const m = await prisma.matter.findFirstOrThrow({ select: { clientId: true } });
+    expect(m.clientId).toBe(survivor.contactId);
+  });
+
+  test("an acknowledgement of a different result does not pass", async () => {
+    await seedContact({ name: "Jane Doe", type: "witness" });
+    const res = await createMatter(
+      createMatterInitialState,
+      createForm({
+        clientId: NEW_CLIENT_SENTINEL,
+        newClientName: "Jane Doe",
+        newClientEmail: "jane@example.com",
+        conflictAck: "stale-fingerprint",
+      })
+    );
+    expect(res.conflict?.severity).toBe("warn");
+    expect(await created()).toBe(0);
+  });
+
+  test("an adverse party who is a current client is a conflict; no override key → blocked", async () => {
+    await seedClientOnMatter("Acme Holdings");
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (key) => key !== "intake.conflict_check.override"
+    );
+    const first = await createMatter(
+      createMatterInitialState,
+      createForm({ opposingParty: "Acme Holdings" })
+    );
+    expect(first.conflict).toMatchObject({ severity: "conflict", canOverride: false });
+    expect(first.conflict!.matches[0].description).toMatch(/current client/);
+
+    // Even with the fingerprint and a reason, no key means no matter.
+    const again = await createMatter(
+      first,
+      createForm({
+        opposingParty: "Acme Holdings",
+        conflictAck: first.conflict!.fingerprint,
+        conflictOverrideReason: "Waiver signed by both clients",
+      })
+    );
+    expect(again.conflict?.canOverride).toBe(false);
+    expect(await created()).toBe(0);
+  });
+
+  test("override needs a 5+ character justification, then logs it on the matter", async () => {
+    await seedClientOnMatter("Acme Holdings");
+    const first = await createMatter(
+      createMatterInitialState,
+      createForm({ opposingParty: "Acme Holdings" })
+    );
+    expect(first.conflict).toMatchObject({ severity: "conflict", canOverride: true });
+
+    const short = await createMatter(
+      first,
+      createForm({
+        opposingParty: "Acme Holdings",
+        conflictAck: first.conflict!.fingerprint,
+        conflictOverrideReason: "ok",
+      })
+    );
+    expect(short.errors?.conflictOverrideReason?.[0]).toMatch(/5\+ characters/);
+    expect(await created()).toBe(0);
+
+    await expect(
+      createMatter(
+        short,
+        createForm({
+          opposingParty: "Acme Holdings",
+          conflictAck: first.conflict!.fingerprint,
+          conflictOverrideReason: "Informed-consent waiver signed",
+        })
+      )
+    ).rejects.toThrow(/__REDIRECT__/);
+    const matter = await prisma.matter.findFirstOrThrow({
+      where: { name: "Doe v. Acme" },
+      select: { id: true },
+    });
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { matterId: matter.id, title: "Created with conflict check: override" },
+      select: { detail: true },
+    });
+    expect(log.detail).toBe("1 match overridden: Informed-consent waiver signed");
+  });
+
+  test("an existing client picked on the form does not match itself", async () => {
+    const c = await seedContact({ name: "Repeat Client", email: "r@example.com" });
+    await expect(
+      createMatter(createMatterInitialState, createForm({ clientId: c.contactId }))
+    ).rejects.toThrow(/__REDIRECT__/);
+  });
+});
+
+// ── Extra team seats on create ─────────────────────────────────────────
+
+describe("createMatter — extra team members", () => {
+  let paraId: string;
+  beforeEach(async () => {
+    paraId = (await seedUser({ firmId, email: "para@example.com", name: "Pat Para" })).userId;
+  });
+  const teamOf = async () => {
+    const m = await prisma.matter.findFirstOrThrow({
+      select: { teamMembers: { select: { userId: true, role: true } } },
+    });
+    return m.teamMembers;
+  };
+
+  test("seats land with the lead; the member is notified and it's logged", async () => {
+    await expect(
+      createMatter(
+        createMatterInitialState,
+        createForm({
+          extraTeam: JSON.stringify([
+            { userId: paraId, role: "paralegal" },
+            { userId: userId, role: "co_counsel" }, // the lead: dropped
+            { userId: paraId, role: "investigator" }, // duplicate: dropped
+          ]),
+        })
+      )
+    ).rejects.toThrow(/__REDIRECT__/);
+    expect(await teamOf()).toEqual(
+      expect.arrayContaining([
+        { userId, role: "lead" },
+        { userId: paraId, role: "paralegal" },
+      ])
+    );
+    expect(await teamOf()).toHaveLength(2);
+    expect(
+      await prisma.notification.count({ where: { userId: paraId, type: "matter_assigned" } })
+    ).toBe(1);
+    expect(
+      await prisma.activityLog.count({ where: { title: "Pat Para added to team as Paralegal" } })
+    ).toBe(1);
+  });
+
+  test("without matters.manage_team, extra seats are refused and nothing is written", async () => {
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (key) => key !== "matters.manage_team"
+    );
+    const res = await createMatter(
+      createMatterInitialState,
+      createForm({ extraTeam: JSON.stringify([{ userId: paraId, role: "paralegal" }]) })
+    );
+    expect(res.errors?.extraTeam?.[0]).toMatch(/permission/);
+    expect(await prisma.matter.count()).toBe(0);
+  });
+
+  test("an inactive user or a lead role is refused", async () => {
+    await prisma.user.update({ where: { id: paraId }, data: { isActive: false } });
+    const inactive = await createMatter(
+      createMatterInitialState,
+      createForm({ extraTeam: JSON.stringify([{ userId: paraId, role: "paralegal" }]) })
+    );
+    expect(inactive.errors?.extraTeam?.[0]).toMatch(/no longer active/);
+
+    const asLead = await createMatter(
+      createMatterInitialState,
+      createForm({ extraTeam: JSON.stringify([{ userId: paraId, role: "lead" }]) })
+    );
+    expect(asLead.errors?.extraTeam).toBeDefined();
+    expect(await prisma.matter.count()).toBe(0);
   });
 });
 

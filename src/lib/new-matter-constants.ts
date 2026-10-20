@@ -12,12 +12,28 @@ import type { RecalcChange } from "@/lib/automations/recalc-plan";
  *  "create new client" fields on the form. */
 export const NEW_CLIENT_SENTINEL = "__new__";
 
+/** A conflict-check result the user must act on before the matter is
+ *  created: tick "reviewed" (warn) or record an override (conflict).
+ *  `matches` are already redacted for the viewer; `fingerprint` is
+ *  echoed back as `conflictAck` to acknowledge exactly this result. */
+export type NewMatterConflict = {
+  severity: "warn" | "conflict";
+  matches: Array<{ severity: "warn" | "conflict"; description: string }>;
+  fingerprint: string;
+  /** Holds `intake.conflict_check.override`. */
+  canOverride: boolean;
+};
+
+/** Extra team seats on create, posted as JSON in `extraTeam`. */
+export type NewMatterTeamSeat = { userId: string; role: string };
+
 /** Shape returned by the create/update matter server actions on
  *  validation error — field errors + echoed values for form re-render. */
 export type CreateMatterState = {
   status: "idle" | "error";
   errors?: Record<string, string[]>;
   values?: Record<string, string>;
+  conflict?: NewMatterConflict;
 };
 
 export const createMatterInitialState: CreateMatterState = {

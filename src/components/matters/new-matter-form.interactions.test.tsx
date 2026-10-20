@@ -59,6 +59,7 @@ const options: NewMatterFormOptions = {
     { id: "u1", name: "Jason Kosloski", jobTitle: "Attorney", initials: "JK" },
   ],
   currentUserId: "u1",
+  canManageTeam: false,
 };
 
 const hiddenClientId = () =>

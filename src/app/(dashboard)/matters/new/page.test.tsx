@@ -20,6 +20,7 @@ vi.mock("@/lib/prisma", () => ({
 }));
 vi.mock("@/lib/permission-check", () => ({
   requirePermission: vi.fn(),
+  currentUserHasPermission: vi.fn(async () => false),
 }));
 vi.mock("@/components/layout/topbar", () => ({ TopBar: () => null }));
 vi.mock("@/components/matters/new-matter-form", () => ({

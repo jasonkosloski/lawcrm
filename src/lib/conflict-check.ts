@@ -43,7 +43,11 @@ export type ConflictMatchKind =
   | "matter_opposing_firm"
   /** A contact someone manually flagged as a conflict
    *  (`Contact.conflictStatus = "flagged"`). Always hard. */
-  | "contact_flagged";
+  | "contact_flagged"
+  /** The ADVERSE party being screened is (or was) the firm's client —
+   *  see `runAdverseConflictMatcher`. Hard on an active matter (Rule
+   *  1.7), soft when every such matter is archived (Rule 1.9). */
+  | "adverse_is_client";
 
 export type ConflictMatch = {
   kind: ConflictMatchKind;
@@ -422,6 +426,135 @@ export async function runConflictMatcher(
       description: `${c.name}${c.isActive ? "" : " (inactive)"} — flagged as a conflict on their contact record`,
       contactId: c.id,
     });
+  }
+
+  return { severity: summarizeMatchSeverity(matches), matches };
+}
+
+/** Split the free-text adverse fields into the names to screen. The
+ *  form's own placeholder ("City of Aurora, Officer J. Doe") puts
+ *  several parties in one field, so each comma / semicolon / newline
+ *  part of two or more words is screened as well as the whole value.
+ *  One-word parts are skipped: they are mostly pieces of one name
+ *  ("Smith, John", "Acme, Inc."), which the whole-value check covers,
+ *  and alone they would match any single-name contact. Exported for
+ *  testing. */
+export function adverseNameKeys(values: Array<string | null | undefined>): string[] {
+  const keys = new Set<string>();
+  for (const v of values) {
+    const whole = normalize(v);
+    if (!whole) continue;
+    keys.add(whole);
+    for (const part of whole.split(/[,;\n]/)) {
+      const k = normalize(part);
+      if (k.includes(" ")) keys.add(k);
+    }
+  }
+  return [...keys];
+}
+
+/**
+ * The other direction of a conflict check: is the party we'd be
+ * ADVERSE to someone the firm represents? `runConflictMatcher` screens
+ * a prospective client against adverse parties on existing matters;
+ * this screens a new matter's opposing party / firm against existing
+ * clients, by contact name or organization (case-insensitive,
+ * normalized, every row — same no-cap rule as above).
+ *
+ *   - "conflict": the name is a client (Matter.client or a client
+ *     party row) on an active matter, or a manually flagged contact.
+ *   - "warn": the name is a client only on archived matters — a former
+ *     client, worth a Rule 1.9 look, one match per matter so the
+ *     display wall can redact each — or it matches only a contact's
+ *     ORGANIZATION (suing a client's employer is not a conflict by
+ *     itself, but an organizational client is stored the same way).
+ *
+ * `ownContactId` is the new matter's own client, never screened as
+ * its own adversary.
+ *
+ * Merged-away contacts are excluded (their rows moved to the
+ * survivor); deactivated ones still count, as in the client path.
+ */
+export async function runAdverseConflictMatcher(
+  adverseNames: Array<string | null | undefined>,
+  ownContactId?: string | null
+): Promise<ConflictCheckResult> {
+  const keys = adverseNameKeys(adverseNames);
+  if (keys.length === 0) return { severity: "clear", matches: [] };
+
+  const identity = keys.flatMap((k) => [
+    { name: { equals: k, mode: "insensitive" as const } },
+    { organization: { equals: k, mode: "insensitive" as const } },
+  ]);
+  const contacts = await prisma.contact.findMany({
+    where: {
+      mergedIntoId: null,
+      OR: identity,
+      ...(ownContactId ? { NOT: { id: ownContactId } } : {}),
+    },
+    select: {
+      id: true,
+      name: true,
+      organization: true,
+      isActive: true,
+      conflictStatus: true,
+      clientMatters: { select: { id: true, name: true, isArchived: true } },
+      mattersAsClient: {
+        where: { category: "client" },
+        select: { matter: { select: { id: true, name: true, isArchived: true } } },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  const matches: ConflictMatch[] = [];
+  for (const c of contacts) {
+    const label = `${c.name}${c.isActive ? "" : " (inactive)"}`;
+    const byName = keys.includes(normalize(c.name));
+    const matchedField = byName ? "name" : "organization";
+    const matters = new Map<string, { name: string; isArchived: boolean }>();
+    for (const m of c.clientMatters) matters.set(m.id, m);
+    for (const mc of c.mattersAsClient) matters.set(mc.matter.id, mc.matter);
+    const active = [...matters].filter(([, m]) => !m.isArchived);
+    const archived = [...matters].filter(([, m]) => m.isArchived);
+
+    for (const [matterId, m] of active) {
+      matches.push({
+        kind: "adverse_is_client",
+        severity: byName ? "conflict" : "warn",
+        matchedField,
+        description: byName
+          ? `${label} — adverse party is a current client on matter "${m.name}"`
+          : `${label} (${c.organization}) — client on matter "${m.name}" shares the adverse party's organization`,
+        contactId: c.id,
+        matterId,
+      });
+    }
+    if (active.length === 0) {
+      for (const [matterId, m] of archived) {
+        matches.push({
+          kind: "adverse_is_client",
+          severity: "warn",
+          matchedField,
+          description: `${label} — adverse party is a former client (archived matter "${m.name}")`,
+          contactId: c.id,
+          matterId,
+        });
+      }
+    }
+    if (c.conflictStatus === "flagged") {
+      matches.push({
+        kind: "contact_flagged",
+        // A flagged person whose ORGANIZATION is the adverse party is
+        // not the adverse party: worth a look, not a hard stop.
+        severity: byName ? "conflict" : "warn",
+        matchedField,
+        description: byName
+          ? `${label} — flagged as a conflict on their contact record`
+          : `${label} (${c.organization}) — flagged as a conflict; shares the adverse party's organization`,
+        contactId: c.id,
+      });
+    }
   }
 
   return { severity: summarizeMatchSeverity(matches), matches };

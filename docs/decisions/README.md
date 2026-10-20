@@ -72,3 +72,4 @@ ADR true to the code are appended in place and dated.
 | [051](051-client-portal-identity-is-separate-from-staff-auth.md) | Client portal identity is separate from staff auth (magic link, database sessions, host-only cookie) |  |
 | [052](052-portal-uploads-are-matter-documents.md) | Portal uploads are ordinary matter documents; three-state file share with folder inheritance |  |
 | [053](053-clerk-proves-identity-the-user-table-grants-access.md) | Clerk proves staff identity; the User table grants access (DB-authoritative, one-time email link) |  |
+| [054](054-new-matter-screens-both-directions-and-overrides-on-the-matter.md) | New matters are conflict-checked in both directions; the override is recorded on the matter |  |

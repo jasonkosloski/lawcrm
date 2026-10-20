@@ -73,6 +73,7 @@ const options: NewMatterFormOptions = {
     { id: "u1", name: "Jason Kosloski", jobTitle: "Attorney", initials: "JK" },
   ],
   currentUserId: "u1",
+  canManageTeam: false,
 };
 
 beforeEach(() => {
@@ -164,5 +165,97 @@ describe("NewMatterForm — selections survive a validation error (F095)", () =>
     await waitFor(() => expect(posted).toHaveLength(2));
     expect(posted[1].get("feeStructure")).toBe("hourly");
     expect(posted[1].get("leadUserId")).toBe("u2");
+  });
+});
+
+describe("NewMatterForm — conflict review (ADR-054)", () => {
+  const formData = () =>
+    new FormData(document.querySelector("form") as HTMLFormElement);
+
+  test("possible conflicts: the tick posts the result's fingerprint", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    mountState.current = {
+      status: "error",
+      values: {},
+      conflict: {
+        severity: "warn",
+        matches: [{ severity: "warn", description: "Jane Doe — same name" }],
+        fingerprint: "fp1",
+        canOverride: false,
+      },
+    };
+    render(<NewMatterForm options={options} />);
+    expect(screen.getByText("Jane Doe — same name")).toBeInTheDocument();
+    expect(formData().get("conflictAck")).toBeNull();
+    await userEvent.click(screen.getByLabelText(/reviewed these possible conflicts/i));
+    expect(formData().get("conflictAck")).toBe("fp1");
+  });
+
+  test("a conflict with the override key asks for a justification", () => {
+    mountState.current = {
+      status: "error",
+      values: { conflictOverrideReason: "ok" },
+      errors: { conflictOverrideReason: ["Justification is required (5+ characters)."] },
+      conflict: {
+        severity: "conflict",
+        matches: [{ severity: "conflict", description: "Acme — current client" }],
+        fingerprint: "fp2",
+        canOverride: true,
+      },
+    };
+    render(<NewMatterForm options={options} />);
+    expect(screen.getByLabelText(/override justification/i)).toHaveValue("ok");
+    expect(screen.getByText(/5\+ characters/)).toBeInTheDocument();
+    expect(formData().get("conflictAck")).toBe("fp2");
+  });
+
+  test("a conflict without the override key offers no way through", () => {
+    mountState.current = {
+      status: "error",
+      values: {},
+      conflict: {
+        severity: "conflict",
+        matches: [{ severity: "conflict", description: "Acme — current client" }],
+        fingerprint: "fp3",
+        canOverride: false,
+      },
+    };
+    render(<NewMatterForm options={options} />);
+    expect(screen.queryByLabelText(/override justification/i)).toBeNull();
+    expect(formData().get("conflictAck")).toBeNull();
+    expect(screen.getByText(/permission to override/i)).toBeInTheDocument();
+  });
+});
+
+describe("NewMatterForm — extra team members", () => {
+  const teamOptions: NewMatterFormOptions = {
+    ...options,
+    canManageTeam: true,
+    users: [
+      ...options.users,
+      { id: "u2", name: "Pat Para", jobTitle: "Paralegal", initials: "PP" },
+    ],
+  };
+
+  test("hidden without matters.manage_team", () => {
+    render(<NewMatterForm options={options} />);
+    expect(screen.queryByText(/other team members/i)).toBeNull();
+  });
+
+  test("an added row posts as JSON in extraTeam; the lead is not offered", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    render(<NewMatterForm options={teamOptions} />);
+    await userEvent.click(screen.getByRole("button", { name: /add team member/i }));
+    const person = screen.getByLabelText("Team member 1");
+    // u1 is the lead (current user) — only Pat is offered.
+    expect(
+      Array.from((person as HTMLSelectElement).options).map((o) => o.value)
+    ).toEqual(["", "u2"]);
+    await userEvent.selectOptions(person, "u2");
+    await userEvent.selectOptions(screen.getByLabelText("Role for team member 1"), "paralegal");
+    const fd = new FormData(document.querySelector("form") as HTMLFormElement);
+    expect(JSON.parse(fd.get("extraTeam") as string)).toEqual([
+      { userId: "u2", role: "paralegal" },
+    ]);
   });
 });

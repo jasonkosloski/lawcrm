@@ -14,7 +14,11 @@ import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vi
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-import { runConflictMatcher } from "@/lib/conflict-check";
+import {
+  adverseNameKeys,
+  runAdverseConflictMatcher,
+  runConflictMatcher,
+} from "@/lib/conflict-check";
 import { prisma } from "@/lib/prisma";
 import {
   resetDb,
@@ -718,5 +722,144 @@ describe("runConflictMatcher — manually flagged contacts", () => {
       organization: null,
     });
     expect(result.severity).toBe("warn");
+  });
+});
+
+describe("runAdverseConflictMatcher — adverse party vs the firm's clients", () => {
+  let areaId: string;
+  let stageId: string;
+  beforeEach(async () => {
+    const a = await seedPracticeArea();
+    areaId = a.areaId;
+    stageId = a.stageId;
+  });
+
+  const clientMatter = async (
+    clientName: string,
+    opts: { archived?: boolean; via?: "matter" | "party"; organization?: string } = {}
+  ) => {
+    const c = await seedContact({
+      name: clientName,
+      organization: opts.organization ?? null,
+      type: "client",
+    });
+    const m = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+      name: `${clientName} matter`,
+    });
+    if (opts.via === "party") {
+      await seedMatterContact({ matterId: m.matterId, contactId: c.contactId, category: "client" });
+    } else {
+      await prisma.matter.update({ where: { id: m.matterId }, data: { clientId: c.contactId } });
+    }
+    if (opts.archived) {
+      await prisma.matter.update({ where: { id: m.matterId }, data: { isArchived: true } });
+    }
+    return { contactId: c.contactId, matterId: m.matterId };
+  };
+
+  test("nothing typed → clear", async () => {
+    expect(await runAdverseConflictMatcher([null, "  "])).toEqual({
+      severity: "clear",
+      matches: [],
+    });
+  });
+
+  test("a current client (Matter.client) named as the adverse party is a conflict", async () => {
+    const { matterId: hit } = await clientMatter("Acme Holdings");
+    const result = await runAdverseConflictMatcher(["  acme   HOLDINGS "]);
+    expect(result.severity).toBe("conflict");
+    expect(result.matches).toHaveLength(1);
+    expect(result.matches[0]).toMatchObject({
+      kind: "adverse_is_client",
+      severity: "conflict",
+      matterId: hit,
+    });
+  });
+
+  test("a client party row on an active matter is a conflict", async () => {
+    await clientMatter("Rita Party", { via: "party" });
+    const result = await runAdverseConflictMatcher(["Rita Party"]);
+    expect(result.severity).toBe("conflict");
+  });
+
+  test("each comma-separated party in the field is screened", async () => {
+    await clientMatter("Officer J. Doe");
+    const result = await runAdverseConflictMatcher(["City of Aurora, Officer J. Doe"]);
+    expect(result.severity).toBe("conflict");
+  });
+
+  test("a client only on archived matters is a former client → warn per matter, so it can be redacted", async () => {
+    const { matterId: archived } = await clientMatter("Old Client", { archived: true });
+    const result = await runAdverseConflictMatcher(["Old Client"]);
+    expect(result.severity).toBe("warn");
+    expect(result.matches[0].matterId).toBe(archived);
+    expect(result.matches[0].description).toMatch(/former client/);
+  });
+
+  test("the new matter's own client is never screened as its own adversary", async () => {
+    const { contactId } = await clientMatter("Self Same");
+    expect((await runAdverseConflictMatcher(["Self Same"], contactId)).severity).toBe("clear");
+  });
+
+  test("a flagged contact matched only by organization is a warn", async () => {
+    const c = await seedContact({ name: "Flagged Employee", organization: "Big City", type: "other" });
+    await prisma.contact.update({
+      where: { id: c.contactId },
+      data: { conflictStatus: "flagged" },
+    });
+    const result = await runAdverseConflictMatcher(["Big City"]);
+    expect(result.severity).toBe("warn");
+    expect(result.matches[0].kind).toBe("contact_flagged");
+  });
+
+  test("matching only a client's organization is a warn, not a conflict", async () => {
+    await clientMatter("Jane Employee", { organization: "City of Aurora" });
+    const result = await runAdverseConflictMatcher(["City of Aurora"]);
+    expect(result.severity).toBe("warn");
+    expect(result.matches[0].matchedField).toBe("organization");
+  });
+
+  test("a non-client contact with the same name is not a match", async () => {
+    const w = await seedContact({ name: "Wanda Witness", type: "witness" });
+    const m = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId });
+    await seedMatterContact({ matterId: m.matterId, contactId: w.contactId, category: "witness" });
+    expect((await runAdverseConflictMatcher(["Wanda Witness"])).severity).toBe("clear");
+  });
+
+  test("a flagged contact is a conflict even with no matters", async () => {
+    const c = await seedContact({ name: "Flagged Foe", type: "other" });
+    await prisma.contact.update({
+      where: { id: c.contactId },
+      data: { conflictStatus: "flagged" },
+    });
+    const result = await runAdverseConflictMatcher(["Flagged Foe"]);
+    expect(result.severity).toBe("conflict");
+    expect(result.matches[0].kind).toBe("contact_flagged");
+  });
+
+  test("merged-away contacts are excluded", async () => {
+    const { contactId } = await clientMatter("Merged Away");
+    const survivor = await seedContact({ name: "Survivor" });
+    await prisma.contact.update({
+      where: { id: contactId },
+      data: { mergedIntoId: survivor.contactId },
+    });
+    expect((await runAdverseConflictMatcher(["Merged Away"])).severity).toBe("clear");
+  });
+
+  test("adverseNameKeys keeps the whole value and each multi-word part", () => {
+    expect(
+      adverseNameKeys(["Doe, John", null, "Acme, Inc.;  Beta Co", "City of Aurora, Officer J. Doe"])
+    ).toEqual([
+      "doe, john",
+      "acme, inc.; beta co",
+      "beta co",
+      "city of aurora, officer j. doe",
+      "city of aurora",
+      "officer j. doe",
+    ]);
   });
 });

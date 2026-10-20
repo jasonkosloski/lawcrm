@@ -20,7 +20,7 @@ import {
   currentUserHasPermission,
   requirePermission,
 } from "@/lib/permission-check";
-import { logActivity } from "@/lib/activity-log";
+import { logActivity, logActivityTx } from "@/lib/activity-log";
 import { createNotification } from "@/lib/notifications";
 import { getEffectiveCalendarDefaults } from "@/lib/calendar-defaults";
 import { BILLING_MODES } from "@/lib/billing-mode-constants";
@@ -50,8 +50,11 @@ import {
 import {
   NEW_CLIENT_SENTINEL,
   type CreateMatterState,
+  type NewMatterTeamSeat,
   type UpdateMatterState,
 } from "@/lib/new-matter-constants";
+import { conflictFingerprint, screenNewMatter } from "@/lib/matter-create-conflict";
+import { redactConflictResultForViewer } from "@/lib/conflict-check-redact";
 
 const createMatterSchema = z
   .object({
@@ -296,6 +299,71 @@ async function resolveAreaAndStage(
   };
 }
 
+const extraTeamSchema = z
+  .array(
+    z.object({
+      userId: z.string().trim().min(1),
+      role: z.enum(MATTER_TEAM_ROLES).refine((r) => r !== "lead"),
+    })
+  )
+  .max(20);
+
+/** Extra team seats posted by the New-matter form (JSON in
+ *  `extraTeam`). Needs `matters.manage_team` (the lead alone only
+ *  needs `matters.create`), active users only; the lead attorney and
+ *  duplicates are dropped. Returns a form error rather than a
+ *  `requirePermission` redirect so nothing typed is lost. */
+async function resolveExtraTeam(
+  rawJson: string | undefined,
+  leadUserId: string
+): Promise<
+  | { ok: true; seats: Array<NewMatterTeamSeat & { name: string }> }
+  | { ok: false; error: string }
+> {
+  if (!rawJson) return { ok: true, seats: [] };
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(rawJson);
+  } catch {
+    return { ok: false, error: "Team members could not be read. Try again." };
+  }
+  const parsed = extraTeamSchema.safeParse(decoded);
+  if (!parsed.success) {
+    return { ok: false, error: "Pick a person and a role for each team member." };
+  }
+  const seen = new Set<string>([leadUserId]);
+  const seats = parsed.data.filter((s) => {
+    if (seen.has(s.userId)) return false;
+    seen.add(s.userId);
+    return true;
+  });
+  if (seats.length === 0) return { ok: true, seats: [] };
+  if (!(await currentUserHasPermission("matters.manage_team"))) {
+    return {
+      ok: false,
+      error: "You don't have permission to add team members beyond the lead attorney.",
+    };
+  }
+  const active = new Map(
+    (
+      await prisma.user.findMany({
+        where: { id: { in: seats.map((s) => s.userId) }, isActive: true },
+        select: { id: true, name: true },
+      })
+    ).map((u) => [u.id, u.name])
+  );
+  if (active.size !== seats.length) {
+    return {
+      ok: false,
+      error: "A selected team member is no longer active. Remove them and try again.",
+    };
+  }
+  return {
+    ok: true,
+    seats: seats.map((s) => ({ ...s, name: active.get(s.userId)! })),
+  };
+}
+
 export async function createMatter(
   _prev: CreateMatterState,
   formData: FormData
@@ -365,6 +433,106 @@ export async function createMatter(
       ? data.statuteOfLimitationsNotes || null
       : null;
 
+  const team = await resolveExtraTeam(raw.extraTeam, leadUserId);
+  if (!team.ok) {
+    return { status: "error", errors: { extraTeam: [team.error] }, values: raw };
+  }
+
+  // Conflict gate (ADR-054): screen the client against adverse
+  // parties AND the typed adverse party against existing clients,
+  // before anything is written. Mirrors lead conversion (ADR-050),
+  // except that the override is recorded here, on the new matter,
+  // since there is no lead to carry it.
+  // Resolved once and reused by the write below. A contact merged
+  // away since the form loaded resolves to its survivor, so the screen
+  // and the matter both use the live record.
+  const clientSelect = {
+    id: true,
+    name: true,
+    email: true,
+    organization: true,
+    mergedIntoId: true,
+  } as const;
+  let existingClient =
+    data.clientId && data.clientId !== NEW_CLIENT_SENTINEL
+      ? await prisma.contact.findUnique({
+          where: { id: data.clientId },
+          select: clientSelect,
+        })
+      : null;
+  if (existingClient?.mergedIntoId) {
+    existingClient = await prisma.contact.findUnique({
+      where: { id: existingClient.mergedIntoId },
+      select: clientSelect,
+    });
+  }
+  const screen = await screenNewMatter({
+    client: existingClient
+      ? {
+          name: existingClient.name,
+          email: existingClient.email,
+          organization: existingClient.organization,
+          ownContactId: existingClient.id,
+        }
+      : data.clientId === NEW_CLIENT_SENTINEL
+        ? {
+            name: data.newClientName || null,
+            email: data.newClientEmail || null,
+            organization: data.newClientOrganization || null,
+          }
+        : null,
+    opposingParty: data.opposingParty || null,
+    opposingFirm: data.opposingFirm || null,
+  });
+  let overrideReason: string | null = null;
+  if (screen.severity !== "clear") {
+    const fingerprint = conflictFingerprint(screen.matches);
+    const acknowledged = raw.conflictAck === fingerprint;
+    const canOverride =
+      screen.severity === "conflict" &&
+      (await currentUserHasPermission("intake.conflict_check.override"));
+    const reason = (raw.conflictOverrideReason ?? "").trim();
+    const passes =
+      acknowledged &&
+      (screen.severity === "warn" ||
+        (canOverride && reason.length >= 5 && reason.length <= 2000));
+    if (!passes) {
+      const shown = await redactConflictResultForViewer(currentUserId, screen);
+      // An acknowledgement of an earlier, different result: say so,
+      // or the user may resubmit without noticing the new matches.
+      const stale = !!raw.conflictAck && !acknowledged;
+      return {
+        status: "error",
+        values: raw,
+        errors: stale
+          ? {
+              conflictAck: [
+                "The conflict check results changed since you reviewed them. Review the list again.",
+              ],
+            }
+          : acknowledged && canOverride
+            ? {
+                conflictOverrideReason: [
+                  reason.length > 2000
+                    ? "Keep the justification under 2000 characters."
+                    : "Justification is required (5+ characters).",
+                ],
+              }
+            : undefined,
+        conflict: {
+          severity: screen.severity,
+          matches: shown.matches.map((m) => ({
+            severity: m.severity,
+            description: m.description,
+          })),
+          fingerprint,
+          canOverride,
+        },
+      };
+    }
+    if (screen.severity === "conflict") overrideReason = reason;
+  }
+
   // Inline client, matter, and SOL deadline are dependent writes —
   // one transaction so a failed matter.create can't strand an
   // orphaned Contact (+ContactPhone), and a matter can't exist
@@ -401,12 +569,8 @@ export async function createMatter(
           },
         });
       }
-    } else if (data.clientId) {
-      const client = await tx.contact.findUnique({
-        where: { id: data.clientId },
-        select: { id: true },
-      });
-      clientId = client?.id ?? null;
+    } else if (existingClient) {
+      clientId = existingClient.id;
     }
 
     const created = await tx.matter.create({
@@ -430,7 +594,10 @@ export async function createMatter(
         statuteOfLimitationsDate: solDate,
         statuteOfLimitationsNotes: solNotes,
         teamMembers: {
-          create: { userId: leadUserId, role: "lead" },
+          create: [
+            { userId: leadUserId, role: "lead" },
+            ...team.seats.map((seat) => ({ userId: seat.userId, role: seat.role })),
+          ],
         },
         // Invariant: whenever a matter has a client, that contact
         // surfaces as a MatterContact with category="client" so the
@@ -477,6 +644,26 @@ export async function createMatter(
       tz,
     });
 
+    // The conflict outcome, as on conversion: a plain "clear" stays
+    // silent; a reviewed warning or an override (with its reason) is
+    // what compliance review asks about. In the transaction: a matter
+    // created over a conflict must never exist without its record.
+    if (screen.severity !== "clear") {
+      const n = screen.matches.length;
+      await logActivityTx(tx, {
+        matterId: created.id,
+        userId: currentUserId,
+        type: "automation",
+        title: `Created with conflict check: ${
+          overrideReason !== null ? "override" : "warn (reviewed)"
+        }`,
+        detail:
+          overrideReason !== null
+            ? `${n} match${n === 1 ? "" : "es"} overridden: ${overrideReason}`
+            : `${n} possible conflict${n === 1 ? "" : "s"} acknowledged`,
+      });
+    }
+
     return { matter: created, defaults };
   });
 
@@ -502,6 +689,30 @@ export async function createMatter(
       title: defaultsLine,
     });
   }
+
+  await Promise.all(
+    team.seats.flatMap((seat) => [
+      logActivity({
+        matterId: matter.id,
+        userId: currentUserId,
+        type: "filing",
+        title: `${seat.name} added to team as ${matterTeamRoleLabel(seat.role)}`,
+      }),
+      // Same notice as addMatterTeamMember; never ping yourself.
+      ...(seat.userId !== currentUserId
+        ? [
+            createNotification({
+              userId: seat.userId,
+              type: "matter_assigned",
+              title: `Added to ${data.name} as ${matterTeamRoleLabel(seat.role)}`,
+              body: null,
+              link: `/matters/${matter.id}`,
+              matterId: matter.id,
+            }),
+          ]
+        : []),
+    ])
+  );
 
   // Sidebar + matters list both read fresh data on next render.
   revalidatePath("/", "layout");

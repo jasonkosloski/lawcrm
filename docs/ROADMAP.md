@@ -26,7 +26,7 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 - [x] **Clerk staff auth**: Google sign-in via Clerk, live in production 2026-10-20; Microsoft sign-in only if needed. → [auth](features/auth.md)
 - [~] **Notification delivery channels**: email/SMS/push fan-out from `createNotification`; per-matter preferences. → [notifications](features/notifications.md)
 - [~] **Phone / SMS / voicemail**: manual call logging shipped; SMS send and voicemail transcription need providers. → [calls](features/communication-calls.md)
-- [~] **`/matters/new` v2**: name pattern, case location, multi-team, conflict pre-save, retainer, drafts. → [matters](features/matters.md)
+- [~] **`/matters/new` v2**: conflict check and team shipped; name pattern, case location, retainer, drafts left. → [matters](features/matters.md)
 - [~] **Client portal**: foundation and documents shipped; status, messages, invoices next. → [client-portal](features/client-portal.md)
 - [ ] **Calendar: recurring events**: blocked on an RRULE data-model ADR (series vs materialized). → [calendar](features/calendar.md)
 - [ ] **Email: attachments on send**: receive side shipped. → [email](features/communication-email.md)
