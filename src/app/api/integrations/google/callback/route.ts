@@ -26,7 +26,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
 import {
@@ -76,7 +76,7 @@ function redirectToSettings(
 export async function GET(request: NextRequest): Promise<Response> {
   const origin = request.nextUrl.origin;
 
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) {
     // Session died mid-flow (expired while on Google's consent
     // screen). Send them to login; they restart from settings.

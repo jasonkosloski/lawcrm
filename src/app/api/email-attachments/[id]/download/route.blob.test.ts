@@ -17,7 +17,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 const BLOB_KEY =
   "https://abc123.private.blob.vercel-storage.com/AAAAAAAAAAAAAAAA__file";
 
-vi.mock("@/auth", () => ({ auth: vi.fn() }));
+vi.mock("@/lib/session", () => ({ getSession: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({
   prisma: { emailAttachment: { findFirst: vi.fn() } },
 }));
@@ -35,14 +35,14 @@ vi.mock("@/lib/file-storage", () => ({
   signedBlobUrl: vi.fn(),
 }));
 
-import { auth } from "@/auth";
+import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { ensureAttachmentBytes } from "@/lib/email-attachments";
 import { signedBlobUrl, statFile } from "@/lib/file-storage";
 import { GET } from "./route";
 
 async function redirectFor(filename: string, declared: string | null) {
-  vi.mocked(auth).mockResolvedValue({ user: { id: "u1" } } as never);
+  vi.mocked(getSession).mockResolvedValue({ user: { id: "u1" } } as never);
   vi.mocked(prisma.emailAttachment.findFirst).mockResolvedValue({
     id: "a1",
     filename,
@@ -127,7 +127,7 @@ describe("email attachment blob redirect - TTL, caching and failure shapes", () 
   });
 
   test("blob gone (stat null) -> 410 and nothing is signed", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(getSession).mockResolvedValue({ user: { id: "u1" } } as never);
     vi.mocked(prisma.emailAttachment.findFirst).mockResolvedValue({
       id: "a1",
       filename: "brief.pdf",
@@ -145,7 +145,7 @@ describe("email attachment blob redirect - TTL, caching and failure shapes", () 
   });
 
   test("an unexpected failure while caching bytes is a logged JSON 502, not a bare 500", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { id: "u1" } } as never);
+    vi.mocked(getSession).mockResolvedValue({ user: { id: "u1" } } as never);
     vi.mocked(prisma.emailAttachment.findFirst).mockResolvedValue({
       id: "a1",
       filename: "brief.pdf",

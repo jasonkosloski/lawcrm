@@ -27,6 +27,10 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 const APP_DIR = path.resolve(__dirname);
+// Only these trees are scanned. Pages outside them (login, portal,
+// no-access) own their auth handling; /no-access in particular must NOT
+// use requireUser() (its visitors are signed in with no firm account, so
+// the guard would redirect to it forever).
 const ROOTS = [path.join(APP_DIR, "(dashboard)"), path.join(APP_DIR, "print")];
 
 const GUARD_CALL = /\b(?:requireUser|requirePermission|requireAdmin|getCurrentUserId)\s*\(/;

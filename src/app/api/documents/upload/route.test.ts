@@ -22,7 +22,7 @@ import { pipeline } from "node:stream/promises";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-vi.mock("@/auth", () => ({ auth: vi.fn() }));
+vi.mock("@/lib/staff-auth", () => ({ getStaffAuthFromRequest: vi.fn() }));
 vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn(),
 }));
@@ -59,7 +59,7 @@ vi.mock("@/lib/file-storage", async (importOriginal) => {
   };
 });
 
-import { auth } from "@/auth";
+import { getStaffAuthFromRequest } from "@/lib/staff-auth";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
@@ -74,7 +74,13 @@ import {
 } from "@/lib/file-storage";
 import { POST } from "./route";
 
-const mockedAuth = vi.mocked(auth);
+const mockedAuth = vi.mocked(getStaffAuthFromRequest);
+const OK = {
+  status: "ok",
+  userId: "u1",
+  clerkUserId: "clerk_1",
+  sessionId: "sess_1",
+} as const;
 const mockedPerm = vi.mocked(currentUserHasPermission);
 const mockedMatter = vi.mocked(prisma.matter.findUnique);
 const mockedLead = vi.mocked(prisma.lead.findUnique);
@@ -98,8 +104,8 @@ async function drain(stream: NodeJS.ReadableStream): Promise<number> {
 }
 
 function wireHappyMocks() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  mockedAuth.mockResolvedValue({ user: { id: "u1" } } as any);
+   
+  mockedAuth.mockResolvedValue(OK);
   mockedPerm.mockResolvedValue(true);
   vi.mocked(canAccessMatter).mockResolvedValue(true);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -171,15 +177,23 @@ function fdWith(
 
 describe("POST /api/documents/upload — gates", () => {
   test("401 without a session", async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mockedAuth.mockResolvedValue(null as any);
+    mockedAuth.mockResolvedValue({ status: "signed_out" });
     const res = await POST(await makeRequest(fdWith({ matterId: "m1" }, [])));
     expect(res.status).toBe(401);
   });
 
+  test("401 for a signed-in user with no firm access", async () => {
+    mockedAuth.mockResolvedValue({
+      status: "no_access",
+      clerkUserId: "clerk_1",
+    });
+    const res = await POST(await makeRequest(fdWith({ matterId: "m1" }, [])));
+    expect(res.status).toBe(401);
+    expect(mockedPerm).not.toHaveBeenCalled();
+  });
+
   test("403 without documents.upload", async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mockedAuth.mockResolvedValue({ user: { id: "u1" } } as any);
+    mockedAuth.mockResolvedValue(OK);
     mockedPerm.mockResolvedValue(false);
     const res = await POST(
       await makeRequest(fdWith({ matterId: "m1" }, [{ name: "a.pdf" }]))
@@ -190,8 +204,7 @@ describe("POST /api/documents/upload — gates", () => {
   });
 
   test("400 on a non-multipart body", async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mockedAuth.mockResolvedValue({ user: { id: "u1" } } as any);
+    mockedAuth.mockResolvedValue(OK);
     mockedPerm.mockResolvedValue(true);
     const res = await POST(
       new NextRequest("http://test.local/api/documents/upload", {

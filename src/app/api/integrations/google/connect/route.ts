@@ -18,7 +18,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getSession } from "@/lib/session";
 import {
   OAUTH_STATE_COOKIE,
   OAUTH_STATE_COOKIE_PATH,
@@ -33,7 +33,7 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest): Promise<Response> {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) {
     return NextResponse.redirect(new URL("/login", request.nextUrl.origin));
   }

@@ -21,9 +21,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-vi.mock("@/auth", () => ({ auth: vi.fn() }));
+vi.mock("@/lib/session", () => ({ getSession: vi.fn() }));
 
-import { auth } from "@/auth";
+import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { isEncryptedToken } from "@/lib/email-token-crypto";
 import {
@@ -35,7 +35,7 @@ import { parseAccessTokenEnvelope } from "@/lib/google/gmail-client";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 import { GET } from "./route";
 
-const mockedAuth = vi.mocked(auth);
+const mockedAuth = vi.mocked(getSession);
 
 /** What Google reports it actually granted — mirrors the connect
  *  scope list incl. the calendar scope. */

@@ -11,10 +11,10 @@
 import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
-// Guard: the query must not reach for auth() itself.
-vi.mock("@/auth", () => ({
-  auth: vi.fn(() => {
-    throw new Error("getCurrentTimerSession must not call auth() directly");
+// Guard: the query must not reach for the session itself.
+vi.mock("@/lib/session", () => ({
+  getSession: vi.fn(() => {
+    throw new Error("getCurrentTimerSession must not call getSession() directly");
   }),
 }));
 

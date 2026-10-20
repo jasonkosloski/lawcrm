@@ -37,19 +37,19 @@ import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-vi.mock("@/auth", () => ({ auth: vi.fn() }));
+vi.mock("@/lib/session", () => ({ getSession: vi.fn() }));
 vi.mock("@/lib/google/gmail-client", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@/lib/google/gmail-client")>();
   return { ...actual, gmailFetch: vi.fn() };
 });
 
-import { auth } from "@/auth";
+import { getSession } from "@/lib/session";
 import { GmailAuthError, gmailFetch } from "@/lib/google/gmail-client";
 import { prisma } from "@/lib/prisma";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
-const mockedAuth = vi.mocked(auth);
+const mockedAuth = vi.mocked(getSession);
 const mockedGmailFetch = vi.mocked(gmailFetch);
 
 const TEST_TMP = realpathSync(mkdtempSync(join(tmpdir(), "lawcrm-attach-")));

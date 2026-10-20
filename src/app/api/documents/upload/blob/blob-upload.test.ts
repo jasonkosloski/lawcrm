@@ -23,7 +23,7 @@
 
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-vi.mock("@/auth", () => ({ auth: vi.fn() }));
+vi.mock("@/lib/session", () => ({ getSession: vi.fn() }));
 vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn(),
 }));
@@ -55,7 +55,7 @@ vi.mock("@vercel/blob", async (importOriginal) => {
 });
 
 import { del, head } from "@vercel/blob";
-import { auth } from "@/auth";
+import { getSession } from "@/lib/session";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
@@ -74,7 +74,7 @@ import {
   onUploadCompleted,
 } from "./blob-upload";
 
-const mockedAuth = vi.mocked(auth);
+const mockedAuth = vi.mocked(getSession);
 const mockedPerm = vi.mocked(currentUserHasPermission);
 const mockedMatter = vi.mocked(prisma.matter.findUnique);
 const mockedLead = vi.mocked(prisma.lead.findUnique);

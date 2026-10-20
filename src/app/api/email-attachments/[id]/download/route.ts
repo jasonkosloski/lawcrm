@@ -33,7 +33,7 @@
  */
 
 import { NextResponse, type NextRequest } from "next/server";
-import { auth } from "@/auth";
+import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { optionalMatterAccessClause } from "@/lib/matter-access";
 import {
@@ -59,7 +59,7 @@ export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ id: string }> }
 ): Promise<Response> {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

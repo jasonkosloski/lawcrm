@@ -41,7 +41,7 @@
 import { del, head } from "@vercel/blob";
 import type { HandleUploadOptions } from "@vercel/blob/client";
 import { z } from "zod";
-import { auth } from "@/auth";
+import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { canAccessMatter } from "@/lib/matter-access";
 import { canAccessLead } from "@/lib/lead-access";
@@ -138,7 +138,7 @@ type TokenPayload = {
 
 export const onBeforeGenerateToken: HandleUploadOptions["onBeforeGenerateToken"] =
   async (pathname, clientPayload) => {
-    const session = await auth();
+    const session = await getSession();
     if (!session?.user?.id) {
       throw new UploadTokenError(401, "Unauthorized");
     }

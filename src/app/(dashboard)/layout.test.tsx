@@ -4,7 +4,7 @@
  * The layout is a UX gate / redirect convenience (pages and actions
  * authenticate themselves; the proxy is only a cookie-presence
  * sniff). These tests pin two things:
- *   1. A missing/stale session redirects to /login, carrying the
+ *   1. A missing session redirects to /login, carrying the
  *      original destination via ?next= — sourced from the
  *      `x-pathname` header that src/proxy.ts injects (pathname +
  *      search). Without that header we must land on bare /login,
@@ -31,7 +31,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("next/headers", () => ({ headers: vi.fn() }));
-vi.mock("@/auth", () => ({ auth: vi.fn() }));
+vi.mock("@/lib/staff-auth", () => ({ getStaffAuth: vi.fn() }));
 // server-only module (Prisma); the zone comes from the user's profile.
 vi.mock("@/lib/current-user-tz", () => ({
   getCurrentUserTimeZone: vi.fn(async () => "Pacific/Honolulu"),
@@ -46,20 +46,29 @@ vi.mock("@/components/layout/app-shell", () => ({
 
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
-import { auth } from "@/auth";
+import { getStaffAuth } from "@/lib/staff-auth";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import DashboardLayout from "./layout";
 
-const mockedAuth = vi.mocked(auth);
+const mockedAuth = vi.mocked(getStaffAuth);
 const mockedRedirect = vi.mocked(redirect);
 const mockedHeaders = vi.mocked(headers);
 
 const signedIn = () =>
-  mockedAuth.mockResolvedValue({ user: { id: "user_1" } } as never);
-const signedOut = () => mockedAuth.mockResolvedValue(null as never);
-/** Stale JWT: session object exists but the jwt callback wiped the id. */
-const staleSession = () =>
-  mockedAuth.mockResolvedValue({ user: {} } as never);
+  mockedAuth.mockResolvedValue({
+    status: "ok",
+    userId: "user_1",
+    clerkUserId: "clerk_1",
+    sessionId: "sess_1",
+  });
+const signedOut = () =>
+  mockedAuth.mockResolvedValue({ status: "signed_out" });
+/** Clerk session exists but no active firm user maps to it. */
+const noAccess = () =>
+  mockedAuth.mockResolvedValue({
+    status: "no_access",
+    clerkUserId: "clerk_1",
+  });
 
 /** Simulate the request headers the proxy forwarded (or didn't). */
 const withHeaders = (entries: Record<string, string>) =>
@@ -101,15 +110,13 @@ describe("DashboardLayout — unauthenticated redirect", () => {
     expect(mockedRedirect).toHaveBeenCalledWith("/login");
   });
 
-  test("stale JWT (session without user id) is treated as signed out", async () => {
-    staleSession();
+  test("signed in without firm access goes to /no-access, not /login", async () => {
+    noAccess();
     withHeaders({ "x-pathname": "/settings" });
     await expect(
       DashboardLayout({ children: null })
     ).rejects.toThrow(REDIRECT_SENTINEL);
-    expect(mockedRedirect).toHaveBeenCalledWith(
-      `/login?next=${encodeURIComponent("/settings")}`
-    );
+    expect(mockedRedirect).toHaveBeenCalledWith("/no-access");
   });
 });
 

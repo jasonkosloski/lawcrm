@@ -38,7 +38,7 @@
  */
 
 import { NextResponse, type NextRequest } from "next/server";
-import { auth } from "@/auth";
+import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { canAccessMatter } from "@/lib/matter-access";
 import { canAccessLead } from "@/lib/lead-access";
@@ -92,7 +92,7 @@ export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ id: string }> }
 ): Promise<Response> {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) {
     // Match the proxy + dashboard layout pattern — authoritative
     // auth check, not just cookie presence.

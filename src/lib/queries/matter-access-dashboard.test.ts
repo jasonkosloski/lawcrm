@@ -16,7 +16,7 @@ vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("@/lib/current-user-tz", () => ({
   getCurrentUserTimeZone: vi.fn(async () => "UTC"),
 }));
-vi.mock("@/auth", () => ({ auth: vi.fn() }));
+vi.mock("@/lib/session", () => ({ getSession: vi.fn() }));
 vi.mock("@/lib/file-storage", () => ({
   statFile: vi.fn(async () => null), // allowed requests end in 410
   openReadStream: vi.fn(() => Readable.from([])),
@@ -39,7 +39,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { Prisma } from "@/generated/prisma/client";
-import { auth } from "@/auth";
+import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { dateOnlyKey, parseDateOnly, todayKey } from "@/lib/format-date";
@@ -445,7 +445,7 @@ describe("download routes answer 404 (not 403) for a hidden matter", () => {
       data: { fileUrl: "k__x.pdf", contentType: "application/pdf" },
     });
     const call = (uid: string) => {
-      vi.mocked(auth).mockResolvedValue({ user: { id: uid } } as never);
+      vi.mocked(getSession).mockResolvedValue({ user: { id: uid } } as never);
       return downloadDocument(
         new Request(`http://localhost/api/documents/${documentId}/download`) as never,
         { params: Promise.resolve({ id: documentId }) }
@@ -494,7 +494,7 @@ describe("download routes answer 404 (not 403) for a hidden matter", () => {
     const hidden = await mk(matterA);
     const filedToB = await mk(matterB);
     const unfiled = await mk(null);
-    vi.mocked(auth).mockResolvedValue({ user: { id: bob } } as never);
+    vi.mocked(getSession).mockResolvedValue({ user: { id: bob } } as never);
     const call = (id: string) =>
       downloadAttachment(
         new Request(`http://localhost/api/email-attachments/${id}/download`) as never,

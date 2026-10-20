@@ -20,7 +20,7 @@
 import { Readable } from "node:stream";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-vi.mock("@/auth", () => ({ auth: vi.fn() }));
+vi.mock("@/lib/session", () => ({ getSession: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     user: { findUnique: vi.fn() },
@@ -47,14 +47,14 @@ vi.mock("@/lib/file-storage", () => ({
   ),
 }));
 
-import { auth } from "@/auth";
+import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { openReadStream, statFile } from "@/lib/file-storage";
 import { canAccessMatter } from "@/lib/matter-access";
 import { canAccessLead } from "@/lib/lead-access";
 import { GET } from "./route";
 
-const mockedAuth = vi.mocked(auth);
+const mockedAuth = vi.mocked(getSession);
 const mockedFindUser = vi.mocked(prisma.user.findUnique);
 const mockedFindDoc = vi.mocked(prisma.document.findFirst);
 const mockedStat = vi.mocked(statFile);

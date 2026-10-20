@@ -73,7 +73,7 @@ import { Readable } from "node:stream";
 import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import busboy from "busboy";
 import { NextResponse, type NextRequest } from "next/server";
-import { auth } from "@/auth";
+import { getStaffAuthFromRequest } from "@/lib/staff-auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessMatter } from "@/lib/matter-access";
 import { canAccessLead } from "@/lib/lead-access";
@@ -141,11 +141,14 @@ type ParseResult =
     });
 
 export async function POST(req: NextRequest): Promise<Response> {
-  const session = await auth();
-  if (!session?.user?.id) {
+  // This route is excluded from the Clerk middleware matcher (so the
+  // proxy never buffers the upload body): authenticate the request
+  // directly. Anything but a resolved firm user is a 401.
+  const staff = await getStaffAuthFromRequest(req);
+  if (staff.status !== "ok") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const userId = session.user.id;
+  const userId = staff.userId;
 
   const allowed = await currentUserHasPermission("documents.upload");
   if (!allowed) {

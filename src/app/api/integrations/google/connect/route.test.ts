@@ -15,13 +15,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-vi.mock("@/auth", () => ({ auth: vi.fn() }));
+vi.mock("@/lib/session", () => ({ getSession: vi.fn() }));
 
-import { auth } from "@/auth";
+import { getSession } from "@/lib/session";
 import { verifyOAuthState } from "@/lib/google/oauth";
 import { GET } from "./route";
 
-const mockedAuth = vi.mocked(auth);
+const mockedAuth = vi.mocked(getSession);
 
 const ENV_KEYS = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "AUTH_SECRET", "AUTH_URL"] as const;
 const savedEnv: Partial<Record<string, string | undefined>> = {};

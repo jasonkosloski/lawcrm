@@ -22,7 +22,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const hoisted = vi.hoisted(() => {
   const stores: Map<string, unknown>[] = [];
-  return { stores };
+  return { stores, staffAuth: vi.fn() };
 });
 
 vi.mock("react", async (importOriginal) => {
@@ -49,17 +49,31 @@ vi.mock("next/navigation", () => ({
     throw new Error(`__REDIRECT__:${url}`);
   }),
 }));
-vi.mock("@/auth", () => ({ auth: vi.fn() }));
+// The real getStaffAuth is React-cache()d; model that so the dedupe
+// assertions below measure the per-request sharing.
+vi.mock("@/lib/staff-auth", async () => {
+  const { cache } = await import("react");
+  return { getStaffAuth: cache(() => hoisted.staffAuth()) };
+});
 
 import { redirect } from "next/navigation";
-import { auth } from "@/auth";
 import {
   getCurrentUserId,
   getSession,
   requireUser,
 } from "@/lib/current-user";
 
-const mockedAuth = vi.mocked(auth);
+const mockedAuth = hoisted.staffAuth;
+const ok = (userId: string) =>
+  ({
+    status: "ok",
+    userId,
+    clerkUserId: "clerk_1",
+    sessionId: "sess_1",
+  }) as never;
+const signedOut = () => ({ status: "signed_out" }) as never;
+const noAccess = () =>
+  ({ status: "no_access", clerkUserId: "clerk_1" }) as never;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -69,18 +83,26 @@ beforeEach(() => {
 
 describe("getCurrentUserId", () => {
   test("returns the session user id", async () => {
-    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedAuth.mockResolvedValue(ok("user-1"));
     await expect(getCurrentUserId()).resolves.toBe("user-1");
   });
 
   test("redirects to /login when there is no session", async () => {
-    mockedAuth.mockResolvedValue(null as never);
+    mockedAuth.mockResolvedValue(signedOut());
     await expect(getCurrentUserId()).rejects.toThrow("__REDIRECT__:/login");
     expect(redirect).toHaveBeenCalledWith("/login");
   });
 
+  test("redirects to /no-access when signed in without firm access", async () => {
+    mockedAuth.mockResolvedValue(noAccess());
+    await expect(getCurrentUserId()).rejects.toThrow(
+      "__REDIRECT__:/no-access"
+    );
+    expect(redirect).toHaveBeenCalledWith("/no-access");
+  });
+
   test("dedupes auth() across repeated calls in one request", async () => {
-    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedAuth.mockResolvedValue(ok("user-1"));
     await expect(getCurrentUserId()).resolves.toBe("user-1");
     await expect(getCurrentUserId()).resolves.toBe("user-1");
     // One auth() decode (and its per-call user.findUnique in the jwt
@@ -91,7 +113,7 @@ describe("getCurrentUserId", () => {
 
 describe("getSession", () => {
   test("decodes the session once per request, shared with getCurrentUserId", async () => {
-    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedAuth.mockResolvedValue(ok("user-1"));
     await getSession();
     await getSession();
     await getCurrentUserId();
@@ -101,18 +123,19 @@ describe("getSession", () => {
 
 describe("requireUser", () => {
   test("returns the session user id", async () => {
-    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedAuth.mockResolvedValue(ok("user-1"));
     await expect(requireUser()).resolves.toBe("user-1");
   });
 
   test("redirects to /login when there is no session", async () => {
-    mockedAuth.mockResolvedValue(null as never);
+    mockedAuth.mockResolvedValue(signedOut());
     await expect(requireUser()).rejects.toThrow("__REDIRECT__:/login");
     expect(redirect).toHaveBeenCalledWith("/login");
   });
 
-  test("redirects when the session carries no user id", async () => {
-    mockedAuth.mockResolvedValue({ user: {} } as never);
-    await expect(requireUser()).rejects.toThrow("__REDIRECT__:/login");
+  test("redirects to /no-access when signed in without firm access", async () => {
+    mockedAuth.mockResolvedValue(noAccess());
+    await expect(requireUser()).rejects.toThrow("__REDIRECT__:/no-access");
+    expect(redirect).toHaveBeenCalledWith("/no-access");
   });
 });
