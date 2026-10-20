@@ -33,13 +33,15 @@ export function describeUserAgent(ua: string): string | null {
 }
 
 /** Internal identifiers that mean nothing to the reader. */
-const INTERNAL = [/^Session \S+$/, /^Clerk user \S+?:?/];
+const INTERNAL = [/^Session \S+$/];
+/** "Clerk user <id>: " prefix on no_access rows — drop the id, keep the reason. */
+const CLERK_PREFIX = /^Clerk user \S+?:\s*/;
 
 export function describeAuthDetail(detail: string | null): string | null {
   if (!detail) return null;
   const parts: string[] = [];
   for (const segment of detail.split(/ — | · /)) {
-    const s = segment.trim();
+    const s = segment.trim().replace(CLERK_PREFIX, "");
     if (!s || INTERNAL.some((re) => re.test(s))) continue;
     if (s.startsWith("IP ")) {
       parts.push(s);

@@ -53,7 +53,7 @@ export default async function ProfileSettingsPage() {
             {user.name}
           </h1>
           <p className="text-xs text-ink-3 truncate">
-            {user.email} · {user.jobTitle}
+            {[user.email, user.jobTitle].filter(Boolean).join(" · ")}
           </p>
           {user.userRoles.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1.5">

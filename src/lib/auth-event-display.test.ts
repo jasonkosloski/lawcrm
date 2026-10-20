@@ -35,11 +35,11 @@ describe("describeAuthDetail", () => {
     ).toBe("Chrome on macOS · revoked by admin · IP 203.0.113.9");
   });
 
-  test("webhook session ids and Clerk ids are dropped", () => {
+  test("webhook session ids and Clerk id prefixes are dropped, reasons kept", () => {
     expect(describeAuthDetail("Session sess_2abc")).toBeNull();
     expect(
       describeAuthDetail("Clerk user user_9xyz: no matching member — IP ::1")
-    ).toBe("IP ::1");
+    ).toBe("no matching member · IP ::1");
   });
 
   test("null / empty stay null", () => {
