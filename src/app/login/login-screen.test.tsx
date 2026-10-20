@@ -1,5 +1,5 @@
 /**
- * The /login screen's presentational shell: it renders the firm's name
+ * The /login screen's presentational shell: it renders the app's name
  * as the page's one h1, a labelled sign-in section, and whatever
  * sign-in control the page passes in.
  */
@@ -14,9 +14,9 @@ describe("LoginScreen", () => {
 
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "Kosloski Law"
+      "LitGox"
     );
-    const section = screen.getByRole("region", { name: "Notice of appearance" });
+    const section = screen.getByRole("region", { name: "Sign in" });
     expect(section).toContainElement(
       screen.getByRole("button", { name: "Sign in now" })
     );
