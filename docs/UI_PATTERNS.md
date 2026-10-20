@@ -137,20 +137,13 @@ src/lib/feedback.ts — never window.alert/confirm/prompt (ESLint no-alert).
 
 ## Layout Patterns
 
-### Two-Column Dashboard
-```
-Left: flex-1 (main content — KPIs, lists, feeds)
-Right: w-[340px] shrink-0 (sidebar widgets — deadlines, pulse)
-Gap: 20px
-```
-
 ### Dashboard cards
 Every dashboard card renders on the shared frame in `src/components/dashboard/dashboard-card.tsx`:
 - `DashboardCard`: title, optional "View all" link (only when a destination page exists), body.
 - `DashboardRow`: one list row inside a card.
 - `LatePill`: the overdue marker used in rows.
 
-Cards size by container query (`@container` on the card, `@sm:`/`@md:` variants inside), not viewport breakpoints, because the same card renders in the full-width band and in 4-, 6- or 8-column slots.
+Cards size by container query (`@container` on the card, `@sm:`/`@2xl:` variants inside), not viewport breakpoints, because the same card renders in the full-width band and in 4-, 6- or 8-column slots. Exception: `KpisCard`'s tiles are their own cards, not wrapped in `DashboardCard`.
 
 ### Split Pane (Intake, Email)
 ```
