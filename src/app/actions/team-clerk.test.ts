@@ -133,7 +133,6 @@ describe("inviteFirmMember", () => {
     const u = await prisma.user.findUniqueOrThrow({
       where: { email: "new.hire@example.com" },
     });
-    expect(u.passwordHash).toBeNull();
     expect(u.clerkUserId).toBeNull();
   });
 

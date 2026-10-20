@@ -141,10 +141,9 @@ describe("permission gate — denial is a form error, not a redirect", () => {
     ).toBe(0);
     const row = await prisma.user.findUniqueOrThrow({
       where: { id: member.userId },
-      select: { name: true, passwordHash: true },
+      select: { name: true },
     });
     expect(row.name).toBe("Member");
-    expect(row.passwordHash).toBeNull();
     expect(mockedGate).toHaveBeenCalledWith("firm.manage_team_directory");
   });
 });
@@ -281,10 +280,9 @@ describe("team actions — input integrity", () => {
     expect(res.errors?.name?.[0]).toMatch(/not found/i);
     const row = await prisma.user.findUniqueOrThrow({
       where: { id: stranger.userId },
-      select: { name: true, passwordHash: true },
+      select: { name: true },
     });
     expect(row.name).toBe("Stranger");
-    expect(row.passwordHash).toBeNull();
   });
 
   test("inviting an existing email (any case) is a field error and creates nothing", async () => {

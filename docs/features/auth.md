@@ -3,11 +3,9 @@
 Staff sign in with Google through Clerk (restricted, invite-only). Clerk proves who someone is; the `User` table decides whether they may use the app ([ADR-053](../decisions/053-clerk-proves-identity-the-user-table-grants-access.md)). There is no self sign-up. The client portal has its own, separate identity ([ADR-051](../decisions/051-client-portal-identity-is-separate-from-staff-auth.md), [client-portal.md](client-portal.md)).
 Related: [ADR-028](../decisions/028-layouts-are-not-auth-gates-every-page.md), [ADR-022](../decisions/022-security-header-baseline-no-csp-yet-and.md), [PERMISSIONS.md](../PERMISSIONS.md), [settings-admin.md](settings-admin.md)
 
-Status: shipped on branch `clerk-staff-auth`; production cutover pending (checklist below).
+Status: live in production on `litgox.com` since 2026-10-20.
 
 ## Open work
-- [ ] **Production cutover** — see the checklist below. Needs the Clerk production instance, Google OAuth client, DNS and env vars.
-- [ ] **Drop migration** (Task 10, once Clerk sign-in is stable in production): remove `User.passwordHash`, `User.emailVerified`, `User.image`, and the `Account` and `VerificationToken` tables, all unused since Auth.js was removed. Destructive, so it waits until rollback is no longer wanted.
 - [ ] **Microsoft sign-in** — add as a second Clerk SSO connection if a firm member needs it; linking is by verified primary email, so no change to the resolver is expected.
 - [ ] **Portal auth decision** — the portal keeps magic links for now. If it moves to Clerk, use a separate Clerk application (ADR-053).
 - [ ] Not built, would sit on Clerk: idle timeout / absolute lifetime (Clerk session settings), re-auth challenge for sensitive actions, multi-tenancy (`firmId` would attach in `getStaffAuth()`).

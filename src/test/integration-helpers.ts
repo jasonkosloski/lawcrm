@@ -115,8 +115,6 @@ export const TABLES_IN_DELETE_ORDER = [
   "user_roles",
   "role_permissions",
   "roles",
-  "verification_tokens",
-  "accounts",
   // Activity logs reference users/matters
   "activity_logs",
   "automations",
