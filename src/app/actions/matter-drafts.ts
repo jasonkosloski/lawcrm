@@ -16,7 +16,21 @@ export type DraftValues = Record<string, string | string[]>;
 
 export type SaveDraftResult =
   | { ok: true; draftId: string; updatedAt: string }
-  | { ok: false; code: "stale" | "notfound" };
+  | { ok: false; code: "stale" | "notfound" | "invalid" };
+
+const MAX_DRAFT_VALUES_CHARS = 200_000;
+
+/** Server actions take arbitrary client JSON: only string / string[]
+ *  values, capped in total size, are stored. */
+function valuesAreValid(values: unknown): values is DraftValues {
+  if (!values || typeof values !== "object" || Array.isArray(values)) return false;
+  for (const v of Object.values(values)) {
+    if (typeof v === "string") continue;
+    if (Array.isArray(v) && v.every((x) => typeof x === "string")) continue;
+    return false;
+  }
+  return JSON.stringify(values).length <= MAX_DRAFT_VALUES_CHARS;
+}
 
 /** Pull the user ids out of the posted `extraTeam` JSON (an array of
  *  `{ userId, role }`). Malformed input yields no seats: auto-save must
@@ -49,6 +63,7 @@ export async function saveMatterDraft(
   values: DraftValues
 ): Promise<SaveDraftResult> {
   const userId = await requirePermission(DRAFT_PERMISSION);
+  if (!valuesAreValid(values)) return { ok: false, code: "invalid" };
   const leadUserId = leadUserIdOf(values);
   const teamUserIds = teamUserIdsOf(values);
 

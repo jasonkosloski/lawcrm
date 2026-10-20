@@ -32,7 +32,7 @@ import {
   type SolPeriod,
 } from "@/lib/sol";
 import { dateOnlyKey, parseDateOnly, todayKey } from "@/lib/format-date";
-import { assertDraftAccess } from "@/lib/draft-access";
+import { assertDraftAccess, canAccessDraft } from "@/lib/draft-access";
 import { agreementGateErrors, originatingDocLabel } from "@/lib/originating-doc";
 import { UserFacingError } from "@/lib/user-facing-error";
 import { todayDateOnly } from "@/app/actions/billing/helpers";
@@ -72,6 +72,8 @@ import {
   type RequiredMatterField,
 } from "@/lib/matter-required-fields";
 
+const DRAFT_FILES_CHANGED_MESSAGE =
+  "The draft's files changed. Review the draft and try again.";
 const DRAFT_USED_MESSAGE = "This draft was already used to open a matter.";
 const DRAFT_STALE_MESSAGE =
   "Someone else saved this draft. Reload to see their changes.";
@@ -537,13 +539,9 @@ export async function createMatter(
   let draft: Awaited<ReturnType<typeof assertDraftAccess>> | null = null;
   let draftFiles: { id: string }[] = [];
   if (draftId) {
-    // A draft that no longer exists was already used (or deleted):
-    // say so instead of the 404 the access guard would give.
-    const exists = await prisma.matterDraft.findUnique({
-      where: { id: draftId },
-      select: { id: true },
-    });
-    if (!exists) {
+    // A draft that is missing OR not accessible gets the same answer,
+    // so existence can't be probed (never the guard's 404).
+    if (!(await canAccessDraft(currentUserId, draftId))) {
       return {
         status: "error",
         errors: { draftId: [DRAFT_USED_MESSAGE] },
@@ -841,10 +839,21 @@ export async function createMatter(
       // the agreement. 0 claimed rows rolls everything back.
       let originatingDocumentId: string | null = null;
       if (draft) {
+        // Lock the draft row first: concurrent draft-file inserts (FK
+        // KEY SHARE) wait until this commits, then fail on the FK and
+        // clean up their own bytes. The file set read below is final.
+        await tx.$queryRaw`SELECT id FROM "matter_drafts" WHERE id = ${draft.id} FOR UPDATE`;
         const files = await tx.matterDraftFile.findMany({
           where: { draftId: draft.id },
           orderBy: { createdAt: "asc" },
         });
+        const origOk =
+          !data.originatingFileId ||
+          files.some((f) => f.id === data.originatingFileId);
+        const needsOrig =
+          (gateFirm?.firm?.requireOriginatingDoc ?? false) &&
+          !files.some((f) => f.id === data.originatingFileId);
+        if (!origOk || needsOrig) throw new UserFacingError(DRAFT_FILES_CHANGED_MESSAGE);
         const claimed = await tx.matterDraft.deleteMany({
           where: { id: draft.id, updatedAt: new Date(data.draftUpdatedAt!) },
         });

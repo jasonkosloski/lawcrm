@@ -1970,6 +1970,95 @@ describe("createMatter: open from a draft + originating-document gate", () => {
     expect(await prisma.matterDraft.count()).toBe(1);
   });
 
+  // Runs `fn` after the action's pre-transaction reads, just before its
+  // first transaction starts (the window the review found).
+  const beforeTx = (fn: () => Promise<unknown>) => {
+    const real = prisma.$transaction.bind(prisma);
+    return vi.spyOn(prisma, "$transaction").mockImplementationOnce(((
+      f: unknown,
+      o: unknown
+    ) =>
+      fn().then(() => (real as (a: unknown, b: unknown) => unknown)(f, o))) as never);
+  };
+  const CHANGED = "The draft's files changed. Review the draft and try again.";
+
+  test("originating file removed between the gate and the claim: refused, draft intact", async () => {
+    await requireOn();
+    const { draft, files } = await seedDraft(2);
+    const spy = beforeTx(() =>
+      prisma.matterDraftFile.delete({ where: { id: files[0].id } })
+    );
+    const res = await run(
+      draftForm(draft, {
+        originatingFileId: files[0].id,
+        agreementStatus: "signed",
+        agreementSignedDate: "2026-01-05",
+      })
+    );
+    spy.mockRestore();
+    expect(res.errors?.draftId).toEqual([CHANGED]);
+    expect(await matterCount()).toBe(0);
+    expect(await prisma.matterDraft.count()).toBe(1);
+    expect(await prisma.matterDraftFile.count()).toBe(1);
+  });
+
+  test("a file added in the window is re-homed with the locked set", async () => {
+    const { draft, files } = await seedDraft(1);
+    const spy = beforeTx(async () => {
+      await prisma.matterDraftFile.create({
+        data: {
+          draftId: draft.id,
+          name: "late.pdf",
+          fileUrl: "https://blob.test/late.pdf",
+          uploadedBy: userId,
+        },
+      });
+    });
+    await expect(
+      run(draftForm(draft, { originatingFileId: files[0].id }))
+    ).rejects.toThrow(/__REDIRECT__/);
+    spy.mockRestore();
+    const m = await prisma.matter.findFirstOrThrow();
+    const docs = await prisma.document.findMany({ where: { matterId: m.id } });
+    expect(docs.map((d) => d.name).sort()).toEqual(["file-0.pdf", "late.pdf"]);
+  });
+
+  test("the transaction holds a row lock on the draft", async () => {
+    const { draft } = await seedDraft(1);
+    const real = prisma.$transaction.bind(prisma);
+    let blocked: boolean | null = null;
+    const spy = vi.spyOn(prisma, "$transaction").mockImplementationOnce(((
+      f: (tx: unknown) => unknown,
+      o: unknown
+    ) =>
+      (real as (a: unknown, b: unknown) => unknown)(async (tx: unknown) => {
+        const out = await f(tx);
+        // Still inside the tx: a competing FOR UPDATE NOWAIT must fail.
+        try {
+          await prisma.$queryRaw`SELECT id FROM "matter_drafts" WHERE id = ${draft.id} FOR UPDATE NOWAIT`;
+          blocked = false;
+        } catch {
+          blocked = true;
+        }
+        return out;
+      }, o)) as never);
+    await expect(run(draftForm(draft))).rejects.toThrow(/__REDIRECT__/);
+    spy.mockRestore();
+    expect(blocked).toBe(true);
+  });
+
+  test("an inaccessible draft answers exactly like a missing one", async () => {
+    const stranger = await prisma.user.create({
+      data: { email: "x@example.test", name: "X", initials: "X", jobTitle: "A" },
+    });
+    const d = await prisma.matterDraft.create({
+      data: { createdById: stranger.id, values: {} },
+    });
+    const res = await run(draftForm(d));
+    expect(res.errors?.draftId).toEqual(["This draft was already used to open a matter."]);
+    expect(await matterCount()).toBe(0);
+  });
+
   describe("switch on", () => {
     beforeEach(requireOn);
     const signed = { agreementStatus: "signed", agreementSignedDate: "2026-01-05" };

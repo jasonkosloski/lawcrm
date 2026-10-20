@@ -17,7 +17,7 @@ import {
 import { listMatterDrafts } from "@/lib/queries/matter-drafts";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
-let creator: string, other: string, admin: string;
+let creator: string, other: string, admin: string, testFirmId: string;
 
 function as(u: string) {
   vi.mocked(getCurrentUserId).mockResolvedValue(u);
@@ -28,6 +28,7 @@ beforeEach(async () => {
   vi.mocked(deleteFile).mockReset();
   vi.mocked(deleteFile).mockResolvedValue(undefined);
   const { firmId, adminRoleId } = await seedFirm();
+  testFirmId = firmId;
   const role = await prisma.role.create({
     data: { firmId, name: "intake", description: "x" },
     select: { id: true },
@@ -71,6 +72,38 @@ describe("saveMatterDraft", () => {
     const r = await saveMatterDraft(a.draftId, a.updatedAt, {});
     expect(r).toEqual({ ok: false, code: "notfound" });
     expect(await prisma.matterDraft.count()).toBe(0);
+  });
+
+  test("rejects oversize or non-string values without writing", async () => {
+    const big = await saveMatterDraft(null, null, { notes: "x".repeat(200_001) });
+    expect(big).toEqual({ ok: false, code: "invalid" });
+    const bad = await saveMatterDraft(null, null, {
+      a: { nested: 1 },
+    } as never);
+    expect(bad).toEqual({ ok: false, code: "invalid" });
+    const badArr = await saveMatterDraft(null, null, { a: [1] } as never);
+    expect(badArr).toEqual({ ok: false, code: "invalid" });
+    expect(await prisma.matterDraft.count()).toBe(0);
+    const a = await newDraft();
+    const upd = await saveMatterDraft(a.draftId, a.updatedAt, {
+      notes: "x".repeat(200_001),
+    });
+    expect(upd).toEqual({ ok: false, code: "invalid" });
+  });
+
+  test("rejects oversize or non-string values without writing", async () => {
+    const big = await saveMatterDraft(null, null, { notes: "x".repeat(200_001) });
+    expect(big).toEqual({ ok: false, code: "invalid" });
+    const bad = await saveMatterDraft(null, null, { a: { nested: 1 } } as never);
+    expect(bad).toEqual({ ok: false, code: "invalid" });
+    const badArr = await saveMatterDraft(null, null, { a: [1] } as never);
+    expect(badArr).toEqual({ ok: false, code: "invalid" });
+    expect(await prisma.matterDraft.count()).toBe(0);
+    const a = await newDraft();
+    const upd = await saveMatterDraft(a.draftId, a.updatedAt, {
+      notes: "x".repeat(200_001),
+    });
+    expect(upd).toEqual({ ok: false, code: "invalid" });
   });
 
   test("only creation logs, and titles carry no client name", async () => {
@@ -157,5 +190,20 @@ describe("listMatterDrafts", () => {
     const adm = await listMatterDrafts();
     expect(adm).toHaveLength(1);
     expect(adm[0].canDelete).toBe(true);
+  });
+
+  test("a user named on a draft but lacking matters.create sees nothing", async () => {
+    const bare = await prisma.role.create({
+      data: { firmId: testFirmId, name: "bare", description: "x" },
+      select: { id: true },
+    });
+    const { userId: seat } = await seedUser({ firmId: testFirmId, roleIds: [bare.id] });
+    const a = await newDraft();
+    await prisma.matterDraft.update({
+      where: { id: a.draftId },
+      data: { leadUserId: seat, teamUserIds: [seat] },
+    });
+    as(seat);
+    expect(await listMatterDrafts()).toEqual([]);
   });
 });

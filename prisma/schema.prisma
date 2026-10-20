@@ -193,9 +193,9 @@ model Firm {
   /// Template for new matter names on /matters/new. Tokens such as
   /// {client_last}, {client_first}, {case_number}, {location}.
   /// A practice area's own template overrides this.
+  matterNameTemplate          String           @default("{client_last}, {client_first} - {case_number} - {location}")
   /// When true, creating a matter requires a signed originating document.
   requireOriginatingDoc       Boolean          @default(false)
-  matterNameTemplate          String           @default("{client_last}, {client_first} - {case_number} - {location}")
   /// Default for "auto-add matter team to new calendar events".
   /// Per-matter override lives on Matter.autoAddTeamToNewEvents
   /// (null on the matter inherits this firm value).

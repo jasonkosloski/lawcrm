@@ -999,6 +999,20 @@ describe("draft target", () => {
     expect(prisma.matterDraftFile.create).not.toHaveBeenCalled();
   });
 
+  test("completed: draft claimed by Create during the insert (P2003) -> blob removed, no throw", async () => {
+    wireDraftGates();
+    vi.mocked(prisma.matterDraftFile.create).mockRejectedValue(
+      Object.assign(new Error("fk"), { code: "P2003" })
+    );
+    mockedHead.mockResolvedValue({ size: 10 } as never);
+    await onUploadCompleted({
+      blob: { url: BLOB_URL } as never,
+      tokenPayload: COMPLETED_PAYLOAD,
+    });
+    expect(deleteFile).toHaveBeenCalledWith(BLOB_URL);
+    expect(logActivity).not.toHaveBeenCalled();
+  });
+
   test("completed: draft already at 20 files -> blob removed, nothing written", async () => {
     wireDraftGates(20);
     mockedHead.mockResolvedValue({ size: 10 } as never);

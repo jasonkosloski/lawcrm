@@ -3,6 +3,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserPermissions } from "@/lib/permission-check";
 import {
   MATTER_DRAFT_RETENTION_DAYS,
+  DRAFT_PERMISSION,
   draftAccessWhere,
 } from "@/lib/draft-access";
 
@@ -26,7 +27,9 @@ function str(v: unknown): string {
 /** The current user's drafts, newest first. */
 export async function listMatterDrafts(): Promise<MatterDraftListItem[]> {
   const userId = await getCurrentUserId();
-  const { isAdmin } = await getCurrentUserPermissions();
+  const { isAdmin, granted } = await getCurrentUserPermissions();
+  // Being named on a draft grants nothing by itself (draft-access.ts).
+  if (!isAdmin && !granted.has(DRAFT_PERMISSION)) return [];
   const drafts = await prisma.matterDraft.findMany({
     where: draftAccessWhere(userId, isAdmin),
     orderBy: { updatedAt: "desc" },

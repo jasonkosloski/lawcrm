@@ -95,4 +95,18 @@ describe("GET /api/matter-draft-sweep", () => {
     expect(mockedDelete).toHaveBeenCalledTimes(3);
     expect(await prisma.matterDraft.count()).toBe(0);
   });
+
+  it("a draft saved between the batch read and the delete survives, files kept", async () => {
+    const d = await makeDraft(100, ["racy"]);
+    const realFind = prisma.matterDraft.findMany.bind(prisma.matterDraft);
+    vi.spyOn(prisma.matterDraft, "findMany").mockImplementationOnce(((args: never) =>
+      (realFind as (a: unknown) => Promise<unknown>)(args).then(async (rows) => {
+        await prisma.$executeRaw`UPDATE matter_drafts SET "updatedAt" = now() WHERE id = ${d.id}`;
+        return rows;
+      })) as never);
+    const res = await GET(request("Bearer s3cret"));
+    expect(await res.json()).toEqual({ deleted: 0 });
+    expect(await prisma.matterDraft.count({ where: { id: d.id } })).toBe(1);
+    expect(mockedDelete).not.toHaveBeenCalled();
+  });
 });

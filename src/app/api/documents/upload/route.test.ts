@@ -1068,6 +1068,18 @@ describe("POST /api/documents/upload — draft target", () => {
     expect(mockedDelete).toHaveBeenCalled();
   });
 
+  test("draft claimed during the insert (P2003) -> 404 and files removed", async () => {
+    wireDraft();
+    vi.mocked(prisma.matterDraftFile.create).mockRejectedValue(
+      Object.assign(new Error("fk"), { code: "P2003" })
+    );
+    const res = await POST(
+      await makeRequest(fdWith({ draftId: "d1" }, [{ name: "a.pdf" }]))
+    );
+    expect(res.status).toBe(404);
+    expect(mockedDelete).toHaveBeenCalledWith("key-a.pdf");
+  });
+
   test("draft deleted while the bytes streamed -> 404 and files removed", async () => {
     wireDraft();
     vi.mocked(prisma.matterDraft.findUnique).mockResolvedValue(null);

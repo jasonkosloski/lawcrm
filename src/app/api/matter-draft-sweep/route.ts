@@ -40,11 +40,19 @@ export async function GET(request: Request): Promise<Response> {
       });
       if (batch.length === 0) break;
 
-      const ids = batch.map((d) => d.id);
-      const keys = batch.flatMap((d) => d.files.map((f) => f.fileUrl));
-      const { count } = await prisma.matterDraft.deleteMany({
-        where: { id: { in: ids } },
-      });
+      // Re-check staleness per draft: one saved since the read above
+      // survives, and only deleted drafts lose their stored bytes.
+      const keys: string[] = [];
+      let count = 0;
+      for (const d of batch) {
+        const res = await prisma.matterDraft.deleteMany({
+          where: { id: d.id, updatedAt: { lt: cutoff } },
+        });
+        if (res.count > 0) {
+          count += res.count;
+          keys.push(...d.files.map((f) => f.fileUrl));
+        }
+      }
       deleted += count;
 
       for (const key of keys) {
