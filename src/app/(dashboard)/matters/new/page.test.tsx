@@ -15,8 +15,25 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     practiceArea: { findMany: vi.fn(async () => []) },
     contact: { findMany: vi.fn(async () => []) },
-    user: { findMany: vi.fn(async () => []) },
+    user: {
+      findMany: vi.fn(async () => []),
+      findUnique: vi.fn(async () => ({ firm: { requireOriginatingDoc: false } })),
+    },
+    matterDraftFile: { findMany: vi.fn(async () => []) },
   },
+}));
+vi.mock("@/lib/draft-access", () => ({ assertDraftAccess: vi.fn() }));
+vi.mock("@/lib/queries/matter-drafts", () => ({
+  listMatterDrafts: vi.fn(async () => []),
+}));
+vi.mock("@/lib/file-storage", () => ({ activeStorageDriver: () => "local" }));
+vi.mock("@/app/actions/billing/helpers", () => ({
+  todayDateOnly: vi.fn(async () => new Date("2026-10-20T00:00:00Z")),
+}));
+vi.mock("@/components/matters/matter-drafts-list", () => ({
+  MatterDraftsList: ({ drafts }: { drafts: unknown[] }) => (
+    <div data-testid="drafts-list">{drafts.length}</div>
+  ),
 }));
 vi.mock("@/lib/permission-check", () => ({
   requirePermission: vi.fn(),
@@ -35,8 +52,21 @@ vi.mock("@/lib/current-user-tz", () => ({
 }));
 vi.mock("@/components/layout/topbar", () => ({ TopBar: () => null }));
 vi.mock("@/components/matters/new-matter-form", () => ({
-  NewMatterForm: ({ options }: { options: Record<string, unknown> }) => (
-    <div data-testid="new-matter-form" data-options={JSON.stringify(options)}>
+  NewMatterForm: ({
+    options,
+    draft,
+    engagement,
+  }: {
+    options: Record<string, unknown>;
+    draft?: unknown;
+    engagement?: unknown;
+  }) => (
+    <div
+      data-testid="new-matter-form"
+      data-options={JSON.stringify(options)}
+      data-draft={JSON.stringify(draft ?? null)}
+      data-engagement={JSON.stringify(engagement ?? null)}
+    >
       {String(options.currentUserId)}
     </div>
   ),
@@ -45,6 +75,8 @@ vi.mock("@/components/matters/new-matter-form", () => ({
 import { prisma } from "@/lib/prisma";
 import { listVenues } from "@/lib/queries/venues";
 import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
+import { assertDraftAccess } from "@/lib/draft-access";
+import { listMatterDrafts } from "@/lib/queries/matter-drafts";
 import NewMatterPage from "./page";
 
 afterEach(() => vi.clearAllMocks());
@@ -80,5 +112,64 @@ describe("NewMatterPage — matters.create gate", () => {
     expect(prisma.practiceArea.findMany).not.toHaveBeenCalled();
     expect(prisma.contact.findMany).not.toHaveBeenCalled();
     expect(prisma.user.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("NewMatterPage — drafts and the Engagement section", () => {
+  const attr = (name: string) =>
+    JSON.parse(screen.getByTestId("new-matter-form").getAttribute(name)!);
+
+  test("no ?draft: no draft, the drafts list gets the user's drafts, today and labels come through", async () => {
+    vi.mocked(requirePermission).mockResolvedValue("user_1");
+    vi.mocked(currentUserHasPermission).mockResolvedValue(true);
+    vi.mocked(prisma.practiceArea.findMany).mockResolvedValue([
+      { id: "a1", name: "PI", originatingDocLabel: "Retainer", stages: [] },
+      { id: "a2", name: "Crim", originatingDocLabel: null, stages: [] },
+    ] as never);
+    vi.mocked(listMatterDrafts).mockResolvedValue([{ id: "d1" }] as never);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      firm: { requireOriginatingDoc: true },
+    } as never);
+    render(await NewMatterPage({ searchParams: Promise.resolve({}) }));
+    expect(assertDraftAccess).not.toHaveBeenCalled();
+    expect(screen.getByTestId("drafts-list").textContent).toBe("1");
+    expect(attr("data-draft")).toBeNull();
+    const e = attr("data-engagement");
+    expect(e).toMatchObject({
+      required: true,
+      canUpload: true,
+      todayKey: "2026-10-20",
+      labelsByArea: { a1: "Retainer", a2: "Fee agreement" },
+      defaultLabel: "Fee agreement",
+    });
+    expect(currentUserHasPermission).toHaveBeenCalledWith("documents.upload");
+  });
+
+  test("?draft=<id> asserts draft access and passes the draft with its files", async () => {
+    vi.mocked(requirePermission).mockResolvedValue("user_1");
+    vi.mocked(assertDraftAccess).mockResolvedValue({
+      id: "d1",
+      updatedAt: new Date("2026-10-19T12:00:00Z"),
+      values: { name: "Draft matter", extraTeam: "[]", junk: 5 },
+    } as never);
+    vi.mocked(prisma.matterDraftFile.findMany).mockResolvedValue([
+      { id: "f1", name: "a.pdf", isOriginating: true },
+    ] as never);
+    render(await NewMatterPage({ searchParams: Promise.resolve({ draft: "d1" }) }));
+    expect(assertDraftAccess).toHaveBeenCalledWith("d1");
+    expect(attr("data-draft")).toEqual({
+      id: "d1",
+      updatedAt: "2026-10-19T12:00:00.000Z",
+      values: { name: "Draft matter", extraTeam: "[]" },
+      files: [{ id: "f1", name: "a.pdf", isOriginating: true }],
+    });
+  });
+
+  test("a draft the user can't see 404s before the form renders", async () => {
+    vi.mocked(requirePermission).mockResolvedValue("user_1");
+    vi.mocked(assertDraftAccess).mockRejectedValue(new Error("NEXT_NOT_FOUND"));
+    await expect(
+      NewMatterPage({ searchParams: Promise.resolve({ draft: "nope" }) })
+    ).rejects.toThrow("NEXT_NOT_FOUND");
   });
 });

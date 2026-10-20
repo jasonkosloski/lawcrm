@@ -89,6 +89,20 @@ const ACCEPT = [
   "video/*",
 ].join(",");
 
+/** Upload target: a matter / lead record, or (matter-drafts) a draft
+ *  that is not a record yet. A draft upload may start with no draft at
+ *  all: `ensureDraft` creates it first. Draft targets are exclusive
+ *  (no folder, no records request) - the routes enforce it. */
+export type UploadScope =
+  | RecordScope
+  | {
+      kind: "draft";
+      draftId: string | null;
+      ensureDraft?: () => Promise<string>;
+    };
+
+type DraftTarget = { kind: "draft"; draftId: string };
+
 const formatMiB = (bytes: number): string =>
   `${Math.floor(bytes / (1024 * 1024))} MiB`;
 
@@ -101,7 +115,7 @@ export function MultiFileUpload({
   recordsRole,
   onUploaded,
 }: {
-  scope: RecordScope;
+  scope: UploadScope;
   /** Upload destination — the currently browsed folder (null = root). */
   folderId: string | null;
   /** Display name for the button tooltip. */
@@ -164,12 +178,13 @@ export function MultiFileUpload({
   };
 
   /** local driver: one multipart POST to the streaming route. */
-  const startXhrUpload = (files: File[]) => {
+  const startXhrUpload = (files: File[], target: RecordScope | DraftTarget) => {
     // Field order per the route contract: target BEFORE file parts.
     const fd = new FormData();
-    if (scope.kind === "matter") fd.append("matterId", scope.matterId);
-    else fd.append("leadId", scope.leadId);
-    if (folderId) fd.append("folderId", folderId);
+    if (target.kind === "matter") fd.append("matterId", target.matterId);
+    else if (target.kind === "lead") fd.append("leadId", target.leadId);
+    else fd.append("draftId", target.draftId);
+    if (folderId && target.kind !== "draft") fd.append("folderId", folderId);
     if (recordsRequestId) fd.append("recordsRequestId", recordsRequestId);
     if (recordsRequestId && recordsRole) fd.append("recordsRole", recordsRole);
     for (const f of files) fd.append("files", f, f.name);
@@ -215,7 +230,10 @@ export function MultiFileUpload({
   };
 
   /** vercel-blob driver: client-direct upload per file. */
-  const startBlobUpload = async (files: File[]) => {
+  const startBlobUpload = async (
+    files: File[],
+    target: RecordScope | DraftTarget
+  ) => {
     const controller = new AbortController();
     cancelRef.current = { abort: () => controller.abort() };
 
@@ -244,8 +262,9 @@ export function MultiFileUpload({
           handleUploadUrl: "/api/documents/upload/blob",
           contentType: contentTypeForFilename(key),
           clientPayload: JSON.stringify({
-            ...scopeWhere(scope),
-            folderId,
+            ...(target.kind === "draft"
+              ? { draftId: target.draftId }
+              : { ...scopeWhere(target), folderId }),
             ...(recordsRequestId ? { recordsRequestId } : {}),
             ...(recordsRequestId && recordsRole ? { recordsRole } : {}),
             name: f.name,
@@ -285,7 +304,7 @@ export function MultiFileUpload({
     }
   };
 
-  const startUpload = (files: File[]) => {
+  const startUpload = async (files: File[]) => {
     setError(null);
     const rejected = preflightError(files);
     if (rejected) {
@@ -298,10 +317,30 @@ export function MultiFileUpload({
     setFileCount(files.length);
     setProgress(0);
 
-    if (storageDriver === "vercel-blob") {
-      void startBlobUpload(files);
+    let target: RecordScope | DraftTarget;
+    if (scope.kind === "draft") {
+      let draftId = scope.draftId;
+      if (!draftId) {
+        try {
+          draftId = (await scope.ensureDraft?.()) ?? null;
+        } catch {
+          draftId = null;
+        }
+      }
+      if (!draftId) {
+        reset();
+        setError("Couldn't save the draft to attach files. Try again.");
+        return;
+      }
+      target = { kind: "draft", draftId };
     } else {
-      startXhrUpload(files);
+      target = scope;
+    }
+
+    if (storageDriver === "vercel-blob") {
+      void startBlobUpload(files, target);
+    } else {
+      startXhrUpload(files, target);
     }
   };
 
@@ -348,7 +387,7 @@ export function MultiFileUpload({
         className="hidden"
         onChange={(e) => {
           const files = Array.from(e.target.files ?? []);
-          if (files.length > 0) startUpload(files);
+          if (files.length > 0) void startUpload(files);
         }}
       />
       <button

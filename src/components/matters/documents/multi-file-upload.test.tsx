@@ -13,7 +13,6 @@
  * guard that can save a user from watching a doomed 4GB upload.
  */
 
-import type { RecordScope } from "@/lib/record-scope";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -25,7 +24,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@vercel/blob/client", () => ({ upload: vi.fn() }));
 
 import { upload } from "@vercel/blob/client";
-import { MultiFileUpload } from "./multi-file-upload";
+import { MultiFileUpload, type UploadScope } from "./multi-file-upload";
 
 const mockedUpload = vi.mocked(upload);
 
@@ -67,7 +66,7 @@ afterEach(() => {
 // Driver under test — set per describe block before calling pickFiles.
 let driver: "local" | "vercel-blob" | undefined;
 
-let scopeUnderTest: RecordScope = { kind: "matter", matterId: "m1" };
+let scopeUnderTest: UploadScope = { kind: "matter", matterId: "m1" };
 
 let extraProps: {
   recordsRequestId?: string;
@@ -180,6 +179,55 @@ describe("lead scope", () => {
       folderId: "fold1",
       name: "a.pdf",
     });
+  });
+});
+
+describe("draft scope", () => {
+  test("local driver posts draftId before the file part, with no folder", async () => {
+    driver = "local";
+    scopeUnderTest = { kind: "draft", draftId: "d1" };
+    await pickFiles([new File(["pdf"], "agreement.pdf")]);
+    await waitFor(() => expect(StubXHR.instances).toHaveLength(1));
+    const fd = StubXHR.instances[0].sent as FormData;
+    expect([...fd.keys()]).toEqual(["draftId", "files"]);
+    expect(fd.get("draftId")).toBe("d1");
+  });
+
+  test("blob driver sends draftId (no folderId) in the client payload", async () => {
+    driver = "vercel-blob";
+    scopeUnderTest = { kind: "draft", draftId: "d1" };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockedUpload.mockResolvedValue({ url: "https://s/x" } as any);
+    await pickFiles([new File(["a"], "a.pdf", { type: "application/pdf" })]);
+    await waitFor(() => expect(mockedUpload).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(mockedUpload.mock.calls[0][2].clientPayload as string)).toEqual({
+      draftId: "d1",
+      name: "a.pdf",
+    });
+  });
+
+  test("with no draft yet, ensureDraft runs first and its id is the target", async () => {
+    driver = "local";
+    const ensureDraft = vi.fn(async () => "created1");
+    scopeUnderTest = { kind: "draft", draftId: null, ensureDraft };
+    await pickFiles([new File(["pdf"], "agreement.pdf")]);
+    await waitFor(() => expect(StubXHR.instances).toHaveLength(1));
+    expect(ensureDraft).toHaveBeenCalledTimes(1);
+    expect((StubXHR.instances[0].sent as FormData).get("draftId")).toBe("created1");
+  });
+
+  test("if the draft can't be created nothing uploads and the user is told", async () => {
+    driver = "local";
+    scopeUnderTest = {
+      kind: "draft",
+      draftId: null,
+      ensureDraft: async () => {
+        throw new Error("nope");
+      },
+    };
+    await pickFiles([new File(["pdf"], "agreement.pdf")]);
+    expect(await screen.findByText(/couldn't save the draft/i)).toBeTruthy();
+    expect(StubXHR.instances).toHaveLength(0);
   });
 });
 

@@ -21,6 +21,18 @@ import type { CreateMatterState } from "@/lib/new-matter-constants";
 // "use server" module that pulls in Prisma/auth — mock it out. The
 // form only hands the reference to useActionState; it's never
 // invoked in these tests.
+// Draft save/auto-save and the Engagement section pull these in; the
+// tests here never exercise them.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: vi.fn(), refresh: vi.fn(), push: vi.fn() }),
+}));
+vi.mock("@/app/actions/matter-drafts", () => ({
+  saveMatterDraft: vi.fn(),
+  removeDraftFile: vi.fn(),
+  setDraftFileOriginating: vi.fn(),
+  deleteMatterDraft: vi.fn(),
+}));
+
 vi.mock("@/app/actions/matters", () => ({
   createMatter: vi.fn(),
 }));

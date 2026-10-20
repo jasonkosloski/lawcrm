@@ -20,6 +20,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   useActionState,
   useEffect,
@@ -66,6 +67,11 @@ import {
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { ConflictReview } from "./conflict-review";
 import { NewMatterTeamPicker, parseTeamSeats } from "./new-matter-team-picker";
+import { EngagementSection, type EngagementChange } from "./engagement-section";
+import { useDraftAutosave } from "./use-draft-autosave";
+import type { DraftValues } from "@/app/actions/matter-drafts";
+import { agreementGateErrors } from "@/lib/originating-doc";
+import type { StorageDriver } from "@/lib/storage/storage-key";
 
 type ClientOption = {
   id: string;
@@ -109,9 +115,60 @@ export type NewMatterFormOptions = {
   timeZone: string;
 };
 
+/** A saved draft being resumed (`/matters/new?draft=<id>`). */
+export type NewMatterDraft = {
+  id: string;
+  updatedAt: string;
+  values: Record<string, string | string[]>;
+  files: { id: string; name: string; isOriginating: boolean }[];
+};
+
+/** Originating-document ("Engagement") settings from the page. */
+export type NewMatterEngagement = {
+  /** The firm requires a signed originating document. */
+  required: boolean;
+  canUpload: boolean;
+  /** Per practice area label; areas without one use `defaultLabel`. */
+  labelsByArea: Record<string, string>;
+  defaultLabel: string;
+  /** The user's profile-zone today (YYYY-MM-DD) for the future-date check. */
+  todayKey: string;
+  storageDriver?: StorageDriver;
+};
+
+const DEFAULT_ENGAGEMENT: NewMatterEngagement = {
+  required: false,
+  canUpload: false,
+  labelsByArea: {},
+  defaultLabel: "Fee agreement",
+  todayKey: "",
+};
+
+/** Carried by the draft row / files themselves, never saved as values. */
+const NOT_DRAFT_VALUES = new Set(["draftId", "draftUpdatedAt", "originatingFileId"]);
+
+function serializeForm(form: HTMLFormElement): DraftValues {
+  const fd = new FormData(form);
+  const out: DraftValues = {};
+  for (const key of new Set(fd.keys())) {
+    if (NOT_DRAFT_VALUES.has(key)) continue;
+    const all = fd.getAll(key).filter((v): v is string => typeof v === "string");
+    out[key] = all.length > 1 ? all : (all[0] ?? "");
+  }
+  return out;
+}
+
 const MAX_SUGGESTIONS = 6;
 
-export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
+export function NewMatterForm({
+  options,
+  draft = null,
+  engagement = DEFAULT_ENGAGEMENT,
+}: {
+  options: NewMatterFormOptions;
+  draft?: NewMatterDraft | null;
+  engagement?: NewMatterEngagement;
+}) {
   const [state, formAction, isPending] = useActionState<
     CreateMatterState,
     FormData
@@ -125,13 +182,30 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const missing = checkRequired(new FormData(e.currentTarget));
-    if (missing.length > 0) {
+    // Mirrors the server's originating-document gate (it stays the
+    // authority); `today` is the user's profile-zone day.
+    const gate = agreementGateErrors(
+      {
+        status: agreementStatus,
+        signedDate: agreementSignedDate,
+        hasOriginatingFile,
+      },
+      {
+        required: engagement.required,
+        label: engagementLabel,
+        today: engagement.todayKey || new Date().toISOString().slice(0, 10),
+      }
+    );
+    if (missing.length > 0 || Object.keys(gate).length > 0) {
       const next: Record<string, string[]> = {};
       for (const k of missing) {
         next[REQUIRED_FIELD_INPUT_NAME[k]] = [requiredFieldError];
       }
+      for (const [k, msg] of Object.entries(gate)) next[k] = [msg];
       setClientErrs(next);
-      if (formRef.current) focusFirstInvalid(formRef.current, missing);
+      if (missing.length > 0 && formRef.current) {
+        focusFirstInvalid(formRef.current, missing);
+      }
       return;
     }
     setClientErrs({});
@@ -139,14 +213,76 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
       | HTMLElement
       | null;
     const fd = new FormData(e.currentTarget, submitter);
-    startTransition(() => formAction(fd));
+    const submit = () => {
+      // An auto-save that landed since the last render moved the
+      // draft's version; Create must claim the freshest one.
+      const latest = autosave.latestUpdatedAt();
+      if (autosave.draftId && latest) fd.set("draftUpdatedAt", latest);
+      startTransition(() => formAction(fd));
+    };
+    if (autosave.isSaving()) void autosave.settled().then(submit);
+    else submit();
   };
 
   // Client-side required-field errors (the server stays authoritative).
   const [clientErrs, setClientErrs] = useState<Record<string, string[]>>({});
   const formRef = useRef<HTMLFormElement>(null);
-  const vals = state.values ?? {};
+  // A validation-error echo wins over the saved draft's values.
+  const draftVals: Record<string, string> = {};
+  for (const [k, v] of Object.entries(draft?.values ?? {})) {
+    if (typeof v === "string") draftVals[k] = v;
+  }
+  const vals = state.values ?? draftVals;
   const errs = { ...(state.errors ?? {}), ...clientErrs };
+
+  // ── Draft save / auto-save ───────────────────────────────────────────
+  const router = useRouter();
+  const autosave = useDraftAutosave({
+    draftId: draft?.id ?? null,
+    updatedAt: draft?.updatedAt ?? null,
+    getValues: () => (formRef.current ? serializeForm(formRef.current) : {}),
+    paused: isPending,
+  });
+  const openDraft = (id: string) =>
+    router.replace(`/matters/new?draft=${encodeURIComponent(id)}`);
+  const saveDraft = async () => {
+    const wasNew = !autosave.draftId;
+    const id = await autosave.saveNow();
+    if (id && wasNew) openDraft(id);
+  };
+  const ensureDraft = async (): Promise<string> => {
+    if (autosave.draftId) return autosave.draftId;
+    const id = await autosave.saveNow();
+    if (!id) throw new Error("Couldn't save the draft.");
+    openDraft(id);
+    return id;
+  };
+
+  // ── Engagement (originating document) ────────────────────────────────
+  const [agreementStatus, setAgreementStatus] = useState<string>(
+    vals.agreementStatus ?? "not_sent"
+  );
+  const [agreementSignedDate, setAgreementSignedDate] = useState<string>(
+    vals.agreementSignedDate ?? ""
+  );
+  const [originatingFileId, setOriginatingFileId] = useState<string>(
+    draft?.files.find((f) => f.isOriginating)?.id ?? ""
+  );
+  const [removedFileIds, setRemovedFileIds] = useState<string[]>([]);
+  const draftFiles = (draft?.files ?? []).filter(
+    (f) => !removedFileIds.includes(f.id)
+  );
+  const hasOriginatingFile = draftFiles.some((f) => f.id === originatingFileId);
+  const onEngagementChange = (c: EngagementChange) => {
+    if (c.status !== undefined) setAgreementStatus(c.status);
+    if (c.signedDate !== undefined) setAgreementSignedDate(c.signedDate);
+    if (c.originatingFileId !== undefined) setOriginatingFileId(c.originatingFileId);
+    if (c.removedFileId) {
+      setRemovedFileIds((ids) => [...ids, c.removedFileId!]);
+      if (c.removedFileId === originatingFileId) setOriginatingFileId("");
+      router.refresh();
+    }
+  };
 
   // ── Client picker state ──────────────────────────────────────────────
   const initialSelectedId =
@@ -212,6 +348,10 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
   const [stageId, setStageId] = useState<string>(initialStageId);
 
   const selectedArea = options.areas.find((a) => a.id === practiceAreaId);
+  // Area change retitles the section; files and the mark stay (they
+  // belong to the draft, not the area).
+  const engagementLabel =
+    engagement.labelsByArea[practiceAreaId] ?? engagement.defaultLabel;
   const stageOptions = selectedArea?.stages ?? [];
 
   const requiredKeys = requiredKeysFor(selectedArea ?? null);
@@ -378,6 +518,14 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
 
   return (
     <form ref={formRef} onSubmit={onSubmit} className="flex flex-col gap-6">
+      {errs.draftId?.[0] && (
+        <div
+          role="alert"
+          className="rounded-md border border-warn-border bg-warn-soft px-3 py-2 text-xs font-medium text-warn"
+        >
+          {errs.draftId[0]}
+        </div>
+      )}
       {/* ── Core ────────────────────────────────────────────────── */}
       <Section title="Core">
         <div className="flex flex-col gap-1">
@@ -883,6 +1031,22 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
         </label>
       </Section>
 
+      <EngagementSection
+        label={engagementLabel}
+        required={engagement.required}
+        canUpload={engagement.canUpload}
+        draftId={autosave.draftId}
+        draftUpdatedAt={autosave.updatedAt}
+        ensureDraft={ensureDraft}
+        files={draftFiles}
+        status={agreementStatus}
+        signedDate={agreementSignedDate}
+        originatingFileId={hasOriginatingFile ? originatingFileId : ""}
+        onChange={onEngagementChange}
+        errors={errs}
+        storageDriver={engagement.storageDriver}
+      />
+
       {/* Statute of limitations — only surfaces when the chosen
           practice area tracks SOL. The action auto-computes the
           deadline from incidentDate + the area's configured
@@ -960,12 +1124,25 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
 
       {/* ── Submit ──────────────────────────────────────────────── */}
       <div className="sticky bottom-0 z-10 -mx-5 px-5 py-3 sm:static sm:mx-0 sm:px-0 sm:py-0 sm:pt-2 bg-white sm:bg-transparent flex items-center justify-end gap-2 border-t border-line">
+        <DraftStatus
+          status={autosave.status}
+          savedAt={autosave.savedAt}
+          timeZone={options.timeZone}
+        />
         <Link
           href="/matters"
           className="inline-flex items-center h-8 px-3 rounded-md text-xs font-medium text-ink-2 border border-line bg-white hover:border-brand-300 hover:text-brand-700 transition-colors"
         >
           Cancel
         </Link>
+        <button
+          type="button"
+          onClick={() => void saveDraft()}
+          disabled={isPending || autosave.status === "saving"}
+          className="inline-flex items-center h-8 px-3 rounded-md text-xs font-medium text-ink-2 border border-line bg-white hover:border-brand-300 hover:text-brand-700 transition-colors disabled:opacity-60"
+        >
+          Save draft
+        </button>
         <button
           type="submit"
           disabled={isPending}
@@ -979,4 +1156,56 @@ export function NewMatterForm({ options }: { options: NewMatterFormOptions }) {
       </div>
     </form>
   );
+}
+
+function DraftStatus({
+  status,
+  savedAt,
+  timeZone,
+}: {
+  status: "idle" | "saving" | "saved" | "stale" | "gone";
+  savedAt: Date | null;
+  timeZone: string;
+}) {
+  if (status === "stale") {
+    return (
+      <span role="status" className="mr-auto text-2xs text-warn">
+        Someone else saved this draft. Reload to see their changes.{" "}
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="underline"
+        >
+          Reload
+        </button>
+      </span>
+    );
+  }
+  if (status === "gone") {
+    return (
+      <span role="status" className="mr-auto text-2xs text-warn">
+        This draft no longer exists
+      </span>
+    );
+  }
+  if (status === "saving") {
+    return (
+      <span role="status" className="mr-auto text-2xs text-ink-4">
+        Saving…
+      </span>
+    );
+  }
+  if (savedAt) {
+    return (
+      <span role="status" className="mr-auto text-2xs text-ink-4">
+        Saved{" "}
+        {savedAt.toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          timeZone,
+        })}
+      </span>
+    );
+  }
+  return null;
 }
